@@ -35,7 +35,7 @@ Usage (every subcommand also takes `--repo OWNER/NAME`; see below)::
     uv run python scripts/dev/findings.py claim 688 701 --worktree worktree-foo \\
         [--session id] [--force]
     uv run python scripts/dev/findings.py release 688 --worktree worktree-foo [--reason "..."]
-    uv run python scripts/dev/findings.py claims [--json]
+    uv run python scripts/dev/findings.py claims [--worktree <branch>] [--json]
     uv run python scripts/dev/findings.py reap [--dry-run]
     uv run python scripts/dev/findings.py close 688 --fixed [--pr 700]
     uv run python scripts/dev/findings.py close 688 --refuted --reason "..."

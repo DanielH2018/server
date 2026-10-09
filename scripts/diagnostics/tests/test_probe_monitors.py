@@ -370,12 +370,14 @@ def test_resolve_gate_states_covers_only_the_gates_whose_monitor_is_absent():
 def test_an_undeclared_gate_key_reads_as_genuinely_unset_is_clean():
     """A key that is not in the store at all is an unset gate.
 
-    `homelab_eval_push_token` is deliberately absent — static-monitors.yaml.j2 says so — and
-    its monitor correctly renders away, which is exactly the False arm. It reported None
+    A gated monitor whose token was never minted correctly renders away, which is exactly the
+    False arm. It reported None
     instead, so two §9.1 lines read "gated on <var>, which could not be read" on every run and
     trained the reader to skim the arm that catches a real failure to read a secret.
     """
-    verdict = monitors.judge_gate_read("homelab_eval_push_token", None, {"other_token"})
+    verdict = monitors.judge_gate_read(
+        "never_declared_push_token", None, {"other_token"}
+    )
     assert verdict is False
 
 
@@ -429,7 +431,7 @@ def test_declared_secret_names_reads_the_real_stores_key_list():
     # The metadata block is not a secret, and treating it as one would make a gate named
     # after it resolve.
     assert "sops" not in names
-    assert "homelab_eval_push_token" not in names
+    assert "never_declared_push_token" not in names
 
 
 def test_the_bridge_tile_loop_expands_to_one_declaration_per_table_row(

@@ -16,7 +16,6 @@ always firing (the streak gate stops holding, so ordinary rollouts page).
 from dataclasses import replace
 from functools import partial
 
-import bridge.streaks
 import pytest
 from checks.cluster import check_k8s_workloads
 from _fake_sources import FakeSources
@@ -72,18 +71,14 @@ def vectors():
     return {ZERO_QUERY: []}
 
 
-@pytest.fixture(autouse=True)
-def _clear_streaks():
-    bridge.streaks._down_streaks.clear()
-    yield
-    bridge.streaks._down_streaks.clear()
-
-
 @pytest.fixture
-def run(vectors):
+def run(vectors, state):
     def _run(kcfg, counts=HEALTHY_COUNTS):
+        # One `state` across every call: each call is one cycle of the same process.
         src = FakeSources(
-            prom_vector=partial(_vector, vectors), prom_scalar=partial(_scalar, counts)
+            state=state,
+            prom_vector=partial(_vector, vectors),
+            prom_scalar=partial(_scalar, counts),
         )
         return check_k8s_workloads(kcfg, src)
 

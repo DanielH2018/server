@@ -30,8 +30,6 @@ def _launch(tools, tmp_path, *args):
             *args,
             "--host",
             "daniel-box",
-            "--orchestrator-branch",
-            "o",
             "--manifest-root",
             str(tmp_path),
         ],

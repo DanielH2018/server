@@ -25,12 +25,19 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import sys
-from dataclasses import dataclass, field
 from pathlib import Path
 
+# The layers and where they live are lib.estate's, which the docs generators read through too,
+# so a template render and a docs page cannot disagree about which value wins (#3899).
+from lib.estate import (
+    PLANE_HOSTS,
+    REPO_INVENTORY,
+    Inventory,
+    inventory_layers,
+    role_defaults,
+)
 from lib.k8s_context import resolve_vars
-from lib.render_guard import ALL_VARS, ANSIBLE, BASE_CONTEXT, HOST_VARS, load_yaml
-from lib.ansible_inventory import K8S_HOST
+from lib.render_guard import ANSIBLE, BASE_CONTEXT, load_yaml
 
 __all__ = [
     "PLANE_HOSTS",
@@ -39,31 +46,6 @@ __all__ = [
     "UnresolvedVarsError",
     "render_context",
 ]
-
-# The host whose host_vars a plane's templates render with when the caller names none. Every
-# k8s role deploys from daniel-box's `containers_list`, so its host_vars are the k8s plane's.
-# A setup role runs on several hosts and a Pi compose role on the host that lists it, so
-# neither plane has one host: a setup template renders with the group layer the hosts share,
-# and the compose validator passes each host it renders for.
-PLANE_HOSTS = {"k8s": K8S_HOST}
-
-
-@dataclass(frozen=True)
-class Inventory:
-    """Where the inventory layers live, so a test can point a render at a throwaway tree.
-
-    Attributes:
-        all_vars: The group_vars file every host shares.
-        host_vars: The directory holding one ``<host>.yml`` per inventory host.
-        plane_hosts: The host each plane renders with when the caller names none.
-    """
-
-    all_vars: Path = ALL_VARS
-    host_vars: Path = HOST_VARS
-    plane_hosts: dict[str, str] = field(default_factory=lambda: dict(PLANE_HOSTS))
-
-
-REPO_INVENTORY = Inventory()
 
 _NOTED: set[str] = set()
 
@@ -120,9 +102,11 @@ def render_context(
     overrides = overrides or {}
     raw = {
         **BASE_CONTEXT,
-        **load_yaml(role_dir / "defaults" / "main.yml"),
-        **load_yaml(inventory.all_vars),
-        **(_host_layer(inventory, host) if host_vars is None else host_vars),
+        **inventory_layers(
+            role_defaults(role_dir),
+            load_yaml(inventory.all_vars),
+            _host_layer(inventory, host) if host_vars is None else host_vars,
+        ),
         "playbook_dir": str(ANSIBLE),
         **overrides,
     }

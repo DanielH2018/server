@@ -4,8 +4,7 @@ Covers the Pi's resource pressure with the published-port arm folded into it, an
 speedtest-tracker's newest result row.
 
 Split out of `checks/host.py`, which keeps disk, certificate expiry and memory. Reads config as
-`cfg.X` and the shared streak counter as `bridge.streaks.X`, so the tests' patches on that
-module reach it. Every Prometheus and HTTP query goes through the `src` argument
+`cfg.X` and its streak counters as `src.state` (`bridge.streaks.State`). Every Prometheus and HTTP query goes through the `src` argument
 (`bridge.sources.Sources`), which a test replaces with a `FakeSources`. The verdicts it
 from-imports from verdicts.host are patched on THIS module, where they are bound. The TCP prober is an ARGUMENT rather than a
 module global a test patches — `check_pi_pressure` and `with_pi_ports` both take `tcp_open`,
@@ -43,6 +42,7 @@ def _tcp_open(host: str, port: int, timeout: float) -> bool:
 
 def with_pi_ports(
     cfg: Config,
+    streaks: dict[str, int],
     ok: bool,
     msg: str,
     tcp_open: Callable[[str, int, float], bool] = _tcp_open,
@@ -82,15 +82,13 @@ def with_pi_ports(
     ]
     arm_ok, arm_msg = pi_ports_verdict(dead, len(cfg.PI_PUBLISHED_PORTS))
     if arm_ok:
-        bridge.streaks._down_streaks["pi_ports"] = 0
+        streaks["pi_ports"] = 0
         return ok, "%s, %s" % (msg, arm_msg)
-    bridge.streaks._down_streaks["pi_ports"], arm_ok, arm_msg = (
-        bridge.streaks.down_streak(
-            bridge.streaks._down_streaks.get("pi_ports", 0),
-            cfg.PI_PORTS_CONSECUTIVE,
-            arm_msg,
-            "deploy grace",
-        )
+    streaks["pi_ports"], arm_ok, arm_msg = bridge.streaks.down_streak(
+        streaks.get("pi_ports", 0),
+        cfg.PI_PORTS_CONSECUTIVE,
+        arm_msg,
+        "deploy grace",
     )
     if arm_ok:
         return ok, "%s, %s" % (msg, arm_msg)
@@ -139,7 +137,7 @@ def check_pi_pressure(
         cfg.PI_MEM_MIN_MB,
         cfg.PI_DISK_MAX_PCT,
     )
-    return with_pi_ports(cfg, ok, msg, tcp_open)
+    return with_pi_ports(cfg, src.state.down_streaks, ok, msg, tcp_open)
 
 
 def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:
@@ -192,14 +190,14 @@ def check_speedtest(cfg: Config, src: Sources) -> tuple[bool, str]:
             },
         )
     except Exception as e:
-        bridge.streaks._down_streaks["speedtest"], ok, msg = bridge.streaks.down_streak(
-            bridge.streaks._down_streaks.get("speedtest", 0),
+        src.state.down_streaks["speedtest"], ok, msg = bridge.streaks.down_streak(
+            src.state.down_streaks.get("speedtest", 0),
             cfg.SPEEDTEST_CONSECUTIVE,
             "speedtest API unreachable: %s" % e,
             "deploy/restart grace",
         )
         return ok, msg
-    bridge.streaks._down_streaks["speedtest"] = 0
+    src.state.down_streaks["speedtest"] = 0
     # Narrowed after the streak reset, outside the `try`: a body of the wrong shape is a bug in
     # the reply, not an unreachable API, and must page now rather than ride the deploy grace.
     rows = as_object_list(

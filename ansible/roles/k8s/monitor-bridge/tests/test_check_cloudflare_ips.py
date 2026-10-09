@@ -9,6 +9,7 @@ parameters of the check, so nothing here patches the module.
 from dataclasses import replace
 
 import checks.cloudflare_ips as cf
+from bridge.streaks import ProbeCache
 
 V4 = [f"198.51.{i}.0/24" for i in range(8)]
 V6 = [f"2001:db8:{i:x}::/48" for i in range(4)]
@@ -19,7 +20,7 @@ def _armed(cfg, expected=None):
     return replace(cfg, CLOUDFLARE_IPS_EXPECTED=frozenset(expected or PUBLISHED))
 
 
-def _fresh_probe() -> cf._ProbeCache:
+def _fresh_probe() -> ProbeCache:
     return {"ts": None, "ok": True, "msg": ""}
 
 

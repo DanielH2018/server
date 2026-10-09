@@ -77,8 +77,7 @@ def load_defaults(role: Path) -> dict:
     callers already hold the path, and a name would force a plane lookup that buys nothing.
     This is the RAW file. `lib.render_context` lays the defaults under the inventory and
     resolves them, which is what a render needs and what a guard on the literal text of a
-    default must not get; `scripts/docs/fragment_readers.role_defaults(path)` is the docs
-    generator's own raw read.
+    default must not get; `lib.estate.role_defaults(role)` is the docs generators' raw read.
     """
     return load_yaml(role / "defaults" / "main.yml") or {}
 

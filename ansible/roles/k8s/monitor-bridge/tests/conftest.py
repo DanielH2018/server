@@ -1,9 +1,9 @@
 """Shared pytest fixtures for the monitor-bridge files/ test suite."""
 
-import bridge.streaks
 import pytest
 
 from bridge.config import load_config
+from bridge.streaks import State
 from _bridge_env import bridge_env
 
 
@@ -26,15 +26,15 @@ def cfg():
     return cfg
 
 
-@pytest.fixture(autouse=True)
-def _reset_down_streaks():
-    """Zero check.py's consecutive-down-streak state before every test.
+@pytest.fixture
+def state():
+    """A zeroed `bridge.streaks.State`, for a test whose cycles each build their own fake.
 
-    `_down_streaks` (check_ups/check_ha_heartbeat/check_discord/check_longhorn_volumes)
-    accumulates across calls, so a streak left over from one test would leak into the
-    next test's first call. This fixture applies one reset to every test.
+    The live `Sources` carries one `State` for the life of the process. A helper that builds a
+    fresh `FakeSources` per cycle hands this one to each of them, so the streak a test means to
+    advance across cycles actually advances instead of restarting at 0 every call.
     """
-    bridge.streaks._down_streaks.clear()
+    return State()
 
 
 @pytest.fixture

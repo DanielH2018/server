@@ -145,3 +145,29 @@ def live_batches(root: Path = MANIFEST_DIR) -> dict[tuple[str, str], tuple[str, 
             if not b.removed_at:
                 live[(b.repo, b.batch)] = (run_id, b)
     return live
+
+
+def branches_launched_by(
+    orchestrator_branch: str, repo: str, root: Path = MANIFEST_DIR
+) -> set[str]:
+    """The branch of every still-standing batch a run under `orchestrator_branch` launched in `repo`.
+
+    What `findings.py claims --worktree` widens its filter with. A batch in this repo is
+    claimed under the orchestrator's own branch, but `launch` claims another repo's batch
+    under the batch's branch, so an orchestrator asking "what do I hold" has to count those
+    too. Filtered by repo because issue numbers collide across registers. An unreadable
+    manifest is skipped, as `live_batches` skips one: a read view must not fail on one bad file.
+    """
+    branches: set[str] = set()
+    if not root.is_dir():
+        return branches
+    for manifest_file in sorted(root.glob("*.json")):
+        try:
+            data = json.loads(manifest_file.read_text())
+            if data["orchestrator_branch"] != orchestrator_branch:
+                continue
+            batches = [Batch(**b) for b in data["batches"]]
+        except OSError, ValueError, KeyError, TypeError:
+            continue
+        branches |= {b.branch for b in batches if not b.removed_at and b.repo == repo}
+    return branches

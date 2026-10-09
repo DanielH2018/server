@@ -191,6 +191,67 @@ the per-volume map and each exclusion's rationale:
    green as services come up. Restore the Kuma admin + check tiles last (its DB was
    deliberately not restored).
 
+## After a whole-cluster cold start (both nodes down at once)
+
+A whole-cluster cold start fails every replica of every attached volume, and Longhorn
+auto-salvages them. Accepted: auto-salvage is the designed recovery, and on 2026-10-08 every
+salvaged volume returned to `healthy`.
+The hazard that follows is a weekly shard's missed run, which this section covers.
+
+**The 2026-10-08 measurement (#3892).** Both nodes rebooted on 2026-10-05: daniel-box at 23:55:01,
+daniel-server at 23:59:26. The k3s API stayed down for about 70 h (#3882). The reboot killed
+every instance-manager process. Instance-manager pods run with `restartPolicy: Never`, and nothing
+could restart them while the API was down. When the API returned at 21:55, longhorn-manager found
+both pods `in phase Failed` and recreated them. It then marked every engine and replica those
+pods had hosted as ERROR (`shouldn't contain the running instance`). Loki shows 39 volumes
+auto-salvaged between 21:56:24 and 21:56:29. The 21:55:24 failures in Loki record when Longhorn
+noticed the loss, not when the replicas stopped. Loki ran in the cluster too, so it holds no
+lines from inside the outage.
+
+**Why a weekly volume can miss its backup for a week.** The CronJob controller fires each missed
+RecurringJob once on recovery. On 2026-10-08 it created the d2, d3 and d4 Jobs at 21:55:20. Each
+Job filtered its volumes at 21:55:26. Any volume already marked `faulted` was skipped
+(`Cannot create job for <vol> volume in state attached`). Volumes not yet marked were backed up
+normally, even while being salvaged. Longhorn does not retry a skipped volume, and the Job still
+reports `succeeded=1`. Three weekly volumes were skipped: prowlarr-config (d4), valheim-config
+(d2) and karakeep-data (d3). The backup-health check flags a skipped weekly volume only when its
+newest backup passes `k3s_longhorn_weekly_backup_max_age_hours` (198 h). For prowlarr that was
+2026-10-09 10:40, 13 h after the skip. A volume in the daily tier recovers on the next night's run.
+
+**What to do after a cold start.** Do not seed every weekly volume whose backup predates the
+recovery. Most of them belong to shards that ran normally before the outage, and seeding them
+spends the day's B2 budget. Seed only the weekly volumes a catch-up Job skipped. The Jobs log
+each skip, so this query names them:
+
+```bash
+uv run python scripts/diagnostics/probe.py loki-query --since 24h \
+  '{namespace="longhorn-system"} |= "Cannot create job for"'
+```
+
+Seed only the names that carry a `recurring-job-group.longhorn.io/weekly-backup-d*` label. A
+daily volume in that list recovers on its own the next night. When Loki does not cover the
+recovery window, a weekly volume whose newest backup is more than 168 h old missed its run:
+
+```bash
+kubectl get volumes.longhorn.io -n longhorn-system -o json | jq -r '.items[]
+  | select(.metadata.labels | keys | any(test("^recurring-job-group.longhorn.io/weekly")))
+  | (.status.lastBackupAt // "") as $at
+  | select($at == "" or ($at | fromdateiso8601 < now - 168*3600))
+  | [(if $at == "" then "never" else $at end), .status.kubernetesStatus.pvcName] | @tsv'
+```
+
+Longhorn writes an empty `lastBackupAt`, not null, on a volume with no backup, and
+`fromdateiso8601` rejects the empty string. The filter therefore tests for it first and prints
+such a volume as `never`.
+
+Seed each one, one at a time. Before you seed more than a few, read the budget line in
+`journalctl -t longhorn-backup-health`, as the playbook's header says:
+
+```bash
+uv run ansible-playbook ansible/seed_volume_backup.yml -i ansible/inventory/hosts.ini \
+  -e seed_claim=<pvc-name> -e seed_allow_existing=true
+```
+
 ## Assurance gap (known, narrowing)
 
 kopia's three-tier assurance (snapshot → weekly verify → monthly restore drill) is rebuilt for

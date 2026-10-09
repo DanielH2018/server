@@ -371,9 +371,9 @@ stringData:
   live-drift-check.json: |
     {"type": "push", "name": "Live Object Drift", "description": "The daily 05:45 kuma-check-live-drift timer on daniel-box runs live_drift_check.py, comparing each cluster object declared keys against its last-applied-configuration annotation via the read-only kubeconfig; it reruns every 30 min while red. DOWN means an object was patched, edited or scaled by hand since Ansible applied it; the message names it. Redeploy the owning role; systemctl status kuma-check-live-drift on daniel-box.", "interval": 90000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ live_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
-{# Gated on the token like its siblings: no homelab_eval_push_token means no ANTHROPIC secret
-   exists yet either (initial_setup's eval-run.sh.j2 header), so the cron is disarmed and this
-   monitor lands before both halves exist rather than sitting red waiting for them.
+{# Gated on the token like its siblings: the token and anthropic_api_key are added together,
+   so without the token the cron is disarmed too (initial_setup's eval-run.sh.j2 header) and
+   this monitor renders away rather than sitting red.
    INTERVAL IS DERIVED FROM THE CRONTAB: Sunday 02:00 weekly (crons.yml), a 604800s period,
    plus generous slack for an 8-agent hermetic LLM sweep whose runtime is not fixed like a
    script's — 626400s (+6h) so a sweep that merely runs long doesn't fire DOWN. #}

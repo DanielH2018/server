@@ -329,7 +329,7 @@ def test_help_lists_clean_and_gives_clean_one_no_help_bullet(capsys):
     with pytest.raises(SystemExit):
         main(["--help"])
     plain = re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out)
-    assert "{read,launch,status,stop,clean,clean-one}" in plain
+    assert "{read,launch,claim,status,stop,clean,clean-one}" in plain
     # No subcommand here gets a help bullet under "positional arguments" — clean-one stays
     # exactly as undocumented as its siblings, rather than standing out with its own line.
     assert "clean-one " not in plain.split("positional arguments:", 1)[1]

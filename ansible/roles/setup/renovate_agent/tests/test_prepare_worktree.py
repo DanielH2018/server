@@ -23,7 +23,8 @@ import pytest
 import run_worktree
 from lib.git_testing import commit, git_out, init_repo, scrub_process_git_env
 
-# Mirrors scripts/dev/prune_worktrees.py's LOCK_OWNER — the lock reason must parse the same way
+# Mirrors LOCK_OWNER in the dotfiles-deployed `claude_worktree` package, which
+# scripts/lib/_claude_worktree.py loads. The lock reason must parse the same way
 # session_is_alive() parses it, or a live run's lock reads as "unrecognized format" there too
 # (which happens to also be treated as alive, but for the wrong reason: never rely on that).
 LOCK_OWNER = re.compile(r"\(pid (\d+) start (\d+)\)")

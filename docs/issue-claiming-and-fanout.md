@@ -92,8 +92,8 @@ settles which one holds the issue. Two sessions editing a body race, and the los
 disappears with no trace.
 
 **Why no compare-and-swap.** GitHub offers none, and the fan-out does not need one: the
-orchestrator claims every issue in every batch *before* it spawns a single agent, so a fan-out
-has no internal race. The only residual race is between independent ad-hoc sessions, where the
+orchestrator claims every issue of a batch *before* that batch's agent starts, so a fan-out has
+no internal race. `fanout_place.py launch` takes those claims itself. The only residual race is between independent ad-hoc sessions, where the
 cost of losing is a duplicated triage rather than corruption. The read-back handles it —
 the session whose claim comment sorts first holds the issue, and the loser releases.
 
@@ -201,6 +201,13 @@ claim comment records whatever worktree name the agent reports, auto-generated o
 `claims` renders the mapping. Session-to-issue attribution loses the readable branch name, so
 the `session-health.py` banner keeps printing `worktree-agent-a0291ece…`.
 
+**An orchestrator reads its own claims with `claims --worktree <its branch>`.** The filter keeps
+the claims that branch holds and adds the branch of every standing batch a `fanout_place.py
+launch` run under it started in the same register, read from the run manifests. A batch in this
+repo is claimed under the orchestrator's branch, so the branch alone covers it. A dotfiles batch
+is claimed under its own branch, and only the manifest ties it back. The filter counts the claims
+it drops rather than hiding them, so an empty result does not read as a register with nothing claimed.
+
 A session an operator drives can still name its own worktree `issue-1132`, because it has no
 cwd override. Only the fan-out is constrained.
 
@@ -283,11 +290,15 @@ what exit 6 would refuse without spending an agent.
    service parks every other batch's landing). The skill's triage step has the measured cases.
    Present the grouping and **stop for approval**: spawning N Opus agents is not a routine
    action.
-2. **Claim, then spawn.** Claim every issue in every batch serially, before spawning anything.
-   This is what removes the race from the fan-out. The claim goes under the **orchestrator's**
-   worktree name, because a subagent's worktree name is auto-generated and unknown until it
-   starts — and a claim naming a worktree that does not exist yet would read as stale
+2. **Claim, then spawn.** Every issue of a batch is claimed before that batch's agent starts.
+   This is what removes the race from the fan-out. `launch` takes the claims itself, one
+   `findings.py claim` per issue, after every placement gate has passed: a refused issue is
+   dropped from its batch, and a failed launch releases what it took. The claim goes under the
+   **orchestrator's** worktree name, which `launch` reads from HEAD and refuses when HEAD is
+   detached or is `master`. A subagent's worktree name is auto-generated and unknown until it
+   starts, and a claim naming a worktree that does not exist yet would read as stale
    immediately. The orchestrator's worktree is live for the whole fan-out, so the claim is too.
+   The Agent-tool fallback takes the same claims with `fanout_place.py claim --batch …`.
 3. **Spawn.** `uv run python scripts/dev/fanout_place.py launch --batch … ` places one Opus
    agent per batch across both hosts and writes each brief itself — see *Placement across
    hosts* above. The Agent tool is the fallback, not the default: the skill's *When the
@@ -338,7 +349,7 @@ drifts from the first.
 Following the repo's rule that a new check ships with a proof it can go red, and that a check
 finding its own subject by pattern ships with a named member it must find:
 
-The claim tests live in five files under `scripts/dev/tests/`, split by what each reads:
+The claim tests live in six files under `scripts/dev/tests/`, split by what each reads:
 
 | File | What it covers |
 |---|---|
@@ -347,6 +358,7 @@ The claim tests live in five files under `scripts/dev/tests/`, split by what eac
 | `test_findings_lib/claim_cli.py` | `claim`, `release`, `claims` and `reap` driven through `main()` |
 | `test_findings_claim_staleness.py` | `claim_is_live` against invented worktree state |
 | `test_findings_claim_reap_then_claim.py` | the reap-then-claim path `next` sends a session down |
+| `test_findings_claims_filter.py` | `claims --worktree` and the run-manifest read that widens it |
 
 Two of them carry the checks this page asked for by name:
 

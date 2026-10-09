@@ -21,6 +21,7 @@ import checks.notify
 import email.message
 
 from _fake_sources import FakeSources
+from bridge.streaks import StampedCache, State
 
 
 def _http_error(url, status, msg):
@@ -46,7 +47,7 @@ def test_discord_webhook_404_is_down():
     assert "404" in msg
 
 
-def _discord_cycle(cfg, status=200, raises=None, url=None):
+def _discord_cycle(cfg, state, status=200, raises=None, url=None):
     cfg = replace(
         cfg, DISCORD_WEBHOOK_URL=url or "https://discord.com/api/webhooks/1/abc"
     )
@@ -64,47 +65,49 @@ def _discord_cycle(cfg, status=200, raises=None, url=None):
             raise _http_error("u", status, "err")
 
         src = FakeSources(get_json=http_err)
+    src.state = state
     return checks.notify.check_discord(cfg, src)
 
 
-def test_discord_single_failure_is_suppressed(cfg):
+def test_discord_single_failure_is_suppressed(cfg, state):
     # One non-200 (a transient blip on the internet-facing check) must NOT page.
-    ok, msg = _discord_cycle(cfg, status=404)
+    ok, msg = _discord_cycle(cfg, state, status=404)
     assert ok
     assert "1/2" in msg
 
 
-def test_discord_two_consecutive_failures_alert(cfg):
+def test_discord_two_consecutive_failures_alert(cfg, state):
     # The 2nd straight failure is a genuinely dead webhook -> down.
-    assert _discord_cycle(cfg, status=404)[0]
-    ok, msg = _discord_cycle(cfg, status=404)
+    assert _discord_cycle(cfg, state, status=404)[0]
+    ok, msg = _discord_cycle(cfg, state, status=404)
     assert not ok
     assert "404" in msg
 
 
-def test_discord_valid_read_resets_streak(cfg):
-    assert _discord_cycle(cfg, status=404)[0]  # streak 1
-    ok, msg = _discord_cycle(cfg, status=200)  # webhook recovered
+def test_discord_valid_read_resets_streak(cfg, state):
+    assert _discord_cycle(cfg, state, status=404)[0]  # streak 1
+    ok, msg = _discord_cycle(cfg, state, status=200)  # webhook recovered
     assert ok
     assert "valid" in msg
-    ok, msg = _discord_cycle(cfg, status=404)  # new streak, suppressed again
+    ok, msg = _discord_cycle(cfg, state, status=404)  # new streak, suppressed again
     assert ok
     assert "1/2" in msg
 
 
-def test_discord_unreachable_rides_grace(cfg):
-    ok, msg = _discord_cycle(cfg, raises=OSError("dns fail"))
+def test_discord_unreachable_rides_grace(cfg, state):
+    ok, msg = _discord_cycle(cfg, state, raises=OSError("dns fail"))
     assert ok
     assert "1/2" in msg
 
 
-def test_discord_unreachable_redacts_the_webhook_url(cfg):
+def test_discord_unreachable_redacts_the_webhook_url(cfg, state):
     # The reported vector: a webhook URL configured with no scheme. urllib raises
     # `ValueError: unknown url type: '<the whole URL>'`, and that URL is the channel's bearer
     # credential — it must not reach the Kuma msg (which check.py also logs).
     url = "discord.com/api/webhooks/1/s3cr3t-token"
     _, msg = _discord_cycle(
         cfg,
+        state,
         url=url,
         raises=ValueError("unknown url type: '%s'" % url),
     )
@@ -114,10 +117,12 @@ def test_discord_unreachable_redacts_the_webhook_url(cfg):
     assert "Kuma webhook" in msg  # and still names which channel failed
 
 
-def test_discord_unreachable_preserves_an_ordinary_error(cfg):
+def test_discord_unreachable_preserves_an_ordinary_error(cfg, state):
     # The other half of the pair: redaction must not swallow the diagnosis. A DNS failure
     # carries no credential, so its text reaches the operator unchanged.
-    _, msg = _discord_cycle(cfg, raises=OSError("[Errno -2] Name or service not known"))
+    _, msg = _discord_cycle(
+        cfg, state, raises=OSError("[Errno -2] Name or service not known")
+    )
     assert "Name or service not known" in msg
     assert "redacted" not in msg
 
@@ -214,18 +219,16 @@ def test_discord_healthchecks_webhook_failure_pages(cfg):
     assert "Healthchecks" in msg and "404" in msg
 
 
-def test_email_backstop_disabled_without_password(monkeypatch, cfg):
+def test_email_backstop_disabled_without_password(cfg):
     cfg = replace(cfg, SMTP_PASSWORD="")
-    ok, msg = checks.notify.email_backstop(cfg)
+    ok, msg = checks.notify.email_backstop(cfg, State().email_probe)
     assert ok
     assert "disabled" in msg
 
 
 def test_email_backstop_caches_success_within_interval(monkeypatch, cfg):
     cfg = replace(cfg, SMTP_PASSWORD="app-pw", EMAIL_PROBE_INTERVAL_S=3600)
-    monkeypatch.setattr(
-        checks.notify, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""}
-    )
+    cache: StampedCache = {"ts": 0.0, "ok": True, "msg": ""}
     calls = []
 
     def probe(_cfg):
@@ -233,21 +236,23 @@ def test_email_backstop_caches_success_within_interval(monkeypatch, cfg):
         return True, "SMTP login ok"
 
     monkeypatch.setattr(checks.notify, "_smtp_login_ok", probe)
-    assert checks.notify.email_backstop(cfg, now=10000.0)[0]  # stale ts -> probes
+    assert checks.notify.email_backstop(cfg, cache, now=10000.0)[
+        0
+    ]  # stale ts -> probes
     ok, msg = checks.notify.email_backstop(
-        cfg, now=11800.0
+        cfg, cache, now=11800.0
     )  # +1800 < interval -> cached
     assert ok and len(calls) == 1 and "verified" in msg
-    checks.notify.email_backstop(cfg, now=13601.0)  # +3601 > interval -> re-probes
+    checks.notify.email_backstop(
+        cfg, cache, now=13601.0
+    )  # +3601 > interval -> re-probes
     assert len(calls) == 2
 
 
 def test_email_backstop_failure_reprobes_every_cycle(monkeypatch, cfg):
     # a failure is NOT cached (unlike a success), so recovery is caught next cycle, not 6h later
     cfg = replace(cfg, SMTP_PASSWORD="app-pw", EMAIL_PROBE_INTERVAL_S=3600)
-    monkeypatch.setattr(
-        checks.notify, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""}
-    )
+    cache: StampedCache = {"ts": 0.0, "ok": True, "msg": ""}
     calls = []
 
     def boom(_cfg):
@@ -255,10 +260,10 @@ def test_email_backstop_failure_reprobes_every_cycle(monkeypatch, cfg):
         raise RuntimeError("auth refused")
 
     monkeypatch.setattr(checks.notify, "_smtp_login_ok", boom)
-    ok, msg = checks.notify.email_backstop(cfg, now=10000.0)
+    ok, msg = checks.notify.email_backstop(cfg, cache, now=10000.0)
     assert not ok and "FAILED" in msg
     ok, _ = checks.notify.email_backstop(
-        cfg, now=10001.0
+        cfg, cache, now=10001.0
     )  # 1s later, well within interval -> still re-probes
     assert not ok and len(calls) == 2
 
@@ -273,9 +278,6 @@ def test_check_discord_email_backstop_failure_pages(monkeypatch, cfg):
         DISCORD_ARR_WEBHOOK_URL="",
         DISCORD_HEALTHCHECKS_WEBHOOK_URL="",
         SMTP_PASSWORD="app-pw",
-    )
-    monkeypatch.setattr(
-        checks.notify, "_email_probe", {"ts": 0.0, "ok": True, "msg": ""}
     )
     src = FakeSources(get_json=lambda *a, **k: {"name": "Homelab Alerts"})
 

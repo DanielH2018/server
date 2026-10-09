@@ -109,17 +109,14 @@ from catalog_facts import auth_tier, k8s_route
 from catalog_model import K3S_DEFAULTS, K8S_ROLES
 from glance_facts import (
     CONTAINERS_ROLES,
-    PI_HOST_VARS,
     SETUP_ROLES,
     image_repository,
     pi_glance_lines,
-    pi_service_entries,
     setup_glance_lines,
     setup_role_dirs,
 )
-from lib.ansible_inventory import K8S_HOST_VARS
-from lib.k8s_roles import k8s_entries
-from lib.render_guard import ALL_VARS, entry_tags, load_yaml
+from lib.estate import Estate, role_defaults
+from lib.render_guard import ALL_VARS, entry_tags
 from lib.repo_paths import ANSIBLE, REPO
 
 SELF = "scripts/docs/gen_role_glance.py"
@@ -196,7 +193,7 @@ def glance_lines(
     every role; built here for a single-role call.
     """
     name = entry["name"]
-    defaults = load_yaml(role_dir / "defaults" / "main.yml")
+    defaults = role_defaults(role_dir)
     lines = [f'- **Deploy tag:** `--tags "{",".join(entry_tags(entry))}"`']
 
     images = image_vars(name, defaults, group_vars)
@@ -224,7 +221,7 @@ def glance_lines(
     claims = claim_tiers(
         role_dir,
         k8s_namespace=group_vars.get("k8s_namespace", "homelab"),
-        tiers=load_longhorn_tier_lists(k3s_defaults),
+        tiers=load_longhorn_tier_lists(k3s_defaults, group_vars),
         k8s_roles=k8s_roles,
         claim_classes=claim_classes,
     )
@@ -362,19 +359,20 @@ def _refresh(
 def stale_k8s_docs(
     *,
     write: bool,
-    host_vars: Path = K8S_HOST_VARS,
+    estate: Estate | None = None,
     k8s_roles: Path = K8S_ROLES,
-    all_vars: Path = ALL_VARS,
     k3s_defaults: Path = K3S_DEFAULTS,
 ) -> list[str]:
     """`k8s/<name>` for every deployed k8s role whose block differs from a fresh render.
 
     Raises `MissingHeading` naming the role for a deployed role whose doc has no heading.
     """
-    group_vars = load_yaml(all_vars)
+    estate = estate or Estate()
+    group_vars = estate.group_vars
+    all_vars = estate.inventory.all_vars
     claim_classes = claim_index(k8s_roles)
     stale: list[str] = []
-    for entry in k8s_entries(host_vars).values():
+    for entry in estate.k8s_entries().values():
         name = entry["name"]
         role_dir = k8s_roles / name
         block = render_block(
@@ -413,12 +411,12 @@ def stale_setup_docs(
 def stale_pi_docs(
     *,
     write: bool,
-    pi_host_vars: Path = PI_HOST_VARS,
+    estate: Estate | None = None,
     containers_roles: Path = CONTAINERS_ROLES,
 ) -> list[str]:
     """`containers/<name>` for every Pi compose role whose block differs from a fresh render."""
     stale: list[str] = []
-    for entry in pi_service_entries(pi_host_vars):
+    for entry in (estate or Estate()).pi_entries():
         name = entry["name"]
         role_dir = containers_roles / name
         block = render_block(pi_glance_lines(entry, role_dir), BEGIN_PI)
@@ -429,10 +427,11 @@ def stale_pi_docs(
 
 def stale_docs(*, write: bool) -> list[str]:
     """Every plane's stale docs, `<plane>/<role>`; writes them if asked."""
+    estate = Estate()
     return (
-        stale_k8s_docs(write=write)
+        stale_k8s_docs(write=write, estate=estate)
         + stale_setup_docs(write=write)
-        + stale_pi_docs(write=write)
+        + stale_pi_docs(write=write, estate=estate)
     )
 
 

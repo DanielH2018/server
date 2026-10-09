@@ -3,7 +3,7 @@
 The Backblaze B2 and Cloudflare R2 checks that shared this module until 2026-09-01 are in
 checks/b2.py and checks/r2.py, mirroring their test files. Reads config as `cfg.X`, queries
 Prometheus through the `src` argument (`bridge.sources.Sources`), which a test replaces with a
-fake, and keeps the shared streak counter in `bridge.streaks`. Rule and enforcement:
+fake, and keeps its streak counters in `src.state` (`bridge.streaks.State`). Rule and enforcement:
 bridge/config.py's header.
 """
 
@@ -103,10 +103,10 @@ def check_longhorn_volumes(cfg: Config, src: Sources) -> tuple[bool, str]:
     )
     ok, msg, grace = longhorn_redundancy_verdict(volumes, offenders)
     if ok:
-        bridge.streaks._down_streaks["longhorn"] = 0
+        src.state.down_streaks["longhorn"] = 0
         return ok, msg
-    bridge.streaks._down_streaks["longhorn"], ok, msg = bridge.streaks.down_streak(
-        bridge.streaks._down_streaks.get("longhorn", 0),
+    src.state.down_streaks["longhorn"], ok, msg = bridge.streaks.down_streak(
+        src.state.down_streaks.get("longhorn", 0),
         cfg.LONGHORN_CONSECUTIVE,
         msg,
         grace,
@@ -180,9 +180,9 @@ def check_pvc_fullness(cfg: Config, src: Sources) -> tuple[bool, str]:
     # simultaneously blind and full still moves the census streak.
     graced = None
     if census_msg:
-        bridge.streaks._down_streaks["pvc_fullness"], census_ok, census_msg = (
+        src.state.down_streaks["pvc_fullness"], census_ok, census_msg = (
             bridge.streaks.down_streak(
-                bridge.streaks._down_streaks.get("pvc_fullness", 0),
+                src.state.down_streaks.get("pvc_fullness", 0),
                 cfg.PVC_CLAIMS_CONSECUTIVE,
                 census_msg,
                 "kubelet scrape gap grace",
@@ -190,7 +190,7 @@ def check_pvc_fullness(cfg: Config, src: Sources) -> tuple[bool, str]:
         )
         graced = (census_ok, census_msg)
     else:
-        bridge.streaks._down_streaks["pvc_fullness"] = 0
+        src.state.down_streaks["pvc_fullness"] = 0
     if breach_msg:
         return False, breach_msg
     if graced is not None:
@@ -235,14 +235,12 @@ def check_snapshot_headroom(cfg: Config, src: Sources) -> tuple[bool, str]:
     )
     ok, msg, grace = snapshot_headroom_verdict(used, caps, cfg.SNAPSHOT_CAP_WARN_RATIO)
     if ok:
-        bridge.streaks._down_streaks["snapshot_headroom"] = 0
+        src.state.down_streaks["snapshot_headroom"] = 0
         return ok, msg
-    bridge.streaks._down_streaks["snapshot_headroom"], ok, msg = (
-        bridge.streaks.down_streak(
-            bridge.streaks._down_streaks.get("snapshot_headroom", 0),
-            cfg.SNAPSHOT_CAP_CONSECUTIVE,
-            msg,
-            grace,
-        )
+    src.state.down_streaks["snapshot_headroom"], ok, msg = bridge.streaks.down_streak(
+        src.state.down_streaks.get("snapshot_headroom", 0),
+        cfg.SNAPSHOT_CAP_CONSECUTIVE,
+        msg,
+        grace,
     )
     return ok, msg

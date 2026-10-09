@@ -17,6 +17,8 @@ to the tags of the tasks that read it:
   - `defaults/main.yml` or `vars/<f>.yml`: the top-level keys whose value changed, then the
     tags of every task file and template naming one of those keys, following another vars
     key that interpolates one.
+  - a filter plugin `deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS` lists for the role:
+    each of its filters the role mentions is walked like a changed key (#3878).
 
 A `set_fact` IS FOLLOWED, as a fourth edge. Its mapping keys become host variables that
 outlive the task file that set them, so a value derived under one tag and read under another
@@ -75,8 +77,9 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import argparse
 import sys
+from pathlib import Path
 
-from deploy_tools import narrow_paths
+from deploy_tools import narrow_filters, narrow_paths
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
@@ -92,6 +95,7 @@ from narrow_setup_playbook import playbook_applies_role
 # role — `handlers/` (whose tasks run under the notifying task's tags), `meta/`, `tests/`,
 # a `CLAUDE.md` — refuses, so the caller prints the role tag.
 NARROWABLE = ("tasks/", "templates/", "files/", "defaults/", "vars/")
+INVENTORY = "ansible/inventory/"
 
 
 # Paths inside a role that reach no host, so they add no tag requirement: prose Ansible never
@@ -166,6 +170,46 @@ def path_tags(
     raise CannotNarrow(f"{rel} is not in a directory this can narrow from")
 
 
+def plugin_tags(
+    path: str, index: RoleIndex, old: str, new: str, repo: str
+) -> frozenset[str]:
+    """The tags of the role's readers of a filter plugin's filters, or a refusal (#3878).
+
+    A filter reaches a setup role through the `defaults/` or `vars/` key whose value calls it,
+    as `k3s_longhorn_r2_volumes` calls `tier_backup_claims`. So each filter name the role
+    mentions is walked like a changed key: `key_readers` follows the keys naming it to the task
+    files and templates reading them. A filter the role never names is skipped, since a plugin
+    registers several and a role calls few.
+
+    Args:
+        path: the plugin, under `ansible/filter_plugins/`.
+        index: the role, read at `new`.
+        old: the commit the checkout was on, read for filters the range renamed or dropped.
+        new: the commit carrying the change.
+        repo: the checkout to read.
+
+    Raises:
+        CannotNarrow: every refusal `narrow_filters.plugin_names` makes, an inventory value
+            calling one of the filters (the role reads that value under a name this walk
+            cannot follow), or a role that names none of the plugin's filters, which means the
+            table calling it a caller and this walk disagree.
+    """
+    tags: set[str] = set()
+    for name in sorted(narrow_filters.plugin_names(path, old, new, Path(repo))):
+        r = git(
+            "grep", "-l", "-w", "-e", name, new, "--", INVENTORY, cwd=repo, check=False
+        )
+        if r.returncode > 1:
+            raise CannotNarrow(f"`git grep {name}` failed: {r.stderr.strip()}")
+        hits = [line.split(":", 1)[1] for line in r.stdout.splitlines() if line]
+        narrow_filters.callers(hits, name, new, Path(repo))
+        if index.mentions(name):
+            tags |= index.key_readers(name)
+    if not tags:
+        raise CannotNarrow(f"{index.prefix} names no filter {path} registers")
+    return frozenset(tags)
+
+
 def role_tags(
     role: str, role_tag: str, old: str, new: str, repo: str, playbook: str
 ) -> frozenset[str]:
@@ -215,11 +259,6 @@ def role_tags(
             f"`git diff {old}..{new} -- {prefix}` failed: {r.stderr.strip()}"
         )
     changed = [line for line in r.stdout.splitlines() if line]
-    # A filter plugin this role calls reaches it through a value no task file names, so no
-    # block tag is derivable from one, and the whole role applies (#3874).
-    called = sorted(set(changed) & plugins)
-    if called:
-        raise CannotNarrow(f"{role} calls a filter from {', '.join(called)}")
     if not changed:
         raise CannotNarrow(
             f"{old}..{new} changes nothing under {prefix} or in a file it ships"
@@ -235,6 +274,9 @@ def role_tags(
             if _reaches_no_host(rel):
                 continue
             got = path_tags(rel, index, old, new, repo)
+        elif path in plugins:
+            rel = path
+            got = plugin_tags(path, index, old, new, repo)
         else:
             # A shipped file is named by this role's tasks the way its own `files/` are, and
             # `readers_of` refuses one that none of them names.

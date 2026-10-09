@@ -144,7 +144,7 @@ def service_config(
         # n8n hides successful executions (EXECUTIONS_DATA_SAVE_ON_SUCCESS=none, kept that way
         # to bound database.sqlite + its B2 backup churn), so "consecutive" can't be read from
         # one snapshot — the per-workflow failure streak is accumulated across cycles in
-        # _n8n_streaks (see n8n_update_streaks): it advances once per NEW error (deduped by
+        # src.state.n8n_streaks (see n8n_update_streaks): it advances once per NEW error (deduped by
         # execution id) and resets when a workflow's latest error ages past N8N_FAIL_WINDOW
         # (recovered / went idle).
         N8N_FAIL_WINDOW=_env("N8N_FAIL_WINDOW"),

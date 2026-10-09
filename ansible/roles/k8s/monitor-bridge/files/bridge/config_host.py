@@ -223,7 +223,7 @@ def host_config(
         HWMON_TEMP_EXCLUDE_CHIP=_env("HWMON_TEMP_EXCLUDE_CHIP"),
         # Hysteresis: a transcode or a compile spikes coretemp for one scrape, so only the Nth
         # consecutive breaching cycle pages. The streak is ONE counter for the whole check
-        # (bridge.streaks._down_streaks["host_temp"]), not one per sensor, so this number is
+        # (src.state.down_streaks["host_temp"]), not one per sensor, so this number is
         # estate-wide.
         #
         # DECIDED: 12 cycles (60 min at INTERVAL=300), not the 3 (15 min) this shipped with —
@@ -247,7 +247,7 @@ def host_config(
         # Estate-wide is acceptable because no other sensor is near its limit: over the same 7 d,
         # daniel-server's coretemp peaked at 74C against a 90C limit and daniel-pi's thermal zone
         # at 79.5C against the 85C fallback, so this delays nothing that is currently firing.
-        # Caveat: _down_streaks is module-global and resets on a bridge restart, so a deploy
+        # Caveat: the streak lives in the process (`bridge.streaks.State`) and resets on a bridge restart, so a deploy
         # mid-excursion costs a full 60 min re-accumulation. That cuts toward quiet, not toward
         # a missed fault.
         HWMON_TEMP_CONSECUTIVE=_int("HWMON_TEMP_CONSECUTIVE"),

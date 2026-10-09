@@ -22,6 +22,13 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
+from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
+
+# The Backup CR reader and the backup group and target names, shared with the backup-health
+# cron (#3735, #3737); it imports host_lib, so both directories go on sys.path.
+_sys.path.insert(0, str(HOST_LIB_FILES))
+_sys.path.insert(0, str(K3S_FILES))
+import longhorn_backups
 
 
 def volume_shard_labels(cluster=DEFAULT_CLUSTER, _run=None):
@@ -43,7 +50,7 @@ def volume_shard_labels(cluster=DEFAULT_CLUSTER, _run=None):
             # Exact group comparison, not a `<group>/` prefix test: see the same rewrite in
             # scripts/infra_map/live.py for why the prefix form is read as URL sanitization.
             group, sep, name = key.partition("/")
-            if sep and group == "recurring-job-group.longhorn.io":
+            if sep and group + sep == longhorn_backups.GROUP_LABEL_PREFIX:
                 shards[item["metadata"]["name"]] = name
     return shards
 
@@ -55,16 +62,15 @@ def volume_owned_backup_counts(cluster=DEFAULT_CLUSTER, _run=None):
     STATUS field, not a Kubernetes label, so `kubectl -l` cannot select on it.
     """
     run = _run or (lambda *args: kubectl(cluster, *args))
-    out = run("-n", "longhorn-system", "get", "backups.longhorn.io", "-o", "json")
+    out = run("-n", "longhorn-system", *longhorn_backups.LIST_ARGS)
     if out.returncode != 0:
         raise SystemExit("kubectl failed: " + out.stderr.strip()[:300])
     owners = {}
-    for item in json.loads(out.stdout).get("items", []):
-        status = item.get("status", {})
-        vol = status.get("volumeName")
-        job = (status.get("labels") or {}).get("RecurringJob")
-        if vol and job:
-            owners.setdefault(vol, {})[job] = owners.setdefault(vol, {}).get(job, 0) + 1
+    items = json.loads(out.stdout).get("items", [])
+    for backup in longhorn_backups.from_items(items):
+        if backup.volume and backup.job:
+            jobs = owners.setdefault(backup.volume, {})
+            jobs[backup.job] = jobs.get(backup.job, 0) + 1
     return owners
 
 
@@ -90,7 +96,7 @@ def pvc_names(cluster=DEFAULT_CLUSTER, _run=None):
 # not apply to it. The deletion log line names the target URL, not the target NAME, so the
 # mapping has to come from the CRs — inferring B2 from the `us-east-005` region component would
 # be exactly the guess `docs/adr/0014` and the tiering memory warn against.
-B2_BACKUP_TARGET_NAME = "default"
+B2_BACKUP_TARGET_NAME = longhorn_backups.B2_TARGET
 
 
 def volume_backup_targets(cluster=DEFAULT_CLUSTER, _run=None):

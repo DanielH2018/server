@@ -14,6 +14,7 @@ from bridge.config import load_config
 from _bridge_env import bridge_env
 from _fake_sources import FakeSources
 import checks.healthchecks as hc
+from bridge.streaks import ProbeCache
 
 EXPECTED = (
     {"slug": "longhorn-backup-health", "kind": "simple", "timeout": 600, "grace": 1200},
@@ -60,7 +61,7 @@ def _armed(cfg):
     return replace(cfg, HEALTHCHECKS_API_KEY="k", HEALTHCHECKS_EXPECTED=EXPECTED)
 
 
-def _fresh_probe() -> hc._ProbeCache:
+def _fresh_probe() -> ProbeCache:
     return {"ts": None, "ok": True, "msg": ""}
 
 

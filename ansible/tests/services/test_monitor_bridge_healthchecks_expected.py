@@ -15,11 +15,11 @@ import re
 
 from _helpers import REPO
 from _k8s_render import rendered_docs
-from fragment_readers import role_defaults
 from fragment_renderers import deadman_crons
 from gen_doc_fragments import deadman_inputs
+from lib.estate import role_defaults
 
-BRIDGE_DEFAULTS = REPO / "ansible/roles/k8s/monitor-bridge/defaults/main.yml"
+BRIDGE_ROLE = REPO / "ansible/roles/k8s/monitor-bridge"
 DOC = REPO / "docs/healthchecks-io-deadman.md"
 
 # The census the comparisons below must cover, so an empty list cannot pass them vacuously.
@@ -44,7 +44,7 @@ _GRACE = re.compile(r"^(\d+) (minute|hour)s?$")
 
 
 def _expected() -> dict[str, dict]:
-    rows = role_defaults(BRIDGE_DEFAULTS)["monitor_bridge_healthchecks_expected"]
+    rows = role_defaults(BRIDGE_ROLE)["monitor_bridge_healthchecks_expected"]
     return {r["slug"]: r for r in rows}
 
 

@@ -266,7 +266,6 @@ def test_check_oom_names_the_killed_pod(cfg):
 def test_check_cpu_throttle_needs_both_gates_and_streak(cfg):
     # 90% throttled AND real cores lost — but only pages on the CPU_CONSECUTIVE-th
     # consecutive breaching cycle.
-    checks.cluster._cpu_breach_streak = 0
     cfg, src = _fake_vectors(
         cfg,
         {
@@ -279,12 +278,10 @@ def test_check_cpu_throttle_needs_both_gates_and_streak(cfg):
         assert ok and "tdarr-y" in msg  # named but not paging yet
     ok, msg = checks.cluster.check_cpu_throttle(cfg, src)
     assert not ok and "tdarr-y" in msg
-    checks.cluster._cpu_breach_streak = 0
 
 
 def test_check_cpu_throttle_tiny_loss_stays_up(cfg):
     # High ratio but negligible absolute cores lost — the volume floor gates it out.
-    checks.cluster._cpu_breach_streak = 0
     cfg, src = _fake_vectors(
         cfg,
         {

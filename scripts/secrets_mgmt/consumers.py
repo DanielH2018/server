@@ -58,6 +58,9 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # --tags uptime-kuma` would rotate the tile and leave the cron pushing the old value —
         # which reads as the monitor going silent, the exact fault it was added to report.
         "docs_refresh_push_token",
+        # Same role, same cron shape, same reason: the weekly eval sweep (eval-run.sh.j2) +
+        # its k8s/uptime-kuma static tile.
+        "homelab_eval_push_token",
         # daniel-SERVER cron (setup/initial_setup) + a k8s/uptime-kuma tile deployed from
         # daniel-box: two hosts, so no single redeploy can move both halves. Rotating the tile
         # alone would leave the cron pushing the old value, silencing the only monitor that can

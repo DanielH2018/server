@@ -88,6 +88,36 @@ def test_no_arguments_means_loop_forever_and_push(monkeypatch, cfg):
     assert ("tok_disk", True, "disk ok") in pushes
 
 
+def test_every_cycle_reads_the_one_state_main_built(monkeypatch):
+    """Streaks and probe caches live on `src.state`, so main() must hand every cycle ONE `Sources`.
+
+    A `Sources` rebuilt per cycle would zero every hysteresis counter each INTERVAL, and no check
+    test could see it, since each reuses one fake. `sources` is left to main() to build here, and
+    `--check counter` keeps the gates and the exporter probe from sending a live query. The
+    second cycle stops the loop with a BaseException, which `_evaluate` does not catch.
+    """
+    wired = _silence(monkeypatch, [], [])
+    del wired["sources"]
+    wired["env"] = bridge_env(INTERVAL="0")
+    seen = []
+
+    class _Stop(BaseException):
+        pass
+
+    def counter(_cfg, src):
+        src.state.down_streaks["counter"] = src.state.down_streaks.get("counter", 0) + 1
+        seen.append(src.state)
+        if len(seen) == 2:
+            raise _Stop
+        return True, "counted"
+
+    wired["checks"] = [Check("counter", "tok_counter", counter)]
+    with pytest.raises(_Stop):
+        cli.main(["--check", "counter"], **wired)
+    assert seen[0] is seen[1]
+    assert seen[1].down_streaks["counter"] == 2
+
+
 def test_once_runs_exactly_one_cycle_and_returns_zero(monkeypatch):
     pushes, ran = [], []
     wired = _silence(monkeypatch, pushes, ran)

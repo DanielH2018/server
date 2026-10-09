@@ -108,6 +108,8 @@ class Calls:
     gh_json: list[list[str]] = field(default_factory=list)
     # The checkout each worktree read was aimed at; None is this repo's own.
     checkouts: list[str | None] = field(default_factory=list)
+    # The (orchestrator branch, repo) each manifest read was asked for.
+    launched: list[tuple[str, str]] = field(default_factory=list)
 
     def none(self) -> bool:
         """Whether neither boundary was reached at all."""
@@ -140,6 +142,9 @@ class Fakes:
     # so a test that got it by default would pass for a reason it never stated. Same argument
     # as the unanswered-argv assertion above.
     worktree_facts: Callable[[], tuple] | None = None
+    # What the run manifests answer, keyed by (orchestrator branch, repo). Empty by default,
+    # so no test reads the real `~/.claude/fanout`.
+    launched: dict[tuple[str, str], set[str]] = field(default_factory=dict)
     gh_errors: dict[str, BaseException] = field(default_factory=dict)
     # Keyed by the same `issue list` / `label list` / `issue view` pair `gh_json` dispatches
     # on, so a test can fail the issue read while the label read still answers.
@@ -259,7 +264,11 @@ def build_tools(f: Fakes | None = None) -> tuple[FindingsTools, Calls]:
             )
         return f.worktree_facts()
 
+    def launched_branches(branch, repo):
+        calls.launched.append((branch, repo))
+        return set(f.launched.get((branch, repo), set()))
+
     return (
-        FindingsTools(gh_json, gh, worktree_facts),
+        FindingsTools(gh_json, gh, worktree_facts, launched_branches=launched_branches),
         calls,
     )

@@ -22,6 +22,7 @@ import yaml
 from _helpers import REPO
 
 import gen_role_glance as g
+from lib.estate import Inventory
 
 HOOK_ID = "regen-role-glance"
 
@@ -86,16 +87,16 @@ def _stale_sonarr_fixture(tmp_path: Path) -> tuple[Path, Callable[..., list[str]
     roles = tmp_path / "roles"
     for name in ("sonarr", "media-volume"):
         shutil.copytree(g.K8S_ROLES / name, roles / name)
-    entry = next(e for e in g.k8s_entries().values() if e["name"] == "sonarr")
-    host_vars = tmp_path / "daniel-box.yml"
-    host_vars.write_text(yaml.safe_dump({"containers_list": [entry]}))
+    entry = g.Estate().k8s_entries()["sonarr"]
+    (tmp_path / "daniel-box.yml").write_text(
+        yaml.safe_dump({"containers_list": [entry]})
+    )
+    estate = g.Estate(Inventory(host_vars=tmp_path))
     doc = roles / "sonarr" / "CLAUDE.md"
     text = doc.read_text()
     assert '`--tags "sonarr"`' in text
     doc.write_text(text.replace('`--tags "sonarr"`', '`--tags "sonar"`', 1))
-    return doc, functools.partial(
-        g.stale_k8s_docs, host_vars=host_vars, k8s_roles=roles
-    )
+    return doc, functools.partial(g.stale_k8s_docs, estate=estate, k8s_roles=roles)
 
 
 def test_fix_mode_rewrites_a_stale_doc_and_fails(tmp_path, capsys):

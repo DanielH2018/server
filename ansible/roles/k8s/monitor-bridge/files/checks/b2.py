@@ -2,46 +2,20 @@
 
 Reads config as `cfg.X` and queries B2 through the `src` argument (`bridge.sources.Sources`),
 which a test replaces with a fake; `b2_reachable` and `b2_authorize` are patched on THIS module, where
-`check_b2_reachable` reads them. The probe caches `_b2_probe` / `_b2_storage` live beside the
-code that mutates them. Rule and enforcement: bridge/config.py's header.
+`check_b2_reachable` reads them. The probe caches are `src.state.b2_probe` / `src.state.b2_storage`
+(`bridge.streaks.State`), so every `Sources` starts with its own. Rule and enforcement:
+bridge/config.py's header.
 """
 
 import base64
 import time
 import urllib.error
 import urllib.parse
-from typing import TypedDict
 
 from bridge.config import Config
 from bridge.sources import Sources
 from bridge.types import JsonObject, JsonValue, as_object
 from verdicts.storage import b2_storage_verdict, b2_sum_versions
-
-
-# `ttl` is how long THIS cached verdict is held, chosen per outcome by b2_reachable — a billed
-# answer from B2 holds B2_PROBE_INTERVAL_S, a transport failure holds B2_TRANSPORT_RETRY_S. It
-# seeds at 0, meaning "nothing is cached yet, probe now": the first cycle probes regardless,
-# because `ts` is 0 and every real clock is further from it than any interval.
-class _ProbeCache(TypedDict):
-    ts: float
-    ok: bool
-    msg: str
-    ttl: float
-
-
-class _StorageCache(TypedDict):
-    ts: float
-    ok: bool
-    msg: str
-
-
-_b2_probe: _ProbeCache = {
-    "ts": 0.0,
-    "ok": True,
-    "msg": "not yet probed",
-    "ttl": 0.0,
-}
-_b2_storage: _StorageCache = {"ts": 0.0, "ok": False, "msg": "not yet probed"}
 
 
 def b2_authorize_data(cfg: Config, src: Sources) -> JsonObject:
@@ -97,10 +71,13 @@ def b2_storage_usage(
     if not cfg.B2_PROBE_KEY_ID or not cfg.B2_PROBE_APPLICATION_KEY:
         return True, "B2 storage check disabled (no credentials)"
     now = now if now is not None else time.time()
-    if _b2_storage["ok"] and now - _b2_storage["ts"] < cfg.B2_STORAGE_INTERVAL_S:
-        return _b2_storage["ok"], "%s (checked %.0fh ago)" % (
-            _b2_storage["msg"],
-            (now - _b2_storage["ts"]) / 3600,
+    if (
+        src.state.b2_storage["ok"]
+        and now - src.state.b2_storage["ts"] < cfg.B2_STORAGE_INTERVAL_S
+    ):
+        return src.state.b2_storage["ok"], "%s (checked %.0fh ago)" % (
+            src.state.b2_storage["msg"],
+            (now - src.state.b2_storage["ts"]) / 3600,
         )
     try:
         api_url, token, bucket_id = b2_storage_api(b2_authorize_data(cfg, src))
@@ -122,9 +99,9 @@ def b2_storage_usage(
         )
     except Exception as e:
         ok, msg = False, "B2 storage probe failed: %s" % e
-    _b2_storage["ts"] = now
-    _b2_storage["ok"] = ok
-    _b2_storage["msg"] = msg
+    src.state.b2_storage["ts"] = now
+    src.state.b2_storage["ok"] = ok
+    src.state.b2_storage["msg"] = msg
     return ok, msg
 
 
@@ -212,15 +189,15 @@ def b2_reachable(
     back the RECOVERY, not just the retry. Re-probing a connection that never landed is free, so
     there is nothing to protect there.
 
-    Module-global cache, reset on container restart, like the streak counters.
+    The cache is `src.state.b2_probe`, reset on container restart like the streak counters.
     """
     if not cfg.B2_PROBE_KEY_ID or not cfg.B2_PROBE_APPLICATION_KEY:
         return True, "B2 reachability check disabled (no credentials)"
     now = now if now is not None else time.time()
-    if now - _b2_probe["ts"] < _b2_probe["ttl"]:
-        return _b2_probe["ok"], "%s (checked %.0fm ago)" % (
-            _b2_probe["msg"],
-            (now - _b2_probe["ts"]) / 60,
+    if now - src.state.b2_probe["ts"] < src.state.b2_probe["ttl"]:
+        return src.state.b2_probe["ok"], "%s (checked %.0fm ago)" % (
+            src.state.b2_probe["msg"],
+            (now - src.state.b2_probe["ts"]) / 60,
         )
     try:
         ok, msg = b2_authorize(cfg, src)
@@ -231,10 +208,10 @@ def b2_reachable(
     except Exception as e:
         # Never reached B2, so nothing was billed — retry on the next cycle.
         ok, msg, ttl = False, "B2 unreachable: %s" % e, cfg.B2_TRANSPORT_RETRY_S
-    _b2_probe["ts"] = now
-    _b2_probe["ok"] = ok
-    _b2_probe["msg"] = msg
-    _b2_probe["ttl"] = ttl
+    src.state.b2_probe["ts"] = now
+    src.state.b2_probe["ok"] = ok
+    src.state.b2_probe["msg"] = msg
+    src.state.b2_probe["ttl"] = ttl
     return ok, msg
 
 

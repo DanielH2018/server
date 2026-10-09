@@ -50,4 +50,8 @@ ALL_VARS = INVENTORY / "group_vars" / "all.yml"
 HOST_VARS = INVENTORY / "host_vars"
 # The k3s role's defaults: the Longhorn tier lists, the etcd snapshot retention and the
 # schema version the manifest validator pins all live here.
-K3S_DEFAULTS = ROLES / "setup" / "k3s" / "defaults" / "main.yml"
+K3S_ROLE = ROLES / "setup" / "k3s"
+K3S_DEFAULTS = K3S_ROLE / "defaults" / "main.yml"
+# `longhorn_backups.py` lives here because the backup-health cron ships it; the reapers and
+# probe.py, which run from the checkout, put this directory on sys.path to import it.
+K3S_FILES = K3S_ROLE / "files"

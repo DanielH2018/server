@@ -156,6 +156,11 @@ def run(
 
 
 # ── git ───────────────────────────────────────────────────────────────────────────────────────
+# DECIDED: `run()` above is the deployer's one git wrapper, and every other module reaches it as
+# `tools.run(["git", ...])`. The three helpers below are the only raw `subprocess` git calls, and
+# each is raw on purpose: `run()` raises on a non-zero exit and `run(check=False)` discards the
+# returncode and stderr, while these three must read them. `deploy_git` is not the home for git
+# I/O: it is the pure decision module, unit-tested without a repo (#3730).
 
 
 def is_ancestor(repo: str, ancestor: str, descendant: str) -> bool:
@@ -165,6 +170,9 @@ def is_ancestor(repo: str, ancestor: str, descendant: str) -> bool:
     fast-forward and deploy (see next_action's origin_ahead). A git error (bad object, etc.) is a
     non-zero exit and conservatively reads False, so the tick degrades into a no-op rather than a
     mis-fired deploy.
+
+    NOT `run(...)`: the answer IS the returncode — exit 1 means "not an ancestor", which `run()`
+    would raise on and `run(check=False)` would discard.
     """
     r = subprocess.run(
         ["git", "merge-base", "--is-ancestor", ancestor, descendant],

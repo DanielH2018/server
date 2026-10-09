@@ -25,8 +25,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from lib.ansible_inventory import containers_entries_in, inventory_hosts
-from lib.render_guard import load_yaml as _load_yaml_mapping
+from lib.estate import Estate, Inventory
 from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI
 
 UNKNOWN = "unknown"
@@ -43,11 +42,7 @@ ROLES = {
 }
 
 
-def load_host_vars(name: str, host_vars: Path = HOST_VARS) -> dict:
-    return _load_yaml_mapping(host_vars / f"{name}.yml")
-
-
-def _flag(data: dict, key: str, defaults: dict | None = None) -> str:
+def _flag(estate: Estate, host: str, key: str) -> str:
     """Host value, else the group default, else unknown.
 
     A host that declares nothing still inherits group_vars/all.yml, so "not in host_vars"
@@ -58,11 +53,11 @@ def _flag(data: dict, key: str, defaults: dict | None = None) -> str:
     The provenance stays visible rather than collapsing into a bare "yes": the convention
     here is to never let a default read as something the host asserted.
     """
-    if key in data:
-        return "yes" if data[key] else "no"
-    if defaults and key in defaults:
-        return "%s (group default)" % ("yes" if defaults[key] else "no")
-    return f"{UNKNOWN} ({key} not declared)"
+    source = estate.source(host, key)
+    if source is None:
+        return f"{UNKNOWN} ({key} not declared)"
+    value = "yes" if estate.vars(host)[key] else "no"
+    return value if source == "host" else f"{value} (group default)"
 
 
 def build_rows(
@@ -83,20 +78,22 @@ def build_rows(
     # A parameter, not the module constant read directly: a test builds a synthetic
     # inventory in a tmp dir, and reaching past it to the real group_vars would make that
     # fixture depend on the repo it is meant to stand in for.
-    defaults = _load_yaml_mapping(all_vars)
+    estate = Estate(
+        Inventory(all_vars=all_vars, host_vars=host_vars, hosts_ini=hosts_ini)
+    )
     rows = []
-    for host in inventory_hosts(hosts_ini):
+    for host in estate.hosts:
         name = host.name
-        data = load_host_vars(name, host_vars)
+        data = estate.own_vars(name)
         rows.append(
             {
                 "name": name,
                 "role": ROLES.get(name, f"{UNKNOWN} (no description recorded)"),
                 "ip": str(data.get("server_ip", f"{UNKNOWN} (server_ip not declared)")),
                 "connection": host.connection,
-                "services": str(len(containers_entries_in(data))),
-                "gitops": _flag(data, "has_gitops", defaults),
-                "docker": _flag(data, "has_docker", defaults),
+                "services": str(len(estate.entries(name))),
+                "gitops": _flag(estate, name, "has_gitops"),
+                "docker": _flag(estate, name, "has_docker"),
             }
         )
     return rows

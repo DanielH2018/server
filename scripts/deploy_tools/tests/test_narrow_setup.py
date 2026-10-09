@@ -174,36 +174,6 @@ def test_a_shipped_file_no_task_of_the_role_names_is_flagged(ships):
         narrow(ships, *_refs(ships))
 
 
-# ── a filter plugin the role calls takes the whole role (#3874) ────────────────────────
-
-PLUGIN = "ansible/filter_plugins/demo_filters.py"
-
-
-@pytest.fixture
-def calls_plugin(tree, monkeypatch) -> Tree:
-    """The demo role declared a caller of `PLUGIN`'s filters."""
-    monkeypatch.setitem(
-        narrow_setup.SETUP_ROLES_CALLING_FILTER_PLUGINS, PLUGIN, frozenset({"demo"})
-    )
-    tree.write(PLUGIN, "VALUE = 1\n")
-    tree.commit("the plugin")
-    return tree
-
-
-def test_a_filter_plugin_the_role_calls_is_flagged(calls_plugin):
-    # The role's own template changes too, so a narrowing that ignored the plugin would
-    # still return `alpha` and drop the plugin's reach.
-    calls_plugin.write(f"{ROLE}/templates/alpha.conf.j2", "mode = 2\n")
-    calls_plugin.write(PLUGIN, "VALUE = 2\n")
-    with pytest.raises(narrow_setup.CannotNarrow, match=r"calls a filter from"):
-        narrow(calls_plugin, *_refs(calls_plugin))
-
-
-def test_a_role_change_beside_an_unchanged_plugin_still_narrows(calls_plugin):
-    calls_plugin.write(f"{ROLE}/templates/alpha.conf.j2", "mode = 2\n")
-    assert narrow(calls_plugin, *_refs(calls_plugin)) == frozenset({"alpha"})
-
-
 # ── the real tree: the case #2307 names, so the scan cannot go vacuous ─────────────────
 
 

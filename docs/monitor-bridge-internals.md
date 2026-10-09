@@ -96,7 +96,7 @@ reason it is a member. The rules below shaped those memberships.
 | `bridge/net.py` | the transport: `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` (which caps its message with `bridge.common.cap_push_msg`), and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST. No check body calls its fetchers; they go through `bridge/sources.py` |
 | `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `loki_vector`, `loki_lines`, `get_json`, `post_json`, and `log_error_counts` composed from two of them). `cli.main()` builds one; `run_once` hands it to every body as `src` |
 | `bridge/msgfmt.py` | `format_down(unit, state, items, details)` — the one grammar for a push message naming several things; import-free so `probe.py releases --kuma` loads it from a host too |
-| `bridge/streaks.py` | `down_streak` (the consecutive-down counter four domains share, cleared by `conftest.py`) and `apply_startup_grace` |
+| `bridge/streaks.py` | `State` (every streak counter and probe cache, carried as `src.state`), `down_streak` (the consecutive-down step) and `apply_startup_grace` |
 | `bridge/common.py` | `_env`, `sanitize`, `cap_push_msg` (`PUSH_MSG_MAX`) and `clamp_discord` (`DISCORD_MAX`) — the helpers shared verbatim with autofix-bridge's `autofix.py`; its header records what was considered and rejected — plus `host_uptime_s`, the node's boot clock the two post-reboot arms key on |
 | `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
 | `verdicts/<domain>.py` | pure decisions taking every threshold as an argument: `cluster`, `host` (`hwmon_temp_limits`, `pi_pressure`), `host_smart` (`scrutiny_*`), `host_power` (`ups_health`, `thermal_monitor_verdict`), `host_cgroups`, `service`, `logs`, `notify`, `storage` (the B2/R2 decisions with the R2 Class A/B/free ACTION LISTS beside them — policy, not configuration) |
@@ -117,8 +117,11 @@ reason it is a member. The rules below shaped those memberships.
   wrong is silent, so `ansible/tests/services/test_monitor_bridge_modules.py` re-derives every
   patched `(module, name)` pair by AST, and `test_bridge_patch_boundary.py` beside it fails a
   runtime module that from-imports a patched name.
-- **Mutable per-check state stays with the code that mutates it.** `_down_streaks` has its own
-  module only because four domains mutate it.
+- **Per-check state is a parameter too.** Every streak counter and probe cache is a field of
+  `bridge.streaks.State`, which `Sources` builds once, so a check reads `src.state.down_streaks`
+  and a fresh `FakeSources` starts zeroed (#3866). A test whose cycles each build their own fake
+  hands them one `State`: `FakeSources(state=...)`, or conftest's `state` fixture. Without
+  that, a "resets the streak" test passes on a counter that never advanced.
 - A fixture goes in `tests/conftest.py`; a helper taking arguments goes in an
   underscore-prefixed, repo-unique module (`_check_gate_helpers.py`), never
   `from conftest import ...`.

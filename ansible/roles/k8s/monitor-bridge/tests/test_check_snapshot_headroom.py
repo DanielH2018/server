@@ -12,7 +12,6 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
-import bridge.streaks
 import checks.storage
 import gates
 import registry
@@ -91,14 +90,16 @@ def test_recovery_resets_the_streak(cfg):
         [_volume("pvc-jf", "jellyfin-config")],
     )
     checks.storage.check_snapshot_headroom(cfg, src)
-    assert bridge.streaks._down_streaks["snapshot_headroom"] == 1
+    assert src.state.down_streaks["snapshot_headroom"] == 1
+    state = src.state
     cfg, src = _arm(
         cfg,
         [_snapshot("pvc-jf", "weekly-b-1", JELLYFIN_USED)],
         [_volume("pvc-jf", "jellyfin-config")],
     )
+    src.state = state
     assert checks.storage.check_snapshot_headroom(cfg, src)[0]
-    assert bridge.streaks._down_streaks["snapshot_headroom"] == 0
+    assert src.state.down_streaks["snapshot_headroom"] == 0
 
 
 def test_a_declared_cap_with_no_snapshot_series_is_flagged_not_green(cfg):

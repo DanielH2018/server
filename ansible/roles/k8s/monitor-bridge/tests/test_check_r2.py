@@ -157,12 +157,10 @@ def test_r2_query_raises_when_no_account_matches(cfg):
         checks.r2.r2_query_usage(cfg, src, R2_NOW)
 
 
-def _arm_r2(cfg, monkeypatch):
-    cfg = replace(
+def _arm_r2(cfg):
+    return replace(
         cfg, CF_ACCOUNT_ID="acct", CF_ANALYTICS_TOKEN="tok", R2_BUCKET="bucket"
     )
-    monkeypatch.setattr(checks.r2, "_r2_probe", {"ts": None, "ok": True, "msg": ""})
-    return cfg
 
 
 def test_r2_usage_disabled_without_credentials(cfg):
@@ -172,17 +170,16 @@ def test_r2_usage_disabled_without_credentials(cfg):
 
 
 def test_r2_usage_caches_a_success(monkeypatch, cfg):
-    cfg = _arm_r2(cfg, monkeypatch)
+    cfg = _arm_r2(cfg)
     calls = []
     monkeypatch.setattr(
         checks.r2,
         "r2_query_usage",
         lambda _cfg, _src, now: (calls.append(now), (0, 0, 0, 0, []))[1],
     )
-    checks.r2.r2_usage(cfg, FakeSources(), now=1000.0)
-    ok, msg = checks.r2.r2_usage(
-        cfg, FakeSources(), now=1000.0 + cfg.R2_PROBE_INTERVAL_S - 1
-    )
+    src = FakeSources()
+    checks.r2.r2_usage(cfg, src, now=1000.0)
+    ok, msg = checks.r2.r2_usage(cfg, src, now=1000.0 + cfg.R2_PROBE_INTERVAL_S - 1)
     assert ok
     assert len(calls) == 1
     assert "checked" in msg
@@ -191,13 +188,14 @@ def test_r2_usage_caches_a_success(monkeypatch, cfg):
 def test_r2_usage_reprobes_after_a_failure(monkeypatch, cfg):
     # Unlike b2_reachable, a failure is NOT cached: these calls are free, so re-probing costs
     # nothing and finds recovery a cycle sooner.
-    cfg = _arm_r2(cfg, monkeypatch)
+    cfg = _arm_r2(cfg)
     calls = []
     monkeypatch.setattr(
         checks.r2,
         "r2_query_usage",
         lambda _cfg, _src, now: (calls.append(now), (9_000_000_000, 0, 0, 0, []))[1],
     )
-    assert not checks.r2.r2_usage(cfg, FakeSources(), now=1000.0)[0]
-    assert not checks.r2.r2_usage(cfg, FakeSources(), now=1001.0)[0]
+    src = FakeSources()
+    assert not checks.r2.r2_usage(cfg, src, now=1000.0)[0]
+    assert not checks.r2.r2_usage(cfg, src, now=1001.0)[0]
     assert len(calls) == 2

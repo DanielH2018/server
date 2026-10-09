@@ -1,13 +1,12 @@
 """Cloudflare R2 free-tier headroom for monitor-bridge — one GraphQL query, four arms.
 
 Reads config as `cfg.X` and queries R2 through the `src` argument (`bridge.sources.Sources`),
-which a test replaces with a fake. `_r2_probe` lives beside `r2_usage`, the only code that mutates it. Rule and
+which a test replaces with a fake. Its cache is `src.state.r2_probe` (`bridge.streaks.State`). Rule and
 enforcement: bridge/config.py's header.
 """
 
 import json
 import time
-from typing import TypedDict
 from datetime import datetime, timedelta, timezone
 
 from bridge.config import Config
@@ -128,18 +127,6 @@ def r2_query_usage(
     return storage_bytes, uploads, class_a, class_b, unknown
 
 
-# ts=None means never probed. An explicit sentinel rather than 0.0: "0 seconds since the epoch" is
-# indistinguishable from a real timestamp by the arithmetic below, and only the sheer size of a
-# real time.time() keeps that from reading as a fresh cache entry on the first cycle.
-class _ProbeCache(TypedDict):
-    ts: float | None
-    ok: bool
-    msg: str
-
-
-_r2_probe: _ProbeCache = {"ts": None, "ok": True, "msg": ""}
-
-
 def r2_usage(cfg: Config, src: Sources, now: float | None = None) -> tuple[bool, str]:
     """Throttled R2 free-tier headroom check. (ok, msg).
 
@@ -153,13 +140,13 @@ def r2_usage(cfg: Config, src: Sources, now: float | None = None) -> tuple[bool,
         return True, "R2 usage check disabled (no account id / token / bucket)"
     now = now if now is not None else time.time()
     if (
-        _r2_probe["ts"] is not None
-        and _r2_probe["ok"]
-        and now - _r2_probe["ts"] < cfg.R2_PROBE_INTERVAL_S
+        src.state.r2_probe["ts"] is not None
+        and src.state.r2_probe["ok"]
+        and now - src.state.r2_probe["ts"] < cfg.R2_PROBE_INTERVAL_S
     ):
         return True, "%s (checked %.0fm ago)" % (
-            _r2_probe["msg"],
-            (now - _r2_probe["ts"]) / 60,
+            src.state.r2_probe["msg"],
+            (now - src.state.r2_probe["ts"]) / 60,
         )
     storage_bytes, uploads, class_a, class_b, unknown = r2_query_usage(cfg, src, now)
     ok, msg = r2_usage_verdict(
@@ -174,9 +161,9 @@ def r2_usage(cfg: Config, src: Sources, now: float | None = None) -> tuple[bool,
         cfg.R2_UPLOADS_MAX,
         cfg.R2_USAGE_MAX_PCT,
     )
-    _r2_probe["ts"] = now
-    _r2_probe["ok"] = ok
-    _r2_probe["msg"] = msg
+    src.state.r2_probe["ts"] = now
+    src.state.r2_probe["ok"] = ok
+    src.state.r2_probe["msg"] = msg
     return ok, msg
 
 

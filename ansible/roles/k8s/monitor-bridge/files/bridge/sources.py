@@ -24,6 +24,7 @@ Stdlib only, like every module under files/.
 
 import bridge.net
 from bridge.config import Config
+from bridge.streaks import State
 from bridge.types import JsonValue
 
 
@@ -32,10 +33,14 @@ class Sources:
 
     Attributes:
       cfg: The configuration holding PROM_URL and LOKI_URL. Read only by the live methods.
+      state: The per-process streak counters and probe caches (`bridge.streaks.State`). Not a
+        source: it rides here because `main()` builds this object once and hands it to every
+        check body, which is exactly the lifetime the hysteresis needs.
     """
 
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
+        self.state = State()
 
     def prom_scalar(self, promql: str) -> float | None:
         """The first series' value of an instant PromQL query, or None when the vector is empty."""

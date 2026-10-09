@@ -14,6 +14,7 @@ import yaml
 
 import gen_role_glance as g
 import glance_facts as f
+from lib.estate import Inventory
 
 KNOWN_SERVICES = frozenset(
     {"sonarr", "traefik", "authelia", "home-assistant", "pihole"}
@@ -294,7 +295,7 @@ def test_every_deployed_role_block_matches_what_the_generator_writes_now():
 def test_the_gate_covers_the_known_services():
     # `k8s_entries` filters `containers_list` by platform; a filter that stopped
     # matching would make the gate above pass on nothing.
-    names = {e["name"] for e in g.k8s_entries().values()}
+    names = {e["name"] for e in g.Estate().k8s_entries().values()}
     assert KNOWN_SERVICES <= names, sorted(KNOWN_SERVICES - names)
 
 
@@ -302,7 +303,7 @@ def test_the_gate_covers_the_known_setup_roles_and_pi_services():
     setup = {d.name for d in g.setup_role_dirs()}
     assert KNOWN_SETUP_ROLES <= setup, sorted(KNOWN_SETUP_ROLES - setup)
     assert "common" not in setup
-    pi = {e["name"] for e in g.pi_service_entries()}
+    pi = {e["name"] for e in g.Estate().pi_entries()}
     assert KNOWN_PI_SERVICES <= pi, sorted(KNOWN_PI_SERVICES - pi)
 
 
@@ -322,7 +323,7 @@ def test_setup_role_dirs_drops_a_pycache_only_shell(tmp_path):
 def test_every_setup_and_pi_doc_carries_the_marker_under_the_heading():
     """The heading, then the marker directly under it, on every doc."""
     docs = [d / "CLAUDE.md" for d in g.setup_role_dirs()] + [
-        g.CONTAINERS_ROLES / e["name"] / "CLAUDE.md" for e in g.pi_service_entries()
+        g.CONTAINERS_ROLES / e["name"] / "CLAUDE.md" for e in g.Estate().pi_entries()
     ]
     missing = []
     for doc in docs:
@@ -351,91 +352,27 @@ def _copy_role(name: str, roles: Path) -> Path:
 
 def test_a_hand_edited_block_is_flagged(tmp_path):
     """The gate's rejecting half: a copy of sonarr is clean, and one changed value makes it stale."""
-    entry = next(e for e in g.k8s_entries().values() if e["name"] == "sonarr")
+    entry = g.Estate().k8s_entries()["sonarr"]
     dst = _copy_role("sonarr", tmp_path / "roles")
     # sonarr's claims resolve through two other roles: volume-claim's default StorageClass
     # names `sonarr-config`'s class, and media-volume declares the `media-data` it mounts.
     _copy_role("volume-claim", tmp_path / "roles")
     _copy_role("media-volume", tmp_path / "roles")
-    host_vars = tmp_path / "daniel-box.yml"
-    host_vars.write_text(yaml.safe_dump({"containers_list": [entry]}))
+    (tmp_path / "daniel-box.yml").write_text(
+        yaml.safe_dump({"containers_list": [entry]})
+    )
+    estate = g.Estate(Inventory(host_vars=tmp_path))
     roles = dst.parent
-    assert g.stale_k8s_docs(write=False, host_vars=host_vars, k8s_roles=roles) == []
+    assert g.stale_k8s_docs(write=False, estate=estate, k8s_roles=roles) == []
 
     doc = (dst / "CLAUDE.md").read_text()
     assert '`--tags "sonarr"`' in doc
     (dst / "CLAUDE.md").write_text(
         doc.replace('`--tags "sonarr"`', '`--tags "sonar"`', 1)
     )
-    assert g.stale_k8s_docs(write=False, host_vars=host_vars, k8s_roles=roles) == [
+    assert g.stale_k8s_docs(write=False, estate=estate, k8s_roles=roles) == [
         "k8s/sonarr"
     ]
-
-
-def _claims_line(entry, role_dir, roles, k3s_defaults):
-    lines = g.glance_lines(
-        entry, role_dir, group_vars={}, k8s_roles=roles, k3s_defaults=k3s_defaults
-    )
-    return next(line for line in lines if line.startswith("- **Claim"))
-
-
-def test_claims_line_carries_each_claims_tier_and_moves_with_the_tier_lists(tmp_path):
-    """A tier beside every named claim, read from the lists — never typed (red-proof pair)."""
-    roles = tmp_path / "roles"
-    entry = {"name": "svc", "platform": "k8s"}
-    role = roles / "svc"
-    (role / "templates").mkdir(parents=True)
-    (role / "tasks").mkdir()
-    # The three declaration shapes: inline PVC, a volume-claim include, a `claimName:`
-    # reference to a claim another role declares off Longhorn.
-    (role / "templates" / "pvc.yaml.j2").write_text(
-        "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: svc-cache\n"
-        "spec:\n  storageClassName: longhorn-nobackup\n"
-    )
-    (role / "templates" / "deployment.yaml.j2").write_text(
-        "      volumes:\n"
-        "        - persistentVolumeClaim:\n            claimName: svc-config\n"
-        "        - persistentVolumeClaim:\n            claimName: media-data\n"
-    )
-    (role / "tasks" / "main.yml").write_text(
-        "- ansible.builtin.include_role:\n    name: k8s/volume-claim\n"
-        "  vars:\n    volume_claim_name: svc-config\n"
-        "    volume_claim_storage_class: longhorn\n"
-    )
-    (roles / "media-volume" / "templates").mkdir(parents=True)
-    (roles / "media-volume" / "templates" / "pvc.yaml.j2").write_text(
-        "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: media-data\n"
-        "spec:\n  storageClassName: media-local\n"
-    )
-    k3s_defaults = tmp_path / "k3s.yml"
-    k3s_defaults.write_text(
-        yaml.safe_dump({"k3s_longhorn_weekly_volumes": ["homelab/svc-config"]})
-    )
-    assert _claims_line(entry, role, roles, k3s_defaults) == (
-        "- **Claims:** `svc-config` (weekly -> B2 (default target)), "
-        "`media-data` (not Longhorn (media-local)), "
-        "`svc-cache` (no backup (StorageClass longhorn-nobackup))"
-    )
-    # Moving the claim between lists moves the line, so the gate catches an edited list.
-    k3s_defaults.write_text(
-        yaml.safe_dump({"k3s_longhorn_nobackup_volumes": ["homelab/svc-config"]})
-    )
-    assert "`svc-config` (no backup (listed in k3s_longhorn_nobackup_volumes))" in (
-        _claims_line(entry, role, roles, k3s_defaults)
-    )
-
-
-def test_the_committed_blocks_name_a_tier_from_each_list():
-    """Non-vacuity: a resolver that stopped matching would print `unknown` everywhere and pass."""
-    # `render_block` wraps a long Claims line, so read each doc with its whitespace folded.
-    sonarr = " ".join((g.K8S_ROLES / "sonarr" / "CLAUDE.md").read_text().split())
-    kuma = " ".join((g.K8S_ROLES / "uptime-kuma" / "CLAUDE.md").read_text().split())
-    assert "`sonarr-config` (weekly -> B2 (default target))" in sonarr
-    assert "`media-data` (not Longhorn (media-local))" in sonarr
-    assert (
-        "`uptime-kuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes))"
-        in kuma
-    )
 
 
 def test_a_hand_edited_setup_block_is_flagged(tmp_path):
@@ -474,24 +411,22 @@ def test_a_hand_edited_pi_block_is_flagged(tmp_path):
     _write(
         role / "CLAUDE.md", "# widget\n\nIntro.\n\n## At a glance\n- **Why:** kept.\n"
     )
-    host_vars = _write(
+    _write(
         tmp_path / "daniel-pi.yml",
         yaml.safe_dump(
             {"containers_list": [{"name": "widget", "networks": ["proxy"]}]}
         ),
     )
-    assert g.stale_pi_docs(
-        write=True, pi_host_vars=host_vars, containers_roles=roles
-    ) == ["containers/widget"]
-    assert (
-        g.stale_pi_docs(write=False, pi_host_vars=host_vars, containers_roles=roles)
-        == []
-    )
+    estate = g.Estate(Inventory(host_vars=tmp_path))
+    assert g.stale_pi_docs(write=True, estate=estate, containers_roles=roles) == [
+        "containers/widget"
+    ]
+    assert g.stale_pi_docs(write=False, estate=estate, containers_roles=roles) == []
     doc = (role / "CLAUDE.md").read_text()
     assert "- **Why:** kept." in doc
     (role / "CLAUDE.md").write_text(
         doc.replace("networks `proxy`", "networks `apps`", 1)
     )
-    assert g.stale_pi_docs(
-        write=False, pi_host_vars=host_vars, containers_roles=roles
-    ) == ["containers/widget"]
+    assert g.stale_pi_docs(write=False, estate=estate, containers_roles=roles) == [
+        "containers/widget"
+    ]

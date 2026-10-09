@@ -18,7 +18,8 @@ the two fetches. That shape keeps the arms to decisions and streak state only.
 
 import dataclasses
 
-import bridge.streaks
+import pytest
+
 import checks.host_thermal
 from verdicts.host_power import (
     thermal_monitor_verdict,
@@ -80,6 +81,12 @@ def test_the_undervoltage_message_names_the_sensor_by_its_readable_name():
     assert "daniel-pi rpi_volt/in0" in msg
 
 
+@pytest.fixture
+def streaks():
+    """The down-streak table an arm advances, `src.state.down_streaks` in a live check."""
+    return {}
+
+
 # ── undervoltage: the arm, including the source gate ──────────────────────────────────────────
 
 # The arm tests take conftest's `cfg` fixture — the rendered env-secret, so every knob holds the
@@ -88,42 +95,50 @@ def test_the_undervoltage_message_names_the_sensor_by_its_readable_name():
 # treats as a green-but-wrong test. `dataclasses.replace` narrows one field where a test needs to.
 
 
-def test_an_asserted_alarm_pages_on_the_first_cycle(cfg):
+def test_an_asserted_alarm_pages_on_the_first_cycle(cfg, streaks):
     """UNDERVOLTAGE_CONSECUTIVE is 1 deliberately: the firmware latched a bit, not a spike."""
-    result = checks.host_thermal._undervoltage_arm(cfg, None, [_alarm(1.0)], True)
+    result = checks.host_thermal._undervoltage_arm(
+        cfg, streaks, None, [_alarm(1.0)], True
+    )
     assert result is not None
     ok, msg = result
     assert not ok
     assert "undervoltage alarm asserted" in msg
 
 
-def test_a_quiet_arm_says_nothing(cfg):
+def test_a_quiet_arm_says_nothing(cfg, streaks):
     """None, not (True, msg): a clean arm must not change the monitor's ordinary tile text."""
-    assert checks.host_thermal._undervoltage_arm(cfg, None, [_alarm(0.0)], True) is None
+    assert (
+        checks.host_thermal._undervoltage_arm(cfg, streaks, None, [_alarm(0.0)], True)
+        is None
+    )
 
 
-def test_an_empty_vector_defers_while_the_pi_scrape_is_down(cfg):
+def test_an_empty_vector_defers_while_the_pi_scrape_is_down(cfg, streaks):
     """check_cluster_targets owns a dead scrape; this arm must not double-page it."""
-    assert checks.host_thermal._undervoltage_arm(cfg, None, [], False) is None
+    assert checks.host_thermal._undervoltage_arm(cfg, streaks, None, [], False) is None
 
 
-def test_an_empty_undervoltage_vector_pages_when_the_pi_is_scraping(cfg):
+def test_an_empty_undervoltage_vector_pages_when_the_pi_is_scraping(cfg, streaks):
     """THE red proof for the false-GREEN this arm exists to prevent.
 
     The Pi is affirmatively up and the sensor is gone: renamed, or the hwmon collector went
     blind. A `max() > 0` arm answers "no undervoltage" here. This one pages.
     """
-    result = checks.host_thermal._undervoltage_arm(cfg, None, [], True)
+    result = checks.host_thermal._undervoltage_arm(cfg, streaks, None, [], True)
     assert result is not None
     ok, msg = result
     assert not ok
     assert "no undervoltage alarm sensor scraped" in msg
 
 
-def test_the_arm_is_off_when_no_query_is_configured(cfg):
+def test_the_arm_is_off_when_no_query_is_configured(cfg, streaks):
     """An unconfigured arm is silent even on an input that would otherwise page."""
     off = dataclasses.replace(cfg, UNDERVOLTAGE_QUERY="")
-    assert checks.host_thermal._undervoltage_arm(off, None, [_alarm(1.0)], True) is None
+    assert (
+        checks.host_thermal._undervoltage_arm(off, streaks, None, [_alarm(1.0)], True)
+        is None
+    )
 
 
 # ── CPU thermal throttling: the pure verdict ──────────────────────────────────────────────────
@@ -179,51 +194,53 @@ _THROTTLING = [_cooling("daniel-box", 1.0), _cooling("daniel-server", 0.0)]
 _QUIET = [_cooling("daniel-box", 0.0), _cooling("daniel-server", 0.0)]
 
 
-def test_sustained_throttling_pages_and_a_single_cycle_is_held(cfg):
+def test_sustained_throttling_pages_and_a_single_cycle_is_held(cfg, streaks):
     """THERMAL_THROTTLE_CONSECUTIVE is 3: a burst throttles for a cycle, a cooling fault does not."""
-    first = checks.host_thermal._thermal_throttle_arm(cfg, _THROTTLING, True)
+    first = checks.host_thermal._thermal_throttle_arm(cfg, streaks, _THROTTLING, True)
     assert first is not None and first[0], "one cycle must be held inside the grace"
     assert "(throttle grace)" in first[1] and "1/3" in first[1]
     for _ in range(cfg.THERMAL_THROTTLE_CONSECUTIVE - 1):
-        last = checks.host_thermal._thermal_throttle_arm(cfg, _THROTTLING, True)
+        last = checks.host_thermal._thermal_throttle_arm(
+            cfg, streaks, _THROTTLING, True
+        )
     assert last is not None and not last[0], "the Nth straight cycle must page"
 
 
-def test_a_clean_cycle_clears_the_throttle_streak(cfg):
-    checks.host_thermal._thermal_throttle_arm(cfg, _THROTTLING, True)
-    assert bridge.streaks._down_streaks["host_thermal_throttle"] == 1
-    assert checks.host_thermal._thermal_throttle_arm(cfg, _QUIET, True) is None
-    assert bridge.streaks._down_streaks["host_thermal_throttle"] == 0
+def test_a_clean_cycle_clears_the_throttle_streak(cfg, streaks):
+    checks.host_thermal._thermal_throttle_arm(cfg, streaks, _THROTTLING, True)
+    assert streaks["host_thermal_throttle"] == 1
+    assert checks.host_thermal._thermal_throttle_arm(cfg, streaks, _QUIET, True) is None
+    assert streaks["host_thermal_throttle"] == 0
 
 
-def test_an_empty_cooling_vector_defers_while_the_node_scrape_is_down(cfg):
+def test_an_empty_cooling_vector_defers_while_the_node_scrape_is_down(cfg, streaks):
     """Both amd64 exporters gone is check_cluster_targets' fault to report, not this arm's."""
-    assert checks.host_thermal._thermal_throttle_arm(cfg, [], False) is None
+    assert checks.host_thermal._thermal_throttle_arm(cfg, streaks, [], False) is None
 
 
-def test_an_empty_cooling_vector_pages_while_the_node_scrape_is_up(cfg):
+def test_an_empty_cooling_vector_pages_while_the_node_scrape_is_up(cfg, streaks):
     """The red proof for the throttle arm's own blindness case.
 
     node-exporter is answering and publishes no Processor cooling device at all: a driver or
     kernel change took the sensors away. Nothing else in the estate would notice.
     """
     for _ in range(cfg.THERMAL_THROTTLE_CONSECUTIVE):
-        result = checks.host_thermal._thermal_throttle_arm(cfg, [], True)
+        result = checks.host_thermal._thermal_throttle_arm(cfg, streaks, [], True)
     assert result is not None
     ok, msg = result
     assert not ok, "blindness must page once its own grace expires, not be held forever"
     assert "no Processor cooling-device series scraped" in msg
 
 
-def test_the_two_new_arms_keep_separate_streak_keys(cfg):
+def test_the_two_new_arms_keep_separate_streak_keys(cfg, streaks):
     """The arms must not compound: three counters, three keys.
 
     check_host_temp's docstring states this and nothing else enforces it — a shared key would let
     an undervoltage blip and a throttle blip page together at half the intended threshold.
     """
-    checks.host_thermal._undervoltage_arm(cfg, None, [_alarm(1.0)], True)
-    checks.host_thermal._thermal_throttle_arm(cfg, _THROTTLING, True)
-    assert set(bridge.streaks._down_streaks) == {
+    checks.host_thermal._undervoltage_arm(cfg, streaks, None, [_alarm(1.0)], True)
+    checks.host_thermal._thermal_throttle_arm(cfg, streaks, _THROTTLING, True)
+    assert set(streaks) == {
         "host_undervoltage",
         "host_thermal_throttle",
     }

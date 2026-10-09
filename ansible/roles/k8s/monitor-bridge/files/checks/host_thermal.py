@@ -4,12 +4,11 @@ Covers SMART wear through Scrutiny, host temperature from node-exporter's hwmon 
 the three UPS battery arms.
 
 Split out of `checks/host.py`, which keeps disk, certificate expiry and memory. Reads config as
-`cfg.X` and the shared streak counter as `bridge.streaks.X`, so the tests' patches on that
-module reach it. Every Prometheus and HTTP query goes through the `src` argument
+`cfg.X` and its streak counters as `src.state` (`bridge.streaks.State`). Every Prometheus and HTTP query goes through the `src` argument
 (`bridge.sources.Sources`), which a test replaces with a `FakeSources`. The verdicts it
 from-imports from verdicts.host are patched on THIS module, where they are bound. The origin-coverage floor stays in
-`checks.host` and is read qualified as `checks.host._host_origin_shortfall`, because
-`_host_origin_streaks` is a single dict the tests clear on that module. Rule and enforcement:
+`checks.host` and is read qualified as `checks.host._host_origin_shortfall`, so one helper
+advances `src.state.host_origin_streaks` for disk, memory and host temperature. Rule and enforcement:
 bridge/config.py's header.
 """
 
@@ -53,7 +52,11 @@ def _source_is_up(cfg: Config, src: Sources, up_query: str) -> bool:
 
 
 def _undervoltage_arm(
-    cfg: Config, names, alarms: list[tuple[dict, float]], source_up: bool
+    cfg: Config,
+    streaks: dict[str, int],
+    names,
+    alarms: list[tuple[dict, float]],
+    source_up: bool,
 ) -> tuple[bool, str] | None:
     """The Pi's firmware undervoltage alarm. (ok, msg), or None when there is nothing to say.
 
@@ -84,18 +87,18 @@ def _undervoltage_arm(
     if not cfg.UNDERVOLTAGE_QUERY:
         return None
     if not alarms and not source_up:
-        bridge.streaks._down_streaks["host_undervoltage"] = 0
+        streaks["host_undervoltage"] = 0
         return None
     ok, msg = undervoltage_verdict(alarms, names)
     if ok:
-        bridge.streaks._down_streaks["host_undervoltage"] = 0
+        streaks["host_undervoltage"] = 0
         return None
     (
-        bridge.streaks._down_streaks["host_undervoltage"],
+        streaks["host_undervoltage"],
         ok,
         msg,
     ) = bridge.streaks.down_streak(
-        bridge.streaks._down_streaks.get("host_undervoltage", 0),
+        streaks.get("host_undervoltage", 0),
         cfg.UNDERVOLTAGE_CONSECUTIVE,
         msg,
         "undervoltage grace",
@@ -104,7 +107,10 @@ def _undervoltage_arm(
 
 
 def _thermal_throttle_arm(
-    cfg: Config, states: list[tuple[dict, float]], source_up: bool
+    cfg: Config,
+    streaks: dict[str, int],
+    states: list[tuple[dict, float]],
+    source_up: bool,
 ) -> tuple[bool, str] | None:
     """Kernel CPU thermal throttling. (ok, msg), or None when there is nothing to say.
 
@@ -132,18 +138,18 @@ def _thermal_throttle_arm(
     if not cfg.THERMAL_THROTTLE_QUERY:
         return None
     if not states and not source_up:
-        bridge.streaks._down_streaks["host_thermal_throttle"] = 0
+        streaks["host_thermal_throttle"] = 0
         return None
     ok, msg = thermal_throttle_verdict(states, cfg.THERMAL_THROTTLE_ORIGINS_MIN)
     if ok:
-        bridge.streaks._down_streaks["host_thermal_throttle"] = 0
+        streaks["host_thermal_throttle"] = 0
         return None
     (
-        bridge.streaks._down_streaks["host_thermal_throttle"],
+        streaks["host_thermal_throttle"],
         ok,
         msg,
     ) = bridge.streaks.down_streak(
-        bridge.streaks._down_streaks.get("host_thermal_throttle", 0),
+        streaks.get("host_thermal_throttle", 0),
         cfg.THERMAL_THROTTLE_CONSECUTIVE,
         msg,
         "throttle grace",
@@ -289,6 +295,7 @@ def check_host_temp(cfg: Config, src: Sources) -> tuple[bool, str]:
     # uses — a host whose only sensors are excluded is not a host this check covers.
     short = checks.host._host_origin_shortfall(
         cfg,
+        src,
         "host_temp",
         hwmon_included_series(temps, cfg.HWMON_TEMP_EXCLUDE_CHIP),
         "host temperature",
@@ -305,6 +312,7 @@ def check_host_temp(cfg: Config, src: Sources) -> tuple[bool, str]:
     # the reading came back empty — which is the only cycle the arm reads it on.
     under = _undervoltage_arm(
         cfg,
+        src.state.down_streaks,
         names,
         alarms,
         bool(alarms) or _source_is_up(cfg, src, cfg.UNDERVOLTAGE_UP_QUERY),
@@ -318,17 +326,15 @@ def check_host_temp(cfg: Config, src: Sources) -> tuple[bool, str]:
     # fetching and the streak state, which is what the arms cannot be given.
     if under is None or under[0]:
         if not ok:
-            bridge.streaks._down_streaks["host_temp"], ok, msg = (
-                bridge.streaks.down_streak(
-                    bridge.streaks._down_streaks.get("host_temp", 0),
-                    cfg.HWMON_TEMP_CONSECUTIVE,
-                    msg,
-                    "thermal spike grace",
-                )
+            src.state.down_streaks["host_temp"], ok, msg = bridge.streaks.down_streak(
+                src.state.down_streaks.get("host_temp", 0),
+                cfg.HWMON_TEMP_CONSECUTIVE,
+                msg,
+                "thermal spike grace",
             )
             temperature = (ok, msg)
         else:
-            bridge.streaks._down_streaks["host_temp"] = 0
+            src.state.down_streaks["host_temp"] = 0
             states = (
                 src.prom_vector(cfg.THERMAL_THROTTLE_QUERY)
                 if cfg.THERMAL_THROTTLE_QUERY
@@ -336,6 +342,7 @@ def check_host_temp(cfg: Config, src: Sources) -> tuple[bool, str]:
             )
             throttle = _thermal_throttle_arm(
                 cfg,
+                src.state.down_streaks,
                 states,
                 bool(states) or _source_is_up(cfg, src, cfg.THERMAL_THROTTLE_UP_QUERY),
             )
@@ -400,7 +407,7 @@ def check_ups(cfg: Config, src: Sources) -> tuple[bool, str]:
         if not (
             source_up is not None and source_up > 0.5 and "replace-battery" in values
         ):
-            bridge.streaks._down_streaks["ups"] = 0
+            src.state.down_streaks["ups"] = 0
             return (
                 True,
                 "no UPS data in Prometheus (nut scrape down? "
@@ -414,17 +421,17 @@ def check_ups(cfg: Config, src: Sources) -> tuple[bool, str]:
     on_battery = ups_on_battery_verdict(values.get("on-battery"))
     if on_battery is not None:
         (
-            bridge.streaks._down_streaks["ups_on_battery"],
+            src.state.down_streaks["ups_on_battery"],
             ok,
             msg,
         ) = bridge.streaks.down_streak(
-            bridge.streaks._down_streaks.get("ups_on_battery", 0),
+            src.state.down_streaks.get("ups_on_battery", 0),
             cfg.UPS_CONSECUTIVE,
             on_battery[1],
             "on-battery grace",
         )
         return ok, msg
-    bridge.streaks._down_streaks["ups_on_battery"] = 0
+    src.state.down_streaks["ups_on_battery"] = 0
     missing = [name for name, v in values.items() if v is None]
     if missing:
         # Some configured arms present, others absent — NOT the whole-scrape-down case above but a
@@ -451,9 +458,9 @@ def check_ups(cfg: Config, src: Sources) -> tuple[bool, str]:
             cfg.UPS_RUNTIME_MIN_S,
         )
     if ok:
-        bridge.streaks._down_streaks["ups"] = 0
+        src.state.down_streaks["ups"] = 0
         return True, msg
-    bridge.streaks._down_streaks["ups"], ok, msg = bridge.streaks.down_streak(
-        bridge.streaks._down_streaks.get("ups", 0), cfg.UPS_CONSECUTIVE, msg, "grace"
+    src.state.down_streaks["ups"], ok, msg = bridge.streaks.down_streak(
+        src.state.down_streaks.get("ups", 0), cfg.UPS_CONSECUTIVE, msg, "grace"
     )
     return ok, msg

@@ -100,9 +100,10 @@ def branch_content_is_on_master(
     recreated. Once master has drifted into a conflict on a file the branch touched, that
     exits non-zero — the very tree #2014 found was already in that state — so the forge is
     asked last whether it merged a PR from exactly this tip (`repo`, the `owner/name` slug,
-    is what `gh` needs; empty means no forge check). Inlined from
-    scripts/dev/prune_worktrees.py's merge_tree_says_contained and pr_head_says_merged for
-    the reason in worktree_is_reusable's docstring — this file ships with no path to scripts/.
+    is what `gh` needs; empty means no forge check). Inlined from merge_tree_says_contained
+    and pr_head_says_merged in the dotfiles-deployed `claude_worktree` package
+    (scripts/lib/_claude_worktree.py says where it lives) for the reason in
+    worktree_is_reusable's docstring — this file ships with no path to scripts/ or to it.
 
     DECIDED: no verdict reads as NOT contained. A non-zero merge-tree exit, empty output, an
     unreadable master tree, and a `gh` that fails or names no PR at this tip all refuse,
@@ -161,7 +162,7 @@ def branch_tip_was_merged(
 
 
 def _process_start_time(pid: int) -> str:
-    """The starttime field scripts/dev/prune_worktrees.py's session_is_alive() compares.
+    """The starttime field `claude_worktree.session_is_alive()` compares.
 
     Read from /proc/<pid>/stat: starttime is the field after the last ')', at index 19 once
     split on whitespace — the comm field can itself contain spaces or parens, which is why
@@ -177,8 +178,9 @@ def _process_start_time(pid: int) -> str:
 def _lock_reason() -> str:
     """The reason string `git worktree lock` records, in the format LOCK_OWNER parses.
 
-    scripts/dev/prune_worktrees.py keeps a worktree only while `tree.locked and
-    session_is_alive(tree.lock_reason)` — session_is_alive() matches `(pid <n> start <n>)`
+    scripts/lib/worktrees.py's classify() keeps a worktree only while `tree.locked and
+    session_is_alive(tree.lock_reason)`, and `prune_worktrees.py --prune` removes only what it
+    does not keep. `claude_worktree.session_is_alive()` matches `(pid <n> start <n>)`
     against /proc/<pid>/stat, so this must be this process's own pid and start time. As long
     as this script is still running (it blocks on run_session() for the run's duration), the
     pid+start pair keeps matching and the pruner keeps the tree; once the process exits, the
@@ -196,7 +198,7 @@ def prepare_worktree(
         if is_registered_worktree(repo_dir, path, tools):
             # The previous tick's lock is still on this tree — `worktree remove` refuses a
             # locked tree outright, and passing --force once does not override a lock (git
-            # needs it twice). Unlock first, mirroring prune_worktrees.py's own remove().
+            # needs it twice). Unlock first, mirroring scripts/lib/worktrees.py's remove().
             tools.run(["git", "-C", repo_dir, "worktree", "unlock", path])
             tools.run(["git", "-C", repo_dir, "worktree", "remove", "--force", path])
         else:
