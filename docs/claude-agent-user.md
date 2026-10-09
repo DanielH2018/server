@@ -7,8 +7,8 @@ the decisions taken along the way, and what each slice still owes. It replaces t
 `prune-artifacts.sh` deletes an artifact 30 days after its last update (#3657).
 
 One part of the plan stays out of this page. The repo is public, and the per-path inventory of
-what a session reaches as `ubuntu` stays private until slice 6 retires those sessions. The
-operator decided this on 2026-10-09 (#3685). See
+what a session reaches as `ubuntu` stays private. The operator decided this on 2026-10-09
+(#3685), and kept it private when slice 6 landed. See
 [What this page leaves out](#what-this-page-leaves-out).
 
 ## Status
@@ -457,7 +457,7 @@ as `claude`.
 **Rollback:** set `claude_code_agent_homelab_ui_enabled: false`, then switch the agent user off
 and delete the `claude-agent` block.
 
-## Slice 6: retire Claude sessions as `ubuntu` (built; the inventory is still to publish)
+## Slice 6: retire Claude sessions as `ubuntu` (done 2026-10-09)
 
 **Decision, 2026-10-09:** new interactive sessions start as `claude` through the dotfiles
 function `claude-agents`, which runs
@@ -491,12 +491,17 @@ A root-owned `/etc/claude-code/managed-settings.json` is deferred (operator deci
 the agent's user-level config root-owned, so revisit it after the switch-over, and only for
 settings that should bind both agents.
 
-Once the slice lands, publish the per-path inventory from the operator's break-glass kit in
-this page, and delete [What this page leaves out](#what-this-page-leaves-out). From then on
-the inventory describes history.
+**The inventory stays private (operator decision, 2026-10-09).** The plan was to publish it
+here once this slice landed, on the premise that it would then describe history. That holds
+only for Claude on daniel-box. Most of its rows describe the `ubuntu` account itself, which
+keeps every one of them, and daniel-server still runs Claude as `ubuntu`.
+[What this page leaves out](#what-this-page-leaves-out) has where it lives.
 
 **Check:** starting `claude` as `ubuntu` shows up in the metric within one 30-second timer
-interval.
+interval. Passed on 2026-10-09: the session that built the slice and a leftover
+`claude daemon run`, both uid 1000, read as `claude_uid_processes{uid="1000"} 2`. The first
+deploy also read a false 0 on some runs, because gawk aborts on a status file whose process
+has exited; #4096 reads the files through `cat` instead.
 
 **Rollback:** delete the two lines in daniel-box's host_vars. `claude_code_login_uids` returns
 to uid 1000, and an empty `claude_code_watch_uids` stops the series and the page with it.
@@ -551,13 +556,11 @@ key, because SOPS holds the become password, and never gives it the operator's `
 
 The plan artifact also holds a per-path inventory of what a session reaches as `ubuntu`. This
 page publishes the reasoning built on it, in [Why a separate user](#why-a-separate-user). The
-inventory stays private, because the repo is public and the inventory stays accurate until
-slice 6 retires Claude sessions as `ubuntu`. The operator decided this split on 2026-10-09
-(#3685).
+inventory stays private, because the repo is public and the inventory describes the `ubuntu`
+account as it still is. The operator decided this split on 2026-10-09 (#3685), and decided
+the same day, when slice 6 landed, to keep it private rather than publish it.
 
-The durable home of the inventory is the operator's offline break-glass kit. The operator
-copies `~/.claude/artifacts/pinned/claude-unix-user-plan_2026-10-04.html` there. The pinned
-copy on daniel-box is a convenience only: `prune-artifacts.sh` skips `pinned/`, but nothing
-backs it up.
-
-Slice 6 publishes the inventory in this page, once it describes history.
+The durable home of the inventory is the operator's break-glass kit in the password manager,
+which holds a copy of `~/.claude/artifacts/pinned/claude-unix-user-plan_2026-10-04.html` since
+2026-10-09. The pinned copy on daniel-box is a convenience only: `prune-artifacts.sh` skips
+`pinned/`, but nothing backs it up.
