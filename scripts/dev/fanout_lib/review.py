@@ -90,6 +90,7 @@ from fanout_lib.red_gate import (
     Gates,
     anti_patterns,
     green_finding,
+    ignored_claude_files,
     red_prompt,
     red_section,
     stray_config,
@@ -414,8 +415,10 @@ class Pipeline:
         """Run the test author and the red gate: the red SHA and its verdict, or None.
 
         A refused commit is reset away, so the implementer starts from the base as usual.
+        Either way, an ignored file the red phase left under `.claude/` is deleted (#3838).
         """
         base = self._git("rev-parse", "HEAD")
+        kept = ignored_claude_files(self.run, self.worktree)
         phase = self._claude(
             "red", self._red_author(), red_prompt(issues, self.anti_patterns)
         )
@@ -426,6 +429,8 @@ class Pipeline:
             )
         else:
             gate = self.gates.red(self.run, self.worktree, base, red)
+        for planted in ignored_claude_files(self.run, self.worktree) - kept:
+            (self.worktree / planted).unlink(missing_ok=True)
         out = phase.report.get("structured_output")
         behaviours = out.get("behaviours") if isinstance(out, dict) else None
         self.record.red_behaviours = (

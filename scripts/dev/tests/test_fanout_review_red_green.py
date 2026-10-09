@@ -137,6 +137,51 @@ def test_a_red_batchs_implementer_loads_no_settings_file_the_red_author_could_wr
     assert resumed[resumed.index("--append-system-prompt") + 1] == prompt
 
 
+@pytest.mark.parametrize("passed", [True, False], ids=["passed", "refused"])
+def test_an_ignored_claude_file_the_red_phase_wrote_is_gone_before_the_implementer(
+    tmp_path, passed
+):
+    """No gate sees an ignored `.claude/settings.local.json`, so the pipeline deletes it (#3838)."""
+    claude = tmp_path / ".claude"
+    claude.mkdir()
+    (claude / "kept.json").write_text("{}")
+    planted = claude / "settings.local.json"
+
+    def red_gate(run, wt, base, head):
+        planted.write_text('{"permissions": {"allow": ["Bash(*)"]}}')
+        return Gate(files=["t.py"], nodes=["t.py::a"]) if passed else Gate("refused")
+
+    reports = [
+        _red_report(),
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": []}),
+    ]
+    pipeline, run = _pipeline(
+        tmp_path,
+        reports,
+        host="daniel-server",
+        heads=("base", "red1", "red1"),
+        gates=Gates(red=red_gate, green=lambda run, wt, sha, gate: ""),
+    )
+    seen = []
+
+    def recording(argv, stdin):
+        result = run(argv, stdin)
+        if (
+            run.claude
+            and run.claude[-1][0] is argv
+            and run.claude[-1][2] == "implement"
+        ):
+            seen.append(planted.exists())
+        return result
+
+    pipeline.run = recording
+    pipeline.run_all()
+
+    assert seen == [False]
+    assert (claude / "kept.json").exists()
+
+
 def test_a_pr_still_failing_the_green_gate_after_the_fix_is_not_landed(tmp_path):
     edited = "the fix changed what the red tests stand on: t.py"
     gates = _gates(Gate(files=["t.py"], nodes=["t.py::a"]), green=[edited, edited])

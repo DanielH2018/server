@@ -220,9 +220,13 @@ def _origin_refs(run: Runner, clone: Path, origin: str) -> str:
     fetch or the implementer can move between the gates (#3845). One transaction may not name
     a ref twice, so `origin/master` is set rather than deleted and recreated.
     """
-    mapped = _git(
-        run, clone, "for-each-ref", "--format=%(refname)", "refs/remotes/origin/"
-    ).stdout.split()
+    mapped = run(
+        [
+            *_BARE_GIT, "-C", str(clone), "for-each-ref", "--format=%(refname)",
+            "refs/remotes/origin/",
+        ],
+        None,
+    ).stdout.split()  # fmt: skip
     lines = [f"delete {ref}" for ref in mapped if not (origin and ref == ORIGIN_MASTER)]
     if origin:
         lines.append(f"update {ORIGIN_MASTER} {origin}")
@@ -239,6 +243,21 @@ def stray_config(run: Runner, worktree: Path) -> list[str]:
     """
     listed = _git(run, worktree, "ls-files", "--others", "--directory").stdout
     return [f for f in listed.splitlines() if PurePosixPath(f).name in PYTEST_CONFIG]
+
+
+def ignored_claude_files(run: Runner, worktree: Path) -> set[str]:
+    """The ignored files under `worktree`'s `.claude/`.
+
+    Neither the red range nor `git status` shows an ignored file, and `.gitignore` ignores
+    `.claude/*.local.json`, so a red author could plant a `.claude/settings.local.json` that
+    widens what a later session may run (#3838). The pipeline deletes each one the red phase
+    added.
+    """
+    listed = _git(
+        run, worktree, "ls-files", "--others", "--ignored", "--exclude-standard",
+        "--", ".claude/",
+    ).stdout  # fmt: skip
+    return set(listed.splitlines())
 
 
 def _collect(run: Runner, worktree: Path, files: list[str]) -> tuple[set[str], int]:
