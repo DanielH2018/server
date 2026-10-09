@@ -21,6 +21,7 @@ import bridge.net
 import bridge.streaks
 from bridge.common import sanitize
 from bridge.parsing import parse_duration
+from bridge.types import as_object, as_object_list, optional_object
 from verdicts.service import (
     ha_ban_verdict,
     ha_heartbeat_fresh,
@@ -52,11 +53,17 @@ def check_n8n(cfg: Config, now: datetime | None = None) -> tuple[bool, str]:
     if not cfg.N8N_API_KEY:
         return True, "n8n monitoring disabled (no API key)"
     headers = {"X-N8N-API-KEY": cfg.N8N_API_KEY}
-    workflows = bridge.net._get_json(
-        cfg.N8N_URL + "/api/v1/workflows?active=true&limit=250", headers=headers
+    workflows = as_object(
+        bridge.net._get_json(
+            cfg.N8N_URL + "/api/v1/workflows?active=true&limit=250", headers=headers
+        ),
+        "n8n workflows",
     )
-    executions = bridge.net._get_json(
-        cfg.N8N_URL + "/api/v1/executions?status=error&limit=100", headers=headers
+    executions = as_object(
+        bridge.net._get_json(
+            cfg.N8N_URL + "/api/v1/executions?status=error&limit=100", headers=headers
+        ),
+        "n8n executions",
     )
     streaks = n8n_update_streaks(
         workflows,
@@ -134,7 +141,12 @@ def check_arr_queue(cfg: Config, fetch=None, now=None) -> tuple[bool, str]:
             bridge.streaks._down_streaks["arr_queue_fetch"] = count
             return held, note
         offenders.extend(
-            queue_warnings(data, app_name, now, cfg.ARR_TITLE_HOLD_GRACE_H)
+            queue_warnings(
+                as_object(data, "%s queue" % app_name),
+                app_name,
+                now,
+                cfg.ARR_TITLE_HOLD_GRACE_H,
+            )
         )
     bridge.streaks._down_streaks["arr_queue_fetch"] = 0
     if offenders:
@@ -203,16 +215,18 @@ def check_bazarr(cfg: Config) -> tuple[bool, str]:
     if not cfg.BAZARR_API_KEY:
         return True, "bazarr monitoring disabled (no API key)"
     headers = {"X-API-KEY": cfg.BAZARR_API_KEY}
-    status = bridge.net._get_json(
-        cfg.BAZARR_URL + "/api/system/status", headers=headers
+    status = optional_object(
+        bridge.net._get_json(cfg.BAZARR_URL + "/api/system/status", headers=headers),
+        "bazarr status",
     )
-    health = bridge.net._get_json(
-        cfg.BAZARR_URL + "/api/system/health", headers=headers
+    health = optional_object(
+        bridge.net._get_json(cfg.BAZARR_URL + "/api/system/health", headers=headers),
+        "bazarr health",
     )
     problems = bazarr_problems(status, health)
     if problems:
         return False, "; ".join(problems[:5])
-    versions = (status or {}).get("data") or {}
+    versions = as_object((status or {}).get("data") or {}, "bazarr status data")
     return True, "bazarr ok (sonarr %s, radarr %s)" % (
         versions.get("sonarr_version") or "n/a",
         versions.get("radarr_version") or "n/a",
@@ -235,13 +249,23 @@ def check_prowlarr_indexers(cfg: Config) -> tuple[bool, str]:
     if not cfg.PROWLARR_API_KEY:
         return True, "prowlarr indexer monitoring disabled (no API key)"
     headers = {"X-Api-Key": cfg.PROWLARR_API_KEY}
-    status = bridge.net._get_json(
-        cfg.PROWLARR_URL + "/api/v1/indexerstatus", headers=headers
+    status = as_object_list(
+        bridge.net._get_json(
+            cfg.PROWLARR_URL + "/api/v1/indexerstatus", headers=headers
+        ),
+        "prowlarr indexerstatus",
     )
-    indexers = bridge.net._get_json(
-        cfg.PROWLARR_URL + "/api/v1/indexer", headers=headers
+    indexers = as_object_list(
+        bridge.net._get_json(cfg.PROWLARR_URL + "/api/v1/indexer", headers=headers),
+        "prowlarr indexers",
     )
-    name_by_id = {i.get("id"): i.get("name") for i in indexers}
+    # An indexer with no name maps to "", which indexers_down reads as falsy and replaces with
+    # "indexer <id>"; skipping it would also shrink the count in the all-ok message.
+    name_by_id: dict[int, str] = {}
+    for indexer in indexers:
+        indexer_id, name = indexer.get("id"), indexer.get("name")
+        if isinstance(indexer_id, int):
+            name_by_id[indexer_id] = name if isinstance(name, str) else ""
     offenders = indexers_down(
         status,
         name_by_id,
@@ -366,9 +390,12 @@ def check_ha_heartbeat(cfg: Config, now: datetime | None = None) -> tuple[bool, 
     if not cfg.HA_URL or not cfg.HA_TOKEN:
         return True, "HA heartbeat monitoring disabled (no URL/token)"
     try:
-        state = bridge.net._get_json(
-            cfg.HA_URL + "/api/states/" + cfg.HA_HEARTBEAT_ENTITY,
-            headers={"Authorization": "Bearer " + cfg.HA_TOKEN},
+        state = optional_object(
+            bridge.net._get_json(
+                cfg.HA_URL + "/api/states/" + cfg.HA_HEARTBEAT_ENTITY,
+                headers={"Authorization": "Bearer " + cfg.HA_TOKEN},
+            ),
+            "HA heartbeat state",
         )
         ok, msg = ha_heartbeat_fresh(state, cfg.HA_HEARTBEAT_MAX_AGE_S, now=now)
     except (

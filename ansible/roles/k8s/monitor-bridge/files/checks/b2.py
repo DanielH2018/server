@@ -14,6 +14,7 @@ from typing import TypedDict
 
 from bridge.config import Config
 import bridge.net
+from bridge.types import JsonObject, JsonValue, as_object
 from verdicts.storage import b2_storage_verdict, b2_sum_versions
 
 
@@ -43,13 +44,16 @@ _b2_probe: _ProbeCache = {
 _b2_storage: _StorageCache = {"ts": 0.0, "ok": False, "msg": "not yet probed"}
 
 
-def b2_authorize_data(cfg: Config) -> dict:
+def b2_authorize_data(cfg: Config) -> JsonObject:
     """The parsed b2_authorize_account response. Raises on any transport/HTTP failure."""
     token = base64.b64encode(
         ("%s:%s" % (cfg.B2_PROBE_KEY_ID, cfg.B2_PROBE_APPLICATION_KEY)).encode()
     ).decode()
-    return bridge.net._get_json(
-        cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token}
+    return as_object(
+        bridge.net._get_json(
+            cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token}
+        ),
+        "b2_authorize_account response",
     )
 
 
@@ -118,18 +122,22 @@ def b2_list_versions(
     last. Stops at B2_STORAGE_MAX_PAGES and says so, rather than looping on a cursor that never
     clears.
     """
-    pages = []
-    start_name = start_id = None
+    pages: list[JsonObject] = []
+    start_name: JsonValue = None
+    start_id: JsonValue = None
     for _ in range(cfg.B2_STORAGE_MAX_PAGES):
-        payload = {"bucketId": bucket_id, "maxFileCount": 1000}
+        payload: dict[str, JsonValue] = {"bucketId": bucket_id, "maxFileCount": 1000}
         if start_name:
             payload["startFileName"] = start_name
         if start_id:
             payload["startFileId"] = start_id
-        page = bridge.net._post_json(
-            "%s/b2api/v3/b2_list_file_versions" % api_url.rstrip("/"),
-            payload,
-            headers={"Authorization": token},
+        page = as_object(
+            bridge.net._post_json(
+                "%s/b2api/v3/b2_list_file_versions" % api_url.rstrip("/"),
+                payload,
+                headers={"Authorization": token},
+            ),
+            "b2_list_file_versions response",
         )
         pages.append(page)
         start_name = page.get("nextFileName")
@@ -154,8 +162,11 @@ def b2_authorize(cfg: Config) -> tuple[bool, str]:
     token = base64.b64encode(
         ("%s:%s" % (cfg.B2_PROBE_KEY_ID, cfg.B2_PROBE_APPLICATION_KEY)).encode()
     ).decode()
-    data = bridge.net._get_json(
-        cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token}
+    data = as_object(
+        bridge.net._get_json(
+            cfg.B2_PROBE_URL, headers={"Authorization": "Basic %s" % token}
+        ),
+        "b2_authorize_account response",
     )
     # A 200 from something that isn't B2 must not read as healthy. Accept EITHER field rather than
     # pinning the response shape: Backblaze publishes a body example for v4 (accountId top-level)

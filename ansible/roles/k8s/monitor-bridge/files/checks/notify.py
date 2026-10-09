@@ -17,6 +17,7 @@ from bridge.config import Config
 import bridge.net
 import bridge.streaks
 from bridge.common import HTTP_TIMEOUT
+from bridge.types import as_object
 from verdicts.notify import discord_webhook_ok
 
 
@@ -142,7 +143,10 @@ def check_discord(cfg: Config) -> tuple[bool, str]:
     for label, url in webhooks:
         try:
             data = bridge.net._get_json(url)
-            w_ok, w_msg = discord_webhook_ok(200, (data or {}).get("name"))
+            name = as_object(data or {}, "discord webhook").get("name")
+            w_ok, w_msg = discord_webhook_ok(
+                200, name if isinstance(name, str) else None
+            )
         except urllib.error.HTTPError as e:
             w_ok, w_msg = discord_webhook_ok(e.code)
         except (

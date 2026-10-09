@@ -60,6 +60,7 @@ from deploy_tools.deploy_detach_notify import gate as health_gate
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_tags import Derivation
 from lib.gh import gh, gh_json
+from lib.json_types import JsonValue
 from lib.git import git
 
 # scripts/deploy_tools -- where land.py, gitops_tick.sh and the imported helpers live.
@@ -491,7 +492,7 @@ class Derive(Protocol):
 class Tools:
     """Every process boundary, so a test replaces one field and never a PATH entry."""
 
-    gh_json: Callable[..., Any] = gh_json
+    gh_json: Callable[..., JsonValue] = gh_json
     gh: Callable[..., subprocess.CompletedProcess[str]] = gh
     git: Callable[..., subprocess.CompletedProcess[str]] = git
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict

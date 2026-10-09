@@ -30,6 +30,11 @@ Pure pieces (``kubectl_argv``, ``node_names``, ``cluster_of``, ``cluster_refusal
 ``kubectl_json`` are the runners.
 """
 
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
 import json
 import os
 import shutil
@@ -37,7 +42,8 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+
+from lib.json_types import JsonObject
 
 # ── which cluster a kubectl serves ──────────────────────────────────────────────────────────
 #
@@ -323,16 +329,28 @@ def kubectl(
     return proc
 
 
-def kubectl_json(cluster: str, *args: str, **kwargs: Any) -> Any:
-    """``kubectl(...)`` with stdout parsed as JSON, or None on a non-zero exit or bad output.
+def kubectl_json(
+    cluster: str,
+    *args: str,
+    check: bool = False,
+    timeout: float | None = 60.0,
+    privileged: bool = False,
+    tools: Tools = DEFAULT_TOOLS,
+) -> JsonObject | None:
+    """``kubectl(...)`` with stdout parsed as a JSON object, or None on a non-zero exit or bad output.
 
-    None covers both because a missing workload, Service or EndpointSlice is an expected
-    result for the probes that call this, not a failure to raise on.
+    ``-o json`` emits an object (a single resource or a ``List``), so a top-level array or
+    scalar counts as bad output. None covers all three because a missing workload, Service or
+    EndpointSlice is an expected result for the probes that call this, not a failure to
+    raise on.
     """
-    proc = kubectl(cluster, *args, **kwargs)
+    proc = kubectl(
+        cluster, *args, check=check, timeout=timeout, privileged=privileged, tools=tools
+    )
     if proc.returncode != 0:
         return None
     try:
-        return json.loads(proc.stdout)
+        doc = json.loads(proc.stdout)
     except json.JSONDecodeError:
         return None
+    return doc if isinstance(doc, dict) else None

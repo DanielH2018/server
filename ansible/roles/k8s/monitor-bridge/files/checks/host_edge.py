@@ -18,6 +18,7 @@ from collections.abc import Callable
 from bridge.config import Config
 import bridge.net
 import bridge.streaks
+from bridge.types import as_object, as_object_list
 from verdicts.host import (
     pi_ports_verdict,
     pi_pressure,
@@ -202,7 +203,12 @@ def check_speedtest(cfg: Config) -> tuple[bool, str]:
         )
         return ok, msg
     bridge.streaks._down_streaks["speedtest"] = 0
-    rows = payload.get("data") or []
+    # Narrowed after the streak reset, outside the `try`: a body of the wrong shape is a bug in
+    # the reply, not an unreachable API, and must page now rather than ride the deploy grace.
+    rows = as_object_list(
+        as_object(payload, "speedtest results").get("data") or [],
+        "speedtest results data",
+    )
     # DECIDED: the check cannot tell a failing Ookla run from a stopped scheduler, and this
     # repo accepts that (#1603). speedtest-tracker writes NO row for a failed run — that is the
     # LinuxServer image's own behaviour, decided between the Ookla CLI exiting non-zero and the
