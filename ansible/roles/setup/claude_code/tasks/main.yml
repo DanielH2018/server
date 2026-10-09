@@ -551,6 +551,11 @@
   when: claude_code_agent_user_enabled
   ansible.builtin.import_tasks: agent_homelab_ui.yml
 
+- name: Give the agent user an ssh key for the peers and name them
+  tags: [claude_code]
+  when: claude_code_agent_user_enabled
+  ansible.builtin.import_tasks: agent_peers.yml
+
 - name: Set what the agent reads of the host, and what the operator reads of the agent
   tags: [claude_code]
   when: claude_code_agent_user_enabled
@@ -594,6 +599,10 @@
 # The way out. Expired rather than removed: removing the user strands its files under a bare
 # uid, and the home holds the agent's clone and any work it has not pushed. 86400 is
 # 1970-01-02, because a shadow expiry of day 0 also reads as "never expires".
+#
+# A host that sets claude_peer_user_enabled owns `claude` through initial_setup's claude-peer.yml
+# instead. That account is the peer login, not this role's agent user, and expiring it here would
+# undo the other role's apply on every run.
 - name: Expire the agent user's account when it is switched off
   tags: [claude_code]
   ansible.builtin.user:
@@ -602,6 +611,7 @@
   become: true
   when:
     - not claude_code_agent_user_enabled
+    - not claude_peer_user_enabled
     - ansible_facts.getent_passwd[claude_code_agent_user] is not none
 
 # ── The agent's lander ──────────────────────────────────────────────────────────────────

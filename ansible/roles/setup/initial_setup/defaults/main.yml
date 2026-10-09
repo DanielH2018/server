@@ -32,3 +32,7 @@ initial_setup_uv_installer_sha256: 58488ae8dbd0773134c92c85e901430e33f99d975bd7f
 # (#2806). Only `has_docker` hosts install the cron.
 initial_setup_docker_prune_cron_minute: 30
 initial_setup_docker_prune_cron_hour: 6
+
+# The home of the peer account the box agent ssh's to (tasks/claude-peer.yml). Outside /home, as
+# the agent user's own home on daniel-box is.
+initial_setup_claude_peer_home: /var/lib/claude

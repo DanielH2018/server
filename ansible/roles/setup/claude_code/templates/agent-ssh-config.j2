@@ -1,0 +1,16 @@
+# {{ ansible_managed }}
+# The agent reaches each peer as `{{ claude_peer_user }}`, an account with no sudo and one group.
+# A peer appears here while its host_vars set claude_peer_user_enabled.
+{% for peer in groups['all'] if peer != claude_peer_key_host and hostvars[peer].claude_peer_user_enabled | bool %}
+
+Host {{ peer }}
+    HostName {{ hostvars[peer].server_ip }}
+    User {{ claude_peer_user }}
+    IdentityFile {{ claude_peer_key_path }}
+    # Offer this key and no other, so a peer never sees a key the agent was not meant to use.
+    IdentitiesOnly yes
+    # DECIDED: accept-new rather than a pinned host key. The agent has no read on the operator's
+    # known_hosts, and the key it offers authorizes a no-sudo account, so a spoofed peer learns
+    # nothing it can use. A changed host key is still refused.
+    StrictHostKeyChecking accept-new
+{% endfor %}

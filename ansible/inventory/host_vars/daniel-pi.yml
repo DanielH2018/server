@@ -42,6 +42,9 @@ has_raspi_kernel: true
 # notify `Restart rsyslog` -- a masked unit fails that handler and the recap reads failed=1
 # for a run whose changes are all live. See group_vars/all.yml for the default.
 has_rsyslog: false
+# The no-sudo `claude` account the agent on daniel-box ssh's to (docs/claude-agent-user.md,
+# slice 5). False locks it and removes its authorized key.
+claude_peer_user_enabled: true
 # Disk-backed swap for the 512 MB Zero 2 W. The RAM-resident zram (optimize_pi) can't add
 # real capacity, so heavy one-shot apt/dpkg steps (apt-show-versions cache build, `upgrade: dist`,
 # AIDE init) OOM-kill mid-transaction and corrupt the package DB. Created by the initial_setup

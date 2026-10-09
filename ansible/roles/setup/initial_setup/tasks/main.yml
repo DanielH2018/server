@@ -9,6 +9,11 @@
   ansible.builtin.import_tasks: host-basics.yml
 - name: Harden unattended upgrades, fail2ban and SSH
   ansible.builtin.import_tasks: access.yml
+- name: Give the box agent a no-sudo ssh login on this peer, or take it back
+  # Not on the key host, where `claude` is the agent user the claude_code role builds and
+  # switching this off would expire it.
+  ansible.builtin.import_tasks: claude-peer.yml
+  when: inventory_hostname != claude_peer_key_host
 - name: Install the host crons
   ansible.builtin.import_tasks: crons.yml
 - name: Cap journald, revert host tuning and install git hooks

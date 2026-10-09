@@ -1,0 +1,167 @@
+---
+# The box agent's login on this peer: a `claude` account with no sudo, no group but ssh-users
+# and a root-owned home, whose only credential is the agent's public key from daniel-box
+# (docs/claude-agent-user.md, slice 5). Imported from main.yml on every host but the key host,
+# where `claude` is the agent user claude_code builds. `claude_peer_user_enabled` is the switch:
+# true builds the account, false locks it and removes the key.
+#
+# ssh-users is the one group, because access.yml's `AllowGroups ssh-users` refuses any other
+# login. It carries nothing else: its members are the operator and root. The account joins no
+# sudo, docker, adm or systemd-journal group. A probe.py path that needs one of those stays the
+# operator's.
+#
+# DECIDED: the home, .ssh and authorized_keys are root-owned. sshd's StrictModes accepts a
+# root-owned file, and an account that owned its home could rename .ssh and plant a key of its
+# own. Root ownership closes that persistence, and a probe account has nothing to write there.
+
+- name: Make sure the ssh-users group exists
+  # access.yml creates it under the `ssh` tag, so a run scoped to this file's tag has to.
+  tags: [claude-peer]
+  ansible.builtin.group:
+    name: ssh-users
+    state: present
+  become: true
+  when: claude_peer_user_enabled
+
+- name: Create the agent's peer account with ssh-users as its one group
+  # `append: false` makes the list exact, so a group added by hand is removed on the next run.
+  # `expires: -1` lifts the expiry the switched-off arm below sets.
+  tags: [claude-peer]
+  ansible.builtin.user:
+    name: "{{ claude_peer_user }}"
+    system: true
+    home: "{{ initial_setup_claude_peer_home }}"
+    create_home: false
+    shell: /bin/bash
+    password_lock: true
+    groups: [ssh-users]
+    append: false
+    expires: -1
+  become: true
+  when: claude_peer_user_enabled
+
+- name: Create the peer account's root-owned home and .ssh
+  tags: [claude-peer]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ initial_setup_claude_peer_home }}"
+    - "{{ initial_setup_claude_peer_home }}/.ssh"
+  become: true
+  when: claude_peer_user_enabled
+
+- name: Read the agent's public peer key from the controller's own disk
+  # The controller is the key host when the Pi is applied from daniel-box, and that host's ssh
+  # to itself is not authorized, so the file is read directly. A controller that is not the key
+  # host has no such file, and the task below reads it over ssh.
+  tags: [claude-peer]
+  delegate_to: localhost
+  become: false
+  ansible.builtin.slurp:
+    src: "{{ claude_peer_key_path }}.pub"
+  register: initial_setup_claude_peer_pub_local
+  failed_when: false
+  when: claude_peer_user_enabled
+
+- name: Read the agent's public peer key over ssh from the key host
+  # daniel-server's play runs on daniel-server, so the key comes over ssh, which the operator's
+  # user is authorized for. The `.pub` is 0644 in a directory the operator's group reads. The
+  # read changes nothing, so check mode runs it too.
+  tags: [claude-peer]
+  delegate_to: localhost
+  become: false
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -o
+      - BatchMode=yes
+      - -o
+      - ConnectTimeout=10
+      - "{{ claude_peer_key_host }}"
+      - cat
+      - "{{ claude_peer_key_path }}.pub"
+  register: initial_setup_claude_peer_pub_ssh
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when:
+    - claude_peer_user_enabled
+    - initial_setup_claude_peer_pub_local.content is not defined
+
+- name: Settle on the agent's public peer key
+  tags: [claude-peer]
+  ansible.builtin.set_fact:
+    initial_setup_claude_peer_key: >-
+      {{ (initial_setup_claude_peer_pub_local.content | b64decode)
+      if initial_setup_claude_peer_pub_local.content is defined
+      else initial_setup_claude_peer_pub_ssh.stdout | default('') }}
+  when: claude_peer_user_enabled
+
+- name: Refuse to authorize a key that was not read
+  tags: [claude-peer]
+  ansible.builtin.assert:
+    that:
+      - initial_setup_claude_peer_key is match('^ssh-ed25519 ')
+      # One line: the agent owns the file, and a second line would land in authorized_keys
+      # without the options on the first.
+      - (initial_setup_claude_peer_key | trim).splitlines() | length == 1
+    fail_msg: >-
+      No ssh-ed25519 public key at {{ claude_peer_key_path }}.pub on {{ claude_peer_key_host }}.
+      Apply the claude_code role there first: it generates the key when
+      claude_code_agent_user_enabled is true.
+    quiet: true
+  # The key host has no key before its first apply, and a check run before that has nothing to read.
+  when:
+    - claude_peer_user_enabled
+    - not ansible_check_mode
+
+- name: Authorize the agent's key for the peer account
+  # `restrict` drops port, agent and X11 forwarding and user-rc, and `pty` puts the terminal back
+  # so the operator can open a shell as this account to debug a probe.
+  tags: [claude-peer]
+  ansible.builtin.copy:
+    # A `|` block, so the file ends in a newline.
+    content: |
+      restrict,pty {{ initial_setup_claude_peer_key | trim }}
+    dest: "{{ initial_setup_claude_peer_home }}/.ssh/authorized_keys"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: claude_peer_user_enabled
+
+# ── The way out ─────────────────────────────────────────────────────────────────────────
+# The key goes first, so nothing can log in as the account while it is being locked. The account
+# is expired rather than removed, as the agent user is: a removed user strands its files under a
+# bare uid. 86400 is 1970-01-02, because a shadow expiry of day 0 also reads as "never expires".
+
+- name: Remove the agent's authorized key from the peer account
+  tags: [claude-peer]
+  ansible.builtin.file:
+    path: "{{ initial_setup_claude_peer_home }}/.ssh/authorized_keys"
+    state: absent
+  become: true
+  when: not claude_peer_user_enabled
+
+- name: Look for the peer account on a host that has it switched off
+  tags: [claude-peer]
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ claude_peer_user }}"
+    fail_key: false
+  register: initial_setup_claude_peer_passwd
+  when: not claude_peer_user_enabled
+
+- name: Expire the peer account when it is switched off
+  tags: [claude-peer]
+  ansible.builtin.user:
+    name: "{{ claude_peer_user }}"
+    expires: 86400
+  become: true
+  when:
+    - not claude_peer_user_enabled
+    - initial_setup_claude_peer_passwd.ansible_facts.getent_passwd[claude_peer_user] is not none

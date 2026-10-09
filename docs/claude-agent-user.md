@@ -19,7 +19,7 @@ operator decided this on 2026-10-09 (#3685). See
 | 2 | Claude opens PRs under its own GitHub identity | Done 2026-10-05 (checked on #3622) |
 | 3 | Merged agent work lands and deploys through a lander unit | Built and deployed 2026-10-08 (#3633, #3650, #3651, #3652). The end-to-end check passed 2026-10-09, after #3999 fixed the approved-PR merge. Done. |
 | 4 | The phone host `claude-rc.service` runs as `claude` | Planned. The operator took its decisions on 2026-10-09; 4a to 4c build next, and 4d waits for a quiet window. |
-| 5 | Peer users, and the tools that decrypt SOPS | Planned |
+| 5 | Peer users, and the tools that decrypt SOPS | Built: the peer users and the homelab-ui login. The agent still lacks Node and Chromium for the MCP server. |
 | 6 | Retire Claude sessions as `ubuntu` | Planned |
 | 7 | A pre-merge dry run without secrets | Optional, planned |
 
@@ -331,10 +331,11 @@ reads that artifact and a memory file the session wrote, after a `claude_code` a
 **Rollback:** `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live
 sessions.
 
-## Slice 5: peers, and the tools that decrypt SOPS (homelab-ui login built; peers planned)
+## Slice 5: peers, and the tools that decrypt SOPS (homelab-ui login and peer users built)
 
-**Build:** create a no-sudo `claude` user on daniel-server and daniel-pi for `probe.py`'s ssh
-paths, with a key per host. `scripts/z2m/set_device_option.sh` and
+**Build:** a no-sudo `claude` user on daniel-server and daniel-pi, and the agent's key for
+them, so `probe.py`'s ssh paths need not run in the operator's shell.
+`scripts/z2m/set_device_option.sh` and
 `ansible/roles/k8s/qbittorrent/files/apply_prefs.py` stay operator-run, or each gets a
 lander-style oneshot unit.
 
@@ -372,13 +373,58 @@ no Node, `playwright-mcp` or Chromium for `claude`. The agent also has no homela
 registration: the operator's is user-scope in `~/.claude.json`, which
 `agent_operator_config.yml` does not copy.
 
-**Check:** a `probe.py` Pi-plane subcommand works as `claude`, and homelab-ui renders a service
-page. Until the gap above closes, check the login half as `claude`, after both the `authelia`
-and `claude_code` applies, with
-`uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage`.
+**Built: the peer users.** How it works:
 
-**Rollback:** remove the peer users. For the login, switch the agent user off and delete the
-`claude-agent` block.
+- **The key.** `ansible/roles/setup/claude_code/tasks/agent_peers.yml` generates an ed25519
+  key as the agent (`claude_peer_key_path`, never the signing key) and renders the agent's
+  `~/.ssh/config`. Each enabled peer gets a `Host` stanza with `User claude`, the peer's
+  `server_ip` and `IdentitiesOnly yes`. The stanza is named for the host, which is the name
+  `probe.py` passes to `ssh`.
+- **The account.** `ansible/roles/setup/initial_setup/tasks/claude-peer.yml` builds `claude`
+  on each peer from `initial_setup.yml`, tag `claude-peer`. The Pi takes the same path with
+  `-e target=daniel-pi`. The user joins `ssh-users` and nothing else, because sshd's
+  `AllowGroups ssh-users` is the only login gate and the group's other members are the operator
+  and root. Its home is `/var/lib/claude`, owned by root, with a root-owned `authorized_keys`
+  holding `restrict,pty` and the agent's key. The account cannot rewrite its own key.
+- **Moving the key.** The peer's play reads the `.pub` from the key host at run time: from
+  the controller's own disk when the controller is daniel-box, otherwise over ssh as the
+  operator. No copy step exists. A peer applied before daniel-box's `claude_code` apply stops
+  at an assert that says so.
+- **The switch.** `claude_peer_user_enabled` defaults to `false` in `group_vars/all.yml` and is
+  `true` in each peer's host_vars. `false` removes the authorized key and expires the account.
+  The `claude_code` role skips its own account expiry on a host that sets the switch,
+  because daniel-server runs both roles and they would otherwise undo each other.
+- **The approval list.** `claude-peer.yml` is on `claude_code_lander_approval_paths`, so an
+  agent PR that changes who may log in to a peer needs the operator's approval.
+
+**What the peer user does for `probe.py`.** `probe.py` has one ssh call:
+`ssh daniel-pi docker inspect $(docker ps -aq)`, used by `pi containers` and by
+`health <name> --docker`. The `docker` group is root-equivalent, and `docker inspect` returns
+every container's `Env`, which holds secrets. This slice does not grant it, so both
+subcommands stay operator-run. `systemd-journal` is not granted on the peers, because no
+`probe.py` path reads a peer's journal over ssh. The Pi-plane subcommands `targets --pi` and
+`kuma-drift --pi` read Prometheus and Kuma over HTTP and use no ssh, so this slice does not
+affect them.
+
+**After this slice no `probe.py` ssh path works as `claude`.** Both need the `docker` group.
+`probe.py pi containers` as `claude` fails on the Docker socket, and that failure is the
+boundary doing its job. A `probe.py` path that reads the Pi over ssh needs a decision on
+read-only Docker access first, for example the `docker-proxy` read endpoint, which would
+change `probe.py` and is not part of this slice.
+
+**Check, peers:** as `claude` on daniel-box, `ssh daniel-pi id` and `ssh daniel-server id`
+print `claude` with `ssh-users` as its only supplementary group. `ssh daniel-pi docker ps`
+fails with a permission error on the Docker socket. **Check, login:** the command above, and
+a homelab-ui page that renders once the Node and Chromium gap closes.
+
+**Apply order:** `claude_code` on daniel-box first, because it generates the key the peers
+read. The peers' `initial_setup` apply second. The agent must not ssh to a peer before then:
+fail2ban has no `ignoreip`, so five refused logins from daniel-box in ten minutes ban it on
+that peer, and on the Pi that ban also cuts Ansible's own connection.
+
+**Rollback:** for the peers, `claude_peer_user_enabled: false` in the peer's host_vars, then
+apply `initial_setup.yml --tags claude-peer` there (add `-e target=daniel-pi` for the Pi). For
+the login, switch the agent user off and delete the `claude-agent` block.
 
 ## Slice 6: retire Claude sessions as `ubuntu` (planned)
 
@@ -415,7 +461,7 @@ the dry-run path's kubectl calls can run without `become`.
 | `deploy.sh`, `--check` and `--dry-run` before a merge | All three decrypt SOPS, and the agent has no age key | Merged work deploys through the lander (slice 3). A pre-merge dry run returns with slice 7. |
 | `sudo` | No sudo rights and no `SUDO_ASKPASS` helper | The operator, or the deployer after a merge |
 | Adding or rotating a secret | `sops` needs the data key to write a value | The operator. Key names stay readable, because SOPS encrypts values only. |
-| ssh as `ubuntu` to the peers | That shell has sudo | A no-sudo `claude` user per peer (slice 5) |
+| ssh as `ubuntu` to the peers | That shell has sudo | A no-sudo `claude` user per peer (slice 5). `pi containers` and `health --docker` still need the `docker` group, so they stay the operator's. |
 | The system journal, until slice 4 | No `adm` or `systemd-journal` membership | Its own units only. Verdict files from the lander replace the journal for landing. Slice 4 adds `systemd-journal`. |
 | Edits to `.github/workflows/` | The token has no `workflow` scope | The operator, or Renovate's own app |
 

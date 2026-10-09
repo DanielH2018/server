@@ -31,6 +31,9 @@ has_hypervisor: true
 # PR, because the k8s play, the connection=local pin and the per-host lock keep deploys there.
 has_claude_code: true
 claude_code_rc_enabled: false
+# The no-sudo `claude` account the agent on daniel-box ssh's to (docs/claude-agent-user.md,
+# slice 5). False locks it and removes its authorized key.
+claude_peer_user_enabled: true
 
 # DECIDED: 13G fleet cap, derived the way defaults/main.yml derives daniel-box's 14G.
 # Measured on daniel-server 2026-09-09. Re-derive all of it if you change this:

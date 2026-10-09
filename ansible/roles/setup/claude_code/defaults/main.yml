@@ -340,8 +340,9 @@ claude_code_lander_approval_paths:
   # What builds an agent user, and the deployer's host helpers.
   - ansible/roles/setup/common/tasks/agent_user.yml
   - ansible/roles/setup/common/files/host_lib.py
-  # sudo, ssh and the operator's own login.
+  # sudo, ssh and the operator's own login, and the agent's login on the peers.
   - ansible/roles/setup/initial_setup/tasks/access.yml
+  - ansible/roles/setup/initial_setup/tasks/claude-peer.yml
   # Every switch above lives in host_vars.
   - ansible/inventory/
   # The secrets and who can decrypt them.

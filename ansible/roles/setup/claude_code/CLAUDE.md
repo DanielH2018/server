@@ -96,8 +96,8 @@ effect at the next start**, so the deploy that changes it drops the RC host's se
 
 `claude_code_agent_user_enabled` builds `claude` with
 `ansible/roles/setup/common/tasks/agent_user.yml`. No unit runs as it. It lands a PR by starting
-`claude-land@<n>.service`, which runs `land.sh` as the operator under the landing policy.
-`defaults/main.yml` covers login, the GitHub account, the lander and switching each off.
+`claude-land@<n>.service`, which runs `land.sh` as the operator. `tasks/agent_peers.yml` keys it
+for the peers. `defaults/main.yml` covers login, GitHub, the lander and their switches.
 
 `claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as, and its home
 and `claude_code_rc_workdir` follow it. The unit gets `ProtectHome=yes`, `NoNewPrivileges=yes` and
