@@ -62,6 +62,15 @@ def test_a_filter_applied_through_map_counts_as_a_call(tree: Tree):
     assert tree.narrow(*_refs(tree)) == {"sonarr", "radarr"}
 
 
+def test_a_test_file_beside_a_roles_code_is_not_a_caller(tree: Tree):
+    """#3660: `_sort_hits` drops what the deployer's `_is_test_only_path` drops, and a
+    `test_*.py` outside a `tests/` directory is one of those."""
+    tree.write("ansible/roles/k8s/radarr/files/test_names.py", "assert 'shout'\n")
+    tree.commit("radarr's test names it")
+    tree.write(PLUGIN, _plugin(body="x.lower()"))
+    assert tree.narrow(*_refs(tree)) == {"sonarr"}
+
+
 def test_a_filter_named_only_in_comments_reaches_nothing_there(tree: Tree):
     tree.write(SONARR, "{# shout is documented here #}\nname: a\n")
     tree.write(

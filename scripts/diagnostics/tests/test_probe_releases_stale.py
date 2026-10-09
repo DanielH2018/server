@@ -307,6 +307,11 @@ def test_is_real_change_is_clean_for_the_renderers_drain():
     assert pr._is_real_change("ansible/roles/k8s/manifests/tasks/drain.yml") is False
 
 
+def test_is_real_change_is_clean_for_a_test_file_beside_a_roles_code():
+    """#3660: the deployer's `_is_test_only_path` decides, not a `tests/` segment alone."""
+    assert pr._is_real_change("ansible/roles/k8s/sonarr/files/test_x.py") is False
+
+
 def test_is_real_change_is_flagged_for_the_paths_the_narrowing_must_not_touch():
     """Four paths a too-wide exclusion would swallow, each still a real change."""
     deploy_time = frozenset({"volume-claim"})

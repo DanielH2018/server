@@ -200,9 +200,15 @@ returns, at both refs, and greps the role trees, the shared templates and the pl
 for each one. A call from `deploy.yml`, `pre_tasks/`, `tasks/` or `post_tasks/` still refuses,
 which is the outcome for `toposort.py` and `k8s_retire.py`. So does an inventory value that
 calls the filter, a `filters()` that is not a literal dict, a deleted plugin and a plugin
-another plugin imports. A setup role that calls a filter is not counted, and neither the
-narrowed run nor the full `deploy.yml` applies it. `scripts/deploy_tools/narrow_filters.py`
-holds the rule.
+another plugin imports. `scripts/deploy_tools/narrow_filters.py` holds the rule.
+
+A setup role that calls a filter is outside both runs, because `deploy.yml` applies no setup
+role (#3874). The deployer reads those callers from
+`deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS`, a static table that
+`ansible/tests/setup/test_setup_cross_role_files.py` holds to the tree. A plugin change then
+joins the setup plane beside the deploy plane. The tick applies an `initial_setup.yml` caller
+such as `gitops_deploy` with its whole-role tag, and records a `k3s-bringup.yml` caller such as
+`k3s` as a `manual_plane` line.
 
 **Every deploy-plane tick also logs a render-digest shadow line** (#3045), one
 `narrow shadow:` line beside the outcome above. It names the services whose applied digests

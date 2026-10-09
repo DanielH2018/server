@@ -30,6 +30,11 @@ The k8s roles importing a setup file are a second table, `K8S_ROLES_IMPORTING_SE
 (#3320). Their import spelling climbs one more level (`{{ role_path }}/../../setup/<owner>/`),
 and the deployer defer-and-alerts them rather than re-applying them.
 
+The setup roles calling a filter plugin's filters are a third, `SETUP_ROLES_CALLING_FILTER_PLUGINS`
+(#3874). `ansible/deploy.yml` runs no setup role, so the deployer re-applies or records them
+beside the deploy plane. `_FILTER_CALLERS_EXEMPT` names each call that leaves nothing rendered
+for a plugin change to stale, with the reason.
+
 Run: uv run pytest ansible/tests/setup/test_setup_cross_role_files.py
 """
 
@@ -38,11 +43,13 @@ import re
 
 from _helpers import ROLES
 from _role_census import role_dirs, role_task_files
+from deploy_tools import narrow_filters
 
 from deploy_cross_role import (
     K8S_ROLES_IMPORTING_SETUP_FILES,
     SETUP_FILES_ROUTED_TO_OWNER,
     SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
+    SETUP_ROLES_CALLING_FILTER_PLUGINS,
 )
 
 _REFERENCE = re.compile(
@@ -82,6 +89,18 @@ KNOWN_EDGES = {
         "render_records",
     },
 }
+# A setup role naming a plugin's filter where no rendered value can go stale, with the reason.
+_FILTER_CALLERS_EXEMPT = {
+    ("ansible/filter_plugins/toposort.py", "docker_install"): (
+        "`filter_by_platform` runs in the `loop:` of `engine-upgrade.yml`, a never-tagged "
+        "task file an operator runs by hand, so it renders nothing the plugin change leaves"
+    ),
+}
+KNOWN_FILTER_CALLERS = {
+    "ansible/filter_plugins/service_tier.py": {"k3s"},
+    "ansible/filter_plugins/k8s_autodeploy.py": {"gitops_deploy"},
+}
+_COMMENT_LINE = re.compile(r"^\s*#.*$", re.MULTILINE)
 KNOWN_K8S_EDGES = {
     "ansible/roles/setup/common/files/host_lib.py": {"configarr", "janitorr"},
     "ansible/roles/setup/common/tasks/install_host_lib.yml": {"configarr", "janitorr"},
@@ -254,3 +273,78 @@ def test_a_k8s_role_importing_a_setup_task_file_is_flagged():
     assert cross_role_files({"svc": task + sibling}, _K8S_REFERENCE) == {
         "ansible/roles/setup/common/tasks/shared.yml": frozenset({"svc"})
     }
+
+
+def filter_callers(
+    names: dict[str, set[str]], texts: dict[str, dict[str, str]]
+) -> dict[str, frozenset[str]]:
+    """Each plugin whose filter a setup role's YAML or template names, mapped to those roles.
+
+    Args:
+        names: a plugin path -> the filter names it registers.
+        texts: a role -> {its file path: text}, `.py`, `.md` and `tests/` already left out:
+            Python names a filter without piping into it, and neither of the other two
+            reaches a host.
+    """
+    out: dict[str, set[str]] = {}
+    for plugin, filters in names.items():
+        words = re.compile(rf"(?<!\w)({'|'.join(map(re.escape, filters))})(?!\w)")
+        for role, files in texts.items():
+            if any(words.search(_COMMENT_LINE.sub("", t)) for t in files.values()):
+                out.setdefault(plugin, set()).add(role)
+    return {plugin: frozenset(roles) for plugin, roles in out.items()}
+
+
+def _plugin_names() -> dict[str, set[str]]:
+    repo = ROLES.parent.parent
+    return {
+        str(p.relative_to(repo)): narrow_filters.filter_names(p.read_text(), str(p))
+        for p in sorted((ROLES.parent / "filter_plugins").glob("*.py"))
+    }
+
+
+def _setup_role_texts() -> dict[str, dict[str, str]]:
+    texts = {}
+    for role_dir in role_dirs(ROLES / "setup"):
+        texts[role_dir.name] = {
+            str(f): f.read_text()
+            for f in sorted(role_dir.rglob("*"))
+            if f.is_file()
+            and f.suffix not in (".py", ".md", ".pyc")
+            and "tests" not in f.relative_to(role_dir).parts
+        }
+    return texts
+
+
+def _tree_filter_callers() -> dict[str, frozenset[str]]:
+    found = filter_callers(_plugin_names(), _setup_role_texts())
+    kept = {
+        plugin: frozenset(r for r in roles if (plugin, r) not in _FILTER_CALLERS_EXEMPT)
+        for plugin, roles in found.items()
+    }
+    return {plugin: roles for plugin, roles in kept.items() if roles}
+
+
+def test_the_filter_callers_table_equals_the_tree():
+    assert _tree_filter_callers() == SETUP_ROLES_CALLING_FILTER_PLUGINS
+    for plugin, roles in KNOWN_FILTER_CALLERS.items():
+        assert SETUP_ROLES_CALLING_FILTER_PLUGINS.get(plugin) == roles, plugin
+
+
+def test_every_filter_caller_exemption_is_still_a_caller():
+    # An exemption for a call that is gone is dead weight, and would hide a new one.
+    found = filter_callers(_plugin_names(), _setup_role_texts())
+    for plugin, role in _FILTER_CALLERS_EXEMPT:
+        assert role in found.get(plugin, ()), (plugin, role)
+
+
+def test_a_setup_role_calling_a_filter_is_flagged():
+    texts = {"k3s": {"defaults/main.yml": "x: \"{{ list | tier_claims('a') }}\"\n"}}
+    assert filter_callers({"p.py": {"tier_claims"}}, texts) == {
+        "p.py": frozenset({"k3s"})
+    }
+
+
+def test_a_setup_role_naming_a_filter_only_in_a_comment_or_a_longer_word_is_clean():
+    texts = {"k3s": {"a.yml": "# tier_claims is read here\ny: my_tier_claims_x\n"}}
+    assert filter_callers({"p.py": {"tier_claims"}}, texts) == {}
