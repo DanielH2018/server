@@ -19,8 +19,9 @@ defaults on — are `ansible/tests/k8s/test_staging_opt_out_flags_render.py`'s.
 
 from lib import yaml_fast
 
-from _k8s_render import _inventory_base, render_role_template
-from validate.k8s_manifests import K8S_ROLES, load_yaml, resolve_vars
+from _k8s_render import render_role_template
+from lib.render_context import render_context
+from validate.k8s_manifests import K8S_ROLES
 
 _ROLE = "traefik"
 _FLAG = "traefik_k8s_manage_acme"
@@ -31,14 +32,10 @@ def _render(template: str, manage_acme: bool) -> str:
 
 
 def _claims(manage_acme: bool) -> list:
-    # Resolved here rather than through render_role_template: `k8s_claims` is a role default
-    # computed from the flag, and resolved defaults outrank overrides laid over them, so the flag
-    # has to change before the defaults resolve.
-    defaults = {
-        **load_yaml(K8S_ROLES / _ROLE / "defaults" / "main.yml"),
-        _FLAG: manage_acme,
-    }
-    return resolve_vars(defaults, _inventory_base())["k8s_claims"]
+    # `k8s_claims` is a role default computed from the flag. `render_context` lays the flag in
+    # before the defaults resolve, so the claims follow it.
+    ctx = render_context(K8S_ROLES / _ROLE, overrides={_FLAG: manage_acme}, strict=True)
+    return ctx["k8s_claims"]
 
 
 def _deployment(manage_acme: bool) -> dict:

@@ -11,44 +11,20 @@ what a test considers a manifest cannot drift from what that validator does.
 from lib import yaml_fast
 from _role_census import role_dirs
 from lib.render_context import render_context
-from lib.repo_paths import HOST_VARS as HOST_VARS_DIR
 from validate.k8s_manifests import (
-    ALL_VARS,
     ANSIBLE,
-    BASE_CONTEXT,
-    HOST_VARS,
     K8S_ROLES,
     SHARED_TPL,
     SKIP_ROLES,
     claim_contexts,
     CLAIM_TEMPLATE,
     k8s_entries,
-    load_yaml,
     make_env,
     make_lookup,
     register_ansible_filters,
     render_or_error,
-    resolve_vars,
-    role_defaults,
     shared_default_templates,
 )
-
-
-def _inventory_base(overrides: dict | None = None) -> dict:
-    """The context every render here starts from, resolved once, `overrides` laid on top.
-
-    daniel-box's host_vars layer over group_vars, as in the validator's main(): a template
-    that reads `containers_list` itself (authelia's access_control rules) would otherwise
-    iterate a StubUndefined as empty and hand every guard a Secret with the rules missing.
-    """
-    base = {
-        **BASE_CONTEXT,
-        **load_yaml(ALL_VARS),
-        **load_yaml(HOST_VARS),
-        "playbook_dir": str(ANSIBLE),
-        **(overrides or {}),
-    }
-    return resolve_vars(base, base)
 
 
 def _role_env(role_dir, ctx: dict):
@@ -165,17 +141,11 @@ def render_texts(overrides: dict) -> tuple[tuple[str, str, str], ...]:
 def host_context(host: str = "daniel-box") -> dict:
     """The resolved inventory a render for `host` starts from: base context, all.yml, host_vars.
 
-    The same layering `_render_all` builds for daniel-box, with the host a parameter so a
-    staging guard can render against `daniel-stage.yml`. Not cached: a caller lays role
-    defaults and overrides on top, and `resolve_vars` is cheap next to the render itself.
+    `render_context` with no role's defaults: the plane directory holds no defaults file. The
+    host is a parameter so a staging guard can render against `daniel-stage.yml`. Not cached:
+    resolving the inventory is cheap next to the render itself.
     """
-    base = {
-        **BASE_CONTEXT,
-        **load_yaml(ALL_VARS),
-        **load_yaml(HOST_VARS_DIR / f"{host}.yml"),
-        "playbook_dir": str(ANSIBLE),
-    }
-    return resolve_vars(base, base)
+    return render_context(K8S_ROLES, host=host, strict=True)
 
 
 def render_role_template(
@@ -194,24 +164,30 @@ def render_role_template(
     `k8s/image-builder` renders here too, with the variables its caller hands over passed as
     `overrides`.
 
-    Role defaults go under the inventory, which is Ansible's own precedence and the order
-    `lib.render_context` gives `_render_all` and the validator. It matters here because
-    daniel-stage overrides `traefik_k8s_manage_crowdsec` on purpose, so a staging render with
-    defaults on top would render the value the deploy never uses.
+    The context is `lib.render_context`'s, the one `_render_all` and the validator render
+    with. Role defaults go under the inventory, which is Ansible's own precedence. It matters
+    here because daniel-stage overrides `traefik_k8s_manage_crowdsec` on purpose, so a staging
+    render with defaults on top would render the value the deploy never uses. `overrides` go
+    in before anything resolves, so a default derived from an overridden flag (traefik's
+    `k8s_claims` from `traefik_k8s_manage_acme`) follows the flag.
     """
-    base = host_context(host)
     # A default rather than a raise: `k8s/image-builder` is included by caller roles and is not
     # a `containers_list` entry at all, so the lookup finds nothing for it and the bare `next()`
     # raised `StopIteration` before the render ever started. The key is LEFT OUT in that case
     # rather than set to None, so a template reading `container_item.name` renders `STUB` the way
     # every other undefined does here instead of raising an AttributeError.
-    entry = next((c for c in base["containers_list"] if c["name"] == role), None)
-    ctx = {
-        **role_defaults(role, base),
-        **base,
-        **({"container_item": entry} if entry is not None else {}),
-        **(overrides or {}),
-    }
+    entry = next(
+        (c for c in host_context(host)["containers_list"] if c["name"] == role), None
+    )
+    ctx = render_context(
+        K8S_ROLES / role,
+        host=host,
+        overrides={
+            **({"container_item": entry} if entry is not None else {}),
+            **(overrides or {}),
+        },
+        strict=True,
+    )
     env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)
