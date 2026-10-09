@@ -61,6 +61,19 @@ def test_a_role_test_file_is_clean():
     assert land_tags.shared_caller_tags([_ROLE_TESTS]) == {}
 
 
+def test_a_test_module_beside_a_roles_code_maps_to_no_tag_on_either_side():
+    """The landing calls the deployer's test-path rule instead of copying it (#3660), so a
+    `test_*.py` outside the role's `tests/` drops on both sides; the copy deployed it."""
+    from deploy_logic import services_from_changed_paths
+
+    test_module = "ansible/roles/k8s/sonarr/files/test_probe.py"
+    assert land_tags.tag_for(test_module, {"sonarr"}) is None
+    assert "sonarr" not in services_from_changed_paths([test_module]).k8s
+    code = "ansible/roles/k8s/sonarr/files/probe.py"
+    assert land_tags.tag_for(code, {"sonarr"}) == "sonarr"
+    assert "sonarr" in services_from_changed_paths([code]).k8s
+
+
 def test_a_role_task_file_is_flagged():
     """The reject half: tasks/ still owes a deploy, which is a deploy of both callers rather
     than a hand."""

@@ -34,7 +34,7 @@ from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, caller_tags, smoke_
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import role_of
+from deploy_logic import _is_test_only_path, role_of
 
 
 # The one directory under the role trees that is not a service: `common`, the shared Docker
@@ -73,16 +73,17 @@ def role_for(path: str) -> str | None:
 
 
 def is_role_test_path(path: str) -> bool:
-    """Whether a changed path is a role's own `tests/` file.
+    """Whether a changed path is test-suite material, which no deploy applies.
 
-    Answers about segment 4 of `ansible/roles/<plane>/<role>/<sub>/...` alone, so it is only
-    meaningful for a path `role_for` has already named a role for. `shared_roles` and `tag_for`
-    are the callers, and both drop such a path: a role's `tests/` is work no deploy applies, the same class as the
-    `.md` rule in `role_for`. Pytest guards over the role's `files/*.py` are staged by
-    nothing — the `no-role-ships-a-test-file` row of
-    `ansible/tests/repo/test_census_rows_roles.py` holds that tree-wide — so
-    they reach no cluster and no deploy can apply them. `_is_real_change` in
-    `scripts/diagnostics/probe_lib/releases.py` drops a role's `tests/` for that reason.
+    The deployer's own `deploy_changes._is_test_only_path`, called rather than restated, so
+    the landing and the tick drop the same paths before they map one to a tag (#3660). It is
+    only asked of a path `role_for` has already named a role for, where it answers for the
+    role's own `tests/` and for a `test_*.py` or `conftest.py` anywhere in the role. Nothing
+    stages those: the `no-role-ships-a-test-file` row of
+    `ansible/tests/repo/test_census_rows_roles.py` holds that tree-wide, and
+    `_is_real_change` in `scripts/diagnostics/probe_lib/releases.py` drops them for the same
+    reason. `shared_roles` and `tag_for` are the callers, and both drop such a path, the same
+    class as the `.md` rule in `role_for`.
 
     `tasks/` is NOT dropped, for three reasons. A role
     with no `containers_list` entry and no caller has no path to being applied at all, and a
@@ -96,11 +97,9 @@ def is_role_test_path(path: str) -> bool:
 
     Read HERE rather than folded into `role_for`, which stays the plain "which role directory is
     this path in" mapper `test_land_tags_shared_mapper_agreement.py` pins against the deployer's
-    own `services_from_changed_paths`. The segment itself comes off `role_of`, which already
-    carries it, rather than off a fourth `split("/")` of the same path.
+    own `services_from_changed_paths`.
     """
-    at = role_of(path)
-    return at is not None and at.subdir == "tests"
+    return _is_test_only_path(path)
 
 
 # Subdirectories of a shared role whose content decides how a deploy RUNS rather than what it
