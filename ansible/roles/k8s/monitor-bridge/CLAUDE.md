@@ -62,11 +62,9 @@ the template rather than the constant.
 Two push-side rules bind as widely. **Every push monitor has `max_retries=0`**, so widen
 `uptime_kuma_k8s_bridge_push_interval` to fix post-boot flapping and never add retries
 (`test_push_monitors_never_retry`). **A new arm folds into an existing monitor by default**;
-prove its selector against a live source first (checks page's *Traps*). **A new tile is a row in
-`monitor_bridge_push_checks`** (`defaults/main.yml`), from which the env-secret renders the
-`KUMA_PUSH_<NAME>` the bridge reads; `tests/test_push_check_table.py` holds the table to the
-registry (#3659). The liveness probe, the credentials and the prerequisites are on the internals
-page.
+prove its selector against a live source first (checks page's *Traps*). **A new tile is a
+`monitor_bridge_push_checks` row** in `defaults/main.yml`. The liveness probe, the credentials
+and the prerequisites are on the internals page.
 
 ## Module layout — and the one rule that governs it
 
@@ -87,10 +85,9 @@ it kills the pod at import on its next roll;
 `check.run_once`, which passes it to every gate, check body and `bridge.net` helper that reads a
 URL; a test states the registry and the `Gates` rather than patching tables. Building the config
 MUST NOT raise: `_int`/`_num` record a malformed or missing value in `CONFIG_PROBLEMS`, and
-`main()` exits 2. **A key `templates/env-secret.yaml.j2` renders has no Python default** — the
-template holds its value once, and the `cfg` test fixture is that render (#3659). A default
-argument cannot read the config — defaults evaluate at import — and a `verdicts/` module reads
-no `cfg` at all. The internals page has the test-side rules.
+`main()` exits 2. **A key the env-secret renders has no Python default**; the `cfg` fixture is
+that render. A default argument cannot read the config — defaults evaluate at import — and a
+`verdicts/` module reads no `cfg` at all. The internals page has the test-side rules.
 
 ## Editing & testing
 Unit tests are `uv run pytest ansible/roles/k8s/monitor-bridge/tests`, one file per domain.
