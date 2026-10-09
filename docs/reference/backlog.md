@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-05 18:17 UTC
-generated_sha: 4fdc475b7
+generated_at: 2026-10-09 06:17 UTC
+generated_sha: ecfcba8b9
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,8 +17,65 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 1 | - | ✓ |
+| [#3660](https://github.com/DanielH2018/server/issues/3660) | medium | improvement | cicd | Answer 'which services does this change reach' from one module instead of five entry points | 2026-10-08 | 0 | - | ✓ |
+| [#3690](https://github.com/DanielH2018/server/issues/3690) | medium | improvement | backup-observability | Derive Uptime Kuma ingress monitors from containers_list instead of hand-listing them | 2026-10-09 | 0 | - | ✓ |
+| [#3705](https://github.com/DanielH2018/server/issues/3705) | medium | gap | cicd | Derive the footgun hook's SSH host list from inventory instead of a stale tuple — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3708](https://github.com/DanielH2018/server/issues/3708) | medium | improvement | cicd | Share one Discord OnFailure alert unit template across setup roles — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3709](https://github.com/DanielH2018/server/issues/3709) | medium | improvement | cicd | Extract the timer-driven service task sequence into a shared common task file — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3710](https://github.com/DanielH2018/server/issues/3710) | medium | improvement | network | Replace hard-coded 10.42.0.0/16 in k8s templates with k3s_pod_cidr — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3711](https://github.com/DanielH2018/server/issues/3711) | medium | improvement | network | Derive netpol-baseline node CIDRs from the group_vars cni0 and flannel lists — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3732](https://github.com/DanielH2018/server/issues/3732) | medium | improvement | cicd | Declare each pinned artifact with one renovate annotation and refresh checksums with asset_pins.py | 2026-10-09 | 0 | - | ✓ |
+| [#3734](https://github.com/DanielH2018/server/issues/3734) | medium | improvement | cicd | Make setup-role placement one inventory list read by initial_setup.yml and the deployer | 2026-10-09 | 0 | - | ✓ |
+| [#3735](https://github.com/DanielH2018/server/issues/3735) | medium | improvement | backup-observability | Read Longhorn Backup CRs through one module instead of seven parsers | 2026-10-09 | 0 | - | ✓ |
+| [#3742](https://github.com/DanielH2018/server/issues/3742) | medium | improvement | backup-observability | Pass monitor-bridge's Prometheus and Loki access in as a Sources object instead of patching bridge.net | 2026-10-09 | 0 | - | ✓ |
+| [#3836](https://github.com/DanielH2018/server/issues/3836) | medium | gap | cicd | Green gate's git-archive export has no .git, so red tests that call git fail and correct fixes are refused | 2026-10-09 | 0 | - | ✓ |
+| [#3838](https://github.com/DanielH2018/server/issues/3838) | medium | gap | security | A red-green batch's implement phase loads a settings.local.json the red author can plant | 2026-10-09 | 0 | - | ✓ |
+| [#3845](https://github.com/DanielH2018/server/issues/3845) | medium | gap | cicd | The green gate's clone reads origin/master at green time, not the base the red gate saw | 2026-10-09 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#3281](https://github.com/DanielH2018/server/issues/3281) | low | improvement | cicd | Digest-pin the third-party images still pinned only by tag | 2026-10-02 | 0 | - | ✓ |
+| [#3661](https://github.com/DanielH2018/server/issues/3661) | low | improvement | cicd | Decide whether the 600-line module cap should force splits that leave conjoined modules | 2026-10-08 | 0 | - | ✓ |
+| [#3662](https://github.com/DanielH2018/server/issues/3662) | low | improvement | container | Narrow the k8s/manifests caller interface so a new role needs one include | 2026-10-08 | 0 | - | ✓ |
+| [#3665](https://github.com/DanielH2018/server/issues/3665) | low | improvement | cicd | Make landing classification an immutable value instead of fields phases rewrite | 2026-10-08 | 0 | - | ✓ |
+| [#3675](https://github.com/DanielH2018/server/issues/3675) | low | improvement | cicd | Decide from slice-1 data whether fan-out review becomes the default | 2026-10-08 | 0 | - | - |
+| [#3677](https://github.com/DanielH2018/server/issues/3677) | low | gap | backup-observability | Backup-health cron liveness check cannot stat /etc/cron.d (0700) as sys_user | 2026-10-08 | 0 | - | - |
+| [#3685](https://github.com/DanielH2018/server/issues/3685) | low | gap | docs | Decide where the claude-user plan's withheld threat-model section is kept | 2026-10-09 | 0 | - | ✓ |
+| [#3689](https://github.com/DanielH2018/server/issues/3689) | low | gap | container | tdarr's 300s rollout check is shorter than its image pull, so every tdarr bump fails its deploy | 2026-10-09 | 0 | - | ✓ |
+| [#3691](https://github.com/DanielH2018/server/issues/3691) | low | improvement | container | Derive Homepage tiles and their widget NetworkPolicy edges from the containers_list entry | 2026-10-09 | 0 | - | ✓ |
+| [#3693](https://github.com/DanielH2018/server/issues/3693) | low | improvement | backup-observability | Give scheduled host jobs one shell library for Kuma push, healthchecks ping and the tree lock | 2026-10-09 | 0 | - | ✓ |
+| [#3694](https://github.com/DanielH2018/server/issues/3694) | low | improvement | security | Replace five per-role failure alert units with one alert@.service template | 2026-10-09 | 0 | - | ✓ |
+| [#3695](https://github.com/DanielH2018/server/issues/3695) | low | improvement | cicd | Let fanout_place.py read HEAD, claim and tear down so the issue-fanout skill is one command | 2026-10-09 | 0 | - | ✓ |
+| [#3696](https://github.com/DanielH2018/server/issues/3696) | low | improvement | cicd | Give the k8s role census one owner in lib/k8s_roles | 2026-10-09 | 0 | - | ✓ |
+| [#3697](https://github.com/DanielH2018/server/issues/3697) | low | improvement | docs | Give the docs generators one estate model instead of each re-walking the inventory | 2026-10-09 | 0 | - | ✓ |
+| [#3703](https://github.com/DanielH2018/server/issues/3703) | low | improvement | cicd | Give the deployer's state one typed read-only view instead of raw marker parsing in each reader | 2026-10-09 | 0 | - | ✓ |
+| [#3712](https://github.com/DanielH2018/server/issues/3712) | low | improvement | network | Render bazarr's NetworkPolicy through the shared networkpolicy macro — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3718](https://github.com/DanielH2018/server/issues/3718) | low | improvement | container | Reuse fake_remux_scan's load_config and log in the sibling fake_remux scripts — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3719](https://github.com/DanielH2018/server/issues/3719) | low | improvement | network | Define the Pi's LAN IP once and derive the other two copies — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3720](https://github.com/DanielH2018/server/issues/3720) | low | improvement | backup-observability | Factor the kuma-push-lib source guard out of 24 shell templates — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3721](https://github.com/DanielH2018/server/issues/3721) | low | improvement | container | Fix or replace the hand-written securityContext and resources blocks at CronJob depth — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3722](https://github.com/DanielH2018/server/issues/3722) | low | improvement | cicd | Share the git-tree flock idiom across host scripts — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3728](https://github.com/DanielH2018/server/issues/3728) | low | improvement | cicd | Move remaining raw get_url binary installs onto common release_bin.yml — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3729](https://github.com/DanielH2018/server/issues/3729) | low | improvement | container | Consider small macros for repeated probes, TZ env and uid literals in k8s templates — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3730](https://github.com/DanielH2018/server/issues/3730) | low | improvement | cicd | Route the deployer's raw git subprocess calls through its own git module — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3736](https://github.com/DanielH2018/server/issues/3736) | low | improvement | backup-observability | Resolve the node-local Longhorn API address in one place, and check the role's readiness filter | 2026-10-09 | 0 | - | ✓ |
+| [#3737](https://github.com/DanielH2018/server/issues/3737) | low | improvement | backup-observability | Define Longhorn backup group and target names once instead of at every site | 2026-10-09 | 0 | - | ✓ |
+| [#3741](https://github.com/DanielH2018/server/issues/3741) | low | improvement | security | Render the CrowdSec agent sidecar from one macro instead of copying it into traefik and authelia | 2026-10-09 | 0 | - | ✓ |
+| [#3743](https://github.com/DanielH2018/server/issues/3743) | low | improvement | backup-observability | Derive plain Prometheus scrape jobs from containers_list instead of hand-copying each exporter's address | 2026-10-09 | 0 | worktree-issue-fanout-2026-10-09 | ✓ |
+| [#3744](https://github.com/DanielH2018/server/issues/3744) | low | improvement | cicd | Make high-churn entry points accept their dependencies instead of building them at import | 2026-10-09 | 0 | - | ✓ |
+| [#3745](https://github.com/DanielH2018/server/issues/3745) | low | improvement | backup-observability | Decide whether pod-side Kuma pushes should share host_lib's retry and cap behaviour | 2026-10-09 | 0 | - | ✓ |
+| [#3746](https://github.com/DanielH2018/server/issues/3746) | low | improvement | cicd | Decide whether role tests should get their role's files/ on sys.path from one conftest rule | 2026-10-09 | 0 | - | ✓ |
+| [#3748](https://github.com/DanielH2018/server/issues/3748) | low | improvement | container | Delete the dead wg-easy pull-pi-peers template and the state-lib.sh only it sources | 2026-10-09 | 0 | - | ✓ |
+| [#3749](https://github.com/DanielH2018/server/issues/3749) | low | improvement | docs | Generate the record-key list in secret-rotation.md and drop name lists the registry already stores | 2026-10-09 | 0 | - | ✓ |
+| [#3751](https://github.com/DanielH2018/server/issues/3751) | low | improvement | security | Declare each OIDC client once instead of in Authelia, the consuming role and k3s | 2026-10-09 | 0 | - | ✓ |
+| [#3753](https://github.com/DanielH2018/server/issues/3753) | low | improvement | cicd | Decide how values shared between this repo and the chezmoi dotfiles stay equal | 2026-10-09 | 0 | - | ✓ |
+| [#3766](https://github.com/DanielH2018/server/issues/3766) | low | improvement | backup-observability | monitor-bridge keeps its own B2 authorize client outside lib/b2.py — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
+| [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
+| [#3796](https://github.com/DanielH2018/server/issues/3796) | low | improvement | docs | renovate_agent's run_worktree.py points at prune_worktrees.py for readers it never defined | 2026-10-09 | 0 | - | ✓ |
+| [#3799](https://github.com/DanielH2018/server/issues/3799) | low | gap | docs | probe.py alerts' comment still says the Pi ships pi-health through Promtail | 2026-10-09 | 0 | - | ✓ |
+| [#3808](https://github.com/DanielH2018/server/issues/3808) | low | improvement | cicd | Route the per-test role_defaults layerings through lib.render_context | 2026-10-09 | 0 | - | ✓ |
+| [#3816](https://github.com/DanielH2018/server/issues/3816) | low | improvement | backup-observability | Read the hand-written scrape jobs' ports from containers_list too | 2026-10-09 | 0 | - | ✓ |
+| [#3843](https://github.com/DanielH2018/server/issues/3843) | low | improvement | cicd | Narrow a filter-plugin change to the roles whose templates call its filters | 2026-10-09 | 0 | - | ✓ |
+| [#3848](https://github.com/DanielH2018/server/issues/3848) | low | improvement | network | Derive netpol-baseline's terraria probe row from terraria_k8s_replicas | 2026-10-09 | 0 | - | ✓ |
+| [#3852](https://github.com/DanielH2018/server/issues/3852) | low | gap | security | Red/green batches: files the red author leaves untracked or skip-worktree stay live for scripts later phases run | 2026-10-09 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -72,6 +129,9 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#3284](https://github.com/DanielH2018/server/issues/3284) | refuted | Narrow the static bootstrap guard to what the runtime --help test cannot reach | Operator decision 2026-10-03. The issue's required mutation run disproved it: test_entry_points_answer_help ran with PYTHONPATH=scripts/ and passed with a bootstrap deleted, while the static guard failed. Follow-ups #3296 (PR #3311) and #3310 (PR #3316) landed. |
 | [#3322](https://github.com/DanielH2018/server/issues/3322) | accepted | Narrow a setup role's apply through the common task file that renders a changed kuma-check template | Operator accepted the trade-off on 2026-10-03. The refusal applies more than the change needs, never less: gitops_deploy and render_records get a whole-role reapply, and k3s a whole k3s-bringup.yml --tags k3s hand-run note. The trigger is rare (the kuma-check templates changed twice, both 2026-09-19). The four routing fixes after the narrowing landed on 2026-10-01 (ff8dc1a99, 080567a6f, e05add716, 8d0a33d9a) each found the next layer of indirection, and resolving a template through the task file that renders it would be one more. PR #3342 records this as a DECIDED marker at the shipped-file branch of narrow_setup.role_tags. Reopen if the trigger recurs or the fallback grows costlier than a longer apply. |
 | [#3358](https://github.com/DanielH2018/server/issues/3358) | refuted | Bring secret-rotate's say_failure back in line with the other two repo-committing crons | Operator-approved 2026-10-03. PR #3417: the only say_failure caller commits with --no-verify, so no hook output can reach the log and the filtered body would never match; the divergence is recorded as a DECIDED marker with a test that fails once --no-verify is dropped. |
+| [#3667](https://github.com/DanielH2018/server/issues/3667) | accepted | Inline or merge scripts/lib helpers that have one production caller | 3 of 4 modules resolved by #3756; release_bin_groups is the shared group resolver for the validator and the ansible/tests secrets guards, so it stays in scripts/lib |
+| [#3758](https://github.com/DanielH2018/server/issues/3758) | accepted | Decide whether release_bin_groups stays in scripts/lib with one production importer | Kept: shared resolver between the validator and the ansible/tests guards; see #3667 |
+| [#3829](https://github.com/DanielH2018/server/issues/3829) | refuted | daniel-pi's uv tooling lags the host-basics pins by several releases | daniel-pi is not in dev_tooling_hosts (ansible/inventory/group_vars/all.yml:398, daniel-box and daniel-server only), and host-basics.yml gates the uv install and every uv-tool install on that list. The Pi's old uv tooling is deliberately unmanaged, not drift. |
 
 ### container
 
