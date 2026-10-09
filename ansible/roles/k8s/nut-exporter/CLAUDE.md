@@ -37,10 +37,12 @@ on the assumption that a scrape must authenticate.
 
 **The UPS reading is on `/ups_metrics`, not `/metrics`.** `/metrics` is the exporter's own Go and
 process registry and carries no UPS variable at all, so a scrape job pointed there succeeds and
-returns nothing useful. The scrape job in `observability/templates/prometheus.yaml.j2` (`job_name:
-nut`) sets `metrics_path` accordingly and passes `ups=` as a param — the exporter fails a scrape
-outright if it discovers several UPS devices and has not been told which, so naming it means a
-second UPS cannot silently blank the job.
+returns nothing useful. The `nut` scrape job renders from the `metrics` item on this role's
+`containers_list` entry in `ansible/inventory/host_vars/daniel-box.yml`. That item sets `path`
+accordingly and passes `ups=` in `params`. The exporter fails a scrape outright if it discovers
+several UPS devices and has not been told which, so naming it means a second UPS cannot
+silently blank the job. The same item holds the `:9199` port, which the Deployment and Service
+read back through `metrics_port('nut')`.
 
 **The probes are `tcpSocket` for two separate reasons.** Probing `/ups_metrics` would crash-loop
 this pod whenever upsd is unreachable, turning a metrics gap into a second outage — Prometheus

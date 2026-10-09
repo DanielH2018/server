@@ -32,6 +32,7 @@ claims are unchanged.
 - **Scraped by:** observability prometheus, `job_name: terraria-stats` and `valheim-stats`.
   Both jobs render from the `metrics` items on this role's `containers_list` entry, which is
   where `:9420` is defined; the Deployments and Services read it back through `metrics_port`.
+  Both scripts read `METRICS_PORT` with no default, so the port has no second copy (#3816).
 - Stock `python:3.14-alpine`, not an `image-builder` build: both scripts and `stats_lib.py` are
   pure stdlib, so a build would add a layer and change nothing that runs.
   **Not because a built image could not be pulled here.** The in-cluster `registry` serves a
