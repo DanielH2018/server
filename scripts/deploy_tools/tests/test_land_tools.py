@@ -101,6 +101,14 @@ def test_read_state_is_empty_for_a_missing_or_blank_marker(tmp_path):
     assert tools.read_state(tmp_path, "hold_sha") == "abc"
 
 
+def test_a_readable_hold_survives_a_torn_behind_marker(tmp_path):
+    """`tick_state` relies on a readable hold reading as HELD whatever `behind_since` holds."""
+    (tmp_path / "hold_sha").write_text("abc\n")
+    (tmp_path / "behind_since").write_bytes(b"\xff\n")
+    assert tools.read_state(tmp_path, "hold_sha") == "abc"
+    assert tools.read_state(tmp_path, "behind_since") is None
+
+
 def test_the_syslog_tag_is_the_one_the_board_expects(monkeypatch):
     seen = _capture(monkeypatch)
     tools.syslog("event=landing pr=1")

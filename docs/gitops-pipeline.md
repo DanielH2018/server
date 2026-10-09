@@ -1253,12 +1253,15 @@ dated and attributed from the older line.
 Every reader calls `gitops_ledger.held_planes`, which returns each `hold_plane` ledger
 subject once, oldest first. The readers are monitor-bridge's Status check, the `deploy_ui` panel,
 `renovate_agent`'s skip reason, `k3s_upgrade_gates.held_sha` and the scheduled-jobs page.
-All but the `deploy_ui` panel reach it through `gitops_hold.DeployerSnapshot` (#3703), which
-reads `hold_sha` and the ledger together and raises on a marker it cannot read. The port is
-partial: `land.sh` still reads `hold_sha` by basename through `land_lib.tools.read_state`,
-which returns None on an unreadable marker and so already fails closed. `deployer_park` reads
-`behind_since`, the ledger and `contention_since` the same raw way. #3972 tracks moving
-both, along with `gitops_state.py` and deploy-ui's `read_state`. `probe.py gitops-state`
+Every one reaches it through `gitops_hold.DeployerSnapshot` (#3703), which reads `hold_sha`
+and the ledger together and raises on a marker it cannot read. #3972 moved the last readers
+onto it, each keeping its own failure rule. `land_lib.tools.read_state` answers None for an
+unreadable snapshot, so `land.sh` fails closed. `deployer_park` answers None too, which the
+SessionStart banner reads as no park. The deploy-ui panel lets the error through to its
+`Unavailable` reply. The first two read one marker at a time through
+`gitops_hold.read_field`, so a torn sibling cannot hide a readable hold or park.
+`gitops_state.py` reads only through `DeployerState`
+under the tree lock, because each of its clears rewrites the marker it read. `probe.py gitops-state`
 (`probe_lib/gitops_view.py`) also reads each marker raw. It reports every marker as set,
 absent or unreadable and keeps going, where the snapshot raises on the first one it cannot
 read and does not read `last_run`. A

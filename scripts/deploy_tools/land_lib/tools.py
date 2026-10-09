@@ -44,9 +44,11 @@ _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 # The deployer's own modules import each other bare (`import deploy_locks`), so the directory
-# has to be on the path for the one constant this module reads from it.
+# has to be on the path for the names this module reads from it.
 _sys.path.insert(2, str(GITOPS_DEPLOY_FILES))
 from deploy_locks import TREE_LOCK as LOCK
+from gitops_hold import DeployerSnapshot, read_field
+from gitops_markers import MARKERS
 from deploy_tools import (
     await_ci,
     land_platform,
@@ -431,20 +433,30 @@ def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
         return None
 
 
+# Each basename `read_state` accepts, mapped to the `DeployerSnapshot` field that holds it.
+_SNAPSHOT_FIELDS = {MARKERS[f]: f for f in DeployerSnapshot._fields}
+
+
 def read_state(deployer_state: Path, name: str) -> str | None:
     """The deployer's `<name>` marker, stripped; '' when absent, None when unreadable.
 
+    A basename `gitops_hold.DeployerSnapshot` carries (`hold_sha`, `behind_since`) is read
+    through `gitops_hold.read_field` (#3972), one marker only, so a torn sibling cannot turn
+    a readable hold into None. Any other basename (`receipts.jsonl`) is read raw.
+
     ABSENT AND UNREADABLE ARE DIFFERENT ANSWERS. A missing marker means the deployer is not
-    holding and is not behind, which is the ordinary case on every healthy tick. A directory
-    this process cannot read answers nothing at all, and collapsing the two made
-    `Landing.tick_state` report `converged` -- "the tick applied it" -- for a state directory
-    it never saw. Callers must fail closed on None; `tick_state` does.
+    holding and is not behind, the ordinary case. Collapsing the two made
+    `Landing.tick_state` report `converged` for a state directory it never saw. Callers must
+    fail closed on None; `tick_state` does.
     """
+    field_name = _SNAPSHOT_FIELDS.get(name)
     try:
-        return (deployer_state / name).read_text().strip()
+        if field_name is None:
+            return (deployer_state / name).read_text().strip()
+        return read_field(deployer_state, field_name) or ""
     except FileNotFoundError:
         return ""
-    except OSError:
+    except OSError, UnicodeDecodeError:
         return None
 
 

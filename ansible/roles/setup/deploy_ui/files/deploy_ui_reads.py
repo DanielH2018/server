@@ -15,18 +15,7 @@ from pathlib import Path
 
 import gitops_ledger
 import gitops_markers
-
-# The three markers the panels show, by basename — `gitops_markers` is the deployer's own table,
-# copied into this `files/` (its header says how it is kept fresh). The basenames are also the
-# keys `/api/state` serves, which is what the page reads.
-MARKERS = tuple(
-    gitops_markers.MARKERS[m]
-    for m in (
-        "hold",
-        "last_run",
-        "behind",
-    )
-)
+from gitops_hold import DeployerSnapshot
 
 # `deploy_run.py`: the `deploy.sh` shim execs `uv run … deploy_run.py`, and that `uv` process
 # stays the family root while the locked half runs under it (#2412), so no process says
@@ -256,23 +245,11 @@ def k8s_deferred_rows(owed: str | None) -> list[dict[str, str]]:
     ]
 
 
-def _read_owed(state_dir: Path) -> str | None:
-    """The `owed` ledger with every line that does not decode dropped, or None when absent.
-
-    A torn byte in one ledger line must not fail the whole `/api/state` read. monitor-bridge
-    drops such a line for the same reason (#2371).
-    """
-    try:
-        text = (state_dir / gitops_markers.MARKERS["owed"]).read_text(errors="replace")
-    except FileNotFoundError:
-        return None
-    return "\n".join(line for line in text.splitlines() if "�" not in line)
-
-
 def read_state(state_dir: Path) -> dict[str, str | list]:
-    """Read the `MARKERS` above, plus the held planes and the deferred bumps.
+    """Read the three markers the panels show, plus the held planes and the deferred bumps.
 
-    A missing marker is ''. The `hold_plane_entries` key is every plane the hold waits on,
+    The keys are the markers' basenames from `gitops_markers.MARKERS`, the deployer's own
+    table copied into this `files/`, which is what the page reads. A missing marker is ''. The `hold_plane_entries` key is every plane the hold waits on,
     the `owed` ledger's `hold_plane` class read through `gitops_ledger.held_planes` (#3392).
     It is what the page lists, one entry per failed apply, because a Clear drops all of them
     at once (#2453). The
@@ -281,21 +258,28 @@ def read_state(state_dir: Path) -> dict[str, str | list]:
     a host that cannot read the state directory itself (#3676), which words them with the
     banner's own renderer. The ledger's other classes are not served.
 
+    `hold_sha`, `behind_since` and the ledger come from `gitops_hold.DeployerSnapshot`
+    (#3972), which drops a ledger line that does not decode, so one torn byte cannot fail the
+    whole read (#2371). `last_run` is not deployer state the snapshot carries, so it is read
+    on its own.
+
     Raises:
         OSError: a marker exists but can't be read (e.g. permission denied). Only a
             missing marker is a clear state; anything else that stops the read must not
             be mistaken for one.
     """
-    st: dict[str, str | list] = {}
-    for name in MARKERS:
-        p = state_dir / name
-        try:
-            text = p.read_text()
-        except FileNotFoundError:
-            st[name] = ""
-            continue
-        st[name] = text.strip()
-    owed = _read_owed(state_dir)
+    snap = DeployerSnapshot.load(state_dir)
+    last_run = state_dir / gitops_markers.MARKERS["last_run"]
+    try:
+        last_run_text = last_run.read_text().strip()
+    except FileNotFoundError:
+        last_run_text = ""
+    st: dict[str, str | list] = {
+        gitops_markers.MARKERS[field]: getattr(snap, field) or ""
+        for field in ("hold", "behind")
+    }
+    st[last_run.name] = last_run_text
+    owed = snap.owed
     st["hold_plane_entries"] = gitops_ledger.held_planes(owed)
     st["k8s_deferred_entries"] = k8s_deferred_rows(owed)
     st["manual_plane_owed"] = "\n".join(

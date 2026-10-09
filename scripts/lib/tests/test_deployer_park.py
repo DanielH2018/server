@@ -71,6 +71,19 @@ def test_a_missing_state_directory_reads_as_no_marker(tmp_path):
     assert read_behind_marker(str(tmp_path / "nope")) is None
 
 
+def test_a_torn_byte_in_the_marker_reads_as_no_park(tmp_path):
+    """A byte that does not decode is "absent" here, never a raise that ends the banner."""
+    (tmp_path / MARKERS["behind"]).write_bytes(b"abc \xff 1000\n")
+    assert read_behind_marker(str(tmp_path)) is None
+
+
+def test_a_torn_sibling_marker_does_not_hide_the_park(tmp_path):
+    """Each marker is read alone, so a torn `hold_sha` leaves the park visible."""
+    (tmp_path / MARKERS["behind"]).write_text(_MARKER + "\n")
+    (tmp_path / MARKERS["hold"]).write_bytes(b"\xff\n")
+    assert read_behind_marker(str(tmp_path)) == _MARKER
+
+
 # ── the owed ledger's manual_plane class; its parser is tested with `gitops_ledger` ──────
 
 

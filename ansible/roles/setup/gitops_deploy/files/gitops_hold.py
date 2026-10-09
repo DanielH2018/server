@@ -11,6 +11,8 @@ restate the file layout, the separator and the rule by hand.
 `DeployerSnapshot` is the read-only half (#3703): the hold, the owed ledger, `behind_since`,
 `contention_since` and `diverged_sha` as one typed view, read the one way every reader outside
 the deployer reads them. A reader names no marker basename and parses no raw marker text.
+`read_field` reads one of those fields the same way, for a reader whose answer must not
+depend on a sibling marker it never asked for (#3972).
 
 Shipped with the deployer (`tasks/code.yml`) and installed by path beside deploy-ui's and
 renovate-agent's `gitops_ledger`, which is why it is stdlib only plus `gitops_markers` and
@@ -145,6 +147,27 @@ def _read_marker(path: Path, errors: str = "strict") -> str | None:
     return text.strip() or None
 
 
+def read_field(state_dir: str | Path, field: str) -> str | None:
+    """One `DeployerSnapshot` field, read as `load` reads it, without touching the others.
+
+    For a reader that needs one marker and must not lose it to a sibling it never asked for:
+    a torn `behind_since` must not turn a readable `hold_sha` into "unknown" (#3972).
+
+    Args:
+        state_dir: the deployer's state directory.
+        field: a `DeployerSnapshot` field name, which is also its `MARKERS` key.
+
+    Raises:
+        OSError, UnicodeDecodeError: as `DeployerSnapshot.load` does, for this marker only.
+    """
+    path = Path(state_dir) / MARKERS[field]
+    if field != "owed":
+        return _read_marker(path)
+    owed = _read_marker(path, errors="replace")
+    kept = [line for line in (owed or "").splitlines() if "\ufffd" not in line]
+    return "\n".join(kept).strip() or None
+
+
 class DeployerSnapshot(NamedTuple):
     """The deployer's state as one read-only view, for every reader outside the deployer.
 
@@ -180,16 +203,7 @@ class DeployerSnapshot(NamedTuple):
             UnicodeDecodeError: a marker other than the `owed` ledger holds a byte that does
                 not decode. It is a `ValueError`, so a caller catches it beside `OSError`.
         """
-        state_dir = Path(state_dir)
-        owed = _read_marker(state_dir / MARKERS["owed"], errors="replace")
-        kept = [line for line in (owed or "").splitlines() if "\ufffd" not in line]
-        return cls(
-            hold=_read_marker(state_dir / MARKERS["hold"]),
-            owed="\n".join(kept).strip() or None,
-            behind=_read_marker(state_dir / MARKERS["behind"]),
-            contention=_read_marker(state_dir / MARKERS["contention"]),
-            diverged=_read_marker(state_dir / MARKERS["diverged"]),
-        )
+        return cls(*(read_field(state_dir, field) for field in cls._fields))
 
     @property
     def held_planes(self) -> list[str]:
