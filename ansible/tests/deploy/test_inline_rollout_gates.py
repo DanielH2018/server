@@ -386,7 +386,7 @@ _GATE_BUDGETS = {
         "to 10 minutes, which is also why radarr's manifests wait is 660s",
     ),
     "tdarr": (
-        2400,
+        3000,
         "declared once as `tdarr_k8s_rollout_timeout` and read by this gate, the manifests "
         "call site and progressDeadlineSeconds; a cold pull of the 1432 MiB image took 25m37s "
         "on 2026-10-08 and failed the 300s gate this replaced (#3689)",

@@ -24,9 +24,10 @@ tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:latest@sha256:6b4dcd9a20dc80a26d06b50
 # flaresolverr's. Its pull on daniel-box took 25m37s on 2026-10-08 (`Pulling` at 23:50:48,
 # container started 00:16:25, #3689), about 0.93 MiB/s. That is not a one-evening ghcr.io
 # outlier: prowlarr's 278 MiB flaresolverr pull took 8m54s (#2369), about 0.52 MiB/s, so a
-# tdarr pull sits between 1537s and roughly 2750s on this line. 2400s covers the measured pull
-# with 56% headroom. Because the Deployment is `Recreate`, tdarr is down for the whole pull.
-tdarr_k8s_rollout_timeout: 2400s
+# tdarr pull sits between 1537s and roughly 2750s on this line. 3000s covers the slow end, the
+# rule manifests_rollout_timeout_default states. Because the Deployment is `Recreate`, tdarr is
+# down for the whole pull.
+tdarr_k8s_rollout_timeout: 3000s
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # k8s/manifests takes a pre-apply Longhorn snapshot of both config claims below and reverts
