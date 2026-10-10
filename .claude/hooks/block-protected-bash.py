@@ -151,7 +151,7 @@ _HOST_BIN_PREFIXES = ("/usr/local/bin", "/opt/homelab")
 
 # A fan-out review pipeline derives the set at start and writes it beside its held copy of
 # this hook (#3810), because the worktree a resumed phase runs in is the agent's to edit.
-# `scripts/dev/fanout_lib/held_hooks.py` mirrors the name.
+# `scripts/dev/fanout_lib/review/held_hooks.py` mirrors the name.
 _HELD_PATHS = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "secret_bearing_host_paths.json"
 )

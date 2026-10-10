@@ -8,7 +8,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_red_lock.py
 
 import pytest
 
-from fanout_lib.red_lock import append_only
+from fanout_lib.review.red_tests import append_only
 
 RED = '''"""Tests for mod."""
 

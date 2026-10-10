@@ -127,7 +127,8 @@ def lands(host: str, repo: str = SERVER) -> bool:
     return repo == SERVER and host == LANDS
 
 
-def _fence(text: str) -> str:
+def fence_for(text: str) -> str:
+    """The backtick fence that safely wraps `text` as a Markdown code block."""
     # A fenced block closes at the first line of at least as many backticks, so the fence
     # has to be longer than any backtick run the issue text contains. A body carrying a
     # ``` code block is ordinary, and a fixed ``` would let it close the fence and put the
@@ -137,7 +138,7 @@ def _fence(text: str) -> str:
 
 
 def _comment_block(comment: Comment) -> str:
-    fence = _fence(comment.body)
+    fence = fence_for(comment.body)
     return f"{fence}\ncomment at {comment.when}:\n\n{comment.body}\n{fence}"
 
 
@@ -145,7 +146,7 @@ def _issue_block(issue: Issue) -> str:
     # The title sits INSIDE the fence with the body: both fields are attacker-authored, and
     # a newline in a title breaks the brief's structure exactly as a newline in a body does.
     # Only the number — an int the fetch parsed — is interpolated into markdown structure.
-    fence = _fence(f"{issue.title}\n{issue.body}")
+    fence = fence_for(f"{issue.title}\n{issue.body}")
     block = f"### Issue #{issue.number}\n{fence}\ntitle: {issue.title}\n\n{issue.body}\n{fence}"
     if not issue.comments:
         return block
@@ -299,7 +300,7 @@ def render_brief(
         target: the repo the batch works. Another repo's batch is claimed under its own
             branch, names that repo on every `gh` and `findings.py` call, and stops at
             the PR.
-        review: the batch runs `fanout_lib.review`'s pipeline. The agent stops at the PR
+        review: the batch runs `fanout_lib.review.review`'s pipeline. The agent stops at the PR
             on every host, and the pipeline hands it the landing after the review.
 
     Returns:
