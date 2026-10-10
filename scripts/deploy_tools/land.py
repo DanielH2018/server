@@ -81,6 +81,11 @@ ruled out. Re-run land.sh then; no later tick crosses a hold.
 `merge-conflict` and `pr-ci-red` are the merge wait ending early on the two states an armed
 auto-merge never recovers from. `pr-ci-red` is the PR's CI before the merge; `ci-red` is
 master's after it.
+
+A PR WHOSE BASE IS BEHIND MASTER IS RE-TESTED BEFORE THE MERGE. When the PR's head reads green
+and master has changed any path since its merge base, `--arm-merge --await-merge` updates the
+PR branch from master once and merges only after CI is green on the updated head. A refused
+update stops the landing with rc 1 and asks for a rebase. `land_lib/merge.py` has the rule.
 """
 
 import contextlib

@@ -42,6 +42,17 @@ operator chose that a `manual —` bump goes to a person.
 When a lander unit sets the landing policy (`policy.py`), --arm-merge runs its checks and pins
 the REST merge to the head SHA they read through its `sha=` field. --await-merge dies if the
 head moves before the merge, so a push after the checks needs a re-run, which checks it again.
+The one head move it does not die on is its own branch update, below: it runs the checks
+again on the updated head and pins that.
+
+--await-merge re-tests a PR whose base is stale before it merges it (issue #4013). Merge
+queues are not offered on a user-owned repo and no ruleset requires an up-to-date branch, so
+nothing else re-tests a PR against the master it merges into. 4 of 5 sampled red master runs
+followed a PR whose every job was green, and two of them came from a master commit merged
+after the PR's base. Once the head reads green, `_master_paths_since` asks GitHub which paths
+master changed since the PR's merge base. When any did, `_update_branch` merges master into the
+PR branch, and the merge waits for CI on the updated head instead. A landing updates the
+branch at most once.
 """
 
 import re
@@ -52,7 +63,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_GREEN, CI_RED
-from lib.json_types import as_object
+from lib.json_types import as_list, as_object
 from deploy_tools.land_lib import policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, say
@@ -198,6 +209,80 @@ def _merge_past_review(ln: Landing, head: str) -> str:
     return ""
 
 
+def _master_paths_since(ln: Landing, head: str) -> list[str]:
+    """The paths master changed since the merge base of `head` and master; [] when none did.
+
+    GitHub's compare endpoint lists at most 300 files. A capped list is still non-empty, so a
+    capped answer still reads as stale.
+
+    Dies when the read fails: an unknown base is an unknown test result, and the cost is one
+    landing to re-run.
+    """
+    # DECIDED: every path master moved counts as one the PR's tests read. The `pytest` job runs
+    # unscoped over the whole tree, and both stale-base reds the issue cites came from a path
+    # sharing no directory with the PR: #2922 (cc2a71fd8) added a size test while master grew the
+    # claude-otel role's CLAUDE.md past it, and #2266 (b86d87d60) changed initial_setup
+    # while master changed docs/facts.lock and ansible/roles/setup/k3s/CLAUDE.md. A directory
+    # or overlap filter passes both. The merge base is older than the base the PR's CI ran
+    # against when the PR was pushed after master moved, so this can update a branch that CI
+    # had already tested in full. That costs one CI run.
+    try:
+        paths = as_list(
+            ln.tools.gh_json(
+                "api",
+                f"repos/{{owner}}/{{repo}}/compare/{head}...{BRANCH}",
+                "--jq",
+                "[.files[]?.filename]",
+            ),
+            "gh api compare",
+        )
+    except subprocess.CalledProcessError as exc:
+        ln.die(f"could not compare {head[:8]} with {BRANCH}: {exc.stderr.strip()}", 1)
+    except subprocess.TimeoutExpired:
+        ln.die(f"could not compare {head[:8]} with {BRANCH}: gh timed out", 1)
+    except ValueError:
+        ln.die(f"could not compare {head[:8]} with {BRANCH}: unparseable gh output", 1)
+    return [p for p in paths if isinstance(p, str)]
+
+
+def _update_branch(ln: Landing, head: str, moved: list[str]) -> None:
+    """Merge master into the PR branch at `head`, so its CI runs against today's master.
+
+    `expected_head_sha` makes GitHub refuse if the branch moved since `head` was read. A
+    refusal dies: the PR cannot be re-tested from here, and merging it untested is what this
+    check exists to stop.
+    """
+    shown = ", ".join(moved[:3]) + (
+        f" and {len(moved) - 3} more" if len(moved) > 3 else ""
+    )
+    say(
+        f"{BRANCH} changed {len(moved)} path(s) since PR #{ln.opts.pr}'s base ({shown}); "
+        f"updating its branch so CI re-tests it against {BRANCH} before the merge"
+    )
+    try:
+        ln.tools.gh(
+            "api",
+            "-X",
+            "PUT",
+            f"repos/{{owner}}/{{repo}}/pulls/{ln.opts.pr}/update-branch",
+            "-f",
+            f"expected_head_sha={head}",
+        )
+    except subprocess.CalledProcessError as exc:
+        why = (exc.stderr or "").strip() or f"gh exited {exc.returncode}"
+        ln.die(
+            f"PR #{ln.opts.pr}'s base is behind {BRANCH} and GitHub refused to update its "
+            f"branch ({why}) — rebase it onto origin/{BRANCH}, push, and re-run this",
+            1,
+        )
+    except subprocess.TimeoutExpired:
+        ln.die(
+            f"PR #{ln.opts.pr}'s base is behind {BRANCH} and the branch update timed out — "
+            f"rebase it onto origin/{BRANCH}, push, and re-run this",
+            1,
+        )
+
+
 def _require_author(ln: Landing) -> None:
     """Die unless the PR's author is `opts.require_author`; a no-op when it is unset.
 
@@ -282,12 +367,16 @@ def await_merge(ln: Landing) -> None:
     guessed.
 
     A PR arm_merge left for a direct merge is merged here, on the first poll where await_ci
-    reads its head green. Without --arm-merge this only polls, for a PR merged some other way.
+    reads its head green, unless master moved past the PR's base: then the branch is updated
+    once and the merge waits for the updated head to go green. Without --arm-merge this only
+    polls, for a PR merged some other way.
     """
     o, t = ln.opts, ln.tools
     waited = 0
     conflicting = 0
     last_refusal = ""
+    # The head this landing updated the branch from; empty until it does.
+    updated_from = ""
     while True:
         view = ln.view("state,mergeable,headRefOid")
         state = view.get("state", "")
@@ -303,12 +392,23 @@ def await_merge(ln: Landing) -> None:
                 Verdict.MERGE_CONFLICT,
             )
         head = view.get("headRefOid") or ""
+        # GitHub applies a branch update asynchronously. Until the head moves, the head on
+        # the PR is the stale one, and its green CI is what the update exists to discard.
+        if updated_from and head == updated_from:
+            head = ""
         if ln.pinned_head and head and head != ln.pinned_head:
-            ln.die(
-                f"PR #{o.pr}'s head moved from {ln.pinned_head[:8]} to {head[:8]} after the "
-                "landing policy checked it; re-run so the new head is checked",
-                1,
-            )
+            if updated_from != ln.pinned_head:
+                ln.die(
+                    f"PR #{o.pr}'s head moved from {ln.pinned_head[:8]} to {head[:8]} after "
+                    "the landing policy checked it; re-run so the new head is checked",
+                    1,
+                )
+            # The move is this landing's own update, so the policy checks the new head and
+            # the merge is pinned to it. A PR the approval list let through on an approval
+            # is refused here: the approval names the head before the update.
+            say(f"checking the landing policy again on the updated head {head[:8]}")
+            ln.pinned_head = policy.check(ln)
+            continue
         if head:
             rc, line = t.await_ci(head, 0)
             if rc == CI_RED:
@@ -319,14 +419,20 @@ def await_merge(ln: Landing) -> None:
                     Verdict.PR_CI_RED,
                 )
             if rc == CI_GREEN and ln.direct_merge_subject:
-                refusal = _merge_past_review(ln, head)
-                if not refusal:
-                    continue
-                if refusal != last_refusal:
-                    say(
-                        f"GitHub refused the direct merge at {head[:8]}; waiting: {refusal}"
-                    )
-                    last_refusal = refusal
+                moved = [] if updated_from else _master_paths_since(ln, head)
+                if moved:
+                    _update_branch(ln, head, moved)
+                    updated_from = head
+                else:
+                    refusal = _merge_past_review(ln, head)
+                    if not refusal:
+                        continue
+                    if refusal != last_refusal:
+                        say(
+                            f"GitHub refused the direct merge at {head[:8]}; waiting: "
+                            f"{refusal}"
+                        )
+                        last_refusal = refusal
         if waited >= o.merge_timeout:
             ln.die(
                 f"PR #{o.pr} still {state} after {o.merge_timeout}s — not being merged; "
