@@ -15,11 +15,39 @@
 # the bring-up order in ansible/README.md §4). A consumer role installing it itself would race
 # with the crons of every other role that also needs it.
 #
-# Every field is an argument: the caller Jinja-renders its own token, host, resolve IP and
-# logger tag, and none of them are read from the environment. An implicit read would make a
-# caller that forgot to set one push to the wrong monitor silently.
+# Every caller-identity field is an argument: the push token, the healthchecks.io slug and the
+# logger tag. None of them is read from the environment, because an implicit read would make a
+# caller that forgot to set one push to the wrong monitor silently. The Kuma host and the
+# ingress VIP it resolves to are not identity. They are the same for every caller on every
+# host, so Ansible renders them into this file below, and a caller passes only its token
+# (#4219). A baked fleet constant cannot misroute a push.
+#
+# DECIDED: each caller keeps its own `source ... || { logger ...; exit 1; }` guard (#3720). The
+# guard exists for the case where this file is absent, so no function in it can report that.
+# A shared Jinja include would have to live in `ansible/templates/`, the one directory both
+# setup and k8s roles can include from. The deployer routes a change there to deploy.yml,
+# which re-renders none of the setup-role crons, and `stamp_render.yml` hashes each caller's
+# own `.j2`, so an edit to the include would leave every cron stale while the drift check
+# reported them current. Four repeated lines cost less than that.
 
-# kuma_push STATUS MSG PUSH_URL KUMA_HOST RESOLVE_IP TAG
+# The two fleet constants. Every line after the `raw` marker below is shell that Jinja must not
+# read: its string-length expansions open a Jinja comment.
+# shellcheck disable=SC2034  # read by kuma_push below
+KUMA_LIB_HOST="uptime-kuma.local.{{ domain }}"
+# Pinned to the cluster ingress VIP: this name resolves through Pi-hole's wildcard, and a DNS
+# outage is exactly when the push must still land.
+# shellcheck disable=SC2034  # read by kuma_push below
+KUMA_LIB_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+#{% raw %}
+
+# kuma_push STATUS MSG TOKEN TAG
+#
+# TOKEN is the push monitor's token, the last path segment of its push URL. The pre-#4219
+# six-argument form, `kuma_push STATUS MSG PUSH_URL KUMA_HOST RESOLVE_IP TAG`, still works:
+# initial_setup installs this file on every host, while each caller is installed by its own
+# role, so for one deploy window a host can run a cron rendered before this change against a
+# library rendered after it. Drop the six-argument arm once every host has applied every
+# caller role since this change. Any other argument count drops the push and logs it.
 #
 # STATUS is Kuma's own vocabulary, `up` or `down`. A push failure is logged, and the function
 # still returns 0: several callers end their script on this call, and returning non-zero there
@@ -82,7 +110,20 @@
 # rollout into a red tile — noise for a cause that is not a real outage — where a delivered
 # retry keeps the tile meaning what it says.
 kuma_push() {
-  local status="$1" msg="$2" push_url="$3" kuma_host="$4" resolve_ip="$5" tag="$6"
+  local status="${1-}" msg="${2-}" push_url kuma_host resolve_ip tag
+  case "$#" in
+  4)
+    push_url="https://${KUMA_LIB_HOST}/api/push/$3"
+    kuma_host=$KUMA_LIB_HOST resolve_ip=$KUMA_LIB_RESOLVE_IP tag=$4
+    ;;
+  6) push_url=$3 kuma_host=$4 resolve_ip=$5 tag=$6 ;;
+  *)
+    # shellcheck disable=SC2034  # read by the sourcing script, not by this file
+    KUMA_PUSH_OK=0
+    logger -t kuma-push-lib "kuma_push takes STATUS MSG TOKEN TAG, got $# arguments — push dropped (status=${status})"
+    return 0
+    ;;
+  esac
   local -r retry_delay_s=30
   local attempt http_code curl_rc reply ctype by
   # Kuma puts the msg into the Discord DOWN embed as a field value, whose cap is 1024 chars,
@@ -171,6 +212,52 @@ kuma_push() {
   # the actual class. Neither value can carry the push token; both are numbers, and `by=kuma`
   # is a fixed word derived from the content type, never from the body.
   logger -t "$tag" "push failed (http=${http_code} rc=${curl_rc}${by}) (status=${status}: ${msg})"
+  return 0
+}
+
+# hc_ping SLUG STATUS TAG [BODY]
+#
+# Pings the healthchecks.io dead-man SLUG: the bare check URL when STATUS is `up`, its `/fail`
+# endpoint for anything else. Kuma runs on the cluster these crons watch, so a cluster or WAN
+# outage silences the Kuma push and the monitor waiting for it together. hc-ping.com is
+# off-site and alerts on silence, the one signal an on-prem monitor cannot produce (#4220).
+#
+# The ping key is fleet-wide, so this reads it from /etc/healthchecks/ping.env itself, in a
+# subshell, and the key never lands in the caller's variables. The slug is identity and stays
+# an argument. No key, or no readable file, skips the ping silently: the pings are optional
+# and an unconfigured host must stay exactly as it was. The file is 0640, which is why a cron
+# that runs as neither root nor that group still gets no ping.
+#
+# BODY is sent as the ping body when given. Omitted means no body at all, not an empty one:
+# manifest-prune-check withholds its message, because it names live objects and
+# healthchecks.io stores ping bodies, and the uptime-kuma-alive slug has nothing to say beyond
+# its status.
+#
+# The slug is bare, never `?create=1`. Auto-provisioning turns a typo into a new check that
+# nobody watches and that reads green forever (`ansible/tests/services/test_healthchecks_pings.py`).
+#
+# `-fs` without `-S`, and stderr discarded on top of it (#2511): `--retry` writes `Warning: ...
+# Will retry` to stderr for an attempt a later one recovers, and cron mails that from a run
+# that succeeded. The `logger` line is the report of a ping that failed for good. The URL
+# carries the ping key, so it reaches curl on stdin as a config file, the way kuma_push sends
+# its token, rather than as an argv element any local user can read in /proc. Always returns 0,
+# for the reason kuma_push gives.
+hc_ping() {
+  local slug="$1" status="$2" tag="$3" key url
+  key=$(
+    HC_PING_KEY=""
+    # shellcheck source=/dev/null
+    [ -r /etc/healthchecks/ping.env ] && . /etc/healthchecks/ping.env
+    printf '%s' "$HC_PING_KEY"
+  )
+  [ -n "$key" ] || return 0
+  url="https://hc-ping.com/${key}/${slug}"
+  [ "$status" = up ] || url="${url}/fail"
+  local -a body=()
+  [ "$#" -ge 4 ] && body=(--data-raw "$4")
+  printf 'url = "%s"\n' "$url" |
+    curl -fs --max-time 10 --retry 3 -K - "${body[@]}" -o /dev/null 2>/dev/null ||
+    logger -t "$tag" "healthchecks ping failed (slug=${slug} status=${status})"
   return 0
 }
 
@@ -276,3 +363,4 @@ reachout_verdict() {
     REACHOUT_NOTE="skipped: WAN unreachable — "
   fi
 }
+#{% endraw %}

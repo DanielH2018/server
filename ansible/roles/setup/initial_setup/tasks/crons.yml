@@ -21,8 +21,10 @@
   # The invariant that binds ALL of them — no push token ever reaches curl's argv — is asserted
   # separately there with no exemptions at all, so opting out of the library cannot opt a script
   # out of the security property.
-  ansible.builtin.copy:
-    src: kuma-push-lib.sh
+  # A template, not a copy: it bakes in the Kuma host and the ingress VIP, which are the same
+  # for every caller, so each caller passes only its token (#4219).
+  ansible.builtin.template:
+    src: kuma-push-lib.sh.j2
     dest: /usr/local/lib/kuma-push-lib.sh
     owner: root
     group: root
@@ -423,16 +425,26 @@
       - ansible/roles/setup/initial_setup/templates/git-tree-lock.j2
 
 # kuma-push-lib.sh is sourced by EVERY health cron on every host, with a `|| exit 1` guard — so a
-# stale copy silently changes how every heartbeat pushes. `tags: [always]`, matching the copy task it records: this fragment must
-# not be left describing a version a tag-scoped run never deployed.
-- name: Record the deployed shared push library
+# stale copy silently changes how every heartbeat pushes. `tags: [always]`, matching the template task it records: this fragment must
+# not be left describing a version a tag-scoped run never deployed. A render stamp rather than
+# a deployed pair, because the live file is rendered and no longer matches its source byte for
+# byte (#4219).
+- name: Stamp the rendered shared push library
   tags: [always]
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
-    stamp_deployed_name: kuma-push-lib
-    stamp_deployed_pairs:
-      - live: /usr/local/lib/kuma-push-lib.sh
-        src: ansible/roles/setup/initial_setup/files/kuma-push-lib.sh
+    stamp_render_name: kuma-push-lib
+    stamp_render_templates:
+      - ansible/roles/setup/initial_setup/templates/kuma-push-lib.sh.j2
+
+# The library was a `copy:` until #4219, recorded as a deployed pair whose source no longer
+# exists. Left in place, that fragment names a missing source on every host forever.
+- name: Remove the retired deployed-pair record of the push library
+  tags: [always]
+  ansible.builtin.file:
+    path: /var/lib/homelab/setup-deployed-manifest.d/kuma-push-lib
+    state: absent
+  become: true
 
 # The drift library is itself copy:-deployed, so the arm it implements watches it. `tags:
 # [always]`, matching the copy task above, so a tag-scoped run cannot leave this fragment

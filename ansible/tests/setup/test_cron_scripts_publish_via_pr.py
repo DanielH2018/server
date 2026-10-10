@@ -250,7 +250,9 @@ _CRON_ENV = {
     "HOME": "set on the eval-run cron job line (crons.yml:531)",
 }
 
-KUMA_PUSH_LIB = REPO / "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"
+KUMA_PUSH_LIB_TEXT = rendered_shell_text(
+    "setup", "initial_setup", "kuma-push-lib.sh.j2"
+)
 
 # Templates whose reads are checked, and one name each that the read census MUST contain. A
 # census that silently stops matching returns an empty set, and "no unsatisfied reads" is what
@@ -310,9 +312,7 @@ def shell_assignments(text: str) -> set[str]:
 def unsatisfied_reads(text: str) -> set[str]:
     """Names the script reads that neither it, the shared library, nor the cron env supplies."""
     supplied = (
-        shell_assignments(text)
-        | shell_assignments(KUMA_PUSH_LIB.read_text())
-        | set(_CRON_ENV)
+        shell_assignments(text) | shell_assignments(KUMA_PUSH_LIB_TEXT) | set(_CRON_ENV)
     )
     return shell_reads(text) - supplied
 

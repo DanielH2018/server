@@ -8,7 +8,7 @@ have gone over the wire, not on a return code.
 from _helpers import ANSIBLE
 from lib.proc_testing import run
 
-LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
+LIB = ANSIBLE / "roles/setup/initial_setup/templates/kuma-push-lib.sh.j2"
 MSG_MAX = 900
 
 

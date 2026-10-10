@@ -24,7 +24,7 @@ from lib.repo_paths import K3S_DEFAULTS
 from _shell_render import rendered_names_for, rendered_shell_text
 from lib.proc_testing import run
 
-LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
+LIB = ANSIBLE / "roles/setup/initial_setup/templates/kuma-push-lib.sh.j2"
 K3S_DEFAULT_VALUES = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
 
 GRACE_S = K3S_DEFAULT_VALUES["k3s_health_cron_boot_grace_s"]

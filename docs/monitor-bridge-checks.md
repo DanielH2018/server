@@ -848,7 +848,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   `crowdsec-home-allowlist`, `github-ruleset-drift`, `release-staleness-check` and
   `docs-refresh` run on the host and push their own tiles, so they are outside this loop and
   this gate structurally cannot suppress them. Each now consults `wan_reachable` in
-  `ansible/roles/setup/initial_setup/files/kuma-push-lib.sh` on the failure path that reached
+  `ansible/roles/setup/initial_setup/templates/kuma-push-lib.sh.j2` on the failure path that reached
   the internet, and reports `skipped: WAN unreachable` as an `up` when neither provider
   answers. The probe is what classifies, not the error text: parsing curl exit codes and git
   stderr across four heterogeneous crons is the "green and inert" shape that library's header
