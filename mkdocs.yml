@@ -192,6 +192,8 @@ nav:
       # keeps the skill short.
       - Landing a merged PR: landing.md
       - The GitOps pipeline: gitops-pipeline.md
+      # The measurement #3734 needs before initial_setup.yml loops over a setup_roles list.
+      - Looped include_role measurement: setup-role-loop-measurement.md
       - Issue claiming and fan-out: issue-claiming-and-fanout.md
       - Secret rotation: secret-rotation.md
       - Claude shell permissions: claude-shell-permissions.md
