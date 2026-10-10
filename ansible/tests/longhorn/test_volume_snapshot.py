@@ -43,6 +43,7 @@ import subprocess
 import pytest
 from lib import yaml_fast
 from _helpers import load_tasks as _tasks
+from _kubectl_seam import no_cluster_to_ask
 from _helpers import render_expr as _render
 from _volume_snapshot import _CLAIM, _DEFAULTS, _GUARD, _MAIN, _MANIFESTS, _ROLE, _named
 from _volume_ops import assert_the_role_declares_an_autodeploy_stance
@@ -280,13 +281,7 @@ def test_the_listing_jsonpath_parses() -> None:
     result = subprocess.run(
         rendered[1:], capture_output=True, text=True, timeout=30, check=False
     )
-    unreachable_tokens = (
-        "connection refused",
-        "was refused",
-        "i/o timeout",
-        "no configuration has been provided",
-    )
-    if any(token in result.stderr for token in unreachable_tokens):
+    if no_cluster_to_ask(result.stderr):
         pytest.skip("no reachable cluster")
     assert result.returncode == 0, (
         f"kubectl rejected the listing jsonpath: {result.stderr.strip()}"

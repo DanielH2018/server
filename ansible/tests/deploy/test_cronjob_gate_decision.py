@@ -53,9 +53,9 @@ import shutil
 from pathlib import Path
 
 import pytest
-from _helpers import K8S_ROLES, jinja_env, load_tasks, load_defaults
+from _helpers import K8S_ROLES, jinja_env, load_tasks, load_defaults, task_named
 from _role_census import role_dirs
-from _helpers import task_named
+from _kubectl_seam import no_cluster_to_ask
 from lib.proc_testing import run
 
 _ROLE = K8S_ROLES / "cronjob-gate"
@@ -331,7 +331,7 @@ def test_the_jsonpath_parses_against_the_live_api() -> None:
         jsonpath,
     ]
     done = run(probe, check=False)
-    if "connection refused" in done.stderr or "was refused" in done.stderr:
+    if no_cluster_to_ask(done.stderr):
         pytest.skip("no reachable cluster")
     assert done.returncode == 0, (
         f"kubectl rejected the role's jsonpath: {done.stderr.strip()!r}. The expression is "

@@ -30,6 +30,7 @@ import subprocess
 
 import pytest
 from _helpers import render_expr as _render
+from _kubectl_seam import no_cluster_to_ask
 from _volume_snapshot import _CLAIM, _DEFAULTS, _named
 
 from lib import yaml_fast
@@ -220,13 +221,7 @@ def test_the_gates_reads_parse_and_return_the_field_it_sums() -> None:
         result = subprocess.run(
             rendered[1:], capture_output=True, text=True, timeout=30, check=False
         )
-        unreachable = (
-            "connection refused",
-            "was refused",
-            "i/o timeout",
-            "no configuration has been provided",
-        )
-        if any(token in result.stderr for token in unreachable):
+        if no_cluster_to_ask(result.stderr):
             pytest.skip("no reachable cluster")
         # The cap read names a volume that does not exist, so kubectl exits 1 with NotFound —
         # which is exactly the rc the task's `failed_when: false` absorbs into "no cap". What
