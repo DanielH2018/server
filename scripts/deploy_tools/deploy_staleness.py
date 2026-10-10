@@ -54,13 +54,6 @@ from lib.deployer_park import (
 )
 from lib.exit_codes import DEPLOY_STALE
 from lib.git import git
-from lib.repo_paths import GITOPS_DEPLOY_FILES
-
-# The deployer's own path→service mapper, reached the way deploy_tags.py reaches it: the role's
-# files/ is on no path by default, and a copy of the mapping here would drift from the one the
-# tick decides with. The path entry is constant and free; the IMPORT is lazy, so `--help` and
-# every un-tagged run pay nothing for it.
-sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 FETCH_TIMEOUT_S = 20
 
@@ -189,12 +182,12 @@ def refusing_paths(
         declared: every tag naming a `containers_list` entry, which is how a shared k8s role
             is told from a service one.
     """
-    from deploy_cross_role import k8s_lookup_readers
-    from deploy_logic import services_from_changed_paths, shared_module_consumers
+    from reach import reach
 
     flagged = []
     for path in paths:
-        cs = services_from_changed_paths([path])
+        one = reach([path])
+        cs = one.changes
         if cs.broad:
             flagged.append((path, "a broad plane"))
             continue
@@ -207,15 +200,7 @@ def refusing_paths(
                 (path, f"the shared k8s role {shared[0]}, which every k8s deploy runs")
             )
             continue
-        reached = (
-            cs.services
-            | cs.k8s
-            | cs.k8s_deploy
-            | cs.tasks
-            | shared_module_consumers([path], repo)
-            | k8s_lookup_readers([path], repo)
-        )
-        hit = sorted(reached & tags)
+        hit = sorted(one.touched(repo) & tags)
         if hit:
             flagged.append((path, ", ".join(hit)))
     return flagged

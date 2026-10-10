@@ -18,9 +18,9 @@ A TAG NO PATH NAMES IS NEVER IN HERE, because this reads paths rather than `deri
 output. Nothing proves which platform such a tag belongs to, so it keeps reaching every host
 that declares it.
 
-Its own module beside `land_tags`, for the reason `land_changes.py` gives for sitting there:
-`land_tags` is AT the 600-line cap. The import goes one way -- this reads `land_tags.tag_for`
-and `land_tags` reads nothing here -- so no cycle.
+Its own module beside `land_tags`, which was AT the 600-line cap when this was written. The
+import goes one way -- this reads `land_tags.tag_for` and `land_tags` reads nothing here -- so
+no cycle.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_platform.py
 """

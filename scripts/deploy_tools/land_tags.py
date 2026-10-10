@@ -46,11 +46,9 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-import deploy_cross_role
 from deploy_logic import (
     broad_remediation,
     k8s_remediation,
-    services_from_changed_paths,
     setup_role_playbook,
     manual_plane_clear_for,
     setup_role_tag,
@@ -62,7 +60,7 @@ from deploy_logic import (
 # answered identically here and in deploy.sh's own validation.
 import deploy_tags
 import narrow_setup
-from land_changes import changes_for
+import reach
 from land_reach import remaining_setup_hosts_note
 
 # Re-exported, not defined here: the path-to-role mappers and the shared-role expansion built
@@ -123,35 +121,14 @@ def landing_hosts_at(
 
 
 def tag_for(path: str, declared: set[str] | None = None) -> str | None:
-    """The deploy tag a changed path maps to, or None.
-
-    A role's own `tests/` maps to no tag. Dropping it only from `shared_roles` would leave
-    land.sh DEPLOYING it: a tests-only PR to a declared
-    role would cost a rollout, a restart window and a health gate for pytest guards nothing
-    stages to the cluster. `is_role_test_path` is the deployer's own test-path rule, called
-    rather than copied.
-    """
-    role = role_for(path)
-    # DECIDED: the tag is dropped, not only the shared-role note. The tick re-asserts a role's
-    # current manifests on its next image bump anyway, and a pytest guard reaches no cluster.
-    if role is None or is_role_test_path(path):
-        return None
-    declared = declared_tags() if declared is None else declared
-    return role if role in declared else None
+    """`reach.tag_for`, reading the declared tags from containers_list when none are given."""
+    return reach.tag_for(path, declared_tags() if declared is None else declared)
 
 
 def derived_tags(files, declared: set[str] | None = None) -> set[str]:
-    """The tags this PR's own file list maps to, before any shared-role expansion.
-
-    A changed path maps to its role's tag, and also to the tag of every role that `lookup()`s
-    it from another role's tree. uptime-kuma renders a tile per row of monitor-bridge's
-    `files/check_table.py`, so a new check landed as `--tags monitor-bridge` alone would ship
-    the check and leave its tile undeployed (#3781).
-    """
+    """`reach.Reach.tags` over this PR's own file list, before any shared-role expansion."""
     declared = declared_tags() if declared is None else declared
-    files = list(files)
-    readers = deploy_cross_role.k8s_lookup_readers(files, REPO)
-    return {t for p in files if (t := tag_for(p, declared))} | (readers & declared)
+    return reach.reach(list(files)).tags(declared, REPO)
 
 
 def own_narrow_tags(files, pr_range: str, repo) -> dict[str, frozenset[str]]:
@@ -166,7 +143,7 @@ def own_narrow_tags(files, pr_range: str, repo) -> dict[str, frozenset[str]]:
         return {}
     old, new = pr_range.split("..", 1)
     out: dict[str, frozenset[str]] = {}
-    for role in services_from_changed_paths(list(files)).setup_roles:
+    for role in reach.reach(list(files)).changes.setup_roles:
         tag, playbook = setup_role_tag(role), setup_role_playbook(role)
         if playbook is None:
             continue
@@ -234,7 +211,7 @@ def plane_note(
         # Passing ONLY the shared half. k8s_remediation appends a scoped `--tags` line for
         # any deployable role it is given, and land.sh has already deployed those itself.
         notes.append(k8s_remediation(set(shared), declared))
-    cs = services_from_changed_paths(files)
+    cs = reach.reach(files).changes
     # Only the broad changes the deployer will NOT apply itself are owed to a human. The tick
     # fast-forwards and applies a deploy-plane change as a full deploy.yml and a setup-plane
     # change as `initial_setup.yml --tags <role>`, including the deployer's own role.
@@ -246,7 +223,7 @@ def plane_note(
     # roles here would make land.sh exit 1 with `needs-manual-apply` while the next tick is
     # applying exactly those roles. land.sh reads the deployer's own state for
     # that case instead.
-    loud = changes_for(files, quiet)
+    loud = reach.reach(files, quiet)
     unroutable = {r for r in loud.changes.setup_roles if not tick_applies_setup_role(r)}
     if loud.manual or unroutable:
         notes.append(
@@ -307,7 +284,7 @@ def self_applied(files, quiet=()) -> bool:
     edit is nothing for the tick to apply, so waiting on the deployer's state to prove it
     did is waiting on a convergence that means something else.
     """
-    cs = changes_for(files, quiet).changes
+    cs = reach.reach(files, quiet).changes
     if cs.broad_deploy:
         return True
     return any(tick_applies_setup_role(r) for r in cs.setup_roles)
@@ -327,7 +304,7 @@ def self_applied_command(files, quiet=()) -> str:
     sees the range again. This is the line `land.sh` prints when the deployer
     recorded no apply covering the PR.
     """
-    cs = changes_for(files, quiet).changes
+    cs = reach.reach(files, quiet).changes
     routable = {r for r in cs.setup_roles if tick_applies_setup_role(r)}
     if not (cs.broad_deploy or routable):
         return ""

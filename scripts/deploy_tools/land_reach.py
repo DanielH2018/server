@@ -41,7 +41,7 @@ from deploy_logic import (
     tick_applies_setup_role,
 )
 
-from land_changes import changes_for
+from reach import reach
 from setup_role_diff import deleted_in, task_file_chains, tree_at
 from setup_role_chains import (
     SHIPPED_DIRS,
@@ -490,7 +490,7 @@ def _remaining_note(
     `pr_range` is the PR's own `<old>..<new>`, which `setup_file_hosts` reads to narrow a
     changed `tasks/` file to its changed tasks; "" keeps the whole file's reach.
     """
-    loud = changes_for(files, quiet)
+    loud = reach(files, quiet)
     cs = loud.changes
     remaining: dict[str, frozenset[str]] = {}
     unapplied: dict[str, frozenset[str]] = {}

@@ -361,7 +361,9 @@ in `merge.py` already wrapped a single call; the multi-statement block was the h
    `land_tags.py:436` goes through a local `tag_for`/`role_for` regex instead. A path the two
    classify differently produces a `--tags` list the deployer would not have chosen.
    Confirmed. Route `derive` through the shared mapper, or add a test asserting the two agree
-   on a fixed path corpus.
+   on a fixed path corpus. On 2026-10-10 both mappers moved into
+   `scripts/deploy_tools/reach.py` (#3660), and `tests/test_reach.py` pins the two shapes of
+   path where they still disagree.
 
 4. **Not one function in the shipped `monitor-bridge` tree has a return annotation.** 0 of 132
    `def` lines under `ansible/roles/k8s/monitor-bridge/files/`, against a fully annotated
