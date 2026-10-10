@@ -10,8 +10,11 @@ template holds `{{ domain }}` where the host should be. The stub curl records it
 config it read on stdin, so each assertion is on what would have gone over the wire.
 """
 
+import re
+import shlex
+
 import pytest
-from _shell_render import render_shell_script
+from _shell_render import render_shell_script, rendered_shell_texts
 from lib.proc_testing import run
 
 PING_ENV = "/etc/healthchecks/ping.env"
@@ -161,3 +164,42 @@ def test_a_failed_ping_is_logged_and_returns_zero(tmp_path, rendered_lib):
     assert "rc=0" in result.stdout
     # The logger stub drops `-t` and keeps the tag.
     assert logs == ["t healthchecks ping failed (slug=s status=down)"]
+
+
+# Every rendered caller must use the four-argument form, or #4228's removal of the `6)` arm drops
+# its pushes. Logical lines, continuations folded and comments dropped, that start a call.
+_CALL = re.compile(r"^kuma_push\s+(.*)$")
+# Callers the census must find, so a census that stopped matching cannot pass on nothing.
+# sync-artifacts passed six arguments after the rest were converted.
+MUST_FIND = frozenset(
+    {"sync-artifacts.sh.j2", "disk-health.sh.j2", "pi-sd-health.sh.j2"}
+)
+
+
+def _kuma_push_arg_counts(text: str) -> list[int]:
+    folded = re.sub(r"\\\n\s*", " ", text)
+    counts = []
+    for line in folded.splitlines():
+        if match := _CALL.match(line.strip()):
+            counts.append(len(shlex.split(match.group(1), comments=True)))
+    return counts
+
+
+def test_every_rendered_caller_passes_four_arguments():
+    found, offenders = set(), {}
+    for _plane, _role, name, text in rendered_shell_texts():
+        if name == "kuma-push-lib.sh.j2":
+            continue
+        counts = _kuma_push_arg_counts(text)
+        if counts:
+            found.add(name)
+        if bad := [n for n in counts if n != 4]:
+            offenders[name] = bad
+    assert MUST_FIND <= found, f"census lost callers: {sorted(MUST_FIND - found)}"
+    assert not offenders, f"kuma_push called with other than 4 arguments: {offenders}"
+
+
+def test_the_census_flags_a_six_argument_call():
+    six = 'kuma_push up "$MSG" \\\n  "https://k/api/push/t" "k" "10.0.0.1" tag\n'
+    assert _kuma_push_arg_counts(six) == [6]
+    assert _kuma_push_arg_counts('kuma_push up "a b" "$T" tag  # note\n') == [4]
