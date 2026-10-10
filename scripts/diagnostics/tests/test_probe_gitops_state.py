@@ -95,6 +95,18 @@ def test_an_unreadable_marker_is_named_unreadable_not_none(tmp_path, capsys):
     }
 
 
+def test_an_unreadable_marker_names_the_acl_not_a_sudo_the_agent_lacks(tmp_path):
+    """The `claude` user has no sudo, so `sudo -u ubuntu` was a hint it could not follow (#4198)."""
+    _state(tmp_path, hold=SHA)
+    (tmp_path / "hold_sha").chmod(0o000)
+    try:
+        out = view.format_text(view.collect(tmp_path, NOW))
+    finally:
+        (tmp_path / "hold_sha").chmod(0o600)
+    assert "sudo" not in out
+    assert "getfacl /var/lib/gitops-deploy" in out and "--tags claude_code" in out
+
+
 def test_no_state_directory_exits_one_and_says_where_it_lives(tmp_path, capsys):
     """Off daniel-box there is no directory, which must not read as a clean deployer."""
     ns = SimpleNamespace(json=False)
