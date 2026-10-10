@@ -3,7 +3,8 @@
 
 Without prek the agent's commits skipped gitleaks and the commit-time ratchets (#4100). Without
 a readable collections fallback every playbook it ran from a worktree died at `couldn't resolve
-module/action` (#4108). Each test pins one leg of the fix, with a reject case beside it.
+module/action` (#4108). Without jsonq the operator's instruction to use it failed (#4101). Each
+test pins one leg of the fix, with a reject case beside it.
 
 Run: uv run pytest ansible/tests/setup/test_agent_user_dev_tools.py
 """
@@ -127,4 +128,51 @@ def test_an_operator_fallback_or_a_clone_first_path_is_flagged() -> None:
     assert collections_path_problems(clone_first, clone) != []
     assert collections_path_problems("PATH=x\n", clone) == [
         "0 ANSIBLE_COLLECTIONS_PATH exports"
+    ]
+
+
+JSONQ_COPY = "Give the agent user the operator's jsonq"
+
+
+def jsonq_layout_problems(task: dict) -> list[str]:
+    """Where the jsonq copy breaks the layout the script loads its modules from.
+
+    The script reads its modules from `../share/jsonq` beside its own real path, so the agent
+    needs the script in `~/.local/bin` and the directory itself, not its contents, in
+    `~/.local/share`.
+    """
+    pairs = {item["src"]: item["dest"] for item in task.get("loop", [])}
+    want = {
+        "/home/{{ sys_user }}/.local/bin/jsonq": "{{ claude_code_agent_user_home }}/.local/bin/jsonq",
+        "/home/{{ sys_user }}/.local/share/jsonq": "{{ claude_code_agent_user_home }}/.local/share/",
+    }
+    return [
+        f"{src} -> {pairs.get(src)}"
+        for src, dest in want.items()
+        if pairs.get(src) != dest
+    ]
+
+
+def test_the_agent_gets_jsonq_with_its_modules_beside_it() -> None:
+    """The operator's CLAUDE.md, which the agent imports, says jsonq is installed (#4101)."""
+    task = named(tasks(CLAUDE_TASKS), JSONQ_COPY)
+    assert jsonq_layout_problems(task) == []
+    assert task["ansible.builtin.copy"]["remote_src"] is True
+
+
+def test_a_jsonq_copy_of_the_module_contents_only_is_flagged() -> None:
+    task = {
+        "loop": [
+            {
+                "src": "/home/{{ sys_user }}/.local/bin/jsonq",
+                "dest": "{{ claude_code_agent_user_home }}/.local/bin/jsonq",
+            },
+            {
+                "src": "/home/{{ sys_user }}/.local/share/jsonq/",
+                "dest": "{{ claude_code_agent_user_home }}/.local/share/",
+            },
+        ]
+    }
+    assert jsonq_layout_problems(task) == [
+        "/home/{{ sys_user }}/.local/share/jsonq -> None"
     ]
