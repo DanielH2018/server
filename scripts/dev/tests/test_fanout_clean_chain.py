@@ -22,11 +22,14 @@ Run: uv run pytest scripts/dev/tests/test_fanout_clean_chain.py
 import shlex
 import subprocess
 import shutil
+import socket
+import threading
 
 from fanout_lib.clean import live_process_scan, remote_clean_command
 from fanout_lib.manifest import Batch
+from lib.worktrees import escape_holder
 from lib.git_testing import git, git_out, init_repo, scrubbed_env
-from lib.proc_testing import fake_bin, path_with, run, write_exec
+from lib.proc_testing import fake_bin, path_with, run
 
 BRANCH = "worktree-fanout-x"
 UNIT = "fanout-x"
@@ -278,16 +281,42 @@ def test_a_stub_a_live_process_still_uses_is_kept_not_deleted(tmp_path):
     assert BRANCH in _branches(repo)
 
 
-def _busy_with_helper(tmp_path, worktree, helper_body, status="/proc/self/status"):
-    """What `live_process_scan` sets `busy` to when a stand-in root helper answers."""
-    helper = write_exec(tmp_path / "worktree-holders", helper_body)
-    script = (
-        live_process_scan(str(worktree), helper=str(helper), sudo="", status=status)
-        + 'echo "$busy"'
-    )
+def _serving(sock, answer: bytes) -> threading.Thread:
+    """A listener at `sock` that sends `answer` to one connection, as the service does."""
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener.bind(str(sock))
+    listener.listen(1)
+
+    def one():
+        with listener:
+            listener.settimeout(30)
+            try:
+                conn, _ = listener.accept()
+            except TimeoutError:
+                return
+            with conn:
+                conn.sendall(answer)
+
+    thread = threading.Thread(target=one, daemon=True)
+    thread.start()
+    return thread
+
+
+def _scan(worktree, sock) -> subprocess.CompletedProcess:
+    """`live_process_scan` run under bash, asking `sock` through the real `nc -U`."""
+    script = live_process_scan(str(worktree), sock=str(sock)) + 'echo "$busy"'
     return subprocess.run(
         ["bash", "-c", script], capture_output=True, text=True, check=True, timeout=30
-    ).stdout.strip()
+    )
+
+
+def _busy_with_helper(tmp_path, worktree, answer: bytes) -> str:
+    """What `live_process_scan` sets `busy` to when a stand-in root helper answers `answer`."""
+    sock = tmp_path / "worktree-holders.sock"
+    thread = _serving(sock, answer)
+    busy = _scan(worktree, sock).stdout.strip()
+    thread.join(timeout=10)
+    return busy
 
 
 def test_the_root_helper_sees_another_uids_holder_the_proc_loop_cannot_is_flagged(
@@ -297,45 +326,93 @@ def test_the_root_helper_sees_another_uids_holder_the_proc_loop_cannot_is_flagge
     worktree = tmp_path / "wt"
     worktree.mkdir()
     sibling = f"{worktree}-other"
-    body = f"printf '41\\tcwd\\t{sibling}\\n42\\tcwd\\t{worktree}/sub\\n'\n"
+    answer = f"ok\n41\tcwd\t{sibling}\n42\tcwd\t{worktree}/sub\nend\n".encode()
 
-    assert _busy_with_helper(tmp_path, worktree, body) == "42"
+    assert _busy_with_helper(tmp_path, worktree, answer) == "42"
 
 
-def test_a_failed_or_blind_root_helper_keeps_the_tree_is_flagged(tmp_path):
+def test_a_refused_garbled_truncated_or_blind_answer_keeps_the_tree_is_flagged(
+    tmp_path,
+):
+    # A socket carries no exit status, so the framing is what tells a finished answer from an
+    # instance that died mid-scan.
     worktree = tmp_path / "wt"
     worktree.mkdir()
 
-    assert _busy_with_helper(tmp_path, worktree, "exit 1\n").startswith("unknown")
-    blind = "printf '7\\tunreadable\\tcwd: EPERM\\n'\n"
+    for answer in (b"refused\tno root\n", b"", b"ok\n", b"ok\n7 cwd /x\nend\n"):
+        assert _busy_with_helper(tmp_path, worktree, answer).startswith("unknown"), (
+            answer
+        )
+        (tmp_path / "worktree-holders.sock").unlink()
+    blind = b"ok\n7\tunreadable\tcwd: EPERM\nend\n"
     assert _busy_with_helper(tmp_path, worktree, blind) == "7"
 
 
-def test_a_shell_with_no_new_privs_skips_the_helper_is_clean(tmp_path):
-    # claude-rc.service sets NoNewPrivileges=yes for the agent user, so sudo cannot gain root
-    # there. Asking would fail and keep every tree.
+def test_a_socket_nothing_listens_on_keeps_the_tree_is_flagged(tmp_path):
     worktree = tmp_path / "wt"
     worktree.mkdir()
-    status = tmp_path / "status"
-    status.write_text("Name:\tbash\nNoNewPrivs:\t1\n")
+    sock = tmp_path / "worktree-holders.sock"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bound:
+        bound.bind(str(sock))
+        busy = _scan(worktree, sock).stdout.strip()
 
-    assert _busy_with_helper(tmp_path, worktree, "exit 1\n", str(status)) == ""
+    assert busy.startswith("unknown")
 
 
-def test_a_shell_without_no_new_privs_still_asks_the_helper_is_flagged(tmp_path):
+def test_no_socket_falls_back_to_the_proc_loop_and_says_so_is_clean(tmp_path):
+    # A host the apply has not reached. A shell under claude-rc.service's NoNewPrivileges=yes
+    # no longer lands here: it connects like any other (#4297).
     worktree = tmp_path / "wt"
     worktree.mkdir()
-    status = tmp_path / "status"
-    status.write_text("Name:\tbash\nNoNewPrivs:\t0\n")
 
-    assert _busy_with_helper(tmp_path, worktree, "exit 1\n", str(status)).startswith(
-        "unknown"
-    )
+    proc = _scan(worktree, tmp_path / "absent.sock")
+
+    assert proc.stdout.strip() == ""
+    assert "cannot connect to" in proc.stderr
+
+
+def test_a_socket_this_uid_may_not_write_falls_back_and_says_so_is_clean(tmp_path):
+    # A session that predates its user's group grant: the root scan does not apply yet, so
+    # the chain scans /proc itself rather than keep every tree.
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    sock = tmp_path / "worktree-holders.sock"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bound:
+        bound.bind(str(sock))
+        bound.listen(1)
+        sock.chmod(0o000)
+        proc = _scan(worktree, sock)
+
+    assert proc.stdout.strip() == ""
+    assert "cannot connect to" in proc.stderr
 
 
 def test_a_helper_that_names_only_other_trees_leaves_the_tree_free_is_clean(tmp_path):
     worktree = tmp_path / "wt"
     worktree.mkdir()
-    body = f"printf '41\\tcwd\\t{worktree}-other\\n'\n"
+    answer = f"ok\n41\tcwd\t{worktree}-other\nend\n".encode()
 
-    assert _busy_with_helper(tmp_path, worktree, body) == ""
+    assert _busy_with_helper(tmp_path, worktree, answer) == ""
+
+
+def test_a_holder_whose_cwd_has_a_line_break_holds_only_its_tree_is_clean(tmp_path):
+    # #4294: the helper escapes the cwd, and the awk compares escaped forms, so the holder of
+    # the oddly named tree is found and an unrelated tree stays free.
+    odd = tmp_path / "wt\nx y"
+    odd.mkdir()
+    plain = tmp_path / "wt"
+    plain.mkdir()
+    answer = f"ok\n42\tcwd\t{escape_holder(str(odd))}/sub\nend\n".encode()
+
+    assert _busy_with_helper(tmp_path, odd, answer) == "42"
+    (tmp_path / "worktree-holders.sock").unlink()
+    assert _busy_with_helper(tmp_path, plain, answer) == ""
+
+
+def test_an_unescaped_line_break_in_an_answer_is_flagged(tmp_path):
+    # The red half: the same cwd printed as-is splits the record and the answer is garbled.
+    odd = tmp_path / "wt\nx"
+    odd.mkdir()
+    answer = f"ok\n42\tcwd\t{odd}/sub\nend\n".encode()
+
+    assert _busy_with_helper(tmp_path, odd, answer).startswith("unknown")

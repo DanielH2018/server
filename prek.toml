@@ -247,7 +247,7 @@ pass_filenames = false
 # validate-shell-templates includes it: host_python_version and the other cross-role fallbacks
 # it carries feed every unit's render. The polkit rules are a third suffix in the first
 # alternative.
-files = "^(ansible/roles/.*\\.(service|timer|rules)\\.j2|ansible/roles/setup/.*/defaults/main\\.yml|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/ansible_jinja_env\\.py)$"
+files = "^(ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|ansible/roles/setup/.*/defaults/main\\.yml|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/ansible_jinja_env\\.py)$"
 
 # Flag bash's `${#var}` length expansion in a Jinja template, before anything renders it. `{#`
 # opens a Jinja comment, so a shell script inside a `.j2` that writes `${#var}` either fails the

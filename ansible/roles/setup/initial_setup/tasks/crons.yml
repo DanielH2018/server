@@ -320,76 +320,82 @@
     mode: "0755"
   become: true
 
+- name: Install the netcat the shell worktree removal asks the holder scan with
+  tags: [crons, worktree-sweep]
+  # fanout_lib.clean.live_process_scan runs in a shell chain before any interpreter, and a shell
+  # has no unix-socket redirect, so it connects with `nc -U`. Ubuntu ships this package by
+  # default; naming it keeps a minimal image from turning every fan-out clean into a refusal.
+  when: has_claude_code
+  ansible.builtin.apt:
+    name: netcat-openbsd
+    state: present
+  become: true
+
 - name: Install the root-run worktree holder scan a worktree removal asks first
   tags: [crons, worktree-sweep]
   # The sweep runs as sys_user, and /proc refuses that uid another user's cwd and environ. A
   # `claude` process started through `su`, `runuser -l` or `systemd-run --uid` can hold a
   # worktree from the claude user's own slice, where the unprivileged scan does not look
-  # (#4170). This helper scans every process as root, and `lib.worktrees.privileged_holders`
-  # runs it through the sudoers rule below.
+  # (#4170). This helper scans every process as root. worktree-holders@.service runs it for
+  # each connection to the socket below, and `lib.worktrees.privileged_holders` connects there.
   #
   # Every has_claude_code host, not only ops_cron_host: the weekly sweep runs on daniel-box,
   # but a fan-out's `fanout_place clean` removes worktrees on whichever host ran the batch.
   #
   # A root-owned COPY, never a path into the checkout: sys_user and every agent can write the
-  # repo, so a sudoers rule naming a file there is root for whoever edits it. Group sys_user
-  # and 0750, because the caller treats execute permission as "the sudoers rule is mine" and
-  # does not ask sudo otherwise. A refused sudo logs and mails a "not in sudoers" incident.
-  # The agent users get execute through an ACL entry below, not through this group.
+  # repo, so a root unit naming a file there is root for whoever edits it. 0700, because only
+  # the service runs it. On a file that carries an ACL, the group bits of the mode are the ACL
+  # mask, so 0700 leaves any `user:claude` entry the sudo grant added with no permission.
   when: has_claude_code
   ansible.builtin.copy:
     src: worktree_holders.py
     dest: /usr/local/libexec/worktree-holders
     owner: root
-    group: "{{ sys_user }}"
-    mode: "0750"
+    group: root
+    mode: "0700"
   become: true
 
-- name: Read which agent users exist for the worktree holder scan
+- name: Name the agent users granted the worktree holder scan
   tags: [crons, worktree-sweep]
-  # initial_setup runs before claude_code creates the agent user, and setfacl refuses a user it
-  # cannot look up. On a host's first apply the agent gets neither the ACL nor the sudoers line;
-  # its removals fall back to the unprivileged scan until the next apply grants both.
-  when: has_claude_code
-  ansible.builtin.getent:
-    database: passwd
-
-- name: Name the agent user granted the worktree holder scan
-  tags: [crons, worktree-sweep]
-  # The operator ruled on 2026-10-10 that the agent user gets the same grant as sys_user
-  # (#4021). The agent's root is its own clone, so a removal it runs in that clone sees a
-  # sys_user process inside the tree. Names and paths are claude_code's own variables, so
-  # they follow that role.
+  # The operator ruled on 2026-10-10 that each agent user gets the same grant as sys_user
+  # (#4021): its root is its own clone, so a removal it runs in that clone sees a sys_user
+  # process inside the tree. Every present entry of claude_code_agents, through the filter
+  # claude_code builds the users with (#4295), so names and clones follow that role.
+  # deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS lists initial_setup as its caller.
   #
-  # The primary agent only, read from claude_code's scalars. Calling the claude_agent_profiles
-  # filter here would make initial_setup one of that plugin's callers, which
-  # deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS must then list. A second entry in
-  # claude_code_agents gets no grant, and its removals fall back to the unprivileged scan.
+  # Whether the user exists yet is not read. initial_setup runs before claude_code creates an
+  # agent, and an entry for a user with no uid matches no caller. Filtering it out would leave
+  # a new agent in the socket's group but refused by the service, so every removal it ran
+  # would be refused until the next apply.
   when: has_claude_code
   ansible.builtin.set_fact:
     initial_setup_worktree_holders_agents: >-
-      {{ [claude_code_agent_user] if (claude_code_agent_user_enabled | bool)
-         and claude_code_agent_user in ansible_facts.getent_passwd else [] }}
-    initial_setup_worktree_holders_revoked: >-
-      {{ [claude_code_agent_user] if not (claude_code_agent_user_enabled | bool)
-         and claude_code_agent_user in ansible_facts.getent_passwd else [] }}
+      {{ claude_code_agents
+         | claude_agent_profiles(claude_code_agent_user, claude_code_agent_primary_profile)
+         | selectattr('state', 'eq', 'present')
+         | list }}
 
 - name: List the worktree holder scan's users and the checkout each one works in
   tags: [crons, worktree-sweep]
-  # One list feeds the root map, the sudoers lines and the ACL entries, so execute permission
-  # and the grant never differ.
   when: has_claude_code
   ansible.builtin.set_fact:
-    initial_setup_worktree_holders_users: "{{ [sys_user] + initial_setup_worktree_holders_agents }}"
+    initial_setup_worktree_holders_users: >-
+      {{ [sys_user] + initial_setup_worktree_holders_agents | map(attribute='name') | list }}
     initial_setup_worktree_holders_checkouts: >-
       {{ [claude_code_operator_checkout]
-         + ([claude_code_agent_user_clone_dir] if initial_setup_worktree_holders_agents else []) }}
+         + initial_setup_worktree_holders_agents | map(attribute='clone_dir') | list }}
 
 - name: Map each user of the worktree holder scan to the worktree root it reports under
   tags: [crons, worktree-sweep]
-  # Root-owned: the helper runs as root and trusts this file for the directory it reports on.
-  # World-readable, because lib.worktrees.holder_root reads it as the caller, to ask the helper
-  # only about a tree inside the root the helper scans.
+  # DECIDED: the map entry is the per-user grant (#4295), and the socket's group is only the
+  # gate on who may connect. The service refuses any uid this map does not name, so dropping
+  # an agent from claude_code_agents revokes its scan at the next apply, though it keeps the
+  # group. A group alone could not be the grant: a membership reaches a process only at its
+  # next login, and claude_code's agent_access.yml owns each agent's exact group list.
+  #
+  # Root-owned: the service runs as root and trusts this file for the directory it reports on.
+  # World-readable, because lib.worktrees.holder_root reads it as the caller, to ask only about
+  # a tree inside the root the service scans.
   when: has_claude_code
   ansible.builtin.copy:
     dest: /etc/worktree-holders.json
@@ -401,56 +407,68 @@
     mode: "0644"
   become: true
 
-- name: Take the worktree holder scan's execute ACL from an agent user that is switched off
+- name: Create the group that may connect to the worktree holder scan's socket
   tags: [crons, worktree-sweep]
-  # Before the sudoers rewrite drops its line, so execute permission never outlives the grant.
   when: has_claude_code
-  ansible.posix.acl:
-    path: /usr/local/libexec/worktree-holders
-    entity: "{{ item }}"
-    etype: user
-    state: absent
-  loop: "{{ initial_setup_worktree_holders_revoked }}"
+  ansible.builtin.group:
+    name: "{{ initial_setup_worktree_holders_group }}"
+    system: true
+  register: initial_setup_worktree_holders_group_made
   become: true
 
-- name: Allow sys_user and each agent user to run the worktree holder scan as root
+- name: Let sys_user connect to the worktree holder scan's socket
   tags: [crons, worktree-sweep]
-  # `""` allows the command with NO arguments. The helper reads the directory it reports on from
-  # the root map above, keyed by SUDO_UID's user, so a caller cannot ask root about any other
-  # path. The operator ruled on 2026-10-10 that the agent gets the same grant (#4021).
-  # `validate` is not optional: a malformed drop-in locks sudo out entirely (see access.yml's
-  # timestamp rule).
+  # Appended, because other roles give sys_user its other groups. Each agent user gets this
+  # group in claude_code's agent_access.yml instead, whose group list is exact. Skipped by a
+  # --check run that has not created the group, because usermod refuses a group it cannot
+  # find even when it only reports.
+  when:
+    - has_claude_code
+    - not (ansible_check_mode and initial_setup_worktree_holders_group_made is changed)
+  ansible.builtin.user:
+    name: "{{ sys_user }}"
+    groups: "{{ initial_setup_worktree_holders_group }}"
+    append: true
+  become: true
+
+- name: Install the worktree holder scan's socket and its per-connection service
+  tags: [crons, worktree-sweep]
+  # The operator ruled on 2026-10-10 that a socket replaces the sudo grant (#4297): sudo cannot
+  # gain root under claude-rc.service's NoNewPrivileges=yes, and a socket needs no setuid.
   when: has_claude_code
-  ansible.builtin.copy:
-    dest: /etc/sudoers.d/20-worktree-holders
-    content: |
-      # Managed by Ansible (roles/setup/initial_setup, crons.yml) — edits here are overwritten.
-      {% for user in initial_setup_worktree_holders_users %}
-      {{ user }} ALL=(root) NOPASSWD: /usr/local/libexec/worktree-holders ""
-      {% endfor %}
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
     owner: root
     group: root
-    mode: "0440"
-    validate: /usr/sbin/visudo -cf %s
+    mode: "0644"
+  loop:
+    - worktree-holders.socket
+    - worktree-holders@.service
+  register: initial_setup_worktree_holders_units
   become: true
 
-- name: Let each agent user execute the worktree holder scan
+- name: Listen on the worktree holder scan's socket
   tags: [crons, worktree-sweep]
-  # DECIDED: a named-user ACL entry, not a shared group, gives the agent execute permission.
-  # The caller reads execute permission as "the sudoers rule is mine". A new group reaches a
-  # process only at its next login, so the agent's lingering user manager and running sessions
-  # would fall back silently until a reboot, and adding the agent to a group of sys_user's
-  # would open every sys_user group-readable file to it. An ACL entry takes effect at once.
-  # After the sudoers rule and the copy: a copy that changes the helper replaces its inode,
-  # which drops this entry, and this task puts it back in the same run.
-  when: has_claude_code
-  ansible.posix.acl:
-    path: /usr/local/libexec/worktree-holders
-    entity: "{{ item }}"
-    etype: user
-    permissions: rx
-    state: present
-  loop: "{{ initial_setup_worktree_holders_agents }}"
+  # Restarted when a unit changed, because a running socket keeps its old SocketGroup and mode.
+  # Skipped by a --check run that has not written a changed unit, which systemd cannot load.
+  when:
+    - has_claude_code
+    - not (ansible_check_mode and initial_setup_worktree_holders_units is changed)
+  ansible.builtin.systemd_service:
+    name: worktree-holders.socket
+    enabled: true
+    state: "{{ 'restarted' if initial_setup_worktree_holders_units is changed else 'started' }}"
+    daemon_reload: "{{ initial_setup_worktree_holders_units is changed }}"
+  become: true
+
+- name: Remove the worktree holder scan's old sudoers rule
+  tags: [crons, worktree-sweep]
+  # The way out of the sudo grant #4270 and #4296 installed, on every host: the socket replaced
+  # it, and a NOPASSWD root rule must not outlive its purpose.
+  ansible.builtin.file:
+    path: /etc/sudoers.d/20-worktree-holders
+    state: absent
   become: true
 
 - name: Record the deployed worktree holder scan
@@ -463,18 +481,56 @@
       - live: /usr/local/libexec/worktree-holders
         src: ansible/roles/setup/initial_setup/files/worktree_holders.py
 
-- name: Remove the worktree holder scan and its sudoers rule from a host with no Claude sessions
+- name: Read whether the worktree holder scan's socket is installed
   tags: [crons, worktree-sweep]
-  # The way out: a host that stops running Claude sessions keeps a NOPASSWD root rule otherwise.
+  when: not has_claude_code
+  ansible.builtin.stat:
+    path: /etc/systemd/system/worktree-holders.socket
+  register: initial_setup_worktree_holders_socket_unit
+
+- name: Stop the worktree holder scan's socket on a host with no Claude sessions
+  tags: [crons, worktree-sweep]
+  # Before its unit file goes, because systemd cannot stop a unit it no longer finds.
+  when:
+    - not has_claude_code
+    - initial_setup_worktree_holders_socket_unit.stat.exists
+  ansible.builtin.systemd_service:
+    name: worktree-holders.socket
+    enabled: false
+    state: stopped
+  become: true
+
+- name: Remove the worktree holder scan from a host with no Claude sessions
+  tags: [crons, worktree-sweep]
+  # The way out: a host that stops running Claude sessions keeps a root service otherwise.
   when: not has_claude_code
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
   loop:
-    - /etc/sudoers.d/20-worktree-holders
+    - /etc/systemd/system/worktree-holders.socket
+    - /etc/systemd/system/worktree-holders@.service
     - /usr/local/libexec/worktree-holders
     - /etc/worktree-holders.json
     - /var/lib/homelab/setup-deployed-manifest.d/worktree-holders
+  register: initial_setup_worktree_holders_removed
+  become: true
+
+- name: Forget the removed worktree holder scan units
+  tags: [crons, worktree-sweep]
+  when:
+    - not has_claude_code
+    - initial_setup_worktree_holders_removed is changed
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  become: true
+
+- name: Remove the worktree holder scan's socket group from a host with no Claude sessions
+  tags: [crons, worktree-sweep]
+  when: not has_claude_code
+  ansible.builtin.group:
+    name: "{{ initial_setup_worktree_holders_group }}"
+    state: absent
   become: true
 
 - name: Schedule the weekly worktree sweep and git object-store repair (box only)

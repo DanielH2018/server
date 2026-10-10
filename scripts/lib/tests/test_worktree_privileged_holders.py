@@ -1,32 +1,46 @@
 """Tests for `lib.worktrees.privileged_holders` and `holder_root`: asking the root helper.
 
 The helper itself, `/usr/local/libexec/worktree-holders`, is tested in
-`ansible/roles/setup/initial_setup/tests/test_worktree_holders.py`. These tests cover when
-the caller asks it, which root it asks about, and how it reads the answer (#4170, #4021).
+`ansible/roles/setup/initial_setup/tests/test_worktree_holders.py`, which also drives this
+caller over a real socket. These tests cover when the caller asks, which root it asks about,
+how a failed connection is read, and how it reads the answer (#4170, #4021, #4297).
 
 Run: uv run pytest scripts/lib/tests/test_worktree_privileged_holders.py
 """
 
+import errno
 import json
 import os
 import pwd
-import subprocess
+import socket
 from pathlib import Path
 
 from _worktree_proc import _unreadable_proc
-from lib.proc_testing import write_exec
 from lib.worktrees import holder_root, privileged_holders, processes_using
 
+SOCK = "/run/worktree-holders.sock"
 
-def _helper_answering(tmp_path: Path, returncode: int = 0, stdout: str = ""):
-    """An executable stand-in for the root helper, and a runner that returns this answer."""
-    helper = write_exec(tmp_path / "worktree-holders", "exit 0\n")
 
-    def run(argv, **_):
-        assert argv == ["/usr/bin/sudo", "-n", str(helper)]
-        return subprocess.CompletedProcess(argv, returncode, stdout, "sudo: denied")
+def _answering(raw: bytes):
+    """A stand-in for `ask_holders` that returns `raw` for the socket the caller names."""
 
-    return str(helper), run
+    def ask(sock):
+        assert sock == SOCK
+        return raw
+
+    return ask
+
+
+def _failing(err: int):
+    def ask(sock):
+        raise OSError(err, os.strerror(err), sock)
+
+    return ask
+
+
+def _ask(tmp_path: Path, ask):
+    root = tmp_path / "worktrees"
+    return privileged_holders(root / "a", sock=SOCK, root=root, ask=ask)
 
 
 def test_the_helper_sees_another_uid_outside_this_slice_is_flagged(tmp_path):
@@ -34,53 +48,61 @@ def test_the_helper_sees_another_uid_outside_this_slice_is_flagged(tmp_path):
     # where the unprivileged scan cannot look. The helper reads it as root.
     root = tmp_path / "worktrees"
     tree, sibling = root / "a", root / "b"
-    helper, run = _helper_answering(
-        tmp_path, stdout=f"4242\tcwd\t{tree}/sub\n4243\tcwd\t{sibling}\n"
-    )
+    raw = f"ok\n4242\tcwd\t{tree}/sub\n4243\tcwd\t{sibling}\nend\n".encode()
 
-    found = privileged_holders(
-        tree, helper=helper, root=root, run=run, status=tmp_path / "status"
-    )
+    found = privileged_holders(tree, sock=SOCK, root=root, ask=_answering(raw))
 
     assert found == [(4242, f"cwd {tree}/sub")]
 
 
-def test_a_helper_failure_or_unreadable_process_refuses_removal_is_flagged(tmp_path):
-    root = tmp_path / "worktrees"
-    failed, run_failed = _helper_answering(tmp_path, returncode=1)
-    garbled, run_garbled = _helper_answering(tmp_path, stdout="4242 cwd /x\n")
-    blind, run_blind = _helper_answering(
-        tmp_path, stdout="4242\tunreadable\tcwd: EPERM\n"
-    )
-
-    for helper, run in (
-        (failed, run_failed),
-        (garbled, run_garbled),
-        (blind, run_blind),
-    ):
-        assert privileged_holders(
-            root / "a", helper=helper, root=root, run=run, status=tmp_path / "status"
-        ), helper
-
-
-def test_no_helper_or_a_tree_outside_its_root_falls_back_to_the_slice_rule_is_clean(
+def test_an_answer_with_its_framing_and_no_holder_leaves_the_tree_free_is_clean(
     tmp_path,
 ):
-    # A host without the hand apply, a caller the helper's 0750 mode shuts out, and a tree
-    # the helper never reports on: each must scan /proc itself rather than read "no holder".
-    root = tmp_path / "worktrees"
-    helper, run = _helper_answering(tmp_path, stdout="")
-    shut_out = tmp_path / "not-mine"
-    shut_out.write_text("")
-    shut_out.chmod(0o640)
+    assert _ask(tmp_path, _answering(b"ok\nend\n")) == []
 
+
+def test_a_refused_garbled_or_truncated_answer_refuses_removal_is_flagged(tmp_path):
+    # A socket carries no exit status. An instance that died mid-scan sends a prefix of a good
+    # answer, or nothing, and neither may read as "no holder".
+    for raw in (
+        b"refused\t/etc/worktree-holders.json maps no worktree root for uid 1001\n",
+        b"",
+        b"ok\n",
+        b"ok\n4242\tcwd\t/x\n",
+        b"4242\tcwd\t/x\nend\n",
+        b"ok\n4242 cwd /x\nend\n",
+        b"ok\nend\nok\n",
+        b"ok\n4242\tunreadable\tcwd: EPERM\nend\n",
+        "ok\n4242\tcwd\t/café\nend\n".encode(),
+        b"ok\n4242\tcwd\t/x\\x00y\nend\n",
+    ):
+        found = _ask(tmp_path, _answering(raw))
+        assert found and found[0][0] in (0, 4242), raw
+
+
+def test_a_refused_connection_or_timeout_refuses_removal_is_flagged(tmp_path):
+    # The socket is there, so the scan applies: a refused connection is a stopped service
+    # whose file stayed behind, and a timeout is a hung instance.
+    for err in (errno.ECONNREFUSED, errno.ETIMEDOUT):
+        found = _ask(tmp_path, _failing(err))
+        assert found and found[0][0] == 0, err
+
+
+def test_no_socket_a_group_that_shuts_this_uid_out_or_a_tree_outside_its_root_falls_back_is_clean(
+    tmp_path, capsys
+):
+    # A host without the apply, a session older than its user's group grant, and a tree the
+    # helper never reports on: each must scan /proc itself rather than read "no holder", and
+    # the first two say so on stderr.
+    root = tmp_path / "worktrees"
+
+    assert _ask(tmp_path, _failing(errno.ENOENT)) is None
+    assert _ask(tmp_path, _failing(errno.EACCES)) is None
+    assert "cannot connect to" in capsys.readouterr().err
     assert (
-        privileged_holders(root / "a", helper=str(tmp_path / "absent"), root=root)
-        is None
-    )
-    assert privileged_holders(root / "a", helper=str(shut_out), root=root) is None
-    assert (
-        privileged_holders(tmp_path / "elsewhere", helper=helper, root=root, run=run)
+        privileged_holders(
+            tmp_path / "elsewhere", sock=SOCK, root=root, ask=_answering(b"")
+        )
         is None
     )
 
@@ -90,37 +112,6 @@ def test_no_helper_or_a_tree_outside_its_root_falls_back_to_the_slice_rule_is_cl
     )
     found = processes_using(str(tmp_path), proc=proc, privileged=lambda _: None)
     assert [pid for pid, _ in found] == [4242]
-
-
-def _status(tmp_path: Path, no_new_privs: int) -> Path:
-    status = tmp_path / f"status-{no_new_privs}"
-    status.write_text(f"Name:\tpython3\nNoNewPrivs:\t{no_new_privs}\n")
-    return status
-
-
-def test_a_caller_with_no_new_privs_falls_back_without_asking_sudo_is_clean(tmp_path):
-    # claude-rc.service runs the agent's sessions with NoNewPrivileges=yes, where sudo cannot
-    # gain root. Asking would fail and refuse every removal, the failure #4017 reverted.
-    root = tmp_path / "worktrees"
-
-    def run(argv, **_):
-        raise AssertionError(f"asked sudo: {argv}")
-
-    helper, _ = _helper_answering(tmp_path)
-    found = privileged_holders(
-        root / "a", helper=helper, root=root, run=run, status=_status(tmp_path, 1)
-    )
-
-    assert found is None
-
-
-def test_a_caller_without_no_new_privs_asks_the_helper_is_flagged(tmp_path):
-    root = tmp_path / "worktrees"
-    helper, run = _helper_answering(tmp_path, returncode=1)
-
-    assert privileged_holders(
-        root / "a", helper=helper, root=root, run=run, status=_status(tmp_path, 0)
-    )
 
 
 def test_the_caller_asks_about_the_root_the_helper_maps_it_to_is_flagged(tmp_path):
@@ -160,3 +151,18 @@ def test_processes_using_takes_the_helpers_answer_over_the_proc_scan_is_flagged(
         )
         == answer
     )
+
+
+def test_a_real_socket_this_uid_may_not_write_falls_back_is_clean(tmp_path, capsys):
+    # The group gate through a real connect: a socket whose mode shuts this uid out raises
+    # EACCES, which reads as "not granted yet", not as a failed scan.
+    root = tmp_path / "worktrees"
+    sock = tmp_path / "worktree-holders.sock"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bound:
+        bound.bind(str(sock))
+        bound.listen(1)
+        sock.chmod(0o000)
+        found = privileged_holders(root / "a", sock=str(sock), root=root)
+
+    assert found is None
+    assert "Permission denied" in capsys.readouterr().err
