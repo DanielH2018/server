@@ -33,16 +33,15 @@ import re
 import sys
 from pathlib import Path
 
-from _helpers import ANSIBLE
 from _helpers import load_yaml
 from _shell_render import rendered_shell_text
+from lib.repo_paths import K3S_DEFAULTS, K3S_FILES, K3S_ROLE
 
 
-K3S = ANSIBLE / "roles" / "setup" / "k3s"
 DRILL = ("setup", "k3s", "longhorn-restore-drill.sh.j2")
-CRONS = K3S / "tasks" / "health-crons.yml"
+CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
 
-sys.path.insert(0, str(K3S / "files"))
+sys.path.insert(0, str(K3S_FILES))
 import longhorn_backup_health_logic as logic  # noqa: E402
 
 NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z
@@ -90,7 +89,7 @@ def test_drill_rotates_over_the_declared_backup_set() -> None:
     PVC's storageClassName is immutable and still reads `longhorn` on volumes dropped from the
     backup set on 2026-08-08, so filtering by class would drill volumes nothing backs up.
     """
-    defaults = load_yaml(K3S / "defaults" / "main.yml")
+    defaults = load_yaml(K3S_DEFAULTS)
     assert defaults["k3s_longhorn_restore_drill_pvc"] == "", (
         "the drill is pinned to one volume — rotation is disabled and 24 volumes go unproven"
     )
@@ -354,7 +353,7 @@ def _tasks():
 
 def _release_bin_group_templates(group: str) -> list[str]:
     """The repo-relative template paths a release_bin group deploys, from the role defaults."""
-    doc = load_yaml(CRONS.parent.parent / "defaults" / "main.yml") or {}
+    doc = load_yaml(K3S_DEFAULTS) or {}
     for value in doc.values() if isinstance(doc, dict) else []:
         if not isinstance(value, list):
             continue
@@ -418,7 +417,7 @@ def test_drill_is_deployed_wherever_the_heartbeat_is() -> None:
 
 def test_drill_runs_daily() -> None:
     """A monthly drill leaves a broken restore path undetected for weeks."""
-    defaults = load_yaml(K3S / "defaults" / "main.yml")
+    defaults = load_yaml(K3S_DEFAULTS)
     minute, hour, dom, month, dow = defaults["k3s_longhorn_restore_drill_cron"].split()
     assert (dom, month, dow) == ("*", "*", "*"), (
         "the drill must run every night for the rotation to cover the fleet"
@@ -435,7 +434,7 @@ def test_cadence_and_staleness_window_move_together() -> None:
     Raising the cadence without lowering the window buys zero detection latency, which is the
     trap this pairing exists to prevent.
     """
-    defaults = load_yaml(K3S / "defaults" / "main.yml")
+    defaults = load_yaml(K3S_DEFAULTS)
     max_age = defaults["k3s_longhorn_restore_drill_max_age_days"]
     assert 2 <= max_age <= 7, (
         f"max_age_days is {max_age}: a nightly drill should tolerate a couple of bad nights, "

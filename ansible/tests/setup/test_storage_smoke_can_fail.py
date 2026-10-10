@@ -18,9 +18,10 @@ later edit that removes it fails the suite rather than going quiet.
 
 import pytest
 
-from _helpers import ANSIBLE, ROLES, load_tasks
+from _helpers import ANSIBLE, load_tasks
+from lib.repo_paths import K3S_ROLE
 
-SMOKE = ROLES / "setup" / "k3s" / "tasks" / "storage_smoke.yml"
+SMOKE = K3S_ROLE / "tasks" / "storage_smoke.yml"
 WAIT_TASK = "Wait for the PVC to reach Bound"
 ASSERT_TASK = "Report the phase the PVC actually reached"
 DELETE_TASK = "Remove the storage smoke PVC"
@@ -88,7 +89,7 @@ def test_the_cleanup_runs_in_an_always():
 
 def test_the_check_is_not_wired_into_the_bringup_role():
     """Opt-in by construction: prod must not create and destroy a PVC on every k3s run."""
-    main = (ROLES / "setup" / "k3s" / "tasks" / "main.yml").read_text()
+    main = (K3S_ROLE / "tasks" / "main.yml").read_text()
     assert "storage_smoke" not in main, (
         "storage_smoke.yml is imported from tasks/main.yml, so it now runs on every k3s-role "
         "run including prod's. It is reached through its own playbook "

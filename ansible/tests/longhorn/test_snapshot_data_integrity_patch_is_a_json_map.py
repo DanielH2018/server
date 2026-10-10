@@ -19,12 +19,11 @@ import json
 
 import pytest
 
-from _helpers import ANSIBLE
-from lib.repo_paths import K3S_DEFAULTS
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 from _helpers import load_yaml
 
 
-TASKS = ANSIBLE / "roles" / "setup" / "k3s" / "tasks" / "longhorn.yml"
+TASKS = K3S_ROLE / "tasks" / "longhorn.yml"
 TASK_NAME = "Set the Longhorn snapshot data-integrity mode"
 CRON_TASK_NAME = "Set the Longhorn snapshot data-integrity cron schedule"
 

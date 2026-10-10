@@ -34,9 +34,7 @@ from _helpers import ALL_VARS, ANSIBLE
 from _helpers import load_yaml, load_defaults
 from _k8s_render import render_role_template, rendered_k8s_text
 from _setup_render import rendered_setup_text, role_context
-
-
-K3S = ANSIBLE / "roles" / "setup" / "k3s"
+from lib.repo_paths import K3S_ROLE
 
 
 def _all_vars() -> dict:
@@ -61,7 +59,7 @@ def _rendered_server_args(**overrides) -> str:
     variables deliberately live in group_vars — setup/k3s and loki-homelab both read them.
     Building it from role defaults alone raises on the first undefined instead.
     """
-    defaults = load_defaults(K3S)
+    defaults = load_defaults(K3S_ROLE)
     context = {
         "server_ip": "10.0.0.215",
         # A stand-in: `domain` is a SOPS value, so no test can read the real one. Only the
@@ -85,7 +83,7 @@ def _rendered_server_args(**overrides) -> str:
 
 
 def _server_tasks() -> list[dict]:
-    return yaml_fast.safe_load((K3S / "tasks" / "server.yml").read_text()) or []
+    return yaml_fast.safe_load((K3S_ROLE / "tasks" / "server.yml").read_text()) or []
 
 
 def _task_index(predicate) -> int:
@@ -127,7 +125,7 @@ def test_secrets_encryption_has_a_rollback_lever():
 
 def test_existing_secrets_are_reencrypted():
     """Arming the flag encrypts WRITES only; without this the old plaintext stays."""
-    text = (K3S / "tasks" / "server.yml").read_text()
+    text = (K3S_ROLE / "tasks" / "server.yml").read_text()
     assert "secrets-encrypt rotate-keys" in text, (
         "The role must run `k3s secrets-encrypt rotate-keys` after arming the flag. "
         "Encryption applies to writes, so Secrets already in etcd stay plaintext — and every "
@@ -323,7 +321,7 @@ def test_alloy_tails_the_audit_log():
     # Resolved, not raw: `k3s_audit_log_path` is itself a template over `k3s_audit_log_dir`,
     # so group_vars holds `{{ k3s_audit_log_dir }}/audit.log` and only the render context
     # expands it.
-    resolved = role_context(K3S)
+    resolved = role_context(K3S_ROLE)
     path, directory = resolved["k3s_audit_log_path"], resolved["k3s_audit_log_dir"]
     # The Alloy config sits in a nested `templates/config/` directory, which the whole-tree
     # render does not glob; `render_role_template` addresses it by its loader-relative name.
@@ -343,7 +341,7 @@ def test_alloy_tails_the_audit_log():
 
 def test_audit_log_vars_are_visible_to_both_roles():
     """A role default cannot be read by another role's template."""
-    shared, role = _all_vars(), load_defaults(K3S)
+    shared, role = _all_vars(), load_defaults(K3S_ROLE)
     for name in ("k3s_audit_log_enabled", "k3s_audit_log_dir", "k3s_audit_log_path"):
         assert name in shared, (
             f"{name} must live in group_vars/all.yml. setup/k3s writes the log and "

@@ -9,10 +9,10 @@ lints and deploys green. The second shape keeps a checksummed `get_url` in the f
 extracted binary comes from an unverified fetch, so a reader sees the check and trusts it.
 """
 
-from _helpers import ROLES as _ROLES
 from _helpers import load_tasks, leaf_tasks
+from lib.repo_paths import K3S_ROLE
 
-_NODE_TASKS = _ROLES / "setup/k3s/tasks/node.yml"
+_NODE_TASKS = K3S_ROLE / "tasks/node.yml"
 _GET_URL = "ansible.builtin.get_url"
 _UNARCHIVE = "ansible.builtin.unarchive"
 _URL_VAR = "k3s_host_coredns_url"

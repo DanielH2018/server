@@ -40,7 +40,7 @@ from pathlib import Path
 import pytest
 from lib import yaml_fast
 from _helpers import ANSIBLE
-from lib.repo_paths import ALL_VARS, HOST_VARS
+from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_ROLE
 
 
 # The k3s-bringup.yml play asserts `inventory_hostname == 'daniel-box'`, so the
@@ -48,7 +48,7 @@ from lib.repo_paths import ALL_VARS, HOST_VARS
 # daniel-server is an agent node with Docker uninstalled — both nodes must stay Docker-free.
 K3S_HOSTS = ("daniel-box", "daniel-server")
 
-K3S_TASKS = ANSIBLE / "roles" / "setup" / "k3s" / "tasks"
+K3S_TASKS = K3S_ROLE / "tasks"
 
 # The two node roles. Named explicitly rather than globbed: a new tasks file in this role
 # is not automatically a node-install path, and globbing would make this test fail for

@@ -11,11 +11,12 @@ Run: uv run pytest ansible/tests/longhorn/test_r2_tier_is_derived.py
 
 import pytest
 
-from _helpers import SETUP_ROLES, load_defaults
+from _helpers import load_defaults
 from _k8s_render import k8s_entries
 from lib.service_tiers import R2_TIER, r2_volumes
 from service_tier import tier_backup_claims, tier_entries
 from test_every_longhorn_pvc_has_a_tier import longhorn_pvcs_by_role
+from lib.repo_paths import K3S_ROLE
 
 # The hand list `k3s_longhorn_r2_volumes` held before the derivation replaced it.
 _REPLACED_HAND_LIST = frozenset(
@@ -42,7 +43,7 @@ _KNOWN_HOME_CRITICAL = frozenset(
 
 
 def test_the_role_default_is_the_derivation_not_a_list():
-    raw = load_defaults(SETUP_ROLES / "k3s")["k3s_longhorn_r2_volumes"]
+    raw = load_defaults(K3S_ROLE)["k3s_longhorn_r2_volumes"]
     assert isinstance(raw, str) and "tier_backup_claims" in raw, raw
 
 
@@ -63,7 +64,7 @@ def test_backup_claims_are_the_tiered_roles_backed_up_longhorn_pvcs():
     A claim its role does not render routes nothing, and a backed-up PVC the entry omits falls
     to the weekly-or-unrouted path; both read as a converged cluster.
     """
-    nobackup = set(load_defaults(SETUP_ROLES / "k3s")["k3s_longhorn_nobackup_volumes"])
+    nobackup = set(load_defaults(K3S_ROLE)["k3s_longhorn_nobackup_volumes"])
     by_role = longhorn_pvcs_by_role()
     mismatched = {}
     for entry in tier_entries(list(k8s_entries().values()), R2_TIER):

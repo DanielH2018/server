@@ -20,9 +20,10 @@ create the file this decision exists to avoid.
 
 import pytest
 
-from _helpers import ROLES, leaf_tasks, load_tasks
+from _helpers import leaf_tasks, load_tasks
+from lib.repo_paths import K3S_ROLE
 
-TASK_DIR = ROLES / "setup" / "k3s" / "tasks"
+TASK_DIR = K3S_ROLE / "tasks"
 MODULES = (
     "ansible.builtin.blockinfile",
     "ansible.builtin.lineinfile",

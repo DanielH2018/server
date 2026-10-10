@@ -15,13 +15,13 @@ that follows from them, and the two structural facts it rests on.
 Run: uv run pytest ansible/tests/longhorn/test_daily_group_membership_is_the_r2_list.py
 """
 
-from _helpers import SETUP_ROLES, load_defaults, load_tasks, task_named
+from _helpers import load_defaults, load_tasks, task_named
 from _setup_render import rendered_setup_text
 from lib import yaml_fast
 from lib.service_tiers import resolved_tier_lists
 from test_every_longhorn_pvc_has_a_tier import _longhorn_class_pvcs
+from lib.repo_paths import K3S_ROLE
 
-K3S = SETUP_ROLES / "k3s"
 RECURRING_JOB = "longhorn-recurringjob.yaml.j2"
 LEAVES_DEFAULT = ("k3s_longhorn_nobackup_volumes", "k3s_longhorn_weekly_volumes")
 
@@ -43,7 +43,7 @@ def daily_members(declared: set[str], defaults: dict) -> set[str]:
 
 
 def test_daily_group_membership_equals_the_r2_list():
-    defaults = resolved_tier_lists(load_defaults(K3S))
+    defaults = resolved_tier_lists(load_defaults(K3S_ROLE))
     declared = _longhorn_class_pvcs()
     assert len(declared) >= 4
     assert daily_members(declared, defaults) == set(defaults["k3s_longhorn_r2_volumes"])
@@ -74,7 +74,7 @@ def test_no_other_recurring_job_claims_the_default_group():
 
 def test_the_reconcile_returns_only_the_unlisted_volumes_to_default():
     task = task_named(
-        load_tasks(K3S / "tasks" / "longhorn.yml"), "Return volumes to the default"
+        load_tasks(K3S_ROLE / "tasks" / "longhorn.yml"), "Return volumes to the default"
     )
     conditions = task["when"]
     for name in LEAVES_DEFAULT:

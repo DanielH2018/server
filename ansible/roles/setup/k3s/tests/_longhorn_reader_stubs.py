@@ -17,8 +17,9 @@ import sys
 from pathlib import Path
 
 from lib.proc_testing import write_exec
+from lib.repo_paths import K3S_FILES
 
-READER = Path(__file__).resolve().parents[1] / "files" / "longhorn_backup_health.py"
+READER = K3S_FILES / "longhorn_backup_health.py"
 HOST_LIB_DIR = Path(__file__).resolve().parents[2] / "common" / "files"
 
 # The epoch every dated fixture here is measured from — the same one test_longhorn_backup_health

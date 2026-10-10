@@ -23,10 +23,10 @@ Run: uv run pytest ansible/tests/longhorn/test_every_longhorn_pvc_has_a_tier.py
 
 from lib.service_tiers import resolved_tier_lists
 
-from _helpers import SETUP_ROLES, load_defaults
+from _helpers import load_defaults
 from _k8s_render import rendered_docs
+from lib.repo_paths import K3S_ROLE
 
-K3S = SETUP_ROLES / "k3s"
 _LONGHORN_CLASS = "longhorn"
 
 # Three hand-maintained lists of `namespace/pvcName` decide where every `longhorn`-class
@@ -100,7 +100,7 @@ def _uncovered(declared: set[str], lists: dict[str, set[str]]) -> set[str]:
 
 
 def test_every_longhorn_pvc_has_a_tier():
-    defaults = resolved_tier_lists(load_defaults(K3S))
+    defaults = resolved_tier_lists(load_defaults(K3S_ROLE))
     lists = {name: set(defaults.get(name) or []) for name in _ROUTING_LISTS}
     declared = _longhorn_class_pvcs()
     assert len(declared) >= 25, (

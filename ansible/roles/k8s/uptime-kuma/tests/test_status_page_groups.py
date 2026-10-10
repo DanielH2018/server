@@ -16,13 +16,15 @@ from kuma_monitors import kuma_ingress_monitors
 from py_table import py_table
 from render_status_page import bucket
 
+from lib.repo_paths import HOST_VARS
+
 ROLE = _Path(__file__).resolve().parents[1]
 
 # monitor-bridge's push tiles render from one loop over this table (#3781), so their ids are
 # the rows' `kuma_id`s rather than literal keys in the template.
 CHECK_TABLE = ROLE.parent / "monitor-bridge" / "files" / "check_table.py"
 # The ingress tiles render from one loop over this host's containers_list (#3690).
-HOST_VARS = ROLE.parents[2] / "inventory" / "host_vars" / "daniel-box.yml"
+DANIEL_BOX_VARS = HOST_VARS / "daniel-box.yml"
 
 DECLARATION = re.compile(r"^  (?P<id>[A-Za-z0-9._-]+)\.json: \|$")
 NAME = re.compile(r'"name": "(?P<name>[^"]*)"')
@@ -69,7 +71,7 @@ def declarations():
         for row in py_table(CHECK_TABLE.read_text(), "CHECKS"):
             found[row["kuma_id"]] = (row["display"], "push")
     if "kuma_ingress_monitors" in text:
-        entries = yaml.safe_load(HOST_VARS.read_text())["containers_list"]
+        entries = yaml.safe_load(DANIEL_BOX_VARS.read_text())["containers_list"]
         for tile in kuma_ingress_monitors(entries):
             found[tile["id"]] = (tile["name"], "http")
     return found

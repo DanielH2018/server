@@ -12,10 +12,10 @@ Ready, the host process answers locally, and the deploy reads green. Both allows
 one per source shape.
 """
 
-from _helpers import ROLES as _ROLES
 from _helpers import load_tasks, leaf_tasks
+from lib.repo_paths import K3S_ROLE
 
-_NODE_TASKS = _ROLES / "setup/k3s/tasks/node.yml"
+_NODE_TASKS = K3S_ROLE / "tasks/node.yml"
 _UFW = "community.general.ufw"
 _PORT_VAR = "k3s_host_dns_metrics_port"
 

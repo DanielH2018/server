@@ -14,15 +14,15 @@ import re
 import pytest
 from jinja2 import StrictUndefined
 
-from _helpers import SETUP_ROLES, load_defaults, load_tasks
+from _helpers import load_defaults, load_tasks
 from lib.ansible_jinja_env import make_ansible_env
 from longhorn_groups import (
     backup_group_label,
     weekly_backup_group,
     weekly_backup_shard,
 )
+from lib.repo_paths import K3S_ROLE
 
-K3S = SETUP_ROLES / "k3s"
 LABEL = re.compile(r"recurring-job-group\.longhorn\.io/\S+")
 UNLISTED = "homelab/not-in-any-tier-list"
 
@@ -80,8 +80,8 @@ def _command_text(task: dict) -> str:
 
 
 def _label_tasks() -> list[dict]:
-    tasks = load_tasks(K3S / "tasks" / "longhorn.yml") + load_tasks(
-        K3S / "tasks" / "longhorn-weekly-shard.yml"
+    tasks = load_tasks(K3S_ROLE / "tasks" / "longhorn.yml") + load_tasks(
+        K3S_ROLE / "tasks" / "longhorn-weekly-shard.yml"
     )
     return [
         t
@@ -110,7 +110,7 @@ def _cases(defaults: dict):
 
 
 def test_every_label_task_renders_the_live_labels():
-    defaults = load_defaults(K3S)
+    defaults = load_defaults(K3S_ROLE)
     weekly = defaults["k3s_longhorn_weekly_volumes"]
     tasks = _label_tasks()
     assert {t["name"] for t in tasks} == set(EXPECTED), (

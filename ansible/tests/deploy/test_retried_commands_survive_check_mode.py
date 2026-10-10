@@ -51,6 +51,7 @@ from _check_mode import (
 )
 from _helpers import ALL_VARS, ROLES
 from _role_census import task_files
+from lib.repo_paths import K3S_ROLE
 
 
 # The retried tasks the census must still find, so a rename or a move cannot empty it and
@@ -77,7 +78,7 @@ KNOWN_RETRIED_COMMAND_TASKS = frozenset(
 # ever reached — the tag fails whatever the retried task carries. Pinned by name here so a
 # revert reopens the tag loudly instead of silently.
 NON_RETRIED_READS_THAT_MUST_OPT_OUT = (
-    (ROLES / "setup" / "k3s" / "tasks" / "coredns.yml", "Read the live Corefile"),
+    (K3S_ROLE / "tasks" / "coredns.yml", "Read the live Corefile"),
 )
 
 

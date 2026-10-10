@@ -16,11 +16,10 @@ import pytest
 from validate import shell_templates as v
 from validate.validate_lib import shell_lint as sl
 from lib.proc_testing import fake_bin, run, write_exec
+from lib.repo_paths import K3S_FILES, K3S_ROLE
 
-BACKUP_HEALTH = v.ROLES / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
-BACKUP_HEALTH_READER = (
-    v.ANSIBLE / "roles" / "setup" / "k3s" / "files" / "longhorn_backup_health.py"
-)
+BACKUP_HEALTH = K3S_ROLE / "templates" / "longhorn-backup-health.sh.j2"
+BACKUP_HEALTH_READER = K3S_FILES / "longhorn_backup_health.py"
 KUMA_PUSH_LIB = (
     v.ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "kuma-push-lib.sh"
 )

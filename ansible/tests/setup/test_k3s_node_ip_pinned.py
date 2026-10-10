@@ -23,17 +23,16 @@ Run: uv run pytest ansible/tests/setup/test_k3s_node_ip_pinned.py
 import re
 
 
-from _helpers import SETUP_ROLES, imported_task_files, imported_tasks, load_defaults
-
-K3S = SETUP_ROLES / "k3s"
+from _helpers import imported_task_files, imported_tasks, load_defaults
+from lib.repo_paths import K3S_ROLE
 
 
 def _task_text() -> str:
-    return "\n".join(p.read_text() for p in imported_task_files(K3S))
+    return "\n".join(p.read_text() for p in imported_task_files(K3S_ROLE))
 
 
 def _tasks() -> list[dict]:
-    return imported_tasks(K3S)
+    return imported_tasks(K3S_ROLE)
 
 
 def _install_task() -> dict:
@@ -46,7 +45,7 @@ def _install_task() -> dict:
 
 def test_node_ip_is_pinned_to_the_hosts_canonical_address():
     """Autodetection is what picked the removable NIC."""
-    args = load_defaults(K3S)["k3s_server_args"]
+    args = load_defaults(K3S_ROLE)["k3s_server_args"]
     for flag in ("--node-ip", "--advertise-address"):
         assert f"{flag} {{{{ server_ip }}}}" in args, (
             f"k3s_server_args must pass `{flag} {{{{ server_ip }}}}`. Without it k3s "
@@ -57,7 +56,7 @@ def test_node_ip_is_pinned_to_the_hosts_canonical_address():
 
 def test_k3s_version_is_pinned():
     """A reconfigure re-runs the installer; unpinned, that upgrades the control plane."""
-    version = load_defaults(K3S).get("k3s_version", "")
+    version = load_defaults(K3S_ROLE).get("k3s_version", "")
     assert re.fullmatch(r"v\d+\.\d+\.\d+\+k3s\d+", str(version)), (
         f"k3s_version must be an explicit version, got {version!r}. The install task "
         "re-runs get.k3s.io whenever k3s_server_args changes, and get.k3s.io installs "

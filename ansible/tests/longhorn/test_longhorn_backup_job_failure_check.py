@@ -28,10 +28,10 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_backup_job_failure_check
 
 import sys
 
-from _helpers import ANSIBLE
 from _shell_render import rendered_shell_text
+from lib.repo_paths import K3S_FILES
 
-sys.path.insert(0, str(ANSIBLE / "roles" / "setup" / "k3s" / "files"))
+sys.path.insert(0, str(K3S_FILES))
 import longhorn_backup_health_logic as logic
 
 HOUR = 3600.0

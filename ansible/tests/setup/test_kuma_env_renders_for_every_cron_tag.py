@@ -16,12 +16,12 @@ Run: uv run pytest ansible/tests/setup/test_kuma_env_renders_for_every_cron_tag.
 
 from pathlib import Path
 
-from _helpers import ANSIBLE
 from _helpers import REPO
 from _helpers import load_tasks
 from lib import release_bin_groups
+from lib.repo_paths import K3S_ROLE
 
-CRONS = ANSIBLE / "roles" / "setup" / "k3s" / "tasks" / "health-crons.yml"
+CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
 ENV_TASK_NAME = "Deploy the Kuma push credentials for the heartbeat scripts"
 KUMA_ENV_PATH = "/etc/rancher/k3s/kuma-push.env"
 
