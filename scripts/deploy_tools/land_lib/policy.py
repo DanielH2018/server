@@ -10,8 +10,8 @@ which is every interactive session and renovate-agent's lander:
 - `LAND_APPROVAL_PATHS`: a file of path prefixes, one per line. A PR changing a path under one
   of them is refused. Those are the paths that widen the agent's own authority: its roles, its
   credentials, the rulesets' drift checks and this code. A PR changing a module this landing
-  process has imported is refused the same way, and so is a new file that would shadow one;
-  see `gate_hits`.
+  process has imported is refused the same way, and so is a new file that would shadow one
+  and any compiled module file; see `gate_hits`.
 - `LAND_APPROVER`: a GitHub login. A PR the approval list refuses lands anyway when this
   login's latest review is an approval of the head SHA the checks read. A later
   changes-requested or a dismissal undoes it, and so does a push: the approval then names an
@@ -29,6 +29,7 @@ approval as well.
 
 import subprocess
 import sys as _sys
+from importlib import machinery
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path as _Path
 from types import ModuleType
@@ -56,6 +57,18 @@ VERDICT_STATES = ("APPROVED", "CHANGES_REQUESTED", "DISMISSED")
 CHECKOUT = _Path(__file__).resolve().parents[3]
 # The site module imports these from any directory on sys.path when the interpreter starts.
 STARTUP_MODULES = frozenset({"sitecustomize", "usercustomize"})
+# Module files the import system loads that are not `.py` source. A `__pycache__` pyc runs in
+# place of its unchanged source, a sourceless `.pyc` imports on its own, and an extension
+# module is tried before `.py` in the same directory. None is tracked legitimately, and none
+# shows the code it runs in a diff.
+COMPILED_SUFFIXES = tuple(
+    s for s in machinery.all_suffixes() if s not in machinery.SOURCE_SUFFIXES
+)
+
+
+def is_compiled_module(path: str) -> bool:
+    """Whether `path` is a file the import system would load as compiled code."""
+    return "__pycache__" in path.split("/") or path.endswith(COMPILED_SUFFIXES)
 
 
 def read_approval_paths(path: str) -> list[str]:
@@ -119,6 +132,10 @@ def gate_hits(
     directory on `sys.path`. The second form catches a new `scripts/json.py` or
     `scripts/lib/__init__.py`, which would shadow `json` or turn the `lib` namespace package
     into code. A module first imported after the checks cannot change their verdict.
+
+    Every compiled module file is a hit wherever it sits (`is_compiled_module`). A loaded
+    module's `__file__` names its `.py` source even when a pyc beside it ran, so neither form
+    above would see one.
     """
     loaded: set[str] = set()
     for module in modules.values():
@@ -146,7 +163,7 @@ def gate_hits(
 def _runs_in_gate(
     path: str, loaded: set[str], names: set[str], dirs: list[str]
 ) -> bool:
-    if path in loaded:
+    if path in loaded or is_compiled_module(path):
         return True
     if not path.endswith(".py"):
         return False
