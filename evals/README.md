@@ -78,6 +78,10 @@ uv run python evals/trend.py report.json --no-write                 # report onl
   summary annotates a regression that crosses an epoch boundary (`epoch e1 -> e2`). Rerun the
   hermetic sweep after any worker upgrade so the baseline is comparable — an untagged run records
   `epoch: "unknown"`.
+- **Records each run's cost** under the `_runs` key: one `{ts, mode, epoch, costUsd}` entry per
+  run, where `costUsd` sums every case report's `costUsd`, so it equals the engine's
+  `sweep cost:` line (or the sum of those lines over a multi-agent report). A report with any case
+  missing `costUsd`, such as one from before the engine priced its calls, records `null`, not 0.
 - Exits non-zero if any case **regressed** (was passing last run, now failing) — usable as a gate.
 - **STABLE** = met threshold in the last `--stable-n` (default 3) hermetic runs; a candidate
   skip-set. The chezmoi engine has no `--skip` flag yet, so this is advisory today — wiring
