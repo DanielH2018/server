@@ -9,6 +9,7 @@ source: no reserved code (2 or 75) and at least one failure state.
 
 import json
 import os
+import pwd
 import subprocess
 from pathlib import Path
 
@@ -112,6 +113,12 @@ def test_the_label_is_the_one_the_deploy_names_its_log_with(tags):
 
 def test_the_probe_reads_the_directory_the_deploy_writes():
     assert deploy_probe.LOG_DIR == deploy_detach.LOG_DIR
+
+
+def test_the_log_dir_is_the_running_user_s_own():
+    """A shared directory took the first deploy's 0770 and refused every other user's log (#4108)."""
+    user = pwd.getpwuid(os.geteuid()).pw_name
+    assert deploy_detach.LOG_DIR == Path(f"/tmp/homelab-deploy-logs-{user}")
 
 
 @pytest.mark.parametrize("verdict", [0, 1])

@@ -497,6 +497,92 @@
   become: true
   when: claude_code_agent_user_enabled
 
+- name: Install the pinned Ansible collections in the agent user's clone
+  tags: [claude_code]
+  # ansible.cfg's absolute collections fallback is the operator's checkout, under the 0750
+  # /home/{{ sys_user }}, so a worktree of this clone resolved no collection at all and every
+  # playbook the agent ran died at `couldn't resolve module/action` (#4108). The login profile
+  # points ANSIBLE_COLLECTIONS_PATH's fallback here instead. The venv's ansible-galaxy, which
+  # the sync above just installed, rather than `uv run`, which would sync again.
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - "{{ claude_code_agent_user_clone_dir }}/.venv/bin/ansible-galaxy"
+      - collection
+      - install
+      - -r
+      - ansible/requirements.yml
+      - -p
+      - ansible/collections
+    chdir: "{{ claude_code_agent_user_clone_dir }}"
+  environment:
+    HOME: "{{ claude_code_agent_user_home }}"
+    TMPDIR: /tmp
+  register: claude_code_agent_collections
+  changed_when: claude_code_agent_collections.stdout is search('was installed successfully')
+  # Never fatal, for the clone pull's reason above: a Galaxy outage would otherwise hold the
+  # deployer over the agent's development environment. A failure leaves the collections the
+  # last apply installed, and the warning below names it.
+  failed_when: false
+  become: true
+  when: claude_code_agent_user_enabled
+
+- name: Report that the agent user's collections were not installed
+  tags: [claude_code]
+  ansible.builtin.debug:
+    msg: >-
+      ansible-galaxy failed in {{ claude_code_agent_user_clone_dir }}:
+      {{ claude_code_agent_collections.stderr | default('') }}.
+      The agent's playbooks keep the collections an earlier apply installed, or none.
+  when:
+    - claude_code_agent_user_enabled
+    - not ansible_check_mode
+    - claude_code_agent_collections.rc | default(0) != 0
+
+- name: Install the commit hooks in the agent user's clone
+  tags: [claude_code]
+  # Without them the agent's commits skip gitleaks and the commit-time ratchets, and a
+  # plaintext secret reaches a pushed branch before anything scans it (#4100). One install
+  # covers every worktree of the clone, since worktrees share its .git/hooks. The hook calls
+  # the prek that installed it by absolute path, so it runs the agent's copy. `removes:` skips
+  # a host where agent_user.yml found no prek to copy; renovate_agent imports that file too
+  # and gets the binary but no hooks, so its unattended commits behave as before.
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - "{{ claude_code_agent_user_home }}/.local/bin/prek"
+      - install
+    chdir: "{{ claude_code_agent_user_clone_dir }}"
+    creates: "{{ claude_code_agent_user_clone_dir }}/.git/hooks/pre-commit"
+    removes: "{{ claude_code_agent_user_home }}/.local/bin/prek"
+  environment:
+    HOME: "{{ claude_code_agent_user_home }}"
+    TMPDIR: /tmp
+  register: claude_code_agent_hooks
+  # Never fatal, for the clone pull's reason above. prek refuses while the clone sets
+  # core.hooksPath, and the report below names that.
+  failed_when: false
+  become: true
+  when: claude_code_agent_user_enabled
+
+- name: Report that the agent user's commit hooks were not installed
+  tags: [claude_code]
+  ansible.builtin.debug:
+    msg: >-
+      prek install failed in {{ claude_code_agent_user_clone_dir }}:
+      {{ claude_code_agent_hooks.stderr | default('') }}.
+      The agent's commits skip gitleaks and the commit-time checks until it succeeds.
+  when:
+    - claude_code_agent_user_enabled
+    - not ansible_check_mode
+    - claude_code_agent_hooks.rc | default(0) != 0
+
 - name: Create the agent user's kubeconfig directory
   tags: [claude_code]
   ansible.builtin.file:

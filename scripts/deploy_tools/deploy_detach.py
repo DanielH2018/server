@@ -35,6 +35,7 @@ not queue behind this one.
 import contextlib
 import fcntl
 import os
+import pwd
 import re
 import subprocess
 import sys
@@ -61,7 +62,10 @@ from lib.exit_codes import (
     DEPLOY_LOCK_UNAVAILABLE,
 )
 
-LOG_DIR = Path("/tmp/homelab-deploy-logs")
+# One directory per user, suffixed with the user's name, as land_lib/detach.py's fallback is: the
+# first deploy creates it under its own umask, and the operator's 0007 made a shared one 0770,
+# which shut the `claude` agent user out of every `--detach` run (#4108).
+LOG_DIR = Path(f"/tmp/homelab-deploy-logs-{pwd.getpwuid(os.geteuid()).pw_name}")
 
 
 def log_path(run: locked.Run, log_dir: Path = LOG_DIR) -> Path:
