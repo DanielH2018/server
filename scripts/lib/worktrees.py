@@ -346,8 +346,8 @@ def privileged_holders(
 def _warn_helper_absent(helper: str) -> None:
     print(
         f"warning: {helper} is not installed, so a process of another uid outside this "
-        "login slice is invisible to the in-use check (#4170). Apply "
-        "`initial_setup.yml --tags worktree-sweep` on this host.",
+        "login slice is invisible to the in-use check (#4170). initial_setup installs it "
+        "on every has_claude_code host, with `--tags worktree-sweep`.",
         file=sys.stderr,
     )
 
