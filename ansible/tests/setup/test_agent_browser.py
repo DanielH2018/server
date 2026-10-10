@@ -202,3 +202,56 @@ def test_every_runuser_env_command_gives_the_agent_its_own_tmpdir() -> None:
     ):
         assert name in checked, f"{name!r} is no longer a runuser env command"
     assert missing == []
+
+
+PRUNE = "Remove the agent user's Node trees and tarballs other than the pinned release"
+LINK = "Point the agent user's current Node at the pinned release"
+
+
+def prune_problems(task_list: list[dict]) -> list[str]:
+    """Where a Node bump leaves an old tree behind, or the prune could take the pinned one."""
+    names = [t.get("name") for t in task_list]
+    if PRUNE not in names:
+        return ["no prune"]
+    problems = []
+    if names.index(PRUNE) < names.index(LINK):
+        problems.append("prunes before `current` moves")
+    argv = named(task_list, PRUNE)["ansible.builtin.command"]["argv"]
+    if argv[:4] != ["runuser", "-u", "{{ claude_code_agent_user }}", "--"]:
+        problems.append("not run as the agent")
+    keep = "node-v{{ claude_code_agent_node_version }}-linux-x64"
+    if "!" not in argv or argv[argv.index("!") + 1 : argv.index("!") + 3] != [
+        "-name",
+        keep,
+    ]:
+        problems.append("does not keep the pinned tree")
+    return problems
+
+
+def test_a_node_bump_removes_every_tree_but_the_pinned_one() -> None:
+    """A bump left the old ~190 MB tree and its tarball behind (#4068)."""
+    task_list = tasks()
+    assert prune_problems(task_list) == []
+    pinned = "claude_code_agent_node_pinned.rc | default(1) != 0"
+    assert pinned in when_list(
+        named(task_list, "Download the agent user's pinned Node")
+    )
+    names = [t.get("name") for t in task_list]
+    assert names.index("Unpack the agent user's Node") < names.index(
+        "Remove the agent user's Node download once it is unpacked"
+    )
+
+
+def test_a_prune_before_the_link_moves_or_without_the_pinned_exception_is_flagged() -> (
+    None
+):
+    live = json.loads(json.dumps(tasks()))
+    prune = named(live, PRUNE)
+    argv = prune["ansible.builtin.command"]["argv"]
+    del argv[argv.index("!") : argv.index("!") + 3]
+    live.remove(prune)
+    live.insert(0, prune)
+    assert prune_problems(live) == [
+        "prunes before `current` moves",
+        "does not keep the pinned tree",
+    ]
