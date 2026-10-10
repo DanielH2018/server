@@ -5,6 +5,10 @@
 #   order: 10
 """Stop hook: keep a headless fan-out session going until it names a PR or a blocker.
 
+Usage: Claude Code runs this hook on the Stop event. It reads the Stop JSON payload on stdin.
+It prints a `{"decision": "block", "reason": ...}` JSON object or nothing, and it exits 0. `-h` or
+`--help` prints this text and exits 0 without reading stdin.
+
 THE PROBLEM. A fan-out batch is one `claude -p` process under a transient systemd unit
 (`scripts/dev/fanout_lib/launch.py`). When the model ends a turn with text and no tool call,
 the process exits there, whatever that text says. On long tasks Opus writes progress reports
@@ -232,4 +236,7 @@ def main(stdin=sys.stdin, stdout=sys.stdout) -> int:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

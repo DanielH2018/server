@@ -14,6 +14,24 @@ it needs ffprobe, which this zero-privilege container (cap_drop ALL, no docker) 
 role CLAUDE.md.
 
 Design: docs/autofix-bridge-actuators.md (the disk-autoprune actuator).
+
+Usage:
+
+    python /app/autofix.py [--once]
+
+The deployment runs it as the container command with no arguments, and it loops forever.
+`--once` runs a single cycle and exits. `-h` and `--help` print this text and exit 0.
+
+Environment (all optional; the deployment sets them from env-secret.yaml.j2):
+
+    INTERVAL                   seconds between cycles (default 300)
+    DRY_RUN                    true unless set to 0, false or no (default true)
+    GRACE_CYCLES               consecutive cycles an item must stay bad (default 3)
+    MAX_ACTIONS_PER_CYCLE      per-cycle cap on actions (default 5)
+    SONARR_URL, SONARR_API_KEY, RADARR_URL, RADARR_API_KEY   the *arr endpoints
+    KUMA_URL, KUMA_PUSH_ARR_AUTOBLOCK                        the Uptime Kuma push monitor
+    ARR_DISCORD_WEBHOOK_URL    Discord webhook for each action
+    HEARTBEAT_FILE            file touched after every cycle (default /tmp/heartbeat)
 """
 
 import json
@@ -351,4 +369,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     main()

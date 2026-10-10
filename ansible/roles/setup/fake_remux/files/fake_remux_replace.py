@@ -17,6 +17,14 @@ Runs via `uv run --no-project --python <pin>` (host_python_version in
 ansible/inventory/group_vars/all.yml). Config comes from /etc/autofix-fake-remux/config.env — the
 same file the detector reads (0600, SONARR_API_KEY + Discord webhook) — plus a FAKE_REMUX_POLICY JSON the pure core
 reads (release-group allow/deny, size band, attempt caps — see fake_remux_replace_logic.py).
+
+Usage: fake_remux_replace.py   (takes no arguments; -h/--help prints this text)
+
+Run by the fake-remux-reconcile cron (every 20 minutes, under fake_remux_lock). Reads the
+file named by FAKE_REMUX_REPLACE_CONFIG (default: autofix-fake-remux/config.env under /etc)
+and the ledger (LEDGER_FILE, default replacements.json under /var/lib/autofix-fake-remux),
+and writes the state file (REPLACE_STATE_FILE, default replace_state.json in that same
+directory). Always exits 0; the state file carries the verdict.
 """
 
 from __future__ import annotations
@@ -543,4 +551,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

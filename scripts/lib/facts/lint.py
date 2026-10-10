@@ -45,7 +45,6 @@ RULES = frozenset(
         "ambiguous-marker",
         "one-way-test",
         "lock-tampered",
-        "count-as-fact",
         "date-as-verification",
         "duplicate-heading",
         "unbalanced-fence",
@@ -55,15 +54,10 @@ RULES = frozenset(
         "vanished-identifier",
     }
 )
-WARN_RULES = frozenset({"count-as-fact", "one-way-test", "version-as-fact"})
+WARN_RULES = frozenset({"one-way-test", "version-as-fact"})
 
 _FENCE_MARK = re.compile(r"```")
 
-_COUNT = re.compile(
-    r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+"
-    r"(?:entries|memories|roles|workloads|services|tests|monitors|files|hooks|checks)\b",
-    re.I,
-)
 _DATE_CLAIM = re.compile(r"\bverified\b[^.\n]{0,40}\b\d{4}-\d{2}-\d{2}\b", re.I)
 
 INVENTORY_REL = "ansible/inventory/hosts.ini"
@@ -184,8 +178,6 @@ def lint_sections(
                 for r in rejects
             )
             for c in cites:
-                if c.form == "probe":
-                    continue
                 if (
                     c.form == "path"
                     and not c.path.endswith("/")
@@ -230,14 +222,6 @@ def lint_sections(
                             f"`{c.raw}` carries no `# fact: {sec.key}`",
                         )
                     )
-            for m in _COUNT.finditer(sec.body):
-                out.append(
-                    _f(
-                        sec.key,
-                        "count-as-fact",
-                        f"'{m.group(0)}' is a count; render it or drop it",
-                    )
-                )
             for m in _DATE_CLAIM.finditer(sec.body):
                 out.append(
                     _f(

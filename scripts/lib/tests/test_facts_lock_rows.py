@@ -33,14 +33,6 @@ def test_a_row_whose_section_cites_nothing_is_flagged(tmp_path):
     ]
 
 
-def test_a_probe_only_row_is_not_empty(tmp_path):
-    """The row holds no atom, but it is what grades the section UNKNOWN."""
-    repo = _repo(tmp_path, "## Down\n`probe.py monitors` answers it.\n")
-    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Down"], "abc1234")
-    assert read_lock(repo / LOCK_REL)["CLAUDE.md#Down"]["atoms"] == {}
-    assert check_lock(repo, repo / LOCK_REL) == []
-
-
 def test_verify_writes_no_row_for_a_section_that_cites_nothing(tmp_path):
     repo = _repo(tmp_path, "## Style\nWrite why, not what.\n")
     write_lock(repo / LOCK_REL, {"CLAUDE.md#Style": {"verified_sha": "a", "atoms": {}}})

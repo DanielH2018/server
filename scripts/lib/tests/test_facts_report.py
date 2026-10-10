@@ -63,7 +63,7 @@ def test_the_backlog_is_ranked_by_its_docs_reads(tmp_path):
         "CLAUDE.md#Root": "CONVENTION",
         "a/CLAUDE.md#Rule": "UNVERIFIED",
         "a/CLAUDE.md#Gate": "IN",
-        "b/CLAUDE.md#Old": "UNKNOWN",
+        "b/CLAUDE.md#Old": "OUT",
     }
     reads = doc_reads(
         log,
@@ -75,7 +75,7 @@ def test_the_backlog_is_ranked_by_its_docs_reads(tmp_path):
     assert ranked_backlog(statuses, reads) == [
         ("a/CLAUDE.md#Rule", "UNVERIFIED", 3),
         ("CLAUDE.md#Root", "CONVENTION", 2),
-        ("b/CLAUDE.md#Old", "UNKNOWN", 0),
+        ("b/CLAUDE.md#Old", "OUT", 0),
     ]
 
 

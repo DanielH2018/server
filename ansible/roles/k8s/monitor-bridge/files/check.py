@@ -20,6 +20,13 @@ ansible/tests/services/test_bridge_patch_boundary.py; the census of what is patc
 ansible/tests/services/test_monitor_bridge_modules.py.
 
 Design: docs/monitor-bridge-internals.md.
+
+Usage:
+
+    python /app/cli.py [--once] [--dry-run]
+
+This module is a library, not the entry point. Running `check.py` directly prints a pointer
+to `cli.py` on stderr and exits 2. `-h` and `--help` print this text and exit 0.
 """
 
 import bridge.common
@@ -180,6 +187,10 @@ if __name__ == "__main__":
     # what a stale runbook (or muscle memory) still reaches for. Without this it exits 0 having
     # printed nothing and pushed nothing, which reads as a clean dry run rather than a no-op.
     import sys
+
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
 
     print("the entry point is cli.py — run `python cli.py` instead", file=sys.stderr)
     sys.exit(2)

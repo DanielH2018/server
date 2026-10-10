@@ -14,6 +14,13 @@ process boundaries both halves inject.
 
 Config from /etc/renovate-agent/config.env (KEY=VALUE) — see templates/config.env.j2.
 Stdlib only.
+
+Usage: renovate_agent.py   (takes no arguments; -h/--help prints this text)
+
+Run by renovate-agent.service from renovate-agent.timer (daily), installed as
+/opt/renovate-agent/renovate_agent.py. To start a tick by hand, run
+`sudo systemctl start renovate-agent`. RENOVATE_AGENT_CONFIG overrides the config path.
+REPO, REPO_DIR and PROMPT_FILE are required in the config file.
 """
 
 from __future__ import annotations
@@ -333,6 +340,9 @@ def report_crash(
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     try:
         sys.exit(main())
     except Exception as e:

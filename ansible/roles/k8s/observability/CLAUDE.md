@@ -1,6 +1,6 @@
 # observability — the cluster metrics plane plus the Claude Code telemetry stack (k3s, daniel-box)
 
-Six workloads in the `observability` namespace, this role their only tenant. Claude telemetry
+The workloads in the `observability` namespace all belong to this role. Claude telemetry
 is the collector, Tempo and the Loki here. The cluster's metrics plane is Prometheus — what
 monitor-bridge reads through `PROMETHEUS_URL` — plus kube-state-metrics and Grafana. Cluster
 LOGS are the exception: `loki-homelab` holds those, separate by decision KL1.
@@ -35,7 +35,7 @@ verification commands).
   discards unsaved edits
 <!-- /generated_from -->
 
-**`probe.py health observability` gates all six workloads**, none of them named observability.
+**`probe.py health observability` gates every workload in the role**, none of them named observability.
 
 ## Eviction tiers
 

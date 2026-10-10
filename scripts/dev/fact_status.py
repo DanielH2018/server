@@ -11,8 +11,7 @@ section no longer exists, which is the way out of a ``section-gone`` finding: a 
 heading is a new unit, and the old row cannot be hand-deleted without tripping the lock's
 own checksum. ``lint`` reports citations that cannot be support. ``report`` measures the
 lock from git and the instructions log: potential against actual moves per atom form, and the
-sections not IN ranked by how often their doc loads (``--json`` for a cron or an agent). Repo
-store only until slice 4 adds ``--store memory``.
+sections not IN ranked by how often their doc loads (``--json`` for a cron or an agent).
 """
 
 import sys as _sys
@@ -53,7 +52,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     edb = build_repo_edb(repo, read_lock(lock_path), by_unit)
     idb = derive(edb)
     for u in sorted(by_unit):
-        print(f"{status_of(edb, idb, u)}  {u}")
+        print(f"{status_of(idb, u)}  {u}")
     findings = check_lock(repo, lock_path, by_unit)
     for f in findings:
         print(f"  {f.kind}: {f.unit} {f.atom} — {f.detail}")
@@ -72,9 +71,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         # raising coverage in bulk is safe in a way re-verifying in bulk would not be.
         recorded = set(read_lock(repo / LOCK_REL))
         fresh = sorted(set(by_unit) - recorded - set(units))
-        # A section citing nothing is a convention and never had a row to write. A section
-        # citing only a probe gets an empty row: the row is what moves it from UNVERIFIED to
-        # UNKNOWN, since `relations` reads the recorded units from the lock's keys.
+        # A section citing nothing is a convention and never had a row to write.
         units += [u for u in fresh if by_unit[u]]
     if not units:
         if not args.unverified:
@@ -185,7 +182,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     by_unit = repo_citations(repo)
     edb = build_repo_edb(repo, read_lock(repo / LOCK_REL), by_unit)
     idb = derive(edb)
-    statuses = {u: status_of(edb, idb, u) for u in by_unit}
+    statuses = {u: status_of(idb, u) for u in by_unit}
     log = Path(args.log) if args.log else default_log(repo)
     report = build(repo, statuses, args.days, log)
     print(json.dumps(report, indent=2) if args.json else render(report, args.top))

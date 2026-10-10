@@ -9,6 +9,21 @@ message either way.
 Runs on daniel-box via `uv run --no-project --python <pin>` (host_python_version in
 ansible/inventory/group_vars/all.yml). The push URL carries a token, so it stays in the
 templated wrapper and never appears here; this file is plaintext in git.
+
+Usage:
+
+    uv run --no-project --python <pin> /opt/configarr-health/configarr_health.py
+
+Takes no arguments. The cron wrapper configarr-health.sh runs it and pushes its output to
+Kuma. `-h` and `--help` print this text and exit 0.
+
+Environment (all optional):
+
+    CONFIGARR_NAMESPACE          namespace of the CronJob (default homelab)
+    CONFIGARR_CRONJOB            CronJob name, also the Job label (default configarr)
+    CONFIGARR_MAX_AGE_H          hours before the last finished Job counts as stale (default 26)
+    CONFIGARR_KUBECTL            kubectl command line (default "k3s kubectl")
+    CONFIGARR_KUBECTL_TIMEOUT_S  seconds allowed per kubectl call (default 30)
 """
 
 from __future__ import annotations
@@ -86,4 +101,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

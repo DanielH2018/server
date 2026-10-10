@@ -13,6 +13,11 @@
 #   args: --project
 """Two narrow bridges between auto mode and this repo, on two events one script serves.
 
+Usage: Claude Code runs this hook on the PermissionDenied:Bash and PostToolUseFailure:Bash
+events, passing `--project`. It reads the hook JSON payload on stdin. It prints one
+`hookSpecificOutput` JSON object (a retry request, or an `additionalContext` note) or nothing, and
+it always exits 0. `-h` or `--help` prints this text and exits 0 without reading stdin.
+
 `PermissionDenied` — fires only in auto mode, only when the classifier denied the call.
 `./scripts/deploy_tools/gitops_tick.sh` is allow-listed and still denied about 1 run in 7 on
 identical command text. The denial is the classifier's own variance, not a rule, so the fix is to
@@ -38,6 +43,7 @@ suite loads it by path.
 import json
 import os
 import re
+import sys
 
 from _hook_common import read_payload, session_state_path
 
@@ -199,4 +205,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     main()

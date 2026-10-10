@@ -33,7 +33,7 @@ claims are unchanged.
   Both jobs render from the `metrics` items on this role's `containers_list` entry, which is
   where `:9420` is defined; the Deployments and Services read it back through `metrics_port`.
   Both scripts read `METRICS_PORT` with no default, so the port has no second copy (#3816).
-- Stock `python:3.14-alpine`, not an `image-builder` build: both scripts and `stats_lib.py` are
+- Stock `python` (`game_stats_k8s_image`), not an `image-builder` build: both scripts and `stats_lib.py` are
   pure stdlib, so a build would add a layer and change nothing that runs.
   **Not because a built image could not be pulled here.** The in-cluster `registry` serves a
   cross-node pull — `ansible/inventory/group_vars/all.yml:k8s_registry_pull_host` is one
@@ -92,7 +92,7 @@ tunables from a `RunConfig` the game builds from its own env constants.
 
 ### How it ships
 
-Both exporters run as `python:3.14-alpine` pods with `stats_lib.py` mounted alongside their
+Both exporters run as stock `python` pods with `stats_lib.py` mounted alongside their
 own entry script by a ConfigMap, because a directly-invoked script gets only its own
 directory on `sys.path`. `tasks/stage.yml` stages the copy AND hands each game the
 `--from-file` argument for it, so no task file spells `stats_lib.py` itself.

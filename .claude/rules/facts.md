@@ -15,7 +15,7 @@ exactly one owning section, keyed `<doc>#<heading text>`. Heading text is not sc
 citations: a backticked span in a heading names the section, never an atom in it.
 
 The grammar is closed — `scripts/lib/facts/citations.py:FORMS` — and a backticked span is
-support only in one of these six shapes:
+support only in one of these five shapes:
 
 ```text
 # a repo path; a directory keeps its trailing slash
@@ -28,8 +28,6 @@ ansible/roles/k8s/traefik/defaults/main.yml:traefik_k8s_https_port
 scripts/lib/tests/test_kubectl.py::test_asking_for_staging_against_a_prod_kubectl_is_flagged
 # a DECIDED: marker, cited by text prefix
 ansible/roles/setup/gitops_deploy/files/deploy_logic.py:DECIDED: a fixed slice while
-# a probe subcommand
-probe.py kuma-drift
 ```
 
 A test node must carry `# fact: <doc>#<heading>` in its body, or the lint warns that the
@@ -119,6 +117,13 @@ carries the row is the squash commit that wrote its hash into the lock, and
   by how often its doc loaded. The counts come from `.claude/logs/instructions.log` in the
   primary checkout and its rotated `.1`, so the span the report prints is usually days, not
   the window. `--json` prints the same as one object.
+
+The lock is kept only while its content atoms pay for it. When `fact_status.py report
+--days 60` shows fewer than two actual moves across the symbol, YAML, test and marker
+forms together, retire `docs/facts.lock`, `verify`, `reverify` and their CI tests, and
+keep `lint` with its prose rules. Path atoms are left out of that count because they hash
+existence, so they never record a prose fix.
+`docs/adr/0019-fact-support-stops-at-the-repo-store.md` records why.
 
 Two prek hooks run on a commit. `facts-lint-changed` lints the sections the branch edits, and
 runs `vanished-identifier` over every section. It fires on a commit that touches a `CLAUDE.md`

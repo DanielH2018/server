@@ -32,12 +32,25 @@ Parsing itself no longer raises — a malformed numeric value is collected and r
 rather than an import traceback before the heartbeat exists.
 
 Stdlib only.
+
+Usage: gitops_deploy.py   (takes no arguments; -h/--help prints this text)
+
+gitops-deploy.service runs it from gitops-deploy.timer (every 10 minutes) as
+`flock -w 180 <tree lock> uv run --no-project gitops_deploy.py`. A by-hand tick is the
+`gitops-tick` skill. It reads GITOPS_DEPLOY_CONFIG (default /etc/gitops-deploy/config.env)
+and keeps its markers in the state directory `deploy_state.STATE_DIR` names.
+docs/gitops-pipeline.md has the exit codes.
 """
 
 import dataclasses
 import os
 import sys
 import time
+
+if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import deploy_alert_text

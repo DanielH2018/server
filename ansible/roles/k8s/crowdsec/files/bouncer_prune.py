@@ -27,6 +27,15 @@ missing, and `api_key` carries no unique constraint to refuse it. The retired
 Runs from the cron wrapper `crowdsec-prune-bouncers.sh` as root on daniel-box. The wrapper owns
 the syslog line; this module owns the decision, and its last stdout line is the summary. The
 functions above `main` are pure and are what `tests/test_bouncer_prune.py` exercises.
+
+Usage:
+
+    uv run --no-project --python <pin> /opt/crowdsec-bouncer-prune/bouncer_prune.py
+
+Takes no arguments and reads no environment variables. It runs `cscli` through
+`k3s kubectl exec deploy/crowdsec` in the homelab namespace, so it needs root on daniel-box.
+Exit 0 means it pruned or had nothing to prune. Exit 1 means it refused or a cscli call failed,
+and the last stdout line says why. `-h` and `--help` print this text and exit 0.
 """
 
 import json
@@ -152,6 +161,9 @@ def main(runner=run, now=None):
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     try:
         sys.exit(main())
     except subprocess.CalledProcessError as exc:
