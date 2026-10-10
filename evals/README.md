@@ -90,6 +90,53 @@ uv run python evals/trend.py report.json --no-write                 # report onl
 - `history.json` is committed (a hermetic run is reproducible, so it's a real baseline). The pure
   trend logic is offline-tested in `test_trend.py`, part of `uv run pytest evals/tests`.
 
+## Section ablation (does a CLAUDE.md section change an outcome?)
+
+`ablate.py` measures whether a doc section changes what an agent does (#4259). A hermetic run
+loads no `CLAUDE.md` at all, so the script appends the doc to each case's agent body itself and
+points the engine at the copies through `EVAL_AGENT_DIRS`. The baseline arm gets the whole doc.
+The `-doc` arm gets none of it. Each `-<heading>` arm gets the doc minus one `## ` section.
+
+`run` needs `ANTHROPIC_API_KEY` in the environment, and it refuses to start without one: a
+non-hermetic run is noise. The key is SOPS-encrypted and an agent never decrypts it, so
+exporting it is an operator-only step.
+
+```bash
+uv run python evals/ablate.py rank                     # repo docs by instructions.log loads
+uv run python evals/ablate.py run --dry-run --agent skeptic   # the plan and section sizes, free
+uv run python evals/ablate.py run --agent skeptic --section "Secrets Management" --k 3
+```
+
+- **Each run stays under $10.** The operator set that cap on 2026-10-10, and `--cap-usd` can
+  only lower it. Before each engine call, the runner checks that the most that call can bill
+  still fits under the cap. That is $3.75: the agent's $0.75 and the judge's $0.50 per-call
+  limits, each tried up to three times. A call that once cost more raises the projection to
+  1.5x that cost. The runner also stops when a run writes no report, or a report without
+  `costUsd`, because its spend is then unknown. The report names the arms it did not measure.
+- **The cap is checked between runs, not inside one.** The engine writes its `--json` only when
+  an invocation ends, so the runner calls it once per case per repetition at `--k 1`. The
+  worst-case floor is what keeps a launched run under the cap; it also means about $6.25 of
+  each $10 run is spendable.
+- **A case changes only when its verdict changes.** The runner applies each case's own
+  `threshold` to its pass count in both arms, as a sweep does. `--k` defaults to 3 because the
+  thresholds assume 3; at `--k 1` one noisy run can flip a verdict.
+- **Live cases are left out.** The engine's hermetic runner skips `"mode": "live"` cases, so
+  one would write no report.
+- **It refuses the weekly sweep's day**, and any day `history.json` records a sweep on, because
+  both spend the same monthly credit. It re-checks before every run, so a run started late on
+  Saturday stops at midnight.
+- **An infra error makes a case inconclusive, not changed.** A row compares pass counts only
+  when every run in both arms was healthy.
+- **The report goes to `~/.cache/homelab-evals/ablation/<stamp>/`**, never to `history.json`. An
+  ablation arm is not a sweep, and `trend.py` would mix it into the regression baseline.
+- **A "same" verdict is bounded by the task set.** The cases grade tool-less reviewer judgment,
+  so a section about shell commands or deploy steps has nothing here to change. "Same" then
+  means the cases do not exercise the section, not that the section is useless. Read a verdict
+  against the cases it ran on before you delete or shorten a section.
+- **`instructions.log` ranks docs, not sections.** It records which doc loaded, so `rank` picks
+  the doc, counting the rotated `instructions.log.1` too. `run` takes that doc's sections in
+  doc order unless `--section` names them.
+
 ## Review outcomes (structured data, not prose)
 
 `review_outcomes.jsonl` holds one JSON object per `/homelab-review` run — `date`, the confirmed
