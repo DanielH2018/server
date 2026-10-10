@@ -22,6 +22,44 @@ def test_an_implementer_with_no_pr_ends_the_run_before_any_review(tmp_path):
     assert run.comments == []
 
 
+def _record(tmp_path):
+    (path,) = (tmp_path / "state").glob("1345-*.json")
+    return json.loads(path.read_text())
+
+
+def test_a_batch_that_opens_no_pr_still_writes_a_record_naming_its_outcome(tmp_path):
+    report = _report("needs input: CI is red")
+    report["permission_denials"] = [{"tool_name": "Bash"}]
+    pipeline, _run = _pipeline(tmp_path, [report])
+    pipeline.run_all()
+    record = _record(tmp_path)
+    assert record["outcome"] == "needs-input"
+    assert record["permission_denials"] == {"implement": 1}
+    assert set(record["durations"]) == {"implement"}
+
+
+def test_a_resumed_phase_records_only_what_it_added_to_the_session(tmp_path):
+    """`--resume` reports the session's running total, so the fix costs 4.0 - 3.0."""
+    reports = [
+        _report(f"Opened {PR}", cost=3.0),
+        _report(structured={"summary": "", "findings": [_finding("off by one")]}),
+        _report(f"Fixed it. {PR}", cost=4.0),
+        _report(structured={"summary": "resolved", "findings": []}),
+        _report(f"{PR}\nVERDICT: settled", cost=4.5),
+    ]
+    pipeline, _run = _pipeline(tmp_path, reports)
+    pipeline.run_all()
+    record = _record(tmp_path)
+    assert record["costs"] == {
+        "implement": 3.0,
+        "review": 1.0,
+        "fix": 1.0,
+        "review-delta": 1.0,
+        "land": 0.5,
+    }
+    assert record["outcome"] == "pr"
+
+
 def test_an_actionable_finding_runs_a_fix_a_delta_review_and_the_landing_in_order(
     tmp_path,
 ):
@@ -112,13 +150,19 @@ def test_a_failed_review_is_said_on_the_pr_and_the_batch_still_lands(tmp_path):
 
 
 def test_the_landing_is_skipped_when_too_little_run_time_is_left(tmp_path):
-    # The pipeline reads the clock once at start; the landing check reads it past the cap.
-    ticks = iter([0.0, 10**6])
+    # The pipeline reads the clock once at start to set its deadline; every later read, the
+    # phase timings and the landing check alike, is past the cap.
+    reads = []
+
+    def clock():
+        reads.append(None)
+        return 0.0 if len(reads) == 1 else float(10**6)
+
     reports = [
         _report(f"Opened {PR}"),
         _report(structured={"summary": "", "findings": []}),
     ]
-    pipeline, run = _pipeline(tmp_path, reports, clock=lambda: next(ticks))
+    pipeline, run = _pipeline(tmp_path, reports, clock=clock)
     final = pipeline.run_all()
     assert final["result"].startswith("needs input:")
     assert [phase for _, _, phase in run.claude] == ["implement", "review"]
