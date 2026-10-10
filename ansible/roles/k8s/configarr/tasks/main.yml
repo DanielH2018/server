@@ -112,6 +112,8 @@
       # include's `host_lib_dir` as written, so a var here reads to it as the wrong directory.
       - live: /opt/configarr-health/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py
+      - live: /opt/configarr-health/kuma_push.py
+        src: ansible/roles/setup/common/files/kuma_push.py
       - live: /opt/configarr-health/configarr_health.py
         src: ansible/roles/k8s/configarr/files/configarr_health.py
       - live: /opt/configarr-health/configarr_health_logic.py

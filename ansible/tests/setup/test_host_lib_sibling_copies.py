@@ -35,6 +35,12 @@ from _role_census import every_plane_role_dirs, role_task_files
 MODULE = "host_lib"
 SHARED_TASK = "common/tasks/install_host_lib.yml"
 HOST_LIB_SRC = "ansible/roles/setup/common/files/host_lib.py"
+# The include copies these files together: host_lib re-exports the Kuma push from kuma_push.py
+# (#3745), so each needs its own stamp pair.
+INSTALLED_SRCS = {
+    "host_lib.py": HOST_LIB_SRC,
+    "kuma_push.py": "ansible/roles/setup/common/files/kuma_push.py",
+}
 
 # The census's non-vacuity assertion. A scan that finds its own subject by glob returns an empty
 # set the moment those files move, and an `all()` over nothing passes. Naming the members
@@ -138,16 +144,17 @@ def unstamped_host_lib_installs(role: Path) -> list[str]:
     `test_a_declared_stamp_pair_names_a_directory_the_include_installs_into` makes in reverse.
     """
     installed = {
-        f"{v['host_lib_dir']}/host_lib.py"
+        (f"{v['host_lib_dir']}/{name}", src)
         for v in includes_of(role)
         if v.get("host_lib_dir")
+        for name, src in INSTALLED_SRCS.items()
     }
     stamped = {
-        pair["live"]
+        (pair["live"], pair.get("src"))
         for pair in stamp_pairs_of(role)
-        if pair.get("src") == HOST_LIB_SRC and pair.get("live")
+        if pair.get("live")
     }
-    return sorted(installed - stamped)
+    return sorted(live for live, _ in installed - stamped)
 
 
 def hand_copies(roles_root: Path) -> list[str]:
@@ -325,14 +332,25 @@ def test_a_consumer_that_stamps_its_scripts_but_not_host_lib_is_flagged(tmp_path
         "      - live: /opt/halfstamped/reader.py\n"
         "        src: ansible/roles/setup/halfstamped/files/reader.py\n"
     )
-    assert unstamped_host_lib_installs(role.parent) == ["/opt/halfstamped/host_lib.py"]
+    assert unstamped_host_lib_installs(role.parent) == [
+        "/opt/halfstamped/host_lib.py",
+        "/opt/halfstamped/kuma_push.py",
+    ]
+
+    # Stamping host_lib alone still leaves its kuma_push.py sibling unwatched.
+    (role / "main.yml").write_text(
+        (role / "main.yml").read_text()
+        + "      - live: /opt/halfstamped/host_lib.py\n"
+        + f"        src: {HOST_LIB_SRC}\n"
+    )
+    assert unstamped_host_lib_installs(role.parent) == ["/opt/halfstamped/kuma_push.py"]
 
     # And the accepting half on the same role, so a detector that flagged every install fails
     # here rather than reading as strictness.
     (role / "main.yml").write_text(
         (role / "main.yml").read_text()
-        + "      - live: /opt/halfstamped/host_lib.py\n"
-        + f"        src: {HOST_LIB_SRC}\n"
+        + "      - live: /opt/halfstamped/kuma_push.py\n"
+        + f"        src: {INSTALLED_SRCS['kuma_push.py']}\n"
     )
     assert unstamped_host_lib_installs(role.parent) == []
 

@@ -72,3 +72,5 @@ def test_the_rules_and_the_script_ship_beside_the_index():
     assert "def main(" in data["render_status_page.py"]
     compile(data["render_status_page.py"], "render_status_page.py", "exec")
     compile(data["push_heartbeat.py"], "push_heartbeat.py", "exec")
+    # push_heartbeat.py imports the shared push from beside itself in /config (#3745).
+    assert "def kuma_push(" in data["kuma_push.py"]

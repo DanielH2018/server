@@ -225,6 +225,15 @@ def test_no_tag_outcomes(landing, fakes, verdict, code):
     assert ln.ledger.cause == ("tick-held" if fakes.state.get("hold_sha") else "")
 
 
+def test_a_held_tick_names_the_clear_command_with_the_full_sha(landing, capsys):
+    held = "deadbeef" * 5
+    ln, _ = _ready(landing, Fakes(self_applied=True, state={"hold_sha": held}))
+    ln.classification = Classification(plane="", self_applied=True)
+    with pytest.raises(Outcome):
+        deploy.no_tag_outcome(ln)
+    assert f"gitops_state.py clear-hold {held}`" in capsys.readouterr().out
+
+
 def test_the_diff_fallback_derives_after_the_tick(landing):
     ln, calls = _ready(landing, Fakes(changed="sonarr"), since="abc")
     ln.needs_diff = True

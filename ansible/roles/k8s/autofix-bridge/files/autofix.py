@@ -23,7 +23,8 @@ import urllib.parse
 import urllib.request
 
 import bridge.common
-from bridge.common import HTTP_TIMEOUT, _env, cap_push_msg, clamp_discord, sanitize
+from bridge.common import HTTP_TIMEOUT, _env, clamp_discord, sanitize
+from kuma_push import kuma_push
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
@@ -223,10 +224,11 @@ def post_discord(msg):
 def push(ok, msg):
     """Pushes an up/down heartbeat plus message to the Kuma push monitor.
 
-    A no-op, logged, when KUMA_URL or KUMA_PUSH is unset. Best-effort: an unreachable Kuma is logged
-    and swallowed rather than raised, so it never crashes the poll loop. `msg` is capped by
-    `cap_push_msg` first, the same boundary monitor-bridge's push applies, so a long report
-    cannot get the DOWN alert rejected by Discord.
+    A no-op, logged, when KUMA_URL or KUMA_PUSH is unset. Goes through setup/common's
+    `kuma_push`, the host pushers' own: it caps `msg` so a long report cannot get the DOWN alert
+    rejected by Discord, retries a rollout's 404 window three times 30s apart, and never raises,
+    so an unreachable Kuma cannot crash the poll loop (#3745). The retry fits well inside the
+    liveness probe's 1000s heartbeat window on top of the 300s INTERVAL.
 
     Args:
         ok: Whether the cycle succeeded (pushed as status "up") or not ("down").
@@ -235,12 +237,7 @@ def push(ok, msg):
     if not KUMA_URL or not KUMA_PUSH:
         bridge.common.log("WARN: no Kuma URL or push token set; skipping push:", msg)
         return
-    msg = cap_push_msg(msg)
-    qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
-    try:
-        _request("%s/api/push/%s?%s" % (KUMA_URL, KUMA_PUSH, qs))
-    except Exception as e:  # best-effort heartbeat; never crash the loop
-        bridge.common.log("push failed (%s):" % msg, e)
+    kuma_push("up" if ok else "down", msg, KUMA_URL, KUMA_PUSH, log=bridge.common.log)
 
 
 def run_once(streaks):

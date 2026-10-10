@@ -38,3 +38,5 @@
         src: ansible/roles/setup/renovate_notify/files/pending_logic.py
       - live: /opt/renovate-notify/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py
+      - live: /opt/renovate-notify/kuma_push.py
+        src: ansible/roles/setup/common/files/kuma_push.py

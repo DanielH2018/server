@@ -27,6 +27,22 @@ from lib.exit_codes import (
     FAILED,
     LAND_GAVE_UP,
 )
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from gitops_markers import HOLD_CLEAR_CMD
+
+
+def hold_clear_hint(sha: str | None) -> str:
+    """How a hand clears the deployer's hold on `sha` once every held plane is applied.
+
+    `gitops_state.py clear-hold` takes the FULL held SHA and refuses any other, so `sha` is
+    never sliced here (#4015, #4081).
+    """
+    return (
+        "Once every held plane is applied, clear the hold with Clear in the deploy UI "
+        f"or `{HOLD_CLEAR_CMD} {sha}` (CLAUDE.md, When to wait)"
+    )
 
 
 class Verdict(StrEnum):

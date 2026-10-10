@@ -86,8 +86,9 @@ here must satisfy this summary.
 
 ## Editing & testing
 - Sidecar: `files/autofix.py`, mounted from a ConfigMap along with monitor-bridge's
-  `bridge/common.py` (`defaults/main.yml`'s `autofix_bridge_modules` names both). **Never
-  fork a second copy of `bridge/common.py` here** — edit monitor-bridge's. The
+  `bridge/common.py` and setup/common's `kuma_push.py`, the Kuma push every host pusher shares
+  (`defaults/main.yml`'s `autofix_bridge_modules` names all three). **Never fork a second copy
+  of either here** — edit the owning role's. The
   `checksum/autofix-script` annotation hashes every staged module, because a ConfigMap change
   alone does not restart a Deployment.
 - Manifests: `templates/deployment.yaml.j2` and `templates/env-secret.yaml.j2`

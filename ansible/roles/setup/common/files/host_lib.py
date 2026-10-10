@@ -26,6 +26,17 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
 
+# The Kuma push lives in its own stdlib-only module so a pod can stage it without the rest of
+# this file (#3745). Re-exported so every host caller keeps `from host_lib import kuma_push`.
+from kuma_push import (  # noqa: F401
+    KUMA_PUSH_ATTEMPTS,
+    KUMA_PUSH_MSG_MAX,
+    KUMA_PUSH_RETRY_DELAY_S,
+    KUMA_PUSH_TIMEOUT_S,
+    cap_kuma_msg,
+    kuma_push,
+)
+
 # Cron inherits neither a useful PATH nor KUBECONFIG. `k3s` and `kubectl` both live in
 # /usr/local/bin, which the cron default omits, so a caller that does not fix this gets an
 # OSError that reads like a missing binary rather than a missing PATH.
@@ -49,14 +60,6 @@ DISCORD_TRUNCATED = "\n…(truncated)"
 # burst; a 429 from a burst only re-queues the message anyway.
 DISCORD_SPOOL_MAX = 50
 DISCORD_SPOOL_FLUSH_MAX = 4
-
-# kuma-push-lib.sh's contract for the shell crons. That file's header has the measurements
-# behind each number (#1010, #2013). 900 keeps the msg inside Discord's 1024-character embed
-# field once Kuma adds its own text.
-KUMA_PUSH_MSG_MAX = 900
-KUMA_PUSH_ATTEMPTS = 3
-KUMA_PUSH_RETRY_DELAY_S = 30
-KUMA_PUSH_TIMEOUT_S = 10
 
 GITHUB_API = "https://api.github.com"
 GITHUB_TIMEOUT_S = 15
@@ -309,104 +312,6 @@ def discord_post(
         return True
     if spool_dir and not _discord_rejected(status):
         _spool_message(spool_dir, message, log)
-    return False
-
-
-def cap_kuma_msg(msg: str, limit: int = KUMA_PUSH_MSG_MAX) -> str:
-    """``msg`` verbatim when it fits ``limit``, else cut with a `` …(+N chars)`` marker.
-
-    The same cut as kuma-push-lib.sh's ``msg_max`` arm and monitor-bridge's ``cap_push_msg``.
-    Kuma copies the msg into a Discord embed field and never truncates it, so an oversized msg
-    gets the whole DOWN alert rejected (#2013).
-    """
-    if len(msg) <= limit:
-        return msg
-    # The marker's own width depends on the count it carries, so settle it in two passes.
-    dropped = len(msg)
-    for _ in range(2):
-        keep = max(0, limit - len(" …(+%d chars)" % dropped))
-        dropped = len(msg) - keep
-    return msg[:keep] + " …(+%d chars)" % dropped
-
-
-def kuma_push(
-    status: str,
-    msg: str,
-    host: str,
-    token: str,
-    *,
-    log: Callable[[str], None] | None = None,
-    opener: Callable | None = None,
-    sleep: Callable[[float], None] = time.sleep,
-) -> bool:
-    """Push ``status`` (``up`` or ``down``) and ``msg`` to the Kuma push monitor for ``token``.
-
-    The Python twin of kuma-push-lib.sh's ``kuma_push``, with the same retry rule: three
-    attempts 30s apart, stopping early only on a 401 or 403, which a retry cannot fix. Every
-    other failure retries, a 404 above all, because Traefik drops the push route while
-    uptime-kuma rolls out and answers 404 for the whole window (#1010). ``msg`` is capped by
-    ``cap_kuma_msg`` first.
-
-    DECIDED: this resolves ``host`` through DNS, where the shell library pins Traefik's VIP with
-    ``curl --resolve``. urllib cannot express that pin (scripts/diagnostics/probe_lib/obs_api.py
-    records the same limit). Shelling out to curl would make every importer depend on a binary
-    for a failure mode the retry already covers, since a resolver outage that outlasts 90s of
-    retries also takes down the other signals the tile's reader has. The token stays out of
-    argv either way, because urllib starts no process.
-
-    Args:
-        status: Kuma's own vocabulary, ``up`` or ``down``.
-        msg: the message Kuma shows on the tile and in its alert.
-        host: the Kuma hostname. Empty skips the push.
-        token: the push monitor's token. Empty skips the push.
-        log: called with one line per failed attempt. It never receives the URL, which
-            carries the token.
-        opener: the ``urlopen`` that carries the push, ``urllib.request.urlopen`` when None,
-            resolved per call so a stub of the stdlib name reaches it too.
-        sleep: the wait between attempts; a test injects a no-op.
-
-    Returns:
-        True only when Kuma answered 2xx. Never raises: a lost push leaves the tile to expire
-        at its interval, and must not turn the caller's verdict into a crash.
-    """
-    if not host or not token:
-        if log:
-            log("no Kuma host/token set; not pushing (status=%s: %s)" % (status, msg))
-        return False
-    msg = cap_kuma_msg(msg)
-    query = urllib.parse.urlencode({"status": status, "msg": msg, "ping": ""})
-    url = "https://%s/api/push/%s?%s" % (host, token, query)
-    reason = ""
-    for attempt in range(1, KUMA_PUSH_ATTEMPTS + 1):
-        try:
-            with (opener or urllib.request.urlopen)(
-                url, timeout=KUMA_PUSH_TIMEOUT_S
-            ) as resp:
-                resp.read()
-            return True
-        except urllib.error.HTTPError as e:
-            # A JSON body means Kuma answered: the edge routed the push and the token has no
-            # live monitor. Traefik's no-router 404 is text/plain. The shell twin logs the same
-            # `by=kuma` field (#1803).
-            ctype = e.headers.get_content_type() if e.headers else ""
-            by = " by=kuma" if ctype == "application/json" else ""
-            reason = "http=%s%s" % (e.code, by)
-            e.close()
-            if e.code in (401, 403):
-                break
-        except (
-            Exception
-        ) as e:  # any transport failure; a push must never crash the caller
-            reason = "error=%s" % type(e).__name__
-        if attempt < KUMA_PUSH_ATTEMPTS:
-            if log:
-                log(
-                    "push failed transiently (%s) (status=%s: %s), retrying in %ss"
-                    % (reason, status, msg, KUMA_PUSH_RETRY_DELAY_S)
-                )
-            sleep(KUMA_PUSH_RETRY_DELAY_S)
-    if log:
-        log("push failed (%s) (status=%s: %s)" % (reason, status, msg))
     return False
 
 

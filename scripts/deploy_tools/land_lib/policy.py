@@ -36,7 +36,7 @@ from typing import NoReturn
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import say
+from deploy_tools.land_lib.outcome import hold_clear_hint, say
 from deploy_tools.land_lib.pr_json import (
     PrFile,
     PrReview,
@@ -45,10 +45,6 @@ from deploy_tools.land_lib.pr_json import (
     parse_review,
 )
 from lib.json_types import JsonObject, as_list, as_object_list
-from lib.repo_paths import GITOPS_DEPLOY_FILES
-
-_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_markers import HOLD_CLEAR_CMD
 
 # GitHub's REST files endpoint returns at most 3000 files, so a PR at the cap may hide a path
 # the list names.
@@ -241,8 +237,7 @@ def check(ln: Landing) -> str:
         _refuse(
             ln,
             f"the deployer is holding {hold}; a merge now would deploy on top of a failed "
-            "apply. Once every held plane is applied, clear the hold with Clear in the deploy "
-            f"UI or `{HOLD_CLEAR_CMD} {hold}` (CLAUDE.md, When to wait)",
+            f"apply. {hold_clear_hint(hold)}",
         )
     if o.approval_paths:
         try:

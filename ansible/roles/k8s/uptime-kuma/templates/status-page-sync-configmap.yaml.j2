@@ -19,6 +19,9 @@
   monitor-bridge's push tiles take their group from the `status_group` column of that role's
   files/check_table.py (#3781): each row's id is pinned, as an exact pattern, at the head of
   its group's rule, so a new bridge check needs no rule here.
+
+  kuma_push.py is setup/common's stdlib-only Kuma push, the one every host pusher reaches
+  through host_lib; push_heartbeat.py imports it from beside itself (#3745).
 #}
 {% set bridge = lookup('file', playbook_dir + '/roles/k8s/monitor-bridge/files/check_table.py') | py_table('CHECKS') %}
 {% set ns = namespace(rules=[]) %}
@@ -46,3 +49,5 @@ data:
 {{ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/render_status_page.py') | indent(4, true) }}
   push_heartbeat.py: |
 {{ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/push_heartbeat.py') | indent(4, true) }}
+  kuma_push.py: |
+{{ lookup('file', playbook_dir + '/roles/setup/common/files/kuma_push.py') | indent(4, true) }}

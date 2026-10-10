@@ -64,7 +64,7 @@ def test_ship_list_excludes_the_test_suite():
 def test_autofix_py_cross_role_imports_are_shipped():
     """The direct check: a cross-role module autofix.py imports must travel with it.
 
-    Scoped to names known to be cross-role (bridge.common) rather than every ImportFrom target,
+    Scoped to names known to be cross-role (bridge.common, kuma_push) rather than every ImportFrom target,
     since a stdlib import (json, sys, ...) has no place in this ship list.
     """
     # `path` is where the module lands under /app, so it is the import id (`bridge/common.py`
@@ -80,7 +80,7 @@ def test_autofix_py_cross_role_imports_are_shipped():
         for node in ast.walk(tree)
         if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module
     }
-    known_cross_role = {"bridge.common"}
+    known_cross_role = {"bridge.common", "kuma_push"}
     missing = (imported & known_cross_role) - shipped
     assert not missing, (
         f"autofix.py imports {sorted(missing)}, absent from autofix_bridge_modules"

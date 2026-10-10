@@ -1,5 +1,7 @@
 ---
 # Install the shared `host_lib.py` beside a consumer script, so `import host_lib` resolves.
+# `kuma_push.py` travels with it, because host_lib re-exports the Kuma push from that file
+# (#3745); a host_lib copy without it dies at import.
 #
 # WHY A SIBLING COPY AND NOT A SHARED PATH. Every consumer is a directly-invoked script, so it
 # gets its own directory on `sys.path` and nothing else (the repo-root CLAUDE.md states the
@@ -8,9 +10,10 @@
 # in one place, so a change to any of them has one place to make.
 #
 # WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. Six of the eight
-# sites record `/opt/<x>/host_lib.py` in their role's `stamp_deployed_pairs` (gitops_deploy,
-# renovate_notify, renovate_agent, fake_remux, and k3s twice); the other two (configarr,
-# janitorr) declare no `stamp_deployed` group at all, so there is nothing for a pair to join.
+# sites record `/opt/<x>/host_lib.py` and `/opt/<x>/kuma_push.py` in their role's
+# `stamp_deployed_pairs` (gitops_deploy, renovate_notify, renovate_agent, fake_remux, and k3s
+# twice); the other two (configarr, janitorr) declare no `stamp_deployed` group at all, so there
+# is nothing for a pair to join.
 # Emitting a fragment here would change host state at those. Worse, a fragment is named per
 # GROUP and holds the whole group's pairs, so a second fragment written from here under the
 # caller's own name would overwrite the pairs the caller declared. The
@@ -43,10 +46,11 @@
 
 - name: Install the shared host_lib helper in {{ host_lib_dir }}
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/roles/setup/common/files/host_lib.py"
-    dest: "{{ host_lib_dir }}/host_lib.py"
+    src: "{{ playbook_dir }}/roles/setup/common/files/{{ item }}"
+    dest: "{{ host_lib_dir }}/{{ item }}"
     owner: "{{ host_lib_owner | default('root') }}"
     group: "{{ host_lib_owner | default('root') }}"
     mode: "{{ host_lib_mode | default('0755') }}"
   become: true
+  loop: [kuma_push.py, host_lib.py]
   notify: "{{ host_lib_notify | default([]) }}"

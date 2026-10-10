@@ -37,6 +37,7 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/templates/alert-webhook.env.j2": _ALERT_UNIT,
     f"{_COMMON}/tasks/agent_user.yml": frozenset({"claude_code", "renovate_agent"}),
     f"{_COMMON}/files/host_lib.py": _HOST_LIB,
+    f"{_COMMON}/files/kuma_push.py": _HOST_LIB,
     f"{_COMMON}/tasks/install_host_lib.yml": _HOST_LIB,
     f"{_COMMON}/tasks/kuma_check_timer.yml": _KUMA_CHECK,
     f"{_COMMON}/templates/kuma-check.service.j2": _KUMA_CHECK,
@@ -70,6 +71,8 @@ SETUP_FILES_ROUTED_TO_OWNER = frozenset({f"{_COMMON}/templates/resolv.conf.j2"})
 _K8S_HOST_LIB = frozenset({"configarr", "janitorr"})
 K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
     f"{_COMMON}/files/host_lib.py": _K8S_HOST_LIB,
+    # autofix-bridge and uptime-kuma stage it into a pod's ConfigMap (#3745).
+    f"{_COMMON}/files/kuma_push.py": _K8S_HOST_LIB | {"autofix-bridge", "uptime-kuma"},
     f"{_COMMON}/tasks/install_host_lib.yml": _K8S_HOST_LIB,
     f"{_COMMON}/tasks/stamp_deployed.yml": _K8S_HOST_LIB,
 }

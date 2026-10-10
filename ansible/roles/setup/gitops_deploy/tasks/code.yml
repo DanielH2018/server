@@ -127,3 +127,5 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_setup_roles.py
       - live: /opt/gitops-deploy/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py
+      - live: /opt/gitops-deploy/kuma_push.py
+        src: ansible/roles/setup/common/files/kuma_push.py

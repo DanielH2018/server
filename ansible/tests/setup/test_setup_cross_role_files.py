@@ -104,6 +104,12 @@ KNOWN_FILTER_CALLERS = {
 _COMMENT_LINE = re.compile(r"^\s*#.*$", re.MULTILINE)
 KNOWN_K8S_EDGES = {
     "ansible/roles/setup/common/files/host_lib.py": {"configarr", "janitorr"},
+    "ansible/roles/setup/common/files/kuma_push.py": {
+        "autofix-bridge",
+        "configarr",
+        "janitorr",
+        "uptime-kuma",
+    },
     "ansible/roles/setup/common/tasks/install_host_lib.yml": {"configarr", "janitorr"},
 }
 
@@ -170,10 +176,25 @@ def _task_texts(plane: str) -> dict[str, str]:
 def _k8s_task_texts() -> dict[str, str]:
     # Comment lines dropped: k8s roles cite setup files in prose (game-stats explains why it
     # does NOT use host_lib.py), and no k8s comment ships a file.
-    return {
+    texts = {
         role: "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
         for role, text in _task_texts("k8s").items()
     }
+    # A k8s role also ships a setup file from a ship list in defaults/ or a `lookup('file')` in
+    # a template, as autofix-bridge and uptime-kuma stage kuma_push.py (#3745). Only lines
+    # naming `playbook_dir` count: template prose cites setup paths too, and ships nothing.
+    for role_dir in role_dirs(ROLES / "k8s"):
+        shipped = [
+            line
+            for sub in ("defaults", "templates")
+            for path in sorted((role_dir / sub).rglob("*"))
+            if path.is_file()
+            for line in path.read_text().splitlines()
+            if "playbook_dir" in line and not line.lstrip().startswith("#")
+        ]
+        if shipped:
+            texts[role_dir.name] = "\n".join([texts.get(role_dir.name, ""), *shipped])
+    return texts
 
 
 def _templates_of(role: str) -> list[str]:

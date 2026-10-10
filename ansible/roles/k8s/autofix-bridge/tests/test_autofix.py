@@ -366,7 +366,8 @@ def test_run_once_no_api_keys_is_disabled_with_no_requests(monkeypatch):
 
 
 # --- the two outbound messages are capped on the wire path ------------------------------------
-# Both caps live in monitor-bridge's bridge/common.py. These drive the real `post_discord` and
+# The Discord cap lives in monitor-bridge's bridge/common.py, the push cap in setup/common's
+# kuma_push.py. These drive the real `post_discord` and
 # `push` through a stub of the stdlib `urlopen`, on a copy of the module loaded with the webhook
 # and push settings in its environment, so no first-party name is patched.
 
@@ -411,6 +412,7 @@ def test_post_discord_caps_an_over_long_report(monkeypatch):
 def test_push_caps_an_over_long_msg(monkeypatch):
     module, sent = _wired_autofix(monkeypatch)
     module.push(False, "m" * 3000)
-    msg = urllib.parse.parse_qs(urllib.parse.urlsplit(sent[0].full_url).query)["msg"][0]
+    # kuma_push hands `urlopen` the URL itself, not a Request.
+    msg = urllib.parse.parse_qs(urllib.parse.urlsplit(sent[0]).query)["msg"][0]
     assert len(msg) == 900
     assert " …(+" in msg
