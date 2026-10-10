@@ -425,6 +425,16 @@
   become: true
   when: claude_code_agent_user_enabled
 
+- name: Look for the operator's read-only kubeconfig
+  tags: [claude_code]
+  ansible.builtin.stat:
+    path: "/home/{{ sys_user }}/.kube/config"
+  register: claude_code_operator_kubeconfig
+  become: true
+  when: claude_code_agent_user_enabled
+
+# Only where the operator has one. daniel-server, a k3s agent node, has none, and its agent
+# runs fan-out batches that stop at the PR, so it reads no cluster state (2026-10-10).
 - name: Give the agent user the operator's read-only kubeconfig
   tags: [claude_code]
   # The homelab-readonly ServiceAccount the k3s role writes for {{ sys_user }}: get, list and
@@ -442,7 +452,9 @@
   # The file carries the ServiceAccount's token, which a --diff run would print.
   diff: false
   no_log: true
-  when: claude_code_agent_user_enabled
+  when:
+    - claude_code_agent_user_enabled
+    - claude_code_operator_kubeconfig.stat.exists
 
 - name: Look for the operator's deployed cc-wait
   tags: [claude_code]
