@@ -112,6 +112,12 @@ reported the checks working.
   (#4067, #4099). Since that fix, the `claude_code` role fast-forwards the clone as `claude` on each apply,
   before its `uv sync`. It moves only a clean `master`; any other state prints a report and
   leaves the clone alone.
+- The apply alone still left the clone behind for a merge that touched only `ui_mcp.sh`,
+  `ui_login.py` or `.claude/hooks/`, because the GitOps deployer routes none of those paths to
+  `claude_code` (#4162). Since that fix, `claude-clone-sync.timer` runs the same fast-forward every
+  `claude_code_agent_clone_sync_interval` (15 minutes). The script is
+  `ansible/roles/setup/claude_code/files/claude-clone-sync.sh`, and it also re-syncs the
+  `.venv` and the collections when a pull moves their lock files.
 - The agent's `~/.claude` is `drwx------ claude:ubuntu`. The role sets that mode on every
   apply, in `ansible/roles/setup/claude_code/tasks/agent_github.yml`, because the directory
   holds the session's login. The group comes from the `setgid` home, but at `0700` it grants
