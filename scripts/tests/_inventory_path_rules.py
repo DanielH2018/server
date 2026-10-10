@@ -3,8 +3,8 @@
 `test_census_rows_test_renders.py` runs `inline_inventory_paths` as the
 `tests-take-inventory-paths-from-repo-paths` row over `pytest_only_modules()` (#4002). It sits
 apart from `_render_helper_rules.py`, whose detectors fill that module to its 500-line cap. Like
-them, it takes TEXT rather than a path, so a row's red and green subjects can be one-line
-snippets.
+them, it takes TEXT, so a row's red and green subjects can be one-line snippets; the module's
+location is an optional second argument, read only to resolve `Path(__file__)` arithmetic.
 """
 
 import ast
@@ -129,7 +129,9 @@ def _local_anchors(tree: ast.Module, module: Path | None) -> dict[str, Segments]
         elif isinstance(node, ast.AnnAssign) and node.value is not None:
             if isinstance(node.target, ast.Name):
                 bindings.append((node.target.id, node.value))
-    while True:
+    # A binding that extends itself (`R = R / "x"`) never settles, so the rounds are bounded.
+    # Bindings that only read each other settle within one round per binding.
+    for _ in range(len(bindings) + 1):
         resolved: dict[str, set[Segments | None]] = {}
         for name, value in bindings:
             chain = _chain(value, names, module)
@@ -142,7 +144,8 @@ def _local_anchors(tree: ast.Module, module: Path | None) -> dict[str, Segments]
             if path is not None and names.get(name) != path:
                 names[name], changed = path, True
         if not changed:
-            return names
+            break
+    return names
 
 
 def _spells(

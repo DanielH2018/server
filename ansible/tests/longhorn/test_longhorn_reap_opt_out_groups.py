@@ -21,7 +21,6 @@ from _setup_render import rendered_setup_text
 import longhorn_reap_logic as logic
 from lib.repo_paths import K3S_FILES
 
-_STORAGECLASS_DIR = K3S_FILES
 
 # The classes this sweep must find. Named rather than counted: the glob reads empty the day the
 # StorageClasses move directory, and an `all(...)` over nothing passes.
@@ -38,7 +37,7 @@ def _selected_groups() -> dict[str, set[str]]:
     directly and cannot be an opt-out.
     """
     selected: dict[str, set[str]] = {}
-    for path in sorted(_STORAGECLASS_DIR.glob("*storageclass*.yaml")):
+    for path in sorted(K3S_FILES.glob("*storageclass*.yaml")):
         doc = yaml_fast.safe_load(path.read_text()) or {}
         raw = (doc.get("parameters") or {}).get("recurringJobSelector")
         if not raw:

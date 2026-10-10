@@ -18,16 +18,14 @@ declared" is why it is not a grep.
 import sys
 from pathlib import Path
 
-from _helpers import REPO
 from lib.repo_paths import K3S_FILES
 
-_REPO = REPO
 sys.path.insert(0, str(K3S_FILES))
 
-from lib import yaml_fast  # noqa: E402
+from lib import yaml_fast
 
-from _k8s_render import rendered_docs, rendered_texts  # noqa: E402
-from manifest_declares import declared, declared_in  # noqa: E402
+from _k8s_render import rendered_docs, rendered_texts
+from manifest_declares import declared, declared_in
 
 
 def _pyyaml_names(text: str) -> set[str]:

@@ -68,11 +68,10 @@ def _announcing_nodes(metallb_pool_text: str) -> set[str]:
 
 def _sentinel_metallb_pool() -> str:
     """metallb-pool.yaml.j2 alone, in setup/k3s's context with the sentinel laid on top."""
-    k3s = K3S_ROLE
     text, err = render_or_error(
-        template_env(k3s / "templates"),
+        template_env(K3S_ROLE / "templates"),
         "metallb-pool.yaml.j2",
-        role_context(k3s, {PRIMARY_NODE_VAR: SENTINEL_NODE}),
+        role_context(K3S_ROLE, {PRIMARY_NODE_VAR: SENTINEL_NODE}),
     )
     assert text is not None, f"setup/k3s/metallb-pool.yaml.j2 failed to render: {err}"
     return text
