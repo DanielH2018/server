@@ -19,7 +19,8 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    new tests pass with its code changes taken out.
 3. fix — only when a finding passes `actionable`. It resumes the implementer session. A red
    batch whose PR fails `red_gate.green_gate` gets that failure as one more finding, and the
-   gate runs again after the fix; a batch still failing it is not landed.
+   gate runs again after the fix; a batch still failing it is not landed. A batch passing it
+   has each fix hunk reverted on its own under the red tests (`hunk_check`), for the record.
 4. delta review — a fresh reviewer reads only the fix's commits.
 5. land — on the deploy host, the pipeline runs `land.sh` itself (`review_land`) and resumes
    the implementer only for a verdict that needs a decision, as the `apply` phase. Before the
@@ -99,6 +100,7 @@ from fanout_lib.red_gate import (
     labelled_skip_reason,
 )
 from fanout_lib.base_check import BaseCheck, unproven_tests
+from fanout_lib.hunk_check import HunkCheck, red_detection
 from fanout_lib.processes import run_process
 from fanout_lib.review_red import RedPhase
 from fanout_lib.review_land import RESUME_VERDICTS, land
@@ -161,6 +163,7 @@ class Pipeline(RedPhase):
         red_green: run the red phase and both gates before and after the implementer.
         gates: the red and green gates; tests pass scripted ones.
         base_check: which new tests pass without the PR's code changes; tests script it.
+        hunk_check: which fix hunks the red tests notice reverted; tests script it.
     """
 
     def __init__(
@@ -176,6 +179,7 @@ class Pipeline(RedPhase):
         red_green: bool = False,
         gates: Gates = GATES,
         base_check: Callable[..., BaseCheck] = unproven_tests,
+        hunk_check: Callable[..., HunkCheck] = red_detection,
     ):
         self.worktree = worktree
         self.batch = batch
@@ -189,6 +193,7 @@ class Pipeline(RedPhase):
         self.red_green = red_green
         self.gates = gates
         self.base_check = base_check
+        self.hunk_check = hunk_check
         # Read at start for the red author and every reviewer (#4023): the skill lives outside
         # the worktree, but one read keeps every phase on the same text.
         self.anti_patterns = anti_patterns()
@@ -424,6 +429,8 @@ class Pipeline(RedPhase):
                         f for f in self.record.remaining if f.get("file") != GREEN_FILE
                     ]
 
+        if red is not None and not green:
+            self._detection(red)
         self._comment()
         if green:
             final = self._held_for_green(green)

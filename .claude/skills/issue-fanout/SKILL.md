@@ -173,7 +173,8 @@ test fails on the unchanged code. A batch that runs no red phase records why, as
 `red_skipped`. The implementer gets that commit and may not edit it, but may append tests to
 its files (`fanout_lib/red_lock.py` says what counts as appending). A refused red commit is
 dropped and the batch runs as usual. A PR that still fails the green gate after the fix round
-is not landed. The PR comment and the local record carry both gates' results.
+is not landed. Once it passes, each hunk of the fix is reverted on its own under the red tests,
+and the record names the hunks no red test noticed (`scripts/dev/fanout_lib/hunk_check.py`). The PR comment and the local record carry both gates' results.
 
 Each batch's branch is `worktree-fanout-<batch>`, the name used throughout this skill. Run as
 the `claude` agent user, the dispatcher names it `worktree-claude+fanout-<batch>` instead.

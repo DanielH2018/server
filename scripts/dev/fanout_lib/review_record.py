@@ -71,6 +71,12 @@ class Record:
     base_tests: int = 0
     base_passing: list[str] = field(default_factory=list)
     base_error: str = ""
+    # The fix hunks tried by reverting each alone under the red tests (`hunk_check`), those
+    # no red test noticed, those noticed only through a missing name, and any error.
+    red_hunks: int = 0
+    red_hunks_missed: list[str] = field(default_factory=list)
+    red_hunks_by_absence: int = 0
+    red_hunks_error: str = ""
     # Why the batch ran no red phase (`red_gate.red_skip_reason`), "" when it ran one.
     red_skipped: str = ""
     # How the batch ended, so the records count the batches that never reached a PR (#3940):
@@ -169,6 +175,12 @@ def comment_body(record: Record) -> str:
         lines.append(f"Red gate refused the test author's commit: {record.red_gate}.")
     if record.green_gate:
         lines.append(f"Green gate: {record.green_gate}.")
+    if record.red_hunks:
+        noticed = record.red_hunks - len(record.red_hunks_missed)
+        lines.append(
+            f"The red tests noticed {noticed} of {record.red_hunks} fix hunks reverted one at "
+            f"a time, {record.red_hunks_by_absence} of them only through a missing name."
+        )
     if record.base_tests:
         lines.append(
             f"{len(record.base_passing)} of the PR's {record.base_tests} new tests pass with "
