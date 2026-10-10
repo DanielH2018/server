@@ -78,7 +78,11 @@ from gitops_ledger import held_planes, manual_plane_entries
 # deploy-ui's daemon on the deployer's host: `deploy_ui_port` in
 # `ansible/roles/setup/deploy_ui/defaults/main.yml`. Its ufw rule admits every node IP, which
 # is what lets a session on daniel-server read it.
-DEPLOY_UI_URL = "http://daniel-box:8790"
+# The address is the host's LAN IP, not its name. The unit binds `DEPLOY_UI_BIND={{ server_ip }}`
+# only, and on daniel-box itself `/etc/hosts` resolves `daniel-box` to 127.0.1.1, where nothing
+# listens: every `runs` read from the deployer's own host failed with Connection refused.
+# `test_deploy_ui_url_is_the_gitops_hosts_server_ip_and_port` pins both to the inventory.
+DEPLOY_UI_URL = "http://10.0.0.215:8790"
 HTTP_TIMEOUT_S = 5
 SUBPROCESS_TIMEOUT_S = 30
 

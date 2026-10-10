@@ -330,3 +330,21 @@ def test_a_claim_no_worktree_works_is_listed_with_its_reason():
         ],
     }
     assert [c["number"] for c in landing.unmatched_claims(snap)] == [2]
+
+
+def test_deploy_ui_url_is_the_gitops_hosts_server_ip_and_port():
+    # deploy-ui binds `server_ip` only, so a hostname that resolves to loopback on the
+    # deployer's own host (Debian's 127.0.1.1 line) is refused there.
+    from lib import yaml_fast
+    from lib.ansible_inventory import GITOPS_HOST, host_vars_file
+
+    host_vars = yaml_fast.safe_load(host_vars_file(GITOPS_HOST).read_text())
+    defaults = yaml_fast.safe_load(
+        (REPO / "ansible/roles/setup/deploy_ui/defaults/main.yml").read_text()
+    )
+    url = landing.urllib.parse.urlsplit(landing.DEPLOY_UI_URL)
+    assert host_vars["has_gitops"] is True
+    assert (url.hostname, url.port) == (
+        host_vars["server_ip"],
+        defaults["deploy_ui_port"],
+    )
