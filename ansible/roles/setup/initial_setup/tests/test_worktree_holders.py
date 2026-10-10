@@ -106,7 +106,9 @@ def _caller_reads(root: Path, tree: Path, output: str):
     def run(argv, **_):
         return subprocess.CompletedProcess(argv, 0, output, "")
 
-    return privileged_holders(tree, helper=sys.executable, root=root, run=run)
+    return privileged_holders(
+        tree, helper=sys.executable, root=root, run=run, status=root / "status"
+    )
 
 
 def test_a_project_dir_that_is_not_one_printable_line_is_dropped_is_clean(tmp_path):

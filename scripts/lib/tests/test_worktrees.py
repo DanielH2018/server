@@ -10,24 +10,20 @@ drives them is `scripts/dev/tests/test_prune_worktrees.py`'s.
 Run: uv run pytest scripts/lib/tests/test_worktrees.py
 """
 
-import json
 import os
-import pwd
 import shutil
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 
 from lib.git_testing import commit, git, init_repo, scrub_process_git_env
-from lib.proc_testing import write_exec
+from _worktree_proc import _unreadable_proc
 from lib.worktrees import (
     KEEP,
     REMOVABLE,
     Worktree,
     classify,
-    holder_root,
     primary_checkout,
-    privileged_holders,
     processes_using,
     remove,
     worktree_facts,
@@ -257,16 +253,6 @@ def test_a_process_in_a_sibling_tree_does_not_block_removal_is_clean(
     assert not wt.exists()
 
 
-def _unreadable_proc(root: Path, pid: int, uid: int, cgroup: str) -> Path:
-    """A fake /proc entry the way another uid's process looks: `status` and `cgroup`
-    readable, `cwd` and `environ` refused (here: absent, which raises OSError the same way)."""
-    entry = root / str(pid)
-    entry.mkdir(parents=True)
-    (entry / "status").write_text(f"Name:\tsleep\nUid:\t{uid}\t{uid}\t{uid}\t{uid}\n")
-    (entry / "cgroup").write_text(f"0::{cgroup}\n")
-    return root
-
-
 def test_another_uids_process_in_my_login_slice_holds_every_tree_is_flagged(tmp_path):
     # #3994: `sudo -u claude sleep` run from inside a worktree keeps its inherited cwd and
     # stays in the caller's slice, and the caller cannot read that cwd.
@@ -292,115 +278,6 @@ def test_unreadable_processes_outside_that_rule_do_not_block_removal_is_clean(tm
     _unreadable_proc(proc, 4, 0, f"/user.slice/user-{me}.slice/session-7.scope")
 
     assert processes_using(str(tmp_path), proc=proc) == []
-
-
-def _helper_answering(tmp_path: Path, returncode: int = 0, stdout: str = ""):
-    """An executable stand-in for the root helper, and a runner that returns this answer."""
-    helper = write_exec(tmp_path / "worktree-holders", "exit 0\n")
-
-    def run(argv, **_):
-        assert argv == ["/usr/bin/sudo", "-n", str(helper)]
-        return subprocess.CompletedProcess(argv, returncode, stdout, "sudo: denied")
-
-    return str(helper), run
-
-
-def test_the_helper_sees_another_uid_outside_this_slice_is_flagged(tmp_path):
-    # #4170: `systemd-run --uid=claude --working-directory=<tree>` lands in claude's slice,
-    # where the unprivileged scan cannot look. The helper reads it as root.
-    root = tmp_path / "worktrees"
-    tree, sibling = root / "a", root / "b"
-    helper, run = _helper_answering(
-        tmp_path, stdout=f"4242\tcwd\t{tree}/sub\n4243\tcwd\t{sibling}\n"
-    )
-
-    found = privileged_holders(tree, helper=helper, root=root, run=run)
-
-    assert found == [(4242, f"cwd {tree}/sub")]
-
-
-def test_a_helper_failure_or_unreadable_process_refuses_removal_is_flagged(tmp_path):
-    root = tmp_path / "worktrees"
-    failed, run_failed = _helper_answering(tmp_path, returncode=1)
-    garbled, run_garbled = _helper_answering(tmp_path, stdout="4242 cwd /x\n")
-    blind, run_blind = _helper_answering(
-        tmp_path, stdout="4242\tunreadable\tcwd: EPERM\n"
-    )
-
-    for helper, run in (
-        (failed, run_failed),
-        (garbled, run_garbled),
-        (blind, run_blind),
-    ):
-        assert privileged_holders(root / "a", helper=helper, root=root, run=run), helper
-
-
-def test_no_helper_or_a_tree_outside_its_root_falls_back_to_the_slice_rule_is_clean(
-    tmp_path,
-):
-    # A host without the hand apply, a caller the helper's 0750 mode shuts out, and a tree
-    # the helper never reports on: each must scan /proc itself rather than read "no holder".
-    root = tmp_path / "worktrees"
-    helper, run = _helper_answering(tmp_path, stdout="")
-    shut_out = tmp_path / "not-mine"
-    shut_out.write_text("")
-    shut_out.chmod(0o640)
-
-    assert (
-        privileged_holders(root / "a", helper=str(tmp_path / "absent"), root=root)
-        is None
-    )
-    assert privileged_holders(root / "a", helper=str(shut_out), root=root) is None
-    assert (
-        privileged_holders(tmp_path / "elsewhere", helper=helper, root=root, run=run)
-        is None
-    )
-
-    me = os.getuid()
-    proc = _unreadable_proc(
-        tmp_path / "proc", 4242, me + 1, f"/user.slice/user-{me}.slice/session-7.scope"
-    )
-    found = processes_using(str(tmp_path), proc=proc, privileged=lambda _: None)
-    assert [pid for pid, _ in found] == [4242]
-
-
-def test_the_caller_asks_about_the_root_the_helper_maps_it_to_is_flagged(tmp_path):
-    # #4021: the agent user's root is its own clone, /var/lib/claude/server, which the root map
-    # names. Asking only under ~/server/.claude/worktrees could disagree with the root the
-    # helper scans, and then an empty answer would read as "no holder".
-    clone = tmp_path / "clone" / ".claude" / "worktrees"
-    roots = tmp_path / "worktree-holders.json"
-    roots.write_text(json.dumps({pwd.getpwuid(os.getuid()).pw_name: str(clone)}))
-
-    assert holder_root(str(roots)) == clone
-
-
-def test_with_no_map_entry_the_caller_falls_back_to_its_home_checkout_is_clean(
-    tmp_path,
-):
-    # No map, no entry for this user, or a relative path: the helper is not installed for
-    # this user, so the root only decides that the slice-rule fallback runs.
-    home = Path(pwd.getpwuid(os.getuid()).pw_dir) / "server" / ".claude" / "worktrees"
-    other = tmp_path / "other.json"
-    other.write_text(json.dumps({"someone-else": "/elsewhere"}))
-    relative = tmp_path / "relative.json"
-    relative.write_text(json.dumps({pwd.getpwuid(os.getuid()).pw_name: "rel/wt"}))
-
-    for roots in (tmp_path / "absent.json", other, relative):
-        assert holder_root(str(roots)) == home, roots
-
-
-def test_processes_using_takes_the_helpers_answer_over_the_proc_scan_is_flagged(
-    tmp_path,
-):
-    answer = [(4242, "cwd /w/a")]
-
-    assert (
-        processes_using(
-            str(tmp_path), proc=tmp_path / "no-proc", privileged=lambda _: answer
-        )
-        == answer
-    )
 
 
 def test_remove_still_deregisters_a_deleted_tree_a_session_names_is_clean(

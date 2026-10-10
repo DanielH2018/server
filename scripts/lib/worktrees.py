@@ -299,6 +299,7 @@ def privileged_holders(
     helper: str = WORKTREE_HOLDERS,
     root: Path | None = None,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    status: Path = Path("/proc/self/status"),
 ) -> list[tuple[int, str]] | None:
     """(pid, how) for every process the root helper reports inside `tree`, or None.
 
@@ -309,6 +310,10 @@ def privileged_holders(
     as the sudoers grant. Asking sudo without that grant makes it log and mail a "not in
     sudoers" incident.
 
+    A process with `NoNewPrivs` set cannot gain root through sudo, so the helper does not
+    apply there either. claude-rc.service sets `NoNewPrivileges=yes` for the agent user, and
+    asking sudo from one of its sessions would refuse every removal.
+
     Once the helper applies, every failure refuses the removal: a non-zero exit, a timeout, a
     line that does not parse, and any process the helper reports root could not read.
 
@@ -317,6 +322,7 @@ def privileged_holders(
         helper: the installed helper.
         root: the directory the helper reports under; `holder_root()` when None.
         run: the subprocess runner.
+        status: the procfs status file whose `NoNewPrivs` line is read.
     """
     # DECIDED: the helper fails closed and its absence falls back to the #3994 slice rule.
     # The helper reads every uid's cwd and environ, so a gap in its answer is a process that
@@ -331,6 +337,9 @@ def privileged_holders(
     if not os.access(helper, os.X_OK):
         if not Path(helper).exists():
             _warn_helper_absent(helper)
+        return None
+    if _no_new_privs(status):
+        _warn_no_new_privs(helper)
         return None
     try:
         # /usr/bin/sudo by path: the dotfiles put an askpass shim named `sudo` first on PATH.
@@ -357,6 +366,25 @@ def privileged_holders(
             how = f"cwd {value}" if kind == "cwd" else f"{kind}={value}"
             found.append((int(pid), how))
     return found
+
+
+def _no_new_privs(status: Path) -> bool:
+    """Whether `status`, a procfs status file, says this process may not gain privileges."""
+    try:
+        lines = status.read_text().splitlines()
+    except OSError:
+        return False
+    return any(line.split() == ["NoNewPrivs:", "1"] for line in lines)
+
+
+@functools.cache
+def _warn_no_new_privs(helper: str) -> None:
+    print(
+        f"warning: this process runs with NoNewPrivs, so sudo cannot run {helper}, and a "
+        "process of another uid outside this login slice is invisible to the in-use check "
+        "(#4021).",
+        file=sys.stderr,
+    )
 
 
 @functools.cache

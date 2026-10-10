@@ -219,7 +219,10 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
 
 
 def live_process_scan(
-    wt: str, helper: str = WORKTREE_HOLDERS, sudo: str = "/usr/bin/sudo -n"
+    wt: str,
+    helper: str = WORKTREE_HOLDERS,
+    sudo: str = "/usr/bin/sudo -n",
+    status: str = "/proc/self/status",
 ) -> str:
     """Shell that sets `busy` to the first pid whose cwd or `CLAUDE_PROJECT_DIR` is in `wt`.
 
@@ -235,14 +238,19 @@ def live_process_scan(
     `lib.worktrees.holder_root` names for the caller, so the `/proc` loop still runs when it
     found nothing, for a tree outside that root. That loop cannot read another uid's process and skips it.
 
+    A shell with `NoNewPrivs` set skips the helper, as `privileged_holders` does: sudo cannot
+    gain root there, and asking would refuse every removal.
+
     Args:
         wt: the worktree path.
-        helper: the installed root helper. A test seam, as is `sudo`.
+        helper: the installed root helper. A test seam, as are `sudo` and `status`.
         sudo: the command prefix that runs `helper` as root.
+        status: the procfs status file whose `NoNewPrivs` line is read.
     """
     return (
         "busy=; "
-        f'if [ -x "{helper}" ]; then '
+        f'if [ -x "{helper}" ] '
+        f"&& ! grep -qs '^NoNewPrivs:[[:space:]]*1' \"{status}\"; then "
         f'if out=$({sudo} "{helper}" 2>/dev/null); then '
         "busy=$(printf '%s\\n' \"$out\" | awk -F '\\t' "
         f'-v wt="{wt}" '
