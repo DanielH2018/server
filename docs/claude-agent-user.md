@@ -112,18 +112,41 @@ reported the checks working.
   (#4067, #4099). Since that fix, the `claude_code` role fast-forwards the clone as `claude` on each apply,
   before its `uv sync`. It moves only a clean `master`; any other state prints a report and
   leaves the clone alone.
+- The apply alone still left the clone behind for a merge that touched only `ui_mcp.sh`,
+  `ui_login.py` or `.claude/hooks/`, because the GitOps deployer routes none of those paths to
+  `claude_code` (#4162). Since that fix, `claude-clone-sync.timer` runs the same fast-forward every
+  `claude_code_agent_clone_sync_interval` (15 minutes). The script is
+  `ansible/roles/setup/claude_code/files/claude-clone-sync.sh`, and it also re-syncs the
+  `.venv` and the collections when a pull moves their lock files.
 - The agent's `~/.claude` is `drwx------ claude:ubuntu`. The role sets that mode on every
   apply, in `ansible/roles/setup/claude_code/tasks/agent_github.yml`, because the directory
   holds the session's login. The group comes from the `setgid` home, but at `0700` it grants
   nothing. `ubuntu` cannot read the agent's memory or artifacts, so slice 4 needs a read grant.
   This page said `drwxr-s---` until 2026-10-09 (#3901). 3f15ead01 added the `0700` task on
   2026-10-05, one day after that check was written.
+- Until #4100 and #4108 the agent had no `prek` and no git hooks, so its commits skipped
+  gitleaks and the commit-time ratchets. Its playbooks also resolved no Ansible collection from
+  a worktree, because `ansible.cfg`'s fallback is the operator's checkout. The shared
+  `agent_user.yml` copies the operator's pinned `prek` and `uvx` beside `uv`. The `claude_code`
+  role runs `prek install` in the clone, which covers every worktree made from it. It also
+  installs the pinned collections into the clone, and the `.profile` sets
+  `ANSIBLE_COLLECTIONS_PATH` so a worktree falls back to them. `renovate-agent` gets the
+  binary but no hooks. ansible-lint and gitleaks need nothing on the agent's `PATH`, because
+  prek builds each hook's environment itself.
+- A detached deploy wrote its log under `/tmp/homelab-deploy-logs`, which the operator's
+  first deploy created `0770`, so every `deploy.sh --detach` as `claude` failed (#4108). The
+  directory is per-user, `/tmp/homelab-deploy-logs-<user>`, as a detached landing's is.
 
 **Check:** as `claude`, `id` lists none of the denied groups, `ls /home/ubuntu` is refused,
-`sudo -n true` fails, `kubectl get pods -A` works and `uv run pytest scripts` passes.
+`sudo -n true` fails, `kubectl get pods -A` works and `uv run pytest` passes. `prek --version`
+runs, and `~/server/.git/hooks/pre-commit` names `/var/lib/claude/.local/bin/prek`.
 
 **Rollback:** turning the variable off locks the account and stops its units. It does not delete
 the home, because the home holds the agent's clone and any unpushed work.
+
+Removing the hook-install task does not remove the hook. To take the commit hooks off the agent,
+run `prek uninstall` as `claude` in `~/server`. A broken hook refuses every agent commit, and
+`--no-verify` is denied at the permission layer, so this is the only way past one.
 
 ## Slice 2: Claude opens PRs under its own GitHub identity
 

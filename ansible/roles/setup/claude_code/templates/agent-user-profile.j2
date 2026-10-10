@@ -8,6 +8,12 @@ PATH="$HOME/.local/bin:$PATH"
 # unit sets the same two.
 export RUN_HOOK_PROJECT_DIR={{ claude_code_agent_user_clone_dir }}
 export RUN_HOOK_UV={{ claude_code_agent_user_home }}/.local/bin/uv
+# ansible.cfg's collections fallback is the operator's checkout, which this user cannot read, so
+# a worktree with no collections of its own resolved none. The same two entries with this
+# user's clone as the fallback: the worktree's own copy still wins, so a requirements.yml bump
+# is tested on the branch that makes it. The relative entry resolves against the working
+# directory, which is the checkout root for a playbook run and for the suite.
+export ANSIBLE_COLLECTIONS_PATH=ansible/collections:{{ claude_code_agent_user_clone_dir }}/ansible/collections
 # scripts/dev/fanout_lib/target.py:branch_name names a fan-out batch's branch
 # `worktree-<prefix>+fanout-<batch>` from this, the one shape the agent branch fence lets this
 # user push (#3618). A script that names branches itself never reads the agent's CLAUDE.md.
