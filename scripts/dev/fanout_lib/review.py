@@ -46,7 +46,7 @@ implementer also loads no settings file from the worktree, and the reviewer gets
 `CLAUDE.md` as text; `held_hooks` says why. A red batch's implement phase runs the same way,
 because the red author had the worktree before it (#3846). Both before and after the red
 gate, the pipeline kills whatever the red phase left running (`processes.reaping`) and runs
-`red_gate.reset_worktree` (#3852, #3871); `_red` says why.
+`red_gate.reset_worktree` (#3852, #3871); `review_red.RedPhase._red` says why.
 
 DISCLOSURE. The repo is public. A finding in category `security` reaches the PR comment as a
 count only, is never filed with `findings.py open`, and is kept in full only in the local
@@ -89,18 +89,15 @@ from fanout_lib.review_prompts import (
 from fanout_lib.red_gate import (
     GREEN_FILE,
     RED_SCHEMA,
-    Gate,
     ResetFailed,
     Gates,
     anti_patterns,
     green_finding,
-    red_prompt,
     red_section,
     labelled_skip_reason,
-    reset_worktree,
 )
-from fanout_lib.processes import reaping, run_process
-from fanout_lib.git_state import GitState, changed, snapshot
+from fanout_lib.processes import run_process
+from fanout_lib.review_red import RedPhase
 from fanout_lib.review_land import RESUME_VERDICTS, land
 from fanout_lib.review_land import report as landing_report
 from fanout_lib.review_record import (
@@ -144,8 +141,10 @@ STATE_DIR = Path.home() / ".local" / "state" / "fanout-review"
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 
-class Pipeline:
+class Pipeline(RedPhase):
     """One batch's phases, run in order against one worktree.
+
+    The red phase and the green gate are `review_red.RedPhase`'s methods.
 
     Args:
         worktree: the batch's worktree, the cwd of every call.
@@ -295,30 +294,6 @@ class Pipeline:
             "--append-system-prompt", self.headless_prompt + prompt,
         ]  # fmt: skip
 
-    def _first_implementer(self) -> list[str]:
-        """The implement phase's argv: on held settings when a red phase ran before it.
-
-        The red author could leave an ignored settings file or a skip-worktree hook edit,
-        neither in the range the red gate reads (#3846). `reset_worktree` removes them; held
-        settings are the second layer, and drop `CLAUDE.md`, so it comes as text.
-        """
-        if not self.red_green:
-            return self._implementer()
-        return self._implementer(self._held_settings(), self._red_claude_md())
-
-    def _red_claude_md(self) -> str:
-        """The start-time `CLAUDE.md` a red batch's implementer session gets as text.
-
-        That session never loaded the project source, so its transcript holds no `CLAUDE.md`,
-        and `--resume` keeps no appended system prompt: every resumed phase passes it again.
-        """
-        if not (self.red_green and self.project_claude_md):
-            return ""
-        return (
-            "\n\n# The repo's CLAUDE.md, as it stood before the red phase ran\n\n"
-            + self.project_claude_md
-        )
-
     def _red_author(self) -> list[str]:
         return [
             *self._stop_hook(),
@@ -326,64 +301,6 @@ class Pipeline:
             "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
             "--json-schema", json.dumps(RED_SCHEMA),
         ]  # fmt: skip
-
-    def _red(self, issues: str) -> tuple[str, Gate] | None:
-        """Run the test author and the red gate: the red SHA and its verdict, or None.
-
-        Before the gate, what the red session left running is killed and the worktree reset
-        to `red`, so the verdict is `red`'s tree alone (#3871): an ignored root `conftest.py`,
-        a `.pth` in `.venv/` or a skip-worktree edit to the code would each make the tests
-        fail for a reason no diff shows. After it, the same again, to the commit the
-        implementer starts from, the base on a refusal (#3852). A failed reset raises
-        `ResetFailed`, which `run_all` turns into a failed batch.
-        """
-        base = self._git("rev-parse", "HEAD")
-        held = snapshot(self.run, self.worktree)
-        with reaping():
-            phase = self._claude(
-                "red", self._red_author(), red_prompt(issues, self.anti_patterns)
-            )
-        # Before any git call reads the worktree's `.git` pointer or the shared config.
-        self._refuse_git_changes(held)
-        red = self._git("rev-parse", "HEAD")
-        if phase.failed:
-            gate = Gate(
-                f"the test author's session failed ({phase.report.get('subtype') or 'error'})"
-            )
-        else:
-            reset_worktree(self.run, self.worktree, red)
-            # The gate runs the red author's tests, which could start processes too.
-            with reaping():
-                gate = self.gates.red(self.run, self.worktree, base, red)
-            self._refuse_git_changes(held)
-        reset_worktree(self.run, self.worktree, red if gate.passed else base)
-        # The Stop hook reads the brief, and the red author could edit it (#3884).
-        (self.worktree / ".fanout" / "brief.md").write_text(self.brief)
-        out = phase.report.get("structured_output")
-        behaviours = out.get("behaviours") if isinstance(out, dict) else None
-        self.record.red_behaviours = (
-            len(behaviours) if isinstance(behaviours, list) else 0
-        )
-        self.record.red_tests = len(gate.nodes)
-        self.record.red_by_absence = len(gate.absent)
-        self.record.red_gate = "passed" if gate.passed else gate.reason
-        return (red, gate) if gate.passed else None
-
-    def _refuse_git_changes(self, held: GitState) -> None:
-        """Fail the batch when git state outside the worktree moved (#3864, #3879)."""
-        moved = changed(held, snapshot(self.run, self.worktree))
-        if moved:
-            raise ResetFailed(
-                f"the red phase changed git state outside the worktree: {', '.join(moved)}"
-            )
-
-    def _green(self, red: tuple[str, Gate] | None) -> str:
-        """Run the green gate on HEAD and record it; "" when it passed or there is no red."""
-        if red is None:
-            return ""
-        reason = self.gates.green(self.run, self.worktree, *red)
-        self.record.green_gate = reason or "passed"
-        return reason
 
     def _resume(self) -> list[str]:
         held = self._implementer(self._held_settings(), self._red_claude_md())
