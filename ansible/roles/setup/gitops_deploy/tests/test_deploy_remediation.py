@@ -11,6 +11,8 @@ so it fails instead of rotting.
 
 import pathlib
 
+import pytest
+
 import deploy_remediation
 
 from lib.repo_paths import K3S_ROLE, REPO
@@ -94,6 +96,29 @@ def test_broad_remediation_without_roles_keeps_the_generic_placeholder():
     assert "ansible/initial_setup.yml --tags <role>" in broad_remediation(
         False, True, set()
     )
+
+
+@pytest.mark.parametrize(
+    "path, expected",
+    [
+        (
+            "ansible/k3s-bringup.yml",
+            "`ansible-playbook ansible/k3s-bringup.yml --tags k3s`",
+        ),
+        ("ansible/bootstrap.yml", "`ansible-playbook ansible/bootstrap.yml`"),
+        ("ansible/initial_setup.yml", "`ansible-playbook ansible/initial_setup.yml`"),
+    ],
+)
+def test_broad_remediation_names_a_changed_bringup_playbook(path, expected):
+    """A bring-up playbook sits in no role directory, so `setup_roles` stays empty and the
+    command fell back to `--tags <role>`, which matches no tag (#4282)."""
+    cs = services_from_changed_paths([path])
+    assert cs.setup_roles == set()
+    cmd = broad_remediation(
+        cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks
+    )
+    assert expected in cmd
+    assert "<role>" not in cmd
 
 
 def test_broad_remediation_puts_the_ff_merge_before_the_playbook():

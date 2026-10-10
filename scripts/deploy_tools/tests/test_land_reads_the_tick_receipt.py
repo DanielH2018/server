@@ -86,6 +86,24 @@ def test_the_plane_cli_narrows_from_this_prs_own_range(pr, capsys):
     assert "--tags kubeconfig`" in capsys.readouterr().out
 
 
+def test_the_plane_cli_names_a_changed_bringup_playbook_over_a_range(tmp_path, capsys):
+    """A playbook-only PR adds no setup role, and with `--range` the note named the
+    `initial_setup.yml --tags <role>` placeholder, which matches no tag (#4282)."""
+    tree = Tree(tmp_path / "repo")
+    tree.write("ansible/k3s-bringup.yml", "---\n- name: Bring up\n  hosts: localhost\n")
+    tree.commit("base")
+    tree.write("ansible/k3s-bringup.yml", "---\n- name: Bring up\n  hosts: all\n")
+    old, new = _refs(tree)
+    payload = json.dumps(
+        {"files": [{"path": "ansible/k3s-bringup.yml"}], "changedFiles": 1}
+    )
+    argv = ["--json", payload, "--plane", "--range", f"{old}..{new}"]
+    assert land_tags.main(argv, repo=tree.root) == 0
+    out = capsys.readouterr().out
+    assert "`ansible-playbook ansible/k3s-bringup.yml --tags k3s`" in out
+    assert "<role>" not in out
+
+
 # ── the landing reads the receipt for the tick that crossed its merge commit ───────────
 
 _RBAC_PR = {"files": [{"path": RBAC}], "changedFiles": 1}

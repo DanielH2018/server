@@ -25,6 +25,7 @@ from deploy_setup_roles import (  # noqa: F401  (re-exported for this module's r
     SETUP_ROLES_OFF_THE_TICK_HOST,
     _SETUP_ROLE_TAG_OVERRIDES,
     _SETUP_ROLES_OUTSIDE_INITIAL_SETUP,
+    roles_outside_initial_setup_in,
     setup_role_playbook,
     setup_role_tag,
     tick_applies_setup_role,
@@ -315,6 +316,10 @@ class ChangeSet:
     # the push: ONE manual path makes the whole tick manual, because a half-applied broad
     # change is exactly the state the defer-and-alert arm exists to prevent.
     broad_manual: bool = False
+    # Which `_BROAD_MANUAL_PREFIXES` playbooks set `broad_manual`, so the remediation can name
+    # the playbook itself. A bring-up playbook sits under no `roles/setup/<name>/`, so it adds
+    # nothing to `setup_roles`, and without this the command fell back to `<role>` (#4282).
+    manual_playbooks: set[str] = field(default_factory=set)
     secrets: bool = False
     pi_shared: bool = False  # a `_PI_SHARED_PREFIX` change: merged, never applied here
     # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
@@ -482,6 +487,7 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.broad = True
             cs.broad_manual = True
             cs.broad_setup = True
+            cs.manual_playbooks.add(p)
             cs.setup_roles |= setup_roles_for(p)
             continue
         if any(p.startswith(prefix) for prefix in _BROAD_SETUP_PREFIXES):

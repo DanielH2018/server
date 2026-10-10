@@ -127,7 +127,11 @@ def park(
 ) -> None:
     """Log the park on every tick, and page once per SHA. Nothing is merged."""
     remediation = broad_remediation(
-        cs.broad_deploy, cs.broad_setup, cs.setup_roles, config.branch
+        cs.broad_deploy,
+        cs.broad_setup,
+        cs.setup_roles,
+        config.branch,
+        playbooks=cs.manual_playbooks,
     )
     # Say so in the JOURNAL, every tick. `alert_once` below throttles the Discord page to one
     # per SHA, and until 2026-09-09 that throttle also decided what the journal said: from the
