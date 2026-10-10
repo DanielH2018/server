@@ -16,3 +16,23 @@ def test_a_key_no_manager_captures_is_not_a_pin():
     assert "crowdsec_k8s_sidecar_agents" not in pinned_keys(
         REPO, "ansible/inventory/group_vars/all.yml"
     )
+
+
+def test_the_real_config_names_the_built_in_github_actions_pins():
+    """#4158: the built-in github-actions manager bumps `uses:` and `runs-on:` under `jobs`."""
+    keys = pinned_keys(REPO, ".github/workflows/ci.yml")
+    assert "jobs" in keys
+    assert "on" not in keys
+
+
+def test_a_disabled_built_in_manager_pins_nothing(tmp_path):
+    (tmp_path / ".github" / "workflows").mkdir(parents=True)
+    (tmp_path / ".github" / "workflows" / "ci.yml").write_text(
+        "jobs:\n  b:\n    steps:\n      - uses: actions/checkout@v4\n"
+    )
+    (tmp_path / "renovate.json").write_text('{"github-actions": {"enabled": false}}')
+    assert pinned_keys(tmp_path, ".github/workflows/ci.yml") == frozenset()
+    (tmp_path / "renovate.json").write_text('{"enabledManagers": ["pep621"]}')
+    assert pinned_keys(tmp_path, ".github/workflows/ci.yml") == frozenset()
+    (tmp_path / "renovate.json").write_text("{}")
+    assert pinned_keys(tmp_path, ".github/workflows/ci.yml") == {"jobs"}
