@@ -44,6 +44,9 @@ empty: those name every role doc still over `_doc_size.MAX_CHARS`, and each entr
 is a doc to trim. That ceiling is what `_fits_inline` leaves a doc — `INLINE_MAX_CHARS` less
 the preamble and the header — not `INLINE_MAX_CHARS` itself (#3245).
 
+A `CLAUDE.md` inlined whole also carries the `_facts_line` line naming its unverified
+sections, when the doc plus the line fits (`render`).
+
 Observability-shaped: never emits a decision, swallows every error and exits 0.
 """
 
@@ -54,6 +57,7 @@ import sys
 import time
 from pathlib import PurePosixPath
 
+from _facts_line import facts_line
 from _hook_common import (
     append_instructions_row,
     emit_pretooluse_context,
@@ -440,7 +444,7 @@ def head_floor(root, doc, trigger):
     return chars + MIN_HEAD_CHARS, lines + _MIN_HEAD_LINES
 
 
-def render(root, doc, trigger, budget_chars, budget_lines):
+def render(root, doc, trigger, budget_chars, budget_lines, facts=None):
     """One doc's block, or None when the doc should wait for a later command.
 
     A doc that fits the hook budget on its own is inlined, or returns None when earlier
@@ -457,6 +461,13 @@ def render(root, doc, trigger, budget_chars, budget_lines):
     text = _read(root, doc)
     header = _header(doc, trigger)
     if _fits_inline(text, header):
+        # DECIDED: the doc's text outranks the facts line. The line goes in only when the doc
+        # plus the line fits both the doc budget and what is left of the payload, and a head
+        # never carries it, so no doc is cut or deferred to make room for it.
+        if facts and _fits_inline(text, f"{header}\n{facts}"):
+            block = f"{header}\n{facts}\n{text.rstrip()}\n"
+            if len(block) <= budget_chars and block.count("\n") <= budget_lines:
+                return block
         block = f"{header}\n{text.rstrip()}\n"
         if len(block) > budget_chars or block.count("\n") > budget_lines:
             return None
@@ -477,7 +488,7 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
     key = context_key(session_id, agent_id)
     already = injected_this_session(key)
     written = written_targets(command, cwd)
-    candidates = []
+    candidates, cache = [], {}
     for root, rel in named_paths(command, cwd):
         writes = written is None or (root, rel) in written
         for doc in docs_for(root, rel):
@@ -492,7 +503,7 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
                 floor = head_floor(root, doc, rel)
             except OSError:
                 continue
-            candidates.append((root, doc, rel, floor))
+            candidates.append((root, doc, rel, floor, facts_line(root, doc, cache)))
     # Only the first head is reserved for: it spends nearly all it is given, so a second
     # head in the same command defers whatever the whole docs leave.
     floors = [c[3] for c in candidates if c[3] is not None]
@@ -500,7 +511,9 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
     blocks, chosen = [], []
     remaining = INLINE_MAX_CHARS - len(_PREAMBLE)
     remaining_lines = INLINE_MAX_LINES - _PREAMBLE.count("\n")
-    for root, doc, rel, floor in sorted(candidates, key=lambda c: c[3] is not None):
+    for root, doc, rel, floor, facts in sorted(
+        candidates, key=lambda c: c[3] is not None
+    ):
         whole = floor is None
         try:
             block = render(
@@ -509,6 +522,7 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
                 rel,
                 remaining - reserve if whole else remaining,
                 remaining_lines - reserve_lines if whole else remaining_lines,
+                facts,
             )
         except OSError:
             continue
