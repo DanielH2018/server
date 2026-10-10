@@ -4,8 +4,8 @@ Run: uv run pytest scripts/dev/tests/test_fanout_hunk_check.py
 """
 
 from _scratch_pytest import run
-from fanout_lib.hunk_check import red_detection
-from fanout_lib.red_gate import red_gate
+from fanout_lib.review.hunk_check import red_detection
+from fanout_lib.review.red_gate import red_gate
 from lib.git_testing import commit, init_repo
 
 CODE = (

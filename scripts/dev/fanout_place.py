@@ -8,7 +8,7 @@ worktree there, and starts a headless
 Opus agent as a transient user service. daniel-box agents land their PR; daniel-server agents
 stop at `gh pr create`. It shipped in commit bd8e62bf8.
 `launch --review` runs `fanout_review.py`: a review between each batch's PR and its landing,
-and a red phase before a `red-green` batch's implementer. `fanout_lib/review.py` has the phases.
+and a red phase before a `red-green` batch's implementer. `fanout_lib/review/review.py` has the phases.
 
 Usage::
 
@@ -72,13 +72,14 @@ from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
-from fanout_lib.collisions import refuse_shared_files, refuse_solo_only
 from findings_lib.tracked_paths import tracked_files
-from fanout_lib.red_gate import review_flags
+from fanout_lib.review.api import review_flags
 from fanout_lib.launch_gates import (
     live_elsewhere,
     over_live_batch_cap,
     over_ssh_budget,
+    refuse_shared_files,
+    refuse_solo_only,
 )
 from lib.git import git
 from fanout_lib.placement import NoHeadroom, place
@@ -87,7 +88,7 @@ from fanout_lib.transport import (
     HOSTS,
     REPO,
     Tools,
-    _local_host,
+    this_host,
     error_text,
     read_host,
     registered_keys,
@@ -177,7 +178,7 @@ def cmd_launch(args, tools: Tools) -> int:
         return 1
     try:
         target, args.host = for_launch(
-            args.repo, args.host, _local_host(), tools.default_ref
+            args.repo, args.host, this_host(), tools.default_ref
         )
     except ValueError as exc:
         print(f"launch: {exc}", file=sys.stderr)

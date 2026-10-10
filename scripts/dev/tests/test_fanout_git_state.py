@@ -11,10 +11,10 @@ import json
 from _review_fakes import PR, _pipeline, _report
 from lib.git_testing import commit, git, git_out, init_repo, scrub_process_git_env
 
-from fanout_lib.git_state import changed, snapshot
-from fanout_lib.processes import run_process
-from fanout_lib.red_gate import Gate, Gates
-from fanout_lib.worktree_reset import reset_worktree
+from fanout_lib.review.git_state import changed, snapshot
+from fanout_lib.review.processes import run_process
+from fanout_lib.review.red_gate import Gate, Gates
+from fanout_lib.review.worktree_reset import reset_worktree
 
 
 def _worktree(tmp_path, monkeypatch):

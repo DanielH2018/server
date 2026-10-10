@@ -21,14 +21,14 @@ Only test files change in the range, so running at `red` runs the new tests agai
 code. In the pipeline, `reset_worktree` runs before the red gate, so the tree already holds
 `red` alone and the two refusals about uncommitted and untracked files guard direct callers.
 
-Every git call on the worktree runs under `_hardened`, so the repo's hooks, filters, replace
+Every git call on the worktree runs under `hardened_runs.hardened`, so the repo's hooks, filters, replace
 refs and the settings that move or skip a reset do not apply (#3871).
 
 THE GREEN GATE runs after the implementer and again after every fix round. The working tree
 must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
 would otherwise pass a gate the pushed head fails (#3821). Every pytest config file, the
 `leakguard` plugin and any red data file must be unchanged since `red`. A red `test_*.py` may
-only gain appended tests, which `red_lock` defines (#4214). No untracked config file may
+only gain appended tests, which `red_tests.append_only` defines (#4214). No untracked config file may
 exist, and every red node must pass in a fresh clone of HEAD, in every one of the pipeline's
 `RUNS` runs. The clone is what makes the
 verdict HEAD's: the implementer controls the worktree's index and git config, so a
@@ -49,7 +49,6 @@ Every process goes through the pipeline's `Runner`, so the tests script pytest's
 
 import json
 import re
-import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Sequence
@@ -61,22 +60,19 @@ from pathlib import Path, PurePosixPath
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 import sys as _sys
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.brief import _fence
-from fanout_lib.red_cause import red_by_absence
-from fanout_lib.red_lock import append_only
+from fanout_lib.brief import fence_for
+from fanout_lib.review.red_tests import append_only, red_by_absence
 
-# The reset that clears the red phase, split out at this module's length cap; every name
-# stays importable from here.
-from fanout_lib.worktree_reset import (  # noqa: F401
-    FANOUT_KEPT,
-    ResetFailed,
-    _git,
-    _hardened,
-    _must,
-    reset_worktree,
-    unhide_index,
+from fanout_lib.review.hardened_runs import (
+    ORIGIN_MASTER,
+    Runner,
+    clone_at,
+    collect,
+    outcomes,
+    pytest_argv,
+    worktree_git,
 )
 
 
@@ -123,11 +119,7 @@ RED_SCHEMA = {
     "required": ["behaviours"],
 }
 
-Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
-# One line of pytest's `-rA` short summary. SKIPPED lines carry a location, not a node id, so
-# a skipped node is simply absent and reads as not failed.
-_OUTCOME = re.compile(r"^(PASSED|FAILED|ERROR|XFAIL|XPASS) (.+?)(?: - .*)?$", re.M)
 # The suffix `green_gate` puts on a refusal when it ran the red nodes more than once.
 _LATER_RUN = re.compile(r" in run (\d+) of \d+$")
 
@@ -142,7 +134,7 @@ class Gate:
     # `refs/remotes/origin/master` when the red gate ran, "" when there was none. Every
     # worktree shares that ref, so the green gate pins its clone's copy here (#3845).
     origin: str = ""
-    # The nodes that failed on a missing name rather than an assertion (`red_cause`, #4023).
+    # The nodes that failed on a missing name rather than an assertion (`red_tests.red_by_absence`, #4023).
     absent: list[str] = field(default_factory=list)
 
     @property
@@ -217,11 +209,6 @@ def is_test_path(path: str) -> bool:
     return "tests" in p.parts[:-1]
 
 
-def outcomes(output: str) -> dict[str, str]:
-    """Each node id in a `pytest -rA` run's short summary, with its outcome."""
-    return {m.group(2): m.group(1) for m in _OUTCOME.finditer(output)}
-
-
 def judge_red(returncode: int, output: str, nodes: list[str]) -> str:
     """Why a run of the new nodes on the unchanged code proves nothing, or "" when it does."""
     if returncode not in (0, 1):
@@ -259,18 +246,10 @@ def judge_green(returncode: int, output: str, nodes: list[str]) -> str:
     return ""
 
 
-def _pytest(worktree: Path, *args: str) -> list[str]:
-    # `-n0` overrides the suite's `-n auto`: a handful of nodes gains nothing from workers.
-    return [
-        "uv", "run", "--directory", str(worktree), "pytest",
-        "-p", "no:cacheprovider", "-n0", "-c", "pyproject.toml", *args,
-    ]  # fmt: skip
-
-
 def _red_file_change(
     run: Runner, worktree: Path, red: str, path: str, gate: Gate
 ) -> str:
-    """How the fix changed `path` beyond what `red_lock` allows, or "" when it only appended.
+    """How the fix changed `path` beyond what `red_tests.append_only` allows, or "" when it only appended.
 
     A red `test_*.py` may gain tests (#4214). A red data file, a pytest config file and the
     `leakguard` plugin may not change at all, and neither may a red file be deleted.
@@ -278,48 +257,13 @@ def _red_file_change(
     if path not in gate.files or not path.endswith(".py"):
         return path
     blobs = [
-        _git(run, worktree, "cat-file", "blob", f"{rev}:{path}")
+        worktree_git(run, worktree, "cat-file", "blob", f"{rev}:{path}")
         for rev in (red, "HEAD")
     ]
     if any(b.returncode for b in blobs):
         return f"{path} deleted"
     problem = append_only(blobs[0].stdout, blobs[1].stdout)
     return f"{path} {problem}" if problem else ""
-
-
-# git with no configuration the implementer can write: no global or system file, which a
-# clone's own fresh config leaves as the only other sources, and no user attributes file. The
-# green gate checks HEAD out this way, so no filter, `info/attributes` line or config value
-# from the worktree's repo can rewrite a file on its way to pytest (#3837).
-_BARE_GIT = (
-    "env", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
-    "git", "-c", "core.attributesFile=/dev/null",
-)  # fmt: skip
-
-
-ORIGIN_MASTER = "refs/remotes/origin/master"
-
-
-def _origin_refs(run: Runner, clone: Path, origin: str) -> str:
-    """The `update-ref --stdin` input that leaves `clone` only the red gate's `origin/master`.
-
-    A clone of a path maps the source's local branches to `origin/*`, so its `origin/master`
-    is the source's local `master`. Tests that diff against `origin/master` must see the base
-    the red gate saw, not that branch and not the source's live remote-tracking ref, which a
-    fetch or the implementer can move between the gates (#3845). One transaction may not name
-    a ref twice, so `origin/master` is set rather than deleted and recreated.
-    """
-    mapped = run(
-        [
-            *_BARE_GIT, "-C", str(clone), "for-each-ref", "--format=%(refname)",
-            "refs/remotes/origin/",
-        ],
-        None,
-    ).stdout.split()  # fmt: skip
-    lines = [f"delete {ref}" for ref in mapped if not (origin and ref == ORIGIN_MASTER)]
-    if origin:
-        lines.append(f"update {ORIGIN_MASTER} {origin}")
-    return "".join(f"{line}\n" for line in lines)
 
 
 def stray_config(run: Runner, worktree: Path) -> list[str]:
@@ -330,18 +274,8 @@ def stray_config(run: Runner, worktree: Path) -> list[str]:
     untracked directory into one entry; pytest reads a conftest only from a test's own
     directories, which hold tracked files and so are never folded.
     """
-    listed = _git(run, worktree, "ls-files", "--others", "--directory").stdout
+    listed = worktree_git(run, worktree, "ls-files", "--others", "--directory").stdout
     return [f for f in listed.splitlines() if PurePosixPath(f).name in PYTEST_CONFIG]
-
-
-def _collect(run: Runner, worktree: Path, files: list[str]) -> tuple[set[str], int]:
-    """The node ids pytest collects from `files`, and its exit code."""
-    if not files:
-        return set(), 5
-    proc = run(_pytest(worktree, "--collect-only", "-q", *files), None)
-    return {
-        ln.strip() for ln in proc.stdout.splitlines() if "::" in ln
-    }, proc.returncode
 
 
 def red_gate(run: Runner, worktree: Path, base: str, red: str, runs: int = 1) -> Gate:
@@ -356,20 +290,20 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str, runs: int = 1) ->
     """
     if base == red:
         return Gate("the test author committed nothing")
-    origin = _git(
+    origin = worktree_git(
         run, worktree, "rev-parse", "--verify", "--quiet", f"{ORIGIN_MASTER}^{{commit}}"
     ).stdout.strip()
     # An uncommitted edit to the code would make the tests fail for a reason the range
     # never shows, and a rewritten base would carry other history onto the PR branch.
-    dirty = _git(run, worktree, "status", "--porcelain").stdout.strip()
+    dirty = worktree_git(run, worktree, "status", "--porcelain").stdout.strip()
     if dirty:
         return Gate(f"the test author left uncommitted changes: {dirty}")
     stray = stray_config(run, worktree)
     if stray:
         return Gate(f"untracked pytest configuration: {', '.join(stray)}")
-    if _git(run, worktree, "merge-base", "--is-ancestor", base, red).returncode:
+    if worktree_git(run, worktree, "merge-base", "--is-ancestor", base, red).returncode:
         return Gate(f"the red commits do not descend from the base {base}")
-    diff = _git(run, worktree, "diff", "--name-only", "--no-renames", base, red)
+    diff = worktree_git(run, worktree, "diff", "--name-only", "--no-renames", base, red)
     files = [f for f in diff.stdout.splitlines() if f]
     others = [f for f in files if not is_test_path(f)]
     if others:
@@ -377,16 +311,18 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str, runs: int = 1) ->
             f"the red commits change files that are not tests: {', '.join(others)}"
         )
     test_py = [f for f in files if f.endswith(".py") and (worktree / f).is_file()]
-    existed = _git(run, worktree, "ls-tree", "--name-only", base, "--", *test_py)
+    existed = worktree_git(
+        run, worktree, "ls-tree", "--name-only", base, "--", *test_py
+    )
     at_base = [f for f in existed.stdout.splitlines() if f] if test_py else []
     before: set[str] = set()
     if at_base:
-        _git(run, worktree, "checkout", base, "--", *at_base)
+        worktree_git(run, worktree, "checkout", base, "--", *at_base)
         try:
-            before, _ = _collect(run, worktree, at_base)
+            before, _ = collect(run, worktree, at_base)
         finally:
-            _git(run, worktree, "checkout", red, "--", *at_base)
-    collected, code = _collect(run, worktree, test_py)
+            worktree_git(run, worktree, "checkout", red, "--", *at_base)
+    collected, code = collect(run, worktree, test_py)
     if code not in (0, 5):
         return Gate(judge_red(code, "", []), files)
     nodes = sorted(collected - before)
@@ -394,7 +330,7 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str, runs: int = 1) ->
         return Gate("the red commits add no test node", files)
     # `-vv`, not `-q`: only at that verbosity is the summary's failure text left whole.
     procs = [
-        run(_pytest(worktree, "-vv", "-rA", "--tb=no", *nodes), None)
+        run(pytest_argv(worktree, "-vv", "-rA", "--tb=no", *nodes), None)
         for _ in range(runs)
     ]
     reasons = [judge_red(p.returncode, p.stdout, nodes) for p in procs]
@@ -415,13 +351,13 @@ def green_gate(run: Runner, worktree: Path, red: str, gate: Gate, runs: int = 1)
     Every one of `runs` runs of the red nodes must pass, so a red test that passes only
     sometimes is not taken for a fix.
     """
-    dirty = _git(run, worktree, "status", "--porcelain").stdout.strip()
+    dirty = worktree_git(run, worktree, "status", "--porcelain").stdout.strip()
     if dirty:
         return (
             "the tree pytest would run differs from the HEAD the PR ships; commit or "
             f"discard these changes: {dirty}"
         )
-    touched = _git(
+    touched = worktree_git(
         run, worktree, "diff", "--name-only", "--no-renames", red, "HEAD", "--",
         *gate.files, *GREEN_PROTECTED,
     ).stdout.split()  # fmt: skip
@@ -432,46 +368,17 @@ def green_gate(run: Runner, worktree: Path, red: str, gate: Gate, runs: int = 1)
     stray = stray_config(run, worktree)
     if stray:
         return f"untracked pytest configuration: {', '.join(stray)}"
-    head = _git(run, worktree, "rev-parse", "HEAD").stdout.strip()
+    head = worktree_git(run, worktree, "rev-parse", "HEAD").stdout.strip()
     with tempfile.TemporaryDirectory(prefix="green-gate-") as tmp:
         tree = Path(tmp) / "head"
         error = clone_at(run, worktree, head, gate.origin, tree)
         if error:
             return f"could not check HEAD out to run the red tests: {error}"
         for attempt in range(1, runs + 1):
-            proc = run(_pytest(tree, "-q", "-rA", "--tb=no", *gate.nodes), None)
+            proc = run(pytest_argv(tree, "-q", "-rA", "--tb=no", *gate.nodes), None)
             reason = judge_green(proc.returncode, proc.stdout, gate.nodes)
             if reason:
                 return f"{reason} in run {attempt} of {runs}" if runs > 1 else reason
-    return ""
-
-
-def clone_at(run: Runner, worktree: Path, rev: str, origin: str, tree: Path) -> str:
-    """Check `rev` out into a fresh clone at `tree`; git's error, or "" on success.
-
-    The clone reads none of the worktree's config, attributes or index, so nothing the
-    implementer left there rewrites what pytest runs (#3837). Its `origin/master` is
-    `origin`, or absent when that is "" (#3845).
-    """
-    cloned = run(
-        [
-            *_BARE_GIT, "clone", "--quiet", "--shared", "--no-checkout",
-            "--template=", str(worktree), str(tree),
-        ],
-        None,
-    )  # fmt: skip
-    if cloned.returncode == 0:
-        cloned = run(
-            [*_BARE_GIT, "-C", str(tree), "update-ref", "--no-deref", "--stdin"],
-            _origin_refs(run, tree, origin),
-        )
-    if cloned.returncode == 0:
-        cloned = run(
-            [*_BARE_GIT, "-C", str(tree), "checkout", "--quiet", "--detach", rev],
-            None,
-        )
-    if cloned.returncode:
-        return cloned.stderr.strip() or f"git exited {cloned.returncode}"
     return ""
 
 
@@ -524,7 +431,7 @@ Report each stated behaviour and the node ids of the tests that check it.
 def red_section(red: str, gate: Gate) -> str:
     """The brief section that hands the implementer the red commit."""
     nodes = "\n".join(gate.nodes)
-    fence = _fence(nodes)
+    fence = fence_for(nodes)
     return f"""## Red tests
 A separate session wrote failing tests for these issues from the issue text alone, committed
 as {red} on this branch. A gate proved they fail on the code as it stands. Your change must

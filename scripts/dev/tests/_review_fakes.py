@@ -3,11 +3,11 @@
 import json
 import subprocess
 
-from fanout_lib.base_check import BaseCheck
+from fanout_lib.review.base_check import BaseCheck
 from fanout_lib.brief import Issue, render_brief
-from fanout_lib.hunk_check import HunkCheck
-from fanout_lib.red_gate import Gates
-from fanout_lib.review import Pipeline
+from fanout_lib.review.hunk_check import HunkCheck
+from fanout_lib.review.red_gate import Gates
+from fanout_lib.review.review import Pipeline
 from fanout_lib.target import SERVER_TARGET
 
 PR = "https://github.com/DanielH2018/server/pull/4000"
@@ -42,7 +42,7 @@ def _finding(title, severity="high", confidence=0.9, category="correctness"):
 
 
 def unprefixed(argv):
-    """`argv` from its `git`, past the `env` settings `red_gate._hardened` puts before it."""
+    """`argv` from its `git`, past the `env` settings `hardened_runs.hardened` puts before it."""
     return argv[argv.index("git") :] if argv[0] == "env" else argv
 
 

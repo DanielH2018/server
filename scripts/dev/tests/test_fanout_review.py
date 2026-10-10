@@ -11,8 +11,8 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review.py
 import json
 
 from _review_fakes import PR, _finding, _pipeline, _report
-from fanout_lib.base_check import BaseCheck
-from fanout_lib.review import PROMPT_FILE, Pipeline, actionable
+from fanout_lib.review.base_check import BaseCheck
+from fanout_lib.review.review import PROMPT_FILE, Pipeline, actionable
 from fanout_lib.target import SERVER_TARGET, Target
 
 

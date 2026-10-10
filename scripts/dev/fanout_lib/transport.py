@@ -68,7 +68,7 @@ _BOOKKEEPING_PREFIXES = (
 )
 
 
-def _local_host() -> str:
+def this_host() -> str:
     return socket.gethostname()
 
 
@@ -141,7 +141,7 @@ def run_command(
     Returns:
         The finished `subprocess.CompletedProcess` (never raises on a non-zero exit).
     """
-    argv = _argv(host, command, local_host or _local_host())
+    argv = _argv(host, command, local_host or this_host())
     env = local_env(dict(os.environ), os.getuid()) if argv[0] == "bash" else None
     return subprocess.run(
         argv,
