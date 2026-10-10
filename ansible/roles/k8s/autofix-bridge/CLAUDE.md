@@ -51,12 +51,11 @@ here must satisfy this summary.
    `CLIENT_ERROR_PATTERNS`, was retired 2026-09-18 (#1951) as inert at the pinned *arr
    versions, and **an *arr bump re-opens that**: re-run #1951's verify-by first.
 2. **Host plane** — the two fake-remux crons, doing work the locked-down container cannot
-   (`docker exec`, ffprobe), each reporting through a state file monitor-bridge reads. Both
-   run as `sys_user` in the docker group, never root.
+   (host ffprobe on the media files), each writing a state file `fake-remux-health.sh` pushes
+   to Kuma. Both run as `sys_user`, never root.
    - **The scan never deletes or re-searches**: it flags a file whose quality claims a Remux
-     but whose video stream is a re-encode, and seeds the ledger. It ffprobes through
-     jellyfin's read-only media mount, so a probe cannot write and jellyfin being down skips
-     files rather than flagging them.
+     but whose video stream is a re-encode, and seeds the ledger. It ffprobes the file on the
+     host, under `fake_remux_host_data_root`.
    - **The reconcile searches first and deletes last** — it grabs a candidate, waits for the
      download, ffprobes it, and **only then** deletes the fake and lets Sonarr import.
      `FAKE_REMUX_REPLACE_MODE` gates it; the template default is `shadow`, but **daniel-box
@@ -78,9 +77,6 @@ here must satisfy this summary.
 - **journald cap is NOT owned here.** It lives in initial_setup's `50-homelab.conf`. A `60-`
   drop-in this role once shipped silently won, because systemd merges drop-ins
   last-wins-by-filename, so the role now REMOVES any stale one.
-- **Deploy `autofix-bridge` before `monitor-bridge`**, which bind-mounts the fake-remux
-  state dir `:ro`. Both state files are seeded on first deploy so its two checks cannot
-  false-DOWN on a fresh host.
 - **Don't re-propose the rejected auto-fix candidates** — prowlarr indexers, b2, recyclarr
   and targets were surveyed and refused ([[autofix-bridge-auto-remediation]]).
 
@@ -95,4 +91,4 @@ here must satisfy this summary.
 - The two fake-remux crons live in `ansible/roles/setup/fake_remux/files/`;
   `docs/autofix-bridge-actuators.md` carries the command that runs either by hand safely.
 - Tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` and `uv run pytest
-  ansible/roles/setup/fake_remux/files`.
+  ansible/roles/setup/fake_remux/tests`.

@@ -1,45 +1,26 @@
 # monitor-bridge checks: the per-check record
 
 The measurements, incidents and retirements behind every threshold check the
-`monitor-bridge` pod pushes to Uptime Kuma. The per-check rule — what it reads, the threshold
-and the arms — lives in `files/registry.py` and the `verdicts/` function each entry names;
-`ansible/roles/k8s/monitor-bridge/CLAUDE.md` carries what holds across all of them (the gates,
-the hysteresis, the module layout) and is what a session loads before touching the role. This
-page is where the numbers came from and what each arm was added after, and its *Live checks*
-walks the registry in order.
+`monitor-bridge` pod pushes to Uptime Kuma. The per-check rule (what it reads, the threshold
+and the arms) lives in the `verdicts/` function that each `files/check_table.py` row names.
+`ansible/roles/k8s/monitor-bridge/CLAUDE.md` carries what holds across all checks: the gates,
+the hysteresis and the module layout. `docs/monitor-bridge-internals.md` owns the module table,
+the operator prerequisites, the push-token plumbing and the gate-set membership. This page
+records where each number came from and which incident added each arm.
 
 `files/check_table.py`'s `CHECKS` is the authority on which checks exist, and the
 *Live checks* section opens with a table generated from it. A test
 (`test_fragments_bridge.py`) holds the bullet titles in *Live checks* to that table: every
-live check has a bullet, and a bullet titled for a check that has moved or retired belongs in
-*Retired and moved checks*. The prose inside a bullet is not tested. If a bullet disagrees
-with the registry, the registry is right.
+live check has a bullet, and every bullet names a live check. The prose inside a bullet is not
+tested. If a bullet disagrees with the registry, the registry is right.
 
+The bullets group the checks by domain, not in registry order. Each is named by its Kuma tile,
+and the row's `name` in `files/check_table.py` is the key the code uses.
 
-## How the bridge got here
-
-> **THE bridge since the Docker uninstall (2026-08-14).** Born as the daniel-server
-> sidecar, split at the Phase F drain, whole again in-cluster: this role's
-> `files/` runs every check, entered at `files/cli.py`. The GitOps pair reads daniel-box's own deployer
-> via a hostPath (the pod is pinned there); `disk_prune` retired with the Docker daemon;
-> `pi_peers` and `renovate_alive` dissolved into direct pushers at the host flips
-> (k8s/pi-peer-backup CronJob; `renovate-notify`'s ExecStartPost). check.py still
-> refuses a CHECKS_ONLY/CHECKS_SKIP filter naming an unknown check or a gated check
-> without its gate, and `tests/test_check_table.py` asserts the
-> env-secret carries exactly one token per registered check and gate. Much of the per-check
-> documentation below predates the moves — Docker-era plumbing details (compose, bind
-> mounts, networks) are history: `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/monitor-bridge/`.
->
-> **`files/check_table.py`'s `CHECKS` is the authority on which checks exist.** Until
-> 2026-08-16 the three retired above were still written up here in the present tense, as live
-> checks with unit-tested pure functions, four weeks after the functions were deleted. A test
-> now holds the *Live checks* bullet titles to `CHECKS`, but not the prose in a bullet. If a
-> bullet below disagrees with the registry, the registry is right.
-
-A tiny sidecar that turns host-cron state files into Uptime Kuma **push** monitors, so
-threshold problems actually page. See repo-root `CLAUDE.md`. (The kopia backup checks
-retired with kopia on 2026-08-10 — the backup plane is Longhorn;
-`backup-consolidation-longhorn.md`.)
+**HISTORY —** The Docker-era plumbing (compose, bind mounts, networks) is in git:
+`git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/monitor-bridge/`.
+The kopia backup checks retired with kopia on 2026-08-10, and the backup plane is Longhorn
+(`docs/archive/k3s-migration/backup-consolidation-longhorn.md`).
 
 ## Live checks
 
@@ -48,6 +29,9 @@ check and gate in registry order. The bullets after it carry the measurements an
 behind each tile, under the tile's display name.
 
 --8<-- "assets/generated/fragments/bridge-checks.md"
+
+The bridge evaluates the four reachability gates first. The internals page lists which
+checks each gate suppresses.
 
 - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
   prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, every
@@ -62,7 +46,9 @@ behind each tile, under the tile's display name.
   a test pinned, until the column made both redundant (#3788).)
 - **Root Disk** (`node_filesystem_*` for `/`, `/boot` **and `/boot/efi`** — old kernels
   filling /boot quietly breaks upgrades, and a full ESP breaks firmware/bootloader
-  updates the same way; server-only, the Pi's disk lives in the Pi Pressure check)
+  updates the same way; server-only, the Pi's disk lives in the Pi Pressure check). Root Disk pages without remediating:
+  containerd's image GC owns image cleanup since the Docker daemon retired (2026-08-14), and no
+  autoprune cron replaced the old one.
 - **TLS Cert Expiry** (`traefik_tls_certs_not_after`) — per-series, so the message names each
   breaching certificate's `cn`. It read `min(traefik_tls_certs_not_after)` until 2026-10-01,
   which aggregated the labels away and left the tile promising a name the message could not
@@ -187,7 +173,7 @@ behind each tile, under the tile's display name.
 - **n8n Prod Workflows** (n8n public API: per-*active*-workflow **consecutive-failure
   streak**. n8n doesn't save successful executions (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`, to
   bound `database.sqlite` + its B2 backup churn — 2026-07-03), so "consecutive" can't be read
-  from one snapshot: `check.py` accumulates the streak ACROSS cycles, deduped by execution id
+  from one snapshot: `check_n8n` accumulates the streak ACROSS cycles, deduped by execution id
   so a single lingering failure isn't recounted, and resets a workflow's streak once its latest
   error ages past `N8N_FAIL_WINDOW` (recovered/idle). `down` when any workflow fails
   `N8N_CONSECUTIVE_MAX` (3) times in a row, OR when `N8N_SYSTEMIC_MAX` (2)+ workflows are each
@@ -195,8 +181,8 @@ behind each tile, under the tile's display name.
   alert instead of waiting for each to hit the consecutive threshold (and instead of a
   per-workflow flood). "Prod" = active. Empty `N8N_API_KEY` = disabled (stays up); an
   unreachable API surfaces as `down`. Reached at `n8n:5678` over `apps`, bypassing Authelia via
-  the `X-N8N-API-KEY` header. Streak state is module-global (resets on a bridge restart, ridden
-  out by the STARTUP_GRACE hysteresis). Pure `n8n_update_streaks()`/`n8n_verdict()` are
+  the `X-N8N-API-KEY` header. The streaks live in `bridge.streaks.State` (`n8n_streaks`), so they reset on a bridge
+  restart, which the STARTUP_GRACE hysteresis rides out. Pure `n8n_update_streaks()`/`n8n_verdict()` are
   unit-tested.)
 - **Arr Queue Warnings** (sonarr's + radarr's own `/api/v3/queue`: `down` on any item with
   `trackedDownloadStatus == "warning"`, `trackedDownloadState == "importBlocked"`, or
@@ -367,10 +353,10 @@ behind each tile, under the tile's display name.
   2026-08-13 Longhorn retry storm, which drove ~2.5k B2 Class B/day against a hard cap.
   A fourth arm counts **outstanding incomplete multipart uploads** (`R2_UPLOADS_MAX`, 25): they
   bill as stored bytes and do NOT appear in an object listing, which is the quiet way a 10 GB
-  budget fills. The durable fix for those is a bucket lifecycle rule (below); this arm is the
+  budget fills. The durable fix for those is a bucket lifecycle rule (set by hand, per the internals page's prerequisites); this arm is the
   backstop for that rule being absent, deleted, or not working.
   Operation classes are NOT in the API response — Cloudflare returns raw `actionType` names — so
-  the Class A / Class B mapping lives in `check.py` from the pricing page. An `actionType` in
+  the Class A / Class B mapping lives in `verdicts/storage.py` (`R2_CLASS_A_ACTIONS`) from the pricing page. An `actionType` in
   neither published list counts toward **Class A** (the tighter, more expensive arm) and is named
   in the message: over-counting reports headroom we do not have, which is the safe direction, and
   the name explains why the numbers moved when Cloudflare adds an operation.
@@ -393,19 +379,12 @@ behind each tile, under the tile's display name.
   the tile clears one cycle after `cloudflare_ips` is fixed. That is why it moved here from
   k8s/traefik's daily root cron on 2026-09-19: the cron left a red tile until the next 05:25.
   Empty expected list = disabled (stays up). Pure `cloudflare_ips_verdict()` is unit-tested.)
-- **Healthchecks.io Console Drift** (`checks/healthchecks.py`, #2566: `GET /api/v3/checks/` with
-  the read-only `healthchecks_api_read_only_key`, compared per slug against
-  `HEALTHCHECKS_EXPECTED` — the schedule type, the Simple period or the Cron expression and
-  timezone, and the grace). The console is the only place those values live, and it drifted
-  twice before anything noticed (#2563). `monitor_bridge_healthchecks_expected` in
-  `defaults/main.yml` is the expectation; `ansible/tests/services/test_monitor_bridge_healthchecks_expected.py`
-  holds it to the cron variables and to `docs/healthchecks-io-deadman.md`'s period-and-grace
-  table. A documented slug missing from the console is DOWN; an undocumented console check is
-  named and does not page (the `DECIDED:` in `healthchecks_verdict`). Same cache as Cloudflare
-  IP Drift: a success is cached for `HEALTHCHECKS_PROBE_INTERVAL_S` (a day), a failure is
-  re-probed every cycle, and it sits in `STARTUP_GRACE` because the fetch has no gate. The API
-  answered a request without a key in 0.40-0.59 s across three calls on 2026-09-25, far inside
-  `HTTP_TIMEOUT`. Empty key or expected list = disabled (stays up).)
+- **Healthchecks.io Console Drift** (`checks/healthchecks.py`, #2566: compares the console's
+  schedule type, period or cron expression, timezone and grace for each slug with
+  `monitor_bridge_healthchecks_expected`. `docs/healthchecks-io-deadman.md` owns the expectation
+  table, the cache and the history of the drift it caught. An undocumented console check is named
+  and does not page (the `DECIDED:` in `healthchecks_verdict`). Gate: `wan_reachable`. An empty key
+  or expected list disables it, and it stays up.)
 - **SMART Data / Health** (Scrutiny's web API `/api/summary` over `monitoring`: every
   non-archived device must have a `collector_date` within 26 h **AND a passing `device_status`**
   (0 = SMART self-assessment + Scrutiny's attribute thresholds both OK; non-zero decodes to
@@ -797,10 +776,10 @@ behind each tile, under the tile's display name.
   what #996 added it for: history in Grafana, which a Kuma tile cannot keep.)
 - **Loki Reachable** (a fixed `/loki/api/v1/labels` probe — the root-cause GATE for the
   Loki-querying checks, the peer of Prometheus Reachable. Evaluated each cycle: when Loki is
-  unreachable the `LOKI_DEPENDENT` check (`loki_ingestion`) is
-  **suppressed** — pushed `up` with a "skipped — Loki unreachable" `msg` — and only THIS monitor
+  unreachable the `LOKI_DEPENDENT` checks (`loki_ingestion`, `swallowed_verdicts`,
+  `kuma_notify_failures`) are **suppressed** — pushed `up` with a "skipped — Loki unreachable" `msg` — and only THIS monitor
   pages. It was two until janitorr's watchdog moved to the cluster (2026-08-08); one Loki outage
-  firing both at once is why the gate exists. Loki being UP but promtail not
+  firing both at once is why the gate exists. Loki being UP but the log shipper (Alloy) not
   shipping is a different signal Loki Log Ingestion still surfaces. `LOKI_DEPENDENT` is guarded by
   a test against the live `CHECKS` so it can't drift.)
 - **WAN Reachable** (two provider URLs fetched by hostname, tried in order — the root-cause
@@ -919,7 +898,7 @@ behind each tile, under the tile's display name.
   same second query the stall arm makes, so the message reads `authelia(0/1)`.
   **A second arm covers DaemonSets** (added 2026-08-13):
   `kube_daemonset_status_number_unavailable`, with its own `K8S_MIN_DAEMONSETS` floor (9) and
-  the same fail-closed-on-absent-series logic — a Deployment-shaped census cannot see promtail,
+  the same fail-closed-on-absent-series logic — a Deployment-shaped census cannot see the Alloy log shipper,
   node-exporter or the `otel` collector, which run one pod per node and are exactly the workloads
   a node problem takes out first. A third arm reports crash-looping restarts —
   `increase(...[K8S_RESTART_WINDOW]) > K8S_RESTART_MAX` (1h / 3), **and** a restart inside
@@ -1339,69 +1318,15 @@ behind each tile, under the tile's display name.
 
 ## Retired and moved checks
 
-The bullets below are checks that left `CHECKS`, kept so the monitor's history stays
-readable beside its successor. The direct pushers that replaced them: the
-`pi-peer-backup` k8s CronJob (WG Pi Peer Backup), the `crowdsec` role's allowlist cron
-(CrowdSec Home Allowlist), `crowdsec-appsec-verify.sh.j2` (CrowdSec AppSec), the
-`fake_remux` setup role's `state_push.py` (Fake Remux Scan / Replace), `renovate-notify`'s
-`ExecStartPost` (Renovate Notifier — Alive), and the configarr and janitorr roles' health
-crons (Configarr Sync, Janitorr Errors). Disk Autoprune retired with the Docker daemon and has
-no successor. Cluster Prometheus Reachable retired as a gate (#2825).
-
-- *(**Configarr Sync** moved out on 2026-08-08, slice 4 B7a. The nightly guide sync is a k8s
-  CronJob on daniel-box now, and the `/configarr/state.json` this bridge read lived beside it on
-  this host. The k8s/configarr role's `configarr-health.sh` cron reads the last Job through the
-  read-only kubeconfig and pushes the SAME monitor with the same token, so the monitor and its
-  history are unchanged — the AutoKuma label moved to the uptime-kuma role, alongside the other
-  two cluster-side push monitors. The exit-code + output verdict still runs `configarr_status.py`
-  verbatim; only where it runs changed.)*
-- *(**Janitorr Errors** moved out on 2026-08-08, slice 4 B7b, with the workload. It read the
-  error count from Loki and the uptime from `container_start_time_seconds{name="janitorr"}`;
-  cluster pod logs never reach Loki and that cAdvisor series is this host's Docker container, so
-  both signals died at the port. The k8s/janitorr role's `janitorr-health.sh` cron reads the pod
-  through the read-only kubeconfig and pushes the SAME monitor with the same token — the 12 h
-  window, the 600 s startup grace and the uptime-minus-grace cap on the counting slice are all
-  preserved, so the verdict does not change with the host. The AutoKuma label moved to the
-  uptime-kuma role.)*
-- **WG Pi Peer Backup** — RETIRED from this container at the host flips (2026-08-14). The pull
-  became the `pi-peer-backup` k8s CronJob, which pushes its Kuma monitor directly, so there is
-  no `/pi-peers/state.json` on this host and no `pi_peers()` check here. The monitor and the
-  gap it watches are unchanged: the rsync uses no `--delete`, so a silently failing pull leaves
-  the last-good copy in place while the Pi's un-rebuildable WireGuard peer keys go stale.
-- **CrowdSec Home Allowlist** — RETIRED from this container at slice-6 B2 (2026-08-09). `cscli
-  allowlists` is LAPI-machine-only, so the updater cron followed the LAPI into the cluster
-  (`roles/k8s/crowdsec`) and pushes the Kuma monitor directly from daniel-box; there is no
-  state file on this host to read, so the check, its `HOME_ALLOWLIST_*` env, its bind mount and
-  its tests are gone. The monitor itself still exists — its AutoKuma label moved to the
-  `uptime-kuma` role.
-- **Public origin lock & AppSec verifiers** — RETIRED at E7 (2026-08-13) with the docker-edge
-  public 80/443 origin. The Cloudflare-only origin (`docker-user-verify.sh` cron) and Cloudflare-IP-
-  drift checks guarded the legacy Traefik@docker; the CrowdSec AppSec verifier has re-homed to
-  daniel-box as a root cron pushing the same "CrowdSec AppSec" Kuma monitor directly from
-  `roles/k8s/crowdsec/templates/crowdsec-appsec-verify.sh.j2`.
-- **Disk Autoprune** — RETIRED at the Docker uninstall (2026-08-14), with no successor. The
-  cron pruned daniel-server's Docker daemon, which no longer exists; containerd's own image GC
-  owns that concern now (`files/bridge/config.py`, the `disk_prune check REMOVED` comment). Root Disk's threshold pager is what is
-  left on that axis — alerting without remediation, deliberately.
-- **Fake Remux Scan / Fake Remux Replace** — no longer bridge checks. The detector +
-  reconciler crons moved to daniel-box with the media stack (2026-08-08, slice 4 B7c;
-  `roles/setup/fake_remux`), and their Kuma pushes go directly from that host via
-  `state_push.py` — same tokens, so the monitors and their history survived the move. The
-  label declarations live on the uptime-kuma compose now. Nothing in `check.py` references
-  fake-remux anymore.
-- **Renovate Notifier — Alive** — RETIRED from this container at the host flips (2026-08-14).
-  The notifier pushes its own Kuma monitor from an `ExecStartPost` now, so there is no
-  `/renovate-state/last_run` bind mount and no `renovate_alive()` check here. The monitor and
-  its dead-man semantics are unchanged.
-  It shipped in commit `e02965544` and its neighbours.
-- **Cluster Prometheus Reachable — RETIRED 2026-09-28** (#2825). A second `vector(1)` gate
-  against `CLUSTER_PROMETHEUS_URL`, kept separate while that URL and `PROMETHEUS_URL` named two
-  instances on two hosts. The Docker plane retired 2026-08-14 and both rendered to one cluster
-  Service after it, so the tile could not go red on its own: `run_once` reused the `prometheus`
-  gate's verdict and pushed the tile `up` regardless (#2780). Its four members —
-  `k8s_workloads`, `cluster_targets`, `pvc_fullness`, `etcd_db_size` — are in `PROM_DEPENDENT`
-  now, and the URL, push token, gate and tile are gone. A `git revert` restores the split; a
-  check reading a second Prometheus needs a gate watching that instance.
+Checks that left `CHECKS` push their monitors from elsewhere, with the same tokens, so each
+monitor keeps its history. The direct pushers are the `pi-peer-backup` k8s CronJob (WG Pi Peer
+Backup), the `crowdsec` role's allowlist cron (CrowdSec Home Allowlist),
+`crowdsec-appsec-verify.sh.j2` (CrowdSec AppSec), the `fake_remux` setup role's
+`fake-remux-health.sh` (Fake Remux Scan / Replace), `renovate-notify`'s `ExecStartPost`
+(Renovate Notifier — Alive), and the configarr and janitorr roles' health crons (Configarr
+Sync, Janitorr Errors). Disk Autoprune retired with the Docker daemon and has no successor.
+Cluster Prometheus Reachable retired as a gate (#2825), and its four members are in
+`PROM_DEPENDENT`. Each check's retirement note is in the repository history.
 
 ## Push-monitor mechanics, and what set each number
 
@@ -1449,52 +1374,6 @@ no successor. Cluster Prometheus Reachable retired as a gate (#2825).
   **disjoint from every `run_once` skip set** (so a graced check reaches the evaluation path each cycle and
   its streak advances) — both invariants guarded by a test against `CHECKS`. `GRACE_CYCLES` is
   env-tunable. Pure `bridge.streaks.apply_startup_grace()` is unit-tested.
-- **Liveness probe (2026-06-10, k8s since the migration):** cli.py touches `/tmp/heartbeat`
-  (tmpfs) after every cycle; the `livenessProbe` in `templates/deployment.yaml.j2` fails when the
-  mtime exceeds ~3×INTERVAL, so **the kubelet** restarts a *hung* loop (death alone already exits
-  the container). Kuma push silence remains the alerting path; the probe adds auto-recovery.
-  (This was a Compose healthcheck restarted by autoheal until the k8s migration. autoheal now
-  runs only on daniel-pi, so looking for its log line here finds nothing.)
-- Push tokens — **`files/check_table.py` is the list** (#3659), one row per check and gate;
-  the env-secret renders `KUMA_PUSH_<NAME>` and uptime-kuma renders the push tile from each. The tokens
-  live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
-  both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
-- The **Home Assistant Automations** check additionally needs `monitor_bridge_ha_token` — an HA
-  **Long-Lived Access Token** (operator-minted in HA → Profile → Security; can't be templated), NOT
-  a Kuma push token. tier `assisted` (rotate = revoke + reissue in HA). It's **file-mounted**
-  (`HA_TOKEN_FILE=/run/secrets/ha_token`, rendered 0600 by the role, read via `check.py`'s
-  `_env_file`) — an unscoped full-access token must NOT sit inline in the container Env the
-  docker-proxy exposes to monitoring-net neighbors (2026-07-15 review H2). An empty token file
-  disables the check (falls back to the `HA_TOKEN` env, also empty = disabled).
-- The **B2 Reachable** check reuses that same file-mount pattern for its B2 credential — the
-  existing `longhorn_b2_application_key` (ADR-0014; spelled `kopia_b2_*` until 2026-09-09),
-  rendered 0600 to `./b2_probe_application_key` and read via
-  `B2_PROBE_APPLICATION_KEY_FILE`. No new secret is minted for it; the probe-specific env name
-  means pointing it at a scoped read-only key later is an inventory edit rather than a code change.
-  The paired `B2_PROBE_KEY_ID` stays inline, since an id can't authenticate on its own.
-- The two GitOps monitors read host state via a **read-only bind-mount**
-  `/var/lib/gitops-deploy:/gitops-state:ro` (written by the `gitops_deploy` host role) — no
-  Prometheus/n8n source. That dir must exist owned by the deploy user before deploy; the
-  `gitops_deploy` role creates it, so deploy `gitops_deploy` before `monitor-bridge` (else Docker
-  auto-creates the mount source root-owned and the non-root container can't read it).
-  (The **Renovate Notifier — Alive** and **WG Pi Peer Backup** monitors had the same
-  deploy-ordering requirement, for `/renovate-state` and `/pi-peers`. Both dissolved into direct
-  pushers at the 2026-08-14 host flips, so neither mount nor either ordering constraint exists
-  now.)
-- The **Cloudflare IP Drift** monitor's
-  `/var/lib/cloudflare-ip-drift:/cloudflare-drift:ro` mount (written weekly by the `traefik` role's
-  `cloudflare-ip-drift.sh`, seeded once on deploy) is created sys_user-owned by that role, which
-  deploys first (everything depends on it), so the ordering is naturally satisfied.
-  The **CrowdSec AppSec** monitor's `/var/lib/crowdsec-appsec:/crowdsec-appsec:ro` mount (written
-  every 15 min by the same role's `appsec-verify.sh`, seeded once on deploy) follows the same
-  ordering — but that dir is **root-owned** (the verify cron runs as root via `docker exec`, like
-  `docker-user-verify.sh`), and the script `chmod 0644`s its state file for the non-root reader.
-- (The **Disk Autoprune** monitor bind-mounted `/var/lib/autofix-disk-prune:/autofix-disk:ro`
-  and required `autofix-bridge` to deploy first. Retired with the Docker daemon on 2026-08-14 —
-  no mount, no ordering constraint.) The **Fake Remux Scan** monitor's `/var/lib/autofix-fake-remux:/fake-remux:ro` mount (written daily by the
-  same role's `fake_remux_scan.py` cron, seeded once on deploy) is created the same way with the
-  same ordering. The **Fake Remux Replace** monitor reuses that same mount — its
-  `fake_remux_replace.py` cron writes `replace_state.json` into the same directory.
 - Thresholds are env-tunable in `templates/env-secret.yaml.j2`, the only place each value is
   written. *Threshold defaults* below tabulates the numeric ones from that template; the
   per-check prose above gives the reason for a number. A failed query or unreachable source
@@ -1509,75 +1388,6 @@ Every value below is a literal in the template, so a change there moves this tab
 
 --8<-- "assets/generated/fragments/bridge-thresholds.md"
 
-## Operator prerequisites, as first written
-
-The role file keeps the short form; this is the original, with the Docker-era `media`
-network note that no longer applies to the k8s pod.
-
-1. Add a push token to `secrets.yml` (`sops ansible/vars/secrets.yml`) for every
-   `files/check_table.py` row —
-   `test_every_bridge_push_token_reaches_a_push_tile` asserts each row reaches an AutoKuma
-   monitor, so the table is the list. (It
-   does not read this file; the token names quoted above are prose and have drifted before.)
-   **They must
-   be exactly 32 alphanumeric chars** (Kuma rejects others; for example `openssl rand -hex 16`);
-   AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
-2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI
-   (**Settings → n8n API**), scoped to read **Workflow** + **Execution** permissions.
-3. For the Arr Queue Warnings monitor: `sonarr_api_key`/`radarr_api_key` already exist in
-   `secrets.yml` (configarr/janitorr/homepage reference them too — get the plaintext from
-   `sudo k3s kubectl -n homelab exec deploy/sonarr -- cat /config/config.xml` (likewise radarr)
-   if you need to re-derive them — both are k8s pods now, and neither cluster node has had
-   Docker since 2026-08-14, so the `docker exec` this line used to give has no target).
-   monitor-bridge joined the `media` network for this on
-   2026-07-02 (its `containers_list` entry in `ansible/inventory/host_vars/daniel-box.yml`);
-   if `media` is ever dropped from that entry, the check pages `down` every cycle
-   (unresolvable host) rather than failing silent.
-4. For the R2 Free Tier Headroom monitor: add `cloudflare_analytics_token` to `secrets.yml`. Mint
-   it at **Cloudflare dashboard → My Profile → API Tokens → Create Token → Custom token**, with
-   exactly one permission: **Account → Account Analytics → Read**, scoped to this account. It is
-   file-mounted (`CF_ANALYTICS_TOKEN_FILE=/etc/bridge-credentials/cf_analytics_token`) for the same
-   H2 reason as `ha_token`. tier `assisted` (rotate = revoke + reissue in the dashboard). The
-   check also reads the existing `r2_account_id` and `r2_bucket`. Run
-   `uv run python scripts/secrets_mgmt/secret_rotation.py sync` after adding both, or the prek registry hook
-   fails. Then smoke-test the query for real —
-   `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/cli.py --once` — the
-   unit tests mock the payload, so this is the first thing that proves Cloudflare accepts the
-   query and that the token is scoped correctly.
-
-   **Do NOT give this token write or R2 permissions.** A token that could revoke R2 access would
-   let the bridge hard-stop the bucket at the threshold, but that means parking a strictly more
-   privileged standing credential in the cluster to protect against sub-dollar overage, and its
-   firing would break the backup path it is guarding. Deliberate trade: this monitor pages, and a
-   human decides. If a hard stop is ever wanted, the manual procedure is **R2 → Manage R2 API
-   Tokens → revoke the key** — and the way back is re-minting it and updating `r2_access_key_id` /
-   `r2_secret_access_key`, so treat it as a break-glass step, not a routine one.
-
-   **One-time bucket setting, not codified here:** set an `AbortIncompleteMultipartUpload`
-   lifecycle rule (7 days) on the bucket —
-   `npx wrangler r2 bucket lifecycle add <bucket> --name abort-mpu --abort-multipart-days 7`, or
-   dashboard → R2 → the bucket → Settings → Object Lifecycle Rules. It needs the S3 API or
-   Wrangler, neither of which the stdlib-only bridge has, and hand-rolling a SigV4 signer that
-   could not be tested against the live bucket from here would be worse than a documented step.
-   The monitor's uploads arm is what notices if this is missing.
-5. Notifications attach **automatically** — the `kuma()` macro tags every monitor with
-   `notification_name_list=["{{ kuma_notification_id }}"]`, linking it to the AutoKuma-managed
-   Discord notification defined on the `uptime-kuma` container. No per-monitor UI clicking.
-
-## The two configuration refactors
-
-The thresholds became fields on a frozen `Config` on 2026-09-04, replacing 118
-`monkeypatch.setattr(bridge.config, "X", ...)` sites and the two `importlib.reload(bridge.config)`
-tests. Until 2026-09-01 the patch-boundary rule was the inverse of today's — a function could
-leave `check.py` only if nothing patched it — and that capped `check.py` near 2,500 lines,
-because every `check_*` reads `_get_json` or a threshold. The two tests that re-derive
-`PROM_ORIGIN` from the environment used to `importlib.reload(bridge.config)`; since the seam
-they call `load_config({...})` with the two Prometheus URLs they mean, which asks the same
-question without mutating the process. The registry and the gates took the same shape on
-2026-09-05. The module split began in commit
-`9e7040cf0` (seven slices, all
-landed 2026-09-01, `check.py` from 3,732 lines to ~510; slice 17b took the last 675 down to the
-run loop alone on 2026-09-05).
 
 ## Traps: the incidents behind the rules
 
@@ -1603,12 +1413,13 @@ Sanitize the configured name at query time and keep the operator-facing name the
 the fault message — that is what makes the next mismatch diagnosable from the alert alone.
 Before trusting a new metric-backed check, run its exact query against live Prometheus and
 confirm it returns rows; the unit tests mock the payload, so they prove the verdict logic and
-nothing about the selector. Guarded by `ksm_resource_label` in `files/check.py` and its test;
+nothing about the selector. Guarded by `ksm_resource_label` in `files/verdicts/cluster.py` and its test in
+`tests/test_check_longhorn.py`;
 landed in PR #286 the same day PR #281 introduced it.
 
-### Promtail's k8s streams have no `app` label
+### The k8s log streams have no `app` label
 `kubectl` selects pods with `-l app=home-assistant`, so a LogQL selector written from that habit
-reads naturally and matches nothing. Promtail's k8s stream carries
+reads naturally and matches nothing. The k8s stream that Alloy ships carries
 `container` / `pod` / `job` / `machine` / `namespace` / `service_name` / `stream` / `filename` —
 no `app`. `LOKI_DOCKER_STREAM` already used `container=~".+"`; the `ip_ban` arm added 2026-08-23
 did not follow it.
