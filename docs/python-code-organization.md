@@ -1,15 +1,11 @@
 # Python code organization
 
 How the first-party Python in this repo is laid out, which layout decisions are settled and
-why, the conventions a new module follows, and the structural gaps a 2026-09-04 review found
-in `land_lib`, `monitor-bridge` and `gitops_deploy`.
+why, and the conventions a new module follows.
 
-This is a reference, not a plan. The findings at the end are ranked and carry `file:line`
-evidence as the review found it. Each one was checked against the source by a second reader,
-and the four that did not survive are listed as refuted so nobody re-derives them. The rest
-were closed in the same PR that added this page; the *Outcome* table at the head of the
-findings names the ones that closed partially and why. Line numbers in the findings are the
-pre-fix ones.
+This is a reference, not a plan. A 2026-09-04 review of `land_lib`, `monitor-bridge` and
+`gitops_deploy` produced ranked structural findings. The PR that added this page fixed every
+finding the review did not refute, and git history holds the review.
 
 ## The shape of the code
 
@@ -254,273 +250,38 @@ skips, saying which reason, when `origin/master` is unreadable: a shallow CI che
 such ref. Locally the ref is only as fresh as your last `git fetch`, so a stale one compares
 against older numbers; `git fetch` before relying on it.
 
-## What the measurements say
+## Textual guards under `ansible/tests/`
 
-The census below is what the conventions above are measured against. Each row is two
-conventions coexisting for one thing; the right-hand column is the one to converge on.
+A guard reads rendered output where a render carries the claim, and source text where a render
+erases it.
 
-| Thing | Split | Converge on |
-|---|---|---|
-| Bootstrap spelling | 6 shapes across 232 files; 23 use `os.path` | The aliased `pathlib` form above |
-| `main` signature | 40 `main(argv)` / 48 `main()` / 17 unannotated | `main(argv=None) -> int` |
-| Exit protocol at the guard | 41 `sys.exit(main())` / 28 `raise SystemExit(main())` / 14 bare `main()` | `sys.exit(main())` |
-| CLI parsing | 45 `argparse` / 15 hand-rolled `sys.argv` | `argparse` |
-| `from __future__ import annotations` | 331 present / 294 absent | Absent |
-| Multi-type `except` | 53 PEP 758 / 28 parenthesized | PEP 758 |
-| `@dataclass` frozen | 14 frozen / 13 mutable | Frozen unless a field is written after construction |
-| git and gh calls | 12 through `lib.git`/`lib.gh` / ~47 raw argv in production code | The wrapper, where the module can import it |
-| Import spelling for `scripts/lib` | `from lib.x import y` / `from lib import x` | Either; do not mix within a module |
-
-None of these is a bug. Each is a rule with no gate, and the census is what a gate would
-freeze. The cheapest gates are ruff rules that already exist: `FA102` flags the future
-import; `UP` covers the `except` migration. The rest are a repo test over the AST, in the
-shape `test_script_bootstraps_present.py` already uses.
-
-### Textual guards under `ansible/tests/`
-
-Issue #3663 counted 156 of 412 test files reading source text with no renderer, 119 of them
-with a regex, and proposed moving them onto rendered-manifest property rows. A file-by-file
-pass on 2026-10-09 found that count was mostly heuristic error.
-
-- **The grep could not see three spellings of a render.** It missed
-  `make_ansible_env(...).from_string`, `_manifest_guards._render`, and a render reached
-  through a sibling helper module such as `services/_jellyfin_plugins.py`. Counting those as
-  renders, and counting a structured parse (YAML, JSON, TOML or `ast`) as a non-textual read,
-  left 34 files reading raw text. Of those, 15 applied a regex to a template, a task file or
-  other YAML.
-- **No template-source reader duplicates a property row.** Every directory under
-  `ansible/tests/` is in `SCANNED` of
-  `ansible/tests/repo/test_guard_tests_read_renders_not_templates.py`. Each module in its
-  `TEMPLATE_SOURCE_READERS` names what a render erases: a macro call against its expanded
-  body, byte identity, a Jinja filter, or a variable name. Three of the four k8s modules
-  among the 15 are entries there. The fourth,
-  `k8s/test_uncovered_roles_justifications_resolve.py`, reads a comment block in another
-  test module, which no render or parse carries.
-- **A task file has no render, so the structural read is a parse.** The equivalent of a
-  property row for `tasks/*.yml` is a read through `yaml_fast` or `_helpers.walk_tasks`.
-  Convert a regex over YAML or TOML text only where its claim survives the parse unchanged.
-  Five conversions landed with this section:
-    - `deploy/test_manifests_apply_guarded.py`: the "next ten lines" exemption became the
-      registering task's own `changed_when` key.
-    - `deploy/test_denylist_render_suppresses_the_kick.py`: a split on `- name: ` became a
-      parsed handler, and the argv is read through `ast`.
-    - `setup/test_optimize_pi_declares_log2ram_sizes.py`: the journald cap is read from the
-      drop-in task's `content`, not from anywhere in the file.
-    - `repo/test_ci_contexts_match_workflows.py`: job names come from `jobs`, not from a
-      four-space indent.
-    - `repo/test_python_version_consistency.py`: the workflow pins come from each step's
-      `with:`, which also reads an unquoted `3.14` the quoted-string pattern skipped.
-- **The rest read text on purpose.** `repo/test_docs_quote_current_values.py` checks doc
-  prose. `repo/test_vale_matches_the_ci_pin.py` reads a version out of a `curl` URL inside a
-  `run:` script. `deploy/test_inventory_block_scalars_have_no_comment_shaped_lines.py` is
-  about the text itself. `longhorn/test_volume_cr_has_no_volumename.py` and
-  `setup/test_release_bin_groups_have_no_secrets.py` read shell and variable names a render
-  would replace. `longhorn/test_prune_backups.py` greps whole task files for a Backup CR name,
-  so a comment can only make it fail, never pass.
-- **Directory order.** By commits since 2026-08-08 to the files the issue's grep counted,
-  `setup/` leads (178), then `deploy/` (133) and `repo/` (130). Their subjects are task
-  files, inventory, CI workflows and shipped shell libraries, so none of them converts to a
-  rendered-manifest row.
-- **The two ratchet lists are a different subject.** The issue's 59- and 52-commit lists
-  (53 commits by this pass's count) are
-  `ansible/tests/repo/module_length_allowlist.txt` and
-  `ansible/tests/repo/monkeypatch_allowlist.txt`. Both already run on one harness,
-  `ansible/tests/_ratchet.py`. Their commits are entries falling as splits and seams land,
-  which is the ratchet doing its job, and neither list records a textual read.
-
-## Findings
-
-Ranked by severity. `Confirmed` means a second reader checked the cited lines the day of the
-review. Every finding not marked refuted was fixed in the PR that added this page; the table
-below records the six that closed partially, with the constraint that stopped them, so the
-remainder is not re-derived as a new finding.
-
-### Outcome
-
-| Finding | What closed | What stayed, and why |
-|---|---|---|
-| 1 `main()` split | `main()` is 58 lines over `assess()`, `plan_tick()` and one `handle_*` per branch, and the entry module is 456 lines: the phases moved to `deploy_phases.py` and `deploy_handlers.py`, the alert delivery to `deploy_alerts.py`, the staging gate's I/O shell to `deploy_staging_io.py`, beside nothing but its own subject (`deploy_staging.py` stays import-pure, because `deploy_logic.py` re-exports it to three tools that import without `host_lib` on the path), the hold and behind-origin markers onto `DeployerState`, and `TickTarget`/`TickPlan` to `deploy_tick_types.py`. Each leaf takes the tick's `tools`, `state` and `config` and imports nothing from the entry module | `gitops_deploy.py` keeps the config constants, `STATE`, `tick_config()`, `main()` and `entrypoint()`. `RetryableFetchError` is defined in `deploy_tick_types.py` and re-exported there under the same name: `assess` raises it and `entrypoint` catches it, and a leaf may not import the entry module |
-| 3 two mappers | A test asserts the two mappers agree at the role level over a fixed corpus | `derive` was not rerouted: `role_for` on a `k8s/manifests/` path returns `manifests` where the shared mapper returns a service set, and putting `manifests` in `--tags` makes `deploy.sh` refuse the list |
-| 6 config at import | Both programs cannot raise on import; `gitops_deploy` builds a frozen `Config` validated in `main()`, `monitor-bridge` collects `CONFIG_PROBLEMS` and reports them from `main()` with exit 2 | `gitops_deploy` keeps its module constants, derived from `CONFIG`; `STAGING_SUBSET` and two timeouts stay as literal `C.get()` calls because `fragment_readers.config_default`, behind `gen_doc_fragments.py`, parses them by text. `HTTP_TIMEOUT` stays in `bridge/common.py` because autofix-bridge imports it from there and does not ship `bridge/config.py` |
-| 10 seams | `GateTools` and `NotifyTools`; every subprocess monkeypatch converted | the staging gate's tests still patched `IDENTITY` and `AUTHORIZED_PUBKEY`, which are filesystem constants rather than process boundaries (gate retired, #2941) |
-| 16 text assertions | `test_land_merge.py` from 18 `capsys` uses to 8 | The remaining eight are where the printed line is the only discriminator between two paths making one identical `gh` call |
-| 25 policy tables | The three R2 billing-class sets moved beside the R2 verdict | `K8S_EXTENDED_RESOURCES` and `PVC_EXCLUDE` are `_env`-read after all; one is rendered into the env Secret and the other is grepped out of `config.py` by a repo test |
-
-Two findings were closed by a comment at the line rather than a change. The `except Outcome:`
-in `merge.py` already wrapped a single call; the multi-statement block was the handler. And
-`r2_month_start` was already UTC and already pinned by a test.
-
-### High
-
-1. **`gitops_deploy.py` `main()` is one 545-line function.** It holds fetch, CI verdict, hold
-   handling, classification, staging consult, deploy dispatch, health gate and alerting, so no
-   part of the tick is testable without driving all of it. The `deploy_*` split extracted the
-   pure decisions and left every I/O counterpart behind, including three whose sibling module
-   already exists by name: `health_ok`/`service_healthy` beside `deploy_health.py`,
-   `consult_staging` beside `deploy_staging.py`, `deploy_k8s()` beside `deploy_k8s.py`.
-   Evidence: `ansible/roles/setup/gitops_deploy/files/gitops_deploy.py:1353` to `:1898`.
-   Confirmed. Next split is by transport, not by more decisions: a `deploy_io.py` holding the
-   subprocess, docker and kubectl callers, and a `main()` that only sequences named phases.
-
-2. **The `deploy.sh` exit contract is decoded twice, once as bare integers.**
-   `land_lib/deploy.py:142,152,158` compares `rc` to `2`, `75` and `20` inline while
-   the staging gate named the same contract as `DEPLOY_SH_NO_VERDICT = frozenset({2, 3, 4,
-   75})`. The two can drift with no test between them. Confirmed. One `exit_codes.py` under
-   `scripts/deploy_tools/`, imported at both sites. The same module absorbs
-   `publish_pr.py:71-78`, which defines two `RC_*` groups that reuse 0 to 3 with different
-   meanings.
-
-3. **`land_tags.py` carries two path-to-service mappers, and `derive` uses the local one.**
-   Four sites call the deployer's shared `services_from_changed_paths`; `derive` at
-   `land_tags.py:436` goes through a local `tag_for`/`role_for` regex instead. A path the two
-   classify differently produces a `--tags` list the deployer would not have chosen.
-   Confirmed. Route `derive` through the shared mapper, or add a test asserting the two agree
-   on a fixed path corpus. On 2026-10-10 both mappers moved into
-   `scripts/deploy_tools/reach.py` (#3660), and `tests/test_reach.py` pins the two shapes of
-   path where they still disagree.
-
-4. **Not one function in the shipped `monitor-bridge` tree has a return annotation.** 0 of 132
-   `def` lines under `ansible/roles/k8s/monitor-bridge/files/`, against a fully annotated
-   `gitops_deploy`. ty covers both trees through `extra-paths` and has nothing to check on
-   half the shipped code. Confirmed by count. Annotate `verdicts/*` and `bridge/*` first;
-   those are the pure functions where a wrong type is a silent wrong verdict.
-
-### Medium
-
-5. **The check registry is an untyped 3-tuple returning an untyped pair.**
-   `monitor-bridge/files/check.py:83` declares `CHECKS` as `(name, token, fn)` entries and
-   each check returns `(ok, msg)`; both are unpacked positionally at `check.py:372,384` and in
-   tests. Confirmed. A frozen `Check` dataclass and a `CheckResult`.
-
-6. **Both shipped programs evaluate their whole configuration at import time.**
-   `gitops_deploy.py:184` binds `C = cfg()` with about 40 derived constants after it;
-   `bridge/config.py` reads roughly 200 env vars at module level. A malformed value raises
-   during import, before the heartbeat exists, so the failure is a traceback rather than a
-   reportable failed check. monitor-bridge also reads env from three surfaces
-   (`bridge/config.py`, `bridge/common.py:48,62`, `check.py:26,318`). One frozen `Config`
-   built inside `main()`, validated there.
-
-7. **Three of eight `monitor-bridge` checks keep their thresholds inline with the fetch.**
-   `checks/b2.py`, `checks/r2.py` and `checks/storage.py` import nothing from `verdicts/`;
-   the other five do. Add the missing verdict modules so the split is uniform.
-
-8. **`Landing` is the inter-phase contract as shared mutable state.** Seven attributes on
-   `land_lib/landing.py:31-37` are written by `classify.py` and read by `deploy.py` and
-   `health_verdict.py`, and no phase signature says which it touches. `tags` in particular is
-   built as a list, joined to a string at `classify.py:77`, and split again at
-   `health_verdict.py:25`. Keep `tags` a `list[str]` and join at the subprocess boundary;
-   longer term, have each phase return a small frozen result the pipeline threads forward.
-
-9. **`Tools` mixes five pure classifiers into what its docstring calls every process boundary.**
-   `land_lib/tools.py:143-147` (`plane_note`, `self_applied`, `remaining_setup_hosts`,
-   `derive`, `quiet_paths`) are decision logic, and `_land_fakes.py:172-176` replaces them
-   with constant lambdas, so no pipeline test runs real tag derivation. Five of those fields
-   are typed `Callable[..., Any]`, which also blinds ty at every call site. Split a
-   `Classifier` out of `Tools` and give the remaining callables real signatures.
-
-10. **The top-level `deploy_tools` scripts have no injectable seam.** `test_deploy_detach_notify.py`
-    uses `monkeypatch` 31 times and the staging gate's tests 25, where `land_lib` tests inject a dataclass. `publish_pr.py:101` already has its own
-    `Tools`; give `deploy_detach_notify.py` the same. (The staging gate was retired in #2941.)
-
-11. **`Ledger.cause` is written from seven sites as free-form strings.** Including an f-string
-    at `land_lib/deploy.py:161` that makes the value set unbounded, while its sibling
-    `verdict` is validated at `outcome.py:42`. The Landings dashboard parses this field. A
-    `CAUSES` set beside `VERDICTS`, and a `test_land_ledger.py`, which does not exist:
-    `annotation_line` appears in no test.
-
-12. **`await_ci.py` runs git two ways in one module.** `:130` goes through `lib.git`, which
-    strips `GIT_*` from the environment; `:143-150` is a raw `subprocess.run(["git",
-    "merge-base", ...])` that would follow an inherited `GIT_DIR` to another repository. The
-    hazard is documented at `lib/git.py:3-8`. Route the second call through the wrapper.
-
-13. **`read_state` returns `""` for a missing, an empty and an unreadable state file alike.**
-    `land_lib/tools.py:120-124` suppresses `OSError`, and `landing.py:97-108` then reports
-    `converged` for an unreadable deployer state directory. Distinguish absent from
-    unreadable so `tick_state` fails closed.
-
-14. **Deployer state is 15 marker files with 15 constants and bespoke readers.**
-    `gitops_deploy.py:91-159`, generic accessors at `:637,645`. No single object describes what
-    the host believes. A `DeployerState` class over the same files, no on-disk
-    change.
-
-15. **`host_lib.py`'s sibling-copy is re-implemented in seven roles.** Each carries its own
-    copy task, `/opt/<x>/host_lib.py` destination and stamp pair (`gitops_deploy/tasks/code.yml`,
-    `renovate_notify`, `renovate_agent`, `k3s/tasks/health-crons.yml`, `fake_remux`, `configarr`,
-    `janitorr`). One included task file in `setup/common`, parameterised by destination.
-
-16. **`main` tests assert on printed text about as often as on verdicts.** 30 text assertions
-    against 39 verdict or return-code assertions across `test_land_*.py`; `test_land_merge.py`
-    uses `capsys` 18 times. A text assertion that stands in for behaviour breaks on a wording
-    change. Assert on the fakes' call list or the verdict; keep `capsys` where the line is the
-    deliverable.
-
-17. **Neither shipped program has a CLI.** No `argparse` under `monitor-bridge/files`,
-    `gitops_deploy/files` or `setup/common/files`, so there is no `--help`, `--once` or
-    `--dry-run`; exercising either by hand means setting env vars and running the real
-    side-effecting loop. A small `argparse` front end that reuses the same functions the pod
-    and the unit call.
-
-18. **The lock-retry loop is written twice with the same shape.** `land_lib/tick.py:25-37` and
-    `land_lib/deploy.py:119-133`, same holder-sampling comment. One `retry_while` helper.
-
-### Low
-
-19. Two classes named `Tools` and two named `Outcome` in one directory
-    (`publish_pr.py:101,121` vs `land_lib/tools.py:127`, `land_lib/outcome.py:32`).
-20. Verdict vocabularies as bare strings: `outcome.py:13`, `landing.py:104-107`,
-    `deploy_staging.py:74-81,124-128`. `StrEnum` keeps the on-disk form and gains a type check.
-21. Three cross-boundary returns are positional tuples (`tools.py:134,140,146`); `NamedTuple`.
-22. `Options` is a mutable dataclass used as immutable config; `conftest.py:92` already treats
-    it as frozen via `dataclasses.replace`.
-23. `test_land_imports.py:66-73` checks a hardcoded module set with `<=`, so a thirteenth
-    `land_lib` module is never checked. Flip to `==`.
-24. `_land_fakes.PRIMARY` is a module-level `mkdtemp()` never cleaned, created once per xdist
-    worker. Use `tmp_path_factory`.
-25. `bridge/config.py:302-458` holds five policy tables that read no env var (the R2 billing
-    classes, two exclusion lists). Move them beside the code that applies them.
-26. `bridge/common.py:65` stamps its own log lines with a naive local time; the container
-    runtime already stamps them. Drop the stamp or make it offset-aware.
-27. Step numbering in `land_lib` is owned by two layers, with `/6` hardcoded seven times
-    against eight actual steps (`pipeline.py:43,46`, `classify.py:23`, `ci.py:28`,
-    `deploy.py:174`, `health_verdict.py:24`, `merge.py:72,140`).
-28. `deploy_logic.py` is a pure re-export facade; the entry module's real coupling is invisible
-    at `gitops_deploy.py:31`. Keep the facade, import the heavily used modules directly.
-29. Two Discord POST implementations (`host_lib.py:62-98`, `bridge/net.py:130-145`) because
-    the two programs cannot share a module; only one documents the Cloudflare 1010 user-agent
-    workaround. Copy the comment.
-30. `EXPORTER_DEPENDENT` and `GATE_DEPENDENTS` in `check.py:204,306` have no every-name-is-a-
-    real-check guard, where the five sibling name sets do.
-
-### Refuted
-
-- **"`bridge/common.py` edits do not roll autofix-bridge's pod."**
-  `ansible/roles/k8s/autofix-bridge/tasks/main.yml:48-52` hashes every staged module into
-  `autofix_bridge_script_checksum`, and `deployment.yaml.j2:29` carries it as the pod-roll
-  annotation. The staleness the reviewer suspected is already closed.
-- **"Nothing guards a `land_lib` module for a missing bootstrap."**
-  `scripts/tests/test_script_bootstraps_present.py` covers every `scripts/**` module by AST
-  resolution, including `land_lib`. The direction guard in `test_land_imports.py` is a second
-  check, not the only one.
-- **"`await_ci.py` duplicates `land_lib/ci.py`."** `ci.py` is a 62-line exit-code-to-verdict
-  adapter over the injected `tools.await_ci`; the GitHub polling lives only in `await_ci.py`.
-- **"`scripts/lib/release_bin_groups.py` has no importers."** It is imported through the
-  `from lib import release_bin_groups` spelling in
-  `scripts/validate/validate_lib/cron_targets.py`, which a `from lib.` grep misses. That is the import-spelling inconsistency above, not dead code.
+- **Rendered manifests.** A property of the rendered k8s manifests goes in as a row of
+  `ansible/tests/k8s/test_rendered_properties.py`, not as a regex over a template.
+- **Template-source readers are declared.** Every directory under `ansible/tests/` is in `SCANNED`
+  of `ansible/tests/repo/test_guard_tests_read_renders_not_templates.py`. A module that must read
+  template text lists itself in that file's `TEMPLATE_SOURCE_READERS` with what a render erases:
+  a macro call against its expanded body, byte identity, a Jinja filter, or a variable name.
+- **A task file has no render, so the structural read is a parse.** Read `tasks/*.yml` through
+  `yaml_fast` or `_helpers.walk_tasks`. Convert a regex over YAML or TOML text to a parse only
+  where its claim survives the parse unchanged.
+- **The two ratchet lists are a different subject.** `ansible/tests/repo/module_length_allowlist.txt`
+  and `ansible/tests/repo/monkeypatch_allowlist.txt` run on one harness, `ansible/tests/_ratchet.py`,
+  and neither records a textual read.
 
 ## Strengths to copy from
 
-- `scripts/deploy_tools/land_lib/tools.py:127-153`: one dataclass holding every process
+- `scripts/deploy_tools/land_lib/tools.py`: one dataclass holding every process
   boundary with real implementations as defaults.
-- `scripts/deploy_tools/tests/test_land_imports.py:28-50,76-82`: an explicit `ALLOWED`
+- `scripts/deploy_tools/tests/test_land_imports.py`: an explicit `ALLOWED`
   dependency map plus a reject-half test proving the parser sees both import forms.
-- `scripts/deploy_tools/tests/conftest.py:102-127`: an autouse fixture that turns a
+- `scripts/deploy_tools/tests/conftest.py`: an autouse fixture that turns a
   `sys.path` leak into a test failure.
-- `scripts/deploy_tools/land_lib/outcome.py:32-50`: exit code and verdict constructed
+- `scripts/deploy_tools/land_lib/outcome.py`: exit code and verdict constructed
   together and validated in `__init__`, so "printed without its verdict" is unrepresentable.
-- `ansible/tests/services/test_monitor_bridge_modules.py:59-60` and
-  `ansible/tests/deploy/test_gitops_deploy_ship_list.py:84-85`: ship lists guarded in both
+- `ansible/tests/services/test_monitor_bridge_modules.py` and
+  `ansible/tests/deploy/test_gitops_deploy_ship_list.py`: ship lists guarded in both
   directions against the tree.
-- `ansible/tests/services/test_monitor_bridge_mount_layout.py:124-135`: a synthesized missing
+- `ansible/tests/services/test_monitor_bridge_mount_layout.py`: a synthesized missing
   module must produce `No module named 'bridge.config'`.
 - `pyproject.toml` `addopts`: `-p leakguard` makes "does a test reach the network" a runner
   verdict rather than a review question.
