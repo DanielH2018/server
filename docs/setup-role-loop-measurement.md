@@ -9,9 +9,11 @@ the per-block tags inside each role, which the deployer's narrowed setup apply s
 ## Result
 
 **The loop selects the same tasks, in the same order, for every tag on every host.** #3734 can
-loop at runtime; it does not need a generated playbook. Two costs remain, and the loop does not
-remove them: Ansible can no longer list the playbook's tasks or tags, and 13 modules and tests read the
-`roles:` list as text. Both are in *What the loop costs* below.
+loop at runtime; tag selection does not force a generated playbook. A runtime loop still has
+costs that a generated playbook avoids. Ansible can no longer list the playbook's tasks or tags,
+13 modules and tests read the `roles:` list as text and would have to change, and a cross-role
+notify into a gated role fails the play instead of being skipped. *What the loop costs* weighs
+them against the generator a generated playbook needs.
 
 | Host | Tags compared | Match | Tasks with no `--tags` (static / looped) |
 |---|---|---|---|
@@ -93,7 +95,24 @@ Two controls show the harness can report a difference. Both ran on daniel-box:
 Without `apply:`, a role tag selects only the tasks that carry that tag themselves. Without
 `always`, `--tags` skips the include, so the role never loads and none of its tasks run.
 
-The harness does not cover two things:
+The harness removed every `notify:`, so a separate probe measured handlers. It used two
+minimal roles: role `a` defines a handler, and role `b`'s task notifies it.
+
+| Shape | `a` included | `a` gated off |
+|---|---|---|
+| static `roles:` | handler runs | handler silently does not run, exit 0 |
+| looped `include_role` | handler runs | play fails, exit 1 |
+
+The looped failure reads `The requested handler 'Handler from a' was not found in either the
+main handlers list nor in the listening handlers list`. The probe returned the same result with
+`--tags b`, and with `b` placed before `a` in the list. In this tree, `optimize_pi` notifies two
+handlers that `initial_setup` defines (`ansible/tests/setup/test_setup_handlers_resolve.py`).
+`initial_setup` is unconditional, so that notify resolves in both shapes. A future
+cross-role notify into a GATED role would fail the play under a loop, where the static playbook
+skips it silently. That test reads the `roles:` list, so it is one of the readers below and can
+carry the rule.
+
+The harness and the probe leave two differences unmeasured, and neither applies to this tree:
 
 - **A static entry's `when:` is evaluated per task, and a looped include evaluates its `when:` once.** Static `roles:`
   append the entry's `when:` to every task in the role. The two shapes differ only if a role
@@ -116,16 +135,24 @@ The harness does not cover two things:
   static `--list-tags` derived from the tasks tree.
 - **13 modules and tests read `initial_setup.yml`'s `roles:` list.** The production readers are
   `narrow_setup_playbook.playbook_roles`, `narrow_setup_index.foreign_tags`, `land_reach` and
-  `docs/glance_facts`. The tests are `test_every_playbook_task_is_tag_selectable`,
+  `scripts/docs/glance_facts.py`. The tests are `test_every_playbook_task_is_tag_selectable`,
   `test_setup_roles_the_tick_host_skips`, `test_initial_setup_roles_are_visible_to_the_deployer`,
   `test_setup_handlers_resolve` and five `test_land_reach*` files. Under a loop, `playbook_roles`
   returns the empty set, so `narrow_setup.role_tags` refuses every narrowing until it reads
-  `setup_roles:` instead. Changing those readers is part of #3734's cost, whether the playbook loops or
-  is generated.
+  `setup_roles:` instead.
 - **`nut_host` does not fit the four placements the issue proposes.** Its gate is
   `inventory_hostname == ups_host or nut_host_secondary_armed | bool`, a `host:` and a `flag:`
   joined by `or`. The list needs a fifth placement, or a per-role gate variable as the
   measurement used.
+
+A generated playbook avoids the first two costs. It still writes a static `roles:` list, so
+listing works and the 13 readers stay unchanged. In exchange it needs a generator and a drift
+check. #3734 therefore chooses between two trade-offs, because tag selection is equal in both
+shapes:
+
+- **Loop at runtime.** No generator, but 13 readers change and listing is lost.
+- **Generate the playbook.** Readers and listing are kept, but a generator and its drift check
+  are added.
 
 ## Where the deployer should read the list
 
