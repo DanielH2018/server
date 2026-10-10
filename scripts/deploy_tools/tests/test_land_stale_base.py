@@ -135,3 +135,49 @@ def test_the_policy_checks_and_pins_the_head_its_own_update_made(landing):
     merge.await_merge(ln)
     assert ln.pinned_head == NEW
     assert _gh_writes(calls) == ["update-branch aaaa", "merge bbbb"]
+
+
+def test_a_head_the_operator_approved_merges_without_an_update(landing, tmp_path):
+    """The update would make a head the approval does not name, and the policy refuses that."""
+    approval_paths = tmp_path / "approval-paths"
+    approval_paths.write_text("scripts/deploy_tools/land\n")
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,title,body,reviewDecision": {
+                    "state": "OPEN",
+                    "title": "Document the lander",
+                    "body": "",
+                    "reviewDecision": "APPROVED",
+                },
+                "headRefOid,headRefName,baseRefName,isCrossRepository": {
+                    "headRefOid": OLD,
+                    "headRefName": "worktree-claude+lander-docs",
+                    "baseRefName": "master",
+                    "isCrossRepository": False,
+                },
+                "headRefOid": {"headRefOid": OLD},
+                "state,mergeable,headRefOid": _polls(OLD),
+            },
+            pr_files=[{"filename": "scripts/deploy_tools/land_lib/merge.py"}],
+            pr_reviews=[
+                {
+                    "user": {"login": "operator-login"},
+                    "state": "APPROVED",
+                    "commit_id": OLD,
+                    "submitted_at": "2026-10-05T20:00:00Z",
+                }
+            ],
+            compare=[INCIDENT_2922],
+        ),
+        arm_merge=True,
+        await_merge=True,
+        require_branch_prefix=PREFIX,
+        approval_paths=str(approval_paths),
+        approver="operator-login",
+    )
+    merge.arm_merge(ln)
+    merge.await_merge(ln)
+    assert ln.approved_head == OLD
+    assert _gh_writes(calls) == ["merge aaaa"]
+    assert not [c for c in calls if c[0] == "gh:compare"]

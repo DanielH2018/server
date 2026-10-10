@@ -52,7 +52,8 @@ followed a PR whose every job was green, and two of them came from a master comm
 after the PR's base. Once the head reads green, `_master_paths_since` asks GitHub which paths
 master changed since the PR's merge base. When any did, `_update_branch` merges master into the
 PR branch, and the merge waits for CI on the updated head instead. A landing updates the
-branch at most once.
+branch at most once, and never the branch of a head the landing policy admitted on an
+approval, which the update would void.
 """
 
 import re
@@ -245,6 +246,20 @@ def _master_paths_since(ln: Landing, head: str) -> list[str]:
     return [p for p in paths if isinstance(p, str)]
 
 
+def _stale_paths(ln: Landing, head: str) -> list[str]:
+    """The paths that make `head` stale enough to update; [] to merge it as it stands."""
+    if head == ln.approved_head:
+        # DECIDED: an approved head merges without the re-test. The update would make a head
+        # the operator's approval does not name, so the policy would refuse it, and each
+        # re-approval starts a new landing whose own update outdates it again.
+        say(
+            f"not checking {head[:8]} against {BRANCH}: the operator approved this head, "
+            "and updating the branch would void the approval"
+        )
+        return []
+    return _master_paths_since(ln, head)
+
+
 def _update_branch(ln: Landing, head: str, moved: list[str]) -> None:
     """Merge master into the PR branch at `head`, so its CI runs against today's master.
 
@@ -404,8 +419,7 @@ def await_merge(ln: Landing) -> None:
                     1,
                 )
             # The move is this landing's own update, so the policy checks the new head and
-            # the merge is pinned to it. A PR the approval list let through on an approval
-            # is refused here: the approval names the head before the update.
+            # the merge is pinned to it.
             say(f"checking the landing policy again on the updated head {head[:8]}")
             ln.pinned_head = policy.check(ln)
             continue
@@ -419,7 +433,7 @@ def await_merge(ln: Landing) -> None:
                     Verdict.PR_CI_RED,
                 )
             if rc == CI_GREEN and ln.direct_merge_subject:
-                moved = [] if updated_from else _master_paths_since(ln, head)
+                moved = [] if updated_from else _stale_paths(ln, head)
                 if moved:
                     _update_branch(ln, head, moved)
                     updated_from = head
