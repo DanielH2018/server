@@ -25,6 +25,12 @@ cannot carry the total past the cap. It rises above that floor only when a run h
 more, at the costliest run seen so far times PROJECTION_MARGIN. A report with no costUsd,
 or no report at all, stops the run, because its spend is unknown.
 
+THE PLAN IS PRICED BEFORE IT STARTS (#4308). The floor above leaves about $6.25 of each $10
+spendable, and the baseline arm of a 30-case plan at k=3 costs more than that, so a plan that
+cannot finish the baseline, -doc and one section arm spends money and measures nothing. `run`
+prices each case from past engine reports and refuses such a plan, dry run included, and names
+the largest selection that fits.
+
 The report goes to --out, never to evals/history.json: an ablation arm is not a sweep, and
 trend.py would mix it into the regression baseline.
 """
@@ -35,12 +41,26 @@ import os
 import re
 import subprocess
 import sys
+import shlex
 import tempfile
 import time
-from collections import Counter
 from collections.abc import Callable
 from datetime import date, datetime, timezone
 from pathlib import Path
+
+from ablate_budget import (
+    ABLATION_DIR,
+    CAP_USD,
+    SWEEP_ARCHIVE,
+    UNPRICED_RUN_USD,
+    WORST_RUN_USD,
+    Budget,
+    complete_arms,
+    fitting_selection,
+    report_entries,
+    run_costs,
+)
+from ranking import default_transcripts, rank_docs, section_reads
 
 REPO = Path(__file__).resolve().parent.parent
 CASES_DIR = REPO / "evals" / "cases"
@@ -51,13 +71,6 @@ ENGINE = CHEZMOI / "evals" / "run-evals.mjs"
 # a name with one there would be graded without the doc and every arm would read identical.
 CHEZMOI_AGENTS = CHEZMOI / "home" / "private_dot_claude" / "agents"
 
-# The operator's ruling on #4259 (2026-10-10): each ablation run stays under $10.
-CAP_USD = 10.0
-PROJECTION_MARGIN = 1.5
-# The most one engine call can bill: the agent's and the judge's --max-budget-usd ($0.75 and
-# $0.50, in invoke-agent.mjs and judge.mjs), each tried up to three times. A run launches only
-# when this much still fits under the cap, so no run can carry the total past it.
-WORST_RUN_USD = 3 * 0.75 + 3 * 0.50
 # The weekly sweep's day, as Python's date.weekday() numbers it (Monday is 0). The cron in
 # ansible/roles/setup/initial_setup/tasks/crons.yml says weekday "0", cron's Sunday; a test
 # holds the two together. An ablation run must not share a day with the sweep, because both
@@ -73,22 +86,6 @@ EXIT_CAPPED = 3
 
 _FRONTMATTER = re.compile(r"\A(---\n.*?\n---\n?)(.*)\Z", re.S)
 _FENCE = re.compile(r"^(```|~~~)")
-
-
-def rank_docs(log_lines: list[str]) -> list[tuple[str, int]]:
-    """Count instructions.log loads per repo-relative doc, most-loaded first.
-
-    A log line is `<ts> [<session>] <reason> <scope> <path> [trigger=...]`. Absolute paths
-    are the user-level docs the dotfiles repo owns, so they are dropped here. The log
-    records whole docs, never headings, so it cannot rank sections.
-    """
-    counts = Counter()
-    for line in log_lines:
-        fields = line.split()
-        if len(fields) < 5 or fields[4].startswith("/"):
-            continue
-        counts[fields[4]] += 1
-    return sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
 
 
 def split_sections(md: str) -> tuple[str, list[tuple[str, str]]]:
@@ -180,35 +177,6 @@ def load_cases(
     if missing:
         raise KeyError(f"unknown or live case id(s): {', '.join(sorted(missing))}")
     return picked
-
-
-class Budget:
-    """Spend so far against the cap, and the projection the pre-launch check uses."""
-
-    def __init__(
-        self,
-        cap: float,
-        margin: float = PROJECTION_MARGIN,
-        floor: float = WORST_RUN_USD,
-    ):
-        self.cap = cap
-        self.margin = margin
-        self.floor = floor
-        self.spent = 0.0
-        self.costliest = 0.0
-
-    def projected(self) -> float:
-        return max(self.costliest * self.margin, self.floor)
-
-    def next_run_fits(self) -> bool:
-        return self.spent + self.projected() <= self.cap
-
-    def add(self, cost: float) -> None:
-        self.spent += cost
-        self.costliest = max(self.costliest, cost)
-
-    def crossed(self) -> bool:
-        return self.spent > self.cap
 
 
 Invoke = Callable[[str, dict, Path], dict | None]
@@ -379,8 +347,8 @@ def build_arms(
     return arms
 
 
-def default_log() -> Path:
-    """The primary checkout's instructions.log; a worktree has no log of its own."""
+def primary_root() -> Path:
+    """The primary checkout, which a worktree's REPO is not."""
     common = subprocess.run(
         [
             "git",
@@ -394,8 +362,12 @@ def default_log() -> Path:
         text=True,
         check=False,
     ).stdout.strip()
-    root = Path(common).parent if common else REPO
-    return root / ".claude" / "logs" / "instructions.log"
+    return Path(common).parent if common else REPO
+
+
+def default_log() -> Path:
+    """The primary checkout's instructions.log; a worktree has no log of its own."""
+    return primary_root() / ".claude" / "logs" / "instructions.log"
 
 
 def _print_summary(summary: dict, run: dict, spent: float) -> None:
@@ -415,9 +387,25 @@ def _print_summary(summary: dict, run: dict, spent: float) -> None:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
-    r = sub.add_parser("rank", help="rank repo docs by instructions.log loads")
+    r = sub.add_parser(
+        "rank",
+        help="rank repo docs by instructions.log loads, or one doc's sections by reads",
+    )
     r.add_argument("--log", type=Path, default=None)
     r.add_argument("--top", type=int, default=10)
+    r.add_argument(
+        "--sections",
+        metavar="DOC",
+        default=None,
+        help="rank this repo-relative doc's `## ` sections by transcripts naming them",
+    )
+    r.add_argument(
+        "--transcripts",
+        type=Path,
+        action="append",
+        default=[],
+        help="a transcript directory (repeatable); default this repo's sessions",
+    )
     a = sub.add_parser("run", help="ablate a doc's sections against the eval cases")
     a.add_argument("--doc", default="CLAUDE.md", help="repo-relative doc to ablate")
     a.add_argument(
@@ -428,6 +416,11 @@ def main(argv=None) -> int:
     )
     a.add_argument("--case", action="append", default=[], help="case id (repeatable)")
     a.add_argument("--agent", action="append", default=[], help="agent (repeatable)")
+    a.add_argument(
+        "--by-reads",
+        action="store_true",
+        help="ablate sections most-read first, as `rank --sections` orders them",
+    )
     a.add_argument(
         "--k",
         type=int,
@@ -440,9 +433,31 @@ def main(argv=None) -> int:
     a.add_argument("--node", default="node")
     a.add_argument("--history", type=Path, default=HISTORY)
     a.add_argument(
+        "--cost-reports",
+        type=Path,
+        action="append",
+        default=[],
+        help="a directory of past engine reports to price cases from (repeatable); "
+        "default the ablation cache and the sweep archive",
+    )
+    a.add_argument(
         "--dry-run", action="store_true", help="print the plan, spend nothing"
     )
     args = p.parse_args(argv)
+
+    def transcripts() -> list[Path]:
+        dirs = getattr(args, "transcripts", None)
+        if dirs:
+            return sorted(p for d in dirs for p in d.rglob("*.jsonl"))
+        return default_transcripts(primary_root())
+
+    if args.cmd == "rank" and args.sections:
+        headings = [h for h, _ in split_sections((REPO / args.sections).read_text())[1]]
+        paths = transcripts()
+        print(f"{args.sections}: sections by transcripts naming them, of {len(paths)}")
+        for heading, n in section_reads(headings, paths):
+            print(f"{n:6d}  ## {heading}")
+        return EXIT_DONE
 
     if args.cmd == "rank":
         log = args.log or default_log()
@@ -467,6 +482,9 @@ def main(argv=None) -> int:
     doc = (REPO / args.doc).read_text()
     headings = [h for h, _ in split_sections(doc)[1]]
     sections = args.section or headings
+    if args.by_reads:
+        reads = dict(section_reads(sections, transcripts()))
+        sections = sorted(sections, key=lambda h: -reads[h])
     unknown = [h for h in sections if h not in headings]
     if unknown:
         print(f"no such section in {args.doc}: {unknown}", file=sys.stderr)
@@ -485,10 +503,43 @@ def main(argv=None) -> int:
         f"{args.doc}: baseline, -doc and {len(sections)} section arm(s) x "
         f"{len(cases)} case(s) x k={args.k} = {runs} runs, capped at ${args.cap_usd:.2f}"
     )
+    priced = run_costs(
+        report_entries(args.cost_reports or [ABLATION_DIR, SWEEP_ARCHIVE])
+    )
+    per_run = {c["id"]: priced.get(c["id"], UNPRICED_RUN_USD) for c in cases}
+    arm_usd = args.k * sum(per_run.values())
+    finished = complete_arms(
+        list(per_run.values()), args.k, 2 + len(sections), args.cap_usd
+    )
+    print(
+        f"estimate: {sum(c in priced for c in per_run)} of {len(cases)} case(s) priced from "
+        f"past reports, the rest at ${UNPRICED_RUN_USD:.2f} a run; ${arm_usd:.2f} an arm; "
+        f"{max(finished - 2, 0)} of {len(sections)} section arm(s) expected to finish"
+    )
+    if finished < 3:
+        print(
+            f"refusing: the baseline, -doc and one section arm need "
+            f"${3 * arm_usd:.2f}, and the cap leaves ${args.cap_usd - WORST_RUN_USD:.2f} "
+            f"once a run's ${WORST_RUN_USD:.2f} worst case is held back",
+            file=sys.stderr,
+        )
+        fit_cases, fit_sections = fitting_selection(
+            list(per_run), per_run, args.k, sections, args.cap_usd
+        )
+        if fit_cases:
+            flags = [f"--case {c}" for c in fit_cases]
+            flags += [f"--section {shlex.quote(h)}" for h in fit_sections]
+            print(f"largest selection that fits: {' '.join(flags)}", file=sys.stderr)
+        else:
+            print(
+                "no selection fits: one case's three arms exceed the cap",
+                file=sys.stderr,
+            )
+        return EXIT_REFUSED
     if args.dry_run:
-        for h, text in split_sections(doc)[1]:
-            if h in sections:
-                print(f"  {len(text):6d} bytes  ## {h}")
+        sizes = dict(split_sections(doc)[1])
+        for h in sections:
+            print(f"  {len(sizes[h]):6d} bytes  ## {h}")
         return EXIT_DONE
 
     if not os.environ.get("ANTHROPIC_API_KEY"):

@@ -11,6 +11,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ablate import (
     BASELINE,
+    EXIT_DONE,
+    EXIT_REFUSED,
     REPO,
     SWEEP_WEEKDAY,
     WHOLE_DOC,
@@ -19,7 +21,7 @@ from ablate import (
     ablate,
     doc_without,
     load_cases,
-    rank_docs,
+    main,
     split_sections,
     summarize,
     sweep_day_conflict,
@@ -83,18 +85,6 @@ def test_an_ablated_prompt_differs_from_the_baseline_only_by_the_section():
 
 def test_the_whole_doc_arm_is_the_agent_file_unchanged():
     assert with_doc(AGENT, "CLAUDE.md", None) == AGENT
-
-
-def test_rank_docs_counts_repo_docs_and_drops_user_level_paths():
-    log = [
-        "t [s] session_start Project CLAUDE.md",
-        "t [s] session_start User /home/u/.claude/CLAUDE.md",
-        "t [s] session_start User /home/u/.claude/CLAUDE.md",
-        "t [s] bash_path_match Project roles/x/CLAUDE.md trigger=roles/x/a.py",
-        "t [s] path_glob_match Project roles/x/CLAUDE.md trigger=roles/x/b.py",
-        "malformed",
-    ]
-    assert rank_docs(log) == [("roles/x/CLAUDE.md", 2), ("CLAUDE.md", 1)]
 
 
 def test_sweep_weekday_matches_the_cron():
@@ -252,3 +242,21 @@ def test_a_refusal_is_rechecked_before_every_run(tmp_path: Path):
 def test_an_unknown_section_is_refused():
     with pytest.raises(KeyError):
         doc_without(DOC, "Gamma")
+
+
+def test_a_default_dry_run_refuses_and_names_a_selection_that_fits(tmp_path, capsys):
+    rc = main(["run", "--dry-run", "--cost-reports", str(tmp_path)])
+    err = capsys.readouterr().err
+    assert rc == EXIT_REFUSED
+    assert "refusing: the baseline, -doc and one section arm need" in err
+    assert "largest selection that fits: --case " in err
+    assert "--section " in err
+
+
+def test_a_plan_that_fits_is_priced_at_the_unpriced_rate_and_accepted(tmp_path, capsys):
+    argv = ["run", "--dry-run", "--agent", "skeptic", "--section", "Secrets Management"]
+    rc = main(argv + ["--cost-reports", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert rc == EXIT_DONE
+    assert "0 of 3 case(s) priced from past reports, the rest at $0.12 a run" in out
+    assert "1 of 1 section arm(s) expected to finish" in out
