@@ -25,8 +25,3 @@
     # excluded. The prune is armed by default since #3662, so this line is the opt-out.
     manifests_prune: false
     manifests_rollout: nut
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
-    manifests_secret_files:
-      - config-secret.yaml

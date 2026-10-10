@@ -8,20 +8,6 @@
     # the whole deploy while the pod is still coming up healthy. The number lives in
     # defaults/main.yml because verify.yml's own rollout gate waits the same budget.
     manifests_rollout_timeout: "{{ sonarr_k8s_rollout_timeout }}"
-    manifests_files:
-      # The policy is listed FIRST so it exists before the pod can be scheduled. `kubectl apply
-      # -f <dir>` does not guarantee that ordering, which is why the gap is also survivable: the
-      # pod takes seconds to pull and start, and the policy is applied in the same call.
-      - networkpolicy.yaml
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-      # The query-only door for monitor-bridge on daniel-server.
-      - ingressroute-monitoring.yaml
-    manifests_secret_files:
-      # The exportarr sidecar's API key. Listed as a SECRET file so it is rendered 0600 under
-      # no_log, like every other decrypted SOPS value.
-      - secret-exportarr.yaml
 
 - name: Prove the library survived the move
   tags: [deploy]

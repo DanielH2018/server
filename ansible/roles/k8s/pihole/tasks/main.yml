@@ -29,13 +29,8 @@
     manifests_self_rollouts:
       - { name: pihole, kind: deploy, image: pihole }
       - { name: pihole-2, kind: deploy, image: pihole, rolled_by_role: true }
-    manifests_files:
-      - configmap.yaml
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-    manifests_secret_files:
-      - secret.yaml
+    # The Deployment macro both instances' templates import. It renders no document of its own.
+    manifests_exclude_files: [pihole-deployment.yaml]
     # Instance 2's Deployment: rendered, pruned and DIGESTED by the shared role, applied by this
     # one. Staged in its own directory, so neither the shared prune nor the shared
     # `kubectl apply -f <dir>/` touches it, and the shared role publishes the path as

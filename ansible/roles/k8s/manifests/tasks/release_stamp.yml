@@ -209,7 +209,7 @@
       # `## Release records`.
       manifests_digest: "{{ manifests_release_digest }}"
       # The count is what makes a dropped secret manifest visible.
-      secret_manifests: "{{ manifests_secret_files | default([]) | sort }}"
+      secret_manifests: "{{ manifests_secret_files_resolved | sort }}"
       # HMAC-SHA256 under the host key, over the sorted secret files -- see the header and the
       # DECIDED marker in release_digest.yml. '' when the host key was unreadable, which a
       # reader treats as absent. A record written before this field has none at all.

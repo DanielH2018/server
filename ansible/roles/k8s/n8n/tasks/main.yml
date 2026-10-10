@@ -40,14 +40,6 @@
     manifests_extra_rollouts:
       - name: n8n-runners
         image: n8n-runners
-    manifests_files:
-      - networkpolicy.yaml
-      - service.yaml
-      - deployment.yaml
-      - deployment-runners.yaml
-      - ingressroute.yaml
-    manifests_secret_files:
-      - secret.yaml
 
 # ── prove the NetworkPolicy, rather than assuming it ────────────────────────────────────────
 # "The controller is up" is not evidence that a policy has any effect, and a policy that silently

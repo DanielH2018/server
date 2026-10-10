@@ -290,11 +290,11 @@ def _empty_files_guard_holds(**context) -> bool:
 
 
 def test_an_armed_role_naming_no_manifest_is_flagged() -> None:
-    assert not _empty_files_guard_holds(manifests_files=[])
+    assert not _empty_files_guard_holds(manifests_files_resolved=[])
 
 
 def test_an_armed_role_naming_a_manifest_is_clean() -> None:
-    assert _empty_files_guard_holds(manifests_files=["deployment.yaml"])
+    assert _empty_files_guard_holds(manifests_files_resolved=["deployment.yaml"])
 
 
 def test_an_empty_render_is_flagged() -> None:

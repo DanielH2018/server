@@ -57,9 +57,7 @@ def test_the_digest_stats_the_ordinary_manifests_and_the_claims_only():
     stat = task_named(
         load_tasks(TASKS / DIGEST_FILE), "Checksum the rendered manifests"
     )
-    assert (
-        stat["loop"] == "{{ (manifests_files | default([])) + manifests_claim_files }}"
-    )
+    assert stat["loop"] == "{{ manifests_files_resolved + manifests_claim_files }}"
 
 
 def test_the_render_entry_is_not_shadowed_by_the_mode_flag():

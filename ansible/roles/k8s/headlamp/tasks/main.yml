@@ -5,20 +5,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_files:
-      # The policy is listed FIRST so it exists before the pod can be scheduled. `kubectl apply
-      # -f <dir>` does not guarantee that ordering, which is why the gap is also survivable: the
-      # pod takes seconds to pull and start, and the policy is applied in the same call.
-      - networkpolicy.yaml
-      - rbac.yaml
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-    # Its own list, not `manifests_files`: the shared role renders these under no_log at 0600
-    # and reconciles their keys, because `kubectl apply` cannot remove a key a template
-    # dropped (roles/k8s/manifests/CLAUDE.md).
-    manifests_secret_files:
-      - oidc-secret.yaml
     # The Prometheus proxy Role and RoleBinding live in the observability namespace, which the
     # armed apply's `-n homelab` refuses (#3575). The shared role renders, prunes and digests
     # them in their own directory, and the task below applies them.

@@ -8,20 +8,6 @@
     # coming up healthy. The number lives in
     # defaults/main.yml because deployment.yaml.j2's progressDeadlineSeconds reads it too.
     manifests_rollout_timeout: "{{ radarr_k8s_rollout_timeout }}"
-    manifests_files:
-      # The policy is listed FIRST so it exists before the pod can be scheduled. `kubectl apply
-      # -f <dir>` does not guarantee that ordering, which is why the gap is also survivable: the
-      # pod takes seconds to pull and start, and the policy is applied in the same call.
-      - networkpolicy.yaml
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-      # The query-only door for monitor-bridge on daniel-server.
-      - ingressroute-monitoring.yaml
-    manifests_secret_files:
-      # The exportarr sidecar's API key. Listed as a SECRET file so it is rendered 0600 under
-      # no_log, like every other decrypted SOPS value.
-      - secret-exportarr.yaml
 
 # The Discord Connect notification is a row in radarr.db, not a manifest — live state a
 # Longhorn revert or a recreated claim drops silently. roles/k8s/arr-notification declares it.

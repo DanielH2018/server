@@ -103,7 +103,3 @@
     # The script ConfigMap is applied above from its own directory, unlabelled, so the prune
     # never selects it.
     manifests_rollout: autofix-bridge
-    manifests_files:
-      - deployment.yaml
-    manifests_secret_files:
-      - env-secret.yaml

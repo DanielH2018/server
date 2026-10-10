@@ -247,11 +247,11 @@ def test_the_sweep_removes_the_sibling_volume_claim_staged_into():
 
 def test_the_sweep_runs_for_a_role_with_k8s_claims_or_its_own_pvc():
     assert _sweeps(manifests_claim_files=["claim-a-config.yaml"])
-    assert _sweeps(manifests_files=["pvc.yaml", "deployment.yaml"])
+    assert _sweeps(manifests_files_resolved=["pvc.yaml", "deployment.yaml"])
 
 
 def test_the_sweep_skips_a_role_with_neither_and_any_dry_run():
-    assert not _sweeps(manifests_files=["server-pvc.yaml", "deployment.yaml"])
+    assert not _sweeps(manifests_files_resolved=["server-pvc.yaml", "deployment.yaml"])
     assert not _sweeps()
     assert not _sweeps(
         manifests_claim_files=["claim-a-config.yaml"], k8s_no_mutate=True

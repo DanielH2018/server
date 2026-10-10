@@ -13,5 +13,3 @@
     # node going NotReady during a deploy is worth a rollback on its own.
     manifests_rollout: node-exporter
     manifests_rollout_kind: daemonset
-    manifests_files:
-      - daemonset.yaml

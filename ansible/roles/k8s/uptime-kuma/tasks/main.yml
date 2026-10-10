@@ -55,14 +55,8 @@
   vars:
     # The two Secrets are never pruned: Secret is not in manifests_prune_allowlist.
     manifests_rollout: uptime-kuma
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-      - status-page-sync-configmap.yaml
-      - status-page-sync-cronjob.yaml
-      - maintenance-sync-configmap.yaml
-      - maintenance-sync-cronjob.yaml
+    # Listed rather than derived: static-monitors.yaml is a Secret (it carries every push
+    # token) whose name does not say so, and the derivation reads secrecy off the name.
     manifests_secret_files:
       - secret.yaml
       - static-monitors.yaml

@@ -18,6 +18,7 @@ gains a probe. Asserting it here as well would split one rule's rationale across
 Do not add it here; add a row there.
 """
 
+from lib.k8s_roles import resolved_manifest_files
 import re
 
 import yaml
@@ -198,17 +199,14 @@ def test_every_arr_renders_its_exportarr_secret():
 
 
 def test_the_secret_is_staged_through_the_no_log_path():
-    """A Secret listed in manifests_files instead of manifests_secret_files renders 0644 and
-    prints its decrypted contents in the play recap."""
+    """A Secret resolved into manifests_files instead of manifests_secret_files renders 0644
+    and prints its decrypted contents in the play recap."""
     for arr in ARRS:
-        tasks = (REPO / f"ansible/roles/k8s/{arr}/tasks/main.yml").read_text()
-        assert "manifests_secret_files:" in tasks, (
-            f"{arr} renders a Secret but declares no manifests_secret_files"
+        files, secret = resolved_manifest_files(arr)
+        assert "secret-exportarr.yaml" in secret, (
+            f"{arr}'s secret-exportarr.yaml must resolve into manifests_secret_files"
         )
-        secret_block = tasks.split("manifests_secret_files:", 1)[1]
-        assert "secret-exportarr.yaml" in secret_block.split("manifests")[0], (
-            f"{arr}'s secret-exportarr.yaml must be under manifests_secret_files"
-        )
+        assert "secret-exportarr.yaml" not in files, arr
 
 
 def test_the_image_pins_stay_in_lockstep():

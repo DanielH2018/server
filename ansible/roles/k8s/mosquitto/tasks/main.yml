@@ -3,12 +3,6 @@
 - name: Deploy mosquitto to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
-    manifests_secret_files:
-      - config-secret.yaml
 
 # `wait` returns the moment MetalLB writes the address, and `-o jsonpath` prints that field
 # once the condition holds — one watch instead of a 12x5s sampling loop.

@@ -7,13 +7,6 @@
 - name: Deploy jellyfin to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
-      # The direct-by-IP LAN address, for clients that do not go through Traefik.
-      - service-lan.yaml
-      - ingressroute.yaml
 
 # ── the snapshot-space cap ──────────────────────────────────────────────────────────
 # The claim caps the FILESYSTEM. It does not cap the Longhorn backend, because this role

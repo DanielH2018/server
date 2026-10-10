@@ -34,9 +34,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_files:
-      - storageclass.yaml
-      - pv.yaml
     # No Deployment in this role — it is storage, not a workload.
     manifests_rollout: ""
     # Armed for the label, not for a deletion it can make: the StorageClass and PV are

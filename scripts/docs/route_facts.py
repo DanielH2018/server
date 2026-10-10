@@ -54,12 +54,12 @@ LAN = "lan"
 PUBLIC = "public"
 
 
-def ingressroute_templates(role_dir: Path) -> list[Path]:
+def ingressroute_templates(role_dir: Path, entry: dict | None = None) -> list[Path]:
     """Every ingressroute template a role's route is rendered from, or [] if it has no route.
 
     The role's own `templates/ingressroute*.j2`, plus the shared default under
-    `ansible/templates/` when the role names `ingressroute.yaml` and ships no template for
-    it. The shared one has to be included or `reachability` reads the role's remaining
+    `ansible/templates/` when the role resolves `ingressroute.yaml` into its manifests and
+    ships no template for it. `entry` is its containers_list entry, which decides that. The shared one has to be included or `reachability` reads the role's remaining
     templates alone: sonarr keeps only `ingressroute-monitoring.yaml.j2`, which calls
     `monitoring_route()` and never `ingressroute()`, so the service would report LAN-only.
     """
@@ -69,7 +69,9 @@ def ingressroute_templates(role_dir: Path) -> list[Path]:
         if templates.is_dir()
         else []
     )
-    shared = manifest_template(role_dir.name, "ingressroute.yaml", role_dir.parent)
+    shared = manifest_template(
+        role_dir.name, "ingressroute.yaml", role_dir.parent, entry
+    )
     if shared is not None and shared not in own:
         own.append(shared)
     return own
@@ -89,10 +91,17 @@ def public_route_enabled(group_vars: Path = GROUP_VARS) -> bool:
     return bool(isinstance(loaded, dict) and loaded.get("k8s_public_route"))
 
 
-def reachability(role_dir: Path, group_vars: Path = GROUP_VARS) -> str:
-    """PUBLIC or LAN for a role that has a route. Callers check for a route first."""
+def reachability(
+    role_dir: Path, group_vars: Path = GROUP_VARS, entry: dict | None = None
+) -> str:
+    """PUBLIC or LAN for a role that has a route. Callers check for a route first.
+
+    `entry` is the role's containers_list entry, which decides whether it takes the shared
+    route; `manifest_template` has the default.
+    """
     text = "\n".join(
-        strip_jinja_comments(p.read_text()) for p in ingressroute_templates(role_dir)
+        strip_jinja_comments(p.read_text())
+        for p in ingressroute_templates(role_dir, entry)
     )
     if not _INGRESSROUTE_CALL_RE.search(text) or _PUBLIC_FALSE_RE.search(text):
         return LAN

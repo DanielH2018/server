@@ -17,9 +17,3 @@
     name: k8s/manifests
   vars:
     manifests_rollout: ical-proxy
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-    manifests_secret_files:
-      - secret.yaml

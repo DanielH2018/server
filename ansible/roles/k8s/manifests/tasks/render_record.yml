@@ -60,5 +60,5 @@
       # uptime-kuma's `static-monitors.yaml.j2`, which is one, leaves it identical.
       # `secret_digest` is what moves for them, so a reader may treat a match as
       # "not stale" only where this list is empty on both sides or both `secret_digest`s match.
-      secret_manifests: "{{ manifests_secret_files | default([]) | sort }}"
+      secret_manifests: "{{ manifests_secret_files_resolved | sort }}"
       secret_digest: "{{ manifests_release_secret_digest }}"

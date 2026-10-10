@@ -2,10 +2,17 @@
 # Shared render -> apply -> wait cycle for every k8s workload role.
 #
 # Included by roles/k8s/<service>/tasks/main.yml, which must set:
-#   manifests_service       service name (also the manifest subdirectory)
-#   manifests_files         list of template basenames rendered world-readable
-#   manifests_secret_files  list rendered 0600 with no_log (anything carrying a secret)
 #   manifests_rollout       workload to wait on; set '' to skip the wait entirely
+#
+# and may set (each derived or defaulted when omitted):
+#   manifests_service       service name (also the manifest subdirectory); defaults to the
+#                           calling role's name
+#   manifests_files         list of template basenames rendered world-readable; derived from
+#                           the caller's templates/ (the "Resolve the manifest file lists" task)
+#   manifests_secret_files  list rendered 0600 with no_log (anything carrying a secret); derived
+#                           from the caller's `*secret*.yaml.j2` templates
+#   manifests_exclude_files [<basename>] templates the derivation must skip: a macro-only file,
+#                           or a shared default the containers_list entry would otherwise earn
 #   manifests_rollout_kind  kubectl kind of that workload (and of every entry in
 #                           manifests_extra_rollouts): 'deploy' (default) or 'daemonset'
 #   manifests_deferred_files  [<basename>] manifests this role RENDERS, PRUNES and DIGESTS but
@@ -150,6 +157,54 @@
   loop_control:
     label: "{{ item.name | default('?') }}"
 
+- name: Resolve the manifest file lists for {{ manifests_service }}
+  tags: [always]
+  # A caller that passes `manifests_files` or `manifests_secret_files` gets exactly that list.
+  # Otherwise the list is derived from the caller's own templates (#3662):
+  #
+  #   secret files  every top-level `templates/*.yaml.j2` whose basename says `secret`
+  #   files         the rest of them, plus `service.yaml` / `ingressroute.yaml` from
+  #                 `manifests_shared_defaults` when the containers_list entry carries a `port` /
+  #                 a `hostname` and the role ships no template of that name
+  #
+  # Both lists skip a one-off `*-job.yaml` (staged and applied by the role's own task, in a
+  # reserved directory, so it never joins the directory apply) and `manifests_exclude_files`.
+  # The files list also skips `manifests_deferred_files`, which render into their own directory.
+  #
+  # Set as `*_resolved` facts, never as `manifests_files` itself. A set_fact is host-scoped, so a
+  # derived `manifests_files` would read as "the caller passed one" in the next role's include.
+  # `tags: [always]` for the same reason as the render directory below: tasks under every tag
+  # read them.
+  #
+  # scripts/lib/k8s_roles.py:resolved_manifest_files is the offline harnesses' copy of this rule,
+  # and ansible/tests/k8s/test_derived_manifest_files.py holds the two in step.
+  vars:
+    manifests_entry: >-
+      {{ (container_item | default({}))
+         if (container_item | default({})).name | default('') == manifests_service else {} }}
+    manifests_own_templates: >-
+      {{ query('fileglob', playbook_dir ~ '/roles/k8s/' ~ manifests_service ~ '/templates/*.yaml.j2')
+         | map('basename') | map('regex_replace', '\.j2$', '') | list }}
+    manifests_candidate_files: >-
+      {{ manifests_own_templates | reject('search', '-job\.yaml$')
+         | difference(manifests_exclude_files | default([])) | sort }}
+    manifests_derived_secret_files: >-
+      {{ manifests_candidate_files | select('search', '(^|-)secret[-.]') | list }}
+    manifests_derived_shared_files: >-
+      {{ ((['service.yaml'] if 'port' in manifests_entry else [])
+          + (['ingressroute.yaml'] if 'hostname' in manifests_entry else []))
+         | difference(manifests_own_templates) | difference(manifests_exclude_files | default([])) }}
+    manifests_secret_list: >-
+      {{ manifests_secret_files if manifests_secret_files is defined
+         else manifests_derived_secret_files }}
+  ansible.builtin.set_fact:
+    manifests_secret_files_resolved: "{{ manifests_secret_list }}"
+    manifests_files_resolved: >-
+      {{ manifests_files if manifests_files is defined
+         else (manifests_candidate_files + manifests_derived_shared_files)
+              | difference(manifests_secret_list)
+              | difference(manifests_deferred_files | default([])) | sort }}
+
 - name: Check that a role arming the prune renders something to keep for {{ manifests_service }}
   tags: [always]
   # The prune deletes every labelled object of an allowlisted kind that the apply did not
@@ -158,7 +213,7 @@
   # list that names no file at all. `always`, so a dry run is held to it too.
   ansible.builtin.assert:
     that:
-      - (manifests_files | default([]) | length) > 0
+      - (manifests_files_resolved | length) > 0
     fail_msg: >-
       {{ manifests_service }} arms manifests_prune but names no manifests_files. A prune
       over an empty render would delete every object the role has live.
@@ -268,7 +323,7 @@
     mode: "0644"
     owner: root
     group: root
-  loop: "{{ manifests_files | default([]) }}"
+  loop: "{{ manifests_files_resolved }}"
   become: true
   register: manifests_render
 
@@ -288,7 +343,7 @@
     mode: "0600"
     owner: root
     group: root
-  loop: "{{ manifests_secret_files | default([]) }}"
+  loop: "{{ manifests_secret_files_resolved }}"
   become: true
   register: manifests_secret_render
 
@@ -330,7 +385,7 @@
   become: true
   when:
     - not (k8s_no_mutate | bool)
-    - manifests_claim_files | length > 0 or 'pvc.yaml' in (manifests_files | default([]))
+    - manifests_claim_files | length > 0 or 'pvc.yaml' in manifests_files_resolved
 
 - name: Create the deferred manifest directory for {{ manifests_service }}
   tags: [config]
@@ -422,7 +477,7 @@
     state: absent
   loop: >-
     {{ manifests_staged.files | map(attribute='path') | map('basename')
-       | difference((manifests_files | default([])) + (manifests_secret_files | default([]))
+       | difference(manifests_files_resolved + manifests_secret_files_resolved
                     + manifests_claim_files)
        | list }}
   become: true
@@ -665,7 +720,7 @@
   # Skipped under dry-run: reconcile_secret_doc.yml `kubectl patch`es the LIVE Secret to drop
   # stale keys. That is a mutation, and it is one the dry-run apply cannot have made necessary.
   ansible.builtin.include_tasks: verify_secret_keys.yml
-  loop: "{{ manifests_secret_files | default([]) }}"
+  loop: "{{ manifests_secret_files_resolved }}"
   loop_control:
     loop_var: secret_file
   when: not k8s_dry_run | bool

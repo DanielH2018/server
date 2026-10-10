@@ -16,11 +16,6 @@
 - name: Deploy janitorr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_files:
-      - deployment.yaml
-    manifests_secret_files:
-      - config-secret.yaml
 
 - name: Verify janitorr
   ansible.builtin.import_tasks: verify.yml

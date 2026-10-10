@@ -6,13 +6,3 @@
 - name: Deploy bazarr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_files:
-      # Listed FIRST so it exists before the pod can be scheduled. Ordering within a single
-      # `kubectl apply -f <dir>` is not guaranteed, which is why the pod also cannot be reached
-      # in the gap: it takes seconds to pull and start, and the policy is applied in the same
-      # call. Same reasoning as roles/k8s/prowlarr.
-      - networkpolicy-bazarr.yaml
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml

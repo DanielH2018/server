@@ -13,6 +13,6 @@
     # aliases, because the stabilise gate would then read a Deployment's jsonpath off this and
     # pass on 0 == 0.
     manifests_rollout_kind: daemonset
-    manifests_files:
-      - configmap.yaml
-      - daemonset.yaml
+    # No Service, though the entry carries a `port`: the `gpu` scrape job discovers each pod, and
+    # a ClusterIP over the two pods would flip one series between two GPUs (CLAUDE.md).
+    manifests_exclude_files: [service.yaml]

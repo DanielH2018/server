@@ -120,25 +120,6 @@
     name: k8s/manifests
   vars:
     manifests_rollout: ""
-    manifests_files:
-      - networkpolicy.yaml
-      - networkpolicy-traefik.yaml
-      - networkpolicy-authelia.yaml
-      # One :6060 prometheus grant per pod in crowdsec_k8s_sidecar_agents.
-      - networkpolicy-crowdsec-sidecars.yaml
-      - networkpolicy-crowdsec.yaml
-      - networkpolicy-pihole.yaml
-      - networkpolicy-mosquitto.yaml
-      - networkpolicy-nut.yaml
-      - networkpolicy-jellyfin.yaml
-      - networkpolicy-netpol-sentinel.yaml
-      - networkpolicy-loki-homelab.yaml
-      # Every fence declared as `netpol_from` or `netpol_fences` on a containers_list entry
-      # (the callers template).
-      - networkpolicy-callers.yaml
-      - networkpolicy-terraria.yaml
-      - networkpolicy-valheim.yaml
-      - networkpolicy-wg-easy.yaml
     # The observability namespace's baseline and its two caller policies, which the armed
     # apply's `-n homelab` refuses (#3575). The shared role renders, prunes and digests them in
     # their own directory, and the task below applies them.

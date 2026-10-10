@@ -62,7 +62,7 @@ def test_the_hmac_task_is_one_no_log_call_per_secret_file():
     task = task_named(
         load_tasks(TASKS / "release_digest.yml"), "Digest the rendered secret manifests"
     )
-    assert task["loop"] == "{{ manifests_secret_files | default([]) }}"
+    assert task["loop"] == "{{ manifests_secret_files_resolved }}"
     assert task["no_log"] is True
     argv = task["ansible.builtin.command"]["argv"]
     helper = next(
@@ -106,7 +106,7 @@ def test_a_secret_loop_without_no_log_is_flagged():
         {
             "name": "hash",
             "ansible.builtin.command": {"argv": ["true"]},
-            "loop": "{{ manifests_secret_files | default([]) }}",
+            "loop": "{{ manifests_secret_files_resolved }}",
         }
     ]
     assert _content_leaks(loud) == ["hash: loops the secret files without no_log"]

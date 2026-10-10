@@ -67,24 +67,18 @@ def var_prefix(name: str) -> str:
     return name.replace("-", "_")
 
 
-def tasks_main(name: str, route: bool) -> str:
+def tasks_main(name: str) -> str:
     """`tasks/main.yml`: one include of the shared render/apply/queue role.
 
-    `service.yaml` and `ingressroute.yaml` are named even though this role ships no template
-    for either — the name is what resolves the shared default in `manifests_shared_defaults`,
-    and what keeps the rendered file inside the prune keep-set and `manifests_digest`.
+    It names no file list. `k8s/manifests` derives one from the role's `templates/` and adds
+    the shared `service.yaml` and `ingressroute.yaml` because the entry carries a `port` and,
+    for a routed service, a `hostname`.
     """
-    files = ["deployment.yaml", "service.yaml"]
-    if route:
-        files.append("ingressroute.yaml")
-    rendered = "\n".join(f"      - {f}" for f in files)
     return f"""---
 - name: Deploy {name} to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_files:
-{rendered}
     manifests_rollout: {name}
 """
 
@@ -269,7 +263,7 @@ def write_role(args, roles_dir: Path | None = None) -> list[Path]:
     """
     role = (roles_dir or K8S_ROLES) / args.name
     files = {
-        role / "tasks" / "main.yml": tasks_main(args.name, args.route),
+        role / "tasks" / "main.yml": tasks_main(args.name),
         role / "defaults" / "main.yml": defaults_main(
             args.name, args.image, args.autodeploy, args.autodeploy_reason, args.uid
         ),
