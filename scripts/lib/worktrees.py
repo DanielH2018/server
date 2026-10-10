@@ -35,13 +35,17 @@ from lib import _claude_worktree  # noqa: F401
 from lib.git import git, git_dirty, git_stdout
 from lib.repo_paths import REPO
 from claude_worktree import (
+    FOREIGN_UID,
     Worktree,
     cherry_says_landed,
     default_ref,
     forge_says_merged,
+    holds_tree,
     merge_tree_says_contained,
     parse_worktree_list,
+    process_holds,
     session_is_alive,
+    tree_roots,
 )
 
 __all__ = [
@@ -230,9 +234,10 @@ def processes_using(
 
     `/proc/<pid>/cwd` and `environ` refuse another user's process, so the root helper at
     `WORKTREE_HOLDERS` answers first when this caller may run it (#4170); see
-    `privileged_holders`. Without it, an unreadable process is skipped, with one exception
-    that `_foreign_in_my_slice` decides: a non-root process of another uid inside this uid's
-    own login slice counts as a holder, because it inherited a cwd this uid handed it (#3994).
+    `privileged_holders`. Without it, the scan is `claude_worktree.process_holds`, the one
+    the dotfiles worktree hooks run too (dotfiles#822). It skips an unreadable process,
+    with one exception: a non-root process of another uid inside this uid's own login slice
+    counts as a holder, because it inherited a cwd this uid handed it (#3994).
 
     Args:
         path: the worktree directory.
@@ -244,34 +249,27 @@ def processes_using(
     answer = (privileged or privileged_holders)(tree)
     if answer is not None:
         return answer
+    # DECIDED: count an unreadable process only when another non-root uid runs it inside
+    # `user-<this uid>.slice` (#3994); every wider rule refuses every removal on daniel-box.
+    # The rule and its reasoning live in `claude_worktree._foreign_in_my_slice`, the one copy
+    # this repo and the dotfiles worktree hooks share (dotfiles#822).
+    roots = tree_roots(path)
     found = []
-    for entry in proc.iterdir():
-        if not entry.name.isdigit():
+    seen = set()
+    # A process can hold the tree twice, by cwd and by CLAUDE_PROJECT_DIR; the refusal
+    # names it once, by the first hold the scan reports.
+    for pid, held, how in process_holds(str(proc)):
+        if pid in seen or not holds_tree(held, roots):
             continue
-        pid = int(entry.name)
-        try:
-            cwd = os.readlink(entry / "cwd")
-        except OSError:
-            cwd = ""
-        # A cwd whose directory was deleted reads back as "<path> (deleted)", which never
-        # resolves inside an existing tree.
-        if cwd and _inside(cwd, tree):
-            found.append((pid, f"cwd {cwd}"))
-            continue
-        try:
-            environ = (entry / "environ").read_bytes().split(b"\0")
-        except OSError:
-            if _foreign_in_my_slice(entry):
-                found.append(
-                    (pid, "another uid's process in this uid's login slice, unreadable")
-                )
-            continue
-        for var in environ:
-            if var.startswith(b"CLAUDE_PROJECT_DIR="):
-                held = var.partition(b"=")[2].decode(errors="replace")
-                if held and _inside(held, tree):
-                    found.append((pid, f"CLAUDE_PROJECT_DIR={held}"))
-                break
+        seen.add(pid)
+        if how == FOREIGN_UID:
+            found.append(
+                (pid, "another uid's process in this uid's login slice, unreadable")
+            )
+        elif how == "cwd":
+            found.append((pid, f"cwd {held}"))
+        else:
+            found.append((pid, f"{how}={held}"))
     return found
 
 
@@ -350,38 +348,6 @@ def _warn_helper_absent(helper: str) -> None:
         "on every has_claude_code host, with `--tags worktree-sweep`.",
         file=sys.stderr,
     )
-
-
-def _foreign_in_my_slice(entry: Path) -> bool:
-    """Whether an unreadable process runs as another non-root uid inside this uid's login slice.
-
-    `status` and `cgroup` stay world-readable when `cwd` and `environ` do not, so this
-    reads only those two.
-    """
-    # DECIDED: count an unreadable process only when another non-root uid runs it inside
-    # `user-<this uid>.slice` (#3994). The kernel checks search permission when a path is
-    # resolved, not on a cwd a process inherits, so `sudo -u claude` or `runuser -u claude`
-    # run from inside a worktree leaves a `claude` process holding a cwd under the 0750
-    # /home/ubuntu. sudo's and runuser's PAM stacks here carry no pam_systemd, so that
-    # process stays in the caller's slice. Each wider rule refuses every removal:
-    # claude-rc.service and claude's own sessions are always alive and always unreadable to
-    # `ubuntu`, and so are root's daemons and, inside this very slice, `sshd [priv]` and the
-    # same-uid but non-dumpable systemd --user, gpg-agent and ssh-agent. A launch that opens a
-    # new logind session (`su`, `runuser -l`, `machinectl shell`) or a unit (`systemd-run
-    # --uid`) lands in the target's slice and is not seen here. Only this fallback has that
-    # gap: the root helper in `privileged_holders` reads every process (#4170).
-    try:
-        status = (entry / "status").read_text()
-        cgroup = (entry / "cgroup").read_text()
-    except OSError:
-        return False
-    uid_line = next(
-        (line for line in status.splitlines() if line.startswith("Uid:")), ""
-    )
-    fields = uid_line.split()
-    if len(fields) < 3 or int(fields[2]) in (0, os.getuid()):
-        return False
-    return f"/user.slice/user-{os.getuid()}.slice/" in cgroup
 
 
 def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
