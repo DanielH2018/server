@@ -5,6 +5,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from trend import (
+    RUNS_KEY,
     _epoch_shift,
     classify,
     load_history,
@@ -26,8 +27,9 @@ def _entry(met, mode="hermetic"):
     }
 
 
-def _report_case(cid, status, threshold_met, passes=3, healthy=3):
+def _report_case(cid, status, threshold_met, passes=3, healthy=3, **extra):
     return {
+        **extra,
         "id": cid,
         "k": 3,
         "healthy": healthy,
@@ -191,3 +193,55 @@ def test_regression_across_epoch_is_annotated(tmp_path, capsys):
     out = capsys.readouterr().out
     assert rc == 1
     assert "REGRESSED" in out and "e1 -> e2" in out
+
+
+def test_record_run_stores_the_summed_sweep_cost_on_the_run_entry():
+    hist = {}
+    record_run(
+        hist,
+        [
+            _report_case("a/1", "PASS", True, costUsd=0.1),
+            _report_case("a/2", "FAIL", False, passes=1, costUsd=0.2),
+        ],
+        ts=7,
+        mode="hermetic",
+        epoch="e1",
+    )
+    # 0.1 + 0.2 is 0.30000000000000004 in floats; the stored total matches the engine's
+    # 4-decimal `sweep cost:` line instead.
+    assert hist[RUNS_KEY] == [
+        {"ts": 7, "mode": "hermetic", "epoch": "e1", "costUsd": 0.3}
+    ]
+    assert "costUsd" not in hist["a/1"][0]
+
+
+def test_record_run_without_cost_fields_records_no_cost():
+    hist = {}
+    record_run(hist, [_report_case("a/1", "PASS", True)], ts=1, mode="hermetic")
+    assert hist[RUNS_KEY][0]["costUsd"] is None
+
+
+def test_record_run_partly_priced_report_records_no_cost():
+    hist = {}
+    record_run(
+        hist,
+        [
+            _report_case("a/1", "PASS", True, costUsd=0.5),
+            _report_case("a/2", "PASS", True),
+        ],
+        ts=1,
+        mode="hermetic",
+    )
+    assert hist[RUNS_KEY][0]["costUsd"] is None
+
+
+def test_main_records_one_cost_entry_per_run(tmp_path):
+    hist = tmp_path / "history.json"
+    write_json(hist, {"a/1": [_entry(True), _entry(True)]})
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps([_report_case("a/1", "PASS", True, costUsd=0.25)]))
+    assert main(["--history", str(hist), str(report)]) == 0
+    assert main(["--history", str(hist), str(report)]) == 0
+    saved = load_history(hist)
+    assert [r["costUsd"] for r in saved[RUNS_KEY]] == [0.25, 0.25]
+    assert classify(saved)["stable"] == ["a/1"]
