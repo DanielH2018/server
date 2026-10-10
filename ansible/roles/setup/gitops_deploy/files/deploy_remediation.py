@@ -64,7 +64,8 @@ def broad_budget_ok(
 def broad_park_reason(cs: ChangeSet) -> str:
     """Why a broad tick parked without fast-forwarding, in one journal-line clause.
 
-    Two shapes still park, and this says which. A bring-up playbook
+    Three shapes park, and this says which. A setup role the routing could not place parks
+    so the next tick derives again (#3734). A bring-up playbook
     (`_BROAD_MANUAL_PREFIXES`) runs by hand by construction. A setup-plane path that resolves
     to no ROLE has no hand command to print and no role to record, so parking is the only
     signal it has — `deploy_defer.parks_the_tick` is the predicate, and `setup_roles_for`
@@ -85,6 +86,12 @@ def broad_park_reason(cs: ChangeSet) -> str:
     """
     if cs.broad_manual:
         return "a bring-up playbook changed, which runs by hand by construction"
+    unrouted = sorted(r for r in cs.setup_roles if not is_routed(r))
+    if unrouted:
+        return (
+            f"setup-role routing could not place {', '.join(unrouted)} (the journal line "
+            "above says why), so the next tick retries rather than guess a playbook or tag"
+        )
     return (
         "a setup-plane path names no role — there is no tag to apply and no role to record, "
         "so nothing but staying behind origin says the change is unapplied"

@@ -286,9 +286,9 @@ def adopt_setup_routing(tools: DeployTools, config: Config, origin: str) -> None
 
     Read at origin, not the working tree, because this runs before the ff-merge: a range that
     adds a role and its playbook entry together routes by the new entry. A failure routes
-    nothing rather than guessing. Every setup role in the range is then recorded in
-    `manual_plane` for a hand, which pages, where a guessed `--tags` that matched nothing
-    would exit 0 and record an apply of nothing (PR #702).
+    nothing rather than guessing. A range carrying a setup role then parks, which pages and
+    retries next tick, where a guessed `--tags` that matched nothing would exit 0 and record
+    an apply of nothing (PR #702).
     """
     try:
         routes, unplaced = tools.setup_routing(config.repo, origin, config.hostname)
@@ -296,13 +296,13 @@ def adopt_setup_routing(tools: DeployTools, config: Config, origin: str) -> None
         deploy_setup_roles.use_routing({})
         log(
             f"setup-role routing at {origin[:8]} failed ({type(exc).__name__}: {exc}) — "
-            "this tick applies no setup role and records each one for a hand"
+            "a range carrying a setup role parks until a tick can route it"
         )
         return
     deploy_setup_roles.use_routing(routes)
     for role, why in sorted(unplaced.items()):
         log(
-            f"setup role {role} cannot be routed at {origin[:8]} ({why}) — recorded for a hand"
+            f"setup role {role} cannot be routed at {origin[:8]} ({why}) — a range carrying it parks"
         )
 
 

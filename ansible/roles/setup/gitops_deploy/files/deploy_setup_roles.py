@@ -12,7 +12,8 @@ THE BUG THIS EXISTS TO KILL: `--tags` matching no task makes Ansible exit 0, so 
 playbook or tag records an apply of nothing (PR #702; `docs/gitops-pipeline.md`, *Broad
 changes*). So a role the routing does not place — the subprocess failed, timed out, or could
 not read the role's entry — is never guessed at. `tick_applies_setup_role` is False for it,
-and the deployer records it in `manual_plane` with no playbook for a hand to apply.
+and a range carrying it parks without a fast-forward, so the next tick derives again
+(`deploy_defer.parks_the_tick`).
 
 Split out of `deploy_changes` at the module-length cap. `deploy_changes` re-exports every
 name, so its readers keep their imports.
@@ -179,6 +180,17 @@ def tick_applies_setup_role(role: str) -> bool:
     """Whether the tick's own `initial_setup.yml --tags <tag>` run applies `role`."""
     route = routing().get(role)
     return bool(route and route.playbook == INITIAL_SETUP and route.on_tick_host)
+
+
+def tag_selects_an_off_host_role(tag: str) -> bool:
+    """Whether `--tags <tag>` selects an `initial_setup.yml` role gated off the tick's host.
+
+    Keyed by the tag, not the role directory: `chezmoi_setup` is selected by `chezmoi`.
+    """
+    return any(
+        r.tag == tag and r.playbook == INITIAL_SETUP and not r.on_tick_host
+        for r in routing().values()
+    )
 
 
 def setup_role_tag(role: str) -> str:

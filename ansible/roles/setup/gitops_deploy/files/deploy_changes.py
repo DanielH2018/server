@@ -27,6 +27,7 @@ from deploy_setup_roles import (  # noqa: F401  (re-exported for this module's r
     setup_role_host,
     setup_role_playbook,
     setup_role_tag,
+    tag_selects_an_off_host_role,
     tick_applies_setup_role,
 )
 

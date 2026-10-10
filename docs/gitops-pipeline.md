@@ -803,8 +803,9 @@ stay).
     The routing is derived from the playbooks by `scripts/deploy_tools/setup_routing.py`
     (#3734). The deployer runs under `uv run --no-project` and cannot import `yaml`, so each
     tick runs that script as a subprocess over origin's tree. A failed run, or a role whose
-    entry it cannot read, routes nothing: the role is recorded in `manual_plane`, never
-    applied under a guessed tag.
+    entry it cannot read, routes nothing: a range carrying the role parks with no
+    fast-forward and the next tick derives again. Nothing applies under a guessed tag, and
+    nothing records the role in `manual_plane` under a guessed tag or playbook.
   - **The ff-merge happens BEFORE the apply**, which is the order the *Deploying this role under
     the shared tree lock* trap below already prescribes for the manual path: applying first
     renders from the pre-merge tree and deploys nothing. It also means an unrelated commit sharing

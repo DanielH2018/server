@@ -31,6 +31,9 @@ def test_plan_tick_routes_by_origins_tree_for_this_host(tick, settings, state):
         asked.append((repo, ref, host))
         return checkout_routing()
 
+    # Production's starting state: the deployer's directory cannot derive routing itself, so
+    # only what plan_tick installs can make the role applyable.
+    deploy_setup_roles.use_routing({})
     tick.paths = [GITOPS_TASKS]
     target = deploy_phases.assess(tick.tools, state, settings)
     deploy_phases.plan_tick(_with_routing(tick, routing), state, settings, target)
@@ -57,7 +60,7 @@ def test_a_failed_derivation_routes_no_role(tick, settings, state, capsys, error
     assert not tick_applies_setup_role("gitops_deploy")
     assert setup_tags_for([GITOPS_TASKS]) == set()
     assert (
-        "applies no setup role and records each one for a hand"
+        "a range carrying a setup role parks until a tick can route it"
         in capsys.readouterr().out
     )
 
@@ -143,3 +146,34 @@ def test_an_unrouted_role_is_named_as_unrouted_not_as_playbookless():
     (cmd,) = deploy_remediation._setup_commands({"gitops_deploy"})
     assert "could not be routed from the playbooks" in cmd
     assert "applied by no playbook" not in cmd
+
+
+def test_a_range_the_tick_cannot_route_parks_and_records_nothing(
+    gitops_deploy, tick, capsys, state
+):
+    """A recorded guess keys `chezmoi_setup` where `clear-owed` cannot match it, and writes
+    `NO_PLAYBOOK`, which reads as `common` and never clears on a later apply."""
+
+    def routing(_repo, _ref, _host):
+        raise subprocess.TimeoutExpired(["uv"], 30)
+
+    tick.paths = ["ansible/roles/setup/chezmoi_setup/tasks/main.yml"]
+    tools = _with_routing(tick, routing)
+    assert gitops_deploy.main(tools, tick.config, state) == 0
+    assert tick.merges == [] and tick.playbooks == []
+    assert state.manual_plane_pending() == []
+    out = capsys.readouterr().out
+    assert "parked, nothing merged" in out
+    assert "routing could not place chezmoi_setup" in out
+
+
+def test_an_apply_under_a_tag_other_than_the_role_name_clears_its_line(state):
+    """`chezmoi_setup` is keyed and applied as `chezmoi`; only an off-host role's tag is
+    dropped before the clear (#3933)."""
+    import deploy_defer
+
+    playbook = "ansible/initial_setup.yml"
+    state.record_manual_plane("e" * 40, playbook, "chezmoi", 1000.0)
+    state.record_manual_plane("e" * 40, playbook, "optimize_pi", 1000.0, "daniel-pi")
+    deploy_defer.clear_applied(state, playbook, ["chezmoi", "optimize_pi"])
+    assert [e.role for e in state.manual_plane_pending()] == ["optimize_pi"]

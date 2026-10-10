@@ -35,9 +35,11 @@ import deploy_alert_text
 import deploy_alerts
 import deploy_narrow
 from deploy_changes import (
+    is_routed,
     setup_role_host,
     setup_role_playbook,
     setup_role_tag,
+    tag_selects_an_off_host_role,
     tick_applies_setup_role,
 )
 from deploy_config import Config, log
@@ -106,8 +108,21 @@ def unapplyable_setup_roles(cs) -> list[str]:
     return sorted(role for role in cs.setup_roles if not tick_applies_setup_role(role))
 
 
+def unrouted_setup_roles(cs) -> list[str]:
+    """The setup roles in this range the tick's routing does not place, sorted (#3734).
+
+    A failed derivation places none. Recording one would write a guess into the ledger: its
+    tag falls back to its directory name, which `clear-owed` then cannot match (`chezmoi_setup`
+    is keyed `chezmoi`), and its playbook to `NO_PLAYBOOK`, which reads as `common`.
+    """
+    return sorted(role for role in cs.setup_roles if not is_routed(role))
+
+
 def parks_the_tick(cs, setup_tags: set[str], pending: list[str]) -> bool:
     """Whether this range must be deferred WITHOUT a fast-forward.
+
+    A range with a setup role the routing does not place parks too, so the next tick retries
+    the derivation rather than fast-forwarding past a change nothing routed.
 
     Args:
         cs: the range's `ChangeSet`.
@@ -120,7 +135,9 @@ def parks_the_tick(cs, setup_tags: set[str], pending: list[str]) -> bool:
     unroutable and nameless at once. Fast-forwarding it would apply nothing, record nothing
     and say nothing.
     """
-    return cs.broad_manual or (cs.broad_setup and not setup_tags and not pending)
+    if cs.broad_manual or unrouted_setup_roles(cs):
+        return True
+    return cs.broad_setup and not setup_tags and not pending
 
 
 def park(
@@ -348,7 +365,7 @@ def clear_applied(state: DeployerState, playbook: str, tags: list[str]) -> None:
     A tag for a role gated off this host is dropped first: `optimize_pi` shares the playbook
     path, so its line would otherwise clear over a run that skipped the role (#3933).
     """
-    tags = [t for t in tags if tick_applies_setup_role(t)]
+    tags = [t for t in tags if not tag_selects_an_off_host_role(t)]
     for role in state.clear_manual_plane_applied(playbook, tags):
         log(
             f"manual_plane cleared for {role}: this tick applied {playbook} --tags {role}"
