@@ -61,7 +61,7 @@ class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig):
     generates a `__repr__` over all of its fields, so without that a `print(cfg)`, an f-string
     in a log line, or a traceback rendering locals would put the HA token, both B2 keys, the
     Cloudflare token, the SMTP password, five Discord webhook URLs and five *arr API keys into
-    the pod log — which promtail ships to Loki. `test_repr_hides_every_credential_but_not_
+    the pod log — which Alloy ships to Loki. `test_repr_hides_every_credential_but_not_
     ordinary_config` pins both halves: the secrets absent, and ordinary config still present.
     That test anchors a sentinel LIST, so it cannot see a new credential added with neither
     marker nor sentinel; `tests/test_config_credential_shape.py` covers that by SHAPE, failing

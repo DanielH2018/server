@@ -897,7 +897,7 @@ checks each gate suppresses.
   and is named again by the unavailable arm on its third; the `desired` count comes from the
   same second query the stall arm makes, so the message reads `authelia(0/1)`.
   **A second arm covers DaemonSets** (added 2026-08-13):
-  `kube_daemonset_status_number_unavailable`, with its own `K8S_MIN_DAEMONSETS` floor (9) and
+  `kube_daemonset_status_number_unavailable`, with its own `K8S_MIN_DAEMONSETS` floor (11) and
   the same fail-closed-on-absent-series logic — a Deployment-shaped census cannot see the Alloy log shipper,
   node-exporter or the `otel` collector, which run one pod per node and are exactly the workloads
   a node problem takes out first. A third arm reports crash-looping restarts —

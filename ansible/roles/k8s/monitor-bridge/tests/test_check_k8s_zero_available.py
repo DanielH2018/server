@@ -17,7 +17,7 @@ from _fake_sources import FakeSources
 
 HEALTHY_COUNTS = {
     "count(kube_deployment_status_replicas_unavailable)": 40.0,
-    "count(kube_daemonset_status_number_unavailable)": 9.0,
+    "count(kube_daemonset_status_number_unavailable)": 11.0,
     "count(kube_node_status_allocatable)": 0.0,
 }
 

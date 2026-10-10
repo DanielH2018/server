@@ -19,7 +19,7 @@ from _fake_sources import FakeSources
 
 HEALTHY_COUNTS = {
     "count(kube_deployment_status_replicas_unavailable)": 40.0,
-    "count(kube_daemonset_status_number_unavailable)": 9.0,
+    "count(kube_daemonset_status_number_unavailable)": 11.0,
     "count(kube_node_status_allocatable)": 0.0,
 }
 
@@ -125,11 +125,11 @@ def test_a_crash_loop_pages_on_the_first_cycle_while_replicas_are_held(
 
 def test_an_unavailable_daemonset_pages_on_the_first_cycle(kcfg, vectors, run):
     vectors["kube_daemonset_status_number_unavailable > 0"] = [
-        ({"daemonset": "promtail"}, 1.0)
+        ({"daemonset": "alloy"}, 1.0)
     ]
     ok, msg = run(kcfg)
     assert not ok
-    assert "k8s daemonsets with unavailable pods: promtail(1)" in msg
+    assert "k8s daemonsets with unavailable pods: alloy(1)" in msg
 
 
 def test_a_thin_deployment_census_pages_on_the_first_cycle(kcfg, run):

@@ -14,7 +14,7 @@ import re
 
 def loki_ingestion_fresh(count: float | None, window: str) -> tuple[bool, str]:
     """Decide log-pipeline freshness from the line count over `window` (None = no series)."""
-    if not count:  # None or 0 — nothing shipped: promtail dead, positions corrupt, etc.
+    if not count:  # None or 0 — nothing shipped: Alloy dead, positions corrupt, etc.
         return (
             False,
             "no log lines ingested in %s — promtail/Loki pipeline silent" % window,
