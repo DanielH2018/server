@@ -209,6 +209,22 @@ def test_a_scratch_unit_template_naming_a_reaper_is_flagged(tmp_path: Path) -> N
     ]
 
 
+def test_a_scratch_cron_naming_the_consolidated_entrypoint_is_flagged(
+    tmp_path: Path,
+) -> None:
+    """Red proof for #4345: the guard follows the reapers into `longhorn_reap.py`."""
+    tasks = tmp_path / "scratch" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "- name: Reap stranded backups nightly\n"
+        "  ansible.builtin.cron:\n"
+        "    name: reap\n"
+        "    job: /srv/server/scripts/backup/longhorn_reap.py backups --apply\n"
+    )
+    hits = scheduled_reapers(tmp_path)
+    assert any("longhorn_reap.py" in reaper for _, reaper in hits), hits
+
+
 def test_a_comment_naming_a_reaper_is_clean(tmp_path: Path) -> None:
     """A unit template's comment is prose, the same as the defaults file's is."""
     templates = tmp_path / "scratch" / "templates"
