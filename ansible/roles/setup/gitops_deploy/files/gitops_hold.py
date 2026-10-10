@@ -5,7 +5,7 @@ A failed broad apply holds its SHA and records the plane it failed in as an `owe
 line of class `hold_plane`. An apply that covers a plane drops that line, and `hold_sha`
 clears once no plane is left (#878). The rule is that `hold_sha` clears only together with its
 `hold_plane` lines, and `Hold` is its one owner. The deployer reaches it through
-`deploy_state_hold.HoldMarkers`, the deploy UI's Clear calls `Hold.clear`, and each used to
+`deploy_state.DeployerState`, the deploy UI's Clear calls `Hold.clear`, and each used to
 restate the file layout, the separator and the rule by hand.
 
 `DeployerSnapshot` is the read-only half (#3703): the hold, the owed ledger, `behind_since`,

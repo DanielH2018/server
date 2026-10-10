@@ -1,4 +1,4 @@
-"""Red-proof pairs for the patch counter in `ansible/tests/_ratchet.py`.
+"""Red-proof pairs for the patch counter in `ansible/tests/_ratchet_patches.py`.
 
 The counter is the half of the two ratchets with a heuristic in it: which names in a test
 module hold a first-party module, and therefore which `monkeypatch.setattr` calls and attribute assignments count. Every
@@ -6,13 +6,13 @@ test here is a pure call on a source string, so each rule has one input it must 
 it must not.
 
 The caps, the allowlist comparisons and the census of the real tree are in
-`ansible/tests/repo/test_module_length_ratchet.py`; `_ratchet.py`'s docstring is where the
-heuristic's blind spots are written down.
+`ansible/tests/repo/test_module_length_ratchet.py`; `_ratchet_patches.py`'s docstring is where
+the heuristic's blind spots are written down.
 
 Run: uv run pytest ansible/tests/repo/test_ratchet_rules.py
 """
 
-from _ratchet import (
+from _ratchet_patches import (
     count_module_patches,
     first_party_module_names,
     module_fixture_names,

@@ -1971,7 +1971,7 @@ is decided by what it touches.
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
 | transport | `deploy_io`, `deploy_alerts` | subprocess, when an alert is sent, and the alert queue's own I/O |
 | the message bodies | `deploy_alert_text` | one pure function per alert — what each post SAYS (#2600) |
-| transport leaves | `gitops_markers`, `gitops_hold`, `deploy_config`, `deploy_state`, `deploy_state_k8s`, `deploy_state_hold`, `deploy_failtext` | the marker table, its parsers and line rewrites, the hold's owner and its clear rule, the config file, the state directory, the two k8s marker families and the hold, each a mixin class, and the text a failed run's alert quotes |
+| transport leaves | `gitops_markers`, `gitops_hold`, `deploy_config`, `deploy_state`, `deploy_failtext` | the marker table, its parsers and line rewrites, the hold's owner and its clear rule, the config file, the state directory with every marker's reader and writer, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s` | `assess` and `plan_tick`; one `handle_*` per terminal branch |
 | the k8s changes owed | `deploy_k8s_owed` | the one reader and writer of the `k8s_deferred` and `k8s_unapplied` ledger classes: record, discharge, the tick-start `reconcile` (#3669) |

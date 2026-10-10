@@ -15,7 +15,7 @@
 # that changes the guard may also RAISE an entry, for the same reason: a widening finds
 # patches in a file that already has a line as well as in one that does not.
 #
-# The counting heuristic and its blind spots are in ansible/tests/_ratchet.py's module
+# The counting heuristic and its blind spots are in ansible/tests/_ratchet_patches.py's module
 # docstring.
 #
 # To see a file's count, lower its entry here by 1 and run the guard -- the failure names

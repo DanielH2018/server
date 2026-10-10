@@ -4,10 +4,9 @@
 Each marker is a file recording what this host believes. `gitops_markers.MARKERS` is that
 files — the directory literal, every basename and the line parsers live there, copied into
 every other tree that reads them; this module holds the reading and the writing.
-This is a leaf: `gitops_markers`, `gitops_ledger`, `deploy_git` for `behind_marker`,
-`deploy_state_hold` for the hold and its planes, `deploy_state_k8s` for the `k8s_deferred` and
-`k8s_unapplied` families, `deploy_state_alerts` for the alert dedupe slots, `host_lib` and the
-standard library. Nothing
+This is a leaf: `gitops_markers`, `gitops_ledger`, `gitops_hold` for the hold and its planes,
+`deploy_git` for `behind_marker`, `deploy_config` for `log`, `host_lib` and the standard
+library. Nothing
 else from this role, and nothing that reaches a process — a hold is written to a file, and
 who decides to write one is the caller's business. Callers reach these names qualified —
 `deploy_state.DeployerState(...)`. `deploy_io` re-exports them for the suite, which reads them
@@ -20,41 +19,89 @@ marker at `templates/gitops-deploy.service.j2`'s `ExecStart` says why.
 import json
 import os
 import pathlib
-from typing import Any, ClassVar
+from collections.abc import Callable
+from typing import Any, ClassVar, NamedTuple
 
+from deploy_config import log
 from deploy_git import behind_marker
-from deploy_state_alerts import AlertSlotMarkers
-from deploy_state_hold import HoldMarkers
-from deploy_state_k8s import K8sLineMarkers
+from gitops_hold import HOLD_PLANE_SEP, Hold, hold_plane_marker
 from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are re-exported
+    ALERT_SLOTS,
     MARKERS,
     NO_PLAYBOOK,
     STATE_DIR,
     ContentionEntry,
+    K8sDeferredEntry,
     ManualPlaneEntry,
+    format_alerted,
+    parse_alerted,
     parse_contention,
 )
-from gitops_ledger import (  # noqa: F401 — the k8s owed classes are re-exported
+from gitops_ledger import (
     OWED_K8S_DEFERRED,
     OWED_K8S_UNAPPLIED,
     OWED_MANUAL_PLANE,
     RECEIPT_KEEP,
     drop_owed,
+    k8s_deferred_entries,
+    k8s_unapplied_entries,
     manual_plane_entries,
+    owed_line,
+    parse_owed,
     parse_receipts,
     put_manual_plane,
     receipt_line,
+    rewrite_owed,
 )
 from host_lib import atomic_write
 
+# DECIDED: one class, over the 600-line cap, rather than three mixins. The hold, the alert
+# slots and the k8s owed classes were split out only because this module stood at the cap
+# (#2663), and each mixin read and wrote through `read`/`write`, which only this class
+# defines and they must not. A piece that cannot be read without its parent adds an
+# interface and hides nothing, so they folded back in #3661; the allowlist entry carries the
+# reason.
 
-class DeployerState(AlertSlotMarkers, HoldMarkers, K8sLineMarkers):
+
+class _K8sOwedClass(NamedTuple):
+    """What one k8s owed class does differently from the other."""
+
+    # Reads the class's entries out of the ledger text. The two readers differ: a deferred
+    # service on two lines keeps its OLDER entry, the age monitor-bridge pages on.
+    entries: Callable[[str | None], list[K8sDeferredEntry]]
+    # Whether recording an already-listed service moves its entry to the new origin (#2644).
+    advance: bool
+
+
+_K8S_OWED: dict[str, _K8sOwedClass] = {
+    # The image bumps a broad tick merged and could not deploy (#2449). The paging class:
+    # monitor-bridge pages on the oldest entry past its age gate. An entry KEEPS ITS ORIGIN:
+    # nothing compares this class's SHA, and `deploy_defer.unrecord` can reset the merge.
+    OWED_K8S_DEFERRED: _K8sOwedClass(k8s_deferred_entries, advance=False),
+    # The k8s changes a tick merged and will never apply (#2570). Nothing pages on it; the
+    # SessionStart banner and the journal read it. An entry MOVES TO THE NEW ORIGIN:
+    # `deploy_k8s_owed.discharge_k8s_unapplied` drops an entry once a release record descends
+    # from the SHA it names, so one left at the OLDEST origin discharges over every later
+    # change to the same service.
+    OWED_K8S_UNAPPLIED: _K8sOwedClass(k8s_unapplied_entries, advance=True),
+}
+
+
+def _k8s_owed(cls: str) -> _K8sOwedClass:
+    """The table row for `cls`, or ValueError for a class `DeployerState` does not own."""
+    try:
+        return _K8S_OWED[cls]
+    except KeyError:
+        raise ValueError(
+            f"{cls!r} is not a k8s owed class; expected one of {sorted(_K8S_OWED)}"
+        ) from None
+
+
+class DeployerState:
     """The marker files under /var/lib/gitops-deploy, as one object with typed accessors.
 
-    The two k8s marker families come from `deploy_state_k8s.K8sLineMarkers` and the alert
-    dedupe slots from `deploy_state_alerts.AlertSlotMarkers`, so `state.record_owed(...)`
-    and `state.alerted_sha(...)` are reached here as they always were. This class stays the one
-    place a marker file is read or written.
+    This class is the one place a marker file is read or written. The hold delegates to
+    `gitops_hold.Hold`, which the deploy UI's Clear calls too (#3658).
 
     The files record what this host believes — the held SHA, the plane that failed, how long
     it has been behind origin, the setup roles no tick can apply, one keyed file holding every
@@ -117,11 +164,135 @@ class DeployerState(AlertSlotMarkers, HoldMarkers, K8sLineMarkers):
     # The four markers with a reader outside this deployer (monitor-bridge reads three of them
     # off the same mount) get a named property; the alert dedupe slots are reached through
     # `alerted_sha`/`record_alerted` by the alert code that owns them. The held planes are
-    # the fourth, read off the `owed` ledger in `deploy_state_hold.HoldMarkers`.
+    # the fourth, read off the `owed` ledger through `gitops_hold.Hold`.
     @property
     def hold_sha(self) -> str | None:
         """The commit this host refuses to redeploy, or None."""
         return self.read("hold")
+
+    # ── the hold and its planes, delegating to `gitops_hold.Hold` ─────────────────────────
+
+    @property
+    def _hold(self) -> Hold:
+        return Hold(self.directory)
+
+    @property
+    def hold_plane(self) -> str | None:
+        """Every plane the hold waits on, `; `-joined, or None."""
+        return HOLD_PLANE_SEP.join(self._hold.planes()) or None
+
+    def write_hold(self, sha: str | None) -> None:
+        """Record `sha` as the commit this host refuses to redeploy, or clear the hold."""
+        self._hold.set_sha(sha)
+
+    def hold_failed_apply(self, sha: str, playbook: str, tags: list[str]) -> None:
+        """Hold `sha` for a failed apply of `playbook`/`tags`, beside any plane already held."""
+        self._hold.record(sha, playbook, tags)
+
+    def clear_broad_hold(self, playbook: str, tags: list[str]) -> None:
+        """Clear the hold after a broad apply, but only once no held plane is left unapplied.
+
+        A hold says a plane is unapplied, and every consumer gates on `hold_sha` — so
+        clearing it after a success in a DIFFERENT plane turns GitOps Deploy — Status green
+        over a plane nothing has applied (issue #878). `Hold.cover` drops the entries this
+        apply covers; while one survives, the tick still succeeded and the hold is kept.
+        """
+        left = self._hold.cover(playbook, tags)
+        if left:
+            log(
+                f"hold kept: {HOLD_PLANE_SEP.join(left)} is still unapplied "
+                f"(this tick applied {hold_plane_marker(playbook, tags)})"
+            )
+
+    def clear_service_hold(self, services: set[str]) -> None:
+        """Clear a hold after a successful service deploy, unless it leaves a plane unapplied.
+
+        A k8s deploy is `ansible/deploy.yml --tags <services>`, so it drops a held
+        entry naming that playbook at a subset of those tags — a failed bump on a broad tick
+        writes exactly that, and the fix-forward deploy of the same service is its way out.
+        Any other entry stays held: without this, an unrelated service deploy clears
+        `hold_sha` and orphans the held planes, which `gitops_status` never reads on its own.
+        """
+        left = self._hold.cover_services(services)
+        if not left:
+            return
+        applied = hold_plane_marker("ansible/deploy.yml", sorted(services))
+        suffix = f" (this tick applied {applied})" if services else ""
+        log(f"hold kept: {HOLD_PLANE_SEP.join(left)} is still unapplied{suffix}")
+
+    # ── the per-SHA alert dedupe slots, one `alerted` marker for every channel (#3047) ────
+
+    def alerted_sha(self, slot: str) -> str | None:
+        """The origin SHA `slot` last paged on, or None when it has paged on nothing.
+
+        Raises:
+            KeyError: `slot` is not an `ALERT_SLOTS` member — a typo is a mistake, not a new
+                channel. The check `path()` gave each slot while it was its own marker.
+        """
+        return parse_alerted(self.read("alerted")).get(self._alert_slot(slot))
+
+    def record_alerted(self, slot: str, sha: str) -> None:
+        """Record that `slot` has now paged on `sha`, leaving every other slot alone."""
+        alerted = parse_alerted(self.read("alerted"))
+        alerted[self._alert_slot(slot)] = sha
+        self.write("alerted", format_alerted(alerted))
+
+    def clear_alerted(self, slot: str) -> None:
+        """Drop `slot`'s line, so the next tick pages on that SHA again.
+
+        The marker is removed when `slot` held the last line, as every other line-oriented
+        marker here is: an empty file and no file read the same.
+        """
+        alerted = parse_alerted(self.read("alerted"))
+        if alerted.pop(self._alert_slot(slot), None) is None:
+            return
+        self.write("alerted", format_alerted(alerted))
+
+    @staticmethod
+    def _alert_slot(slot: str) -> str:
+        """`slot` itself, or `KeyError` when it is not one of `ALERT_SLOTS`."""
+        if slot not in ALERT_SLOTS:
+            raise KeyError(slot)
+        return slot
+
+    # ── the k8s owed classes: `k8s_deferred` and `k8s_unapplied`, one entry per service ───
+
+    def owed_pending(self, cls: str) -> list[K8sDeferredEntry]:
+        """Every `cls` entry still owed. `k8s_deferred` comes back oldest entry first."""
+        return _k8s_owed(cls).entries(self.read("owed"))
+
+    def record_owed(self, cls: str, origin: str, services, now: float) -> list[str]:
+        """Record a `cls` entry per service in `services`. Returns the ones added.
+
+        A service already listed keeps its first-seen stamp, which dates the oldest change.
+        Under `k8s_unapplied` its entry moves to `origin`; under `k8s_deferred` it keeps its
+        origin too. A moved entry stays OUT of the return value, which
+        `deploy_defer.unrecord` clears: an entry predating the tick survives the reset.
+
+        `rewrite_owed` owns the repair of a TORN line naming one of `services` (#2657), and
+        the move to `origin`. A repaired service reads as listed, so this updates its line
+        rather than appending a second one beside it.
+        """
+        advance = _k8s_owed(cls).advance
+        owed = self.read("owed")
+        wanted = set(services)
+        text = rewrite_owed(owed, cls, wanted, origin, now, advance)
+        added = sorted(wanted - {e.subject for e in parse_owed(text, cls)})
+        lines = text.splitlines() + [owed_line(cls, s, origin, now) for s in added]
+        if added or text != (owed or ""):
+            self.write("owed", "\n".join(lines))
+        return added
+
+    def clear_owed(self, cls: str, services) -> list[str]:
+        """Drop the `cls` entries naming any of `services`. Returns the names cleared.
+
+        A torn ledger line naming one of `services` goes as well (#2657).
+        """
+        _k8s_owed(cls)
+        text, cleared = drop_owed(self.read("owed"), cls, services)
+        if cleared:
+            self.write("owed", text or None)
+        return cleared
 
     # ── the per-SHA tick receipt (#3391) ──────────────────────────────────────────────────
 

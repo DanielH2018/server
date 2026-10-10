@@ -20,6 +20,9 @@ import time
 from typing import Callable, NamedTuple
 
 from deploy_config import log
+
+# The playbook the setup arm runs, and the one `narrow_setup.py` derives reachability against.
+from deploy_setup_roles import INITIAL_SETUP
 from gitops_hold import held_tag
 
 # What the tick's receipt records as a plane's tags when a deploy-plane range moves no
@@ -34,12 +37,6 @@ NARROWED_TO_NOTHING = "narrowed-to-nothing"
 NARROW_TIMEOUT_S = 120.0
 
 NARROW_SCRIPT = "scripts/deploy_tools/deploy_tags.py"
-
-# The playbook the setup arm runs, and the one `narrow_setup.py` derives a tag's reachability
-# against. A literal here rather than `deploy_changes.setup_role_playbook`, which is the
-# authority: `test_gitops_deploy_imports` holds this module to two leaf imports, and
-# `ansible/tests/deploy/test_setup_role_playbooks_agree.py` is what keeps the string honest.
-SETUP_PLAYBOOK = "ansible/initial_setup.yml"
 
 # How long the setup-role narrowing gets, and the script that does it. Cheaper than the
 # deploy-plane derivation — one `git ls-tree` plus a `git show` per file of ONE role — so a run
@@ -269,7 +266,7 @@ def narrowed_setup_tags(
         config: the tick's `Config`, for the checkout path.
         target: the tick's `TickTarget`, for the two commits bounding the range.
         setup_tags: `setup_tags_for(paths)` — the whole-role tags this tick would apply.
-        setup_roles: role tag -> role directory, for the roles `SETUP_PLAYBOOK` applies.
+        setup_roles: role tag -> role directory, for the roles `INITIAL_SETUP` applies.
         now: the monotonic clock the shared budget below is measured on. A parameter so a
             test can spend the budget without sleeping.
 
@@ -338,7 +335,7 @@ def _one_setup_role(
             config.repo,
             role,
             role_tag,
-            SETUP_PLAYBOOK,
+            INITIAL_SETUP,
             target.local,
             target.origin,
             timeout,
@@ -382,7 +379,7 @@ def plan(
         setup_tags: `setup_tags_for(paths)`, non-empty for a setup-plane change.
         deploy_plane: `cs.broad_deploy` — the range moved a deploy-plane path.
         narrow_setup: `narrow_setup_role`, or a test's stand-in, for the setup arm.
-        setup_roles: role tag -> role directory, for the roles `SETUP_PLAYBOOK` applies.
+        setup_roles: role tag -> role directory, for the roles `INITIAL_SETUP` applies.
         digest_diff: `deploy_release.digest_diff`, read for the shadow log alone. None skips
             the log.
 
@@ -405,7 +402,7 @@ def plan(
         held = sorted(
             held_tag(r, t) for r, role_tags in by_role.items() for t in role_tags
         )
-        plans.append(BroadPlan(SETUP_PLAYBOOK, tags, True, held))
+        plans.append(BroadPlan(INITIAL_SETUP, tags, True, held))
     if deploy_plane:
         deploy = _deploy_plane(narrow, config, target)
         if digest_diff is not None:

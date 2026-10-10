@@ -43,6 +43,7 @@ from _ratchet import (
     TEST_CAP,
     Ratchet,
     cap_for,
+    conjoined_reasons,
     function_differs,
     function_source,
     parse_allowlist,
@@ -73,6 +74,7 @@ MODULE_FIXTURE_MEMBERS = frozenset(
 WHOLE_FILE_GUARDS = (
     "ansible/tests/_ratchet.py",
     "ansible/tests/_ratchet_census.py",
+    "ansible/tests/_ratchet_patches.py",
     "ansible/tests/repo/test_module_length_ratchet.py",
 )
 
@@ -231,6 +233,61 @@ def test_adding_a_path_master_already_tracks_is_flagged():
     flagged = raised_entries({}, {"scripts/old.py": 900}, "list.txt")
     assert len(flagged) == 1
     assert "added to list.txt" in flagged[0]
+
+
+def test_adding_a_path_with_a_conjoined_reason_is_clean():
+    """The cap prompts a decision (#3661); a stated reason is that decision, recorded.
+
+    The pair is `test_adding_a_path_master_already_tracks_is_flagged` above.
+    """
+    text = "scripts/old.py 650  # conjoined: the mixins call methods only it defines\n"
+    added = parse_allowlist(text)
+    reasons = conjoined_reasons(text)
+    assert reasons == {"scripts/old.py": "the mixins call methods only it defines"}
+    assert raised_entries({}, added, "list.txt", conjoined=reasons) == []
+
+
+def test_a_bare_conjoined_keyword_or_another_comment_is_no_reason():
+    text = "scripts/a.py 650  # conjoined:\nscripts/b.py 650  # too long to split\n"
+    assert conjoined_reasons(text) == {}
+
+
+def test_an_unchanged_conjoined_reason_does_not_let_an_entry_rise():
+    """Growth past a stated reason has to be decided again, not waved through by it."""
+    reason = {"scripts/a.py": "the mixins call methods only it defines"}
+    flagged = raised_entries(
+        {"scripts/a.py": 650},
+        {"scripts/a.py": 651},
+        "list.txt",
+        conjoined=reason,
+        old_conjoined=reason,
+    )
+    assert len(flagged) == 1
+    assert "up from 650" in flagged[0]
+
+
+def test_a_restated_conjoined_reason_lets_an_entry_rise():
+    """The way back through: the diff that grows the file rewrites the decision beside it."""
+    clean = raised_entries(
+        {"scripts/a.py": 650},
+        {"scripts/a.py": 680},
+        "list.txt",
+        conjoined={"scripts/a.py": "680 since the new marker reads through `read`"},
+        old_conjoined={"scripts/a.py": "the mixins call methods only it defines"},
+    )
+    assert clean == []
+
+
+def test_a_reworded_reason_that_names_no_new_max_does_not_let_an_entry_rise():
+    """A trailing period is not a decision; the restatement must name the number it allows."""
+    flagged = raised_entries(
+        {"scripts/a.py": 650},
+        {"scripts/a.py": 9000},
+        "list.txt",
+        conjoined={"scripts/a.py": "reason one."},
+        old_conjoined={"scripts/a.py": "reason one"},
+    )
+    assert len(flagged) == 1
 
 
 def test_adding_a_path_master_does_not_track_is_clean():
@@ -399,6 +456,12 @@ def test_no_allowlist_entry_rose_against_the_merge_base(ratchet: Ratchet):
         ratchet.path.name,
         untracked_on_master=[p for p in new if not tracked_on_base(p)],
         guard_changed=guard_differs_from_base(),
+        conjoined=conjoined_reasons(ratchet.path.read_text())
+        if ratchet is LENGTHS
+        else None,
+        old_conjoined=conjoined_reasons(text_on_base(rel))
+        if ratchet is LENGTHS
+        else None,
     )
     assert not offenders, "\n".join(offenders)
 
