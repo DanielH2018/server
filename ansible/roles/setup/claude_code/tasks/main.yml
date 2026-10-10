@@ -564,8 +564,24 @@
   environment:
     HOME: "{{ claude_code_agent_user_home }}"
     TMPDIR: /tmp
+  register: claude_code_agent_hooks
+  # Never fatal, for the clone pull's reason above. prek refuses while the clone sets
+  # core.hooksPath, and the report below names that.
+  failed_when: false
   become: true
   when: claude_code_agent_user_enabled
+
+- name: Report that the agent user's commit hooks were not installed
+  tags: [claude_code]
+  ansible.builtin.debug:
+    msg: >-
+      prek install failed in {{ claude_code_agent_user_clone_dir }}:
+      {{ claude_code_agent_hooks.stderr | default('') }}.
+      The agent's commits skip gitleaks and the commit-time checks until it succeeds.
+  when:
+    - claude_code_agent_user_enabled
+    - not ansible_check_mode
+    - claude_code_agent_hooks.rc | default(0) != 0
 
 - name: Create the agent user's kubeconfig directory
   tags: [claude_code]

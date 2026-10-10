@@ -138,6 +138,10 @@ runs, and `~/server/.git/hooks/pre-commit` names `/var/lib/claude/.local/bin/pre
 **Rollback:** turning the variable off locks the account and stops its units. It does not delete
 the home, because the home holds the agent's clone and any unpushed work.
 
+Removing the hook-install task does not remove the hook. To take the commit hooks off the agent,
+run `prek uninstall` as `claude` in `~/server`. A broken hook refuses every agent commit, and
+`--no-verify` is denied at the permission layer, so this is the only way past one.
+
 ## Slice 2: Claude opens PRs under its own GitHub identity
 
 Done 2026-10-05. The pieces are PRs #3541, #3542, #3598, #3613 and #3617.
