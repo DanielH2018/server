@@ -119,7 +119,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: netpol-baseline
     manifests_rollout: ""
     manifests_files:
       - networkpolicy.yaml

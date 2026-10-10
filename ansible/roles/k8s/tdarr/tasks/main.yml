@@ -67,7 +67,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: tdarr
     # A cold pull of the 1.4 GiB image outlasts the shared default; the measurement is in
     # defaults/main.yml because the template's progressDeadlineSeconds reads it too.
     manifests_rollout_timeout: "{{ tdarr_k8s_rollout_timeout }}"

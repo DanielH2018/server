@@ -50,7 +50,7 @@ from pathlib import Path
 from lib import yaml_fast
 from _helpers import K8S_ROLES
 from _k8s_render import rendered_texts
-from _role_census import role_task_files
+from _role_census import manifests_service_of, role_task_files
 
 _MANIFESTS = K8S_ROLES / "manifests/tasks/main.yml"
 
@@ -71,16 +71,19 @@ _KNOWN_UNCOVERED: set[tuple[str, str]] = set()
 
 
 def _include_vars(role_tasks: Path) -> list[dict]:
-    """The `vars:` of every `include_role: k8s/manifests` in a role's task file."""
+    """The `vars:` of every `include_role: k8s/manifests` in a role's task file.
+
+    `manifests_service` is filled in from the role directory when the include omits it, as
+    the role's own default does (#4053).
+    """
+    role = role_tasks.parent.parent.name
     out = []
     for task in yaml_fast.safe_load(role_tasks.read_text()) or []:
         if not isinstance(task, dict):
             continue
-        include = (
-            task.get("ansible.builtin.include_role") or task.get("include_role") or {}
-        )
-        if include.get("name") == "k8s/manifests":
-            out.append(task.get("vars") or {})
+        service = manifests_service_of(task, role)
+        if service is not None:
+            out.append({**(task.get("vars") or {}), "manifests_service": service})
     return out
 
 

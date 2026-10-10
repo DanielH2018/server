@@ -28,6 +28,7 @@ Run: uv run pytest ansible/tests/services/test_scrutiny_influxdb_policy.py
 
 import pytest
 from _helpers import REPO
+from _role_census import manifests_service_of
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 
@@ -172,9 +173,7 @@ def test_the_influxdb_policy_is_staged_by_the_deploy_task():
     """Rendering it is not shipping it — `manifests_files` is what reaches the cluster."""
     tasks = yaml_fast.safe_load(SCRUTINY_TASKS.read_text())
     deploys = [
-        task
-        for task in tasks
-        if (task.get("vars") or {}).get("manifests_service") == "scrutiny"
+        task for task in tasks if manifests_service_of(task, "scrutiny") == "scrutiny"
     ]
     assert len(deploys) == 1, (
         f"expected exactly one task deploying the scrutiny manifests, found {len(deploys)}"

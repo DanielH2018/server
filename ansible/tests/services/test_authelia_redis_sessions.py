@@ -21,6 +21,7 @@ real rendered manifests behind a non-vacuity assertion:
 
 import pytest
 from _helpers import REPO
+from _role_census import manifests_service_of
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 
@@ -147,9 +148,7 @@ def test_the_rendered_redis_ports_agree(redis_ports):
 def test_the_role_does_not_roll_redis_with_the_portal():
     tasks = yaml_fast.safe_load(AUTHELIA_TASKS.read_text())
     deploys = [
-        task
-        for task in tasks
-        if (task.get("vars") or {}).get("manifests_service") == "authelia"
+        task for task in tasks if manifests_service_of(task, "authelia") == "authelia"
     ]
     assert len(deploys) == 1, (
         f"expected exactly one task deploying the authelia manifests, found {len(deploys)} — "
@@ -246,9 +245,7 @@ def test_the_redis_policy_is_staged_by_the_deploy_task():
     """
     tasks = yaml_fast.safe_load(AUTHELIA_TASKS.read_text())
     deploys = [
-        task
-        for task in tasks
-        if (task.get("vars") or {}).get("manifests_service") == "authelia"
+        task for task in tasks if manifests_service_of(task, "authelia") == "authelia"
     ]
     assert len(deploys) == 1, (
         f"expected exactly one task deploying the authelia manifests, found {len(deploys)}"

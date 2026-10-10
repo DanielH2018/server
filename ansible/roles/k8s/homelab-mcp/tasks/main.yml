@@ -26,7 +26,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: homelab-mcp
     # The ClusterRole and ClusterRoleBinding in rbac.yaml are cluster-scoped, so the namespaced
     # prune allowlist in k8s/manifests never selects them; dropping one still leaves it live.
     manifests_rollout: homelab-mcp

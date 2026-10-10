@@ -7,7 +7,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: nut-exporter
     manifests_rollout: nut-exporter
     manifests_files:
       - deployment.yaml

@@ -14,7 +14,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: observability
     # Every namespaced document lives in k8s_observability_namespace, so the armed apply and its
     # prune run there. The dashboard ConfigMaps are applied from their own directory, unlabelled,
     # so the prune never selects them.
