@@ -21,6 +21,10 @@ from fanout_lib.status import BLOCKER, NO_PR
 ACTIONABLE_SEVERITIES = frozenset({"critical", "high", "medium"})
 CONFIDENCE_FLOOR = 0.6
 HOLD_CONFIDENCE = 0.8
+# The `test` findings the fix round takes at any severity: a test that checks nothing, or one
+# with no durable value. The severity floor dropped 46 of the reviewer's 50 test findings,
+# these anti-patterns among them (#4023). A missing-coverage finding keeps the floor.
+ACTED_ON_TEST_SUBKINDS = frozenset({"vacuous", "scaffold"})
 
 
 @dataclass
@@ -84,12 +88,22 @@ def outcome(report: dict, has_pr: bool) -> str:
 
 
 def actionable(findings: Sequence[dict]) -> list[dict]:
-    """The findings the fix round acts on: medium or worse, at or above the confidence floor."""
+    """The findings the fix round acts on, all at or above the confidence floor.
+
+    A finding of medium severity or worse, or a vacuous or scaffold `test` finding at any
+    severity.
+    """
     return [
         f
         for f in findings
-        if f.get("severity") in ACTIONABLE_SEVERITIES
-        and float(f.get("confidence") or 0) >= CONFIDENCE_FLOOR
+        if float(f.get("confidence") or 0) >= CONFIDENCE_FLOOR
+        and (
+            f.get("severity") in ACTIONABLE_SEVERITIES
+            or (
+                f.get("category") == "test"
+                and f.get("subkind") in ACTED_ON_TEST_SUBKINDS
+            )
+        )
     ]
 
 
@@ -146,7 +160,8 @@ def comment_body(record: Record) -> str:
     held = sum(1 for f in record.findings if is_held(f))
     lines.append(
         f"{len(record.findings)} findings, {len(record.actionable)} actionable "
-        f"(severity medium or worse, confidence {CONFIDENCE_FLOOR} or more), "
+        f"(severity medium or worse, or a vacuous or scaffold test, at confidence "
+        f"{CONFIDENCE_FLOOR} or more), "
         f"{len(record.remaining)} left after the fix round."
     )
     if held:

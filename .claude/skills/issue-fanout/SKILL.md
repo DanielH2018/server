@@ -146,8 +146,9 @@ runs the copy in its own snapshot of this repo's `origin/master`, which `launch`
 the batch's `.fanout/server`. The snapshot also supplies that batch's system prompt and
 `fanout-stop` hook.
 The agent stops at its PR on every host. A fresh reviewer then reads only the issue text and the diff, and returns findings with
-a severity and a confidence. A finding of severity medium or worse, at confidence 0.6 or more,
-resumes the agent for one fix round, and a second reviewer reads only the fix. A finding of
+a severity and a confidence. A finding of severity medium or worse, or a test the reviewer
+marks vacuous or scaffold at any severity, resumes the agent for one fix round when its
+confidence is 0.6 or more, and a second reviewer reads only the fix. A finding of
 severity medium or worse at confidence 0.8 or more that survives the fix round holds the PR:
 the batch ends `needs input:`, naming the finding, and nothing lands it. Otherwise, on
 daniel-box, the pipeline runs `land.sh` itself. It resumes the agent only for an `unhealthy`,
