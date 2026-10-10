@@ -20,6 +20,7 @@ from fanout_lib.status import BLOCKER, NO_PR
 
 ACTIONABLE_SEVERITIES = frozenset({"critical", "high", "medium"})
 CONFIDENCE_FLOOR = 0.6
+HOLD_CONFIDENCE = 0.8
 
 
 @dataclass
@@ -90,6 +91,21 @@ def actionable(findings: Sequence[dict]) -> list[dict]:
     ]
 
 
+def blocking(findings: Sequence[dict]) -> list[dict]:
+    """The leftovers that hold a PR instead of landing it: medium or worse, confidence 0.8+.
+
+    Above the fix round's 0.6 floor on purpose, so only a confident leftover stops a landing
+    (#3951). Across 68 batches, 10 medium-or-worse findings survived the fix round and all 9
+    of their PRs merged, three of them later named broken by a follow-up.
+    """
+    return [
+        f
+        for f in findings
+        if f.get("severity") in ACTIONABLE_SEVERITIES
+        and float(f.get("confidence") or 0) >= HOLD_CONFIDENCE
+    ]
+
+
 def findings_of(phase: Phase) -> tuple[list[dict] | None, str]:
     """The reviewer's findings, or None and the reason the review produced none."""
     if phase.failed:
@@ -136,7 +152,14 @@ def comment_body(record: Record) -> str:
             f"{held} security findings are held off this public page and kept in the "
             "orchestrator's local record."
         )
-    shown = [f for f in record.findings if not is_held(f)]
+    # Only the actionable findings are listed (#3952): 77% of all findings sat below the
+    # confidence floor, and the full list stays in the local record.
+    shown = [f for f in record.actionable if not is_held(f)]
+    below = len(record.findings) - len(record.actionable)
+    if below:
+        lines.append(
+            f"{below} findings below the actionable bar are listed only in the local record."
+        )
     if shown:
         lines += [
             "",

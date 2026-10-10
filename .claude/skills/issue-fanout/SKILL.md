@@ -146,9 +146,11 @@ the batch's `.fanout/server`. The snapshot also supplies that batch's system pro
 `fanout-stop` hook.
 The agent stops at its PR on every host. A fresh reviewer then reads only the issue text and the diff, and returns findings with
 a severity and a confidence. A finding of severity medium or worse, at confidence 0.6 or more,
-resumes the agent for one fix round, and a second reviewer reads only the fix. On daniel-box
-the agent is then resumed to land. The review's counts and costs go on the PR as a comment,
-security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
+resumes the agent for one fix round, and a second reviewer reads only the fix. A finding of
+severity medium or worse at confidence 0.8 or more that survives the fix round holds the PR:
+the batch ends `needs input:`, naming the finding, and nothing lands it. Otherwise, on
+daniel-box, the agent is then resumed to land. The review's counts and costs go on the PR as
+a comment, with only the actionable findings listed and security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
 `scripts/dev/fanout_lib/review.py` has the phases and the reasons for them. Lint and tests
 stay with the implementer; only the slow model review moves out. The fallback `Agent(...)`
 path below has no review phase.

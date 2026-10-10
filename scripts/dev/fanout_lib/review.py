@@ -102,6 +102,7 @@ from fanout_lib.review_record import (
     Phase,
     Record,
     actionable,
+    blocking,
     comment_body,
     findings_of,
     issues_section,
@@ -468,7 +469,10 @@ class Pipeline:
                     ]
 
         self._comment()
-        final = self._held_for_green(green) if green else self._finish(last)
+        if green:
+            final = self._held_for_green(green)
+        else:
+            final = self._held_for_findings() or self._finish(last)
         self.record.outcome = outcome(final, has_pr=True)
         self._save()
         held = sum(1 for f in self.record.remaining if is_held(f))
@@ -485,6 +489,29 @@ class Pipeline:
             ["gh", "pr", "comment", self.record.pr, "--body-file", "-"],
             comment_body(self.record),
         )
+
+    def _held_for_findings(self) -> dict | None:
+        """A `needs input:` report holding the open PR on a confident leftover, else None.
+
+        On every host: a daniel-server batch's PR is landed by the orchestrator from `status`'s
+        `done` line, which would land it just the same. A security finding is counted rather
+        than named, because this text reaches `status` and the orchestrator's transcript.
+        """
+        left = blocking(self.record.remaining)
+        if not left:
+            return None
+        named = [f"{f.get('title')} ({f.get('file')})" for f in left if not is_held(f)]
+        held = len(left) - len(named)
+        if held:
+            named.append(f"{held} security findings in {self.state_dir}")
+        return {
+            "type": "result",
+            "is_error": False,
+            "result": (
+                "needs input: the review left a confident medium-or-worse finding after the "
+                f"fix round, so the PR was not landed: {'; '.join(named)}.\n{self.record.pr}"
+            ),
+        }
 
     def _held_for_green(self, reason: str) -> dict:
         return {
