@@ -123,10 +123,10 @@ batch across both hosts:
 uv run python scripts/dev/fanout_place.py launch --batch 1345,1386 --batch 1288
 ```
 
-The dispatcher claims each batch (step 2), writes the brief (issue bodies verbatim, the claim note, the first-act comment,
-the landing path or the stop-at-PR rule, and the session-health output of every host a batch
-was actually placed on) and starts a headless Opus agent as a transient user
-service in a fresh worktree on whichever host has the
+The dispatcher claims each batch (step 2), writes the brief (issue bodies verbatim, the claim
+note, the landing path or the stop-at-PR rule, and the session-health lines of the placed host
+that name a role or host the batch's issues cite, the rest as a count) and starts a headless
+Opus agent as a transient user service in a fresh worktree on whichever host has the
 most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means a dropped
 claim (step 2) or one of three placement refusals, which claim nothing: neither host has a
 reservation's worth of headroom; the placement would put more
@@ -341,7 +341,8 @@ Each agent starts with none of this conversation's context, so its brief must ca
   records which agent actually took the work — `findings.py` never learns this name, because
   the claim stays under the orchestrator's. Give it the comment's exact shape,
   `gh issue comment <n> --body 'Worked by \`<its own branch>\`'`, in single quotes so the
-  shell does not run the backticks; `brief.py` renders the dispatcher's copy.
+  shell does not run the backticks. Only this path needs it: `launch` posts the comment
+  itself once a batch is running.
 
 - That `land.sh` (the `land-after-merge` skill) is the landing path, and that hand-polling CI
   is not.

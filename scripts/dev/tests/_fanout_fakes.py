@@ -40,6 +40,7 @@ class FakeRun:
             returned, so a test can script a `subprocess.TimeoutExpired` on a given call.
         calls: every call made, in order.
         issue_fetches: every `(number, repo)` issue fetch `fake_tools` answered.
+        comments: every `(number, body, repo)` issue comment, each answered as posted.
     """
 
     answers: dict[str, subprocess.CompletedProcess] = field(default_factory=dict)
@@ -48,6 +49,9 @@ class FakeRun:
     )
     calls: list[tuple[str, str, str | None]] = field(default_factory=list)
     issue_fetches: list[tuple[int, str]] = field(default_factory=list)
+    # Every `(number, body, repo)` issue comment, kept apart from `calls` so a test that
+    # pins the host and `findings` call order does not see them.
+    comments: list[tuple[int, str, str]] = field(default_factory=list)
 
     @property
     def host_calls(self) -> list[tuple[str, str, str | None]]:
@@ -147,6 +151,9 @@ def fake_tools(
         findings=findings,
         default_ref=default_ref,
         head_branch=head_branch,
+        comment=lambda number, body, repo: (
+            run.comments.append((number, body, repo)) is None
+        ),
     ), run
 
 

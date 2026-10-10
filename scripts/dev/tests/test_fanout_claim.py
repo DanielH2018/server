@@ -46,6 +46,10 @@ def test_launch_claims_each_issue_under_head_before_its_batch_starts(tmp_path):
     ]
     manifest = json.loads(next(iter(tmp_path.glob("*.json"))).read_text())
     assert manifest["orchestrator_branch"] == "worktree-orch"
+    # The dispatcher, not the agent, records which batch branch took each issue (#3962).
+    assert run.comments == [
+        (n, "Worked by `worktree-fanout-1-2`", "DanielH2018/server") for n in (1, 2)
+    ]
 
 
 @pytest.mark.parametrize("head", ["HEAD", "master"])

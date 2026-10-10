@@ -250,9 +250,10 @@ def cmd_launch(args, tools: Tools) -> int:
         flags = review_flags(batch, issues, args.review, target.is_server)
         brief = render_brief(issues, host, batch, holder, health, target, args.review)
         try:
-            run.batches.append(
-                launch_mod.launch(tools, host, batch, brief, numbers, target, *flags)
+            launched = launch_mod.launch(
+                tools, host, batch, brief, numbers, target, *flags
             )
+            run.batches.append(launched)
         except launch_mod.LaunchError as exc:
             released = (
                 claims_mod.release_for_orchestrator(tools, numbers, holder)
@@ -276,6 +277,7 @@ def cmd_launch(args, tools: Tools) -> int:
             )
             return 1
         print(f"{batch} -> {host} ({launch_mod.unit_name(batch, target)})")
+        claims_mod.post_worked_by(tools, numbers, launched.branch, target)
     if not run.batches:
         print("launched nothing: every issue's claim was refused", file=sys.stderr)
         return 3
