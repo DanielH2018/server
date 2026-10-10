@@ -1,0 +1,19 @@
+Derive the deployer's setup-role routing from the playbooks
+
+The deployer carried a hand-written map of which playbook and --tags
+value apply each setup role, plus a table of roles gated off its host,
+and a test re-derived both from the playbooks to catch drift. A wrong
+entry is silent: --tags matching nothing exits 0 and the tick records an
+apply of nothing (PR #702, #3933).
+
+scripts/deploy_tools/setup_routing.py now reads initial_setup.yml,
+k3s-bringup.yml and bootstrap.yml, and evaluates each entry's when:
+against the tick host's vars with a strict form of land_reach's gate
+evaluator (moved to setup_gates.py). The tick runs it as a subprocess
+over origin's tree before the ff-merge. A failed run, or a role whose
+entry it cannot read, routes nothing: the role lands in manual_plane for
+a hand rather than being applied under a guessed tag.
+
+The off-tick host the printed remediation targets now travels on the
+manual_plane ledger line as a `host` key, because monitor-bridge, the
+banner and probe.py cannot run the derivation.

@@ -38,6 +38,7 @@ from functools import partial
 import deploy_io
 import deploy_narrow
 import deploy_release
+import deploy_setup_roles
 from deploy_config import Config, log
 from deploy_git import ci_verdict
 from host_lib import discord_post, flush_discord_spool, github_get, github_token
@@ -177,6 +178,11 @@ class DeployTools:
     # The setup-role narrowing, a subprocess for the same reason and a field for the same
     # reason: `deploy_defer.record`'s tests script an exit code rather than a process.
     narrow_setup_role: Callable[..., tuple[int, str]] = deploy_narrow.narrow_setup_role
+    # Which playbook and tag apply each setup role (#3734): a subprocess that parses the
+    # playbooks, and a field so a tick test scripts the routing rather than a process.
+    setup_routing: Callable[[str, str, str], tuple[dict, dict]] = (
+        deploy_setup_roles.derive_routing
+    )
     emit_deploy_annotation: Callable[[set[str], str], None] = (
         deploy_io.emit_deploy_annotation
     )

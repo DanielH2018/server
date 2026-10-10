@@ -13,6 +13,7 @@ import pathlib
 import pytest
 
 import deploy_io
+import deploy_setup_roles
 
 SHA = "c0ffee12" * 5
 
@@ -50,6 +51,17 @@ def test_a_pending_role_is_recorded_as_one_ledger_line(state):
     assert entry.playbook == "ansible/k3s-bringup.yml"
     assert entry.role == "k3s"
     assert entry.at == 1000.0
+
+
+def test_a_role_gated_off_the_tick_host_carries_its_host_through_a_tags_rewrite(state):
+    """Every printed apply command targets the line's `host` (#3734, #3933)."""
+    playbook = "ansible/initial_setup.yml"
+    state.record_manual_plane(SHA, playbook, "optimize_pi", 1000.0, "daniel-pi")
+    state.record_manual_plane_tags("optimize_pi", frozenset({"x"}), line_predates=False)
+    (line,) = pathlib.Path(state.path("owed")).read_text().splitlines()
+    assert json.loads(line)["host"] == "daniel-pi"
+    (entry,) = state.manual_plane_pending()
+    assert entry.host == "daniel-pi"
 
 
 def test_a_second_role_appends_and_the_same_role_does_not(state):
@@ -211,15 +223,18 @@ def test_a_garbled_line_is_neither_pending_nor_lost(state):
 def test_the_marker_key_is_the_role_name_for_every_pending_role():
     """An operator clears by the role name the alert prints, so the two must be one word.
 
-    The marker's third field is `setup_role_tag(role)`, and only a role
-    `initial_setup.yml` does not apply can ever be written there. Both of those roles are
-    tagged by their own name today. A future one that is not (the `chezmoi_setup` /
-    `chezmoi` shape) would make `clear-owed manual_plane <role>` miss its line, so it fails here
-    rather than on a host.
+    The marker's third field is `setup_role_tag(role)`, and only a role the tick does not
+    apply can ever be written there. Each of those is tagged by its own name today. A future
+    one that is not (the `chezmoi_setup` / `chezmoi` shape) would make `clear-owed
+    manual_plane <role>` miss its line, so it fails here rather than on a host.
     """
     import deploy_changes
 
-    roles = set(deploy_changes._SETUP_ROLES_OUTSIDE_INITIAL_SETUP)
-    assert roles >= {"k3s", "common"}, roles
+    roles = {
+        role
+        for role in deploy_setup_roles.routing()
+        if not deploy_changes.tick_applies_setup_role(role)
+    }
+    assert roles >= {"k3s", "common", "optimize_pi"}, roles
     for role in roles:
         assert deploy_changes.setup_role_tag(role) == role, role

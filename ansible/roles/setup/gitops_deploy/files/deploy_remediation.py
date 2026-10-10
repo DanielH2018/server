@@ -14,6 +14,7 @@ from collections.abc import Iterable
 from deploy_changes import (
     ChangeSet,
     roles_outside_initial_setup_in,
+    setup_role_host,
     setup_role_playbook,
     setup_role_tag,
 )
@@ -107,7 +108,7 @@ def broad_remediation(
 
     `setup_roles` narrows the setup half from that `<role>` placeholder to the real command,
     and exists because the placeholder's *playbook* was wrong for some roles rather than merely
-    vague — see `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`. Omitting it keeps the old generic text,
+    vague — see `setup_role_playbook`. Omitting it keeps the old generic text,
     which is what every caller with no path list still gets.
 
     `playbooks` is the changed bring-up playbooks, `ChangeSet.manual_playbooks`. A bring-up
@@ -282,8 +283,8 @@ def _setup_commands(
         narrow_tags: role tag -> the narrower tags that role's own change needs, from the
             `manual_plane` ledger class. A role absent from it, or present with an empty set,
             gets the whole-role tag.
-        playbooks: changed bring-up playbooks. One that `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`
-            routes a role to is named by that role's command, so `k3s-bringup.yml` prints
+        playbooks: changed bring-up playbooks. One that `setup_role_playbook` routes a role
+            to is named by that role's command, so `k3s-bringup.yml` prints
             `--tags k3s` with its maximal-tag warning. Any other is named as a whole run:
             `bootstrap.yml` and `initial_setup.yml` have no single role a playbook-level edit
             maps to.
@@ -321,7 +322,8 @@ def _setup_commands(
         role_tag = setup_role_tag(role)
         narrowed = _narrowed_tags(role, narrow_tags)
         tags = ",".join(sorted(narrowed)) or role_tag
-        cmd = f"`ansible-playbook {playbook} --tags {tags}{target_arg(role)}`"
+        target = target_arg(setup_role_host(role))
+        cmd = f"`ansible-playbook {playbook} --tags {tags}{target}`"
         if not narrowed:
             warning = maximal_tag_warning(role)
         elif narrowed & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):

@@ -11,12 +11,16 @@ rather than fake the process. They take `run=tools.run` instead, which is `Scrip
 here.
 """
 
+import functools
+import json
 import pathlib
 import subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import setup_routing
 from deploy_config import Config
+from deploy_setup_roles import routes_from_json
 from deploy_state import DeployerState
 from deploy_toolbox import DeployTools
 from gitops_ledger import parse_receipts
@@ -323,6 +327,15 @@ def locks_taken(lock_dir) -> list[str]:
     )
 
 
+@functools.cache
+def checkout_routing() -> tuple[dict, dict]:
+    """This checkout's setup-role routing, the shape `DeployTools.setup_routing` returns.
+
+    Derived in-process: the real field runs the same derivation as a subprocess over origin.
+    """
+    return routes_from_json(json.dumps(setup_routing.routes()))
+
+
 def build_tools(scripted: ScriptedTick) -> DeployTools:
     """The `DeployTools` that answers every boundary from `scripted`."""
     return DeployTools(
@@ -336,6 +349,7 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         flush_discord_spool=scripted.flush_discord_spool,
         narrow_deploy_plane=scripted.narrow_deploy_plane,
         narrow_setup_role=scripted.narrow_setup_role,
+        setup_routing=lambda _repo, _ref, _host: checkout_routing(),
         # The host's render records, read for a log line alone, so no tick test reads them.
         digest_diff=lambda _ref: {},
         release_records=dict,

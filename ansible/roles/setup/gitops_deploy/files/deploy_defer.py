@@ -35,6 +35,7 @@ import deploy_alert_text
 import deploy_alerts
 import deploy_narrow
 from deploy_changes import (
+    setup_role_host,
     setup_role_playbook,
     setup_role_tag,
     tick_applies_setup_role,
@@ -263,7 +264,11 @@ def record(
         role
         for role in roles
         if state.record_manual_plane(
-            origin, setup_role_playbook(role) or NO_PLAYBOOK, setup_role_tag(role), now
+            origin,
+            setup_role_playbook(role) or NO_PLAYBOOK,
+            setup_role_tag(role),
+            now,
+            setup_role_host(role),
         )
     ]
     narrowed = {}

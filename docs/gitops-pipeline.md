@@ -344,10 +344,12 @@ neither `k3s-bringup.yml` nor a playbook for `common`; it is what a role promote
 `optimize_pi` is recorded the same way (#3933). `initial_setup.yml` includes it under `when:
 inventory_hostname == optimize_pi_host`, so the tick's `--tags optimize_pi` run on daniel-box
 matched no task, exited 0 and recorded an apply the Pi never received.
-`gitops_markers.SETUP_ROLES_OFF_THE_TICK_HOST` maps the role to its host, and the remediation
-prints `ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`.
-`ansible/tests/deploy/test_setup_roles_the_tick_host_skips.py` derives that table from the
-playbook gates, so a second role gated off the tick's host fails it until the table names it.
+`scripts/deploy_tools/setup_routing.py` reads the role's `when:` against each host's vars and
+finds the one host it admits. The deployer writes that host into the role's `manual_plane` line
+as its `host` key, and every surface that prints the remediation appends `-e target=<host>`
+from it: `ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`.
+A second role gated off the tick's host is derived the same way, with no table to update
+(#3734).
 
 #### The tag the remediation prints is derived, not the role tag
 
@@ -798,9 +800,11 @@ stay).
     forwarder had to be installed by hand afterwards. `setup_role_playbook` / `setup_role_tag`
     now own the routing, `setup_tags_for` returns nothing for a role initial_setup.yml cannot
     apply (so it defers rather than guessing), and `broad_remediation` names the real playbook.
-    The map is hand-written because this module runs under `uv run --no-project` and cannot
-    import `yaml`; `ansible/tests/deploy/test_setup_role_playbooks_agree.py` derives the truth from the
-    playbooks and fails when the two drift.
+    The routing is derived from the playbooks by `scripts/deploy_tools/setup_routing.py`
+    (#3734). The deployer runs under `uv run --no-project` and cannot import `yaml`, so each
+    tick runs that script as a subprocess over origin's tree. A failed run, or a role whose
+    entry it cannot read, routes nothing: the role is recorded in `manual_plane`, never
+    applied under a guessed tag.
   - **The ff-merge happens BEFORE the apply**, which is the order the *Deploying this role under
     the shared tree lock* trap below already prescribes for the manual path: applying first
     renders from the pre-merge tree and deploys nothing. It also means an unrelated commit sharing
@@ -2034,8 +2038,8 @@ under-sized.
 
 - **`roles/setup/<name>/` is not the same thing as `initial_setup.yml --tags <name>`**: the
   playbook may not include the role (`k3s`, `common`) and the tag may not be the directory name
-  (`chezmoi_setup` → `chezmoi`). `setup_role_playbook` and `setup_role_tag` own the routing;
-  `ansible/tests/deploy/test_setup_role_playbooks_agree.py` derives the truth.
+  (`chezmoi_setup` → `chezmoi`). `setup_role_playbook` and `setup_role_tag` own the routing,
+  which `scripts/deploy_tools/setup_routing.py` derives from the playbooks themselves (#3734).
 - **A `manual_plane` row's remediation names the NARROWEST tag the change needs** (#2307), from
   the `tags` key `deploy_defer.record` writes on the role's ledger line. A row is logged on every later
   tick, paged once per SHA, and cleared by the tick applying the role's real playbook or by

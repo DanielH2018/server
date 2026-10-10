@@ -73,7 +73,7 @@ def _apply_and_clear(pending, narrow) -> str:
             % (
                 entry.playbook,
                 ",".join(sorted(selected)),
-                target_arg(role),
+                target_arg(entry.host),
                 " (WARNING: %s)" % warning if warning else "",
             )
         )

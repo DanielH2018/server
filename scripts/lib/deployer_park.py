@@ -228,7 +228,7 @@ def manual_plane_lines(owed, now):
         tags = ",".join(sorted(selected))
         warning = maximal_apply_warning(e.role, selected)
         how = (
-            f"apply `{e.playbook} --tags {tags}{target_arg(e.role)}` by hand"
+            f"apply `{e.playbook} --tags {tags}{target_arg(e.host)}` by hand"
             + (f" (WARNING: {warning})" if warning else "")
             if e.playbook != "none"
             else "apply the role by hand"

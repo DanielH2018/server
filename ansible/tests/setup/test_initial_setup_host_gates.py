@@ -6,7 +6,7 @@ entry. Three flags carry those facts:
 `has_low_memory_board`, `has_raspi_kernel` and `has_ample_ram`.
 
 WHERE THE FLAGS LIVE IS PART OF THE GUARD, for the reason
-`test_ops_cron_host_gate.py` gives: `scripts/deploy_tools/land_reach.py:_eval_when` resolves a
+`test_ops_cron_host_gate.py` gives: `scripts/deploy_tools/setup_gates.py:_eval_when` resolves a
 gate against `group_vars/all.yml` + `host_vars` only, and a name it cannot resolve reads as
 "every host" — an over-broad verdict. A flag moved into the role's
 `defaults/` would pass every assertion about the task files and still break the reach reader.

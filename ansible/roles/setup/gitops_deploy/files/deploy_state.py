@@ -373,16 +373,16 @@ class DeployerState:
             self.write("owed", put_manual_plane(self.read("owed"), entry, tags))
 
     def record_manual_plane(
-        self, origin: str, playbook: str, role: str, now: float
+        self, origin: str, playbook: str, role: str, now: float, host: str | None = None
     ) -> bool:
         """Record that `role` changed in `origin`'s range and no tick can apply it.
 
         Args:
             origin: the origin SHA the tick fast-forwarded to.
-            playbook: the playbook that applies the role, or `NO_PLAYBOOK` for one no
-                playbook includes.
+            playbook: the playbook that applies the role, or `NO_PLAYBOOK`.
             role: the role, under the `--tags` value that selects it.
             now: a first-seen stamp, in `time.time()` terms.
+            host: the host an apply must target, as `ManualPlaneEntry.host` says.
 
         Returns:
             True when a line was appended, False when this role was already pending.
@@ -399,7 +399,7 @@ class DeployerState:
         """
         if any(e.role == role for e in self.manual_plane_pending()):
             return False
-        entry = ManualPlaneEntry(origin, playbook, role, now)
+        entry = ManualPlaneEntry(origin, playbook, role, now, host)
         self.write("owed", put_manual_plane(self.read("owed"), entry, frozenset()))
         return True
 

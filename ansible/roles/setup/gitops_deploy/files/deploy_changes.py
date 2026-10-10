@@ -22,10 +22,8 @@ import deploy_cross_role
 
 from deploy_setup_roles import (  # noqa: F401  (re-exported for this module's readers)
     INITIAL_SETUP,
-    SETUP_ROLES_OFF_THE_TICK_HOST,
-    _SETUP_ROLE_TAG_OVERRIDES,
-    _SETUP_ROLES_OUTSIDE_INITIAL_SETUP,
     roles_outside_initial_setup_in,
+    setup_role_host,
     setup_role_playbook,
     setup_role_tag,
     tick_applies_setup_role,

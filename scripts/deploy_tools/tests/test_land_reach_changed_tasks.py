@@ -174,7 +174,7 @@ def _pre_merge_checkout(tmp_path) -> tuple:
     run(["git", "init", "-q", "-b", "master", str(repo)], check=True, env=env)
     tree = {
         "ansible/initial_setup.yml": yaml.safe_dump(
-            [{"hosts": "all", "roles": ["crony"]}]
+            [{"hosts": "all", "roles": [{"role": "crony", "tags": ["crony"]}]}]
         ),
         "ansible/inventory/group_vars/all.yml": "has_gitops: false\n",
         "ansible/inventory/host_vars/daniel-box.yml": "has_gitops: true\n",

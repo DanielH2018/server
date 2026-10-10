@@ -345,7 +345,8 @@ def manual_plane_entries(
         if role is None:
             continue
         playbook = _token(obj.get("playbook")) or NO_PLAYBOOK
-        entries.append(ManualPlaneEntry(entry.origin, playbook, role, entry.at))
+        host = _token(obj.get("host"))
+        entries.append(ManualPlaneEntry(entry.origin, playbook, role, entry.at, host))
         tags[role] = _manual_plane_tags(obj)
     return sorted(entries, key=lambda e: e.at), tags
 
@@ -360,7 +361,7 @@ def put_manual_plane(
     second line for the same role, readable or torn, is dropped: the first stands for it, and
     two would page twice for one change.
     """
-    own = ("class", "subject", "origin", "at", "playbook", "tags")
+    own = ("class", "subject", "origin", "at", "playbook", "tags", "host")
     lines, placed = [], False
     for line in (owed or "").splitlines():
         if owed_line_key(line) != (OWED_MANUAL_PLANE, entry.role):
@@ -386,6 +387,7 @@ def _manual_plane_line(entry: ManualPlaneEntry, tags: frozenset[str], extra) -> 
         **extra,
         playbook=entry.playbook,
         tags=sorted(tags),
+        **({"host": entry.host} if entry.host else {}),
     )
 
 

@@ -91,7 +91,7 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
     for e in entries:
         selected = narrow.get(e.role) or frozenset({e.role})
         apply = (
-            f"{e.playbook} --tags {','.join(sorted(selected))}{target_arg(e.role)}"
+            f"{e.playbook} --tags {','.join(sorted(selected))}{target_arg(e.host)}"
             if e.playbook != NO_PLAYBOOK
             else "apply the role by hand; no playbook applies it"
         )

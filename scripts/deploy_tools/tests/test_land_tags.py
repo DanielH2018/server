@@ -289,7 +289,7 @@ def test_pr_617_deploys_the_shared_roles_callers_and_reports_only_the_setup_plan
     assert "manifests" not in note and "ansible/deploy.yml" not in note
     # `k3s-bringup.yml`, NOT `initial_setup.yml`. The k3s role appears only in the bring-up
     # playbook, so `initial_setup.yml` is a command that exits 0 having matched no task — see
-    # `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`.
+    # `setup_routing`.
     assert "ansible/k3s-bringup.yml --tags k3s" in note, (
         "roles/setup/k3s is in this PR too"
     )

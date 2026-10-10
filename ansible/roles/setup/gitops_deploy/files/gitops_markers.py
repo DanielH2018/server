@@ -136,23 +136,15 @@ ALERT_SLOTS: frozenset[str] = frozenset(
 # (`common`).
 NO_PLAYBOOK = "none"
 
-# Setup roles `initial_setup.yml` gates off the GitOps tick's host, mapped to the host each runs
-# on. The tick's own `--tags optimize_pi` run on daniel-box matched no task, exited 0 and
-# recorded an apply (#3933), so the deployer records these in `manual_plane` instead. Here
-# rather than in the deployer's `deploy_setup_roles`, which re-exports it, because the
-# SessionStart banner, monitor-bridge and `probe.py` print the line's apply command and none of
-# them can import the deployer. `ansible/tests/deploy/test_setup_roles_the_tick_host_skips.py`
-# derives the table from the playbook's gates.
-SETUP_ROLES_OFF_THE_TICK_HOST: dict[str, str] = {"optimize_pi": "daniel-pi"}
 
-
-def target_arg(role: str) -> str:
+def target_arg(host: str | None) -> str:
     """` -e target=<host>` for a role gated off the tick's host, else "".
 
-    Appended to every printed `ansible-playbook ... --tags <role>`: without it the command
-    runs on the operator's host, skips the role and exits 0.
+    `host` is the `manual_plane` line's own `host` key, which the deployer derives from the
+    playbook's gate when it records the role (#3734). Appended to every printed
+    `ansible-playbook ... --tags <role>`: without it the command runs on the operator's host,
+    skips the role and exits 0 (#3933).
     """
-    host = SETUP_ROLES_OFF_THE_TICK_HOST.get(role)
     return f" -e target={host}" if host else ""
 
 
@@ -280,12 +272,15 @@ class ManualPlaneEntry(NamedTuple):
         at: when the deployer first recorded it, in `time.time()` terms. The age this stamp
             gives is what monitor-bridge pages on, so it is NEVER refreshed for a role
             already listed.
+        host: the one host the playbook gates the role onto, for a role the tick's host
+            does not run, else None. Every printed apply command appends `target_arg(host)`.
     """
 
     origin: str
     playbook: str
     role: str
     at: float
+    host: str | None = None
 
 
 class K8sDeferredEntry(NamedTuple):

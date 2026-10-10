@@ -107,7 +107,6 @@ ROLE_DIRS_CALLERS = frozenset(
         "deploy/test_manifests_prune.py",
         "deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
         "deploy/test_restart_on_narrows_the_restart_signals.py",
-        "deploy/test_setup_role_playbooks_agree.py",
         "repo/test_role_claude_md.py",
         "services/test_bridge_patch_boundary.py",
         "setup/test_has_flag_roles_have_both_directions.py",

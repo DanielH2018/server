@@ -20,6 +20,7 @@ import deploy_alert_text
 import deploy_alerts
 import deploy_io
 import deploy_cross_role
+import deploy_setup_roles
 from deploy_changes import (
     ChangeSet,
     comment_only_broad_changes,
@@ -239,6 +240,7 @@ def plan_tick(
         paths = [p for p in paths if p not in quiet]
     if deploy_cross_role.CROSS_ROLE_FILE in paths:
         _adopt_incoming_cross_role_tables(tools, config, target.origin)
+    adopt_setup_routing(tools, config, target.origin)
     cs = services_from_changed_paths(paths)
     # Read at origin rather than the working tree: this runs before the ff-merge, so the
     # deleted directory is still on disk.
@@ -277,6 +279,31 @@ def _adopt_incoming_cross_role_tables(
         )
         return
     log(f"range edits {path} — classifying with its copy at {origin[:8]}")
+
+
+def adopt_setup_routing(tools: DeployTools, config: Config, origin: str) -> None:
+    """Route setup roles by the playbooks at `origin`, or route none (#3734).
+
+    Read at origin, not the working tree, because this runs before the ff-merge: a range that
+    adds a role and its playbook entry together routes by the new entry. A failure routes
+    nothing rather than guessing. Every setup role in the range is then recorded in
+    `manual_plane` for a hand, which pages, where a guessed `--tags` that matched nothing
+    would exit 0 and record an apply of nothing (PR #702).
+    """
+    try:
+        routes, unplaced = tools.setup_routing(config.repo, origin, config.hostname)
+    except Exception as exc:
+        deploy_setup_roles.use_routing({})
+        log(
+            f"setup-role routing at {origin[:8]} failed ({type(exc).__name__}: {exc}) — "
+            "this tick applies no setup role and records each one for a hand"
+        )
+        return
+    deploy_setup_roles.use_routing(routes)
+    for role, why in sorted(unplaced.items()):
+        log(
+            f"setup role {role} cannot be routed at {origin[:8]} ({why}) — recorded for a hand"
+        )
 
 
 # The line `git log` prints ahead of each commit's paths. No tracked path starts with it.

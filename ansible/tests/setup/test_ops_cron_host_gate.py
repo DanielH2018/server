@@ -4,7 +4,7 @@ Thirteen tasks there install the repo-level ops crons behind one variable instea
 `inventory_hostname == 'daniel-box'` literal, so moving those crons to another host is one
 edit.
 
-WHERE THE VARIABLE LIVES IS PART OF THE GUARD. `scripts/deploy_tools/land_reach.py:_eval_when`
+WHERE THE VARIABLE LIVES IS PART OF THE GUARD. `scripts/deploy_tools/setup_gates.py:_eval_when`
 resolves a gate against `group_vars/all.yml` + `host_vars` only, and returns "every host"
 for a name it cannot resolve. Moved to the role's `defaults/`, this gate would put the
 over-broad verdict back on every change to this file.

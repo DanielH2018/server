@@ -65,7 +65,7 @@ def task_chains(
 
 @functools.lru_cache(maxsize=256)
 def _parse_tasks(path: Path, _mtime_ns: int) -> list | None:
-    """`path` parsed once per content, mirroring `land_reach._parse_vars_file`'s cache key.
+    """`path` parsed once per content, mirroring `setup_gates._parse_vars_file`'s cache key.
 
     `setup_repo_file_hosts` asks every setup role whether it ships one changed repo file, so
     a PR with several of them walks the same 18 task trees once per file. The cache makes

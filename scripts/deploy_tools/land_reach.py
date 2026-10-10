@@ -19,7 +19,6 @@ this one evaluates the chains it returns.
 """
 
 import contextlib
-import functools
 import json
 import sys
 from pathlib import Path
@@ -28,7 +27,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
-from lib.ansible_inventory import inventory_hosts
 from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -36,12 +34,18 @@ sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 import deploy_cross_role
 from deploy_logic import (
     _is_test_only_path,
-    setup_role_playbook,
     setup_role_tag,
     tick_applies_setup_role,
 )
 
 from reach import reach
+from setup_gates import (  # noqa: F401  (`_eval_when` and `_HOSTS` are read as land_reach's)
+    HOMESERVERS as _HOMESERVERS,
+    HOSTS as _HOSTS,
+    _eval_when,
+    _host_vars,
+)
+import setup_routing
 from setup_role_diff import deleted_in, task_file_chains, tree_at
 from setup_role_chains import (
     SHIPPED_DIRS,
@@ -53,12 +57,6 @@ from setup_role_chains import (
     var_consumer_chains,
 )
 
-# The hosts land.sh's setup-role remediation ever names: hosts.ini's `[homeservers]`, the
-# group initial_setup.yml is run against. A staging host is excluded on purpose -- it is not
-# land.sh's business (HOSTS_LAND_SH_NEVER_DEPLOYS in scripts/lib/render_guard.py is the same
-# exclusion for a deploy tag), and it would sit in its own group rather than this one.
-_HOMESERVERS = [h for h in inventory_hosts() if "homeservers" in h.groups]
-_HOSTS = tuple(h.name for h in _HOMESERVERS)
 
 # `ansible_connection=local` in hosts.ini -- selecting one of these with `-e target=` from
 # elsewhere only picks its VARIABLES; the play still runs on whichever host you typed the
@@ -89,68 +87,6 @@ def _initial_setup_roles(playbook: Path = _INITIAL_SETUP_YML) -> dict[str, objec
         when = None if isinstance(entry, str) else entry.get("when")
         roles[name] = when
     return roles
-
-
-def _host_vars(
-    host: str, all_vars: Path = ALL_VARS, host_vars_dir: Path = HOST_VARS
-) -> dict:
-    """`all_vars` overridden by `host_vars_dir`/<host>.yml.
-
-    The same precedence Ansible resolves a `when:` variable through (a host_vars key always
-    wins over the group default). Defaults to this repo's group_vars/all.yml and host_vars/.
-    """
-    merged = dict(_vars_file(all_vars))
-    hv = host_vars_dir / f"{host}.yml"
-    if hv.exists():
-        merged.update(_vars_file(hv))
-    return merged
-
-
-def _vars_file(path: Path) -> dict:
-    """`path` parsed once per content: the cache key carries its mtime, so a rewrite misses.
-
-    `_eval_when` reads the merged vars per gate per host, and group_vars/all.yml is the
-    largest YAML in the tree; without this, a 40-path setup-role note re-parsed it several
-    hundred times.
-    """
-    return _parse_vars_file(path, path.stat().st_mtime_ns)
-
-
-@functools.lru_cache(maxsize=32)
-def _parse_vars_file(path: Path, _mtime_ns: int) -> dict:
-    return yaml_fast.safe_load(path.read_text()) or {}
-
-
-def _eval_when(
-    expr: object, host: str, all_vars: Path = ALL_VARS, host_vars_dir: Path = HOST_VARS
-) -> bool:
-    """Best-effort read of a `when:` value for one host.
-
-    Every gate `initial_setup.yml` uses today is a bare var, an `or`/`and` of them, an
-    `inventory_hostname == <var-or-literal>` comparison, or one of those with a trailing
-    `| bool` filter -- all valid Python once `| bool` is stripped, so `eval` against the
-    host's merged vars reads them exactly as Ansible would. A YAML list is Ansible's
-    implicit AND (`when: [a, b]` means `a and b`), so it is joined before evaluating rather
-    than rejected.
-
-    Returns True -- host REACHED -- whenever evaluation cannot be trusted: a non-string,
-    non-list value (a YAML `when: true`), an unresolved name, or a Jinja construct `eval`
-    cannot parse. Wider than the truth is recoverable (an extra command an operator can
-    no-op past); narrower silently hides a real gap, which is the failure this function
-    exists to close. Same asymmetry `quiet_paths` already applies to a broad path it cannot
-    read.
-    """
-    if isinstance(expr, list):
-        expr = " and ".join(f"({e})" for e in expr)
-    if not isinstance(expr, str):
-        return True
-    ns = dict(_host_vars(host, all_vars, host_vars_dir))
-    ns["inventory_hostname"] = host
-    py_expr = expr.replace("| bool", "").replace("|bool", "")
-    try:
-        return bool(eval(py_expr, {"__builtins__": {}}, ns))
-    except Exception:
-        return True
 
 
 _SETUP_ROLES_DIR = ANSIBLE / "roles" / "setup"
@@ -186,12 +122,10 @@ def setup_role_hosts(
     its `not has_gitops` branch tears the deployer down on the other two. A tasks tree that
     cannot be read stays wide, the same asymmetry `_eval_when` applies inside one gate.
 
-    Returns an empty set for a role `initial_setup.yml` does not reach at all (its playbook
-    is not `ansible/initial_setup.yml`, or it is not in that playbook's `roles:` list) --
+    Returns an empty set for a role `initial_setup.yml` does not reach at all (it is not in
+    that playbook's `roles:` list) --
     that is `plane_note`'s `unroutable` territory, not this function's to guess at.
     """
-    if setup_role_playbook(role) != "ansible/initial_setup.yml":
-        return frozenset()
     roles = _initial_setup_roles(playbook)
     if role not in roles:
         return frozenset()
@@ -452,9 +386,11 @@ def remaining_setup_hosts_note(
     paths = (_INITIAL_SETUP_YML, ALL_VARS, HOST_VARS, _SETUP_ROLES_DIR)
     with tree_at(ref, repo) if ref else contextlib.nullcontext() as root:
         at = [(root or repo) / p.relative_to(REPO) for p in paths]
-        return _remaining_note(
-            files, local_host, quiet, at[0], at[1], at[2], at[3], pr_range, repo
-        )
+        # Which roles the tick applied is a question about the same tree.
+        with setup_routing.routed_by(root or repo, local_host):
+            return _remaining_note(
+                files, local_host, quiet, at[0], at[1], at[2], at[3], pr_range, repo
+            )
 
 
 def _remaining_note(
