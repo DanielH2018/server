@@ -49,12 +49,14 @@ that bite from a config edit alone.
   and to Loki on the target's next outage. `jellyfin_api_key` leaked that way during the
   2026-09-09 Jellyfin crash loop (#1499) and was rotated on 2026-09-10. ENFORCED by
   `ansible/tests/services/test_homepage_widget_urls_carry_no_credentials.py`.
-- **A widget dialling a ClusterIP needs the target's NetworkPolicy to name `app: homepage`.**
-  The namespace baseline admits Traefik and Prometheus, so pod-to-pod from homepage is denied by
-  default and the tile fails as a widget-proxy error while homepage stays 1/1. ENFORCED by
-  `ansible/tests/services/test_homepage_widget_netpol_edges.py`. So a link-only tile is a
-  config-only change and a widget is not: adding a service to the dashboard and giving it a live
-  widget are two separate pieces of work.
+- **A widget dialling a ClusterIP needs `homepage_widget: true` on the target's entry.**
+  The namespace baseline admits Traefik and Prometheus, so homepage's pod-to-pod call is
+  denied by default and the tile fails as a widget-proxy error while homepage stays 1/1. The
+  key adds homepage to the entry's fence, and `homepage_widget_url` builds the URL only for an
+  entry carrying it (`ansible/filter_plugins/homepage_tiles.py`, #3691). ENFORCED on the
+  rendered URLs by `ansible/tests/services/test_homepage_tiles_filter.py`. So a widget also
+  deploys the target's fence. Headlamp's and pihole's widgets are the two exceptions, each
+  behind a `DECIDED:` marker in `services.yaml.j2`.
 - **A layout entry matches a group by NAME, and an unmatched one is silently dead.** `layout:`
   in `templates/config/settings.yaml.j2` and the group headings in `services.yaml.j2` are two
   lists that must agree. A layout key naming no group does nothing; a group with no layout key
@@ -64,6 +66,8 @@ that bite from a config edit alone.
 - **`fields:` picks which blocks a widget renders, and an unknown name is dropped silently.**
   The valid names are upstream's, not the labels the tile displays, and three tiles take their
   blocks from somewhere other than `fields:` — the per-widget shapes are on the docs page.
+- **A tile's `href` comes from the entry's `hostname`** through `homepage_href`. The tiles
+  stay hand-placed, because their order is measured layout.
 - **A block's HEADING cannot be changed in config — it is renamed in CSS.** `block.jsx` renders
   `t(label)`, an i18n lookup against a translation file baked into the image, and `fields:`
   selects which blocks render rather than what they are called. `custom.css.j2` collapses the

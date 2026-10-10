@@ -6,7 +6,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review_stats.py
 import json
 from dataclasses import asdict
 
-from fanout_lib.review_record import Record
+from fanout_lib.review.review_record import Record
 from fanout_review_stats import load, main, summarize
 
 

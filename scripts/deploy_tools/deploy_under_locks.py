@@ -46,8 +46,7 @@ from lib.exit_codes import (
     DEPLOY_PLAYBOOK_FAILED,
     DEPLOY_SNAPSHOT_FAILED,
 )
-from deploy_tools.deploy_owed_k8s import discharge_owed_k8s
-from deploy_tools.deploy_playbook import annotate, run_playbook
+from deploy_tools.deploy_playbook import annotate, discharge_owed_k8s, run_playbook
 from lib.git import git, git_stdout
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 

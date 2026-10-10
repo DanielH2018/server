@@ -1,7 +1,7 @@
 """Run a `launch --review` fan-out batch: implement, review, fix, then land.
 
 A batch's transient unit runs this in place of `claude -p`, with the batch's worktree as its
-cwd, the brief on stdin and `.fanout/report.json` as stdout. `fanout_lib.review` holds the
+cwd, the brief on stdin and `.fanout/report.json` as stdout. `fanout_lib.review.review` holds the
 phases and the reasons for them.
 
 Usage::
@@ -19,9 +19,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fanout_lib.review import Pipeline
+from fanout_lib.review.api import Pipeline
 from fanout_lib.target import resolve
-from fanout_lib.transport import _local_host
+from fanout_lib.transport import this_host
 
 
 def main(argv=None) -> int:
@@ -37,7 +37,7 @@ def main(argv=None) -> int:
     pipeline = Pipeline(
         Path.cwd(),
         args.batch,
-        _local_host(),
+        this_host(),
         resolve(args.repo),
         sys.stdin.read(),
         red_green=args.red_green,

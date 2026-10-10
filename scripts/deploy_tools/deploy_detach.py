@@ -49,8 +49,7 @@ from pathlib import Path
 # test, a REPL) finds only this module's own directory, and `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from deploy_tools import deploy_under_locks as locked
-from deploy_tools.deploy_owed_k8s import discharge_owed_k8s
-from deploy_tools.deploy_playbook import annotate, run_playbook
+from deploy_tools.deploy_playbook import annotate, discharge_owed_k8s, run_playbook
 from lib.detach_fork import (
     close_inherited,
     fork_detached,

@@ -12,20 +12,19 @@ from lib.proc_testing import write_exec
 
 from _scratch_pytest import run
 from fanout_lib.brief import Issue
-from fanout_lib.red_gate import (
+from fanout_lib.review.red_gate import (
     RED_GREEN_LABEL,
     REPEATED_GREEN,
     REPEATED_RED,
     Gates,
-    ResetFailed,
     anti_patterns,
     green_cause,
     green_gate,
     red_gate,
-    reset_worktree,
     review_flags,
-    unhide_index,
 )
+from fanout_lib.review.hardened_runs import ResetFailed
+from fanout_lib.review.worktree_reset import reset_worktree, unhide_index
 from lib.git_testing import commit, git, git_out, init_repo
 
 CODE = "def double(x):\n    return x\n"

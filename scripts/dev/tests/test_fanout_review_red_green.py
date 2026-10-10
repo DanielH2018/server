@@ -14,9 +14,9 @@ import pytest
 
 from _review_fakes import ISSUES, PR, _finding, _pipeline, _report, unprefixed
 from fanout_lib.brief import ISSUES_HEADING, render_brief
-from fanout_lib.hunk_check import HunkCheck
-from fanout_lib.red_gate import Gate, Gates
-from fanout_lib.review import Pipeline
+from fanout_lib.review.hunk_check import HunkCheck
+from fanout_lib.review.red_gate import Gate, Gates
+from fanout_lib.review.review import Pipeline
 from fanout_lib.target import SERVER_TARGET
 from lib.proc_testing import DEFAULT_TIMEOUT
 from lib.git_testing import commit, git, git_out, init_repo

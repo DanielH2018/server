@@ -36,3 +36,4 @@ ansible/tests/longhorn/test_longhorn_restore_drill.py 502
 ansible/tests/setup/test_cron_scripts_publish_via_pr.py 673
 scripts/backup/tests/test_longhorn_reap_logic.py 668
 scripts/deploy_tools/tests/test_deploy_detach_notify.py 508
+scripts/dev/fanout_lib/review/review.py 657  # conjoined: the red phase and green gate read the pipeline state and call _claude, _git and the argv builders only Pipeline defines (the RedPhase mixin until this entry)

@@ -1,64 +1,26 @@
 # Restoring the k3s control plane from an off-box etcd snapshot
 
-**Status, 2026-09-11: the restore is drilled.** `offbox-daniel-box-1789094702.zip` restored in
-a throwaway guest on daniel-server and served its object graph — 8 namespaces, 72 Deployments,
-45 PVCs, 48 CRDs, 51 Secrets — in 50 seconds end to end (issue #1175). It runs monthly from
-then on. The steps below that the drill does not exercise are still unverified: the agent
-rejoin, the Longhorn reattach, and the restore onto a replacement host rather than into a
-scratch data-dir.
+**The restore is drilled.** `etcd-restore-drill-vm` restores the newest off-box snapshot in a
+throwaway guest on daniel-server every month (*The full drill runs monthly in a throwaway guest*
+below). The first full pass, on 2026-09-11 (#1175), restored `offbox-daniel-box-1789094702.zip`
+and served its object graph — 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs, 51 Secrets — in 50
+seconds end to end.
 
-**The `--list-only` leg is no longer a hand check.** `k3s_etcd_restore_drill_cron` runs it weekly
-on daniel-box (Mondays 10:20, armed by `k3s_etcd_restore_drill_armed`, PR #531), and
-`check_etcd_restore_drill()` in monitor-bridge reads its stamp fail-closed onto a Kuma tile
-(PR #535). That tile still covers the listing leg alone — the full drill has its own,
-`etcd Restore Drill (full)`, pushed monthly from daniel-server. Neither tile says anything
-about the steps after the object graph comes back.
+A weekly `--list-only` drill on daniel-box (`k3s_etcd_restore_drill_cron`, armed by
+`k3s_etcd_restore_drill_armed`) proves the listing leg. `check_etcd_restore_drill()` in
+monitor-bridge reads its stamp fail-closed onto the `etcd Restore Drill` Kuma tile. The monthly
+drill has its own tile, `etcd Restore Drill (full)`.
 
-What was first verified on 2026-08-22, with `scripts/backup/etcd_restore_drill.sh --list-only` and the runs
-that followed it:
+No drill exercises the steps after the object graph comes back: the agent rejoin, the Longhorn
+reattach, and the restore onto a replacement host rather than into a scratch data-dir. Those
+steps are unverified.
 
-- The credentials, bucket and folder work, and `k3s etcd-snapshot list --s3` returns real
-  snapshots.
-- `offbox-daniel-box-1787366702.zip` — the 02:45 snapshot that day — **downloaded and
-  decompressed**. So the nightly cron is producing artefacts that are retrievable and intact
-  enough for k3s to open.
-- Reading the object graph back out — the claim a restore actually rests on — was still open
-  at that point. It was closed on 2026-09-11 by the drill in the guest; the pass record below
-  carries the evidence.
-
-**A scratch restore alongside the running k3s does not work, and is not worth more attempts.**
-`k3s server --cluster-reset` assumes it is the only k3s on the host. Five obstacles were found
-and the first four fixed — the token file must exist *and* the value must arrive as `K3S_TOKEN`
-(the file is only a pre-check; k3s otherwise mints a random token and overwrites the file,
-which is what "encrypted with different token" meant on 2026-09-11), isolation flags
-belong on both invocations, `--disable-agent` leaves the load-balancer on 6444
-(`--lb-server-port` moves it), and `--cluster-reset-restore-path` is read twice by k3s —
-checked for existence after k3s changes directory to `<data-dir>/server`, then joined onto
-`<data-dir>/server/db/snapshots` for the `.zip` decompress — so absolute paths double,
-`--etcd-s3` doubles them for you, and the only value that satisfies both reads is the bare
-name with the file hard-linked into both places (corrected 2026-09-11 from the k3s source). The fifth is a wedge in "Waiting to retrieve agent
-configuration" that ran 17 minutes on 6 seconds of CPU. The script's header records each one.
-The fifth turned out not to be the live k3s at all: it reproduced on 2026-09-11 in a guest with
-no other k3s, and it is a port collision inside the script's own isolation flags. Three flags
-give k3s four listeners: the API server's internal port is `https-listen-port + 1`, the
-API-server client load-balancer is `lb-server-port − 1`, and the supervisor has to share the
-API server's port — split, k3s serves the API server only on the internal port and the
-kubeconfig points at nothing. With 7443/7444/7445 the hidden listeners landed on 7444 twice
-over (the reset's `/cacerts` wedge, then `bind: address already in use` at the scratch
-server), and a split 7443/7445 answered `connection refused`. The supervisor shares
-7443 with the API server, the load-balancer is at 7448, and a test pins the layout.
-
-Two paths finish the job, and neither is more patching:
-
-1. **Run the drill on a host with no k3s of its own** — a throwaway VM. Every obstacle above
-   comes from sharing the host, so they all evaporate. This is the cheap one and it stays
-   non-destructive. **Taken, issue #1175** — see *The full drill runs monthly in a throwaway
-   guest* below.
-2. **Take a scheduled outage and do the real restore below.** It proves the most, including the
-   agent rejoin and the Longhorn reattach that no scratch drill can exercise. Still never done.
-
-The isolation itself held: across all five failed runs the live cluster stayed Ready, both nodes
-included, and every write landed under `/var/tmp`.
+A scratch restore alongside the running k3s does not work: `k3s server --cluster-reset`
+assumes it is the only k3s on the host. The header of `scripts/backup/etcd_restore_drill.sh`
+records the five obstacles found, including how k3s reads `--cluster-reset-restore-path` and
+the port layout of the isolation flags. The full drill therefore runs in a throwaway guest
+(below). A real restore on daniel-box under a scheduled outage would also prove the agent
+rejoin and the Longhorn reattach, and it has never been done.
 
 ## The full drill runs monthly in a throwaway guest
 
@@ -75,8 +37,8 @@ a root cron on `etcd_drill_full_cron` (`inventory/group_vars/all.yml`: the first
    downloads that object with a SigV4 GET, and runs the drill against it with
    `--local-snapshot`. The guest cannot use the drill's own S3 mode for either half:
    `k3s etcd-snapshot list` lists through a running k3s server's supervisor API (since k3s
-   1.29) and there is no server in the guest, and the S3 path doubling (item 4 above) makes
-   the local-file form the working one for the restore;
+   1.29) and there is no server in the guest, and the S3 path doubling (see the script
+   header) makes the local-file form the working one for the restore;
 4. pulls the drill's stdout, `restore.log` and `server.log` out to
    `/var/log/etcd-restore-drill/<run-id>/` on daniel-server (pruned after 400 days), then
    destroys the guest and deletes its disk — pass or fail, so no restored etcd database, token
@@ -90,15 +52,11 @@ so a run that overlaps the cron refuses rather than building a second guest.
 
 What this proves and does not: everything the script header says — the off-box snapshot is
 complete, readable by this k3s version, and its object graph comes back. It does not exercise the
-agent rejoin or the Longhorn reattach; only path 2 does. The weekly `--list-only` cron on
-daniel-box and its monitor-bridge tile are unchanged.
+agent rejoin or the Longhorn reattach; only a real restore (*Restoring* below) does. The weekly
+`--list-only` cron on daniel-box and its monitor-bridge tile are unchanged.
 
-**Pass record** (the stamp on daniel-server is the machine-readable copy):
-
-| Date | Snapshot | Where | Result |
-|---|---|---|---|
-| 2026-09-11 | `offbox-daniel-box-1789094702.zip` | `etcd-drill` guest on daniel-server | **Pass.** 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs, 51 Secrets; 50 s end to end. First full restore ever performed from these snapshots (#1175). |
-| 2026-09-21 | `offbox-daniel-box-1789958702.zip` | `etcd-drill` guest on daniel-server | **Pass.** 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs, 53 Secrets; 47 s end to end (12:29:35 to 12:30:22 UTC). Run by hand through `etcd-restore-drill-vm`, the first run after the monthly cron was installed. |
+The stamp `/var/lib/etcd-restore-drill/last-success-full` on daniel-server records the latest
+pass, and each run's logs sit under `/var/log/etcd-restore-drill/<run-id>/`.
 
 ## What these snapshots do and do not cover
 
@@ -108,7 +66,7 @@ CRs, and the PVC objects with their volume bindings. It is **not** the contents 
 | Loss | Restored from |
 |---|---|
 | Cluster objects (a bad delete, a corrupted etcd, daniel-box's disk) | the etcd snapshot, here |
-| PVC *contents* (the data inside a volume) | Longhorn backups — same R2 bucket, `longhorn` prefix |
+| PVC *contents* (the data inside a volume) | Longhorn backups — B2 by default, R2 for four volumes (`longhorn-disaster-recovery.md`, *Two targets*) |
 
 A full rebuild needs both, **etcd first**: restore the objects so the PVCs exist, then restore the
 volumes into them.
@@ -119,14 +77,15 @@ volumes into them.
 in etcd encrypted with a key held at `/var/lib/rancher/k3s/server/cred/encryption-config.json` on
 daniel-box.
 
-**Corrected 2026-08-23: that key IS in the snapshot, and this section previously said it was
-not.** k3s stores the bootstrap set's file *contents* in the datastore under `/bootstrap`,
+**That key IS in the snapshot.** k3s stores the bootstrap set's file *contents* in the datastore under `/bootstrap`,
 encrypted with the cluster token — `ControlRuntimeBootstrap` includes `EncryptionConfig`
 (`pkg/daemons/config/types.go`), `ReadFromDisk` reads each path's bytes into `File.Content`
 (`pkg/bootstrap/bootstrap.go`), and `pkg/cluster/storage.go` describes the blob as "CA certs and
 keys, encryption passphrases, etc — encrypted with the join token." `secrets-encrypt rotate-keys`
-calls `cluster.Save`, so the stored copy tracks rotations. Verified against k3s v1.36.3+k3s1, the
-running version. An etcd snapshot is an unfiltered datastore image, so it carries that blob.
+calls `cluster.Save`, so the stored copy tracks rotations. `k3s_version` in the k3s role's
+defaults pins the running release, and the monthly drill guest has no key of its own, so a bump
+that broke decryption from the blob would fail the drill. An etcd snapshot is an unfiltered
+datastore image, so it carries that blob.
 
 **The artifact that has to survive daniel-box is therefore `/var/lib/rancher/k3s/server/token`,
 not `encryption-config.json`.** Without the token nothing in the blob decrypts — CA certs, service
@@ -192,7 +151,7 @@ cron exists to find), and anything created outside the repo.
 - Local, k3s's own schedule: `/var/lib/rancher/k3s/server/db/snapshots/`, 00:00 and 12:00, 5 retained.
 - Off-box, the cron this doc is about: R2, `s3://<r2_bucket>/etcd-snapshots/`, daily at 02:45.
   Named `offbox-<node>-<unix-timestamp>.zip` — compressed, and the extension is literally
-  `.zip`, not zstd as this line claimed until 2026-08-22. The name matters: it is what
+  `.zip`. The name matters: it is what
   `--cluster-reset-restore-path` takes, and it takes it as a NAME, never a path (see below).
 - Credentials: `/etc/rancher/k3s/etcd-s3.env` on daniel-box (0600 root), rendered by the k3s role
   from the `r2_*` SOPS secrets.

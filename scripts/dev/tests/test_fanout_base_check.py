@@ -4,7 +4,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_base_check.py
 """
 
 from _scratch_pytest import run
-from fanout_lib.base_check import unproven_tests
+from fanout_lib.review.base_check import unproven_tests
 from lib.git_testing import commit, init_repo
 
 CODE = "def double(x):\n    return x\n"

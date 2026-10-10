@@ -162,7 +162,7 @@ netpol_baseline_probe_targets:
   - {service: grafana, plane: observability}
   - {service: tempo, plane: observability}
   # The infra tier.
-  - {service: authelia, plane: homelab, port: 9091, expect: refused, policy: networkpolicy-authelia.yaml.j2}
+  - {service: authelia, plane: homelab, port: 9091, expect: refused, policy: "authelia's netpol_from (host_vars/daniel-box.yml)"}
   - {service: crowdsec, plane: homelab, port: 8080, expect: refused, policy: networkpolicy-crowdsec.yaml.j2}
   - {service: nut, plane: homelab, port: 3493, expect: refused, policy: networkpolicy-nut.yaml.j2}
   - {service: mosquitto, plane: homelab, port: 1883, expect: refused, policy: networkpolicy-mosquitto.yaml.j2}

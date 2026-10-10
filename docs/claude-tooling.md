@@ -8,8 +8,9 @@ and a hook that denies prints its reason.
 
 ## `scripts/diagnostics/probe.py`
 
-Read-only homelab diagnostics, allow-listed (no prompt). It resolves the live container IP via
-`docker inspect`, so prefer it over curling bridge IPs, which change on recreate.
+Read-only homelab diagnostics, allow-listed (no prompt). It resolves a k3s workload's current
+Service ClusterIP through `kubectl`, and a Pi container's address through `docker inspect`. Prefer
+it over curling a hand-copied IP, which goes stale when a pod or container is recreated.
 
 To see every subcommand with a one-line description, run
 `uv run python scripts/diagnostics/probe.py --list`. The list comes from `SUBCOMMANDS`/`REGISTRY`
@@ -536,34 +537,29 @@ hook's `.py` carries its own `# gen-hooks: register` block, and `args:` there ho
 
 Each session runs the hooks its own checkout carries (#3394). Claude Code sets
 `$CLAUDE_PROJECT_DIR` to the directory the session started in, which is the worktree root for
-a worktree session. The registrations used to name an absolute path into the primary checkout.
-A worktree cut from a fresher `origin/master` then registered a hook script the primary
-checkout did not have yet, `/bin/sh` exited 127, and the tool call ran with the guard skipped:
-about 2,100 Bash calls did on daniel-server in September 2026 (#2675). The `--project`
-posture still runs the hook from the primary checkout's directory, so a fresh worktree needs
-no `.venv` of its own.
+a worktree session. A registration that names an absolute path into the primary checkout breaks
+when a worktree is cut from a fresher `origin/master` than the primary checkout: `/bin/sh` exits
+127 on the missing script, and the tool call runs with the guard skipped. The `--project` posture
+still runs the hook from the primary checkout's directory, so a fresh worktree needs no `.venv`
+of its own.
 
-The two PreToolUse guards, `bash-pretool` and `block-protected-edits`, deny when the runner
-itself is gone (#3887). A session outlives its starting worktree's deletion, and `/bin/sh` then
-exits 127 on every hook, which the harness treats as non-blocking. One session ran four hours
-that way on 2026-10-05 with every guarded call allowed. The generator appends
-`scripts/dev/gen_hook_settings.py:GUARD_SUFFIX` to each `--ask-on-cd` registration. That
-suffix exits 2 with a stderr reason when `run-hook.sh` is not executable, and passes every
-other exit through. The other hooks keep the non-blocking error, because exit 2 on `Stop`
-would keep the session working forever.
-
-A worktree cut before #3394 still registers the absolute path. Its hooks run from the primary
-checkout until it merges master, and a worktree cut before the #3278 switch still exits 127 on
-the six per-hook `.sh` shims #3304 deleted.
+The two PreToolUse guards, `bash-pretool` and `block-protected-edits`, take a different posture
+on a failed `cd`, through `--ask-on-cd`. `run-hook.sh --ask-on-cd` emits an **ask** naming the
+guards that did not run, because a bare exit 0 from a deny guard is an allow (#2171). The guards
+also deny when the runner itself is gone (#3887). A session outlives its starting worktree's
+deletion, and `/bin/sh` then exits 127 on every hook, which the harness treats as non-blocking.
+The generator appends `scripts/dev/gen_hook_settings.py:GUARD_SUFFIX` to each `--ask-on-cd`
+registration. That suffix exits 2 with a stderr reason when `run-hook.sh` is not executable, and
+passes every other exit through. The other hooks keep the non-blocking error, because exit 2 on
+`Stop` would keep the session working forever.
 
 ### `bash-pretool` (PreToolUse, Bash)
 
 It *decides nothing itself*. It is the one process that runs the Bash arms —
 `block-protected-bash`, `block-footguns`, `inject-nested-docs` and `uv-python`, each of which used to be its own hook with its own `uv run` start, and `strip-cd-cwd` (#3957). A sixth arm,
 `auto-approve-readonly`, moved into the dotfiles `claude_guard` package as `readonly.py`
-(dotfiles #628). When #2394 merged them, all five imported `_hook_common` and
-`claude_guard.segment`, so four of those five interpreter starts bought nothing: measured on daniel-server, five sequential shims took a median 233 ms against
-the dispatcher's 60 ms, and 96 ms when the five ran concurrently (#2394).
+(dotfiles #628). All five imported `_hook_common` and `claude_guard.segment`, so four of the five
+interpreter starts bought nothing (#2394).
 
 Each arm runs under its own `try/except` and contributes a `(decision, reason)` pair or
 nothing. `bash-pretool.py` then merges them the way the harness merges separate hooks — `deny`
@@ -592,10 +588,8 @@ the plain rewrite path. The harness flattens every PreToolUse hook's output into
 both keys is indistinguishable from two hooks emitting one each.
 
 A failed `cd` into the repo makes the shim **ask**, naming `block-protected-bash` and
-`block-footguns` as the guards that did not run. Three of the five
-separate hooks asked in that case before the merge and two stayed silent; one process can only do one thing,
-and a missed approval or doc injection is a prompt and a re-read, where a missed deny is a
-bypass.
+`block-footguns` as the guards that did not run. A missed approval or doc injection costs a prompt
+and a re-read, where a missed deny is a bypass.
 
 ### `block-protected-edits` (PreToolUse, `Edit|Write`)
 
@@ -762,20 +756,6 @@ a `block` continues the session. `fanout_place.py status` reads the same two pat
 same final text. A batch reads `done` only with a PR URL, `needs-input` with a blocker line and
 `no-pr` otherwise.
 
-## What an edit costs, by file type
-
-This repo now registers one hook on `Edit|Write`: `block-protected-edits`, a ~7 ms no-op except
-on the paths it owns. The user-level hooks in the dotfiles repo still run alongside it and are
-not counted here.
-
-The two PostToolUse linters that carried this repo's edit cost — `ansible-lint` at **1,642 ms**
-on `roles/*/tasks/main.yml` and `validate-compose` at **177 ms** on `docker-compose.yml.j2`,
-both measured 2026-08-23 — were deleted in #2856 as duplicates of the prek hooks that run the
-same checks at commit time. Over the same 24h the OTEL telemetry put `PostToolUse:Edit` at a
-559 ms average and `PostToolUse:Write` at 234 ms. Those figures are history: they are recorded
-so a later measurement showing an order-of-magnitude drop reads as the deletion rather than as a
-broken exporter.
-
 ## `auto-mode-bridge` internals
 
 The two places auto mode and this repo have to talk (`PermissionDenied` + `PostToolUseFailure`,
@@ -800,51 +780,22 @@ rather than as unverified application context.
 
 ## Permission auditing
 
-No longer lives here. A `log-permission` hook used to count tool calls and prompts into
-`.claude/logs/permissions.json` for `audit-permissions.py` to read; Claude Code's own OTEL
-`tool_decision` events carry that now, and name the deciding authority (`config` rule, `hook`,
-`user`) instead of leaving it inferred.
+The reader is the `claude-permission-audit` plugin (`/audit-permissions`), installed globally
+rather than vendored per repo. Claude Code's OTEL `tool_decision` events carry the data, and they
+name the deciding authority (`config` rule, `hook`, `user`) instead of leaving it inferred. Both
+hosts' Claude Code exports OTLP to their own node's collector hostPort (127.0.0.1:4317).
 
-Both hosts' Claude Code exports OTLP to their local node's hostPort (127.0.0.1:4317); since
-Phase F (2026-08-13) the cluster observability collector is a DaemonSet with a loopback hostPort on
-every node, so both hosts reach their own node's collector directly — the Docker forwarder is
-dissolved/archived. The reader is the `claude-permission-audit` plugin (`/audit-permissions`),
-installed globally rather than vendored per-repo.
-
-**The plugin loads in this repo too.** `.claude/settings.json` disabled it per-project while this
-repo kept its own logger and `audit-permissions.py`, because both wrote
-`.claude/logs/permissions.json` and running the two double-logged. Retiring the logger removed
-that reason, and the entry outlived it until #3142. The plugin registers no hooks of its own: it
-ships the skill and the Loki reader, so enabling it here adds `/audit-permissions` and changes
-nothing else about a session.
+**The plugin loads in this repo.** `.claude/settings.json` must not disable it, because a disable
+removes `/audit-permissions` from every session opened here and nothing in a session says so. The
+plugin registers no hooks of its own: it ships the skill and the Loki reader, so enabling it adds
+`/audit-permissions` and changes nothing else about a session.
 `.claude/hooks/tests/test_project_settings_shape.py::test_no_plugin_is_disabled_here_without_a_reason_on_the_list`
 fails if a disable for it comes back without a reason written here.
 
 The events land in **observability's Loki** (`observability` namespace, Service `loki`), not in
-`loki-homelab`. `probe.py loki-query` asks `loki-homelab` by default, and until #2210 a
-`{service_name="claude-code"}` query there returned a well-formed empty result that read as
-"the OTEL stream is gone" while 1.07M lines sat in the other store. A query whose
-selector is `service_name="claude-code"` routes to observability's Loki on its own, with a
-stderr line saying so; `--loki observability` asks that store for any query, and an explicit
-`--loki homelab` with that selector is refused rather than answered empty. `otelq logs` only
-ever asks the observability store.
-
-### `/audit-permissions` breaks whenever Loki is not on the node you run it from
-
-And the fix is not in this repo. Its `loki-source.js` hardcodes `LOKI_URL ||
-http://127.0.0.1:3100` with no ClusterIP fallback and no retry, reporting "could not read Loki …
-Set $LOKI_URL"; `$LOKI_URL` is unset in `settings.json`, the chezmoi base template, the shell rc
-files and the plugin's own frontmatter, so the loopback default is what runs.
-
-Loki, Prometheus and Tempo are Deployments with **no `nodeSelector`**, bound to `hostIP:
-127.0.0.1` hostPorts — all three sit on daniel-box by scheduler luck, and a reboot can move them.
-The 2026-08-23 ClusterIP pin (`c0d8731e`) gave `otelq` and `otel-sweep` a stable second address;
-the plugin never got it.
-
-Workaround: `LOKI_URL=http://10.43.99.158:3100`. Durable fix: apply the ClusterIP-fallback pattern
-in the `daniel-tools` marketplace repo, which is where the plugin lives — an operator searching
-under `ansible/` does not find it (2026-08-23b review M11).
-
-Do **not** pin the workloads to a node; `roles/setup/k3s/defaults/main.yml:893-896` pre-rejects
-that — fix the firewall, not the placement. In-cluster consumers (Grafana datasources,
-monitor-bridge, autofix-bridge) use Service DNS and are unaffected.
+`loki-homelab`. `probe.py loki-query` asks `loki-homelab` by default, and a
+`{service_name="claude-code"}` query there returns a well-formed empty result that reads as "the
+OTEL stream is gone." A query whose selector is `service_name="claude-code"` routes to
+observability's Loki on its own, with a stderr line saying so. `--loki observability` asks that
+store for any query, and an explicit `--loki homelab` with that selector is refused rather than
+answered empty. `otelq logs` only ever asks the observability store.

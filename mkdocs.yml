@@ -183,78 +183,86 @@ nav:
           # how the baseline selects pods — live content, not archive material.
           - "NetworkPolicy — what each slice settled": networkpolicy-slice-answers.md
           - "Argo and Flux evaluation (ADR-0010)": archive/gitops-argo-flux-evaluation.md
-  # One section, ordered day-to-day first and recovery last. An upgrade is both a
-  # driving and a recovery procedure, so a reader looking for "how do I do X" should not
-  # have to guess which heading X is filed under.
+          # The measurement #3734 needs before initial_setup.yml loops over a setup_roles list.
+          - "Looped include_role measurement (#3734)": setup-role-loop-measurement.md
+  # Six groups, ordered day-to-day first and recovery last. An upgrade is both a driving and
+  # a recovery procedure, so the upgrades sit with recovery, where a reader looking for "how do
+  # I get the cluster back" finds them. A group is a nav heading only: every page keeps its
+  # path, so moving one between groups breaks no link.
   - Operations:
-      - Deploying by hand: deploying.md
-      # The long form behind the `land-after-merge` skill. The skill carries the invocation
-      # and the verdict decoder; this page carries the measurement behind each rule, which
-      # keeps the skill short.
-      - Landing a merged PR: landing.md
-      - The GitOps pipeline: gitops-pipeline.md
-      # The measurement #3734 needs before initial_setup.yml loops over a setup_roles list.
-      - Looped include_role measurement: setup-role-loop-measurement.md
-      - Issue claiming and fan-out: issue-claiming-and-fanout.md
-      - Secret rotation: secret-rotation.md
-      - Claude shell permissions: claude-shell-permissions.md
-      - Claude tooling reference: claude-tooling.md
-      - Failure classes: failure-classes.md
-      # Layout decisions, module conventions and the ranked structural findings from the
-      # review of land_lib, monitor-bridge and gitops_deploy.
-      - Python code organization: python-code-organization.md
-      - Security tools: security-tools.md
-      - WireGuard private access: wireguard-private-homelab-access.md
-      - Healthchecks.io deadman: healthchecks-io-deadman.md
-      - Uptime Robot monitors: uptime-robot-monitors.md
-      # The per-check record behind monitor-bridge's role CLAUDE.md: measurements, incidents
-      # and retirements, kept off the file a session loads on every touch of the role.
-      - monitor-bridge check history: monitor-bridge-checks.md
-      # The pages below each take the working-out of one role CLAUDE.md: drill records,
-      # measured traps, board provenance and design records. The role doc keeps the operating
-      # rules, within the inject hook's character budget, and a session reads the page only
-      # when it edits that code.
-      - k8s manifest cycle record: k8s-manifest-cycle-record.md
-      - volume-snapshot drill record: volume-snapshot-drills.md
-      - observability dashboard record: observability-dashboards.md
-      - cronjob-gate design record: cronjob-gate-design.md
-      - headlamp plugins and OIDC record: headlamp-oidc-and-plugins.md
-      - game-stats internals: game-stats-internals.md
-      - n8n community node packages: n8n-community-packages.md
-      - renovate_notify internals: renovate-notify-internals.md
-      - Traefik startup and plugins: traefik-plugins-and-startup.md
-      - Traefik client identity and TLS: traefik-client-identity-and-tls.md
-      - Valheim modding: valheim-modding.md
-      - autofix-bridge actuators: autofix-bridge-actuators.md
-      - CrowdSec record: crowdsec-waf-record.md
-      - qbittorrent VPN and prefs: qbittorrent-vpn-and-prefs.md
-      - Jellyfin plugins: jellyfin-plugins.md
-      - claude-rc caps: claude-code-rc-caps.md
-      - Claude memory store copy: claude-memory-sync.md
-      - Claude as its own UNIX user: claude-agent-user.md
-      - hypervisor libvirt internals: hypervisor-libvirt-internals.md
-      - Docker engine pins and runtime: docker-engine-pins-and-runtime.md
-      - observability OIDC and idle diagnosis: observability-oidc-and-idle-diagnosis.md
-      - monitor-bridge internals: monitor-bridge-internals.md
-      - homepage widgets and layout: homepage-widgets-and-layout.md
-      - volume-revert drill and sizing: volume-revert-drill-and-sizing.md
-      - renovate_agent bounds and digest: renovate-agent-bounds-and-digest.md
-      - k3s node-plane crons and incidents: k3s-node-plane-crons-and-incidents.md
-      - Pi-hole DNS continuity record: pihole-dns-continuity-record.md
-      - Authelia sessions and CrowdSec init: authelia-sessions-and-crowdsec-init.md
-      - Pi host tuning record: pi-host-tuning-record.md
-      - Host baseline record: host-baseline-record.md
-      - uptime-kuma and AutoKuma record: uptime-kuma-autokuma-record.md
-      - Email to RSS: email-to-rss.md
-      - AniList integration: anilist-integration.md
-      - k3s control-plane upgrade: k3s-upgrade.md
-      - Longhorn upgrade: longhorn-upgrade.md
-      - Longhorn disaster recovery: longhorn-disaster-recovery.md
-      - k3s etcd restore: k3s-etcd-restore.md
-      # The last stop on the recovery ladder — total loss of daniel-box or the author's own
-      # access. It is the entry point that links to every runbook above rather than one more
-      # subsystem-specific procedure, so it sits after all of them.
-      - Break glass: break-glass.md
+      - Deploy and land:
+          - Deploying by hand: deploying.md
+          # The long form behind the `land-after-merge` skill. The skill carries the invocation
+          # and the verdict decoder; this page carries the measurement behind each rule, which
+          # keeps the skill short.
+          - Landing a merged PR: landing.md
+          - The GitOps pipeline: gitops-pipeline.md
+          - Secret rotation: secret-rotation.md
+      - Monitoring and alerting:
+          - Healthchecks.io deadman: healthchecks-io-deadman.md
+          - Uptime Robot monitors: uptime-robot-monitors.md
+          # internals holds the module table, prerequisites and gate sets; the check record
+          # holds one entry per live check. check.py and cli.py cite the internals path.
+          - monitor-bridge internals: monitor-bridge-internals.md
+          - monitor-bridge check record: monitor-bridge-checks.md
+          - uptime-kuma and AutoKuma record: uptime-kuma-autokuma-record.md
+          - observability record: observability-dashboards.md
+          - cronjob-gate design record: cronjob-gate-design.md
+          - autofix-bridge actuators: autofix-bridge-actuators.md
+      - Access and host security:
+          - WireGuard private access: wireguard-private-homelab-access.md
+          - Security tools: security-tools.md
+      - Claude tooling:
+          - Claude tooling reference: claude-tooling.md
+          - Claude shell permissions: claude-shell-permissions.md
+          - Claude as its own UNIX user: claude-agent-user.md
+          - claude-rc caps: claude-code-rc-caps.md
+          - Claude memory store copy: claude-memory-sync.md
+          - Issue claiming and fan-out: issue-claiming-and-fanout.md
+          - Failure classes: failure-classes.md
+          - Python code organization: python-code-organization.md
+      # Each page below takes the working-out of one role CLAUDE.md: drill records, measured
+      # traps, board provenance and design records. The role doc keeps the operating rules,
+      # within the inject hook's character budget, and a session reads the page only when it
+      # edits that code.
+      - Role records:
+          - Edge:
+              - Traefik record: traefik-plugins-and-startup.md
+              - CrowdSec record: crowdsec-waf-record.md
+              - Authelia sessions record: authelia-sessions-and-crowdsec-init.md
+              - Pi-hole DNS continuity record: pihole-dns-continuity-record.md
+          - Hosts:
+              - Host baseline record: host-baseline-record.md
+              - Pi host tuning record: pi-host-tuning-record.md
+              - k3s node-plane crons and incidents: k3s-node-plane-crons-and-incidents.md
+              - hypervisor libvirt internals: hypervisor-libvirt-internals.md
+              - Docker engine pins and runtime: docker-engine-pins-and-runtime.md
+          - Storage:
+              - k8s manifest cycle record: k8s-manifest-cycle-record.md
+              - volume-snapshot drill record: volume-snapshot-drills.md
+              - volume-revert drill and sizing: volume-revert-drill-and-sizing.md
+          - Renovate:
+              - renovate_notify internals: renovate-notify-internals.md
+              - renovate_agent bounds and digest: renovate-agent-bounds-and-digest.md
+          - Services:
+              - headlamp plugins and OIDC record: headlamp-oidc-and-plugins.md
+              - homepage widgets and layout: homepage-widgets-and-layout.md
+              - Jellyfin plugins: jellyfin-plugins.md
+              - AniList integration: anilist-integration.md
+              - qbittorrent VPN and prefs: qbittorrent-vpn-and-prefs.md
+              - n8n community node packages: n8n-community-packages.md
+              - game-stats internals: game-stats-internals.md
+              - Valheim modding: valheim-modding.md
+              - Email to RSS: email-to-rss.md
+      - Recovery and upgrades:
+          - k3s control-plane upgrade: k3s-upgrade.md
+          - Longhorn upgrade: longhorn-upgrade.md
+          - Longhorn disaster recovery: longhorn-disaster-recovery.md
+          - k3s etcd restore: k3s-etcd-restore.md
+          # The last stop on the recovery ladder — total loss of daniel-box or the author's own
+          # access. It is the entry point that links to every runbook above rather than one more
+          # subsystem-specific procedure, so it sits after all of them.
+          - Break glass: break-glass.md
   # Work that shipped, a spike that concluded and an incident that closed: kept as the record,
   # not as instructions. Operations holds only pages that describe the lab as it runs.
   # The archive index lists every archived plan and names where its live documentation went,

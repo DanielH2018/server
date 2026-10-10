@@ -62,12 +62,9 @@ nothing until the play runs, and the gap report covers every key of
 
 ## Why the teardown arm exists
 
-Until 2026-08-17 the role was gated `when: has_docker` in `initial_setup.yml`, so flipping a host to
-`has_docker: false` skipped it entirely and nothing declarative ever cleaned up. daniel-server's
-2026-08-14 uninstall was done imperatively and missed a still-enabled
-`docker-compose-qbittorrent.service` — `Requires=` a `docker.service` that no longer exists — plus
-two crons for retired services. Install without uninstall is a one-way door; `tasks/teardown.yml` is
-the way back out.
+Install without uninstall is a one-way door, and `tasks/teardown.yml` is the way back out when a host flips to `has_docker: false`.
+
+**HISTORY — the role was gated `when: has_docker` until 2026-08-17, so that flip skipped it and nothing declarative cleaned up.** daniel-server's imperative uninstall on 2026-08-14 missed a still-enabled `docker-compose-qbittorrent.service` and two crons for retired services.
 
 ## The Go runtime limits, and what sized them
 
@@ -111,10 +108,9 @@ host retires Docker.
 
 ## The deb822 repo migration
 
-Commit `fee21f9` moved the APT repo to a deb822 `.sources` file, shared in shape with
-`ansible/roles/setup/optimize_pi/`'s Log2Ram repo: both need `python3-debian`, and both clean up the
-legacy one-line `.list`. `optimize_pi` already used the correct idiom — `get_url` with an explicit
-`mode:` — and `docker_install` now matches it.
+The APT repo is a deb822 `.sources` file, the same shape as `ansible/roles/setup/optimize_pi/`'s
+Log2Ram repo. Both need `python3-debian`, both fetch the key with `get_url` and an explicit `mode:`,
+and both remove the legacy one-line `.list`.
 
 ## The `default-address-pools` derivation
 

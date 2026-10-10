@@ -188,6 +188,9 @@ def make_lookup(ctx: dict):
             # jinja2 leaves `Environment.globals` unannotated, so its type is inferred from
             # the default namespace's values and rejects any other callable.
             cast(dict[str, Any], env.globals)["lookup"] = lookup
+            # A deploy's lookup('template') sees every filter the calling template does, and
+            # homepage's tile list reaches the repo's own (homepage_href), so copy them over.
+            env.filters.update(context.environment.filters)
             env.filters["from_json"] = _from_json
             env.filters["to_json"] = to_json_stub
             return env.get_template(path.name).render(ctx).rstrip("\n")

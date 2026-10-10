@@ -156,9 +156,9 @@ daniel-box, the pipeline runs `land.sh` itself. It resumes the agent only for an
 landing's log. Any other verdict ends the batch. The review's counts and costs go on the PR as
 a comment, with only the actionable findings listed and security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
 Before the review, every batch of this repo runs the PR's new tests with its code changes
-taken out (`scripts/dev/fanout_lib/base_check.py`). The reviewer is told which still pass, and
+taken out (`scripts/dev/fanout_lib/review/base_check.py`). The reviewer is told which still pass, and
 the PR comment counts them.
-`scripts/dev/fanout_lib/review.py` has the phases and the reasons for them. Lint and tests
+`scripts/dev/fanout_lib/review/review.py` has the phases and the reasons for them. Lint and tests
 stay with the implementer; only the slow model review moves out. The fallback `Agent(...)`
 path below has no review phase.
 
@@ -168,13 +168,13 @@ runs: Python under `scripts/`, the filter plugins and the hooks, and a role's `f
 role has its own `tests/`, such as monitor-bridge's registry and the HA Jinja macros. Add or
 remove it by hand where that rule is wrong. Before the implementer starts, a separate session
 writes one failing test per claim in each issue's `## Verify-by`, and per stated behaviour
-those miss, from the issue text alone. `scripts/dev/fanout_lib/red_gate.py` proves each new
+those miss, from the issue text alone. `scripts/dev/fanout_lib/review/red_gate.py` proves each new
 test fails on the unchanged code. A batch that runs no red phase records why, as
 `red_skipped`. The implementer gets that commit and may not edit it, but may append tests to
-its files (`fanout_lib/red_lock.py` says what counts as appending). A refused red commit is
+its files (`fanout_lib/review/red_tests.py` says what counts as appending). A refused red commit is
 dropped and the batch runs as usual. A PR that still fails the green gate after the fix round
 is not landed. Once it passes, each hunk of the fix is reverted on its own under the red tests,
-and the record names the hunks no red test noticed (`scripts/dev/fanout_lib/hunk_check.py`).
+and the record names the hunks no red test noticed (`scripts/dev/fanout_lib/review/hunk_check.py`).
 To see whether the red phase earns its cost, run `uv run python
 scripts/dev/fanout_review_stats.py --dir <state dir> ...`, once per user whose records count. The PR comment and the local record carry both gates' results.
 

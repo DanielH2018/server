@@ -82,36 +82,9 @@ Being *ahead* of master is normal branch work and is never refused.
 
 ## Checking a change without deploying it
 
-Three modes, and they see genuinely different things. Reaching for the wrong one is how a
-manifest bug reaches production.
+The `deploy` skill (`.claude/skills/deploy/SKILL.md`) owns the three-mode table (`prek run --all-files`, `--check`, `--dry-run`) and the two limits of a green dry run. Only `--dry-run` shows the manifests to an API server.
 
-| Mode | What sees the manifests | Catches |
-|---|---|---|
-| `prek run --all-files` | Nothing — renders locally, then parses and schema-checks | Jinja indent bugs, invalid YAML, duplicate keys, undefined fields, wrong types |
-| `--check` | Nothing — the apply is **skipped** | Task-level wiring. Not the manifests themselves |
-| `--dry-run` | The **live API server**, via `kubectl apply --dry-run=server` | Everything prek catches, plus CRD schemas, CRD ordering and admission rejections |
-
-`--dry-run` renders to a temp directory, applies with `--dry-run=server`, and discards it.
-Nothing in the cluster is applied, patched or rolled, and nothing on the node is written either:
-a role's host-plane tasks — the staged modules under `/etc/rancher/k3s/<role>/`, the
-`/usr/local/bin` scripts, the crons that run them, the probe-Job manifests — all carry
-`when: not k8s_dry_run | bool` (#2614), and
-`ansible/tests/deploy/test_k8s_dry_run_host_writes.py::test_every_host_write_outside_manifests_is_guarded`
-fails on one that does not.
-
-### What a green dry run does not prove
-
-**It skips each role's own cluster writes.** Probe Jobs, script ConfigMaps, `exec` into a live
-pod and inline restarts all sit outside the shared manifests path. Each is guarded on
-`k8s_no_mutate`, so a dry run proves the manifests and not the probes.
-
-**A brand-new service is only half-checked.** Its `k8s_claims` are applied with
-`--dry-run=server`, which validates the claim object and provisions nothing, and nothing at
-admission verifies that a referenced PVC exists. So the Deployment validates while the volume
-is never proven provisionable.
-
-**It says nothing about runtime.** Scheduling, PVC binding, probe behaviour and rollout
-behaviour all need a real deploy.
+A dry run writes nothing on the node either. Every host-plane task in a role carries `when: not k8s_dry_run | bool` (#2614), and `ansible/tests/deploy/test_k8s_dry_run_host_writes.py::test_every_host_write_outside_manifests_is_guarded` fails on one that does not.
 
 ## Verify twice
 
@@ -199,6 +172,6 @@ landings and deploys in flight with the locks each holds, services whose release
 the deployer's markers, and open PRs. Each button runs the command you would type: land
 runs `land.sh --pr <n> --since <sha>`, deploy runs `deploy.sh --tags <svc>`, cancel
 SIGTERMs a listed landing, clear hold removes `hold_sha` and its `hold_plane` ledger lines together against a
-SHA you type, and the staging override sets or clears its marker. Output goes to
+SHA you type. Output goes to
 `~/.local/state/deploy-ui/` on daniel-box and one audit line per action reaches Loki under
 `deploy-ui`. The daemon is `roles/setup/deploy_ui`; the route is `roles/k8s/deploy-ui`.

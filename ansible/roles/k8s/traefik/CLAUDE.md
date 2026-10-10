@@ -19,10 +19,9 @@ depends on, so it must render before any role whose manifests reference those CR
 - **`traefik-acme` is the `acme.json` cert store** (`Recreate`, ReadWriteOnce — two Traefiks
   writing it corrupt it).
 
-The working-out behind the rules below sits on two pages, split by subject:
-`docs/traefik-plugins-and-startup.md` (the plugin download, the probe's red path, the init
-containers) and `docs/traefik-client-identity-and-tls.md` (the forwarded-header chain,
-origin-pull, the 421 incidents).
+The working-out behind the rules below is `docs/traefik-plugins-and-startup.md` (the plugin
+download, the probe's red path, the forwarded-header chain, origin-pull, the 421 incidents).
+The init containers' working-out is `docs/crowdsec-waf-record.md`.
 
 ## Plugins and the startupProbe
 
@@ -94,7 +93,7 @@ origin-pull, the 421 incidents).
   registers. The third copies
   the image's datafiles world-readable; it and the first are the pod's two `runAsUser: 0`
   containers. All three and the agent sidecar render from `ansible/templates/crowdsec-agent.yml.j2`,
-  which authelia's pod shares. `docs/traefik-plugins-and-startup.md` has what each one is
+  which authelia's pod shares. `docs/crowdsec-waf-record.md` has what each one is
   working around.
 - Ports are unprivileged inside the pod (`8000`/`8443`/`8082`); the Service maps the
   public `80`/`443` to them, avoiding `NET_BIND_SERVICE`. `runAsUser` is pinned to

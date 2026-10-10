@@ -5,33 +5,15 @@ on every touch of the role. The role doc keeps the rules; this page keeps how ea
 arrived at. `docs/archive/staging-cluster.md` is the record of the cluster this role once
 carried, and `docs/k3s-etcd-restore.md` is the drill the surviving guest runs.
 
-## The retired staging guest, and how the host converges
+## The retired staging guest, and the key withdrawal that stays
 
-`daniel-stage` — 8 GiB, 4 vCPU, a 100 GB qcow2 — was removed on 2026-09-29 (#2941). The
-operator decided no manual staging sessions continue, and the GitOps tick had already stopped
-consulting it (#2859), so the guest sat allocated for work nothing drove.
+**HISTORY — the staging guest.** `daniel-stage` (8 GiB, 4 vCPU, a 100 GB qcow2) was removed on 2026-09-29 (#2941), after the operator ended manual staging sessions and the GitOps tick stopped consulting it (#2859). `teardown.yml` runs only when `has_hypervisor` goes false, and that flag stays true on daniel-server for the drill, so deleting `guest.yml` alone would have left the domain running as an unmanaged orphan. A reap on the install path destroyed the domain, undefined its storage and removed the staging gate's files, and `gitops_deploy`'s `retired.yml` did the same on daniel-box for the staging-backfill units. Both reapers were deleted once the hosts converged (#3272); the repo history of `reap_staging.yml` holds the first.
 
-**Deleting `guest.yml` would not have removed the guest.** `teardown.yml` runs only when
-`has_hypervisor` goes false, and that flag stays true on daniel-server for the drill — so the
-domain would have kept running as an orphan Ansible no longer manages. That is the
-`docker_install` failure `tasks/main.yml` documents. A reap on the install path,
-`reap_staging.yml`, therefore destroyed the domain, ran `virsh undefine --remove-all-storage`
-on it, and removed the seed, the seed directory and the rendered XML by path. The same file
-removed what the staging gate left: `/home/ubuntu/server-staging`, its lock,
-`/usr/local/bin/staging-gate-dispatch` and `/usr/local/bin/staging-gate-run`.
-`gitops_deploy`'s `retired.yml` did the same on daniel-box for the staging-backfill units and
-the gate's private key.
-
-Both reapers were deleted once the hosts had converged (#3272). On 2026-10-02 daniel-server had
-no libvirt domains and no `/var/lock/staging-gate.lock`, and daniel-box had no
-`staging-backfill` unit files. `git log --diff-filter=D -- '*reap_staging.yml'` finds the
-reaper if a host ever needs it again.
-
-The gate's public key stays in `files/staging-gate-retired/`, and the withdrawal task in
-`install.yml` keeps taking it out of `authorized_keys`. Deleting the key file alone would leave
-the key working on any host that had not converged: `authorized_key` runs `state: present` with
-`exclusive` false, so it only ever adds. The private half (`staging_gate_ssh_key`) is out of
-SOPS and out of the rotation registry.
+**The withdrawal of the gate's key stays.** The gate's public key stays in
+`files/staging-gate-retired/`, and the withdrawal task in `install.yml` keeps taking it out of
+`authorized_keys`. Deleting the key file alone would leave the key working on any host that had not
+converged, because `authorized_key` runs `state: present` with `exclusive` false and so only ever
+adds. The private half (`staging_gate_ssh_key`) is out of SOPS and out of the rotation registry.
 
 ## Why the staging subnet is `192.168.140.0/24`
 

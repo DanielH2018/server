@@ -465,7 +465,6 @@
  "ansible/tests/services/test_homelab_mcp_pins.py": 0.0,
  "ansible/tests/services/test_homepage_block_label_overrides.py": 0.0,
  "ansible/tests/services/test_homepage_longhorn_widget_url.py": 0.0,
- "ansible/tests/services/test_homepage_widget_netpol_edges.py": 0.0,
  "ansible/tests/services/test_homepage_widget_urls_carry_no_credentials.py": 0.0,
  "ansible/tests/services/test_ical_proxy_pins_match_uv_lock.py": 0.0,
  "ansible/tests/services/test_introskipper_install.py": 0.0,

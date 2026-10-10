@@ -10,7 +10,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_brief.py
 import re
 
 from fanout_lib.brief import Comment, Issue, relevant_health, render_brief
-from fanout_lib.review import issues_section
+from fanout_lib.review.review import issues_section
 from fanout_lib.target import Target
 
 ISSUES = [

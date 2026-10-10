@@ -111,11 +111,7 @@ reports correctly. The sibling `renovate_agent` role behaves the same way.
 
 ## What the liveness monitor does not cover
 
-`ExecStartPost` beats a Kuma push monitor ("Renovate Notifier — Alive") and runs only when
-`ExecStart` succeeded, so a crash pages twice: `OnFailure=renovate-notify-alert.service` hits
-Discord immediately, and the missed beat reds the monitor at its 36h window.
-
-That monitor watches the notifier, not Renovate. A green "Alive" monitor says this unit ran; it
-says nothing about whether Renovate is still producing updates, which is the staleness arm's
-job. The marker also greens regardless of Discord *delivery*, which is why monitor-bridge
-verifies the GitOps/Renovate webhook separately (`checks/notify.py`).
+The role doc's *Liveness, and the sandbox* section states the limit: the "Renovate Notifier —
+Alive" monitor watches the notifier, not Renovate, and it greens whatever Discord did. The
+staleness arm covers Renovate going quiet. monitor-bridge verifies delivery of the
+GitOps/Renovate webhook separately (`checks/notify.py`).

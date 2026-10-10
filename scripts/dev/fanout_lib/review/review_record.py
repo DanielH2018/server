@@ -12,10 +12,10 @@ from dataclasses import dataclass, field
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib.brief import ISSUES_HEADING
-from fanout_lib.review_prompts import is_held
+from fanout_lib.review.review_prompts import is_held
 from fanout_lib.status import BLOCKER, NO_PR
 
 ACTIONABLE_SEVERITIES = frozenset({"critical", "high", "medium"})
