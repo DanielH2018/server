@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-10 21:29 UTC
-generated_sha: 89d586f13
+generated_at: 2026-10-10 21:32 UTC
+generated_sha: c3e751d60
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 89d586f13
 
 # Decisions
 
-657 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+654 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -20,14 +20,14 @@ generated_sha: 89d586f13
     * `.claude/hooks/_claude_guard.py:19` and `scripts/lib/_claude_worktree.py:11`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/post-merge-automation.md:268`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:591`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:513`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1406`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `.claude/rules/facts.md:30` and `scripts/lib/tests/test_facts_citations.py:86`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/k8s/wg-easy/CLAUDE.md:73`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/setup/common/CLAUDE.md:26`
-    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `docs/gitops-pipeline.md:1874`
-    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `docs/monitor-bridge-checks.md:476`
+    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `docs/monitor-bridge-checks.md:455`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `prek.toml:443`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/k8s/artifacts/CLAUDE.md:72`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287`
@@ -37,6 +37,7 @@ generated_sha: 89d586f13
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15`
@@ -45,6 +46,7 @@ generated_sha: 89d586f13
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/authelia/tasks/main.yml:238` and `ansible/roles/k8s/nut/tasks/main.yml:22`
     * `ansible/roles/k8s/configarr/tasks/main.yml:123` and `ansible/roles/k8s/observability/tasks/main.yml:283`
@@ -84,43 +86,47 @@ generated_sha: 89d586f13
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `ansible/roles/setup/common/CLAUDE.md:26`
-    * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `docs/gitops-pipeline.md:1874`
-    * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `docs/monitor-bridge-checks.md:476`
+    * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `docs/monitor-bridge-checks.md:455`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `prek.toml:443`
-    * `ansible/roles/setup/common/CLAUDE.md:26` and `docs/gitops-pipeline.md:1874`
-    * `ansible/roles/setup/common/CLAUDE.md:26` and `docs/monitor-bridge-checks.md:476`
+    * `ansible/roles/setup/common/CLAUDE.md:26` and `docs/monitor-bridge-checks.md:455`
     * `ansible/roles/setup/common/CLAUDE.md:26` and `prek.toml:443`
     * `ansible/roles/setup/docker_install/tasks/go-runtime.yml:13` and `ansible/roles/setup/optimize_pi/CLAUDE.md:88`
-    * `ansible/roles/setup/docker_install/tasks/go-runtime.yml:13` and `docs/monitor-bridge-checks.md:1242`
+    * `ansible/roles/setup/docker_install/tasks/go-runtime.yml:13` and `docs/monitor-bridge-checks.md:1221`
     * `ansible/roles/setup/gitops_deploy/files/deploy_broad_k8s.py:168` and `scripts/lib/tests/test_ansible_jinja_env.py:168`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/initial_setup/tasks/crons.yml:900` and `ansible/roles/setup/initial_setup/tasks/crons.yml:980`
     * `ansible/roles/setup/initial_setup/tasks/network.yml:201` and `ansible/roles/setup/initial_setup/tasks/system-tuning.yml:197`
     * `ansible/roles/setup/k3s/files/longhorn_backup_health.py:402` and `ansible/roles/setup/k3s/files/longhorn_skipped_volumes_logic.py:46`
-    * `ansible/roles/setup/optimize_pi/CLAUDE.md:88` and `docs/monitor-bridge-checks.md:1242`
+    * `ansible/roles/setup/optimize_pi/CLAUDE.md:88` and `docs/monitor-bridge-checks.md:1221`
     * `ansible/tests/_ratchet.py:49` and `ansible/tests/_ratchet.py:243`
     * `ansible/tests/_shell_render.py:11` and `ansible/tests/services/test_alloy_pi_http_surface.py:67`
     * `ansible/tests/repo/test_adr_links.py:1` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:170`
     * `ansible/tests/repo/test_adr_links.py:12` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/tests/repo/test_adr_links.py:12` and `docs/gitops-pipeline.md:1039`
     * `ansible/tests/repo/test_adr_links.py:12` and `scripts/lib/b2.py:21`
     * `ansible/tests/repo/test_adr_links.py:33` and `ansible/tests/repo/test_census_rows_roles.py:270`
     * `docs/adr/index.md:9` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:100`
@@ -128,24 +134,30 @@ generated_sha: 89d586f13
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:162` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:344`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:7`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:137`
-    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:591`
+    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:513`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/docs-ui-and-adrs/design.md:137`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/post-merge-automation.md:268`
+    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1406`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/tests/test_probe_health.py:323`
+    * `docs/archive/docs-ui-and-adrs/design.md:27` and `docs/gitops-pipeline.md:1039`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/lib/b2.py:21`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/archive/post-merge-automation.md:268`
+    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1406`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:591`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:513`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1406`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/break-glass.md:129` and `scripts/deploy_tools/shared_role_reach.py:22`
-    * `docs/gitops-pipeline.md:591` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:591` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/gitops-pipeline.md:1874` and `docs/monitor-bridge-checks.md:476`
-    * `docs/gitops-pipeline.md:1874` and `prek.toml:443`
-    * `docs/monitor-bridge-checks.md:476` and `prek.toml:443`
+    * `docs/break-glass.md:130` and `scripts/deploy_tools/shared_role_reach.py:22`
+    * `docs/gitops-pipeline.md:513` and `docs/gitops-pipeline.md:1406`
+    * `docs/gitops-pipeline.md:513` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:513` and `scripts/diagnostics/tests/test_probe_health.py:323`
+    * `docs/gitops-pipeline.md:1039` and `scripts/lib/b2.py:21`
+    * `docs/gitops-pipeline.md:1406` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:1406` and `scripts/diagnostics/tests/test_probe_health.py:323`
+    * `docs/monitor-bridge-checks.md:455` and `prek.toml:443`
     * `scripts/deploy_tools/tests/test_shared_role_reach.py:111` and `scripts/deploy_tools/tests/test_shared_role_reach.py:125`
     * `scripts/dev/fanout_lib/brief.py:267` and `scripts/dev/findings_lib/history_cli.py:199`
     * `scripts/dev/findings_lib/claim_cli.py:29` and `scripts/dev/findings_lib/export_cli.py:37`
@@ -700,35 +712,32 @@ generated_sha: 89d586f13
 | ` block has to be redone: | `docs/archive/self-hosted-runner-spike.md:190` | 2026-09-22 |
 | ` marker above the retirement tasks in `roles/setup/gitops_deploy/tasks/install.yml`. | `docs/archive/staging-phase-c.md:529` | 2026-09-24 |
 | ` marker sits at the line; `ansible/tests/services/test_smtp_wiring.py` holds the | `docs/authelia-sessions-and-crowdsec-init.md:135` | 2026-09-29 |
-| ` comment on | `docs/break-glass.md:129` | 2026-10-04 |
-| ` marker sits | `docs/claude-shell-permissions.md:100` | 2026-09-18 |
+| ` comment on | `docs/break-glass.md:130` | 2026-10-04 |
 | no | `docs/crowdsec-waf-record.md:32` | 2026-09-29 |
 | ` marker on that tolerance in | `docs/crowdsec-waf-record.md:162` | 2026-10-10 |
-| ` marker above `_BROAD_MANUAL_PREFIXES` in `deploy_changes.py` carries the evidence. | `docs/gitops-pipeline.md:156` | 2026-09-28 |
-| ` marker. | `docs/gitops-pipeline.md:591` | 2026-09-21 |
-| ` at the fallback in | `docs/gitops-pipeline.md:769` | 2026-09-21 |
-| ` on | `docs/gitops-pipeline.md:775` | 2026-09-21 |
-| ` marker and the measurement. | `docs/gitops-pipeline.md:831` | 2026-10-04 |
-| ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:882` | 2026-09-21 |
-| ` at the `cs.k8s` branch of | `docs/gitops-pipeline.md:1090` | 2026-09-21 |
-| ` that says how each one does. | `docs/gitops-pipeline.md:1355` | 2026-10-09 |
-| ` at that task says why the state | `docs/gitops-pipeline.md:1388` | 2026-09-21 |
-| ` marker in | `docs/gitops-pipeline.md:1874` | 2026-09-21 |
-| ` in `files/deploy_locks.py`. | `docs/gitops-pipeline.md:2029` | 2026-09-30 |
-| ` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean | `docs/homepage-widgets-and-layout.md:154` | 2026-09-29 |
-| HMAC-SHA256 under a host-local key` | `docs/k8s-manifest-cycle-record.md:359` | 2026-10-02 |
-| this digest names the bytes` | `docs/k8s-manifest-cycle-record.md:408` | 2026-10-02 |
-| ` at `smoke_caller` holds | `docs/landing.md:367` | 2026-10-01 |
-| ` in `healthchecks_verdict`). | `docs/monitor-bridge-checks.md:404` | 2026-09-25 |
-| ` marker in | `docs/monitor-bridge-checks.md:476` | 2026-09-21 |
-| 12 cycles` marker | `docs/monitor-bridge-checks.md:503` | 2026-09-21 |
-| ` at the fetch in | `docs/monitor-bridge-checks.md:787` | 2026-10-01 |
-| ` marker at that switch in `group_vars/all.yml` records why it stays off — arming it | `docs/monitor-bridge-checks.md:1083` | 2026-09-25 |
-| ` marker in `bridge/config_io.py`) over the window; the message names which reason fired when the | `docs/monitor-bridge-checks.md:1170` | 2026-09-21 |
-| ` marker at the | `docs/monitor-bridge-checks.md:1242` | 2026-10-01 |
+| ` marker above | `docs/gitops-pipeline.md:156` | 2026-10-10 |
+| ` marker. | `docs/gitops-pipeline.md:513` | 2026-10-10 |
+| ` on `deploy_narrow.denylisted_in` is the long form, and the journal names the | `docs/gitops-pipeline.md:623` | 2026-10-10 |
+| ` at the fallback in `deploy_narrow.py` | `docs/gitops-pipeline.md:624` | 2026-10-10 |
+| ` marker and the measurement. | `docs/gitops-pipeline.md:655` | 2026-10-10 |
+| ` at the `cs.k8s` branch of `deploy_alerts.alert_deferred` points here. | `docs/gitops-pipeline.md:834` | 2026-10-10 |
+| ` | `docs/gitops-pipeline.md:1039` | 2026-10-10 |
+| ` at that task says why the | `docs/gitops-pipeline.md:1071` | 2026-10-10 |
+| ` marker | `docs/gitops-pipeline.md:1406` | 2026-10-10 |
+| ` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean | `docs/homepage-widgets-and-layout.md:148` | 2026-09-29 |
+| HMAC-SHA256 under a host-local key` | `docs/k8s-manifest-cycle-record.md:360` | 2026-10-02 |
+| this digest names the bytes` | `docs/k8s-manifest-cycle-record.md:409` | 2026-10-02 |
+| ` at `smoke_caller` holds | `docs/landing.md:352` | 2026-10-01 |
+| ` in `healthchecks_verdict`). | `docs/monitor-bridge-checks.md:386` | 2026-10-10 |
+| ` marker in | `docs/monitor-bridge-checks.md:455` | 2026-09-21 |
+| 12 cycles` marker | `docs/monitor-bridge-checks.md:482` | 2026-09-21 |
+| ` at the fetch in | `docs/monitor-bridge-checks.md:766` | 2026-10-01 |
+| ` marker at that switch in `group_vars/all.yml` records why it stays off — arming it | `docs/monitor-bridge-checks.md:1062` | 2026-09-25 |
+| ` marker in `bridge/config_io.py`) over the window; the message names which reason fired when the | `docs/monitor-bridge-checks.md:1149` | 2026-09-21 |
+| ` marker at the | `docs/monitor-bridge-checks.md:1221` | 2026-10-01 |
 | ` marker with the byte | `docs/pi-host-tuning-record.md:63` | 2026-10-10 |
-| ` marker carries the | `docs/pi-host-tuning-record.md:244` | 2026-09-30 |
-| ` marker at the top of `module_length_allowlist.txt` is the ruling. | `docs/python-code-organization.md:249` | 2026-10-10 |
+| ` marker carries the | `docs/pi-host-tuning-record.md:242` | 2026-09-30 |
+| ` marker at the top of `module_length_allowlist.txt` is the ruling. | `docs/python-code-organization.md:245` | 2026-10-10 |
 | ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
 | ` comment beside it accepts a grouped VERSION bump paging four days early as the cost. | `docs/renovate-notify-internals.md:81` | 2026-10-02 |
 | no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` has the | `docs/traefik-plugins-and-startup.md:54` | 2026-09-29 |
