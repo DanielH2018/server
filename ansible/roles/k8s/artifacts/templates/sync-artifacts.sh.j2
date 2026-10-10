@@ -5,7 +5,19 @@
 # artifacts Deployment can serve them all from a single hostPath tree. Pull rather than push:
 # `daniel-box` does not resolve from daniel-server, and pushing would put an ssh key somewhere
 # this one does not have to go.
+#
+# Usage: sync-artifacts.sh (no arguments)
+# Runs from the sync-artifacts cron on daniel-box as the sys user, every 5 minutes by default
+# (artifacts_sync_minute). Environment, optional: SYNC_ARTIFACTS_STATE_DIR (default /tmp), which
+# holds the lock and the per-peer failure counters. The peers it pulls from are the
+# artifacts_peer_sources entries rendered into this file.
 set -euo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # Destination paths are written out per host below rather than through a shared variable:
 # the peer list can be empty, and an unused variable is a shellcheck failure in the rendered

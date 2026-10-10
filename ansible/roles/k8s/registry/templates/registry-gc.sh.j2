@@ -21,8 +21,22 @@
 # precisely so a bug there cannot mutate the cluster. This one MUST scale a Deployment, so it
 # holds a credential that can. Everything it does is scoped to the registry Deployment and its
 # own Job; keep it that way.
+#
+# Usage: registry-gc.sh (no arguments)
+# Runs from the registry-gc root cron on daniel-box, weekly at the time set by
+# registry_k8s_gc_cron_weekday, _hour and _minute. It scales the registry Deployment to 0, runs
+# the garbage-collect Job from /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml, scales it
+# back, and pushes the result to Kuma when registry_gc_push_token is set. It reads
+# /etc/rancher/k3s/k3s.yaml and /usr/local/lib/kuma-push-lib.sh, and keeps its state in
+# /var/lib/registry-gc.
 
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

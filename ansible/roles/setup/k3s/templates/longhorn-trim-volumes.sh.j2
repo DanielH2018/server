@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Hand freed filesystem blocks back to Longhorn — managed by Ansible; edits overwritten.
 #
+# Usage: longhorn-trim-volumes.sh [-h|--help]
+# Takes no arguments. Cron job "Longhorn filesystem trim" (cron file longhorn-trim) runs it as the
+# deploy user daily at k3s_longhorn_trim_cron_hour:k3s_longhorn_trim_cron_minute, with output
+# piped to logger -t longhorn-trim-cron. Running it by hand trims every eligible attached volume.
+# It prints one line per volume: trim, skip or FAIL.
+#
 # WHY THIS EXISTS. Longhorn backs up allocated device BLOCKS, not live files. ext4 marks a
 # deleted file's blocks free in its own metadata, but the block device never learns unless a
 # discard is issued — and nothing in this homelab issued one: no fstrim cron, no `discard` mount
@@ -29,6 +35,12 @@
 # trim brought actualSize to 215 MB. `ls -l /dev/longhorn/<vol>` tells the two apart: an mtime
 # older than the restart means no detach happened.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # Check 10 of longhorn-backup-health reads this stamp's mtime as "the cron fired", because the
 # /etc/cron.d entry it would otherwise stat is root-only (#3677). First, so a run that dies

@@ -12,7 +12,19 @@
 #
 # Read-only observation, deliberately: this does not add or change any cgroup bound (#1213
 # owns the SSH-session cap fix; that is a separate decision).
+#
+# Usage: claude-cgroup-metrics.sh (no arguments)
+# Runs as claude-cgroup-metrics.service, fired by claude-cgroup-metrics.timer every 30 seconds,
+# and writes $TEXTFILE_DIR/claude_cgroup.prom. Environment, all optional: TEXTFILE_DIR (default
+# /var/lib/node-exporter-textfile), CGROOT (default /sys/fs/cgroup) and PROCROOT (default /proc).
+# It exits 0 without writing when TEXTFILE_DIR does not exist.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # Overridable so the paired test below can point this at a fixture tree instead of the real
 # cgroupfs; unset in production, where both default to the real paths.

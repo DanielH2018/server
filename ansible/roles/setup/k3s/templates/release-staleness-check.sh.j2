@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Release-staleness drift check — managed by Ansible (k3s role); edits overwritten.
 #
+# Usage: release-staleness-check.sh [-h|--help]
+# Takes no arguments. Cron job "Release staleness drift check" runs it as the deploy user every
+# k3s_release_staleness_cron_minute minutes (cron file release-staleness-check). It reads the Kuma
+# push token from /etc/rancher/k3s/kuma-push.env, fetches origin, and pushes the verdict. Running
+# it by hand is safe, but it pushes to the Kuma monitor.
+#
 # THE GAP THIS CLOSES (issue #947). When gitops_deploy.py defers a non-auto-deployable k8s role
 # change (`alert_deferred`'s `cs.k8s` branch), it fast-forwards the tree and pages Discord ONCE
 # per SHA. The ff-merge clears `behind_since` -- the deployer's own durable "still behind" signal
@@ -29,6 +35,12 @@
 # a parked deployer (a broad hold, a dead timer) would read GREEN forever instead of catching up
 # to what actually landed -- the exact failure mode this check exists to close.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

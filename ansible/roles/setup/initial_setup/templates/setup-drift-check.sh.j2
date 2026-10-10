@@ -2,6 +2,13 @@
 # Setup-plane drift check for hosts that run no manifest-prune-check — managed by Ansible
 # (initial_setup role); edits overwritten.
 #
+# Usage: setup-drift-check.sh [-h|--help]
+# Takes no arguments. systemd timer kuma-check-setup-drift.timer runs it as root daily at 07:50
+# on hosts that run no manifest-prune-check.sh, and again every 30 minutes while the last run
+# failed. It reads /etc/homelab/kuma-push.env for the Kuma push token and compares the deployed
+# scripts with the render manifests under /var/lib/homelab. Running it by hand is safe, but it
+# pushes to the Kuma monitor.
+#
 # WHAT THIS EXISTS FOR (2026-08-29 review M-10). The setup plane is deployed only by a manual
 # `initial_setup.yml`; nothing converges it, so a host can run an old render of a script or an
 # old copy of deployed code indefinitely. manifest-prune-check.sh reports exactly that — and it
@@ -26,6 +33,12 @@
 # as manifest-prune-check.sh — root buys the file reads and nothing else; this script makes no
 # cluster or network call beyond its own two pushes.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

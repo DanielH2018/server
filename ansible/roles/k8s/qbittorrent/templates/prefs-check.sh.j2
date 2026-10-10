@@ -12,7 +12,20 @@
 #
 # Never writes to qBittorrent. apply_prefs.py --dry-run only reports; running it with no flag
 # to actually apply a changed DESIRED value is a human decision, made by hand.
+#
+# Usage: qbittorrent-prefs-check.sh (no arguments)
+# Runs from the qbittorrent-prefs-check cron on daniel-box as the sys user, once a day at the time
+# set by qbittorrent_k8s_prefs_check_cron_hour and _minute. It runs
+# /opt/qbittorrent-prefs-check/apply_prefs.py --dry-run against the qBittorrent WebUI and logs
+# the result with `logger -t qbittorrent-prefs-check`. The WebUI credentials are rendered into
+# this file.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # Credentials interpolated directly, not sourced from a separate env file: this file is
 # rendered 0700 owned by {{ sys_user }} (the same user the cron below runs as), so there is no

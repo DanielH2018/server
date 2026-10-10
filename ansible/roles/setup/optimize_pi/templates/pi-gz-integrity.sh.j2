@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Pi rotated-log integrity sweep — managed by Ansible (optimize_pi role); edits overwritten.
 #
+# Usage: pi-gz-integrity.sh [-h|--help]
+# Takes no arguments. Cron job "Pi rotated-log integrity sweep" runs it daily at 01:40, with output
+# piped to logger -t pi-gz-integrity, and the role runs it once at deploy time to prime the
+# verdict. It writes the verdict file named by optimize_pi_gz_integrity_state_file. Running it by
+# hand is safe: it only reads the rotated logs.
+#
 # Runs `gzip -t` over every rotated log on this host, once a day, and writes a verdict file.
 # It pushes nothing itself: pi-sd-health.sh reads the verdict every 5 minutes and folds it into
 # the "Daniel Pi SD Health" Kuma push, so this sweep needs no monitor and no push token.
@@ -24,6 +30,12 @@
 # brace-hash that operator opens with is how Jinja starts a comment block, so a single use of it
 # fails the render with "Missing end of comment tag". Counts come from `wc` instead.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 STATE="{{ optimize_pi_gz_integrity_state_file }}"
 FLOOR={{ optimize_pi_gz_integrity_min_files }}

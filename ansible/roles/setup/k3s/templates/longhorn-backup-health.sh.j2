@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Longhorn backup-plane heartbeat — managed by Ansible (k3s role); edits overwritten.
 #
+# Usage: longhorn-backup-health.sh [-h|--help]
+# Takes no arguments. Cron job "Longhorn backup health" runs it as the deploy user every
+# k3s_longhorn_backup_health_cron_minute minutes (cron file longhorn-backup-health). It is
+# read-only against the cluster. It reads the Kuma push token from /etc/rancher/k3s/kuma-push.env
+# and the optional healthchecks ping URL from /etc/healthchecks/ping.env. Running it by hand is
+# safe, but it pushes to the Kuma monitor.
+#
 # Thin on purpose. Everything that decides up-or-down is in longhorn_backup_health.py + its pure
 # core (longhorn_backup_health_logic.py), which are plain files with unit tests; this exists only
 # because the Kuma push token has to be templated in, and a secret-carrying file should hold as
@@ -59,6 +66,12 @@
 # 70s, so up to two more kubectl calls fit before one needs a shorter deadline or a longer cron
 # period.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

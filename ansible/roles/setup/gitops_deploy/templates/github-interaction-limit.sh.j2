@@ -1,6 +1,14 @@
 #!/bin/bash
 # Daily re-arm of the repo's GitHub interaction limit, and a Kuma beat saying it is armed.
 #
+# Usage: github-interaction-limit.sh [-h|--help]
+# Takes no arguments. systemd timer kuma-check-github-interaction-limit.timer runs it as root once
+# a day (gitops_deploy_interaction_limit_cron_hour and _minute), and again every 30 minutes while
+# the last run failed. Running it by hand re-applies the limit for real. It needs a gh login for
+# the deploy user, reads gitops_deploy_interaction_limit and its expiry from the values rendered
+# into this file, and pushes to the github-interaction-limit Kuma monitor. Exit 0 = limit re-armed
+# (or disarmed, when the declared limit is none); exit 1 = it was not, and the push says down.
+#
 # The interaction limit is the only lever GitHub offers that keeps a PUBLIC repo closed to
 # everyone but its collaborators: with `collaborators_only` set, nobody else can comment, react,
 # open an issue or open a PR, while reads, clones and forks stay open. It is the answer to "keep
@@ -30,6 +38,12 @@
 #
 # set -uo (not -euo): a failed curl must be captured + reported, not swallowed by an early exit.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin # cron ships a bare PATH
 # What scripts/lib/gh.py sets for every Python caller, and this cron calls `gh` directly. A `gh`
