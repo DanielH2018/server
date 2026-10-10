@@ -54,7 +54,7 @@ class ScriptedTick:
         commits: `(sha, paths)` per commit, newest first, for the per-commit `git log`; None
             reads as one commit at `origin` carrying `paths`, the range as one change.
         files: `"<ref>:<path>"` to the content `git show` returns for it.
-        tree_listing: what `git ls-tree` at origin lists under roles/k8s/.
+        tree_listing: what `git ls-tree` at origin lists, under roles/k8s/ or roles/setup/.
         diffs: k8s service to the `-U0` diff of its defaults file across the range. Every
             service the image-diff read reaches for must have an entry, `""` included.
         playbook_outcomes: an exception to raise from each playbook run in turn; None runs

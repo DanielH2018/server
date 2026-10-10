@@ -43,9 +43,9 @@ def _restore_setup_routing():
     Every `main()` installs routing for the rest of the process, and a test that scripts a
     failed derivation installs none at all; a later test on the same worker would inherit it.
     """
-    saved = deploy_setup_roles.current_routing()
+    saved = deploy_setup_roles.current_routing(), deploy_setup_roles.routing_failed()
     yield
-    deploy_setup_roles.use_routing(saved)
+    deploy_setup_roles.use_routing(*saved)
 
 
 FILES = pathlib.Path(__file__).resolve().parents[1] / "files"

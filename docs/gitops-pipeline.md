@@ -643,7 +643,13 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     `scripts/deploy_tools/setup_routing.py` derives the routing from the playbooks (#3734). The
     deployer runs under `uv run --no-project` and cannot import `yaml`, so each tick runs that
     script as a subprocess over origin's tree. Nothing applies under a guessed tag, and nothing
-    records the role in `manual_plane` under a guessed tag or playbook.
+    records the role in `manual_plane` under a guessed tag or playbook. A failed or timed-out
+    run is transient, so a range carrying a setup role parks with no fast-forward and the next
+    tick derives again. Any other answer is deterministic and never parks (#4326). A role whose
+    directory the range deletes is dropped, as a deleted k8s role is. A role the routing came
+    back without placing is recorded in `manual_plane` with the playbook `unrouted`, keyed by
+    its directory name. `clear-owed manual_plane <role>` matches that key, and the tick clears
+    the line itself once a later routing places the role and an apply runs its tag.
   - **The ff-merge happens BEFORE the apply**, since applying first renders from the pre-merge
     tree and deploys nothing. An unrelated commit sharing the tick also lands when the apply
     fails.

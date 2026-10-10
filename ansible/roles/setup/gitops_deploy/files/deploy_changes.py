@@ -24,6 +24,7 @@ from deploy_setup_roles import (  # noqa: F401  (re-exported for this module's r
     INITIAL_SETUP,
     is_routed,
     roles_outside_initial_setup_in,
+    routing_failed,
     setup_role_host,
     setup_role_playbook,
     setup_role_tag,

@@ -135,6 +135,23 @@ ALERT_SLOTS: frozenset[str] = frozenset(
 # What the `playbook` key of a `manual_plane` ledger line holds for a role no playbook applies
 # (`common`).
 NO_PLAYBOOK = "none"
+# What it holds for a role the deployer's routing could not place (#4323): an entry with no tag
+# or two tags, a role listed in two playbooks, or a gate it cannot read. A distinct value, so no
+# printer names such a role as `common`, and `deploy_defer.clear_applied` can clear the line once
+# a later tick routes the role and applies it.
+UNROUTED_PLAYBOOK = "unrouted"
+
+
+def by_hand(playbook: str) -> str | None:
+    """What a printer says for a `manual_plane` line naming no playbook, else None."""
+    if playbook == NO_PLAYBOOK:
+        return "apply the role by hand"
+    if playbook == UNROUTED_PLAYBOOK:
+        return (
+            "apply the role by hand with the playbook and `--tags` value that include it "
+            "(the deployer could not route it from the playbooks)"
+        )
+    return None
 
 
 def target_arg(host: str | None) -> str:

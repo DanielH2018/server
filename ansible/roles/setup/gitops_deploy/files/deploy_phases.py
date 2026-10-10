@@ -20,6 +20,7 @@ import deploy_alert_text
 import deploy_alerts
 import deploy_io
 import deploy_cross_role
+import deploy_defer
 import deploy_setup_roles
 from deploy_changes import (
     ChangeSet,
@@ -241,7 +242,9 @@ def plan_tick(
     if deploy_cross_role.CROSS_ROLE_FILE in paths:
         _adopt_incoming_cross_role_tables(tools, config, target.origin)
     adopt_setup_routing(tools, config, target.origin)
-    cs = services_from_changed_paths(paths)
+    cs = deploy_defer.drop_deleted_setup_roles(
+        tools, config, target.origin, services_from_changed_paths(paths), paths
+    )
     # Read at origin rather than the working tree: this runs before the ff-merge, so the
     # deleted directory is still on disk.
     deleted = k8s_roles_deleted_at(tools, config, target.origin, cs.k8s)
@@ -286,14 +289,15 @@ def adopt_setup_routing(tools: DeployTools, config: Config, origin: str) -> None
 
     Read at origin, not the working tree, because this runs before the ff-merge: a range that
     adds a role and its playbook entry together routes by the new entry. A failure routes
-    nothing rather than guessing. A range carrying a setup role then parks, which pages and
-    retries next tick, where a guessed `--tags` that matched nothing would exit 0 and record
-    an apply of nothing (PR #702).
+    nothing rather than guessing, where a guessed `--tags` that matched nothing would exit 0
+    and record an apply of nothing (PR #702). A failure is transient, so a range carrying a
+    setup role parks and the next tick retries. A role the routing cannot place is a
+    deterministic answer, so the tick records it in `manual_plane` and does not park (#4326).
     """
     try:
         routes, unplaced = tools.setup_routing(config.repo, origin, config.hostname)
     except Exception as exc:
-        deploy_setup_roles.use_routing({})
+        deploy_setup_roles.use_routing({}, failed=True)
         log(
             f"setup-role routing at {origin[:8]} failed ({type(exc).__name__}: {exc}) — "
             "a range carrying a setup role parks until a tick can route it"
@@ -302,7 +306,8 @@ def adopt_setup_routing(tools: DeployTools, config: Config, origin: str) -> None
     deploy_setup_roles.use_routing(routes)
     for role, why in sorted(unplaced.items()):
         log(
-            f"setup role {role} cannot be routed at {origin[:8]} ({why}) — a range carrying it parks"
+            f"setup role {role} cannot be routed at {origin[:8]} ({why}) — "
+            "a range carrying it records it in manual_plane for a hand"
         )
 
 

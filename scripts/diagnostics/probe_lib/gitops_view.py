@@ -52,7 +52,7 @@ from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     HOLD_CLEAR_CMD,
     MARKERS,
-    NO_PLAYBOOK,
+    by_hand,
     STATE_DIR,
     k8s_deferred_deploy_cmd,
     maximal_apply_warning,
@@ -91,9 +91,8 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
     for e in entries:
         selected = narrow.get(e.role) or frozenset({e.role})
         apply = (
-            f"{e.playbook} --tags {','.join(sorted(selected))}{target_arg(e.host)}"
-            if e.playbook != NO_PLAYBOOK
-            else "apply the role by hand; no playbook applies it"
+            by_hand(e.playbook)
+            or f"{e.playbook} --tags {','.join(sorted(selected))}{target_arg(e.host)}"
         )
         warning = maximal_apply_warning(e.role, selected)
         rows[OWED_MANUAL_PLANE].append(

@@ -11,13 +11,16 @@ import subprocess
 
 import pytest
 
+import deploy_defer
 import deploy_phases
 import deploy_setup_roles
 import setup_routing
 from _deploy_fakes import checkout_routing
 from deploy_changes import setup_tags_for, tick_applies_setup_role
+from gitops_markers import NO_PLAYBOOK, UNROUTED_PLAYBOOK, by_hand
 
 GITOPS_TASKS = "ansible/roles/setup/gitops_deploy/tasks/main.yml"
+INITIAL_SETUP = "ansible/initial_setup.yml"
 
 
 def _with_routing(tick, routing):
@@ -164,16 +167,79 @@ def test_a_range_the_tick_cannot_route_parks_and_records_nothing(
     assert state.manual_plane_pending() == []
     out = capsys.readouterr().out
     assert "parked, nothing merged" in out
-    assert "routing could not place chezmoi_setup" in out
+    assert "routing failed, so it could not place chezmoi_setup" in out
 
 
-def test_an_apply_under_a_tag_other_than_the_role_name_clears_its_line(state):
-    """`chezmoi_setup` is keyed and applied as `chezmoi`; only an off-host role's tag is
-    dropped before the clear (#3933)."""
-    import deploy_defer
+def _routing_without(role, why):
+    routes, _ = checkout_routing()
+    routes = {r: v for r, v in routes.items() if r != role}
+    unplaced = {role: why} if why else {}
+    return lambda _repo, _ref, _host: (routes, unplaced)
 
-    playbook = "ansible/initial_setup.yml"
-    state.record_manual_plane("e" * 40, playbook, "chezmoi", 1000.0)
-    state.record_manual_plane("e" * 40, playbook, "optimize_pi", 1000.0, "daniel-pi")
-    deploy_defer.clear_applied(state, playbook, ["chezmoi", "optimize_pi"])
+
+def test_a_range_deleting_a_setup_role_fast_forwards_and_records_nothing(
+    gitops_deploy, tick, capsys, state
+):
+    """#4326: the routing never places a deleted role, so this range parked on every tick."""
+    tick.paths = ["ansible/roles/setup/fake_remux/tasks/main.yml"]
+    tick.tree_listing = "ansible/roles/setup/gitops_deploy\nansible/roles/setup/k3s\n"
+    tools = _with_routing(tick, _routing_without("fake_remux", None))
+    assert gitops_deploy.main(tools, tick.config, state) == 0
+    assert tick.merges == [tick.origin] and tick.playbooks == []
+    assert state.manual_plane_pending() == []
+    out = capsys.readouterr().out
+    assert "fake_remux: setup role directory deleted" in out
+    assert "parked" not in out
+
+
+def test_a_range_carrying_an_unplaced_role_fast_forwards_and_records_it(
+    gitops_deploy, tick, capsys, state
+):
+    """#4326: an unplaced role is a deterministic answer, so no retry would clear a park."""
+    tick.paths = ["ansible/roles/setup/chezmoi_setup/tasks/main.yml"]
+    tools = _with_routing(tick, _routing_without("chezmoi_setup", "two tags"))
+    assert gitops_deploy.main(tools, tick.config, state) == 0
+    assert tick.merges == [tick.origin] and tick.playbooks == []
+    (entry,) = state.manual_plane_pending()
+    assert (entry.role, entry.playbook) == ("chezmoi_setup", UNROUTED_PLAYBOOK)
+    out = capsys.readouterr().out
+    assert "parked" not in out
+    assert "`chezmoi_setup` could not be routed from the playbooks" in out
+
+
+# ── clear_applied keys on the --tags values the apply ran ─────────────────────────────────
+def test_a_chezmoi_apply_clearing_chezmoi_setups_line_is_clean(state):
+    """`chezmoi_setup` is keyed and applied as `chezmoi`, which no role directory is named."""
+    state.record_manual_plane("e" * 40, INITIAL_SETUP, "chezmoi", 1000.0)
+    deploy_defer.clear_applied(state, INITIAL_SETUP, ["chezmoi"])
+    assert state.manual_plane_pending() == []
+
+
+def test_an_off_host_tag_clearing_its_line_is_flagged(state):
+    """`--tags optimize_pi` on daniel-box skips the role, so its line stays (#3933)."""
+    state.record_manual_plane(
+        "e" * 40, INITIAL_SETUP, "optimize_pi", 1000.0, "daniel-pi"
+    )
+    deploy_defer.clear_applied(state, INITIAL_SETUP, ["optimize_pi"])
     assert [e.role for e in state.manual_plane_pending()] == ["optimize_pi"]
+
+
+# ── an unplaced role's line is not `common`'s, and it clears ──────────────────────────────
+def test_a_role_no_playbook_applies_records_no_playbook_is_clean():
+    assert deploy_defer._ledger_playbook("common") == NO_PLAYBOOK
+    assert deploy_defer._ledger_playbook("k3s") == "ansible/k3s-bringup.yml"
+
+
+def test_an_unplaced_roles_line_is_flagged_unrouted_and_clears_once_routed(state):
+    """`NO_PLAYBOOK` read as `common` in three printers, and no later apply cleared it."""
+    routes, _ = checkout_routing()
+    deploy_setup_roles.use_routing(
+        {r: v for r, v in routes.items() if r != "chezmoi_setup"}
+    )
+    assert deploy_defer._ledger_playbook("chezmoi_setup") == UNROUTED_PLAYBOOK
+    assert "could not route it" in (by_hand(UNROUTED_PLAYBOOK) or "")
+    assert by_hand(UNROUTED_PLAYBOOK) != by_hand(NO_PLAYBOOK)
+    state.record_manual_plane("e" * 40, UNROUTED_PLAYBOOK, "chezmoi_setup", 1000.0)
+    deploy_setup_roles.use_routing(routes)
+    deploy_defer.clear_applied(state, INITIAL_SETUP, ["chezmoi"])
+    assert state.manual_plane_pending() == []

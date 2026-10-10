@@ -152,6 +152,9 @@ def handle_broad(
     # this deployer cannot apply no longer does — it fast-forwards and leaves the durable
     # `manual_plane` marker instead. Parking held every other session's landing behind work
     # only a hand could do. `deploy_defer`'s module docstring carries the measurement.
+    # One exception narrows this (#4326): a range carrying a setup role parks while the
+    # routing derivation failed or timed out, because that is transient and the next tick
+    # retries. A deleted role is dropped and an unplaced one is recorded; neither parks.
     if deploy_defer.parks_the_tick(cs, setup_tags, pending):
         deploy_defer.park(tools, state, config, origin, cs)
         return 0

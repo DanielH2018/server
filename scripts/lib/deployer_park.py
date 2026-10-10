@@ -70,6 +70,7 @@ from gitops_markers import (
     STATE_DIR,
     k8s_deferred_deploy_cmd,
     parse_contention,
+    by_hand,
     maximal_apply_warning,
     owed_clear_cmd,
     target_arg,
@@ -227,11 +228,9 @@ def manual_plane_lines(owed, now):
         selected = narrow.get(e.role) or {e.role}
         tags = ",".join(sorted(selected))
         warning = maximal_apply_warning(e.role, selected)
-        how = (
+        how = by_hand(e.playbook) or (
             f"apply `{e.playbook} --tags {tags}{target_arg(e.host)}` by hand"
             + (f" (WARNING: {warning})" if warning else "")
-            if e.playbook != "none"
-            else "apply the role by hand"
         )
         lines.append(
             f"  ✗ the GitOps deployer merged a change to the `{e.role}` setup role "

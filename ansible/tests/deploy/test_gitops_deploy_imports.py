@@ -85,6 +85,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_state",
         "deploy_tick_types",
         "deploy_toolbox",
+        "gitops_markers",
     },
     # The k8s changes the deployer owes, `k8s_deferred` and `k8s_unapplied` (#3669). Its own
     # module so no stage module reads or writes those two ledger classes directly.
@@ -168,6 +169,8 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_changes",
         "deploy_config",
         "deploy_cross_role",
+        # `drop_deleted_setup_roles`, which `plan_tick` asks beside the k8s drop (#4326).
+        "deploy_defer",
         "deploy_setup_roles",
         "deploy_git",
         "deploy_inventory",

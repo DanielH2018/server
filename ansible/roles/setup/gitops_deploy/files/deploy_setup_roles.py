@@ -10,10 +10,14 @@ installs nothing derives from its own checkout on first use.
 
 THE BUG THIS EXISTS TO KILL: `--tags` matching no task makes Ansible exit 0, so a guessed
 playbook or tag records an apply of nothing (PR #702; `docs/gitops-pipeline.md`, *Broad
-changes*). So a role the routing does not place — the subprocess failed, timed out, or could
-not read the role's entry — is never guessed at. `tick_applies_setup_role` is False for it,
-and a range carrying it parks without a fast-forward, so the next tick derives again
-(`deploy_defer.parks_the_tick`).
+changes*). So a role the routing does not place is never guessed at, and
+`tick_applies_setup_role` is False for it. What the tick does next depends on why (#4326):
+- The subprocess failed or timed out (`routing_failed`). That is transient, so a range
+  carrying a setup role parks without a fast-forward and the next tick derives again
+  (`deploy_defer.parks_the_tick`).
+- The routing came back without the role. That is deterministic, and a retry gives the same
+  answer. A role whose directory the range deletes is dropped (`deploy_defer.drop_deleted_setup_roles`),
+  and an unplaced one is recorded in `manual_plane` as `UNROUTED_PLAYBOOK`.
 
 Split out of `deploy_changes` at the module-length cap. `deploy_changes` re-exports every
 name, so its readers keep their imports.
@@ -52,6 +56,8 @@ class SetupRoute(NamedTuple):
 
 # None until a tick installs routing or a reader first asks; see `routing`.
 _ROUTES: dict[str, SetupRoute] | None = None
+# True while the installed routing is a failed derivation's refusal, not the playbooks' answer.
+_FAILED = False
 
 
 def routing_argv(ref: str, host: str) -> list[str]:
@@ -126,14 +132,20 @@ def current_routing() -> dict[str, SetupRoute] | None:
     return _ROUTES
 
 
-def use_routing(routes: dict[str, SetupRoute] | None) -> None:
+def use_routing(routes: dict[str, SetupRoute] | None, failed: bool = False) -> None:
     """Route setup roles by `routes` for the rest of the process.
 
-    `{}` routes nothing, which is the tick's refusal when the derivation failed. None goes
-    back to deriving from the checkout on the next read.
+    `failed=True` marks `routes` as the tick's refusal after the derivation failed (`{}`),
+    which `routing_failed` reports. None goes back to deriving from the checkout on the next
+    read.
     """
-    global _ROUTES
-    _ROUTES = routes
+    global _ROUTES, _FAILED
+    _ROUTES, _FAILED = routes, failed
+
+
+def routing_failed() -> bool:
+    """Whether the installed routing is a failed derivation's, so nothing it lacks is final."""
+    return _FAILED
 
 
 def routing() -> dict[str, SetupRoute]:
