@@ -75,6 +75,12 @@ def test_a_plane_beside_an_applied_tick_half_prints_only_the_plane(
 # Each tick state's own marker, and the substring the plane arm must print for it.
 _TICK_STATES = [
     pytest.param({"hold_sha": "deadbeef"}, "holding deadbeef", id="held"),
+    # The hold's way out, with the full held SHA (#4081).
+    pytest.param(
+        {"hold_sha": "deadbeef"},
+        "gitops_state.py clear-hold deadbeef`",
+        id="held-names-the-clear",
+    ),
     pytest.param(
         {"behind_since": "2026-09-25T10:00:00Z"},
         "not fast-forwarded to origin",

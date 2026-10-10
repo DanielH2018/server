@@ -26,6 +26,7 @@ from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.outcome import (
     ABANDONED_WATCH_NOTE,
     Outcome,
+    hold_clear_hint,
     say,
     unrecorded_apply_note,
 )
@@ -422,10 +423,12 @@ class Landing:
                 "be read, so whether the tick applied its own half is unknown"
             ]
         if state == TickState.HELD:
+            hold = self.state("hold_sha")
             return [
-                f"  The deployer is also holding {self.state('hold_sha')}: its own apply "
+                f"  The deployer is also holding {hold}: its own apply "
                 "failed — see the held planes in owed.jsonl and the gitops-deploy journal. A hold blocks every "
-                "session's deploy until it is cleared, so this PR's half stays unapplied."
+                "session's deploy until it is cleared, so this PR's half stays unapplied.",
+                f"  {hold_clear_hint(hold)}",
             ]
         if state == TickState.BEHIND:
             lines = [
