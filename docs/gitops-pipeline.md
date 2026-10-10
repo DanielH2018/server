@@ -1338,7 +1338,8 @@ what it recorded.
   `scripts/deploy_tools/shared_role_callers.py:caller_tags` derives them (#2643).
 - Two more callers run the same discharge so that a deployed change does not wait ten minutes
   for the next tick (#4087). Sessions cleared such lines by hand six times on 2026-10-09.
-  - A successful `deploy.sh` runs it last (`deploy_under_locks.discharge_owed_k8s`). That
+  - A successful `deploy.sh` runs it last (`deploy_owed_k8s.discharge_owed_k8s`), and a
+    `--detach` run runs it before its health gate (`deploy_detach.deploy_and_gate`). That
     covers a landing whose tick recorded the line before the landing deployed it, and a hand
     deploy. It waits 5s for the tree lock and otherwise leaves the line to the next tick.
   - The tick that records a line drops it again at once when the service's own release record

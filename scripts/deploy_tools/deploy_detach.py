@@ -49,6 +49,7 @@ from pathlib import Path
 # test, a REPL) finds only this module's own directory, and `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from deploy_tools import deploy_under_locks as locked
+from deploy_tools.deploy_owed_k8s import discharge_owed_k8s
 from deploy_tools.deploy_playbook import annotate, run_playbook
 from lib.detach_fork import (
     close_inherited,
@@ -151,17 +152,21 @@ def notify(run: locked.Run, status: int, log: Path, notifier: str) -> int:
 
 @dataclass(frozen=True)
 class ChildSteps:
-    """The three steps `deploy_and_gate` runs, so a test replaces a field, not a module."""
+    """The four steps `deploy_and_gate` runs, so a test replaces a field, not a module."""
 
     run_playbook: Callable[[locked.Run], int] = run_playbook
     annotate: Callable[[locked.Run], None] = annotate
+    discharge: Callable[[Path], None] = discharge_owed_k8s
     notify: Callable[[locked.Run, int, Path, str], int] = notify
 
 
 def deploy_and_gate(
     run: locked.Run, log: Path, notifier: str, steps: ChildSteps | None = None
 ) -> int:
-    """Run the playbook, annotate a success, then run the notifier's health gate.
+    """Run the playbook, annotate and discharge a success, then run the notifier's health gate.
+
+    The discharge is the foreground run's `discharge_owed_k8s` (#4087), run before the gate so
+    the ledger no longer names the change when the verdict posts.
 
     Returns:
       The notifier's exit code: 0 when the gate settled, which needs the playbook's 0 too.
@@ -179,6 +184,7 @@ def deploy_and_gate(
     # Annotated here, where the run finished: the parent returned long before.
     if status == 0:
         steps.annotate(run)
+        steps.discharge(run.repo_root)
     # The snapshot outlives the playbook by exactly this call: the notifier's health gate
     # renders the deployed role's manifests from it to enumerate what to check.
     return steps.notify(run, status, log, notifier)

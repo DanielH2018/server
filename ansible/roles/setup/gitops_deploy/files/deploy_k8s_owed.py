@@ -16,7 +16,7 @@ Within the deployer's `files/`, no other module reads or writes the two classes
 (`tests/test_k8s_unapplied_marker.py::test_only_deploy_k8s_owed_touches_the_k8s_ledger_classes`).
 `deploy_state_k8s.K8sLineMarkers` stays the storage layer under it, because
 `scripts/deploy_tools/gitops_state.py clear-owed` reaches the same ledger as `state.*` from
-outside a tick, and `scripts/deploy_tools/deploy_under_locks.py` calls
+outside a tick, and `scripts/deploy_tools/deploy_owed_k8s.py` calls
 `discharge_k8s_unapplied` itself after a successful `deploy.sh` (#4087). The other readers
 outside the deployer — monitor-bridge, deploy-ui, renovate-agent, the SessionStart banner and
 the rest of `scripts/` — parse the ledger through `gitops_ledger` or a copy of it, and never
