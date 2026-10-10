@@ -16,9 +16,11 @@ Within the deployer's `files/`, no other module reads or writes the two classes
 (`tests/test_k8s_unapplied_marker.py::test_only_deploy_k8s_owed_touches_the_k8s_ledger_classes`).
 `deploy_state_k8s.K8sLineMarkers` stays the storage layer under it, because
 `scripts/deploy_tools/gitops_state.py clear-owed` reaches the same ledger as `state.*` from
-outside a tick. The readers outside the deployer — monitor-bridge, deploy-ui, renovate-agent,
-the SessionStart banner and `scripts/` — parse the ledger through `gitops_ledger` or a copy
-of it, and never write these classes.
+outside a tick, and `scripts/deploy_tools/deploy_under_locks.py` calls
+`discharge_k8s_unapplied` itself after a successful `deploy.sh` (#4087). The other readers
+outside the deployer — monitor-bridge, deploy-ui, renovate-agent, the SessionStart banner and
+the rest of `scripts/` — parse the ledger through `gitops_ledger` or a copy of it, and never
+write these classes.
 
 "Digest provable" has one definition. `deploy_narrow.digest_provable` is the transport: it
 runs `scripts/deploy_tools/digest_provable.py` and decodes its answer. `_digest_provable`
@@ -130,6 +132,13 @@ def alert_and_record_deferred(
     EACH LINE NAMES THE COMMIT THAT CHANGED ITS SERVICE (#3111), from `cs.k8s_origins`, and
     `origin` only where that map has no answer: the discharge asks whether a release record
     descends from the line, and a landing's record names its own commit, not the tick's tip.
+
+    A LINE THE SERVICE'S OWN RECORD ALREADY CARRIES IS DROPPED AT ONCE (#4087). A fast-path
+    landing deploys at its merge commit and only then kicks the tick that merges the range, so
+    this tick records a change that is already live. `reconcile` ran before the record and
+    cannot see it, and the next tick is ten minutes away. Only the own-record check runs here:
+    the shared-role and render-digest proofs each start a subprocess, and the next tick's
+    `reconcile` still applies them.
     """
     now = time.time()
     by_commit: dict[str, set[str]] = {}
@@ -137,6 +146,19 @@ def alert_and_record_deferred(
         by_commit.setdefault(cs.k8s_origins.get(service, origin), set()).add(service)
     for commit, services in by_commit.items():
         state.record_owed(OWED_K8S_UNAPPLIED, commit, services, now)
+    recorded = set().union(*by_commit.values())
+    carried = sorted(
+        e.service
+        for e in state.owed_pending(OWED_K8S_UNAPPLIED)
+        if e.service in recorded
+        and _record_carries(tools, config, tools.release_commit(e.service), e.origin)
+    )
+    if carried:
+        state.clear_owed(OWED_K8S_UNAPPLIED, carried)
+        log(
+            f"k8s_unapplied not kept for {', '.join(carried)}: its release record already "
+            f"carries the change"
+        )
     deploy_alerts.alert_deferred(
         tools, state, config, origin, deployed, cs, declared_k8s
     )
@@ -189,7 +211,7 @@ def discharge_k8s_unapplied(
     callers = _shared_callers(tools, config, {s for s, c in records.items() if not c})
 
     def descends(commit: str | None, origin: str) -> bool:
-        return bool(commit) and tools.is_ancestor(config.repo, origin, commit)
+        return _record_carries(tools, config, commit, origin)
 
     def carries(service: str, origin: str, by_digest: bool) -> bool:
         if service not in records:
@@ -238,6 +260,17 @@ def discharge_k8s_unapplied(
 # `volume-snapshot` and `volume-revert` render nothing at all, so they keep the record-only
 # rule.
 DIGEST_PROVABLE_ROLES = frozenset({"manifests"})
+
+
+def _record_carries(
+    tools: DeployTools, config: Config, commit: str | None, origin: str
+) -> bool:
+    """Whether a release record naming `commit` carries the change merged at `origin`.
+
+    No commit is no evidence, and `is_ancestor` reads a git error as False, so every unknown
+    keeps the line.
+    """
+    return bool(commit) and tools.is_ancestor(config.repo, origin, commit)
 
 
 def _shared_callers(

@@ -1336,6 +1336,16 @@ what it recorded.
   (`manifests`, `image-builder`) has no record of its own, so its line drops
   when every tag that runs it carries the change, as
   `scripts/deploy_tools/shared_role_callers.py:caller_tags` derives them (#2643).
+- Two more callers run the same discharge so that a deployed change does not wait ten minutes
+  for the next tick (#4087). Sessions cleared such lines by hand six times on 2026-10-09.
+  - A successful `deploy.sh` runs it last (`deploy_under_locks.discharge_owed_k8s`). That
+    covers a landing whose tick recorded the line before the landing deployed it, and a hand
+    deploy. It waits 5s for the tree lock and otherwise leaves the line to the next tick.
+  - The tick that records a line drops it again at once when the service's own release record
+    already carries it (`deploy_k8s_owed.alert_and_record_deferred`). A fast-path landing
+    deploys at its merge commit first, so the tick it kicks records a change that is already
+    live. This check reads only the own record. The shared-role and render proofs each start a
+    subprocess, so they wait for the next tick's `reconcile`.
 - A caller carries the change when its release record descends from the line's commit. For
   `manifests` alone, a caller also carries it when a render at a commit descending from the
   line's matches its applied digests (`deploy_release.render_proof`, #3057). The render need

@@ -48,7 +48,7 @@ from lib.exit_codes import (
 )
 from deploy_tools.deploy_playbook import annotate, run_playbook
 from lib.git import git, git_stdout
-from lib.repo_paths import GITOPS_DEPLOY_FILES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
 # deploy_locks.py ships to the deployer host as a role file, so it sits on no import path.
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -74,6 +74,11 @@ TAG_LIST_TIMEOUT_DEFAULT = 120
 # `git worktree remove` is ~0.3s each, so a root with hundreds of dead directories would
 # otherwise turn the hold into minutes. The rest wait for the next locked run.
 REAP_MAX_PER_RUN_DEFAULT = 20
+# How long the k8s_unapplied discharge waits for the tree lock after a deploy. A tick holds it
+# for minutes, and that tick's own reconcile discharges the same lines, so this does not wait.
+OWED_LOCK_WAIT_S = 5.0
+# Redirects the deployer's state directory, so a test never rewrites the host's ledger.
+GITOPS_STATE_DIR_ENV = "HOMELAB_DEPLOY_GITOPS_STATE_DIR"
 # Every job that can hold the git-tree lock, printed when this run could not take it. The
 # waiter census in test_gitops_deploy_timeout_budgets.py is the list a new holder joins, and
 # docs/deploying.md is the prose copy.
@@ -499,6 +504,58 @@ def take_service_locks(
             say(f"deploy: service lock {lock.name} acquired after {waited}s")
 
 
+def discharge_owed_k8s(
+    repo_root: Path, tools=None, lock_wait_s: float = OWED_LOCK_WAIT_S
+) -> None:
+    """Drop each `k8s_unapplied` line a release record now carries, as the next tick would.
+
+    A landing whose tick merged the range first records the change, then deploys it here, and
+    the deployer discharges the line only at the start of its next tick (#4087). Until then the
+    SessionStart banner and `probe.py gitops-state` report a deployed change as owed. This runs
+    `deploy_k8s_owed.discharge_k8s_unapplied`, the deployer's own rule, so a hand deploy and a
+    landing drop exactly the lines a tick would.
+
+    Best effort, after the deploy succeeded: any failure is one line and the exit code stays 0,
+    because the next tick discharges the same lines. The tree lock serialises the ledger rewrite
+    against a tick, and a tick holding it for longer than `lock_wait_s` skips this.
+
+    Args:
+      repo_root: the checkout this deploy ran from, where the ancestry is asked.
+      tools: the deployer's `DeployTools`. None builds the production one, which reads the
+        host's release records.
+      lock_wait_s: how long to wait for the tree lock.
+    """
+    try:
+        # `deploy_state` reaches `host_lib` for its atomic write, as in `gitops_state.py`.
+        sys.path.insert(0, str(HOST_LIB_FILES))
+        import deploy_k8s_owed
+        from deploy_config import Config
+        from deploy_state import STATE_DIR, DeployerState
+        from deploy_toolbox import DeployTools
+
+        fd = _open_lock(tree_lock_path())
+        try:
+            _flock_timed(fd, fcntl.LOCK_EX, lock_wait_s)
+            deploy_k8s_owed.discharge_k8s_unapplied(
+                DeployTools() if tools is None else tools,
+                DeployerState(os.environ.get(GITOPS_STATE_DIR_ENV) or STATE_DIR),
+                Config(repo=str(repo_root)),
+            )
+        finally:
+            os.close(fd)
+    except _LockTimeout:
+        say(
+            f"deploy: a gitops tick held the tree lock past {lock_wait_s}s, so the "
+            "k8s_unapplied ledger was not checked; the next tick discharges what this deploy carried"
+        )
+    # Broad on purpose: the deploy already succeeded, and nothing here may change that.
+    except Exception as exc:
+        say(
+            f"deploy: did not check the k8s_unapplied ledger ({type(exc).__name__}: {exc}); "
+            "the next gitops tick discharges what this deploy carried"
+        )
+
+
 def run(repo_root: Path, tags: list[str], at_sha: str, args: list[str]) -> int:
     """Deploy under the locks; the wrapper's exit status."""
     state = Run(repo_root=repo_root, tags=tags, at_sha=at_sha, args=args)
@@ -519,6 +576,7 @@ def run(repo_root: Path, tags: list[str], at_sha: str, args: list[str]) -> int:
     # saying it happened.
     if status == 0:
         annotate(state)
+        discharge_owed_k8s(repo_root)
         return 0
     if status == DEPLOY_NO_HOSTS:
         say(

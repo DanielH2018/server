@@ -58,6 +58,8 @@ class ScriptedTick:
         run_error: raised by every `run()` call instead of answering, for the paths that must
             survive a git failure.
         discord_ok: whether Discord accepts each post.
+        releases: k8s service to the commit its release record names; a service absent
+            from it has no record.
         log: every call, oldest first, as ("git", argv), ("playbook", argv, kwargs),
             ("annotation", services) or ("post", content).
         repo: the fake checkout REPO points at; `declare()` and `render()` populate it.
@@ -101,6 +103,7 @@ class ScriptedTick:
         # Raised instead of answering, for `narrow_tags_for`'s `except Exception` arm.
         self.narrow_setup_error: Exception | None = None
         self.discord_ok = True
+        self.releases: dict[str, str] = {}
         self.log: list[tuple] = []
         self.repo = repo
         # The DeployTools built from this object; the `tick` fixture fills it in, and every
@@ -200,6 +203,9 @@ class ScriptedTick:
         if ancestor == self.origin and descendant in self.rev_list:
             return False
         raise AssertionError(f"unscripted ancestry query: {ancestor} {descendant}")
+
+    def release_commit(self, service: str) -> str | None:
+        return self.releases.get(service)
 
     def fetch_ci_verdict(self, sha: str) -> str:
         """The scripted verdict for the tip, or for one scripted ancestor of it.
@@ -333,6 +339,9 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         # The host's render records, read for a log line alone, so no tick test reads them.
         digest_diff=lambda _ref: {},
         release_records=dict,
+        # The host's release records, which a tick that records `k8s_unapplied` reads to drop
+        # a line already deployed (#4087). A tick test that wants one scripts it here.
+        release_commit=scripted.release_commit,
         # A subprocess over the real tree; no tick test discharges by an own-role digest.
         digest_provable=lambda _repo, _roles: set(),
         emit_deploy_annotation=scripted.emit_deploy_annotation,
