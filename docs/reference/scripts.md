@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-10 06:17 UTC
-generated_sha: b3de5a5e5
+generated_at: 2026-10-10 18:17 UTC
+generated_sha: 3db073ded
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: b3de5a5e5
 
 # Scripts
 
-267 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+277 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file. The filter bar above the first table narrows all four at once: by section, by directory, or by any text in a row. A header click sorts by that column.
 
@@ -89,21 +89,22 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-186 script(s) — imported by another script — not an entry point.
+195 script(s) — imported by another script — not an entry point.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
 | `scripts/dev/fanout_lib/abandon.py` | dev | Stop or abandon fan-out batches: `fanout_place.py stop` and `fanout_place.py abandon`. | imported by fanout_place.py | — | — |
 | `scripts/diagnostics/probe_lib/alerts.py` | diagnostics | `probe.py alerts` -- DOWN history reconstructed from Loki, since Kuma keeps only current state. | imported by subcommands.py | — | — |
-| `scripts/lib/ansible_inventory.py` | lib | The one reading of ``containers_list`` and ``hosts.ini`` every script under ``scripts/`` shares. | imported by brief.py, compose_templates.py, constants.py, core.py, diagram.py, estate.py, gen_doc_fragments.py, glance_facts.py, health_docker.py, inventory.py, k8s_manifests.py, k8s_roles.py, land_reach.py, launch_gates.py, narrow_containers.py, new_k8s_service.py, render_guard.py | `test_ansible_inventory.py` | — |
+| `scripts/lib/ansible_inventory.py` | lib | The one reading of ``containers_list`` and ``hosts.ini`` every script under ``scripts/`` shares. | imported by brief.py, compose_templates.py, constants.py, core.py, diagram.py, estate.py, gen_doc_fragments.py, glance_facts.py, health_docker.py, inventory.py, k8s_manifests.py, k8s_roles.py, land_reach.py, launch_gates.py, lint.py, narrow_containers.py, new_k8s_service.py, render_guard.py | `test_ansible_inventory.py` | — |
 | `scripts/lib/ansible_jinja_env.py` | lib | The Jinja environment every render guard uses, carrying ansible-core's own filters. | imported by compose_templates.py, k8s_context.py, k8s_manifests.py, setup_templates.py, shell_lint.py, shell_templates.py, unit_templates.py | `test_ansible_jinja_env.py` | — |
 | `scripts/diagnostics/probe_lib/arr.py` | diagnostics | `probe.py arr <app> <api-path>` — read-only *arr API GETs against sonarr/radarr/prowlarr. | imported by cli_parser.py, postflight.py, subcommands.py | — | — |
-| `scripts/lib/facts/atoms.py` | lib | Resolve a citation against a checkout and hash the thing it names. | imported by lint.py, lock.py | — | — |
+| `scripts/lib/facts/atoms.py` | lib | Resolve a citation against a checkout and hash the thing it names. | imported by evidence.py, lint.py, lock.py | — | — |
 | `scripts/deploy_tools/await_ci.py` | deploy_tools | Wait for master CI to reach a verdict on one SHA. | imported by tools.py | `test_await_ci.py` | [0, 1, 2, 75](#scriptsdeploytoolsawaitcipy) |
 | `scripts/lib/b2.py` | lib | One Backblaze B2 native-API session: authorize, list a prefix, delete a version. | imported by b2_api.py, b2_drain.py | `test_b2.py` | — |
 | `scripts/diagnostics/probe_lib/b2_api.py` | diagnostics | The Longhorn listing from B2 and its parser. | imported by longhorn.py | — | — |
 | `scripts/diagnostics/probe_lib/b2_ledger.py` | diagnostics | The B2 spend ledger: what maintenance tools spent, since B2 publishes no usage API. | imported by longhorn.py, subcommands.py | — | — |
 | `scripts/diagnostics/probe_lib/b2_spend.py` | diagnostics | The `b2-spend` report: measured Class B backup spend, per volume and per backup target. | imported by b2_ledger.py | — | — |
+| `scripts/dev/fanout_lib/base_check.py` | dev | Which of a PR's new tests still pass with its code changes taken out. | imported by _review_fakes.py, hunk_check.py, review.py, review_red.py | — | — |
 | `scripts/dev/findings_lib/boundaries.py` | dev | Every process boundary `findings.py` crosses, as one injectable object. | imported by _findings_fakes.py, claim_cli.py, export_cli.py, findings.py, gh_calls.py, history_cli.py, target.py | — | — |
 | `scripts/dev/fanout_lib/brief.py` | dev | The brief a headless fan-out agent reads on stdin. | imported by _review_fakes.py, claims.py, collisions.py, fanout_place.py, red_gate.py, review.py, review_prompts.py, review_record.py, status.py, transport.py | — | — |
 | `scripts/docs/catalog_backup.py` | docs | Longhorn backup tier and GitOps auto-deploy eligibility for one ``containers_list`` entry. | imported by gen_role_glance.py, service_catalog.py | `test_catalog_backup.py` | — |
@@ -111,7 +112,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/docs/catalog_model.py` | docs | The service catalogue's row type, its "cannot be derived" marker, and its path anchors. | imported by catalog_backup.py, catalog_facts.py, catalog_render.py, gen_role_glance.py, service_catalog.py | — | — |
 | `scripts/docs/catalog_render.py` | docs | The two renderings of the service catalogue: the MkDocs page and the standalone HTML. | imported by service_catalog.py | — | — |
 | `scripts/deploy_tools/land_lib/ci.py` | deploy_tools | Step 2, pre-flight, and step 3, the master CI wait -- in that order, on purpose. | imported by deploy.py, pipeline.py | — | — |
-| `scripts/lib/facts/citations.py` | lib | The closed citation grammar for the two fact stores. | imported by atoms.py, lint.py, lock.py | — | — |
+| `scripts/lib/facts/citations.py` | lib | The closed citation grammar for the two fact stores. | imported by atoms.py, evidence.py, lint.py, lock.py, report.py | — | — |
 | `scripts/dev/findings_lib/claim.py` | dev | Whether a claim on an issue is still live, decided from the worktree that holds it. | imported by claim_cli.py, findings.py | — | — |
 | `scripts/dev/findings_lib/claim_cli.py` | dev | The four claim subcommands: `claim`, `release`, `claims` and `reap`. | imported by findings.py | — | — |
 | `scripts/dev/fanout_lib/claims.py` | dev | The claims a fan-out takes under the orchestrator's own branch, and the batch specs they cover. | imported by fanout_place.py | — | — |
@@ -131,6 +132,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/land_lib/deploy.py` | deploy_tools | Step 5: deploy what the tick deferred, one deploy.sh per host, riding out a stale tree. | imported by pipeline.py | — | — |
 | `scripts/deploy_tools/deploy_detach.py` | deploy_tools | `deploy.sh --detach`: take the locks here, then run the playbook in a forked child. | imported by deploy_run.py | — | — |
 | `scripts/deploy_tools/deploy_flags.py` | deploy_tools | What `deploy.sh` refuses a command line over, and the exception its gates refuse with. | imported by deploy_run.py | `test_deploy_flags.py` | — |
+| `scripts/deploy_tools/deploy_owed_k8s.py` | deploy_tools | Drop the `k8s_unapplied` lines a successful `deploy.sh` carried, as the next tick would (#4087). | imported by deploy_detach.py, deploy_under_locks.py | — | — |
 | `scripts/deploy_tools/deploy_playbook.py` | deploy_tools | The playbook run of a foreground deploy, and the annotation a finished one leaves. | imported by deploy_detach.py, deploy_under_locks.py | — | — |
 | `scripts/deploy_tools/deploy_under_locks.py` | deploy_tools | The locked half of a foreground deploy: tree lock, snapshot, service locks, playbook. | imported by deploy_detach.py, deploy_run.py | — | — |
 | `scripts/lib/deployer_park.py` | lib | What the GitOps deployer's own markers say it has deferred: a park, or a pending role. | imported by deploy_staleness.py, gitops_view.py, landing_blockers.py | `test_deployer_park.py` | — |
@@ -140,6 +142,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/doc_freshness.py` | lib | How old a hand-written doc is, and whether the files it names have moved under it. | imported by _mkdocs_freshness.py, freshness.py | `test_doc_freshness.py` | — |
 | `scripts/lib/docs_provenance.py` | lib | The provenance banner every generated documentation page opens with. | imported by backlog.py, catalog_render.py, crons.py, decisions.py, freshness.py, gen_doc_fragments.py, gen_infra_map.py, hosts.py, networking.py, scripts.py, secrets.py, service_catalog.py, state.py | `test_docs_provenance.py` | — |
 | `scripts/lib/estate.py` | lib | The inventory as the docs generators read it: hosts, each host's vars, and its entries. | imported by catalog_backup.py, fragment_readers.py, gen_doc_fragments.py, gen_role_glance.py, hosts.py, k8s_roles.py, networking.py, render_context.py, service_catalog.py | `test_estate.py` | — |
+| `scripts/lib/facts/evidence.py` | lib | Diff evidence for a ``moved`` finding: which removed identifiers the section's prose names. | imported by lock.py | — | — |
 | `scripts/lib/exit_codes.py` | lib | Every exit-code contract this repo's entry points share, named once. | imported by _land_fakes.py, ci.py, deploy.py, deploy_detach.py, deploy_detach_notify.py, deploy_flags.py, deploy_playbook.py, deploy_run.py, deploy_staleness.py, deploy_tags.py, deploy_under_locks.py, land.py, merge.py, narrow_broad.py, outcome.py, prune_worktrees.py, publish_pr.py, renovate_rebase.py, runbook_gates.py, scripts.py, tick.py, tools.py | `test_exit_codes.py` | — |
 | `scripts/dev/findings_lib/export_cli.py` | dev | The `export` subcommand: the whole `claude` register, every state, written as one JSON file. | imported by findings.py | — | — |
 | `scripts/dev/fanout_place.py` | dev | Place issue-fanout batches on the session host with the most memory headroom. | imported by fanout_probe.py | — | — |
@@ -148,10 +151,10 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/docs/fragment_renderers.py` | docs | The renderers behind the doc fragments: pure functions from plain values to markdown. | imported by gen_doc_fragments.py | — | — |
 | `scripts/lib/gh.py` | lib | One way to run the GitHub CLI from a script, with no prompt and no notifier. | imported by boundaries.py, publish_pr.py, renovate_branch_sweep.py, renovate_rebase.py, signing.py, tools.py, transport.py | `test_gh.py` | — |
 | `scripts/dev/findings_lib/gh_calls.py` | dev | The gh reads and writes `findings.py` makes, and the one place a plan is executed. | imported by backlog.py, claim_cli.py, export_cli.py, findings.py, history_cli.py | — | — |
-| `scripts/lib/git.py` | lib | One way to run git from a script, with the repository chosen by ``cwd`` alone. | imported by await_ci.py, citations.py, clean.py, decisions.py, deploy_run.py, deploy_staleness.py, deploy_tags.py, deploy_under_locks.py, doc_freshness.py, docs_provenance.py, fact_status.py, fanout_place.py, land.py, lint.py, narrow_broad.py, narrow_filters.py, narrow_git.py, narrow_paths.py, narrow_setup.py, narrow_setup_index.py, narrow_templates.py, prune_worktrees.py, publish_pr.py, pytest_shard.py, releases.py, releases_diff.py, releases_render.py, render_guard.py, renovate_branch_sweep.py, root_ignored_files.py, rotation_tools.py, setup_role_diff.py, shared_role_reach.py, state.py, tools.py, transport.py, worktrees.py | `test_git.py` | — |
+| `scripts/lib/git.py` | lib | One way to run git from a script, with the repository chosen by ``cwd`` alone. | imported by await_ci.py, citations.py, clean.py, decisions.py, deploy_run.py, deploy_staleness.py, deploy_tags.py, deploy_under_locks.py, doc_freshness.py, docs_provenance.py, evidence.py, fact_status.py, fanout_place.py, land.py, lint.py, narrow_broad.py, narrow_filters.py, narrow_git.py, narrow_paths.py, narrow_setup.py, narrow_setup_index.py, narrow_templates.py, prune_worktrees.py, publish_pr.py, pytest_shard.py, releases.py, releases_diff.py, releases_render.py, removed.py, render_guard.py, renovate_branch_sweep.py, report.py, root_ignored_files.py, rotation_tools.py, setup_role_diff.py, shared_role_reach.py, state.py, tools.py, tracked_paths.py, transport.py, worktrees.py | `test_git.py` | — |
 | `scripts/secrets_mgmt/git_dates.py` | secrets_mgmt | When each secret's ciphertext last changed, read out of git. | imported by secret_rotation.py | — | — |
-| `scripts/dev/fanout_lib/git_state.py` | dev | The git state outside a red batch's worktree that the red author could write (#3864, #3879). | imported by review.py | — | — |
-| `scripts/lib/git_testing.py` | lib | Build a throwaway git repository for a test, with the inherited `GIT_*` environment gone. | imported by _deploy_sh_fakes.py, _narrow_fixtures.py, _release_fixtures.py | `test_git_testing.py` | — |
+| `scripts/dev/fanout_lib/git_state.py` | dev | The git state outside a red batch's worktree that the red author could write (#3864, #3879). | imported by review_red.py | — | — |
+| `scripts/lib/git_testing.py` | lib | Build a throwaway git repository for a test, with the inherited `GIT_*` environment gone. | imported by _deploy_sh_fakes.py, _narrow_fixtures.py, _release_fixtures.py, _scratch_pytest.py | `test_git_testing.py` | — |
 | `scripts/diagnostics/probe_lib/gitops_view.py` | diagnostics | `probe.py gitops-state` — every marker the GitOps deployer keeps, read-only, with its way out. | imported by subcommands.py | — | — |
 | `scripts/docs/glance_facts.py` | docs | The setup-plane and Pi-plane fact readers behind `gen_role_glance.py`, and what every plane shares. | imported by gen_role_glance.py | — | — |
 | `scripts/diagnostics/grafana_panel_report.py` | diagnostics | Classify what a Grafana dashboard page actually rendered. | no `__main__` guard; imported by test_grafana_panel_report.py, test_ui_smoke_grafana.py | `test_grafana_panel_report.py` | — |
@@ -169,6 +172,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/fanout_lib/held_hooks.py` | dev | The project hooks and settings a review pipeline holds from start, outside the worktree. | imported by review.py | — | — |
 | `scripts/dev/findings_lib/history_cli.py` | dev | The two history subcommands: `history` searches past findings, `show` prints one. | imported by findings.py | — | — |
 | `scripts/infra_map/html_views.py` | infra_map | The HTML host panels: one row per service, one panel per host. | imported by render.py | — | — |
+| `scripts/dev/fanout_lib/hunk_check.py` | dev | Whether the red tests notice each hunk of the fix when it alone is taken out. | imported by _review_fakes.py, review.py, review_red.py | — | — |
 | `scripts/infra_map/inventory.py` | infra_map | Declared state: what ``containers_list`` and the role trees say should run. | imported by gen_infra_map.py, model.py | — | — |
 | `scripts/lib/invocation_sites.py` | lib | Where a `scripts/...` path can be executed from, read once for two different questions. | imported by script_classify.py | `test_invocation_sites.py` | — |
 | `scripts/dev/findings_lib/issue_model.py` | dev | The finding vocabulary and the pure reads over a gh issue: no gh, no shell, no argv. | imported by _findings_fakes.py, backlog.py, brief.py, claim.py, claim_cli.py, cli.py, collisions.py, export_cli.py, findings.py, gh_calls.py, history_cli.py, plans.py, solo_only.py, transport.py, verify.py | — | — |
@@ -193,9 +197,9 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/fanout_lib/launch.py` | dev | Create the worktree, write the brief, start the transient service — spec §3. | imported by fanout_place.py, review.py | — | — |
 | `scripts/dev/fanout_lib/launch_gates.py` | dev | The refusals `launch` applies to a placement before it spends an ssh connection. | imported by fanout_place.py | — | — |
 | `scripts/deploy_tools/land_lib/ledger.py` | deploy_tools | What the Landings board reads: one logfmt line per landing, from a Ledger of stamps. | imported by land.py, landing.py | — | — |
-| `scripts/lib/facts/lint.py` | lib | Lint for the fact stores: the forms the spec excludes, and the atoms that do not resolve. | imported by fact_status.py | — | — |
+| `scripts/lib/facts/lint.py` | lib | Lint for the fact stores: the forms the spec excludes, and the atoms that do not resolve. | imported by fact_status.py, report.py | — | — |
 | `scripts/infra_map/live.py` | infra_map | Live state: what the cluster and the Pi report is actually running. | imported by gen_infra_map.py | — | — |
-| `scripts/lib/facts/lock.py` | lib | ``docs/facts.lock``: the recorded hashes for every verified CLAUDE.md section. | imported by fact_status.py, lint.py | — | — |
+| `scripts/lib/facts/lock.py` | lib | ``docs/facts.lock``: the recorded hashes for every verified CLAUDE.md section. | imported by fact_status.py, lint.py, report.py | — | — |
 | `scripts/diagnostics/probe_lib/longhorn.py` | diagnostics | Longhorn's B2 backup objects: what the estate holds and what it costs. | imported by b2_ledger.py, cli_parser.py, subcommands.py | — | — |
 | `scripts/diagnostics/probe_lib/longhorn_budget.py` | diagnostics | What one Longhorn retention prune costs B2 in Class C transactions, per weekly shard. | imported by longhorn.py | — | — |
 | `scripts/diagnostics/probe_lib/longhorn_cluster.py` | diagnostics | The live cluster objects the B2 reports read: Volume, Backup, PV and BackupTarget. | imported by b2_spend.py, longhorn.py | — | — |
@@ -225,13 +229,14 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/land_lib/policy.py` | deploy_tools | The landing policy a lander unit sets for an agent's PRs, checked before any merge call. | imported by merge.py | — | — |
 | `scripts/deploy_tools/land_lib/pr_json.py` | deploy_tools | The fields the lander reads from a PR's JSON, typed once where `gh_json` returns them. | imported by landing.py, policy.py | — | — |
 | `scripts/dev/findings_lib/precomputed.py` | dev | What a session working an issue would otherwise rediscover: the deploy plane and the tests. | imported by brief.py, history_cli.py | — | — |
-| `scripts/lib/proc_testing.py` | lib | Launch a subprocess from a test, and build the fake binaries it finds on `PATH`. | imported by _deploy_sh_fakes.py, _reap_entrypoint_harness.py | `test_proc_testing.py` | — |
-| `scripts/dev/fanout_lib/processes.py` | dev | The review pipeline's process boundary, and the reap that ends a red phase. | imported by review.py | — | — |
+| `scripts/lib/proc_testing.py` | lib | Launch a subprocess from a test, and build the fake binaries it finds on `PATH`. | imported by _deploy_sh_fakes.py, _reap_entrypoint_harness.py, _scratch_pytest.py | `test_proc_testing.py` | — |
+| `scripts/dev/fanout_lib/processes.py` | dev | The review pipeline's process boundary, and the reap that ends a red phase. | imported by review.py, review_red.py | — | — |
 | `scripts/deploy_tools/reach.py` | deploy_tools | Which services a changed-path list reaches, answered in one module (#3660). | imported by deploy_staleness.py, deploy_tags.py, land_platform.py, land_reach.py, land_shared.py, land_tags.py, narrow_broad.py | `test_reach.py` | — |
 | `scripts/diagnostics/probe_lib/readonly_rbac.py` | diagnostics | `probe.py readonly-rbac` — is the read-only ServiceAccount still read-only? | imported by subcommands.py | — | — |
-| `scripts/dev/fanout_lib/red_cause.py` | dev | Why each red test failed on the unchanged code: an assertion, or a name that is not there yet. | imported by red_gate.py | — | — |
-| `scripts/dev/fanout_lib/red_gate.py` | dev | The red and green gates a `red-green` fan-out batch passes through (#3674). | imported by _review_fakes.py, fanout_place.py, review.py | — | — |
-| `scripts/dev/findings_lib/red_green.py` | dev | Which findings `open` labels `red-green`, so a `--review` fan-out gives them a red phase. | imported by findings.py, plans.py, red_gate.py | — | — |
+| `scripts/dev/fanout_lib/red_cause.py` | dev | Why each red test failed on the unchanged code: an assertion, or a name that is not there yet. | imported by hunk_check.py, red_gate.py | — | — |
+| `scripts/dev/fanout_lib/red_gate.py` | dev | The red and green gates a `red-green` fan-out batch passes through (#3674). | imported by _review_fakes.py, base_check.py, fanout_place.py, hunk_check.py, review.py, review_red.py | — | — |
+| `scripts/dev/findings_lib/red_green.py` | dev | Which findings `open` labels `red-green`, so a `--review` fan-out gives them a red phase. | imported by findings.py, hunk_check.py, plans.py, red_gate.py | — | — |
+| `scripts/dev/fanout_lib/red_lock.py` | dev | What the implementer may change in a red test file: append tests, and nothing else (#4214). | imported by red_gate.py | — | — |
 | `scripts/lib/facts/relations.py` | lib | The status algebra: the spec's Datalog rules as set comprehensions over finite relations. | imported by fact_status.py, lock.py | — | — |
 | `scripts/lib/release_bin_groups.py` | lib | Resolve which source files a `release_bin.yml` group deploys. | imported by cron_targets.py | — | — |
 | `scripts/diagnostics/probe_lib/releases.py` | diagnostics | `probe.py releases` -- which commit produced the manifests each k8s service is running. | imported by health.py, land_rerolls.py, subcommands.py | — | — |
@@ -240,15 +245,18 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_lib/releases_format.py` | diagnostics | Renderers for `probe.py releases` -- the table, the cron-facing list and the Kuma push line. | imported by releases.py | — | — |
 | `scripts/diagnostics/probe_lib/releases_render.py` | diagnostics | The render digest, which is `probe.py releases`' primary answer on staleness. | imported by releases.py | — | — |
 | `scripts/diagnostics/probe_lib/releases_retired.py` | diagnostics | Release records for services the inventory no longer declares. | imported by releases.py | — | — |
+| `scripts/lib/facts/removed.py` | lib | Identifier-shaped tokens a range of commits removed, and whether the tree still holds them. | imported by evidence.py, lint.py | — | — |
 | `scripts/infra_map/render.py` | infra_map | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | — | — |
 | `scripts/lib/render_context.py` | lib | The variable context a role template renders with, in Ansible's precedence. | imported by compose_templates.py, k8s_manifests.py, monitors.py, setup_templates.py, shell_templates.py, unit_templates.py | `test_render_context.py` | — |
 | `scripts/lib/render_guard.py` | lib | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by ansible_jinja_env.py, catalog_backup.py, catalog_facts.py, compose_templates.py, deploy_tags.py, estate.py, gen_role_glance.py, glance_facts.py, k8s_context.py, k8s_manifests.py, k8s_yaml.py, land_tags.py, monitors.py, narrow_broad.py, narrow_containers.py, render_context.py, render_targets.py, service_tiers.py, setup_templates.py, shared_role_callers.py, shell_templates.py, unit_templates.py | `test_render_guard.py` | — |
 | `scripts/lib/renovate_annotations.py` | lib | The `# renovate:` annotations in the roles' defaults, read the way Renovate reads them. | imported by _renovate.py, asset_pins.py | `test_renovate_annotations.py` | — |
-| `scripts/lib/repo_paths.py` | lib | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by _deploy_sh_fakes.py, _inventory_path_rules.py, _render_helper_rules.py, _renovate.py, ansible_inventory.py, asset_pins.py, await_ci.py, build_docs.py, catalog_backup.py, catalog_model.py, classify.py, constants.py, consumers.py, core.py, cron_checks.py, cron_targets.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_run.py, deploy_tags.py, deploy_under_locks.py, deployer_park.py, docs_provenance.py, estate.py, fact_status.py, fragment_readers.py, freshness.py, gen_doc_fragments.py, gen_gitops_markers.py, gen_hook_settings.py, gen_role_glance.py, gitops_state.py, gitops_view.py, glance_facts.py, grafana_dashboards.py, ha.py, health.py, hosts.py, invocation_sites.py, jinja_bash_collisions.py, jinja_defaults.py, k3s_upgrade_gates.py, k8s_autodeploy_counts.py, k8s_roles.py, k8s_schema.py, kuma_table_loop.py, land_reach.py, land_rerolls.py, land_shared.py, land_tags.py, landing.py, landing_blockers.py, longhorn_budget.py, longhorn_cluster.py, longhorn_reap_logic.py, longhorn_reap_orphan_backups.py, longhorn_reap_orphan_snapshots.py, longhorn_upgrade_gates.py, monitors.py, narrow_broad.py, narrow_paths.py, narrow_setup.py, networking.py, new_k8s_service.py, options.py, pi_plane.py, pinned_rotation_gates.py, policy.py, pytest_shard.py, reach.py, refresh_vendored_schemas.py, releases.py, releases_format.py, releases_render.py, render_guard.py, render_targets.py, renovate_branch_sweep.py, review_metrics.py, root_ignored_files.py, rotation_tools.py, route_facts.py, runbook_gates.py, script_classify.py, scripts.py, secret_bearing_host_paths.py, secrets.py, service_catalog.py, service_tiers.py, setup_templates.py, shared_role_callers.py, shared_role_reach.py, shell_templates.py, state.py, target.py, tools.py, validate_ha_config.py, worktrees.py | — | — |
-| `scripts/dev/fanout_lib/review.py` | dev | The review pipeline a `launch --review` batch runs in place of a single `claude -p`. | imported by _review_fakes.py, fanout_review.py | — | — |
+| `scripts/lib/repo_paths.py` | lib | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by _deploy_sh_fakes.py, _inventory_path_rules.py, _render_helper_rules.py, _renovate.py, ansible_inventory.py, asset_pins.py, await_ci.py, build_docs.py, catalog_backup.py, catalog_model.py, classify.py, constants.py, consumers.py, core.py, cron_checks.py, cron_targets.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_owed_k8s.py, deploy_run.py, deploy_tags.py, deploy_under_locks.py, deployer_park.py, docs_provenance.py, estate.py, fact_status.py, fragment_readers.py, freshness.py, gen_doc_fragments.py, gen_gitops_markers.py, gen_hook_settings.py, gen_role_glance.py, gitops_state.py, gitops_view.py, glance_facts.py, grafana_dashboards.py, ha.py, health.py, hosts.py, invocation_sites.py, jinja_bash_collisions.py, jinja_defaults.py, k3s_upgrade_gates.py, k8s_autodeploy_counts.py, k8s_roles.py, k8s_schema.py, kuma_table_loop.py, land_reach.py, land_rerolls.py, land_shared.py, land_tags.py, landing.py, landing_blockers.py, longhorn_budget.py, longhorn_cluster.py, longhorn_dr_gates.py, longhorn_reap_logic.py, longhorn_reap_orphan_backups.py, longhorn_reap_orphan_snapshots.py, longhorn_upgrade_gates.py, monitors.py, narrow_broad.py, narrow_paths.py, narrow_setup.py, networking.py, new_k8s_service.py, options.py, outcome.py, pi_plane.py, pinned_rotation_gates.py, pytest_shard.py, reach.py, refresh_vendored_schemas.py, releases.py, releases_format.py, releases_render.py, render_guard.py, render_targets.py, renovate_branch_sweep.py, report.py, review_metrics.py, root_ignored_files.py, rotation_tools.py, route_facts.py, runbook_gates.py, script_classify.py, scripts.py, secret_bearing_host_paths.py, secrets.py, service_catalog.py, service_tiers.py, setup_templates.py, shared_role_callers.py, shared_role_reach.py, shell_templates.py, state.py, target.py, tools.py, validate_ha_config.py, worktrees.py | — | — |
+| `scripts/lib/facts/report.py` | lib | ``fact_status.py report``: whether ``docs/facts.lock`` pays for itself, read from git and the log. | imported by fact_status.py | — | — |
+| `scripts/dev/fanout_lib/review.py` | dev | The review pipeline a `launch --review` batch runs in place of a single `claude -p`. | imported by _review_fakes.py, fanout_review.py, fanout_review_stats.py, review_red.py | — | — |
 | `scripts/dev/fanout_lib/review_land.py` | dev | The review pipeline's landing: `land.sh` run by the pipeline, the model resumed only on need. | imported by review.py | — | — |
 | `scripts/dev/fanout_lib/review_prompts.py` | dev | What the review pipeline asks each phase it resumes or starts, and the reviewer's schema. | imported by review.py, review_record.py | — | — |
-| `scripts/dev/fanout_lib/review_record.py` | dev | What one `--review` batch records: its phases, the findings, and the PR comment built from them. | imported by review.py, review_prompts.py | — | — |
+| `scripts/dev/fanout_lib/review_record.py` | dev | What one `--review` batch records: its phases, the findings, and the PR comment built from them. | imported by fanout_review_stats.py, review.py, review_prompts.py | — | — |
+| `scripts/dev/fanout_lib/review_red.py` | dev | The red phase of a `review.Pipeline`, and the green gate that checks the PR against it. | imported by review.py | — | — |
 | `scripts/secrets_mgmt/rotation_tools.py` | secrets_mgmt | Every process boundary `secret_rotation.py` crosses, as one injectable object. | imported by _rotation_fakes.py, consumers.py, git_dates.py, secret_registry.py, secret_rotation.py, secrets.py | `test_rotation_tools.py` | — |
 | `scripts/docs/route_facts.py` | docs | Shared route facts for the reference generators. | imported by catalog_facts.py, catalog_render.py, networking.py | `test_route_facts.py` | — |
 | `scripts/deploy_tools/runbook_gates.py` | deploy_tools | The runner and the shared verdicts behind every `scripts/deploy_tools/*_gates.py`. | imported by k3s_etcd_restore_gates.py, k3s_upgrade_gates.py, longhorn_dr_gates.py, longhorn_upgrade_gates.py, pinned_rotation_gates.py | — | — |
@@ -272,6 +280,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/fanout_lib/target.py` | dev | Which repo a batch works: its register, its primary checkout and the branch it merges to. | imported by _fanout_fakes.py, _review_fakes.py, abandon.py, brief.py, claim_cli.py, claims.py, clean.py, fanout_place.py, fanout_review.py, launch.py, manifest.py, review.py, status.py, transport.py | — | — |
 | `scripts/deploy_tools/land_lib/tick.py` | deploy_tools | Step 4, the GitOps tick, retried while the unit's own flock gives up. | imported by deploy.py, health_verdict.py, pipeline.py | — | — |
 | `scripts/deploy_tools/land_lib/tools.py` | deploy_tools | Every process boundary a landing crosses, as one injectable object. | imported by _land_fakes.py, land.py, landing.py | — | — |
+| `scripts/dev/findings_lib/tracked_paths.py` | dev | Resolve a path an issue cites relative to some directory to the tracked file it names. | imported by collisions.py, fanout_place.py, red_green.py | — | — |
 | `scripts/dev/fanout_lib/transport.py` | dev | The transport seam: every process boundary the dispatcher crosses, as one injectable object. | imported by _fanout_fakes.py, abandon.py, claims.py, clean.py, fanout_place.py, fanout_review.py, launch.py, status.py | — | — |
 | `scripts/dev/findings_lib/verify.py` | dev | Verify-by: the prose an issue stores about how to check it, and how `verify` reports it. | imported by findings.py | — | — |
 | `scripts/diagnostics/probe_lib/vip_placement.py` | diagnostics | `probe.py vip-placement` — does every ETP=Local VIP have a Ready endpoint on an announcing node? | imported by subcommands.py | — | — |
@@ -282,7 +291,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run by hand
 
-31 script(s) — a person runs it.
+32 script(s) — a person runs it.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -292,6 +301,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/grafana/export_grafana_dashboards.py` | grafana | Export the *customized* Grafana dashboards from the live DB into code. | no automated caller in the tree | `test_export_grafana_dashboards.py` | — |
 | `scripts/dev/fanout_probe.py` | dev | The `fanout` source for cc-wait: a fan-out run's batches, read through `fanout_place status`. | no automated caller in the tree | `test_fanout_probe.py` | — |
 | `scripts/dev/fanout_review.py` | dev | Run a `launch --review` fan-out batch: implement, review, fix, then land. | launch.py (a person runs it) | `test_fanout_review.py` | — |
+| `scripts/dev/fanout_review_stats.py` | dev | Sum the fan-out review records into the measures that decide whether the red phase stays. | no automated caller in the tree | `test_fanout_review_stats.py` | — |
 | `scripts/grafana/fetch_grafana_dashboards.py` | grafana | Fetch + adapt Grafana community dashboards for headless (provisioned) use. | no automated caller in the tree | `test_fetch_grafana_dashboards.py` | — |
 | `scripts/dev/gen_gitops_markers.py` | dev | Copy the deployer's marker modules into monitor-bridge, the one tree that cannot ship them. | no automated caller in the tree | — | — |
 | `scripts/deploy_tools/gitops_tick.sh` | deploy_tools | trigger a GitOps deploy tick by hand and report what it did. | exit_codes.py (a person runs it) | — | [0, 1, 2, 3, 4, 64, 75](#scriptsdeploytoolsgitopsticksh) |
@@ -380,7 +390,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Usage
 
-19 script(s) document how to invoke themselves. The rest take `--help`, which every catalogued entry point answers with exit 0 (`scripts/lib/tests/test_entry_points_answer_help.py`).
+20 script(s) document how to invoke themselves. The rest take `--help`, which every catalogued entry point answers with exit 0 (`scripts/lib/tests/test_entry_points_answer_help.py`).
 
 
 ### `scripts/docs/reference/backlog.py`
@@ -436,6 +446,12 @@ fanout_place.py clean <run-id>
 
 ```
 fanout_review.py --batch 1345-1386 --repo DanielH2018/server [--red-green] < .fanout/brief.md
+```
+
+### `scripts/dev/fanout_review_stats.py`
+
+```
+fanout_review_stats.py [--dir DIR ...] [--since YYYY-MM-DD] [--json]
 ```
 
 ### `scripts/docs/reference/freshness.py`

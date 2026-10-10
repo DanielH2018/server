@@ -19,6 +19,9 @@ import time
 from pathlib import Path
 
 HISTORY = Path(__file__).parent / "history.json"
+# Run-level records live beside the per-case lists under this key. A case id is always
+# `<agent>/<case>`, so a key without a slash never collides with one.
+RUNS_KEY = "_runs"
 
 
 def load_history(path: Path) -> dict:
@@ -39,7 +42,9 @@ def write_json(path: Path, obj: dict) -> None:
 def record_run(
     history: dict, report: list[dict], ts: int, mode: str, epoch: str = "unknown"
 ) -> dict:
-    """Append one entry per case from a report array; returns the updated history.
+    """Append one entry per case, plus one run entry under RUNS_KEY; returns the updated history.
+
+    The run entry carries the sweep's total cost (`sweep_cost`).
 
     `epoch` tags the worker configuration that produced the run (model + coding-agent version).
     A regression across an epoch boundary is likely the *worker* changing, not the harness — the
@@ -61,7 +66,28 @@ def record_run(
                 "thresholdMet": met,
             }
         )
+    history.setdefault(RUNS_KEY, []).append(
+        {"ts": ts, "mode": mode, "epoch": epoch, "costUsd": sweep_cost(report)}
+    )
     return history
+
+
+def sweep_cost(report: list[dict]) -> float | None:
+    """Total `costUsd` over a report's case entries, or None when any entry lacks it.
+
+    The engine prints the same sum as its `sweep cost:` line, at 4 decimals, so the total is
+    rounded to match. The sweep cron concatenates one report per agent, so its total is the sum
+    of several `sweep cost:` lines. A report from before the engine priced its calls records
+    None rather than 0. So does a report where only some entries carry a cost: a partial sum
+    would read as a total while undercounting.
+    """
+    costs: list[float] = []
+    for case in report:
+        cost = case.get("costUsd")
+        if not isinstance(cost, (int, float)) or isinstance(cost, bool):
+            return None
+        costs.append(float(cost))
+    return round(sum(costs), 4) if costs else None
 
 
 def _signal(entries: list[dict], mode: str) -> list[bool]:
@@ -108,6 +134,8 @@ def classify(
         "stable": [],
     }
     for cid in sorted(history):
+        if cid == RUNS_KEY:
+            continue
         sig = _signal(history[cid], mode)
         if len(sig) < 2:
             continue
