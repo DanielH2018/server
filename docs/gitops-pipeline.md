@@ -457,6 +457,9 @@ git diff --name-only <local-HEAD>..origin/master
 The Discord alert names the playbook to run. **Fast-forward first, then run it** —
 `git merge --ff-only origin/master` in the primary checkout, and only then the playbook.
 Running the playbook first renders from the pre-merge tree and applies nothing.
+Running it from your own worktree first is worse. The rendered crons `cd` into the primary
+checkout and run its Python, so until the fast-forward a new cron line runs against the old
+scripts (PR #438).
 
 **If the change is another session's, it is theirs to clear.** Say so and stop, rather than
 applying a setup-plane change you did not write.

@@ -30,6 +30,11 @@ Usage:
     uv run python scripts/dev/prune_worktrees.py --prune    # also remove the removable ones
     uv run python scripts/dev/prune_worktrees.py --brief    # short report, for a banner
     uv run python scripts/dev/prune_worktrees.py --gc       # object-store repair only
+    uv run python scripts/dev/prune_worktrees.py --check <branch>   # one branch's verdict
+
+`--check` answers "does this branch still hold unlanded work" for one branch, with the same
+four-layer ladder the pruner deletes by. It prints `landed (<layer>)` or `unlanded` and exits
+0 or 1; an unknown branch, or no repository, exits 64. It reads only, and removes nothing.
 
 `--brief` chooses the report's shape and nothing else. It is orthogonal to `--prune`:
 `--prune --brief` removes the same worktrees `--prune` alone would, and prints a short
@@ -50,6 +55,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dev.foreign_owned import foreign_owned_advice
+from lib.exit_codes import FAILED, OK, USAGE_ERROR
 from lib.git import git, git_stdout, repair_object_store
 
 # The worktree library: the readers, `is_merged` and `classify`. This file is only the CLI
@@ -61,6 +67,7 @@ from lib.worktrees import (
     is_dirty,
     is_merged,
     locally_landed,
+    merged_layer,
     parse_worktree_list,
     primary_checkout,
     remove,
@@ -316,6 +323,37 @@ def brief(prune: bool = False) -> int:
     return 0
 
 
+def check(branch: str) -> int:
+    """Print one branch's landed/unlanded verdict and the layer that decided it.
+
+    The worktree-cleanup skill's merged check. It used to compare a `git merge-tree` SHA with
+    master's tree SHA by eye, which is only the third of is_merged's four layers: a squash
+    merge that master has since drifted into a conflict with reads unlanded there, and only
+    the forge layer settles it (#3929).
+    """
+    repo = primary_checkout()
+    if repo is None:
+        print("not inside a git repository", file=sys.stderr)
+        return USAGE_ERROR
+    head = git(
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        f"{branch}^{{commit}}",
+        cwd=repo,
+        check=False,
+    )
+    if head.returncode != 0:
+        print(f"no such branch or commit: {branch}", file=sys.stderr)
+        return USAGE_ERROR
+    layer = merged_layer(repo, head.stdout.strip(), branch)
+    if layer is None:
+        print(f"{branch}: unlanded")
+        return FAILED
+    print(f"{branch}: landed ({layer})")
+    return OK
+
+
 def main(argv: list[str] | None = None) -> int:
     """Report each session worktree's removable/keep/orphan verdict, and prune with `--prune`.
 
@@ -346,7 +384,19 @@ def main(argv: list[str] | None = None) -> int:
             "a stale gc.log, without touching any worktree"
         ),
     )
+    parser.add_argument(
+        "--check",
+        metavar="BRANCH",
+        help=(
+            "print whether BRANCH's work is already on origin/master, and the layer that "
+            "decided it (ancestry, patch-id, content or forge); exit 0 landed, 1 unlanded, "
+            "64 for an unknown branch. Reads only"
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.check:
+        return check(args.check)
 
     if args.gc:
         repo = primary_checkout()

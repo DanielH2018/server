@@ -26,12 +26,13 @@ def test_a_loud_bring_up_playbook_is_reported_as_manual():
     assert reach([_SERVICE, _BRINGUP]).manual == [_BRINGUP]
 
 
-def test_changes_expands_a_copied_file_and_tags_does_not():
-    """The divergence the module docstring records, pinned so unifying it is a visible change."""
+def test_changes_and_tags_both_expand_a_copied_file():
+    """A landing deploys the k8s roles shipping a copy, as `deploy.sh --changed` does (#4136)."""
     r = reach([_COPIED])
     declared = {"configarr", "janitorr"}
     assert {"configarr", "janitorr"} <= r.changes.k8s
-    assert r.tags(declared) == set()
+    assert r.tags(declared) == {"configarr", "janitorr"}
+    assert r.tags({"configarr"}) == {"configarr"}
     assert {"configarr", "janitorr"} <= r.touched()
 
 
