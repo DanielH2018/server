@@ -96,10 +96,11 @@ from fanout_lib.red_gate import (
     green_finding,
     red_prompt,
     red_section,
-    red_skip_reason,
+    labelled_skip_reason,
     reset_worktree,
 )
 from fanout_lib.processes import reaping, run_process
+from fanout_lib.git_state import GitState, changed, snapshot
 from fanout_lib.review_land import RESUME_VERDICTS, land
 from fanout_lib.review_land import report as landing_report
 from fanout_lib.review_record import (
@@ -337,10 +338,13 @@ class Pipeline:
         `ResetFailed`, which `run_all` turns into a failed batch.
         """
         base = self._git("rev-parse", "HEAD")
+        held = snapshot(self.run, self.worktree)
         with reaping():
             phase = self._claude(
                 "red", self._red_author(), red_prompt(issues, self.anti_patterns)
             )
+        # Before any git call reads the worktree's `.git` pointer or the shared config.
+        self._refuse_git_changes(held)
         red = self._git("rev-parse", "HEAD")
         if phase.failed:
             gate = Gate(
@@ -351,7 +355,10 @@ class Pipeline:
             # The gate runs the red author's tests, which could start processes too.
             with reaping():
                 gate = self.gates.red(self.run, self.worktree, base, red)
+            self._refuse_git_changes(held)
         reset_worktree(self.run, self.worktree, red if gate.passed else base)
+        # The Stop hook reads the brief, and the red author could edit it (#3884).
+        (self.worktree / ".fanout" / "brief.md").write_text(self.brief)
         out = phase.report.get("structured_output")
         behaviours = out.get("behaviours") if isinstance(out, dict) else None
         self.record.red_behaviours = (
@@ -361,24 +368,13 @@ class Pipeline:
         self.record.red_gate = "passed" if gate.passed else gate.reason
         return (red, gate) if gate.passed else None
 
-    def _red_skip_reason(self) -> str:
-        """Why this batch runs no red phase, from its issues' labels as they stand now."""
-        if not self.target.is_server:
-            return "other-repo"
-        labels = []
-        for number in self.batch.split("-"):
-            view = ["gh", "issue", "view", number, "--json", "labels"]
-            try:
-                labels.append(
-                    [
-                        x["name"]
-                        for x in json.loads(self.run(view, None).stdout)["labels"]
-                    ]
-                )
-            except ValueError, KeyError, TypeError:
-                return "labels unreadable"
-        # Every issue labelled, yet launched without the phase: the label came after launch.
-        return red_skip_reason(labels, True) or "labelled after launch"
+    def _refuse_git_changes(self, held: GitState) -> None:
+        """Fail the batch when git state outside the worktree moved (#3864, #3879)."""
+        moved = changed(held, snapshot(self.run, self.worktree))
+        if moved:
+            raise ResetFailed(
+                f"the red phase changed git state outside the worktree: {', '.join(moved)}"
+            )
 
     def _green(self, red: tuple[str, Gate] | None) -> str:
         """Run the green gate on HEAD and record it; "" when it passed or there is no red."""
@@ -426,7 +422,9 @@ class Pipeline:
         if self.project_settings:
             self.hooks.update(held_secret_paths(self.run, SOURCE_ROOT))
         if not self.red_green:
-            self.record.red_skipped = self._red_skip_reason()
+            self.record.red_skipped = labelled_skip_reason(
+                self.run, self.batch, self.target.is_server
+            )
         try:
             red = self._red(issues) if self.red_green else None
         except ResetFailed as exc:
