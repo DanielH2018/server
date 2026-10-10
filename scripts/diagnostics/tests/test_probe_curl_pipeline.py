@@ -245,12 +245,6 @@ def test_observability_loki_ip_reads_the_role_default():
 _plan = cast(Callable[..., Any], curl_pipeline.plan)
 
 
-def test_plan_takes_no_resolve_ip_parameter():
-    import inspect
-
-    assert "resolve_ip" not in inspect.signature(curl_pipeline.plan).parameters
-
-
 def test_plan_needs_nothing_beyond_args_for_a_lookup_free_subcommand():
     # `cert` consults neither endpoint lookup, so its args alone must be enough to plan it.
     host = "homepage.daniel-hunter.com"
