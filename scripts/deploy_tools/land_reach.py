@@ -13,9 +13,8 @@ templates under the ungated `initial_setup` role would otherwise read as reachin
 that one of its tasks copies out of the checkout.
 `remaining_setup_hosts_note` is the string land.sh prints and the verdict hangs on.
 
-The path-to-tag mappers live in `reach.py`.
-The traversal that reads a role's `tasks/` tree for those gates is `setup_role_chains.py`;
-this one evaluates the chains it returns.
+The path-to-tag mappers live in `reach.py`. `setup_role_chains.py` reads a role's `tasks/` tree,
+and what a PR range changed in it, for those gates; this one evaluates the chains it returns.
 """
 
 import contextlib
@@ -23,7 +22,6 @@ import functools
 import json
 import sys
 from pathlib import Path
-
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -42,14 +40,16 @@ from deploy_logic import (
 )
 
 from reach import reach
-from setup_role_diff import deleted_in, task_file_chains, tree_at
 from setup_role_chains import (
     SHIPPED_DIRS,
     VARS_DIRS,
+    deleted_in,
     handler_notifier_chains,
     task_chains,
+    task_file_chains,
     task_gates_naming,
     task_gates_shipping_repo_path,
+    tree_at,
     var_consumer_chains,
 )
 
@@ -258,7 +258,7 @@ def setup_file_hosts(
     own and returns the role-level answer, which for a dispatcher is the union.
 
     Given `pr_range` (`<old>..<new>`), a `tasks/` path narrows further, to the tasks the
-    range added or edited (`setup_role_diff.changed_task_texts`). `initial_setup/tasks/
+    range added or edited (`setup_role_chains.changed_task_texts`). `initial_setup/tasks/
     crons.yml` holds ungated crons beside box-only ones, so an edit to only the box-only
     ones read as owing daniel-server and daniel-pi an apply (#3976). `repo` is the checkout
     whose git store holds the range. A diff it cannot read keeps the whole file's reach.
@@ -446,7 +446,7 @@ def remaining_setup_hosts_note(
 ) -> str:
     """`_remaining_note` over `ref`'s `ansible/` tree, or `repo`'s checkout without one.
 
-    `ref` is the merge commit: the checkout can predate it (`setup_role_diff.tree_at`), and
+    `ref` is the merge commit: the checkout can predate it (`setup_role_chains.tree_at`), and
     a ref git cannot archive falls back to `repo`'s checkout and says so on stderr.
     """
     paths = (_INITIAL_SETUP_YML, ALL_VARS, HOST_VARS, _SETUP_ROLES_DIR)
