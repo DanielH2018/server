@@ -223,9 +223,9 @@ data:
       # ── Phase E2 (2026-08-12): Prometheus consolidation — daniel-server's remaining Docker
       # exporters, scraped directly instead of arriving via that instance's remote_write. Ports
       # are newly LAN-published (prometheus-exporters-lan-firewall.sh locks each to daniel-box
-      # only). k8s_bridge_client_ip is daniel-server's address as this play sees it (a literal,
-      # not hostvars['daniel-server'] — see its definition: daniel-server isn't guaranteed to be
-      # in this play's hostvars).
+      # only). k8s_bridge_client_ip is daniel-server's address, derived in group_vars/all.yml
+      # from hostvars['daniel-server'].server_ip — the one literal, in daniel-server's
+      # host_vars (#4063).
       #
       # Label parity is load-bearing, not cosmetic: these same job names and an instance of
       # "daniel-server" are what daniel-server's Docker Prometheus produced (directly for `node`
