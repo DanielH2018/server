@@ -17,6 +17,12 @@
 # Usage: claude-clone-sync.sh <clone-dir>
 set -euo pipefail
 
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
 clone=${1:?usage: claude-clone-sync.sh <clone-dir>}
 export LC_ALL=C
 cd "$clone"

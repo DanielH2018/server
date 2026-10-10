@@ -16,7 +16,20 @@
 # replaces retired with the flip. It also pings an off-premises Healthchecks.io check when
 # HC_PING_URL is set, which is what still alerts when the whole cluster (Kuma included) is
 # down. `set -uo` (not -euo) so the rsync exit code is captured and reported, not swallowed.
+#
+# Usage: pull-pi-peers.sh (no arguments)
+# Runs as the pi-peer-backup CronJob at 23:00 America/Chicago, and once per deploy as the
+# pi-peer-backup-deploy-gate Job. Environment: PI_SRC (required, the Pi's source
+# directory), KUMA_PUSH_URL (required), HC_PING_URL (optional Healthchecks.io ping), and
+# HOSTNAME (a pod name starting pi-peer-backup-deploy-gate- skips both pushes). Reads the
+# SSH identity at /ssh/id and writes to /data/peers.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 : "${PI_SRC:?}" "${KUMA_PUSH_URL:?}"
 # A subdir, not the PVC mountpoint: /data itself is root-owned (fsGroup grants group

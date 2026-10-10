@@ -13,7 +13,19 @@
 # AppSec" Kuma monitor directly (no monitor-bridge hop, same token).
 #
 # set -uo (not -euo): a failed assert must be captured + reported, not swallowed.
+#
+# Usage: crowdsec-appsec-verify.sh (no arguments)
+# Runs from the crowdsec-appsec-verify root cron on daniel-box every 15 minutes. It runs `cscli`
+# inside the crowdsec pod through `k3s kubectl exec`, reads /usr/local/lib/kuma-push-lib.sh, and
+# pushes the verdict to the CrowdSec AppSec Kuma push monitor. The syslog tag is
+# crowdsec-appsec-verify.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin  # cron ships a bare PATH
 

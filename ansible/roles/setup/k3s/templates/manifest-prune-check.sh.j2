@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Deployed-artifact drift check — managed by Ansible (k3s role); edits overwritten.
 #
+# Usage: manifest-prune-check.sh [-h|--help]
+# Takes no arguments. systemd timer kuma-check-manifest-prune.timer runs it as root daily at
+# k3s_manifest_prune_cron_hour:k3s_manifest_prune_cron_minute, and again on failure. It reads the
+# Kuma push token from /etc/rancher/k3s/kuma-push.env and the optional healthchecks ping URL from
+# /etc/healthchecks/ping.env. Running it by hand is read-only against the cluster, but it pushes
+# to the Kuma monitor.
+#
 # Three arms, all answering "is what is live still what the repo says?": orphaned cluster objects
 # that no staged manifest declares (below); copy:-deployed setup code that differs byte-for-byte
 # from its source (second arm); and template:-rendered setup scripts whose SOURCE has changed
@@ -52,6 +59,12 @@
 # the armed roles. This cron keeps watching every role, armed or not. An orphan that predates
 # its role's arming carries no label, so the prune cannot see it and only this cron reports it.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

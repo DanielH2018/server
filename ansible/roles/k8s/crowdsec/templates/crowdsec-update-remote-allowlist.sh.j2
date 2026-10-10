@@ -7,7 +7,19 @@
 #
 # set -uo (not -euo): the module's exit code and last line are what gets reported, so nothing
 # here may exit before the push.
+#
+# Usage: crowdsec-update-remote-allowlist.sh (no arguments)
+# Runs from the crowdsec-remote-allowlist root cron on daniel-box every 5 minutes. It runs
+# /opt/crowdsec-remote-allowlist/remote_allowlist.py through uv, reads
+# /usr/local/lib/kuma-push-lib.sh, and pushes the verdict to the remote allowlist Kuma push
+# monitor. The syslog tag is crowdsec-remote-allowlist.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin  # cron ships a bare PATH
 

@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # daniel-box root-disk headroom heartbeat — managed by Ansible (k3s role); edits overwritten.
 #
+# Usage: disk-health.sh [-h|--help]
+# Takes no arguments. Cron job "daniel-box disk health" runs it as the deploy user every
+# k3s_disk_health_cron_minute minutes (cron file disk-health). It reads the Kuma push token from
+# /etc/rancher/k3s/kuma-push.env and the optional healthchecks ping URL from
+# /etc/healthchecks/ping.env, then pushes the root filesystem's used percentage. Running it by
+# hand is safe.
+#
 # Everything on this host — Longhorn replicas, container images, etcd — lives on the root LV.
 #
 # Independent of Prometheus BY DESIGN: this is the leg that survives a node-exporter or Prometheus
@@ -15,6 +22,12 @@
 # (Longhorn default) replica scheduling stops once the disk passes 75% used, so paging at 90
 # would fire after the storage plane already degraded.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

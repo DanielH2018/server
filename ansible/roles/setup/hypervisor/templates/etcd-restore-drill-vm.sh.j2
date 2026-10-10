@@ -2,6 +2,12 @@
 # etcd-restore-drill-vm — run the FULL etcd restore drill in a throwaway guest, unattended.
 # Rendered by roles/setup/hypervisor onto daniel-server; scheduled by the cron in etcd_drill.yml.
 #
+# Usage: etcd-restore-drill-vm.sh [-h|--help]
+# Takes no arguments. Root cron job "Full etcd restore drill in a throwaway guest" (cron file
+# etcd-restore-drill-vm, schedule etcd_drill_full_cron) runs it on daniel-server and appends its
+# output to cron.log in the drill log directory. Running it by hand starts a real guest and a real
+# restore. Exit 0 = the drill passed; the evidence of each run is under LOG_ROOT/<utc-run-id>/.
+#
 # The drill itself is scripts/backup/etcd_restore_drill.sh, which restores the newest off-box
 # snapshot into a scratch data-dir and reads the object graph back. It cannot pass beside a live
 # k3s (its header lists five structural reasons), so this script gives it a host with no k3s at
@@ -28,6 +34,12 @@
 # Exit 0 = the drill passed. Non-zero = it did not, or this script could not get as far as running
 # it; the Kuma message and the syslog line say which.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

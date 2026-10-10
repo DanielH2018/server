@@ -24,6 +24,12 @@
 # Usage: claude-dotfiles-sync.sh <chezmoi-binary> <seed-config>
 set -euo pipefail
 
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
 usage="usage: claude-dotfiles-sync.sh <chezmoi-binary> <seed-config>"
 chezmoi=${1:?$usage}
 seed=${2:?$usage}
