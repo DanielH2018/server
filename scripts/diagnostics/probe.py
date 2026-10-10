@@ -102,7 +102,6 @@ from diagnostics.probe_lib.health import (
     inspect_argv,
     k8s_deploy_args,
     k8s_pods_args,
-    resolve_ip,
 )
 
 # Every subcommand's `run_*` callable comes from here rather than from its module: `main()`
@@ -177,7 +176,7 @@ def main(argv=None, *, plan=plan):
     # through to the raw streaming path below.
     if ns.cmd in ("metric", "loki-query") and not ns.json and not ns.dry_run:
         return REGISTRY.get(ns.cmd).func(ns)
-    stages = plan(argv, resolve_ip)
+    stages = plan(argv)
     if ns.dry_run:
         for stage in stages:
             print(" ".join(stage))

@@ -20,8 +20,8 @@ from diagnostics.probe_lib import cli_parser, core, curl_pipeline
 from lib.proc_testing import run
 
 
-def test_plan_metric_uses_cluster_prometheus_route(fake_resolve, fake_k8s_endpoint):
-    stages = curl_pipeline.plan(["metric", "up == 0"], fake_resolve, fake_k8s_endpoint)
+def test_plan_metric_uses_cluster_prometheus_route(fake_k8s_endpoint):
+    stages = curl_pipeline.plan(["metric", "up == 0"], fake_k8s_endpoint)
     assert stages == [
         core.curl_argv(
             "https://prometheus.example/api/v1/query?query=up+%3D%3D+0",
@@ -30,8 +30,8 @@ def test_plan_metric_uses_cluster_prometheus_route(fake_resolve, fake_k8s_endpoi
     ]
 
 
-def test_plan_targets_uses_cluster_prometheus_route(fake_resolve, fake_k8s_endpoint):
-    stages = curl_pipeline.plan(["targets"], fake_resolve, fake_k8s_endpoint)
+def test_plan_targets_uses_cluster_prometheus_route(fake_k8s_endpoint):
+    stages = curl_pipeline.plan(["targets"], fake_k8s_endpoint)
     assert stages == [
         core.curl_argv(
             "https://prometheus.example/api/v1/targets",
@@ -40,10 +40,8 @@ def test_plan_targets_uses_cluster_prometheus_route(fake_resolve, fake_k8s_endpo
     ]
 
 
-def test_plan_loki_labels_uses_cluster_endpoint_with_vip_pin(
-    fake_resolve, fake_k8s_endpoint
-):
-    stages = curl_pipeline.plan(["loki-labels"], fake_resolve, fake_k8s_endpoint)
+def test_plan_loki_labels_uses_cluster_endpoint_with_vip_pin(fake_k8s_endpoint):
+    stages = curl_pipeline.plan(["loki-labels"], fake_k8s_endpoint)
     assert stages == [
         core.curl_argv(
             "https://loki-homelab.example/loki/api/v1/labels",
@@ -52,9 +50,9 @@ def test_plan_loki_labels_uses_cluster_endpoint_with_vip_pin(
     ]
 
 
-def test_plan_loki_query_with_limit(fake_resolve, fake_k8s_endpoint):
+def test_plan_loki_query_with_limit(fake_k8s_endpoint):
     stages = curl_pipeline.plan(
-        ["loki-query", '{job="x"}', "--limit", "50"], fake_resolve, fake_k8s_endpoint
+        ["loki-query", '{job="x"}', "--limit", "50"], fake_k8s_endpoint
     )
     assert stages == [
         core.curl_argv(
@@ -64,10 +62,8 @@ def test_plan_loki_query_with_limit(fake_resolve, fake_k8s_endpoint):
     ]
 
 
-def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin(
-    fake_resolve, fake_k8s_endpoint
-):
-    stages = curl_pipeline.plan(["scrutiny"], fake_resolve, fake_k8s_endpoint)
+def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin(fake_k8s_endpoint):
+    stages = curl_pipeline.plan(["scrutiny"], fake_k8s_endpoint)
     assert stages == [
         core.curl_argv(
             "https://scrutiny.example/api/summary",
@@ -76,16 +72,16 @@ def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin(
     ]
 
 
-def test_plan_cert_defaults_port_and_sni_to_host(fake_resolve):
-    stages = curl_pipeline.plan(["cert", "homepage.daniel-hunter.com"], fake_resolve)
+def test_plan_cert_defaults_port_and_sni_to_host():
+    stages = curl_pipeline.plan(["cert", "homepage.daniel-hunter.com"])
     assert stages == cli_parser.cert_stages(
         "homepage.daniel-hunter.com", 443, "homepage.daniel-hunter.com"
     )
 
 
-def test_plan_cert_explicit_port_and_sni(fake_resolve):
+def test_plan_cert_explicit_port_and_sni():
     stages = curl_pipeline.plan(
-        ["cert", "10.0.0.161:443", "--sni", "homepage.daniel-hunter.com"], fake_resolve
+        ["cert", "10.0.0.161:443", "--sni", "homepage.daniel-hunter.com"]
     )
     assert stages == cli_parser.cert_stages(
         "10.0.0.161", 443, "homepage.daniel-hunter.com"
@@ -99,9 +95,7 @@ def test_cert_stages_is_a_two_stage_pipeline():
     assert s2[:2] == ["openssl", "x509"]
 
 
-def test_no_cluster_route_carries_the_retired_k8s_suffix(
-    fake_resolve, fake_k8s_endpoint
-):
+def test_no_cluster_route_carries_the_retired_k8s_suffix(fake_k8s_endpoint):
     """Assert on the hostnames plan() actually asks for, so a reintroduced `-k8s` suffix fails
     here first: every cluster subcommand would 404 against Traefik's no-Host-match while
     fixtures asserted the stale name."""
@@ -118,7 +112,7 @@ def test_no_cluster_route_carries_the_retired_k8s_suffix(
         ["loki-query", '{job="x"}'],
         ["scrutiny"],
     ):
-        curl_pipeline.plan(argv, fake_resolve, record)
+        curl_pipeline.plan(argv, record)
 
     assert asked, "expected plan() to route these subcommands through k8s_endpoint"
     assert not [h for h in asked if h.endswith("-k8s")]
@@ -136,9 +130,9 @@ def _fake_cluster_ip():
     return "10.43.0.99"
 
 
-def test_plan_loki_query_default_store_is_homelab(fake_resolve, fake_k8s_endpoint):
+def test_plan_loki_query_default_store_is_homelab(fake_k8s_endpoint):
     stages = curl_pipeline.plan(
-        ["loki-query", '{job="x"}'], fake_resolve, fake_k8s_endpoint, _fake_cluster_ip
+        ["loki-query", '{job="x"}'], fake_k8s_endpoint, _fake_cluster_ip
     )
     assert stages[0][-1].startswith(
         "https://loki-homelab.example/loki/api/v1/query_range?"
@@ -147,11 +141,10 @@ def test_plan_loki_query_default_store_is_homelab(fake_resolve, fake_k8s_endpoin
 
 
 def test_plan_loki_query_observability_store_uses_cluster_ip_without_pin(
-    fake_resolve, fake_k8s_endpoint
+    fake_k8s_endpoint,
 ):
     stages = curl_pipeline.plan(
         ["loki-query", '{service_name="claude-code"}', "--loki", "observability"],
-        fake_resolve,
         fake_k8s_endpoint,
         _fake_cluster_ip,
     )
@@ -165,11 +158,10 @@ def test_plan_loki_query_observability_store_uses_cluster_ip_without_pin(
 
 
 def test_plan_loki_labels_observability_store_uses_cluster_ip_without_pin(
-    fake_resolve, fake_k8s_endpoint
+    fake_k8s_endpoint,
 ):
     stages = curl_pipeline.plan(
         ["loki-labels", "--loki", "observability"],
-        fake_resolve,
         fake_k8s_endpoint,
         _fake_cluster_ip,
     )
@@ -177,12 +169,11 @@ def test_plan_loki_labels_observability_store_uses_cluster_ip_without_pin(
 
 
 def test_plan_routes_bare_claude_code_selector_to_observability(
-    fake_resolve, fake_k8s_endpoint, capsys
+    fake_k8s_endpoint, capsys
 ):
     # The issue's own verify-by command, with no --loki: it must return lines, not a refusal.
     stages = curl_pipeline.plan(
         ["loki-query", '{service_name="claude-code"} | event_name="tool_decision"'],
-        fake_resolve,
         fake_k8s_endpoint,
         _fake_cluster_ip,
     )
@@ -190,13 +181,10 @@ def test_plan_routes_bare_claude_code_selector_to_observability(
     assert "observability" in capsys.readouterr().err
 
 
-def test_plan_refuses_claude_code_selector_at_explicit_homelab_store(
-    fake_resolve, fake_k8s_endpoint
-):
+def test_plan_refuses_claude_code_selector_at_explicit_homelab_store(fake_k8s_endpoint):
     with pytest.raises(SystemExit, match="--loki observability"):
         curl_pipeline.plan(
             ["loki-query", '{service_name="claude-code"}', "--loki", "homelab"],
-            fake_resolve,
             fake_k8s_endpoint,
             _fake_cluster_ip,
         )

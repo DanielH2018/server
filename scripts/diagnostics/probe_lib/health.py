@@ -53,10 +53,6 @@ from diagnostics.probe_lib.health_docker import (
     declared_on_pi,
     format_health,
     inspect_argv,
-    # Re-exported only: probe.py imports it here and hands it to `plan()` as that function's
-    # IP resolver (probe.py:688). Nothing in this module calls it, so ruff --fix deletes the
-    # import without the noqa, and probe.py then fails at import.
-    resolve_ip,  # noqa: F401
 )
 from diagnostics.probe_lib.health_kubectl import (
     WORKLOAD_KINDS,

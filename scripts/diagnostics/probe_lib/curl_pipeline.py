@@ -48,15 +48,13 @@ from diagnostics.probe_lib.core import (
 
 def plan(
     args,
-    resolve_ip,
     k8s_endpoint=k8s_endpoint,
     observability_loki_ip=observability_loki_ip,
 ):
     """Return the command pipeline (list of argv stages) for the parsed args.
 
-    `resolve_ip(container) -> ip`, `k8s_endpoint(hostname) -> (base, pin)` and
-    `observability_loki_ip() -> ip` are injected so all routing/URL logic is testable without
-    Docker, SOPS, or the network. Most commands are a single stage; `cert` is a two-stage
+    `k8s_endpoint(hostname) -> (base, pin)` and `observability_loki_ip() -> ip` are injected so
+    all routing/URL logic is testable without SOPS or the network. Most commands are a single stage; `cert` is a two-stage
     openssl pipeline.
     """
     ns = _build_parser().parse_args(args)

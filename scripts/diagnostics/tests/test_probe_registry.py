@@ -149,7 +149,7 @@ def test_a_routed_subcommand_streams_when_its_callable_does_not_apply(
         monkeypatch.setattr(entry, "func", _refuse)
     planned = []
 
-    def fake_plan(args, _resolve_ip):
+    def fake_plan(args):
         planned.append(args)
         return [["curl", "planned"]]
 
