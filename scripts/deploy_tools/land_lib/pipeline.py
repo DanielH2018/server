@@ -150,10 +150,14 @@ def _phases(ln: Landing) -> None:
         print(f"== arm  arming PR #{ln.opts.pr}'s merge")
         merge.arm_merge(ln)
     if ln.opts.await_merge:
-        print(
-            f"== 0/{STEP_COUNT}  waiting for PR #{ln.opts.pr} to merge "
-            "(auto-merge or the merge queue)"
+        # land.sh never arms GitHub's auto-merge (merge.py's docstring has why), so the wait
+        # either merges the PR itself or polls for a merge made some other way.
+        how = (
+            "merging it directly once its CI is green"
+            if ln.opts.arm_merge
+            else "polling for a merge made elsewhere"
         )
+        print(f"== 0/{STEP_COUNT}  waiting for PR #{ln.opts.pr} to merge ({how})")
         merge.await_merge(ln)
     for number, (label, phase) in enumerate(_STEPS, 1):
         print(f"== {number}/{STEP_COUNT}  {label.format(pr=ln.opts.pr)}")

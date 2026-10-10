@@ -261,3 +261,45 @@ def test_one_prune_removes_a_worktree_and_deletes_the_branch_it_freed(
     assert done.returncode == 0, done.stderr
     assert not (tmp_path / "done").exists()
     assert "worktree-done" not in _branch_names(repo)
+
+
+def test_check_names_the_layer_that_settled_a_rebase_landed_branch(
+    tmp_path, monkeypatch
+):
+    # Not ancestry: the cherry-pick lands the content under a new sha, so only the patch-id
+    # layer settles it, and naming that layer is what --check adds over a bare yes/no.
+    scrub_process_git_env(monkeypatch)
+    repo = _repo_with_branches(tmp_path)
+    git(repo, "checkout", "-q", "-b", "worktree-rebased")
+    (repo / "c.txt").write_text("three\n")
+    git(repo, "add", "c.txt")
+    git(repo, "commit", "-q", "-m", "rebased work", "--no-gpg-sign")
+    git(repo, "checkout", "-q", "master")
+    # -x forces a new SHA: a same-second cherry-pick otherwise reproduces the original's.
+    git(repo, "cherry-pick", "-x", "worktree-rebased")
+    git(repo, "update-ref", "refs/remotes/origin/master", "master")
+
+    done = run(
+        [sys.executable, str(PRUNER), "--check", "worktree-rebased"],
+        cwd=repo,
+        env=scrubbed_env(),
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip() == "worktree-rebased: landed (patch-id)"
+
+
+def test_check_exits_1_for_a_branch_holding_unlanded_work(tmp_path, monkeypatch):
+    # The RED half. GH_BIN=false keeps the forge layer offline: it fails, and a failed forge
+    # lookup is no verdict, which must read as unlanded.
+    scrub_process_git_env(monkeypatch)
+    repo = _repo_with_branches(tmp_path)
+
+    done = run(
+        [sys.executable, str(PRUNER), "--check", "worktree-open"],
+        cwd=repo,
+        env=scrubbed_env(GH_BIN="false"),
+    )
+
+    assert done.returncode == 1, done.stderr
+    assert done.stdout.strip() == "worktree-open: unlanded"

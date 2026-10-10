@@ -52,9 +52,11 @@ __all__ = [
     "forge_says_merged",
     "is_dirty",
     "is_merged",
+    "local_landed_layer",
     "locally_landed",
     "memoised_merged",
     "merge_tree_says_contained",
+    "merged_layer",
     "parse_worktree_list",
     "primary_checkout",
     "processes_using",
@@ -113,10 +115,23 @@ def is_merged(
     one needing a network round-trip and credentials.
 
     All four failures are closed: an unknown reads as NOT merged, because this decides what
-    to DELETE.
+    to DELETE. `merged_layer` is the same ladder naming the layer that decided.
     """
-    if locally_landed(repo, head, base=base):
-        return True
+    return merged_layer(repo, head, branch, base=base) is not None
+
+
+def merged_layer(
+    repo: str, head: str, branch: str = "", base: str = "origin/master"
+) -> str | None:
+    """The layer of is_merged's ladder that settled `head` as landed, or None when none did.
+
+    One of `ancestry`, `patch-id`, `content` or `forge`. `prune_worktrees.py --check` prints
+    it, so a reader can tell a squash-landed branch the forge vouched for from one whose
+    content git matched locally.
+    """
+    layer = local_landed_layer(repo, head, base=base)
+    if layer is not None:
+        return layer
     # Fourth and last: squash-merged AND master has since drifted into a conflict on a file the
     # branch also touched. `git merge-tree` then exits non-zero, which is the right local answer
     # ("no verdict") and the wrong final one.
@@ -124,7 +139,7 @@ def is_merged(
     # Ask the forge, which knows what it merged. This runs LAST because it is the only check
     # needing a network round-trip and credentials; every branch the local checks settle never
     # reaches it. No `gh`, no auth, or no answer all mean no verdict, which reads as not merged.
-    return forge_says_merged(repo, branch, head)
+    return "forge" if forge_says_merged(repo, branch, head) else None
 
 
 def locally_landed(
@@ -141,26 +156,38 @@ def locally_landed(
     `ancestry_known` says the caller has already settled the ancestry layer in bulk, through
     `ancestry_landed_branches`, so this skips the per-branch `merge-base` call.
     """
+    return local_landed_layer(repo, head, ancestry_known, base) is not None
+
+
+def local_landed_layer(
+    repo: str, head: str, ancestry_known: bool = False, base: str = "origin/master"
+) -> str | None:
+    """The local layer that settled `head` as landed: `ancestry`, `patch-id` or `content`.
+
+    None when no local layer did. locally_landed is this as a bool.
+    """
     if not ancestry_known:
         ancestor = git("merge-base", "--is-ancestor", head, base, cwd=repo, check=False)
         if ancestor.returncode == 0:
-            return True
+            return "ancestry"
     cherry = git("cherry", base, head, cwd=repo, check=False)
     # A failed `git cherry` prints nothing, and empty output otherwise means "merged" — so
     # the return code has to gate this, or an unknown ref would read as safe to delete.
     if cherry.returncode != 0:
-        return False
+        return None
     if cherry_says_landed(cherry.stdout, empty_means=True):
-        return True
+        return "patch-id"
     master_tree = git("rev-parse", f"{base}^{{tree}}", cwd=repo, check=False)
     if master_tree.returncode != 0:
-        return False
+        return None
     # Exit is non-zero on a conflict, and on a git too old for --write-tree (added in 2.38).
     # Both mean "no verdict", which must read as not merged.
     merged_tree = git("merge-tree", "--write-tree", base, head, cwd=repo, check=False)
-    return merged_tree.returncode == 0 and merge_tree_says_contained(
+    if merged_tree.returncode == 0 and merge_tree_says_contained(
         merged_tree.stdout, master_tree.stdout
-    )
+    ):
+        return "content"
+    return None
 
 
 def is_dirty(path: str) -> bool:

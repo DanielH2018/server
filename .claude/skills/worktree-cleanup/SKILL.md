@@ -15,15 +15,17 @@ byte-identically to one holding real unlanded work.
 **Do not pass `discard_changes` to argue with it.** That flag is how you lose work that was
 never landed, and from the tool's side the two cases are indistinguishable.
 
-Verify by content instead. The branch has nothing left to give when its merge result equals
-master's tree:
+Ask the pruner instead. `--check` runs the same four-layer ladder `--prune` deletes by:
+ancestry, patch-id, content (`git merge-tree`), then the forge's record of which head it merged.
 
 ```bash
-git merge-tree --write-tree origin/master <branch>
-git rev-parse origin/master^{tree}
+uv run python scripts/dev/prune_worktrees.py --check <branch>
 ```
 
-Equal SHAs mean the work is in. Leave the tree for the pruner rather than removing it by hand.
+It prints `<branch>: landed (<layer>)` and exits 0, or `<branch>: unlanded` and exits 1. Exit
+64 means the branch does not resolve. Only the forge layer settles a squash-merged branch that
+master has since drifted into a conflict with, so a hand comparison of `merge-tree` SHAs reads
+that branch as unlanded. Leave a landed tree for the pruner rather than removing it by hand.
 
 ## The pruner
 
