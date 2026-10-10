@@ -9,7 +9,7 @@
 #
 # Two passes, because the source names the directory `private_dot_claude`: a plain apply
 # chmods ~/.claude to 0700 and cuts the operator off from the agent's memory store and
-# artifacts, which tasks/agent_access.yml opens with mode 2750. The first pass applies every
+# artifacts, which tasks/agent_github.yml opens with mode 0710. The first pass applies every
 # managed directory but ~/.claude itself, creating any new one; the second applies everything
 # else and no directory.
 #
@@ -53,6 +53,16 @@ if [[ $("$chezmoi" execute-template '{{ includeTemplate "is-agent" . }}' 2>/dev/
     "refusing to apply the operator's dotfiles to $USER" >&2
   exit 1
 fi
+
+# The subset the role installed before the dotfiles (tasks/agent_operator_config.yml) is
+# root-owned. chezmoi cannot write into it, and the agent cannot delete it, but the agent owns
+# ~/.claude and so can rename it in place; the role deletes what this moved on its next apply.
+# Only after the check above, so a refused source leaves the subset where it was.
+for tree in operator rules output-styles skills; do
+  if [[ -d "$HOME/.claude/$tree" && $(stat -c %U "$HOME/.claude/$tree") == root ]]; then
+    mv -T "$HOME/.claude/$tree" "$HOME/.claude/.subset-copy-$tree"
+  fi
+done
 
 mapfile -t dirs < <("$chezmoi" managed --include=dirs --path-style=absolute | grep -vxF "$HOME/.claude")
 if ((${#dirs[@]})); then

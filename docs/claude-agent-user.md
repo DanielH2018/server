@@ -637,21 +637,26 @@ the operator's.
 steps:
 
 1. Copy the operator's pinned chezmoi.
-1. Remove the subset's root-owned trees.
 1. Seed the three prompt answers.
 1. Clone the dotfiles as the agent's chezmoi source.
 1. Run `files/claude-dotfiles-sync.sh`. `<name>-dotfiles-sync.timer` runs the same script every
    15 minutes, since a dotfiles merge applies no role here.
+1. Delete the subset the script moved aside.
 
-The script has two guards:
+The script has three guards:
 
 - It refuses a source that does not render `is-agent` as true. Applied anyway, such a source
   would write the operator's `.gitconfig` over the agent's identity. The refusal is not fatal
   to the apply, so a host can switch the flag on before the dotfiles change lands.
+- After that check, and only then, it renames each root-owned subset tree to
+  `~/.claude/.subset-copy-<name>`. chezmoi, running as the agent, cannot write into a root-owned
+  directory, and the agent cannot delete one. It owns `~/.claude`, though, so it can rename one
+  in place, and the role deletes the renamed tree on its next apply. A refused source therefore
+  leaves the subset where it was, and the agent always has one of the two.
 - It applies in two passes, every directory but `~/.claude` and then everything but
   directories. The source names the directory `private_dot_claude`, and a plain apply sets its mode
   to 0700. That would cut the operator off from the agent's memory store and artifacts, which
-  `agent_access.yml` opens at 2750.
+  `agent_github.yml` opens at 0710 for the operator's group.
 
 **What the agent loses:** root ownership of its copied config. The subset was root-owned, which
 stopped an injected session from editing it in place. chezmoi writes as the agent, so the agent
@@ -661,7 +666,7 @@ from the dotfiles repo, where DanielClaudeBot can merge its own PRs. They guard 
 not against a hostile session, as the copied skills already did.
 
 **Check:** a scratch run of the script as `claude`, against the dotfiles branch, applied the
-agent variant and left `~/.claude` at 2750. A pre-existing `.profile` and `.gitconfig` kept
+agent variant and left `~/.claude` at the mode it started with. A pre-existing `.profile` and `.gitconfig` kept
 their contents. The rendered `settings.json` carried 10 hook events, every guard hook among
 them, with `SUDO_ASKPASS` unset, `CLAUDE_ARTIFACTS_HOST=daniel-box-claude` and
 `OTEL_RESOURCE_ATTRIBUTES=process.owner=claude`. A second run was a no-op, with an empty

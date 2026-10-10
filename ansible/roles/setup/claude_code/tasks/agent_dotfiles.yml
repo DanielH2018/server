@@ -38,29 +38,6 @@
   become: true
   when: claude_code_agent_dotfiles
 
-# The copy installed these root-owned, and chezmoi, running as the agent, cannot write into a
-# root-owned directory. Only a root-owned one goes: once chezmoi owns them they are the agent's.
-- name: Look for the operator config copy's root-owned trees
-  ansible.builtin.stat:
-    path: "{{ claude_code_agent_user_home }}/.claude/{{ item }}"
-  loop: [operator, rules, output-styles, skills]
-  register: claude_code_agent_copied_trees
-  become: true
-  when: claude_code_agent_dotfiles
-
-- name: Remove the operator config copy's root-owned trees
-  ansible.builtin.file:
-    path: "{{ item.stat.path }}"
-    state: absent
-  loop: "{{ claude_code_agent_copied_trees.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item | default('') }}"
-  become: true
-  when:
-    - claude_code_agent_dotfiles
-    - item.stat.exists | default(false)
-    - item.stat.pw_name == 'root'
-
 - name: Create the agent user's chezmoi config directory
   ansible.builtin.file:
     path: "{{ claude_code_agent_user_home }}/.config/chezmoi"
@@ -149,6 +126,16 @@
   failed_when: false
   become: true
   when: claude_code_agent_dotfiles and not ansible_check_mode
+
+# The script renames the root-owned subset aside before its first apply, because the agent
+# cannot delete it (files/claude-dotfiles-sync.sh). Root can.
+- name: Remove the subset the dotfiles sync moved aside
+  ansible.builtin.file:
+    path: "{{ claude_code_agent_user_home }}/.claude/.subset-copy-{{ item }}"
+    state: absent
+  loop: [operator, rules, output-styles, skills]
+  become: true
+  when: claude_code_agent_dotfiles
 
 - name: Report that the agent user's dotfiles were not applied
   ansible.builtin.debug:

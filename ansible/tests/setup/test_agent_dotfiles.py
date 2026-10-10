@@ -61,6 +61,23 @@ class Agent:
         self.chezmoi = root / "chezmoi"
         write_exec(self.chezmoi, CHEZMOI_STUB)
         self.calls = root / "calls.log"
+        # The test cannot make a root-owned directory, so a `stat` ahead of the real one on
+        # PATH names root as the owner of every tree listed in ROOT_OWNED.
+        self.bin = root / "bin"
+        self.root_owned = root / "root-owned"
+        self.root_owned.write_text("")
+        write_exec(
+            self.bin / "stat",
+            f'for a; do last=$a; done; if grep -qxF "$last" {self.root_owned}; then echo root; '
+            f'else exec /usr/bin/stat "$@"; fi\n',
+        )
+
+    def copied_subset(self, *trees: str) -> None:
+        """Lay down trees the way agent_operator_config.yml left them: root's."""
+        for tree in trees:
+            (self.home / ".claude" / tree).mkdir(parents=True)
+            with self.root_owned.open("a") as f:
+                f.write(f"{self.home}/.claude/{tree}\n")
 
     def push(self) -> None:
         commit(self.pusher, "upstream", **{"home/dot_bashrc": "2\n"})
@@ -76,6 +93,7 @@ class Agent:
                 STUB_SOURCE=str(self.source),
                 STUB_IS_AGENT=is_agent,
             ),
+            stub_bin=self.bin,
         )
 
     def log(self) -> list[str]:
@@ -146,13 +164,36 @@ def test_the_apply_runs_as_the_agent_and_never_fails_the_play() -> None:
     assert task["failed_when"] is False
 
 
-def test_only_a_root_owned_copy_is_removed_before_chezmoi_takes_over() -> None:
-    """Once chezmoi has written the trees they are the agent's, and an apply keeps them."""
+def test_the_root_owned_subset_is_moved_aside_before_chezmoi_writes(
+    agent: Agent,
+) -> None:
+    """chezmoi, as the agent, cannot write into it; the agent owns ~/.claude and can rename."""
+    agent.copied_subset("skills", "rules")
+    (agent.home / ".claude" / "output-styles").mkdir()
+    assert agent.sync().returncode == 0
+    claude = agent.home / ".claude"
+    assert sorted(p.name for p in claude.iterdir()) == [
+        ".subset-copy-rules",
+        ".subset-copy-skills",
+        "output-styles",
+    ], "only the root-owned trees move, and the agent's own stays"
+
+
+def test_a_refused_source_leaves_the_subset_in_place(agent: Agent) -> None:
+    """Moved aside without an apply, the agent would have neither the subset nor the dotfiles."""
+    agent.copied_subset("skills")
+    assert agent.sync(is_agent="").returncode == 1
+    assert (agent.home / ".claude" / "skills").is_dir()
+
+
+def test_the_role_deletes_what_the_script_moved_aside() -> None:
     task = named(
-        tasks("agent_dotfiles.yml"),
-        "Remove the operator config copy's root-owned trees",
+        tasks("agent_dotfiles.yml"), "Remove the subset the dotfiles sync moved aside"
     )
-    assert "item.stat.pw_name == 'root'" in task["when"]
+    assert task["ansible.builtin.file"]["path"].endswith(
+        "/.claude/.subset-copy-{{ item }}"
+    )
+    assert task["loop"] == ["operator", "rules", "output-styles", "skills"]
 
 
 def test_switching_the_dotfiles_off_removes_every_unit() -> None:
