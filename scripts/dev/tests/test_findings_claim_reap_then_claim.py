@@ -10,6 +10,8 @@ indistinguishable from a fixture where every claim is stale.
 Run: uv run pytest scripts/dev/tests/test_findings_claim_reap_then_claim.py
 """
 
+import json
+
 from _findings_fakes import Fakes, build_tools, facts, make_issue
 
 from dev.findings import main
@@ -195,3 +197,19 @@ def test_claim_reads_the_worktrees_once_for_a_whole_batch():
     )
     assert main(["claim", "1132", "1140", "--worktree", MINE], tools) == 0
     assert len(reads) == 1
+
+
+def test_claim_refuses_rather_than_reaps_an_operator_claim_read_by_the_agent_user(
+    monkeypatch, capsys
+):
+    """#4103's Verify-by from the agent user's side: no worktree here, and still held."""
+    monkeypatch.setenv("CLAUDE_WORKTREE_PREFIX", "claude")
+    issue = _held_by_other()
+    tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=STALE))
+    assert main(["claim", "1132", "--worktree", MINE], tools) == 3
+    assert not any(f"Released: `{OTHER}`" in " ".join(c) for c in calls.gh)
+
+    tools, _calls = build_tools(Fakes(issues=[issue], worktree_facts=STALE))
+    capsys.readouterr()
+    assert main(["next", "--json"], tools) == 0
+    assert json.loads(capsys.readouterr().out) == []

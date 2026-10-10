@@ -14,7 +14,8 @@ import re
 
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
-from fanout_lib.target import WORKTREE_PREFIX_ENV, branch_name
+from fanout_lib.target import branch_name
+from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
 from lib.git_testing import git
 

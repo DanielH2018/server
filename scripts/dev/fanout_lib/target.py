@@ -18,6 +18,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from lib.repo_paths import PRIMARY_CHECKOUT
+from lib.worktree_owner import own_prefix
 
 SERVER = "DanielH2018/server"
 # The agent user cannot read /home/ubuntu, and its login profile
@@ -76,10 +77,6 @@ class Target:
 
 SERVER_TARGET = Target(SERVER, SERVER_CHECKOUT, "origin/master")
 
-# The agent user's login profile (roles/setup/claude_code/templates/agent-user-profile.j2) sets
-# this to `claude_code_agent_worktree_prefix`. The operator's environment leaves it unset.
-WORKTREE_PREFIX_ENV = "CLAUDE_WORKTREE_PREFIX"
-
 
 def branch_name(batch: str) -> str:
     """The branch a batch's worktree is created on, claimed under and pushed from.
@@ -87,9 +84,10 @@ def branch_name(batch: str) -> str:
     The agent user's GitHub account may push only `worktree-<prefix>+**` (the "agent branch
     fence" ruleset, #3618), the branch EnterWorktree gives a `<prefix>/<slug>` worktree. When
     the running user's environment names a prefix, the batch branch takes that shape.
-    Otherwise it is `worktree-fanout-<batch>`.
+    Otherwise it is `worktree-fanout-<batch>`. `lib.worktree_owner` reads the same prefix
+    to decide whose clone a claimed branch lives in.
     """
-    prefix = os.environ.get(WORKTREE_PREFIX_ENV, "")
+    prefix = own_prefix()
     return f"worktree-{prefix}+fanout-{batch}" if prefix else f"worktree-fanout-{batch}"
 
 

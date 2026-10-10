@@ -526,6 +526,18 @@ removes every one.
 - daniel-box sets `claude_code_login_uids: []`, which removes the caps from `user-1000.slice`.
   The fleet bound on `user.slice` still covers it.
 
+**Issue claims made from the other clone read as held.** `findings.py` judges whether a claim
+is live from `git worktree list`, which lists only the reading user's own clone. A claim made
+from the other clone therefore read as stale, with the reason `no worktree`, and `claim` or `reap` released
+it while its session worked on. At 23:25:52Z on 2026-10-09 an `ubuntu` session reaped the
+`claude` session's claim on #4098, though `worktree-claude+fanout-daniel-server-agent` was
+checked out in `/var/lib/claude/server` (#4103). `lib/worktree_owner.py` now reads the owner
+from the branch name. A `worktree-<prefix>+…` branch belongs to the user whose
+`CLAUDE_WORKTREE_PREFIX` is `<prefix>`, and a branch with no prefix belongs to the operator. A
+claim under the other user's branch reads as held, with the reason `held by another user's
+clone`. To release a stale claim from the other clone, run `findings.py reap` or `release` as
+that clone's user; neither user can judge the other's worktrees.
+
 A root-owned `/etc/claude-code/managed-settings.json` is deferred (operator decision,
 2026-10-09). It binds every user on the host, `renovate-agent` included. Slice 4 already makes
 the agent's user-level config root-owned, so revisit it after the switch-over, and only for
