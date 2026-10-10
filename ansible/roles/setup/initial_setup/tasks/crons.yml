@@ -306,6 +306,84 @@
   # a broken thing successfully is invisible to every check that watches the deploy.
   when: has_repo_checkout
 
+- name: Create the directory the worktree holder scan installs into
+  tags: [crons, worktree-sweep]
+  # Ubuntu does not ship /usr/local/libexec, and `copy` does not create a missing parent. The
+  # first apply of the install below failed on daniel-box with "Destination directory
+  # /usr/local/libexec does not exist" and held the initial_setup plane.
+  when: has_claude_code
+  ansible.builtin.file:
+    path: /usr/local/libexec
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Install the root-run worktree holder scan a worktree removal asks first
+  tags: [crons, worktree-sweep]
+  # The sweep runs as sys_user, and /proc refuses that uid another user's cwd and environ. A
+  # `claude` process started through `su`, `runuser -l` or `systemd-run --uid` can hold a
+  # worktree from the claude user's own slice, where the unprivileged scan does not look
+  # (#4170). This helper scans every process as root, and `lib.worktrees.privileged_holders`
+  # runs it through the sudoers rule below.
+  #
+  # Every has_claude_code host, not only ops_cron_host: the weekly sweep runs on daniel-box,
+  # but a fan-out's `fanout_place clean` removes worktrees on whichever host ran the batch.
+  #
+  # A root-owned COPY, never a path into the checkout: sys_user and every agent can write the
+  # repo, so a sudoers rule naming a file there is root for whoever edits it. Group sys_user
+  # and 0750, because the caller treats execute permission as "the sudoers rule is mine" and
+  # does not ask sudo otherwise. A refused sudo logs and mails a "not in sudoers" incident.
+  when: has_claude_code
+  ansible.builtin.copy:
+    src: worktree_holders.py
+    dest: /usr/local/libexec/worktree-holders
+    owner: root
+    group: "{{ sys_user }}"
+    mode: "0750"
+  become: true
+
+- name: Allow sys_user to run the worktree holder scan as root
+  tags: [crons, worktree-sweep]
+  # `""` allows the command with NO arguments. The helper derives the directory it reports on
+  # from SUDO_UID, so the caller cannot ask root about any other path. `validate` is not
+  # optional: a malformed drop-in locks sudo out entirely (see access.yml's timestamp rule).
+  when: has_claude_code
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/20-worktree-holders
+    content: |
+      # Managed by Ansible (roles/setup/initial_setup, crons.yml) — edits here are overwritten.
+      {{ sys_user }} ALL=(root) NOPASSWD: /usr/local/libexec/worktree-holders ""
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+  become: true
+
+- name: Record the deployed worktree holder scan
+  tags: [crons, worktree-sweep]
+  when: has_claude_code
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: worktree-holders
+    stamp_deployed_pairs:
+      - live: /usr/local/libexec/worktree-holders
+        src: ansible/roles/setup/initial_setup/files/worktree_holders.py
+
+- name: Remove the worktree holder scan and its sudoers rule from a host with no Claude sessions
+  tags: [crons, worktree-sweep]
+  # The way out: a host that stops running Claude sessions keeps a NOPASSWD root rule otherwise.
+  when: not has_claude_code
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/sudoers.d/20-worktree-holders
+    - /usr/local/libexec/worktree-holders
+    - /var/lib/homelab/setup-deployed-manifest.d/worktree-holders
+  become: true
+
 - name: Schedule the weekly worktree sweep and git object-store repair (box only)
   tags: [crons, worktree-sweep]
   # Several Claude sessions branch, commit and retire worktrees in this checkout every day, and

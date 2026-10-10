@@ -1,0 +1,64 @@
+{# DECIDED: the CrowdSec agent sidecars' :6060 grant admits prometheus from the observability
+   namespace, so it stays off the callers model.
+   The callers model (`netpol_from` / `netpol_fences`, macro in
+   ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
+   peers, and its header rules out growing it to absorb another shape. Census: #3701.
+#}
+{# One additive policy per pod in `crowdsec_k8s_sidecar_agents` (group_vars/all.yml), the map
+   the sidecar's AGENT_USERNAME, the LAPI registration loop and observability's
+   `crowdsec-<app>-agent` scrape jobs also read. Adding an app to that map renders its grant
+   here, so no app's own policy carries a hand-written :6060 rule (#4088).
+
+   The grant and the scrape job only work as a pair: without the grant the job reads
+   `up == 0` forever. Nothing but prometheus may reach :6060, because agent metrics enumerate
+   every parser and scenario the pod runs, which is reconnaissance for an attacker.
+
+   The sidecar carries its host pod's labels, so the policy selects `app: <app>` and the
+   grant reaches the agent and nothing else only because 6060 is the agent's port.
+
+   A policy of its own rather than a rule in the app's policy, because policies are additive
+   and an extra policy admits without fencing anything new. That holds only for a pod some
+   other ingress policy already selects: on a pod nothing else selects, this policy would be
+   the first, and it would isolate the pod down to :6060. Every pod here is selected by
+   `baseline-ingress` (namespace scope, or label scope through `netpol-baseline: enforced`)
+   or by a bespoke fence of its own. `baseline-ingress` already admits prometheus on every
+   port, so this grant is what keeps :6060 reachable on a pod that leaves the baseline.
+
+   prometheus lives in the observability namespace, so namespaceSelector and podSelector are
+   siblings in ONE from item, which ANDs them. As separate items they would OR, admitting every
+   pod in observability and every prometheus anywhere.
+
+   Renders allow-all when the flag is false, so `netpol_baseline_enforced` is a real rollback
+   lever. `| bool` for the string trap. Both explained in full in
+   networkpolicy-traefik.yaml.j2. #}
+{% for app in crowdsec_k8s_sidecar_agents %}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ app }}-crowdsec-agent-metrics
+  namespace: {{ k8s_namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ app }}
+  policyTypes:
+    - Ingress
+  ingress:
+{% if netpol_baseline_enforced | bool %}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app: prometheus
+      ports:
+        - port: 6060
+          protocol: TCP
+{% else %}
+    # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
+    # everything, which is the easiest thing in this file to get backwards.
+    - {}
+{% endif %}
+{% endfor %}

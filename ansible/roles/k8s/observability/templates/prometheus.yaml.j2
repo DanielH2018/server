@@ -447,10 +447,10 @@ data:
       # entrypoint rewrites only the PORT, and only when METRICS_PORT is set, which these pods
       # do not set).
       #
-      # Reaching it needs the matching netpol grant: each app's baseline policy admits 6060 to
-      # prometheus through a `from` item of its OWN (netpol-baseline/templates/
-      # networkpolicy-<app>.yaml.j2), not a port appended to an existing rule (#1706). Grant
-      # and job only work as a pair.
+      # Reaching it needs the matching netpol grant, which renders from the same map as a
+      # policy of its own per app (netpol-baseline/templates/
+      # networkpolicy-crowdsec-sidecars.yaml.j2), not a port appended to an existing rule
+      # (#1706, #4088). Grant and job only work as a pair.
 {% for app in crowdsec_k8s_sidecar_agents %}
       - job_name: crowdsec-{{ app }}-agent
         scrape_interval: 1m

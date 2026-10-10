@@ -13,6 +13,7 @@ from functools import cache
 
 import pytest
 from _helpers import REPO, discover_docs
+from deploy_tools.land_lib import policy
 from lib.facts.citations import macro_citations
 from _row_table import (
     Census,
@@ -100,7 +101,36 @@ def _namespace_dir_files() -> list[str]:
     return tracked("scripts/*", "ansible/tests/*", "ansible/roles/*/*/tests/*")
 
 
+def _compiled_offence(subject: Subject) -> list[str]:
+    return (
+        ["is a compiled module file"] if policy.is_compiled_module(subject.rel) else []
+    )
+
+
 ROWS = (
+    Census(
+        name="no-compiled-module-file-is-tracked",
+        reason=(
+            "A tracked pyc runs in place of its unchanged source, and an extension module is "
+            "imported before the `.py` beside it, so either one replaces code with bytes no "
+            "diff shows. `.gitignore` excludes both, which `git add -f` bypasses. The landing "
+            "gate refuses them with the same predicate, `policy.is_compiled_module`; this row "
+            "also covers a commit that reaches master another way."
+        ),
+        files=lambda: tracked("*"),
+        offence=_compiled_offence,
+        red=(
+            Subject("scripts/lib/__pycache__/gh.cpython-314.pyc", ""),
+            Subject("scripts/lib/gh.cpython-314-x86_64-linux-gnu.so", ""),
+            Subject("scripts/lib/gh.pyc", ""),
+        ),
+        green=(
+            Subject("scripts/lib/gh.py", ""),
+            Subject("docs/pycache-notes.md", ""),
+        ),
+        min_matches=1000,
+        must_find=frozenset({"scripts/deploy_tools/land_lib/policy.py"}),
+    ),
     Census(
         name="documented-macros-exist",
         reason=(

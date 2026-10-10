@@ -9,7 +9,7 @@ polkit.addRule(function (action, subject) {
     if (action.id !== "org.freedesktop.systemd1.manage-units") {
         return undefined;
     }
-    if (subject.user !== "{{ claude_code_agent_user }}") {
+    if (subject.user !== "{{ claude_code_lander_agent_user }}") {
         return undefined;
     }
     if (!/^claude-land@[1-9][0-9]{0,6}\.service$/.test(action.lookup("unit"))) {

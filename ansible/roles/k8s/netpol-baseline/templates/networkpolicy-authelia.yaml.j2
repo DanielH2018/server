@@ -1,13 +1,10 @@
-{# DECIDED: authelia's :6060 metrics grant admits prometheus from the observability
-   namespace, so this fence stays bespoke.
+{# DECIDED: authelia's fence stays bespoke although its one rule fits the callers model.
    The callers model (`netpol_from` / `netpol_fences`, macro in
    ansible/templates/networkpolicy.yml.j2) renders one TCP port admitting same-namespace `app:`
-   peers, and its header rules out growing it to absorb another shape. Census: #3701.
-   One rule here would fit that model on its own, but splitting it out leaves this file
-   behind anyway, doubles the policy objects on one pod and renames a live object under the
-   armed prune, so the whole fence keeps one owner.
-   A `netpol_from` on the authelia entry would also render a second policy named
-   `authelia`, which ansible/tests/k8s/test_netpol_from.py refuses.
+   peers, and traefik -> :9091 is that shape. Until #4088 this file also held a cross-namespace
+   :6060 prometheus grant, which networkpolicy-crowdsec-sidecars.yaml.j2 now renders. Moving
+   the rest onto the authelia entry as `netpol_from` moves a live object between two templates
+   under the armed prune, so it is its own change: #4264. Census: #3701.
 #}
 ---
 apiVersion: networking.k8s.io/v1
@@ -36,30 +33,8 @@ spec:
       ports:
         - port: 9091
           protocol: TCP
-    # :6060 is the crowdsec-agent SIDECAR's metrics port, and it needs a from item of its OWN
-    # (#1706). Appending the port to the rule above would admit TRAEFIK to it and prometheus to
-    # nothing — a NetworkPolicy rule ANDs its `from` with its `ports`. Nothing but prometheus
-    # may reach it: agent metrics enumerate every parser and scenario the portal runs, which is
-    # reconnaissance for an attacker.
-    #
-    # prometheus lives in the observability namespace since slice 3, so this is cross-namespace:
-    # namespaceSelector and podSelector are siblings in ONE from item, which ANDs them. As
-    # separate items they would OR, admitting every pod in observability and every prometheus
-    # anywhere. Same shape as networkpolicy-traefik.yaml.j2's :8080/:6060 grant.
-    #
-    # This grant and the `crowdsec-authelia-agent` scrape job in
-    # observability/templates/prometheus.yaml.j2 only work as a pair: without the grant the job
-    # reads `up == 0` forever.
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: observability
-          podSelector:
-            matchLabels:
-              app: prometheus
-      ports:
-        - port: 6060
-          protocol: TCP
+    # The crowdsec-agent SIDECAR's :6060 grant is not here: networkpolicy-crowdsec-sidecars.yaml.j2
+    # renders it for every pod in crowdsec_k8s_sidecar_agents (#4088).
 {% else %}
     # OFF. One empty rule admits everything. `ingress: []` would be the exact opposite and deny
     # everything, which is the easiest thing in this file to get backwards.

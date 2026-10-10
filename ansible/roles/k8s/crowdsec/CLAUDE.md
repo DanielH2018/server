@@ -109,7 +109,6 @@ Read the job before writing a CrowdSec query: `node` is not a CrowdSec label and
 DaemonSet job attaches one, so a per-node selector on an engine or sidecar metric matches nothing
 (ENFORCED by `ansible/tests/services/test_dashboard_queries_match_this_clusters_labels.py`).
 
-**A sidecar job needs two edits, not one** — the containerPort declaration on that pod, and a
-prometheus `from` item of its own in its baseline NetworkPolicy (#1706: appending a port to an
-existing rule grants the wrong client). ENFORCED by
+**A sidecar job also needs the pod's containerPort and a :6060 grant**, which netpol-baseline's
+`networkpolicy-crowdsec-sidecars.yaml.j2` renders from the same map (#4088). ENFORCED by
 `ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py`.

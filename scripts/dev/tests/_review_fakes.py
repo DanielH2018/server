@@ -3,7 +3,9 @@
 import json
 import subprocess
 
+from fanout_lib.base_check import BaseCheck
 from fanout_lib.brief import Issue, render_brief
+from fanout_lib.hunk_check import HunkCheck
 from fanout_lib.red_gate import Gates
 from fanout_lib.review import Pipeline
 from fanout_lib.target import SERVER_TARGET
@@ -108,6 +110,8 @@ def _pipeline(
     clock=None,
     gates=None,
     target=SERVER_TARGET,
+    base_check=None,
+    hunk_check=None,
 ):
     (tmp_path / ".fanout").mkdir()
     brief = render_brief(ISSUES, host, "1345", "worktree-orch", [], review=True)
@@ -123,5 +127,7 @@ def _pipeline(
         state_dir=tmp_path / "state",
         red_green=gates is not None,
         gates=gates or Gates(),
+        base_check=base_check or (lambda *_: BaseCheck()),
+        hunk_check=hunk_check or (lambda *_: HunkCheck()),
     )
     return pipeline, run

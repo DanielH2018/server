@@ -11,6 +11,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_review.py
 import json
 
 from _review_fakes import PR, _finding, _pipeline, _report
+from fanout_lib.base_check import BaseCheck
 from fanout_lib.review import PROMPT_FILE, Pipeline, actionable
 from fanout_lib.target import SERVER_TARGET, Target
 
@@ -249,6 +250,42 @@ def test_a_low_missing_coverage_or_unsure_vacuous_finding_stays_below_the_bar():
         )
         == []
     )
+
+
+def test_new_tests_that_pass_without_the_fix_reach_the_reviewer_and_the_record(
+    tmp_path,
+):
+    seen = []
+
+    def base_check(run, worktree, base, head, exclude):
+        seen.append((base, head, exclude))
+        return BaseCheck(2, ["tests/test_x.py::test_guard"])
+
+    reports = [_report(f"Opened {PR}"), _report(structured={"findings": []})]
+    pipeline, run = _pipeline(tmp_path, reports, base_check=base_check)
+    pipeline.run_all()
+    assert seen == [("base0", "aaa", ())]
+    assert "- `tests/test_x.py::test_guard`" in run.claude[1][1]
+    assert _record(tmp_path)["base_passing"] == ["tests/test_x.py::test_guard"]
+    assert "1 of the PR's 2 new tests pass with its code changes" in run.comments[0]
+
+
+def test_a_base_check_that_raises_is_recorded_and_the_review_still_runs(tmp_path):
+    reports = [_report(f"Opened {PR}"), _report(structured={"findings": []})]
+    pipeline, run = _pipeline(tmp_path, reports, base_check=lambda *_: 1 / 0)
+    pipeline.run_all()
+    assert [phase for _, _, phase in run.claude] == ["implement", "review"]
+    assert _record(tmp_path)["base_error"] == "ZeroDivisionError: division by zero"
+
+
+def test_another_repos_batch_runs_no_base_check(tmp_path):
+    reports = [_report(f"Opened {PR}"), _report(structured={"findings": []})]
+    target = Target("DanielH2018/dotfiles", str(tmp_path), "origin/main")
+    pipeline, _run = _pipeline(
+        tmp_path, reports, target=target, base_check=lambda *_: 1 / 0
+    )
+    pipeline.run_all()
+    assert _record(tmp_path)["base_tests"] == 0
 
 
 def test_the_reviewer_reads_the_anti_patterns_read_at_start(tmp_path):
