@@ -7,6 +7,11 @@
 #   args: --ask-on-cd
 """PreToolUse(Edit|Write) guard: deny direct edits to files you must not edit by hand.
 
+Usage: Claude Code runs this hook on PreToolUse for the Edit, Write, MultiEdit and NotebookEdit
+tools, passing `--ask-on-cd`. It reads the hook JSON payload on stdin. It prints a `deny` decision
+JSON object or nothing, and it exits 0. `-h` or `--help` prints this text and exits 0 without
+reading stdin.
+
 Two classes, both always a mistake in this repo:
 
   1. A generated documentation page — rewritten by the docs-refresh cron, so a hand edit is
@@ -181,4 +186,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

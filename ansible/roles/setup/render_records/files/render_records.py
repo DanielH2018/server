@@ -31,6 +31,18 @@ EXIT CODES are the kuma-check timer's contract (roles/setup/common/tasks/kuma_ch
 Restart=on-failure reruns them: the boot grace, and a walk that found no green commit. Neither
 is a verdict, so neither may turn the tile green or red. A producer that keeps deferring goes
 red anyway, because the monitor's interval expires with no push.
+
+Usage: render_records.py   (takes no arguments; -h/--help prints this text)
+
+Run hourly by the render-records kuma-check timer as the sys_user, installed as
+/opt/render-records/render_records.py. Environment, set by the unit:
+  CHECKOUT_DIR   the dedicated detached worktree the render reads (required)
+  RECORD_DIR     where the per-service records are written (required)
+  RENDER_HOST    this host's inventory name, which each record must carry (required)
+  GITOPS_CONFIG  the deployer's config file (default /etc/gitops-deploy/config.env)
+  BOOT_GRACE_S   exit 1 with no push while uptime is under this many seconds (default 0)
+  DEPLOYER_DIR   directory holding the deployer's modules (default /opt/gitops-deploy)
+  KUMA_HOST, PUSH_TOKEN   the Kuma push target, from the unit's env file
 """
 
 from __future__ import annotations
@@ -333,4 +345,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

@@ -23,6 +23,15 @@ A PR is landed only when all of these hold:
 
 Then `land.sh` runs as an interactive session would run it, and only its `VERDICT:` line is
 written where the session can read it. Stdlib only, like the rest of the agent.
+
+Usage: land_renovate_pr.py <pr-number>
+
+Started as `renovate-agent-land@<pr-number>.service`, never by hand. Reads the PR with
+`gh`, the deployer's config at /etc/gitops-deploy/config.env, and the environment
+RENOVATE_AGENT_REPO (default DanielH2018/server) and RENOVATE_AGENT_REPO_DIR (default
+/home/ubuntu/server). Writes the outcome to /var/lib/renovate-agent-land/<pr-number>.verdict.
+Exit codes: land.sh's own on a landing, 2 for an argument that is not a PR number, 3 for a
+refusal.
 """
 
 from __future__ import annotations
@@ -175,4 +184,7 @@ def main(
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main(sys.argv))

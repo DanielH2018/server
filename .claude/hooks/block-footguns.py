@@ -3,6 +3,11 @@
 #   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
 """PreToolUse(Bash) guard: six commands that fail silently on this machine.
 
+Usage: `bash-pretool.py` loads this file as an arm on PreToolUse:Bash, and it also runs
+standalone. It reads the hook JSON payload on stdin. It prints a `deny` (or `ask`) decision JSON
+object or nothing, and it exits 0. `-h` or `--help` prints this text and exits 0 without reading
+stdin.
+
 Each has a deterministic signature, a recorded cost, and a one-line fix — which is what makes
 them worth a hook rather than a paragraph. What they share is that none of them ERRORS: each
 either produces a plausible-looking result that is wrong or succeeds outright while bypassing
@@ -420,4 +425,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

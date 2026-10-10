@@ -17,10 +17,30 @@ where Valheim names a player only on spawn, resolves a disconnect by SteamID, an
 deaths (see valheim_stats.py's docstring).
 
 Design: docs/game-stats-internals.md.
+
+Usage:
+
+    python /app/stats.py
+
+Takes no arguments. The deployment runs it as the container command, and it polls until
+killed. `-h` and `--help` print this text and exit 0.
+
+Environment (all optional except METRICS_PORT):
+
+    METRICS_PORT      port for the Prometheus metrics and health endpoints (required, no default)
+    LOKI_URL          Loki base URL (default http://loki:3100)
+    LOKI_QUERY        LogQL selector for the console lines (default '{container="terraria"}')
+    POLL_INTERVAL     seconds between Loki polls (default 20)
+    HTTP_TIMEOUT      seconds allowed per Loki request (default 10)
+    DB_PATH           SQLite file holding the stats (default /data/stats.db)
+    BACKFILL_DAYS     days of Loki history read on a first run (default 28)
+    LOKI_PAGE_LIMIT   lines per Loki page (default 5000)
+    HEALTH_MAX_AGE    seconds without a poll before health fails (default 3 * POLL_INTERVAL + 30)
 """
 
 import os
 import re
+import sys
 
 import stats_lib
 
@@ -325,4 +345,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     main()

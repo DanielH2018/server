@@ -7,6 +7,12 @@
 #   args: --ask-on-cd=block-protected-bash,block-footguns
 """One PreToolUse:Bash hook that runs the Bash arms in a single process.
 
+Usage: Claude Code runs this hook on PreToolUse:Bash, passing
+`--ask-on-cd=block-protected-bash,block-footguns`. It reads the hook JSON payload on stdin. It
+prints one merged `hookSpecificOutput` JSON object (a `deny` or `ask` decision, an
+`additionalContext` injection, an `updatedInput` rewrite) or nothing, and it exits 0. `-h` or
+`--help` prints this text and exits 0 without reading stdin.
+
 WHY. Each Bash tool call used to start five `uv run --no-sync --quiet python <arm>.py`
 processes — `auto-approve-readonly`, `block-protected-bash`, `nudge-land-sh`,
 `block-footguns` and `inject-nested-docs`. Loki counted 18,421 PreToolUse:Bash calls in the
@@ -240,4 +246,7 @@ def main(load=load_arm):
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

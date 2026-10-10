@@ -21,6 +21,19 @@ timer-built index serves links to files that are already gone. Building on reque
 
 Two siblings ship beside this one in the same ConfigMap: `artifact_meta.py` holds the
 taxonomy and the metadata parsers, and `_gui_html.py` holds the page served at `/`.
+
+Usage:
+
+    python3 /app/artifact_server.py
+
+Takes no arguments. The deployment runs it as the container command. It listens on all
+interfaces and serves until killed. `-h` and `--help` print this text and exit 0.
+
+Environment:
+
+    ARTIFACTS_ROOT          directory holding one subdirectory per host (default /srv/artifacts)
+    ARTIFACTS_PORT          TCP port to listen on (default 8080)
+    ARTIFACTS_SERVICES_FILE JSON file of known service names, read by artifact_meta.py
 """
 
 from __future__ import annotations
@@ -28,6 +41,7 @@ from __future__ import annotations
 import json
 import os
 import posixpath
+import sys
 import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -297,4 +311,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     main()

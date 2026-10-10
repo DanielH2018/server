@@ -4,7 +4,30 @@ Fetches two Google Calendar ICS feeds and one Obsidian Tasks gist feed on a back
 refresh loop, processes each (drops superseded recurrence occurrences, caps overlapping
 recurring series, and — for the Obsidian feed — hoists a clickable link, a stable UID and
 drops LOCATION per VTODO), and serves the cached, processed result at /calendar{1,2,4}.ics.
+
+Usage:
+
+    python app.py
+
+Takes no arguments. The image copies this file in as app.py and runs it as the container
+command. It fetches every feed once, then serves on port 5000 until killed. `-h` and `--help`
+print this text and exit 0.
+
+Environment (all optional; the deployment sets them from env-secret and the manifest):
+
+    GOOGLE_ICS_URL      first Google Calendar ICS feed, served at /calendar1.ics
+    GOOGLE_ICS_URL_2    second Google Calendar ICS feed, served at /calendar2.ics
+    OBSIDIAN_GIST_URL   Obsidian Tasks gist feed, served at /calendar4.ics
+    REFRESH_INTERVAL    seconds between feed refreshes (default 900)
 """
+
+import sys
+
+# Answer --help before the imports below, which need Flask and requests installed.
+if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
 
 from flask import Flask, Response
 import requests, threading, time, os, re, hashlib

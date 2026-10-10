@@ -13,6 +13,19 @@ through an uptime-kuma rollout's 404 window and their message cap (#3745). The r
 most 90s to a run whose Kuma is down, which the job deadline's margin over two dump budgets
 absorbs on the first pod; only a second pod's beat can meet the deadline, and only while Kuma
 is down, when the tile is already going DOWN.
+
+Usage:
+
+    python3 /config/push_heartbeat.py
+
+Takes no arguments. The status-page-sync CronJob runs it as its last container and always
+exits 0. `-h` and `--help` print this text and exit 0.
+
+Environment:
+
+    KUMA_URL      base URL of Uptime Kuma; with an empty value the beat is skipped
+    PUSH_TOKEN    token of the Kuma push monitor; with an empty value the beat is skipped
+    PUSH_MESSAGE  message sent with the beat (default "status page sync ok")
 """
 
 from __future__ import annotations
@@ -46,4 +59,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

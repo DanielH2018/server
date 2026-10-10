@@ -9,6 +9,21 @@ either way.
 Runs on daniel-box via `uv run --no-project --python <pin>` (host_python_version in
 ansible/inventory/group_vars/all.yml). The push URL carries a token, so it stays in the
 templated wrapper and never appears here; this file is plaintext in git.
+
+Usage:
+
+    uv run --no-project --python <pin> /opt/janitorr-health/janitorr_health.py
+
+Takes no arguments. The cron wrapper janitorr-health.sh runs it and pushes its output to
+Kuma. `-h` and `--help` print this text and exit 0.
+
+Environment (all optional):
+
+    JANITORR_NAMESPACE           namespace of the janitorr Deployment (default homelab)
+    JANITORR_WINDOW_H            hours of pod log scanned for errors (default 12)
+    JANITORR_STARTUP_GRACE_S     seconds after a pod start before errors count (default 600)
+    JANITORR_KUBECTL             kubectl command line (default "k3s kubectl")
+    JANITORR_KUBECTL_TIMEOUT_S   seconds allowed per kubectl call (default 30)
 """
 
 from __future__ import annotations
@@ -94,4 +109,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

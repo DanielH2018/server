@@ -11,6 +11,18 @@ what makes the decisions unit-testable without a cluster.
 Runs on daniel-box via `uv run --no-project --python <pin>` (host_python_version in
 ansible/inventory/group_vars/all.yml). The Kuma push token stays in the templated wrapper, which
 sources it from an 0640 env file at runtime, and never appears here.
+
+Usage: longhorn_backup_health.py   (takes no arguments; -h/--help prints this text)
+
+Not run by hand: /usr/local/bin/longhorn-backup-health (rendered from
+templates/longhorn-backup-health.sh.j2, a cron every 10 minutes) exports every setting and
+calls it. It refuses to start unless the shim exported all of them: LONGHORN_BACKUP_NAMESPACE,
+LONGHORN_BACKUP_KUBECTL, LONGHORN_BACKUP_KUBECTL_TIMEOUT_S, LONGHORN_BACKUP_ARMED,
+LONGHORN_R2_ARMED, the LONGHORN_*_MAX_AGE_HOURS and LONGHORN_*_BACKUP_* thresholds,
+LONGHORN_RESTORE_DRILL_* (stamp dir and ages), LONGHORN_TRIM_CRON_* and
+LONGHORN_B2_DELETIONS_CRON_* (cron file, expected flag, fired stamp), LONGHORN_JOURNALCTL,
+LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
+Prints `up<TAB>msg` or `down<TAB>msg` and exits 0.
 """
 
 from __future__ import annotations
@@ -20,6 +32,11 @@ import os
 import subprocess
 import sys
 import time
+
+if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import host_lib

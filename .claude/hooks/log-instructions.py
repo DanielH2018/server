@@ -5,6 +5,10 @@
 #   order: 10
 """Record which CLAUDE.md / .claude/rules file loaded into context, and why.
 
+Usage: Claude Code runs this hook on the InstructionsLoaded event. It reads the hook JSON
+payload on stdin, appends one row to `.claude/logs/instructions.log`, prints nothing, and always
+exits 0. `-h` or `--help` prints this text and exits 0 without reading stdin.
+
 One line per file as it loads, carrying the file and its `load_reason`: session_start,
 path_glob_match, nested_traversal, include, compact. `inject-nested-docs.py` appends a sixth,
 `bash_path_match`, through `_hook_common.append_instructions_row`, for a doc it supplied because a Bash command
@@ -26,6 +30,7 @@ checkout.
 """
 
 import os
+import sys
 
 from _hook_common import append_instructions_row as append_row
 from _hook_common import read_payload
@@ -69,6 +74,9 @@ def main():
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     try:
         main()
     except Exception:  # noqa: S110 -- a logging hook must never block the tool call
