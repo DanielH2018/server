@@ -131,6 +131,13 @@ def test_the_agent_gets_the_read_only_kubeconfig_and_never_prints_it() -> None:
     )
     assert copy["mode"] == "0600"
     assert task["diff"] is False and task["no_log"] is True
+    # daniel-server's operator has no kubeconfig, which failed its first apply (2026-10-10).
+    look = named(tasks(CLAUDE_TASKS), "Look for the operator's read-only kubeconfig")
+    assert look["ansible.builtin.stat"]["path"] == copy["src"]
+    assert task["when"] == [
+        "claude_code_agent_user_enabled",
+        "claude_code_operator_kubeconfig.stat.exists",
+    ]
 
 
 def test_the_login_profile_points_the_hook_shim_at_the_agents_own_clone_and_uv() -> (
