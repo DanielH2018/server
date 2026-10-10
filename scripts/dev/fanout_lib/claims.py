@@ -17,6 +17,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from fanout_lib.brief import WORKED_BY
 from fanout_lib.target import Target
 from fanout_lib.transport import Tools, error_text
 
@@ -115,6 +116,24 @@ def reap_register(tools: Tools, target: Target) -> None:
             f"launch: reap failed ({proc.returncode}): {detail}; claiming without it",
             file=sys.stderr,
         )
+
+
+def post_worked_by(
+    tools: Tools, issues: list[int], branch: str, target: Target
+) -> None:
+    """Record on each issue which batch branch took it, once that batch is running.
+
+    The agent posted this as its first act, a model turn per issue (237 calls in the
+    transcripts, #3962), and a branch name in backticks inside double quotes made the shell
+    run it as a command. `launch` knows the branch, so it posts the comment itself. A failed
+    post only warns: the claim, not this comment, is what keeps a second session off the issue.
+    """
+    for number in issues:
+        if not tools.comment(number, f"{WORKED_BY}{branch}`", target.repo):
+            print(
+                f"launch: #{number}: could not post the Worked-by comment",
+                file=sys.stderr,
+            )
 
 
 def claim_for_orchestrator(

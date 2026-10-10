@@ -287,12 +287,13 @@ def test_a_failed_and_a_successful_health_read_both_surface_in_the_brief(tmp_pat
 
     tools, run = fake_tools(
         answers={"daniel-server": ok(HEADROOM)},
-        issues=[Issue(1, "t", "b", ("claude",))],
+        issues=[Issue(1, "t", "roles/k8s/sonarr/tasks/main.yml", ("claude",))],
     )
-    run.answers_by_call = [ok(HEADROOM), ok("line one\nline two\n")]
+    run.answers_by_call = [ok(HEADROOM), ok("sonarr line one\nsonarr line two\n")]
     assert _launch(tools, tmp_path / "second-run", "--host", "daniel-server") == 0
     brief = _brief(run)
-    assert "[daniel-server] line one" in brief and "[daniel-server] line two" in brief
+    assert "[daniel-server] sonarr line one" in brief
+    assert "[daniel-server] sonarr line two" in brief
 
 
 def test_a_health_read_timeout_surfaces_in_the_brief(tmp_path):

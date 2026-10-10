@@ -9,7 +9,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_brief.py
 
 import re
 
-from fanout_lib.brief import Comment, Issue, render_brief
+from fanout_lib.brief import Comment, Issue, relevant_health, render_brief
 from fanout_lib.review import issues_section
 from fanout_lib.target import Target
 
@@ -66,12 +66,12 @@ def test_both_briefs_carry_issue_bodies_verbatim_and_the_claim_note():
         )
         assert "body one\nline two" in text and "second body" in text
         assert "already claimed under `worktree-orch`" in text
-        assert (
-            "gh issue comment 1345 --body 'Worked by `worktree-fanout-1345-1386`'"
-            in text
-        )
+        assert "gh issue comment" not in text
+        assert "Read CLAUDE.md first" not in text
         assert "findings.py open" in text
-        assert "primary checkout is dirty" in text
+        # The dirty-checkout line names no role or host these issues cite.
+        assert "primary checkout is dirty" not in text
+        assert "1 other host-state lines omitted" in text
 
 
 def test_both_briefs_state_the_completion_condition_the_stop_hook_checks():
@@ -193,7 +193,7 @@ def test_a_dotfiles_brief_names_its_repo_and_stops_at_the_pr_on_every_host():
         brief = render_brief(ISSUES, host, "1345-1386", "worktree-orch", [], DOTFILES)
         assert "land.sh" not in brief and "VERDICT" not in brief
         assert "gh pr create" in brief and "do not merge" in brief.lower()
-        assert "gh issue comment 1345 --repo DanielH2018/dotfiles" in brief
+        assert "gh issue comment" not in brief
         assert "claimed under `worktree-fanout-1345-1386`" in brief
         assert "worktree-orch" not in brief
         assert "findings.py open --repo DanielH2018/dotfiles" in brief
@@ -205,3 +205,28 @@ def test_a_dotfiles_brief_names_its_repo_and_stops_at_the_pr_on_every_host():
         assert "/home/ubuntu/server" not in brief
         assert "of /home/ubuntu/.local/share/chezmoi, checked out" in brief
         assert "fresh from origin/main" in brief
+
+
+def test_a_health_line_naming_a_cited_role_or_host_is_kept_and_the_rest_counted():
+    issues = [
+        Issue(1, "t", "fix `ansible/roles/k8s/sonarr/tasks/main.yml` on daniel-pi")
+    ]
+    health = [
+        "[daniel-box] ⚠ sonarr is owed a deploy",
+        "[daniel-box] ⚠ daniel-pi is unreachable",
+        "[daniel-box] ⚠ radarr is owed a deploy",
+        "[daniel-box] session-health read failed (timed out) — banner state unknown",
+    ]
+    assert relevant_health(health, issues) == [
+        "[daniel-box] ⚠ sonarr is owed a deploy",
+        "[daniel-box] ⚠ daniel-pi is unreachable",
+        "[daniel-box] session-health read failed (timed out) — banner state unknown",
+        "(1 other host-state lines omitted: none names a role or host these issues cite)",
+    ]
+
+
+def test_the_placed_hosts_own_prefix_does_not_make_every_line_relevant():
+    issues = [Issue(1, "t", "a daniel-box tooling bug")]
+    assert relevant_health(["[daniel-box] ⚠ radarr is owed a deploy"], issues) == [
+        "(1 other host-state lines omitted: none names a role or host these issues cite)"
+    ]

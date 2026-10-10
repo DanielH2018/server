@@ -50,6 +50,36 @@ ISSUE_PREAMBLE = (
 )
 
 
+# What a batch touches, as its issues name it: a role by its path, a host by its name.
+_ROLE_RE = re.compile(r"roles/(?:k8s|containers|setup)/([\w-]+)")
+_HOST_RE = re.compile(r"\bdaniel-(?:box|server|pi)\b")
+_HOST_PREFIX_RE = re.compile(r"^\[[^]]+\] ")
+
+
+def relevant_health(health: Sequence[str], issues: Sequence["Issue"]) -> list[str]:
+    """The host-state lines that name a role or host the batch's issues cite, and a count.
+
+    Every line of the placed host's SessionStart banner went into every brief, so a batch
+    spent turns ruling out k3s-owed and release-staleness warnings about other roles (#3956).
+    A read failure is always kept: it says the state is unknown, not that it is unrelated.
+    The `[<host>] ` prefix the dispatcher adds is not matched, or every line would name its
+    own host.
+    """
+    text = "\n".join(f"{i.title}\n{i.body}" for i in issues)
+    names = set(_ROLE_RE.findall(text)) | set(_HOST_RE.findall(text))
+    kept = [
+        ln
+        for ln in health
+        if "read failed" in ln or any(n in _HOST_PREFIX_RE.sub("", ln) for n in names)
+    ]
+    if len(kept) < len(health):
+        kept.append(
+            f"({len(health) - len(kept)} other host-state lines omitted: none names a role "
+            "or host these issues cite)"
+        )
+    return kept
+
+
 @dataclass(frozen=True)
 class Comment:
     """One operator comment the brief carries: when GitHub stamped it, and its text."""
@@ -256,13 +286,10 @@ def render_brief(
     branch = branch_name(batch)
     numbers = " ".join(str(i.number) for i in issues)
     bodies = "\n\n".join(_issue_block(i) for i in issues)
-    health_block = "\n".join(health) if health else "(both hosts reported clean)"
-    # Single quotes: inside double quotes the shell reads the backticks as a command
-    # substitution, runs the branch name as a command and posts "Worked by ".
-    repo_flag = "" if target.is_server else f" --repo {target.repo}"
-    first_act = "\n".join(
-        f"gh issue comment {i.number}{repo_flag} --body '{WORKED_BY}{branch}`'"
-        for i in issues
+    health_block = (
+        "\n".join(relevant_health(health, issues))
+        if health
+        else "(both hosts reported clean)"
     )
     holder = orchestrator_branch if target.is_server else branch
     if target.is_server:
@@ -280,14 +307,11 @@ def render_brief(
     return f"""# Fan-out batch {batch} on {host}
 
 You are a headless Opus agent in the worktree `{branch}` of {target.checkout}, checked out
-fresh from {target.base}. Read CLAUDE.md first. Work the issues below to a PR.
+fresh from {target.base}. Work the issues below to a PR.
 
 ## Claim
-Issues {numbers} are already claimed under `{holder}`. Do not claim them again.
-Your first act is to record which agent took the work:
-```bash
-{first_act}
-```
+Issues {numbers} are already claimed under `{holder}`. Do not claim them again. The
+dispatcher has posted the `Worked by` comment naming your branch on each of them.
 
 ## Host state at launch (what the SessionStart banner would have shown)
 {health_block}
