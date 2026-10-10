@@ -1,7 +1,7 @@
 """The two ratchets themselves, and the census of the tree that feeds them.
 
-`_ratchet.py` holds the pure half — the caps, the allowlist parser, the two comparisons
-and the patch counter. This module is the impure half that reads the working tree: the
+`_ratchet.py` and `_ratchet_patches.py` hold the pure half — the caps, the allowlist parser,
+the two comparisons and the patch counter. This module is the impure half that reads the working tree: the
 line counts, the monkeypatch counts and the conftest-fixture census. It sits beside the
 pure module rather than inside the test module so the `--tighten` writer
 (`scripts/dev/tighten_ratchets.py`) imports the SAME census the ratchet asserts on.
@@ -16,9 +16,8 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from _helpers import REPO, is_test_file
-from _ratchet import (
-    Ratchet,
-    cap_for,
+from _ratchet import Ratchet, cap_for
+from _ratchet_patches import (
     count_module_patches,
     first_party_module_names,
     module_fixture_names,
@@ -36,7 +35,11 @@ def run_git(*args: str) -> subprocess.CompletedProcess[str]:
 LENGTHS = Ratchet(
     path=HERE / "module_length_allowlist.txt",
     unit="lines",
-    remedy="Split it: docs/python-code-organization.md says where the pieces go.",
+    remedy=(
+        "Split it where each piece reads alone (docs/python-code-organization.md says "
+        "where the pieces go). If every split would leave a piece conjoined with its "
+        "parent, list it with a `# conjoined: <why>` reason instead."
+    ),
     cap_of=cap_for,
 )
 

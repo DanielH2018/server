@@ -229,13 +229,24 @@ already past either limit are listed one per line in
 file over a cap has no line, when a file that has come back under its cap keeps one, and when
 a file has shrunk below its line without the line following it down — an entry records what
 the file is today, and the gap between the two would be regrowth headroom nothing reports. The
-rules themselves are in `ansible/tests/_ratchet.py`, whose docstring is where the counting
-heuristic's blind spots are written down.
+rules themselves are in `ansible/tests/_ratchet.py`. The monkeypatch counter is
+`ansible/tests/_ratchet_patches.py`, whose docstring is where the counting heuristic's blind
+spots are written down.
 
 It also diffs both lists against `origin/master`, so an entry only ever falls or is deleted
 and the lists shrink to nothing as the splits land. A path may be added to a list only when
 `origin/master` does not track the file — it is new, or renamed — or when the same commit
-changes the guard, since a widened rule finds files that were always over. That comparison
+changes the guard, since a widened rule finds files that were always over.
+
+**The length cap prompts a decision; it does not force a split** (#3661). Split a module
+where each piece reads alone. A split whose piece calls methods only its parent defines, or
+copies a literal it may not import, adds an interface and hides nothing. Such a module stays
+whole, and its length entry ends `# conjoined: <why>`. The ratchet accepts that entry as an
+addition. It accepts a rise only in a diff that rewrites the reason, so growth restates the
+decision. The `# DECIDED:` marker at the top of `module_length_allowlist.txt` is the ruling.
+The monkeypatch list takes no reason, because a seam can always remove a patch.
+
+That comparison
 skips, saying which reason, when `origin/master` is unreadable: a shallow CI checkout has no
 such ref. Locally the ref is only as fresh as your last `git fetch`, so a stale one compares
 against older numbers; `git fetch` before relying on it.

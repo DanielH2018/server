@@ -7,9 +7,17 @@
 # against origin/master. A file back at or under its cap must lose its line; the list records
 # remaining work only.
 #
-# A path may be ADDED only when origin/master does not track the file (it is new, or renamed)
-# or when the same commit changes the guard itself (a widened rule finds files that were
-# always over). Otherwise split the file rather than listing it.
+# A path may be ADDED when origin/master does not track the file (it is new, or renamed),
+# when the same commit changes the guard itself (a widened rule finds files that were always
+# over), or when the line ends with a stated reason: `<path> <max>  # conjoined: <why>`.
+#
+# DECIDED: the cap prompts a decision; it does not force a split (#3661, operator ruling
+# 2026-10-09). Split a module over the cap when each piece reads alone. When every split
+# would leave a piece conjoined with its parent, so that it calls methods only the parent
+# defines or copies a literal it may not import, list the module with a `conjoined:` reason
+# instead. The reason has to be on the entry's own line. A conjoined entry rises only in a
+# diff that rewrites its reason, so growth past it restates the decision. The reasoning is in
+# ansible/tests/_ratchet.py.
 #
 # Line count is `wc -l` semantics -- the number of newline characters:
 #   wc -l <path>
