@@ -28,7 +28,7 @@ THE GREEN GATE runs after the implementer and again after every fix round. The w
 must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
 would otherwise pass a gate the pushed head fails (#3821). Every pytest config file, the
 `leakguard` plugin and any red data file must be unchanged since `red`. A red `test_*.py` may
-only gain appended tests, which `red_lock` defines (#4214). No untracked config file may
+only gain appended tests, which `red_tests.append_only` defines (#4214). No untracked config file may
 exist, and every red node must pass in a fresh clone of HEAD, in every one of the pipeline's
 `RUNS` runs. The clone is what makes the
 verdict HEAD's: the implementer controls the worktree's index and git config, so a
@@ -64,8 +64,7 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import _fence
-from fanout_lib.red_cause import red_by_absence
-from fanout_lib.red_lock import append_only
+from fanout_lib.red_tests import append_only, red_by_absence
 
 # The reset that clears the red phase, split out at this module's length cap; every name
 # stays importable from here.
@@ -142,7 +141,7 @@ class Gate:
     # `refs/remotes/origin/master` when the red gate ran, "" when there was none. Every
     # worktree shares that ref, so the green gate pins its clone's copy here (#3845).
     origin: str = ""
-    # The nodes that failed on a missing name rather than an assertion (`red_cause`, #4023).
+    # The nodes that failed on a missing name rather than an assertion (`red_tests.red_by_absence`, #4023).
     absent: list[str] = field(default_factory=list)
 
     @property
@@ -270,7 +269,7 @@ def _pytest(worktree: Path, *args: str) -> list[str]:
 def _red_file_change(
     run: Runner, worktree: Path, red: str, path: str, gate: Gate
 ) -> str:
-    """How the fix changed `path` beyond what `red_lock` allows, or "" when it only appended.
+    """How the fix changed `path` beyond what `red_tests.append_only` allows, or "" when it only appended.
 
     A red `test_*.py` may gain tests (#4214). A red data file, a pytest config file and the
     `leakguard` plugin may not change at all, and neither may a red file be deleted.

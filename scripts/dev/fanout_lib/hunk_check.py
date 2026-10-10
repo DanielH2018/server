@@ -13,11 +13,11 @@ hunk of the PR's non-test diff from the merge base is reverted on its own with `
 and the red nodes run. The merge base, not the red commit, because a batch branch that merged
 master in, as #4182's and #4183's did, would otherwise count master's hunks as the fix's. A hunk is noticed when any red node stops passing. It is noticed "by absence" when
 no node fails on an assertion, which is how a hunk that adds a name other hunks or the tests
-import shows up; `red_cause` is the classifier. A Python hunk whose revert leaves the module's
+import shows up; `red_tests.red_by_absence` is the classifier. A Python hunk whose revert leaves the module's
 AST unchanged once docstrings are dropped, such as a comment or a docstring, is skipped, since
 no test could notice it, and so is every hunk in a file `runnable` refuses, such as a doc.
 
-It records and never refuses, as `red_cause` does, until the records show where a refusal
+It records and never refuses, as `red_tests.red_by_absence` does, until the records show where a refusal
 threshold belongs. At most `MAX_HUNKS` hunks are tried, one pytest run each.
 """
 
@@ -37,7 +37,7 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib.base_check import is_test_side
-from fanout_lib.red_cause import red_by_absence
+from fanout_lib.red_tests import red_by_absence
 from fanout_lib.red_gate import _BARE_GIT, Gate, _git, _pytest, clone_at, outcomes
 from findings_lib.red_green import suite_covered
 

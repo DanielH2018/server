@@ -14,7 +14,7 @@ reported. A node whose module no longer imports errors rather than passes, and
 
 It reports and never refuses. A regression guard for behaviour the fix keeps passes on the
 base legitimately, so the reviewer gets the list as data and judges each test, as it does for
-`red_cause`'s absence nodes.
+`red_tests.red_by_absence`'s absence nodes.
 """
 
 import tempfile

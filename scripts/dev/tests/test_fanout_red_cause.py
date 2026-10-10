@@ -6,7 +6,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_red_cause.py
 """
 
 from _review_fakes import PR, _pipeline, _report
-from fanout_lib.red_cause import cause, red_by_absence
+from fanout_lib.red_tests import cause, red_by_absence
 from fanout_lib.red_gate import Gate, Gates
 
 SUMMARY = """\

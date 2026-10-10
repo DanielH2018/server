@@ -171,7 +171,7 @@ writes one failing test per claim in each issue's `## Verify-by`, and per stated
 those miss, from the issue text alone. `scripts/dev/fanout_lib/red_gate.py` proves each new
 test fails on the unchanged code. A batch that runs no red phase records why, as
 `red_skipped`. The implementer gets that commit and may not edit it, but may append tests to
-its files (`fanout_lib/red_lock.py` says what counts as appending). A refused red commit is
+its files (`fanout_lib/red_tests.py` says what counts as appending). A refused red commit is
 dropped and the batch runs as usual. A PR that still fails the green gate after the fix round
 is not landed. Once it passes, each hunk of the fix is reverted on its own under the red tests,
 and the record names the hunks no red test noticed (`scripts/dev/fanout_lib/hunk_check.py`).
