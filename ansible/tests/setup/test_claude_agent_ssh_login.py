@@ -125,6 +125,9 @@ def test_the_agent_user_lingers_while_enabled_and_stops_when_not() -> None:
     assert on["ansible.builtin.command"] == (
         "loginctl enable-linger {{ claude_code_agent_user }}"
     )
+    # loginctl refuses a user it cannot look up, so the linger comes after the user exists.
+    created = named(main, "Create the agent user, its tools and its clone")
+    assert main.index(created) < main.index(on)
     off = named(main, "Stop the switched-off agent user's manager lingering")
     assert off["when"] == "not claude_code_agent_user_enabled"
     assert off["args"]["removes"] == on["args"]["creates"]
