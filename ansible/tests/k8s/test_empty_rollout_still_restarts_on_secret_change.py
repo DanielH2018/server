@@ -48,6 +48,7 @@ import re
 from pathlib import Path
 
 from lib import yaml_fast
+from lib.k8s_roles import resolved_manifest_files
 from _helpers import K8S_ROLES
 from _k8s_render import rendered_texts
 from _role_census import manifests_service_of, role_task_files
@@ -85,6 +86,20 @@ def _include_vars(role_tasks: Path) -> list[dict]:
         if service is not None:
             out.append({**(task.get("vars") or {}), "manifests_service": service})
     return out
+
+
+def _renders_a_secret(role_dir: Path) -> bool:
+    """Whether `role_dir`'s render include resolves any secret file.
+
+    Read through `resolved_manifest_files`, not the include's `manifests_secret_files` key:
+    most roles pass no list and get theirs derived from `templates/` (#3662), so the raw key
+    reaches only the few that still list one.
+    """
+    return bool(resolved_manifest_files(role_dir.name, role_dir.parent)[1])
+
+
+def _includes_the_render(tasks: Path) -> bool:
+    return bool(_include_vars(tasks))
 
 
 def _restarts_privately(role_dir: Path) -> bool:
@@ -152,7 +167,7 @@ def _env_secret_workloads(role_dir: Path) -> list[str]:
 def uncovered_env_secret_workloads(role_dir: Path) -> list[tuple[str, str]]:
     """(role, workload) for every env-Secret reader the role's own deploy never restarts.
 
-    The corpus is roles rendering `manifests_secret_files` — a role with no Secret of its own
+    The corpus is roles whose resolved `manifests_secret_files` is non-empty — a role with no Secret of its own
     has nothing for a rotation to miss. A workload reading a Secret rendered by a DIFFERENT role
     is still counted: matching Secret names across roles would need the Jinja resolved, and
     counting it is the fail-loud direction. No role in the tree is in that shape today.
@@ -163,9 +178,9 @@ def uncovered_env_secret_workloads(role_dir: Path) -> list[tuple[str, str]]:
     if not tasks.is_file():
         return []
     uncovered = []
+    if not _renders_a_secret(role_dir):
+        return []
     for variables in _include_vars(tasks):
-        if not variables.get("manifests_secret_files"):
-            continue
         covered = {
             variables.get("manifests_rollout", variables.get("manifests_service"))
         }
@@ -211,7 +226,7 @@ def test_the_known_uncovered_pin_is_not_stale():
 def test_the_render_reaches_every_role_rendering_a_secret():
     """The denylisted half of `_template_texts`: no real role falls back to its source.
 
-    Every role whose `k8s/manifests` include names `manifests_secret_files` is in
+    Every role whose resolved `manifests_secret_files` is non-empty is in
     `_k8s_render.rendered_texts`, so the fallback serves only the synthetic roles the proofs
     below write under `tmp_path`. A role dropping out of the render would read as source again
     and stop seeing a `secretKeyRef` that arrives through a variable.
@@ -220,10 +235,8 @@ def test_the_render_reaches_every_role_rendering_a_secret():
     unrendered = sorted(
         tasks.parent.parent.name
         for tasks in sorted(K8S_ROLES.glob("*/tasks/main.yml"))
-        if any(
-            variables.get("manifests_secret_files")
-            for variables in _include_vars(tasks)
-        )
+        if _includes_the_render(tasks)
+        and _renders_a_secret(tasks.parent.parent)
         and tasks.parent.parent.name not in rendered
     )
     assert unrendered == [], (
@@ -237,12 +250,13 @@ def test_the_shape_this_guard_protects_actually_exists():
     corpus = [
         tasks.parent.parent.name
         for tasks in sorted(K8S_ROLES.glob("*/tasks/main.yml"))
-        if any(
-            variables.get("manifests_secret_files")
-            for variables in _include_vars(tasks)
-        )
+        if _includes_the_render(tasks)
+        and _renders_a_secret(tasks.parent.parent)
         and _env_secret_workloads(tasks.parent.parent)
     ]
+    # Members whose secret files are derived, not listed: a selector reading the raw include
+    # key would drop them and leave only the roles that still pass a list.
+    assert {"sonarr", "n8n", "karakeep"} <= set(corpus), corpus
     assert len(corpus) > 1, (
         "no role renders a Secret read through env — either the shape is gone (delete this "
         f"file) or the selector broke and the guard is now inert. Matched: {corpus}"

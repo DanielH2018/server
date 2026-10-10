@@ -31,6 +31,7 @@ import re
 from pathlib import Path
 
 import pytest
+from lib.k8s_roles import declared_manifest_files
 from _helpers import K8S_ROLES, load_tasks, walk_tasks
 from _role_census import manifests_service_of, task_files, task_files_by_role
 from _shell_render import rendered_shell_text
@@ -65,7 +66,7 @@ def _included_role(task: dict) -> str:
 
 
 def pruned_dirs(roles_dir: Path) -> dict[str, tuple[str, ...]]:
-    """`manifests_service` -> the filenames its caller names, for every role in the tree.
+    """`manifests_service` -> the filenames its caller names or resolves, for every role.
 
     The filenames decide what may legitimately sit in the directory. A `manifests_files` built
     as a Jinja string (freshrss builds its list conditionally) is kept as one string and
@@ -83,6 +84,9 @@ def pruned_dirs(roles_dir: Path) -> dict[str, tuple[str, ...]]:
             for key in ("manifests_files", "manifests_secret_files"):
                 value = task_vars.get(key, [])
                 listed.extend(value if isinstance(value, list) else [str(value)])
+            if service == role_dir.name:
+                # Most roles pass no list and get one derived from templates/ (#3662).
+                listed.extend(sorted(declared_manifest_files(role_dir.name, roles_dir)))
             found[service] = tuple(str(f) for f in listed)
     return found
 
