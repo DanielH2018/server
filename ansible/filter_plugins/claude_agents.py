@@ -2,8 +2,8 @@
 
 The `claude_code` role builds each agent user from a profile. The primary agent, the one the
 `claude_code_agent_*` scalars describe, is listed by name only and takes every value from those
-scalars, because the lander, the peer ssh login, the artifacts mount and claude-rc.service read
-the scalars too. Every further agent carries its own profile. The fields that give an agent an
+scalars, because the lander, the peer ssh login, the homelab-ui browser, the artifacts mount
+and claude-rc.service read the scalars too. Every further agent carries its own profile. The fields that give an agent an
 identity (its GitHub account and the SOPS variable holding its token) have no default, so a
 second agent can never inherit the primary's account by omission.
 
@@ -22,9 +22,6 @@ FURTHER_AGENT_DEFAULTS = {
     "github_login": None,
     "github_id": None,
     "github_token_var": None,
-    "homelab_ui": False,
-    "homelab_ui_username": None,
-    "homelab_ui_password_var": None,
     "journal_access": False,
     "operator_read": True,
     "operator_config": True,
@@ -38,7 +35,6 @@ PROFILE_FIELDS = frozenset(FURTHER_AGENT_DEFAULTS) | {
     "worktree_prefix",
 }
 BOOL_FIELDS = (
-    "homelab_ui",
     "journal_access",
     "operator_read",
     "operator_config",
@@ -65,8 +61,6 @@ def _further(entry, primary):
     profile.setdefault("worktree_prefix", entry["name"])
     if profile["state"] == "present":
         required = ["github_login", "github_id", "github_token_var"]
-        if profile["homelab_ui"]:
-            required += ["homelab_ui_username", "homelab_ui_password_var"]
         missing = [field for field in required if not profile[field]]
         if missing:
             _fail(f"{entry['name']} is present but sets no {', '.join(missing)}")

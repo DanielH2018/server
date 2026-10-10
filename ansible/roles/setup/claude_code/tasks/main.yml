@@ -381,7 +381,7 @@
     label: "{{ claude_code_agent.name }}"
   # Each profile field onto the name the task files and templates read. Include vars outrank
   # role defaults and the inventory, so inside agent.yml these hold this agent's values. The
-  # token and the password are looked up by variable name, so a profile never carries a secret.
+  # token is looked up by variable name, so a profile never carries a secret.
   vars:
     claude_code_agent_user: "{{ claude_code_agent.name }}"
     claude_code_agent_user_enabled: "{{ claude_code_agent.state == 'present' }}"
@@ -393,15 +393,40 @@
     claude_code_agent_github_id: "{{ claude_code_agent.github_id }}"
     claude_code_agent_gh_token_value: "{{ lookup('vars', claude_code_agent.github_token_var, default='') }}"
     claude_code_agent_worktree_prefix: "{{ claude_code_agent.worktree_prefix }}"
-    claude_code_agent_homelab_ui_enabled: "{{ claude_code_agent.homelab_ui }}"
-    claude_code_homelab_ui_username: "{{ claude_code_agent.homelab_ui_username }}"
-    claude_code_homelab_ui_password: >-
-      {{ lookup('vars', claude_code_agent.homelab_ui_password_var, default='')
-         if claude_code_agent.homelab_ui_password_var else '' }}
     claude_code_agent_journal_access: "{{ claude_code_agent.journal_access }}"
     claude_code_agent_operator_read: "{{ claude_code_agent.operator_read }}"
     claude_code_agent_operator_config: "{{ claude_code_agent.operator_config }}"
     claude_code_agent_memory_seed: "{{ claude_code_agent.memory_seed }}"
+
+# The primary agent's homelab-ui login, browser and MCP registration, from the
+# claude_code_agent_* scalars. Outside the loop, so agent_browser.yml stays a static import of
+# this file: narrow_setup follows only static imports, and a Node or playwright pin bump then
+# narrows to that file's own tag rather than the whole role (#4189). After the loop, which has
+# built the user they write into.
+# The login only feeds the homelab-ui browser (scripts/diagnostics/ui_login.py), so a host
+# without the browser holds no Authelia credential.
+- name: Give the agent user its homelab-ui login
+  tags: [claude_code]
+  when:
+    - claude_code_agent_user_enabled
+    - claude_code_agent_homelab_ui_enabled
+  ansible.builtin.import_tasks: agent_homelab_ui.yml
+
+- name: Give the agent user its homelab-ui browser and MCP registration, or take them back
+  tags: [claude_code]
+  when: claude_code_agent_user_enabled
+  ansible.builtin.import_tasks: agent_browser.yml
+
+# The homelab-ui login is a live Authelia credential, so switching the user or its browser off
+# removes it too. Disabling the Authelia account itself is the operator's half: delete the
+# `claude-agent` block in the authelia role and redeploy.
+- name: Remove the agent user's homelab-ui login when it or its browser is switched off
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ claude_code_homelab_ui_credentials }}"
+    state: absent
+  become: true
+  when: not (claude_code_agent_user_enabled and claude_code_agent_homelab_ui_enabled)
 
 # After the agent users exist: the caps follow their uids, looked up from the passwd database.
 # The block sits down here, not beside the cgroup metrics above, because a first apply that

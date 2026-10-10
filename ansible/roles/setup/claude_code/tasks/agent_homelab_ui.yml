@@ -8,12 +8,11 @@
 - name: Refuse to give the agent user a homelab-ui login without its password
   ansible.builtin.assert:
     that:
-      - claude_code_homelab_ui_password | default('') | length > 0
+      - authelia_agent_password | default('') | length > 0
       - domain | default('') | length > 0
     fail_msg: >-
-      The agent user {{ claude_code_agent_user }} has its homelab-ui login switched on, but
-      the SOPS variable its profile names for the password (authelia_agent_password for the
-      primary agent) or domain is not in secrets.yml. Add the password with `sops` first, and deploy the authelia role so the
+      claude_code_agent_user_enabled is true, but authelia_agent_password or domain is not in
+      secrets.yml. Add the password with `sops` first, and deploy the authelia role so the
       account exists.
     quiet: true
   no_log: true

@@ -30,9 +30,6 @@ PRIMARY = {
     "github_id": 338220904,
     "github_token_var": "claude_code_agent_gh_token",
     "worktree_prefix": "claude",
-    "homelab_ui": True,
-    "homelab_ui_username": "claude-agent",
-    "homelab_ui_password_var": "authelia_agent_password",
     "journal_access": True,
     "operator_read": True,
     "operator_config": True,
@@ -85,7 +82,6 @@ def test_a_further_agent_gets_its_own_paths_and_none_of_the_primarys_grants() ->
     assert second["repo"] == PRIMARY["repo"]
     assert second["github_token_var"] == "claude2_gh_token"
     assert second["journal_access"] is False
-    assert second["homelab_ui"] is False
     assert second["memory_seed"] is False
 
 
@@ -105,8 +101,9 @@ def test_an_absent_further_agent_needs_no_identity() -> None:
     assert profile["state"] == "absent"
 
 
-def test_a_further_agents_homelab_ui_needs_its_own_login() -> None:
-    with pytest.raises(AnsibleFilterError, match="homelab_ui_username"):
+def test_the_homelab_ui_browser_is_the_primarys_alone() -> None:
+    """main.yml installs it from the scalars, so agent_browser.yml stays a static import."""
+    with pytest.raises(AnsibleFilterError, match="unknown fields \\['homelab_ui'\\]"):
         claude_agent_profiles([SECOND | {"homelab_ui": True}], "claude", PRIMARY)
 
 
@@ -118,7 +115,7 @@ def test_the_primary_entry_carries_only_its_name() -> None:
 @pytest.mark.parametrize(
     ("agents", "message"),
     [
-        ([SECOND | {"homelab": True}], "unknown fields \\['homelab'\\]"),
+        ([SECOND | {"journal": True}], "unknown fields \\['journal'\\]"),
         ([SECOND | {"state": "gone"}], "state 'gone'"),
         ([SECOND | {"journal_access": "false"}], "journal_access to 'false'"),
         ([{"name": "Bad Name"}], "not a valid user name"),
@@ -152,7 +149,7 @@ def test_the_include_maps_every_profile_field() -> None:
     assert read == PROFILE_FIELDS | {"primary"}
 
 
-def test_the_include_looks_secrets_up_by_name() -> None:
+def test_the_include_looks_the_token_up_by_name() -> None:
     """A profile names the SOPS variable, so no secret sits in a loop item or its label."""
     task = include_task()
     assert task["loop_control"]["label"] == "{{ claude_code_agent.name }}"
@@ -160,8 +157,4 @@ def test_the_include_looks_secrets_up_by_name() -> None:
     assert (
         "lookup('vars', claude_code_agent.github_token_var"
         in (variables["claude_code_agent_gh_token_value"])
-    )
-    assert (
-        "lookup('vars', claude_code_agent.homelab_ui_password_var"
-        in (variables["claude_code_homelab_ui_password"])
     )

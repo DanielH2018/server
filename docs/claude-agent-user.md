@@ -636,9 +636,11 @@ agents that share a name, home or worktree prefix. A further agent gets a home u
 subset and the login caps. It gets no journal access unless its entry sets
 `journal_access: true`.
 
-Only the primary agent gets the lander, the peer ssh login, the artifacts mount and the memory
-seed. Each of those is a host-wide object named after `claude`, and the lander is on the
-approval floor, so widening any of them is its own change.
+Only the primary agent gets the lander, the peer ssh login, the homelab-ui browser and login,
+the artifacts mount and the memory seed. Each of those is a host-wide object named after
+`claude` or a single Authelia account, and the lander is on the approval floor, so widening any
+of them is its own change. The browser also stays outside the loop so that a Node or playwright
+pin bump narrows to its own tag (#4189).
 
 To add a further agent:
 
@@ -654,8 +656,8 @@ To add a further agent:
 1. Add its signing key's `.pub` to its account as a Signing Key.
 
 To retire one, set `state: absent` rather than deleting the entry. Ansible removes nothing it
-no longer declares. Absent expires the account, keeps the home, and removes the GitHub token,
-the homelab-ui login and the clone sync units.
+no longer declares. Absent expires the account, keeps the home, and removes the GitHub token
+and the clone sync units.
 
 ## What the `claude` user cannot do
 

@@ -37,7 +37,7 @@ def role_defaults(*parts: str) -> dict:
 
 def test_the_login_is_given_only_to_an_enabled_agent_user_with_its_browser() -> None:
     """daniel-server's agent has no browser, so it holds no Authelia credential."""
-    task = named(tasks("agent.yml"), "Give the agent user its homelab-ui login")
+    task = named(tasks("main.yml"), "Give the agent user its homelab-ui login")
     assert task["ansible.builtin.import_tasks"] == "agent_homelab_ui.yml"
     assert task["when"] == [
         "claude_code_agent_user_enabled",
@@ -71,7 +71,7 @@ def test_an_enabled_agent_user_without_its_password_fails_the_apply() -> None:
         "Refuse to give the agent user a homelab-ui login without its password",
     )
     assert task["ansible.builtin.assert"]["that"] == [
-        "claude_code_homelab_ui_password | default('') | length > 0",
+        "authelia_agent_password | default('') | length > 0",
         "domain | default('') | length > 0",
     ]
     assert task["no_log"] is True
@@ -81,7 +81,7 @@ def test_the_file_carries_the_username_password_and_domain() -> None:
     rendered = render_setup_text(
         "claude_code",
         "agent-homelab-ui-credentials.json.j2",
-        {"claude_code_homelab_ui_password": PASSWORD, "domain": DOMAIN},
+        {"authelia_agent_password": PASSWORD, "domain": DOMAIN},
     )
     assert yaml_fast.safe_load(rendered) == {
         "username": "claude-agent",
@@ -92,7 +92,7 @@ def test_the_file_carries_the_username_password_and_domain() -> None:
 
 def test_switching_the_agent_user_or_its_browser_off_removes_the_login() -> None:
     task = named(
-        tasks("agent.yml"),
+        tasks("main.yml"),
         "Remove the agent user's homelab-ui login when it or its browser is switched off",
     )
     assert task["ansible.builtin.file"] == {
