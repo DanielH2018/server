@@ -256,8 +256,11 @@ Two choices keep the floor from being bypassed through the inventory, now that t
 is off the list:
 
 - The list is literal in the template, not a variable.
-- `tasks/lander.yml` pins the unit's checkout, branch prefix and approver as block vars, which
-  outrank `host_vars` and `group_vars`.
+- `tasks/lander.yml` pins the unit's checkout, branch prefix, required author and approver,
+  and the Unix user the polkit rule admits, as block vars. Block vars outrank `host_vars` and
+  `group_vars`. Each pin is a literal. A pin that templated the agent profile's variables,
+  as the branch prefix and author once did, was resolved from the inventory and pinned
+  nothing.
 
 **The floor is not a barrier to root.** The deployer applies any setup-role change as root, so
 a task added to an unlisted role reaches root without approval. That was also true of the wider
@@ -266,8 +269,13 @@ list, which never named every setup role. A true root barrier would put
 
 The list does not name the modules the landing process imports, such as `scripts/lib/` and the
 deployer's helpers. The policy derives that set when it runs, from the modules it has loaded,
-and refuses a PR that changes one or adds a file that would shadow one (#3888).
-`gate_hits` in `scripts/deploy_tools/land_lib/policy.py` holds the rule.
+and refuses a PR that changes one or adds a file that would shadow one (#3888). It also
+refuses any compiled module file: a `__pycache__/` path, a `.pyc` or an extension module.
+Python loads a `.pyc` file in place of unchanged source and an extension module before the `.py`
+beside it, and a loaded module's `__file__` names the source either way, so the loaded set
+cannot see them. `gate_hits` in `scripts/deploy_tools/land_lib/policy.py` holds the rule,
+and the `no-compiled-module-file-is-tracked` row of
+`ansible/tests/repo/test_census_rows_text.py` refuses such a file on any branch.
 
 After each of 3b to 3d, `land.sh` reported `needs-manual-apply` for daniel-server. That run was
 skipped on purpose. Both `claude_code_agent_user_enabled` and `claude_code_lander_enabled` are
