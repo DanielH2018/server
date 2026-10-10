@@ -1,19 +1,16 @@
 """The red and green gates against real git and real pytest, on a scratch repo.
 
-The runner hands `git` to git under a scrubbed environment and turns the gate's
-`uv run --directory <tree> pytest ...` into this interpreter's pytest in that tree, so every
-verdict below is read off output pytest really printed.
+`_scratch_pytest.run` is the runner, so every verdict below is read off output pytest
+really printed.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_red_gate.py
 """
 
-import subprocess
-import sys
-
 import pytest
 
-from lib.proc_testing import DEFAULT_TIMEOUT, write_exec
+from lib.proc_testing import write_exec
 
+from _scratch_pytest import run
 from fanout_lib.brief import Issue
 from fanout_lib.red_gate import (
     RED_GREEN_LABEL,
@@ -25,7 +22,7 @@ from fanout_lib.red_gate import (
     review_flags,
     unhide_index,
 )
-from lib.git_testing import commit, git, git_out, init_repo, scrubbed_env
+from lib.git_testing import commit, git, git_out, init_repo
 
 CODE = "def double(x):\n    return x\n"
 FIXED = "def double(x):\n    return 2 * x\n"
@@ -35,28 +32,6 @@ CONFIG = {"pyproject.toml": "[tool.pytest.ini_options]\n"}
 NEW_TEST = (
     "\n\ndef test_two():\n    from mod import double\n\n    assert double(2) == 4\n"
 )
-
-
-def run(argv, stdin):
-    if argv[0] == "uv":
-        tree = argv[3]
-        argv = [sys.executable, "-m", "pytest", *argv[5:]]
-        return subprocess.run(
-            argv,
-            cwd=tree,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=DEFAULT_TIMEOUT,
-        )
-    return subprocess.run(
-        argv,
-        input=stdin,
-        capture_output=True,
-        text=True,
-        env=scrubbed_env(),
-        timeout=DEFAULT_TIMEOUT,
-    )
 
 
 def _repo(tmp_path, **red_files):

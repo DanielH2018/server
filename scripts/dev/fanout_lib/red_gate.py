@@ -227,6 +227,17 @@ def judge_red(returncode: int, output: str, nodes: list[str]) -> str:
     return ""
 
 
+def green_cause(reason: str) -> str:
+    """`passed`, `unmet` when a red node did not pass, or `lock` when the gate refused first.
+
+    An `unmet` first run is the red phase's real catch: the implementer's first attempt did
+    not do what the red tests ask. A `lock` refusal is about what the fix touched.
+    """
+    if not reason:
+        return "passed"
+    return "unmet" if reason.startswith("pytest exited") else "lock"
+
+
 def judge_green(returncode: int, output: str, nodes: list[str]) -> str:
     """Why the red nodes do not all pass after the fix, or "" when they do."""
     seen = outcomes(output)
@@ -397,27 +408,40 @@ def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
     head = _git(run, worktree, "rev-parse", "HEAD").stdout.strip()
     with tempfile.TemporaryDirectory(prefix="green-gate-") as tmp:
         tree = Path(tmp) / "head"
-        cloned = run(
-            [
-                *_BARE_GIT, "clone", "--quiet", "--shared", "--no-checkout",
-                "--template=", str(worktree), str(tree),
-            ],
-            None,
-        )  # fmt: skip
-        if cloned.returncode == 0:
-            cloned = run(
-                [*_BARE_GIT, "-C", str(tree), "update-ref", "--no-deref", "--stdin"],
-                _origin_refs(run, tree, gate.origin),
-            )
-        if cloned.returncode == 0:
-            cloned = run(
-                [*_BARE_GIT, "-C", str(tree), "checkout", "--quiet", "--detach", head],
-                None,
-            )
-        if cloned.returncode:
-            return f"could not check HEAD out to run the red tests: {cloned.stderr.strip()}"
+        error = clone_at(run, worktree, head, gate.origin, tree)
+        if error:
+            return f"could not check HEAD out to run the red tests: {error}"
         proc = run(_pytest(tree, "-q", "-rA", "--tb=no", *gate.nodes), None)
     return judge_green(proc.returncode, proc.stdout, gate.nodes)
+
+
+def clone_at(run: Runner, worktree: Path, rev: str, origin: str, tree: Path) -> str:
+    """Check `rev` out into a fresh clone at `tree`; git's error, or "" on success.
+
+    The clone reads none of the worktree's config, attributes or index, so nothing the
+    implementer left there rewrites what pytest runs (#3837). Its `origin/master` is
+    `origin`, or absent when that is "" (#3845).
+    """
+    cloned = run(
+        [
+            *_BARE_GIT, "clone", "--quiet", "--shared", "--no-checkout",
+            "--template=", str(worktree), str(tree),
+        ],
+        None,
+    )  # fmt: skip
+    if cloned.returncode == 0:
+        cloned = run(
+            [*_BARE_GIT, "-C", str(tree), "update-ref", "--no-deref", "--stdin"],
+            _origin_refs(run, tree, origin),
+        )
+    if cloned.returncode == 0:
+        cloned = run(
+            [*_BARE_GIT, "-C", str(tree), "checkout", "--quiet", "--detach", rev],
+            None,
+        )
+    if cloned.returncode:
+        return cloned.stderr.strip() or f"git exited {cloned.returncode}"
+    return ""
 
 
 # The `test-scenario-hygiene` skill is user-level, not in this repo, so the red brief carries

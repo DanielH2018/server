@@ -15,9 +15,17 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from fanout_lib.base_check import BaseCheck
 from fanout_lib.git_state import GitState, changed, snapshot
+from fanout_lib.hunk_check import HunkCheck
 from fanout_lib.processes import reaping
-from fanout_lib.red_gate import Gate, ResetFailed, red_prompt, reset_worktree
+from fanout_lib.red_gate import (
+    Gate,
+    ResetFailed,
+    green_cause,
+    red_prompt,
+    reset_worktree,
+)
 
 if TYPE_CHECKING:
     from fanout_lib.review import Pipeline
@@ -100,10 +108,55 @@ class RedPhase:
                 f"the red phase changed git state outside the worktree: {', '.join(moved)}"
             )
 
+    def _unproven(
+        self: "Pipeline", base: str, head: str, red: tuple[str, Gate] | None
+    ) -> list[str]:
+        """Record which of the PR's new tests pass without its code changes, and name them.
+
+        Every batch of this repo runs it, red phase or not; the red nodes are left out, since
+        the red gate already proved they fail there. Another repo's batch runs none, because
+        the check runs this repo's pytest configuration. It only records, so any exception
+        it raises lands in `base_error` and the batch goes on to its review.
+        """
+        if not self.target.is_server:
+            return []
+        try:
+            check = self.base_check(
+                self.run, self.worktree, base, head, red[1].nodes if red else ()
+            )
+        # A measure never stops the batch, so this catches what the check did not expect.
+        except Exception as exc:
+            check = BaseCheck(error=f"{type(exc).__name__}: {exc}")
+        self.record.base_tests = check.new
+        self.record.base_passing = check.passing
+        self.record.base_error = check.error
+        return check.passing
+
+    def _detection(self: "Pipeline", red: tuple[str, Gate]) -> None:
+        """Record which fix hunks the red tests notice when each is reverted on its own.
+
+        Run once, on the HEAD that passed the last green gate, which is the PR that ships. The
+        diff starts at the merge base, not the red commit: a branch that merged master would
+        otherwise count master's hunks as fix hunks the red tests missed. The red commit
+        touches only tests, which the check leaves out. It only records, so any exception it
+        raises lands in `red_hunks_error`.
+        """
+        start = self._git("merge-base", "HEAD", self.target.base)
+        try:
+            check = self.hunk_check(self.run, self.worktree, start, red[1])
+        # A measure never stops the batch, so this catches what the check did not expect.
+        except Exception as exc:
+            check = HunkCheck(error=f"{type(exc).__name__}: {exc}")
+        self.record.red_hunks = check.hunks
+        self.record.red_hunks_missed = check.missed
+        self.record.red_hunks_by_absence = check.by_absence
+        self.record.red_hunks_error = check.error
+
     def _green(self: "Pipeline", red: tuple[str, Gate] | None) -> str:
         """Run the green gate on HEAD and record it; "" when it passed or there is no red."""
         if red is None:
             return ""
         reason = self.gates.green(self.run, self.worktree, *red)
         self.record.green_gate = reason or "passed"
+        self.record.green_first = self.record.green_first or green_cause(reason)
         return reason

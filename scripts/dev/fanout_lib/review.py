@@ -15,16 +15,19 @@ THE PHASES, each one `claude -p` in the batch's worktree:
 1. implement — the brief on stdin. A `--review` brief tells the agent to stop at the PR.
 2. review — a fresh session with the issue text and the diff only, never the implementer's
    transcript. Edit and Write are denied to it, and it returns findings as structured output.
+   Before it, this repo's batch runs `base_check`, and the reviewer is told which of the PR's
+   new tests pass with its code changes taken out.
 3. fix — only when a finding passes `actionable`. It resumes the implementer session. A red
    batch whose PR fails `red_gate.green_gate` gets that failure as one more finding, and the
-   gate runs again after the fix; a batch still failing it is not landed.
+   gate runs again after the fix; a batch still failing it is not landed. A batch passing it
+   has each fix hunk reverted on its own under the red tests (`hunk_check`), for the record.
 4. delta review — a fresh reviewer reads only the fix's commits.
 5. land — on the deploy host, the pipeline runs `land.sh` itself (`review_land`) and resumes
    the implementer only for a verdict that needs a decision, as the `apply` phase. Before the
    landing, and on every other host instead of it, a session resumes to file what is left.
 
-DECIDED: a refused red commit does not stop the batch. The refusal is what the red phase
-measures, a vacuous test caught before it shipped, and the issue still deserves its fix. The
+DECIDED: a refused red commit does not stop the batch. The refusal means the test author's
+tests proved nothing, not that the issue is wrong, and the issue still deserves its fix. The
 plain implementer then writes its own tests as any batch does, and the record says the red
 phase was refused.
 
@@ -52,8 +55,9 @@ DISCLOSURE. The repo is public. A finding in category `security` reaches the PR 
 count only, is never filed with `findings.py open`, and is kept in full only in the local
 record under `STATE_DIR`.
 
-The local record also carries each phase's cost and the finding counts. It is how slice 1's
-kill criterion is measured, and it outlives the worktree that `clean` removes.
+The local record also carries each phase's cost, the finding counts and the red/green
+measures, and it outlives the worktree that `clean` removes. `scripts/dev/fanout_review_stats.py`
+sums the records into the measures that decide whether the red phase stays.
 """
 
 import json
@@ -96,6 +100,8 @@ from fanout_lib.red_gate import (
     red_section,
     labelled_skip_reason,
 )
+from fanout_lib.base_check import BaseCheck, unproven_tests
+from fanout_lib.hunk_check import HunkCheck, red_detection
 from fanout_lib.processes import run_process
 from fanout_lib.review_red import RedPhase
 from fanout_lib.review_land import RESUME_VERDICTS, land
@@ -157,6 +163,8 @@ class Pipeline(RedPhase):
         state_dir: where the local record goes.
         red_green: run the red phase and both gates before and after the implementer.
         gates: the red and green gates; tests pass scripted ones.
+        base_check: which new tests pass without the PR's code changes; tests script it.
+        hunk_check: which fix hunks the red tests notice reverted; tests script it.
     """
 
     def __init__(
@@ -171,6 +179,8 @@ class Pipeline(RedPhase):
         state_dir: Path = STATE_DIR,
         red_green: bool = False,
         gates: Gates = GATES,
+        base_check: Callable[..., BaseCheck] = unproven_tests,
+        hunk_check: Callable[..., HunkCheck] = red_detection,
     ):
         self.worktree = worktree
         self.batch = batch
@@ -183,6 +193,8 @@ class Pipeline(RedPhase):
         self.state_dir = state_dir
         self.red_green = red_green
         self.gates = gates
+        self.base_check = base_check
+        self.hunk_check = hunk_check
         # Read at start for the red author and every reviewer (#4023): the skill lives outside
         # the worktree, but one read keeps every phase on the same text.
         self.anti_patterns = anti_patterns()
@@ -366,10 +378,11 @@ class Pipeline(RedPhase):
         base = self._git("merge-base", "HEAD", self.target.base)
         head = self._git("rev-parse", "HEAD")
 
+        passing = self._unproven(base, head, red)
         review = self._claude(
             "review",
             self._reviewer(),
-            review_prompt(issues, base, head, red[1].absent if red else ()),
+            review_prompt(issues, base, head, red[1].absent if red else (), passing),
         )
         found, error = findings_of(review)
         self.record.review_error = error
@@ -417,6 +430,8 @@ class Pipeline(RedPhase):
                         f for f in self.record.remaining if f.get("file") != GREEN_FILE
                     ]
 
+        if red is not None and not green:
+            self._detection(red)
         self._comment()
         if green:
             final = self._held_for_green(green)
