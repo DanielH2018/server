@@ -42,7 +42,7 @@ def _finding(title, severity="high", confidence=0.9, category="correctness"):
 
 
 def unprefixed(argv):
-    """`argv` from its `git`, past the `env` settings `red_gate._hardened` puts before it."""
+    """`argv` from its `git`, past the `env` settings `hardened_runs.hardened` puts before it."""
     return argv[argv.index("git") :] if argv[0] == "env" else argv
 
 

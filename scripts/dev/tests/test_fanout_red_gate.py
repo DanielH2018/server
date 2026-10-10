@@ -17,15 +17,14 @@ from fanout_lib.red_gate import (
     REPEATED_GREEN,
     REPEATED_RED,
     Gates,
-    ResetFailed,
     anti_patterns,
     green_cause,
     green_gate,
     red_gate,
-    reset_worktree,
     review_flags,
-    unhide_index,
 )
+from fanout_lib.hardened_runs import ResetFailed
+from fanout_lib.worktree_reset import reset_worktree, unhide_index
 from lib.git_testing import commit, git, git_out, init_repo
 
 CODE = "def double(x):\n    return x\n"

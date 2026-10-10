@@ -49,7 +49,7 @@ implementer also loads no settings file from the worktree, and the reviewer gets
 `CLAUDE.md` as text; `held_hooks` says why. A red batch's implement phase runs the same way,
 because the red author had the worktree before it (#3846). Both before and after the red
 gate, the pipeline kills whatever the red phase left running (`processes.reaping`) and runs
-`red_gate.reset_worktree` (#3852, #3871); `Pipeline._red` says why.
+`worktree_reset.reset_worktree` (#3852, #3871); `Pipeline._red` says why.
 
 DISCLOSURE. The repo is public. A finding in category `security` reaches the PR comment as a
 count only, is never filed with `findings.py open`, and is kept in full only in the local
@@ -94,7 +94,6 @@ from fanout_lib.red_gate import (
     GREEN_FILE,
     RED_SCHEMA,
     Gate,
-    ResetFailed,
     Gates,
     anti_patterns,
     green_cause,
@@ -102,8 +101,9 @@ from fanout_lib.red_gate import (
     red_prompt,
     red_section,
     labelled_skip_reason,
-    reset_worktree,
 )
+from fanout_lib.hardened_runs import ResetFailed
+from fanout_lib.worktree_reset import reset_worktree
 from fanout_lib.base_check import BaseCheck, unproven_tests
 from fanout_lib.git_state import GitState, changed, snapshot
 from fanout_lib.hunk_check import HunkCheck, red_detection
