@@ -22,7 +22,7 @@
   parsers. `ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py` holds the job, the port
   and the grant together.
 
-  The Secret stays a template per app rather than a shared macro (#4088). The two copies are
+  DECIDED: the Secret stays a template per app rather than a shared macro (#4088). The two copies are
   about 20 lines each and differ in the log path, the `type` label and traefik's bouncer key,
   so a macro would take three arguments to save roughly ten lines.
 

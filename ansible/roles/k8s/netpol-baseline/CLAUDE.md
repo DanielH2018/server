@@ -56,7 +56,8 @@ needs, decides which one.
   file here reads one of them.
   Each one but `networkpolicy-callers.yaml.j2` also opens with a `DECIDED:` marker naming the
   shape the callers model below cannot express: an ipBlock, a from-less open port, UDP, a
-  second port, a cross-namespace peer or a non-`app:` peer (#3701). The `bespoke-netpol-says-why-it-is-not-a-callers-fence`
+  second port, a cross-namespace peer or a non-`app:` peer (#3701). authelia's is the
+  exception, pending #4264. The `bespoke-netpol-says-why-it-is-not-a-callers-fence`
   row of `ansible/tests/repo/test_census_rows_roles.py` fails on one that does not.
 - **As data on the `containers_list` entry**, when the fence is one port and a list of caller
   pods: `netpol_from: [apps]`, rendered through the `networkpolicy` macro in
