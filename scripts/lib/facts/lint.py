@@ -367,14 +367,14 @@ def changed_units(repo: Path, since: str) -> set[str]:
     changed: set[str] = set()
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
-        before = _bodies_at(repo, since, rel)
+        before = bodies_at(repo, since, rel)
         for s in sections(rel, doc.read_text(encoding="utf-8")):
             if before.get(s.key) != s.body:
                 changed.add(s.key)
     return changed
 
 
-def _bodies_at(repo: Path, since: str, rel: str) -> dict[str, str]:
+def bodies_at(repo: Path, since: str, rel: str) -> dict[str, str]:
     """Each section body of the doc ``rel`` as ``since`` holds it; empty when the doc is absent there."""
     old = git("show", f"{since}:{rel}", cwd=repo, check=False)
     if old.returncode != 0:
@@ -393,7 +393,7 @@ def first_cited_units(repo: Path, since: str, keys: set[str]) -> set[str]:
     tracked = tracked_files(repo)
     out: set[str] = set()
     for rel in sorted({k.partition("#")[0] for k in keys}):
-        before = _bodies_at(repo, since, rel)
+        before = bodies_at(repo, since, rel)
         for key in keys:
             if key.partition("#")[0] != rel:
                 continue

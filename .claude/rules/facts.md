@@ -106,6 +106,14 @@ writes it, and a hand edit fails `test_every_recorded_atom_hashes_as_recorded` a
 - `fact_status.py forget '<doc>#<heading>'` drops the row of a renamed or deleted heading.
   It also clears an `empty-row` finding: a row whose section cites nothing records nothing,
   and `verify` writes no row for such a section.
+- `fact_status.py report` measures whether the lock pays for itself, from git and the
+  instructions log alone, over `--days` (30 by default). A potential is a lock commit that
+  changed a recorded atom's hash, and it is actual when that commit also changed the owning
+  section's prose. The report prints both per atom form, leaving out new rows, rows whose
+  `python` changed, and the lock's first commit. It then ranks every section that is not IN
+  by how often its doc loaded. The counts come from `.claude/logs/instructions.log` in the
+  primary checkout and its rotated `.1`, so the span the report prints is usually days, not
+  the window. `--json` prints the same as one object.
 
 Two prek hooks run on a commit. `facts-lint-changed` lints the sections the branch edits, and
 runs `vanished-identifier` over every section. It fires on a commit that touches a `CLAUDE.md`

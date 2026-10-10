@@ -1,5 +1,7 @@
 """fact_status.py: exit codes and the text a CI failure prints."""
 
+import json
+
 from fact_status import _USAGE, main
 from lib.git_testing import git, init_repo
 from lib.facts.lock import read_lock
@@ -261,3 +263,15 @@ def test_reverify_records_a_section_given_its_first_citation(tmp_path, capsys):
     assert main(["reverify", "--repo", str(repo), "--changed-since", "HEAD"]) == 1
     assert "recorded CLAUDE.md#Style" in capsys.readouterr().out
     assert set(read_lock(repo / "docs" / "facts.lock")) == {"CLAUDE.md#Style"}
+
+
+def test_report_json_ranks_the_sections_not_in(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    log = tmp_path / "no-log-here.log"
+    assert main(["report", "--repo", str(repo), "--log", str(log), "--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["log"]["rows"] == 0
+    assert [(r["section"], r["status"]) for r in report["backlog"]] == [
+        ("CLAUDE.md#Gate", "UNVERIFIED"),
+        ("CLAUDE.md#Style", "CONVENTION"),
+    ]

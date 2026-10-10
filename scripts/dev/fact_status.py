@@ -9,8 +9,10 @@ whose citation set an edit changed, records a section the edit gave its first ci
 refuses one whose recorded atom moved. ``forget`` drops a lock row whose
 section no longer exists, which is the way out of a ``section-gone`` finding: a renamed
 heading is a new unit, and the old row cannot be hand-deleted without tripping the lock's
-own checksum. ``lint`` reports citations that cannot be support. Repo store only until
-slice 4 adds ``--store memory``.
+own checksum. ``lint`` reports citations that cannot be support. ``report`` measures the
+lock from git and the instructions log: potential against actual moves per atom form, and the
+sections not IN ranked by how often their doc loads (``--json`` for a cron or an agent). Repo
+store only until slice 4 adds ``--store memory``.
 """
 
 import sys as _sys
@@ -19,6 +21,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import argparse
+import json
 from pathlib import Path
 
 from lib.facts.lint import changed_units, first_cited_units, lint_sections
@@ -33,6 +36,7 @@ from lib.facts.lock import (
     verify_units,
 )
 from lib.facts.relations import derive, status_of
+from lib.facts.report import build, default_log, render
 from lib.git import git_stdout
 from lib.repo_paths import REPO
 
@@ -176,6 +180,18 @@ def cmd_lint(args: argparse.Namespace) -> int:
     return 1 if any(not f.warn for f in findings) else 0
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    repo = Path(args.repo)
+    by_unit = repo_citations(repo)
+    edb = build_repo_edb(repo, read_lock(repo / LOCK_REL), by_unit)
+    idb = derive(edb)
+    statuses = {u: status_of(edb, idb, u) for u in by_unit}
+    log = Path(args.log) if args.log else default_log(repo)
+    report = build(repo, statuses, args.days, log)
+    print(json.dumps(report, indent=2) if args.json else render(report, args.top))
+    return 0
+
+
 def _add_common(sp: argparse.ArgumentParser) -> None:
     """Add ``--repo``/``--store`` to a subparser.
 
@@ -215,6 +231,19 @@ def main(argv: list[str] | None = None) -> int:
     _add_common(ln)
     ln.add_argument("--changed-since", default=None)
     ln.set_defaults(fn=cmd_lint)
+    rp = sub.add_parser("report")
+    _add_common(rp)
+    rp.add_argument("--days", type=int, default=30, help="the window, in days")
+    rp.add_argument(
+        "--log",
+        default=None,
+        help="the instructions log (default: the primary checkout's)",
+    )
+    rp.add_argument(
+        "--top", type=int, default=15, help="sections to print in text form"
+    )
+    rp.add_argument("--json", action="store_true", help="print one JSON object")
+    rp.set_defaults(fn=cmd_report)
     args = p.parse_args(argv)
     return args.fn(args)
 

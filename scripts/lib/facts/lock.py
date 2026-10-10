@@ -70,11 +70,12 @@ def read_lock(path: Path) -> dict[str, dict]:
     """
     if not path.is_file():
         return {}
-    body = "\n".join(
-        ln
-        for ln in path.read_text(encoding="utf-8").splitlines()
-        if not ln.startswith("#")
-    )
+    return parse_lock(path.read_text(encoding="utf-8"))
+
+
+def parse_lock(text: str) -> dict[str, dict]:
+    """The ``units`` mapping of a lock's text, such as one ``git show`` read from a commit."""
+    body = "\n".join(ln for ln in text.splitlines() if not ln.startswith("#"))
     return json.loads(body)["units"] if body.strip() else {}
 
 
