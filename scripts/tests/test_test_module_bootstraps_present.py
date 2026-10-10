@@ -73,10 +73,11 @@ TESTPATH_DIRS = [d.resolve() for p in _INI["testpaths"] for d in REPO.glob(p)]
 
 # The conftest that puts a role's own `files/` on sys.path for that role's tests.
 ROLES_CONFTEST = REPO / "ansible" / "roles" / "conftest.py"
-_SPEC = importlib.util.spec_from_file_location("_roles_conftest", ROLES_CONFTEST)
-assert _SPEC and _SPEC.loader, (
+assert ROLES_CONFTEST.is_file(), (
     f"{ROLES_CONFTEST} is gone: role tests lost their files/ path"
 )
+_SPEC = importlib.util.spec_from_file_location("_roles_conftest", ROLES_CONFTEST)
+assert _SPEC and _SPEC.loader
 _roles_conftest = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_roles_conftest)
 role_files_dir = _roles_conftest.role_files_dir
