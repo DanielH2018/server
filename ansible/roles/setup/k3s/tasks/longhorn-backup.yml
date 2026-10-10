@@ -60,7 +60,8 @@
   tags: [longhorn_backup]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io default
+      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io
+      {{ 'b2_target' | longhorn_backup_name }}
       --type=merge -p {{ target_patch | quote }}
   vars:
     target_patch: >-
@@ -73,7 +74,8 @@
   tags: [longhorn_backup]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io default
+      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io
+      {{ 'b2_target' | longhorn_backup_name }}
       --type=merge -p {{ secret_patch | quote }}
   vars:
     secret_patch: '{"spec":{"credentialSecret":"longhorn-b2"}}'
@@ -87,7 +89,9 @@
 - name: Check whether Longhorn can reach the backup target
   tags: [longhorn_backup]
   ansible.builtin.command:
-    cmd: k3s kubectl -n longhorn-system get backuptarget default -o jsonpath={.status.available}
+    cmd: >-
+      k3s kubectl -n longhorn-system get backuptarget {{ 'b2_target' | longhorn_backup_name }}
+      -o jsonpath={.status.available}
   register: k3s_backup_available
   become: true
   changed_when: false
@@ -160,11 +164,12 @@
       k3s kubectl -n longhorn-system patch volumes.longhorn.io {{ item.split(' ')[0] }}
       --type=merge -p {{ r2_route_patch | quote }}
   vars:
-    r2_route_patch: '{"spec":{"backupTargetName":"r2"}}'
+    r2_route_patch: >-
+      {"spec":{"backupTargetName":"{{ 'r2_target' | longhorn_backup_name }}"}}
   loop: "{{ k3s_longhorn_volume_targets.stdout_lines }}"
   when:
     - item.split(' ')[1] in k3s_longhorn_r2_volumes
-    - item.split(' ')[2] | default('', true) != 'r2'
+    - item.split(' ')[2] | default('', true) != ('r2_target' | longhorn_backup_name)
   become: true
   changed_when: true
 
@@ -175,10 +180,11 @@
       k3s kubectl -n longhorn-system patch volumes.longhorn.io {{ item.split(' ')[0] }}
       --type=merge -p {{ default_route_patch | quote }}
   vars:
-    default_route_patch: '{"spec":{"backupTargetName":"default"}}'
+    default_route_patch: >-
+      {"spec":{"backupTargetName":"{{ 'b2_target' | longhorn_backup_name }}"}}
   loop: "{{ k3s_longhorn_volume_targets.stdout_lines }}"
   when:
-    - item.split(' ')[2] | default('', true) == 'r2'
+    - item.split(' ')[2] | default('', true) == ('r2_target' | longhorn_backup_name)
     - item.split(' ')[1] not in k3s_longhorn_r2_volumes
   become: true
   changed_when: true

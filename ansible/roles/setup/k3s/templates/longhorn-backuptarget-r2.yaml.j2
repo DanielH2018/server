@@ -15,7 +15,7 @@
 apiVersion: longhorn.io/v1beta2
 kind: BackupTarget
 metadata:
-  name: r2
+  name: {{ 'r2_target' | longhorn_backup_name }}
   namespace: longhorn-system
 spec:
   backupTargetURL: "{% if k3s_longhorn_r2_armed | bool %}s3://{{ r2_bucket }}@{{ k3s_longhorn_r2_region }}/{{ k3s_longhorn_r2_backup_prefix }}{% endif %}"
