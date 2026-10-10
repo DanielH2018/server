@@ -150,9 +150,21 @@ the per-volume map and each exclusion's rationale:
    (`homelab/<pvc-name>` — the names in `longhorn-backup-tiering.md`'s table).
 
    If you restored etcd first (`k3s-etcd-restore.md`, for lost cluster objects), the snapshot
-   already carries the PV and PVC objects with their volume bindings. Restore each volume
-   under its original PV name so those objects bind to it, and use **Create PV/PVC** only for
-   a volume whose objects the snapshot lacks.
+   already carries the PV and PVC objects with their volume bindings. It also carries
+   Longhorn's own CRs, and that changes what two gates read:
+
+   - **Gate 3 refuses on every original volume.** Each PVC comes back bound to its original
+     Longhorn `Volume` CR, which has no `fromBackup`. The script reports such a volume as
+     `bound to its original volume`, not as `provisioned empty`. A volume that is healthy
+     kept its replicas and needs no restore. A faulted one has lost its data: delete it in
+     the Longhorn UI, then restore the backup under the same name so the snapshot's PV binds
+     to it.
+   - **Gate 2 can pass without a sync.** The snapshot's `BackupVolume` CRs satisfy it, and
+     they list the backups that existed when the snapshot was taken. Force Backup → Sync
+     anyway, so a backup pruned since then is not offered for a restore.
+
+   Use **Create PV/PVC** only for a volume whose objects the snapshot lacks. No drill has run
+   this etcd-first order; the steps above are inferred from what the snapshot holds.
 5. **Deploy**: `./scripts/deploy.sh`. Workloads bind the existing
    PVCs; no-backup volumes provision empty and rebuild per the list above.
 6. **Verify**: `uv run python scripts/diagnostics/probe.py targets` and `health <svc>` for the
@@ -253,10 +265,11 @@ a pinned backup ID dies the day retention deletes it.
 **Which volume rotates.** Candidates are every volume carrying a
 `recurring-job-group.longhorn.io/*` label other than `no-backup` — the same selector check 4 uses,
 and the only one that cannot drift from what the RecurringJobs really select. Each night the
-least-recently-*attempted* candidate is drilled, so a full cycle takes one night per candidate (25
-on 2026-08-20). Ordering by attempt rather than by success is deliberate: a volume that fails
-every drill would otherwise stay the least-recently succeeded forever, be picked every night, and
-starve the other 24.
+least-recently-*attempted* candidate is drilled, so a full cycle takes one night per candidate.
+The drill writes the candidates to `/var/lib/longhorn-restore-drill/candidates`, one per line, so
+`wc -l` on that file gives the cycle length in nights. Ordering by attempt rather than by success
+is deliberate: a volume that fails every drill would otherwise stay the least-recently succeeded
+forever, be picked every night, and starve every other candidate.
 
 A candidate with no Completed backup is skipped rather than failed — check 4 already pages
 per-volume for that, and failing here would burn a rotation slot re-reporting it.
@@ -266,7 +279,7 @@ because B2 is the store under a transaction cap and drilling an R2 volume proves
 instead. That still holds per-night, and stops mattering once every volume comes up in turn: each
 target is proven on the nights its own volumes are drilled. R2 restores are free (10M Class B per
 month, zero egress), and the 16 MiB block change of 2026-08-19 cut B2's per-restore cost eightfold
-— a whole 25-night cycle now costs less than one day's measured baseline Class B spend.
+— a whole cycle now costs less than one day's measured baseline Class B spend.
 
 **Checks 7 and 8 of the backup heartbeat watch it**, and they answer different questions. Check 7
 is liveness: the drill writes `/var/lib/longhorn-restore-drill/last-success` only after its data
@@ -274,8 +287,8 @@ assertions pass, and check 7 pages when that stamp is missing, unparseable, or o
 `k3s_longhorn_restore_drill_max_age_days` (3 — two tolerated bad nights). It fails closed: a drill
 that has never run is reported, not skipped.
 
-Check 8 is coverage, and rotation is what made it necessary — a green check 7 now means one of 25
-volumes restored. It reads the candidate list the drill publishes to
+Check 8 is coverage, and rotation is what made it necessary — a green check 7 now means one
+candidate volume restored. It reads the candidate list the drill publishes to
 `/var/lib/longhorn-restore-drill/candidates` and pages, by name, for any candidate whose
 `success/<pvc>` stamp is missing or older than one full cycle plus
 `k3s_longhorn_restore_drill_coverage_slack_days`. The grace is measured **per volume**, from the

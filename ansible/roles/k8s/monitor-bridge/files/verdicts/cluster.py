@@ -292,7 +292,7 @@ def log_error_verdict(
     `total` is the selector's own volume, and it is what keeps this honest. The arm fails OPEN
     (see check.py's with_log_errors), so a selector matching no stream returns no matches and
     reads exactly like a healthy estate — the trap that shipped HA_BAN_SELECTOR with an `app`
-    label promtail does not emit and reported "no ip_ban events" through a window containing a
+    label the log shipper does not emit and reported "no ip_ban events" through a window containing a
     real ban. Counting the volume separates "nothing is wrong" from "I asked the wrong
     question", so a zero here reports INERT rather than OK.
     """

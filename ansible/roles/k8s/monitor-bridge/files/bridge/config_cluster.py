@@ -74,7 +74,7 @@ def cluster_config(
         # / cpu / janitorr / targets silently widen from "daniel-server's containers" to "every
         # container in the homelab", and would start naming k8s pods as offenders. The remaining
         # PROM_DEPENDENT checks that DON'T read traefik_* are pinned
-        # (cert/restarts/oom/cpu/targets/ups/promtail_dropped). Disk and memory are the two
+        # (cert/restarts/oom/cpu/targets/ups/shipper_dropped). Disk and memory are the two
         # exceptions: they are HOST checks, and pinning them to one origin would leave the other
         # host's root disk and memory unwatched — so they group `by (origin)` and report the
         # worst, covering both. Since E2 the cluster edge also emits traefik_* (traefik-k8s
@@ -150,11 +150,12 @@ def cluster_config(
         # Same fail-closed reasoning as K8S_MIN_WORKLOADS, for the DaemonSet series
         # (kube_daemonset_status_number_unavailable) instead of the Deployment one — a
         # DaemonSet's absent/unschedulable pod has no Deployment-arm equivalent, so it was
-        # invisible until this arm existed. The nine DaemonSets running as of 2026-08-13:
-        # otel-collector, promtail, scrutiny-collector, crowdsec-node-agent, dri-device-plugin,
-        # engine-image-*, longhorn-csi-plugin, longhorn-manager, speaker. Bump this floor (and
-        # the comment) when a DaemonSet is added or retired — same discipline as
-        # K8S_MIN_WORKLOADS.
+        # invisible until this arm existed. The eleven DaemonSet series on 2026-10-10
+        # (`probe.py metric 'count(kube_daemonset_status_number_unavailable)'`): alloy,
+        # crowdsec-node-agent, dri-device-plugin, engine-image-*, gpu-exporter,
+        # longhorn-csi-plugin, longhorn-manager, node-exporter, otel-collector,
+        # scrutiny-collector, speaker. Bump this floor (and the comment) when a DaemonSet is
+        # added or retired — same discipline as K8S_MIN_WORKLOADS.
         K8S_MIN_DAEMONSETS=_int("K8S_MIN_DAEMONSETS"),
         # Consecutive down cycles before check_k8s_workloads' UNAVAILABLE-REPLICA arm pages —
         # that arm alone, not the check. A Deployment rolling has one unavailable replica by

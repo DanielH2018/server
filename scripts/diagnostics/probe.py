@@ -4,17 +4,26 @@
 One allow-listed surface for the queries that would otherwise be hand-written `curl`/`openssl`
 one-offs.
 
-The monitoring stack (Prometheus, Loki, Scrutiny, uptime-kuma) does NOT publish
-host ports; it's internal to the Docker network. The old approach was to
-`curl http://<bridge-ip>:<port>/...` against a hand-copied container IP — but
-Docker reassigns those IPs on recreate, so every such allow-list entry was dead
-on the next deploy. This wrapper resolves the container's *current* IP via
-`docker inspect` at run time, so it keeps working, and a single allow-list entry
-covers every subcommand:
+The monitoring stack runs in k3s and publishes no host ports, so a hand-written `curl` needs an
+address that outlives a redeploy. This wrapper derives each address at run time, which keeps a
+single allow-list entry valid for every subcommand:
 
     Bash(uv run python scripts/diagnostics/probe.py:*)
 
-Everything it runs is read-only (HTTP GET / TLS handshake / docker inspect).
+It reaches a service by one of four transports:
+
+- The cluster route `<name>.local.<domain>`, pinned to the MetalLB ingress VIP with
+  `curl --resolve` (`probe_lib/core.py:k8s_endpoint`). Prometheus, the homelab Loki, Scrutiny,
+  uptime-kuma and Home Assistant go this way, because this host's resolver bypasses the LAN
+  DNS.
+- The observability Loki's ClusterIP, read from the role default that pins it
+  (`core.observability_loki_ip`). That Loki has no route.
+- A k8s Service ClusterIP looked up through kubectl (`probe_lib/health_docker.py:
+  resolve_service_ip`), for `arr`, whose API path has no Authelia bypass on the route.
+- `ssh daniel-pi docker inspect`, for `health --docker` and `pi containers`. daniel-pi is the
+  only host that still runs Docker.
+
+Everything it runs is read-only (HTTP GET / TLS handshake / kubectl get / docker inspect).
 
 Subcommands:
     metric '<promql>'        Prometheus instant query [--json] (prometheus :9090)
