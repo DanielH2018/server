@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-10-09 18:17 UTC
-generated_sha: fcb47a0a0
+generated_at: 2026-10-10 06:17 UTC
+generated_sha: b3de5a5e5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: fcb47a0a0
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-10-09T18:14:55+0000 | 2m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-10-09T11:07:50+0000 | 7h9m | 1d | ok | session completed |
-| renovate-notify | 2026-10-09T17:08:52+0000 | 1h8m | 1d | ok | notified |
-| docs-refresh | 2026-10-09T06:17:00+0000 | 12h | 12h | ok | generators: ok |
-| secret-rotate | 2026-10-09T18:03:38+0000 | 13m | 7d | ok | last touched by: Give the agent user its own Authelia login for the homelab-ui MCP server |
-| longhorn-restore-drill | 2026-10-09T04:11:02+0000 | 14h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-10-05T10:20:03+0000 | 4d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1791168302.zip) |
+| gitops-deploy | 2026-10-10T06:06:19+0000 | 11m | 10m | ok | **HOLD** at `a905064d` (ansible/deploy.yml home-assistant) -- a health gate or broad apply failed and is parked until cleared |
+| renovate-agent | 2026-10-09T11:07:50+0000 | 19h9m | 1d | ok | session completed |
+| renovate-notify | 2026-10-09T17:08:52+0000 | 13h8m | 1d | ok | notified |
+| docs-refresh | 2026-10-09T18:17:00+0000 | 12h | 12h | ok | generators: ok |
+| secret-rotate | 2026-10-09T18:03:38+0000 | 12h13m | 7d | ok | last touched by: Give the agent user its own Authelia login for the homelab-ui MCP server |
+| longhorn-restore-drill | 2026-10-10T04:10:47+0000 | 2h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-10-05T10:20:03+0000 | 4d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1791168302.zip) |
