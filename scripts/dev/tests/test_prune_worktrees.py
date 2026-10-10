@@ -390,3 +390,33 @@ def test_the_weekly_prune_removes_merged_worktrees_beside_a_vanished_one(
 
     assert done.returncode == 0, done.stderr
     assert not (tmp_path / "done").exists()
+
+
+def test_report_names_the_vanished_tree_and_does_not_offer_to_remove_it(
+    tmp_path, monkeypatch
+):
+    scrub_process_git_env(monkeypatch)
+    repo = _repo_with_a_vanished_worktree(tmp_path)
+
+    done = run([sys.executable, str(PRUNER)], cwd=repo, env=scrubbed_env())
+
+    assert f"[vanished ] {tmp_path / 'gone'}" in done.stdout, done.stderr
+    assert f"[{REMOVABLE:9}] {tmp_path / 'gone'}" not in done.stdout
+
+
+def test_plain_prune_drops_a_vanished_registration_when_nothing_else_is_removable(
+    tmp_path, monkeypatch
+):
+    # The vanished tree is the only work, so a `nothing to remove` early return skips the
+    # `git worktree prune` its reason promises.
+    scrub_process_git_env(monkeypatch)
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    git(repo, "worktree", "add", "-q", "--detach", str(tmp_path / "gone"))
+    shutil.rmtree(tmp_path / "gone")
+    git(repo, "update-ref", "refs/remotes/origin/master", "master")
+
+    done = run([sys.executable, str(PRUNER), "--prune"], cwd=repo, env=scrubbed_env())
+
+    assert done.returncode == 0, done.stderr
+    assert str(tmp_path / "gone") not in git_out(repo, "worktree", "list")

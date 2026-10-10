@@ -453,19 +453,23 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     removable = []
+    vanished = 0
     for verdict, tree, reason in survey(repo):
         print(f"[{verdict:9}] {tree.path}\n            {reason}")
         if verdict == REMOVABLE:
             removable.append(tree)
+        vanished += verdict == VANISHED
 
-    if not removable and not stale:
+    # A vanished registration alone is still work: prune_all's repair_object_store runs the
+    # `git worktree prune` that drops it, which VANISHED's reason promises `--prune` does.
+    if not removable and not stale and not vanished:
         print("\nnothing to remove")
         return 0
 
     if not args.prune:
         print(
-            f"\n{len(removable)} worktree(s) and {len(stale)} branch(es) removable — "
-            "re-run with --prune to remove"
+            f"\n{len(removable)} worktree(s), {len(stale)} branch(es) and {vanished} "
+            "vanished registration(s) removable — re-run with --prune to remove"
         )
         return 0
 
