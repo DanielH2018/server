@@ -22,6 +22,9 @@ from _test_module_rules import MODULE_FLOOR, pytest_only_modules
 
 from lib.repo_paths import REPO
 
+# The sibling module the sibling-import red subject reads, at the path it resolves to.
+_SIBLINGS = {REPO / "ansible/tests/x/_drill.py": 'SETUP = ROLES / "setup"\n'}
+
 ROWS = (
     Census(
         name="tests-build-no-bare-jinja-environment",
@@ -123,12 +126,12 @@ ROWS = (
             'itself, so `K3S_ROLE / "tasks"` passes. A module binding its own `INVENTORY` is a '
             'hit too. A repo-relative string such as `"ansible/inventory/group_vars/all.yml"` '
             "is not a chain, which is how the deploy classifiers' tests pass those as inputs. "
-            "Two roots are not resolved: a name imported from a sibling test module "
-            "(`from _restore_drill import K3S`), and one computed from another module's "
-            "`__file__`."
+            "A name imported from a first-party module takes that module's binding "
+            "(`from _restore_drill import K3S`), and an imported module's `m.__file__` is "
+            "its file, resolved the way pytest imports it (#4155)."
         ),
         files=pytest_only_modules,
-        offence=lambda s: inline_inventory_paths(s.text, REPO / s.rel),
+        offence=lambda s: inline_inventory_paths(s.text, REPO / s.rel, _SIBLINGS),
         red=(
             Subject("a.py", 'REPO / "ansible/inventory/hosts.ini"\n'),
             Subject("b.py", 'ANSIBLE / "inventory" / "group_vars" / "all.yml"\n'),
@@ -157,6 +160,18 @@ ROWS = (
                 "ansible/roles/k8s/x/tests/test_y.py",
                 "ROLE = Path(__file__).resolve().parents[1]\n"
                 'ROLE.parents[2] / "inventory" / "host_vars" / "daniel-box.yml"\n',
+            ),
+            # A root bound in a sibling module, which owns nothing until the import resolves.
+            Subject(
+                "ansible/tests/x/test_y.py",
+                'from _drill import SETUP\nSETUP / "k3s" / "defaults" / "main.yml"\n',
+            ),
+            # A root computed from another module's file: monitor-bridge's `files/check.py`.
+            Subject(
+                "ansible/roles/k8s/monitor-bridge/tests/test_y.py",
+                "import check\n"
+                "Path(check.__file__).resolve().parents[3]"
+                ' / "setup" / "k3s" / "defaults" / "main.yml"\n',
             ),
         ),
         green=(
