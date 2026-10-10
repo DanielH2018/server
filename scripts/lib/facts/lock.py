@@ -22,6 +22,7 @@ from .citations import (
     sections,
     tracked_files,
 )
+from .evidence import EvidenceCache, moved_evidence
 from .relations import Edb
 
 LOCK_REL = "docs/facts.lock"
@@ -203,6 +204,9 @@ def check_lock(
     if by_unit is None:
         by_unit = repo_citations(repo)
     findings: list[Finding] = []
+    # Read only when an atom moved: the evidence costs a diff, and most runs have no move.
+    prose: dict[str, str] = {}
+    evidence_cache = EvidenceCache()
     for unit, rec in sorted(lock.items()):
         if unit not in by_unit:
             findings.append(
@@ -281,7 +285,14 @@ def check_lock(
                         unit,
                         atom,
                         "moved",
-                        f"recorded {recorded_hash[:8]}, now {now[:8]}",
+                        f"recorded {recorded_hash[:8]}, now {now[:8]}"
+                        + moved_evidence(
+                            repo,
+                            cited[atom],
+                            rec.get("verified_sha", ""),
+                            prose.setdefault(unit, _section_prose(repo, unit)),
+                            evidence_cache,
+                        ),
                     )
                 )
         # A citation ADDED to an already-verified section. `status` grades the unit OUT for
@@ -300,6 +311,18 @@ def check_lock(
                 )
             )
     return findings
+
+
+def _section_prose(repo: Path, unit: str) -> str:
+    """The body of the section ``unit`` names, read from its doc; empty when it is gone."""
+    doc = unit.partition("#")[0]
+    path = repo / doc
+    if not path.is_file():
+        return ""
+    for sec in sections(doc, path.read_text(encoding="utf-8")):
+        if sec.key == unit:
+            return sec.body
+    return ""
 
 
 def verify_units(

@@ -112,6 +112,14 @@ runs `vanished-identifier` over every section. It fires on a commit that touches
 or any non-Markdown file other than the paths the docs-refresh and eval-run crons commit.
 `facts-reverify-changed` re-hashes a section whose prose you edited, when only a citation was
 added or dropped. It also records a section with no lock row that the commit gives its first
-citation, and drops the row of a section left citing nothing. It writes the lock and exits non-zero like a formatter, so
-`git add docs/facts.lock` and commit again. A `moved` or `missing` atom stays red until a
-person re-reads the section and runs `verify`.
+citation, and drops the row of a section left citing nothing. It writes the lock and exits
+non-zero like a formatter, so `git add docs/facts.lock` and commit again. A `moved` or
+`missing` atom stays red until a person re-reads the section and runs `verify`.
+
+A `moved` finding names the identifiers its change removed that the section's prose names,
+as a cue for that reading. It reads two kinds, with the token shape `vanished-identifier`
+uses. The atom-scoped kind is what the atom's own content lost since the row's
+`verified_sha`. The range-wide kind is what any non-Markdown file lost in `verified_sha..HEAD`
+that no tracked file still holds. When the section names none of them, the finding says so.
+The evidence changes no verdict: a refactor that leaves the prose true still needs `verify`.
+A `verified_sha` that does not resolve, as in a shallow clone, leaves the plain message.
