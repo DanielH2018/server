@@ -5,7 +5,9 @@
   states its complete caller set on purpose (the *arr headers say why).
 
   The caller list is data on the service's `containers_list` entry, `netpol_from:`, so each
-  caller's reason sits beside it as a YAML comment. Two places render it:
+  caller's reason sits beside it as a YAML comment. `homepage_widget: true` on the entry adds
+  homepage, and every caller passes the list through the `netpol_callers` filter so the key
+  reaches both renderers. Two places render it:
 
   - netpol-baseline's `networkpolicy-callers.yaml.j2` loops over every entry carrying
     `netpol_from`, gated on `netpol_baseline_enforced`. An entry whose pod label differs from
@@ -13,7 +15,7 @@
     A sub-workload with no entry of its own is a `netpol_fences: [{app, port, from}]` item on
     its role's entry, and the same template renders it (freshrss's feed cache).
   - A role whose deploy must carry its own fence renders it from its own template, reading
-    `container_item.netpol_from`, and its entry sets `netpol_role_owned: true` so the loop
+    `container_item | netpol_callers`, and its entry sets `netpol_role_owned: true` so the loop
     skips it. sonarr, radarr, prowlarr, qbittorrent, bazarr and headlamp do this;
     netpol-baseline's CLAUDE.md says when a policy belongs in the workload's role. A `netpol_fences` item its role renders
     sets `role_owned: true` instead, and the role's template selects the item by `app`
