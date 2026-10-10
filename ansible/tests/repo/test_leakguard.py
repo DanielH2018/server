@@ -416,7 +416,10 @@ def test_strip_env_removes_only_the_hook_variables() -> None:
 
 
 # The agent user's profile value, which `fanout_lib.target` reads into SERVER_CHECKOUT.
-_PROFILE_ENV = {"RUN_HOOK_PROJECT_DIR": "/var/lib/claude/server"}
+# Not the agent's real clone, /var/lib/claude/server: run as `claude`, PRIMARY_CHECKOUT is that
+# clone already, so the profile would move nothing and the red half below would pass (#4108).
+# The plugin strips the variable by name, so any value no checkout has does.
+_PROFILE_ENV = {"RUN_HOOK_PROJECT_DIR": "/nonexistent/agent-profile-checkout"}
 
 _READS_SERVER_CHECKOUT = f"""
 import sys

@@ -118,9 +118,22 @@ reported the checks working.
   nothing. `ubuntu` cannot read the agent's memory or artifacts, so slice 4 needs a read grant.
   This page said `drwxr-s---` until 2026-10-09 (#3901). 3f15ead01 added the `0700` task on
   2026-10-05, one day after that check was written.
+- Until #4100 and #4108 the agent had no `prek` and no git hooks, so its commits skipped
+  gitleaks and the commit-time ratchets. Its playbooks also resolved no Ansible collection from
+  a worktree, because `ansible.cfg`'s fallback is the operator's checkout. The shared
+  `agent_user.yml` copies the operator's pinned `prek` and `uvx` beside `uv`. The `claude_code`
+  role runs `prek install` in the clone, which covers every worktree made from it. It also
+  installs the pinned collections into the clone, and the `.profile` sets
+  `ANSIBLE_COLLECTIONS_PATH` so a worktree falls back to them. `renovate-agent` gets the
+  binary but no hooks. ansible-lint and gitleaks need nothing on the agent's `PATH`, because
+  prek builds each hook's environment itself.
+- A detached deploy wrote its log under `/tmp/homelab-deploy-logs`, which the operator's
+  first deploy created `0770`, so every `deploy.sh --detach` as `claude` failed (#4108). The
+  directory is per-user, `/tmp/homelab-deploy-logs-<user>`, as a detached landing's is.
 
 **Check:** as `claude`, `id` lists none of the denied groups, `ls /home/ubuntu` is refused,
-`sudo -n true` fails, `kubectl get pods -A` works and `uv run pytest scripts` passes.
+`sudo -n true` fails, `kubectl get pods -A` works and `uv run pytest` passes. `prek --version`
+runs, and `~/server/.git/hooks/pre-commit` names `/var/lib/claude/.local/bin/prek`.
 
 **Rollback:** turning the variable off locks the account and stops its units. It does not delete
 the home, because the home holds the agent's clone and any unpushed work.
