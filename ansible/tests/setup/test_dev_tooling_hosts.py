@@ -162,3 +162,44 @@ def test_the_git_hooks_task_gates_on_the_allowlist():
         f"Install Git hooks runs `prek install` but is not gated on {VAR}, which is what "
         f"installs prek. Its `when` is {task.get('when')!r}."
     )
+
+
+PUBLISH_UV = "Publish uv at a stable path for systemd and cron"
+REMOVE_UV_LINK = "Remove the old uv symlink so a real copy can replace it"
+
+
+def published_uv_problems(task_list: list[dict]) -> list[str]:
+    """Why /usr/local/bin/uv would not run for a uid other than the connecting user's.
+
+    A link into that user's 0750 home dangles for everyone else, the claude agent included
+    (#4203). `copy` checksums through an existing link at dest, so the link has to go first.
+    """
+    names = [t.get("name") for t in task_list]
+    publish = next((t for t in task_list if t.get("name") == PUBLISH_UV), {})
+    copy = publish.get("ansible.builtin.copy") or {}
+    problems = []
+    if not copy:
+        problems.append("not a copy")
+    elif (copy.get("owner"), copy.get("mode")) != ("root", "0755"):
+        problems.append(f"owner/mode {copy.get('owner')}/{copy.get('mode')}")
+    if REMOVE_UV_LINK not in names or names.index(REMOVE_UV_LINK) > names.index(
+        PUBLISH_UV
+    ):
+        problems.append("no link removal before the copy")
+    return problems
+
+
+def test_uv_is_published_as_a_copy_every_user_can_run():
+    tasks = yaml_fast.safe_load((TASKS_DIR / "host-basics.yml").read_text())
+    assert published_uv_problems(tasks) == []
+
+
+def test_uv_published_as_a_link_into_the_home_is_flagged():
+    link = {
+        "name": PUBLISH_UV,
+        "ansible.builtin.file": {"src": "/home/u/.local/bin/uv", "state": "link"},
+    }
+    assert published_uv_problems([link]) == [
+        "not a copy",
+        "no link removal before the copy",
+    ]

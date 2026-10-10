@@ -61,8 +61,8 @@ The session reads third-party text: release notes, changelogs and PR bodies. It 
 - **Home, state and clone.** `renovate_agent_home` (`/var/lib/renovate-agent`) holds the run
   record, the session's `~/.claude` and its own clone at `renovate_agent_clone_dir`. The
   directory carries the set-group-ID bit and group `sys_user`, so the docs cron still reads the run record.
-- **Toolchain.** `/usr/local/bin/uv` is a symlink into the operator's home, which the agent
-  cannot read. The role copies the operator's pinned uv into the agent's `~/.local/bin` and runs
+- **Toolchain.** The agent runs its own uv rather than `/usr/local/bin/uv`, the operator's
+  install that `initial_setup` publishes. The role copies the operator's pinned uv into the agent's `~/.local/bin` and runs
   `uv python install` as the agent. Every project hook runs through `uv run`, and in an
   unattended session a hook that cannot start makes each Bash call an `ask`, which is a denial.
 - **Project hooks.** `.claude/hooks/run-hook.sh` defaults to the operator's checkout and uv. The

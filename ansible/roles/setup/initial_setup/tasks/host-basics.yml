@@ -286,19 +286,45 @@
   become: false
   when: inventory_hostname in dev_tooling_hosts
 
+- name: Look for the old uv symlink at the stable path
+  tags: [tooling]
+  ansible.builtin.stat:
+    path: /usr/local/bin/uv
+  register: initial_setup_uv_published
+  when: inventory_hostname in dev_tooling_hosts
+
+# Until #4203 /usr/local/bin/uv was a symlink into the connecting user's 0750 home, so it
+# dangled for every other uid, the claude agent user included. `copy` checksums THROUGH a link
+# at dest, which here points at src, so it would report ok and leave the link. Remove it first.
+- name: Remove the old uv symlink so a real copy can replace it
+  tags: [tooling]
+  ansible.builtin.file:
+    path: /usr/local/bin/uv
+    state: absent
+  become: true
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - initial_setup_uv_published.stat.islnk | default(false)
+
 - name: Publish uv at a stable path for systemd and cron
   tags: [tooling]
   # Host scripts run through `uv run`, so what needs a stable absolute path is UV, not a Python.
   # systemd and cron inherit no useful PATH and cannot expand ~, and hardcoding the connecting
   # user's home into unit files couples them to a path that is not guaranteed.
   #
+  # A root-owned copy, not a symlink into that home, so every uid can run it (#4203). The copy
+  # follows the pinned per-user install above: a pin bump reinstalls that binary in this same
+  # tag, and this task copies the new bytes over.
+  #
   # Deliberately NOT a python3.14 symlink: a second system-level interpreter would be a second
   # way to run Python on these hosts, and the whole point is that there is one way — uv.
-  ansible.builtin.file:
+  ansible.builtin.copy:
     src: "{{ initial_setup_user_home.stdout }}/.local/bin/uv"
     dest: /usr/local/bin/uv
-    state: link
-    force: true
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
   become: true
   when: inventory_hostname in dev_tooling_hosts
 
