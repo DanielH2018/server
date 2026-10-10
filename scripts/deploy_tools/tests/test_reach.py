@@ -3,7 +3,7 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_reach.py
 """
 
-from reach import reach
+from reach import reach, tag_for
 
 _SERVICE = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
 _BRINGUP = "ansible/k3s-bringup.yml"
@@ -51,3 +51,7 @@ def test_tags_keeps_only_declared_roles_and_drops_role_tests():
         reach(["ansible/roles/k8s/sonarr/tests/test_sonarr.py"]).tags({"sonarr"})
         == set()
     )
+
+
+def test_tag_for_rejects_a_path_outside_the_role_trees():
+    assert tag_for("ansible/inventory/host_vars/daniel-box.yml", {"daniel-box"}) is None

@@ -27,6 +27,7 @@ import pytest
 
 
 import land_tags
+import reach
 from _land_fakes import MERGE_SHA
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
@@ -67,10 +68,10 @@ def test_a_test_module_beside_a_roles_code_maps_to_no_tag_on_either_side():
     from deploy_logic import services_from_changed_paths
 
     test_module = "ansible/roles/k8s/sonarr/files/test_probe.py"
-    assert land_tags.tag_for(test_module, {"sonarr"}) is None
+    assert reach.tag_for(test_module, {"sonarr"}) is None
     assert "sonarr" not in services_from_changed_paths([test_module]).k8s
     code = "ansible/roles/k8s/sonarr/files/probe.py"
-    assert land_tags.tag_for(code, {"sonarr"}) == "sonarr"
+    assert reach.tag_for(code, {"sonarr"}) == "sonarr"
     assert "sonarr" in services_from_changed_paths([code]).k8s
 
 
@@ -161,7 +162,7 @@ def test_the_declared_paths_under_test_still_exist():
 
 def test_a_declared_role_test_file_derives_no_tag():
     """The accept half: no tag, so no rollout, restart window or health gate."""
-    assert land_tags.tag_for(_DECLARED_TESTS) is None
+    assert reach.tag_for(_DECLARED_TESTS, land_tags.declared_tags()) is None
     assert land_tags.derive([_DECLARED_TESTS], 1) == land_tags.Derivation(
         [], land_tags.DeriveSource.PR
     )
@@ -169,7 +170,7 @@ def test_a_declared_role_test_file_derives_no_tag():
 
 def test_a_declared_role_shipped_file_still_derives_its_tag():
     """The reject half: one directory over from tests/, the tag is still owed."""
-    assert land_tags.tag_for(_DECLARED_FILES) == "monitor-bridge"
+    assert reach.tag_for(_DECLARED_FILES, land_tags.declared_tags()) == "monitor-bridge"
     assert land_tags.derive([_DECLARED_FILES], 1).tags == ["monitor-bridge"]
 
 

@@ -3,7 +3,7 @@
 A change to such a file must deploy its readers as well as its owner. uptime-kuma renders a
 push tile for every row of monitor-bridge's `files/check_table.py` (#3781), so a new check
 landed as `--tags monitor-bridge` alone would ship the check and leave its tile undeployed. The
-landing (`land_tags.derived_tags`), the deployer's defer alert and the secret census all read
+landing (`reach.Reach.tags`), the deployer's defer alert and the secret census all read
 this derivation.
 
 Run: uv run pytest ansible/tests/deploy/test_k8s_lookup_readers.py

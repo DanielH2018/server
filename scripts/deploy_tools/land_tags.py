@@ -120,17 +120,6 @@ def landing_hosts_at(
     return landing_hosts_for_tags(tags, records, k8s_only)
 
 
-def tag_for(path: str, declared: set[str] | None = None) -> str | None:
-    """`reach.tag_for`, reading the declared tags from containers_list when none are given."""
-    return reach.tag_for(path, declared_tags() if declared is None else declared)
-
-
-def derived_tags(files, declared: set[str] | None = None) -> set[str]:
-    """`reach.Reach.tags` over this PR's own file list, before any shared-role expansion."""
-    declared = declared_tags() if declared is None else declared
-    return reach.reach(list(files)).tags(declared, REPO)
-
-
 def own_narrow_tags(files, pr_range: str, repo) -> dict[str, frozenset[str]]:
     """`narrow_setup.role_tags` over this PR's own range, per setup role it touches.
 
@@ -342,7 +331,7 @@ def derive(files, changed_files: int, declared: set[str] | None = None) -> Deriv
     declared = declared_tags() if declared is None else declared
     # A build role whose workload lives in a different role must not deploy alone: the build
     # would push a new image that nothing rolls onto, and report green doing it.
-    return Derivation(sorted(derived_tags(files, declared)), DeriveSource.PR)
+    return Derivation(sorted(reach.reach(files).tags(declared, REPO)), DeriveSource.PR)
 
 
 def doc_paths(paths) -> set[str]:
