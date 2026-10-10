@@ -377,7 +377,7 @@ def test_loki_ingestion_with_lines_is_ok():
 def test_loki_ingestion_zero_lines_is_down():
     ok, msg = checks.logs.loki_ingestion_fresh(0, "10m")
     assert not ok
-    assert "silent" in msg
+    assert "Alloy/Loki pipeline silent" in msg
 
 
 def test_loki_ingestion_no_series_is_down():

@@ -17,7 +17,7 @@ def loki_ingestion_fresh(count: float | None, window: str) -> tuple[bool, str]:
     if not count:  # None or 0 — nothing shipped: Alloy dead, positions corrupt, etc.
         return (
             False,
-            "no log lines ingested in %s — promtail/Loki pipeline silent" % window,
+            "no log lines ingested in %s — Alloy/Loki pipeline silent" % window,
         )
     return True, "%d log lines in %s" % (int(count), window)
 
