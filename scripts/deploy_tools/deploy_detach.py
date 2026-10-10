@@ -64,11 +64,11 @@ from lib.exit_codes import (
 LOG_DIR = Path("/tmp/homelab-deploy-logs")
 
 
-def log_path(run: locked.Run) -> Path:
+def log_path(run: locked.Run, log_dir: Path = LOG_DIR) -> Path:
     """Where the child writes, named after the tags, a UTC stamp and the parent's pid."""
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     label = re.sub(r"[^A-Za-z0-9_.-]", "_", run.label)
-    return LOG_DIR / f"deploy-{label}-{stamp}-{os.getpid()}.log"
+    return log_dir / f"deploy-{label}-{stamp}-{os.getpid()}.log"
 
 
 def wait_command(tags: list[str], log: Path) -> str:
@@ -180,8 +180,27 @@ def deploy_and_gate(
     return steps.notify(run, status, log, notifier)
 
 
-def child(run: locked.Run, log: Path, notifier: str) -> None:
+@dataclass(frozen=True)
+class DetachTools:
+    """The boundaries `run` and `child` cross, so a test replaces a field, not a module."""
+
+    log_dir: Path = LOG_DIR
+    take_tree_lock: Callable[[], int] = take_tree_lock_now
+    reap_dead_snapshots: Callable[[Path], None] = locked.reap_dead_snapshots
+    make_snapshot: Callable[[locked.Run], None] = locked.make_snapshot
+    take_service_locks: Callable[[locked.Run, list[str]], None] = (
+        locked.take_service_locks
+    )
+    fork: Callable[[Callable[[], None]], int] = fork_detached
+    leave_unit_cgroup: Callable[[str], str | None] = leave_unit_cgroup
+    deploy_and_gate: Callable[[locked.Run, Path, str], int] = deploy_and_gate
+
+
+def child(
+    run: locked.Run, log: Path, notifier: str, tools: DetachTools | None = None
+) -> None:
     """The backgrounded half. Never returns: its end is `os._exit`, never deploy_run's frames."""
+    tools = tools or DetachTools()
     code = 1
     try:
         null = os.open(os.devnull, os.O_RDONLY)
@@ -194,10 +213,10 @@ def child(run: locked.Run, log: Path, notifier: str) -> None:
         close_inherited(fd for fd in (*run.service_fds, run.owner_fd) if fd is not None)
         # Before the playbook starts: a child started while the move is pending stays in the
         # unit's cgroup.
-        moved = leave_unit_cgroup("deploy")
+        moved = tools.leave_unit_cgroup("deploy")
         if moved:
             print(moved, flush=True)
-        code = deploy_and_gate(run, log, notifier)
+        code = tools.deploy_and_gate(run, log, notifier)
     except SystemExit as stop:
         code = stop.code if isinstance(stop.code, int) else 1
     except Exception:
@@ -215,28 +234,34 @@ def child(run: locked.Run, log: Path, notifier: str) -> None:
 
 
 def run(
-    repo_root: Path, tags: list[str], at_sha: str, args: list[str], notifier: str
+    repo_root: Path,
+    tags: list[str],
+    at_sha: str,
+    args: list[str],
+    notifier: str,
+    tools: DetachTools | None = None,
 ) -> int:
     """Lock, snapshot, fork; the parent's exit status, 0 once the child is running.
 
     `notifier` is the path of `deploy_detach_notify.py`, relative to `repo_root`.
     """
+    tools = tools or DetachTools()
     state = locked.Run(repo_root=repo_root, tags=tags, at_sha=at_sha, args=args)
-    log = log_path(state)
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log = log_path(state, tools.log_dir)
+    tools.log_dir.mkdir(parents=True, exist_ok=True)
     try:
         full_run_tags: list[str] = []
-        tree_fd = take_tree_lock_now()
+        tree_fd = tools.take_tree_lock()
         try:
             # Under the tree lock, and the only thing this mode needs it for.
-            locked.reap_dead_snapshots(repo_root)
-            locked.make_snapshot(state)
+            tools.reap_dead_snapshots(repo_root)
+            tools.make_snapshot(state)
             if not tags:
                 full_run_tags = locked.enumerate_full_run_tags(state)
         finally:
             os.close(tree_fd)
         try:
-            locked.take_service_locks(state, full_run_tags)
+            tools.take_service_locks(state, full_run_tags)
         except locked.Refused as refused:
             if refused.code == DEPLOY_LOCK_BUSY:
                 locked.say(
@@ -252,7 +277,7 @@ def run(
     log.touch()
     sys.stdout.flush()
     sys.stderr.flush()
-    pid = fork_detached(lambda: child(state, log, notifier))
+    pid = tools.fork(lambda: child(state, log, notifier))
     pid_path(log).write_text(f"{pid}\n")
     # The child owns the snapshot and the locks now. Close this process's copies WITHOUT
     # removing the snapshot: `state.close()` here would delete it from under the playbook.

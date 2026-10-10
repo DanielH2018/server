@@ -16,7 +16,7 @@ import pytest
 
 from deploy_tools import deploy_detach, deploy_probe
 from deploy_tools import deploy_under_locks as locked
-from lib.detach_fork import record_code, recorded_code
+from lib.detach_fork import recorded_code
 
 _SHIM = Path(__file__).resolve().parents[3] / ".claude" / "wait-sources" / "deploy"
 _SETTLED = "deploy --detach settled (ansible exit 0)"
@@ -116,23 +116,47 @@ def test_the_probe_reads_the_directory_the_deploy_writes():
 
 @pytest.mark.parametrize("verdict", [0, 1])
 def test_the_child_records_the_notifier_s_code(tmp_path, verdict):
-    """The code `deploy_probe` ends on is the health gate's, not a constant 0."""
+    """`child` itself writes the gate's code as `.rc`, not a constant 0 (#3934).
+
+    Runs `child` in a forked process, because it ends in `os._exit`. The cgroup move is
+    stubbed so the test process never leaves the unit it runs in.
+    """
     run = locked.Run(repo_root=tmp_path, tags=["sonarr"], at_sha="", args=[])
-    steps = deploy_detach.ChildSteps(
-        run_playbook=lambda _run: 0,
-        annotate=lambda _run: None,
-        notify=lambda *_args: verdict,
+    tools = deploy_detach.DetachTools(
+        leave_unit_cgroup=lambda _prefix: None,
+        deploy_and_gate=lambda *_args: verdict,
     )
     log = tmp_path / "deploy-sonarr-20261010-120000-1.log"
-    record_code(log, deploy_detach.deploy_and_gate(run, log, "notifier.py", steps))
+    pid = os.fork()
+    if pid == 0:
+        deploy_detach.child(run, log, "notifier.py", tools)
+    _, status = os.waitpid(pid, 0)
+    assert os.waitstatus_to_exitcode(status) == verdict
     assert recorded_code(log) == verdict
 
 
-def test_the_wait_command_names_the_tags_and_the_log(tmp_path):
-    log = tmp_path / "deploy-a+b-20261010-120000-1.log"
-    assert (
-        deploy_detach.wait_command(["a", "b"], log) == f"cc-wait deploy a,b --log {log}"
+def test_run_records_the_log_and_pid_before_returning(tmp_path, capsys):
+    """A `cc-wait deploy` chained on the return finds this run's log, pid and command."""
+    logs_at_fork = []
+
+    def fork(_body) -> int:
+        logs_at_fork.extend(tmp_path.glob("deploy-sonarr-*.log"))
+        return 4242
+
+    tools = deploy_detach.DetachTools(
+        log_dir=tmp_path,
+        take_tree_lock=lambda: os.open(os.devnull, os.O_RDONLY),
+        reap_dead_snapshots=lambda _root: None,
+        make_snapshot=lambda _state: None,
+        take_service_locks=lambda _state, _tags: None,
+        fork=fork,
     )
+    assert deploy_detach.run(tmp_path, ["sonarr"], "", [], "notifier.py", tools) == 0
+    (log,) = tmp_path.glob("deploy-sonarr-*.log")
+    assert logs_at_fork == [log], "the log must exist before the fork"
+    assert deploy_probe.find_log("sonarr", "", str(tmp_path)) == log
+    assert log.with_suffix(".pid").read_text() == "4242\n"
+    assert f"  wait: cc-wait deploy sonarr --log {log}" in capsys.readouterr().out
 
 
 def test_the_declared_states_keep_cc_wait_s_contract():
