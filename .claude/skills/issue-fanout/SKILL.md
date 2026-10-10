@@ -13,18 +13,17 @@ command.
 
 ## 1. Triage
 
-Clear the claims whose worktree is gone first, then read what is free:
+Read what is free:
 
 ```bash
-uv run python scripts/dev/findings.py reap
 uv run python scripts/dev/findings.py next --json
 ```
 
-`reap` releases every claim whose worktree no longer holds work — a session that died after
-its PR landed, or a worktree somebody pruned. **This is the one place that invokes it**: no
-cron and no hook does, and without it a stale claim sits on the register indefinitely. It
-refuses outright rather than releasing anything if the git read fails, so a non-zero exit here
-is a stop, not a warning.
+`launch` runs `findings.py reap` itself, after every placement gate and before its first
+claim. `reap` releases every claim whose worktree no longer holds work: a session that died
+after its PR landed, or a worktree somebody pruned. No cron and no hook runs it, so `launch`
+is where it runs. A failed reap only warns, because each claim still reaps a stale claim on
+the issue it takes.
 
 `next` withholds `manual` issues, issues deferred to a later date, anything a LIVE claim
 holds, and anything an open PR already closes — every row it prints is free to take. An issue
@@ -85,7 +84,7 @@ Both were measured on the 2026-09-10 fan-outs:
 **Stop here for approval.** Present the grouping — which issues, which batch, why they're
 split this way — and wait. Spawning several Opus agents is not a routine action.
 
-Done when: `reap` has run, every issue `next` returned is in exactly one batch or named as
+Done when: every issue `next` returned is in exactly one batch or named as
 held for the next wave, no two batches share a role, no two batches share a cited file, at
 most one batch touches SOPS, no batch that adds a role shares the wave, and the operator has
 approved the grouping.
@@ -317,7 +316,9 @@ uv run python scripts/dev/fanout_place.py claim --batch 1345,1386 --batch 1288
 ```
 
 It claims under HEAD as `launch` does, prints `#<n> claimed by <branch>` per issue, and exits
-3 naming each refusal on stderr. Drop a refused issue from its batch before spawning.
+3 naming each refusal on stderr. Drop a refused issue from its batch before spawning. This
+path writes no manifest, so `abandon` cannot release its claims. When an agent here does not
+finish, release them with `findings.py release --all --worktree <branch> --reason "..."`.
 
 Each agent starts with none of this conversation's context, so its brief must carry, in full:
 
@@ -421,19 +422,17 @@ listing them:
 uv run python scripts/dev/findings.py claims --worktree <orchestrator-branch>
 ```
 
-Before this report goes out, release any issue it lists that no agent finished, under the
-branch `launch` printed as `claims held under <branch>`:
+Before this report goes out, give back every batch no agent finished. A batch that ended
+`failed`, `no-pr` or `needs-input`, and that you are not finishing by hand, is abandoned:
 
 ```bash
-uv run python scripts/dev/findings.py release <n> --worktree <branch> --reason "..."
+uv run python scripts/dev/fanout_place.py abandon <run-id> <batch>
 ```
 
-When no agent finished anything, `release --all --worktree <branch> --reason "..."` releases
-every open claim that branch holds in one call. `stop` and `abandon` already released their
-batches' claims.
-
-Release explicitly. A claim under the orchestrator's branch stays live for as long as that
-worktree exists, so `reap` does not clear it.
+`abandon` removes the batch's tree and branch and releases its claims, and `stop` releases the
+claims of every batch it stops. Run `claims --worktree` again afterwards: it lists nothing a
+finished or abandoned batch held. A claim under the orchestrator's branch stays live for as
+long as that worktree exists, so `reap` never clears one this step leaves behind.
 
 **Collect every `MANUAL APPLY PENDING` heading.** An agent whose landing ended
 `needs-manual-apply` or `blocked` filed the pending apply as its own issue (step 3). Carry
@@ -453,7 +452,7 @@ chezmoi checkout and its `origin/main` (`REGISTER_CHECKOUTS` in
 `scripts/dev/findings_lib/boundaries.py`). `launch --repo` accepts exactly the repos that table
 lists. Three steps differ from the sections above.
 
-a. **Triage** with `reap --repo DanielH2018/dotfiles`, then `next --json --repo DanielH2018/dotfiles`.
+a. **Triage** with `next --json --repo DanielH2018/dotfiles`; `launch --repo` runs the reap.
    The grouping rules are section 1's. The dotfiles repo has no Ansible roles, so group by cited
    file alone.
 b. **Skip section 2: `launch` takes the claim itself.** Run
@@ -475,13 +474,9 @@ c. **Land each PR serially** from its batch's tree with `bin/land <branch>`, whi
    with `findings.py close <n> --fixed --pr <n> --repo DanielH2018/dotfiles`. Run it even when the
    PR's `Closes #<n>` already closed the issue: GitHub's close leaves the claim standing, and
    `close` releases it. Then `clean <run-id>` removes the landed trees, as in section 3.
-d. **Release and abandon under the batch's branch.** Section 5's `release` names the
-   orchestrator's branch, which holds no dotfiles claim, so it is refused here. Release an
-   unfinished batch with
-   `findings.py release <n> --worktree worktree-fanout-<batch> --repo DanielH2018/dotfiles --reason "..."`.
-   To abandon a batch whose branch never merged, run
-   `abandon <run-id> <batch>`. `abandon` acts on the chezmoi checkout and releases the claims
-   under the batch's branch on its own.
+d. **Abandon an unfinished batch as in section 5.** `abandon <run-id> <batch>` acts on the
+   chezmoi checkout and releases the claims under the batch's branch, which is where `launch`
+   took them; the orchestrator's branch holds no dotfiles claim.
 
 The dotfiles agents run without the `fanout-stop` Stop hook, which only this repo's
 `.claude/settings.json` registers. An agent that ends its turn on a progress report is not sent
