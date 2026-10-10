@@ -161,6 +161,31 @@ def _issue_block(issue: Issue) -> str:
     )
 
 
+# What a verdict that leaves a host apply owed asks of the session that reads it. The
+# landing brief carries it, and so does the prompt `review_prompts.apply_prompt` resumes a
+# review batch's implementer with.
+APPLY_OWED = """### A verdict that leaves a host apply owed
+`needs-manual-apply` and `blocked` mean the PR merged and an apply is still owed on a host.
+`land.sh` has already printed the exact command — the playbook line, the `deploy.sh --tags`
+line, the remaining-hosts note, and any `gitops_state.py clear-owed manual_plane <role>`. Read the
+deployer's own markers for what is still pending:
+```bash
+cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/owed.jsonl
+```
+A non-empty `hold_sha`, or an `owed.jsonl` line of class `manual_plane` naming your role, is
+CLAUDE.md *When to wait*.
+Do exactly one of these two things, never neither:
+- Apply the change and verify it, where *When to wait* leaves it to you — the marker is this
+  PR's own work, no bring-up playbook sits in the range, and no other session owns it.
+- Otherwise file it with `findings.py open`, carrying the host, the role and the exact command
+  `land.sh` printed, verbatim. Then list that issue number under a `MANUAL APPLY PENDING`
+  heading in your final report.
+
+A verdict that is neither `settled` nor `nothing-to-deploy`, with no `MANUAL APPLY PENDING`
+heading and no apply, leaves the pending apply in prose only, which nothing tracks.
+"""
+
+
 def _landing(host: str, batch: str, target: Target = SERVER_TARGET) -> str:
     if not target.is_server:
         return f"""## Landing
@@ -193,26 +218,7 @@ State `deferred` (exit 4) is not: the PR landed, and the next tick applies it.
 Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--refuted` and
 `--accepted` are operator-only.
 
-### A verdict that leaves a host apply owed
-`needs-manual-apply` and `blocked` mean the PR merged and an apply is still owed on a host.
-`land.sh` has already printed the exact command — the playbook line, the `deploy.sh --tags`
-line, the remaining-hosts note, and any `gitops_state.py clear-owed manual_plane <role>`. Read the
-deployer's own markers for what is still pending:
-```bash
-cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/owed.jsonl
-```
-A non-empty `hold_sha`, or an `owed.jsonl` line of class `manual_plane` naming your role, is
-CLAUDE.md *When to wait*.
-Do exactly one of these two things, never neither:
-- Apply the change and verify it, where *When to wait* leaves it to you — the marker is this
-  PR's own work, no bring-up playbook sits in the range, and no other session owns it.
-- Otherwise file it with `findings.py open`, carrying the host, the role and the exact command
-  `land.sh` printed, verbatim. Then list that issue number under a `MANUAL APPLY PENDING`
-  heading in your final report.
-
-A verdict that is neither `settled` nor `nothing-to-deploy`, with no `MANUAL APPLY PENDING`
-heading and no apply, leaves the pending apply in prose only, which nothing tracks.
-"""
+{APPLY_OWED}"""
     return f"""## Landing
 This host is {host}, not the deploy host. Open the PR with `gh pr create` and STOP there:
 **do not merge**, do not deploy, do not run the land script. Print the PR URL as the last line
@@ -223,7 +229,8 @@ of your final message. A {LANDS} session lands it and closes the issue.
 REVIEW_LANDING = """## Landing
 This batch has a review phase. Open the PR with `gh pr create` and STOP there: **do not
 merge**, do not run the land script, and do not close the issues. A separate reviewer reads
-the PR next. This session is then resumed with its findings, and later with how to land.
+the PR next, and this session is resumed with its findings. The pipeline then lands the PR
+itself, and resumes this session again only for a verdict that needs a decision.
 Print the PR URL as the last line of your final message.
 """
 
@@ -231,8 +238,8 @@ Print the PR URL as the last line of your final message.
 def _finishing(host: str, target: Target = SERVER_TARGET, review: bool = False) -> str:
     # The same completion condition `.claude/hooks/fanout-stop.py` and `status.py` check.
     # Only the landing host can owe a host apply, so only its brief names the heading. A
-    # review batch's first session owes only the PR; `review_prompts.land_prompt` asks for
-    # the verdict.
+    # review batch's sessions owe only the PR: its pipeline runs `land.sh` itself
+    # (`review_land`).
     if lands(host, target.repo) and not review:
         # The landing host owes a verdict as well as a PR: `gh pr create` returning says
         # nothing about whether the PR merged and deployed. The hook and

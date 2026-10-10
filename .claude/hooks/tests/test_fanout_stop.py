@@ -165,16 +165,17 @@ def test_a_review_phase_may_stop_on_its_json_but_the_same_text_outside_one_is_bl
     assert _stop(_fanout_tree(tmp_path / "other"), '{"findings": []}') is not None
 
 
-def test_a_land_phase_owes_a_verdict_although_its_brief_stops_at_the_pr(tmp_path):
+def test_a_review_batch_owes_no_verdict_in_any_phase(tmp_path):
+    # Its pipeline runs land.sh itself (#3960), so the apply phase it resumes finishes on the
+    # PR URL, and a PR URL alone still finishes a landing brief's session.
     issues = [Issue(1, "one", "body")]
     brief = render_brief(issues, "daniel-box", "1", "worktree-orch", [], review=True)
     root = _fanout_tree(tmp_path, brief)
-    (root / ".fanout" / "phase").write_text("implement\n")
-    assert _stop(root, FINISHED) is None
-    (root / ".fanout" / "phase").write_text("land\n")
-    reason = _stop(root, FINISHED)
-    assert reason and "no `VERDICT:` line" in reason
-    assert _stop(root, LANDED) is None
+    for running in ("implement", "file", "apply"):
+        (root / ".fanout" / "phase").write_text(f"{running}\n")
+        assert _stop(root, FINISHED) is None
+    landing = render_brief(issues, "daniel-box", "1", "worktree-orch", [])
+    assert _stop(_fanout_tree(tmp_path / "landing", landing), FINISHED) is not None
 
 
 def test_a_red_phase_may_stop_on_its_json(tmp_path):

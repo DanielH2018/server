@@ -40,9 +40,9 @@ this repo's `origin/master` (`launch.snapshot_command`), not the host's primary 
 THE REVIEW PIPELINE. A `launch --review` batch runs several sessions in one worktree
 (`scripts/dev/fanout_lib/review.py`), and the pipeline names the running one in
 `.fanout/phase`. A `review` session never blocks: it is a read-only reviewer whose final
-message is structured JSON, with no PR URL to give. A `land` session owes a `VERDICT:` line
-although its brief stops at the PR, because the pipeline handed it the landing section
-afterwards. With no phase file, the brief alone decides, as before.
+message is structured JSON, with no PR URL to give. No phase owes a `VERDICT:` line: the
+pipeline runs `land.sh` itself (#3960), and a review batch's brief stops at the PR. With no
+phase file, the brief alone decides, as before.
 
 A `red` session never blocks either. It writes the failing tests a red/green batch starts
 from, and like a reviewer it ends with structured JSON and has no PR to name.
@@ -197,7 +197,7 @@ def decide(payload: dict) -> str | None:
     item = open_item(
         str(payload.get("last_assistant_message") or ""),
         root,
-        owes_a_landing(root) or running == "land",
+        owes_a_landing(root),
     )
     if item is None:
         return None
