@@ -1,11 +1,12 @@
 # Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
-# {{ claude_code_agent_github_login }}'s classic token, scope public_repo only, from
-# claude_code_agent_gh_token in SOPS. gh reads the user's token from `users:`, and the copy at
-# host level is the shape gh writes itself for the active account.
+# {{ claude_code_agent_github_login }}'s classic token, scope public_repo only, from the SOPS
+# variable the agent's profile names (claude_code_agent_gh_token for the primary agent). gh
+# reads the user's token from `users:`, and the copy at host level is the shape gh writes
+# itself for the active account.
 github.com:
     users:
         {{ claude_code_agent_github_login }}:
-            oauth_token: {{ claude_code_agent_gh_token | to_json }}
-    oauth_token: {{ claude_code_agent_gh_token | to_json }}
+            oauth_token: {{ claude_code_agent_gh_token_value | to_json }}
+    oauth_token: {{ claude_code_agent_gh_token_value | to_json }}
     user: {{ claude_code_agent_github_login }}
     git_protocol: https

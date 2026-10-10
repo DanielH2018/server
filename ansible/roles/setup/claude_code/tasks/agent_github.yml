@@ -12,10 +12,11 @@
 - name: Refuse to give the agent user a GitHub identity without its token
   ansible.builtin.assert:
     that:
-      - claude_code_agent_gh_token | default('') | length > 0
+      - claude_code_agent_gh_token_value | default('') | length > 0
     fail_msg: >-
-      claude_code_agent_user_enabled is true, but claude_code_agent_gh_token is not in
-      secrets.yml. Add the machine account's classic public_repo token with `sops` first.
+      The agent user {{ claude_code_agent_user }} is switched on, but the SOPS variable its
+      profile names for its token is not in secrets.yml (claude_code_agent_gh_token for the
+      primary agent). Add the machine account's classic public_repo token with `sops` first.
     quiet: true
   no_log: true
 

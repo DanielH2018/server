@@ -29,7 +29,7 @@ A branch made any other way follows the same rule. To push one, name it
 GitHub compares a pushed branch with the default branch. A branch based behind master's latest
 `.github/workflows/` change reads as a workflow edit, and your token cannot push one. Run
 `git fetch origin master` and `git rebase origin/master`, then push.
-{% if claude_code_lander_enabled %}
+{% if claude_code_lander_enabled and claude_code_agent_is_primary %}
 
 ## Land a PR with the repo's own command
 

@@ -24,7 +24,7 @@ from lib.proc_testing import run, write_exec
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 SCRIPT = ROLE / "files" / "claude-clone-sync.sh"
-CLAUDE_TASKS = ROLE / "tasks" / "main.yml"
+CLAUDE_TASKS = ROLE / "tasks" / "agent.yml"
 PULL = "Fast-forward the agent user's clone to origin's master"
 REPORT = "Report that the agent user's clone was left behind"
 SYNC = "Sync the repo's venv in the agent user's clone"
@@ -214,12 +214,19 @@ def test_the_venv_sync_reads_the_fast_forwarded_lock() -> None:
 
 def test_switching_the_agent_off_removes_what_the_drift_stamp_names() -> None:
     """A fragment left behind names a removed script, and the drift check stays red for good."""
-    stamp = named("Record the deployed agent clone sync script for drift checking")[
-        "vars"
-    ]
-    removed = named(
-        "Remove the agent clone sync units and script when the agent user is switched off"
-    )["loop"]
+    main = yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    stamp = next(
+        t["vars"]
+        for t in main
+        if t.get("name")
+        == "Record the deployed agent clone sync script for drift checking"
+    )
+    removed = next(
+        t["loop"]
+        for t in main
+        if t.get("name")
+        == "Remove the agent clone sync script when no agent user is switched on"
+    )
     fragment = (
         "/var/lib/homelab/setup-deployed-manifest.d/" + stamp["stamp_deployed_name"]
     )

@@ -20,22 +20,22 @@
   ansible.builtin.getent:
     database: passwd
 
-# claude_code_login_uids is what the operator declares. The agent's uid joins it when the
-# agent user is enabled and exists: looked up, never written down, because a hard-coded uid
-# would silently cap nothing on a host that numbered the account differently. Under --check
-# on a host that has not built the agent yet, it is absent here and joins on the real run.
+# claude_code_login_uids is what the operator declares. Each switched-on agent's uid joins it
+# once the agent user exists: looked up, never written down, because a hard-coded uid would
+# silently cap nothing on a host that numbered the account differently. Under --check on a host
+# that has not built an agent yet, it is absent here and joins on the real run. Every agent,
+# switched on or not, is a login account, so a switched-off agent's environment.d file goes.
 - name: Work out which uids carry the login-session caps
   ansible.builtin.set_fact:
     claude_code_login_caps_uids: >-
       {{ ((claude_code_login_uids
-           + ([ansible_facts.getent_passwd[claude_code_agent_user][1] | int]
-              if claude_code_agent_user_enabled
-                 and claude_code_agent_user in ansible_facts.getent_passwd
-              else []))
+           + (ansible_facts.getent_passwd | dictsort
+              | selectattr('0', 'in', claude_code_agents_present)
+              | map(attribute='1.1') | list))
           | map('int') | unique | list)
          if claude_code_login_caps_enabled else [] }}
     claude_code_login_accounts: >-
-      {{ [sys_user, claude_code_agent_user] | unique
+      {{ ([sys_user] + claude_code_agent_profiles | map(attribute='name') | list) | unique
          | select('in', ansible_facts.getent_passwd) | list }}
 
 # ── The slice drop-ins ──────────────────────────────────────────────────────────────────
