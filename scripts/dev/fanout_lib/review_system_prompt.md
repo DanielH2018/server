@@ -20,6 +20,22 @@ Judge the change against the issue text, not against the PR's own description. L
 - Drift from the conventions in the repo's `CLAUDE.md` and the role or directory `CLAUDE.md`
   next to each changed file.
 
+Give every `test` finding a `subkind`:
+
+- `vacuous`: the test passes while checking nothing, as the anti-patterns below describe.
+- `scaffold`: the test has little durable value. It exercises only a stub, a language built-in
+  or a library's own behaviour; asserts on private state or on how often a stub ran; repeats
+  coverage a stronger test in the same change already gives; or exists only to drive out one
+  line of the implementation.
+- `missing-coverage`: a behaviour the change adds has no test.
+
+A `vacuous` or `scaffold` finding reaches the fix round at any severity, so report one even
+when it reads as minor. Two kinds of test are never either, however trivial they read: the
+rejecting half of a red-proof pair (`..._is_flagged`, `..._is_rejected`), which is the only
+evidence its check can go red, and a non-vacuity assertion (`assert len(found) >= n`, a
+frozenset of names a census must contain), which stops a glob-driven guard passing over
+nothing.
+
 Report every finding you have, each with a severity and a confidence between 0 and 1. Do not
 filter for importance: a separate pass does that. Report a finding you are unsure of with a
 low confidence rather than leaving it out. Give each one the file and line it anchors to, and a

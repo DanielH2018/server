@@ -231,6 +231,36 @@ def test_actionable_keeps_medium_at_the_confidence_floor_and_drops_the_rest():
     ) == [kept]
 
 
+def _test_finding(subkind, confidence=0.6):
+    return dict(_finding(subkind, "low", confidence, "test"), subkind=subkind)
+
+
+def test_a_low_vacuous_or_scaffold_test_finding_reaches_the_fix_round():
+    # The severity floor dropped these anti-patterns unfiled (#4023).
+    vacuous, scaffold = _test_finding("vacuous"), _test_finding("scaffold")
+    assert actionable([vacuous, scaffold]) == [vacuous, scaffold]
+
+
+def test_a_low_missing_coverage_or_unsure_vacuous_finding_stays_below_the_bar():
+    assert (
+        actionable(
+            [
+                _test_finding("missing-coverage"),
+                _test_finding("vacuous", confidence=0.59),
+            ]
+        )
+        == []
+    )
+
+
+def test_the_reviewer_reads_the_anti_patterns_read_at_start(tmp_path):
+    pipeline, _ = _pipeline(tmp_path, [])
+    pipeline.anti_patterns = "ANTI-PATTERNS AT START"
+    reviewer = pipeline._reviewer()
+    prompt = reviewer[reviewer.index("--append-system-prompt") + 1]
+    assert "ANTI-PATTERNS AT START" in prompt
+
+
 def test_the_reviewer_prompt_is_the_text_read_before_the_implementer_ran(tmp_path):
     """The implementer can write the worktree the module loads from, so a prompt file read
     at review time is one it could have rewritten."""
@@ -379,6 +409,8 @@ def test_another_repos_later_phases_keep_its_own_project_settings(tmp_path):
     assert list(settings["hooks"]) == ["Stop"]
     reviewer = pipeline._reviewer()
     assert "--setting-sources" not in reviewer
+    pipeline.anti_patterns = ""
+    reviewer = pipeline._reviewer()
     assert reviewer[reviewer.index("--append-system-prompt") + 1] == (
         pipeline.review_prompt
     )

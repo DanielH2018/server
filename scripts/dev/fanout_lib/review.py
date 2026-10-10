@@ -179,7 +179,9 @@ class Pipeline:
         self.state_dir = state_dir
         self.red_green = red_green
         self.gates = gates
-        self.anti_patterns = anti_patterns() if red_green else ""
+        # Read at start for the red author and every reviewer (#4023): the skill lives outside
+        # the worktree, but one read keeps every phase on the same text.
+        self.anti_patterns = anti_patterns()
         self.record = Record(batch)
         self.session = ""
         # The implementer session's `total_cost_usd` so far: a resumed session reports its
@@ -369,6 +371,8 @@ class Pipeline:
 
     def _reviewer(self) -> list[str]:
         prompt = self.review_prompt
+        if self.anti_patterns:
+            prompt += "\n\n# What a vacuous test looks like\n\n" + self.anti_patterns
         if self.project_claude_md:
             prompt += (
                 "\n\n# The repo's CLAUDE.md, as it stood before the implementer ran\n\n"
