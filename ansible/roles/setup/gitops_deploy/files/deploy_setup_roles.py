@@ -29,6 +29,15 @@ _SETUP_ROLE_TAG_OVERRIDES = {"chezmoi_setup": "chezmoi"}
 INITIAL_SETUP = "ansible/initial_setup.yml"
 
 
+def roles_outside_initial_setup_in(playbook: str) -> set[str]:
+    """The setup roles `playbook` applies that `initial_setup.yml` does not, by the map above.
+
+    Empty for `initial_setup.yml` itself and for `bootstrap.yml`: neither carries a role the
+    map routes to it, so a change to either is named as a run of the whole playbook.
+    """
+    return {r for r, p in _SETUP_ROLES_OUTSIDE_INITIAL_SETUP.items() if p == playbook}
+
+
 def setup_role_playbook(role: str) -> str | None:
     """The playbook that applies a setup role, or None when no playbook includes it."""
     if role in _SETUP_ROLES_OUTSIDE_INITIAL_SETUP:

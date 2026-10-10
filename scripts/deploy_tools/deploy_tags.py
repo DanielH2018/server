@@ -357,7 +357,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
         print(f"  {path}", file=sys.stderr)
     print(
         "  Applying it means applying whoever wrote it — if it is another session's, say so "
-        f"and stop. Otherwise: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles)}",
+        f"and stop. Otherwise: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks)}",
         file=sys.stderr,
     )
     return DEPLOY_BROAD
@@ -429,7 +429,7 @@ def changed(
             file=sys.stderr,
         )
         print(
-            f"  Run manually instead: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles)}",
+            f"  Run manually instead: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks)}",
             file=sys.stderr,
         )
         return DEPLOY_BROAD

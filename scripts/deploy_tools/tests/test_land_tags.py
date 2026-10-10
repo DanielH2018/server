@@ -437,7 +437,7 @@ def test_a_quiet_path_does_not_excuse_the_loud_one_beside_it():
     """One dropped path must not take the rest of the broad half with it."""
     files = [*_PR_843, "ansible/bootstrap.yml"]
     note = land_tags.plane_note(files, quiet={_K3S_DEFAULTS})
-    assert "initial_setup.yml --tags <role>" in note
+    assert "`ansible-playbook ansible/bootstrap.yml`" in note
 
 
 def test_a_quiet_path_never_mutes_a_secrets_rotation():

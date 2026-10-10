@@ -9,7 +9,14 @@ apart in what order they name the ff-merge and the playbook.
 
 from __future__ import annotations
 
-from deploy_changes import ChangeSet, setup_role_playbook, setup_role_tag
+from collections.abc import Iterable
+
+from deploy_changes import (
+    ChangeSet,
+    roles_outside_initial_setup_in,
+    setup_role_playbook,
+    setup_role_tag,
+)
 from gitops_ledger import OWED_MANUAL_PLANE
 from gitops_markers import MAXIMAL_ROLE_GATED_TAGS, owed_clear_cmd, target_arg
 
@@ -88,6 +95,7 @@ def broad_remediation(
     setup_roles: set[str] | None = None,
     branch: str = BRANCH_DEFAULT,
     narrow_tags: dict[str, frozenset[str]] | None = None,
+    playbooks: Iterable[str] = (),
 ) -> str:
     """The manual command(s) a broad (defer-and-alert) change needs, in the order they work.
 
@@ -101,6 +109,11 @@ def broad_remediation(
     and exists because the placeholder's *playbook* was wrong for some roles rather than merely
     vague — see `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`. Omitting it keeps the old generic text,
     which is what every caller with no path list still gets.
+
+    `playbooks` is the changed bring-up playbooks, `ChangeSet.manual_playbooks`. A bring-up
+    playbook sits under no role directory, so it adds nothing to `setup_roles`, and before
+    #4282 a `k3s-bringup.yml`-only change printed `initial_setup.yml --tags <role>`: a
+    placeholder that names the wrong playbook and matches no tag.
 
     `narrow_tags` narrows the `--tags` value one step further, from the whole-role tag to the
     tags of the tasks that read what changed. It is the `tags` key of the deployer's
@@ -120,7 +133,7 @@ def broad_remediation(
     if broad_deploy:
         cmds.append("`ansible-playbook ansible/deploy.yml`")
     if broad_setup:
-        cmds.extend(_setup_commands(setup_roles, narrow_tags))
+        cmds.extend(_setup_commands(setup_roles, narrow_tags, playbooks))
     return f"`git merge --ff-only origin/{branch}` FIRST, then " + " and ".join(cmds)
 
 
@@ -260,6 +273,7 @@ def maximal_tag_warning(role: str) -> str:
 def _setup_commands(
     setup_roles: set[str] | None,
     narrow_tags: dict[str, frozenset[str]] | None = None,
+    playbooks: Iterable[str] = (),
 ) -> list[str]:
     """One command per setup role, or the generic placeholder when no roles are known.
 
@@ -268,6 +282,11 @@ def _setup_commands(
         narrow_tags: role tag -> the narrower tags that role's own change needs, from the
             `manual_plane` ledger class. A role absent from it, or present with an empty set,
             gets the whole-role tag.
+        playbooks: changed bring-up playbooks. One that `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`
+            routes a role to is named by that role's command, so `k3s-bringup.yml` prints
+            `--tags k3s` with its maximal-tag warning. Any other is named as a whole run:
+            `bootstrap.yml` and `initial_setup.yml` have no single role a playbook-level edit
+            maps to.
 
     A role in `_MAXIMAL_ROLE_TAGS` gets its command annotated with what that command does, so
     every surface quoting this composer — land.sh's `needs-manual-apply` note, the deployer's
@@ -275,11 +294,18 @@ def _setup_commands(
     whole-role warning goes only on the whole-role tag. A narrowed `--tags` that still reaches
     the role's gated tasks (`_MAXIMAL_ROLE_GATED_TAGS`) carries the shorter gated warning.
     """
-    if not setup_roles:
+    roles = set(setup_roles or ())
+    cmds = []
+    for playbook in sorted(playbooks):
+        owners = roles_outside_initial_setup_in(playbook)
+        if owners:
+            roles |= owners
+        else:
+            cmds.append(f"`ansible-playbook {playbook}`")
+    if not roles and not cmds:
         return ["`ansible-playbook ansible/initial_setup.yml --tags <role>`"]
     narrow_tags = narrow_tags or {}
-    cmds = []
-    for role in sorted(setup_roles):
+    for role in sorted(roles):
         playbook = setup_role_playbook(role)
         if playbook is None:
             # No playbook includes this role, so there is no single command to print. Naming

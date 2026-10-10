@@ -221,6 +221,7 @@ def plane_note(
                 True,
                 unroutable,
                 narrow_tags=narrow_tags if narrow_tags is not None else {},
+                playbooks=loud.changes.manual_playbooks,
             )
         )
     if unroutable and not loud.manual:
