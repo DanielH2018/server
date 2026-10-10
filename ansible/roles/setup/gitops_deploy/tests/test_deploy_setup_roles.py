@@ -11,12 +11,14 @@ import subprocess
 
 import pytest
 
+import deploy_cross_role
 import deploy_defer
 import deploy_phases
 import deploy_setup_roles
 import setup_routing
 from _deploy_fakes import checkout_routing
 from deploy_changes import setup_tags_for, tick_applies_setup_role
+from deploy_remediation import broad_remediation
 from gitops_markers import NO_PLAYBOOK, UNROUTED_PLAYBOOK, by_hand
 
 GITOPS_TASKS = "ansible/roles/setup/gitops_deploy/tasks/main.yml"
@@ -243,3 +245,33 @@ def test_an_unplaced_roles_line_is_flagged_unrouted_and_clears_once_routed(state
     deploy_setup_roles.use_routing(routes)
     deploy_defer.clear_applied(state, INITIAL_SETUP, ["chezmoi"])
     assert state.manual_plane_pending() == []
+
+
+# ── common's remediation names its consumers from the routing (#4316) ─────────────────────
+def test_commons_consumer_commands_follow_the_routing_not_literals():
+    """#4316: a consumer that moves host changes the printed command with it."""
+    routes, _ = checkout_routing()
+    moved = routes["optimize_pi"]._replace(host="daniel-elsewhere")
+    deploy_setup_roles.use_routing({**routes, "optimize_pi": moved})
+    cmd = broad_remediation(False, True, {"common"})
+    assert "--tags optimize_pi -e target=daniel-elsewhere`" in cmd
+    assert "daniel-pi" not in cmd
+
+
+def test_commons_consumers_come_from_the_adopted_cross_role_table():
+    """A third role rendering `resolv.conf.j2` is named once origin's table carries it."""
+    path = "ansible/roles/setup/common/templates/resolv.conf.j2"
+    saved = deploy_cross_role.current_tables()
+    deploy_cross_role.use_tables(
+        {
+            **saved,
+            "SETUP_FILES_ROUTED_TO_OWNER": {
+                path: frozenset({"k3s", "optimize_pi", "chezmoi_setup"})
+            },
+        }
+    )
+    try:
+        cmd = broad_remediation(False, True, {"common"})
+    finally:
+        deploy_cross_role.use_tables(saved)
+    assert "`ansible-playbook ansible/initial_setup.yml --tags chezmoi`" in cmd

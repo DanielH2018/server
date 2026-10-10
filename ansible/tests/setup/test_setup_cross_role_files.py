@@ -223,11 +223,13 @@ def test_the_scan_finds_the_known_edges():
         assert found.get(path) == roles, path
 
 
-def test_the_owner_routed_template_is_still_rendered_by_another_role():
+def test_the_owner_routed_template_names_the_roles_that_render_it():
     # The exclusion is a decision about a real edge; one that no role names is dead weight.
+    # The consumers are what `common`'s remediation prints (#4316), so a third renderer the
+    # table does not name would go missing from that command.
     direct = cross_role_files(_setup_task_texts())
-    for path in SETUP_FILES_ROUTED_TO_OWNER:
-        assert direct.get(path), path
+    for path, roles in SETUP_FILES_ROUTED_TO_OWNER.items():
+        assert direct.get(path) == roles, path
 
 
 def test_the_k8s_importers_table_equals_the_tree():

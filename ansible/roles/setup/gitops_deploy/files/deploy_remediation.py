@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+import deploy_cross_role
 from deploy_changes import (
     ChangeSet,
     is_routed,
@@ -324,32 +325,58 @@ def _setup_commands(
             continue
         playbook = setup_role_playbook(role)
         if playbook is None:
-            # No playbook includes this role, so there is no single command to print. Naming
-            # its consumers is the only actionable thing left, and it is genuinely two
-            # commands on two hosts — see the `common` note on the mapping above.
-            cmds.append(
-                f"`{role}` is read by other roles and applied by no playbook of its own — "
-                "apply each consumer (`ansible-playbook ansible/k3s-bringup.yml --tags "
-                "<tag>` on daniel-box, `ansible-playbook ansible/initial_setup.yml --tags "
-                "optimize_pi -e target=daniel-pi` on daniel-pi)"
-            )
+            cmds.append(_consumers_command(role))
             continue
-        role_tag = setup_role_tag(role)
-        narrowed = _narrowed_tags(role, narrow_tags)
-        tags = ",".join(sorted(narrowed)) or role_tag
-        target = target_arg(setup_role_host(role))
-        cmd = f"`ansible-playbook {playbook} --tags {tags}{target}`"
-        if not narrowed:
-            warning = maximal_tag_warning(role)
-        elif narrowed & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
-            warning = _MAXIMAL_ROLE_GATED_WARNING[role]
-        else:
-            warning = ""
-        # Parenthesised, not appended after a dash: `manual_plane_remediation` adds ", then
-        # <clear command>" after this list, and an unbracketed warning made that clause read
-        # as a continuation of the warning's own last sentence.
-        cmds.append(f"{cmd} (WARNING: {warning})" if warning else cmd)
+        cmds.append(_role_command(role, playbook, narrow_tags))
     return cmds
+
+
+def _role_command(
+    role: str, playbook: str, narrow_tags: dict[str, frozenset[str]]
+) -> str:
+    """The one command that applies a routed setup role, with its maximal-tag warning."""
+    role_tag = setup_role_tag(role)
+    narrowed = _narrowed_tags(role, narrow_tags)
+    tags = ",".join(sorted(narrowed)) or role_tag
+    target = target_arg(setup_role_host(role))
+    cmd = f"`ansible-playbook {playbook} --tags {tags}{target}`"
+    if not narrowed:
+        warning = maximal_tag_warning(role)
+    elif narrowed & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
+        warning = _MAXIMAL_ROLE_GATED_WARNING[role]
+    else:
+        warning = ""
+    # Parenthesised, not appended after a dash: `manual_plane_remediation` adds ", then
+    # <clear command>" after this list, and an unbracketed warning made that clause read
+    # as a continuation of the warning's own last sentence.
+    return f"{cmd} (WARNING: {warning})" if warning else cmd
+
+
+def _consumers_command(role: str) -> str:
+    """The commands for a role no playbook includes: one per role that renders its files.
+
+    `common` is that role. Its consumers come from `deploy_cross_role.SETUP_FILES_ROUTED_TO_OWNER`,
+    and each consumer's playbook, tag and host come from the routing (#4316). Before that the
+    text named `k3s-bringup.yml`, `optimize_pi` and daniel-pi as literals, which went stale
+    the moment a consumer moved host or a third role started rendering the file.
+
+    Read qualified at call time, because `deploy_cross_role.use_tables` rebinds the table to
+    origin's copy. A consumer the routing does not place keeps its name and says so.
+    """
+    consumers = deploy_cross_role.owner_routed_consumers(role)
+    cmds = []
+    for consumer in sorted(consumers):
+        playbook = setup_role_playbook(consumer) if is_routed(consumer) else None
+        if playbook is None:
+            cmds.append(f"`{consumer}` (not routed to a playbook)")
+        else:
+            cmds.append(_role_command(consumer, playbook, {}))
+    each = (
+        f"apply each consumer ({', '.join(cmds)})"
+        if cmds
+        else "apply each role that renders its files"
+    )
+    return f"`{role}` is read by other roles and applied by no playbook of its own — {each}"
 
 
 def k8s_remediation(
