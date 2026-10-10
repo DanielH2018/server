@@ -7,11 +7,11 @@ counting it made the conjunction fire on rendered bytes alone. The second guard 
 assumption that makes skipping them safe.
 """
 
+from lib.k8s_roles import resolved_manifest_files
 from _helpers import REPO as _REPO
 from _helpers import load_tasks as _tasks
 from _helpers import render_expr as _render
 from _k8s_render import rendered_docs
-from _role_census import task_files_by_role
 
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
@@ -65,16 +65,9 @@ def test_every_secret_document_renders_as_a_secret_file() -> None:
 
     That trigger reads `manifests_secret_render`, which renders `manifests_secret_files` alone. A
     Secret declared in an ordinary manifest file would change with no trigger left to restart
-    its consumer. The list is the role's explicit `manifests_secret_files` when it passes one,
-    else the basenames that say `secret`, as `k8s/manifests` derives it.
+    its consumer. The list comes from `lib.k8s_roles.resolved_manifest_files`, the offline copy
+    of the role's own resolution that `test_derived_manifest_files.py` keeps in step with it.
     """
-    explicit: dict[str, str] = {}
-    for role_dir, path in task_files_by_role(_REPO / "ansible/roles/k8s"):
-        for task in _tasks(path):
-            listed = (task.get("vars") or {}).get("manifests_secret_files")
-            if listed is not None:
-                explicit[role_dir.name] = str(listed)
-
     secrets = {
         (role, name)
         for role, name, doc in rendered_docs()
@@ -86,14 +79,10 @@ def test_every_secret_document_renders_as_a_secret_file() -> None:
     stray = sorted(
         f"{role}/{name}"
         for role, name in secrets
-        if not (
-            name.removesuffix(".j2") in explicit[role]
-            if role in explicit
-            else "secret" in name
-        )
+        if name.removesuffix(".j2") not in resolved_manifest_files(role)[1]
     )
     assert not stray, (
         "These templates declare a Secret outside the role's manifests_secret_files, so a change "
         "to it restarts nothing: the apply's verdict skips `secret/` lines (#4339) and the "
-        f"`secret` trigger never renders them. Name the file `*secret*` or list it: {stray}"
+        f"`secret` trigger never renders them. Name the file `secret.yaml`, `<x>-secret.yaml` or `secret-<x>.yaml`, or list it: {stray}"
     )
