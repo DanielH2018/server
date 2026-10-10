@@ -48,6 +48,11 @@ FINDINGS_SCHEMA = {
                         ],
                     },
                     "detail": {"type": "string"},
+                    # Only on a `test` finding; `review_record.actionable` reads it (#4023).
+                    "subkind": {
+                        "type": "string",
+                        "enum": ["vacuous", "scaffold", "missing-coverage"],
+                    },
                 },
                 "required": [
                     "title",
