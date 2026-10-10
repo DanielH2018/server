@@ -105,12 +105,18 @@ def network_policies() -> list[tuple[str, dict]]:
 
 
 def doubly_rendered(policies: list[tuple[str, dict]]) -> set[tuple[str, str]]:
-    """(namespace, name) of every NetworkPolicy more than one role renders."""
-    owners: dict[tuple[str, str], set[str]] = {}
-    for role, doc in policies:
+    """(namespace, name) of every NetworkPolicy rendered more than once, by one role or two.
+
+    Two documents of one name in the same role are a duplicate too: `homepage_widget` on an
+    entry whose role also renders a bespoke fence of that name (pihole) would make the callers
+    loop render a second copy, and the last one applied would replace the bespoke fence.
+    """
+    counts: dict[tuple[str, str], int] = {}
+    for _role, doc in policies:
         meta = doc["metadata"]
-        owners.setdefault((meta.get("namespace", ""), meta["name"]), set()).add(role)
-    return {key for key, roles in owners.items() if len(roles) > 1}
+        key = (meta.get("namespace", ""), meta["name"])
+        counts[key] = counts.get(key, 0) + 1
+    return {key for key, n in counts.items() if n > 1}
 
 
 def admitted(doc: dict) -> list[tuple[frozenset[str], frozenset[int]]]:
@@ -140,7 +146,7 @@ def test_each_homepage_widget_entry_admits_homepage():
     } == (HOMEPAGE_WIDGET_FENCES)
 
 
-def test_no_network_policy_renders_from_two_roles():
+def test_no_network_policy_renders_twice():
     assert doubly_rendered(network_policies()) == set()
 
 
@@ -153,6 +159,14 @@ def test_a_policy_rendered_by_two_roles_is_flagged():
         ("radarr", {"metadata": {"name": "radarr", "namespace": "homelab"}}),
     ]
     assert doubly_rendered(policies) == {("homelab", "sonarr")}
+
+
+def test_a_policy_rendered_twice_by_one_role_is_flagged():
+    """A bespoke fence and a callers-loop fence of one name both render in netpol-baseline."""
+    doc = {"metadata": {"name": "pihole", "namespace": "homelab"}}
+    assert doubly_rendered([("netpol-baseline", doc), ("netpol-baseline", doc)]) == {
+        ("homelab", "pihole")
+    }
 
 
 def test_each_entry_renders_one_fence_from_its_owner_admitting_its_callers():

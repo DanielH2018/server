@@ -53,7 +53,8 @@ def homepage_widget_url(containers_list, name, namespace):
     if not entry.get("homepage_widget"):
         raise ValueError(
             f"containers_list entry {name!r} does not set `homepage_widget: true`, so its "
-            "NetworkPolicy does not admit homepage. Set the key on the entry."
+            "NetworkPolicy does not admit homepage. Set the key on the entry, unless a bespoke "
+            "template renders its fence (pihole); see services.yaml.j2."
         )
     if entry.get("port") is None:
         raise ValueError(f"containers_list entry {name!r} has no `port`")
