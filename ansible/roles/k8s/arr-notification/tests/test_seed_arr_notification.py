@@ -14,14 +14,8 @@ Run: uv run pytest ansible/roles/k8s/arr-notification/tests
 """
 
 import copy
-import os
-import sys
 
 import pytest
-
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
-)
 
 import seed_arr_notification as seed
 

@@ -14,13 +14,13 @@ that tag keeps routing to both hosts. Narrowing host routing is the dangerous di
 tag that reaches no host leaves the landing reading `settled` while the Pi runs the old
 container -- so this answers only for a tag whose whole path set sits under one tree.
 
-A TAG NO PATH NAMES IS NEVER IN HERE, because this reads paths rather than `derived_tags`'
+A TAG NO PATH NAMES IS NEVER IN HERE, because this reads paths rather than `Reach.tags`'
 output. Nothing proves which platform such a tag belongs to, so it keeps reaching every host
 that declares it.
 
-Its own module beside `land_tags`, for the reason `land_changes.py` gives for sitting there:
-`land_tags` is AT the 600-line cap. The import goes one way -- this reads `land_tags.tag_for`
-and `land_tags` reads nothing here -- so no cycle.
+Its own module beside `land_tags`, which was AT the 600-line cap when this was written. The
+import goes one way -- this reads `land_tags` and `reach`, and neither reads anything here -- so
+no cycle.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_platform.py
 """
@@ -34,6 +34,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import land_tags
+import reach
 
 # The role tree a k3s workload's files sit in. `land_tags._K8S` anchors its own match to this
 # same prefix, and `test_land_platform.py` holds the two against each other: a tree that moved
@@ -55,7 +56,7 @@ def k8s_only_tags(files, declared: set[str] | None = None) -> list[str]:
     declared = land_tags.declared_tags() if declared is None else declared
     trees: dict[str, set[bool]] = {}
     for path in files:
-        if tag := land_tags.tag_for(path, declared):
+        if tag := reach.tag_for(path, declared):
             trees.setdefault(tag, set()).add(path.startswith(K8S_TREE))
     return sorted(tag for tag, in_k8s in trees.items() if in_k8s == {True})
 

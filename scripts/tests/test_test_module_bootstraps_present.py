@@ -34,12 +34,20 @@ This stays a file rather than a census row for the reason Guard 2 gives (#3430):
 each import through Guard 2's evaluator against an index of the tree, and its accept/reject
 pairs build synthetic trees under `tmp_path`, which a row's text-only subjects cannot.
 
+A role's tests get one more directory. `ansible/roles/conftest.py` puts `<plane>/<role>/files`
+on `sys.path` when pytest collects a module under that role's `tests/` (#3746), so the guard
+credits that directory for such a module and refuses an insert of it as redundant, the same
+two rules it applies to `pythonpath`. The rule is the conftest's own `role_files_dir`, loaded
+from the file rather than restated here, and it names only the module's OWN role: an import of
+another role's `files/` module still needs an insert, or better a `pythonpath` entry.
+
 A `tests/_*.py` fixture module is a pytest-only module too: nothing but a `test_*.py` imports
 it. `collect_test_modules` takes every tracked module `is_pytest_only` accepts under a
 `testpaths` entry, and the fixture modules answer to both rules above.
 """
 
 import ast
+import importlib.util
 import sys
 import tomllib
 from pathlib import Path
@@ -59,7 +67,21 @@ from lib.repo_paths import REPO
 _PYPROJECT = tomllib.loads((REPO / "pyproject.toml").read_text())
 _INI = _PYPROJECT["tool"]["pytest"]["ini_options"]
 PYTHONPATH_DIRS = [(REPO / p).resolve() for p in _INI["pythonpath"]]
-TESTPATH_DIRS = [(REPO / p).resolve() for p in _INI["testpaths"]]
+# `ansible/roles/*/*/tests` is a glob, which pytest expands and `REPO / p` does not: read
+# literally, it named a directory that does not exist and kept every role test out of the census.
+TESTPATH_DIRS = [d.resolve() for p in _INI["testpaths"] for d in REPO.glob(p)]
+
+# The conftest that puts a role's own `files/` on sys.path for that role's tests.
+ROLES_CONFTEST = REPO / "ansible" / "roles" / "conftest.py"
+assert ROLES_CONFTEST.is_file(), (
+    f"{ROLES_CONFTEST} is gone: role tests lost their files/ path"
+)
+_SPEC = importlib.util.spec_from_file_location("_roles_conftest", ROLES_CONFTEST)
+assert _SPEC and _SPEC.loader
+_roles_conftest = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_roles_conftest)
+role_files_dir = _roles_conftest.role_files_dir
+ROLES_ROOT = ROLES_CONFTEST.parent
 
 # Vendored third-party Python, whose import hygiene is not ours to judge.
 _EXCLUDED = ("ansible/collections",)
@@ -139,11 +161,13 @@ def find_test_bootstrap_gaps(
     pythonpath_dirs: list[Path],
     repo_dirs: dict[str, set[Path]],
     pythonpath_index: dict[str, set[Path]] | None = None,
+    roles_root: Path | None = None,
 ) -> tuple[list[tuple[Path, int, str, set[Path]]], list[tuple[Path, int, str]]]:
     """Every unsafe bare-name import, plus every one whose insert could not be evaluated.
 
     Explicitly parameterised — the accept/reject pair below feeds it synthetic trees under
     `tmp_path`, which a function reading `testpaths` for itself could not be handed.
+    `roles_root` is the directory `ansible/roles/conftest.py` sits in; None credits no role.
     """
     if pythonpath_index is None:
         pythonpath_index = build_import_index()
@@ -152,6 +176,7 @@ def find_test_bootstrap_gaps(
     for file in files:
         tree = _parsed(file)
         own_dir = file.parent.resolve()
+        role_dir = role_files_dir(file, roles_root) if roles_root else None
         inserts = _sys_path_insert_calls(tree)
         for top, scope, lineno in _imported_names(tree):
             if top in sys.stdlib_module_names:
@@ -160,6 +185,8 @@ def find_test_bootstrap_gaps(
                 continue  # pytest puts the module's own directory on sys.path
             if any(_provides(d, top) for d in pythonpath_dirs):
                 continue  # pyproject's pythonpath covers it for every collected module
+            if role_dir is not None and _provides(role_dir, top):
+                continue  # ansible/roles/conftest.py inserts the role's own files/
             providers = {d for d in repo_dirs.get(top, set()) if _provides(d, top)}
             if not providers:
                 continue  # third-party: the environment provides it, not the tree
@@ -181,7 +208,10 @@ def find_test_bootstrap_gaps(
 
 def test_every_test_module_import_has_its_own_bootstrap():
     missing, _ = find_test_bootstrap_gaps(
-        collect_test_modules(), PYTHONPATH_DIRS, repo_module_dirs()
+        collect_test_modules(),
+        PYTHONPATH_DIRS,
+        repo_module_dirs(),
+        roles_root=ROLES_ROOT,
     )
     assert not missing, (
         "test module imports a repo module by bare name with no sys.path insert of its own "
@@ -197,7 +227,10 @@ def test_every_test_module_import_has_its_own_bootstrap():
 def test_no_test_module_insert_is_unresolvable():
     """An insert this evaluator cannot understand is reported, never credited."""
     _, unresolvable = find_test_bootstrap_gaps(
-        collect_test_modules(), PYTHONPATH_DIRS, repo_module_dirs()
+        collect_test_modules(),
+        PYTHONPATH_DIRS,
+        repo_module_dirs(),
+        roles_root=ROLES_ROOT,
     )
     assert not unresolvable, (
         "test module whose candidate sys.path.insert could not be evaluated (extend "
@@ -209,11 +242,13 @@ def find_redundant_test_bootstraps(
     files: list[Path],
     pythonpath_dirs: list[Path],
     pythonpath_index: dict[str, set[Path]] | None = None,
+    roles_root: Path | None = None,
 ) -> list[tuple[Path, int, Path]]:
-    """Every insert whose target is the module's own directory or a `pythonpath` entry.
+    """Every insert whose target is the module's own directory, its role's `files/` or a
+    `pythonpath` entry.
 
-    Both are on `sys.path` for every collected module already, so the insert changes nothing
-    under pytest and a test module is run by nothing else. An insert the evaluator cannot
+    All three are on `sys.path` for the module already, so the insert changes nothing under
+    pytest and a test module is run by nothing else. An insert the evaluator cannot
     resolve is `test_no_test_module_insert_is_unresolvable`'s to report, not this one's.
     """
     if pythonpath_index is None:
@@ -221,21 +256,25 @@ def find_redundant_test_bootstraps(
     redundant: list[tuple[Path, int, Path]] = []
     for file in files:
         own_dir = file.parent.resolve()
+        role_dir = role_files_dir(file, roles_root) if roles_root else None
         for call, _scope in _sys_path_insert_calls(_parsed(file)):
             target = _insert_target(call, file, pythonpath_index)
             if target is None:
                 continue
             target = target.resolve()
-            if target == own_dir or target in pythonpath_dirs:
+            if target in (own_dir, role_dir) or target in pythonpath_dirs:
                 redundant.append((file, call.lineno, target))
     return redundant
 
 
 def test_no_test_module_carries_an_insert_pythonpath_already_supplies():
-    redundant = find_redundant_test_bootstraps(collect_test_modules(), PYTHONPATH_DIRS)
+    redundant = find_redundant_test_bootstraps(
+        collect_test_modules(), PYTHONPATH_DIRS, roles_root=ROLES_ROOT
+    )
     assert not redundant, (
-        "test module inserts a directory pytest already puts on sys.path (its own, or a "
-        "`pythonpath` entry in pyproject.toml) — delete the bootstrap, it is dead weight:\n"
+        "test module inserts a directory pytest already puts on sys.path (its own, its "
+        "role's files/ via ansible/roles/conftest.py, or a `pythonpath` entry in "
+        "pyproject.toml) — delete the bootstrap, it is dead weight:\n"
         + "\n".join(
             f"  {f.relative_to(REPO)}:{lineno} inserts {target.relative_to(REPO)}"
             for f, lineno, target in redundant
@@ -264,6 +303,8 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
             "ansible/tests/conftest.py",
             "scripts/deploy_tools/tests/_land_fakes.py",
             "ansible/tests/_k8s_render.py",
+            # Imports its role's `files/` module through ansible/roles/conftest.py alone.
+            "ansible/roles/k8s/crowdsec/tests/test_bouncer_prune.py",
         }
     )
     assert required <= census, sorted(required - census)
@@ -390,3 +431,50 @@ def test_an_insert_of_the_module_s_own_directory_is_flagged(tmp_path):
     )
     flagged = find_redundant_test_bootstraps([module], [], {})
     assert [t for _, _, t in flagged] == [(tmp_path / "pkg" / "tests").resolve()]
+
+
+def _role_tree(
+    tmp_path: Path, test_body: str
+) -> tuple[Path, Path, dict[str, set[Path]]]:
+    """Two roles under `tmp_path/roles`, each shipping one module, and a test in the first."""
+    roles = tmp_path / "roles"
+    own = _write(roles / "k8s" / "own" / "files" / "own_mod.py", "VALUE = 1\n").parent
+    other = _write(
+        roles / "k8s" / "other" / "files" / "other_mod.py", "VALUE = 2\n"
+    ).parent
+    module = _write(roles / "k8s" / "own" / "tests" / "test_x.py", test_body)
+    repo_dirs = {"own_mod": {own.resolve()}, "other_mod": {other.resolve()}}
+    return module, roles, repo_dirs
+
+
+def test_a_role_test_importing_its_own_files_module_with_no_insert_is_clean(tmp_path):
+    module, roles, repo_dirs = _role_tree(tmp_path, "from own_mod import VALUE\n")
+    missing, _ = find_test_bootstrap_gaps([module], [], repo_dirs, {}, roles_root=roles)
+    assert not missing
+
+
+def test_a_role_test_importing_another_role_s_files_module_is_flagged(tmp_path):
+    """The conftest names the module's own role only: a role ships only its own `files/`,
+    so an import of a sibling role's module that passed here would fail at deploy time."""
+    module, roles, repo_dirs = _role_tree(tmp_path, "from other_mod import VALUE\n")
+    missing, _ = find_test_bootstrap_gaps([module], [], repo_dirs, {}, roles_root=roles)
+    assert [(f.name, top) for f, _, top, _ in missing] == [("test_x.py", "other_mod")]
+
+
+def test_a_role_test_inserting_its_own_files_is_flagged(tmp_path):
+    module, roles, _ = _role_tree(
+        tmp_path,
+        "import sys\nfrom pathlib import Path\n"
+        'sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))\n',
+    )
+    flagged = find_redundant_test_bootstraps([module], [], {}, roles_root=roles)
+    files = (roles / "k8s" / "own" / "files").resolve()
+    assert [(f.name, t) for f, _, t in flagged] == [("test_x.py", files)]
+
+
+def test_role_files_dir_names_no_directory_outside_a_role_s_tests(tmp_path):
+    module, roles, _ = _role_tree(tmp_path, "")
+    assert role_files_dir(module, roles) == (roles / "k8s" / "own" / "files").resolve()
+    stray = _write(roles / "k8s" / "own" / "files" / "test_y.py", "")
+    assert role_files_dir(stray, roles) is None
+    assert role_files_dir(tmp_path / "scripts" / "tests" / "test_z.py", roles) is None

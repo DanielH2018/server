@@ -1,12 +1,6 @@
 import json
-import os
-import sys
 
 import pytest
-
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
-)
 
 from safe_reads import (
     allowed_hosts_and_origins,

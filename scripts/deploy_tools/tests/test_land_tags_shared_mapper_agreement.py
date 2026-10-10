@@ -23,6 +23,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_shared_mapper_agree
 
 import land_shared
 import land_tags
+import reach
 from deploy_k8s import k8s_roles_listed
 from deploy_logic import services_from_changed_paths
 
@@ -116,7 +117,7 @@ def test_tag_for_is_narrower_than_role_for_and_that_is_the_reason_derive_keeps_i
     """`manifests` is a real role and NOT a deploy tag; `--tags manifests` refuses the list."""
     shared = "ansible/roles/k8s/manifests/tasks/main.yml"
     assert land_tags.role_for(shared) == "manifests"
-    assert land_tags.tag_for(shared) is None
+    assert reach.tag_for(shared, land_tags.declared_tags()) is None
     assert _shared_roles(shared) == {"manifests"}
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Which role a changed path belongs to, the shared-role expansion, and the #3124 narrowing.
+"""The shared-role expansion a landing makes, and the #3124 narrowing.
 
 A shared k8s role — `manifests`, `image-builder`, `arr-notification` — has no `containers_list`
 entry, so `--tags` cannot select it. `deploy.yml` runs it under the tag of every role that
@@ -15,9 +15,9 @@ representative caller as a smoke test, and `shared_role_callers.smoke_caller` ca
 `# DECIDED:` holding the operator's ruling and the gap it accepts.
 
 WHY IT IS NOT IN `land_tags`. That module is at its 600-line cap, and
-`scripts/tests/test_scripts_import_direction.py` refuses a cycle — so the mappers the shared-role
-half reads moved here with it rather than being imported back. `land_tags` re-exports every name
-below, so each existing reader keeps reading it there.
+`scripts/tests/test_scripts_import_direction.py` refuses a cycle — so this reads the path mappers
+from `reach`, which sits below both, rather than from `land_tags`. `land_tags` re-exports every
+name below, so each existing reader keeps reading it there.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_shared_role_smoke_caller.py
 """
@@ -34,70 +34,16 @@ from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, caller_tags, smoke_
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import _is_test_only_path, role_of
+from deploy_logic import role_of
 
-
-# The one directory under the role trees that is not a service: `common`, the shared Docker
-# deploy path. `--tags common` matches no containers_list entry, and Ansible exits 0 on a tag
-# selecting nothing.
-_NOT_SERVICES = frozenset({"common"})
+# The path-to-role mapper and the test-path rule live in `reach`, the module that answers
+# which services a path list reaches. `land_tags` re-exports both under their old names.
+from reach import is_role_test_path, role_for
 
 
 def declared_tags() -> set[str]:
     """Every name that selects a service, read from containers_list."""
     return deploy_tags.service_tags()
-
-
-def role_for(path: str) -> str | None:
-    """The role directory a changed path belongs to, or None.
-
-    Not the same question as `tag_for`: a role directory under roles/k8s/ need not have a
-    `containers_list` entry, and eight of them do not.
-
-    A `.md` under a role belongs to no role HERE, which is the answer the deployer's own
-    mapper gives: `services_from_changed_paths` drops one ahead of every plane branch,
-    because a document is not something a playbook applies.
-    `test_land_tags_shared_mapper_agreement.py` pins the two answers together.
-
-    The path shape itself is the deployer's `deploy_changes.role_of`, reached through the
-    index, so one function answers which role a path sits in. The `.md` rule and
-    `_NOT_SERVICES` stay HERE: `role_of` is the plain mapper, and this is the caller that reads
-    DIFF paths rather than a tree at a ref.
-    """
-    if path.endswith(".md"):
-        return None
-    at = role_of(path)
-    if at is None or at.plane == "setup" or at.role in _NOT_SERVICES:
-        return None
-    return at.role
-
-
-def is_role_test_path(path: str) -> bool:
-    """Whether a changed path is test-suite material, which no deploy applies.
-
-    The deployer's own `deploy_changes._is_test_only_path`, called rather than restated, so
-    the landing and the tick drop the same paths before they map one to a tag (#3660). It is
-    only asked of a path `role_for` has already named a role for, where it answers for the
-    role's own `tests/` and for a `test_*.py` or `conftest.py` anywhere in the role. Nothing
-    stages those: the `no-role-ships-a-test-file` row of
-    `ansible/tests/repo/test_census_rows_roles.py` holds that tree-wide. `shared_roles` and `tag_for` are the callers, and both drop such a path, the same
-    class as the `.md` rule in `role_for`.
-
-    `tasks/` is NOT dropped, for three reasons. A role
-    with no `containers_list` entry and no caller has no path to being applied at all, and a
-    tasks-only PR adding one must still be reported
-    (`tests/test_land_classify.py:110`). A helper's tasks apply live state to each
-    caller separately — arr-notification's seed a Discord Connect notification into the *arr's
-    own database — so deploying one caller is not the change applied
-    (`tests/test_land_tags_caller_coverage.py:76`). And `_supplies_manifest_bytes`
-    puts `image-builder` in the reported set by name:
-    the role ships `templates/build-job.yaml.j2`.
-
-    Read HERE rather than folded into `role_for`, which stays the plain "which role directory is
-    this path in" mapper `test_land_tags_shared_mapper_agreement.py` pins against the deployer's
-    own `services_from_changed_paths`.
-    """
-    return _is_test_only_path(path)
 
 
 # Subdirectories of a shared role whose content decides how a deploy RUNS rather than what it

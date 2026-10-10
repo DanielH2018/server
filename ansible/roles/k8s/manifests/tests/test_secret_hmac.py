@@ -9,13 +9,7 @@ Run: uv run pytest ansible/roles/k8s/manifests/tests
 """
 
 import hashlib
-import os
 import stat
-import sys
-
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
-)
 
 import secret_hmac
 

@@ -12,12 +12,12 @@ Run: uv run pytest ansible/tests/setup/test_claude_agent_ssh_login.py
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from lib import yaml_fast
+from lib.repo_paths import ALL_VARS, HOST_VARS
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 CLAUDE_MAIN = ROLE / "tasks" / "main.yml"
 AGENT_PEERS = ROLE / "tasks" / "agent_peers.yml"
 SSH_LOGIN = ROLE / "tasks" / "agent_ssh_login.yml"
-INVENTORY = ANSIBLE / "inventory"
 
 
 def tasks(path) -> list[dict]:
@@ -54,9 +54,7 @@ def test_the_key_half_runs_only_on_the_key_host_and_the_login_half_everywhere_el
         "claude_code_agent_user_enabled",
         "inventory_hostname != claude_agent_ssh_key_host",
     ]
-    assert vars_of(INVENTORY / "group_vars" / "all.yml")[
-        "claude_agent_ssh_key_host"
-    ] == ("daniel-box")
+    assert vars_of(ALL_VARS)["claude_agent_ssh_key_host"] == ("daniel-box")
 
 
 def test_the_key_is_authorized_while_enabled_and_removed_when_not() -> None:
@@ -86,21 +84,16 @@ def test_a_key_that_was_not_read_as_one_ed25519_line_is_refused() -> None:
 def test_daniel_server_switches_the_agent_and_its_login_on_and_the_default_is_off() -> (
     None
 ):
-    server = vars_of(INVENTORY / "host_vars" / "daniel-server.yml")
+    server = vars_of(HOST_VARS / "daniel-server.yml")
     assert server["claude_code_agent_user_enabled"] is True
     assert server["claude_agent_ssh_login_enabled"] is True
-    assert (
-        vars_of(INVENTORY / "group_vars" / "all.yml")["claude_agent_ssh_login_enabled"]
-        is False
-    )
-    assert "claude_agent_ssh_login_enabled" not in vars_of(
-        INVENTORY / "host_vars" / "daniel-box.yml"
-    )
+    assert vars_of(ALL_VARS)["claude_agent_ssh_login_enabled"] is False
+    assert "claude_agent_ssh_login_enabled" not in vars_of(HOST_VARS / "daniel-box.yml")
 
 
 def test_the_key_path_is_under_the_agent_home_and_is_not_the_signing_key() -> None:
     defaults = vars_of(ROLE / "defaults" / "main.yml")
-    key = vars_of(INVENTORY / "group_vars" / "all.yml")["claude_agent_ssh_key_path"]
+    key = vars_of(ALL_VARS)["claude_agent_ssh_key_path"]
     assert key.startswith(defaults["claude_code_agent_user_home"] + "/")
     assert key != defaults["claude_code_agent_signing_key"]
 

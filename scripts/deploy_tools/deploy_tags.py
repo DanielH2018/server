@@ -280,13 +280,9 @@ def _load_deploy_logic():
     function rather than at module import time, so `validate`/`list`/`describe` never pay
     for or depend on this cross-directory import succeeding — only `changed` needs it.
     """
-    from deploy_logic import (
-        broad_remediation,
-        k8s_remediation,
-        services_from_changed_paths,
-    )
+    from deploy_logic import broad_remediation, k8s_remediation
 
-    return services_from_changed_paths, broad_remediation, k8s_remediation
+    return broad_remediation, k8s_remediation
 
 
 def _git_diff_paths(ref: str, cwd: Path = REPO) -> list[str]:
@@ -314,12 +310,12 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     construction — so a deploy after that tick is guaranteed to hit deploy.sh's staleness
     refusal (exit 4). This is checkable in milliseconds and BEFORE any CI wait.
     """
-    # Lazy for the reason `_load_deploy_logic` is: `land_changes` imports `deploy_logic` at
-    # module scope, so a top-level import here would charge `validate`/`list`/`describe` for
-    # the cross-directory import they are kept clear of.
-    from land_changes import changes_for
+    # Lazy for the reason `_load_deploy_logic` is: `reach` imports `deploy_logic` at module
+    # scope, so a top-level import here would charge `validate`/`list`/`describe` for the
+    # cross-directory import they are kept clear of.
+    from reach import reach
 
-    _, broad_remediation, _ = _load_deploy_logic()
+    broad_remediation, _ = _load_deploy_logic()
     try:
         paths = _incoming_paths(args.ref)
     except subprocess.CalledProcessError as exc:
@@ -342,7 +338,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
             "tick crosses it.",
             file=sys.stderr,
         )
-    loud = changes_for(paths, quiet)
+    loud = reach(paths, quiet)
     cs = loud.changes
     if not loud.manual:
         print(
@@ -406,14 +402,9 @@ def changed(
     `git_diff` is the seam for the diff itself; None resolves `_git_diff_paths` at call time,
     so a test that patches the module attribute still reaches it.
     """
-    (
-        services_from_changed_paths,
-        broad_remediation,
-        k8s_remediation,
-    ) = _load_deploy_logic()
-    # Calls the mapper directly, NOT through the `land_changes.changes_for` the other five
-    # sites share: that helper drops a quiet set and names the bring-up paths,
-    # and this command has neither question. Its module docstring carries the decision.
+    from reach import reach
+
+    broad_remediation, k8s_remediation = _load_deploy_logic()
     try:
         paths = (git_diff or _git_diff_paths)(ref, cwd)
     except subprocess.CalledProcessError as exc:
@@ -427,7 +418,7 @@ def changed(
         print(f"deploy --changed: no files differ from {ref}.", file=sys.stderr)
         return 0
 
-    cs = services_from_changed_paths(paths)
+    cs = reach(paths).changes
 
     if cs.broad:
         print(

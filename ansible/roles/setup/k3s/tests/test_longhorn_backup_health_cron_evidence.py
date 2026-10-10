@@ -20,10 +20,8 @@ The transport that produces these lines is pinned separately by a real subproces
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py
 """
 
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
 import longhorn_cron_evidence_logic as logic
 from _shell_render import rendered_shell_text
 from lib import yaml_fast

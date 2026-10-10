@@ -20,8 +20,15 @@ the line this writes into the run's log names the scope.
 Only a `.service` under `user@<uid>.service` is left. A system unit such as
 `gitops-deploy.service` is left alone on purpose: moving out of it needs root, and the deployer
 waits for its own deploys. A login session's scope is left alone too.
+
+THE RUN RECORDS ITS OWN PID AND EXIT CODE BESIDE ITS LOG. A grandchild cannot be reaped by
+whoever waits on it, so the caller writes `<log stem>.pid` and the run writes `<log stem>.rc`
+after flushing its last line (`record_code`). A cc-wait probe (`land_probe.py`,
+`deploy_probe.py`) reads the code first and the log second, and reads a dead pid with no code
+as a run that was killed.
 """
 
+import contextlib
 import os
 import re
 import subprocess
@@ -188,3 +195,57 @@ def leave_unit_cgroup(
                 f"after {MOVE_WAIT_S:g}s; stopping {unit} may still stop this run."
             )
         sleep(MOVE_POLL_S)
+
+
+def rc_path(log: Path) -> Path:
+    """Where a detached run records its exit code: the log's own name with `.rc` for `.log`."""
+    return log.with_suffix(".rc")
+
+
+def pid_path(log: Path) -> Path:
+    """Where the caller records a detached run's pid: the log's own name with `.pid`."""
+    return log.with_suffix(".pid")
+
+
+def record_code(log: Path, code: int) -> None:
+    """Write `code` beside `log`, atomically. Call it after flushing the run's last line.
+
+    A reader that sees the code then also sees the last log line. Never raises: the run is on
+    its way out, and a failed write reads as a killed run, which is the honest report.
+    """
+    with contextlib.suppress(Exception):
+        rc = rc_path(log)
+        tmp = rc.with_suffix(".rc.tmp")
+        tmp.write_text(f"{code}\n")
+        tmp.replace(rc)
+
+
+def recorded_code(log: Path) -> int | None:
+    """The exit code the run recorded next to `log`, or None when it has not written one."""
+    try:
+        return int(rc_path(log).read_text().strip())
+    except OSError, ValueError:
+        return None
+
+
+def recorded_pid(log: Path) -> int | None:
+    """The run's pid as its caller recorded it next to `log`, or None when there is none."""
+    try:
+        return int(pid_path(log).read_text().strip())
+    except OSError, ValueError:
+        return None
+
+
+def alive(pid: int) -> bool:
+    """Whether `pid` still runs. A zombie is dead: its new parent may never reap it."""
+    with contextlib.suppress(ChildProcessError):
+        # Our own child (only in tests): reap it, or it stays a zombie of this process.
+        reaped, _ = os.waitpid(pid, os.WNOHANG)
+        if reaped:
+            return False
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return False
+    # The state is the first field after the parenthesised command name.
+    return stat.rpartition(")")[2].split()[0] not in ("Z", "X")

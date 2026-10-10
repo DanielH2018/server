@@ -317,6 +317,10 @@ ancestor and so sits behind the TIP on most ticks while working normally (issue 
 still applying, the markers were read mid-apply and a hold cannot be ruled out (issue #1607):
 re-run, because no later tick crosses a hold.
 
+`cc-wait land` tells the two apart for its caller (#3932). A plain `deferred` ends the wait as
+state `deferred`, exit 4. A `deferred` that abandoned a mid-apply tick ends it as `gave-up`,
+exit 3, the same as every other 75 that asks for a re-run of `land.sh`.
+
 **Converging is not applying.** `behind_since` empty says local == origin, which any session's
 `git merge --ff-only` produces too — and once it holds, `next_action()` returns `noop` for every
 later tick, so a plane the tick never applied is stranded permanently. PR #1529 read `settled`

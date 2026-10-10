@@ -1,13 +1,6 @@
 """Unit tests for k8s_reads — the cluster-API tool logic (offline, no I/O)."""
 
-import os
-import sys
-
 import pytest
-
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
-)
 
 import k8s_reads
 

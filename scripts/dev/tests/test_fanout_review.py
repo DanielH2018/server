@@ -114,8 +114,60 @@ def test_findings_below_the_bar_skip_the_fix_round_and_a_non_landing_host_stops(
     assert "2 findings, 0 actionable" in run.comments[0]
 
 
+def _fix_round(left):
+    """Reports for a batch whose fix round leaves `left` behind, then lands."""
+    first = _finding("off by one", confidence=0.9)
+    return [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": [first]}),
+        _report(f"Fixed. {PR}"),
+        _report(structured={"summary": "", "findings": left}),
+        _report(f"{PR}\nVERDICT: settled"),
+    ]
+
+
+def test_a_confident_medium_leftover_holds_the_pr_instead_of_landing(tmp_path):
+    left = [_finding("still off by one", severity="medium", confidence=0.8)]
+    pipeline, run = _pipeline(tmp_path, _fix_round(left))
+    final = pipeline.run_all()
+    assert final["result"].startswith("needs input:")
+    assert "still off by one (scripts/x.py)" in final["result"]
+    assert final["result"].endswith(PR)
+    assert "land" not in [phase for _, _, phase in run.claude]
+
+
+def test_a_leftover_under_the_hold_bar_still_lands(tmp_path):
+    left = [_finding("maybe off by one", severity="medium", confidence=0.79)]
+    pipeline, run = _pipeline(tmp_path, _fix_round(left))
+    pipeline.run_all()
+    assert [phase for _, _, phase in run.claude][-1] == "land"
+
+
+def test_the_pr_comment_lists_only_actionable_findings_and_counts_the_rest(tmp_path):
+    findings = [
+        _finding("off by one", confidence=0.9),
+        _finding("naming nit", severity="low", confidence=0.9),
+        _finding("unsure", severity="high", confidence=0.4),
+    ]
+    reports = [
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": findings}),
+        _report(f"Fixed. {PR}"),
+        _report(structured={"summary": "", "findings": []}),
+        _report(f"{PR}\nVERDICT: settled"),
+    ]
+    pipeline, run = _pipeline(tmp_path, reports)
+    pipeline.run_all()
+    comment = run.comments[0]
+    assert "off by one" in comment
+    assert "naming nit" not in comment and "unsure" not in comment
+    assert "2 findings below the actionable bar" in comment
+    assert "naming nit" in _record(tmp_path)["findings"][1]["title"]
+
+
 def test_a_security_finding_stays_off_the_public_comment_and_the_tracker(tmp_path):
-    held = _finding("token leaks to the log", category="security")
+    # Actionable (0.6+) but under the 0.8 hold bar, so the batch still reaches the landing.
+    held = _finding("token leaks to the log", confidence=0.7, category="security")
     reports = [
         _report(f"Opened {PR}"),
         _report(structured={"summary": "", "findings": [held]}),

@@ -30,7 +30,7 @@ redeploys it; a full run is only slow.
 `show_at` and the YAML mapping parse, one copy each.
 
 `narrow` agrees with `deploy_tags.py changed` wherever both answer: the non-broad half of a
-range goes through the same `services_from_changed_paths` mapper, less the roles the range
+range goes through the same `reach.reach(...).changes` mapper, less the roles the range
 DELETED (`narrow_paths.role_is_gone`). Where `changed` prints a tag list PLUS a note about a
 shared role a human must still apply, `narrow` refuses: the tick has no human to read it.
 
@@ -456,9 +456,9 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
     narrowing a range that carries one would leave every service outside the tag list on the
     old value.
     """
-    from deploy_logic import services_from_changed_paths
+    from reach import reach
 
-    cs = services_from_changed_paths(paths)
+    cs = reach(paths).changes
     if cs.broad_manual:
         raise CannotNarrow("the range also changes a bring-up playbook")
     if cs.secrets:

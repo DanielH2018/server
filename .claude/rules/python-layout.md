@@ -47,10 +47,13 @@ role ships), the Bash classifier in `.claude/hooks/tests/`, and `scripts/<dir>/t
 
 A `tests/` sibling keeps a test out of every `files/` ship list and lets the deployer's
 test-only path rule stay a directory check (ENFORCED by
-`ansible/tests/repo/test_testpaths_covers_every_test_file.py`). A test in a `tests/` directory
-reaches its module through a `sys.path` bootstrap pointing at the sibling `files/`, or through
-`pythonpath` where the module is shared across roles. Every such bootstrap lands in the one
-session a full run shares, so a top-level `files/*.py` needs a basename no other role's
+`ansible/tests/repo/test_testpaths_covers_every_test_file.py`). A test under
+`<plane>/<role>/tests/` imports its own role's `files/` modules by bare name with no insert:
+`ansible/roles/conftest.py` puts that one directory on `sys.path` when pytest collects the
+test (#3746). It never adds another role's `files/`, because a role ships only its own. A
+module shared across roles goes on `pythonpath` instead.
+`scripts/tests/test_test_module_bootstraps_present.py` refuses an insert the conftest already
+supplies. Every such path lands in the one session a full run shares, so a top-level `files/*.py` needs a basename no other role's
 `files/` or `pythonpath` root uses. Two roles' `app.py` failed six tests only in a full run
 (#2608). The `no-two-import-roots-share-a-module-basename` row of
 `ansible/tests/repo/test_census_rows_python.py` enforces it. A role that ships a `files/*.py`

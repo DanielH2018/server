@@ -231,6 +231,8 @@ def cmd_launch(args, tools: Tools) -> int:
         for host in sorted({host for _, host in placed})
         for ln in _health_lines(tools, host)
     ]
+    # After every gate, like the claims: a refused launch writes nothing to the register.
+    claims_mod.reap_register(tools, target)
     run = manifest_mod.Manifest(manifest_mod.new_run_id(datetime.now(UTC)), holder, [])
     refused = False
     for batch, host in placed:
@@ -248,9 +250,10 @@ def cmd_launch(args, tools: Tools) -> int:
         flags = review_flags(batch, issues, args.review, target.is_server)
         brief = render_brief(issues, host, batch, holder, health, target, args.review)
         try:
-            run.batches.append(
-                launch_mod.launch(tools, host, batch, brief, numbers, target, *flags)
+            launched = launch_mod.launch(
+                tools, host, batch, brief, numbers, target, *flags
             )
+            run.batches.append(launched)
         except launch_mod.LaunchError as exc:
             released = (
                 claims_mod.release_for_orchestrator(tools, numbers, holder)
@@ -274,6 +277,7 @@ def cmd_launch(args, tools: Tools) -> int:
             )
             return 1
         print(f"{batch} -> {host} ({launch_mod.unit_name(batch, target)})")
+        claims_mod.post_worked_by(tools, numbers, launched.branch, target)
     if not run.batches:
         print("launched nothing: every issue's claim was refused", file=sys.stderr)
         return 3

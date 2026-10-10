@@ -8,11 +8,6 @@ that 404 and the two shapes a route can answer while carrying nothing.
 Run: uv run pytest ansible/roles/setup/initial_setup/tests/test_loki_route_health.py
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
-
 from loki_route_health import verdict
 
 # Measured from daniel-server, `uv run python scripts/diagnostics/probe.py loki-labels`.

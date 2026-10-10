@@ -3,6 +3,7 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_claim.py
 """
 
+import dataclasses
 import json
 import subprocess
 
@@ -34,14 +35,21 @@ def test_launch_claims_each_issue_under_head_before_its_batch_starts(tmp_path):
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES)
     assert _launch(tools, tmp_path, "1,2") == 0
     hosts = [host for host, _, _ in run.calls]
-    # Headroom and health reads first, then both claims, then the one launch call.
-    assert hosts == ["daniel-box", "daniel-box", "findings", "findings", "daniel-box"]
+    # Headroom and health reads first, then the reap and both claims, then the one launch.
+    assert hosts == [
+        "daniel-box", "daniel-box", "findings", "findings", "findings", "daniel-box",
+    ]  # fmt: skip
     assert _findings(run) == [
+        "reap",
         "claim 1 --worktree worktree-orch",
         "claim 2 --worktree worktree-orch",
     ]
     manifest = json.loads(next(iter(tmp_path.glob("*.json"))).read_text())
     assert manifest["orchestrator_branch"] == "worktree-orch"
+    # The dispatcher, not the agent, records which batch branch took each issue (#3962).
+    assert run.comments == [
+        (n, "Worked by `worktree-fanout-1-2`", "DanielH2018/server") for n in (1, 2)
+    ]
 
 
 @pytest.mark.parametrize("head", ["HEAD", "master"])
@@ -104,6 +112,21 @@ def test_claim_takes_every_batch_and_exits_3_naming_a_refusal(capsys):
     assert "#1 claimed by `worktree-orch`" in out.out
     assert "#3: claim refused (3)" in out.err
     assert [host for host, _, _ in run.calls] == ["findings"] * 3
+
+
+def test_a_failed_reap_warns_and_the_launch_still_claims(tmp_path, capsys):
+    """`claim` reaps a stale claim on the issue it takes, so a failed `reap` blocks nothing."""
+    tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES)
+    claim = tools.findings
+
+    def findings(argv):
+        if argv[0] == "reap":
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr="git failed")
+        return claim(argv)
+
+    assert _launch(dataclasses.replace(tools, findings=findings), tmp_path, "1") == 0
+    assert "reap failed (1): git failed; claiming without it" in capsys.readouterr().err
+    assert _findings(run) == ["claim 1 --worktree worktree-orch"]
 
 
 def test_a_placement_refusal_claims_nothing(tmp_path):

@@ -27,7 +27,8 @@ and auto-merge ignores one (`docs/landing.md` has the detail).
 
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
 `cc-wait land <n>`, never `land.sh`, which would start a second landing. State `gave-up` (exit 3)
-is `land.sh`'s own give-up, a resume point for the whole command. Where a task notification can
+is `land.sh`'s own give-up, a resume point for the whole command. State `deferred` (exit 4) is
+not: the PR landed, and the next tick applies it, so there is nothing to re-run. Where a task notification can
 wake the session, run the command with `run_in_background: true`. A headless `claude -p` agent
 cannot be woken once its turn ends, so it runs the command in the foreground with
 `timeout: 600000` and does not end its turn on it.

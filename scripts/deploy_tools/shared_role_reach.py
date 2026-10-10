@@ -274,7 +274,7 @@ def paths_a_hand_must_apply(
     the roles is what keeps `plane_note` a decision over a path list, the way it is for
     `quiet`: a shared role has no `containers_list` entry by construction, so dropping its
     paths removes it from `shared_roles` and changes nothing else the note reads —
-    `derived_tags` maps them to no tag and `services_from_changed_paths` puts them in neither
+    `Reach.tags` maps them to no tag and `services_from_changed_paths` puts them in neither
     the broad nor the setup half.
 
     Returns `files` unchanged on every failure inside, which keeps every shared role in the

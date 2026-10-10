@@ -271,6 +271,18 @@ def merged_pr_url(branch: str, repo: str = SERVER) -> str:
     return str(data[0]["url"]) if data else ""
 
 
+def comment_issue(number: int, body: str, repo: str = SERVER) -> bool:
+    """Post `body` as a comment on issue `number` in `repo`; False when `gh` failed."""
+    try:
+        out = gh(
+            "issue", "comment", str(number), "--repo", repo, "--body", body,
+            check=False, timeout=GH_TIMEOUT_S,
+        )  # fmt: skip
+    except subprocess.TimeoutExpired:
+        return False
+    return out.returncode == 0
+
+
 def run_findings(argv: list[str]) -> subprocess.CompletedProcess:
     """Run this checkout's `findings.py` with `argv`, never raising on a non-zero exit."""
     return subprocess.run(
@@ -314,6 +326,7 @@ class Tools:
         findings: run `findings.py` with an argv, for the claim `launch` takes itself.
         default_ref: read a checkout's remote default branch, for `target.resolve`.
         head_branch: read the orchestrator's own branch, which holds this repo's claims.
+        comment: post a comment on an issue in a repo, for the `Worked by` record.
     """
 
     run: Callable[..., subprocess.CompletedProcess] = run_command
@@ -323,6 +336,7 @@ class Tools:
     findings: Callable[[list[str]], subprocess.CompletedProcess] = run_findings
     default_ref: Callable[[str], str | None] = default_ref
     head_branch: Callable[[], str] = head_branch
+    comment: Callable[[int, str, str], bool] = comment_issue
 
 
 def read_host(tools: Tools, host: str) -> HostReading | str:

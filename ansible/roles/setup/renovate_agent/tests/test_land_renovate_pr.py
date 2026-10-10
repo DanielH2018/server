@@ -9,9 +9,7 @@ Run: uv run pytest ansible/roles/setup/renovate_agent/tests/test_land_renovate_p
 import json
 import pathlib
 import re
-import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import agent_toolbox
 import land_renovate_pr as lander
 import pytest

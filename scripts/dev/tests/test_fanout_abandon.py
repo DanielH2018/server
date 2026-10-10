@@ -174,3 +174,17 @@ def test_the_skill_has_no_hand_run_abandon_teardown():
     text = skill.read_text()
     assert "fanout_place.py abandon" in text
     assert "git branch -D worktree-fanout" not in text
+
+
+def test_a_tree_a_live_process_still_uses_is_kept(tmp_path):
+    """A shell `cd`'d into the tree is not the batch's unit, so stopping the unit missed it."""
+    repo, worktree = _scratch_with_an_unmerged_locked_worktree(tmp_path)
+    holder = subprocess.Popen(["sleep", "60"], cwd=worktree)
+    try:
+        proc = _run_chain(tmp_path, repo, worktree)
+    finally:
+        holder.kill()
+        holder.wait()
+    assert proc.stdout.strip() == f"kept: {worktree} — pid {holder.pid} still uses it"
+    branches, registrations = _state(repo)
+    assert BRANCH in branches and str(worktree) in registrations

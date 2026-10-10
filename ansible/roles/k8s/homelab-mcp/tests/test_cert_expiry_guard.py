@@ -13,7 +13,6 @@ Run: uv run pytest ansible/roles/k8s/homelab-mcp/tests/test_cert_expiry_guard.py
 """
 
 import importlib
-import os
 import socket
 import sys
 import types
@@ -21,9 +20,6 @@ import types
 import pytest
 
 from diagnostics.probe_lib import obs_api
-
-FILES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
-sys.path.insert(0, FILES)
 
 
 class _FastMCP:
