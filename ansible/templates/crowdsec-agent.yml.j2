@@ -13,14 +13,18 @@
   container as root that runs as the pod uid. One body stops that drift.
 
   WHAT ADDING A THIRD PROTECTED APP TAKES. An entry in `crowdsec_k8s_sidecar_agents`
-  (group_vars/all.yml), which is the machine name; the crowdsec role's LAPI registration loop
-  and the observability role's `crowdsec-<app>-agent` scrape job both derive from that map. The
-  three calls here. A `<app>-crowdsec` Secret carrying `AGENT_PASSWORD`, `acquis.yaml` and the
-  two whitelist parsers. A prometheus `from` item of the app's own in its baseline
-  NetworkPolicy, because the sidecar carries the HOST pod's labels: Prometheus reaches it as
-  `app=<app>`, which is also why the scrape job keeps on the app label plus port 6060.
-  `ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py` holds the job, the port and the
-  grant together.
+  (group_vars/all.yml), which is the machine name. The crowdsec role's LAPI registration loop,
+  the observability role's `crowdsec-<app>-agent` scrape job and netpol-baseline's :6060
+  prometheus grant (`networkpolicy-crowdsec-sidecars.yaml.j2`) all derive from that map. The
+  sidecar carries the HOST pod's labels, so Prometheus reaches it as `app=<app>`, which is why
+  both the job and the grant select the app label plus port 6060. Then the three calls here,
+  and a `<app>-crowdsec` Secret carrying `AGENT_PASSWORD`, `acquis.yaml` and the two whitelist
+  parsers. `ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py` holds the job, the port
+  and the grant together.
+
+  The Secret stays a template per app rather than a shared macro (#4088). The two copies are
+  about 20 lines each and differ in the log path, the `type` label and traefik's bouncer key,
+  so a macro would take three arguments to save roughly ten lines.
 
   The root seeding containers are written out in full rather than built through
   hardened_security_context(), which refuses uid 0 by convention: each one's comment says which

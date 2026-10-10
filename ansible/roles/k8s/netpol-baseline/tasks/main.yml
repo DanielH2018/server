@@ -127,6 +127,8 @@
       - networkpolicy.yaml
       - networkpolicy-traefik.yaml
       - networkpolicy-authelia.yaml
+      # One :6060 prometheus grant per pod in crowdsec_k8s_sidecar_agents.
+      - networkpolicy-crowdsec-sidecars.yaml
       - networkpolicy-crowdsec.yaml
       - networkpolicy-pihole.yaml
       - networkpolicy-mosquitto.yaml
