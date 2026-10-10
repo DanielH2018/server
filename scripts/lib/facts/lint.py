@@ -30,10 +30,11 @@ from .citations import (
     parse_citations,
     repo_docs,
     sections,
+    spans,
     tracked_files,
 )
 from .lock import LOCK_REL, lock_tampered
-from .pins import pinned_keys
+from .pins import image_pins, pinned_keys, split_image_ref
 
 RULES = frozenset(
     {
@@ -49,9 +50,10 @@ RULES = frozenset(
         "unbalanced-fence",
         "renovate-pin",
         "retired-host",
+        "version-as-fact",
     }
 )
-WARN_RULES = frozenset({"count-as-fact", "one-way-test"})
+WARN_RULES = frozenset({"count-as-fact", "one-way-test", "version-as-fact"})
 
 _FENCE_MARK = re.compile(r"```")
 
@@ -112,6 +114,7 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
     pins: dict[str, frozenset[str]] = {}
     hosts = frozenset(host_names(repo / INVENTORY_REL))
     host_rx = host_pattern(hosts)
+    images = image_pins(repo, tracked)
 
     def _pins(rel: str) -> frozenset[str]:
         if rel not in pins:
@@ -246,7 +249,49 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
                 )
                 for name in sorted(named_hosts - hosts)
             )
+            out.extend(_version_facts(sec.key, rel, prose, images))
     return out
+
+
+# A generated block restates its source on every regeneration, so a pin it names is never stale.
+_GENERATED = re.compile(r"<!-- generated_from:.*?<!-- /generated_from -->", re.S)
+
+
+def _version_facts(
+    key: str,
+    doc_rel: str,
+    prose: str,
+    images: dict[str, tuple[tuple[str, str, str], ...]],
+) -> list[LintFinding]:
+    """A ``version-as-fact`` warning per backticked ``image:tag`` span naming a pinned image.
+
+    A warning, never an error: a Renovate bump that makes the span stale cannot edit prose, and
+    #4012 ruled that a Renovate PR must not arrive red over documentation. When several pins
+    share the image, the span is stale only if its tag matches none of them, and the message
+    names the pin nearest the doc. speedtest's upstream `v1.14.7` is out of scope: it is not an
+    ``image:tag`` span, and its pin is ``latest@sha256``, which no tag in prose can match.
+    """
+    doc_dir = doc_rel.rpartition("/")[0] + "/"
+    found: list[LintFinding] = []
+    for raw in dict.fromkeys(spans(_GENERATED.sub("", prose))):
+        parts = split_image_ref(raw)
+        if not parts or parts[0] not in images:
+            continue
+        name, tag = parts
+        pins = images[name]
+        same = [p for p in pins if p[0] == tag]
+        pin_tag, var, path = sorted(
+            same or pins, key=lambda p: not p[2].startswith(doc_dir)
+        )[0]
+        where = (
+            f"`{var}` in {path}" if var != "image:" else f"the `image:` line in {path}"
+        )
+        if same:
+            detail = f"`{raw}` restates {where}, a value Renovate moves; name the variable instead"
+        else:
+            detail = f"`{raw}` is stale: {where} pins `{name}:{pin_tag}`; name the variable instead"
+        found.append(_f(key, "version-as-fact", detail))
+    return found
 
 
 def changed_units(repo: Path, since: str) -> set[str]:

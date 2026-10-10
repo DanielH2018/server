@@ -222,9 +222,10 @@ def test_rule_census():
             "unbalanced-fence",
             "renovate-pin",
             "retired-host",
+            "version-as-fact",
         }
     )
-    assert WARN_RULES == frozenset({"count-as-fact", "one-way-test"})
+    assert WARN_RULES == frozenset({"count-as-fact", "one-way-test", "version-as-fact"})
 
 
 def test_hand_edited_lock_is_flagged(tmp_path):
@@ -315,3 +316,65 @@ def test_retired_host_in_a_history_bullet_is_clean(tmp_path):
         "  daniel-stage, a KVM guest on daniel-server.\n- daniel-box is the server.\n"
     )
     assert _host_findings(tmp_path, **{"CLAUDE.md": doc}) == set()
+
+
+# ── version-as-fact ──────────────────────────────────────────────────────────────────────
+
+_REGISTRY = "ansible/roles/k8s/registry"
+_ALLOY_COMPOSE = "ansible/roles/containers/alloy/templates/docker-compose.yml.j2"
+
+
+def _version_findings(tmp_path, doc, **files):
+    """``version-as-fact`` details for a registry-role doc, beside the REAL registry defaults."""
+    repo = _repo(tmp_path, "## A\nnothing\n")
+    for rel, text in {
+        f"{_REGISTRY}/defaults/main.yml": (
+            REPO / _REGISTRY / "defaults/main.yml"
+        ).read_text(),
+        f"{_REGISTRY}/CLAUDE.md": doc,
+        **files,
+    }.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(text)
+    git(repo, "add", "-A")
+    found = [f for f in lint_sections(repo, None) if f.rule == "version-as-fact"]
+    assert all(f.warn for f in found)
+    return [f.detail for f in found]
+
+
+def test_stale_image_tag_is_a_warning(tmp_path):
+    """The registry title sentence as it stood at 8181ee59f, against a 3.1.2 pin."""
+    doc = "# registry\n\nA local `registry:3.1.1` that stores images.\n"
+    [detail] = _version_findings(tmp_path, doc)
+    assert detail.startswith("`registry:3.1.1` is stale: `registry_k8s_image` in ")
+
+
+def test_pinned_tag_restated_is_a_warning(tmp_path):
+    tag = (REPO / _REGISTRY / "defaults/main.yml").read_text().split("registry:")[1]
+    doc = f"# registry\n\nA local `registry:{tag.split('@')[0]}`.\n"
+    [detail] = _version_findings(tmp_path, doc)
+    assert "restates `registry_k8s_image`" in detail
+
+
+def test_a_shared_image_is_stale_only_when_no_pin_matches(tmp_path):
+    compose = "services:\n  alloy:\n    image: grafana/alloy:v1.19.2@sha256:ab\n"
+    defaults = "x_k8s_alloy_image: grafana/alloy:v1.20.1@sha256:cd\n"
+    doc = "# registry\n\n`grafana/alloy:v1.19.2` and `grafana/alloy:v1.18.0`.\n"
+    details = _version_findings(
+        tmp_path,
+        doc,
+        **{_ALLOY_COMPOSE: compose, "ansible/roles/k8s/x/defaults/main.yml": defaults},
+    )
+    assert details[0].startswith(
+        "`grafana/alloy:v1.19.2` restates the `image:` line in "
+    )
+    assert details[1].startswith("`grafana/alloy:v1.18.0` is stale: ")
+
+
+def test_unpinned_generated_and_history_image_spans_are_clean(tmp_path):
+    doc = (
+        "# registry\n\n`nginx:1.0`, `t/m.py:LIMIT` and `puid:pgid` name no pin.\n\n"
+        "<!-- generated_from: gen -- do not edit -->\n- `registry:3.1.1`\n"
+        "<!-- /generated_from -->\n\n- **HISTORY — upgraded from `registry:3.0.0`.**\n"
+    )
+    assert _version_findings(tmp_path, doc) == []

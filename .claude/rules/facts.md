@@ -65,6 +65,15 @@ grade. Some lint rules therefore read the prose itself.
   `ansible/inventory/hosts.ini`. The rule derives the host prefix from the inventory, never
   from a list. A word inside a path or a longer name, such as `/srv/artifacts/daniel-box-claude`
   or the domain `daniel-hunter.com`, is not a host mention.
+- `version-as-fact` (warning) flags a backticked `image:tag` span whose image the tree pins.
+  The pins are the `*_image` keys in role defaults and inventory vars, plus the `image:` lines
+  in the Pi's compose templates. A tag no pin carries reads as stale, and the message names
+  the pin's variable and file. A tag that matches still restates a value Renovate moves, so
+  name the variable instead (`registry` (`registry_k8s_image`)). It stays a warning because
+  a Renovate PR cannot edit prose and must not arrive red (#4012). A `generated_from` block
+  is skipped, since it regenerates from the pin. A version that is not an `image:tag` span is
+  out of scope, such as speedtest's upstream `v1.14.7`: its pin is `latest@sha256`, so the
+  tree holds no tag to compare it with.
 
 A paragraph or bullet that opens with `**HISTORY —` is history, and every prose rule skips it.
 A sentence such as "it lived on the staging guest until 2026-09-28" is correct exactly because
