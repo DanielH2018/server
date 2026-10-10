@@ -222,7 +222,8 @@ def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
 # The setup task files #3134, #3135 and #3154 made narrowable, each with the answer `tags_of`
 # gives. Before them, `crons.yml` refused on its `always` preamble, three roles had one untagged
 # `main.yml`, and `gitops_deploy` and `hypervisor` reached their task files only through
-# `include_tasks`, so every change to them applied the whole role.
+# `include_tasks`, so every change to them applied the whole role. `claude_code`'s
+# `agent_browser.yml` inherited only the role tag until #4189.
 NARROWED_SETUP_FILES = {
     ("deploy_ui", "tasks/code.yml"): {"deploy-ui-code"},
     ("deploy_ui", "tasks/service.yml"): {"deploy-ui-service"},
@@ -240,6 +241,7 @@ NARROWED_SETUP_FILES = {
     ("hypervisor", "tasks/network.yml"): {"hypervisor-network"},
     ("hypervisor", "tasks/etcd_drill.yml"): {"hypervisor-etcd-drill"},
     ("hypervisor", "tasks/teardown.yml"): {"hypervisor-teardown"},
+    ("claude_code", "tasks/agent_browser.yml"): {"claude-code-agent-browser"},
 }
 
 
@@ -251,6 +253,16 @@ def test_the_real_split_setup_roles_narrow_below_their_role_tag(role, rel):
     assert tags == NARROWED_SETUP_FILES[(role, rel)]
     playbook = (REPO / "ansible/initial_setup.yml").read_text()
     assert not tags & narrow_setup.foreign_tags(role, playbook, "HEAD", str(REPO))
+
+
+def test_the_real_playwright_pin_narrows_to_the_agent_browser_block():
+    """A Renovate bump of the pin applied the whole claude_code role for six minutes (#4189)."""
+    index = narrow_setup.RoleIndex("claude_code", "HEAD", str(REPO))
+    for key in (
+        "claude_code_agent_playwright_mcp_version",
+        "claude_code_agent_node_version",
+    ):
+        assert index.key_readers(key) == frozenset({"claude-code-agent-browser"})
 
 
 def test_the_real_initial_setup_crons_file_narrows_past_its_always_preamble():
