@@ -1,8 +1,8 @@
 ---
 # Pin the node's LAN address statically, so k3s does not depend on the gateway's DHCP server
-# to start. Imported by main.yml, so it runs on the server node only: the agent play reaches
-# daniel-server through a dynamic include_role over SSH, where `--tags node-address` cannot
-# select it and `netplan apply` would reconfigure the link the session rides on.
+# to start. Two importers: main.yml for the server node, and k3s-bringup.yml's agent-address
+# play for daniel-server (#3891). That play runs ON the agent, not through the join play's
+# SSH session, because `netplan apply` reconfigures the link such a session rides on.
 # templates/netplan-static-address.yaml.j2 has the incident (#3882) and why DHCPv4 is switched
 # off rather than kept alongside.
 #

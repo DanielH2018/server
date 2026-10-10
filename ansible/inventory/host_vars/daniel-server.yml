@@ -1,5 +1,10 @@
 ---
 server_ip: 10.0.0.161
+# The link carrying server_ip. k3s-bringup.yml's agent-address play pins the address on it
+# statically, so the k3s agent still starts when the gateway's DHCP server is down (#3891).
+# The gateway reserves server_ip for this NIC (operator, 2026-10-10). wlo1 keeps its DHCP
+# route at metric 600 as the fallback.
+k3s_node_static_link: enp88s0
 ssh_config_path: /etc/ssh/sshd_config
 # Intel XE iGPU present — enables /dev/dri passthrough for jellyfin/tdarr hardware transcode.
 has_igpu: true

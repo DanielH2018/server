@@ -1062,8 +1062,8 @@ k3s_host_dns_probe_name: github.com
 k3s_node_dns_dhcp_links:
   - eno1
 
-# The link that carries server_ip, which tasks/static-address.yml pins statically on the
-# server node so k3s can start while the gateway's DHCP server is down (#3882). Empty removes
+# The link that carries server_ip, which tasks/static-address.yml pins statically so k3s can
+# start while the gateway's DHCP server is down (#3882, #3891 for the agent). Empty removes
 # the pin and re-applies netplan. Set it in host_vars only once the gateway keeps server_ip
 # out of its DHCP pool.
 k3s_node_static_link: ""
