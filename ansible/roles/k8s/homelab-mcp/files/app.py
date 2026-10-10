@@ -7,14 +7,39 @@ a peer on the shared docker network can't reach the tools by skipping Traefik.
 
 The decisions that matter (container-field whitelist, file jail, token check)
 live in safe_reads.py and are unit-tested offline; this file is the wiring.
+
+Usage:
+
+    python app.py
+
+Takes no arguments. The image runs it as the container command, and it serves MCP over HTTP
+until killed. `-h` and `--help` print this text and exit 0.
+
+Environment:
+
+    HOMELAB_MCP_TOKEN   bearer token every request must carry (required; the server exits without it)
+    PORT                TCP port to listen on (default 8000)
+    MCP_PUBLIC_HOST     external hostname Traefik forwards, allowlisted for the MCP transport
+    HOMELAB_HA_TOKEN    Home Assistant token for the HA tools
+    HA_URL, PROMETHEUS_URL, LOKI_URL, CLAUDE_LOKI_URL, SCRUTINY_URL, KUBE_API_URL,
+    DOCKER_PROXY_URL    base URLs of the services the read tools query
+    HOMELAB_FILE_ROOT   directory the file-read tool is jailed to (default /srv/ansible-src)
+    CERT_EXPIRY_DOMAINS, CERT_EXPIRY_PORTS   zone suffixes and ports the cert_expiry tool may dial
 """
 
 from __future__ import annotations
 
 import os
 import socket
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+# Answer --help before the imports below, which need httpx and mcp installed.
+if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
 
 import httpx
 from mcp.server.fastmcp import FastMCP

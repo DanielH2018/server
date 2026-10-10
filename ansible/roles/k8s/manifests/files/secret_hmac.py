@@ -18,7 +18,8 @@ WHY KEYED. A plain sha256 of a manifest rendered from a known template lets anyo
 comparable only between records written on the host that holds it.
 
 Exit codes: 0 digest or key printed; 1 FILE unreadable (the caller records ABSENT); 2 KEYFILE
-missing or unreadable (the caller omits the secret digest entirely).
+missing or unreadable (the caller omits the secret digest entirely). 64 wrong argument count.
+`-h` and `--help` print this text and exit 0.
 """
 
 import hashlib
@@ -77,4 +78,7 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main(sys.argv[1:]))

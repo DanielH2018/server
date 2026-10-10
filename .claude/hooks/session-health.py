@@ -5,6 +5,10 @@
 #   order: 10
 """SessionStart health banner: surfaces what's already broken before work starts.
 
+Usage: Claude Code runs this hook on the SessionStart event. It takes no stdin payload. It
+prints a health banner to stdout, or nothing when everything is green, and it always exits 0. `-h`
+or `--help` prints this text and exits 0.
+
 When a Claude Code session opens in this repo, this prints anything already broken so
 work doesn't start blind:
   * Prometheus scrape targets that are down (fleet-wide, via scripts/diagnostics/probe.py)
@@ -540,6 +544,9 @@ def main(
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     try:
         sys.exit(main())
     except Exception:

@@ -8,6 +8,13 @@ when the actionable set changes. Writes a last_run timestamp for the monitor-bri
 
 Config from /etc/renovate-notify/config.env (KEY=VALUE): REPO, DISCORD_WEBHOOK, STATE_DIR,
 GITHUB_TOKEN or GH_TOKEN (optional). Stdlib only.
+
+Usage: renovate_notify.py [--dry-run]
+
+Run by renovate-notify.service from renovate-notify.timer (daily), installed as
+/opt/renovate-notify/renovate_notify.py. `--dry-run` logs what it would post instead of
+calling Discord, and persists neither the fingerprint nor the liveness marker. `-h` and
+`--help` print this text.
 """
 
 from __future__ import annotations
@@ -366,4 +373,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())
