@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Regenerate docs/reference/, rebuild the MkDocs site, commit and push any change.
 #
+# Usage: docs-refresh.sh [-h|--help]
+# Takes no arguments. Cron job "Refresh generated docs" runs it as the deploy user on the
+# ops_cron_host at 06:17 and 18:17 with PATH, KUBECONFIG=~/.kube/config and output piped to
+# logger -t docs-refresh. Running it by hand takes the git-tree lock and publishes a PR for real.
+# It reads the checkout under the deploy user's home and writes the site to docs_host_site_dir.
+# It pushes its verdict to the Docs Refresh Kuma monitor. Exit 1 means the test suite was red.
+#
 # THE LOCK IS THE POINT. This mutates the primary git tree, which gitops-deploy.service
 # rewrites with `git pull` on a 30-minute timer and which every deploy renders its
 # templates from. {{ server_git_tree_lock }} is what makes those mutually exclusive.
@@ -64,6 +71,12 @@
 # declines: the trap below reports the outcome of every exit path, and `down` is the load-bearing
 # half. The up-beat is a side effect of having a push monitor at all, not the reason for it.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 REPO="/home/{{ sys_user }}/server"
 UV="/home/{{ sys_user }}/.local/bin/uv"

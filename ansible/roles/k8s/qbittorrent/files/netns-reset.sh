@@ -32,7 +32,20 @@
 # restarts without touching the netns — the deadlock this script exists to break, but never a
 # leak. The one thing that can refuse it is the `owner` match being unavailable in the pod's
 # iptables, which the first deploy of this wrapper proves one way or the other.
+#
+# Usage: netns-reset.sh (no arguments)
+# Runs as `/opt/netns-reset/netns-reset.sh && exec /init` in the wireguard sidecar container,
+# mounted from the qbittorrent-netns-reset ConfigMap. Environment: LAN_NETWORKS (required, the
+# comma-separated LAN CIDRs the gate allows) and PUID (required, the uid the gate fences).
+# Exit 0 means the netns is reset and the image's init can start; exit 1 means the gate could
+# not be installed and nothing was touched.
 set -u
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 log() { echo "[netns-reset] $*"; }
 

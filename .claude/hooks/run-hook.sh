@@ -53,6 +53,12 @@
 
 set -u
 
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
 HOOKS_DIR="$(dirname "$(readlink -f "$0")")"
 
 name=

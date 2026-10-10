@@ -26,7 +26,18 @@
 #
 # Push, not poll: this is a host cron that reports its own verdict. Same curl as
 # longhorn-backup-health.sh, through kuma-push-lib.sh.
+#
+# Usage: telemetry-health.sh (no arguments)
+# Runs from the telemetry-health cron on daniel-box, every 10 minutes by default
+# (observability_health_cron_minute). It probes the OTLP receiver on the node's loopback, reads
+# /usr/local/lib/kuma-push-lib.sh, and pushes the verdict to the telemetry Kuma push monitor.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

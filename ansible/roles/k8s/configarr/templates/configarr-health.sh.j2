@@ -17,7 +17,19 @@
 #
 # Reads the cluster through the read-only ServiceAccount kubeconfig, so the cron needs no sudo and
 # cannot mutate anything.
+#
+# Usage: configarr-health.sh (no arguments)
+# Runs from the configarr-health cron on daniel-box as the sys user, every 10 minutes by default
+# (configarr_k8s_health_cron_minute). It reads /usr/local/lib/kuma-push-lib.sh, the sys user's
+# ~/.kube/config and /opt/configarr-health/configarr_health.py, then pushes the verdict to the
+# configarr Kuma push monitor.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

@@ -8,7 +8,18 @@
 # run logs its summary, so `probe.py loki-query '{job="syslog"} |= "crowdsec-bouncer-prune"'`
 # shows which rows went and which row was kept, which a session cannot read through `cscli`
 # (the read-only ServiceAccount is refused `pods/exec`).
+#
+# Usage: crowdsec-prune-bouncers.sh (no arguments)
+# Runs from the crowdsec-bouncer-prune cron on daniel-box at minute 17 of every hour, piped to
+# `logger -t crowdsec-bouncer-prune`. It runs /opt/crowdsec-bouncer-prune/bouncer_prune.py through
+# uv and logs the last line of its output. Exit 1 means the prune failed.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin  # cron ships a bare PATH
 

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Pi container-recovery heartbeat — managed by Ansible (optimize_pi role); edits overwritten.
 #
+# Usage: pi-recovery-health.sh [-h|--help]
+# Takes no arguments. Cron job "Pi container-recovery heartbeat" runs it every 5 minutes on
+# daniel-pi. It checks every container the host deploys, runs docker start on any that is not
+# running, and pushes to the Daniel Pi Recovery Kuma monitor. Running it by hand does the same.
+#
 # AutoKuma only reads the SERVER's docker socket, so the Pi's containers have no liveness
 # monitor of their own. autoheal (restarts unhealthy containers) and docker-proxy (read-only
 # socket serving Alloy's container-log discovery) die silently: if autoheal dies,
@@ -16,6 +21,12 @@
 # SD-health heartbeat's: Traefik's .local router resolved straight to the server LAN IP,
 # Authelia bypasses ^/api/push/ on this host LAN-only — the URL token is the credential.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

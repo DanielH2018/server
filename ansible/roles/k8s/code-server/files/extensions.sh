@@ -2,6 +2,17 @@
 # Install proprietary extensions (downloaded at image build time) into the
 # user config volume on each container start. code-server handles idempotency.
 #
+# Usage: extensions.sh (no arguments)
+# Runs as /custom-cont-init.d/10-extensions.sh in the code-server image, on every start of the
+# container. It uninstalls each id in RETIRED_EXTS, then installs every /opt/vsix/*.vsix into
+# /config/extensions. It reads no environment variables and no config file.
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
 # --extensions-dir is NOT optional, and its absence was a silent bug from this script's first
 # commit (d9a33181) until 2026-08-16. The server is launched by the image's own run script with
 # `--extensions-dir /config/extensions`; this CLI invocation inherits none of those arguments,

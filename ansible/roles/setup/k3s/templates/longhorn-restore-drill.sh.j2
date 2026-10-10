@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # Longhorn restore drill — managed by Ansible (k3s role); edits overwritten.
 #
+# Usage: longhorn-restore-drill.sh [-h|--help] [PVC]
+# Root cron job "Longhorn restore drill" (cron file longhorn-restore-drill, schedule
+# k3s_longhorn_restore_drill_cron) runs it with no argument. An operator pins the drill to one
+# volume with a PVC name as the first argument, or with the RESTORE_DRILL_PIN environment
+# variable (the argument wins), for example: sudo /usr/local/bin/longhorn-restore-drill.sh <pvc>.
+# Without a pin it uses the role's k3s_longhorn_restore_drill_pvc default.
+# Running it creates and deletes a real Volume, PV, PVC and pod.
+#
 # Restores the newest backup of one small volume from B2 into a NEW volume, mounts it in a
 # throwaway pod, checks the data is real, then tears everything down. The live volume is never
 # touched.
@@ -18,6 +26,12 @@
 # pod. The read-only ServiceAccount the heartbeat uses cannot do any of that, so do not try to
 # convert this to that credential.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # Cron's PATH is /usr/bin:/bin, which omits /usr/local/bin where k3s lives.
 export PATH="/usr/local/bin:${PATH}"

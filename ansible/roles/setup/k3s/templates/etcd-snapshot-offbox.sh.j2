@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Off-box etcd snapshot — managed by Ansible (k3s role); edits overwritten.
 #
+# Usage: etcd-snapshot-offbox.sh [-h|--help]
+# Takes no arguments. Root cron job "Off-box etcd snapshot" (cron file etcd-snapshot-offbox) runs
+# it daily at k3s_etcd_s3_cron_hour:k3s_etcd_s3_cron_minute. Running it by hand takes and uploads
+# a real snapshot. It reads the R2 credentials from /etc/rancher/k3s/etcd-s3.env, the Kuma push
+# token from /etc/rancher/k3s/kuma-push.env and the optional healthchecks ping URL from
+# /etc/healthchecks/ping.env.
+#
 # k3s's own scheduled snapshots write to ${data-dir}/server/db/snapshots on this host's disk.
 # That covers an accidental `kubectl delete` and nothing else: the disk holding the snapshots is
 # the disk whose loss the snapshot exists for. This uploads one to R2 daily so a copy survives
@@ -26,6 +33,12 @@
 # v1.36.3+k3s1), encrypted with the token — so the token is the artifact that must survive
 # daniel-box, and it is the only one. docs/k3s-etcd-restore.md carries the evidence.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {
