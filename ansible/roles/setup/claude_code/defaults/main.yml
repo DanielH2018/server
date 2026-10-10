@@ -371,7 +371,7 @@ claude_code_agent_node_sha256: fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d
 # the agent's browser behaves as the operator's does. Chromium is the revision this package's
 # own playwright pins, installed with that playwright's CLI.
 # renovate: datasource=npm depName=@playwright/mcp
-claude_code_agent_playwright_mcp_version: "0.0.79"
+claude_code_agent_playwright_mcp_version: "0.0.83"
 # Node unpacks to node-v<version>-linux-x64 under this directory, and `current` links to it, so
 # the registration's NODE_BIN survives a Node bump. npm's global prefix is that Node tree, so
 # playwright-mcp lands in the same bin directory.
