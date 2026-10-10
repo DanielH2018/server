@@ -58,7 +58,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
-from lib.detach_fork import close_inherited, fork_detached, leave_unit_cgroup
+from lib.detach_fork import (  # noqa: F401 -- the record readers are this module's API too
+    alive,
+    close_inherited,
+    fork_detached,
+    leave_unit_cgroup,
+    pid_path,
+    rc_path,
+    record_code,
+    recorded_code,
+    recorded_pid,
+)
 
 # Where a detached landing writes. `$CLAUDE_JOB_DIR/tmp` is what the skill told sessions to
 # use, and it is per-session and cleaned up; this falls back to /tmp so the flag works from a
@@ -128,16 +138,6 @@ def error_in(log: Path) -> str | None:
     return (message[: end.start()] if end else message).rstrip()
 
 
-def rc_path(log: Path) -> Path:
-    """Where the landing records its exit code: the log's own name with `.rc` for `.log`."""
-    return log.with_suffix(".rc")
-
-
-def pid_path(log: Path) -> Path:
-    """Where `fork` records the landing's pid: the log's own name with `.pid` for `.log`."""
-    return log.with_suffix(".pid")
-
-
 def fork(log: Path, landing: Callable[[], int], scope_prefix: str = "land") -> int:
     """Run `landing` in a detached, logged grandchild; its pid, in the parent.
 
@@ -191,43 +191,8 @@ def _run_landing(log: Path, landing: Callable[[], int], scope_prefix: str) -> No
             sys.stdout.flush()
             sys.stderr.flush()
         # After the flush, so a reader that sees the code also sees the last log line.
-        with contextlib.suppress(Exception):
-            rc = rc_path(log)
-            tmp = rc.with_suffix(".rc.tmp")
-            tmp.write_text(f"{code}\n")
-            tmp.replace(rc)
+        record_code(log, code)
         os._exit(code)
-
-
-def recorded_code(log: Path) -> int | None:
-    """The exit code the landing recorded next to `log`, or None when it has not written one."""
-    try:
-        return int(rc_path(log).read_text().strip())
-    except OSError, ValueError:
-        return None
-
-
-def recorded_pid(log: Path) -> int | None:
-    """The landing's pid as `fork` recorded it next to `log`, or None when there is none."""
-    try:
-        return int(pid_path(log).read_text().strip())
-    except OSError, ValueError:
-        return None
-
-
-def alive(pid: int) -> bool:
-    """Whether `pid` still runs. A zombie is dead: its new parent may never reap it."""
-    with contextlib.suppress(ChildProcessError):
-        # Our own child (only in tests): reap it, or it stays a zombie of this process.
-        reaped, _ = os.waitpid(pid, os.WNOHANG)
-        if reaped:
-            return False
-    try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
-    except OSError:
-        return False
-    # The state is the first field after the parenthesised command name.
-    return stat.rpartition(")")[2].split()[0] not in ("Z", "X")
 
 
 def wait_command(pr: str, log: Path) -> str:

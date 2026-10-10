@@ -19,6 +19,13 @@ land.sh's own code, and the `VERDICT:` line is the detail. The one exception is 
 exits 75 for "gave up waiting; re-run land.sh", but cc-wait keeps 75 for "re-run this wait", so
 a landing that gave up ends the wait with 3 instead, and its verdict line says which give-up it
 was.
+
+DEFERRED IS NOT A GIVE-UP (issue #3932). land.sh also exits 75 for `deferred`: the tick applies
+this PR itself and has not crossed it yet, so nothing is wrong and re-running land.sh achieves
+nothing the next tick does not. That ends the wait as `deferred`, exit 4, so a caller can tell
+it from a resume point without reading the verdict text. A `deferred` whose log also carries
+`outcome.ABANDONED_WATCH_NOTE` stays `gave-up`: that run stopped watching a tick mid-apply, a
+hold cannot be ruled out, and the remedy is to re-run land.sh.
 """
 
 import argparse
@@ -28,12 +35,25 @@ import sys
 from pathlib import Path
 
 from land_lib import detach
+from land_lib.outcome import ABANDONED_WATCH_NOTE, Verdict
 
 # land.sh's exit code -> the state that ends the wait. Every code land.sh documents is here.
 _STATE_BY_RC = {0: "landed", 1: "failed", 64: "bad-arguments", 75: "gave-up"}
 
-# Each terminal state -> the exit code cc-wait ends with. `gave-up` is land.sh's 75, remapped.
-TERMINAL = {"landed": 0, "failed": 1, "bad-arguments": 64, "gave-up": 3, "died": 1}
+# Each terminal state -> the exit code cc-wait ends with. `gave-up` is land.sh's 75, remapped;
+# `deferred` is the one 75 that is not a resume point (see the module docstring).
+TERMINAL = {
+    "landed": 0,
+    "failed": 1,
+    "bad-arguments": 64,
+    "gave-up": 3,
+    "deferred": 4,
+    "died": 1,
+}
+
+_VERDICT_TOKEN = re.compile(r"^VERDICT: (\S+)")
+# The note's first line is enough to find it, and survives a rewrap of the rest.
+_ABANDONED_WATCH = ABANDONED_WATCH_NOTE.splitlines()[0].strip()
 
 # A landing's phase lines: `== 4/6  deploying ...`. The newest one is the progress detail.
 _PHASE = re.compile(r"^== (.+)$", re.MULTILINE)
@@ -90,6 +110,8 @@ def read(log: Path) -> dict:
             or f"no VERDICT line; read {log}"
         )
         state = _STATE_BY_RC.get(code, "failed")
+        if state == "gave-up" and _is_plain_deferral(log, verdict):
+            state = "deferred"
         detail = verdict if code in _STATE_BY_RC else f"exit code {code}: {verdict}"
         return {"state": state, "detail": detail}
     phases = _PHASE.findall(log.read_text(errors="replace"))
@@ -97,6 +119,14 @@ def read(log: Path) -> dict:
         "state": "running",
         "detail": " ".join(phases[-1].split()) if phases else str(log),
     }
+
+
+def _is_plain_deferral(log: Path, verdict: str) -> bool:
+    """Whether a landing's 75 is `deferred` without the abandoned-watch note beside it."""
+    token = _VERDICT_TOKEN.match(verdict)
+    if not token or token.group(1) != Verdict.DEFERRED:
+        return False
+    return _ABANDONED_WATCH not in log.read_text(errors="replace")
 
 
 def main(argv: list[str] | None = None) -> int:

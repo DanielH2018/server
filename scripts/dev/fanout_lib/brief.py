@@ -158,6 +158,7 @@ end your turn on it: `cc-wait` prints the landing's `VERDICT:` line and exits wi
 own code. It waits at most 570s. Exit 75 means the landing is still running: re-run ONLY
 `cc-wait land <n> --log-dir "{log_dir}"`, never `land.sh`, which would start a second landing.
 State `gave-up` (exit 3) is land.sh's own give-up, a resume point: re-run the whole command.
+State `deferred` (exit 4) is not: the PR landed, and the next tick applies it.
 `deploy.sh` exit 75 is a resume point to retry, not a failure to report.
 Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--refuted` and
 `--accepted` are operator-only.

@@ -42,10 +42,15 @@ def _locked_run(tmp_path: Path) -> tuple[locked.Run, Path]:
 def test_the_service_lock_is_held_while_the_gate_runs(tmp_path):
     run, lock = _locked_run(tmp_path)
     seen = []
+
+    def notify(*_args) -> int:
+        seen.append(_another_deploy_could_take(lock))
+        return 0
+
     steps = deploy_detach.ChildSteps(
         run_playbook=lambda _run: 0,
         annotate=lambda _run: None,
-        notify=lambda *_args: seen.append(_another_deploy_could_take(lock)),
+        notify=notify,
     )
     deploy_detach.deploy_and_gate(run, tmp_path / "log", "notifier.py", steps)
     assert seen == [False], "a second deploy could take the lock under the gate"
