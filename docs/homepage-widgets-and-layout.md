@@ -48,12 +48,6 @@ repo-side check stays green. The personal links therefore live in the `Calendar`
 `Bookmarks:` layout entry. That group is five columns wide so the links fill one row, with
 `#my-calendar { grid-column: 1 / -1 }` spanning the calendar back across all five.
 
-## Both halves of an unmatched `layout:` entry have been live here
-
-A `Monitoring:` key sat in
-`settings.yaml.j2` until 2026-09-09 for a group this dashboard has never declared, and the
-retired `Tracking` group rendered below every laid-out group at one column wide.
-
 ## A group's `columns:` is derived from its tile count
 
 A count the columns do not divide leaves an orphan on the last row and a hole beside it, and in
@@ -167,10 +161,6 @@ block and took its whole grid row from 120px to 136px.
   `services.yaml.j2` drops the matching `server:`/`container:` keys — tiles render without a dot
   rather than erroring on a `my-docker` host that does not exist here.
 - The calendar's own data comes from the internal `ical-proxy`.
-- **The nine link tiles added and removed on 2026-09-09** were prowlarr, bazarr, tdarr,
-  authelia, healthchecks, wg-easy, zigbee2mqtt, littlelink and bento-pdf. The role doc carries
-  the rule that follows from it: the tile list is curated, so a service being routed is not a
-  reason to add a tile back.
 
 ## A tab reading `Homepage` means the page rendered with no settings
 

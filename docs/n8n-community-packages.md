@@ -28,7 +28,7 @@ it does not cover `nodes`. Installed packages therefore live on the volume, not 
 - A package survives a pod restart, an image rebuild and a `--tags n8n` redeploy, and **nothing
   in this repo records which packages are installed**. Restoring `n8n-data` from its Longhorn
   backup restores them with it; a fresh claim starts with none, and the workflows that used them
-  break at run time rather than at deploy time. Same class of state as the encryption key above.
+  break at run time rather than at deploy time. Same class of state as the credential-encryption key, which also lives on `n8n-data` (the role doc's *DR / encryption key* bullet).
 - A package is npm-installed against the **running image's** Node runtime. A base-image Node
   major bump in this role's Dockerfiles can break a package with native dependencies while every
   manifest and template here reads unchanged.

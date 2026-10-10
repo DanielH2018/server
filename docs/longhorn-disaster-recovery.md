@@ -1,18 +1,11 @@
 # Longhorn Disaster Recovery — restore from B2 (and R2)
 
 Recover the cluster's PVC state when **daniel-box is gone** (dead disk, lost host,
-total-loss event). Successor to [`kopia-disaster-recovery.md`](archive/kopia-disaster-recovery.md)
-(retired 2026-08-13 — the kopia repo was deleted; that doc is kept for the era it
-describes). The backupstore lives off-site in B2 under
-`s3://daniel-server-kopia@us-east-005/longhorn`, and every credential needed to reach it is
-in SOPS — which remains DR-closed exactly as before (age host keys backed up out-of-band +
+total-loss event). The backupstore lives off-site in B2 under
+`s3://daniel-server-kopia@us-east-005/longhorn` (the bucket kept its name from the retired
+kopia setup), and every credential needed to reach it is
+in SOPS — which remains DR-closed (age host keys backed up out-of-band +
 an off-box recovery recipient), so the capability survives a total loss.
-
-> **Kopia era closed 2026-08-14:** the repo was deleted 08-13, `kopia_password` retired with
-> it (8edb11cd), and the residual hidden object versions were hard-purged 08-14 (941
-> versions, 4.66 GB) — the bucket now holds `longhorn/` only. The B2 *account* credentials
-> survive and render the `longhorn-b2` target Secret; they were renamed from `kopia_b2_*` to
-> `longhorn_b2_*` on 2026-09-09. The bucket keeps its own name, `daniel-server-kopia`.
 
 ## Two targets: B2 is the default, R2 holds the crown jewels
 
@@ -45,7 +38,7 @@ Arming is independent per target (`k3s_longhorn_backup_armed`, `k3s_longhorn_r2_
 and step 3's cap caveat applies to B2 only — R2's free tier has no transaction cap, and its
 own headroom is watched by monitor-bridge's **R2 Free Tier Headroom** monitor.
 
-## The off-site recovery kit (carried over from the kopia era — still the recovery spine)
+## The off-site recovery kit
 
 Recovery has three independent legs: **B2** holds the data, an **out-of-band age key**
 decrypts the secrets, and **GitHub** holds the only off-site copy of the encrypted
@@ -73,26 +66,14 @@ because gh's label-filtered list stops at 1000 issues; a slice that reaches the 
 in half, and a single day at the cap fails the export rather than writing a short file. It
 takes about a minute per 1000 issues.
 
-## The external dead-man's switch (re-homed 2026-08-14; re-validate at drain close)
+## The external dead-man's switch
 
 The one backstop for a total in-house monitoring death is the external UptimeRobot monitor
-**`Auth Health`** (dashboard `https://dashboard.uptimerobot.com/monitors/803868101`, a
-case-sensitive keyword monitor requiring `"status":"OK"` from
-`https://auth.daniel-hunter.com/api/health`).
-
-> **Corrected 2026-08-30.** This named monitor `803270234` probing `homepage.daniel-hunter.com`
-> until that date. **That monitor no longer exists** — the account holder's live set is
-> `803868101` and `803868270`, and the deletion was never recorded anywhere, so this runbook
-> promised a backstop that was absent for an unknown period. The replacement is also a stronger
-> check: `homepage` is Authelia-gated, so the old probe only ever saw a 302 from the middleware,
-> which is the known residual the kopia runbook recorded. `docs/uptime-robot-monitors.md` is the
-> live record and carries both ids. Recorded here because an external SaaS can't be
-IaC-managed, so this record is its only audit trail. The kopia-era analysis (operator-
-accepted residual: the target is an Authelia-gated 302, so it back-stops host/edge/Authelia
-death but NOT a Kuma-only container death) predates the migration — the alert brain now
-lives on daniel-box (cluster Kuma) and homepage has a cluster identity, so the *shape* of
-the residual has moved even if the acceptance likely still holds. Re-validate the target
-choice in the final `/homelab-review` pass; history: `docs/archive/kopia-disaster-recovery.md`.
+**`Auth Health`**, a case-sensitive keyword monitor that requires `"status":"OK"` from
+`https://auth.daniel-hunter.com/api/health`. UptimeRobot is an external SaaS that no IaC
+manages, so [`uptime-robot-monitors.md`](uptime-robot-monitors.md) is its audit trail: it
+holds the monitor ids, why this target replaced the earlier one, and the residual that
+remains.
 
 ## What is and isn't in the backupstore
 
@@ -106,25 +87,8 @@ the per-volume map and each exclusion's rationale:
 - **Weekly tier** (the B2 volumes, weekday-sharded since 2026-08-16): up to a week
   old, each volume on its own weekday (~3/day — B2's 2,500/day transaction caps couldn't
   absorb a batch). Acceptable by design — configs, largely regenerable.
-
-  > **Still building depth — counted against the cluster 2026-08-24.** The retain above is the
-  > steady state; depth builds one backup per volume per week from the volume's first shard
-  > run. The tier is producing: 34 completed backups covering all 21 volumes, oldest
-  > 2026-08-19, newest the same morning this was checked. Not every volume had reached retain 2 yet —
-  > 9 sit at one recovery point, 11 at two, one at three — so restoring the least-covered
-  > volume still gets you its single shard date rather than "up to a week old."
-  >
-  > This replaces a note written 2026-08-16 that read "zero — no backup in the weekly tier has
-  > ever completed", and a second one saying B2 was disarmed after the seventh transaction-cap
-  > event and would stay that way. Both were true when written and are not now: B2 re-armed
-  > 2026-08-17 (`k3s_longhorn_backup_armed` in
-  > `ansible/roles/setup/k3s/defaults/main.yml`) and the first shards landed 2026-08-19.
-  >
-  > The frozen `daily-backup` objects that the old note called load-bearing are gone — every
-  > backup on the B2 target postdates the re-arm. The reaper's refusal to touch a volume whose
-  > current tier has produced nothing
-  > (`scripts/backup/longhorn_reap_orphan_backups.py`) no longer has anything to protect here,
-  > because every volume's current tier has now produced something.
+  A volume added to the tier recently holds fewer recovery points than the retain until it
+  has run that many weeks.
 - **No-backup** (16 volumes): rebuilt, not restored. The notable rebuild paths:
   uptime-kuma (recreate the first-run admin by hand; AutoKuma backfills monitors from the
   static-monitors Secret; history is gone), `scrutiny` (TSDB refills from collector runs),
@@ -132,7 +96,7 @@ the per-volume map and each exclusion's rationale:
   runs "Rebuild everything" — the vault's source of truth is the markdown on each
   Obsidian device), registry/caches/TSDBs (repopulate on use).
 - Restores are **crash-consistent** block snapshots: SQLite DBs recover as-of-last-
-  checkpoint via their own journal — same semantics kopia's WAL-exclusion rule accepted.
+  checkpoint via their own journal.
 
 ## Procedure (fresh host, total loss)
 
@@ -148,8 +112,8 @@ the per-volume map and each exclusion's rationale:
    with nothing to restore from.
 3. **Wait for the backupstore sync** — `kubectl -n longhorn-system get backuptarget`
    `AVAILABLE true`, then Backup CRs appear. **The poll interval is `0`** — polling is
-   OFF (`k3s_longhorn_backupstore_poll_interval`, set to 0 on 2026-08-15 because even the
-   1h setting exhausted B2's Class-B cap by 11:00), so the sync does not happen on its
+   OFF (`k3s_longhorn_backupstore_poll_interval` is 0, because even a 1h interval exhausted
+   B2's Class-B cap), so the sync does not happen on its
    own: force it in the Longhorn UI with Backup → Sync.
 
    Mind the B2 transaction caps: a full-restore day is exactly when the cap can bite
@@ -162,7 +126,7 @@ the per-volume map and each exclusion's rationale:
    drill hit (below). If you see it, check the caps in the B2 console **before**
    concluding anything about the backup: stop, blank the target
    (`k3s_longhorn_backup_armed: false` + deploy), and resume after the 00:00 UTC reset.
-4. **Restore volumes BEFORE any `deploy.yml`** — deploying first would provision fresh
+4. **Restore volumes BEFORE any deploy** — deploying first would provision fresh
    empty PVCs under the same names. Before the first restore, run the gates: both targets
    armed and available, a `BackupVolume` on each (the sync happened), and no backed-up PVC
    name already bound to an empty volume. They run as one script, in order, and the exit code
@@ -184,7 +148,12 @@ the per-volume map and each exclusion's rationale:
    `spec.fromBackup`): restore each backed-up volume under its original PV name, then use
    Longhorn's **Create PV/PVC** with the original namespace/PVC names
    (`homelab/<pvc-name>` — the names in `longhorn-backup-tiering.md`'s table).
-5. **Deploy**: `uv run ansible-playbook ansible/deploy.yml`. Workloads bind the existing
+
+   If you restored etcd first (`k3s-etcd-restore.md`, for lost cluster objects), the snapshot
+   already carries the PV and PVC objects with their volume bindings. Restore each volume
+   under its original PV name so those objects bind to it, and use **Create PV/PVC** only for
+   a volume whose objects the snapshot lacks.
+5. **Deploy**: `./scripts/deploy.sh`. Workloads bind the existing
    PVCs; no-backup volumes provision empty and rebuild per the list above.
 6. **Verify**: `uv run python scripts/diagnostics/probe.py targets` and `health <svc>` for the
    restored tier; `probe.py ha verify-automations` for HA; monitor-bridge's board goes
@@ -265,23 +234,14 @@ uv run ansible-playbook ansible/seed_volume_backup.yml -i ansible/inventory/host
 
 ## Assurance gap (known, narrowing)
 
-kopia's three-tier assurance (snapshot → weekly verify → monthly restore drill) is rebuilt for
-Longhorn and, since 2026-08-20, exceeds it on cadence: backups are verified to *complete* (the
-backup-plane heartbeat) and to *restore*, one volume per night, rotating over the whole backup
-set. What the tiers do not give you is simultaneity — see the nightly drill below for what the
-fleet-wide claim actually is.
+Backups are verified to *complete* (the backup-plane heartbeat) and to *restore*, one volume
+per night, rotating over the whole backup set. What the tiers do not give you is
+simultaneity. See the nightly drill below for what the fleet-wide claim actually is.
 
-**The first restore drill ran on 2026-08-15, against `traefik-acme`, and it failed** — not
-on the data, but on a B2 Class-B cap already at 100%, which surfaced as
-`cannot find volume.cfg in backupstore` (see step 3). The lesson worth carrying is the
-masked failure mode, not any conclusion about the backups.
-
-**The retry on 2026-08-16 00:11 UTC passed**: the 2026-08-15 nightly of `traefik-acme`
-restored from B2 into a fresh volume in ~21 s, and a probe pod confirmed real data
-(`acme.json` 16 KB, certificate present, expected domain matched) before full teardown.
-The drill playbook lives at `/home/ubuntu/migration-oneshots/restore-drill.yml`; note a
-restore Volume CR needs `spec.backupTargetName` since the v1.12 multi-target change, or
-it resolves against the volume's default target.
+The first restore drill (2026-08-15, `traefik-acme`) failed on a B2 Class-B cap, not on the
+data, and the cap surfaced as `cannot find volume.cfg in backupstore` (step 3). The retry on
+2026-08-16 passed. A restore `Volume` CR needs `spec.backupTargetName`, or it resolves
+against the volume's default target.
 
 **Scheduled since 2026-08-19; nightly and rotating since 2026-08-20.**
 `/usr/local/bin/longhorn-restore-drill.sh` (k3s role, `longhorn-restore-drill.sh.j2`) runs as root
@@ -340,7 +300,8 @@ and unbound is listed only in `excluded_oversize`. The page clears on the next d
 PVC is bound to the volume again, the volume is deleted, or it moves to `no-backup`.
 
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
-"every volume restored within the last cycle," not "every volume restores right now." A full-cluster restore is also still rationed — at 16 MiB blocks
+What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
+"every volume restored within the last cycle," not "every volume restores right now." A full-cluster restore is also still rationed: at 16 MiB blocks
 (set 2026-08-19) new volumes cost ~8x less to restore, but existing volumes remain at 2 MiB until
 recreated. Lean on the 7-day hidden-version window (`daysFromHidingToDeleting: 7` on the bucket)
 if something looks wrong mid-restore.

@@ -20,7 +20,7 @@ every touch of the role (#2985).
   manager to restore with the first entry, and the commands that finish its sha256.
 - **Prometheus charts.** The plugin finds Prometheus by the `headlamp-prometheus: "true"`
   label on the Service in `roles/k8s/observability`, and queries it through the API server's
-  service proxy, so `templates/rbac.yaml.j2` carries a Role in `observability` granting `get`
+  service proxy, so `templates/rbac-observability.yaml.j2` carries a Role in `observability` granting `get`
   on `services/proxy` pinned to `prometheus:9090`. The network hop is the API server's,
   admitted by `netpol_baseline_obs_node_cidrs`, not by anything on the headlamp pod. Label,
   Service name/port and the Role's `resourceNames` must agree;
@@ -55,8 +55,7 @@ than one — the `--oidc-*` flags took exactly one and are mutually exclusive wi
 
 `headlamp_k8s_oidc_callback_url` is empty, so Headlamp derives the `redirect_uri` from each
 request (`getOidcCallbackURL` reads the request host and `X-Forwarded-Proto`) and one instance
-serves both hostnames. Both URIs are registered on the Authelia client to match. Pinning it
-sends every login to one hostname's callback, which is half of what broke the public route.
+serves both hostnames. Both URIs are registered on the Authelia client to match.
 
 ## Why the switch replaces the ServiceAccount identity
 
@@ -78,5 +77,4 @@ digest in Authelia's config. It is an env var rather than a seventh flag because
 part of the pod spec, and the cluster's read-only ServiceAccount can read Deployments.
 
 `headlamp_k8s_oidc_scopes` omits `openid` because Headlamp prepends it
-(`backend/cmd/headlamp.go` at v0.45.0), so listing it sends it twice. `groups` is the scope
-that carries the RBAC subject.
+(`backend/cmd/headlamp.go` at v0.45.0), so listing it sends it twice.

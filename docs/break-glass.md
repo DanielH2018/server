@@ -98,15 +98,16 @@ otherwise; none of the values below are secrets themselves, only names and locat
 daniel-server keeps its own SOPS key, so decryption still works without the recovery key.
 
 1. Follow `docs/longhorn-disaster-recovery.md` → *Procedure (fresh host, total loss)*,
-   steps 1–2: bring up a replacement daniel-box with `ansible/bootstrap.yml`, add its
+   through *Cluster bring-up*: bring up a replacement daniel-box with `ansible/bootstrap.yml`, add its
    pubkey to `ansible/.sops.yaml`, `sops updatekeys` from daniel-server, commit, pull.
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).
-3. Restore Longhorn volumes per `docs/longhorn-disaster-recovery.md` steps 3–4, **before**
-   `deploy.yml` — deploying first provisions empty PVCs under the same names.
-4. Deploy: `uv run ansible-playbook ansible/deploy.yml`.
-5. Verify with `probe.py targets` / `probe.py health <svc>` per that doc's step 6.
+3. Restore Longhorn volumes per `docs/longhorn-disaster-recovery.md` (*Wait for the backupstore sync*, then
+   *Restore volumes BEFORE any deploy*), **before** the deploy — deploying first provisions
+   empty PVCs under the same names.
+4. Deploy: `./scripts/deploy.sh`.
+5. Verify with `probe.py targets` / `probe.py health <svc>` per that doc's *Verify* step.
 
 ### Scenario: daniel-server is dead, daniel-box survives
 
@@ -232,9 +233,8 @@ what each source records — not what "should" have happened.
 
 | Runbook | Drilled? | Evidence |
 |---|---|---|
-| k3s etcd restore (full, onto a replacement host) | **Partly, and ongoing.** The `--list-only` leg runs weekly by cron and has been verified since 2026-08-22. The full restore first passed 2026-09-11 — `offbox-daniel-box-1789094702.zip` restored in a throwaway guest on daniel-server and served 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets — and runs monthly since. Still not drilled: the restore onto a REPLACEMENT HOST, the agent rejoin and the Longhorn reattach. | `docs/k3s-etcd-restore.md`, *Pass record* |
+| k3s etcd restore (full, onto a replacement host) | **Partly, and ongoing.** The `--list-only` leg runs weekly by cron and has been verified since 2026-08-22. The full restore first passed 2026-09-11 — `offbox-daniel-box-1789094702.zip` restored in a throwaway guest on daniel-server and served 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets — and runs monthly since. Still not drilled: the restore onto a REPLACEMENT HOST, the agent rejoin and the Longhorn reattach. | `docs/k3s-etcd-restore.md`, *The full drill runs monthly in a throwaway guest* |
 | Longhorn volume restore | **Yes, and ongoing.** First attempt 2026-08-15 failed on a B2 cap (not the data); retry 2026-08-16 passed (`traefik-acme`, ~21s, verified real data). Scheduled nightly since 2026-08-19, rotating one volume per night over the full backup set since 2026-08-20. | `docs/longhorn-disaster-recovery.md`: "Assurance gap (known, narrowing)" |
-| Kopia disaster recovery | **N/A — tool retired 2026-08-14.** Doc kept as history only; do not follow it for a live recovery. | `docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md` |
 | SOPS decrypt with the recovery age key alone (no host key) | **No record found.** No drill of this specific path is recorded anywhere in the repo. | absence of any citation — see *Annual drill* below |
 | GitOps bootstrap (`bootstrap.yml` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `ansible/roles/setup/sops_setup/CLAUDE.md`, `ansible/bootstrap.yml` header |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
@@ -249,9 +249,6 @@ Once a year, on a scratch host with no other access to this repo's live infrastr
    recovery recipient alone — no host key present. **Operator-only:** an agent cannot run
    this step, because the guard denies any `sops` decrypt.
 4. Record the date and outcome in this doc's *Documented vs drilled* table, in the SOPS
-   decrypt row, the same way `docs/longhorn-disaster-recovery.md:172` records its own
-   drill date.
+   decrypt row, the same way `docs/longhorn-disaster-recovery.md`, *Assurance gap (known,
+   narrowing)*, records its own drill date.
 5. Destroy the scratch host's copy of both the key and the decrypted output afterward.
-
-This drill is out of scope for this change — it is a recommendation for a future session to
-execute, not something run here.
