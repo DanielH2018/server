@@ -3,9 +3,7 @@
 The role that turns a host into a k3s node and declares the cluster's own plumbing: the server
 install, the agent join, MetalLB, Longhorn with its backup targets, the read-only kubeconfig,
 CoreDNS, and the host crons that watch and exercise backups. `daniel-box` is
-the server, `daniel-server` an agent (`tasks/agent.yml`), `daniel-stage` the
-staging guest whose `host_vars` turn the backup targets and the health crons off, because both
-would push to prod's Kuma and B2.
+the server and `daniel-server` an agent (`tasks/agent.yml`).
 
 `ansible/k3s-bringup.yml` applies it, and that is one of the `_BROAD_MANUAL_PREFIXES` playbooks
 the GitOps deployer never runs itself, so every change here is a hand apply. The drill's bounds,
@@ -72,9 +70,10 @@ authority of those four actuators is written here so a later edit cannot quietly
   default; scheduling either is out of contract. They live in `scripts/backup/` and run from the
   repo checkout, so this role installs nothing of theirs. ENFORCED:
   `ansible/tests/longhorn/test_longhorn_reap_orphan_never_scheduled.py::test_no_setup_role_schedules_a_reaper`.
-- **Mode / arming:** `k3s_manage_health_crons` (staging: `false`) withholds the whole set,
+- **Mode / arming:** `k3s_manage_health_crons` withholds the whole set,
   `k3s_manage_backup_targets` the R2/B2 targets and the RecurringJobs, and
-  `k3s_etcd_restore_drill_armed` the weekly etcd drill, which runs `--list-only` here.
+  `k3s_etcd_restore_drill_armed` the weekly etcd drill, which runs `--list-only` here. Both
+  `k3s_manage_*` flags default to `true`, and no host overrides either.
 - **Abort valves:** the drill tears down on EVERY exit path, the trim aborts when the node's
   longhorn-manager pod is not ready, and the weekly B2 tier is sharded across weekdays so no
   day's deletions reach the B2 transaction cap.

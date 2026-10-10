@@ -159,7 +159,7 @@ def cmd_lint(args: argparse.Namespace) -> int:
     except ValueError as unresolvable:
         print(unresolvable, file=_sys.stderr)
         return _USAGE
-    findings = lint_sections(repo, keys)
+    findings = lint_sections(repo, keys, since=args.changed_since)
     for f in findings:
         print(f"{'warn ' if f.warn else 'ERROR'} {f.rule:<20} {f.unit}: {f.detail}")
     return 1 if any(not f.warn for f in findings) else 0
