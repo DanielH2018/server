@@ -479,6 +479,9 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     bodies = {i["number"]: i.get("body") or "" for i in issues}
     for r in rows:
         r["solo_only"] = bool(fanout_tooling_paths(bodies[r["number"]]))
+        # The holder the text render names as `[stale claim by ...]`, null when unclaimed:
+        # an orchestrator reading `--json` told a free issue from one `claim` reaps (#3927).
+        r["stale_claim_by"] = stale.get(r["number"])
     # Named, not hidden: withheld silently, a deferred issue reads as a closed one. Under
     # `--json` the note goes to stderr, because the array IS the free set an orchestrator
     # claims (`issue-fanout`), and a deferred row inside it would be claimed.
