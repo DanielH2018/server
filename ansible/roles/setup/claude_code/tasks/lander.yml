@@ -6,16 +6,20 @@
 #
 # DECIDED: the lander's settings are pinned as block vars here, on top of their defaults.
 # Block vars outrank host_vars and group_vars, so an agent PR that changes only the inventory
-# cannot point the unit at the agent's own clone or name another approver. The inventory is
-# off the approval list (docs/claude-agent-user.md, "The approval floor"), and this file is on
-# it, so these values change only with the operator's approval.
+# cannot point the unit at the agent's own clone, widen the branches or authors it lands, let
+# another Unix user start it, or name another approver. The inventory is off the approval list
+# (docs/claude-agent-user.md, "The approval floor"), and this file is on it, so these values
+# change only with the operator's approval. Each is a literal: a value that templates an
+# inventory variable, such as the agent profile's worktree prefix, would follow the inventory.
 # ansible/tests/setup/test_claude_lander.py holds them equal to the defaults the validator
-# renders with.
+# renders with, and equal to the agent profile they describe.
 
 - name: Install the lander under its pinned settings
   vars:
     claude_code_lander_checkout: "/home/{{ sys_user }}/server"
-    claude_code_lander_branch_prefix: "worktree-{{ claude_code_agent_worktree_prefix }}+"
+    claude_code_lander_branch_prefix: "worktree-claude+"
+    claude_code_lander_author: DanielClaudeBot
+    claude_code_lander_agent_user: claude
     claude_code_lander_approver: DanielH2018
   block:
     - name: Create the lander's config directory
