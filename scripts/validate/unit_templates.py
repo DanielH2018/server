@@ -93,8 +93,14 @@ _FAIL_MESSAGE = re.compile(r"Unknown key|Failed to parse|Assignment outside of s
 
 
 def discover_templates() -> list[Path]:
-    """Return every *.service.j2 / *.timer.j2 under ansible/roles/."""
-    return sorted([*ROLES.rglob("*.service.j2"), *ROLES.rglob("*.timer.j2")])
+    """Return every *.service.j2 / *.timer.j2 / *.socket.j2 under ansible/roles/."""
+    return sorted(
+        [
+            *ROLES.rglob("*.service.j2"),
+            *ROLES.rglob("*.timer.j2"),
+            *ROLES.rglob("*.socket.j2"),
+        ]
+    )
 
 
 def discover_rules() -> list[Path]:

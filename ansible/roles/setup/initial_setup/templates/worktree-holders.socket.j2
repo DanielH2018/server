@@ -1,0 +1,25 @@
+# Managed by Ansible (roles/setup/initial_setup, tasks/crons.yml) — edits here are overwritten.
+#
+# The worktree holder scan's socket (#4297). A worktree removal connects here to ask root which
+# processes hold a tree (lib.worktrees.privileged_holders, fanout_lib.clean.live_process_scan).
+# A socket needs no setuid, so a claude-rc.service session, which runs with
+# NoNewPrivileges=yes, can ask it too. The group decides who may connect; the service then maps
+# the caller's SO_PEERCRED uid to a worktree root and refuses a uid the map does not name.
+[Unit]
+Description=Worktree holder scan socket
+
+[Socket]
+ListenStream=/run/worktree-holders.sock
+# One worktree-holders@.service instance per connection, with the connection on its stdin.
+Accept=yes
+SocketUser=root
+SocketGroup={{ initial_setup_worktree_holders_group }}
+SocketMode=0660
+# Without this, a stopped socket leaves its file behind. A connect to it is then refused,
+# which the callers read as a failed scan and refuse every removal; an absent file makes them
+# fall back to the unprivileged scan with a warning instead.
+RemoveOnStop=yes
+MaxConnections=16
+
+[Install]
+WantedBy=sockets.target

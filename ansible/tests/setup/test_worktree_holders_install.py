@@ -1,74 +1,133 @@
-"""The worktree sweep's root helper is installed where the sudoers rule and the caller look.
+"""The worktree sweep's root helper is installed where its socket and its callers look.
 
-`lib.worktrees.privileged_holders` checks execute permission on `WORKTREE_HOLDERS` before it
-asks sudo, and the sudoers rule names the same path. If the three drift apart, the sweep
-either falls back to the unprivileged scan without saying why, or sudo refuses it every run.
-The agent user's grant (#4021) adds a fourth path, the root map both the helper and the
-caller read, and a second way to execute the helper, an ACL entry.
+`lib.worktrees.privileged_holders` and `fanout_lib.clean.live_process_scan` connect to
+`WORKTREE_HOLDERS_SOCKET`; the socket unit listens there, and its per-connection service runs
+the helper the role installs. If those drift apart, every caller falls back to the
+unprivileged scan, or every removal is refused. The root map both the helper and the caller
+read names each user's worktree root, and it must name every present agent (#4295). The
+sudo grant the socket replaced must be gone from every host (#4297).
 
 Run: uv run pytest ansible/tests/setup/test_worktree_holders_install.py
 """
 
 import json
-import re
 from pathlib import PurePosixPath
+from typing import cast
 
-import pytest
-from _helpers import SETUP_ROLES, load_tasks, render_expr, task_named
-from lib.worktrees import WORKTREE_HOLDER_ROOTS, WORKTREE_HOLDERS
+from _helpers import SETUP_ROLES, jinja_env, load_tasks, render_expr, task_named
+from _setup_render import render_setup_text, rendered_setup_text
+from claude_agents import claude_agent_profiles
+from lib.worktrees import WORKTREE_HOLDER_ROOTS, WORKTREE_HOLDERS_SOCKET
 
 CRONS = SETUP_ROLES / "initial_setup" / "tasks" / "crons.yml"
-RULE = "Allow sys_user and each agent user to run the worktree holder scan"
-ROOT_MAP = "Map each user of the worktree holder scan"
+HELPER = "/usr/local/libexec/worktree-holders"
+INSTALL = "Install the root-run worktree holder scan"
+AGENTS = "Name the agent users granted the worktree holder scan"
 USERS = "List the worktree holder scan's users"
-ACL = "Let each agent user execute the worktree holder scan"
+ROOT_MAP = "Map each user of the worktree holder scan"
+SUDOERS = "Remove the worktree holder scan's old sudoers rule"
+GROUP = "initial_setup_worktree_holders_group"
+
+PRIMARY = {
+    "state": "present",
+    "home": "/var/lib/claude",
+    "clone_dir": "/var/lib/claude/server",
+    "repo": "DanielH2018/server",
+    "github_login": "DanielClaudeBot",
+    "github_id": 1,
+    "github_token_var": "claude_code_agent_gh_token",
+    "worktree_prefix": "claude",
+    "journal_access": True,
+    "operator_read": True,
+    "operator_config": True,
+    "memory_seed": True,
+    "dotfiles": True,
+}
+SECOND = {
+    "name": "claude2",
+    "github_login": "SecondBot",
+    "github_id": 2,
+    "github_token_var": "claude2_gh_token",
+}
 
 
-def _sudoers_rules(content: str) -> list[tuple[str, str]]:
-    """(user, command) for every rule line. Each line must be an argument-free NOPASSWD rule."""
-    rules = []
-    for line in content.splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        match = re.fullmatch(r"(\S+) ALL=\(root\) NOPASSWD: (\S+) \"\"", line.strip())
-        assert match, f"not an argument-free NOPASSWD rule: {line!r}"
-        rules.append((match.group(1), match.group(2)))
-    return rules
+def _directives(text: str) -> dict[str, str]:
+    """`Key=Value` for every directive line of a rendered unit. A repeated key keeps its last."""
+    found = {}
+    for line in text.splitlines():
+        if "=" in line and not line.startswith(("#", "[")):
+            key, _, value = line.partition("=")
+            found[key.strip()] = value.strip()
+    return found
 
 
-def _rendered_rule(tasks: list[dict], users: list[str]) -> str:
-    rule = task_named(tasks, RULE)
-    return render_expr(
-        rule["ansible.builtin.copy"]["content"],
-        initial_setup_worktree_holders_users=users,
+def _socket_and_service() -> tuple[dict[str, str], dict[str, str]]:
+    return (
+        _directives(rendered_setup_text("initial_setup", "worktree-holders.socket.j2")),
+        _directives(
+            rendered_setup_text("initial_setup", "worktree-holders@.service.j2")
+        ),
     )
 
 
-def test_install_dest_sudoers_rule_and_caller_name_one_path_is_clean():
-    tasks = load_tasks(CRONS)
-    install = task_named(tasks, "Install the root-run worktree holder scan")
+def _units_meet_the_callers(socket: dict, service: dict, installed: str) -> bool:
+    """The socket listens where the callers connect, and its service runs the installed helper.
 
-    assert install["ansible.builtin.copy"]["dest"] == WORKTREE_HOLDERS
-    assert {cmd for _, cmd in _sudoers_rules(_rendered_rule(tasks, ["ubuntu"]))} == {
-        WORKTREE_HOLDERS
-    }
+    The answer reaches the caller only through the helper's own write: stdout and stderr go to
+    the journal, so a traceback never arrives where the caller reads an answer.
+    """
+    return (
+        socket.get("ListenStream") == WORKTREE_HOLDERS_SOCKET
+        and socket.get("Accept") == "yes"
+        and service.get("ExecStart") == installed
+        and service.get("StandardInput") == "socket"
+        and service.get("StandardOutput") == "journal"
+        and service.get("StandardError") == "journal"
+    )
 
 
-def test_every_granted_user_gets_one_argument_free_rule_is_clean():
-    # #4021: the agent user gets the same grant as sys_user, one line each.
-    rules = _sudoers_rules(_rendered_rule(load_tasks(CRONS), ["ubuntu", "claude"]))
+def test_the_socket_listens_where_the_callers_connect_and_runs_the_helper_is_clean():
+    install = task_named(load_tasks(CRONS), INSTALL)["ansible.builtin.copy"]
+    socket, service = _socket_and_service()
 
-    assert rules == [("ubuntu", WORKTREE_HOLDERS), ("claude", WORKTREE_HOLDERS)]
+    assert install["dest"] == HELPER
+    assert _units_meet_the_callers(socket, service, install["dest"])
 
 
-def test_a_rule_that_accepts_arguments_is_flagged():
-    # Without `""`, sudo lets the caller pass any argument, and a later helper that read one
-    # would let the caller ask root about any directory. The second line is checked too.
-    with pytest.raises(AssertionError, match="not an argument-free NOPASSWD rule"):
-        _sudoers_rules(
-            f'ubuntu ALL=(root) NOPASSWD: {WORKTREE_HOLDERS} ""\n'
-            f"claude ALL=(root) NOPASSWD: {WORKTREE_HOLDERS}\n"
+def test_a_service_whose_stdout_reaches_the_socket_is_flagged():
+    socket, service = _socket_and_service()
+
+    assert not _units_meet_the_callers(
+        socket, {**service, "StandardOutput": "socket"}, HELPER
+    )
+    assert not _units_meet_the_callers(
+        {**socket, "ListenStream": "/run/elsewhere.sock"}, service, HELPER
+    )
+
+
+def _only_the_group_may_connect(socket: dict) -> bool:
+    return socket.get("SocketMode") == "0660" and socket.get("SocketUser") == "root"
+
+
+def test_only_the_sockets_group_may_connect_is_clean():
+    # The operator's ruling (2026-10-10): a group-restricted socket mode decides who may
+    # connect. The group is the role's variable, the one claude_code's agent_access.yml gives
+    # each agent user.
+    socket, _ = _socket_and_service()
+    moved = _directives(
+        render_setup_text(
+            "initial_setup", "worktree-holders.socket.j2", {GROUP: "sentinel-group"}
         )
+    )
+
+    assert _only_the_group_may_connect(socket)
+    assert moved["SocketGroup"] == "sentinel-group"
+
+
+def test_a_world_writable_socket_is_flagged():
+    socket, _ = _socket_and_service()
+
+    assert not _only_the_group_may_connect({**socket, "SocketMode": "0666"})
 
 
 def _parent_created_before_install(tasks: list[dict], dest: str) -> bool:
@@ -85,115 +144,109 @@ def _parent_created_before_install(tasks: list[dict], dest: str) -> bool:
 def test_the_install_directory_is_created_before_the_copy_is_clean():
     # `copy` does not create a missing parent, and Ubuntu ships no /usr/local/libexec. The first
     # apply failed on daniel-box for exactly that and held the initial_setup plane.
-    assert _parent_created_before_install(load_tasks(CRONS), WORKTREE_HOLDERS)
+    assert _parent_created_before_install(load_tasks(CRONS), HELPER)
 
 
 def test_an_install_with_no_directory_task_before_it_is_flagged():
-    install = {"ansible.builtin.copy": {"dest": WORKTREE_HOLDERS}}
+    install = {"ansible.builtin.copy": {"dest": HELPER}}
     late_dir = {
         "ansible.builtin.file": {
-            "path": str(PurePosixPath(WORKTREE_HOLDERS).parent),
+            "path": str(PurePosixPath(HELPER).parent),
             "state": "directory",
         }
     }
-    assert not _parent_created_before_install([install, late_dir], WORKTREE_HOLDERS)
+    assert not _parent_created_before_install([install, late_dir], HELPER)
 
 
-def _rendered_roots(tasks: list[dict], users: list[str], checkouts: list[str]):
-    task = task_named(tasks, ROOT_MAP)
+def _rendered_roots(tasks: list[dict], agents: list[dict]) -> dict[str, str]:
+    """The root map the role writes for `agents`, the profiles the filter returned."""
+    users = task_named(tasks, USERS)["ansible.builtin.set_fact"]
+    context = {
+        "sys_user": "ubuntu",
+        "claude_code_operator_checkout": "/home/ubuntu/server",
+        "initial_setup_worktree_holders_agents": agents,
+    }
+    context["initial_setup_worktree_holders_users"] = render_expr(
+        users["initial_setup_worktree_holders_users"], **context
+    )
+    context["initial_setup_worktree_holders_checkouts"] = render_expr(
+        users["initial_setup_worktree_holders_checkouts"], **context
+    )
     text = render_expr(
-        task["ansible.builtin.copy"]["content"],
-        initial_setup_worktree_holders_users=users,
-        initial_setup_worktree_holders_checkouts=checkouts,
+        task_named(tasks, ROOT_MAP)["ansible.builtin.copy"]["content"], **context
     )
     return json.loads(text) if isinstance(text, str) else text
 
 
-def test_the_root_map_sends_each_user_to_its_own_checkouts_worktrees_is_clean():
-    # The helper and lib.worktrees.holder_root both read this file, so it sits where they look,
-    # and only root may write it.
+def _granted_agents(expression: str, agents: list[dict]) -> list[dict]:
+    """What the role's agent expression makes of `agents`, through the real filter."""
+    env = jinja_env()
+    env.filters["claude_agent_profiles"] = claude_agent_profiles
+    # NativeEnvironment returns the list itself; the stubs type every render as `str`.
+    return cast(
+        list[dict],
+        env.from_string(expression).render(
+            claude_code_agents=agents,
+            claude_code_agent_user="claude",
+            claude_code_agent_primary_profile=PRIMARY,
+        ),
+    )
+
+
+def test_the_root_map_names_every_present_agent_is_clean():
+    # #4295: a second present entry in claude_code_agents gets its own clone as its root, and
+    # an absent one gets nothing. The map is where the service looks a caller up, so an agent
+    # missing from it is refused every scan.
     tasks = load_tasks(CRONS)
     copy = task_named(tasks, ROOT_MAP)["ansible.builtin.copy"]
+    expression = task_named(tasks, AGENTS)["ansible.builtin.set_fact"][
+        "initial_setup_worktree_holders_agents"
+    ]
+    agents = _granted_agents(
+        expression,
+        [{"name": "claude"}, SECOND, {**SECOND, "name": "gone", "state": "absent"}],
+    )
 
     assert (copy["dest"], copy["owner"]) == (WORKTREE_HOLDER_ROOTS, "root")
-    assert _rendered_roots(
-        tasks, ["ubuntu", "claude"], ["/home/ubuntu/server", "/var/lib/claude/server"]
-    ) == {
+    assert _rendered_roots(tasks, agents) == {
         "ubuntu": "/home/ubuntu/server/.claude/worktrees",
         "claude": "/var/lib/claude/server/.claude/worktrees",
+        "claude2": "/var/lib/claude2/server/.claude/worktrees",
     }
 
 
-def _checkouts_come_from_role_variables(tasks: list[dict]) -> bool:
-    """The operator's checkout and each agent's clone are claude_code's own variables."""
-    agents = task_named(tasks, "Name the agent user granted")[
-        "ansible.builtin.set_fact"
-    ]
-    checkouts = task_named(tasks, USERS)["ansible.builtin.set_fact"][
-        "initial_setup_worktree_holders_checkouts"
-    ]
+def test_an_agent_list_read_from_the_primary_scalars_alone_is_flagged():
+    # The #4021 shape: the primary agent from claude_code's scalars, which never sees claude2.
+    scalars_only = "{{ [{'name': claude_code_agent_user, 'clone_dir': '/var/lib/claude/server'}] }}"
+    agents = _granted_agents(scalars_only, [{"name": "claude"}, SECOND])
+
+    assert "claude2" not in _rendered_roots(load_tasks(CRONS), agents)
+
+
+def _sudoers_removed_everywhere(tasks: list[dict]) -> bool:
+    task = task_named(tasks, SUDOERS)
     return (
-        "claude_code_agent_user_enabled"
-        in agents["initial_setup_worktree_holders_agents"]
-        and "claude_code_operator_checkout" in checkouts
-        and "claude_code_agent_user_clone_dir" in checkouts
-        and "/" not in checkouts
+        task.get("ansible.builtin.file")
+        == {"path": "/etc/sudoers.d/20-worktree-holders", "state": "absent"}
+        and "when" not in task
     )
 
 
-def test_the_checkouts_come_from_role_variables_is_clean():
-    assert _checkouts_come_from_role_variables(load_tasks(CRONS))
-
-
-def test_a_literal_checkout_path_is_flagged():
+def test_the_old_sudoers_rule_is_removed_on_every_host_is_clean():
+    # #4297: a host that had the sudo grant keeps a NOPASSWD root rule unless something
+    # deletes it. The has_claude_code hosts are exactly the ones that have it.
     tasks = load_tasks(CRONS)
-    users = task_named(tasks, USERS)
-    literal = {
-        **users,
-        "ansible.builtin.set_fact": {
-            **users["ansible.builtin.set_fact"],
-            "initial_setup_worktree_holders_checkouts": "{{ ['/home/ubuntu/server'] + "
-            "([claude_code_agent_user_clone_dir] if initial_setup_worktree_holders_agents else []) }}",
-        },
-    }
-    with_literal = [literal if task is users else task for task in tasks]
 
-    assert not _checkouts_come_from_role_variables(with_literal)
-
-
-def _grants_follow_one_list(tasks: list[dict]) -> bool:
-    """The ACL loops over the agents the sudoers users come from, after both copies."""
-    names = [task.get("name", "") for task in tasks]
-    agents = "initial_setup_worktree_holders_agents"
-    order = [
-        names.index(task_named(tasks, fragment)["name"])
-        for fragment in ("Install the root-run worktree holder scan", RULE, ACL)
-    ]
-    return (
-        task_named(tasks, ACL).get("loop") == "{{ " + agents + " }}"
-        and agents
-        in task_named(tasks, USERS)["ansible.builtin.set_fact"][
-            "initial_setup_worktree_holders_users"
-        ]
-        and order == sorted(order)
+    assert _sudoers_removed_everywhere(tasks)
+    assert not any(
+        "sudoers" in str(t.get("ansible.builtin.copy", {}).get("dest", ""))
+        for t in tasks
     )
 
 
-def test_the_acl_and_the_sudoers_rule_grant_the_same_agents_is_clean():
-    # The caller reads execute permission as "the sudoers rule is mine". An agent with one and
-    # not the other either falls back silently or makes sudo mail an incident. The ACL comes
-    # after the copy, because a copy that changes the helper replaces the inode and drops it.
-    assert _grants_follow_one_list(load_tasks(CRONS))
-
-
-def test_an_acl_over_another_list_or_before_the_copy_is_flagged():
+def test_a_sudoers_removal_only_off_claude_hosts_is_flagged():
     tasks = load_tasks(CRONS)
-    acl = task_named(tasks, ACL)
-    other_list = [
-        {**task, "loop": "{{ some_other_agents }}"} if task is acl else task
-        for task in tasks
-    ]
-    acl_first = [acl] + [task for task in tasks if task is not acl]
+    task = task_named(tasks, SUDOERS)
+    gated = [{**t, "when": "not has_claude_code"} if t is task else t for t in tasks]
 
-    assert not _grants_follow_one_list(other_list)
-    assert not _grants_follow_one_list(acl_first)
+    assert not _sudoers_removed_everywhere(gated)

@@ -32,3 +32,9 @@ initial_setup_uv_installer_sha256: 58488ae8dbd0773134c92c85e901430e33f99d975bd7f
 # (#2806). Only `has_docker` hosts install the cron.
 initial_setup_docker_prune_cron_minute: 30
 initial_setup_docker_prune_cron_hour: 6
+
+# The group whose members may connect to the worktree holder scan's socket,
+# /run/worktree-holders.sock (tasks/crons.yml, #4297). initial_setup adds sys_user to it, and
+# claude_code's agent_access.yml adds each present agent user, because that task's group list
+# is exact and would strip a membership granted anywhere else.
+initial_setup_worktree_holders_group: worktree-holders

@@ -1,0 +1,23 @@
+# Managed by Ansible (roles/setup/initial_setup, tasks/crons.yml) — edits here are overwritten.
+#
+# One answer of the worktree holder scan, started by worktree-holders.socket for each
+# connection (#4297). The helper reads the caller's uid from the connection on stdin, scans
+# /proc as root and writes the answer back on that connection.
+[Unit]
+Description=Worktree holder scan for one caller
+# A failed instance is collected rather than left in the unit list, one per connection.
+CollectMode=inactive-or-failed
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/worktree-holders
+StandardInput=socket
+# Only the helper's own sendall reaches the socket. A traceback on stdout or stderr would
+# otherwise arrive in the answer, where the caller would have to tell it from a refusal.
+StandardOutput=journal
+StandardError=journal
+# A scan of /proc takes well under a second; a hung instance must not hold a connection open.
+RuntimeMaxSec=120
+NoNewPrivileges=yes
+ProtectSystem=strict
+PrivateNetwork=yes
