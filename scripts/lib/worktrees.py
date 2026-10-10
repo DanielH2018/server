@@ -202,7 +202,7 @@ def _inside(held: str, tree: Path) -> bool:
     return path == tree or tree in path.parents
 
 
-def processes_using(path: str) -> list[tuple[int, str]]:
+def processes_using(path: str, proc: Path = Path("/proc")) -> list[tuple[int, str]]:
     """(pid, how) for every live process whose cwd, or `CLAUDE_PROJECT_DIR`, is inside `path`.
 
     A Claude session whose project dir is deleted loses every repo hook (#3887), and its
@@ -214,13 +214,14 @@ def processes_using(path: str) -> list[tuple[int, str]]:
     binary's command name is its version string (`2.1.295`), so a name match finds nothing,
     and a hook or tool shell a session spawned carries the variable too.
 
-    Only processes this uid may inspect are seen. `/proc/<pid>/cwd` and `environ` refuse
-    another user's process, and those are skipped rather than counted as holders, because
-    root's daemons are always unreadable and counting them would refuse every removal.
+    `/proc/<pid>/cwd` and `environ` refuse another user's process. Such a process is
+    skipped, with one exception that `_foreign_in_my_slice` decides: a non-root process of
+    another uid inside this uid's own login slice counts as a holder, because it inherited
+    a cwd this uid handed it (#3994).
     """
     tree = Path(path).resolve()
     found = []
-    for entry in Path("/proc").iterdir():
+    for entry in proc.iterdir():
         if not entry.name.isdigit():
             continue
         pid = int(entry.name)
@@ -236,12 +237,10 @@ def processes_using(path: str) -> list[tuple[int, str]]:
         try:
             environ = (entry / "environ").read_bytes().split(b"\0")
         except OSError:
-            # DECIDED: another uid's unreadable process is skipped, not counted (#3994). The
-            # `ubuntu` prune of /home/ubuntu/server cannot miss a `claude` session: /home/ubuntu
-            # is 0750 ubuntu:ubuntu and `claude` is in no `ubuntu` group, so no `claude`
-            # process can hold a cwd there. Counting a process whose uid can traverse to the
-            # tree fails the other way: the agent clone is 2770 claude:ubuntu, so every
-            # `ubuntu` process could reach it and a `claude`-run removal would refuse every tree.
+            if _foreign_in_my_slice(entry):
+                found.append(
+                    (pid, "another uid's process in this uid's login slice, unreadable")
+                )
             continue
         for var in environ:
             if var.startswith(b"CLAUDE_PROJECT_DIR="):
@@ -250,6 +249,37 @@ def processes_using(path: str) -> list[tuple[int, str]]:
                     found.append((pid, f"CLAUDE_PROJECT_DIR={held}"))
                 break
     return found
+
+
+def _foreign_in_my_slice(entry: Path) -> bool:
+    """Whether an unreadable process runs as another non-root uid inside this uid's login slice.
+
+    `status` and `cgroup` stay world-readable when `cwd` and `environ` do not, so this
+    reads only those two.
+    """
+    # DECIDED: count an unreadable process only when another non-root uid runs it inside
+    # `user-<this uid>.slice` (#3994). The kernel checks search permission when a path is
+    # resolved, not on a cwd a process inherits, so `sudo -u claude` or `runuser -u claude`
+    # run from inside a worktree leaves a `claude` process holding a cwd under the 0750
+    # /home/ubuntu. sudo's and runuser's PAM stacks here carry no pam_systemd, so that
+    # process stays in the caller's slice. Each wider rule refuses every removal:
+    # claude-rc.service and claude's own sessions are always alive and always unreadable to
+    # `ubuntu`, and so are root's daemons and, inside this very slice, `sshd [priv]` and the
+    # same-uid but non-dumpable systemd --user, gpg-agent and ssh-agent. A launch that opens a
+    # new logind session (`su`, `runuser -l`, `machinectl shell`) or a unit (`systemd-run
+    # --uid`) lands in the target's slice and is not seen; the gap and its fix are in #4170.
+    try:
+        status = (entry / "status").read_text()
+        cgroup = (entry / "cgroup").read_text()
+    except OSError:
+        return False
+    uid_line = next(
+        (line for line in status.splitlines() if line.startswith("Uid:")), ""
+    )
+    fields = uid_line.split()
+    if len(fields) < 3 or int(fields[2]) in (0, os.getuid()):
+        return False
+    return f"/user.slice/user-{os.getuid()}.slice/" in cgroup
 
 
 def remove(repo: str, tree: Worktree) -> tuple[bool, str]:
