@@ -9,6 +9,8 @@ apart in what order they name the ff-merge and the playbook.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from deploy_changes import (
     ChangeSet,
     roles_outside_initial_setup_in,
@@ -93,7 +95,7 @@ def broad_remediation(
     setup_roles: set[str] | None = None,
     branch: str = BRANCH_DEFAULT,
     narrow_tags: dict[str, frozenset[str]] | None = None,
-    playbooks=(),
+    playbooks: Iterable[str] = (),
 ) -> str:
     """The manual command(s) a broad (defer-and-alert) change needs, in the order they work.
 
@@ -271,7 +273,7 @@ def maximal_tag_warning(role: str) -> str:
 def _setup_commands(
     setup_roles: set[str] | None,
     narrow_tags: dict[str, frozenset[str]] | None = None,
-    playbooks=(),
+    playbooks: Iterable[str] = (),
 ) -> list[str]:
     """One command per setup role, or the generic placeholder when no roles are known.
 
