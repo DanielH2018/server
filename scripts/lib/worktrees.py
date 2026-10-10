@@ -21,6 +21,8 @@ process using the tree at the moment of removal (`processes_using`).
 
 import functools
 import os
+import pwd
+import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -202,7 +204,19 @@ def _inside(held: str, tree: Path) -> bool:
     return path == tree or tree in path.parents
 
 
-def processes_using(path: str, proc: Path = Path("/proc")) -> list[tuple[int, str]]:
+# The root-run scan `initial_setup` installs beside the worktree sweep cron, and the sudoers
+# rule that lets the checkout owner run it with no arguments. The source is
+# ansible/roles/setup/initial_setup/files/worktree_holders.py, and it reports only under
+# `~/server/.claude/worktrees` of the uid that ran sudo.
+WORKTREE_HOLDERS = "/usr/local/libexec/worktree-holders"
+_HELPER_KINDS = ("cwd", "CLAUDE_PROJECT_DIR", "unreadable")
+
+
+def processes_using(
+    path: str,
+    proc: Path = Path("/proc"),
+    privileged: Callable[[Path], list[tuple[int, str]] | None] | None = None,
+) -> list[tuple[int, str]]:
     """(pid, how) for every live process whose cwd, or `CLAUDE_PROJECT_DIR`, is inside `path`.
 
     A Claude session whose project dir is deleted loses every repo hook (#3887), and its
@@ -214,12 +228,22 @@ def processes_using(path: str, proc: Path = Path("/proc")) -> list[tuple[int, st
     binary's command name is its version string (`2.1.295`), so a name match finds nothing,
     and a hook or tool shell a session spawned carries the variable too.
 
-    `/proc/<pid>/cwd` and `environ` refuse another user's process. Such a process is
-    skipped, with one exception that `_foreign_in_my_slice` decides: a non-root process of
-    another uid inside this uid's own login slice counts as a holder, because it inherited
-    a cwd this uid handed it (#3994).
+    `/proc/<pid>/cwd` and `environ` refuse another user's process, so the root helper at
+    `WORKTREE_HOLDERS` answers first when this caller may run it (#4170); see
+    `privileged_holders`. Without it, an unreadable process is skipped, with one exception
+    that `_foreign_in_my_slice` decides: a non-root process of another uid inside this uid's
+    own login slice counts as a holder, because it inherited a cwd this uid handed it (#3994).
+
+    Args:
+        path: the worktree directory.
+        proc: the procfs root to scan when the helper does not answer.
+        privileged: the helper's reader, `privileged_holders` when None. It returns None when
+            the helper does not apply to this caller.
     """
     tree = Path(path).resolve()
+    answer = (privileged or privileged_holders)(tree)
+    if answer is not None:
+        return answer
     found = []
     for entry in proc.iterdir():
         if not entry.name.isdigit():
@@ -251,6 +275,83 @@ def processes_using(path: str, proc: Path = Path("/proc")) -> list[tuple[int, st
     return found
 
 
+def privileged_holders(
+    tree: Path,
+    helper: str = WORKTREE_HOLDERS,
+    root: Path | None = None,
+    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+) -> list[tuple[int, str]] | None:
+    """(pid, how) for every process the root helper reports inside `tree`, or None.
+
+    None means the helper does not apply, and the caller scans `/proc` itself. That is the
+    case for a tree outside `root`, which the helper never reports on, and for a caller that
+    cannot execute the helper. The role installs it `root:<checkout owner> 0750`, so execute
+    permission is the same test as the sudoers grant. Asking sudo without that grant makes it
+    log and mail a "not in sudoers" incident.
+
+    Once the helper applies, every failure refuses the removal: a non-zero exit, a timeout, a
+    line that does not parse, and any process the helper reports root could not read.
+
+    Args:
+        tree: the resolved worktree directory.
+        helper: the installed helper.
+        root: the directory the helper reports under; this uid's
+            `~/server/.claude/worktrees` when None.
+        run: the subprocess runner.
+    """
+    # DECIDED: the helper fails closed and its absence falls back to the #3994 slice rule.
+    # The helper reads every uid's cwd and environ, so a gap in its answer is a process that
+    # could hold this tree, and a refused removal is retried next week. Its absence cannot
+    # fail closed the same way: without root, claude-rc.service and the claude user's own
+    # sessions are always unreadable, so that rule would refuse every removal on a host where
+    # the hand apply has not run. The fallback says so on stderr, which the cron journals.
+    if root is None:
+        root = (
+            Path(pwd.getpwuid(os.getuid()).pw_dir) / "server" / ".claude" / "worktrees"
+        )
+    if not _inside(str(tree), root.resolve()):
+        return None
+    if not os.access(helper, os.X_OK):
+        if not Path(helper).exists():
+            _warn_helper_absent(helper)
+        return None
+    try:
+        # /usr/bin/sudo by path: the dotfiles put an askpass shim named `sudo` first on PATH.
+        result = run(
+            ["/usr/bin/sudo", "-n", helper],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return [(0, f"{helper} did not answer: {e}")]
+    if result.returncode != 0:
+        return [(0, f"{helper} exited {result.returncode}: {result.stderr.strip()}")]
+    found = []
+    for line in result.stdout.splitlines():
+        pid, _, rest = line.partition("\t")
+        kind, _, value = rest.partition("\t")
+        if not pid.isdigit() or not value or kind not in _HELPER_KINDS:
+            return [(0, f"{helper} printed an unparseable line: {line!r}")]
+        if kind == "unreadable":
+            found.append((int(pid), f"unreadable even to root ({value})"))
+        elif _inside(value, tree):
+            how = f"cwd {value}" if kind == "cwd" else f"{kind}={value}"
+            found.append((int(pid), how))
+    return found
+
+
+@functools.cache
+def _warn_helper_absent(helper: str) -> None:
+    print(
+        f"warning: {helper} is not installed, so a process of another uid outside this "
+        "login slice is invisible to the in-use check (#4170). Apply "
+        "`initial_setup.yml --tags worktree-sweep` on this host.",
+        file=sys.stderr,
+    )
+
+
 def _foreign_in_my_slice(entry: Path) -> bool:
     """Whether an unreadable process runs as another non-root uid inside this uid's login slice.
 
@@ -267,7 +368,8 @@ def _foreign_in_my_slice(entry: Path) -> bool:
     # `ubuntu`, and so are root's daemons and, inside this very slice, `sshd [priv]` and the
     # same-uid but non-dumpable systemd --user, gpg-agent and ssh-agent. A launch that opens a
     # new logind session (`su`, `runuser -l`, `machinectl shell`) or a unit (`systemd-run
-    # --uid`) lands in the target's slice and is not seen; the gap and its fix are in #4170.
+    # --uid`) lands in the target's slice and is not seen here. Only this fallback has that
+    # gap: the root helper in `privileged_holders` reads every process (#4170).
     try:
         status = (entry / "status").read_text()
         cgroup = (entry / "cgroup").read_text()
