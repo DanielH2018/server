@@ -63,19 +63,20 @@
         # read into it, and root with ALL dropped cannot write into another uid's directory —
         # DAC_READ_SEARCH is the READ half of the override, DAC_OVERRIDE is the write half.
         # The copy would fail, `exit 0` would swallow it, and the pod would come up with the
-        # warning intact. Going first, this creates the directory root-owned and
-        # world-readable, and the rsync's own `--ignore-existing` then leaves the files alone.
+        # warning intact. Going first, this creates the directory while the emptyDir is still
+        # empty, and the rsync's own `--ignore-existing` then leaves the files alone.
         #
-        # ROOT-OWNED is the half that keeps it readable, not just a consequence of needing
-        # DAC_READ_SEARCH. rsync gives an existing destination directory the SOURCE's mode.
-        # Measured both ways against a same-uid destination: a 000 source chmodded `hub/` to
-        # 000 (exit 23, it never recursed), a 0755 source left 0755 (exit 0), and in both the
-        # already-staged file kept its content and mode — `--ignore-existing` is what protects
-        # the files. Here the directory is root-owned and the rsync runs as the pod uid, so
-        # that chmod is refused whatever the source mode, and a refusal is one more error under
-        # the exit 23 the marker below already tolerates. Create this directory as the pod uid
-        # and its mode goes back under rsync's control, which a root-only source would then
-        # take away again — silently, behind a green render and a healthy pod.
+        # The tree ends up OWNED BY THE POD UID, not root: the chown in the command below is
+        # deliberate, and the comment above it names the outage that forced it. A root-owned
+        # tree stays readable but the agent cannot write it, and its entrypoint writes here on
+        # every start. The cost of the chown is that rsync now owns the directory's mode: it
+        # gives an existing destination directory the SOURCE's mode, and a directory owned by
+        # the rsync's own uid no longer refuses that chmod. Measured against a same-uid
+        # destination: a 000 source chmodded `hub/` to 000 (exit 23, it never recursed), a
+        # 0755 source left 0755 (exit 0), and in both the already-staged file kept its content
+        # and mode — `--ignore-existing` is what protects the files. Any source mode that keeps
+        # the owner's bits leaves `hub/` usable, because its owner is the uid the agent runs
+        # as. A staged hub directory of mode 000 would lock the agent out of it.
         - name: crowdsec-hub-install
           image: {{ crowdsec_k8s_image }}
           command:
