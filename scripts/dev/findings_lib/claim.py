@@ -33,6 +33,7 @@ from dev.findings_lib.issue_model import (
     label_names,
     ordered_comments,
 )
+from lib.worktree_owner import other_clone_owner
 from lib.worktrees import REMOVABLE, Worktree, classify
 
 # What a worktree read raises when the directory behind a registered worktree is gone.
@@ -99,6 +100,14 @@ def claim_is_live(
     a claim whose state cannot be read hands live work to a second session. The reason names
     `git worktree prune`, because nothing else in the output points at a stale registration.
     """
+    # Judged only by its own user: the other clone's worktrees are not in `trees`, so its
+    # live claims read "no worktree" here and `reap` released them (#4103). Held is the
+    # fail-safe direction; that user's own `reap` is the way to clear a stale one.
+    owner = other_clone_owner(worktree_name)
+    if owner is not None:
+        return True, (
+            f"held by another user's clone ({owner}) — only that user's `reap` can judge it"
+        )
     tree = next((t for t in trees if t.branch == worktree_name), None)
     if tree is None:
         return False, "no worktree — the claim names a branch nothing has checked out"

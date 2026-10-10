@@ -15,7 +15,8 @@ import pytest
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from deploy_tools.land_lib import handoff, options, policy
-from fanout_lib.target import WORKTREE_PREFIX_ENV, branch_name
+from fanout_lib.target import branch_name
+from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"

@@ -318,3 +318,28 @@ def test_two_different_worktrees_each_get_their_own_answer():
     merged(two)
     merged(one)
     assert calls == [("/repo", "abc", "b1"), ("/repo", "def", "b2")]
+
+
+# #4103: each Unix user's clone lists only its own worktrees, so a claim made from the other
+# clone always read "no worktree" and was reaped while its session worked on.
+AGENT_WT = "worktree-claude+issue-1132"
+
+
+def test_an_agent_users_claim_is_held_when_the_operator_reads_it():
+    live, reason = claim_is_live(AGENT_WT, [], dirty=_never, merged=_never)
+    assert live is True
+    assert "held by another user's clone (claude)" in reason
+
+
+def test_an_operator_claim_is_held_when_the_agent_user_reads_it(monkeypatch):
+    monkeypatch.setenv("CLAUDE_WORKTREE_PREFIX", "claude")
+    live, reason = claim_is_live(WT, [], dirty=_never, merged=_never)
+    assert live is True
+    assert "held by another user's clone (operator)" in reason
+
+
+def test_the_agent_users_own_claim_with_no_worktree_is_still_stale(monkeypatch):
+    monkeypatch.setenv("CLAUDE_WORKTREE_PREFIX", "claude")
+    live, reason = claim_is_live(AGENT_WT, [], dirty=_never, merged=_never)
+    assert live is False
+    assert "no worktree" in reason
