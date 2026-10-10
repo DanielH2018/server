@@ -50,7 +50,7 @@ claims are unchanged.
 
 - **`terraria-stats-data`** is 1Gi, a `k8s_claims` entry in `defaults/main.yml`, seeded once at
   cutover from the Docker-era DB, on the **weekly** B2 backup tier. It holds the all-time playtime
-  SQLite DB — irreplaceable, since Loki's ~28-day window can't fully reconstruct it.
+  SQLite DB — irreplaceable, since Loki keeps 31 days and the exporter backfills only 28.
 - **What is Terraria's own** is `parse_line`, `StatsState`, and `Store`'s schema half — the
   `players` schema, `load_state` and `save`, over a `stats_lib.SqliteStore` subclass.
 - **It runs as many pods as the game server does**, reading `terraria_k8s_replicas` from

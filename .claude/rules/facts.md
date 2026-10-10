@@ -120,7 +120,9 @@ runs `vanished-identifier` over every section. It fires on a commit that touches
 or any non-Markdown file other than the paths the docs-refresh and eval-run crons commit.
 `facts-reverify-changed` re-hashes a section whose prose you edited, when only a citation was
 added or dropped. It also records a section with no lock row that the commit gives its first
-citation, and drops the row of a section left citing nothing. It writes the lock and exits
+citation, and drops the row of a section left citing nothing. A renamed heading or a moved doc
+reads as such a section, so the hook skips one that cites an atom the old row recorded at
+another hash; the `section-gone` finding then asks for `verify`. It writes the lock and exits
 non-zero like a formatter, so `git add docs/facts.lock` and commit again. A `moved` or
 `missing` atom stays red until a person re-reads the section and runs `verify`.
 

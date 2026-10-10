@@ -93,3 +93,27 @@ def test_a_backlog_section_edited_without_a_first_citation_stays_unrecorded(tmp_
     )
     assert _reverify(repo) == ([], [])
     assert read_lock(repo / LOCK_REL) == {}
+
+
+def _rename_gate(repo, limit):
+    """Verify Gate and commit, then rename its heading and set ``LIMIT`` in the working tree."""
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    commit(repo, "verify")
+    (repo / "t" / "m.py").write_text(f"LIMIT = {limit}\nCAP = 3\n")
+    (repo / "CLAUDE.md").write_text("## The gate\n`t/m.py:LIMIT` bounds it.\n")
+
+
+def test_a_renamed_heading_whose_atom_moved_is_not_recorded(tmp_path):
+    """The rename makes a key with no row; recording it would launder the move (#2817)."""
+    repo = _repo(tmp_path, "## Gate\n`t/m.py:LIMIT` bounds it.\n")
+    _rename_gate(repo, 86)
+    done, blocking = _reverify(repo)
+    assert done == []
+    assert [(f.unit, f.kind) for f in blocking] == [("CLAUDE.md#Gate", "section-gone")]
+    assert set(read_lock(repo / LOCK_REL)) == {"CLAUDE.md#Gate"}
+
+
+def test_a_renamed_heading_whose_atoms_held_is_recorded(tmp_path):
+    repo = _repo(tmp_path, "## Gate\n`t/m.py:LIMIT` bounds it.\n")
+    _rename_gate(repo, 85)
+    assert _reverify(repo)[0] == ["CLAUDE.md#The gate"]

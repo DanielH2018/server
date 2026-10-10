@@ -454,11 +454,41 @@ def reverify_benign(
             and f.unit not in blocked_units
             and f.unit in lock
         }
-        | {u for u in first_cited or () if u not in lock and by_unit.get(u)}
+        | {
+            u
+            for u in first_cited or ()
+            if u not in lock
+            and by_unit.get(u)
+            and not _carries_a_moved_atom(repo, lock, findings, by_unit[u])
+        }
     )
     if todo:
         verify_units(repo, lock_path, todo, head_sha, by_unit)
     return todo, blocking
+
+
+def _carries_a_moved_atom(
+    repo: Path, lock: dict[str, dict], findings: list[Finding], cites: list[Citation]
+) -> bool:
+    """Whether a first-cited section cites an atom a `section-gone` row recorded at another hash.
+
+    A renamed heading, or a moved doc, makes a new key with no row while the old row goes
+    `section-gone`. Recording the new key would carry an atom that moved in the same commit
+    into the lock with nobody reading the prose, which is the #2817 contract broken by a
+    rename. A rename that moved nothing is still recorded.
+    """
+    gone = [lock[f.unit].get("atoms", {}) for f in findings if f.kind == "section-gone"]
+    for c in cites:
+        recorded = [atoms[c.raw] for atoms in gone if c.raw in atoms]
+        if not recorded:
+            continue
+        try:
+            now = hash_atom(c, repo)
+        except Ambiguous:
+            return True
+        if any(h != now for h in recorded):
+            return True
+    return False
 
 
 def forget_units(lock_path: Path, keys: list[str]) -> dict[str, dict]:
