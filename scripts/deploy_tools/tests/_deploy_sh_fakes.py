@@ -119,7 +119,9 @@ def deploy_sh_env(tmp_path: Path, bin_dir: Path, **overrides: str) -> dict[str, 
 
     The TREE lock is redirected too. `deploy.sh` takes it for real, for the snapshot, and the
     production path is the one every holder in docs/deploying.md's list takes — so a
-    test taking it would queue behind real work and hold real work up behind itself.
+    test taking it would queue behind real work and hold real work up behind itself. So is
+    the deployer's state directory, which a successful run's `k8s_unapplied` discharge
+    rewrites, and the release records that discharge reads.
 
     Args:
         tmp_path: the test's own directory; the snapshot root and lock directory go under it.
@@ -133,6 +135,9 @@ def deploy_sh_env(tmp_path: Path, bin_dir: Path, **overrides: str) -> dict[str, 
         HOMELAB_DEPLOY_SNAPSHOT_ROOT=str(tmp_path / "snapshots"),
         HOMELAB_DEPLOY_LOCK_DIR=str(locks),
         HOMELAB_DEPLOY_TREE_LOCK=str(locks / PurePath(TREE_LOCK).name),
+        # A successful run rewrites the deployer's owed ledger; never the host's.
+        HOMELAB_DEPLOY_GITOPS_STATE_DIR=str(tmp_path / "gitops-state"),
+        HOMELAB_DEPLOY_RELEASE_DIR=str(tmp_path / "releases"),
         DEPLOY_TEST_PYTHON=sys.executable,
         **overrides,
     )

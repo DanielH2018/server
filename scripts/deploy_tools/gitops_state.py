@@ -37,8 +37,8 @@ six hours old. The deployer clears a line itself on any tick that deploys the se
 `./scripts/deploy.sh` an operator ran, which the deployer cannot see. The apply comes first here too.
 
 `clear-owed k8s_unapplied <service>` drops the entry of the class for the k8s changes this deployer never applies (#3392) — a
-hand-edited role, or one of the forty denylisted ones. NOTHING PAGES ON THAT CLASS, and every tick discharges an entry whose
-service has since been deployed, so this command is needed for two cases only: a change that was reverted rather than applied,
+hand-edited role, or one of the forty denylisted ones. NOTHING PAGES ON THAT CLASS, and every tick and every successful `deploy.sh`
+discharges an entry whose service has since been deployed (#4087), so this command is needed for two cases only: a reverted change,
 and a shared role one of whose callers nothing can prove applied — no tag runs it, or a caller writes no release record
 (`scripts/deploy_tools/shared_role_callers.py:caller_tags` names the callers).
 
