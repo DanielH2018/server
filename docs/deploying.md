@@ -40,19 +40,17 @@ want none of the above.
 ### Who holds the tree lock
 
 This is the one list of the jobs that take `/var/lock/server-git-tree.lock`. Other docs link
-here rather than naming the holders themselves.
+here rather than naming the holders themselves. The table is generated from the templates that
+take the lock, so a new holder appears in it without an edit. Cadences are in
+[Scheduled jobs](reference/crons.md).
 
-- `gitops-deploy.service`, every 10 minutes, for its whole fetch, fast-forward and apply.
-- The weekly secret-rotate cron (`secret-rotate.sh.j2`).
-- The twice-daily docs-refresh cron (`docs-refresh.sh.j2`).
-- The weekly eval-run cron (`eval-run.sh.j2`).
-- Another `deploy.sh`, through `scripts/deploy_tools/deploy_under_locks.py`, for the seconds
-  it takes to snapshot `HEAD`.
+--8<-- "assets/generated/fragments/tree-lock-holders.md"
 
-The four waiters are pinned by the census in
-`ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py`, which a new
-waiter has to join. `deploy_under_locks.py:TREE_LOCK_HOLDERS` prints this list to a deploy
-that could not take the lock.
+`ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py` pins the wait of
+each holder against the deployer's worst-case hold. Its census names the waiters by hand, so a
+new waiter has to join it. `deploy_under_locks.py:TREE_LOCK_HOLDERS` is the message a deploy
+prints when it could not take the lock, and
+`scripts/docs/tests/test_fragments_deploy.py` fails when that message omits a holder in the table.
 
 The three crons take the lock through one Jinja macro,
 `ansible/roles/setup/initial_setup/templates/git-tree-lock.j2`, which owns the wait and the

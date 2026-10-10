@@ -35,13 +35,17 @@ to `/config/bepinex`, so per-mod `.cfg` files sit beside the world.
 
 ## Why the live mod set keeps shrinking
 
-Live since 2026-09-13: Server_devcommands 1.113.0 and AchievementEnabler 0.3.2. MouseTweaks
-1.0.3 and AAABuildMenu 1.0.1 were live from 2026-09-09 until SteamCMD auto-updated the game
-from `l-1.0.7` to `l-1.0.12` and broke both — no newer Thunderstore release exists for either,
-so they moved to the disabled block. Eight further mods were requested across 2026-09-09 and
-every one fails on `l-1.0.7` or is only needed by one that does; each disabled entry in
-`defaults/main.yml` carries the error that disabled it. BepInExPack is not listed — the image
-installs it itself.
+The mod set, read from `defaults/main.yml` (`valheim_k8s_mods` for the enabled entries, the
+commented-out block for the disabled ones):
+
+--8<-- "assets/generated/fragments/valheim-mods.md"
+
+MouseTweaks 1.0.3 and AAABuildMenu 1.0.1 were live from 2026-09-09 until SteamCMD
+auto-updated the game from `l-1.0.7` to `l-1.0.12` and broke both — no newer Thunderstore
+release exists for either, so they moved to the disabled block. Eight further mods were
+requested across 2026-09-09 and every one fails on `l-1.0.7` or is only needed by one that
+does; each disabled entry in `defaults/main.yml` carries the error that disabled it.
+BepInExPack is not listed — the image installs it itself.
 
 **`UPDATE_CRON` still runs at its default `*/15`, so the game can update out from under the
 mods.** A Valheim release the mods have not caught up with can break them with no repo change

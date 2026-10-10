@@ -39,12 +39,11 @@ session-level identity itself.
 
 ## Vocabulary
 
-Two labels join `LABELS` in `findings_lib/issue_model.py` and are created by the existing `sync-labels`:
+`LABELS` in `findings_lib/issue_model.py` holds every label that `sync-labels` creates. The table
+below is generated from it. This spec added two of them, `manual` and `claimed`, both grey state
+markers. `claimed` is a cheap filter, because the payload is a comment.
 
-| Label | Colour role | Meaning |
-|---|---|---|
-| `manual` | state marker (grey) | Reserved for the operator. No session claims it, and no fan-out dispatches it. |
-| `claimed` | state marker (grey) | A session is working this issue. A cheap filter; the payload is a comment. |
+--8<-- "assets/generated/fragments/findings-labels.md"
 
 `manual` is one word rather than a prefix. The Renovate convention already uses "manual — …"
 inside group names, so the bare word is mildly overloaded; the label namespace is separate
@@ -128,7 +127,11 @@ name a branch nothing here has checked out, so each would read as stale.
 ## Commands
 
 `findings.py --help` lists the subcommands, and `findings.py <cmd> --help` owns each one's
-flags. This page does not restate them, because a third copy drifts whenever a flag changes.
+flags. This page does not restate the flags, because a third copy drifts whenever a flag changes.
+The table of subcommands is generated from the `add_parser` calls in `findings_lib/cli.py`.
+
+--8<-- "assets/generated/fragments/findings-subcommands.md"
+
 `docs/reference/scripts.md` maps the modules behind the CLI. The argv goes in
 `findings_lib/plans.py`, the parsing in `findings_lib/issue_model.py`, and the `gh` calls in
 `findings_lib/gh_calls.py`. Every write command has a dry-run mode that plans and writes nothing.
@@ -355,7 +358,7 @@ The claim tests live in six files under `scripts/dev/tests/`, split by what each
 |---|---|
 | `test_findings_claim_record.py` | the comment format and the fold: who holds an issue, and how the parser is hardened |
 | `test_findings_claim_plans.py` | the pure argv `plan_claim` and `plan_release` return |
-| `test_findings_lib/claim_cli.py` | `claim`, `release`, `claims` and `reap` driven through `main()` |
+| `test_findings_claim_cli.py` | `claim`, `release`, `claims` and `reap` driven through `main()` |
 | `test_findings_claim_staleness.py` | `claim_is_live` against invented worktree state |
 | `test_findings_claim_reap_then_claim.py` | the reap-then-claim path `next` sends a session down |
 | `test_findings_claims_filter.py` | `claims --worktree` and the run-manifest read that widens it |

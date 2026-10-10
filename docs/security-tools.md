@@ -91,11 +91,7 @@ The initial database lives at `/var/lib/aide/aide.db`. The first run (`aideinit`
 
 **Watched paths and their keys:**
 
-| Key | Paths watched |
-|-----|---------------|
-| `identity` | `/etc/passwd`, `/etc/group`, `/etc/shadow` |
-| `sshd` | `/etc/ssh/sshd_config` |
-| `actions` | `/etc/sudoers`, `/etc/sudoers.d` |
+--8<-- "assets/generated/fragments/auditd-watches.md"
 
 **Check for findings:**
 

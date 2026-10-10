@@ -76,8 +76,9 @@ TAG_LIST_TIMEOUT_DEFAULT = 120
 # otherwise turn the hold into minutes. The rest wait for the next locked run.
 REAP_MAX_PER_RUN_DEFAULT = 20
 # Every job that can hold the git-tree lock, printed when this run could not take it. The
-# waiter census in test_gitops_deploy_timeout_budgets.py is the list a new holder joins, and
-# docs/deploying.md is the prose copy.
+# fragment `tree-lock-holders` derives the holders from the templates, and
+# scripts/docs/tests/test_fragments_deploy.py fails when this message omits one. The waiter
+# census in test_gitops_deploy_timeout_budgets.py is the list a new waiter joins.
 TREE_LOCK_HOLDERS = (
     "  A deploy is already running. Likely holders: gitops-deploy.service",
     "  (systemctl status gitops-deploy.service), the weekly secret-rotate cron, the",

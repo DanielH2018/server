@@ -60,7 +60,7 @@ about the sync.
 **Do not "simplify" this to `USE_RSYNC=false`.** That conf knob takes Log2Ram's
 `cp -rfup --sparse=always` fallback, which is byte-correct but has no `--delete`: files
 deleted from the tmpfs would linger on the SD card, and `sync_from_disk` would restore them
-into the 128 MB `/var/log` at boot. The task carries a `# DECIDED:` marker with the byte
+into the RAM-backed `/var/log` at boot. The task carries a `# DECIDED:` marker with the byte
 evidence and the rsync version it was reproduced under.
 
 **The patch is forward-only.** Repairing the six already-corrupt files needs a privileged
@@ -94,9 +94,12 @@ Together these reclaimed about 17 MB on 2026-07-06.
 
 ## The log RAM budget
 
-`/var/log` is log2ram's 128 MB RAM-backed tmpfs, and the role declares that size rather than
-inheriting it (`optimize_pi_log2ram_size`, with `LOG_DISK_SIZE`, `ZL2R` and `COMP_ALG` beside
-it). log2ram 1.7.2 ships exactly those four values and daniel-pi's `/etc/log2ram.conf` is
+`/var/log` is log2ram's RAM-backed tmpfs, and the role declares its size rather than
+inheriting it, with `LOG_DISK_SIZE`, `ZL2R` and `COMP_ALG` beside it:
+
+--8<-- "assets/generated/fragments/pi-log2ram.md"
+
+log2ram 1.7.2 ships exactly those four values and daniel-pi's `/etc/log2ram.conf` is
 byte-identical to upstream's, so the declaration writes nothing today. It costs something only
 when a package default moves, which is when the caps below need the number pinned — log2ram
 shipped `SIZE=40M` before 128M. #2714 read the live file as hand-edited; it is not, and its
@@ -151,8 +154,12 @@ container.
 
 ## apt timers pinned to the quiet hour
 
-A drop-in per timer (`apt-timers`, `optimize_pi_apt_timers`) sets `apt-daily.timer` to 04:20
-and `apt-daily-upgrade.timer` to 05:20 UTC, once a day, ±10 min. Ubuntu's default fires the
+A drop-in per timer (`apt-timers`, `optimize_pi_apt_timers`) pins each timer to one daily time,
+±10 min:
+
+--8<-- "assets/generated/fragments/pi-apt-timers.md"
+
+Ubuntu's default fires the
 update half twice a day at any hour (`6,18:00` plus 12 h of randomness), and on this box each
 firing is a four-minute 60 MB burst: measured 2026-09-18 at 15:05Z, memory PSI `full avg10`
 45%, load 9.9, an RCU stall (#2007). The drop-in clears the packaged schedule with an empty
