@@ -145,8 +145,57 @@ def test_reports_each_arm_with_and_without_and_marks_a_flip(tmp_path: Path):
     assert summary["unmeasured"] == []
     alpha = summary["measured"]["-Alpha"]
     assert alpha["changed"] is True
-    assert alpha["cases"]["a/2"] == {"with": "1/1", "without": "0/1", "changed": True}
+    assert alpha["cases"]["a/2"] == {
+        "with": "1/1",
+        "without": "0/1",
+        "changed": True,
+        "inconclusive": False,
+    }
     assert summary["measured"][WHOLE_DOC]["changed"] is False
+
+
+def test_a_run_with_no_report_stops_because_its_spend_is_unknown(tmp_path: Path):
+    reports = iter([{"passes": 1, "healthy": 1, "costUsd": 0.1}, None])
+    run = ablate(
+        _arms(BASELINE, WHOLE_DOC),
+        CASES,
+        1,
+        Budget(10.0),
+        lambda *_: next(reports),
+        tmp_path,
+    )
+    assert run["stopped"] == "the engine wrote no report for a/2; spend unknown"
+    assert run["cut_arm"] == BASELINE
+
+
+def test_an_infra_error_is_inconclusive_rather_than_a_flip(tmp_path: Path):
+    healthy = iter([1, 1, 0, 1])  # baseline a/1, a/2; -doc a/1 errored, a/2
+
+    def invoke(case_id, env, arm_dir):
+        h = next(healthy)
+        return {"passes": h, "healthy": h, "costUsd": 0.1}
+
+    names = [BASELINE, WHOLE_DOC]
+    run = ablate(_arms(*names), CASES, 1, Budget(10.0), invoke, tmp_path)
+    row = summarize(run, names, CASES, 1)["measured"][WHOLE_DOC]
+    assert row["changed"] is False
+    assert row["inconclusive"] == ["a/1"]
+
+
+def test_a_refusal_is_rechecked_before_every_run(tmp_path: Path):
+    invoke, calls = _invoker([0.1] * 4)
+    refusals = iter([None, "it is Sunday now"])
+    run = ablate(
+        _arms(BASELINE),
+        CASES,
+        1,
+        Budget(10.0),
+        invoke,
+        tmp_path,
+        refuse=lambda: next(refusals),
+    )
+    assert len(calls) == 1
+    assert run["stopped"] == "it is Sunday now"
 
 
 def test_an_unknown_section_is_refused():

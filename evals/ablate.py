@@ -198,7 +198,7 @@ class Budget:
         return self.spent > self.cap
 
 
-Invoke = Callable[[str, dict, Path], dict]
+Invoke = Callable[[str, dict, Path], dict | None]
 
 
 def ablate(
@@ -208,12 +208,15 @@ def ablate(
     budget: Budget,
     invoke: Invoke,
     agent_root: Path,
+    refuse: Callable[[], str | None] = lambda: None,
 ) -> dict:
     """Run every case k times per arm until the arms run out or the budget stops it.
 
     `arms` pairs an arm name with {agent name: agent file text}. `invoke(case_id, agent_dirs
-    env, run_dir)` runs one case once and returns that run's case report. The result maps
-    each arm to {case id: {passes, healthy, costUsd}}, and names the arm the cap cut short.
+    env, run_dir)` runs one case once and returns that run's case report, or None when the
+    engine wrote none. `refuse()` names a reason not to launch, re-checked before every run.
+    The result maps each arm to {case id: {passes, healthy, costUsd}}, and names the arm a
+    stop cut short.
     """
     results: dict[str, dict[str, dict]] = {}
     stopped = None
@@ -235,7 +238,17 @@ def ablate(
                         f"${budget.spent:.2f} past the ${budget.cap:.2f} cap"
                     )
                     return {"results": results, "stopped": stopped, "cut_arm": arm}
+                stopped = refuse()
+                if stopped:
+                    return {"results": results, "stopped": stopped, "cut_arm": arm}
                 report = invoke(case["id"], env, arm_dir)
+                if report is None:
+                    # The run may have billed calls before it died, and no report says how
+                    # much, so the cap can no longer be enforced.
+                    stopped = (
+                        f"the engine wrote no report for {case['id']}; spend unknown"
+                    )
+                    return {"results": results, "stopped": stopped, "cut_arm": arm}
                 cost = report.get("costUsd") or 0.0
                 budget.add(cost)
                 tally["passes"] += report.get("passes", 0)
@@ -271,14 +284,17 @@ def summarize(run: dict, arm_names: list[str], cases: list[dict], k: int) -> dic
         rows = {}
         for case in cases:
             with_it, without = base[case["id"]], results[arm][case["id"]]
+            # An infra error leaves a run unhealthy, and 1/1 against 0/0 is not a flip.
+            inconclusive = with_it["healthy"] < k or without["healthy"] < k
             rows[case["id"]] = {
                 "with": f"{with_it['passes']}/{with_it['healthy']}",
                 "without": f"{without['passes']}/{without['healthy']}",
-                "changed": (with_it["passes"], with_it["healthy"])
-                != (without["passes"], without["healthy"]),
+                "changed": not inconclusive and with_it["passes"] != without["passes"],
+                "inconclusive": inconclusive,
             }
         measured[arm] = {
             "changed": any(r["changed"] for r in rows.values()),
+            "inconclusive": [cid for cid, r in rows.items() if r["inconclusive"]],
             "cases": rows,
         }
     return {"k": k, "measured": measured, "unmeasured": unmeasured}
@@ -288,7 +304,7 @@ def engine_invoke(engine: Path, node: str, out_dir: Path) -> Invoke:
     """One `run-evals.mjs --case <id> --k 1` call, returning that case's report entry."""
     counter = iter(range(1_000_000))
 
-    def invoke(case_id: str, env: dict, arm_dir: Path) -> dict:
+    def invoke(case_id: str, env: dict, arm_dir: Path) -> dict | None:
         report_path = out_dir / f"{arm_dir.name}-{next(counter):05d}.json"
         subprocess.run(
             [
@@ -306,11 +322,10 @@ def engine_invoke(engine: Path, node: str, out_dir: Path) -> Invoke:
             cwd=arm_dir,
             check=False,
         )
-        if not report_path.is_file():
-            # An engine that died before writing a report still billed its calls, but how
-            # much is unknowable here; the post-run total undercounts by that much.
-            return {"passes": 0, "healthy": 0, "costUsd": 0.0}
-        return json.loads(report_path.read_text())[0]
+        try:
+            return json.loads(report_path.read_text())[0]
+        except OSError, json.JSONDecodeError, IndexError:
+            return None
 
     return invoke
 
@@ -352,6 +367,7 @@ def _print_summary(summary: dict, run: dict, spent: float) -> None:
         print(f"{'CHANGED' if row['changed'] else 'same   '}  {arm}")
         for cid, r in row["cases"].items():
             mark = "*" if r["changed"] else " "
+            mark = "?" if r["inconclusive"] else mark
             print(f"   {mark} {cid}: with {r['with']}, without {r['without']}")
     if summary["unmeasured"]:
         print(f"not measured: {', '.join(summary['unmeasured'])}")
@@ -392,7 +408,12 @@ def main(argv=None) -> int:
         if not log.is_file():
             print(f"no instructions log at {log}; pass --log", file=sys.stderr)
             return EXIT_REFUSED
-        for path, n in rank_docs(log.read_text().splitlines())[: args.top]:
+        # The rotated log too, so the ranking does not depend on when it last rotated.
+        rotated = log.with_name(log.name + ".1")
+        lines = log.read_text().splitlines()
+        if rotated.is_file():
+            lines += rotated.read_text().splitlines()
+        for path, n in rank_docs(lines)[: args.top]:
             print(f"{n:6d}  {path}")
         return EXIT_DONE
 
@@ -435,9 +456,13 @@ def main(argv=None) -> int:
         )
         return EXIT_REFUSED
     history = json.loads(args.history.read_text()) if args.history.is_file() else {}
-    conflict = sweep_day_conflict(
-        datetime.now(timezone.utc).astimezone().date(), history
-    )
+
+    def day_conflict() -> str | None:
+        return sweep_day_conflict(
+            datetime.now(timezone.utc).astimezone().date(), history
+        )
+
+    conflict = day_conflict()
     if conflict:
         print(f"refusing: {conflict}", file=sys.stderr)
         return EXIT_REFUSED
@@ -456,6 +481,8 @@ def main(argv=None) -> int:
             budget,
             engine_invoke(args.engine, args.node, out / "runs"),
             Path(tmp),
+            # Re-checked per run, so a run started late on Saturday stops at midnight.
+            refuse=day_conflict,
         )
     summary = summarize(run, [name for name, _ in arms], cases, args.k)
     report = {
