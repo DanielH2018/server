@@ -23,7 +23,8 @@ _EDGE = re.compile(r"^(?:\./|[-/])+")
 # Markdown is the prose under test, not the tree it describes, and the lock records citations.
 # `lock.LOCK_REL`, restated: `lock` imports this module through `evidence`, so importing the
 # constant back would be a cycle. `test_facts_lock_evidence.py` pins the two together.
-_CODE = (".", ":!*.md", ":!docs/facts.lock")
+LOCK_PATH = "docs/facts.lock"
+_CODE = (".", ":!*.md", f":!{LOCK_PATH}")
 
 
 def identifiers(text: str) -> set[str]:

@@ -97,6 +97,11 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
 `docs/facts.lock` records the hashes each verified section was checked against. The tool
 writes it, and a hand edit fails `test_every_recorded_atom_hashes_as_recorded` as tampered.
 
+A row's `verified_sha` is the HEAD that `verify` ran at, which is often a branch commit the
+squash merge left off master. Do not read it as a master commit. The commit on master that
+carries the row is the squash commit that wrote its hash into the lock, and
+`git log -S'<hash>' -- docs/facts.lock` finds it.
+
 - `fact_status.py status` prints every section's status.
 - `fact_status.py verify '<doc>#<heading>'` is the only path from OUT back to IN.
 - `fact_status.py verify --unverified` records every section with no lock row yet. It never
@@ -128,8 +133,10 @@ non-zero like a formatter, so `git add docs/facts.lock` and commit again. A `mov
 
 A `moved` finding names the identifiers its change removed that the section's prose names,
 as a cue for that reading. It reads two kinds, with the token shape `vanished-identifier`
-uses. The atom-scoped kind is what the atom's own content lost since the row's
-`verified_sha`. The range-wide kind is what any non-Markdown file lost in `verified_sha..HEAD`
-that no tracked file still holds. When the section names none of them, the finding says so.
-The evidence changes no verdict: a refactor that leaves the prose true still needs `verify`.
-A `verified_sha` that does not resolve, as in a shallow clone, leaves the plain message.
+uses. Both diff from a base commit: the row's `verified_sha` when HEAD's history holds it,
+else the newest commit on HEAD that wrote the recorded hash into the lock and whose tree
+still hashes the atom to it. The atom-scoped kind is what the atom's own content lost since
+the base. The range-wide kind is what any non-Markdown file lost in `<base>..HEAD` that no
+tracked file still holds. When the section names none of them, the finding says so. The
+evidence changes no verdict: a refactor that leaves the prose true still needs `verify`. When
+no base qualifies, as in a shallow clone, the finding keeps the plain message.

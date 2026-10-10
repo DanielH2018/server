@@ -6,7 +6,7 @@ changes: every finding here stays `moved`, and only the detail grows.
 
 from lib.facts import removed
 from lib.facts.lock import LOCK_REL, check_lock, verify_units
-from lib.git_testing import commit, init_repo
+from lib.git_testing import commit, git, init_repo
 
 _UNIT = "CLAUDE.md#Window"
 
@@ -24,34 +24,42 @@ def _detail(repo):
     return findings[0].detail
 
 
+# a91ed2c6d: the cited test only renamed a local; the same commit renamed the defaults key.
+_A91_DOC = (
+    "## Window\nThe window runs in `kuma_maintenance_window_timezone`, "
+    "ENFORCED by `k/tests/test_w.py::test_window`.\n"
+)
+_A91_TEST = "def test_window():\n    {name} = '25 7 * * 0'\n    assert {name}\n"
+_A91_BEFORE = {
+    "k/defaults/main.yml": "kuma_maintenance_window_timezone: Atlantic/Reykjavik\n",
+    "k/tests/test_w.py": _A91_TEST.format(name="kuma_maintenance_sync_schedule"),
+}
+_A91_AFTER = {
+    "k/defaults/main.yml": "kuma_maint_tz: Atlantic/Reykjavik\n",
+    "k/tests/test_w.py": _A91_TEST.format(name="kuma_sync_sched"),
+}
+_A91_NAMED = "; the section names `kuma_maintenance_window_timezone` (removed in {}..HEAD, and gone from the tree)"
+
+
 def test_a_renamed_key_the_section_names_is_named_from_the_range(tmp_path):
-    """a91ed2c6d: the cited test only renamed a local; the same commit renamed the defaults key."""
     repo = init_repo(tmp_path)
-    doc = (
-        "## Window\nThe window runs in `kuma_maintenance_window_timezone`, "
-        "ENFORCED by `k/tests/test_w.py::test_window`.\n"
-    )
-    test_src = "def test_window():\n    {name} = '25 7 * * 0'\n    assert {name}\n"
-    sha = _moved(
-        repo,
-        {
-            "k/defaults/main.yml": "kuma_maintenance_window_timezone: Atlantic/Reykjavik\n",
-            "k/tests/test_w.py": test_src.format(name="kuma_maintenance_sync_schedule"),
-        },
-        doc,
-    )
-    commit(
-        repo,
-        "rename",
-        **{
-            "k/defaults/main.yml": "kuma_maint_tz: Atlantic/Reykjavik\n",
-            "k/tests/test_w.py": test_src.format(name="kuma_sync_sched"),
-        },
-    )
-    assert _detail(repo).endswith(
-        f"; the section names `kuma_maintenance_window_timezone` (removed in {sha}..HEAD, "
-        "and gone from the tree)"
-    )
+    sha = _moved(repo, _A91_BEFORE, _A91_DOC)
+    commit(repo, "rename", **_A91_AFTER)
+    assert _detail(repo).endswith(_A91_NAMED.format(sha))
+
+
+def test_a_verified_sha_squashed_off_head_falls_back_to_the_lock_commit(tmp_path):
+    """The squash shape: the row names a branch commit HEAD never held, and the squash commit
+    that carries the code and the lock is the base the evidence diffs from."""
+    repo = init_repo(tmp_path)
+    for rel, text in {**_A91_BEFORE, "CLAUDE.md": _A91_DOC}.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(text)
+    git(repo, "add", "-A")
+    verify_units(repo, repo / LOCK_REL, [_UNIT], "feedface0")
+    squash = commit(repo, "squash of the branch that verified")[:9]
+    commit(repo, "rename", **_A91_AFTER)
+    assert _detail(repo).endswith(_A91_NAMED.format(squash))
 
 
 def test_a_name_the_atom_stopped_using_is_named_from_the_atom(tmp_path):
@@ -91,7 +99,9 @@ def test_a_refactor_the_prose_does_not_name_says_none(tmp_path):
     )
 
 
-def test_an_unresolvable_verified_sha_keeps_the_plain_message(tmp_path):
+def test_no_commit_on_head_holding_the_recorded_atom_keeps_the_plain_message(tmp_path):
+    """The row's sha does not resolve, and the one commit that wrote its hash into the lock
+    already holds the moved value, so no commit on HEAD hashes the atom as recorded."""
     repo = init_repo(tmp_path)
     doc = "## Window\n`t/m.py:LIMIT` caps the window.\n"
     commit(repo, "base", **{"t/m.py": "LIMIT = 3\n", "CLAUDE.md": doc})
@@ -102,5 +112,6 @@ def test_an_unresolvable_verified_sha_keeps_the_plain_message(tmp_path):
 
 
 def test_the_token_collector_excludes_the_lock():
-    """`removed._CODE` restates `LOCK_REL` because importing it would be a cycle."""
+    """`removed.LOCK_PATH` restates `LOCK_REL` because importing it would be a cycle."""
+    assert removed.LOCK_PATH == LOCK_REL
     assert f":!{LOCK_REL}" in removed._CODE

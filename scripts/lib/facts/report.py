@@ -84,6 +84,10 @@ def precision(repo: Path, days: int, now: datetime | None = None) -> Precision:
     a row the commit created (nothing was recorded before it), a row whose ``python`` changed
     (an interpreter bump moves every symbol and test hash at once and says nothing about the
     prose), and the commit that created the lock.
+
+    No row's ``verified_sha`` is read. That is often a branch commit a squash merge dropped,
+    and the walk needs none: it follows the lock's own first-parent history on HEAD, where
+    each squash commit carries the lock change and the prose change together.
     """
     now = now or datetime.now(timezone.utc)
     out = Precision(since=now - timedelta(days=days))

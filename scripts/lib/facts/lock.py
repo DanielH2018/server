@@ -291,6 +291,7 @@ def check_lock(
                             repo,
                             cited[atom],
                             rec.get("verified_sha", ""),
+                            recorded_hash,
                             prose.setdefault(unit, _section_prose(repo, unit)),
                             evidence_cache,
                         ),
