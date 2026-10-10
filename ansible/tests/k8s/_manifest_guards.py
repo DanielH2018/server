@@ -18,8 +18,6 @@ from _helpers import ANSIBLE
 from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_DEFAULTS
 
 
-K3S = ANSIBLE / "roles" / "setup" / "k3s"
-
 K8S = ANSIBLE / "roles" / "k8s"
 
 ALL_VARS_VALUES = yaml_fast.safe_load(ALL_VARS.read_text())

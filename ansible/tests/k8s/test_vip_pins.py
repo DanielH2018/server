@@ -28,8 +28,8 @@ from lib import yaml_fast
 from _k8s_render import render_texts, rendered_docs
 from lib.ansible_jinja_env import template_env
 from lib.render_guard import render_or_error
-from _helpers import ROLES
 from _setup_render import role_context, rendered_setup_text
+from lib.repo_paths import K3S_ROLE
 
 # The variable the announcement and every workload pin read.
 PRIMARY_NODE_VAR = "k8s_primary_node"
@@ -68,7 +68,7 @@ def _announcing_nodes(metallb_pool_text: str) -> set[str]:
 
 def _sentinel_metallb_pool() -> str:
     """metallb-pool.yaml.j2 alone, in setup/k3s's context with the sentinel laid on top."""
-    k3s = ROLES / "setup" / "k3s"
+    k3s = K3S_ROLE
     text, err = render_or_error(
         template_env(k3s / "templates"),
         "metallb-pool.yaml.j2",

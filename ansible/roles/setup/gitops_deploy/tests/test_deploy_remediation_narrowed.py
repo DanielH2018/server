@@ -19,9 +19,9 @@ import gitops_markers
 import narrow_setup_index
 
 from deploy_remediation import broad_remediation, manual_plane_remediation
+from lib.repo_paths import K3S_ROLE
 
-_K3S_ROLE = pathlib.Path(__file__).parents[2] / "k3s"
-_K3S_TASKS = _K3S_ROLE / "tasks"
+_K3S_TASKS = K3S_ROLE / "tasks"
 
 
 def _tagged_tasks(tasks, inherited=frozenset()):
@@ -44,7 +44,7 @@ def _tagged_tasks(tasks, inherited=frozenset()):
             yield task, effective
 
 
-def _restart_handlers(path=_K3S_ROLE / "handlers" / "main.yml") -> set[str]:
+def _restart_handlers(path=K3S_ROLE / "handlers" / "main.yml") -> set[str]:
     """The role's handler names that restart a service, read from `handlers/main.yml`."""
     handlers = yaml.safe_load(path.read_text())
     return {h["name"] for h in handlers if "restarted" in yaml.safe_dump(h)}

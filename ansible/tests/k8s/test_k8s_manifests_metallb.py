@@ -9,7 +9,8 @@ read the `metallb.io` Service annotations, which the
 
 from lib import yaml_fast
 
-from _manifest_guards import ALL_VARS_VALUES, K3S, K3S_DEFAULT_VALUES, _render
+from _manifest_guards import ALL_VARS_VALUES, K3S_DEFAULT_VALUES, _render
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 
 
 def _ip_to_int(addr: str) -> int:
@@ -20,11 +21,11 @@ def _ip_to_int(addr: str) -> int:
 def _pool_docs() -> list[dict]:
     """IPAddressPool documents in FILE order — the order kubectl applies them in."""
     rendered = _render(
-        K3S / "templates" / "metallb-pool.yaml.j2",
+        K3S_ROLE / "templates" / "metallb-pool.yaml.j2",
         k3s_metallb_ingress_vip=ALL_VARS_VALUES["k3s_metallb_ingress_vip"],
-        k3s_metallb_pool=yaml_fast.safe_load(
-            (K3S / "defaults" / "main.yml").read_text()
-        )["k3s_metallb_pool"],
+        k3s_metallb_pool=yaml_fast.safe_load(K3S_DEFAULTS.read_text())[
+            "k3s_metallb_pool"
+        ],
     )
     docs = [d for d in yaml_fast.safe_load_all(rendered) if d]
     return [d for d in docs if d["kind"] == "IPAddressPool"]

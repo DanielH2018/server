@@ -14,9 +14,10 @@ import base64
 
 from ansible.template import Templar, trust_as_template
 
-from _helpers import ROLES, leaf_tasks, load_tasks
+from _helpers import leaf_tasks, load_tasks
+from lib.repo_paths import K3S_ROLE
 
-_TASKS = ROLES / "setup/k3s/tasks/coredns.yml"
+_TASKS = K3S_ROLE / "tasks/coredns.yml"
 
 # The image block of k3s v1.37.1+k3s1's manifests/coredns.yaml as k3s stages it, with
 # `%{SYSTEM_DEFAULT_REGISTRY}%` already substituted to the empty string.

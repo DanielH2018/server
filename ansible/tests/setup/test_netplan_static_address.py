@@ -7,8 +7,7 @@ kept daniel-box's k3s crash-looping on `bind: cannot assign requested address` f
 must switch DHCPv4 off rather than run it alongside (the template says why).
 """
 
-from _helpers import ANSIBLE
-from lib.repo_paths import ALL_VARS, HOST_VARS
+from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_ROLE
 from lib import yaml_fast
 from _setup_render import render_setup_text
 
@@ -92,11 +91,7 @@ def test_an_address_other_than_server_ip_is_flagged() -> None:
 
 def test_emptying_the_link_removes_the_pin_and_reapplies() -> None:
     """The way back: an emptied variable must not leave DHCPv4 off on the link."""
-    tasks = yaml_fast.safe_load(
-        (
-            ANSIBLE / "roles" / "setup" / "k3s" / "tasks" / "static-address.yml"
-        ).read_text()
-    )
+    tasks = yaml_fast.safe_load((K3S_ROLE / "tasks" / "static-address.yml").read_text())
     dest = "/etc/netplan/90-homelab-static-address.yaml"
     removal = [
         t

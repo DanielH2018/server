@@ -40,6 +40,7 @@ from _shell_render import (
 from lib import yaml_fast
 from lib.render_guard import containers_entries_in, entry_platform
 from validate.shell_templates import discover_templates
+from lib.repo_paths import K3S_ROLE
 
 # The Pi's roles whose templates the accessor must render. Derived from `containers_list` below
 # as well, so this names what must still be deployed there rather than only what is.
@@ -233,9 +234,7 @@ def test_an_override_beats_a_default_the_role_itself_declares() -> None:
     precedence: if the role's own default won, `ansible/tests/longhorn/_restore_drill.py` would
     render the production stamp tree and its tests would write there.
     """
-    declared = load_defaults(ROLES / "setup" / "k3s")[
-        "k3s_longhorn_restore_drill_stamp_dir"
-    ]
+    declared = load_defaults(K3S_ROLE)["k3s_longhorn_restore_drill_stamp_dir"]
     script = render_shell_script(
         "setup",
         "k3s",

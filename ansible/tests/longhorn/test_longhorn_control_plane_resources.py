@@ -20,11 +20,10 @@ import json
 import pytest
 from lib import yaml_fast
 
-from _helpers import SETUP_ROLES, load_tasks
-from lib.repo_paths import K3S_DEFAULTS
+from _helpers import load_tasks
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 
-K3S = SETUP_ROLES / "k3s"
-LONGHORN_TASKS = K3S / "tasks" / "longhorn.yml"
+LONGHORN_TASKS = K3S_ROLE / "tasks" / "longhorn.yml"
 K3S_DEFAULT_VALUES = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
 
 CSI_SIDECARS = ("csi-attacher", "csi-provisioner", "csi-resizer", "csi-snapshotter")

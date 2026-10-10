@@ -12,7 +12,6 @@ from _helpers import (
     ANSIBLE,
     K8S_ROLES,
     REPO,
-    SETUP_ROLES,
     command_of,
     image_tag,
     imported_task_files,
@@ -22,6 +21,7 @@ from _helpers import (
     task_named,
     walk_tasks,
 )
+from lib.repo_paths import K3S_ROLE
 
 BLOCKED = yaml_fast.safe_load(
     """
@@ -203,8 +203,8 @@ def test_imported_tasks_keeps_a_non_import_entry_in_place(tmp_path):
 
 def test_imported_tasks_reaches_the_k3s_role():
     # Non-vacuity against the real tree: a role whose main.yml is imports only.
-    assert len(imported_task_files(SETUP_ROLES / "k3s")) >= 5
-    assert imported_tasks(SETUP_ROLES / "k3s")
+    assert len(imported_task_files(K3S_ROLE)) >= 5
+    assert imported_tasks(K3S_ROLE)
 
 
 @pytest.mark.parametrize(

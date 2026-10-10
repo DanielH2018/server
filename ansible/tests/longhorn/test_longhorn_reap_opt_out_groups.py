@@ -16,12 +16,12 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_reap_opt_out_groups.py
 import json
 
 from lib import yaml_fast
-from _helpers import REPO
 from _setup_render import rendered_setup_text
 
 import longhorn_reap_logic as logic
+from lib.repo_paths import K3S_FILES
 
-_STORAGECLASS_DIR = REPO / "ansible/roles/setup/k3s/files"
+_STORAGECLASS_DIR = K3S_FILES
 
 # The classes this sweep must find. Named rather than counted: the glob reads empty the day the
 # StorageClasses move directory, and an `all(...)` over nothing passes.

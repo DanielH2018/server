@@ -16,11 +16,11 @@ from pathlib import Path
 
 from lib import yaml_fast
 
-from _restore_drill import K3S
+from lib.repo_paths import K3S_DEFAULTS
 from _restore_drill import harness
 
 CAP = int(
-    yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())[
+    yaml_fast.safe_load(K3S_DEFAULTS.read_text())[
         "k3s_longhorn_restore_drill_max_actual_bytes"
     ]
 )

@@ -112,18 +112,21 @@ ROWS = (
     Census(
         name="tests-take-inventory-paths-from-repo-paths",
         reason=(
-            "`lib.repo_paths` owns `HOSTS_INI`, `ALL_VARS`, `HOST_VARS` and `K3S_DEFAULTS`, and "
-            "#3912 and #3982 moved the test modules onto them. A hit is a `/` chain rooted at "
-            "`REPO`, `_REPO`, `REPO_ROOT`, `ANSIBLE`, `ROLES` or `INVENTORY` (or "
-            "`Path(<one of them>)`) whose string parts spell one of those paths; the message "
-            "names the constant. A module binding its own `INVENTORY` is a hit too. A "
-            'repo-relative string such as `"ansible/inventory/group_vars/all.yml"` is not a '
-            "chain, which is how the deploy classifiers' tests pass those as inputs. The walk "
-            'reads one expression, so a path built in two steps (`K3S = ROLES / "setup" / '
-            '"k3s"`, then `K3S / "defaults" / "main.yml"`) is not seen.'
+            "`lib.repo_paths` owns `HOSTS_INI`, `ALL_VARS`, `HOST_VARS`, `K3S_ROLE`, "
+            "`K3S_FILES` and `K3S_DEFAULTS`, and #3912, #3982 and #4133 moved the test modules "
+            "onto them. A hit is a `/` chain whose string parts spell one of those paths; the "
+            "message names the constant. Its root is `REPO`, `ANSIBLE`, `ROLES`, "
+            "`SETUP_ROLES`, `INVENTORY` or `K3S_ROLE` (also as `Path(...)` or `v.ROLES`), an "
+            'alias of one, a local name bound to an anchored chain (`K3S = ROLES / "setup" / '
+            '"k3s"`, then `K3S / "defaults" / "main.yml"`), or `Path(__file__)` arithmetic '
+            "evaluated at the module (#4135). A chain counts only for the segments it spells "
+            'itself, so `K3S_ROLE / "tasks"` passes. A module binding its own `INVENTORY` is a '
+            'hit too. A repo-relative string such as `"ansible/inventory/group_vars/all.yml"` '
+            "is not a chain, which is how the deploy classifiers' tests pass those as inputs. "
+            "A root computed from another module's `__file__` is not resolved."
         ),
         files=pytest_only_modules,
-        offence=lambda s: inline_inventory_paths(s.text),
+        offence=lambda s: inline_inventory_paths(s.text, REPO / s.rel),
         red=(
             Subject("a.py", 'REPO / "ansible/inventory/hosts.ini"\n'),
             Subject("b.py", 'ANSIBLE / "inventory" / "group_vars" / "all.yml"\n'),
@@ -135,6 +138,20 @@ ROWS = (
             # A local INVENTORY shadowing the repo_paths one, and a chain built from it.
             Subject("f.py", 'INVENTORY = ANSIBLE / "inventory"\n'),
             Subject("g.py", 'INVENTORY / "group_vars" / "all.yml"\n'),
+            # The k3s role directory and its files/, however the chain is rooted (#4133).
+            Subject("h.py", 'ANSIBLE / "roles" / "setup" / "k3s"\n'),
+            Subject("i.py", 'SETUP_ROLES / "k3s" / "files" / "x.py"\n'),
+            Subject("j.py", 'v.ROLES / "setup/k3s" / "tasks"\n'),
+            # A path built in two steps, where the first step owns nothing (#4135).
+            Subject(
+                "k.py", 'SETUP = ROLES / "setup"\nSETUP / "k3s/defaults/main.yml"\n'
+            ),
+            # A root outside the anchor set, evaluated from the module's own location.
+            Subject(
+                "ansible/roles/k8s/x/tests/test_y.py",
+                "ROLE = Path(__file__).resolve().parents[1]\n"
+                'ROLE.parents[2] / "inventory" / "host_vars" / "daniel-box.yml"\n',
+            ),
         ),
         green=(
             Subject(
@@ -143,11 +160,14 @@ ROWS = (
             Subject("b.py", 'classify(["ansible/inventory/group_vars/all.yml"])\n'),
             Subject("c.py", 'tmp_path / "inventory" / "hosts.ini"\n'),
             Subject("d.py", 'REPO / "ansible" / "templates"\n'),
-            Subject("e.py", 'ROLES / "setup" / "k3s" / "files"\n'),
+            Subject("e.py", 'K3S_ROLE / "tasks" / "main.yml"\n'),
+            # A local alias of a constant spells nothing past it.
+            Subject("f.py", 'K3S = K3S_ROLE\nK3S / "templates"\n'),
+            Subject("g.py", 'ROLES / "setup" / role / "defaults" / "main.yml"\n'),
         ),
         min_matches=MODULE_FLOOR,
-        # The classifier tests holding repo-relative inventory strings as inputs, and the four
-        # modules #4002 converted, are in the census the row reads.
+        # The classifier tests holding repo-relative inventory strings as inputs, and modules
+        # #4002, #4133 and #4135 converted, are in the census the row reads.
         must_find=frozenset(
             {
                 "scripts/deploy_tools/tests/test_deploy_tags_blockers.py",
@@ -156,6 +176,8 @@ ROWS = (
                 "evals/tests/test_eval_cases.py",
                 "ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py",
                 "ansible/tests/setup/test_claude_agent_ssh_login.py",
+                "ansible/tests/k8s/_manifest_guards.py",
+                "ansible/roles/k8s/uptime-kuma/tests/test_status_page_groups.py",
             }
         ),
         allow={

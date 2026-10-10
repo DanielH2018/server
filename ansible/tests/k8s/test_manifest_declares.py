@@ -19,9 +19,10 @@ import sys
 from pathlib import Path
 
 from _helpers import REPO
+from lib.repo_paths import K3S_FILES
 
 _REPO = REPO
-sys.path.insert(0, str(_REPO / "ansible/roles/setup/k3s/files"))
+sys.path.insert(0, str(K3S_FILES))
 
 from lib import yaml_fast  # noqa: E402
 

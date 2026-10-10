@@ -25,11 +25,11 @@ from pathlib import Path
 from lib import yaml_fast
 from _helpers import REPO
 from _shell_render import rendered_names_for, rendered_shell_text
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 
 _REPO = REPO
-_ROLE = _REPO / "ansible/roles/setup/k3s"
-_TEMPLATES = _ROLE / "templates"
-_HEALTH_CRONS = _ROLE / "tasks/health-crons.yml"
+_TEMPLATES = K3S_ROLE / "templates"
+_HEALTH_CRONS = K3S_ROLE / "tasks/health-crons.yml"
 _MANIFEST_DIR = "/var/lib/homelab/setup-render-manifest.d"
 # Arms 2 and 3 live in a library that both consumers source: manifest-prune-check.sh.j2 is
 # installed only on k3s server hosts, and daniel-server renders the whole UPS shutdown chain.
@@ -64,7 +64,7 @@ _GROUP_TAGS = {
 
 
 def _groups() -> list[dict]:
-    defaults = yaml_fast.safe_load((_ROLE / "defaults/main.yml").read_text())
+    defaults = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
     return defaults["k3s_render_stamp_groups"]
 
 

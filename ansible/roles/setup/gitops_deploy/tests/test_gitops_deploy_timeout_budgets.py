@@ -23,6 +23,7 @@ import re
 import pytest
 import yaml
 
+from lib.repo_paths import ALL_VARS
 from lib.repo_paths import REPO as _REPO
 
 from _helpers import manifests_rollout_timeout_s
@@ -237,7 +238,6 @@ def test_a_short_lock_waiter_is_flagged():
 # promoted claim-declaring role fails this test instead of silently under-sizing the budget.
 
 _K8S_ROLES_DIR = pathlib.Path(__file__).parents[3] / "k8s"
-_ALL_VARS = pathlib.Path(__file__).parents[4] / "inventory" / "group_vars" / "all.yml"
 
 
 def _rollout_timeout_s(role: str) -> int:
@@ -271,7 +271,7 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
     snapshot_defaults = yaml.safe_load(
         (_K8S_ROLES_DIR / "volume-snapshot" / "defaults" / "main.yml").read_text()
     )
-    all_vars = yaml.safe_load(_ALL_VARS.read_text())
+    all_vars = yaml.safe_load(ALL_VARS.read_text())
     defaults = yaml.safe_load(_DEFAULTS.read_text())
 
     state_timeout = int(revert_defaults["volume_revert_state_timeout"])
@@ -400,7 +400,7 @@ def _forward_terms() -> tuple[int, int, int]:
     snapshot_defaults = yaml.safe_load(
         (_K8S_ROLES_DIR / "volume-snapshot" / "defaults" / "main.yml").read_text()
     )
-    all_vars = yaml.safe_load(_ALL_VARS.read_text())
+    all_vars = yaml.safe_load(ALL_VARS.read_text())
     defaults = yaml.safe_load(_DEFAULTS.read_text())
     return (
         int(snapshot_defaults["volume_snapshot_timeout"]),

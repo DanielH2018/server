@@ -27,15 +27,15 @@ from lib.service_tiers import resolved_tier_lists
 
 from _k8s_render import rendered_docs
 
-from _helpers import SETUP_ROLES, imported_tasks, load_defaults
+from _helpers import imported_tasks, load_defaults
+from lib.repo_paths import K3S_DEFAULTS, K3S_FILES, K3S_ROLE
 
-K3S = SETUP_ROLES / "k3s"
-STORAGECLASS = K3S / "files" / "longhorn-storageclass.yaml"
+STORAGECLASS = K3S_FILES / "longhorn-storageclass.yaml"
 
 
 def _tasks():
     """Every task the role runs, in the order it runs them."""
-    return imported_tasks(K3S)
+    return imported_tasks(K3S_ROLE)
 
 
 def _commands(tasks: list[dict]) -> list[str]:
@@ -95,7 +95,7 @@ def test_role_patches_the_backup_block_size_setting():
 
 def test_backup_block_size_is_a_value_longhorn_accepts():
     """Longhorn takes 2 or 16 MiB and nothing between; a typo here is silently wrong."""
-    defaults = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
+    defaults = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
     assert defaults["k3s_longhorn_backup_block_size"] in (2, 16), (
         "k3s_longhorn_backup_block_size must be 2 or 16 (MiB). Longhorn rejects other "
         "values, and the patch reports success regardless."
@@ -201,7 +201,7 @@ def test_declared_pvcs_finds_every_known_claim():
 
 
 def test_backup_routing_lists_are_pairwise_disjoint():
-    defaults = resolved_tier_lists(load_defaults(K3S))
+    defaults = resolved_tier_lists(load_defaults(K3S_ROLE))
     lists = {name: set(defaults.get(name) or []) for name in _ROUTING_LISTS}
     overlaps = []
     for i, left in enumerate(_ROUTING_LISTS):
@@ -216,7 +216,7 @@ def test_backup_routing_lists_are_pairwise_disjoint():
 
 
 def test_backup_routing_lists_have_no_duplicates():
-    defaults = resolved_tier_lists(load_defaults(K3S))
+    defaults = resolved_tier_lists(load_defaults(K3S_ROLE))
     for name in _ROUTING_LISTS:
         entries = defaults.get(name) or []
         dupes = sorted({e for e in entries if entries.count(e) > 1})
@@ -226,7 +226,7 @@ def test_backup_routing_lists_have_no_duplicates():
 def test_every_routed_volume_is_a_real_pvc():
     # A typo here does not fail anything at deploy — the label reconcile simply matches no
     # volume and moves on, leaving the PVC on whatever tier it was already in.
-    defaults = resolved_tier_lists(load_defaults(K3S))
+    defaults = resolved_tier_lists(load_defaults(K3S_ROLE))
     declared = _declared_pvcs()
     assert len(declared) > 20, (
         f"only found {len(declared)} PVC names — the collector stopped matching"

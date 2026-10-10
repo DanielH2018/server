@@ -12,13 +12,13 @@ from lib import yaml_fast
 from _k8s_render import rendered_docs
 from _manifest_guards import (
     ALL_VARS_VALUES,
-    K3S,
     K3S_DEFAULT_VALUES,
     K8S,
     _k8s_entries,
     _render,
     _role_context,
 )
+from lib.repo_paths import K3S_ROLE
 
 
 READ_VERBS = {"get", "list", "watch"}
@@ -26,7 +26,7 @@ READ_VERBS = {"get", "list", "watch"}
 
 def _readonly_rbac_docs() -> list[dict]:
     rendered = _render(
-        K3S / "templates" / "readonly-rbac.yaml.j2",
+        K3S_ROLE / "templates" / "readonly-rbac.yaml.j2",
         sys_user=ALL_VARS_VALUES["sys_user"],
         k3s_readonly_sa_name=K3S_DEFAULT_VALUES["k3s_readonly_sa_name"],
         k3s_readonly_sa_namespace=K3S_DEFAULT_VALUES["k3s_readonly_sa_namespace"],
