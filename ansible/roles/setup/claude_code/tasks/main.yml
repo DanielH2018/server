@@ -390,34 +390,18 @@
 # working tree rather than from a session's worktree: the hook shim (the profile above) and the
 # homelab-ui MCP launcher (agent_browser.yml). A clone left 94 commits behind ran a ui_mcp.sh
 # that still decrypted SOPS, which the agent cannot do, and the MCP server never connected
-# (#4067, #4099). These tasks fast-forward it on each apply, before the venv sync below reads
-# its uv.lock. Only a clean master is moved: anything else is the agent's work in progress.
-- name: Read the agent user's clone branch and status
+# (#4067, #4099). files/claude-clone-sync.sh fast-forwards it when it is a clean master, and
+# leaves anything else alone as the agent's work in progress. This apply runs it before the venv
+# sync below reads the clone's uv.lock. claude-clone-sync.timer runs it between applies, since a
+# merge touching only the launcher or .claude/hooks/ applies no role at all (#4162).
+- name: Install the agent user's clone sync script
   tags: [claude_code]
-  ansible.builtin.command:
-    argv:
-      - runuser
-      - -u
-      - "{{ claude_code_agent_user }}"
-      - --
-      - git
-      - -C
-      - "{{ claude_code_agent_user_clone_dir }}"
-      - status
-      - --porcelain=v2
-      - --branch
-      - --untracked-files=no
-  environment:
-    HOME: "{{ claude_code_agent_user_home }}"
-    TMPDIR: /tmp
-  register: claude_code_agent_clone_status
-  changed_when: false
-  # Never fatal, for the pull's reason below. A missing or broken clone skips the pull, and the
-  # report task names the failed read. So does a --check run on a host that has just switched
-  # the agent user on, which reads for real a clone the skipped clone task never made.
-  failed_when: false
-  # A read of state that exists independently of this play, so --check runs it too.
-  check_mode: false
+  ansible.builtin.copy:
+    src: claude-clone-sync.sh
+    dest: /usr/local/bin/claude-clone-sync.sh
+    mode: "0755"
+    owner: root
+    group: root
   become: true
   when: claude_code_agent_user_enabled
 
@@ -432,43 +416,70 @@
       - -u
       - "{{ claude_code_agent_user }}"
       - --
-      - git
-      - -C
+      - /usr/local/bin/claude-clone-sync.sh
       - "{{ claude_code_agent_user_clone_dir }}"
-      - pull
-      - --ff-only
-      - origin
-      - master
   environment:
     HOME: "{{ claude_code_agent_user_home }}"
+    # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the agent cannot write.
     TMPDIR: /tmp
-    # The changed_when below parses git's English output.
-    LC_ALL: C
   register: claude_code_agent_clone_pull
-  changed_when: claude_code_agent_clone_pull.stdout | default('') is search('^Updating ', multiline=True)
+  changed_when: claude_code_agent_clone_pull.stdout | default('') is search('^advanced ', multiline=True)
   failed_when: false
   become: true
-  when:
-    - claude_code_agent_user_enabled
-    - claude_code_agent_clone_status.rc | default(1) == 0
-    - claude_code_agent_clone_status.stdout | default('') is search('^# branch\.head master$', multiline=True)
-    - claude_code_agent_clone_status.stdout | default('') is not search('^[^#]', multiline=True)
+  when: claude_code_agent_user_enabled
 
 - name: Report that the agent user's clone was left behind
   tags: [claude_code]
   ansible.builtin.debug:
     msg: >-
       {{ claude_code_agent_user_clone_dir }} was not fast-forwarded:
-      {{ 'reading its status failed: ' ~ (claude_code_agent_clone_status.stderr | default(''))
-      if claude_code_agent_clone_status.rc | default(1) != 0
-      else 'its pull failed: ' ~ (claude_code_agent_clone_pull.stderr | default(''))
+      {{ 'its sync failed: ' ~ (claude_code_agent_clone_pull.stderr | default(''))
       if claude_code_agent_clone_pull.rc | default(0) != 0
-      else 'it is off master or has uncommitted changes' }}.
+      else claude_code_agent_clone_pull.stdout | default('the sync did not run') }}.
       The agent's hook shim and homelab-ui launcher keep running its old code until it moves.
   when:
     - claude_code_agent_user_enabled
     - not ansible_check_mode
-    - claude_code_agent_clone_pull is skipped or claude_code_agent_clone_pull.rc | default(0) != 0
+    - >-
+      claude_code_agent_clone_pull is skipped
+      or claude_code_agent_clone_pull.rc | default(0) != 0
+      or claude_code_agent_clone_pull.stdout | default('') is search('^skipped: ', multiline=True)
+
+- name: Install the agent user's clone sync units
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - claude-clone-sync.service
+    - claude-clone-sync.timer
+  become: true
+  when: claude_code_agent_user_enabled
+  notify: Reload systemd
+
+# Shares claude-rc's webhook file in /etc/claude-rc, which the role creates on every host.
+- name: Install the agent user's clone sync failure alert
+  tags: [claude_code]
+  when: claude_code_agent_user_enabled
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  vars:
+    alert_unit_name: claude-clone-sync
+    alert_unit_description: Alert when the claude agent user's clone cannot be fast-forwarded
+    alert_unit_message: "claude-clone-sync failed on {{ inventory_hostname }}: the claude agent user keeps running old hooks and an old homelab-ui launcher. Check `journalctl -u claude-clone-sync`."
+    alert_unit_env_dir: /etc/claude-rc
+
+- name: Enable and start the agent user's clone sync timer
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-clone-sync.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: claude_code_agent_user_enabled
 
 - name: Sync the repo's venv in the agent user's clone
   tags: [claude_code]
@@ -779,6 +790,45 @@
   become: true
   when: not claude_code_agent_user_enabled
 
+# The way out for the clone sync. An expired account does not stop a `User=` service, which
+# runs with no PAM account check, so the units must go or the timer keeps pulling.
+- name: Check whether an agent clone sync timer is installed
+  tags: [claude_code]
+  ansible.builtin.stat:
+    path: /etc/systemd/system/claude-clone-sync.timer
+  register: claude_code_agent_clone_sync_timer_file
+  become: true
+  when: not claude_code_agent_user_enabled
+
+# Guarded on the file: systemd refuses to stop a unit it has never heard of.
+- name: Stop and disable the agent clone sync timer when the agent user is switched off
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-clone-sync.timer
+    enabled: false
+    state: stopped
+  become: true
+  when:
+    - not claude_code_agent_user_enabled
+    - claude_code_agent_clone_sync_timer_file.stat.exists
+
+- name: Remove the agent clone sync units and script when the agent user is switched off
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/claude-clone-sync.service
+    - /etc/systemd/system/claude-clone-sync.timer
+    - /etc/systemd/system/claude-clone-sync-alert.service
+    - /usr/local/bin/claude-clone-sync.sh
+    # The drift-check fragment the stamp at the end of this file writes. Left behind, it names
+    # the script removed above, and the setup drift check reports it missing for good.
+    - /var/lib/homelab/setup-deployed-manifest.d/claude-code-clone-sync
+  become: true
+  when: not claude_code_agent_user_enabled
+  notify: Reload systemd
+
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # In its own file, because that file is on the lander's approval list and pins the lander's
 # settings against an inventory override (tasks/lander.yml).
@@ -808,6 +858,8 @@
       - ansible/roles/setup/claude_code/templates/pytest-fanout-cap.conf.j2
       - ansible/roles/setup/claude_code/templates/claude-memory-sync.service.j2
       - ansible/roles/setup/claude_code/templates/claude-memory-sync.timer.j2
+      - ansible/roles/setup/claude_code/templates/claude-clone-sync.service.j2
+      - ansible/roles/setup/claude_code/templates/claude-clone-sync.timer.j2
       - ansible/roles/setup/claude_code/templates/claude-land@.service.j2
       - ansible/roles/setup/claude_code/templates/50-claude-land.rules.j2
       - ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2
@@ -823,3 +875,15 @@
     stamp_deployed_pairs:
       - live: /usr/local/bin/claude-cgroup-metrics.sh
         src: ansible/roles/setup/claude_code/files/claude-cgroup-metrics.sh
+
+# Its own group, so a host with the agent user switched off claims no clone sync script. The
+# switched-off arm above removes this fragment with the script.
+- name: Record the deployed agent clone sync script for drift checking
+  tags: [claude_code]
+  when: claude_code_agent_user_enabled
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: claude-code-clone-sync
+    stamp_deployed_pairs:
+      - live: /usr/local/bin/claude-clone-sync.sh
+        src: ansible/roles/setup/claude_code/files/claude-clone-sync.sh
