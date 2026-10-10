@@ -371,6 +371,22 @@ def test_no_socket_falls_back_to_the_proc_loop_and_says_so_is_clean(tmp_path):
     assert "cannot connect to" in proc.stderr
 
 
+def test_a_socket_this_uid_may_not_write_falls_back_and_says_so_is_clean(tmp_path):
+    # A session that predates its user's group grant: the root scan does not apply yet, so
+    # the chain scans /proc itself rather than keep every tree.
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    sock = tmp_path / "worktree-holders.sock"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bound:
+        bound.bind(str(sock))
+        bound.listen(1)
+        sock.chmod(0o000)
+        proc = _scan(worktree, sock)
+
+    assert proc.stdout.strip() == ""
+    assert "cannot connect to" in proc.stderr
+
+
 def test_a_helper_that_names_only_other_trees_leaves_the_tree_free_is_clean(tmp_path):
     worktree = tmp_path / "wt"
     worktree.mkdir()

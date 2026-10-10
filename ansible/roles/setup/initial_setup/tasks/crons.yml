@@ -344,8 +344,8 @@
   #
   # A root-owned COPY, never a path into the checkout: sys_user and every agent can write the
   # repo, so a root unit naming a file there is root for whoever edits it. 0700, because only
-  # the service runs it. A copy that changes the file replaces its inode, which also drops the
-  # `user:claude` ACL entry the sudo grant once added.
+  # the service runs it. On a file that carries an ACL, the group bits of the mode are the ACL
+  # mask, so 0700 leaves any `user:claude` entry the sudo grant added with no permission.
   when: has_claude_code
   ansible.builtin.copy:
     src: worktree_holders.py

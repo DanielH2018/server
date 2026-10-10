@@ -12,6 +12,7 @@ import errno
 import json
 import os
 import pwd
+import socket
 from pathlib import Path
 
 from _worktree_proc import _unreadable_proc
@@ -150,3 +151,18 @@ def test_processes_using_takes_the_helpers_answer_over_the_proc_scan_is_flagged(
         )
         == answer
     )
+
+
+def test_a_real_socket_this_uid_may_not_write_falls_back_is_clean(tmp_path, capsys):
+    # The group gate through a real connect: a socket whose mode shuts this uid out raises
+    # EACCES, which reads as "not granted yet", not as a failed scan.
+    root = tmp_path / "worktrees"
+    sock = tmp_path / "worktree-holders.sock"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bound:
+        bound.bind(str(sock))
+        bound.listen(1)
+        sock.chmod(0o000)
+        found = privileged_holders(root / "a", sock=str(sock), root=root)
+
+    assert found is None
+    assert "Permission denied" in capsys.readouterr().err
