@@ -28,6 +28,7 @@ Run: uv run pytest ansible/tests/services/test_karakeep_backend_policies.py
 
 import pytest
 from _helpers import REPO
+from _role_census import manifests_service_of
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 
@@ -183,9 +184,7 @@ def test_each_backend_policy_is_staged_by_the_deploy_task(backend):
     policy_file, _port = BACKENDS[backend]
     tasks = yaml_fast.safe_load(KARAKEEP_TASKS.read_text())
     deploys = [
-        task
-        for task in tasks
-        if (task.get("vars") or {}).get("manifests_service") == CONSUMER
+        task for task in tasks if manifests_service_of(task, CONSUMER) == CONSUMER
     ]
     assert len(deploys) == 1, (
         f"expected exactly one task deploying the karakeep manifests, found {len(deploys)}"

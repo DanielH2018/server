@@ -4,7 +4,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: crowdsec
     # The node agents read AGENT_PASSWORD from this role's Secret through `secretKeyRef`
     # (node-agent-daemonset.yaml.j2), and env is resolved once at pod start. The shared
     # config-change restart rolls only `manifests_rollout` — deploy/crowdsec — so without this

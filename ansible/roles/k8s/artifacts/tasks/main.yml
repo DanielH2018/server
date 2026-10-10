@@ -61,7 +61,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: artifacts
     manifests_files:
       - configmap.yaml
       - deployment.yaml

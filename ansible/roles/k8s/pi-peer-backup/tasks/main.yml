@@ -65,7 +65,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: pi-peer-backup
     # A CronJob — nothing to wait on at deploy; the first scheduled (or manually
     # triggered) run is the proof.
     manifests_rollout: ''

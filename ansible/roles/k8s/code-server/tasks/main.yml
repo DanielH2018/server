@@ -31,7 +31,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: code-server
     manifests_rollout: code-server
     manifests_files:
       - deployment.yaml

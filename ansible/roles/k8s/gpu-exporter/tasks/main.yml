@@ -8,7 +8,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: gpu-exporter
     manifests_rollout: gpu-exporter
     # `daemonset` literally: the assert in k8s/manifests refuses kubectl's `ds`/`DaemonSet`
     # aliases, because the stabilise gate would then read a Deployment's jsonpath off this and

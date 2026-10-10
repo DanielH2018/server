@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import K8S_ROLES, load_tasks, walk_tasks
-from _role_census import task_files, task_files_by_role
+from _role_census import manifests_service_of, task_files, task_files_by_role
 from _shell_render import rendered_shell_text
 
 MANIFEST_ROOT = "/etc/rancher/k3s/manifests"
@@ -73,14 +73,12 @@ def pruned_dirs(roles_dir: Path) -> dict[str, tuple[str, ...]]:
     the alternative is a guard that flags a file the role does list.
     """
     found: dict[str, tuple[str, ...]] = {}
-    for tasks_file in task_files(roles_dir):
+    for role_dir, tasks_file in task_files_by_role(roles_dir):
         for task in walk_tasks(load_tasks(tasks_file)):
-            if _included_role(task) != MANIFESTS_ROLE:
-                continue
-            task_vars = task.get("vars") or {}
-            service = str(task_vars.get("manifests_service", "")).strip()
+            service = manifests_service_of(task, role_dir.name)
             if not service or "{{" in service:
                 continue
+            task_vars = task.get("vars") or {}
             listed: list[str] = []
             for key in ("manifests_files", "manifests_secret_files"):
                 value = task_vars.get(key, [])
@@ -145,9 +143,7 @@ def owning_roles(roles_dir: Path) -> dict[str, str]:
     found: dict[str, str] = {}
     for role_dir, tasks_file in task_files_by_role(roles_dir):
         for task in walk_tasks(load_tasks(tasks_file)):
-            if _included_role(task) != MANIFESTS_ROLE:
-                continue
-            service = str((task.get("vars") or {}).get("manifests_service", "")).strip()
+            service = manifests_service_of(task, role_dir.name)
             if service and "{{" not in service:
                 found[service] = role_dir.name
     return found

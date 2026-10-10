@@ -3,7 +3,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: radarr
     # The startupProbe allows up to 10 min of first-boot DOCKER_MODS install; the shared
     # rollout default times out against it and aborts the whole deploy while the pod is still
     # coming up healthy. The number lives in

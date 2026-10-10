@@ -26,7 +26,7 @@ from _helpers import load_tasks as _tasks
 from _helpers import command_of as _cmd
 from _helpers import render_expr as _render
 from _k8s_render import deploy_play
-from _role_census import task_files
+from _role_census import manifests_service_of, task_files_by_role
 
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
@@ -329,13 +329,21 @@ def _walk(tasks) -> list[dict]:
 
 
 def _role_includes(role_name: str) -> list[dict]:
-    """The `vars` of every include of `role_name` across roles/k8s/*/tasks/*.yml."""
+    """The `vars` of every include of `role_name` across roles/k8s/*/tasks/*.yml.
+
+    A `k8s/manifests` include gets its `manifests_service` filled in from the role directory
+    when it omits one, as the role's own default does (#4053).
+    """
     out: list[dict] = []
-    for path in task_files(_REPO / "ansible/roles/k8s"):
+    for role_dir, path in task_files_by_role(_REPO / "ansible/roles/k8s"):
         for task in _walk(_tasks(path)):
             inc = task.get("ansible.builtin.include_role")
             if isinstance(inc, dict) and inc.get("name") == role_name:
-                out.append(task.get("vars") or {})
+                task_vars = dict(task.get("vars") or {})
+                service = manifests_service_of(task, role_dir.name)
+                if service is not None:
+                    task_vars["manifests_service"] = service
+                out.append(task_vars)
     return out
 
 
