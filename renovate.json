@@ -392,6 +392,10 @@
       ],
       "groupName": "CI runner image (manual — check the preinstalled tools the system hooks assume)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
@@ -483,6 +487,10 @@
       ],
       "groupName": "k8s image {{depName}} (manual — k8s_autodeploy: false, so the tick applies nothing; land.sh deploys it)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "groupSingleUpdates": true,
       "automerge": false
     },
@@ -501,6 +509,10 @@
       ],
       "groupName": "k8s base image {{depName}} (manual — k8s_autodeploy: false, so the tick applies nothing; land.sh rebuilds and deploys it)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "groupSingleUpdates": true,
       "automerge": false
     },
@@ -546,6 +558,10 @@
       ],
       "groupName": "ansible-core (manual — lockstep: pyproject.toml + host-basics.yml; rerun --tags tooling on the hosts)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
@@ -566,6 +582,10 @@
       ],
       "groupName": "{{depName}} (manual — finish any paired digest: asset_pins.py --refresh {{depName}})",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "groupSingleUpdates": true,
       "automerge": false
     },
@@ -582,6 +602,10 @@
       ],
       "groupName": "node_exporter (manual — lockstep: cluster image + Pi host unit; asset_pins.py --refresh prometheus/node_exporter, then initial_setup.yml --tags node-exporter-host -e target=daniel-pi)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
@@ -594,6 +618,10 @@
       ],
       "groupName": "meilisearch (manual upgrade \u2014 DB format migration; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "groupSingleUpdates": true,
       "automerge": false
     },
@@ -621,6 +649,10 @@
       ],
       "groupName": "ansible galaxy collections (manual \u2014 lockstep with ansible-core)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
@@ -633,6 +665,10 @@
       ],
       "groupName": "crowdsec bouncer plugin (manual \u2014 needs traefik redeploy; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "groupSingleUpdates": true,
       "automerge": false
     },
@@ -649,6 +685,10 @@
       ],
       "groupName": "docker engine on the Pi (manual \u2014 merge, then run docker-engine-upgrade; it stops every Compose project)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
@@ -663,6 +703,10 @@
       ],
       "groupName": "k3s control plane (manual \u2014 plan the upgrade, mind Longhorn's version skips)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
@@ -689,6 +733,10 @@
       ],
       "groupName": "karakeep time-tagger pip deps (manual \u2014 track the pinned app; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "groupSingleUpdates": true,
       "automerge": false
     },
@@ -708,6 +756,10 @@
       ],
       "groupName": "code-server build pins (manual — built image, finish code_server_k8s_node_sha256 on a node bump; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "prBodyNotes": [
         "If this PR bumps `@anthropic-ai/claude-code`, finish the `Anthropic.claude-code` entry of `code_server_k8s_extensions` in `ansible/roles/k8s/code-server/defaults/main.yml` in the same PR: its version, its `linux-x64` URL and the sha256 of the decoded VSIX. The Marketplace recipe is in the comment above that list. Renovate has no datasource for the extension, so `test_the_cli_is_pinned_to_the_extension_release` stays red until both move together."
       ],
@@ -727,6 +779,10 @@
       ],
       "groupName": "homelab-mcp pip deps (manual — built image; rebuild with deploy.sh --tags homelab-mcp)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
@@ -753,6 +809,10 @@
       ],
       "groupName": "n8n (manual — append each resolved version to base-pin-history.tsv; lockstep: app + task runners; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "groupSingleUpdates": true,
       "automerge": false
     },
@@ -769,6 +829,10 @@
       ],
       "groupName": "n8n fuzzball (manual — built image, rebuild with deploy.sh --tags n8n; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "groupSingleUpdates": true,
       "automerge": false
     },
@@ -782,6 +846,10 @@
       ],
       "groupName": "jellyfin-ani-sync (manual — finish the targetAbi + MD5, raise jellyfin with it)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
@@ -794,6 +862,10 @@
       ],
       "groupName": "intro-skipper (manual — finish the sha256 + targetAbi, check the Jellyfin line)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
@@ -806,6 +878,10 @@
       ],
       "groupName": "jellyfin webhook (manual — finish the targetAbi + MD5, check the Jellyfin line)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
@@ -818,6 +894,10 @@
       ],
       "groupName": "jellyfin merge-versions (manual — finish the sha256 + targetAbi, check the Jellyfin line)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
@@ -830,6 +910,10 @@
       ],
       "groupName": "jellyfin media-cleaner (manual — pick the per-ABI asset, finish the sha256 + targetAbi)",
       "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
       "automerge": false
     },
     {
