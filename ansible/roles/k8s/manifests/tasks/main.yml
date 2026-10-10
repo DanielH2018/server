@@ -1,12 +1,12 @@
 ---
 # Shared render -> apply -> wait cycle for every k8s workload role.
 #
-# Included by roles/k8s/<service>/tasks/main.yml, which must set:
-#   manifests_rollout       workload to wait on; set '' to skip the wait entirely
-#
-# and may set (each derived or defaulted when omitted):
+# Included by roles/k8s/<service>/tasks/main.yml, which may set (each derived or defaulted
+# when omitted, so a role whose Deployment is named after it passes no vars at all):
 #   manifests_service       service name (also the manifest subdirectory); defaults to the
 #                           calling role's name
+#   manifests_rollout       workload to wait on; defaults to manifests_service. Set '' to
+#                           skip the wait entirely
 #   manifests_files         list of template basenames rendered world-readable; derived from
 #                           the caller's templates/ (the "Resolve the manifest file lists" task)
 #   manifests_secret_files  list rendered 0600 with no_log (anything carrying a secret); derived

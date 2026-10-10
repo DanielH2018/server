@@ -6,17 +6,25 @@ Usage::
     uv run python scripts/dev/new_k8s_service.py miniflux \\
         --image ghcr.io/miniflux/miniflux:2.2.16 --port 8080 --authelia one_factor
 
-Writes `ansible/roles/k8s/<name>/` — `tasks/main.yml`, `defaults/main.yml`,
-`templates/deployment.yaml.j2` and a `CLAUDE.md` with the `## At a glance` markers the
-role-glance generator fills — and appends the `containers_list` entry to
-`ansible/inventory/host_vars/daniel-box.yml`. Then it runs
-`scripts/docs/gen_role_glance.py` so the new CLAUDE.md's block is already correct.
+The role is a `containers_list` entry plus a Deployment template (#4298). The entry is
+appended to `ansible/inventory/host_vars/daniel-box.yml`, and `templates/deployment.yaml.j2`
+is the one manifest the role ships. Three small files sit beside the template:
+
+* `tasks/main.yml` is the bare `include_role` of `k8s/manifests`, with no `vars:`. That role
+  derives the file lists from `templates/` and the entry (#3662), defaults
+  `manifests_service` to the role's name (#4053), and reads `manifests_rollout |
+  default(manifests_service)` wherever it needs the workload to wait on.
+* `defaults/main.yml` holds what has no other home: the image pin Renovate's k8s-defaults
+  manager bumps, the `k8s_autodeploy` stance `ansible/filter_plugins/k8s_autodeploy.py`
+  raises without, the resources, and the pinned uid.
+* `CLAUDE.md` carries the `## At a glance` markers. `scripts/docs/gen_role_glance.py`, which
+  this script runs last, writes the tag, image, route, claims and stance between them, so the
+  rest of the doc holds only what the generator cannot derive.
 
 WHY A GENERATOR AND NOT A SIBLING (#2855). Step 1 of the `new-k8s-service` skill used to say
 "copy a close sibling". A sibling's files carry its narration, and that narration is dated: the
 littlelink role's Deployment cited a Compose template that had not existed since 2026-08-14.
-Five files carrying someone else's history is a worse starting point than five files carrying
-none.
+A role carrying someone else's history is a worse starting point than one carrying none.
 
 WHAT IT DOES NOT WRITE, deliberately:
 
@@ -68,18 +76,21 @@ def var_prefix(name: str) -> str:
 
 
 def tasks_main(name: str) -> str:
-    """`tasks/main.yml`: one include of the shared render/apply/queue role.
+    """`tasks/main.yml`: the bare include of the shared render/apply/queue role.
 
-    It names no file list. `k8s/manifests` derives one from the role's `templates/` and adds
-    the shared `service.yaml` and `ingressroute.yaml` because the entry carries a `port` and,
-    for a routed service, a `hostname`.
+    It passes no vars. `k8s/manifests` derives the file lists from the role's `templates/`,
+    adding the shared `service.yaml` and `ingressroute.yaml` because the entry carries a
+    `port` and, for a routed service, a `hostname`. Its rollout target defaults to the
+    service name, which is the scaffolded Deployment's name.
+
+    Keep the `name: k8s/manifests` line unquoted and uncommented:
+    `ansible/tests/deploy/_autodeploy_rollout.py:_primary_rollout_name` matches it literally to
+    resolve a role with no `manifests_rollout` to the role's own name.
     """
     return f"""---
 - name: Deploy {name} to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_rollout: {name}
 """
 
 
@@ -160,23 +171,22 @@ spec:
 """
 
 
-def role_doc(name: str, port: int, route: bool) -> str:
+def role_doc(name: str, route: bool) -> str:
     """A CLAUDE.md whose `## At a glance` block the generator fills in immediately after.
 
     The markers have to be present and empty: `gen_role_glance.py` writes between them and
-    leaves everything else alone, so a doc without them is never filled.
+    leaves everything else alone, so a doc without them is never filled. The block states the
+    deploy tag, image, route, claims and auto-deploy stance, so the prose below it states
+    none of them. It keeps the one fact the block omits: the Service and the route render
+    from shared templates rather than from this role.
     """
-    routing = (
-        "Reached through Traefik; the route comes from the shared "
-        "`ansible/templates/ingressroute-default.yaml.j2`, which reads the hostname, port "
-        "and Authelia gate off the containers_list entry."
+    shared = (
+        "The Service and the IngressRoute render from "
+        "`ansible/templates/service-default.yaml.j2` and "
+        "`ansible/templates/ingressroute-default.yaml.j2`, off the containers_list entry."
         if route
-        else "No IngressRoute — reached in-cluster by Service name only."
-    )
-    shared_route = (
-        " and the IngressRoute from `ansible/templates/ingressroute-default.yaml.j2`"
-        if route
-        else ""
+        else "The Service renders from `ansible/templates/service-default.yaml.j2`, off the "
+        "containers_list entry. No IngressRoute: callers reach it in-cluster by Service name."
     )
     return f"""# {name} — TODO: one line on what this service is for
 
@@ -186,16 +196,12 @@ See repo-root `CLAUDE.md` for shared conventions.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 <!-- /generated_from -->
 
-- **Port:** {port}. {routing}
-- **Manifests from the containers_list entry:** the Service comes from
-  `ansible/templates/service-default.yaml.j2`{shared_route}; this role ships no template for
-  either.
-
 ## Notable
 - TODO: what a reader would get wrong about this role. Delete this heading if nothing does.
 
 ## Editing
-- Manifests: `templates/`.
+- Manifests: `templates/`. {shared}
+- Image pin, auto-deploy stance, resources and uid: `defaults/main.yml`.
 """
 
 
@@ -270,7 +276,7 @@ def write_role(args, roles_dir: Path | None = None) -> list[Path]:
         role / "templates" / "deployment.yaml.j2": deployment_template(
             args.name, args.strategy, args.priority_class
         ),
-        role / "CLAUDE.md": role_doc(args.name, args.port, args.route),
+        role / "CLAUDE.md": role_doc(args.name, args.route),
     }
     written = []
     for path, content in files.items():
@@ -391,9 +397,11 @@ def main(argv=None) -> int:
         f"  ./scripts/deploy.sh --tags {args.name} --dry-run\n"
         f"A dry run does not prove a brand-new service: see the new-k8s-service skill for "
         f"what it leaves uncovered.\n"
-        f"Secrets, PVCs and NetworkPolicies are not scaffolded — add them by hand under "
-        f"{(role / 'templates').relative_to(REPO)} and name each file in "
-        f"{(role / 'tasks' / 'main.yml').relative_to(REPO)}.\n"
+        f"Secrets and NetworkPolicies are not scaffolded. Add each as a template under "
+        f"{(role / 'templates').relative_to(REPO)}; k8s/manifests renders every top-level "
+        f"one, and a name containing `secret` renders 0600 under no_log. A PVC is a "
+        f"`k8s_claims` entry in {(role / 'defaults' / 'main.yml').relative_to(REPO)}, not "
+        f"a template.\n"
         f"\nTwo censuses a new role always has to join, which `prek` does not run and CI does:\n"
         f"  BORN_FENCED_ROLES in ansible/tests/k8s/test_netpol_baseline_labels.py — add "
         f"{args.name} with the sentence saying why Traefik is its only caller, or drop the "
