@@ -679,6 +679,38 @@
     - claude_code_agent_user_enabled
     - claude_code_agent_cc_wait.stat.exists | default(false)
 
+- name: Look for the operator's deployed jsonq
+  tags: [claude_code]
+  ansible.builtin.stat:
+    path: /home/{{ sys_user }}/.local/share/jsonq
+  register: claude_code_agent_jsonq
+  become: true
+  when: claude_code_agent_user_enabled
+
+- name: Give the agent user the operator's jsonq
+  tags: [claude_code]
+  # The operator's CLAUDE.md, which the agent imports, says jsonq is installed for JSON work jq
+  # cannot express; without it a session falls back to the prompting `python3 -c` (#4101). The
+  # dotfiles repo deploys it under the operator's home only. The script loads its modules from
+  # ../share/jsonq beside its own real path, so both halves are copied. Copied as cc-wait is
+  # above, and skipped the same way on a host without the dotfiles deploy.
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    remote_src: true
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: preserve
+  loop:
+    - src: /home/{{ sys_user }}/.local/share/jsonq
+      dest: "{{ claude_code_agent_user_home }}/.local/share/"
+    - src: /home/{{ sys_user }}/.local/bin/jsonq
+      dest: "{{ claude_code_agent_user_home }}/.local/bin/jsonq"
+  become: true
+  when:
+    - claude_code_agent_user_enabled
+    - claude_code_agent_jsonq.stat.exists | default(false)
+
 - name: Give the agent user its GitHub identity
   tags: [claude_code]
   when: claude_code_agent_user_enabled
