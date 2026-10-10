@@ -12,10 +12,10 @@ own default is disabled, and the variable was unset before that, so the instance
 default rather than on a decision.
 
 The two sibling scope flags are set explicitly beside it (#1588):
-`N8N_UNVERIFIED_PACKAGES_ENABLED=true` holds the behaviour 2.38.5 warns it changes in v3,
+`N8N_UNVERIFIED_PACKAGES_ENABLED=true` holds the behaviour that 2.38.5 (read 2026-09-29) warns it changes in v3,
 and `N8N_REINSTALL_MISSING_PACKAGES=false` holds upstream's default. The template carries the
 reasoning for each, including why `N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE` is not set — that
-variable does not exist at 2.38.5.
+variable did not exist at 2.38.5. Recheck both against the pinned version before relying on them.
 
 **Where a package lands.** n8n npm-installs each community package under
 `$N8N_USER_FOLDER/.n8n/nodes`. `N8N_USER_FOLDER` is unset across this repo, so the path is

@@ -82,9 +82,9 @@ k8s_autodeploy_reason: "observability — this IS the alert pipeline; a broken d
 # A literal rather than a reference to the cron variables, because those live in the setup/k3s,
 # k8s/pi-peer-backup and k8s/registry defaults, and role defaults do not cross the deploy play's
 # include_role loop. ansible/tests/services/test_monitor_bridge_healthchecks_expected.py holds
-# this list to those variables (through the deadman-cadences fragment's reader) and to the
-# period-and-grace table in docs/healthchecks-io-deadman.md, so a cron or a grace cannot move
-# in one place alone.
+# this list to those variables (through the deadman-cadences fragment's reader), so a cron
+# cannot move in one place alone. The period-and-grace table in
+# docs/healthchecks-io-deadman.md is the deadman-graces fragment, rendered from this list.
 #
 # pi-peer-backup alone runs in `tz`: it is a k8s CronJob with `timeZone: {{ tz }}`, and every
 # other slug is a daniel-box host cron, which runs in UTC.

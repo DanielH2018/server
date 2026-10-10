@@ -212,18 +212,29 @@ stay at `volume_snapshot_retain: 3`, `volume_snapshot_timeout: 120` until a call
 something else, at which point the fix is adding them to the `vars:` block of that
 `Snapshot the stateful volumes` task, not a role default.
 
-### Why the opt-in census is 13 of 31
+### The opt-in set and why it started at 13 of 31
 
-**Scope for this slice: 13 of 31.** Measured 2026-08-21, 31 roles in this repo carry the
-`Recreate` + rendered-RWO-claim shape this role exists for; task 3 declared
-`k8s_autodeploy_snapshot_pvcs` for 13 of them — the ones drawn from the auto-deploy promotion
-criteria, not from a data-migration survey. The other 18 (`authelia`, `observability`, `crowdsec`,
-`healthchecks`, `karakeep`, `loki-homelab`, `mosquitto`, `n8n`, `pihole`, `registry`, `scrutiny`,
-`terraria`, `terraria-stats`, `traefik`, `uptime-kuma`, `valheim`, `valheim-stats`, `wg-easy`)
-carried the same
-manual-deploy migration risk; karakeep opted in later (`c49d5c4a4`), so 17 remain. Widening
-was deferred on 2026-08-21 because the create path had not yet run live. It has since; see
-*What is unverified* in `docs/volume-snapshot-drills.md`.
+The set of roles that opt in is the table below. It is generated from each role's
+`defaults/main.yml`, so it moves when a role declares or drops `k8s_autodeploy_snapshot_pvcs`.
+A role that only mentions the name in a comment, as `observability` and `navidrome` do, is not
+in it.
+
+--8<-- "assets/generated/fragments/snapshot-optin.md"
+
+The rest of this section is the record of the first slice. It is dated 2026-08-21 and the
+counts in it are not the live ones.
+
+**Scope for that slice: 13 of 31.** Measured 2026-08-21, 31 roles in this repo carry the
+`Recreate` + rendered-RWO-claim shape this role exists for. Task 3 declared
+`k8s_autodeploy_snapshot_pvcs` for 13 of them, the ones drawn from the auto-deploy promotion
+criteria rather than from a data-migration survey. The other 18 (`authelia`, `observability`,
+`crowdsec`, `healthchecks`, `karakeep`, `loki-homelab`, `mosquitto`, `n8n`, `pihole`,
+`registry`, `scrutiny`, `terraria`, `terraria-stats`, `traefik`, `uptime-kuma`, `valheim`,
+`valheim-stats`, `wg-easy`) carried the same manual-deploy migration risk. `karakeep` opted in
+later (`c49d5c4a4`), so 17 of those 18 remained, and the table above has 14 roles: the 13 plus
+`karakeep`. Three names in that list (`healthchecks`, `terraria-stats`, `valheim-stats`) have no
+role directory today. Widening was deferred on 2026-08-21 because the create path had not yet
+run live. It has since run; see *What is unverified* above.
 
 ### The revert needs two, not one
 

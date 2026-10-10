@@ -46,9 +46,10 @@ That is the property that makes rating on AniList and syncing from Jellyfin safe
 
 ### Version pin
 
-The Jellyfin server runs 10.11.11, pinned as
-`lscr.io/linuxserver/jellyfin:10.11.11ubu2604-ls47`. The plugin release 4.4.0.0 declares
-`targetAbi` 10.11.11.0, which the loader rejects on an older server. Until 2026-09-02 the
+The plugin release declares a `targetAbi`, which the loader rejects on an older server. The
+Jellyfin image and the Ani-Sync version are pinned together in the jellyfin role's
+`defaults/main.yml`; the `jellyfin-plugin-pins` table in
+[Jellyfin plugins](jellyfin-plugins.md) lists the pins as they stand. Until 2026-09-02 the
 server was 10.11.10 and the plugin pin was held at 4.1.0.0 (`targetAbi` 10.11.6.0) for that
 reason; the two were raised together, and every future bump has to move them together too.
 
@@ -67,9 +68,9 @@ role already owns `/config`, so a separate role would split one concern across t
 `defaults/main.yml` gains four variables:
 
 ```yaml
-jellyfin_k8s_anisync_version: "4.4.0.0"
-jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v4.4/10.11.11.-.ani-sync_4.4.0.0.zip"
-jellyfin_k8s_anisync_md5: "0d398377b33c27840c021779497c72dc"
+jellyfin_k8s_anisync_version: "<version>"
+jellyfin_k8s_anisync_url: "https://github.com/vosmiic/jellyfin-ani-sync/releases/download/v<minor>/<targetAbi>.-.ani-sync_<version>.zip"
+jellyfin_k8s_anisync_md5: "<md5 from the plugin manifest>"
 jellyfin_k8s_plugin_init_image: python:3.14-alpine@sha256:<digest>  # shared with the Intro Skipper installer
 ```
 

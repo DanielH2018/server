@@ -13,6 +13,9 @@ pre-fix ones.
 
 ## The shape of the code
 
+The census below is the 2026-09-04 review's, and the tree has grown since. Recount before
+quoting a number.
+
 | Measure | Value |
 |---|---|
 | First-party `.py` files (excluding `ansible/collections/`) | 758 |

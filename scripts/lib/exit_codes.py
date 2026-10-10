@@ -285,7 +285,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             LAND_FAILED,
             "LAND_FAILED",
             "CI red, blocked by a change needing a hand, the deploy failed, the health gate "
-            "failed, or the PR was closed unmerged, conflicts with master, or its own CI is red.",
+            "failed, or the PR was closed without merging, conflicts with master, or its own CI is red.",
         ),
         _c(LAND_BAD_ARGS, "LAND_BAD_ARGS", "the command line is wrong."),
         _c(

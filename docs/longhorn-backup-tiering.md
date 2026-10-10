@@ -43,32 +43,62 @@ or key revocation — that would take the whole B2 target with it. Restoring the
 selecting the `r2` target, not `default`; see
 [`longhorn-disaster-recovery.md`](longhorn-disaster-recovery.md).
 
-| Volume | Tier | Target | kopia rule preserved |
-|---|---|---|---|
-| home-assistant-config | daily | **R2** | `.cache/` diverted to emptyDir; `hacs_frontend/` stays (static — see below) |
-| zigbee2mqtt-data | daily | **R2** | `log/` diverted to emptyDir |
-| n8n-data, n8n-files | weekly (Sun/Fri) | B2 | `.cache/` diverted; WAL churn accepted (below) |
-| karakeep-data | weekly (Wed) | B2 | `uv-cache/` was already an emptyDir in the time-tagger pod |
-| freshrss-config | weekly (Fri) | B2 | `data/cache/` diverted to emptyDir |
-| authelia-config | daily | **R2** | logs were already an emptyDir |
-| wg-easy-config | weekly (Thu) | B2 | clean (peer keys — the one thing kopia pulled from the Pi) |
-| traefik-acme | daily | **R2** | clean (acme-only; access logs already emptyDir) |
-| code-server-workspace | weekly (Sun) | B2 | **replaced code-server-config 2026-08-16** — see below |
-| code-server-config | **no-backup** | — | the deviation below was reversed once its cost was measured |
-| jellyfin-config | weekly (Mon) | B2 | `transcodes/` already emptyDir; metadata stays — see deviations |
-| sonarr/radarr/prowlarr/bazarr/qbittorrent-config | weekly (sharded) | B2 | MediaCover/logs/Definitions stay — weekly cadence bounds them |
-| tdarr-server, tdarr-configs | weekly (Mon/Tue) | B2 | `transcode_cache/` + logs already emptyDir; `Backups/` zips diverted |
-| terraria-config | weekly (Wed) | B2 | `.wld.bak*` churn accepted at weekly cadence (retired service; live `.wld` backed up, same operator call as kopia's) |
-| `scrutiny`-web-config | weekly (Sat) | B2 | clean |
-| valheim-config | weekly (Tue) | B2 | post-doc addition (2026-08-13, pwd→SOPS recovery); world saves. The image's hourly world zips were diverted to the nobackup `valheim-server` claim on 2026-09-02 (`BACKUPS_DIRECTORY`) — see *The storage cap is a second axis* |
-| valheim-stats-data, terraria-stats-data | weekly (Mon/Sun) | B2 | post-doc additions; small stats DBs |
-| pi-peer-backup-data | weekly (Sat) | B2 | post-doc addition (2026-08-14); the Pi's nightly rsync lands at 04:30 UTC, so a Saturday 04:30 backup captures the previous day's sync — crash-consistent either way |
-| navidrome-data | weekly (Wed) | B2 | post-doc addition (2026-09-03, issue #946); moved from Sun into healthchecks-config's index when that role retired (#2806); `ND_DATAFOLDER` — Navidrome's SQLite DB and artwork cache, not the music library (that's an emptyDir mount, `navidrome/templates/deployment.yaml.j2`) |
-| `scrutiny`-influxdb-data | **no-backup** | — | kopia: `scrutiny/influxdb2/` — the volume IS the TSDB (single mount, verified) |
-| uptime-kuma-data | **no-backup** | — | kopia: `uptime-kuma/data*/` — monitors regenerate from the static-monitors Secret; admin recreated by hand; history not kept (kopia's own caveat, now in this doc) |
-| `crowdsec`-db | **no-backup** | — | Docker's `crowdsec`-db named volume was deliberately outside kopia scope |
-| autokuma-data | **no-backup** | — | regenerates from the static-monitors Secret |
-| pihole-etc, `livesync`-data, `grafana`-data, registry/`prometheus`/`loki`/`tempo`/speedtest/karakeep-meili/mosquitto/flaresolverr | no-backup (pre-existing) | — | consistent with kopia: FTL/gravity, couchdb-data, plugins, TSDBs were all excluded; the configs kopia *kept* are Ansible-rendered here |
+--8<-- "assets/generated/fragments/longhorn-volume-shards.md"
+
+The table lists the volumes the three tier lists name. These volumes are in no list and were
+already unbacked before the tiering: `pihole-etc`, `livesync-data`, `grafana-data`, and the
+registry, `prometheus`, `loki`, `tempo`, speedtest, karakeep-meili, mosquitto and flaresolverr
+volumes. That is consistent with kopia, which excluded FTL/gravity, couchdb-data, plugins and
+the TSDBs. The configs kopia *kept* are Ansible-rendered here.
+
+### Which kopia rule each volume preserves
+
+The tier table has no column for this, so each volume's translation of its kopia rule is
+listed here.
+
+- `home-assistant-config` (daily, R2): `.cache/` diverted to emptyDir. `hacs_frontend/` stays
+  because it is static (see below).
+- `zigbee2mqtt-data` (daily, R2): `log/` diverted to emptyDir.
+- `n8n-data`, `n8n-files`: `.cache/` diverted. The WAL churn is accepted (see below).
+- `karakeep-data`: `uv-cache/` was already an emptyDir in the time-tagger pod.
+- `freshrss-config`: `data/cache/` diverted to emptyDir.
+- `authelia-config` (daily, R2): logs were already an emptyDir.
+- `wg-easy-config`: clean. It holds the peer keys, the one thing kopia pulled from the Pi.
+- `traefik-acme` (daily, R2): clean. It holds only the ACME state, and the access logs were
+  already an emptyDir.
+- `code-server-workspace`: replaced `code-server-config` on 2026-08-16 (see below).
+- `code-server-config` (no backup): the deviation below was reversed once its cost was
+  measured.
+- `jellyfin-config`: `transcodes/` was already an emptyDir. The metadata stays (see
+  deviations).
+- `sonarr-config`, `radarr-config`, `prowlarr-config`, `bazarr-config`, `qbittorrent-config`:
+  MediaCover, logs and Definitions stay, because the weekly cadence bounds them.
+- `tdarr-server`, `tdarr-configs`: `transcode_cache/` and the logs were already an emptyDir.
+  The `Backups/` zips are diverted.
+- `terraria-config`: the `.wld.bak*` churn is accepted at weekly cadence. The service is
+  retired, and the live `.wld` is backed up, which was the same operator call as kopia's.
+- `scrutiny-web-config`: clean.
+- `valheim-config`: added after the original doc on 2026-08-13 (password to SOPS recovery), and it
+  holds the world saves. The image's hourly world zips were diverted to the nobackup
+  `valheim-server` claim on 2026-09-02 (`BACKUPS_DIRECTORY`); see *The storage cap is a second
+  axis*.
+- `valheim-stats-data`, `terraria-stats-data`: added after the original doc. They are small
+  stats databases.
+- `pi-peer-backup-data`: added after the original doc on 2026-08-14. The Pi's nightly rsync
+  lands at 04:30 UTC, so a Saturday 04:30 backup captures the previous day's sync. It is
+  crash-consistent either way.
+- `navidrome-data`: added after the original doc on 2026-09-03 (issue #946). It moved from
+  Sunday into healthchecks-config's index when that role retired (#2806). `ND_DATAFOLDER`
+  holds Navidrome's SQLite DB and artwork cache, not the music library, which is an emptyDir
+  mount (`navidrome/templates/deployment.yaml.j2`).
+- `scrutiny-influxdb-data` (no backup): kopia excluded `scrutiny/influxdb2/`, and the volume
+  IS the TSDB (single mount, verified).
+- `uptime-kuma-data` (no backup): kopia excluded `uptime-kuma/data*/`. The monitors regenerate
+  from the static-monitors Secret, the admin is recreated by hand, and the history is not kept
+  (kopia's own caveat, now in this doc).
+- `crowdsec-db` (no backup): Docker's `crowdsec-db` named volume was deliberately outside
+  kopia scope.
+- `autokuma-data` (no backup): regenerates from the static-monitors Secret.
 
 ## The transaction budget (2026-08-17) — what this doc's framing was missing
 

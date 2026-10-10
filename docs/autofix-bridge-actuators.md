@@ -136,9 +136,11 @@ they self-heal through backoff, or autoheal and watchtower already cover the res
 images, or they need a human. recyclarr itself was retired 2026-07-17 and replaced by
 configarr. Do not re-propose these.
 
-## Tunables, in host_vars
+## Tunables
 
-`autofix_fake_remux_gop_max_s` and `autofix_fake_remux_max_per_scan` bound detection;
-`autofix_fake_remux_replace_mode` (off/shadow/live) gates the reconciler; and
-`autofix_fake_remux_policy` is the git-tracked selection-policy dict rendered to
-`policy.json`.
+`autofix_fake_remux_gop_max_s` and `autofix_fake_remux_max_per_scan` bound detection. No
+inventory file sets them, so the `default(5)` in
+`ansible/roles/setup/fake_remux/templates/fake-remux.config.env.j2` applies to both.
+`autofix_fake_remux_replace_mode` (off/shadow/live) gates the reconciler, and
+`ansible/inventory/host_vars/daniel-box.yml` sets it. `autofix_fake_remux_policy`, also in that
+host_vars file, is the git-tracked selection-policy dict rendered to `policy.json`.

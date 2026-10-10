@@ -83,11 +83,15 @@ from the pod's own log, which needs no API key:
 kubectl -n homelab logs <pod> -c jellyfin | grep 'Loaded plugin:'
 ```
 
+The plugins this role installs, each guarded by its own test file, read from `defaults/main.yml`
+(the 2026-09-28 census, #2873, found these five):
+
+--8<-- "assets/generated/fragments/jellyfin-plugin-pins.md"
+
 Read 2026-09-28 (#2873), grouped by who owns the version:
 
-- **Installed by this role**, each guarded by its own test file: `Ani-Sync 4.4.0.0`,
-  `Intro Skipper 1.10.11.24`, `Webhook 21.0.0.0`, `Merge Versions 10.11.0.1` (#1616) and
-  `Media Cleaner 3.7.0.101109` (#1619, pinned at that version by #2905). Two plugins were installed
+- **Installed by this role**: the table above. Merge Versions arrived in #1616 and Media Cleaner
+  in #1619, which #2905 pinned at its table version. Two plugins were installed
   and removed soon after — Trakt (#1617) and SSO-Auth (#1648, removed #1674); `sweep-unlisted-plugins`
   keeps both off.
 - **Bundled with the image**, so they move with `jellyfin_k8s_image` and need no pin here: `AudioDB`,
