@@ -58,6 +58,11 @@ class TestDecide:
         """A held host is a condition to clear even when there is nothing else to do."""
         assert not al.decide([], "deadbeefcafe", "").quiet
 
+    def test_a_hold_names_the_clear_command_with_the_full_sha(self) -> None:
+        held = "deadbeef" * 5
+        gate = al.decide([_pr(1)], f"{held}\n", "")
+        assert f"gitops_state.py clear-hold {held}`" in gate.reason
+
     def test_a_hold_plane_names_the_playbook(self) -> None:
         gate = al.decide([_pr(1)], "deadbeefcafe", "k3s-bringup.yml")
         assert "k3s-bringup.yml" in gate.reason

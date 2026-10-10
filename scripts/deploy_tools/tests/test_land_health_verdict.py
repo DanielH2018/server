@@ -141,6 +141,14 @@ def test_a_self_applied_half_reads_the_deployers_state(
     assert ln.ledger.cause == cause
 
 
+def test_a_held_tick_names_the_clear_command_with_the_full_sha(landing, capsys):
+    held = "deadbeef" * 5
+    ln, _ = _deployed(landing, Fakes(self_applied=True, state={"hold_sha": held}))
+    with pytest.raises(Outcome):
+        health_verdict.health(ln)
+    assert f"gitops_state.py clear-hold {held}`" in capsys.readouterr().out
+
+
 def test_an_ordinary_service_pr_ignores_the_deployers_state(landing):
     """behind_since is somebody else's pending merge when the tick does not apply this PR."""
     ln, _ = _deployed(landing, Fakes(state={"behind_since": "x"}))

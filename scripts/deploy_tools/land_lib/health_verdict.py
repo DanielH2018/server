@@ -18,6 +18,7 @@ from deploy_tools.land_lib.outcome import (
     ABANDONED_WATCH_NOTE,
     Cause,
     Verdict,
+    hold_clear_hint,
     remaining_hosts_note,
     say,
 )
@@ -147,10 +148,12 @@ def health(ln: Landing) -> NoReturn:
                 f"PR #{pr}, {sha}, tags: {tags} — services deployed, the tick's half unknown",
             )
         if state == TickState.HELD:
+            hold = ln.state("hold_sha")
             print(
-                f"  services deployed, but the deployer is holding {ln.state('hold_sha')}: "
+                f"  services deployed, but the deployer is holding {hold}: "
                 "its own apply failed — see the held planes in owed.jsonl"
             )
+            print(f"  {hold_clear_hint(hold)}")
             ln.ledger.cause = Cause.TICK_HELD
             ln.finish(
                 Verdict.DEPLOY_FAILED,

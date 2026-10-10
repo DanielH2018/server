@@ -17,6 +17,8 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from gitops_markers import HOLD_CLEAR_CMD
+
 # The session's result JSON marks its final object with this `type`. Anything printed before
 # it on stdout is a warning or progress line, which is why the parse scans rather than loads.
 _RESULT_TYPE = "result"
@@ -104,11 +106,14 @@ def decide(open_prs: list[OpenPR], hold_sha: str, hold_plane: str) -> Gate:
     # panel — already name it to the operator who can act. `gitops_markers` is the deployer's own
     # module installed beside this file, so it carries the parser whether this reads it or not.
     if hold_sha.strip():
-        held = hold_sha.strip()[:8]
+        held = hold_sha.strip()
         plane = f" (broad apply: {hold_plane.strip()})" if hold_plane.strip() else ""
+        # The full SHA: `clear-hold` refuses any other (#4081).
         return Gate(
             run=False,
-            reason=f"the GitOps deployer is holding at {held}{plane} — clear the hold first",
+            reason=f"the GitOps deployer is holding at {held[:8]}{plane} — once every held "
+            f"plane is applied, clear the hold with Clear in the deploy UI or "
+            f"`{HOLD_CLEAR_CMD} {held}`",
         )
     if not open_prs:
         return Gate(run=False, reason="no open Renovate PRs", quiet=True)

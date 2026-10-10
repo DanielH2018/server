@@ -31,6 +31,7 @@ from deploy_tools.land_lib.outcome import (
     Cause,
     Verdict,
     cause_for_deploy_exit,
+    hold_clear_hint,
     remaining_hosts_note,
     say,
 )
@@ -200,9 +201,11 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
             f"PR #{pr} — the deployer's state could not be read; confirm the tick applied it",
         )
     if state == TickState.HELD:
+        hold = ln.state("hold_sha")
         print(
-            f"  the deployer is holding {ln.state('hold_sha')}: its apply failed — see the held planes in owed.jsonl and the gitops-deploy journal"
+            f"  the deployer is holding {hold}: its apply failed — see the held planes in owed.jsonl and the gitops-deploy journal"
         )
+        print(f"  {hold_clear_hint(hold)}")
         ln.ledger.cause = Cause.TICK_HELD
         ln.finish(
             Verdict.DEPLOY_FAILED,
