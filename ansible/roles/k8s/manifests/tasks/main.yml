@@ -666,9 +666,20 @@
   # expression would report changed and cascade into the rollout triggers below — which are
   # skipped under dry-run, but `changed` is also what the batch drain and the stabilisation
   # gate key on. Pin it false: nothing changed, because nothing was persisted.
+  #
+  # DECIDED: a `secret/` line does not count (#4339). Client-side apply prints `configured` for
+  # a `stringData` Secret on EVERY run: the live object stores only `data`, so the three-way
+  # patch re-adds `stringData` and is never `{}`. Counted, it made this task `changed` on every
+  # run of a role holding one (authelia holds three), so the render-AND-apply restart below
+  # (#3115) fired on rendered bytes alone. A YAML-comment edit to crowdsec-agent.yml.j2 then
+  # restarted authelia. A Secret's real change is the `secret` trigger's job, which reads
+  # `manifests_secret_render`. That holds because every template declaring `kind: Secret`
+  # renders through `manifests_secret_files`; uptime-kuma lists static-monitors.yaml there by
+  # hand for that reason.
   changed_when: >-
     not (k8s_dry_run | bool)
-    and ('created' in manifests_apply.stdout or 'configured' in manifests_apply.stdout)
+    and (manifests_apply.stdout
+         | regex_findall('(?m)^(?!secret/)[^ ]+ (?:created|configured)') | length > 0)
 
 - name: Fingerprint the pod templates after the apply for {{ manifests_service }}
   tags: [deploy]

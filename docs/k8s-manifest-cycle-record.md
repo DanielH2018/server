@@ -172,6 +172,18 @@ manifests_apply is changed`. `manifests_apply` is changed when its stdout holds 
 `configured`, so a ConfigMap whose data moved still restarts. Under `--dry-run` it is pinned
 unchanged, as is every restart.
 
+A `secret/` line does not count toward that verdict (#4339). Client-side `kubectl apply` prints
+`configured` for a `stringData` Secret on every run, because the live object stores only `data`
+and the three-way patch re-adds `stringData` each time. Until #4339 that made the apply arm true
+on every run of a role holding such a Secret, so the conjunction fell back to the render alone.
+PR #4336 changed only comments in `ansible/templates/crowdsec-agent.yml.j2`, and its deploy on
+2026-10-10 restarted authelia: `secret_digest` stayed the same, and no non-Secret object in
+authelia's directory took a client-side apply. Traefik did not restart, but for a different
+reason. It arms `manifests_prune`, and the `homelab_role_label` filter re-dumps every document
+and drops its comments, so its rendered bytes never moved. An unarmed role has no such
+protection. Secret changes still restart through the `secret` trigger, because every template
+that declares `kind: Secret` renders through `manifests_secret_files`.
+
 The `secret` trigger deliberately stays on `manifests_secret_render`: `verify_secret_keys.yml`
 patches a stale key out of a Secret after an apply that printed `unchanged`, and that change
 needs the restart. Pihole's private restarts read the same conjunction per instance (#3127, see

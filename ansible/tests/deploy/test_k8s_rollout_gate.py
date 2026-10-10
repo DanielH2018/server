@@ -25,7 +25,7 @@ from _helpers import REPO as _REPO
 from _helpers import load_tasks as _tasks
 from _helpers import command_of as _cmd
 from _helpers import render_expr as _render
-from _k8s_render import deploy_play
+from _k8s_render import deploy_play, rendered_docs
 from _role_census import manifests_service_of, task_files_by_role
 
 
@@ -420,3 +420,76 @@ def test_manifests_queues_the_drain_under_the_deploy_tag() -> None:
             "--skip-tags deploy a no-op for the always-tagged drain and gate; "
             "%r has %r" % (task.get("name"), tags)
         )
+
+
+def _apply_changed(stdout: str) -> bool:
+    """The apply task's own `changed_when`, rendered against one `kubectl apply` stdout."""
+    (apply,) = [
+        t
+        for t in _tasks(_MANIFESTS)
+        if str(t.get("name", "")).startswith("Apply manifests")
+    ]
+    expr = "{{ " + str(apply["changed_when"]) + " }}"
+    return _render(expr, k8s_dry_run=False, manifests_apply={"stdout": stdout})
+
+
+def test_a_stringdata_secret_alone_does_not_mark_the_apply_changed() -> None:
+    """#4339: client-side apply prints `configured` for a `stringData` Secret on every run.
+
+    Counted, it made the apply `changed` on every authelia deploy, so the render-AND-apply
+    restart fell back to the render alone and a YAML-comment edit restarted the SSO portal.
+    The stdout here is authelia's directory on that deploy: three Secrets, nothing else moved.
+    """
+    authelia = "\n".join(
+        [
+            "secret/authelia-config configured",
+            "secret/authelia-crowdsec configured",
+            "secret/authelia-redis configured",
+            "deployment.apps/authelia unchanged",
+            "configmap/authelia-extra unchanged",
+            "middleware.traefik.io/authelia unchanged",
+        ]
+    )
+    assert _apply_changed(authelia) is False
+    # RED-proof on the other side: any non-Secret object that moved still counts.
+    assert _apply_changed(authelia + "\nconfigmap/authelia-extra configured") is True
+    assert _apply_changed("deployment.apps/authelia created") is True
+
+
+def test_every_secret_document_renders_as_a_secret_file() -> None:
+    """The apply ignores `secret/` lines only because the `secret` trigger covers every Secret.
+
+    That trigger reads `manifests_secret_render`, which renders `manifests_secret_files` alone. A
+    Secret declared in an ordinary manifest file would change with no trigger left to restart
+    its consumer. The list is the role's explicit `manifests_secret_files` when it passes one,
+    else the basenames that say `secret`, as `k8s/manifests` derives it.
+    """
+    explicit: dict[str, str] = {}
+    for role_dir, path in task_files_by_role(_REPO / "ansible/roles/k8s"):
+        for task in _tasks(path):
+            listed = (task.get("vars") or {}).get("manifests_secret_files")
+            if listed is not None:
+                explicit[role_dir.name] = str(listed)
+
+    secrets = {
+        (role, name)
+        for role, name, doc in rendered_docs()
+        if doc.get("kind") == "Secret"
+    }
+    # The one Secret whose name does not say so, listed by hand: if the census stops finding it,
+    # it has stopped reading the rendered tree.
+    assert ("uptime-kuma", "static-monitors.yaml.j2") in secrets
+    stray = sorted(
+        f"{role}/{name}"
+        for role, name in secrets
+        if not (
+            name.removesuffix(".j2") in explicit[role]
+            if role in explicit
+            else "secret" in name
+        )
+    )
+    assert not stray, (
+        "These templates declare a Secret outside the role's manifests_secret_files, so a change "
+        "to it restarts nothing: the apply's verdict skips `secret/` lines (#4339) and the "
+        f"`secret` trigger never renders them. Name the file `*secret*` or list it: {stray}"
+    )
