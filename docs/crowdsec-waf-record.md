@@ -128,21 +128,24 @@ Upstream `crowdsecurity/grafana-dashboards` cannot fill the gap either: it is Pr
 last touched 2023-06-20 targeting CrowdSec v1.5.x, and its `dashboards_v5` panel set is already
 what this repo ships, with identical titles and `instance` relabelled to `machine`.
 
-## Why a sidecar scrape job takes two edits, and three dashboard findings
+## What a sidecar scrape job needs, and three dashboard findings
 
 Pod-role service discovery emits a target per *declared* `containerPort`, so each CrowdSec sidecar
 declares 6060 (`ansible/roles/k8s/traefik/templates/deployment.yaml.j2`,
-`ansible/roles/k8s/authelia/templates/deployment.yaml.j2`), and that pod's baseline NetworkPolicy
-admits `prometheus` to that port
-(`ansible/roles/k8s/netpol-baseline/templates/networkpolicy-<pod>.yaml.j2`). Either one missing
-gives a job that discovers nothing or reads `up == 0` forever, both indistinguishable from the job
-nobody added.
+`ansible/roles/k8s/authelia/templates/deployment.yaml.j2`). A NetworkPolicy also admits
+`prometheus` to that port. Either one missing gives a job that discovers nothing or reads
+`up == 0` forever, both indistinguishable from the job nobody added.
+
+Until #4088 the grant was a hand-written rule in each pod's own policy. It now renders from
+`crowdsec_k8s_sidecar_agents`, one policy per app, in
+`ansible/roles/k8s/netpol-baseline/templates/networkpolicy-crowdsec-sidecars.yaml.j2`.
 
 **The netpol grant is a `from` item of its own, not a port appended to an existing rule.** A
 NetworkPolicy rule ANDs its `from` with its `ports`, so adding 6060 to authelia's traefik-to-9091
 rule would have admitted *traefik* to the agent's metrics and `prometheus` to nothing (#1706). It
 reads like a grant in a diff. traefik's own policy already had a `prometheus` `from` item for :8080,
-which is why #1694 there was a one-line port addition and #1706 here was not.
+which is why #1694 there was a one-line port addition and #1706 here was not. The derived policy
+carries the grant as its only rule, so it cannot take on another rule's caller.
 
 Three findings the dashboards carry from this:
 

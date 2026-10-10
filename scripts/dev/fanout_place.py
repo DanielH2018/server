@@ -73,6 +73,7 @@ from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
 from fanout_lib.collisions import refuse_shared_files, refuse_solo_only
+from findings_lib.tracked_paths import tracked_files
 from fanout_lib.red_gate import review_flags
 from fanout_lib.launch_gates import (
     live_elsewhere,
@@ -191,7 +192,8 @@ def cmd_launch(args, tools: Tools) -> int:
         return 1
     if refuse_solo_only(batches, fetched):
         return 1
-    if refuse_shared_files(batches, fetched, args.allow_shared_file):
+    tracked = tracked_files() if target.is_server else ()
+    if refuse_shared_files(batches, fetched, args.allow_shared_file, tracked):
         return 1
     # Read the registered keys before the first ssh: a gh outage then refuses having spent no
     # connection against the per-host ssh limit.

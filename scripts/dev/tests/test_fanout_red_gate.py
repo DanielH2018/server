@@ -1,31 +1,32 @@
 """The red and green gates against real git and real pytest, on a scratch repo.
 
-The runner hands `git` to git under a scrubbed environment and turns the gate's
-`uv run --directory <tree> pytest ...` into this interpreter's pytest in that tree, so every
-verdict below is read off output pytest really printed.
+`_scratch_pytest.run` is the runner, so every verdict below is read off output pytest
+really printed.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_red_gate.py
 """
 
-import subprocess
-import sys
-
 import pytest
 
-from lib.proc_testing import DEFAULT_TIMEOUT, write_exec
+from lib.proc_testing import write_exec
 
+from _scratch_pytest import run
 from fanout_lib.brief import Issue
 from fanout_lib.red_gate import (
     RED_GREEN_LABEL,
+    REPEATED_GREEN,
+    REPEATED_RED,
+    Gates,
     ResetFailed,
     anti_patterns,
+    green_cause,
     green_gate,
     red_gate,
     reset_worktree,
     review_flags,
     unhide_index,
 )
-from lib.git_testing import commit, git, git_out, init_repo, scrubbed_env
+from lib.git_testing import commit, git, git_out, init_repo
 
 CODE = "def double(x):\n    return x\n"
 FIXED = "def double(x):\n    return 2 * x\n"
@@ -35,28 +36,6 @@ CONFIG = {"pyproject.toml": "[tool.pytest.ini_options]\n"}
 NEW_TEST = (
     "\n\ndef test_two():\n    from mod import double\n\n    assert double(2) == 4\n"
 )
-
-
-def run(argv, stdin):
-    if argv[0] == "uv":
-        tree = argv[3]
-        argv = [sys.executable, "-m", "pytest", *argv[5:]]
-        return subprocess.run(
-            argv,
-            cwd=tree,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=DEFAULT_TIMEOUT,
-        )
-    return subprocess.run(
-        argv,
-        input=stdin,
-        capture_output=True,
-        text=True,
-        env=scrubbed_env(),
-        timeout=DEFAULT_TIMEOUT,
-    )
 
 
 def _repo(tmp_path, **red_files):
@@ -166,6 +145,70 @@ def test_the_green_gate_passes_a_fix_and_refuses_an_edited_red_test(tmp_path):
     commit(repo, "weaken", **{"tests/test_new.py": "def test_two():\n    pass\n"})
     assert "tests/test_new.py" in green_gate(run, repo, red, gate)
     assert git_out(repo, "rev-parse", "HEAD") != red
+
+
+def test_the_green_gate_passes_a_fix_that_appends_a_test_to_a_red_file(tmp_path):
+    """#4213: the fix round added the test a reviewer asked for to the red file (#4214)."""
+    repo, base, red = _repo(tmp_path, **{"tests/test_mod.py": OLD_TEST + NEW_TEST})
+    gate = red_gate(run, repo, base, red)
+    extra = "\n\ndef test_three():\n    from mod import double\n\n    assert double(3) == 6\n"
+    commit(
+        repo,
+        "fix",
+        **{"mod.py": FIXED, "tests/test_mod.py": OLD_TEST + NEW_TEST + extra},
+    )
+    assert green_gate(run, repo, red, gate) == ""
+
+
+def test_the_green_gate_refuses_an_edit_to_a_test_already_in_a_red_file(tmp_path):
+    """#4183: the fix edited a pre-existing test in the red file instead of the code."""
+    repo, base, red = _repo(tmp_path, **{"tests/test_mod.py": OLD_TEST + NEW_TEST})
+    gate = red_gate(run, repo, base, red)
+    weakened = OLD_TEST.replace("double(0) == 0", "True") + NEW_TEST
+    commit(repo, "fix", **{"mod.py": FIXED, "tests/test_mod.py": weakened})
+    assert green_gate(run, repo, red, gate).endswith(
+        "tests/test_mod.py changes or removes `def test_zero`"
+    )
+
+
+# A test that counts its runs in a file outside the repo, so no gate sees an untracked file,
+# and asserts on the count's parity.
+FLAKY = (
+    "\n\ndef test_flaky():\n    import pathlib\n\n    from mod import double\n\n"
+    "    count = pathlib.Path('{counter}')\n"
+    "    n = int(count.read_text()) if count.exists() else 0\n"
+    "    count.write_text(str(n + 1))\n"
+    "    assert double(2) == 4 {op} n % 2 == 1\n"
+)
+
+
+def test_a_red_test_that_fails_only_sometimes_on_the_base_is_refused(tmp_path):
+    """#4178 was itself a minute-boundary flake: one failing run proves nothing."""
+    flaky = FLAKY.format(counter=tmp_path / "runs", op="or")
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": flaky})
+    gate = red_gate(run, repo, base, red, runs=3)
+    assert gate.reason.startswith("failed in only 2 of 3 runs on the unchanged code")
+
+
+def test_a_red_test_that_passes_only_sometimes_after_the_fix_is_refused(tmp_path):
+    """The base runs fail on the assertion; the fix's runs then pass on odd counts only."""
+    flaky_after_fix = FLAKY.format(counter=tmp_path / "runs", op="and")
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": flaky_after_fix})
+    gate = red_gate(run, repo, base, red, runs=3)
+    assert gate.passed, gate.reason
+    commit(repo, "fix", **{"mod.py": FIXED})
+    reason = green_gate(run, repo, red, gate, runs=3)
+    assert reason.startswith(
+        "pytest exited 1; not passing: tests/test_new.py::test_flaky (FAILED) in run 2 of 3"
+    )
+    # A pass that does not repeat is not the red phase's catch, which `unmet` counts.
+    assert green_cause(reason) == "flaky"
+
+
+def test_the_pipeline_runs_each_gate_three_times():
+    gates = Gates()
+    assert gates.red is REPEATED_RED and REPEATED_RED.keywords == {"runs": 3}
+    assert gates.green is REPEATED_GREEN and REPEATED_GREEN.keywords == {"runs": 3}
 
 
 def test_the_green_gate_refuses_an_uncommitted_edit_the_pushed_head_lacks(tmp_path):

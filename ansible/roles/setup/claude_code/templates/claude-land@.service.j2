@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=oneshot
 # The operator's user, because land.sh merges past the review rule and deploys: it uses the
 # operator's gh token, decrypts secrets and runs Ansible with become. The agent's sessions run
-# as {{ claude_code_agent_user }} and can only START this unit, through the polkit rule
+# as {{ claude_code_lander_agent_user }} and can only START this unit, through the polkit rule
 # 50-claude-land.rules. The instance name is the only input they give: land.sh reads the PR
 # from GitHub, and the policy below decides whether it lands.
 User={{ sys_user }}
@@ -18,7 +18,7 @@ Environment=HOME=/home/{{ sys_user }}
 Environment=PYTHONDONTWRITEBYTECODE=1
 # land.sh's landing policy: only the agent's account, only its fenced branches, and no path
 # on the approval list unless the operator's GitHub login approved the head.
-Environment=LAND_REQUIRE_AUTHOR={{ claude_code_agent_github_login }}
+Environment=LAND_REQUIRE_AUTHOR={{ claude_code_lander_author }}
 Environment=LAND_REQUIRE_BRANCH_PREFIX={{ claude_code_lander_branch_prefix }}
 Environment=LAND_APPROVAL_PATHS=/etc/claude-land/approval-paths
 Environment=LAND_APPROVER={{ claude_code_lander_approver }}

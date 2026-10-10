@@ -8,7 +8,7 @@ refused here rather than discovered at merge.
 """
 
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -20,10 +20,13 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from fanout_lib.brief import Issue
 from findings_lib.issue_model import cited_paths
 from findings_lib.solo_only import fanout_tooling_paths
+from findings_lib.tracked_paths import resolve_fragments
 
 
 def shared_files(
-    batches: Mapping[str, Sequence[int]], issues: Mapping[int, Issue]
+    batches: Mapping[str, Sequence[int]],
+    issues: Mapping[int, Issue],
+    tracked: Collection[str] = (),
 ) -> list[tuple[str, list[str]]]:
     """Every file cited by issues in two or more batches, with the batches that cite it.
 
@@ -31,6 +34,8 @@ def shared_files(
         batches: batch id → the issue numbers in it, as `_parse_batches` returns them.
         issues: every fetched issue by number; a number a batch names but this lacks is
             skipped, since `_fetch_issues` has already refused that launch.
+        tracked: the target repo's tracked files, which a path cited from a subdirectory
+            resolves against (#4232). Empty leaves every path as the body spells it.
 
     Returns:
         `[(path, [batch, ...]), ...]` sorted by path, each batch list sorted. Empty when the
@@ -42,7 +47,7 @@ def shared_files(
             issue = issues.get(number)
             if issue is None:
                 continue
-            for path in cited_paths(issue.body):
+            for path in resolve_fragments(cited_paths(issue.body), tracked):
                 cited.setdefault(path, set()).add(batch)
     return [
         (path, sorted(names)) for path, names in sorted(cited.items()) if len(names) > 1
@@ -53,6 +58,7 @@ def refuse_shared_files(
     batches: Mapping[str, Sequence[int]],
     issues: Mapping[int, Issue],
     allowed: Sequence[str] = (),
+    tracked: Collection[str] = (),
 ) -> bool:
     """Whether `launch` must refuse this grouping, having printed every collision to stderr.
 
@@ -63,7 +69,7 @@ def refuse_shared_files(
     a doc path cannot switch the check off for the script collision beside it; that collision
     still refuses. An excused collision still prints, so the override is on the record.
     """
-    collisions = shared_files(batches, issues)
+    collisions = shared_files(batches, issues, tracked)
     refused = False
     for path, names in collisions:
         if path in allowed:

@@ -14,7 +14,8 @@ THE RED GATE reads the test author's commit range `base..red`. It refuses the ra
 - it adds no test node, collected at `red` but not at `base`;
 - running only the new nodes does not exit 1 with every node reported `FAILED`. Exit 2 is a
   collection error, such as a module-level ImportError of a module the fix will create, and a
-  node that errors, skips or xfails proves nothing about the behaviour.
+  node that errors, skips or xfails proves nothing about the behaviour. The pipeline runs
+  them `RUNS` times, and a node that fails in only some runs is refused as flaky.
 
 Only test files change in the range, so running at `red` runs the new tests against `base`'s
 code. In the pipeline, `reset_worktree` runs before the red gate, so the tree already holds
@@ -25,9 +26,11 @@ refs and the settings that move or skip a reset do not apply (#3871).
 
 THE GREEN GATE runs after the implementer and again after every fix round. The working tree
 must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
-would otherwise pass a gate the pushed head fails (#3821). The red files, every pytest config
-file and the `leakguard` plugin must be unchanged since `red`, no untracked config file may
-exist, and every red node must pass in a fresh clone of HEAD. The clone is what makes the
+would otherwise pass a gate the pushed head fails (#3821). Every pytest config file, the
+`leakguard` plugin and any red data file must be unchanged since `red`. A red `test_*.py` may
+only gain appended tests, which `red_lock` defines (#4214). No untracked config file may
+exist, and every red node must pass in a fresh clone of HEAD, in every one of the pipeline's
+`RUNS` runs. The clone is what makes the
 verdict HEAD's: the implementer controls the worktree's index and git config, so a
 skip-worktree entry, an `info/exclude` line or `status.showUntrackedFiles=no` each hides an
 edit from `git status`. The clone reads none of that repo's config or `info/attributes`, so a
@@ -51,6 +54,7 @@ import sys
 import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path, PurePosixPath
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
@@ -61,6 +65,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import _fence
 from fanout_lib.red_cause import red_by_absence
+from fanout_lib.red_lock import append_only
 
 # The reset that clears the red phase, split out at this module's length cap; every name
 # stays importable from here.
@@ -82,6 +87,8 @@ from findings_lib.red_green import RED_GREEN_LABEL
 # What the implementer may not change once the red commit exists, besides the red files.
 # The `file` of the finding a failed green gate becomes, which no real path can equal.
 GREEN_FILE = "(red/green gate)"
+# How often the pipeline's gates run the red nodes; `Gates` says why more than once.
+RUNS = 3
 # Files pytest reads as configuration wherever they sit: a nested inifile replaces the root
 # one for nodes below it, and a conftest can rewrite any outcome.
 PYTEST_CONFIG = frozenset(
@@ -121,6 +128,8 @@ Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 # One line of pytest's `-rA` short summary. SKIPPED lines carry a location, not a node id, so
 # a skipped node is simply absent and reads as not failed.
 _OUTCOME = re.compile(r"^(PASSED|FAILED|ERROR|XFAIL|XPASS) (.+?)(?: - .*)?$", re.M)
+# The suffix `green_gate` puts on a refusal when it ran the red nodes more than once.
+_LATER_RUN = re.compile(r" in run (\d+) of \d+$")
 
 
 @dataclass
@@ -225,6 +234,21 @@ def judge_red(returncode: int, output: str, nodes: list[str]) -> str:
     return ""
 
 
+def green_cause(reason: str) -> str:
+    """`passed`, `unmet`, `flaky` or `lock`: how one green gate run ended.
+
+    An `unmet` first run is the red phase's real catch: the implementer's first attempt did
+    not do what the red tests ask. `flaky` is a red node that passed and then failed a later
+    run, which is no catch. A `lock` refusal is about what the fix touched.
+    """
+    if not reason:
+        return "passed"
+    if not reason.startswith("pytest exited"):
+        return "lock"
+    later = _LATER_RUN.search(reason)
+    return "flaky" if later and int(later.group(1)) > 1 else "unmet"
+
+
 def judge_green(returncode: int, output: str, nodes: list[str]) -> str:
     """Why the red nodes do not all pass after the fix, or "" when they do."""
     seen = outcomes(output)
@@ -241,6 +265,26 @@ def _pytest(worktree: Path, *args: str) -> list[str]:
         "uv", "run", "--directory", str(worktree), "pytest",
         "-p", "no:cacheprovider", "-n0", "-c", "pyproject.toml", *args,
     ]  # fmt: skip
+
+
+def _red_file_change(
+    run: Runner, worktree: Path, red: str, path: str, gate: Gate
+) -> str:
+    """How the fix changed `path` beyond what `red_lock` allows, or "" when it only appended.
+
+    A red `test_*.py` may gain tests (#4214). A red data file, a pytest config file and the
+    `leakguard` plugin may not change at all, and neither may a red file be deleted.
+    """
+    if path not in gate.files or not path.endswith(".py"):
+        return path
+    blobs = [
+        _git(run, worktree, "cat-file", "blob", f"{rev}:{path}")
+        for rev in (red, "HEAD")
+    ]
+    if any(b.returncode for b in blobs):
+        return f"{path} deleted"
+    problem = append_only(blobs[0].stdout, blobs[1].stdout)
+    return f"{path} {problem}" if problem else ""
 
 
 # git with no configuration the implementer can write: no global or system file, which a
@@ -300,11 +344,12 @@ def _collect(run: Runner, worktree: Path, files: list[str]) -> tuple[set[str], i
     }, proc.returncode
 
 
-def red_gate(run: Runner, worktree: Path, base: str, red: str) -> Gate:
+def red_gate(run: Runner, worktree: Path, base: str, red: str, runs: int = 1) -> Gate:
     """Prove the test author's commits `base..red` add tests that fail on `base`'s code.
 
     The worktree must be at `red`. Collecting at `base` checks the modified test files out
-    at `base` and back again, so nothing else may run in the worktree meanwhile.
+    at `base` and back again, so nothing else may run in the worktree meanwhile. Every one of
+    `runs` runs must fail every new node, so a test that fails only sometimes is refused.
 
     Returns:
         The verdict; on a pass it names the red test files and the new node ids.
@@ -348,13 +393,28 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str) -> Gate:
     if not nodes:
         return Gate("the red commits add no test node", files)
     # `-vv`, not `-q`: only at that verbosity is the summary's failure text left whole.
-    proc = run(_pytest(worktree, "-vv", "-rA", "--tb=no", *nodes), None)
-    reason = judge_red(proc.returncode, proc.stdout, nodes)
-    return Gate(reason, files, nodes, origin, red_by_absence(proc.stdout, nodes))
+    procs = [
+        run(_pytest(worktree, "-vv", "-rA", "--tb=no", *nodes), None)
+        for _ in range(runs)
+    ]
+    reasons = [judge_red(p.returncode, p.stdout, nodes) for p in procs]
+    failed = reasons.count("")
+    reason = next((r for r in reasons if r), "")
+    if reason and failed:
+        reason = (
+            f"failed in only {failed} of {runs} runs on the unchanged code, so it is "
+            f"flaky: {reason}"
+        )
+    out = procs[0].stdout
+    return Gate(reason, files, nodes, origin, red_by_absence(out, nodes))
 
 
-def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
-    """Why the implementer's HEAD fails the green gate, or "" when it passes."""
+def green_gate(run: Runner, worktree: Path, red: str, gate: Gate, runs: int = 1) -> str:
+    """Why the implementer's HEAD fails the green gate, or "" when it passes.
+
+    Every one of `runs` runs of the red nodes must pass, so a red test that passes only
+    sometimes is not taken for a fix.
+    """
     dirty = _git(run, worktree, "status", "--porcelain").stdout.strip()
     if dirty:
         return (
@@ -362,38 +422,57 @@ def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
             f"discard these changes: {dirty}"
         )
     touched = _git(
-        run, worktree, "diff", "--name-only", red, "HEAD", "--",
+        run, worktree, "diff", "--name-only", "--no-renames", red, "HEAD", "--",
         *gate.files, *GREEN_PROTECTED,
     ).stdout.split()  # fmt: skip
-    if touched:
-        return f"the fix changed what the red tests stand on: {', '.join(touched)}"
+    changed = [_red_file_change(run, worktree, red, f, gate) for f in touched]
+    changed = [c for c in changed if c]
+    if changed:
+        return f"the fix changed what the red tests stand on: {', '.join(changed)}"
     stray = stray_config(run, worktree)
     if stray:
         return f"untracked pytest configuration: {', '.join(stray)}"
     head = _git(run, worktree, "rev-parse", "HEAD").stdout.strip()
     with tempfile.TemporaryDirectory(prefix="green-gate-") as tmp:
         tree = Path(tmp) / "head"
+        error = clone_at(run, worktree, head, gate.origin, tree)
+        if error:
+            return f"could not check HEAD out to run the red tests: {error}"
+        for attempt in range(1, runs + 1):
+            proc = run(_pytest(tree, "-q", "-rA", "--tb=no", *gate.nodes), None)
+            reason = judge_green(proc.returncode, proc.stdout, gate.nodes)
+            if reason:
+                return f"{reason} in run {attempt} of {runs}" if runs > 1 else reason
+    return ""
+
+
+def clone_at(run: Runner, worktree: Path, rev: str, origin: str, tree: Path) -> str:
+    """Check `rev` out into a fresh clone at `tree`; git's error, or "" on success.
+
+    The clone reads none of the worktree's config, attributes or index, so nothing the
+    implementer left there rewrites what pytest runs (#3837). Its `origin/master` is
+    `origin`, or absent when that is "" (#3845).
+    """
+    cloned = run(
+        [
+            *_BARE_GIT, "clone", "--quiet", "--shared", "--no-checkout",
+            "--template=", str(worktree), str(tree),
+        ],
+        None,
+    )  # fmt: skip
+    if cloned.returncode == 0:
         cloned = run(
-            [
-                *_BARE_GIT, "clone", "--quiet", "--shared", "--no-checkout",
-                "--template=", str(worktree), str(tree),
-            ],
+            [*_BARE_GIT, "-C", str(tree), "update-ref", "--no-deref", "--stdin"],
+            _origin_refs(run, tree, origin),
+        )
+    if cloned.returncode == 0:
+        cloned = run(
+            [*_BARE_GIT, "-C", str(tree), "checkout", "--quiet", "--detach", rev],
             None,
-        )  # fmt: skip
-        if cloned.returncode == 0:
-            cloned = run(
-                [*_BARE_GIT, "-C", str(tree), "update-ref", "--no-deref", "--stdin"],
-                _origin_refs(run, tree, gate.origin),
-            )
-        if cloned.returncode == 0:
-            cloned = run(
-                [*_BARE_GIT, "-C", str(tree), "checkout", "--quiet", "--detach", head],
-                None,
-            )
-        if cloned.returncode:
-            return f"could not check HEAD out to run the red tests: {cloned.stderr.strip()}"
-        proc = run(_pytest(tree, "-q", "-rA", "--tb=no", *gate.nodes), None)
-    return judge_green(proc.returncode, proc.stdout, gate.nodes)
+        )
+    if cloned.returncode:
+        return cloned.stderr.strip() or f"git exited {cloned.returncode}"
+    return ""
 
 
 # The `test-scenario-hygiene` skill is user-level, not in this repo, so the red brief carries
@@ -449,9 +528,10 @@ def red_section(red: str, gate: Gate) -> str:
     return f"""## Red tests
 A separate session wrote failing tests for these issues from the issue text alone, committed
 as {red} on this branch. A gate proved they fail on the code as it stands. Your change must
-make them pass. Do not change them, any `conftest.py` or `pyproject.toml`: a gate after your
-session runs them again and refuses the PR if you did. Where a red test is wrong, say why in
-the PR body instead. The red nodes:
+make them pass. Do not change them, anything else already in their files, any `conftest.py`
+or `pyproject.toml`: a gate after your session runs them again and refuses the PR if you did.
+You may append new test functions, fixtures, helpers and imports to a red test file. Where a
+red test is wrong, say why in the PR body instead. The red nodes:
 {fence}
 {nodes}
 {fence}
@@ -460,8 +540,12 @@ the PR body instead. The red nodes:
 
 
 def green_finding(reason: str, red: str, gate: Gate) -> dict:
-    """The green gate's failure as a finding the fix round acts on, with how to undo it."""
-    restore = f"git checkout {red} -- {' '.join(gate.files)}"
+    """The green gate's failure as a finding the fix round acts on, with how to undo it.
+
+    `git checkout <red> -- <file>` would also drop tests appended since, so the detail names
+    the red version to restore from instead.
+    """
+    files = " ".join(gate.files)
     return {
         "title": "The PR fails the red/green gate",
         "file": GREEN_FILE,
@@ -469,15 +553,25 @@ def green_finding(reason: str, red: str, gate: Gate) -> dict:
         "confidence": 1.0,
         "category": "test",
         "detail": (
-            f"{reason}. The red tests are the ones committed at {red}; restore an edited "
-            f"one with `{restore}` and make the code pass them instead."
+            f"{reason}. The red tests are the ones committed at {red} in {files}. Restore "
+            f"what the reason names as `git show {red}:<file>` has it, keeping any test you "
+            "appended, and make the code pass the red tests instead."
         ),
     }
 
 
+REPEATED_RED = partial(red_gate, runs=RUNS)
+REPEATED_GREEN = partial(green_gate, runs=RUNS)
+
+
 @dataclass(frozen=True)
 class Gates:
-    """The two gates a `review.Pipeline` runs; tests pass scripted ones."""
+    """The two gates a `review.Pipeline` runs; tests pass scripted ones.
 
-    red: Callable[[Runner, Path, str, str], Gate] = red_gate
-    green: Callable[[Runner, Path, str, Gate], str] = green_gate
+    The pipeline's gates run the red nodes `RUNS` times. One run is not enough: #4178, the
+    issue of one of the first four red batches, was itself a minute-boundary flake.
+    TestGen-LLM (arXiv 2402.09171) reruns each generated test five times for the same reason.
+    """
+
+    red: Callable[[Runner, Path, str, str], Gate] = REPEATED_RED
+    green: Callable[[Runner, Path, str, Gate], str] = REPEATED_GREEN

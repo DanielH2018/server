@@ -380,6 +380,33 @@ def test_a_new_file_that_would_import_under_a_loaded_name_is_flagged(path):
     assert _gate_hits(path) == [path]
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "scripts/lib/__pycache__/gh.cpython-314.pyc",
+        "scripts/deploy_tools/__pycache__/await_ci.cpython-314.pyc",
+        "scripts/lib/gh.cpython-314-x86_64-linux-gnu.so",
+        "scripts/json.abi3.so",
+        "scripts/lib/gh.pyc",
+        "ansible/roles/setup/gitops_deploy/files/__pycache__/notes.txt",
+    ],
+    ids=[
+        "pycache-pyc-of-a-loaded-module",
+        "pycache-pyc-of-an-unloaded-module",
+        "extension-beside-loaded-source",
+        "abi3-extension-shadowing-stdlib",
+        "sourceless-pyc",
+        "anything-under-pycache",
+    ],
+)
+def test_a_compiled_module_file_is_flagged_wherever_it_sits(path):
+    assert _gate_hits(path) == [path]
+
+
+def test_a_source_file_named_like_a_cache_dir_is_clean():
+    assert _gate_hits("docs/pycache-notes.md", "scripts/dev/so_what.py") == []
+
+
 def test_a_rename_out_of_a_loaded_module_is_flagged():
     assert _gate_hits(previous="scripts/lib/gh.py") == ["scripts/lib/gh.py"]
 

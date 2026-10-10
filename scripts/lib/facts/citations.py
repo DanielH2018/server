@@ -59,11 +59,16 @@ _PATTERNS = (
 _FILE_LINE = re.compile(r"^[\w./-]+\.[a-z][a-z0-9]*:\d+(?:-\d+)?$")
 
 
+def spans(text: str) -> list[str]:
+    """Every backticked span in ``text`` outside a fence, citation or not, in document order."""
+    return _SPAN.findall(_FENCE.sub("", text))
+
+
 def parse_citations(text: str) -> tuple[list[Citation], list[Rejected]]:
     """Every support citation and every rejected span in ``text``, in document order."""
     cites: list[Citation] = []
     rejects: list[Rejected] = []
-    for raw in _SPAN.findall(_FENCE.sub("", text)):
+    for raw in spans(text):
         if _FILE_LINE.match(raw):
             rejects.append(Rejected(raw, "file:line"))
             continue
@@ -156,6 +161,55 @@ _MACRO = re.compile(r"\b((?:[a-z0-9_-]+/)?[a-z0-9_-]+\.yml\.j2)\b")
 def macro_citations(text: str) -> list[str]:
     """Every ``[dir/]<name>.yml.j2`` named in ``text``, fenced or not, in order."""
     return _MACRO.findall(text)
+
+
+# A paragraph or bullet that opens with this string is history: a deliberate statement about
+# something that no longer holds ("retired 2026-08-14", "went on 2026-09-28"). Rules that read
+# prose for a claim about THIS tree skip it -- `retired-host`, `version-as-fact` and
+# `vanished-identifier` in `lint.py` -- because the sentence is correct exactly when the thing
+# it names is gone. The wg-easy role's doc opened a bullet this way before any rule read it, so
+# the convention is adopted rather than invented. The bold need not close after the dash.
+HISTORY_MARKER = "**HISTORY —"
+
+_LIST_ITEM = re.compile(r"(?:[-*+]|\d+[.)])\s+")
+
+
+def mask_history(text: str) -> str:
+    """``text`` with every history paragraph or bullet blanked out, line breaks kept.
+
+    A bullet runs from its marker line through every following line indented deeper than the
+    marker, blank lines included, so its continuation lines and nested bullets are history
+    too. A paragraph runs from its first line to the next blank line or list item. Only a
+    block that OPENS with ``HISTORY_MARKER`` is history; the marker mid-sentence is prose.
+    """
+    out: list[str] = []
+    prev_blank = True
+    # The open history block as (is_bullet, indent), or None outside one.
+    hist: tuple[bool, int] | None = None
+    for line in text.split("\n"):
+        stripped = line.lstrip()
+        indent = len(line) - len(stripped)
+        item = _LIST_ITEM.match(stripped)
+        if hist is not None:
+            is_bullet, hist_indent = hist
+            if is_bullet:
+                ended = bool(stripped) and indent <= hist_indent
+            else:
+                ended = not stripped or bool(item)
+            if ended:
+                hist = None
+            else:
+                out.append(re.sub(r"\S", " ", line))
+                prev_blank = not stripped
+                continue
+        opener = stripped[item.end() :] if item else (stripped if prev_blank else "")
+        if opener.startswith(HISTORY_MARKER):
+            hist = (bool(item), indent)
+            out.append(re.sub(r"\S", " ", line))
+        else:
+            out.append(line)
+        prev_blank = not stripped
+    return "\n".join(out)
 
 
 @dataclass(frozen=True)
