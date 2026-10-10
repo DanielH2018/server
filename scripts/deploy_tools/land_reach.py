@@ -13,7 +13,7 @@ templates under the ungated `initial_setup` role would otherwise read as reachin
 that one of its tasks copies out of the checkout.
 `remaining_setup_hosts_note` is the string land.sh prints and the verdict hangs on.
 
-The path-to-tag mappers stay in `land_tags.py`.
+The path-to-tag mappers live in `reach.py`.
 The traversal that reads a role's `tasks/` tree for those gates is `setup_role_chains.py`;
 this one evaluates the chains it returns.
 """

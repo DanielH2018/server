@@ -10,8 +10,8 @@ test-path rule, the quiet-path filter and the path-to-role mapper.
 THREE READINGS, NOT ONE. The callers ask three different questions of the same paths:
 
 - `Reach.changes` is the deployer's `ChangeSet`. `deploy.sh --changed` deploys
-  `changes.k8s | changes.services`, which includes every k8s role holding a copy of a
-  changed file another role owns.
+  `changes.k8s | changes.services`, which includes every k8s role that
+  `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES` lists for a changed setup-role file.
 - `Reach.tags` is the landing's tag list: each path's own declared role, plus every role
   that `lookup()`s a changed file. It has no copy-holder expansion.
 - `Reach.touched` is everything a path could re-render, for the staleness refusal. It is
@@ -20,7 +20,7 @@ THREE READINGS, NOT ONE. The callers ask three different questions of the same p
 
 The first two disagreed on 3 of the last 400 master commits on 2026-10-10. Two were a change
 to `roles/setup/common/files/host_lib.py`, which `changes` maps to configarr and janitorr
-(they ship a copy) and `tags` maps to nothing. One was monitor-bridge's `check_table.py`,
+(they install a copy) and `tags` maps to nothing (#4136). One was monitor-bridge's `check_table.py`,
 which `tags` maps to uptime-kuma (it `lookup()`s the file) and `changes` does not. Each
 answer is kept as it was: unifying them changes what a landing deploys, which is its own
 change with its own test.

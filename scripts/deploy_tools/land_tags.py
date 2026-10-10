@@ -63,9 +63,9 @@ import narrow_setup
 import reach
 from land_reach import remaining_setup_hosts_note
 
-# Re-exported, not defined here: the path-to-role mappers and the shared-role expansion built
-# on them moved to `land_shared` when this module reached its line cap. Every reader keeps its
-# old name, and `test_land_tags_shared_mapper_agreement.py` keeps pinning `land_tags.role_for`.
+# Re-exported, not defined here: the path-to-role mappers live in `reach` and the shared-role
+# expansion built on them in `land_shared`. Every reader keeps its old name, and
+# `test_land_tags_shared_mapper_agreement.py` keeps pinning `land_tags.role_for`.
 from land_shared import (  # noqa: F401  (`role_of` has an out-of-module reader)
     declared_tags,
     is_role_test_path,
