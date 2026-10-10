@@ -7,14 +7,14 @@ kept daniel-box's k3s crash-looping on `bind: cannot assign requested address` f
 must switch DHCPv4 off rather than run it alongside (the template says why).
 """
 
-from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_ROLE
+from lib.repo_paths import ALL_VARS, ANSIBLE, HOST_VARS, K3S_ROLE
 from lib import yaml_fast
 from _setup_render import render_setup_text
 
 _TEMPLATE = "netplan-static-address.yaml.j2"
-# The server node, the one static-address.yml runs on. daniel-server is still on DHCP; the
-# agent path cannot apply the pin safely (static-address.yml's header says why).
-_NODES = ("daniel-box",)
+# Both k3s nodes. daniel-box's pin runs from k3s-bringup.yml's server play, daniel-server's
+# from its agent-address play (#3891).
+_NODES = ("daniel-box", "daniel-server")
 
 
 def static_address_problems(
@@ -48,7 +48,7 @@ def _host_vars(host: str) -> dict:
     return yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text())
 
 
-def test_the_server_node_renders_its_own_address_pinned() -> None:
+def test_each_node_renders_its_own_address_pinned() -> None:
     router = yaml_fast.safe_load(ALL_VARS.read_text())["lan_router_ip"]
     for host in _NODES:
         hv = _host_vars(host)
@@ -110,3 +110,63 @@ def test_emptying_the_link_removes_the_pin_and_reapplies() -> None:
         "netplan apply",
     }
     assert all(flag in t["when"] for t in commands), "removal does not trigger netplan"
+
+
+def _agent_pin_play_problems(plays: list[dict]) -> list[str]:
+    """What keeps k3s-bringup.yml from pinning the agent's address without a re-join.
+
+    The pin must arrive by a static `import_role`, so `--tags node-address` selects it (a
+    dynamic `include_role` is what kept #3891 open), and the server play must resolve to no
+    hosts while the opt-in is set, or its server-host guard refuses the agent first.
+    """
+    problems = []
+    pin_plays = [
+        play
+        for play in plays
+        if any(
+            (task.get("ansible.builtin.import_role") or {}).get("tasks_from")
+            == "static-address"
+            for task in play.get("tasks", [])
+        )
+    ]
+    if len(pin_plays) != 1:
+        problems.append(f"{len(pin_plays)} plays import static-address, not 1")
+    elif "pin_agent_address" not in pin_plays[0]["hosts"]:
+        problems.append("the pin play's hosts do not read pin_agent_address")
+    if "pin_agent_address" not in plays[0]["hosts"]:
+        problems.append("the server play still runs while pin_agent_address is set")
+    return problems
+
+
+def test_the_agent_pin_play_is_selectable_by_its_tag_is_clean() -> None:
+    plays = yaml_fast.safe_load((ANSIBLE / "k3s-bringup.yml").read_text())
+    assert _agent_pin_play_problems(plays) == []
+
+
+def test_an_agent_pin_by_dynamic_include_is_flagged() -> None:
+    server = {
+        "hosts": "{{ pin_agent_address | default([]) is truthy | ternary([], 'x') }}"
+    }
+    pin = {
+        "hosts": "{{ pin_agent_address | default([]) }}",
+        "tasks": [
+            {
+                "ansible.builtin.include_role": {
+                    "name": "k3s",
+                    "tasks_from": "static-address",
+                }
+            }
+        ],
+    }
+    assert _agent_pin_play_problems([server, pin]) == [
+        "0 plays import static-address, not 1"
+    ]
+    server["hosts"] = "{{ target }}"
+    pin["tasks"][0] = {
+        "ansible.builtin.import_role": pin["tasks"][0].pop(
+            "ansible.builtin.include_role"
+        )
+    }
+    assert _agent_pin_play_problems([server, pin]) == [
+        "the server play still runs while pin_agent_address is set"
+    ]

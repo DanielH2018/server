@@ -21,7 +21,8 @@ deployer prints this warning beside the command it suggests, from
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
-- **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`
+- **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`;
+  `k3s-bringup.yml --tags "node-address"`
 - **Crons (9):**
   - `Longhorn backup health` — `*/10 * * * *`
   - `Longhorn filesystem trim` — `10 6 * * *`
