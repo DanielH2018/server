@@ -6,6 +6,8 @@ from lib.facts.lock import LOCK_REL, verify_units
 from lib.facts.report import doc_reads, precision, ranked_backlog
 from lib.git_testing import commit, git, init_repo
 
+# A fixed epoch: the log rows are dated against it, never against the live clock.
+_NOW = datetime(2026, 10, 10, 12, tzinfo=timezone.utc)
 _DOC = "## Gate\n`t/m.py:LIMIT` bounds {what}.\n"
 
 
@@ -41,7 +43,7 @@ def test_a_move_with_a_prose_edit_is_actual_and_one_without_is_potential(tmp_pat
 
 
 def test_the_backlog_is_ranked_by_its_docs_reads(tmp_path):
-    now = datetime.now(timezone.utc)
+    now = _NOW
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     old = (now - timedelta(days=40)).strftime("%Y-%m-%dT%H:%M:%SZ")
     log = tmp_path / "instructions.log"
@@ -78,7 +80,5 @@ def test_the_backlog_is_ranked_by_its_docs_reads(tmp_path):
 
 
 def test_a_missing_log_reads_as_no_rows(tmp_path):
-    reads = doc_reads(
-        tmp_path / "instructions.log", {"CLAUDE.md"}, datetime.now(timezone.utc)
-    )
+    reads = doc_reads(tmp_path / "instructions.log", {"CLAUDE.md"}, _NOW)
     assert (reads.rows, dict(reads.counts)) == (0, {})
