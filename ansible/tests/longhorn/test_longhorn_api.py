@@ -35,6 +35,7 @@ from _helpers import K8S_ROLES
 from _helpers import REPO as _REPO_ROOT
 from _helpers import load_tasks as _tasks
 from _helpers import task_named
+from _kubectl_seam import no_cluster_to_ask
 from longhorn_manager import ready_manager_ip
 
 _ROLE = K8S_ROLES / "longhorn-api"
@@ -87,14 +88,6 @@ def test_the_recorded_facts_are_the_documented_interface() -> None:
     assert record["longhorn_api_node"] == "{{ ansible_hostname }}"
 
 
-_UNREACHABLE_TOKENS = (
-    "connection refused",
-    "was refused",
-    "i/o timeout",
-    "no configuration has been provided",
-)
-
-
 def _ground_truth_manager_ips() -> dict[str, str] | None:
     """Every READY longhorn-manager pod's node and IP, read with the correct, un-mutated
     label — independent of the role's own argv under test and of the filter it calls. Ready
@@ -124,7 +117,7 @@ def _ground_truth_manager_ips() -> dict[str, str] | None:
         timeout=30,
         check=False,
     )
-    if result.returncode != 0 or any(t in result.stderr for t in _UNREACHABLE_TOKENS):
+    if result.returncode != 0 or no_cluster_to_ask(result.stderr):
         return None
     # First ready match wins on a duplicate node, as `ready_manager_ip` takes the first — if a
     # node ever runs two ready manager pods, the role and this ground truth must agree on which
