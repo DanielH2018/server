@@ -16,3 +16,26 @@ def test_a_key_no_manager_captures_is_not_a_pin():
     assert "crowdsec_k8s_sidecar_agents" not in pinned_keys(
         REPO, "ansible/inventory/group_vars/all.yml"
     )
+
+
+def test_the_real_config_names_the_built_in_managers_pins():
+    """#4158: no custom manager reads these files; the built-in github-actions manager bumps
+    image-smoke's `uses:` refs, and the ansible manager the n8n deploy task's `image:`."""
+    keys = pinned_keys(REPO, ".github/workflows/image-smoke.yml")
+    assert "jobs" in keys
+    assert "on" not in keys
+    # The third root item of a list-rooted tasks file, "Deploy n8n to the cluster".
+    assert "2" in pinned_keys(REPO, "ansible/roles/k8s/n8n/tasks/main.yml")
+
+
+def test_a_disabled_built_in_manager_pins_nothing(tmp_path):
+    (tmp_path / ".github" / "workflows").mkdir(parents=True)
+    (tmp_path / ".github" / "workflows" / "ci.yml").write_text(
+        "jobs:\n  b:\n    steps:\n      - uses: actions/checkout@v4\n"
+    )
+    (tmp_path / "renovate.json").write_text('{"github-actions": {"enabled": false}}')
+    assert pinned_keys(tmp_path, ".github/workflows/ci.yml") == frozenset()
+    (tmp_path / "renovate.json").write_text('{"enabledManagers": ["pep621"]}')
+    assert pinned_keys(tmp_path, ".github/workflows/ci.yml") == frozenset()
+    (tmp_path / "renovate.json").write_text("{}")
+    assert pinned_keys(tmp_path, ".github/workflows/ci.yml") == {"jobs"}
