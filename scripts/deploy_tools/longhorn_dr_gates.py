@@ -20,6 +20,13 @@ The gates, in the order the runbook gives them:
      that was not created from a backup. A live cluster fails this gate on every volume —
      which is correct, because this runbook is for a cluster that has lost them.
 
+     After an etcd-first restore the gate also refuses, for a different reason. The snapshot
+     carries Longhorn's `Volume` CRs, so each PVC comes back bound to its ORIGINAL volume, with
+     no `fromBackup`. The gate tells that volume apart by name: it is the `BackupVolume`'s
+     `spec.volumeName`, where a deploy would have provisioned a new `pvc-<uid>`. That volume's
+     data survives only if its replicas did, and a restore under its name needs it gone first.
+     No drill has run this path (`docs/longhorn-disaster-recovery.md`, step 4).
+
 Every cluster read goes through `lib.kubectl` with the cluster named `prod`. The B2
 transaction cap is not scriptable from here: a cap denial surfaces as `cannot find volume.cfg
 in backupstore`, and the runbook's step 3 says what to do when you see it.
@@ -119,16 +126,22 @@ def pvc_of_backup(backup_volume: dict) -> tuple[str, str] | None:
 
 
 def provisioned_empty(backup_volumes_doc, volumes_doc) -> list[str]:
-    """Live volumes bound to a backed-up PVC's name that were not created from a backup."""
+    """Live volumes bound to a backed-up PVC's name that were not created from a backup.
+
+    A volume named as its `BackupVolume`'s `spec.volumeName` is the original volume, which only
+    an etcd restore (or a cluster that never lost it) brings back. It is reported with that
+    cause, since "a deploy ran first" would send the operator after the wrong fault.
+    """
     if backup_volumes_doc is None:
         return ["<could not list backupvolumes.longhorn.io>"]
     if volumes_doc is None:
         return ["<could not list volumes.longhorn.io>"]
-    backed_up: dict[tuple[str, str], str] = {}
+    backed_up: dict[tuple[str, str], tuple[str, str]] = {}
     for item in items(backup_volumes_doc):
         pvc = pvc_of_backup(item)
         if pvc is not None:
-            backed_up.setdefault(pvc, name_of(item))
+            original = str((item.get("spec") or {}).get("volumeName") or "")
+            backed_up.setdefault(pvc, (name_of(item), original))
     found = []
     for item in items(volumes_doc):
         k8s = (item.get("status") or {}).get("kubernetesStatus") or {}
@@ -137,9 +150,17 @@ def provisioned_empty(backup_volumes_doc, volumes_doc) -> list[str]:
             continue
         if (item.get("spec") or {}).get("fromBackup"):
             continue
+        backup_volume, original = backed_up[pvc]
+        if original and name_of(item) == original:
+            found.append(
+                f"{pvc[0]}/{pvc[1]} is bound to its original volume {original}, "
+                f"never lost or brought back as an object by an etcd restore — a healthy one "
+                f"needs no restore; delete a faulted one before restoring {backup_volume}"
+            )
+            continue
         found.append(
             f"{pvc[0]}/{pvc[1]} is bound to {name_of(item)}, provisioned empty — "
-            f"a deploy ran before the restore (backup volume {backed_up[pvc]})"
+            f"a deploy ran before the restore (backup volume {backup_volume})"
         )
     return found
 

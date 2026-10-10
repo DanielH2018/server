@@ -25,7 +25,9 @@ def _target(name: str, url: str, available) -> dict:
     }
 
 
-def _backup_volume(name: str, target: str, pvc: tuple[str, str] | None) -> dict:
+def _backup_volume(
+    name: str, target: str, pvc: tuple[str, str] | None, volume: str = ""
+) -> dict:
     labels = {}
     if pvc is not None:
         # Longhorn writes the PVC binding as a JSON document inside one label value.
@@ -34,7 +36,7 @@ def _backup_volume(name: str, target: str, pvc: tuple[str, str] | None) -> dict:
         )
     return {
         "metadata": {"name": name},
-        "spec": {"backupTargetName": target},
+        "spec": {"backupTargetName": target, "volumeName": volume},
         "status": {"labels": labels, "lastBackupName": "backup-1"},
     }
 
@@ -55,7 +57,9 @@ BOTH_ARMED = {
 }
 SYNCED = {
     "items": [
-        _backup_volume("pvc-old-a-1234", "default", ("homelab", "bazarr-config")),
+        _backup_volume(
+            "pvc-old-a-1234", "default", ("homelab", "bazarr-config"), "pvc-old-a"
+        ),
         _backup_volume("pvc-old-b-5678", "r2", ("homelab", "authelia-config")),
         _backup_volume("pvc-old-c-9abc", "default", None),
     ]
@@ -138,6 +142,15 @@ def test_an_empty_volume_under_a_backed_up_name_is_flagged():
     assert gates.provisioned_empty(SYNCED, live) == [
         "homelab/bazarr-config is bound to pvc-new-1, provisioned empty — "
         "a deploy ran before the restore (backup volume pvc-old-a-1234)"
+    ]
+
+
+def test_the_original_volume_an_etcd_restore_brings_back_is_flagged_as_such():
+    live = {"items": [_volume("pvc-old-a", ("homelab", "bazarr-config"))]}
+    assert gates.provisioned_empty(SYNCED, live) == [
+        "homelab/bazarr-config is bound to its original volume pvc-old-a, "
+        "never lost or brought back as an object by an etcd restore — a healthy one "
+        "needs no restore; delete a faulted one before restoring pvc-old-a-1234"
     ]
 
 
