@@ -155,6 +155,9 @@ daniel-box, the pipeline runs `land.sh` itself. It resumes the agent only for an
 `deploy-failed`, `needs-manual-apply` or `blocked` verdict, with the verdict and the end of the
 landing's log. Any other verdict ends the batch. The review's counts and costs go on the PR as
 a comment, with only the actionable findings listed and security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
+Before the review, every batch of this repo runs the PR's new tests with its code changes
+taken out (`scripts/dev/fanout_lib/base_check.py`). The reviewer is told which still pass, and
+the PR comment counts them.
 `scripts/dev/fanout_lib/review.py` has the phases and the reasons for them. Lint and tests
 stay with the implementer; only the slow model review moves out. The fallback `Agent(...)`
 path below has no review phase.
