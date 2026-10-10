@@ -53,7 +53,8 @@ that bite from a config edit alone.
   The namespace baseline admits Traefik and Prometheus, so homepage's pod-to-pod call is
   denied by default and the tile fails as a widget-proxy error while homepage stays 1/1. The
   key adds homepage to the entry's fence, and `homepage_widget_url` builds the URL only for an
-  entry carrying it (`ansible/filter_plugins/homepage_tiles.py`, #3691). So a widget also
+  entry carrying it (`ansible/filter_plugins/homepage_tiles.py`, #3691). ENFORCED on the
+  rendered URLs by `ansible/tests/services/test_homepage_tiles_filter.py`. So a widget also
   deploys the target's fence. Headlamp's and pihole's widgets are the two exceptions, each
   behind a `DECIDED:` marker in `services.yaml.j2`.
 - **A layout entry matches a group by NAME, and an unmatched one is silently dead.** `layout:`
