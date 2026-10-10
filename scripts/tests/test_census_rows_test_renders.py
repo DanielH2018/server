@@ -11,9 +11,9 @@ Run: uv run pytest scripts/tests/test_census_rows_test_renders.py
 """
 
 import pytest
+from _inventory_path_rules import inline_inventory_paths
 from _render_helper_rules import (
     bare_jinja_envs,
-    inline_inventory_paths,
     local_repo_roots,
     shell_template_source_reads,
 )
@@ -114,8 +114,9 @@ ROWS = (
         reason=(
             "`lib.repo_paths` owns `HOSTS_INI`, `ALL_VARS`, `HOST_VARS` and `K3S_DEFAULTS`, and "
             "#3912 and #3982 moved the test modules onto them. A hit is a `/` chain rooted at "
-            "`REPO`, `_REPO`, `REPO_ROOT`, `ANSIBLE` or `ROLES` (or `Path(<one of them>)`) "
-            "whose string parts spell one of those paths; the message names the constant. A "
+            "`REPO`, `_REPO`, `REPO_ROOT`, `ANSIBLE`, `ROLES` or `INVENTORY` (or "
+            "`Path(<one of them>)`) whose string parts spell one of those paths; the message "
+            "names the constant. A module binding its own `INVENTORY` is a hit too. A "
             'repo-relative string such as `"ansible/inventory/group_vars/all.yml"` is not a '
             "chain, which is how the deploy classifiers' tests pass those as inputs. The walk "
             'reads one expression, so a path built in two steps (`K3S = ROLES / "setup" / '
@@ -131,6 +132,9 @@ ROWS = (
                 "d.py", '_REPO / "ansible/roles" / "setup/k3s/defaults/main.yml"\n'
             ),
             Subject("e.py", 'ROLES / "setup" / "k3s" / "defaults" / "main.yml"\n'),
+            # A local INVENTORY shadowing the repo_paths one, and a chain built from it.
+            Subject("f.py", 'INVENTORY = ANSIBLE / "inventory"\n'),
+            Subject("g.py", 'INVENTORY / "group_vars" / "all.yml"\n'),
         ),
         green=(
             Subject(
@@ -151,8 +155,15 @@ ROWS = (
                 "ansible/tests/setup/test_host_python_invocations.py",
                 "evals/tests/test_eval_cases.py",
                 "ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py",
+                "ansible/tests/setup/test_claude_agent_ssh_login.py",
             }
         ),
+        allow={
+            "scripts/lib/tests/test_render_guard.py": (
+                "`test_anchors_resolve_to_the_real_tree` checks that `repo_paths`' own "
+                "`INVENTORY` anchor reaches the real tree, so it spells a path under it"
+            ),
+        },
     ),
     Census(
         name="tests-read-shell-templates-rendered",
