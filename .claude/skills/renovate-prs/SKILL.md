@@ -99,6 +99,11 @@ tell is the age of the merge base, not the age of the PR**:
   to 2.37.9 against a live 2.37.10. That downgrade is caught by
   `test_the_ledger_last_entry_is_the_live_pin`, but only after the ledger row is appended.
 
+A `manual —` PR is the exception: a stale base is expected there. Its rule sets `rebaseWhen:
+"conflicted"` (#4011), because each rebase reruns a CI run that stays red until a person pushes
+the manual half. Do not tick its box during triage. §4's finisher rebases the branch onto
+master before adding the missing half, and that refresh is the one that counts.
+
 **A PR whose merge would land nothing is failed by CI, not by this step.** #1741 and #1743
 automerged on 2026-09-11 ten seconds after opening, so no session triaged them (#1755). Renovate
 had reused the previous bump's branch under the next version's title, and master already held
