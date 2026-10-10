@@ -23,10 +23,10 @@ import shlex
 import subprocess
 import shutil
 
-from fanout_lib.clean import remote_clean_command
+from fanout_lib.clean import live_process_scan, remote_clean_command
 from fanout_lib.manifest import Batch
 from lib.git_testing import git, git_out, init_repo, scrubbed_env
-from lib.proc_testing import fake_bin, path_with, run
+from lib.proc_testing import fake_bin, path_with, run, write_exec
 
 BRANCH = "worktree-fanout-x"
 UNIT = "fanout-x"
@@ -276,3 +276,43 @@ def test_a_stub_a_live_process_still_uses_is_kept_not_deleted(tmp_path):
     assert proc.stdout.strip() == f"kept: {worktree} — pid {holder.pid} still uses it"
     assert (worktree / ".remember").is_dir()
     assert BRANCH in _branches(repo)
+
+
+def _busy_with_helper(tmp_path, worktree, helper_body):
+    """What `live_process_scan` sets `busy` to when a stand-in root helper answers."""
+    helper = write_exec(tmp_path / "worktree-holders", helper_body)
+    script = (
+        live_process_scan(str(worktree), helper=str(helper), sudo="") + 'echo "$busy"'
+    )
+    return subprocess.run(
+        ["bash", "-c", script], capture_output=True, text=True, check=True, timeout=30
+    ).stdout.strip()
+
+
+def test_the_root_helper_sees_another_uids_holder_the_proc_loop_cannot_is_flagged(
+    tmp_path,
+):
+    """#4170: a `systemd-run --uid=claude` process in the tree is invisible to /proc as ubuntu."""
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    sibling = f"{worktree}-other"
+    body = f"printf '41\\tcwd\\t{sibling}\\n42\\tcwd\\t{worktree}/sub\\n'\n"
+
+    assert _busy_with_helper(tmp_path, worktree, body) == "42"
+
+
+def test_a_failed_or_blind_root_helper_keeps_the_tree_is_flagged(tmp_path):
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+
+    assert _busy_with_helper(tmp_path, worktree, "exit 1\n").startswith("unknown")
+    blind = "printf '7\\tunreadable\\tcwd: EPERM\\n'\n"
+    assert _busy_with_helper(tmp_path, worktree, blind) == "7"
+
+
+def test_a_helper_that_names_only_other_trees_leaves_the_tree_free_is_clean(tmp_path):
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    body = f"printf '41\\tcwd\\t{worktree}-other\\n'\n"
+
+    assert _busy_with_helper(tmp_path, worktree, body) == ""

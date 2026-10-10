@@ -14,6 +14,7 @@ import pytest
 
 from _review_fakes import ISSUES, PR, _finding, _pipeline, _report, unprefixed
 from fanout_lib.brief import ISSUES_HEADING, render_brief
+from fanout_lib.hunk_check import HunkCheck
 from fanout_lib.red_gate import Gate, Gates
 from fanout_lib.review import Pipeline
 from fanout_lib.target import SERVER_TARGET
@@ -66,6 +67,56 @@ def test_a_red_green_batch_hands_the_implementer_the_red_commit_it_must_not_edit
     assert pipeline.record.red_gate == "passed"
     assert (pipeline.record.red_behaviours, pipeline.record.red_tests) == (2, 1)
     assert "Red gate passed: 1 tests for 2 stated behaviours" in run.comments[0]
+
+
+@pytest.mark.parametrize("green", ["", "pytest exited 1; not passing: t.py::a"])
+def test_only_a_pr_that_passes_the_green_gate_has_its_hunks_checked(tmp_path, green):
+    checked = []
+
+    def hunk_check(run, worktree, start, gate):
+        checked.append(start)
+        return HunkCheck(hunks=3, missed=["mod.py:6"], by_absence=1)
+
+    reports = [
+        _red_report(),
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": []}),
+        _report(f"Fixed. {PR}"),
+        _report(structured={"summary": "", "findings": []}),
+    ]
+    pipeline, run = _pipeline(
+        tmp_path,
+        reports,
+        heads=("base", "red1", "aaa", "bbb"),
+        gates=_gates(Gate(files=["t.py"], nodes=["t.py::a"]), green=[green, green]),
+        hunk_check=hunk_check,
+    )
+    pipeline.run_all()
+    # The merge base, not the red commit: #4182 and #4183 both merged master into their
+    # branch, and `red..HEAD` would count master's hunks as fix hunks the red tests missed.
+    assert checked == ([] if green else ["base0"])
+    assert pipeline.record.green_first == ("unmet" if green else "passed")
+    assert pipeline.record.red_hunks_missed == ([] if green else ["mod.py:6"])
+    noticed = "The red tests noticed 2 of 3 fix hunks"
+    assert (noticed in run.comments[0]) is not bool(green)
+
+
+def test_a_hunk_check_that_raises_is_recorded_and_the_batch_still_lands(tmp_path):
+    reports = [
+        _red_report(),
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": []}),
+    ]
+    pipeline, run = _pipeline(
+        tmp_path,
+        reports,
+        heads=("base", "red1", "red1"),
+        gates=_gates(Gate(files=["t.py"], nodes=["t.py::a"]), green=[""]),
+        hunk_check=lambda *_: 1 / 0,
+    )
+    pipeline.run_all()
+    assert pipeline.record.red_hunks_error == "ZeroDivisionError: division by zero"
+    assert run.lands
 
 
 def test_a_refused_red_commit_is_reset_away_and_the_implementer_runs_without_it(
@@ -239,6 +290,7 @@ def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
         state_dir=tmp_path / "state",
         red_green=True,
         gates=Gates(red=red_gate, green=lambda *_: ""),
+        hunk_check=lambda *_: HunkCheck(),
     )
     pipeline.run_all()
     try:
@@ -307,7 +359,8 @@ def test_a_pr_still_failing_the_green_gate_after_the_fix_is_not_landed(tmp_path)
         "review",
     ]
     assert edited in run.claude[3][1]
-    assert "git checkout red1 -- t.py" in run.claude[3][1]
+    assert "`git show red1:<file>`" in run.claude[3][1]
+    assert pipeline.record.green_first == "lock"
     assert final["result"].startswith("needs input: the PR fails the green gate")
     assert final["result"].endswith(PR)
 
@@ -333,6 +386,8 @@ def test_a_fix_round_after_a_passing_green_gate_runs_the_gate_again_and_holds_a_
     final = pipeline.run_all()
 
     assert "The red tests committed at red1 stay as they are" in run.claude[3][1]
+    assert "keep it and append a test" in run.claude[3][1]
     assert final["result"].startswith("needs input: the PR fails the green gate")
     assert pipeline.record.green_gate == edited
+    assert pipeline.record.green_first == "passed"
     assert run.lands == []

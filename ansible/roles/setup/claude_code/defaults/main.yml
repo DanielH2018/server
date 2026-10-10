@@ -462,15 +462,21 @@ claude_code_agent_primary_profile:
 # is also true. False on either removes the rule, the unit and the approval list; a landing
 # already running finishes.
 claude_code_lander_enabled: false
-# These three are pinned again as block vars in tasks/lander.yml, which wins over any inventory
-# override; the values here are what the validator renders the unit with.
+# These five are pinned again as block vars in tasks/lander.yml, which wins over any inventory
+# override; the values here are what the validator renders the unit with. Each is a literal,
+# not a reference to the agent profile's variables: a block var that references an inventory
+# variable is resolved from the inventory, so it pins nothing.
 # The checkout land.sh runs from: the deployer's primary, which only ever fast-forwards to
 # master, so the lander runs the land.sh that master holds and never a branch's copy.
 claude_code_lander_checkout: "/home/{{ sys_user }}/server"
 # The only branches the lander lands, the shape EnterWorktree gives a `claude/<slug>` worktree.
 # It must match the fence's exclude (gitops_deploy_fence_ruleset_exclude), the one branch
-# shape the account can push.
-claude_code_lander_branch_prefix: "worktree-{{ claude_code_agent_worktree_prefix }}+"
+# shape the account can push, and claude_code_agent_worktree_prefix.
+claude_code_lander_branch_prefix: "worktree-claude+"
+# The GitHub login a PR must be authored by, the agent's (claude_code_agent_github_login).
+claude_code_lander_author: DanielClaudeBot
+# The Unix user the polkit rule lets start a landing, the agent's (claude_code_agent_user).
+claude_code_lander_agent_user: claude
 # The operator's GitHub login. Its approval of a PR's head SHA lifts the approval-path refusal
 # below, so the agent can land a PR the operator has reviewed. Never the agent's own login.
 claude_code_lander_approver: DanielH2018
