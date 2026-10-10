@@ -169,10 +169,17 @@ under `uv run --no-project`. The journal names the outcome on every tick:
 - **no tags**: the range moves no rendered output (a comment-only inventory edit, a variable
   nothing reads, a macro nothing imports). The fast-forward is the whole apply, and the receipt
   records `narrowed-to-nothing` as the plane's tags.
-- **a refusal**: the full `deploy.yml`. Anything the derivation cannot map lands here: a variable
-  the play itself reads, `hosts.ini`, a tag list covering most of the fleet, or a crash in the
-  derivation. A missed consumer would leave a service silently stale, while a full run is only
-  slow.
+- **a refusal**: no playbook runs, and the plane is deferred (#4333). Anything the derivation
+  cannot map lands here: a variable the play itself reads, `hosts.ini`, a tag list covering
+  most of the fleet, or a crash in the derivation. Until #4333 a refusal ran the whole
+  `deploy.yml`. That run takes about twenty minutes, and the tick's budget is shared with the
+  wait for the service locks, so on 2026-10-10 it got 776s, timed out, and held every landing
+  until a hand cleared it. A refusal now fast-forwards and records each service it may reach
+  as a `k8s_unapplied` line, which names the `--tags` command and discharges itself once a
+  deploy carries the change. The fleet-coverage refusal prints the tags it reached beside its
+  exit 3, so only those are recorded; any other refusal records every declared service. No
+  receipt is written for the plane, so `land.sh` reports `needs-manual-apply` rather than
+  reading it as applied.
 
 `narrow` is read-only and can be run by hand against any range. The rules it applies, and what
 each one refuses, are in `scripts/deploy_tools/narrow_broad.py`.
@@ -205,22 +212,15 @@ each one refuses, are in `scripts/deploy_tools/narrow_broad.py`.
 **Every deploy-plane tick also logs a render-digest shadow line.** The `narrow shadow:` line names
 the services whose applied digests differ from a render record of the commit being applied,
 counts the ones that match, and counts the ones with no usable record, grouped by reason. It
-applies nothing. It is meant to replace the refusal's full run with a digest diff, but it
+applies nothing. It is meant to narrow a refused range by a digest diff, but it
 measures little: `setup/render_records` writes one record per service
 `scripts/deploy_tools/render_targets.py` lists, hourly at `:17`, from the newest commit on
 origin/master with green CI. A tick that has just fetched a merge applies a commit no render has
 seen, so the line usually reads `unknown: render is of another commit`.
 
-**A full play measures itself instead.** `release_stamp.yml` hashes every service it applies
-through the same `release_digest.yml` a render record uses, so a release digest equals the render
-digest at the same commit.
-play, the tick snapshots the release records before the apply. After a successful apply it logs
-one `narrow measured:` line naming the services whose digests moved, which is exactly what a
-digest diff at that commit would have applied, plus the counts of unchanged services and those
-with no usable record. The measurement costs no render and no lock time. A narrowed tick
-re-stamps only its own tags and logs no such line, and a failed full play takes the hold path.
-`deploy_release.applied_diff` is the reader, and `deploy_release.digest_diff` is a stdlib
-restatement of `probe_lib/releases_render.py:digest_verdict` that
+Until #4333 the full play measured itself, logging a `narrow measured:` line from the release
+records either side of it. A refusal runs no play now, so that line is gone with it.
+`deploy_release.digest_diff` is a stdlib restatement of `probe_lib/releases_render.py:digest_verdict` that
 `tests/test_deploy_release_digest.py` runs over the same records.
 
 A failed narrowed apply adds the plane it named to `hold_plane` as the entry
@@ -571,8 +571,8 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
       that deploys it, and the deferred-change pages (`alert_deferred`) go out on that path too.
     - **A bump the deploy plane covers is deployed once, by the plane, ungated.**
       `narrow_broad._changed_half` builds its ChangeSet from the raw paths, so a range that also
-      moves a deploy-plane path puts the bump's tag in the narrowed list, and a refused narrowing
-      runs the whole play. `deploy_broad_k8s.covered_by_plane` takes those bumps out of both the
+      moves a deploy-plane path puts the bump's tag in the narrowed list. A refused narrowing
+      runs nothing, so it covers no bump. `deploy_broad_k8s.covered_by_plane` takes those bumps out of both the
       gate and the separate deploy. A second `--tags sonarr` would re-take the Longhorn snapshot
       of every claim sonarr declares and spend the shared budget twice.
     - **Forward-only, on the broad budget.** `_rollback_k8s` resets the tree to `local`, which
@@ -605,11 +605,10 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     change is narrowed before it is applied* above has the three outcomes. **The narrowed list is
     not filtered through `K8S_AUTODEPLOY_DENYLIST`.** The denylist gates promotion into the k8s
     auto-deploy machinery (snapshot, rollback), and the broad plane has none of it, running the
-    plain playbook forward-only the way an operator's `deploy.sh` does. A filter could only reach
-    the narrowed path anyway, since a refused range runs the whole play over every denied role.
-    The `# DECIDED:` on `deploy_narrow.denylisted_in` is the long form, and the journal names the
-    denied tags a narrowed apply includes. The `# DECIDED:` at the fallback in `deploy_narrow.py`
-    says why doubt runs the whole play.
+    plain playbook forward-only the way an operator's `deploy.sh` does. The `# DECIDED:` on
+    `deploy_narrow.denylisted_in` is the long form, and the journal names the denied tags a
+    narrowed apply includes. The `# DECIDED:` at the fallback in `deploy_narrow.py` says why doubt
+    defers the plane rather than running the whole play (#4333).
   - The narrowing reads the k8s role-caller graph from the WORKING TREE, which is still on `local`
     at that point. A range that adds a caller of a shared role reads one caller short, and a shared
     role that then looks caller-less refuses, which is the safe direction.
@@ -843,8 +842,9 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     - The deploy plane is in the census too. For each changed path under `ansible/inventory/` or
       `ansible/templates/` since the record, `releases.py` asks `narrow_broad.broad_path_tags`,
       the per-path rule the tick narrows a broad range with, which services the change reaches. A
-      path the rules refuse marks every service sharing that record stale, which is the set the
-      tick's full run re-stamps.
+      path the rules refuse marks every service sharing that record stale, which is the set a
+      full deploy re-stamps. The tick defers such a range rather than running that deploy
+      (#4333), so the stale flag and the `k8s_unapplied` lines name the same services.
     - The flag needs no clearing rule, because the next real apply of that service rewrites its
       record.
   - **Accepted, not fixed: the batch-abort blast radius is this branch's most likely bad day.**
@@ -892,8 +892,8 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
 
   **A broad tick subtracts the roles its own deploy plane applied before it posts this**
   (`deploy_broad_k8s.apply_broad_k8s`). `narrow_broad` maps a role's changed path to its tag, so a
-  range carrying a deploy-plane path narrows to a list that names the role, and a refused
-  narrowing runs the whole play. Without the subtraction the tick would run
+  range carrying a deploy-plane path narrows to a list that names the role. A refused narrowing
+  applies nothing, so it subtracts nothing. Without the subtraction the tick would run
   `deploy.yml --tags radarr,sonarr` and then post "fast-forwarded but **not applied**" for the
   same roles.
 

@@ -352,7 +352,6 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         setup_routing=lambda _repo, _ref, _host: checkout_routing(),
         # The host's render records, read for a log line alone, so no tick test reads them.
         digest_diff=lambda _ref: {},
-        release_records=dict,
         # The host's release records, which a tick that records `k8s_unapplied` reads to drop
         # a line already deployed (#4087). A tick test that wants one scripts it here.
         release_commit=scripted.release_commit,

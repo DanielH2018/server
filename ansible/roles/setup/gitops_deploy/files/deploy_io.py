@@ -350,10 +350,11 @@ def deploy_broad(
     `uv run --frozen` for the same reason deploy() uses it: the repo's pinned env, and never
     mutating uv.lock on the host.
 
-    No tags means the whole playbook — only ever reached for the deploy plane, where
-    `ansible/deploy.yml` unscoped IS the remediation. The setup plane never lands here
-    unscoped: setup_tags_for returning an empty set routes to the defer-and-alert arm
-    instead, because an unscoped initial_setup.yml is a whole-host reprovision.
+    No tags would mean the whole playbook, and the tick never asks for it. A refused
+    deploy-plane narrowing defers the plane instead (#4333), because the whole
+    `ansible/deploy.yml` does not fit the budget this call is given. The setup plane never
+    lands here unscoped either: setup_tags_for returning an empty set routes to the
+    defer-and-alert arm, because an unscoped initial_setup.yml is a whole-host reprovision.
     """
     cmd = [*PLAYBOOK_ARGV, playbook]
     if tags:

@@ -1,12 +1,13 @@
-"""A deploy-plane tick applies what the narrowing derived, or the whole play when it refuses.
+"""A deploy-plane tick applies what the narrowing derived, or defers the plane when it refuses.
 
-Each rule is a pair: the narrowed range, and a range the derivation refused, which must run
-byte-for-byte what this arm ran before the narrowing existed. A narrowing that fired on
-everything and one that fired on nothing read the same from the passing side alone.
+Each rule is a pair: the narrowed range, and a range the derivation refused. A refusal runs
+no playbook at all since #4333: the whole play does not fit the tick's budget, so the plane
+is merged and the services it may reach are recorded in `k8s_unapplied`. A narrowing that
+fired on everything and one that fired on nothing read the same from the passing side alone.
 
 The scripted narrowing is `tick.narrow`, an `(exit code, stdout)` pair — the same contract
 `deploy_tags.py narrow` has, and the boundary `DeployTools.narrow_deploy_plane` crosses. Its
-default is a refusal, so every test written before this slice keeps asserting the full run.
+default is a refusal.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_narrow.py
 """
@@ -16,11 +17,16 @@ import dataclasses
 import deploy_narrow
 import deploy_tick_types
 from _deploy_fakes import receipt_applied
+from gitops_ledger import OWED_K8S_UNAPPLIED
 
 ORIGIN = "2" * 40
 # A deploy-plane path: inventory is in `_BROAD_DEPLOY_PREFIXES`, and the tick used to run
 # `ansible/deploy.yml` unscoped for it.
 GROUP_VARS = "ansible/inventory/group_vars/all.yml"
+DECLARES_RADARR_SONARR = (
+    "containers_list:\n  - name: radarr\n    platform: k8s\n"
+    "  - name: sonarr\n    platform: k8s\n"
+)
 
 
 def _playbook_argv(tick):
@@ -42,20 +48,39 @@ def test_a_narrowed_range_deploys_only_the_tags_it_named(gitops_deploy, tick, st
     assert receipt_applied(state) == {"ansible/deploy.yml": ("radarr", "sonarr")}
 
 
-def test_a_refused_range_still_runs_the_whole_play(gitops_deploy, tick, capsys, state):
-    """The rejecting half: exit 3 is what the tick did for every deploy-plane range before."""
+def _owed(state) -> list[str]:
+    return sorted(e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED))
+
+
+def test_a_refused_range_runs_no_play_and_owes_every_declared_service(
+    gitops_deploy, tick, capsys, state
+):
+    """#4333: an untagged deploy.yml ran past the tick's budget and held every landing.
+
+    No receipt either: an empty tag list there reads as "the whole play ran" to land.sh.
+    """
+    tick.declare(DECLARES_RADARR_SONARR)
     tick.paths = [GROUP_VARS]
     tick.narrow = (3, "")
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert _playbook_argv(tick) == [
-        "uv",
-        "run",
-        "--frozen",
-        "ansible-playbook",
-        "ansible/deploy.yml",
-    ]
-    assert "cannot narrow (exit 3)" in capsys.readouterr().out
-    assert receipt_applied(state) == {"ansible/deploy.yml": ()}
+    assert tick.playbooks == []
+    assert tick.merges == [ORIGIN]
+    assert receipt_applied(state) is None
+    assert state.hold_plane is None
+    assert _owed(state) == ["radarr", "sonarr"]
+    out = capsys.readouterr().out
+    assert "cannot narrow (exit 3)" in out
+    assert "deferring every declared service to k8s_unapplied" in out
+
+
+def test_a_refusal_naming_its_tags_owes_only_those(gitops_deploy, tick, state):
+    """The fleet-coverage ceiling knows what it reached, so the rest owe nothing."""
+    tick.declare(DECLARES_RADARR_SONARR)
+    tick.paths = [GROUP_VARS]
+    tick.narrow = (3, "sonarr,wg-easy")
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.playbooks == []
+    assert _owed(state) == ["sonarr"]
 
 
 def test_a_range_that_moves_no_rendered_output_applies_nothing(
@@ -117,17 +142,43 @@ def test_a_mixed_range_applies_the_setup_plane_and_then_the_deploy_plane(
     fallback — the re-stamp `Release Staleness Drift` relies on — never ran.
     """
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml", GROUP_VARS]
-    tick.narrow = (3, "")
+    tick.narrow = (0, "sonarr")
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert [argv[-3:] for argv in tick.playbooks] == [
         ["ansible/initial_setup.yml", "--tags", "gitops_deploy"],
-        ["--frozen", "ansible-playbook", "ansible/deploy.yml"],
+        ["ansible/deploy.yml", "--tags", "sonarr"],
     ]
     assert tick.merges == [ORIGIN]
     assert receipt_applied(state) == {
         "ansible/initial_setup.yml": ("gitops_deploy",),
-        "ansible/deploy.yml": (),
+        "ansible/deploy.yml": ("sonarr",),
     }
+
+
+def test_a_mixed_range_whose_deploy_half_is_refused_applies_only_the_setup_plane(
+    gitops_deploy, tick, state
+):
+    """The setup apply still runs and is recorded; the deploy half is owed, not run."""
+    tick.declare(DECLARES_RADARR_SONARR)
+    tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml", GROUP_VARS]
+    tick.narrow = (3, "")
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert [argv[-1] for argv in tick.playbooks] == ["gitops_deploy"]
+    assert receipt_applied(state) == {"ansible/initial_setup.yml": ("gitops_deploy",)}
+    assert _owed(state) == ["radarr", "sonarr"]
+
+
+def test_a_failed_setup_apply_still_owes_the_refused_deploy_plane(
+    gitops_deploy, tick, state
+):
+    """The failure arm returns before `apply_broad_k8s`, so it records the deferral itself."""
+    tick.declare(DECLARES_RADARR_SONARR)
+    tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml", GROUP_VARS]
+    tick.narrow = (3, "radarr")
+    tick.playbook_outcomes = [RuntimeError("boom")]
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert state.hold_plane == "ansible/initial_setup.yml gitops_deploy"
+    assert _owed(state) == ["radarr"]
 
 
 def test_a_mixed_range_whose_deploy_half_fails_keeps_the_setup_apply_recorded(
@@ -150,9 +201,7 @@ def test_a_setup_only_range_plans_no_deploy_plane(gitops_deploy, tick, state):
     assert [argv[-1] for argv in tick.playbooks] == ["gitops_deploy"]
 
 
-def test_a_crashing_narrowing_still_runs_the_whole_play(
-    gitops_deploy, tick, capsys, state
-):
+def test_a_crashing_narrowing_defers_the_plane(gitops_deploy, tick, capsys, state):
     """The `# DECIDED:` marker says a crash here lands on the fallback, so prove it can.
 
     `narrow_deploy_plane` decodes a subprocess's output, so it can raise a plain ValueError
@@ -162,7 +211,7 @@ def test_a_crashing_narrowing_still_runs_the_whole_play(
     tick.paths = [GROUP_VARS]
     tick.narrow_error = ValueError("invalid start byte")
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert _playbook_argv(tick)[-1:] == ["ansible/deploy.yml"]
+    assert tick.playbooks == []
     assert tick.merges == [ORIGIN]
     assert "cannot narrow (ValueError: invalid start byte)" in capsys.readouterr().out
 
@@ -227,10 +276,10 @@ def test_the_denylist_decision_is_recorded_where_the_narrowing_reads_it(gitops_s
 
 
 # ── the render-digest shadow (#3045): logged beside the answer, never applied ──────────────
-def test_a_refused_range_logs_the_digest_shadow_and_still_runs_the_whole_play(
+def test_a_refused_range_logs_the_digest_shadow_and_defers_the_plane(
     gitops_deploy, tick, capsys, state
 ):
-    """The shadow names what a digest diff would apply; the argv is the full play regardless."""
+    """The shadow names what a digest diff would apply; the tick runs nothing regardless."""
     tick.paths = [GROUP_VARS]
     tick.narrow = (3, "")
     tick.tools = dataclasses.replace(
@@ -242,10 +291,10 @@ def test_a_refused_range_logs_the_digest_shadow_and_still_runs_the_whole_play(
         },
     )
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert _playbook_argv(tick)[-1:] == ["ansible/deploy.yml"]
+    assert tick.playbooks == []
     assert (
         "narrow shadow: render digest at 22222222 would apply radarr (current 1; "
-        "unknown: render is of another commit 2); the narrowing chose the full play"
+        "unknown: render is of another commit 2); the narrowing chose to defer the plane"
     ) in capsys.readouterr().out
 
 
@@ -267,52 +316,3 @@ def test_a_digest_diff_that_raises_leaves_the_narrowed_apply_alone(
         "narrow shadow: no digest diff (OSError: permission denied)"
         in capsys.readouterr().out
     )
-
-
-# ── the measured shadow (#3045): a full play's own release records, either side of it ──────
-def _stamped(digest, commit=ORIGIN):
-    return {
-        "commit": commit,
-        "tree_dirty": False,
-        "host": "daniel-box",
-        "manifests_digest": digest,
-        "secret_manifests": [],
-        "secret_digest": "",
-    }
-
-
-def test_a_full_play_logs_the_services_its_apply_moved(
-    gitops_deploy, tick, capsys, state
-):
-    """Only the digest that changed counts; a service the play did not re-stamp is unstamped."""
-    before = {
-        "radarr": _stamped("r1", "1" * 40),
-        "sonarr": _stamped("s1", "1" * 40),
-        "traefik": _stamped("t1", "1" * 40),
-    }
-    after = {**before, "radarr": _stamped("r2"), "sonarr": _stamped("s1")}
-    snapshots = iter([before, after])
-    tick.paths = [GROUP_VARS]
-    tick.narrow = (3, "")
-    tick.tools = dataclasses.replace(
-        tick.tools, release_records=lambda: next(snapshots)
-    )
-    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert _playbook_argv(tick)[-1:] == ["ansible/deploy.yml"]
-    assert (
-        "narrow measured: the full play at 22222222 moved radarr (moved 1; unchanged 1; "
-        "unstamped 1)"
-    ) in capsys.readouterr().out
-
-
-def test_a_narrowed_apply_reads_no_release_records(gitops_deploy, tick, capsys, state):
-    """The rejecting half: a narrowed play re-stamps only its tags, so it measures nothing."""
-
-    def unread():
-        raise AssertionError("a narrowed tick read the release records")
-
-    tick.paths = [GROUP_VARS]
-    tick.narrow = (0, "radarr,sonarr")
-    tick.tools = dataclasses.replace(tick.tools, release_records=unread)
-    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert "narrow measured" not in capsys.readouterr().out

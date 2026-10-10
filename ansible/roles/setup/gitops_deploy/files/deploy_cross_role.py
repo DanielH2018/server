@@ -83,8 +83,8 @@ K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
 
 
 # A filter plugin mapped to the setup roles whose rendered state calls one of its filters
-# (#3874). `ansible/deploy.yml` runs no setup role, so neither a narrowed deploy plane nor the
-# full play it falls back to re-renders these. `setup_roles_for` returns them, and the tick
+# (#3874). `ansible/deploy.yml` runs no setup role, so no deploy-plane apply, narrowed or
+# whole, re-renders these. `setup_roles_for` returns them, and the tick
 # applies or records each as it would its own change: `gitops_deploy` through
 # `initial_setup.yml`, and `k3s` as a `manual_plane` line, since only `k3s-bringup.yml` runs it.
 # `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.

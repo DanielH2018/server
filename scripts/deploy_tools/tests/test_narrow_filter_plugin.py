@@ -39,6 +39,18 @@ def test_a_filter_only_a_role_template_calls_narrows_to_that_role(tree: Tree):
     assert tree.narrow(*_refs(tree)) == {"sonarr"}
 
 
+def test_an_added_plugin_narrows_to_the_roles_that_call_it(tree: Tree):
+    """#4333: PR #4310 added a plugin, and the tick took that range for the whole fleet.
+
+    The narrowing named the plugin's eight callers; the fleet-wide answer came from a
+    `containers_list` edit beside it. A new plugin and its first caller land together.
+    """
+    radarr = "ansible/roles/k8s/radarr/templates/deployment.yaml.j2"
+    tree.write("ansible/filter_plugins/whisper.py", _plugin('{"whisper": shout}'))
+    tree.write(radarr, "name: {{ 'a' | whisper }}\n")
+    assert tree.narrow(*_refs(tree)) == {"radarr"}
+
+
 def test_a_filter_the_play_calls_is_flagged(tree: Tree):
     tree.write(
         "ansible/deploy.yml", "- hosts: all\n  vars:\n    p: \"{{ 'a' | shout }}\"\n"

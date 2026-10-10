@@ -9,7 +9,7 @@ invisible to the deployer, and the record is the only evidence of it this host h
 
 The render records (`roles/k8s/manifests/tasks/render_record.yml`) come from the hourly
 `render_records` producer. `render_proof` lets a render stand in for a deploy of a shared role
-(#3057), and `digest_diff` and `applied_diff` feed the deploy-plane shadow log (#3045).
+(#3057), and `digest_diff` feeds the deploy-plane shadow log (#3045).
 
 Its own module rather than a section of `deploy_io.py`, which is at its length ceiling and
 whose allowlist entry only ever falls.
@@ -158,58 +158,4 @@ def digest_diff(
             _record(service, release_dir), _record(service, render_dir), ref
         )
         out.setdefault(f"{verdict}: {why}" if why else verdict, []).append(service)
-    return out
-
-
-# The three answers `applied_diff` gives for one service.
-MOVED = "moved"
-UNCHANGED = "unchanged"
-UNSTAMPED = "unstamped"
-
-
-def release_records(release_dir: str = K8S_RELEASE_DIR) -> dict[str, dict]:
-    """Every service's release record, keyed by service, for a before/after comparison."""
-    out = {}
-    for path in pathlib.Path(release_dir).glob("*.json"):
-        if path.name.endswith(".previous.json"):
-            continue
-        record = _record(path.stem, release_dir)
-        if record is not None:
-            out[path.stem] = record
-    return out
-
-
-def _digests(record: dict | None) -> tuple | None:
-    if record is None:
-        return None
-    return (
-        record.get("manifests_digest"),
-        record.get("secret_manifests"),
-        record.get("secret_digest"),
-    )
-
-
-def applied_diff(
-    before: dict[str, dict], after: dict[str, dict], ref: str
-) -> dict[str, list[str]]:
-    """Which services an apply of `ref` changed, read from the release records either side.
-
-    `release_stamp.yml` hashes an applied service through the same `release_digest.yml` a
-    render record uses, so a record stamped at `ref` is as good as a render of `ref`. That
-    makes a full play its own render, at no extra cost, for every service it stamped (#3045).
-    MOVED is what a digest diff at `ref` would have applied: digests that differ from the
-    record before, or no record before. UNSTAMPED is a service with no usable record at `ref`
-    afterwards — one the play did not reach, or whose record `_incomparable` would refuse.
-    Each value is a sorted service list; a key with no services is absent.
-    """
-    out: dict[str, list[str]] = {}
-    for service in sorted(set(before) | set(after)):
-        record = after.get(service)
-        if record is None or _incomparable(record, record, ref):
-            verdict = UNSTAMPED
-        elif _digests(record) == _digests(before.get(service)):
-            verdict = UNCHANGED
-        else:
-            verdict = MOVED
-        out.setdefault(verdict, []).append(service)
     return out

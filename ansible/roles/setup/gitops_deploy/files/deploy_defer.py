@@ -47,6 +47,7 @@ import deploy_narrow
 from deploy_changes import (
     ChangeSet,
     is_routed,
+    keys_naming_no_role,
     role_of,
     routing_failed,
     services_from_changed_paths,
@@ -57,7 +58,6 @@ from deploy_changes import (
     tick_applies_setup_role,
 )
 from deploy_config import Config, log
-from deploy_setup_roles import keys_naming_no_role
 from deploy_remediation import (
     broad_park_reason,
     broad_remediation,

@@ -37,15 +37,37 @@ def covered_by_plane(plans, bumps: set[str]) -> set[str]:
     """The bumps a deploy-plane plan in `plans` applies on its own.
 
     `narrow_broad._changed_half` builds its ChangeSet from the raw paths, so a bump's tag
-    lands in the narrowed list whenever the range also carries a deploy-plane path, and a
-    refused narrowing runs the whole play. Deploying those bumps again re-took the Longhorn
-    snapshot of every claim they declare and spent the shared budget twice. A plan that
-    applies nothing (`narrowed-to-nothing`) covers nothing.
+    lands in the narrowed list whenever the range also carries a deploy-plane path.
+    Deploying those bumps again re-took the Longhorn snapshot of every claim they declare
+    and spent the shared budget twice. A plan that applies nothing (`narrowed-to-nothing`, or
+    a refused narrowing deferred since #4333) covers nothing.
     """
     for broad in plans:
         if broad.playbook == DEPLOY_PLAYBOOK and broad.apply:
-            return set(bumps) if not broad.tags else set(bumps) & set(broad.tags)
+            return set(bumps) & set(broad.tags)
     return set()
+
+
+def fold_deferred(cs: ChangeSet, plans, declared: set[str]) -> ChangeSet:
+    """`cs` with the services a deferred deploy plane owes added to `cs.k8s` (#4333).
+
+    A refused narrowing applies nothing, so what it may reach joins the k8s roles this tick
+    merged and did not apply, and `alert_and_record_deferred` records and pages them as one
+    set. The refusal's own tags when it named them, else every declared service, because
+    the derivation could rule none out. Intersected with `declared`, the entries this host
+    deploys: a Pi service has no deploy here to discharge its line.
+    """
+    owed: set[str] = set()
+    for broad in plans:
+        if broad.deferred:
+            owed |= (set(broad.owed) or set(declared)) & declared
+    if not owed:
+        return cs
+    log(
+        f"{len(owed)} services deferred to k8s_unapplied: the deploy plane could not be "
+        "narrowed, and the whole play does not fit the tick's budget"
+    )
+    return replace(cs, k8s=cs.k8s | owed)
 
 
 def apply_broad_k8s(
@@ -88,23 +110,18 @@ def apply_broad_k8s(
     already red.
     """
     origin = target.origin
+    cs = fold_deferred(cs, plans, plan.k8s_services)
     bumps = cs.k8s_deploy - covered_by_plane(plans, cs.k8s_deploy)
     # A k8s role the deploy plane APPLIED is not a deferred change, whatever the post would
     # otherwise say (#2453). `narrow_broad` maps a role's own changed path to its tag, so the
-    # narrowed list names it whenever the range also carries a deploy-plane path, and a refused
-    # narrowing runs the whole play — either way the probe that measured this ran `deploy.yml
-    # --tags radarr,sonarr` and then posted "fast-forwarded but not applied" for the same
-    # roles, printing that same command as the remedy. Every plan here succeeded: this runs
-    # after the loop, whose failure and contention arms both return.
+    # narrowed list names it whenever the range also carries a deploy-plane path — the probe
+    # that measured this ran `deploy.yml --tags radarr,sonarr` and then posted
+    # "fast-forwarded but not applied" for the same roles, printing that same command as the
+    # remedy. Every plan here succeeded: this runs after the loop, whose failure and
+    # contention arms both return.
     #
-    # INTERSECTED WITH THE DECLARED ENTRIES, which `covered_by_plane` alone does not do. It
-    # returns the WHOLE set on a refused narrowing, and that is sound for `k8s_deploy` (a
-    # promoted bump is declared by construction) but not for `cs.k8s`, which `role_of`
-    # fills from role directories in the tree. `deploy.yml` applies no role this host does not
-    # declare — the same fact `k8s_remediation` prescribes a full deploy for — so subtracting
-    # one would page nowhere at all. A shared role a declared role calls IS applied by a full
-    # run and still stays in the post: that is the pre-existing false "not applied", and it is
-    # the safe side of the two.
+    # INTERSECTED WITH THE DECLARED ENTRIES: `deploy.yml` applies no role this host does not
+    # declare, so a role `role_of` found in the tree but no entry names stays in the post.
     plane_applied = covered_by_plane(plans, cs.k8s) & plan.k8s_services
     if plane_applied:
         log(
