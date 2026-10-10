@@ -58,10 +58,11 @@ def _tracked(prefix: str) -> list[pathlib.PurePosixPath]:
 
 @pytest.mark.parametrize("subcommand", ["backups", "snapshots"])
 @pytest.mark.parametrize("where", ["repo-root", "elsewhere"])
-def test_subcommand_help_exits_zero(subcommand, where, tmp_path):
+@pytest.mark.parametrize("help_flag", ["--help", "-h"])
+def test_subcommand_help_exits_zero(subcommand, where, help_flag, tmp_path):
     cwd = REPO if where == "repo-root" else tmp_path
     proc = subprocess.run(
-        [sys.executable, str(REAP_ENTRY), subcommand, "--help"],
+        [sys.executable, str(REAP_ENTRY), subcommand, help_flag],
         cwd=cwd,
         capture_output=True,
         text=True,
@@ -76,13 +77,13 @@ def test_subcommand_help_exits_zero(subcommand, where, tmp_path):
 
 @pytest.mark.parametrize("flags", BACKUPS_FLAG_SETS, ids=" ".join)
 def test_backups_subcommand_accepts_every_old_flag(flags, tmp_path):
-    proc, _calls = _run(
+    proc, calls = _run(
         REAP_ENTRY, ["backups", *flags], {"volumes": []}, tmp_path, admin_readable=True
     )
     assert proc.returncode != 2, proc.stderr
     assert "unknown argument" not in proc.stderr, proc.stderr
     # Parsing succeeded only if the run went on to read the cluster.
-    assert "can't open file" not in proc.stderr, proc.stderr
+    assert any(arg == "volumes.longhorn.io" for c in calls for arg in c), proc.stderr
 
 
 def test_snapshots_subcommand_accepts_apply(tmp_path):
