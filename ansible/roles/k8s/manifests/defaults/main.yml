@@ -34,7 +34,7 @@ manifests_render_record: false
 manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
 
 # Live prune (#1076, #3388). `kubectl apply -f <dir>/` only adds/updates, so a manifest
-# dropped from manifests_files leaves its live object running — the "Prune staged manifests
+# dropped from the role's file list leaves its live object running — the "Prune staged manifests
 # dropped from the file lists" task only deletes the STAGED FILE, never the live object.
 # manifest-prune-check.sh pages about that gap after the fact; this is the in-place fix.
 #
@@ -134,9 +134,11 @@ manifests_restart_triggers_default: [config, secret, image]
 # role, so `ansible/filter_plugins/toposort.py` derives the deploy's traefik ordering edge
 # from the entry's `hostname`.
 #
-# The render task below resolves the source per file, so the fallback costs nothing for a
-# role that ships its own template, and the prune keep-set is unchanged: the caller still
-# names `service.yaml` in `manifests_files`, which is what the prune and the digest both read.
+# The render task resolves the source per file, so the fallback costs nothing for a role that
+# ships its own template. The basename still has to be in the role's resolved file list, which
+# is what the prune and the digest both read: the derivation adds `service.yaml` for an entry
+# carrying a `port` and `ingressroute.yaml` for one carrying a `hostname`, unless the include
+# excludes it ("Resolve the manifest file lists" in tasks/main.yml).
 #
 # `scripts/lib/k8s_roles.py:SHARED_MANIFEST_DEFAULTS` mirrors this map so the offline render
 # harnesses render what a deploy renders; `ansible/tests/k8s/test_shared_manifest_defaults.py`

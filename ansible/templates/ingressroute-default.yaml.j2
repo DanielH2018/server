@@ -1,6 +1,7 @@
 {# Not a macro — a whole manifest. `k8s/manifests` renders this file as `ingressroute.yaml`
-   for every role that names `ingressroute.yaml` in its `manifests_files` and ships no
-   `templates/ingressroute.yaml.j2` of its own (`manifests_shared_defaults` in that role's
+   for every role that resolves `ingressroute.yaml` into its `manifests_files` and ships no
+   `templates/ingressroute.yaml.j2` of its own. A role resolves it when its containers_list
+   entry carries a `hostname` and its include does not exclude it (`manifests_shared_defaults` in that role's
    defaults). This file is the wrapper around the `ingressroute()` macro below that 16
    roles' IngressRoute templates would otherwise repeat byte for byte.
 

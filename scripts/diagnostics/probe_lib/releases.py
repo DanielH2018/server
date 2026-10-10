@@ -271,8 +271,9 @@ def _is_real_change(path, deploy_time_roles=frozenset()):
     true of a `tasks/` file inside a shared role that DOES supply bytes -- but that role sits in
     every service's `role_paths`, so `volume-claim`'s staging-directory move (0b86a7d7) marked
     all 53 services stale and parked `Release Staleness Drift` DOWN with no deploy tag able to
-    clear it. The narrowing is scoped to shared roles: a SERVICE's own `tasks/main.yml` names
-    its `manifests_files`, so a change there does move its bytes and must still count. The
+    clear it. The narrowing is scoped to shared roles: a SERVICE's own `tasks/main.yml` passes
+    its render include's vars (an exclusion, a file list where it keeps one), so a change there
+    does move its bytes and must still count. The
     renderer's rollout wait (`drain.yml`) runs, renders nothing.
     """
     if path.endswith(".md") or _is_test_only_path(path):

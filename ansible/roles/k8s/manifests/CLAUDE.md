@@ -18,11 +18,14 @@ read it when you change one.
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:                                   # manifests_service defaults to the role's name
-    manifests_files: [deployment.yaml, service.yaml, ingressroute.yaml]
-    manifests_secret_files: [secret.yaml] # rendered 0600 under no_log
     manifests_rollout: <deployment name>  # '' skips the wait entirely
     manifests_rollout_kind: deploy        # or 'daemonset'; default 'deploy'
 ```
+
+**The file lists are derived** (#3662): every top-level `templates/*.yaml.j2` but a
+`*-job.yaml`, plus the shared default (below) an entry's `port` or `hostname` earns. A name
+saying `secret` renders 0600 under `no_log`. `manifests_exclude_files` drops one, reason at the
+include; a passed list wins whole.
 
 Optional and empty by default: `manifests_extra_rollouts` (`{name, image}` per extra Deployment
 this role should roll), `manifests_self_rollouts` (`{name, kind, image?, namespace?,
@@ -37,15 +40,13 @@ deferred pair below.
   directory, inside the prune keep-set, the digest and the dry run. A role that snapshots applies
   them before the snapshot; any other gets them from the directory apply, after its
   `00-namespace.yaml`. This role declares no default for it, because its own default would
-  outrank the caller's. It replaced `k8s/volume-claim` (#3387).
+  outrank the caller's (#3387).
 
-- **Templates stay in the caller's role**, at `roles/k8s/<service>/templates/<name>.j2`, and the
-  `src` is anchored to `playbook_dir`: a relative `src` resolves against this role, and so does a
-  `{{ role_path }}` passed through `vars:`.
-- **A basename with no template in the caller's role renders from a SHARED default.**
-  `manifests_shared_defaults` covers `service.yaml` and `ingressroute.yaml`, read off the role's
-  `containers_list` entry; the basename still goes in `manifests_files`, the role's own template
-  wins, and dropping `hostname` costs a routed entry its traefik ordering edge.
+- **Templates stay in the caller's role**, and `src` is anchored to `playbook_dir`: a relative
+  `src`, or a `{{ role_path }}` passed through `vars:`, resolves against this role.
+- **`manifests_shared_defaults` renders `service.yaml` and `ingressroute.yaml`** off the
+  `containers_list` entry for a role with no own template. Dropping `hostname` costs a routed
+  entry its route and its traefik ordering edge.
 - **A caller may defer the APPLY of some manifests and keep the render.**
   `manifests_deferred_files` plus `manifests_deferred_dir_name` render, prune and digest them
   into a reserved sibling directory the caller applies itself, gating on
@@ -62,14 +63,14 @@ deferred pair below.
   whose manifests were *accepted*, not one whose pods are up. Every task in `drain.yml` is
   `tags: [always]`: a gitops-deploy run filters `[deploy]` out, which left the drain waiting
   on nothing behind a `failed=0` recap.
-- **Dropping a name from `manifests_files` leaves the live object serving** only where a
+- **Dropping a manifest from the file list leaves the live object serving** only where a
   role passes `manifests_prune: false`. An armed role renders through
   `ansible/templates/role-labelled.yaml.j2`, which labels every document, since the `-l`
   selector also filters the apply. Pruned kinds:
   `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`. It applies in
   `manifests_prune_namespace` (default `k8s_namespace`) only.
-- **The prune owns the whole directory, so nothing else may stage a file there**; an unnamed
-  file is deleted on that role's next deploy. Write it to a reserved sibling directory
+- **The prune owns the whole directory, so nothing else may stage a file there**; a file
+  outside the resolved lists is deleted on that role's next deploy. Write it to a reserved sibling directory
   (`<service>-netpol`, `<service>-claims`, `registry-jobs`) no `manifests_service` claims.
 - **A restart needs the render AND the apply both changed (#3115), and is skipped where the
   apply rolled the workload itself.** Rendered bytes move on a comment edit `kubectl apply` calls

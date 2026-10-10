@@ -31,9 +31,9 @@ directory name is reserved the way `<service>-netpol` is, by
 ## Where the two shared default templates came from
 
 `manifests_shared_defaults` (this role's `defaults/main.yml`) maps a manifest basename to a
-template under `ansible/templates/`, and the render task uses it when the caller names the
-basename in `manifests_files` and ships no `templates/<basename>.j2` of its own. There are two
-entries.
+template under `ansible/templates/`, and the render task uses it when the basename is in the
+role's resolved file list and the role ships no `templates/<basename>.j2` of its own. There are
+two entries.
 
 - `service.yaml`: 25 roles' Service templates were byte-identical wrappers around the
   `service()` macro, so they were deleted and `ansible/templates/service-default.yaml.j2`
@@ -49,6 +49,51 @@ deploy's traefik ordering edge used to be derived from.
 dropping `hostname` from a routed entry now costs the role its traefik edge as well as its
 route's host label.
 
+## How a role's file lists are derived (#3662)
+
+Until 2026-10-10, 53 of the 57 including roles listed `manifests_files` and
+`manifests_secret_files` by hand. The lists restated two things the tree already said: which
+manifest templates the role ships, and whether its `containers_list` entry earns the shared
+Service and route. The "Resolve the manifest file lists" task now derives both for a role that
+passes neither:
+
+- **The secret files** are the role's own top-level `templates/*.yaml.j2` whose basename says
+  `secret` (`secret.yaml`, `config-secret.yaml`, `secret-exportarr.yaml`). Every secret template
+  in the tree was already named that way. A template that renders a Secret under any other name
+  would stage 0644 and outside `no_log`, so
+  `ansible/tests/k8s/test_derived_manifest_files.py` refuses one unless the role lists its secret
+  files itself. uptime-kuma does, for `static-monitors.yaml`.
+- **The files** are the rest of those templates plus a shared `service.yaml` for an entry with a
+  `port` and a shared `ingressroute.yaml` for one with a `hostname`. The list leaves out:
+  - a one-off `*-job.yaml` (the registry's self-test and GC Jobs, the netpol probes), which the
+    role stages in a reserved directory and applies itself;
+  - the role's `manifests_deferred_files`;
+  - whatever its include names in `manifests_exclude_files`.
+
+Six roles carry an exclusion, and each names its reason at the include. `pihole` excludes its
+macro-only `pihole-deployment.yaml`. `gpu-exporter`, `longhorn-ui`, `observability` and
+`scrutiny` exclude the shared Service their `port` would earn. `livesync` excludes the shared
+route its `hostname` would earn.
+
+A role still passes its own list where the list depends on role vars: authelia, navidrome and
+traefik build theirs with Jinja. A passed list wins whole, and the derivation does not touch it.
+
+The derived lists are stored as `manifests_files_resolved` and `manifests_secret_files_resolved`,
+and every task in the role reads those names. They are never stored as `manifests_files` itself.
+A `set_fact` is host-scoped, so a derived `manifests_files` would survive into the next role's
+include, and its `is defined` check would then report that the caller passed a list.
+
+The order of the list never mattered and the derivation sorts it. `kubectl apply -f <dir>/`
+applies in filename order whatever the list says, and `manifests_digest` hashes a `dictsort`.
+The proof the refactor moved no bytes was a `--dry-run` render of all 56 services before and
+after, with `manifests_render_record_dir` pointed outside `/var/lib/homelab`. It compared each
+record's `manifests_digest` and `secret_digest`.
+
+`scripts/lib/k8s_roles.py:resolved_manifest_files` is the offline harnesses' copy of the rule.
+`ansible/tests/k8s/test_derived_manifest_files.py::test_the_deploy_and_the_harnesses_derive_the_same_lists`
+evaluates the shipped task through Ansible's `Templar` and requires both copies to give the same
+answer for every role.
+
 ## Why `manifests_rollout_kind` rejects kubectl's own aliases
 
 `ds` and `DaemonSet` are refused by an assert, because three consumers match the literal string
@@ -59,16 +104,17 @@ reading a Deployment's `jsonpath` off a DaemonSet — `0 == 0`, passing vacuousl
 
 ## Retirement, the prune, and the directory's ownership
 
-**Dropping a name from `manifests_files` is only half a retirement, for a role that opts out of
-`manifests_prune`** (authelia and nut). `kubectl apply -f <dir>/` sweeps the whole directory, so the role
+**Dropping a manifest from a role's file list is only half a retirement, for a role that opts
+out of `manifests_prune`** (authelia and nut). For a role whose list is derived, deleting the
+template or excluding it drops it. `kubectl apply -f <dir>/` sweeps the whole directory, so the role
 deletes the staged file for you — but the **live object keeps serving**. It needs one hand
 `kubectl delete`, which the `manifest-prune-check.sh` host cron flags. Bit for real on
 2026-08-13: a retired IngressRoute deleted live at 18:51 was re-created by the 18:53 deploy from
 its stale staged file.
 
 **The prune owns the whole directory, so nothing else may stage a file there.** A file another
-role or another task writes into `/etc/rancher/k3s/manifests/<service>/` without the caller
-naming it in `manifests_files`/`manifests_secret_files` is deleted on the next deploy of that
+role or another task writes into `/etc/rancher/k3s/manifests/<service>/` without it being in
+the caller's resolved `manifests_files`/`manifests_secret_files` is deleted on the next deploy of that
 role — a permanently `changed` prune item on an otherwise idempotent run. Write it to a sibling
 directory instead, the way `headlamp-netpol`, `prowlarr-netpol`, `n8n-netpol` (#1668),
 `registry-jobs` (#1669), `media-volume-probe`, `netpol-baseline-probe*`, `build-<image>`
