@@ -62,7 +62,7 @@ import sys as _sys
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fanout_lib.brief import _fence
+from fanout_lib.brief import fence_for
 from fanout_lib.red_tests import append_only, red_by_absence
 
 from fanout_lib.hardened_runs import (
@@ -431,7 +431,7 @@ Report each stated behaviour and the node ids of the tests that check it.
 def red_section(red: str, gate: Gate) -> str:
     """The brief section that hands the implementer the red commit."""
     nodes = "\n".join(gate.nodes)
-    fence = _fence(nodes)
+    fence = fence_for(nodes)
     return f"""## Red tests
 A separate session wrote failing tests for these issues from the issue text alone, committed
 as {red} on this branch. A gate proved they fail on the code as it stands. Your change must

@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib.review import Pipeline
 from fanout_lib.target import resolve
-from fanout_lib.transport import _local_host
+from fanout_lib.transport import this_host
 
 
 def main(argv=None) -> int:
@@ -37,7 +37,7 @@ def main(argv=None) -> int:
     pipeline = Pipeline(
         Path.cwd(),
         args.batch,
-        _local_host(),
+        this_host(),
         resolve(args.repo),
         sys.stdin.read(),
         red_green=args.red_green,

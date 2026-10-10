@@ -88,7 +88,7 @@ from fanout_lib.transport import (
     HOSTS,
     REPO,
     Tools,
-    _local_host,
+    this_host,
     error_text,
     read_host,
     registered_keys,
@@ -178,7 +178,7 @@ def cmd_launch(args, tools: Tools) -> int:
         return 1
     try:
         target, args.host = for_launch(
-            args.repo, args.host, _local_host(), tools.default_ref
+            args.repo, args.host, this_host(), tools.default_ref
         )
     except ValueError as exc:
         print(f"launch: {exc}", file=sys.stderr)
