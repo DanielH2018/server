@@ -88,6 +88,18 @@ def test_new_tests_that_fail_on_the_base_pass_the_gate_and_old_nodes_are_left_ou
     assert (repo / "tests/test_mod.py").read_text() == OLD_TEST + NEW_TEST
 
 
+def test_the_gate_names_a_red_test_that_failed_only_on_a_missing_name(tmp_path):
+    # A node id long enough that a `-q` summary cuts the failure text to "ImportE..." (#4023).
+    long_name = "test_triple_of_one_is_three_with_a_name_long_enough_to_be_cut_short"
+    absent = f"\n\ndef {long_name}():\n    from mod import triple\n\n    assert triple(1) == 3\n"
+    repo, base, red = _repo(
+        tmp_path, **{"tests/test_mod.py": OLD_TEST + NEW_TEST + absent}
+    )
+    gate = red_gate(run, repo, base, red)
+    assert gate.passed, gate.reason
+    assert gate.absent == [f"tests/test_mod.py::{long_name}"]
+
+
 def test_a_module_level_import_of_a_missing_module_is_refused(tmp_path):
     missing = (
         "from not_written_yet import thing\n\n\ndef test_it():\n    assert thing()\n"
