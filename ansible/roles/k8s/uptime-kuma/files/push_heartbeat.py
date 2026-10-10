@@ -7,22 +7,24 @@ silence. Both healthy paths beat: a run that finds nothing to change is the comm
 
 Written as a file rather than an inline `python3 -c` so it can be read and linted like the
 rest of the role's code. Stdlib only: this runs in the same python:3.14-alpine image the
-render stage uses, with no wheels installed.
+render stage uses, with no wheels installed. The push itself is setup/common's `kuma_push.py`,
+staged beside this file in the same ConfigMap, so the beat gets the host pushers' retry
+through an uptime-kuma rollout's 404 window and their message cap (#3745). The retry adds at
+most 90s to a run whose Kuma is down, which the job deadline's margin over two dump budgets
+absorbs on the first pod; only a second pod's beat can meet the deadline, and only while Kuma
+is down, when the tile is already going DOWN.
 """
 
 from __future__ import annotations
 
 import os
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
 
-TIMEOUT = 10
+from kuma_push import kuma_push
 
 
 def main() -> int:
-    base = os.environ.get("KUMA_URL", "").rstrip("/")
+    base = os.environ.get("KUMA_URL", "")
     token = os.environ.get("PUSH_TOKEN", "")
     message = os.environ.get("PUSH_MESSAGE", "status page sync ok")
 
@@ -33,17 +35,13 @@ def main() -> int:
         print("no push token configured; skipping the heartbeat")
         return 0
 
-    query = urllib.parse.urlencode({"status": "up", "msg": message})
-    url = f"{base}/api/push/{token}?{query}"
-
-    try:
-        with urllib.request.urlopen(url, timeout=TIMEOUT) as response:
-            print(f"heartbeat pushed ({response.status})")
-    except (urllib.error.URLError, OSError) as exc:
-        # A missed beat is already an alert — the tile's watchdog reports it. Failing the Job
-        # on top would turn one Kuma blip into a second, louder signal about the same thing.
-        print(f"heartbeat failed: {exc}", file=sys.stderr)
-
+    # A missed beat is already an alert — the tile's watchdog reports it. Failing the Job on
+    # top would turn one Kuma blip into a second, louder signal about the same thing, so a lost
+    # push exits 0 too.
+    if kuma_push(
+        "up", message, base, token, log=lambda line: print(line, file=sys.stderr)
+    ):
+        print("heartbeat pushed")
     return 0
 
 

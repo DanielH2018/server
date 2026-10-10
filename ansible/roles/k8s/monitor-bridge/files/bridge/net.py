@@ -366,6 +366,12 @@ def push(
         msg: The status message to attach to the push.
         opener: Sends the GET that carries the push. None is the real `urlopen`.
     """
+    # DECIDED: one attempt, not setup/common's `kuma_push` with its three attempts 30s apart
+    # (#3745). That retry suits a caller with one push per run, as autofix-bridge and the
+    # status-page sync are. This loop pushes one tile per check, every cycle, in sequence, so
+    # through an uptime-kuma rollout's 404 window each push would wait 60s and the cycle would
+    # stall for most of an hour. A lost push here is retried by the next cycle, 300s later, and
+    # `cap_push_msg` keeps the ` (N cycles)` suffix that `kuma_push`'s cap does not.
     if not token:
         bridge.common.log("WARN: no push token set; skipping push:", msg)
         return

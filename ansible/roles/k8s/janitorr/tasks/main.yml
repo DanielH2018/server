@@ -83,6 +83,8 @@
       # include's `host_lib_dir` as written, so a var here reads to it as the wrong directory.
       - live: /opt/janitorr-health/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py
+      - live: /opt/janitorr-health/kuma_push.py
+        src: ansible/roles/setup/common/files/kuma_push.py
       - live: /opt/janitorr-health/janitorr_health.py
         src: ansible/roles/k8s/janitorr/files/janitorr_health.py
       - live: /opt/janitorr-health/janitorr_health_logic.py

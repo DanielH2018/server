@@ -184,6 +184,15 @@ def test_kuma_push_retries_a_rollout_404_and_delivers():
     assert query["status"] == ["up"] and query["msg"] == ["fine"]
 
 
+def test_kuma_push_to_a_base_url_keeps_its_scheme_and_port():
+    """A pod pushes to the in-cluster Service over plain http, not through Traefik (#3745)."""
+    opener, seen = _opener("ok")
+    assert host_lib.kuma_push(
+        "up", "fine", "http://uptime-kuma.homelab:3001/", "T", opener=opener
+    )
+    assert seen[0].startswith("http://uptime-kuma.homelab:3001/api/push/T?")
+
+
 def test_kuma_push_stops_on_a_rejected_token_without_retrying():
     opener, seen = _opener(_http_error(401, "application/json"))
     sleeps, logs = [], []

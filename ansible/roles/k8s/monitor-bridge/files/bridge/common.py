@@ -50,8 +50,9 @@ import time
 # HTTP 400 (`{"embeds":["0"]}`), and Kuma does not retry, so the transition reaches nobody.
 # release-staleness-check's fleet-wide list did exactly that on 2026-09-17 and 2026-09-18
 # (#2013). 900 leaves room for what Kuma adds inside the field. The same cap lives in
-# `kuma-push-lib.sh` and host_lib's `cap_kuma_msg` for the host pushers; this one is the
-# boundary for every push from both bridges.
+# `kuma-push-lib.sh` and setup/common's `kuma_push.cap_kuma_msg`, which the host pushers,
+# autofix-bridge and the status-page sync push through; this one is the boundary for
+# monitor-bridge's own pushes (`bridge.net.push` says why they stay separate).
 PUSH_MSG_MAX = 900
 _CYCLES_SUFFIX_RE = re.compile(r"\s*\(\d+ cycles?\)\s*$")
 
