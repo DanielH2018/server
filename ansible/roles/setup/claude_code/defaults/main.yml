@@ -392,6 +392,8 @@ claude_code_agent_node_download_dir: /var/cache/claude-agent-node
 # is also true. False on either removes the rule, the unit and the approval list; a landing
 # already running finishes.
 claude_code_lander_enabled: false
+# These three are pinned again as block vars in tasks/lander.yml, which wins over any inventory
+# override; the values here are what the validator renders the unit with.
 # The checkout land.sh runs from: the deployer's primary, which only ever fast-forwards to
 # master, so the lander runs the land.sh that master holds and never a branch's copy.
 claude_code_lander_checkout: "/home/{{ sys_user }}/server"
@@ -402,37 +404,6 @@ claude_code_lander_branch_prefix: "worktree-{{ claude_code_agent_worktree_prefix
 # The operator's GitHub login. Its approval of a PR's head SHA lifts the approval-path refusal
 # below, so the agent can land a PR the operator has reviewed. Never the agent's own login.
 claude_code_lander_approver: DanielH2018
-# Paths that widen the agent's own authority. land.sh refuses an agent PR that changes, adds,
-# deletes or renames out of a path under one of these prefixes, unless the approver above has
-# approved its head. Plain prefixes, so `scripts/deploy_tools/land` covers land.sh, land.py and
-# land_lib/.
-# The modules the landing process imports from scripts/lib/ and elsewhere are not listed here.
-# The policy derives them at landing time from what it has loaded (land_lib/policy.py,
-# gate_hits), so this list holds only what no import walk can see.
-claude_code_lander_approval_paths:
-  # This role, which defines the agent user, its token, this list and the lander itself.
-  - ansible/roles/setup/claude_code/
-  # The unattended agent and its own lander.
-  - ansible/roles/setup/renovate_agent/
-  # The deployer, and the drift check that holds the rulesets to their declared shape.
-  - ansible/roles/setup/gitops_deploy/
-  # What builds an agent user, and the deployer's host helpers.
-  - ansible/roles/setup/common/tasks/agent_user.yml
-  - ansible/roles/setup/common/files/host_lib.py
-  # sudo, ssh and the operator's own login.
-  - ansible/roles/setup/initial_setup/tasks/access.yml
-  # Every switch above lives in host_vars.
-  - ansible/inventory/
-  # The secrets and who can decrypt them.
-  - ansible/.sops.yaml
-  - ansible/vars/secrets.yml
-  # CI, which decides what "green" means for the merge.
-  - .github/
-  # The landing policy and the code that runs it.
-  - scripts/deploy_tools/land
-  # The interpreter and packages `uv run` syncs before land.py starts. A package can run code
-  # at interpreter start through a .pth file, before any policy check.
-  - pyproject.toml
-  - uv.lock
-  - uv.toml
-  - .python-version
+# The approval list (the paths an agent PR cannot land without the approver above) is literal
+# in templates/claude-land-approval-paths.j2, not a variable here, so the inventory cannot
+# override it. That template has the floor and the reason for each entry.

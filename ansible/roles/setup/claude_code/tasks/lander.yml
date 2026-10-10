@@ -1,0 +1,80 @@
+---
+# The agent's lander. claude-land@<n>.service lands one of the agent's PRs as {{ sys_user }},
+# under land.sh's landing policy. See defaults/main.yml. The approval list and the unit go in
+# before the rule, so the agent cannot start a landing that would read neither. Imported from
+# main.yml.
+#
+# DECIDED: the lander's settings are pinned as block vars here, on top of their defaults.
+# Block vars outrank host_vars and group_vars, so an agent PR that changes only the inventory
+# cannot point the unit at the agent's own clone or name another approver. The inventory is
+# off the approval list (docs/claude-agent-user.md, "The approval floor"), and this file is on
+# it, so these values change only with the operator's approval.
+# ansible/tests/setup/test_claude_lander.py holds them equal to the defaults the validator
+# renders with.
+
+- name: Install the lander under its pinned settings
+  vars:
+    claude_code_lander_checkout: "/home/{{ sys_user }}/server"
+    claude_code_lander_branch_prefix: "worktree-{{ claude_code_agent_worktree_prefix }}+"
+    claude_code_lander_approver: DanielH2018
+  block:
+    - name: Create the lander's config directory
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: /etc/claude-land
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_lander_enabled
+
+    - name: Write the paths an agent PR cannot land without the operator
+      tags: [claude_code]
+      ansible.builtin.template:
+        src: claude-land-approval-paths.j2
+        dest: /etc/claude-land/approval-paths
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_lander_enabled
+
+    - name: Install the lander unit
+      tags: [claude_code]
+      ansible.builtin.template:
+        src: claude-land@.service.j2
+        dest: /etc/systemd/system/claude-land@.service
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_lander_enabled
+      notify: Reload systemd
+
+    - name: Let the agent user start a landing and nothing else (polkit)
+      tags: [claude_code]
+      ansible.builtin.template:
+        src: 50-claude-land.rules.j2
+        dest: /etc/polkit-1/rules.d/50-claude-land.rules
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+      when: claude_code_agent_user_enabled and claude_code_lander_enabled
+      # No handler: polkitd watches rules.d and reloads a changed rule on its own.
+
+    # The way out, when either switch is off. The rule goes first, so the agent loses the start
+    # before anything else changes. Removing the unit file does not stop a landing already running.
+    - name: Remove the lander when the agent user or the lander is switched off
+      tags: [claude_code]
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/polkit-1/rules.d/50-claude-land.rules
+        - /etc/systemd/system/claude-land@.service
+        - /etc/claude-land
+      become: true
+      when: not (claude_code_agent_user_enabled and claude_code_lander_enabled)
+      notify: Reload systemd

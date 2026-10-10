@@ -202,21 +202,38 @@ It landed as four PRs, all deployed on daniel-box on 2026-10-08:
   convenience, not a boundary: an agent that skips it has no privileges to land with. `cc-wait`
   is copied to the agent the way `claude_guard` is.
 
-The approval list holds the paths that widen the agent's own authority.
-`claude_code_lander_approval_paths` in `ansible/roles/setup/claude_code/defaults/main.yml` is the
-source of truth for the rendered list, with a reason beside each entry. It holds:
+### The approval floor
 
-- `ansible/roles/setup/claude_code/`, `ansible/roles/setup/renovate_agent/` and
-  `ansible/roles/setup/gitops_deploy/`
-- `ansible/roles/setup/common/tasks/agent_user.yml` and
-  `ansible/roles/setup/common/files/host_lib.py`
-- `ansible/roles/setup/initial_setup/tasks/access.yml`
-- `ansible/inventory/`, `ansible/.sops.yaml` and `ansible/vars/secrets.yml`
-- `.github/`
+The approval list is a floor (operator decision, 2026-10-10). It keeps the explicit grant
+points and the gate itself. Before that date it also held the agent's own roles
+(`claude_code`, `renovate_agent`), the deployer (`gitops_deploy`), `agent_user.yml`,
+`host_lib.py` and `ansible/inventory/`. A PR changing those now lands without the operator.
+
+`ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2` is the source of
+truth, with a reason beside each entry. It holds:
+
+- the lander itself: `tasks/lander.yml`, the list template, the unit template and the polkit
+  rule template, all under `ansible/roles/setup/claude_code/`
 - `scripts/deploy_tools/land`, a prefix that covers `land.sh`, `land.py`, `land_*.py` and
   `land_lib/`
 - `pyproject.toml`, `uv.lock`, `uv.toml` and `.python-version`, which set the interpreter and
   the packages `uv run` syncs before `land.py` starts
+- `.github/`
+- `ansible/roles/setup/initial_setup/tasks/access.yml`, which holds sudo, ssh and the
+  operator's login
+- `ansible/.sops.yaml` and `ansible/vars/secrets.yml`
+
+Two choices keep the floor from being bypassed through the inventory, now that the inventory
+is off the list:
+
+- The list is literal in the template, not a variable.
+- `tasks/lander.yml` pins the unit's checkout, branch prefix and approver as block vars, which
+  outrank `host_vars` and `group_vars`.
+
+**The floor is not a barrier to root.** The deployer applies any setup-role change as root, so
+a task added to an unlisted role reaches root without approval. That was also true of the wider
+list, which never named every setup role. A true root barrier would put
+`ansible/roles/setup/` itself on the list.
 
 The list does not name the modules the landing process imports, such as `scripts/lib/` and the
 deployer's helpers. The policy derives that set when it runs, from the modules it has loaded,
