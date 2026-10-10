@@ -24,7 +24,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import status as status_mod
-from fanout_lib.clean import read_clean_result
+from fanout_lib.clean import busy_refusal, live_process_scan, read_clean_result
 from fanout_lib.manifest import Batch, Manifest
 from fanout_lib.target import SERVER_TARGET, Target, resolve
 from fanout_lib.transport import Tools
@@ -62,6 +62,8 @@ def remote_abandon_command(
         f'echo "kept: {wt} — unit {b.unit} still active after stop"; '
         f"else "
         f"systemctl --user reset-failed {b.unit} 2>/dev/null; "
+        f"{live_process_scan(wt)}"
+        f'if [ -n "$busy" ]; then {busy_refusal(wt)}; else '
         f"git -C {repo} worktree unlock {wt} 2>/dev/null; "
         f"if [ -e {wt}/.git ]; then "
         f"git -C {repo} worktree remove --force {wt} >/dev/null 2>&1; "
@@ -73,6 +75,7 @@ def remote_abandon_command(
         f"&& ! git -C {repo} branch -D {branch} >/dev/null 2>&1; then "
         f'echo "kept: {wt} — branch {branch} not deleted"; '
         f'else echo "removed: {wt} (abandoned)"; '
+        f"fi; "
         f"fi; "
         f"fi"
     )
