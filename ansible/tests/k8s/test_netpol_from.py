@@ -26,6 +26,7 @@ from lib.ansible_inventory import containers_entries_in
 # than counted: if the key were renamed, the census below would go empty and every `all()` here
 # would pass on nothing.
 KNOWN_FENCES = {
+    "authelia": "netpol-baseline",
     "speedtest": "netpol-baseline",
     "ical-proxy": "netpol-baseline",
     "home-assistant": "netpol-baseline",

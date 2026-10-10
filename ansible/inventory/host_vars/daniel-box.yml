@@ -132,6 +132,10 @@ containers_list:
     use_authelia: false
     tier: home-edge
     backup_claims: [authelia-config]
+    # Rendered by netpol-baseline's networkpolicy-callers.yaml.j2 on the portal port.
+    netpol_from:
+      - traefik  # forwardauth-middleware.yaml.j2 dials authelia.<ns>.svc:9091 from the Traefik
+                 # pod. Apps behind the middleware never dial authelia: Traefik issues the 302.
     # Rendered by this role's templates/networkpolicy-redis.yaml.j2, not netpol-baseline:
     # the portal exits without its session store, so the fence ships with the portal (#1609).
     # `role_owned: true` makes netpol-baseline's callers loop skip the item.
