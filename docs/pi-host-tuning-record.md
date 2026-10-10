@@ -181,9 +181,7 @@ was the one container whose host form changes no decision.
 `ansible/tests/setup/test_pi_node_exporter_host_unit.py` holds the unit to the archived
 compose's collector set and the version to the cluster DaemonSet's.
 
-Retiring the container is by hand — `docker rm -f node-exporter` and its
-`containers/node-exporter/` directory — BEFORE the first apply: the container publishes the
-same IP and port the unit binds.
+**HISTORY — the node_exporter cutover.** It retired the container by hand (`docker rm -f node-exporter` and its `containers/node-exporter/` directory) before the first apply, because the container published the same IP and port the unit binds.
 
 ## SD-card health heartbeat, and the rotated-log sweep it carries
 
@@ -217,8 +215,8 @@ reboot, and the heartbeat would then report a missing verdict for up to a day.
 
 ## Container-recovery heartbeat
 
-AutoKuma reads only daniel-server's docker socket, so the Pi's containers have no liveness
-monitor of their own. The two that die silently are `autoheal`, which restarts unhealthy
+AutoKuma reconciles monitors from the `uptime-kuma` role's rendered declarations and has no
+Docker source, so the Pi's containers have no liveness monitor of their own. The two that die silently are `autoheal`, which restarts unhealthy
 containers, and `docker-proxy`, the read-only socket Alloy's container-log discovery reads: a
 dead autoheal stops recovering Pi containers, and a dead docker-proxy stops this host's
 container logs reaching Loki while Alloy keeps running with zero targets.
@@ -231,8 +229,8 @@ through the docker group, so it still reports docker-proxy's own death, and push
 static "Daniel Pi Recovery" Kuma push monitor over the same LAN-only `^/api/push/` bypass. Any
 one container down is an explicit `down`; a dead cron or host trips the 600s watchdog. The
 token is `pi_recovery_push_token` in `secrets.yml`. The set was autoheal and docker-proxy alone
-until #1910: the same failed start reaches glances, wg-easy and docker-proxy-lifecycle, and
-Kuma sees only the first two from outside.
+until #1910: the same failed start reaches wg-easy and docker-proxy-lifecycle, and Kuma
+sees neither from outside.
 
 **It also restarts what it finds dead**, and still pushes `down` for that cycle.
 `restart: unless-stopped` covers a container whose process exits, not one whose *create* fails
@@ -292,18 +290,16 @@ the crons stopping. That is the intended signal, not a second fault.
 
 ## The durable health log
 
-Both health crons leave a record at `/var/log/pi-health/health.log`, which the Pi's promtail
-tails as its `pi-health` job under `job="syslog"`. Kuma keeps only current state, so without
+Both health crons leave a record at `/var/log/pi-health/health.log`, which the Pi's Alloy
+tails as its `pi_health` source under `job="syslog"`. Kuma keeps only current state, so without
 this a DOWN that clears is gone — and `probe.py alerts` reconstructs episodes from
 `{job="syslog"} |= "status=down"`.
 
 Two independent gaps kept daniel-pi out of that view, and closing either alone would have
 changed nothing: the crons emitted no `status=` token, because `kuma-push-lib.sh` calls
-`logger` only when the *push* fails, and there was no path to Loki for it anyway — rsyslog is
-masked on this host, and this promtail build is a journal stub, verified by the absence of
-`sd_journal_open` and libsystemd and by a `journal:` dry run yielding zero entries. A file plus
-a static scrape job needs no new daemon, and carries about 576 lines/day where the whole
-journal would be about 38k.
+`logger` only when the *push* fails, and there was no path to Loki for it anyway, because
+rsyslog is masked on this host. A file plus a static log source needs no new daemon, and
+carries about 576 lines/day where the whole journal would be about 38k.
 
 **The timestamp format is load-bearing**: `_SYSLOG_LINE_RE` wants exactly two whitespace-free
 tokens before the tag, so the scripts emit `date -Is`, which is one token. Traditional syslog
@@ -333,21 +329,14 @@ always trying the first listed server first. So the Pi falls through to the publ
 Pi-hole is unreachable and returns to it on the very next query, automatically, in both
 directions, with no daemon watching anything.
 
-**This replaces PR #693's resolved drop-in, which did not work.** systemd-resolved is sticky
-by design and treats its `DNS=` list as interchangeable peers; measured 45 minutes after that
-deploy, `Current DNS Server` read 1.1.1.1 at 15:12 and 10.0.0.243 at 15:14, unprompted.
-Disabling resolved also removes the LINK scope a drop-in could not reach — `resolvectl status`
-still listed 75.75.75.75, 75.75.76.76 and two Comcast v6 addresses under Link 2, with their
-own `Current DNS Server`.
+**HISTORY — the resolved drop-in.** This replaced PR #693's resolved drop-in, which did not work. systemd-resolved treats its `DNS=` list as interchangeable peers, so `Current DNS Server` flipped between 1.1.1.1 and 10.0.0.243 unprompted within minutes of that deploy. Disabling resolved also removes the LINK scope a drop-in could not reach.
 
-**It also moves the Pi's containers, but only after a restart.** Docker's embedded resolver
-pins its upstreams at container START, so changing the host's resolv.conf leaves every running
-container forwarding to whatever was there before. On the 2026-09-01 cutover all seven still
-carried `ExtServers: [host(127.0.0.53)]` — the stub that had just been stopped — and
-`getent hosts github.com` inside promtail returned nothing. **Nothing went unhealthy and no
-monitor fired**; promtail simply stopped resolving its Loki push URL. The role now restarts the
-running containers whenever it rewrites resolv.conf, and a restart is enough, since Docker
-regenerates the container's file from the host's on start.
+**Running containers keep the old resolver until they restart.** Docker's embedded resolver pins
+its upstreams at container START, so a changed host resolv.conf leaves every running container
+forwarding to whatever was there before. Nothing goes unhealthy and no monitor fires: on the
+2026-09-01 cutover the Pi's log shipper stopped resolving its Loki push URL and nothing else
+changed. The role restarts the running containers whenever it rewrites resolv.conf, and a restart
+is enough, since Docker regenerates the container's file from the host's on start.
 
 **The cost:** one 2s timeout per lookup while Pi-hole is down, because `attempts` counts rounds
 over the whole list rather than retries per server, and no DNS cache, since resolved's is gone

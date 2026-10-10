@@ -112,7 +112,7 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   disk swap. Pi-only packages gate on `has_raspi_kernel` instead — the board and its memory are
   two separate facts.
 - Two templates carry host-specific config: `templates/98_aide_local.conf.j2`, the AIDE
-  exclusions for the Docker homelab, and `templates/fail2ban_homelab.conf.j2`, the fail2ban
+  exclusions for high-churn paths (the Pi's Docker tree, app data and pseudo filesystems), and `templates/fail2ban_homelab.conf.j2`, the fail2ban
   jail. Pi-only tasks are individually `when:`-guarded rather than block-scoped, so a server run
   simply skips them.
 
@@ -292,10 +292,8 @@ lines are gone from the journal, and from `/var/log/syslog` for every facility e
 unit line, and timesyncd's `Initial clock synchronization` step. An empty `journalctl -u k3s`
 window therefore means *nothing at notice or above*, not *nothing happened*; the systemd
 `Failed with result` lines are the only trace of a crash loop in the journal. The cause is in
-`/var/log/k3s.log` since #1918: the k3s role's `tasks/unit-logging.yml` sends the unit's stdout
-and stderr there through a drop-in, because every k3s line is priority info and this cap dropped
-all of them — on 2026-09-09 k3s crash-looped about 3000 times over five hours and left no reason
-behind. Kernel info lines DO survive, in `/var/log/syslog` only: `NIC Link is Up`, veth and cni0
+`/var/log/k3s.log`, which `docs/k3s-node-plane-crons-and-incidents.md` (*k3s's own output is in
+`/var/log/k3s.log`, not the journal*) explains. Kernel info lines DO survive, in `/var/log/syslog` only: `NIC Link is Up`, veth and cni0
 bridge events, `PM: suspend entry`. A read that finds nothing in the journal is not finished
 until it has grepped syslog.
 
