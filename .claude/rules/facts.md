@@ -74,6 +74,17 @@ grade. Some lint rules therefore read the prose itself.
   is skipped, since it regenerates from the pin. A version that is not an `image:tag` span is
   out of scope, such as speedtest's upstream `v1.14.7`: its pin is `latest@sha256`, so the
   tree holds no tag to compare it with.
+- `vanished-identifier` (error) runs only under `lint --changed-since <ref>`, which is what
+  the `facts-lint-changed` hook passes. It takes the identifier-shaped tokens on the lines the
+  branch removed from non-Markdown files: six or more characters holding `_`, `.`, `/` or `-`,
+  and not a version or a number. It keeps the ones that no tracked non-Markdown file holds and
+  no tracked path ends with. Any section that still names one in backticks is a finding,
+  whether or not the branch edited that section. The branch runs from the merge base with
+  `<ref>` to the working tree, so a commit that fixes its own sentence stays silent. Versions
+  are exempt because `version-as-fact` owns them. To resolve a finding, edit the sentence or
+  mark it as history. A name that the tree builds from parts, such as
+  `checksum_annotation('autofix-script')`, never appears literally, so a doc naming the
+  rendered `checksum/autofix-script` reads as vanished. Name it as the tree spells it.
 
 A paragraph or bullet that opens with `**HISTORY —` is history, and every prose rule skips it.
 A sentence such as "it lived on the staging guest until 2026-09-28" is correct exactly because
@@ -93,8 +104,9 @@ writes it, and a hand edit fails `test_every_recorded_atom_hashes_as_recorded` a
   UNVERIFIED one.
 - `fact_status.py forget '<doc>#<heading>'` drops the row of a renamed or deleted heading.
 
-Two prek hooks run on a commit. `facts-lint-changed` lints the sections the commit edits.
-`facts-reverify-changed` re-hashes a section whose prose you edited, when only a citation was
+Two prek hooks run on a commit. `facts-lint-changed` lints the sections the branch edits, and
+runs `vanished-identifier` over every section. It fires on a commit that touches a `CLAUDE.md`
+or any non-Markdown file. `facts-reverify-changed` re-hashes a section whose prose you edited, when only a citation was
 added or dropped. It writes the lock and exits non-zero like a formatter, so
 `git add docs/facts.lock` and commit again. A `moved` or `missing` atom stays red until a
 person re-reads the section and runs `verify`.

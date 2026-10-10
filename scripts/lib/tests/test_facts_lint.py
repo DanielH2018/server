@@ -223,6 +223,7 @@ def test_rule_census():
             "renovate-pin",
             "retired-host",
             "version-as-fact",
+            "vanished-identifier",
         }
     )
     assert WARN_RULES == frozenset({"count-as-fact", "one-way-test", "version-as-fact"})

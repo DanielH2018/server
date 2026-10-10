@@ -471,13 +471,23 @@ files = "(\\.py|^ansible/tests/repo/(module_length|monkeypatch)_allowlist\\.txt)
 # holds the converted set already in the lock; this is the ratchet for everything not yet
 # converted). `--changed-since` needs a real git history, which `--all-files` on a shallow
 # runner may not have for origin/master — see the `land-after-merge`/CI fetch-depth notes.
+# CI's prek jobs check out with fetch-depth: 0 and fetch the base branch, so origin/master is
+# there on a PR; on a push to master it is HEAD, and the range is empty.
+#
+# The same run adds `vanished-identifier`: a CLAUDE.md still naming an identifier this branch
+# removed from the last non-Markdown file holding it. That commit is usually code-only, so the
+# gate fires on any non-Markdown file as well as on a CLAUDE.md. A commit touching only other
+# Markdown stays skipped, as the docs-refresh and eval-run crons' commits did before. Measured
+# 2026-10-10 on daniel-box, three runs each, against the same 4-commit branch diff: the code
+# before the rule took 0.32-0.33s and the code with it 0.37-0.39s. A code-only commit used to
+# skip the hook, so it pays the whole ~0.4s. Against a 300-commit range the run took 1.9s.
 [[repos.hooks]]
 id = "facts-lint-changed"
-name = "fact citations in edited CLAUDE.md sections"
+name = "fact citations in edited CLAUDE.md sections, and identifiers the branch removed"
 entry = "uv run --frozen python scripts/dev/fact_status.py lint --changed-since origin/master"
 language = "system"
 pass_filenames = false
-files = "(^|/)CLAUDE\\.md$"
+files = "(^|/)CLAUDE\\.md$|^(?!.*\\.md$)"
 
 # Eight static test modules that turned more PRs red than any other test the author's own code
 # did not break. The first four were 24 of 154 failed CI runs from 2026-08-30 to 2026-10-05
