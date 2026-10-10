@@ -1,6 +1,6 @@
 [Unit]
 Description=Fast-forward the {{ claude_code_agent_user }} agent user's clone to origin's master
-OnFailure=claude-clone-sync-alert.service
+OnFailure={{ claude_code_agent_user }}-clone-sync-alert.service
 Wants=network-online.target
 After=network-online.target
 

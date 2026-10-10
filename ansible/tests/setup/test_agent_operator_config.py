@@ -48,7 +48,7 @@ def operator_tasks() -> list[dict]:
 
 def test_the_subset_is_installed_only_for_an_enabled_agent_user() -> None:
     task = named(
-        tasks("main.yml"),
+        tasks("agent.yml"),
         "Give the agent a subset of the operator's Claude config, or take it back",
     )
     assert task["ansible.builtin.import_tasks"] == "agent_operator_config.yml"

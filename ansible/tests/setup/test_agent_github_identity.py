@@ -34,7 +34,7 @@ def named(task_list: list[dict], name: str) -> dict:
 
 
 def test_the_identity_is_given_only_to_an_enabled_agent_user() -> None:
-    task = named(tasks("main.yml"), "Give the agent user its GitHub identity")
+    task = named(tasks("agent.yml"), "Give the agent user its GitHub identity")
     assert task["ansible.builtin.import_tasks"] == "agent_github.yml"
     assert task["when"] == "claude_code_agent_user_enabled"
 
@@ -43,7 +43,7 @@ def test_gh_reads_the_token_for_the_agents_own_account() -> None:
     rendered = render_setup_text(
         "claude_code",
         "agent-gh-hosts.yml.j2",
-        {"claude_code_agent_gh_token": TOKEN},
+        {"claude_code_agent_gh_token_value": TOKEN},
     )
     host = yaml_fast.safe_load(rendered)["github.com"]
     assert host["users"] == {"DanielClaudeBot": {"oauth_token": TOKEN}}
@@ -91,7 +91,7 @@ def test_an_enabled_agent_user_without_its_token_fails_the_apply() -> None:
         "Refuse to give the agent user a GitHub identity without its token",
     )
     assert task["ansible.builtin.assert"]["that"] == [
-        "claude_code_agent_gh_token | default('') | length > 0"
+        "claude_code_agent_gh_token_value | default('') | length > 0"
     ]
     assert task["no_log"] is True
 
@@ -125,7 +125,7 @@ def test_git_signs_every_commit_as_the_machine_account(tmp_path) -> None:
 
 def test_switching_the_agent_user_off_removes_its_token() -> None:
     task = named(
-        tasks("main.yml"),
+        tasks("agent.yml"),
         "Remove the agent user's GitHub token when it is switched off",
     )
     assert task["ansible.builtin.file"] == {

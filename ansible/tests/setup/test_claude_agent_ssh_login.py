@@ -15,7 +15,7 @@ from lib import yaml_fast
 from lib.repo_paths import ALL_VARS, HOST_VARS
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
-CLAUDE_MAIN = ROLE / "tasks" / "main.yml"
+CLAUDE_MAIN = ROLE / "tasks" / "agent.yml"
 AGENT_PEERS = ROLE / "tasks" / "agent_peers.yml"
 SSH_LOGIN = ROLE / "tasks" / "agent_ssh_login.yml"
 
@@ -43,6 +43,7 @@ def test_the_key_half_runs_only_on_the_key_host_and_the_login_half_everywhere_el
     assert peers["ansible.builtin.import_tasks"] == "agent_peers.yml"
     assert peers["when"] == [
         "claude_code_agent_user_enabled",
+        "claude_code_agent_is_primary",
         "inventory_hostname == claude_agent_ssh_key_host",
     ]
     login = named(
@@ -52,6 +53,7 @@ def test_the_key_half_runs_only_on_the_key_host_and_the_login_half_everywhere_el
     assert login["ansible.builtin.import_tasks"] == "agent_ssh_login.yml"
     assert login["when"] == [
         "claude_code_agent_user_enabled",
+        "claude_code_agent_is_primary",
         "inventory_hostname != claude_agent_ssh_key_host",
     ]
     assert vars_of(ALL_VARS)["claude_agent_ssh_key_host"] == ("daniel-box")

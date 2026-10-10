@@ -31,7 +31,8 @@ TASKS = COMMON / "tasks" / "alert_unit.yml"
 # empty set.
 KNOWN_ALERTS = frozenset(
     {
-        "claude-clone-sync",
+        # One per agent user, named after it.
+        "{{ claude_code_agent_user }}-clone-sync",
         "claude-memory-sync",
         "claude-rc",
         "gitops-deploy",
@@ -70,9 +71,7 @@ def onfailure_alerts(unit_texts: list[str]) -> set[str]:
     """Every `<name>` the given unit texts name as `OnFailure=<name>-alert.service`."""
     names: set[str] = set()
     for text in unit_texts:
-        names |= set(
-            re.findall(r"^OnFailure=(\S+)-alert\.service$", text, re.MULTILINE)
-        )
+        names |= set(re.findall(r"^OnFailure=(.+)-alert\.service$", text, re.MULTILINE))
     return names
 
 
@@ -135,6 +134,7 @@ def test_each_message_renders_a_valid_json_payload() -> None:
             variables["alert_unit_message"],
             inventory_hostname="daniel-box",
             claude_code_memory_sync_target="daniel-server",
+            claude_code_agent_user="claude",
         )
         unit = _render(template, **{**variables, "alert_unit_message": message})
         assert "{{" not in message, f"{name}: curl's --expand-data would expand {{{{"

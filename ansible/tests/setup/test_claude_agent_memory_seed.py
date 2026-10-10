@@ -90,7 +90,7 @@ def test_the_guard_reads_the_agent_index_in_the_agent_memory_dir() -> None:
 
 def test_the_import_runs_only_for_an_enabled_agent_that_is_the_hosts_user() -> None:
     task = named(
-        yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text()),
+        yaml_fast.safe_load((ROLE / "tasks" / "agent.yml").read_text()),
         "Copy the operator's memory store into the agent's, the first time the agent is the host's user",
     )
     assert task["ansible.builtin.import_tasks"] == "agent_memory_seed.yml"

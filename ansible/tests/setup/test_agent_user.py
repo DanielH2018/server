@@ -20,11 +20,13 @@ from lib import yaml_fast
 SETUP = ANSIBLE / "roles" / "setup"
 SHARED = SETUP / "common" / "tasks" / "agent_user.yml"
 SHARED_IMPORT = "{{ role_path }}/../common/tasks/agent_user.yml"
-CLAUDE_TASKS = SETUP / "claude_code" / "tasks" / "main.yml"
+CLAUDE_TASKS = SETUP / "claude_code" / "tasks" / "agent.yml"
 # Imported by main.yml under one `when:`, so its tasks carry none and agent_tasks() misses them.
 AGENT_GITHUB = SETUP / "claude_code" / "tasks" / "agent_github.yml"
 AGENT_ACCESS = SETUP / "claude_code" / "tasks" / "agent_access.yml"
 AGENT_BROWSER = SETUP / "claude_code" / "tasks" / "agent_browser.yml"
+# The file in each role that imports the shared one. claude_code's runs once per agent.
+AGENT_TASKS_FILE = {"renovate_agent": "main.yml", "claude_code": "agent.yml"}
 # Every role that builds an agent user, with the role variable each contract key must name.
 AGENTS = {
     "renovate_agent": {
@@ -68,7 +70,7 @@ def group_grants(task_list: list[dict]) -> list[str]:
 def test_each_agent_user_is_built_by_the_shared_file_with_its_own_paths(
     role: str,
 ) -> None:
-    role_tasks = tasks(SETUP / role / "tasks" / "main.yml")
+    role_tasks = tasks(SETUP / role / "tasks" / AGENT_TASKS_FILE[role])
     imports = [
         t for t in role_tasks if t.get("ansible.builtin.import_tasks") == SHARED_IMPORT
     ]
@@ -97,7 +99,7 @@ def test_the_claude_agents_only_groups_are_the_journal_and_ssh_users_and_both_sw
     user = named(access, name)["ansible.builtin.user"]
     assert " ".join(user["groups"].split()) == (
         "{{ (['systemd-journal'] if claude_code_agent_journal_access else []) "
-        "+ (['ssh-users'] if claude_agent_ssh_login_enabled "
+        "+ (['ssh-users'] if claude_agent_ssh_login_enabled and claude_code_agent_is_primary "
         "and inventory_hostname != claude_agent_ssh_key_host else []) }}"
     )
     assert user["append"] is False

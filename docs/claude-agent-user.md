@@ -613,6 +613,52 @@ ServiceAccount every request whose `request.dryRun` is false.
 **Unverified:** whether this k3s version's admission CEL exposes `request.dryRun`, and whether
 the dry-run path's kubectl calls can run without `become`.
 
+## More than one agent
+
+The `claude_code` role builds every agent user in `claude_code_agents`, one run of
+`tasks/agent.yml` per entry (#4196). `claude` stays the primary agent: the
+`claude_code_agent_*` scalars configure it, and its entry carries only its name. A further
+agent is a full entry in the host's `host_vars`:
+
+```yaml
+claude_code_agents:
+  - name: "{{ claude_code_agent_user }}"
+  - name: claude-ops
+    github_login: SomeOtherBot
+    github_id: 123456
+    github_token_var: claude_ops_gh_token
+```
+
+`filter_plugins/claude_agents.py` refuses a further agent without its own GitHub login, id
+and token variable, so it never pushes as `DanielClaudeBot` by omission. It also refuses two
+agents that share a name, home or worktree prefix. A further agent gets a home under
+`/var/lib/<name>`, its own clone, the shared tools, a GitHub identity, the operator's config
+subset and the login caps. It gets no journal access unless its entry sets
+`journal_access: true`.
+
+Only the primary agent gets the lander, the peer ssh login, the homelab-ui browser and login,
+the artifacts mount and the memory seed. Each of those is a host-wide object named after
+`claude` or a single Authelia account, and the lander is on the approval floor, so widening any
+of them is its own change. The browser also stays outside the loop so that a Node or playwright
+pin bump narrows to its own tag (#4189).
+
+To add a further agent:
+
+1. Create its GitHub machine account and make it a write collaborator.
+1. Store its classic `public_repo` token in SOPS under the name its entry gives
+   `github_token_var`.
+1. Add `refs/heads/worktree-<prefix>+**` to the "agent branch fence" ruleset's excludes, and
+   the same pattern to `github-ruleset-drift.sh`'s declaration. A ruleset cannot tell two bot
+   accounts apart, so each can push to the other's prefix. The primary agent's lander lands
+   only `worktree-claude+` branches, so it never lands another agent's work.
+1. Add the entry, apply `initial_setup.yml --tags claude_code`, then log in as the agent once
+   with `sudo machinectl shell <name>@ /bin/bash -l` and run `/login`.
+1. Add its signing key's `.pub` to its account as a Signing Key.
+
+To retire one, set `state: absent` rather than deleting the entry. Ansible removes nothing it
+no longer declares. Absent expires the account, keeps the home, and removes the GitHub token
+and the clone sync units.
+
 ## What the `claude` user cannot do
 
 | Capability | Why | Where it goes instead |

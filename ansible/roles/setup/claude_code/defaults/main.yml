@@ -392,6 +392,49 @@ claude_code_agent_node_bin: "{{ claude_code_agent_node_dir }}/current/bin"
 # unpacks it from here.
 claude_code_agent_node_download_dir: /var/cache/claude-agent-node
 
+# ── Every agent user on the host ────────────────────────────────────────────────────────
+# The agent users this host builds, in order. tasks/agent.yml runs once per entry, and
+# filter_plugins/claude_agents.py checks each entry and fills in its defaults.
+#
+# The primary agent is the one the claude_code_agent_* scalars above describe, and its entry
+# carries only its name. The lander, the peer ssh login, the homelab-ui browser and login, the
+# artifacts mount, the memory seed and claude-rc.service serve the primary agent alone. The default lists it alone, present
+# while claude_code_agent_user_enabled is true.
+#
+# A further agent is a full entry. `name`, `github_login`, `github_id` and `github_token_var`
+# (the SOPS variable holding its token) are required and never inherited, so a second agent
+# cannot push as the primary's account by omission. `home` defaults to /var/lib/<name>, `clone_dir` to <home>/server and `worktree_prefix`
+# to the name. `journal_access` defaults to false; `operator_read` and `operator_config` to
+# true. Outside Ansible, each further agent needs its own GitHub account and its prefix added to
+# the branch fence ruleset's excludes. docs/claude-agent-user.md, "More than one agent", has the
+# checklist.
+#
+# The way out is `state: absent`, never deleting the entry: Ansible removes nothing it no
+# longer declares. absent expires the account, keeps the home, and removes the agent's GitHub
+# token and clone sync units.
+claude_code_agents:
+  - name: "{{ claude_code_agent_user }}"
+# Whether the agent being built is the primary one. tasks/main.yml sets it per agent; this
+# default is what a template sees outside that loop.
+claude_code_agent_is_primary: true
+# The SOPS variable the primary agent's GitHub token comes from.
+claude_code_agent_gh_token_var: claude_code_agent_gh_token
+# The primary agent's profile, rendered from the scalars above. Not meant to be overridden:
+# set the scalar instead.
+claude_code_agent_primary_profile:
+  state: "{{ 'present' if claude_code_agent_user_enabled else 'absent' }}"
+  home: "{{ claude_code_agent_user_home }}"
+  clone_dir: "{{ claude_code_agent_user_clone_dir }}"
+  repo: "{{ claude_code_agent_user_repo }}"
+  github_login: "{{ claude_code_agent_github_login }}"
+  github_id: "{{ claude_code_agent_github_id }}"
+  github_token_var: "{{ claude_code_agent_gh_token_var }}"
+  worktree_prefix: "{{ claude_code_agent_worktree_prefix }}"
+  journal_access: "{{ claude_code_agent_journal_access }}"
+  operator_read: "{{ claude_code_agent_operator_read }}"
+  operator_config: "{{ claude_code_agent_operator_config }}"
+  memory_seed: "{{ claude_code_agent_memory_seed }}"
+
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # The agent's account cannot merge its own PRs: "master review gate" wants an approval from
 # someone other than the last pusher. claude-land@<n>.service lands PR <n> as {{ sys_user }},
