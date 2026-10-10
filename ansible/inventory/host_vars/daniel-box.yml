@@ -66,6 +66,14 @@ autofix_fake_remux_policy:
 # volumes worth a daily backup; the k3s role's `k3s_longhorn_r2_volumes` is those claims, and
 # `ansible/tests/longhorn/test_r2_tier_is_derived.py` checks them against the role's rendered
 # PVCs. A tiered entry with no `backup_claims` holds nothing worth a daily copy.
+#
+# The other two Longhorn tiers derive from the entries the same way (#4207).
+# `weekly_backup_claims` maps a claim to its weekly B2 shard, 0 (Sunday) to 6, and becomes
+# `k3s_longhorn_weekly_volumes`. The shard is that volume's weekday for good: change it only
+# to rebalance B2's daily transaction cap, and give a new claim the lightest weekday.
+# `no_backup_claims` lists bound claims forced out of the backup set, each with its reason,
+# and becomes `k3s_longhorn_nobackup_volumes`. A `longhorn`-class claim in none of the three
+# keys is backed up daily to B2 by the `default` group.
 containers_list:
   # crowdsec must precede traefik: the traefik pod carries a crowdsec agent sidecar that logs
   # into this engine's LAPI, and a post-deploy task in this role registers the machine
@@ -79,6 +87,8 @@ containers_list:
   # is the one first-run ordering failure we accept, because the credential constraint wins.
   - name: crowdsec
     platform: k8s
+    # Decisions expire and re-derive from logs; Metabase dashboards are provisioned.
+    no_backup_claims: [crowdsec-db]
     # daniel-server's agent and its traefik bouncer authenticate here with machine/bouncer
     # keys, so use_authelia false is load-bearing. hostname also feeds the Pi-hole
     # per-service DNS override.
@@ -201,6 +211,7 @@ containers_list:
   # each pair.
   - name: sonarr
     platform: k8s
+    weekly_backup_claims: {sonarr-config: 6}  # Sat
     depends_on: [media-volume]
     hostname: "sonarr"
     port: 8989
@@ -229,6 +240,7 @@ containers_list:
   # it cannot talk to a tracker before the kill-switch exists.
   - name: qbittorrent
     platform: k8s
+    weekly_backup_claims: {qbittorrent-config: 4}  # Thu
     depends_on: [media-volume]
     hostname: "qbittorrent"
     port: 8080
@@ -246,6 +258,7 @@ containers_list:
       - homepage                 # dashboard widget, ClusterIP — see the policy's header
   - name: radarr
     platform: k8s
+    weekly_backup_claims: {radarr-config: 2}  # Tue
     depends_on: [media-volume]
     hostname: "radarr"
     port: 7878
@@ -275,6 +288,7 @@ containers_list:
   # ingress is the direction actually enforced on this cluster.
   - name: prowlarr
     platform: k8s
+    weekly_backup_claims: {prowlarr-config: 4}  # Thu
     hostname: "prowlarr"
     port: 9696
     use_authelia: true
@@ -297,6 +311,7 @@ containers_list:
       - flaresolverr-netpol-probe  # control leg of this role's own isolation probe
   - name: bazarr
     platform: k8s
+    weekly_backup_claims: {bazarr-config: 5}  # Fri
     depends_on: [media-volume]
     hostname: "bazarr"
     port: 6767
@@ -314,6 +329,7 @@ containers_list:
   # clients are TV and phone apps that cannot complete a web SSO flow.
   - name: jellyfin
     platform: k8s
+    weekly_backup_claims: {jellyfin-config: 1}  # Mon
     depends_on: [media-volume]
     hostname: "jellyfin"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: jellyfin-lan-vip, a port check on the LAN VIP.
@@ -326,6 +342,7 @@ containers_list:
   # request. Its /media mount is consequently the only read-write one among the consumers.
   - name: tdarr
     platform: k8s
+    weekly_backup_claims: {tdarr-server: 1, tdarr-configs: 2}  # Mon, Tue
     depends_on: [media-volume]
     hostname: "tdarr"
     port: 8265
@@ -396,6 +413,7 @@ containers_list:
     platform: k8s
   - name: freshrss
     platform: k8s
+    weekly_backup_claims: {freshrss-config: 5}  # Fri
     hostname: "freshrss"
     kuma: {name: k3s FreshRSS}
     port: 80
@@ -418,6 +436,7 @@ containers_list:
   # list so the Deployment, Service and route keep being reconciled; only the pod count is 0.
   - name: navidrome
     platform: k8s
+    weekly_backup_claims: {navidrome-data: 3}  # Wed
     hostname: "navidrome"
     # No tile while parked: the role deploys no route at replicas 0, so the tile would be
     # permanently red. Delete this line when bringing it back.
@@ -496,6 +515,7 @@ containers_list:
   # karakeep addresses them by those names.
   - name: karakeep
     platform: k8s
+    weekly_backup_claims: {karakeep-data: 3}  # Wed
     hostname: "karakeep"
     port: 3000
     use_authelia: true
@@ -550,6 +570,7 @@ containers_list:
   # and monitor-bridge's check_n8n rides the API-key route.
   - name: n8n
     platform: k8s
+    weekly_backup_claims: {n8n-data: 0, n8n-files: 5}  # Sun, Fri
     hostname: "n8n"
     port: 5678
     use_authelia: true
@@ -675,6 +696,7 @@ containers_list:
   # inside the pod — see roles/k8s/wg-easy/defaults/main.yml.
   - name: wg-easy
     platform: k8s
+    weekly_backup_claims: {wg-easy-config: 4}  # Thu
     tier: platform
     hostname: "wg-easy"
     port: 51821
@@ -685,6 +707,10 @@ containers_list:
 
   - name: uptime-kuma
     platform: k8s
+    # Monitors + notifications regenerate from the git-rendered static-monitors Secret, and
+    # autokuma's state rebuilds from the same Secret. DR caveat: the first-run admin is
+    # recreated by hand and status HISTORY is not kept anywhere.
+    no_backup_claims: [uptime-kuma-data, autokuma-data]
     hostname: "uptime-kuma"
     # No tile on itself: Kuma cannot page that Kuma is down.
     kuma: false
@@ -714,6 +740,17 @@ containers_list:
   # two_factor even on the LAN: a shell as the repo user on a stolen password alone.
   - name: code-server
     platform: k8s
+    weekly_backup_claims: {code-server-workspace: 0}  # Sun
+    # Measured composition, not an estimate. `du` inside the pod puts 5.8 G in
+    # .local/share/code-server/extensions — a directory the server does NOT read, since it
+    # runs with `--extensions-dir /config/extensions` (637 M, complete) — plus 223 M of
+    # caches and 17 M of code-server state, against 2.4 M of workspace. Backing up the whole
+    # volume made one service 52% of the 13.72 GiB backup set and 3,668 of 7,023 blocks; at
+    # one Class-B GET per block on restore, that volume alone was 147% of B2's 2,500/day cap
+    # and could not be restored inside a day. The keepers live in code-server-workspace,
+    # which IS backed up. Not a class change, because storageClassName is immutable once
+    # bound.
+    no_backup_claims: [code-server-config]
     hostname: "code-server"
     port: 8443
     use_authelia: true
@@ -723,11 +760,13 @@ containers_list:
   # via its Service (the wg-easy pattern — the router's forward points at this device).
   - name: terraria
     platform: k8s
+    weekly_backup_claims: {terraria-config: 3}  # Wed
 
   # Same shape as terraria: nothing about it is HTTP — the game answers UDP 2456-2457 on
   # the node IP via its own Service.
   - name: valheim
     platform: k8s
+    weekly_backup_claims: {valheim-config: 2}  # Tue
 
   # The homelab log store — a SECOND cluster Loki, deliberately separate from observability's,
   # which holds verbatim prompts and stays loopback-only. The route is ClientIP-gated
@@ -749,6 +788,7 @@ containers_list:
   # Loki. No web UI and no route; each exporter's Service is scraped in-cluster.
   - name: game-stats
     platform: k8s
+    weekly_backup_claims: {terraria-stats-data: 0, valheim-stats-data: 1}  # Sun, Mon
     depends_on: [loki-homelab]
     # One job per game, each a single replica behind its own Service. terraria-stats runs as
     # many pods as the server, so its job is dropped at `terraria_k8s_replicas: 0`: a Service
@@ -806,10 +846,15 @@ containers_list:
   # weekly, so there is no same-day off-site restore point.
   - name: pi-peer-backup
     platform: k8s
+    weekly_backup_claims: {pi-peer-backup-data: 6}  # Sat
   # SMART monitoring. UI behind Authelia; /api/* is bypassed for LAN machine traffic (the
   # collector's POSTs and monitor-bridge's summary reads) in the authelia role's config.
   - name: scrutiny
     platform: k8s
+    weekly_backup_claims: {scrutiny-web-config: 6}  # Sat
+    # The volume holds ONLY the SMART TSDB (verified single mount), regenerating from the
+    # daily collector runs.
+    no_backup_claims: [scrutiny-influxdb-data]
     hostname: "scrutiny"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: scrutiny-k8s, which probes /api/health through the LAN bypass.
     kuma: false

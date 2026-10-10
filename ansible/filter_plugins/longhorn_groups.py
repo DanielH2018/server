@@ -8,7 +8,10 @@ instead (#3946).
 
 - `backup_group_label`: the volume label key for a group, `recurring-job-group.longhorn.io/<group>`.
 - `weekly_backup_group`: the group of weekly shard N, `weekly-backup-d<N>`.
-- `weekly_backup_shard`: the shard a weekly-tier volume belongs to, its list index mod 7.
+- `weekly_backup_shard`: the shard a weekly-tier volume belongs to, as its entry declares it.
+- `longhorn_weekly_claims` and `longhorn_nobackup_claims`: the k3s role's weekly and no-backup
+  volume sets, derived from each `containers_list` entry's `weekly_backup_claims` and
+  `no_backup_claims` the way `tier_backup_claims` derives the R2 set (#4207).
 - `longhorn_backup_name`: a bare name by key — the label prefix, a group or a BackupTarget —
   for a template that matches on a name rather than writing one label, such as the restore
   drill's jq selector and `seed_volume_backup.yml`.
@@ -66,14 +69,61 @@ def weekly_backup_group(shard: int) -> str:
     return longhorn_backups.weekly_shard_group(int(shard))
 
 
-def weekly_backup_shard(pvc: str, weekly_volumes: list) -> int:
-    """The weekday shard of `pvc`: its index in `weekly_volumes` mod the shard count.
+def weekly_backup_shard(pvc: str, weekly_volumes: dict) -> int:
+    """The weekday shard of `pvc` in `weekly_volumes`, the map `longhorn_weekly_claims` returns.
 
-    `list.index` takes the FIRST occurrence, which is what the tasks' inline
-    `k3s_longhorn_weekly_volumes.index(...) % 7` did. Raises `ValueError` when `pvc` is not
-    in the list, as `list.index` does.
+    Raises `ValueError` when `pvc` is not in the map, as the list lookup this replaced did.
     """
-    return list(weekly_volumes).index(pvc) % longhorn_backups.WEEKLY_SHARDS
+    if pvc not in weekly_volumes:
+        raise ValueError(f"weekly_backup_shard: {pvc!r} is not a weekly-tier volume")
+    return weekly_volumes[pvc]
+
+
+def _entries(containers_list):
+    return [e for e in containers_list or [] if isinstance(e, dict)]
+
+
+def longhorn_weekly_claims(containers_list, namespace: str) -> dict:
+    """`{namespace/claim: shard}` for every entry's `weekly_backup_claims`, in list order.
+
+    DECIDED: the shard is declared per claim, never derived from a position. It was the
+    claim's index mod 7 in a hand list, so one deletion moved every volume below it to another
+    weekday and could stack two heavy volumes on one B2 cap-day (#4207).
+
+    `namespace` is the default for an entry that names none; pass `k8s_namespace`. Raises
+    `ValueError` on a shard outside 0 to 6 or a claim two entries declare.
+    """
+    found: dict[str, int] = {}
+    for entry in _entries(containers_list):
+        for claim, shard in (entry.get("weekly_backup_claims") or {}).items():
+            pvc = f"{entry.get('namespace') or namespace}/{claim}"
+            # YAML's `true` is a bool, and a bool is an int. Not `type(shard) is int`: Ansible
+            # passes its own tagged int subclass.
+            if (
+                isinstance(shard, bool)
+                or not isinstance(shard, int)
+                or shard not in _SHARDS
+            ):
+                raise ValueError(
+                    f"longhorn_weekly_claims: {pvc} declares shard {shard!r}, "
+                    f"not an integer 0-{len(_SHARDS) - 1}"
+                )
+            if pvc in found:
+                raise ValueError(f"longhorn_weekly_claims: {pvc} is declared twice")
+            found[pvc] = int(shard)
+    return found
+
+
+def longhorn_nobackup_claims(containers_list, namespace: str) -> list:
+    """`namespace/claim` for every entry's `no_backup_claims`, in list order.
+
+    `namespace` is the default for an entry that names none; pass `k8s_namespace`.
+    """
+    return [
+        f"{entry.get('namespace') or namespace}/{claim}"
+        for entry in _entries(containers_list)
+        for claim in entry.get("no_backup_claims") or []
+    ]
 
 
 # The bare names `longhorn_backup_name` returns, by key.
@@ -105,5 +155,7 @@ class FilterModule:
             "backup_group_label": backup_group_label,
             "weekly_backup_group": weekly_backup_group,
             "weekly_backup_shard": weekly_backup_shard,
+            "longhorn_weekly_claims": longhorn_weekly_claims,
+            "longhorn_nobackup_claims": longhorn_nobackup_claims,
             "longhorn_backup_name": longhorn_backup_name,
         }

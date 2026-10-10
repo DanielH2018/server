@@ -26,6 +26,7 @@ import re
 from _helpers import ANSIBLE
 from _helpers import load_yaml
 from _helpers import render_expr
+from lib.ansible_jinja_env import make_ansible_env
 
 
 PLAY = ANSIBLE / "prune_backups.yml"
@@ -176,6 +177,23 @@ def test_b2_drain_always_hands_the_script_the_live_volume_list() -> None:
     assert "--apply" in _drain_argv(prune_apply="true")
     from_file = _drain_argv(prune_volumes_file="/tmp/vols.txt")
     assert "--live-volumes-file" in from_file and "--volumes-file" in from_file
+
+
+def test_b2_drain_resyncs_the_b2_target_the_k3s_role_configures() -> None:
+    """#4210: the target comes from `longhorn_backup_name`, rendered and typed out here.
+
+    The k3s role configures the B2 target through the same filter. Typed out, the expected
+    name does not follow a rename of `B2_TARGET`, so a rename fails here and gets read.
+    """
+    task = _task("b2-drain", "Ask Longhorn to re-read the backup target")
+    argv = task["ansible.builtin.command"]["argv"]
+    # Up to `--type`: the patch body after it calls the `pipe` lookup.
+    head = argv[: argv.index("--type")]
+    assert "longhorn_backup_name" in head[-1], head
+    rendered = [make_ansible_env().from_string(str(a)).render() for a in head]
+    assert rendered == [
+        "k3s", "kubectl", "-n", "longhorn-system", "patch", "backuptarget", "default",
+    ]  # fmt: skip
 
 
 def test_b2_drain_refuses_an_empty_volume_list_before_staging_it() -> None:

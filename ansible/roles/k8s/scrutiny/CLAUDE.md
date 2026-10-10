@@ -24,8 +24,10 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
   (`SCRUTINY_URL`) and homelab-mcp. Scrutiny's web app has no auth of its own, so a wider
   bypass would hand the LAN `DELETE /api/device/:uuid` and `POST /api/settings`.
 - **`scrutiny-influxdb-data`** (2Gi) is deliberately not backed up. It holds only the SMART
-  time series, which the daily collector runs rebuild; the reason sits beside its entry in
-  `k3s_longhorn_nobackup_volumes` in `ansible/roles/setup/k3s/defaults/main.yml`.
+  time series, which the daily collector runs rebuild; the reason sits beside the
+  `no_backup_claims` key of this role's `containers_list` entry in
+  `ansible/inventory/host_vars/daniel-box.yml`, which `k3s_longhorn_nobackup_volumes` derives
+  from.
   **`scrutiny-web-config`** (1Gi) is the SQLite config DB: device metadata and notification
   settings. Both claims are `k8s_claims` entries in `defaults/main.yml`.
 - **The rolling branch tags** are `master-web` and `master-collector`.

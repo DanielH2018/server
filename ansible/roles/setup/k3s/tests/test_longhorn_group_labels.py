@@ -16,9 +16,12 @@ from jinja2 import StrictUndefined
 
 from _helpers import load_defaults, load_tasks
 from lib.ansible_jinja_env import make_ansible_env
+from lib.service_tiers import resolved_tier_lists
 from longhorn_groups import (
     backup_group_label,
     longhorn_backup_name,
+    longhorn_nobackup_claims,
+    longhorn_weekly_claims,
     weekly_backup_group,
     weekly_backup_shard,
 )
@@ -28,7 +31,8 @@ LABEL = re.compile(r"recurring-job-group\.longhorn\.io/\S+")
 UNLISTED = "homelab/not-in-any-tier-list"
 
 # Each label task, by name, and the labels its command writes or selects on. `{weekday}` is the
-# volume's index in k3s_longhorn_weekly_volumes mod 7; `{shard}` is the included shard.
+# shard the volume's entry declares in k3s_longhorn_weekly_volumes; `{shard}` is the included
+# shard.
 EXPECTED = {
     "Find backed-up Longhorn volumes that should be excluded": [
         "recurring-job-group.longhorn.io/default=enabled",
@@ -111,7 +115,7 @@ def _cases(defaults: dict):
 
 
 def test_every_label_task_renders_the_live_labels():
-    defaults = load_defaults(K3S_ROLE)
+    defaults = resolved_tier_lists(load_defaults(K3S_ROLE))
     weekly = defaults["k3s_longhorn_weekly_volumes"]
     tasks = _label_tasks()
     assert {t["name"] for t in tasks} == set(EXPECTED), (
@@ -136,7 +140,7 @@ def test_every_label_task_renders_the_live_labels():
             if not _passes_when(task, context):
                 continue
             text = ENV.from_string(_command_text(task)).render(context)
-            weekday = weekly.index(pvc) % 7 if pvc in weekly else None
+            weekday = weekly.get(pvc)
             expected = [
                 e.format(shard=shard, weekday=weekday) for e in EXPECTED[task["name"]]
             ]
@@ -147,10 +151,41 @@ def test_every_label_task_renders_the_live_labels():
     assert rendered >= len(weekly) * 7
 
 
-def test_a_weekly_volume_shards_on_its_first_index():
-    volumes = ["a", "b", "a", "c", "d", "e", "f", "g", "h"]
-    assert weekly_backup_shard("a", volumes) == 0
-    assert weekly_backup_shard("h", volumes) == 1
+def test_a_weekly_volume_shards_on_the_shard_its_entry_declares():
+    entries = [
+        {"name": "a", "weekly_backup_claims": {"a-config": 3, "a-data": 0}},
+        {"name": "b", "namespace": "media", "weekly_backup_claims": {"b-config": 6}},
+        {"name": "c", "no_backup_claims": ["c-cache"]},
+    ]
+    weekly = longhorn_weekly_claims(entries, "homelab")
+    assert weekly == {"homelab/a-config": 3, "homelab/a-data": 0, "media/b-config": 6}
+    assert weekly_backup_shard("homelab/a-config", weekly) == 3
+    assert longhorn_nobackup_claims(entries, "homelab") == ["homelab/c-cache"]
+    with pytest.raises(ValueError, match="not a weekly-tier volume"):
+        weekly_backup_shard("homelab/c-cache", weekly)
+
+
+@pytest.mark.parametrize(
+    ("entries", "message"),
+    [
+        (
+            [{"name": "a", "weekly_backup_claims": {"a-config": 7}}],
+            "not an integer 0-6",
+        ),
+        ([{"name": "a", "weekly_backup_claims": {"a-config": True}}], "not an integer"),
+        ([{"name": "a", "weekly_backup_claims": {"a-config": "1"}}], "not an integer"),
+        (
+            [
+                {"name": "a", "weekly_backup_claims": {"shared": 1}},
+                {"name": "b", "weekly_backup_claims": {"shared": 2}},
+            ],
+            "declared twice",
+        ),
+    ],
+)
+def test_a_shard_a_volume_cannot_be_placed_on_is_refused(entries, message):
+    with pytest.raises(ValueError, match=message):
+        longhorn_weekly_claims(entries, "homelab")
 
 
 def test_an_unknown_group_is_refused():

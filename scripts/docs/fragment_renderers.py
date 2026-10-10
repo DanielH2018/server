@@ -31,7 +31,7 @@ def render_longhorn_tiers(d: dict) -> str:
         f"| Daily | R2 (`r2`) | {len(r2)} | `{d['k3s_longhorn_backup_cron']}` "
         f"| {d['k3s_longhorn_backup_retain']} |",
         f"| Weekly | B2 (`default`) | {len(weekly)}, one weekday each "
-        f"| `{minute} {hour} * * <index mod 7>` | {d['k3s_longhorn_weekly_backup_retain']} |",
+        f"| `{minute} {hour} * * <declared shard>` | {d['k3s_longhorn_weekly_backup_retain']} |",
         f"| None | — | {len(nobackup)} listed, plus the `longhorn-nobackup` StorageClass | — | — |",
         "",
         # "Daily tier", not "Daily-tier": Google.LyHyphens reads any `\w+ly-` as a hyphenated

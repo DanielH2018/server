@@ -40,7 +40,8 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   leaves it live on the config volume. Retiring one means adding its id to `RETIRED_EXTS` in
   that script, not just deleting it from the Dockerfile.
 - **Two claims, and only the small one is backed up** (2026-08-16). `code-server-config`
-  (10 Gi) holds derived state and is in `k3s_longhorn_nobackup_volumes`;
+  (10 Gi) holds derived state and is in this role's `containers_list` entry's
+  `no_backup_claims`, so in `k3s_longhorn_nobackup_volumes`;
   `code-server-workspace` (5 Gi) holds `workspace`, `.ssh`, `.config` and the git identity,
   mounted by subPath, and is what the weekly B2 tier backs up. A first-boot initContainer
   copies them across and is a no-op afterwards. Nothing was deleted — the config volume still

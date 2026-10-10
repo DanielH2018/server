@@ -61,7 +61,8 @@
 # reconciles them; it walks volume directories only, not block trees.
 - name: Ask Longhorn to re-read the backup target
   ansible.builtin.command:
-    argv: [k3s, kubectl, -n, longhorn-system, patch, backuptarget, default,
+    argv: [k3s, kubectl, -n, longhorn-system, patch, backuptarget,
+           "{{ 'b2_target' | longhorn_backup_name }}",
            --type, merge, -p,
            '{"spec":{"syncRequestedAt":"{{ lookup("pipe", "date -u +%Y-%m-%dT%H:%M:%SZ") }}"}}']
   become: true
