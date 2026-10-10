@@ -133,7 +133,7 @@ _DEFAULTS = {
 def test_longhorn_tiers_renders_the_defaults_it_is_given():
     out = renderers.render_longhorn_tiers(_DEFAULTS)
     assert "| Daily | R2 (`r2`) | 2 | `30 3 * * *` | 14 |" in out
-    assert "| 1, one weekday each | `30 4 * * <index mod 7>` | 2 |" in out
+    assert "| 1, one weekday each | `30 4 * * <declared shard>` | 2 |" in out
     assert "`homelab/a`, `homelab/b`" in out
 
 

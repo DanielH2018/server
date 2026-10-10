@@ -624,7 +624,7 @@ k3s_longhorn_backup_retain: 14
 # census read 34k Heads / 37k Lists) — and even a Sunday-only weekly batch, stacked with the
 # daily tier, retention pruning on both, and the 07:30 Sunday-reboot resync, blows both
 # 2,500/day caps. Every B2-destined volume therefore backs up WEEKLY, sharded across the seven
-# weekdays (list index mod 7 = cron day-of-week, 0=Sunday) so no single cap-day carries more
+# weekdays (declared shard = cron day-of-week, 0=Sunday) so no single cap-day carries more
 # than 3 volumes' worth of transactions. The operator accepted a week-old worst-case restore
 # for the B2 set; the four R2-routed volumes keep the daily cadence, R2's caps being monthly
 # and vast.
@@ -641,9 +641,6 @@ k3s_longhorn_backup_retain: 14
 # scripts/backup/longhorn_reap_orphan_backups.py is their only owner.
 k3s_longhorn_weekly_backup_minute_hour: "30 4"
 k3s_longhorn_weekly_backup_retain: 2
-# PVC names; the reconcile task swaps the volume's recurring-job group label. A PVC
-# recreated from the `longhorn` StorageClass reverts to daily until the next deploy — drift
-# in the over-backed-up direction, caught by the reconcile rerun.
 # ── Cloudflare R2: the second backup target ──────────────────────────────────────────────
 # Longhorn has supported more than one BackupTarget since v1.8.0. A volume is routed by its
 # OWN spec.backupTargetName, and
@@ -676,7 +673,7 @@ k3s_longhorn_r2_poll_interval: 0
 # depends on, the SSO store behind every authenticated route, and the two home-automation
 # stores that are slow and error-prone to rebuild by hand. Small, config-shaped, and exactly
 # the set worth putting on a target with free egress. Names are namespace/pvcName, matching
-# k3s_longhorn_weekly_volumes below.
+# the keys of k3s_longhorn_weekly_volumes below.
 #
 # Derived, not listed: every `backup_claims` volume of every `home-critical` containers_list
 # entry (tier `home-edge` or `home-automation`; filter_plugins/service_tier.py, #3389). To
@@ -687,42 +684,19 @@ k3s_longhorn_r2_poll_interval: 0
 # back to B2, so an undefined list must fail the play instead.
 k3s_longhorn_r2_volumes: "{{ containers_list | tier_backup_claims('home-critical', k8s_namespace) }}"
 
-# DECIDED: swap a replacement into a removed volume's index, never delete it; the weekday is
-# index mod 7, so a removal moves later volumes onto other shards and other retain jobs.
+# The weekly B2 tier, as `{namespace/pvcName: shard}`. A volume's backup weekday is its shard
+# (0=Sunday), so no weekday stacks two heavy volumes under B2's daily transaction cap.
 #
-# ORDER MATTERS: a volume's backup weekday is its list index mod 7 (0=Sunday). The list is
-# laid out in columns of seven — positions 0-6 are the seven largest volumes, one per day,
-# then the next seven, then the smallest — so no weekday stacks two heavy volumes. Reordering
-# moves volumes to a different weekday (harmless beyond a one-off cadence wobble), but append
-# new volumes at the END so existing assignments stay put.
-k3s_longhorn_weekly_volumes:
-  # Index 0 is a replacement swapped in place for the removed volume, not an append: a
-  # volume's weekday is its index mod 7, so deleting index 0 would shift all twenty volumes
-  # below it by a day and could stack two heavy volumes on one cap-day.
-  - homelab/code-server-workspace # Sun
-  - homelab/jellyfin-config # Mon
-  - homelab/valheim-config # Tue
-  - homelab/karakeep-data # Wed
-  - homelab/prowlarr-config # Thu
-  - homelab/freshrss-config # Fri
-  - homelab/sonarr-config # Sat
-  - homelab/n8n-data # Sun
-  - homelab/tdarr-server # Mon
-  - homelab/radarr-config # Tue
-  - homelab/terraria-config # Wed
-  - homelab/qbittorrent-config # Thu
-  - homelab/bazarr-config # Fri
-  - homelab/scrutiny-web-config # Sat
-  - homelab/terraria-stats-data # Sun
-  - homelab/valheim-stats-data # Mon
-  - homelab/tdarr-configs # Tue
-  # Index 17 is navidrome-data, moved up from the tail when healthchecks-config retired
-  # (#2806). Taking the last entry shifts no other volume's weekday; navidrome alone moves from
-  # Sun to Wed, and it is parked at 0 replicas, so its data does not change between backups.
-  - homelab/navidrome-data # Wed
-  - homelab/wg-easy-config # Thu
-  - homelab/n8n-files # Fri
-  - homelab/pi-peer-backup-data # Sat
+# Derived, not listed: every `weekly_backup_claims` entry of every containers_list entry, each
+# naming its own shard (filter_plugins/longhorn_groups.py, #4207). To change the set, edit the
+# entry. The shard used to be the volume's index mod 7 in a hand list here, so removing one
+# volume moved every volume below it to another weekday; a declared shard moves only itself.
+# The reconcile in tasks/longhorn.yml swaps each volume's recurring-job group label, so a PVC
+# recreated from the `longhorn` StorageClass reverts to daily until the next deploy: drift in
+# the over-backed-up direction, caught by the reconcile rerun.
+# No `default({})` on containers_list, for the R2 expression's reason: an empty result returns
+# every weekly volume to the daily B2 group, so an undefined list must fail the play instead.
+k3s_longhorn_weekly_volumes: "{{ containers_list | longhorn_weekly_claims(k8s_namespace) }}"
 
 # Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). Pushes to a static Kuma
 # monitor rather than being polled, because monitor-bridge runs on daniel-server and cannot
@@ -954,28 +928,12 @@ k3s_etcd_restore_drill_cron: "20 10 * * 1"
 # permanent exclusion. `Backup.status.size` is the backup's LOGICAL volume size, not blocks
 # uploaded (traefik-acme reports 35 -> 48 MB across daily backups of a 25 MB volume), and B2
 # publishes no cap-headroom endpoint, so **B2 Reachable** is the readout for a cap that fires.
-# Each entry below names the reason it is excluded.
-k3s_longhorn_nobackup_volumes:
-  # autokuma's state rebuilds from the static-monitors Secret — fully regenerable, so it
-  # meets the same standard as the nobackup StorageClass.
-  - homelab/autokuma-data
-  # The volume holds ONLY the SMART TSDB (verified single mount), regenerating from the
-  # daily collector runs.
-  - homelab/scrutiny-influxdb-data
-  # Monitors + notifications regenerate from the git-rendered static-monitors Secret. DR
-  # caveat: the first-run admin is recreated by hand and status HISTORY is not kept anywhere.
-  - homelab/uptime-kuma-data
-  # Decisions expire and re-derive from logs; Metabase dashboards are provisioned.
-  - homelab/crowdsec-db
-  # Measured composition, not an estimate. `du` inside the pod puts 5.8 G in
-  # .local/share/code-server/extensions — a directory the server does NOT read, since it runs
-  # with `--extensions-dir /config/extensions` (637 M, complete) — plus 223 M of caches and
-  # 17 M of code-server state, against 2.4 M of workspace. Backing up the whole volume made
-  # one service 52% of the 13.72 GiB backup set and 3,668 of 7,023 blocks; at one Class-B GET
-  # per block on restore, that volume alone was 147% of B2's 2,500/day cap and could not be
-  # restored inside a day. The keepers live in the code-server-workspace claim, which IS
-  # backed up. Not a class change, because storageClassName is immutable once bound.
-  - homelab/code-server-config
+#
+# Derived, not listed: every `no_backup_claims` entry of every containers_list entry, where
+# each claim carries the reason it is excluded (filter_plugins/longhorn_groups.py, #4207). An
+# empty result would return every listed volume to the daily B2 group, so there is no default
+# on containers_list here either.
+k3s_longhorn_nobackup_volumes: "{{ containers_list | longhorn_nobackup_claims(k8s_namespace) }}"
 
 # The nameserver lines this node's /etc/resolv.conf carries, IN ORDER. First entry wins on
 # every query; the rest are fallbacks. See templates/resolv.conf.j2 for why the order alone

@@ -27,7 +27,8 @@ express a path exclude, so each rule translates one of three ways:
    bounds what a rule-less volume can cost. Since 2026-08-16 (the sixth cap event) the split
    follows the target: the four R2-routed volumes are the whole daily tier, and **every
    B2-destined volume backs up weekly**, sharded across the seven weekdays (~3 volumes per
-   day, list index mod 7 = day-of-week) so no single B2 cap-day carries a batch. Week-old
+   day) so no single B2 cap-day carries a batch. Each claim's day-of-week is the shard its
+   `containers_list` entry declares in `weekly_backup_claims`, 0 for Sunday (#4207). Week-old
    worst-case restore for the B2 set is an accepted trade.
 
 Both audits ran against the live deployment templates on 2026-08-12 (every mount on every
@@ -95,8 +96,10 @@ same time, the store went from 22 prefixes / 93 backups / 9,312 blocks / 6.15 Gi
 4,031 / 2.86 GiB**, every volume at or under `retain`.
 
 Post-drain the worst weekday shard projects at ~1,524 Class C against the 2,500 cap, and the
-existing `index mod 7` shard split happens to balance well enough that it needed no change. That
-is luck, not design — the split is by list position and the cost is by block count.
+`index mod 7` shard split of the time happened to balance well enough that it needed no change.
+That was luck, not design: the split was by list position and the cost is by block count. Since
+#4207 each claim declares its shard on its `containers_list` entry, so moving load between
+weekdays moves only the claims it names.
 
 > **Superseded 2026-08-20 — do not size a shard off the figure above.** The 16 MiB block migration
 > cut block count per volume roughly 8.6x (sonarr 200 → 23, prowlarr 216 → 25), and the cost basis
@@ -247,7 +250,8 @@ the drain's `b2_list_file_versions` above, one level up.
   The third option this table's framing missed is neither "keep it" nor "emptyDir": a
   **second claim holding only the keepers**. `code-server-workspace` carries `workspace`,
   `.ssh`, `.config` and the git identity (~2.5 M) by subPath, and `code-server-config` moved
-  to `k3s_longhorn_nobackup_volumes`. Nothing is deleted and nothing stops persisting across
+  to `k3s_longhorn_nobackup_volumes` (declared since #4207 as the code-server entry's
+  `no_backup_claims`). Nothing is deleted and nothing stops persisting across
   restarts — only the backup scope changed. Extensions were always the safest thing to drop:
   all seven are baked into the image as `.vsix` and reinstalled by
   `/custom-cont-init.d/10-extensions.sh` on **every** container start, so they need no network

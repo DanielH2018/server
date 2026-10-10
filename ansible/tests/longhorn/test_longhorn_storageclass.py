@@ -218,7 +218,7 @@ def test_backup_routing_lists_are_pairwise_disjoint():
 def test_backup_routing_lists_have_no_duplicates():
     defaults = resolved_tier_lists(load_defaults(K3S_ROLE))
     for name in _ROUTING_LISTS:
-        entries = defaults.get(name) or []
+        entries = list(defaults.get(name) or [])
         dupes = sorted({e for e in entries if entries.count(e) > 1})
         assert not dupes, f"{name} lists {dupes} more than once"
 
