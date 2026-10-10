@@ -1,6 +1,6 @@
 """What the review pipeline asks each phase it resumes or starts, and the reviewer's schema.
 
-`fanout_lib.review` runs the phases; this module is the text they read. Every payload a model
+`fanout_lib.review.review` runs the phases; this module is the text they read. Every payload a model
 wrote goes in through `_as_data`, fenced and labelled as data. `is_held` decides which findings
 stay off the public PR and tracker.
 """
@@ -14,12 +14,12 @@ from typing import TYPE_CHECKING
 import sys as _sys
 from pathlib import Path
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib.brief import APPLY_OWED, fence_for
 
 if TYPE_CHECKING:
-    from fanout_lib.review_record import Record
+    from fanout_lib.review.review_record import Record
 
 FINDINGS_SCHEMA = {
     "type": "object",

@@ -154,7 +154,26 @@ def _resolve(name: str, importer: str, known: set[str]) -> str | None:
     return sibling if sibling in known else None
 
 
-def _first_party_imports(source: str, importer: str, known: set[str]) -> set[str]:
+def _resolve_from_ancestors(name: str, importer: str, known: set[str]) -> str | None:
+    """`_resolve`, plus the name taken from any package above `importer`.
+
+    A module inside `scripts/dev/fanout_lib` spells a sibling `fanout_lib.manifest`, which
+    resolves against `scripts/dev`, the directory its own `sys.path` insert names. `_resolve`
+    reads that import as no edge; the package-API rule below has to see it.
+    """
+    if hit := _resolve(name, importer, known):
+        return hit
+    parts = importer.split(".")[:-1]
+    for depth in range(len(parts), -1, -1):
+        candidate = ".".join([*parts[:depth], name])
+        if candidate in known:
+            return candidate
+    return None
+
+
+def _first_party_imports(
+    source: str, importer: str, known: set[str], resolve=_resolve
+) -> set[str]:
     """Every module in `known` that `source` imports, by any form and at any nesting depth.
 
     `ast.walk` rather than a scan of `tree.body`: an import deferred into a function body is the
@@ -165,25 +184,25 @@ def _first_party_imports(source: str, importer: str, known: set[str]) -> set[str
         if isinstance(node, ast.Import):
             for alias in node.names:
                 # An alias binds a second name for the same module; the edge is identical.
-                if hit := _resolve(alias.name, importer, known):
+                if hit := resolve(alias.name, importer, known):
                     found.add(hit)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
-            if hit := _resolve(node.module, importer, known):
+            if hit := resolve(node.module, importer, known):
                 found.add(hit)
                 continue
             # `from diagnostics.probe_lib import core` — the module is the PACKAGE and the
             # imported name is the module. Without this arm every such import reads as no edge.
             for alias in node.names:
-                if hit := _resolve(f"{node.module}.{alias.name}", importer, known):
+                if hit := resolve(f"{node.module}.{alias.name}", importer, known):
                     found.add(hit)
     return found - {importer}
 
 
-def _module_graph() -> dict[str, set[str]]:
+def _module_graph(resolve=_resolve) -> dict[str, set[str]]:
     files = _module_names()
     known = set(files)
     return {
-        name: _first_party_imports(path.read_text(), name, known)
+        name: _first_party_imports(path.read_text(), name, known, resolve)
         for name, path in files.items()
     }
 
@@ -348,3 +367,65 @@ def test_the_cycle_detector_finds_a_two_module_cycle():
 def test_the_cycle_detector_clears_a_diamond():
     """The accept half: a shared leaf reached by two paths is not a cycle."""
     assert _cycles({"a": {"b", "c"}, "b": {"d"}, "c": {"d"}, "d": set()}) == set()
+
+
+# --- Package APIs -----------------------------------------------------------------------------
+
+# A package with one public module: a production module outside the package may import that
+# module and no other under it, so the rest of the package can change without its callers.
+# Tests may reach inside. Each entry names the outside importers the rule must find, so a move
+# that hid them from the census fails here rather than passing over nothing.
+PACKAGE_APIS = {
+    "dev.fanout_lib.review": (
+        "dev.fanout_lib.review.api",
+        frozenset({"dev.fanout_place", "dev.fanout_review", "dev.fanout_review_stats"}),
+    ),
+}
+
+
+def _past_the_api(graph: dict[str, set[str]], package: str, api: str) -> list[str]:
+    """Each edge from outside `package` to a module in it other than `api`."""
+    inside = f"{package}."
+    return sorted(
+        f"{importer} imports {target}"
+        for importer, targets in graph.items()
+        if not importer.startswith(inside)
+        for target in targets
+        if target.startswith(inside) and target != api
+    )
+
+
+def test_outside_code_imports_a_package_only_through_its_api():
+    graph = _module_graph(_resolve_from_ancestors)
+    for package, (api, consumers) in PACKAGE_APIS.items():
+        found = {importer for importer, targets in graph.items() if api in targets}
+        assert consumers <= found, f"{api} lost importers: {sorted(consumers - found)}"
+        past = _past_the_api(graph, package, api)
+        assert not past, f"import {api} instead: {past}"
+
+
+def test_an_import_past_the_api_is_flagged():
+    graph = {"dev.fanout_place": {"dev.fanout_lib.review.red_gate"}}
+    assert _past_the_api(
+        graph, "dev.fanout_lib.review", "dev.fanout_lib.review.api"
+    ) == ["dev.fanout_place imports dev.fanout_lib.review.red_gate"]
+
+
+def test_the_api_itself_and_imports_inside_the_package_are_clean():
+    graph = {
+        "dev.fanout_place": {"dev.fanout_lib.review.api"},
+        "dev.fanout_lib.review.review": {"dev.fanout_lib.review.red_gate"},
+    }
+    assert (
+        _past_the_api(graph, "dev.fanout_lib.review", "dev.fanout_lib.review.api") == []
+    )
+
+
+def test_a_package_import_resolves_from_an_ancestor_directory():
+    """`fanout_lib.review.red_gate` inside `dev/fanout_lib/launch.py` names `dev.fanout_lib...`."""
+    known = {"dev.fanout_lib.launch", "dev.fanout_lib.review.red_gate"}
+    source = "from fanout_lib.review.red_gate import review_flags\n"
+    assert _first_party_imports(source, "dev.fanout_lib.launch", known) == set()
+    assert _first_party_imports(
+        source, "dev.fanout_lib.launch", known, _resolve_from_ancestors
+    ) == {"dev.fanout_lib.review.red_gate"}

@@ -67,7 +67,7 @@ def hardened(run: Runner, worktree: Path) -> list[str]:
     DECIDED: pin settings rather than snapshot and restore the config file. Every worktree
     shares the one in the common git dir and writes `branch.*` keys into it, so a restore
     would undo other sessions' writes. The reset only stops running through a planted
-    `.git/config` or hook; `fanout_lib.git_state` is what fails the batch when one appears.
+    `.git/config` or hook; `fanout_lib.review.git_state` is what fails the batch when one appears.
     """
     listed = run(
         [

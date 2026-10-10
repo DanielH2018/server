@@ -109,14 +109,16 @@ def test_an_issue_with_an_open_pr_is_not_pickable():
 
 def test_fanout_tooling_paths_finds_bare_and_pathed_citations_only():
     body = (
-        "`fanout_place.py status` and scripts/dev/fanout_lib/review.py:120, "
+        "`fanout_place.py status`, `fanout_lib/brief.py` and "
+        "scripts/dev/fanout_lib/review/review.py:120, "
         "the `.claude/hooks/fanout-stop.py` hook; not scripts/dev/tests/"
         "test_fanout_red_gate.py, the issue-fanout skill or ~/.claude/fanout/."
     )
     assert fanout_tooling_paths(body) == [
         ".claude/hooks/fanout-stop.py",
+        "fanout_lib/brief.py",
         "fanout_place.py",
-        "scripts/dev/fanout_lib/review.py",
+        "scripts/dev/fanout_lib/review/review.py",
     ]
 
 
@@ -247,7 +249,7 @@ def test_next_json_offers_a_fanout_tooling_issue_marked_solo_only(capsys):
 
 def test_next_text_render_marks_a_solo_only_issue(capsys):
     tooling = make_issue(1150, title="tooling")
-    tooling["body"] = "scripts/dev/fanout_lib/red_gate.py drops the commit"
+    tooling["body"] = "scripts/dev/fanout_lib/review/red_gate.py drops the commit"
     tools, _ = build_tools(
         Fakes(issues=[tooling, make_issue(1151)], worktree_facts=facts())
     )

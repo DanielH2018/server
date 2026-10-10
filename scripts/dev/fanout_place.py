@@ -8,7 +8,7 @@ worktree there, and starts a headless
 Opus agent as a transient user service. daniel-box agents land their PR; daniel-server agents
 stop at `gh pr create`. It shipped in commit bd8e62bf8.
 `launch --review` runs `fanout_review.py`: a review between each batch's PR and its landing,
-and a red phase before a `red-green` batch's implementer. `fanout_lib/review.py` has the phases.
+and a red phase before a `red-green` batch's implementer. `fanout_lib/review/review.py` has the phases.
 
 Usage::
 
@@ -73,7 +73,7 @@ from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
 from findings_lib.tracked_paths import tracked_files
-from fanout_lib.red_gate import review_flags
+from fanout_lib.review.api import review_flags
 from fanout_lib.launch_gates import (
     live_elsewhere,
     over_live_batch_cap,

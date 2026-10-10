@@ -32,11 +32,11 @@ from pathlib import Path
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 import sys as _sys
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib.base_check import is_test_side
-from fanout_lib.red_tests import red_by_absence
-from fanout_lib.hardened_runs import (
+from fanout_lib.review.base_check import is_test_side
+from fanout_lib.review.red_tests import red_by_absence
+from fanout_lib.review.hardened_runs import (
     Runner,
     bare_git,
     clone_at,
@@ -44,7 +44,7 @@ from fanout_lib.hardened_runs import (
     pytest_argv,
     worktree_git,
 )
-from fanout_lib.red_gate import Gate
+from fanout_lib.review.red_gate import Gate
 from findings_lib.red_green import suite_covered
 
 MAX_HUNKS = 20

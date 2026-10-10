@@ -300,7 +300,7 @@ def render_brief(
         target: the repo the batch works. Another repo's batch is claimed under its own
             branch, names that repo on every `gh` and `findings.py` call, and stops at
             the PR.
-        review: the batch runs `fanout_lib.review`'s pipeline. The agent stops at the PR
+        review: the batch runs `fanout_lib.review.review`'s pipeline. The agent stops at the PR
             on every host, and the pipeline hands it the landing after the review.
 
     Returns:

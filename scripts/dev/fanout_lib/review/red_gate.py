@@ -60,12 +60,12 @@ from pathlib import Path, PurePosixPath
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 import sys as _sys
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib.brief import fence_for
-from fanout_lib.red_tests import append_only, red_by_absence
+from fanout_lib.review.red_tests import append_only, red_by_absence
 
-from fanout_lib.hardened_runs import (
+from fanout_lib.review.hardened_runs import (
     ORIGIN_MASTER,
     Runner,
     clone_at,

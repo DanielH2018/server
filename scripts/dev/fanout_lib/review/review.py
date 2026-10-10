@@ -72,16 +72,16 @@ from pathlib import Path
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
 import sys as _sys
 
-_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib.brief import ISSUES_HEADING, lands
-from fanout_lib.held_hooks import (
+from fanout_lib.review.held_hooks import (
     held_secret_paths,
     pointed_settings,
     read_hooks,
     write_hooks,
 )
-from fanout_lib.review_prompts import (
+from fanout_lib.review.review_prompts import (
     FINDINGS_SCHEMA,
     delta_prompt,
     file_prompt,
@@ -90,7 +90,7 @@ from fanout_lib.review_prompts import (
     apply_prompt,
     review_prompt,
 )
-from fanout_lib.red_gate import (
+from fanout_lib.review.red_gate import (
     GREEN_FILE,
     RED_SCHEMA,
     Gate,
@@ -102,15 +102,15 @@ from fanout_lib.red_gate import (
     red_section,
     labelled_skip_reason,
 )
-from fanout_lib.hardened_runs import ResetFailed
-from fanout_lib.worktree_reset import reset_worktree
-from fanout_lib.base_check import BaseCheck, unproven_tests
-from fanout_lib.git_state import GitState, changed, snapshot
-from fanout_lib.hunk_check import HunkCheck, red_detection
-from fanout_lib.processes import reaping, run_process
-from fanout_lib.review_land import RESUME_VERDICTS, land
-from fanout_lib.review_land import report as landing_report
-from fanout_lib.review_record import (
+from fanout_lib.review.hardened_runs import ResetFailed
+from fanout_lib.review.worktree_reset import reset_worktree
+from fanout_lib.review.base_check import BaseCheck, unproven_tests
+from fanout_lib.review.git_state import GitState, changed, snapshot
+from fanout_lib.review.hunk_check import HunkCheck, red_detection
+from fanout_lib.review.processes import reaping, run_process
+from fanout_lib.review.review_land import RESUME_VERDICTS, land
+from fanout_lib.review.review_land import report as landing_report
+from fanout_lib.review.review_record import (
     Phase,
     Record,
     actionable,
@@ -132,7 +132,7 @@ from fanout_lib.target import Target
 PROMPT_FILE = Path(__file__).resolve().parent / "review_system_prompt.md"
 # The checkout this module was loaded from: the batch worktree for this repo, the batch's
 # `.fanout/server` snapshot for another repo. Both are trees the implementer can write.
-SOURCE_ROOT = Path(__file__).resolve().parents[3]
+SOURCE_ROOT = Path(__file__).resolve().parents[4]
 HEADLESS_PROMPT_FILE = SOURCE_ROOT / SYSTEM_PROMPT_FILE
 # Names the pipeline's own copy of `fanout-stop.py`. The worktree's copy, which this repo's
 # `.claude/settings.json` registers too, stands down while the file exists, so one Stop spends
