@@ -5,7 +5,9 @@ The summary lines are pytest's own, measured with `pytest -vv -rA --tb=no` on 20
 Run: uv run pytest scripts/dev/tests/test_fanout_red_cause.py
 """
 
+from _review_fakes import PR, _pipeline, _report
 from fanout_lib.red_cause import cause, red_by_absence
+from fanout_lib.red_gate import Gate, Gates
 
 SUMMARY = """\
 FAILED t.py::test_import - ModuleNotFoundError: No module named 'nosuchmod'
@@ -38,3 +40,24 @@ def test_an_assertion_or_another_error_is_not_red_by_absence():
         "assertion",
         "other",
     ]
+
+
+def test_the_reviewer_and_the_record_name_the_red_by_absence_nodes(tmp_path):
+    gate = Gate(files=["t.py"], nodes=["t.py::a", "t.py::b"], absent=["t.py::a"])
+    reports = [
+        _report(structured={"behaviours": []}),
+        _report(f"Opened {PR}"),
+        _report(structured={"summary": "", "findings": []}),
+    ]
+    pipeline, run = _pipeline(
+        tmp_path,
+        reports,
+        host="daniel-server",
+        heads=("base", "red1", "red1"),
+        gates=Gates(red=lambda *_: gate, green=lambda *_: ""),
+    )
+    pipeline.run_all()
+    assert pipeline.record.red_by_absence == 1
+    review_stdin = run.claude[2][1]
+    assert "- `t.py::a`" in review_stdin and "`t.py::b`" not in review_stdin
+    assert "1 of them only because a name was missing" in run.comments[0]

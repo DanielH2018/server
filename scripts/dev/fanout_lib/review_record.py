@@ -63,6 +63,8 @@ class Record:
     red_gate: str = ""
     red_behaviours: int = 0
     red_tests: int = 0
+    # How many red tests failed only because a name was missing (#4023).
+    red_by_absence: int = 0
     green_gate: str = ""
     # Why the batch ran no red phase (`red_gate.red_skip_reason`), "" when it ran one.
     red_skipped: str = ""
@@ -151,7 +153,12 @@ def comment_body(record: Record) -> str:
     if record.red_gate == "passed":
         lines.append(
             f"Red gate passed: {record.red_tests} tests for {record.red_behaviours} stated "
-            "behaviours failed on the unchanged code."
+            "behaviours failed on the unchanged code"
+            + (
+                f", {record.red_by_absence} of them only because a name was missing."
+                if record.red_by_absence
+                else "."
+            )
         )
     elif record.red_gate:
         lines.append(f"Red gate refused the test author's commit: {record.red_gate}.")

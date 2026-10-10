@@ -365,6 +365,7 @@ class Pipeline:
             len(behaviours) if isinstance(behaviours, list) else 0
         )
         self.record.red_tests = len(gate.nodes)
+        self.record.red_by_absence = len(gate.absent)
         self.record.red_gate = "passed" if gate.passed else gate.reason
         return (red, gate) if gate.passed else None
 
@@ -449,7 +450,9 @@ class Pipeline:
         head = self._git("rev-parse", "HEAD")
 
         review = self._claude(
-            "review", self._reviewer(), review_prompt(issues, base, head)
+            "review",
+            self._reviewer(),
+            review_prompt(issues, base, head, red[1].absent if red else ()),
         )
         found, error = findings_of(review)
         self.record.review_error = error

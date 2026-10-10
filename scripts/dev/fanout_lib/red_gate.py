@@ -60,6 +60,7 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import _fence
+from fanout_lib.red_cause import red_by_absence
 
 # The reset that clears the red phase, split out at this module's length cap; every name
 # stays importable from here.
@@ -132,6 +133,8 @@ class Gate:
     # `refs/remotes/origin/master` when the red gate ran, "" when there was none. Every
     # worktree shares that ref, so the green gate pins its clone's copy here (#3845).
     origin: str = ""
+    # The nodes that failed on a missing name rather than an assertion (`red_cause`, #4023).
+    absent: list[str] = field(default_factory=list)
 
     @property
     def passed(self) -> bool:
@@ -344,9 +347,10 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str) -> Gate:
     nodes = sorted(collected - before)
     if not nodes:
         return Gate("the red commits add no test node", files)
-    proc = run(_pytest(worktree, "-q", "-rA", "--tb=no", *nodes), None)
+    # `-vv`, not `-q`: only at that verbosity is the summary's failure text left whole.
+    proc = run(_pytest(worktree, "-vv", "-rA", "--tb=no", *nodes), None)
     reason = judge_red(proc.returncode, proc.stdout, nodes)
-    return Gate(reason, files, nodes, origin)
+    return Gate(reason, files, nodes, origin, red_by_absence(proc.stdout, nodes))
 
 
 def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
