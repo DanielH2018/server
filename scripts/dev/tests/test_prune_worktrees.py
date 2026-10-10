@@ -28,6 +28,7 @@ from prune_worktrees import (
     main,
     orphan_branches,
     prune_all,
+    reap_claims,
     sweep_branches,
 )
 
@@ -143,6 +144,34 @@ def test_prune_all_reports_a_removal_git_refused(capsys, tmp_path):
     )
     out = capsys.readouterr().out
     assert "could not remove /w: is dirty\n  blocked under /w\n" in out
+
+
+def _reaps_after(tmp_path, removed_ok):
+    reaped = []
+    prune_all(
+        str(tmp_path),
+        [_tree()],
+        advise=lambda root: [],
+        remover=lambda repo, tree: (removed_ok, "" if removed_ok else "is dirty"),
+        reaper=lambda repo: reaped.append(repo) or ["released #1 (worktree-x)"],
+    )
+    return reaped
+
+
+def test_prune_all_reaps_claims_after_a_removal(capsys, tmp_path):
+    # A removed tree's claims stay on the register until `reap` runs (#3928).
+    assert _reaps_after(tmp_path, removed_ok=True) == [str(tmp_path)]
+    assert "released #1 (worktree-x)" in capsys.readouterr().out
+
+
+def test_prune_all_does_not_reap_when_nothing_was_removed(tmp_path):
+    assert _reaps_after(tmp_path, removed_ok=False) == []
+
+
+def test_the_default_reaper_skips_a_checkout_with_no_findings_script(tmp_path):
+    # The main-path tests run in scratch checkouts, so this is also what keeps them off gh.
+    [line] = reap_claims(str(tmp_path))
+    assert line.startswith("claims not reaped: no ")
 
 
 # --- the orphan-branch sweep ----------------------------------------------------

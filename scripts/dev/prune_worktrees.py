@@ -40,6 +40,7 @@ A prune also repairs the shared object store the removed worktrees leave litter 
 """
 
 import argparse
+import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -198,11 +199,42 @@ def survey(repo: str) -> list[tuple[str, Worktree, str]]:
     return out
 
 
+def reap_claims(repo: str) -> list[str]:
+    """Run the checkout's own `findings.py reap` and return the lines to print.
+
+    A removed worktree's claims read as stale from then on, but only `reap` releases them, and
+    nothing ran it outside a fan-out's launch (#3928). It is the checkout's copy, so a scratch
+    repo with no `scripts/dev/findings.py` reaps nothing and says so.
+    """
+    findings = Path(repo) / "scripts" / "dev" / "findings.py"
+    if not findings.is_file():
+        return [f"claims not reaped: no {findings}"]
+    # This interpreter, not `uv`: the weekly cron's PATH omits ~/.local/bin, and it already
+    # runs this script under `uv run`, so sys.executable is the repo's env.
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(findings), "reap"],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return ["claims not reaped: reap ran past 300s"]
+    lines = proc.stdout.splitlines()
+    if proc.returncode != 0:
+        detail = " ".join(proc.stderr.split())
+        lines.append(f"claims not reaped: reap exited {proc.returncode}: {detail}")
+    return lines
+
+
 def prune_all(
     repo: str,
     trees: list[Worktree],
     advise: Callable[[str], list[str]] = foreign_owned_advice,
     remover: Callable[[str, Worktree], tuple[bool, str]] | None = None,
+    reaper: Callable[[str], list[str]] = reap_claims,
 ) -> None:
     """Remove each tree, printing one line per outcome.
 
@@ -214,9 +246,11 @@ def prune_all(
     a test of `main` that replaces this module's `remove` still reaches it.
     """
     remover = remove if remover is None else remover
+    removed = 0
     for tree in trees:
         ok, error = remover(repo, tree)
         if ok:
+            removed += 1
             print(f"removed {tree.path}")
         else:
             print(f"could not remove {tree.path}: {error}")
@@ -224,6 +258,9 @@ def prune_all(
                 print(line)
     for line in repair_object_store(repo):
         print(line)
+    if removed:
+        for line in reaper(repo):
+            print(line)
 
 
 def brief(prune: bool = False) -> int:

@@ -221,6 +221,19 @@ def test_next_text_render_marks_a_stale_claim_and_names_reap(capsys):
     assert "reap" in out
 
 
+def test_next_json_names_the_stale_claim_holder_and_null_for_a_free_issue(capsys):
+    # The JSON consumer gets what the text render's `[stale claim by ...]` marker says (#3927).
+    free = make_issue(1140)
+    held = make_issue(1132, comments=[claim_comment("worktree-gone", None, "t")])
+    tools, _ = build_tools(Fakes(issues=[free, held], worktree_facts=facts()))
+    assert main(["next", "--json"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert {r["number"]: r["stale_claim_by"] for r in rows} == {
+        1140: None,
+        1132: "worktree-gone",
+    }
+
+
 def test_next_json_offers_a_fanout_tooling_issue_marked_solo_only(capsys):
     tooling = make_issue(1150)
     tooling["body"] = "Fix `fanout_place.py stop`."

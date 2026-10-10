@@ -21,9 +21,9 @@ uv run python scripts/dev/findings.py next --json
 
 `launch` runs `findings.py reap` itself, after every placement gate and before its first
 claim. `reap` releases every claim whose worktree no longer holds work: a session that died
-after its PR landed, or a worktree somebody pruned. No cron and no hook runs it, so `launch`
-is where it runs. A failed reap only warns, because each claim still reaps a stale claim on
-the issue it takes.
+after its PR landed, or a worktree somebody pruned. `prune_worktrees.py --prune`, which the
+weekly sweep cron runs, also reaps once it has removed a tree. A failed reap only warns,
+because each claim still reaps a stale claim on the issue it takes.
 
 `next` withholds `manual` issues, issues deferred to a later date, anything a LIVE claim
 holds, and anything an open PR already closes — every row it prints is free to take. An issue
