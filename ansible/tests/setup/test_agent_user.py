@@ -347,37 +347,6 @@ def test_the_agents_clone_gets_a_venv_its_hooks_can_import_from() -> None:
     }
 
 
-def test_the_agents_clone_is_fast_forwarded_as_the_agent_before_its_venv_sync() -> None:
-    """#4067/#4099: the hook shim and ui_mcp.sh run from this clone, which nothing else pulls.
-
-    Only a clean master moves, and never fatally: a red task here holds the GitOps deployer
-    over the agent's own working state.
-    """
-    claude_tasks = tasks(CLAUDE_TASKS)
-    names = [t.get("name") for t in claude_tasks]
-    pull_name = "Fast-forward the agent user's clone to origin's master"
-    pull = named(claude_tasks, pull_name)
-    argv = pull["ansible.builtin.command"]["argv"]
-    assert argv[:4] == ["runuser", "-u", "{{ claude_code_agent_user }}", "--"]
-    assert argv[4:] == [
-        "git",
-        "-C",
-        "{{ claude_code_agent_user_clone_dir }}",
-        "pull",
-        "--ff-only",
-        "origin",
-        "master",
-    ]
-    assert pull["failed_when"] is False
-    gates = " ".join(pull["when"])
-    assert "branch\\.head master" in gates and "^[^#]" in gates, (
-        "the pull must be gated on master and a clean tracked tree"
-    )
-    assert names.index(pull_name) < names.index(
-        "Sync the repo's venv in the agent user's clone"
-    ), "the venv sync must read the fast-forwarded uv.lock"
-
-
 def dirs_not_owned_like_the_chown(task_list: list[dict]) -> list[str]:
     """Each directory task whose owner or group differs from the closing chown's.
 

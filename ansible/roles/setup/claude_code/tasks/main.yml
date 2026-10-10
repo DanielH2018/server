@@ -412,6 +412,10 @@
     TMPDIR: /tmp
   register: claude_code_agent_clone_status
   changed_when: false
+  # Never fatal, for the pull's reason below. A missing or broken clone skips the pull, and the
+  # report task names the failed read. So does a --check run on a host that has just switched
+  # the agent user on, which reads for real a clone the skipped clone task never made.
+  failed_when: false
   # A read of state that exists independently of this play, so --check runs it too.
   check_mode: false
   become: true
@@ -446,6 +450,7 @@
   become: true
   when:
     - claude_code_agent_user_enabled
+    - claude_code_agent_clone_status.rc | default(1) == 0
     - claude_code_agent_clone_status.stdout | default('') is search('^# branch\.head master$', multiline=True)
     - claude_code_agent_clone_status.stdout | default('') is not search('^[^#]', multiline=True)
 
@@ -454,7 +459,9 @@
   ansible.builtin.debug:
     msg: >-
       {{ claude_code_agent_user_clone_dir }} was not fast-forwarded:
-      {{ 'its pull failed: ' ~ (claude_code_agent_clone_pull.stderr | default(''))
+      {{ 'reading its status failed: ' ~ (claude_code_agent_clone_status.stderr | default(''))
+      if claude_code_agent_clone_status.rc | default(1) != 0
+      else 'its pull failed: ' ~ (claude_code_agent_clone_pull.stderr | default(''))
       if claude_code_agent_clone_pull.rc | default(0) != 0
       else 'it is off master or has uncommitted changes' }}.
       The agent's hook shim and homelab-ui launcher keep running its old code until it moves.
