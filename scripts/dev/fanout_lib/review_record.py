@@ -67,7 +67,7 @@ class Record:
     # How many red tests failed only because a name was missing (#4023).
     red_by_absence: int = 0
     green_gate: str = ""
-    # The first green gate run's `red_gate.green_cause`: `passed`, `unmet` or `lock`.
+    # The first green gate run's `red_gate.green_cause`: `passed`, `unmet`, `flaky` or `lock`.
     green_first: str = ""
     # The PR's new test nodes outside the red phase, those of them that pass with its code
     # changes taken out (`base_check`), and why the check could not run, if it could not.

@@ -1,4 +1,7 @@
-from lib.facts.pins import pinned_keys
+import pytest
+
+from lib.facts.citations import tracked_files
+from lib.facts.pins import image_pins, pinned_keys, split_image_ref
 from lib.repo_paths import REPO
 
 
@@ -39,3 +42,34 @@ def test_a_disabled_built_in_manager_pins_nothing(tmp_path):
     assert pinned_keys(tmp_path, ".github/workflows/ci.yml") == frozenset()
     (tmp_path / "renovate.json").write_text("{}")
     assert pinned_keys(tmp_path, ".github/workflows/ci.yml") == {"jobs"}
+
+
+def test_the_real_tree_names_the_image_pins_it_must_find():
+    """A role default, an inventory var and a Pi compose line; a built image pins nothing."""
+    pins = image_pins(REPO, tracked_files(REPO))
+    assert ("registry_k8s_image", "ansible/roles/k8s/registry/defaults/main.yml") in {
+        p[1:] for p in pins["registry"]
+    }
+    assert pins["crowdsecurity/crowdsec"][0][1:] == (
+        "crowdsec_k8s_image",
+        "ansible/inventory/group_vars/all.yml",
+    )
+    assert (
+        "image:",
+        "ansible/roles/containers/alloy/templates/docker-compose.yml.j2",
+    ) in {p[1:] for p in pins["grafana/alloy"]}
+    assert not [name for name in pins if "{{" in name or "code-server" in name]
+
+
+@pytest.mark.parametrize(
+    ("ref", "parts"),
+    [
+        ("registry:3.1.2@sha256:ab", ("registry", "3.1.2")),
+        ("host:5000/team/img:1.0", ("host:5000/team/img", "1.0")),
+        ("host:5000/team/img", None),
+        ("t/m.py:LIMIT", ("t/m.py", "LIMIT")),
+        ("org/app@sha256:ab", None),
+    ],
+)
+def test_split_image_ref(ref, parts):
+    assert split_image_ref(ref) == parts

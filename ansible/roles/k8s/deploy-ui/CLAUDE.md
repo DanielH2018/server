@@ -27,4 +27,3 @@ separate tag on another playbook — `uv run ansible-playbook ansible/initial_se
 Authelia policy: `auth_tier: two_factor` on the containers_list entry, which the authelia role
 renders into its access_control rules. ENFORCED for every SSO entry by
 `ansible/tests/services/test_authelia_access_tiers.py`.
-Kept out of `STAGING_SUBSET`: daniel-stage has no daemon to route to.

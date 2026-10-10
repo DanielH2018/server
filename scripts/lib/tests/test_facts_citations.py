@@ -5,6 +5,7 @@ import pytest
 from lib.git_testing import git, init_repo
 from lib.facts.citations import (
     FORMS,
+    HISTORY_MARKER,
     REJECT_REASONS,
     Citation,
     Rejected,
@@ -13,12 +14,15 @@ from lib.facts.citations import (
     in_tree,
     line_numbered_citations,
     macro_citations,
+    mask_history,
     node_citations,
     parse_citations,
     repo_docs,
     sections,
+    spans,
     tracked_files,
 )
+from lib.repo_paths import REPO
 
 _DOC = """intro `scripts/lib/git.py`
 
@@ -414,3 +418,32 @@ def test_repo_docs_lists_every_tracked_claude_md(tmp_path):
         tmp_path / "CLAUDE.md",
         tmp_path / "role" / "CLAUDE.md",
     ]
+
+
+def test_the_real_wg_easy_history_bullet_is_masked_and_its_neighbours_are_not():
+    """The bullet that set the convention. Its continuation lines go with it; the next stays."""
+    text = (REPO / "ansible/roles/containers/wg-easy/CLAUDE.md").read_text()
+    assert "\n- " + HISTORY_MARKER in text
+    masked = mask_history(text)
+    assert "wg_easy_password_hash` no longer exists" not in masked
+    assert "Exposure is LAN-bound" in masked
+    assert "Pi UI is unauthenticated" in masked
+    assert masked.count("\n") == text.count("\n")
+
+
+def test_a_history_paragraph_ends_at_the_blank_line():
+    text = f"{HISTORY_MARKER} gone.** It used `x_y`.\nStill `x_y`.\n\nLive `a_b`.\n"
+    assert spans(mask_history(text)) == ["a_b"]
+
+
+def test_a_history_bullet_keeps_its_nested_bullets_and_ends_at_a_sibling():
+    text = (
+        f"- {HISTORY_MARKER} gone.**\n\n  - nested `x_y`\n- sibling `a_b`\n"
+        "  - its child `c_d`\n"
+    )
+    assert spans(mask_history(text)) == ["a_b", "c_d"]
+
+
+def test_the_marker_mid_sentence_is_prose():
+    text = f"See the {HISTORY_MARKER} bullet.** `a_b`\n- the {HISTORY_MARKER}** `c_d`\n"
+    assert mask_history(text) == text

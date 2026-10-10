@@ -24,6 +24,9 @@ rather than in this repo's config (#4158). ``_BUILT_IN`` restates the default
 docker-compose, helm-values and gitlabci select no tracked file, and the kubernetes manager has
 no default pattern; add a row when one starts to. A built-in manager is active unless
 ``enabledManagers`` leaves it out or its own object sets ``"enabled": false``.
+
+``image_pins`` answers a different question for the ``version-as-fact`` lint: which tag the
+tree pins for each image, so a tag restated in prose can be compared with it.
 """
 
 import fnmatch
@@ -133,3 +136,56 @@ def pinned_keys(repo: Path, rel: str) -> frozenset[str]:
             if line_rx.match(line) and (key := _key_above(lines, i)):
                 keys.add(key)
     return frozenset(keys)
+
+
+# ── image pins, for the `version-as-fact` lint ───────────────────────────────────────────
+#
+# Every image the tree pins by tag, read from where the tree pins it: the top-level `*_image`
+# keys in role defaults and inventory vars, and the `image:` lines in the Pi's compose
+# templates, whose pins live nowhere else. A value holding `{{` is a built image whose tag
+# the play computes, so it pins nothing a sentence could restate.
+_VAR_FILES = re.compile(
+    r"^ansible/(?:roles/[^/]+/[^/]+/defaults/[^/]+|inventory/(?:group|host)_vars/[^/]+)\.ya?ml$"
+)
+_COMPOSE_FILES = re.compile(
+    r"^ansible/roles/containers/[^/]+/templates/docker-compose\.ya?ml\.j2$"
+)
+_IMAGE_VAR = re.compile(r"^(?P<var>[a-z0-9_]+_image):\s*['\"]?(?P<ref>[^\s'\"]+)", re.M)
+_COMPOSE_IMAGE = re.compile(r"^\s*image:\s*['\"]?(?P<ref>[^\s'\"]+)", re.M)
+
+
+def split_image_ref(ref: str) -> tuple[str, str] | None:
+    """``(name, tag)`` of an ``image:tag[@digest]`` reference, or None when it carries no tag.
+
+    The tag colon is the last one after the last slash, so a registry port
+    (``host:5000/img:1.0``) stays part of the name.
+    """
+    ref = ref.split("@", 1)[0]
+    colon = ref.rfind(":")
+    if colon <= ref.rfind("/") or colon in (0, len(ref) - 1):
+        return None
+    return ref[:colon], ref[colon + 1 :]
+
+
+def image_pins(
+    repo: Path, tracked: frozenset[str]
+) -> dict[str, tuple[tuple[str, str, str], ...]]:
+    """Image name -> every ``(tag, variable, file)`` that pins it, in file then line order.
+
+    A compose pin has no variable, so its second field reads ``image:``.
+    """
+    found: dict[str, list[tuple[str, str, str]]] = {}
+    for rel in sorted(tracked):
+        if _VAR_FILES.match(rel):
+            rx = _IMAGE_VAR
+        elif _COMPOSE_FILES.match(rel):
+            rx = _COMPOSE_IMAGE
+        else:
+            continue
+        for m in rx.finditer((repo / rel).read_text(encoding="utf-8")):
+            ref = m.group("ref")
+            parts = None if "{{" in ref else split_image_ref(ref)
+            if parts:
+                var = m.groupdict().get("var") or "image:"
+                found.setdefault(parts[0], []).append((parts[1], var, rel))
+    return {name: tuple(pins) for name, pins in found.items()}
