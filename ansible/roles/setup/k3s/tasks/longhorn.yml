@@ -200,7 +200,8 @@
   # fails NotFound. The CR takes a duration string, where the setting took bare seconds.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io default
+      k3s kubectl -n longhorn-system patch backuptargets.longhorn.io
+      {{ 'b2_target' | longhorn_backup_name }}
       --type=merge -p {{ poll_patch | quote }}
   vars:
     poll_patch: '{"spec":{"pollInterval":"{{ k3s_longhorn_backupstore_poll_interval }}s"}}'

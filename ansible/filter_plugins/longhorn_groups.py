@@ -9,6 +9,13 @@ instead (#3946).
 - `backup_group_label`: the volume label key for a group, `recurring-job-group.longhorn.io/<group>`.
 - `weekly_backup_group`: the group of weekly shard N, `weekly-backup-d<N>`.
 - `weekly_backup_shard`: the shard a weekly-tier volume belongs to, its list index mod 7.
+- `longhorn_backup_name`: a bare name by key — the label prefix, a group or a BackupTarget —
+  for a template that matches on a name rather than writing one label, such as the restore
+  drill's jq selector and `seed_volume_backup.yml`.
+
+DECIDED: a task names a group by its own spelling, `'no-backup' | backup_group_label`, not by
+a key. The filter refuses any group the module does not define, so a typo fails the render the
+same way a key would, and the task still reads as the label it writes (#3946).
 
 Each raises `ValueError` on a group or shard the module does not define, so a typo fails the
 render instead of writing a label no RecurringJob selects. Ansible wraps the `ValueError` in
@@ -69,6 +76,27 @@ def weekly_backup_shard(pvc: str, weekly_volumes: list) -> int:
     return list(weekly_volumes).index(pvc) % longhorn_backups.WEEKLY_SHARDS
 
 
+# The bare names `longhorn_backup_name` returns, by key.
+NAMES = {
+    "label_prefix": longhorn_backups.GROUP_LABEL_PREFIX,
+    "default_group": longhorn_backups.DEFAULT_GROUP,
+    "no_backup_group": longhorn_backups.NO_BACKUP_GROUP,
+    "weekly_legacy_group": longhorn_backups.WEEKLY_LEGACY_GROUP,
+    "b2_target": longhorn_backups.B2_TARGET,
+    "r2_target": longhorn_backups.R2_TARGET,
+}
+
+
+def longhorn_backup_name(key: str) -> str:
+    """The name `key` stands for in `NAMES`, refusing a key it does not list."""
+    if key not in NAMES:
+        raise ValueError(
+            f"longhorn_backup_name: {key!r} is not a Longhorn backup name; "
+            f"known: {', '.join(sorted(NAMES))}"
+        )
+    return NAMES[key]
+
+
 class FilterModule:
     """Registers the Longhorn backup group filters."""
 
@@ -77,4 +105,5 @@ class FilterModule:
             "backup_group_label": backup_group_label,
             "weekly_backup_group": weekly_backup_group,
             "weekly_backup_shard": weekly_backup_shard,
+            "longhorn_backup_name": longhorn_backup_name,
         }

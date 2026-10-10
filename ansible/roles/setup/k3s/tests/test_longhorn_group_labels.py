@@ -18,6 +18,7 @@ from _helpers import load_defaults, load_tasks
 from lib.ansible_jinja_env import make_ansible_env
 from longhorn_groups import (
     backup_group_label,
+    longhorn_backup_name,
     weekly_backup_group,
     weekly_backup_shard,
 )
@@ -164,3 +165,76 @@ def test_a_shard_outside_the_week_is_refused():
     assert weekly_backup_group(6) == "weekly-backup-d6"
     with pytest.raises(ValueError, match="outside 0-6"):
         weekly_backup_group(7)
+
+
+def test_the_bare_names_are_the_live_ones():
+    """The drill and seed playbook match on these; typed out, as the labels above are."""
+    assert {
+        key: longhorn_backup_name(key)
+        for key in (
+            "label_prefix",
+            "default_group",
+            "no_backup_group",
+            "weekly_legacy_group",
+            "b2_target",
+            "r2_target",
+        )
+    } == {
+        "label_prefix": "recurring-job-group.longhorn.io/",
+        "default_group": "default",
+        "no_backup_group": "no-backup",
+        "weekly_legacy_group": "weekly-backup",
+        "b2_target": "default",
+        "r2_target": "r2",
+    }
+    with pytest.raises(ValueError, match="not a Longhorn backup name"):
+        longhorn_backup_name("no-backup")
+
+
+def _backup_task(name: str) -> dict:
+    tasks = load_tasks(K3S_ROLE / "tasks" / "longhorn-backup.yml")
+    return next(t for t in tasks if t["name"] == name)
+
+
+@pytest.mark.parametrize(
+    ("name", "live", "patch"),
+    [
+        (
+            "Route the selected volumes to R2",
+            "pvc-0000 homelab/listed default",
+            '{"spec":{"backupTargetName":"r2"}}',
+        ),
+        (
+            "Return de-listed volumes to the default backup target",
+            "pvc-0000 homelab/unlisted r2",
+            '{"spec":{"backupTargetName":"default"}}',
+        ),
+    ],
+)
+def test_the_r2_routing_writes_the_live_target_names(name, live, patch):
+    """These tasks WRITE spec.backupTargetName, which the health cron and the drill read."""
+    task = _backup_task(name)
+    context = {"k3s_longhorn_r2_volumes": ["homelab/listed"]}
+    assert _passes_when(task, {**context, "item": live})
+    # Already where it belongs: the route skips itself, so a converged cluster changes nothing.
+    settled = (
+        "pvc-0000 homelab/listed r2" if "R2" in name else "pvc-0000 homelab/unlisted"
+    )
+    assert not _passes_when(task, {**context, "item": settled})
+    assert ENV.from_string(task["vars"][next(iter(task["vars"]))]).render() == patch
+
+
+def test_the_b2_target_tasks_name_the_live_target():
+    tasks = load_tasks(K3S_ROLE / "tasks" / "longhorn-backup.yml") + load_tasks(
+        K3S_ROLE / "tasks" / "longhorn.yml"
+    )
+    # Up to `--type`: the patch body after it goes through Ansible's `quote`, which ENV lacks.
+    commands = [
+        ENV.from_string(_command_text(t).split("--type")[0]).render()
+        for t in tasks
+        if "ansible.builtin.command" in t
+        and re.search(r"backuptargets?(\.longhorn\.io)? ", _command_text(t))
+    ]
+    assert len(commands) == 4, commands
+    for text in commands:
+        assert re.search(r"backuptargets?(\.longhorn\.io)? default ", text), text

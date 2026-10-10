@@ -123,7 +123,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     ``kuma_ingress_monitors``, which raises on a malformed ``kuma`` key.
     ``py_table`` reads monitor-bridge's check table out of its Python source, for the
     env-secret and the Kuma tiles. The k3s RecurringJob template names each weekly shard
-    through ``weekly_backup_group``, which raises on a shard outside 0-6. Registering the real ones makes those failures reach the guard.
+    through ``weekly_backup_group``, which raises on a shard outside 0-6, and the restore drill
+    names the label prefix, the opt-out group and the B2 target through ``longhorn_backup_name``. Registering the real ones makes those failures reach the guard.
 
     Args:
         env: The environment to register on, modified in place.
@@ -139,6 +140,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     from kuma_monitors import kuma_ingress_monitors
     from longhorn_groups import (
         backup_group_label,
+        longhorn_backup_name,
         weekly_backup_group,
         weekly_backup_shard,
     )
@@ -174,6 +176,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["backup_group_label"] = backup_group_label
     env.filters["weekly_backup_group"] = weekly_backup_group
     env.filters["weekly_backup_shard"] = weekly_backup_shard
+    env.filters["longhorn_backup_name"] = longhorn_backup_name
     env.tests["search"] = search
     return env
 
