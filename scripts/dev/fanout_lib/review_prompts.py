@@ -18,7 +18,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from fanout_lib.brief import _fence
 
 if TYPE_CHECKING:
-    from fanout_lib.review import Record
+    from fanout_lib.review_record import Record
 
 FINDINGS_SCHEMA = {
     "type": "object",

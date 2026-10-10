@@ -58,8 +58,8 @@ kill criterion is measured, and it outlives the worktree that `clean` removes.
 import json
 import subprocess
 import time
-from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass, field
+from collections.abc import Callable
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -98,6 +98,15 @@ from fanout_lib.red_gate import (
     reset_worktree,
 )
 from fanout_lib.processes import reaping, run_process
+from fanout_lib.review_record import (
+    Phase,
+    Record,
+    actionable,
+    comment_body,
+    findings_of,
+    issues_section,
+    outcome,
+)
 from fanout_lib.launch import (
     BUDGET_USD,
     REVIEW_RUNTIME_MAX_S,
@@ -119,8 +128,6 @@ OWN_COPY = Path(".fanout") / "stop-hook"
 REVIEW_BUDGET_USD = 15
 # A finding the fix round acts on. The reviewer reports everything, as the user-level
 # `## Code review` rule asks; this is the separate filtering pass.
-ACTIONABLE_SEVERITIES = frozenset({"critical", "high", "medium"})
-CONFIDENCE_FLOOR = 0.6
 # `land.sh` waits up to about an hour for CI and the tick. A land phase started with less than
 # this left on the unit's `RuntimeMaxSec` would be killed mid-landing, so it is skipped.
 LAND_MARGIN_S = 90 * 60
@@ -129,119 +136,6 @@ STATE_DIR = Path.home() / ".local" / "state" / "fanout-review"
 
 # One process boundary for claude, git and gh: argv and stdin in, the finished process out.
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
-
-
-@dataclass
-class Phase:
-    """One `claude -p` call: its name and the JSON report it printed."""
-
-    name: str
-    report: dict
-
-    @property
-    def text(self) -> str:
-        return str(self.report.get("result") or "")
-
-    @property
-    def cost(self) -> float:
-        return float(self.report.get("total_cost_usd") or 0)
-
-    @property
-    def failed(self) -> bool:
-        return bool(self.report.get("is_error"))
-
-
-@dataclass
-class Record:
-    """What the local record under `STATE_DIR` and the PR comment are written from."""
-
-    batch: str
-    pr: str = ""
-    costs: dict[str, float] = field(default_factory=dict)
-    review_error: str = ""
-    findings: list[dict] = field(default_factory=list)
-    actionable: list[dict] = field(default_factory=list)
-    remaining: list[dict] = field(default_factory=list)
-    # The red/green measure (#3674): "" when the batch had no red phase, else "passed" or the
-    # gate's reason. A refused red gate is a vacuous test caught.
-    red_gate: str = ""
-    red_behaviours: int = 0
-    red_tests: int = 0
-    green_gate: str = ""
-
-
-def actionable(findings: Sequence[dict]) -> list[dict]:
-    """The findings the fix round acts on: medium or worse, at or above the confidence floor."""
-    return [
-        f
-        for f in findings
-        if f.get("severity") in ACTIONABLE_SEVERITIES
-        and float(f.get("confidence") or 0) >= CONFIDENCE_FLOOR
-    ]
-
-
-def findings_of(phase: Phase) -> tuple[list[dict] | None, str]:
-    """The reviewer's findings, or None and the reason the review produced none."""
-    if phase.failed:
-        return (
-            None,
-            f"the review session failed ({phase.report.get('subtype') or 'error'})",
-        )
-    out = phase.report.get("structured_output")
-    if not isinstance(out, dict) or not isinstance(out.get("findings"), list):
-        return None, "the review session returned no structured findings"
-    return [f for f in out["findings"] if isinstance(f, dict)], ""
-
-
-def issues_section(brief: str) -> str:
-    """The brief's fenced issue text, which is all the reviewer learns about intent."""
-    _, sep, rest = brief.partition(ISSUES_HEADING)
-    return sep + rest if sep else ""
-
-
-def comment_body(record: Record) -> str:
-    """The PR comment: the public trail of the review, its counts and its costs."""
-    lines = ["## Fan-out review", ""]
-    if record.review_error:
-        lines += [f"The review did not complete: {record.review_error}.", ""]
-    if record.red_gate == "passed":
-        lines.append(
-            f"Red gate passed: {record.red_tests} tests for {record.red_behaviours} stated "
-            "behaviours failed on the unchanged code."
-        )
-    elif record.red_gate:
-        lines.append(f"Red gate refused the test author's commit: {record.red_gate}.")
-    if record.green_gate:
-        lines.append(f"Green gate: {record.green_gate}.")
-    if record.red_gate:
-        lines.append("")
-    held = sum(1 for f in record.findings if is_held(f))
-    lines.append(
-        f"{len(record.findings)} findings, {len(record.actionable)} actionable "
-        f"(severity medium or worse, confidence {CONFIDENCE_FLOOR} or more), "
-        f"{len(record.remaining)} left after the fix round."
-    )
-    if held:
-        lines.append(
-            f"{held} security findings are held off this public page and kept in the "
-            "orchestrator's local record."
-        )
-    shown = [f for f in record.findings if not is_held(f)]
-    if shown:
-        lines += [
-            "",
-            "| Severity | Confidence | Where | Finding |",
-            "|---|---|---|---|",
-        ]
-        for f in shown:
-            where = f"`{f.get('file', '')}:{f.get('line', '')}`".replace("|", "\\|")
-            title = str(f.get("title", "")).replace("|", "\\|").replace("\n", " ")
-            lines.append(
-                f"| {f.get('severity')} | {f.get('confidence')} | {where} | {title} |"
-            )
-    costs = ", ".join(f"{k} ${v:.2f}" for k, v in record.costs.items())
-    lines += ["", f"Cost by phase: {costs}."]
-    return "\n".join(lines) + "\n"
 
 
 class Pipeline:
@@ -287,6 +181,9 @@ class Pipeline:
         self.anti_patterns = anti_patterns() if red_green else ""
         self.record = Record(batch)
         self.session = ""
+        # The implementer session's `total_cost_usd` so far: a resumed session reports its
+        # whole-session total, so each resumed phase records only the increase (#3939).
+        self.session_cost = 0.0
         # Read now, before the implementer runs. A server unit imports this module from the
         # batch worktree, which that agent can write, so a file read at review time would
         # take whatever the implementer left there. The headless prompt and the Stop hook
@@ -320,6 +217,7 @@ class Pipeline:
             f"{'review' if name.startswith('review') else name}\n"
         )
         (fanout / "stop-blocks").write_text("0\n")
+        started = self.clock()
         proc = self.run(argv, stdin)
         try:
             report = json.loads(proc.stdout)
@@ -334,7 +232,21 @@ class Pipeline:
             }
         (fanout / f"{name}.json").write_text(json.dumps(report))
         phase = Phase(name, report)
-        self.record.costs[name] = self.record.costs.get(name, 0) + phase.cost
+        cost = phase.cost
+        if name == "implement" or "--resume" in argv:
+            # A failed resume can report no total at all, which is no reason to forget the
+            # session's spend so far.
+            cost = max(phase.cost - self.session_cost, 0.0)
+            self.session_cost = max(self.session_cost, phase.cost)
+        record = self.record
+        record.costs[name] = record.costs.get(name, 0) + cost
+        record.durations[name] = round(
+            record.durations.get(name, 0) + self.clock() - started, 1
+        )
+        denials = report.get("permission_denials")
+        record.permission_denials[name] = record.permission_denials.get(name, 0) + (
+            len(denials) if isinstance(denials, list) else 0
+        )
         return phase
 
     def _git(self, *args: str) -> str:
@@ -489,6 +401,7 @@ class Pipeline:
             red = self._red(issues) if self.red_green else None
         except ResetFailed as exc:
             self.record.red_gate = f"reset failed: {exc}"
+            self.record.outcome = "failed"
             self._save()
             return {"type": "result", "is_error": True, "result": f"failed: {exc}"}
         brief = self.brief
@@ -497,8 +410,10 @@ class Pipeline:
         impl = self._claude("implement", self._first_implementer(), brief)
         pr = PR_URL.search(impl.text)
         if impl.failed or not pr:
-            if self.red_green:
-                self._save()
+            # Saved whether or not the batch is red-green: a batch that never reached a PR is
+            # the failure rate the records exist to measure (#3940).
+            self.record.outcome = outcome(impl.report, has_pr=False)
+            self._save()
             return impl.report
         self.record.pr = pr.group(0)
         self.session = str(impl.report.get("session_id") or "")
@@ -554,6 +469,7 @@ class Pipeline:
 
         self._comment()
         final = self._held_for_green(green) if green else self._finish(last)
+        self.record.outcome = outcome(final, has_pr=True)
         self._save()
         held = sum(1 for f in self.record.remaining if is_held(f))
         if held:
