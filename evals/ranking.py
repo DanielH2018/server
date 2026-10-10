@@ -60,17 +60,24 @@ def _assistant_text(record: dict) -> str:
 def section_reads(
     headings: list[str], transcripts: Iterable[Path]
 ) -> list[tuple[str, int]]:
-    """Rank a doc's `## ` headings by how many transcripts' assistant turns name them.
+    """Rank a doc's `## ` headings by how many sessions' assistant turns name them.
 
     Only what the assistant wrote counts. A tool result, a user turn and hook-injected context
     carry the whole doc whenever it loads, so counting them would measure loading, not reading.
-    Each transcript counts once per heading, so one long session cannot outweigh many short
-    ones. A heading matches on its heading_key, case-sensitively. Ties keep doc order.
+    Each session counts once per heading, so one long session cannot outweigh many short
+    ones. A subagent's transcript, `<session>/subagents/<agent>.jsonl`, counts as its parent
+    session's, so a fan-out of ten reviewers citing one heading counts once. A heading
+    matches on its heading_key, case-sensitively. Ties keep doc order.
     """
     keys = {h: heading_key(h) for h in headings}
-    counts = dict.fromkeys(headings, 0)
+    by_session: dict[Path, set[str]] = {}
     for path in transcripts:
-        found: set[str] = set()
+        session = (
+            path.parent.parent
+            if path.parent.name == "subagents"
+            else path.with_suffix("")
+        )
+        found = by_session.setdefault(session, set())
         try:
             with path.open(encoding="utf-8", errors="replace") as f:
                 for line in f:
@@ -87,6 +94,8 @@ def section_reads(
                     found |= {h for h in headings if h not in found and keys[h] in text}
         except OSError:
             continue
+    counts = dict.fromkeys(headings, 0)
+    for found in by_session.values():
         for h in found:
             counts[h] += 1
     order = {h: i for i, h in enumerate(headings)}

@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shlex
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -260,3 +261,21 @@ def test_a_plan_that_fits_is_priced_at_the_unpriced_rate_and_accepted(tmp_path, 
     assert rc == EXIT_DONE
     assert "0 of 3 case(s) priced from past reports, the rest at $0.12 a run" in out
     assert "1 of 1 section arm(s) expected to finish" in out
+
+
+def test_the_printed_selection_is_accepted_when_pasted_back(tmp_path, capsys):
+    # The skeptic cases' real prices on 2026-10-10. They sort last in file order and first
+    # by cost, so a selection checked cheapest first is refused in the runner's order.
+    priced = {
+        "001-refuted-with-evidence": 0.097222,
+        "002-falsify-the-defense": 0.080694,
+    }
+    priced["003-no-evidence-is-not-refutation"] = 0.0418034
+    entries = [{"id": f"skeptic/{c}", "k": 1, "costUsd": v} for c, v in priced.items()]
+    (tmp_path / "runs.json").write_text(json.dumps(entries))
+    reports = ["--cost-reports", str(tmp_path)]
+    assert main(["run", "--dry-run", *reports]) == EXIT_REFUSED
+    line = capsys.readouterr().err.split("largest selection that fits: ", 1)[1]
+    flags = shlex.split(line.splitlines()[0])
+    assert main(["run", "--dry-run", *reports, *flags]) == EXIT_DONE
+    assert "1 of 1 section arm(s) expected to finish" in capsys.readouterr().out

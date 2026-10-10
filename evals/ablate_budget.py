@@ -115,15 +115,22 @@ def fitting_selection(
 
     Cases are taken cheapest first while those three arms still fit, then sections in the
     given order while their arms still fit. k stays fixed, because the case thresholds
-    assume it. Both lists are empty when not even one case fits.
+    assume it. Both lists are empty when not even one case fits. The cases come back in
+    `case_ids` order, the order the runner plays them in.
     """
-    picked: list[str] = []
+
+    def in_run_order(chosen: set[str]) -> list[float]:
+        # Whether an arm's last run launches depends on what the runs before it spent, so
+        # a selection played cheapest first can fit where the runner's own order does not.
+        return [per_run[c] for c in case_ids if c in chosen]
+
+    picked: set[str] = set()
     for cid in sorted(case_ids, key=lambda c: (per_run[c], c)):
-        trial = picked + [cid]
-        if complete_arms([per_run[c] for c in trial], k, 3, cap) < 3:
+        if complete_arms(in_run_order(picked | {cid}), k, 3, cap) < 3:
             break
-        picked = trial
+        picked.add(cid)
     if not picked:
         return [], []
-    arms = complete_arms([per_run[c] for c in picked], k, 2 + len(sections), cap)
-    return picked, sections[: arms - 2]
+    arms = complete_arms(in_run_order(picked), k, 2 + len(sections), cap)
+    picked_ids = [c for c in case_ids if c in picked]
+    return picked_ids, sections[: arms - 2]

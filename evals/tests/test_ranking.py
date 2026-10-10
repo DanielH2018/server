@@ -54,3 +54,15 @@ def test_section_reads_count_what_the_assistant_wrote_once_per_transcript(
         ("Beta (aside)", 1),
         ("Gamma", 0),
     ]
+
+
+def test_a_sessions_subagents_count_as_that_one_session(tmp_path: Path):
+    cite = _turn("assistant", [{"type": "text", "text": "per Alpha"}])
+    (tmp_path / "s1.jsonl").write_text(cite)
+    (tmp_path / "s1" / "subagents").mkdir(parents=True)
+    for agent in ("a", "b"):
+        (tmp_path / "s1" / "subagents" / f"{agent}.jsonl").write_text(cite)
+    (tmp_path / "s2" / "subagents").mkdir(parents=True)
+    (tmp_path / "s2" / "subagents" / "a.jsonl").write_text(cite)
+    paths = sorted(tmp_path.rglob("*.jsonl"))
+    assert section_reads(["Alpha"], paths) == [("Alpha", 2)]

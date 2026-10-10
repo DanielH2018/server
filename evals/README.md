@@ -145,10 +145,11 @@ uv run python evals/ablate.py run --agent skeptic --section "Secrets Management"
   against the cases it ran on before you delete or shorten a section.
 - **`instructions.log` ranks docs; transcripts rank sections (#4302).** The log records which
   doc loaded, so `rank` picks the doc, counting the rotated `instructions.log.1` too.
-  `rank --sections <doc>` counts, for each `## ` heading, the session transcripts under
+  `rank --sections <doc>` counts, for each `## ` heading, the sessions under
   `~/.claude/projects/` whose assistant turns name it: prose, thinking and tool call inputs.
   User turns and tool results are skipped, because they carry the whole doc whenever it loads.
-  A heading matches on its text before any em-dash or bracket, and a transcript counts once.
+  A heading matches on its text before any em-dash or bracket. A session counts once per
+  heading, its subagents' transcripts included.
   `run --by-reads` ablates the sections in that order, so a budget stop cuts the least-read.
   Without it, `run` takes the doc's sections in doc order unless `--section` names them.
 

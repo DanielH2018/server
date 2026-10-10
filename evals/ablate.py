@@ -397,7 +397,7 @@ def main(argv=None) -> int:
         "--sections",
         metavar="DOC",
         default=None,
-        help="rank this repo-relative doc's `## ` sections by transcripts naming them",
+        help="rank this repo-relative doc's `## ` sections by sessions naming them",
     )
     r.add_argument(
         "--transcripts",
@@ -454,7 +454,9 @@ def main(argv=None) -> int:
     if args.cmd == "rank" and args.sections:
         headings = [h for h, _ in split_sections((REPO / args.sections).read_text())[1]]
         paths = transcripts()
-        print(f"{args.sections}: sections by transcripts naming them, of {len(paths)}")
+        print(
+            f"{args.sections}: sections by sessions naming them, {len(paths)} transcripts"
+        )
         for heading, n in section_reads(headings, paths):
             print(f"{n:6d}  ## {heading}")
         return EXIT_DONE
