@@ -23,6 +23,7 @@ from lib.worktrees import (
     Worktree,
     classify,
     primary_checkout,
+    processes_using,
     remove,
     worktree_facts,
 )
@@ -249,6 +250,43 @@ def test_a_process_in_a_sibling_tree_does_not_block_removal_is_clean(
 
     assert ok, err
     assert not wt.exists()
+
+
+def _unreadable_proc(root: Path, pid: int, uid: int, cgroup: str) -> Path:
+    """A fake /proc entry the way another uid's process looks: `status` and `cgroup`
+    readable, `cwd` and `environ` refused (here: absent, which raises OSError the same way)."""
+    entry = root / str(pid)
+    entry.mkdir(parents=True)
+    (entry / "status").write_text(f"Name:\tsleep\nUid:\t{uid}\t{uid}\t{uid}\t{uid}\n")
+    (entry / "cgroup").write_text(f"0::{cgroup}\n")
+    return root
+
+
+def test_another_uids_process_in_my_login_slice_holds_every_tree_is_flagged(tmp_path):
+    # #3994: `sudo -u claude sleep` run from inside a worktree keeps its inherited cwd and
+    # stays in the caller's slice, and the caller cannot read that cwd.
+    me = os.getuid()
+    proc = _unreadable_proc(
+        tmp_path / "proc", 4242, me + 1, f"/user.slice/user-{me}.slice/session-7.scope"
+    )
+
+    assert [pid for pid, _ in processes_using(str(tmp_path), proc=proc)] == [4242]
+
+
+def test_unreadable_processes_outside_that_rule_do_not_block_removal_is_clean(tmp_path):
+    # Each of these is always alive on daniel-box, so counting any would refuse every removal:
+    # the claude agent's resident service, another user's own session, root's daemons and
+    # `sshd [priv]` inside this very slice.
+    me = os.getuid()
+    proc = tmp_path / "proc"
+    _unreadable_proc(proc, 1, me + 1, "/user.slice/claude-rc.service")
+    _unreadable_proc(
+        proc, 2, me + 1, f"/user.slice/user-{me + 1}.slice/session-9.scope"
+    )
+    _unreadable_proc(proc, 3, 0, "/system.slice/cron.service")
+    _unreadable_proc(proc, 4, 0, f"/user.slice/user-{me}.slice/session-7.scope")
+
+    assert processes_using(str(tmp_path), proc=proc) == []
 
 
 def test_remove_still_deregisters_a_deleted_tree_a_session_names_is_clean(
