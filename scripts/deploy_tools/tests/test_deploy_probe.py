@@ -149,7 +149,7 @@ def test_run_records_the_log_and_pid_before_returning(tmp_path, capsys):
         reap_dead_snapshots=lambda _root: None,
         make_snapshot=lambda _state: None,
         take_service_locks=lambda _state, _tags: None,
-        fork=fork,
+        fork_detached=fork,
     )
     assert deploy_detach.run(tmp_path, ["sonarr"], "", [], "notifier.py", tools) == 0
     (log,) = tmp_path.glob("deploy-sonarr-*.log")

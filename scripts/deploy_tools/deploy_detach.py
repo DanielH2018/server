@@ -191,7 +191,7 @@ class DetachTools:
     take_service_locks: Callable[[locked.Run, list[str]], None] = (
         locked.take_service_locks
     )
-    fork: Callable[[Callable[[], None]], int] = fork_detached
+    fork_detached: Callable[[Callable[[], None]], int] = fork_detached
     leave_unit_cgroup: Callable[[str], str | None] = leave_unit_cgroup
     deploy_and_gate: Callable[[locked.Run, Path, str], int] = deploy_and_gate
 
@@ -277,7 +277,7 @@ def run(
     log.touch()
     sys.stdout.flush()
     sys.stderr.flush()
-    pid = tools.fork(lambda: child(state, log, notifier))
+    pid = tools.fork_detached(lambda: child(state, log, notifier))
     pid_path(log).write_text(f"{pid}\n")
     # The child owns the snapshot and the locks now. Close this process's copies WITHOUT
     # removing the snapshot: `state.close()` here would delete it from under the playbook.
