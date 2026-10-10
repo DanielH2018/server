@@ -229,8 +229,14 @@ def root_run_writers(task_list: list[dict]) -> list[str]:
 
 
 def agent_tasks(task_list: list[dict]) -> list[dict]:
-    """claude_code's tasks that act on the agent user's home."""
-    return [t for t in task_list if t.get("when") == "claude_code_agent_user_enabled"]
+    """claude_code's tasks that act on the agent user's home, with a list `when:` included."""
+    gate = "claude_code_agent_user_enabled"
+    return [
+        t
+        for t in task_list
+        if t.get("when") == gate
+        or (isinstance(t.get("when"), list) and gate in t["when"])
+    ]
 
 
 def test_every_command_writing_the_agents_home_on_each_apply_runs_as_the_agent() -> (
@@ -243,6 +249,7 @@ def test_every_command_writing_the_agents_home_on_each_apply_runs_as_the_agent()
     # The named members, so the census cannot pass on a renamed or vanished task.
     named(shared, "Install the pinned host Python for the agent user")
     named(claude, "Sync the repo's venv in the agent user's clone")
+    named(claude, "Fast-forward the agent user's clone to origin's master")
     named(github, "Generate the agent's commit-signing key")
     named(browser, "Install the agent user's pinned @playwright/mcp")
     assert root_run_writers(shared) == []
@@ -338,6 +345,37 @@ def test_the_agents_clone_gets_a_venv_its_hooks_can_import_from() -> None:
         "HOME": "{{ claude_code_agent_user_home }}",
         "TMPDIR": "/tmp",
     }
+
+
+def test_the_agents_clone_is_fast_forwarded_as_the_agent_before_its_venv_sync() -> None:
+    """#4067/#4099: the hook shim and ui_mcp.sh run from this clone, which nothing else pulls.
+
+    Only a clean master moves, and never fatally: a red task here holds the GitOps deployer
+    over the agent's own working state.
+    """
+    claude_tasks = tasks(CLAUDE_TASKS)
+    names = [t.get("name") for t in claude_tasks]
+    pull_name = "Fast-forward the agent user's clone to origin's master"
+    pull = named(claude_tasks, pull_name)
+    argv = pull["ansible.builtin.command"]["argv"]
+    assert argv[:4] == ["runuser", "-u", "{{ claude_code_agent_user }}", "--"]
+    assert argv[4:] == [
+        "git",
+        "-C",
+        "{{ claude_code_agent_user_clone_dir }}",
+        "pull",
+        "--ff-only",
+        "origin",
+        "master",
+    ]
+    assert pull["failed_when"] is False
+    gates = " ".join(pull["when"])
+    assert "branch\\.head master" in gates and "^[^#]" in gates, (
+        "the pull must be gated on master and a clean tracked tree"
+    )
+    assert names.index(pull_name) < names.index(
+        "Sync the repo's venv in the agent user's clone"
+    ), "the venv sync must read the fast-forwarded uv.lock"
 
 
 def dirs_not_owned_like_the_chown(task_list: list[dict]) -> list[str]:

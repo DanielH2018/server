@@ -106,6 +106,12 @@ reported the checks working.
   set `CLAUDE_INSTALL_ALLOW_SUDO=1`, and the hold was cleared after a hand apply.
 - The first login needed a hand `uv sync` in `~/server`, because the role does not create the
   clone's `.venv` (#3513).
+- The role cloned `~/server` once and never advanced it. The hook shim and the homelab-ui
+  launcher run from that clone's main working tree, so on 2026-10-09 the clone sat 94 commits
+  behind master. Its `ui_mcp.sh` still decrypted SOPS, and the MCP server never connected
+  (#4067, #4099). Since that fix, the `claude_code` role fast-forwards the clone as `claude` on each apply,
+  before its `uv sync`. It moves only a clean `master`; any other state prints a report and
+  leaves the clone alone.
 - The agent's `~/.claude` is `drwx------ claude:ubuntu`. The role sets that mode on every
   apply, in `ansible/roles/setup/claude_code/tasks/agent_github.yml`, because the directory
   holds the session's login. The group comes from the `setgid` home, but at `0700` it grants
