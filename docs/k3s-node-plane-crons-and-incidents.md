@@ -166,7 +166,7 @@ the `down` with the added and cleared names prefixed. A DOWN that is not a verdi
 failing, or the probe exiting above 1) keeps the recorded set, or records an empty one so the
 first verdict after it still notifies. An `up` clears it.
 
-## daniel-box pins its LAN address, because k3s binds it
+## Both nodes pin their LAN address, because k3s binds it
 
 k3s binds `server_ip` itself, through etcd's peer listener and the apiserver's advertise
 address. A node that takes its address from DHCP cannot start k3s while the gateway's DHCP
@@ -186,9 +186,20 @@ lease on it. To apply it, run `k3s-bringup.yml --tags node-address` on daniel-bo
 To back the pin out, empty `k3s_node_static_link` and run the same tag. That run removes the
 file and re-applies netplan, so the link returns to the installer's DHCP.
 
-daniel-server is still on DHCP. The agent play reaches it over SSH through a dynamic
-`include_role`, which `--tags node-address` cannot select, and a `netplan apply` there would
-reconfigure the link the session uses.
+daniel-server pins its address too (#3891), on `enp88s0`. The gateway reserves 10.0.0.161 for
+that NIC, and wlo1's DHCP route at metric 600 stays as the fallback. The join play cannot
+apply the pin: it reaches daniel-server over SSH through a dynamic `include_role`, which
+`--tags node-address` cannot select, and a `netplan apply` there would reconfigure the link
+the session uses. A separate opt-in play imports the same task file statically and runs on
+daniel-server itself. To apply or back out the pin there, run this on daniel-server:
+
+```bash
+uv run ansible-playbook ansible/k3s-bringup.yml \
+  -e pin_agent_address=daniel-server --tags node-address
+```
+
+While `pin_agent_address` is set, the server play matches no hosts, so its server-host guard
+does not refuse the agent. The run touches nothing of the agent join.
 
 ## Two smaller traps
 

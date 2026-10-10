@@ -16,7 +16,7 @@ and the monitor cannot say WHY the target is down. This test can.
 """
 
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, K3S_DEFAULTS
+from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_DEFAULTS
 from _k8s_render import rendered_k8s_text
 
 
@@ -62,7 +62,12 @@ def test_the_scrape_job_reads_the_group_var_rather_than_a_literal() -> None:
     other way, and a pattern that matches nothing passes (#3202).
     """
     group_vars = yaml_fast.safe_load(ALL_VARS.read_text())
-    target = f"{group_vars['k8s_node_client_ip']}:{group_vars[_SCRAPER_VAR]}"
+    # daniel-box's own literal, not k8s_node_client_ip: that derives from it through hostvars
+    # (#4063), and a derivation that lost the entry would render `None` here too.
+    box_ip = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())[
+        "server_ip"
+    ]
+    target = f"{box_ip}:{group_vars[_SCRAPER_VAR]}"
     rendered = rendered_k8s_text("observability", "prometheus.yaml.j2")
     assert target in rendered, (
         f"the coredns-host job's target does not render as {target}, so this guard would "

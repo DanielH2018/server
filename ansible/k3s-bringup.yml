@@ -12,7 +12,9 @@
 # runs on every host, and the server role must land on daniel-box alone. daniel-server joins
 # as an AGENT — that is the opt-in join play further down, not this one.
 - name: Bring up the k3s cluster
-  hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
+  # Empty while `pin_agent_address` is set, so the agent-address play below can run on the
+  # agent without this play's server-host guard refusing it.
+  hosts: "{{ pin_agent_address | default([]) is truthy | ternary([], target | default(lookup('pipe', 'hostname'))) }}"
   # An escalated task imports from this tree's .venv as root, and the root-owned
   # __pycache__ that leaves behind blocks the worktree's removal. See
   # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
@@ -45,6 +47,46 @@
       tags: always
   roles:
     - { role: k3s, tags: ["k3s"] }
+
+# Pin an agent node's LAN address, so its k3s agent starts while the gateway's DHCP server is
+# down (#3891). Opt-in like the join plays: it matches no hosts without
+# `-e pin_agent_address=daniel-server`. Run it ON the agent:
+#   uv run ansible-playbook ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address
+# hosts.ini gives daniel-server `ansible_connection=local`, and the preamble refuses a
+# local-connection host run from another machine, so `netplan apply` never runs under an SSH
+# session riding the link it reconfigures. `import_role` rather than the join play's
+# `include_role`: the import is static, so `--tags node-address` selects the pin and nothing
+# of the agent join.
+- name: Pin an agent node's LAN address
+  hosts: "{{ pin_agent_address | default([]) }}"
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
+  # The shared preamble gathers facts once the SOPS sudo password is set.
+  gather_facts: false
+  pre_tasks:
+    - name: Load encrypted secrets and set the become password (shared preamble)
+      ansible.builtin.import_tasks: pre_tasks/load_secrets.yml
+      tags: always
+
+    - name: Refuse to pin anything but the agent node
+      # The server node's pin runs from the play above. A typo'd pin_agent_address must not
+      # rewrite the Pi's netplan.
+      ansible.builtin.assert:
+        that: inventory_hostname == 'daniel-server'
+        fail_msg: >-
+          This play pins daniel-server's address only, and this host is
+          {{ inventory_hostname }}. daniel-box's pin runs from the server play with
+          --tags node-address.
+      tags: always
+  tasks:
+    - name: Pin the agent's LAN address
+      ansible.builtin.import_role:
+        name: k3s
+        tasks_from: static-address
+      tags: [node-address]
 
 # Join an agent node. Deliberately opt-in — the join plays match no
 # hosts unless invoked with `-e join_agent=daniel-server`. Three plays, not one: the join

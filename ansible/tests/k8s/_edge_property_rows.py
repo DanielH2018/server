@@ -205,6 +205,48 @@ def _pi_push_offence(role: str, route: dict) -> str | None:
     return f"match does not admit {allowed}, so the Pi's Alloy cannot push its logs"
 
 
+@cache
+def _host_ip(host: str) -> str:
+    # The host's own literal, not the k8s_*_client_ip group_vars derives from it through
+    # hostvars (#4063): a derivation that lost the host's entry resolves to None without
+    # raising, and a guard reading the derived value would compare the render with itself.
+    return load_yaml(HOST_VARS / f"{host}.yml")["server_ip"]
+
+
+# Two monitoring_route() callers that take the macro's default k8s_bridge_client_ip grant and
+# nothing else from inventory. Named so the row fails `subject gone` if either stops rendering.
+_BRIDGE_ROUTES = frozenset({"ical-proxy-monitoring", "loki-homelab-monitoring"})
+
+
+def _bridge_routes(role: str, tpl: str, doc: dict):
+    name = doc.get("metadata", {}).get("name")
+    if doc.get("kind") == "IngressRoute" and name in _BRIDGE_ROUTES:
+        for route in doc["spec"]["routes"]:
+            yield name, route
+
+
+def _bridge_offence(role: str, route: dict) -> str | None:
+    allowed = f"ClientIP(`{_host_ip('daniel-server')}/32`)"
+    if allowed in route.get("match", ""):
+        return None
+    return f"match does not admit {allowed}, daniel-server's own address"
+
+
+def _deploy_ui_endpoints(role: str, tpl: str, doc: dict):
+    if role == "deploy-ui" and doc.get("kind") == "EndpointSlice":
+        yield doc["metadata"]["name"], doc
+
+
+def _deploy_ui_endpoint_offence(role: str, doc: dict) -> str | None:
+    addresses = [a for e in doc.get("endpoints", []) for a in e.get("addresses", [])]
+    if addresses == [_host_ip("daniel-box")]:
+        return None
+    return (
+        f"addresses are {addresses}, not daniel-box's {_host_ip('daniel-box')}, where "
+        "deploy-ui.service listens"
+    )
+
+
 EDGE_PROPERTIES = (
     Property(
         name="traefik-crds-carry-no-inline-credential",
@@ -370,5 +412,40 @@ EDGE_PROPERTIES = (
         red=("loki-homelab", {"match": "Host(`x`) && ClientIP(`None/32`)"}),
         green=("loki-homelab", {"match": f"Host(`x`) && ClientIP(`{_pi_ip()}/32`)"}),
         must_find=frozenset({"loki-homelab-push-monitoring"}),
+    ),
+    Property(
+        name="bridge-grant-admits-daniel-server",
+        reason=(
+            "monitoring_route() prepends a ClientIP grant built from k8s_bridge_client_ip, which "
+            "derives from daniel-server's server_ip through hostvars (#4063). A hostvars without "
+            "daniel-server's entry renders `None/32` with every validator green. The row "
+            "compares against daniel-server's own host_vars literal."
+        ),
+        select=_bridge_routes,
+        offence=_bridge_offence,
+        red=("ical-proxy", {"match": "Host(`x`) && (ClientIP(`None/32`))"}),
+        green=(
+            "ical-proxy",
+            {"match": f"Host(`x`) && (ClientIP(`{_host_ip('daniel-server')}/32`))"},
+        ),
+        must_find=_BRIDGE_ROUTES,
+    ),
+    Property(
+        name="deploy-ui-endpoint-is-daniel-box",
+        reason=(
+            "deploy-ui's EndpointSlice names the host running deploy-ui.service through "
+            "k8s_node_client_ip, which derives from daniel-box's server_ip through hostvars "
+            "(#4063). A lost hostvars entry renders the address `None`, and the slice still "
+            "parses. The row compares against daniel-box's own host_vars literal."
+        ),
+        select=_deploy_ui_endpoints,
+        offence=_deploy_ui_endpoint_offence,
+        red=("deploy-ui", {"endpoints": [{"addresses": ["None"]}]}),
+        green=(
+            "deploy-ui",
+            {"endpoints": [{"addresses": [_host_ip("daniel-box")]}]},
+        ),
+        more_red=(("deploy-ui", {"endpoints": [{"addresses": ["10.0.0.1"]}]}),),
+        must_find=frozenset({"deploy-ui-host"}),
     ),
 )
