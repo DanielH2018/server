@@ -43,6 +43,16 @@ def test_shared_files_names_the_file_and_every_batch_that_cites_it():
     assert shared_files(batches, issues) == [(ALERTS, ["1780-1784", "1782"])]
 
 
+def test_a_fragment_collides_with_the_full_path_it_names():
+    """#4232: `probe_lib/alerts.py` and the full path are one file to two agents."""
+    issues = {
+        1: Issue(1, "a", f"`{ALERTS}` drops the row", ("claude",)),
+        2: Issue(2, "b", "`probe_lib/alerts.py:336` drops it too", ("claude",)),
+    }
+    batches = {"1": [1], "2": [2]}
+    assert shared_files(batches, issues, tracked={ALERTS}) == [(ALERTS, ["1", "2"])]
+
+
 def test_shared_files_is_clean_when_the_shared_script_sits_in_one_batch():
     batches = {"1780-1782": [1780, 1782], "1784": [1784]}
     issues = {i.number: i for i in ISSUES}

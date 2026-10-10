@@ -6,7 +6,14 @@ path it cites lies in code this repo's suite runs, because the red gate proves t
 fail by running them. The operator can still add or remove the label by hand.
 """
 
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
 from pathlib import Path, PurePosixPath
+
+_sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from dev.findings_lib.tracked_paths import resolve_fragments, tracked_files
 
 RED_GREEN_LABEL = "red-green"
 # `plan_ensure_label` creates it the first time `open` applies it, as it does a dated label.
@@ -42,5 +49,10 @@ def suite_covered(path: str, repo: Path = REPO) -> bool:
 
 
 def red_green_eligible(paths: list[str], repo: Path = REPO) -> bool:
-    """Whether a finding citing `paths` gets the label: it cites some, all suite-covered."""
-    return bool(paths) and all(suite_covered(p, repo) for p in paths)
+    """Whether a finding citing `paths` gets the label: it cites some, all suite-covered.
+
+    A path cited from a subdirectory, such as `fanout_lib/clean.py`, is first resolved to the
+    one tracked file it names (#4232).
+    """
+    resolved = resolve_fragments(paths, tracked_files(repo))
+    return bool(resolved) and all(suite_covered(p, repo) for p in resolved)

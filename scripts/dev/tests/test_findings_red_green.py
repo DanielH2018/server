@@ -10,6 +10,7 @@ from fanout_lib.red_gate import red_skip_reason
 
 from dev import findings
 from dev.findings_lib.red_green import RED_GREEN_LABEL, red_green_eligible
+from dev.findings_lib.tracked_paths import resolve_fragments
 
 COVERED = [
     "scripts/dev/findings.py",
@@ -58,6 +59,25 @@ def test_open_leaves_a_finding_citing_a_doc_unlabelled(tmp_path, make_tools):
     )
     create = next(c for c in calls.gh if c[:2] == ["issue", "create"])
     assert RED_GREEN_LABEL not in create
+
+
+def test_a_fragment_resolves_to_the_one_tracked_file_that_ends_with_it():
+    """#4232: #4116 cited `fanout_lib/clean.py`, meaning `scripts/dev/fanout_lib/clean.py`."""
+    tracked = {"scripts/dev/fanout_lib/clean.py", "a/lib/x.py", "b/lib/x.py"}
+    cited = ["fanout_lib/clean.py", "lib/x.py", "docs/gone.md"]
+    assert resolve_fragments(cited, tracked) == [
+        "scripts/dev/fanout_lib/clean.py",
+        "lib/x.py",
+        "docs/gone.md",
+    ]
+
+
+def test_open_labels_a_finding_that_cites_suite_covered_code_by_a_fragment(
+    tmp_path, make_tools
+):
+    calls = _open(tmp_path, make_tools, "`fanout_lib/clean.py:clean_one` drops it.")
+    create = next(c for c in calls.gh if c[:2] == ["issue", "create"])
+    assert RED_GREEN_LABEL in create
 
 
 def test_red_skip_reason_names_each_way_a_batch_misses_the_phase():
