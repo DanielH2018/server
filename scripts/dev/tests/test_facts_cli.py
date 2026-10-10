@@ -228,3 +228,26 @@ def test_reverify_names_a_moved_atom_in_a_section_the_commit_did_not_edit(
     err = capsys.readouterr().err
     assert "not folded, and CI fails on these:" in err
     assert "moved: CLAUDE.md#Gate" in err
+
+
+def test_lint_flags_a_value_only_a_built_in_renovate_manager_bumps(tmp_path, capsys):
+    """#4158: `extends` enables the built-in github-actions manager, which rewrites a
+    workflow's `uses:` ref with no `customManagers` entry naming the file."""
+    repo = _repo(tmp_path)
+    (repo / "renovate.json").write_text('{"extends": ["config:recommended"]}\n')
+    (repo / ".github" / "workflows").mkdir(parents=True)
+    (repo / ".github" / "workflows" / "ci.yml").write_text(
+        "on: push\n"
+        "jobs:\n"
+        "  build:\n"
+        "    runs-on: ubuntu-24.04\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\n"
+    )
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`.github/workflows/ci.yml:jobs.build.steps.0.uses` checks out.\n"
+    )
+    git(repo, "add", "-A")
+    assert main(["lint", "--repo", str(repo)]) == 1
+    out = capsys.readouterr().out
+    assert "renovate-pin" in out and "CLAUDE.md#Gate" in out

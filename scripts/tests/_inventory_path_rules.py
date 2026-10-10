@@ -4,10 +4,15 @@
 `tests-take-inventory-paths-from-repo-paths` row over `pytest_only_modules()` (#4002). It sits
 apart from `_render_helper_rules.py`, whose detectors fill that module to its 500-line cap. Like
 them, it takes TEXT, so a row's red and green subjects can be one-line snippets; the module's
-location is an optional second argument, read only to resolve `Path(__file__)` arithmetic.
+location is an optional second argument, read to resolve `Path(__file__)` arithmetic and the
+modules it imports. A third argument maps a module path to its text, so a red subject can carry
+the sibling it imports from.
 """
 
 import ast
+import tomllib
+from collections.abc import Mapping
+from functools import cache
 from pathlib import Path
 
 from lib.repo_paths import REPO
@@ -42,13 +47,100 @@ _OWNED_PATHS = (
 Segments = tuple[str, ...]
 
 
+@cache
+def _import_roots() -> tuple[Path, ...]:
+    """The `pythonpath` directories pytest puts on `sys.path`, which a bare import resolves in."""
+    config = tomllib.loads((REPO / "pyproject.toml").read_text())
+    return tuple(
+        REPO / p for p in config["tool"]["pytest"]["ini_options"]["pythonpath"]
+    )
+
+
+def _candidates(directory: Path, dotted: str) -> tuple[Path, Path]:
+    parts = dotted.split(".")
+    return (
+        directory.joinpath(*parts[:-1], parts[-1] + ".py"),
+        directory.joinpath(*parts, "__init__.py"),
+    )
+
+
+@cache
+def _on_disk(directory: Path, dotted: str) -> Path | None:
+    return next((c for c in _candidates(directory, dotted) if c.is_file()), None)
+
+
+def _module_file(
+    dotted: str, importer: Path | None, sources: Mapping[Path, str]
+) -> Path | None:
+    """The first-party file `import <dotted>` loads from `importer`, or None.
+
+    pytest prepends a test module's own directory, so that is searched first, then the role's
+    `files/` that `ansible/roles/conftest.py` adds for a test under a role's `tests/`, then
+    the `pythonpath` roots. A file in `sources` counts as present. Every directory searched
+    is in the repo, so whatever resolves is first-party.
+    """
+    dirs: list[Path] = []
+    if importer is not None and importer.is_relative_to(REPO):
+        dirs = [importer.parent, importer.parent.parent / "files"]
+    for directory in dirs + list(_import_roots()):
+        if sources:
+            fixture = next(
+                (c for c in _candidates(directory, dotted) if c in sources), None
+            )
+            if fixture is not None:
+                return fixture
+        found = _on_disk(directory, dotted)
+        if found is not None:
+            return found
+    return None
+
+
+# A module's resolved names, by its path on disk. A census reads every test module, and they
+# import the same helpers, so each file is parsed once. A module in `sources` is never cached.
+_DISK_NAMES: dict[Path, dict[str, Segments]] = {}
+
+
+def _module_names(
+    path: Path, sources: Mapping[Path, str], seen: frozenset[Path]
+) -> dict[str, Segments]:
+    """The names the module at `path` binds to a path in the repo, or {} if it does not parse."""
+    if path in sources:
+        text = sources[path]
+    elif path in _DISK_NAMES:
+        return _DISK_NAMES[path]
+    else:
+        try:
+            text = path.read_text()
+        except OSError, UnicodeDecodeError:
+            text = ""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        tree = ast.Module(body=[], type_ignores=[])
+    names = _local_anchors(tree, path, sources, seen | {path})
+    if path not in sources:
+        _DISK_NAMES[path] = names
+    return names
+
+
+def _dotted(node: ast.expr) -> str | None:
+    """`a.b.c` for a Name or an Attribute chain over one, else None."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        inner = _dotted(node.value)
+        return f"{inner}.{node.attr}" if inner else None
+    return None
+
+
 def _root(
     node: ast.expr, names: dict[str, Segments], module: Path | None
 ) -> Segments | None:
     """The repo-relative segments the root of a `/` chain stands for, or None if unknown.
 
     A root is an anchor or a name the module bound to one, `v.ROLES` off an imported module,
-    `__file__`, or any of those under `Path(...)`, `.resolve()`, `.parent` or `.parents[n]`.
+    `__file__` or an imported module's `m.__file__`, or any of those under `Path(...)`,
+    `.resolve()`, `.parent` or `.parents[n]`.
     """
     if isinstance(node, ast.Name):
         if node.id == "__file__" and module is not None and module.is_relative_to(REPO):
@@ -58,6 +150,9 @@ def _root(
         if node.attr == "parent":
             inner = _root(node.value, names, module)
             return inner[:-1] if inner else None
+        if node.attr == "__file__":
+            module_name = _dotted(node.value)
+            return names.get(f"{module_name}.__file__") if module_name else None
         return _PATH_ANCHORS.get(node.attr)
     if (
         isinstance(node, ast.Subscript)
@@ -105,7 +200,12 @@ def _chain(
     return len(root), segments
 
 
-def _local_anchors(tree: ast.Module, module: Path | None) -> dict[str, Segments]:
+def _local_anchors(
+    tree: ast.Module,
+    module: Path | None,
+    sources: Mapping[Path, str],
+    seen: frozenset[Path] = frozenset(),
+) -> dict[str, Segments]:
     """The anchors plus every name `tree` binds to a path in the repo, at any scope.
 
     `from _helpers import ROLES as _ROLES` binds an alias, and `K3S = ROLES / "setup" /
@@ -113,15 +213,43 @@ def _local_anchors(tree: ast.Module, module: Path | None) -> dict[str, Segments]
     point, so a name bound through another local resolves too. A name bound to two different
     things anywhere in the module is dropped, because the walk does not know which scope a
     chain reads it from.
+
+    A name imported from a first-party module takes that module's own binding, so
+    `from _restore_drill import K3S` resolves to whatever `_restore_drill.py` built (#4155).
+    An imported module binds `<name>.__file__` to its file, for `Path(check.__file__)`.
+    `seen` holds the modules already being read, so an import cycle stops.
     """
     names = dict(_PATH_ANCHORS)
     bindings: list[tuple[str, ast.expr]] = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                found = _module_file(a.name, module, sources)
+                if found is not None:
+                    names[f"{a.asname or a.name}.__file__"] = found.relative_to(
+                        REPO
+                    ).parts
+        elif isinstance(node, ast.ImportFrom):
             names.update(
                 (a.asname, _PATH_ANCHORS[a.name])
                 for a in node.names
                 if a.asname and a.name in _PATH_ANCHORS
+            )
+            if node.level or not node.module:
+                continue
+            for a in node.names:
+                bound = a.asname or a.name
+                submodule = _module_file(f"{node.module}.{a.name}", module, sources)
+                if submodule is not None:
+                    names[f"{bound}.__file__"] = submodule.relative_to(REPO).parts
+            source = _module_file(node.module, module, sources)
+            if source is None or source in seen or source == module:
+                continue
+            theirs = _module_names(source, sources, seen)
+            names.update(
+                (a.asname or a.name, theirs[a.name])
+                for a in node.names
+                if a.name not in _PATH_ANCHORS and a.name in theirs
             )
         elif isinstance(node, ast.Assign) and len(node.targets) == 1:
             if isinstance(node.targets[0], ast.Name):
@@ -159,20 +287,24 @@ def _spells(
     )
 
 
-def inline_inventory_paths(source: str, module: Path | None = None) -> list[str]:
+def inline_inventory_paths(
+    source: str, module: Path | None = None, sources: Mapping[Path, str] | None = None
+) -> list[str]:
     """The `/` chains `source` builds to a path `lib.repo_paths` owns, each with its constant.
 
     A hit is a chain rooted in the repo whose string parts spell the inventory,
     `group_vars/all.yml`, `host_vars`, or the k3s role directory, its `files/` or its
     defaults, whether the parts are one string or several. The root is an anchor, a local name
-    bound to one, or `__file__` arithmetic evaluated at `module`. A chain counts only for the
+    bound to one, a name imported from a first-party module that binds one, or `__file__`
+    arithmetic evaluated at `module` or at an imported module's file. `sources` supplies a
+    module's text in place of the file on disk. A chain counts only for the
     segments it spells itself, so `K3S_ROLE / "tasks"` passes. Only the outermost chain is
     read, so one expression is one hit. A repo-relative STRING
     (`"ansible/inventory/group_vars/all.yml"`) is not a chain and not a hit: the deploy
     classifiers' tests hand those to the code under test as inputs.
     """
     tree = ast.parse(source)
-    names = _local_anchors(tree, module)
+    names = _local_anchors(tree, module, sources or {})
     inner = {
         id(node.left)
         for node in ast.walk(tree)
