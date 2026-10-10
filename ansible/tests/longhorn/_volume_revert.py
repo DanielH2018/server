@@ -57,30 +57,6 @@ def _index(names: list[str], fragment: str) -> int:
     return hits[0]
 
 
-# kubectl's ways of saying "there is no cluster here to ask". kubectl does
-# NOT print the bare string "connection refused" — it prints "The connection to the server
-# localhost:8080 was refused", and a cluster without Longhorn's CRDs answers "the server doesn't
-# have a resource type". A guard that misses either turns "no cluster" into a red test on any
-# machine that ships kubectl, GitHub's ubuntu runners included. The first four match
-# `test_volume_snapshot.py`'s list.
-_NO_CLUSTER = (
-    "connection refused",
-    "was refused",
-    "i/o timeout",
-    "no configuration has been provided",
-    "doesn't have a resource type",
-)
-
-
-def _no_cluster_to_ask(stderr: str) -> bool:
-    """Whether kubectl failed for want of a cluster rather than for want of a valid jsonpath.
-
-    A rejected jsonpath never counts as unreachable, whatever else the stderr says: that is the
-    one failure the seam test exists to catch, and it reads `error: error parsing jsonpath …`.
-    """
-    return "jsonpath" not in stderr and any(token in stderr for token in _NO_CLUSTER)
-
-
 def _guard_of(task: dict) -> list[str]:
     when = task.get("when")
     conditions = when if isinstance(when, list) else [when]

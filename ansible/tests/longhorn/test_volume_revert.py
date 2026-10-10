@@ -45,6 +45,7 @@ import subprocess
 import pytest
 from _helpers import load_tasks as _tasks
 from _helpers import render_expr as _render
+from _kubectl_seam import no_cluster_to_ask as _no_cluster_to_ask
 from _volume_revert import (
     _CLAIM,
     _DEFAULTS,
@@ -52,7 +53,6 @@ from _volume_revert import (
     _VALIDATOR,
     _index,
     _named,
-    _no_cluster_to_ask,
     _task_names,
 )
 from _volume_ops import assert_the_role_declares_an_autodeploy_stance
@@ -71,6 +71,9 @@ def test_the_seam_test_skips_a_missing_cluster_and_fails_a_bad_jsonpath() -> Non
         "variable",
         'error: the server doesn\'t have a resource type "snapshots"',
         "Unable to connect to the server: dial tcp 10.0.0.1:6443: i/o timeout",
+        # As the `claude` agent user, whose fallback kubeconfig is root-only (#4221).
+        'error: error loading config file "/etc/rancher/k3s/k3s.yaml": open '
+        "/etc/rancher/k3s/k3s.yaml: permission denied",
     )
     for stderr in unreachable:
         assert _no_cluster_to_ask(stderr), stderr
