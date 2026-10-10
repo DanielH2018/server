@@ -386,6 +386,90 @@
   become: true
   when: claude_code_agent_user_enabled
 
+# The shared task file clones once and never pulls, yet two things run from this clone's main
+# working tree rather than from a session's worktree: the hook shim (the profile above) and the
+# homelab-ui MCP launcher (agent_browser.yml). A clone left 94 commits behind ran a ui_mcp.sh
+# that still decrypted SOPS, which the agent cannot do, and the MCP server never connected
+# (#4067, #4099). These tasks fast-forward it on each apply, before the venv sync below reads
+# its uv.lock. Only a clean master is moved: anything else is the agent's work in progress.
+- name: Read the agent user's clone branch and status
+  tags: [claude_code]
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - git
+      - -C
+      - "{{ claude_code_agent_user_clone_dir }}"
+      - status
+      - --porcelain=v2
+      - --branch
+      - --untracked-files=no
+  environment:
+    HOME: "{{ claude_code_agent_user_home }}"
+    TMPDIR: /tmp
+  register: claude_code_agent_clone_status
+  changed_when: false
+  # Never fatal, for the pull's reason below. A missing or broken clone skips the pull, and the
+  # report task names the failed read. So does a --check run on a host that has just switched
+  # the agent user on, which reads for real a clone the skipped clone task never made.
+  failed_when: false
+  # A read of state that exists independently of this play, so --check runs it too.
+  check_mode: false
+  become: true
+  when: claude_code_agent_user_enabled
+
+- name: Fast-forward the agent user's clone to origin's master
+  tags: [claude_code]
+  # Never fatal. The GitOps tick applies this role, and a red task there holds the deployer
+  # over the agent's own clone. A session's fetch holding a ref lock, a diverged local master
+  # or a network blip fails this pull; the report task below names it instead.
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - git
+      - -C
+      - "{{ claude_code_agent_user_clone_dir }}"
+      - pull
+      - --ff-only
+      - origin
+      - master
+  environment:
+    HOME: "{{ claude_code_agent_user_home }}"
+    TMPDIR: /tmp
+    # The changed_when below parses git's English output.
+    LC_ALL: C
+  register: claude_code_agent_clone_pull
+  changed_when: claude_code_agent_clone_pull.stdout | default('') is search('^Updating ', multiline=True)
+  failed_when: false
+  become: true
+  when:
+    - claude_code_agent_user_enabled
+    - claude_code_agent_clone_status.rc | default(1) == 0
+    - claude_code_agent_clone_status.stdout | default('') is search('^# branch\.head master$', multiline=True)
+    - claude_code_agent_clone_status.stdout | default('') is not search('^[^#]', multiline=True)
+
+- name: Report that the agent user's clone was left behind
+  tags: [claude_code]
+  ansible.builtin.debug:
+    msg: >-
+      {{ claude_code_agent_user_clone_dir }} was not fast-forwarded:
+      {{ 'reading its status failed: ' ~ (claude_code_agent_clone_status.stderr | default(''))
+      if claude_code_agent_clone_status.rc | default(1) != 0
+      else 'its pull failed: ' ~ (claude_code_agent_clone_pull.stderr | default(''))
+      if claude_code_agent_clone_pull.rc | default(0) != 0
+      else 'it is off master or has uncommitted changes' }}.
+      The agent's hook shim and homelab-ui launcher keep running its old code until it moves.
+  when:
+    - claude_code_agent_user_enabled
+    - not ansible_check_mode
+    - claude_code_agent_clone_pull is skipped or claude_code_agent_clone_pull.rc | default(0) != 0
+
 - name: Sync the repo's venv in the agent user's clone
   tags: [claude_code]
   # The profile points the hook shim at this clone, and the shim runs every guard with

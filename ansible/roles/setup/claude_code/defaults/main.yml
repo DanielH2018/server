@@ -344,7 +344,8 @@ claude_code_homelab_ui_credentials: "{{ claude_code_agent_user_home }}/.config/h
 
 # Whether the agent user can launch the homelab-ui MCP server itself (tasks/agent_browser.yml):
 # its own Node, @playwright/mcp and Chromium, plus a user-scope `homelab-ui` registration in its
-# ~/.claude.json pointing at its clone's scripts/diagnostics/ui_mcp.sh (#4058). The operator's
+# ~/.claude.json pointing at its clone's scripts/diagnostics/ui_mcp.sh (#4058). tasks/main.yml
+# fast-forwards that clone on each apply, so the launcher follows master (#4099). The operator's
 # toolchain sits under the 0750 /home/{{ sys_user }}, which this user cannot read, and the
 # operator's registration is user-scope in the operator's own ~/.claude.json. Not the repo's
 # .mcp.json: a project-scope server waits for a per-user approval a phone session cannot give,

@@ -195,7 +195,8 @@
   # Its own clone, so the session never writes the primary checkout's .git, which the deployer
   # fetches and fast-forwards. git refuses a repository whose gitdir another uid owns, so a
   # shared checkout is not an option either way. Run-once rather than the git module: root's
-  # git refuses a repository another user owns, and the session fetches for itself.
+  # git refuses a repository another user owns. A caller whose code runs from the clone's main
+  # working tree advances it as the agent: claude_code fast-forwards it on each apply.
   ansible.builtin.command:
     argv:
       - git

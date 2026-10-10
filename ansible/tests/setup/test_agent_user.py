@@ -229,8 +229,14 @@ def root_run_writers(task_list: list[dict]) -> list[str]:
 
 
 def agent_tasks(task_list: list[dict]) -> list[dict]:
-    """claude_code's tasks that act on the agent user's home."""
-    return [t for t in task_list if t.get("when") == "claude_code_agent_user_enabled"]
+    """claude_code's tasks that act on the agent user's home, with a list `when:` included."""
+    gate = "claude_code_agent_user_enabled"
+    return [
+        t
+        for t in task_list
+        if t.get("when") == gate
+        or (isinstance(t.get("when"), list) and gate in t["when"])
+    ]
 
 
 def test_every_command_writing_the_agents_home_on_each_apply_runs_as_the_agent() -> (
@@ -243,6 +249,7 @@ def test_every_command_writing_the_agents_home_on_each_apply_runs_as_the_agent()
     # The named members, so the census cannot pass on a renamed or vanished task.
     named(shared, "Install the pinned host Python for the agent user")
     named(claude, "Sync the repo's venv in the agent user's clone")
+    named(claude, "Fast-forward the agent user's clone to origin's master")
     named(github, "Generate the agent's commit-signing key")
     named(browser, "Install the agent user's pinned @playwright/mcp")
     assert root_run_writers(shared) == []
