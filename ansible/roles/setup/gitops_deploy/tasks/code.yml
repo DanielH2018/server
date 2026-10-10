@@ -15,9 +15,6 @@
     - deploy_io.py
     - deploy_config.py
     - deploy_state.py
-    - deploy_state_k8s.py
-    - deploy_state_hold.py
-    - deploy_state_alerts.py
     - gitops_markers.py
     - gitops_ledger.py
     - gitops_hold.py
@@ -45,6 +42,19 @@
   become: true
   notify: Run gitops-deploy once
 
+# A copy loop removes nothing it stops naming. These three mixins folded back into
+# deploy_state.py (#3661); nothing imports them, so the copies left behind are dead files.
+- name: Remove deployer modules folded into another
+  tags: [gitops-deploy-code]
+  ansible.builtin.file:
+    path: "/opt/gitops-deploy/{{ item }}"
+    state: absent
+  loop:
+    - deploy_state_k8s.py
+    - deploy_state_hold.py
+    - deploy_state_alerts.py
+  become: true
+
 - name: Install the shared host_lib helper beside the deployer
   tags: [gitops-deploy-code]
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
@@ -71,12 +81,6 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_config.py
       - live: /opt/gitops-deploy/deploy_state.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_state.py
-      - live: /opt/gitops-deploy/deploy_state_k8s.py
-        src: ansible/roles/setup/gitops_deploy/files/deploy_state_k8s.py
-      - live: /opt/gitops-deploy/deploy_state_hold.py
-        src: ansible/roles/setup/gitops_deploy/files/deploy_state_hold.py
-      - live: /opt/gitops-deploy/deploy_state_alerts.py
-        src: ansible/roles/setup/gitops_deploy/files/deploy_state_alerts.py
       - live: /opt/gitops-deploy/gitops_markers.py
         src: ansible/roles/setup/gitops_deploy/files/gitops_markers.py
       - live: /opt/gitops-deploy/gitops_ledger.py

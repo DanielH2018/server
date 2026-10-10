@@ -91,7 +91,7 @@ MARKERS: dict[str, str] = {
     # ONE KEYED FILE RATHER THAN SEVEN `<channel>_alerted_sha` FILES (#3047), and nothing
     # outside the deployer reads it. `dirty_alerted` below is keyed by DATE rather than SHA,
     # and `denylist_rendered` gates a git read rather than a page, so neither is a slot.
-    # `deploy_state_alerts.AlertSlotMarkers` reads and writes it; the one-shot migration that
+    # `deploy_state.DeployerState.alerted_sha` reads it and `record_alerted` writes it; the one-shot migration that
     # folded a host's seven old files in was deleted once daniel-box had ticked past it (#3075).
     "alerted": "alerted_shas",
     # The checkout SHA the denylist reconcile last ran against — the once-per-SHA guard on

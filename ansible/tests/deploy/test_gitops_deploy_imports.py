@@ -45,7 +45,7 @@ ALLOWED: dict[str, set[str] | None] = {
     # `gitops_hold` for `held_tag`, the hold-marker format `broad_hold_cleared_by` reads back
     # (#3138) — a stdlib leaf, so no cycle. It must NOT import `deploy_toolbox`, which
     # imports IT for the `narrow_deploy_plane` default.
-    "deploy_narrow": {"deploy_config", "gitops_hold"},
+    "deploy_narrow": {"deploy_config", "deploy_setup_roles", "gitops_hold"},
     # The state directory, the marker table and the line parsers. Import-free by construction:
     # a copy of it ships into every other tree that reads the markers (its header says how),
     # so an import here would have to be satisfiable in a monitor-bridge pod.
@@ -110,25 +110,15 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_tick_types",
         "deploy_toolbox",
     },
-    # The marker files, plus `behind_marker` from `deploy_git`.
+    # The marker files, plus `behind_marker` from `deploy_git`, the hold's owner
+    # `gitops_hold`, and `deploy_config` for `log`.
     "deploy_state": {
+        "deploy_config",
         "deploy_git",
-        "deploy_state_alerts",
-        "deploy_state_hold",
-        "deploy_state_k8s",
+        "gitops_hold",
         "gitops_ledger",
         "gitops_markers",
     },
-    # The hold and its planes, as a mixin `DeployerState` inherits. `gitops_hold` owns them,
-    # `deploy_config` for `log`.
-    "deploy_state_hold": {"deploy_config", "gitops_hold"},
-    # The `k8s_deferred` and `k8s_unapplied` families, as a mixin `DeployerState` inherits.
-    # It reads and writes through the methods that class defines, so it imports only the
-    # parsers — never `deploy_state`, which would be a cycle.
-    "deploy_state_k8s": {"gitops_ledger", "gitops_markers"},
-    # The alert dedupe slots, as a second such mixin. `deploy_config` for `log`, which the
-    # migration uses to say which slots it folded in; otherwise the same contract.
-    "deploy_state_alerts": {"deploy_config", "gitops_markers"},
     "deploy_io": {
         "deploy_config",
         "deploy_failtext",
