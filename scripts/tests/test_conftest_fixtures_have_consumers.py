@@ -1,7 +1,7 @@
 """`scripts/conftest.py` carries no fixture that no test requests (#4337).
 
-#4332 dropped `plan()`'s `resolve_ip` parameter, which was the only consumer of the
-`fake_resolve` fixture and its `_fake_resolve` helper. A fixture nobody requests reads as
+#4332 dropped `plan()`'s `resolve_ip` parameter, which was the only consumer of the fake
+resolver fixture and its private helper. A fixture nobody requests reads as
 live scaffolding, so the next reader keeps it alive by copying it.
 """
 
@@ -15,8 +15,8 @@ _TOKEN = "fake_" + "resolve"
 _SCRIPTS_CONFTEST = REPO / "scripts" / "conftest.py"
 
 
-def test_no_tracked_file_under_scripts_or_ansible_names_fake_resolve():
-    # The issue's Verify-by: `grep -rn fake_resolve scripts ansible` matches nothing.
+def test_no_tracked_file_under_scripts_or_ansible_names_the_resolver_fixture():
+    # The issue's Verify-by: a grep for the fixture's name over scripts/ and ansible/ is empty.
     tracked = subprocess.run(
         ["git", "ls-files", "-z", "--", "scripts", "ansible"],
         cwd=REPO,
@@ -43,7 +43,7 @@ def test_no_tracked_file_under_scripts_or_ansible_names_fake_resolve():
     assert hits == [], f"{_TOKEN} has no consumer since #4332; still named at: {hits}"
 
 
-def test_scripts_conftest_defines_neither_fake_resolve_nor_its_helper(request):
+def test_scripts_conftest_defines_neither_the_resolver_fixture_nor_its_helper(request):
     # Read the conftest module pytest actually loaded, rather than its source text.
     loaded = [
         plugin
