@@ -18,11 +18,14 @@ def test_a_key_no_manager_captures_is_not_a_pin():
     )
 
 
-def test_the_real_config_names_the_built_in_github_actions_pins():
-    """#4158: the built-in github-actions manager bumps `uses:` and `runs-on:` under `jobs`."""
-    keys = pinned_keys(REPO, ".github/workflows/ci.yml")
+def test_the_real_config_names_the_built_in_managers_pins():
+    """#4158: no custom manager reads these files; the built-in github-actions manager bumps
+    image-smoke's `uses:` refs, and the ansible manager the n8n deploy task's `image:`."""
+    keys = pinned_keys(REPO, ".github/workflows/image-smoke.yml")
     assert "jobs" in keys
     assert "on" not in keys
+    # The third root item of a list-rooted tasks file, "Deploy n8n to the cluster".
+    assert "2" in pinned_keys(REPO, "ansible/roles/k8s/n8n/tasks/main.yml")
 
 
 def test_a_disabled_built_in_manager_pins_nothing(tmp_path):

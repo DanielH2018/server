@@ -33,6 +33,7 @@ from pathlib import Path
 
 _JS_GROUP = re.compile(r"\(\?<(?=[A-Za-z])")
 _TOP_KEY = re.compile(r"^([A-Za-z0-9_]+):")
+_TOP_ITEM = re.compile(r"^-(?:\s|$)")
 _PIN_GROUPS = ("currentValue", "currentDigest")
 
 # name -> (default managerFilePatterns, a regex matching each line whose value it bumps)
@@ -93,9 +94,17 @@ def _built_ins(config: Path) -> tuple[tuple[tuple[str, ...], re.Pattern], ...]:
 
 
 def _key_above(lines: list[str], index: int) -> str | None:
-    for line in reversed(lines[: index + 1]):
-        if m := _TOP_KEY.match(line):
+    """The first selector segment owning line ``index``: a top-level key, or the item's index.
+
+    An Ansible tasks file is a list at the root, and a citation into it starts with the item
+    index (``0.community.docker.docker_container.image``), so a ``- `` item at column 0 keys
+    by its position among the root items.
+    """
+    for i in range(index, -1, -1):
+        if m := _TOP_KEY.match(lines[i]):
             return m.group(1)
+        if _TOP_ITEM.match(lines[i]):
+            return str(sum(1 for line in lines[:i] if _TOP_ITEM.match(line)))
     return None
 
 
