@@ -23,7 +23,7 @@ import functools
 import json
 import os
 import pwd
-import subprocess
+import socket
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -209,11 +209,11 @@ def _inside(held: str, tree: Path) -> bool:
     return path == tree or tree in path.parents
 
 
-# The root-run scan `initial_setup` installs beside the worktree sweep cron, and the sudoers
-# rule that lets the checkout owner and each agent user run it with no arguments. The source
-# is ansible/roles/setup/initial_setup/files/worktree_holders.py. It reports only under the
-# root WORKTREE_HOLDER_ROOTS maps the sudo caller's user to, which `holder_root` reads too.
-WORKTREE_HOLDERS = "/usr/local/libexec/worktree-holders"
+# The root-run scan `initial_setup` installs beside the worktree sweep cron, and the socket
+# systemd answers it on, one service instance per connection. Its group decides who may connect.
+# The source is ansible/roles/setup/initial_setup/files/worktree_holders.py. It reports only
+# under the root WORKTREE_HOLDER_ROOTS maps the caller's uid to, which `holder_root` reads too.
+WORKTREE_HOLDERS_SOCKET = "/run/worktree-holders.sock"
 WORKTREE_HOLDER_ROOTS = "/etc/worktree-holders.json"
 _HELPER_KINDS = ("cwd", "CLAUDE_PROJECT_DIR", "unreadable")
 
@@ -294,105 +294,136 @@ def processes_using(
     return found
 
 
+def ask_holders(sock: str = WORKTREE_HOLDERS_SOCKET, timeout: float = 120) -> bytes:
+    """Everything the root helper sends back on one connection to `sock`, until it closes.
+
+    The caller sends nothing: the service names the caller by the uid the kernel recorded
+    for this connection (`SO_PEERCRED`), so there is no request to forge.
+
+    Raises:
+        OSError: when the connection fails or `timeout` passes first.
+    """
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+        conn.settimeout(timeout)
+        conn.connect(sock)
+        chunks = []
+        while chunk := conn.recv(65536):
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def privileged_holders(
     tree: Path,
-    helper: str = WORKTREE_HOLDERS,
+    sock: str = WORKTREE_HOLDERS_SOCKET,
     root: Path | None = None,
-    run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
-    status: Path = Path("/proc/self/status"),
+    ask: Callable[[str], bytes] = ask_holders,
 ) -> list[tuple[int, str]] | None:
     """(pid, how) for every process the root helper reports inside `tree`, or None.
 
     None means the helper does not apply, and the caller scans `/proc` itself. That is the
-    case for a tree outside `root`, which the helper never reports on, and for a caller that
-    cannot execute the helper. The role installs it `root:<checkout owner> 0750`, with an ACL
-    entry for each agent user that has a sudoers line, so execute permission is the same test
-    as the sudoers grant. Asking sudo without that grant makes it log and mail a "not in
-    sudoers" incident.
+    case for a tree outside `root`, which the helper never reports on, for a host with no
+    socket, and for a caller the socket's group shuts out. A session started before its user
+    joined that group is one of those until it restarts.
 
-    A process with `NoNewPrivs` set cannot gain root through sudo, so the helper does not
-    apply there either. claude-rc.service sets `NoNewPrivileges=yes` for the agent user, and
-    asking sudo from one of its sessions would refuse every removal.
+    The socket needs no setuid, so a caller with `NoNewPrivs` set asks it too. That includes
+    every claude-rc.service session, which sudo never could serve (#4297).
 
-    Once the helper applies, every failure refuses the removal: a non-zero exit, a timeout, a
-    line that does not parse, and any process the helper reports root could not read.
+    Once the socket accepts the connection, every failure refuses the removal: a refusal, a
+    timeout, a refused connection, an answer that does not parse, and any process the helper
+    reports root could not read.
 
     Args:
         tree: the resolved worktree directory.
-        helper: the installed helper.
+        sock: the helper's socket.
         root: the directory the helper reports under; `holder_root()` when None.
-        run: the subprocess runner.
-        status: the procfs status file whose `NoNewPrivs` line is read.
+        ask: reads the helper's whole answer from `sock`.
     """
-    # DECIDED: the helper fails closed and its absence falls back to the #3994 slice rule.
-    # The helper reads every uid's cwd and environ, so a gap in its answer is a process that
-    # could hold this tree, and a refused removal is retried next week. Its absence cannot
-    # fail closed the same way: without root, claude-rc.service and the claude user's own
-    # sessions are always unreadable, so that rule would refuse every removal on a host where
-    # the hand apply has not run. The fallback says so on stderr, which the cron journals.
+    # DECIDED: the socket fails closed once it accepts, and an absent socket or a connect
+    # refused for permission falls back to the #3994 slice rule. The helper reads every uid's
+    # cwd and environ, so a gap in its answer is a process that could hold this tree, and a
+    # refused removal is retried next week. Neither fallback can fail closed the same way:
+    # without root, claude-rc.service and the claude user's own sessions are always
+    # unreadable, so that rule would refuse every removal on a host where the hand apply has
+    # not run, and in every session older than its user's group grant. The fallback says so
+    # on stderr, which the cron journals.
     if root is None:
         root = holder_root()
     if not _inside(str(tree), root.resolve()):
         return None
-    if not os.access(helper, os.X_OK):
-        if not Path(helper).exists():
-            _warn_helper_absent(helper)
-        return None
-    if _no_new_privs(status):
-        _warn_no_new_privs(helper)
-        return None
     try:
-        # /usr/bin/sudo by path: the dotfiles put an askpass shim named `sudo` first on PATH.
-        result = run(
-            ["/usr/bin/sudo", "-n", helper],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired) as e:
-        return [(0, f"{helper} did not answer: {e}")]
-    if result.returncode != 0:
-        return [(0, f"{helper} exited {result.returncode}: {result.stderr.strip()}")]
+        raw = ask(sock)
+    except (FileNotFoundError, PermissionError) as e:
+        _warn_scan_unreachable(sock, e.strerror or str(e))
+        return None
+    except OSError as e:
+        return [(0, f"{sock} did not answer: {e}")]
+    return read_answer(raw, tree, sock)
+
+
+def read_answer(raw: bytes, tree: Path, sock: str) -> list[tuple[int, str]]:
+    """(pid, how) for each holder of `tree` in the helper's answer `raw`, or a refusal.
+
+    A refusal is one `(0, reason)` entry, which the caller reads as a holder it cannot name.
+    The answer must open with the `ok` header and close with the `end` terminator, because a
+    socket carries no exit status: an instance that died mid-scan sends a prefix of a good
+    answer, or nothing at all, and neither may read as "no holders".
+
+    Each value arrives escaped with `unicode_escape` (#4294), so a path holding a line break
+    or a tab is still one line. It is decoded before `_inside` compares it, and the escaped
+    form names it in the refusal, where it stays one printable line.
+    """
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError:
+        return [(0, f"{sock} answered bytes that are not ASCII: {raw[:200]!r}")]
+    lines = text.split("\n")
+    head = lines[0]
+    if head.startswith("refused\t") and lines[1:] == [""]:
+        return [(0, f"{sock} refused: {head.partition(chr(9))[2]}")]
+    if head != "ok" or lines[-2:] != ["end", ""]:
+        return [(0, f"{sock} answered without its framing: {text[:200]!r}")]
     found = []
-    for line in result.stdout.splitlines():
+    for line in lines[1:-2]:
         pid, _, rest = line.partition("\t")
         kind, _, value = rest.partition("\t")
-        if not pid.isdigit() or not value or kind not in _HELPER_KINDS:
-            return [(0, f"{helper} printed an unparseable line: {line!r}")]
+        held = _unescape(value)
+        if not pid.isdigit() or not held or kind not in _HELPER_KINDS:
+            return [(0, f"{sock} answered an unparseable line: {line!r}")]
         if kind == "unreadable":
             found.append((int(pid), f"unreadable even to root ({value})"))
-        elif _inside(value, tree):
+        elif _inside(held, tree):
             how = f"cwd {value}" if kind == "cwd" else f"{kind}={value}"
             found.append((int(pid), how))
     return found
 
 
-def _no_new_privs(status: Path) -> bool:
-    """Whether `status`, a procfs status file, says this process may not gain privileges."""
+def escape_holder(value: str) -> str:
+    """`value` escaped the way the root helper escapes a path it reports.
+
+    `unicode_escape` encodes each character on its own, so the escaped form of a path inside
+    a tree starts with the escaped tree and a `/`. `fanout_lib.clean.live_process_scan`
+    compares the two escaped forms in awk for that reason, and never decodes.
+    """
+    return value.encode("unicode_escape").decode("ascii")
+
+
+def _unescape(value: str) -> str:
+    """The path `escape_holder` made `value` from, or "" when `value` is not one it makes."""
     try:
-        lines = status.read_text().splitlines()
-    except OSError:
-        return False
-    return any(line.split() == ["NoNewPrivs:", "1"] for line in lines)
+        held = value.encode("ascii").decode("unicode_escape")
+    except UnicodeError:
+        return ""
+    # A path holds no NUL, and Path.resolve raises on one.
+    return "" if "\0" in held else held
 
 
 @functools.cache
-def _warn_no_new_privs(helper: str) -> None:
+def _warn_scan_unreachable(sock: str, why: str) -> None:
     print(
-        f"warning: this process runs with NoNewPrivs, so sudo cannot run {helper}, and a "
-        "process of another uid outside this login slice is invisible to the in-use check "
-        "(#4021).",
-        file=sys.stderr,
-    )
-
-
-@functools.cache
-def _warn_helper_absent(helper: str) -> None:
-    print(
-        f"warning: {helper} is not installed, so a process of another uid outside this "
-        "login slice is invisible to the in-use check (#4170). initial_setup installs it "
-        "on every has_claude_code host, with `--tags worktree-sweep`.",
+        f"warning: cannot connect to {sock} ({why}), so a process of another uid outside "
+        "this login slice is invisible to the in-use check (#4170). initial_setup installs "
+        "the socket on every has_claude_code host with `--tags worktree-sweep`, and a "
+        "session started before its user joined the socket's group must restart first.",
         file=sys.stderr,
     )
 

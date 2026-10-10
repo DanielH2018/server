@@ -1,6 +1,8 @@
-"""The root-run worktree holder scan, against a fake /proc.
+"""The root-run worktree holder scan, against a fake /proc and a real unix socket.
 
 A fake entry's `cwd` is a symlink, which `os.readlink` reads the way it reads the kernel's.
+A `socket.socketpair()` stands in for the connection systemd hands the service: its
+`SO_PEERCRED` names this test's own uid, so the root map names that uid's user.
 
 Run: uv run pytest ansible/roles/setup/initial_setup/tests/test_worktree_holders.py
 """
@@ -9,18 +11,24 @@ import ast
 import json
 import os
 import pwd
-import subprocess
-import sys
+import socket
+import threading
 from pathlib import Path
 
 import pytest
 import worktree_holders
-from lib.worktrees import WORKTREE_HOLDER_ROOTS, privileged_holders
-from worktree_holders import main, render, scan
+from lib.worktrees import (
+    WORKTREE_HOLDER_ROOTS,
+    escape_holder,
+    privileged_holders,
+    read_answer,
+)
+from worktree_holders import answer, escape, main, render, scan, serve
 
 # Ubuntu 24.04's /usr/bin/python3, which the shebang names. Root must not run an interpreter
 # a non-root user can write, so the uv-managed host Python is not an option.
 DISTRO_PYTHON = (3, 12)
+ME = pwd.getpwuid(os.getuid()).pw_name
 
 
 def _entry(proc: Path, pid: int, cwd: Path | None = None, environ: bytes | None = None):
@@ -31,6 +39,12 @@ def _entry(proc: Path, pid: int, cwd: Path | None = None, environ: bytes | None 
     if environ is not None:
         (entry / "environ").write_bytes(environ)
     return entry
+
+
+def _mapped(tmp_path: Path, mapping) -> Path:
+    roots = tmp_path / "worktree-holders.json"
+    roots.write_text(json.dumps(mapping))
+    return roots
 
 
 def test_a_process_with_its_cwd_in_a_worktree_is_flagged(tmp_path):
@@ -76,131 +90,157 @@ def test_a_process_that_exited_mid_scan_is_skipped_is_clean(tmp_path):
     assert scan(root, proc=tmp_path / "proc") == []
 
 
-def _unrelated_and_forged(tmp_path: Path):
-    """A root with two trees, and a process outside both whose project dir is poisoned.
+def _caller_reads(tree: Path, text: str):
+    """What the caller makes of the service sending `text`, for `tree`."""
+    return read_answer(text.encode("ascii"), tree, "worktree-holders.sock")
 
-    Each value is one the caller would misread a line at a time: a bare newline makes an
-    unparseable line, a newline and tabs forge a holder line for tree `b`, and U+2028 is a
-    line break to `str.splitlines()` though it is not `\\n`.
-    """
+
+# Each a directory name a caller reading a line at a time would misread: a bare newline makes
+# an unparseable line, a newline and tabs forge a holder line for tree `b`, U+2028 is a line
+# break to `str.splitlines()` though it is not `\n`, and a tab forges a field.
+LINE_BREAKERS = (
+    "a\nnot a holder line",
+    "a\n4242\tcwd\t/b",
+    "a\u2028x",
+    "a\tcwd",
+    "a\x85",
+)
+
+
+@pytest.mark.parametrize("name", LINE_BREAKERS, ids=repr)
+def test_a_cwd_with_a_line_break_is_reported_on_one_line_and_holds_only_its_tree_is_clean(
+    tmp_path, name
+):
+    # #4294: the process holds its own tree and nothing else. Before the escape, the caller
+    # read an unparseable line and refused every removal while the process lived.
+    root = tmp_path / "worktrees"
+    held, unrelated = root / name, root / "b"
+    held.mkdir(parents=True)
+    unrelated.mkdir()
+    _entry(tmp_path / "proc", 7, cwd=held, environ=b"")
+    text = f"ok\n{render(scan(root, proc=tmp_path / 'proc'))}end\n"
+
+    assert len(text.split("\n")) == 4
+    assert _caller_reads(held, text) == [(7, f"cwd {escape(str(held))}")]
+    assert _caller_reads(unrelated, text) == []
+
+
+def test_a_cwd_printed_without_the_escape_breaks_the_caller_is_flagged(tmp_path):
+    # The red half: the same values printed as-is refuse the unrelated tree or forge a holder.
+    root = tmp_path / "worktrees"
+    broken = f"ok\n7\tcwd\t{root}/a\nnot a holder line\nend\n"
+    forged = f"ok\n7\tcwd\t{root}/a\n4242\tcwd\t{root}/b\nend\n"
+
+    assert _caller_reads(root / "b", broken)[0][1].startswith(
+        "worktree-holders.sock answered an unparseable line"
+    )
+    assert _caller_reads(root / "b", forged) == [(4242, f"cwd {root}/b")]
+
+
+def test_a_project_dir_with_a_line_break_holds_only_its_tree_is_clean(tmp_path):
+    # #4272 dropped such a value. Escaped, it is reported, and holds only the tree it names.
     root = tmp_path / "worktrees"
     (root / "a").mkdir(parents=True)
-    (root / "b").mkdir()
-    poisoned = (
-        f"{root / 'a'}\nnot a holder line",
-        f"{root / 'a'}\n4242\tcwd\t{root / 'b'}",
-        f"{root / 'a'} not a holder line",
-        f"{root / 'a'}\tcwd",
+    poisoned = f"{root / 'a'}/x\n4242\tcwd\t{root / 'b'}"
+    _entry(
+        tmp_path / "proc",
+        7,
+        cwd=tmp_path,
+        environ=f"CLAUDE_PROJECT_DIR={poisoned}\0".encode(),
     )
-    proc = tmp_path / "proc"
-    for pid, value in enumerate(poisoned, start=7):
-        _entry(
-            proc, pid, cwd=tmp_path, environ=f"CLAUDE_PROJECT_DIR={value}\0".encode()
-        )
-    return root, proc
+    text = f"ok\n{render(scan(root, proc=tmp_path / 'proc'))}end\n"
+
+    assert [pid for pid, _ in _caller_reads(root / "a", text)] == [7]
+    assert _caller_reads(root / "b", text) == []
 
 
-def _caller_reads(root: Path, tree: Path, output: str):
-    """What `privileged_holders` makes of the helper printing `output`, for `tree`."""
-
-    def run(argv, **_):
-        return subprocess.CompletedProcess(argv, 0, output, "")
-
-    return privileged_holders(
-        tree, helper=sys.executable, root=root, run=run, status=root / "status"
-    )
+def test_the_helper_and_the_callers_escape_one_way_is_clean():
+    # The shell caller compares escaped forms, so both sides must escape identically.
+    for value in (*LINE_BREAKERS, "/plain/path", "caf\u00e9", "\udcff", "back\\slash"):
+        assert escape(value) == escape_holder(value)
+        assert escape(value).isascii() and escape(value).isprintable()
 
 
-def test_a_project_dir_that_is_not_one_printable_line_is_dropped_is_clean(tmp_path):
-    # #4272: one process of another uid must not stop every removal, nor keep a tree it does
-    # not hold.
-    root, proc = _unrelated_and_forged(tmp_path)
-    output = render(scan(root, proc=proc))
-
-    assert output == ""
-    assert _caller_reads(root, root / "a", output) == []
-    assert _caller_reads(root, root / "b", output) == []
-
-
-def test_a_poisoned_project_dir_printed_as_is_breaks_the_caller_is_flagged(tmp_path):
-    # The red half: without the filter, the same values refuse the unrelated tree and forge a
-    # holder for `b`.
-    root, _ = _unrelated_and_forged(tmp_path)
-    unfiltered = render([(7, "CLAUDE_PROJECT_DIR", f"{root / 'a'}\nnot a holder line")])
-    forged = render(
-        [(8, "CLAUDE_PROJECT_DIR", f"{root / 'a'}\n4242\tcwd\t{root / 'b'}")]
-    )
-
-    assert _caller_reads(root, root / "b", unfiltered)[0][1].startswith(
-        f"{sys.executable} printed an unparseable line"
-    )
-    assert _caller_reads(root, root / "b", forged) == [(4242, f"cwd {root / 'b'}")]
-
-
-def test_the_cwd_of_a_process_with_a_poisoned_project_dir_is_still_reported_is_flagged(
-    tmp_path,
-):
-    root = tmp_path / "worktrees"
-    (root / "a").mkdir(parents=True)
-    environ = f"CLAUDE_PROJECT_DIR={root / 'a'}\n\0".encode()
-    _entry(tmp_path / "proc", 7, cwd=root / "a", environ=environ)
-
-    assert scan(root, proc=tmp_path / "proc") == [(7, "cwd", str(root / "a"))]
-
-
-def _mapped(tmp_path: Path, mapping) -> Path:
-    roots = tmp_path / "worktree-holders.json"
-    roots.write_text(json.dumps(mapping))
-    return roots
-
-
-def test_main_reports_under_the_sudo_users_mapped_root_is_flagged(
-    tmp_path, monkeypatch, capsys
-):
-    # #4021: the root comes from the map, not from the caller's home, so the agent user's
-    # removal in its own clone sees the operator's process there.
-    me = pwd.getpwuid(os.getuid()).pw_name
+def test_main_answers_under_the_callers_mapped_root_is_flagged(tmp_path):
+    # #4021: the root comes from the map, keyed by the uid the kernel names, so the agent
+    # user's removal in its own clone sees the operator's process there.
     root = tmp_path / "clone" / ".claude" / "worktrees"
     (root / "a").mkdir(parents=True)
     _entry(tmp_path / "proc", 7, cwd=root / "a", environ=b"")
-    monkeypatch.setenv("SUDO_UID", str(os.getuid()))
+    service, caller = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    with caller:
+        code = main(
+            ["worktree-holders"],
+            roots=_mapped(tmp_path, {ME: str(root)}),
+            proc=tmp_path / "proc",
+            fd=service.detach(),
+        )
+        sent = caller.recv(65536).decode()
 
-    code = main(
-        ["worktree-holders"],
-        roots=_mapped(tmp_path, {me: str(root)}),
-        proc=tmp_path / "proc",
-    )
-
-    assert (code, capsys.readouterr().out) == (0, f"7\tcwd\t{root / 'a'}\n")
+    assert (code, sent) == (0, f"ok\n7\tcwd\t{root / 'a'}\nend\n")
 
 
-def test_main_refuses_a_user_the_map_does_not_root_is_flagged(tmp_path, monkeypatch):
-    # Fail closed: a missing map, no entry for the user, or a relative path each exit 2, which
-    # the caller reads as a refusal.
-    me = pwd.getpwuid(os.getuid()).pw_name
-    monkeypatch.setenv("SUDO_UID", str(os.getuid()))
+def test_a_uid_the_map_does_not_root_is_refused_is_flagged(tmp_path):
+    # Fail closed: a missing map, no entry for the user, or a relative path each refuse, and
+    # the refusal carries no `end`, so a caller cannot read it as "no holders".
     proc = tmp_path / "proc"
     proc.mkdir()
 
     for roots in (
         tmp_path / "absent.json",
         _mapped(tmp_path, {"someone-else": str(tmp_path)}),
-        _mapped(tmp_path, {me: "relative/worktrees"}),
+        _mapped(tmp_path, {ME: "relative/worktrees"}),
     ):
-        assert main(["worktree-holders"], roots=roots, proc=proc) == 2, roots
+        text = answer(os.getuid(), roots=roots, proc=proc)
+        assert text.startswith("refused\t") and text.count("\n") == 1, roots
+        assert _caller_reads(tmp_path / "a", text)[0][0] == 0, roots
+
+
+def test_main_refuses_an_argument_or_a_stdin_that_is_not_a_socket_is_flagged(tmp_path):
+    # The service takes nothing from the caller. A path argument would let it ask root about
+    # any directory, and a pipe on stdin means nothing named the caller.
+    read_end, write_end = os.pipe()
+    os.close(write_end)
+    try:
+        assert main(["worktree-holders", "/root"]) == 2
+        assert main(["worktree-holders"], fd=read_end) == 2
+    finally:
+        os.close(read_end)
 
 
 def test_the_helper_and_the_caller_read_one_root_map_is_clean():
     assert worktree_holders.ROOTS == Path(WORKTREE_HOLDER_ROOTS)
 
 
-def test_main_refuses_an_argument_or_a_missing_sudo_uid_is_flagged(monkeypatch):
-    # The sudoers rule allows no arguments; a path argument would let the caller ask root
-    # about any directory.
-    monkeypatch.setenv("SUDO_UID", str(os.getuid()))
-    assert main(["worktree-holders", "/root"]) == 2
-    monkeypatch.delenv("SUDO_UID")
-    assert main(["worktree-holders"]) == 2
+def _serving(sock: Path, roots: Path, proc: Path) -> threading.Thread:
+    """A listener at `sock` that answers one connection the way the service does."""
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener.bind(str(sock))
+    listener.listen(1)
+
+    def one():
+        with listener:
+            conn, _ = listener.accept()
+            with conn:
+                serve(conn, roots, proc)
+
+    thread = threading.Thread(target=one, daemon=True)
+    thread.start()
+    return thread
+
+
+def test_the_caller_reads_the_service_over_a_real_socket_is_flagged(tmp_path):
+    # The transport end to end: connect, the kernel's SO_PEERCRED, the framed answer, the parse.
+    root = tmp_path / "worktrees"
+    (root / "a\u2028b").mkdir(parents=True)
+    _entry(tmp_path / "proc", 7, cwd=root / "a\u2028b", environ=b"")
+    sock = tmp_path / "worktree-holders.sock"
+    thread = _serving(sock, _mapped(tmp_path, {ME: str(root)}), tmp_path / "proc")
+
+    found = privileged_holders(root / "a\u2028b", sock=str(sock), root=root)
+    thread.join(timeout=10)
+
+    assert found == [(7, f"cwd {escape(str(root / 'a\u2028b'))}")]
 
 
 def test_the_helper_parses_on_the_distro_interpreter_is_clean():

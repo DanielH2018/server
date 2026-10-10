@@ -82,15 +82,23 @@ agent gets a lander of the same shape.
   the worktree and the `.git` file (git 2.43, `setup.c` `ensure_valid_ownership`). Group ownership and
   the `setgid` bit do not pass that check, and a shared `.git/config` lets either user run code as the
   other.
-- **The agent belongs to none of `ubuntu`, `sudo`, `adm`, `docker`, `lxd` or `kvm`.** Without
+- **The agent belongs to none of `ubuntu`, `sudo`, `adm`, `docker`, `lxd` or `kvm`.** Its
+  groups are `systemd-journal`, `worktree-holders` and, on a peer, `ssh-users`. Without
   `adm` or `systemd-journal`, `journalctl` shows the agent only its own units. The operator
   granted `systemd-journal` on 2026-10-09, after a secrets scan of the journal. Slice 4 adds it.
-- **The agent's one sudo grant is the worktree holder scan.** The operator granted it on
-  2026-10-10 (#4021). `/usr/local/libexec/worktree-holders` runs as root with no arguments and
-  reports only under the agent's own clone, so a worktree removal in `/var/lib/claude/server`
-  sees an `ubuntu` process inside the tree. initial_setup's `worktree-sweep` tag installs the
-  sudoers line and a named-user ACL entry that lets the agent execute the helper. `sudo -n true`
-  still fails.
+- **The agent has no sudo grant. Its one root service is the worktree holder scan.** The
+  operator granted the scan on 2026-10-10 (#4021) and ruled the same day that a socket replaces
+  the sudo grant it first used (#4297). Under `NoNewPrivileges=yes`, sudo cannot gain root, so
+  no `claude-rc.service` session could use that grant. `worktree-holders.socket` listens on
+  `/run/worktree-holders.sock`, mode 0660, group `worktree-holders`. For each connection
+  systemd runs `/usr/local/libexec/worktree-holders` as root. The helper reads the caller's uid
+  from `SO_PEERCRED` and reports only under that user's root in `/etc/worktree-holders.json`.
+  For the agent, that root is its own clone, so a worktree removal in `/var/lib/claude/server`
+  sees an `ubuntu` process inside the tree. initial_setup's `worktree-sweep` tag renders the
+  map from every present entry of `claude_code_agents` (#4295), and the helper refuses a uid
+  the map does not name. The `claude_code` role's `agent_access.yml` puts each present agent in
+  the group. A session started before its user joined the group falls back to the
+  unprivileged scan until it restarts. `sudo -n true` still fails.
 - **The agent has its own GitHub identity and signing key.** A PR author cannot approve their
   own PR, so any approval gate needs a second identity.
 - **Remote Control needs one interactive step.** It requires a claude.ai `/login`, and without a

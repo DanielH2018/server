@@ -4,6 +4,7 @@ The reverse state of launch. Never removes a dirty or unmerged tree, and names w
 """
 
 import dataclasses
+import shlex
 import subprocess
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -27,9 +28,10 @@ from fanout_lib.transport import REPO
 from lib.git import git
 from lib.worktrees import (
     REMOVABLE,
-    WORKTREE_HOLDERS,
+    WORKTREE_HOLDERS_SOCKET,
     Worktree,
     classify,
+    escape_holder,
     is_dirty,
     is_merged,
     remove,
@@ -218,12 +220,27 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
     return "failed", f"clean failed (exit {proc.returncode}): {detail}"
 
 
-def live_process_scan(
-    wt: str,
-    helper: str = WORKTREE_HOLDERS,
-    sudo: str = "/usr/bin/sudo -n",
-    status: str = "/proc/self/status",
-) -> str:
+# What `live_process_scan`'s awk does with the root helper's answer. It reads the framing
+# `lib.worktrees.read_answer` reads, and prints `unknown (...)` for any answer that function
+# refuses, so the chain keeps the tree. `WT` is the worktree escaped the helper's way: awk
+# compares the escaped forms and never decodes (#4294). It arrives through ENVIRON, because
+# `awk -v` would read its backslashes as escapes.
+_HOLDER_AWK = (
+    'NR == 1 { if ($0 != "ok") { bad = 1; if ($1 == "refused") refused = 1 }; next } '
+    "ended { bad = 1; next } "
+    '$0 == "end" { ended = 1; next } '
+    "NF != 3 || $1 !~ /^[0-9]+$/ "
+    '|| ($2 != "cwd" && $2 != "CLAUDE_PROJECT_DIR" && $2 != "unreadable") '
+    "{ bad = 1; next } "
+    'hit == "" && ($2 == "unreadable" || $3 == ENVIRON["WT"] '
+    '|| index($3, ENVIRON["WT"] "/") == 1) { hit = $1 } '
+    'END { if (refused) print "unknown (worktree-holders refused this uid)"; '
+    'else if (bad || !ended) print "unknown (worktree-holders answered garbled)"; '
+    "else print hit }"
+)
+
+
+def live_process_scan(wt: str, sock: str = WORKTREE_HOLDERS_SOCKET) -> str:
     """Shell that sets `busy` to the first pid whose cwd or `CLAUDE_PROJECT_DIR` is in `wt`.
 
     `lib.worktrees.processes_using` in shell, for the chains that run before or without an
@@ -231,32 +248,31 @@ def live_process_scan(
     that deletes the tree itself skipped that check (#3995). `busy` is empty when nothing
     uses the tree.
 
-    The root helper `initial_setup` installs answers first when this uid can execute it, so
-    another uid's process outside this login slice is seen (#4170). As in
-    `privileged_holders`, it fails closed: a failed run, an `unreadable` line or a line of an
-    unknown kind sets `busy`. The helper reports only under the worktree root
+    The root helper `initial_setup` installs answers first, through its socket, when this
+    uid may connect, so another uid's process outside this login slice is seen (#4170). The
+    socket needs no setuid, so a claude-rc.service shell, which runs with `NoNewPrivs`, asks
+    it too (#4297). `nc -U` is the client, since a shell has no unix-socket redirect. As in
+    `privileged_holders`, it fails closed once the socket is there: a failed connection, a
+    refusal, an answer without its framing, an `unreadable` line or a line of an unknown kind
+    sets `busy`. A socket that is absent, or that this uid's groups cannot write, skips the
+    helper with a warning on stderr. The helper reports only under the worktree root
     `lib.worktrees.holder_root` names for the caller, so the `/proc` loop still runs when it
-    found nothing, for a tree outside that root. That loop cannot read another uid's process and skips it.
-
-    A shell with `NoNewPrivs` set skips the helper, as `privileged_holders` does: sudo cannot
-    gain root there, and asking would refuse every removal.
+    found nothing, for a tree outside that root. That loop cannot read another uid's process
+    and skips it.
 
     Args:
         wt: the worktree path.
-        helper: the installed root helper. A test seam, as are `sudo` and `status`.
-        sudo: the command prefix that runs `helper` as root.
-        status: the procfs status file whose `NoNewPrivs` line is read.
+        sock: the helper's socket. A test seam.
     """
+    escaped = shlex.quote(escape_holder(wt))
     return (
         "busy=; "
-        f'if [ -x "{helper}" ] '
-        f"&& ! grep -qs '^NoNewPrivs:[[:space:]]*1' \"{status}\"; then "
-        f'if out=$({sudo} "{helper}" 2>/dev/null); then '
-        "busy=$(printf '%s\\n' \"$out\" | awk -F '\\t' "
-        f'-v wt="{wt}" '
-        '\'NF && ($2 == "unreadable" || ($2 != "cwd" && $2 != "CLAUDE_PROJECT_DIR") '
-        '|| $3 == wt || index($3, wt "/") == 1) {print $1; exit}\'); '
-        'else busy="unknown (worktree-holders failed)"; fi; fi; '
+        f'if [ -S "{sock}" ] && [ -w "{sock}" ]; then '
+        f'if out=$(nc -U "{sock}" </dev/null 2>/dev/null); then '
+        f"busy=$(printf '%s\\n' \"$out\" | WT={escaped} awk -F '\\t' '{_HOLDER_AWK}'); "
+        'else busy="unknown (worktree-holders did not answer)"; fi; '
+        f"else echo \"warning: cannot connect to {sock}, so another uid's process outside "
+        'this login slice is invisible to the in-use check (#4170)" >&2; fi; '
         'if [ -z "$busy" ]; then '
         "for p in /proc/[0-9]*; do "
         'c=$(readlink "$p/cwd" 2>/dev/null); '

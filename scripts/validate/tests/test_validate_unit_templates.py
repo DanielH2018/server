@@ -152,8 +152,10 @@ def test_discover_templates_finds_the_known_set():
         "kuma-check.service.j2",
         "kuma-check.timer.j2",
         "unit-failure-alert.service.j2",
+        "worktree-holders.socket.j2",
+        "worktree-holders@.service.j2",
     } <= names
-    assert len(names) == 25
+    assert len(names) == 27
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():

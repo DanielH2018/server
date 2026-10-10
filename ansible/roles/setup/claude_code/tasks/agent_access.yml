@@ -8,11 +8,24 @@
 # none), so an empty list is the way back out. ssh-users is the one group sshd's AllowGroups
 # admits, and a peer whose claude_agent_ssh_login_enabled is true puts the agent in it so the
 # key host's agent can log in (agent_ssh_login.yml). That login is the primary agent's alone.
-- name: Set the agent user's journal access and its ssh login group
+# The worktree holder scan's socket group lets the agent connect to the root scan its worktree
+# removals ask (initial_setup's crons.yml, #4297). Every present agent joins it, matching the
+# root map initial_setup renders from the same profiles (#4295); that map, not this group,
+# decides what the agent's scan covers.
+- name: Create the worktree holder scan's socket group for the agent user to join
+  # initial_setup creates it too. Here as well, because useradd refuses a group that does not
+  # exist, and a `--tags claude_code` run can come before any worktree-sweep apply.
+  ansible.builtin.group:
+    name: "{{ initial_setup_worktree_holders_group }}"
+    system: true
+  become: true
+
+- name: Set the agent user's journal access, its ssh login group and its worktree scan group
   ansible.builtin.user:
     name: "{{ claude_code_agent_user }}"
     groups: >-
-      {{ (['systemd-journal'] if claude_code_agent_journal_access else [])
+      {{ [initial_setup_worktree_holders_group]
+      + (['systemd-journal'] if claude_code_agent_journal_access else [])
       + (['ssh-users'] if claude_agent_ssh_login_enabled and claude_code_agent_is_primary
       and inventory_hostname != claude_agent_ssh_key_host else []) }}
     append: false
