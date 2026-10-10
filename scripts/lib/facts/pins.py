@@ -1,4 +1,4 @@
-"""The YAML keys whose value Renovate rewrites, derived from ``renovate.json``'s custom managers.
+"""The YAML keys whose value Renovate rewrites, from ``renovate.json`` and its built-in managers.
 
 A ``yaml`` atom hashes its key's value, so citing a key Renovate manages turns every bump of
 that pin into a ``moved`` atom. The bump's PR then fails
@@ -12,9 +12,18 @@ select, and the line holding a ``currentValue`` or ``currentDigest`` capture nam
 top-level key it sits under. A citation of a nested selector is flagged when its first segment
 is a managed key, so a sibling of a pin inside the same mapping reads as managed too.
 
-Only ``customManagers`` are read. The built-in managers that ``extends`` enables
-(github-actions, pep621, kubernetes and the rest) are not derived, because their file
-selection lives inside Renovate rather than in this repo's config.
+Renovate's built-in managers also rewrite YAML, and their file selection lives inside Renovate
+rather than in this repo's config (#4158). ``_BUILT_IN`` restates the default
+``managerFilePatterns`` of the two that select a tracked YAML file here, copied from
+``lib/modules/manager/<name>/index.ts`` upstream, with the value lines each one extracts:
+
+- ``github-actions`` reads ``uses:``, ``runs-on:``, ``container:`` and ``image:`` in workflow
+  and action files, so every ``jobs`` (or ``runs``) selector is managed.
+- ``ansible`` reads ``image:`` in any ``tasks/*.yml``.
+
+docker-compose, helm-values and gitlabci select no tracked file, and the kubernetes manager has
+no default pattern; add a row when one starts to. A built-in manager is active unless
+``enabledManagers`` leaves it out or its own object sets ``"enabled": false``.
 """
 
 import fnmatch
@@ -24,7 +33,26 @@ from pathlib import Path
 
 _JS_GROUP = re.compile(r"\(\?<(?=[A-Za-z])")
 _TOP_KEY = re.compile(r"^([A-Za-z0-9_]+):")
+_TOP_ITEM = re.compile(r"^-(?:\s|$)")
 _PIN_GROUPS = ("currentValue", "currentDigest")
+
+# name -> (default managerFilePatterns, a regex matching each line whose value it bumps)
+_BUILT_IN = {
+    "github-actions": (
+        (
+            "/(^|/)(workflow-templates|\\.(?:github|gitea|forgejo)/(?:workflows|actions))/.+\\.ya?ml$/",
+            "/(^|/)action\\.ya?ml$/",
+        ),
+        # A local `uses: ./path` is a path, not a dependency, so nothing bumps it.
+        re.compile(
+            r"^\s*(?:-\s*)?(?:uses:\s*['\"]?(?!\.)\S|(?:runs-on|container|image):\s*\S)"
+        ),
+    ),
+    "ansible": (
+        ("/(^|/)tasks/[^/]+\\.ya?ml$/",),
+        re.compile(r"^\s*(?:-\s*)?image:\s*\S"),
+    ),
+}
 
 
 def _selects(pattern: str, rel: str) -> bool:
@@ -52,15 +80,36 @@ def _managers(
     return tuple(out)
 
 
+def _built_ins(config: Path) -> tuple[tuple[tuple[str, ...], re.Pattern], ...]:
+    if not config.is_file():
+        return ()
+    cfg = json.loads(config.read_text(encoding="utf-8"))
+    enabled = cfg.get("enabledManagers")
+    return tuple(
+        spec
+        for name, spec in _BUILT_IN.items()
+        if (enabled is None or name in enabled)
+        and cfg.get(name, {}).get("enabled", True) is not False
+    )
+
+
 def _key_above(lines: list[str], index: int) -> str | None:
-    for line in reversed(lines[: index + 1]):
-        if m := _TOP_KEY.match(line):
+    """The first selector segment owning line ``index``: a top-level key, or the item's index.
+
+    An Ansible tasks file is a list at the root, and a citation into it starts with the item
+    index (``0.community.docker.docker_container.image``), so a ``- `` item at column 0 keys
+    by its position among the root items.
+    """
+    for i in range(index, -1, -1):
+        if m := _TOP_KEY.match(lines[i]):
             return m.group(1)
+        if _TOP_ITEM.match(lines[i]):
+            return str(sum(1 for line in lines[:i] if _TOP_ITEM.match(line)))
     return None
 
 
 def pinned_keys(repo: Path, rel: str) -> frozenset[str]:
-    """The top-level keys of ``rel`` whose value a Renovate custom manager rewrites."""
+    """The top-level keys of ``rel`` whose value a Renovate manager rewrites."""
     target = repo / rel
     if not target.is_file():
         return frozenset()
@@ -77,4 +126,10 @@ def pinned_keys(repo: Path, rel: str) -> frozenset[str]:
                         key = _key_above(lines, text.count("\n", 0, m.start(group)))
                         if key:
                             keys.add(key)
+    for patterns, line_rx in _built_ins(repo / "renovate.json"):
+        if not any(_selects(p, rel) for p in patterns):
+            continue
+        for i, line in enumerate(lines):
+            if line_rx.match(line) and (key := _key_above(lines, i)):
+                keys.add(key)
     return frozenset(keys)
