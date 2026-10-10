@@ -25,7 +25,6 @@ import sys
 import pytest
 from _role_census import role_dirs
 from _helpers import (
-    REPO,
     ROLES,
     jinja_env,
     load_tasks,
@@ -33,13 +32,13 @@ from _helpers import (
     task_named,
     walk_tasks,
 )
-from lib.repo_paths import ALL_VARS
+from lib.repo_paths import ALL_VARS, K3S_FILES
 from _k8s_render import render_role_template, rendered_texts
 from lib import yaml_fast
 from lib.k8s_roles import declared_manifest_files, manifest_template
 from role_label import ROLE_LABEL, homelab_role_label
 
-sys.path.insert(0, str(REPO / "ansible/roles/setup/k3s/files"))
+sys.path.insert(0, str(K3S_FILES))
 
 from manifest_declares import declared_in
 

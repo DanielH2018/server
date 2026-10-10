@@ -28,11 +28,10 @@ from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 
 from _helpers import ANSIBLE, load_defaults
-from lib.repo_paths import ALL_VARS
+from lib.repo_paths import ALL_VARS, K3S_ROLE
 from _k8s_render import rendered_docs
 from _setup_render import render_setup_text
 
-K3S = ANSIBLE / "roles" / "setup" / "k3s"
 HEADLAMP = ANSIBLE / "roles" / "k8s" / "headlamp"
 
 # The two hostnames Authelia answers on, and the two `iss` values they mint. Measured
@@ -85,7 +84,7 @@ def _context() -> dict:
     rather than through the harness. `_setup_render.role_context` resolves each key the way
     Ansible does, which is what used to be done by hand for the two `domain`-derived paths.
     """
-    defaults = load_defaults(K3S)
+    defaults = load_defaults(K3S_ROLE)
     context = {
         "server_ip": "10.0.0.215",
         "domain": DOMAIN,
@@ -103,7 +102,9 @@ def _context() -> dict:
 def _rendered_server_args(context: dict | None = None) -> str:
     """`k3s_server_args` as the installer receives it."""
     context = context or _context()
-    return _env().from_string(load_defaults(K3S)["k3s_server_args"]).render(**context)
+    return (
+        _env().from_string(load_defaults(K3S_ROLE)["k3s_server_args"]).render(**context)
+    )
 
 
 def _rendered_auth_config() -> dict:
@@ -156,7 +157,7 @@ def test_the_apiserver_is_pointed_at_the_authentication_config_file():
     args = _apiserver_args(_rendered_server_args())
     assert (
         args.get("authentication-config")
-        == load_defaults(K3S)["k3s_authentication_config_path"]
+        == load_defaults(K3S_ROLE)["k3s_authentication_config_path"]
     )
 
 
@@ -219,7 +220,7 @@ def test_every_issuer_url_is_exact_and_distinct():
 def test_every_issuer_names_the_client_id_as_its_audience():
     """Authelia's default `id_token_audience_mode: specification` puts only the client id in
     `aud`, and `audiences` is required and must be non-empty."""
-    client_id = load_defaults(K3S)["k3s_oidc_client_id"]
+    client_id = load_defaults(K3S_ROLE)["k3s_oidc_client_id"]
     for entry in _rendered_auth_config()["jwt"]:
         assert entry["issuer"]["audiences"] == [client_id], entry["issuer"]["url"]
 
@@ -237,7 +238,7 @@ def test_username_prefixing_is_disabled_with_an_empty_string_not_a_hyphen():
     config = _rendered_auth_config()
     for entry in config["jwt"]:
         username = entry["claimMappings"]["username"]
-        assert username["claim"] == load_defaults(K3S)["k3s_oidc_username_claim"]
+        assert username["claim"] == load_defaults(K3S_ROLE)["k3s_oidc_username_claim"]
         assert "prefix" in username, (
             "prefix is required when claim is set; the apiserver rejects the file without it"
         )
@@ -271,7 +272,7 @@ def test_groups_prefix_matches_the_group_headlamp_binds():
     group = headlamp["headlamp_k8s_oidc_group"]
     for entry in _rendered_auth_config()["jwt"]:
         groups = entry["claimMappings"]["groups"]
-        assert groups["claim"] == load_defaults(K3S)["k3s_oidc_groups_claim"]
+        assert groups["claim"] == load_defaults(K3S_ROLE)["k3s_oidc_groups_claim"]
         prefix = groups["prefix"]
         assert group.startswith(prefix), (
             f"{group!r} does not carry the prefix {prefix!r}"

@@ -20,7 +20,7 @@ import narrow_setup
 import narrow_setup_index
 from lib import yaml_fast
 from lib.git import git_stdout
-from lib.repo_paths import REPO
+from lib.repo_paths import K3S_ROLE, REPO
 
 from _setup_role_fixtures import ALPHA, BETA, DEFAULTS, ROLE, Tree, build, narrow
 
@@ -168,7 +168,7 @@ def _facts_of(role_dir) -> dict[str, set[str]]:
 
 def test_the_k3s_role_derives_exactly_the_facts_this_census_names():
     """Non-vacuity: the census below has a live subject in the role it was written for."""
-    found = _facts_of(REPO / "ansible/roles/setup/k3s")
+    found = _facts_of(K3S_ROLE)
     assert set(found) == K3S_FACTS, sorted(found)
 
 

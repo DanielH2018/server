@@ -31,9 +31,9 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_backup_grace_visibility.
 
 import sys
 
-from _helpers import ANSIBLE
+from lib.repo_paths import K3S_FILES
 
-sys.path.insert(0, str(ANSIBLE / "roles" / "setup" / "k3s" / "files"))
+sys.path.insert(0, str(K3S_FILES))
 import longhorn_backup_health_logic as logic
 
 NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z

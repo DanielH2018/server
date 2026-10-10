@@ -20,11 +20,10 @@ The transport that produces these lines is pinned separately by a real subproces
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py
 """
 
-from pathlib import Path
-
 import longhorn_cron_evidence_logic as logic
 from _shell_render import rendered_shell_text
 from lib import yaml_fast
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 
 
 # The trim's own summary and abort lines, copied from longhorn-trim-volumes.sh.j2. They are
@@ -199,11 +198,10 @@ def test_cron_liveness_reads_a_stale_fire_stamp_as_not_firing():
 
 def test_each_cron_touches_the_stamp_the_shim_exports():
     """The cron writes the stamp and the shim names it; nothing else holds the two paths together."""
-    role = Path(__file__).resolve().parents[1]
-    stamp_dir = yaml_fast.safe_load((role / "defaults" / "main.yml").read_text())[
+    stamp_dir = yaml_fast.safe_load(K3S_DEFAULTS.read_text())[
         "k3s_cron_fired_stamp_dir"
     ]
-    tasks = yaml_fast.safe_load((role / "tasks" / "health-crons.yml").read_text())
+    tasks = yaml_fast.safe_load((K3S_ROLE / "tasks" / "health-crons.yml").read_text())
     b2_job = next(
         t["ansible.builtin.cron"]["job"]
         for t in tasks

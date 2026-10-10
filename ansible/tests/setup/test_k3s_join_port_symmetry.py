@@ -24,9 +24,9 @@ that needs a port can establish that.
 Run: uv run pytest ansible/tests/setup/test_k3s_join_port_symmetry.py
 """
 
-from _helpers import SETUP_ROLES, load_yaml
+from _helpers import load_yaml
+from lib.repo_paths import K3S_DEFAULTS
 
-K3S = SETUP_ROLES / "k3s"
 
 # The one direction-specific port, with the reason it is legitimately one-sided. Anything else
 # appearing on only one side is a bug, not a decision.
@@ -34,7 +34,7 @@ SERVER_ONLY = {("6443", "tcp")}
 
 
 def _ports(variable: str) -> set[tuple[str, str]]:
-    defaults = load_yaml(K3S / "defaults" / "main.yml")
+    defaults = load_yaml(K3S_DEFAULTS)
     assert variable in defaults, f"{variable} is gone from k3s defaults/main.yml"
     entries = defaults[variable]
     assert entries, f"{variable} is empty — this guard would pass vacuously"

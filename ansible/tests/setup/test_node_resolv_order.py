@@ -33,6 +33,7 @@ import re
 
 from _helpers import ROLES as _ROLES
 from _setup_render import render_setup_text, rendered_setup_text, role_context
+from lib.repo_paths import K3S_ROLE
 
 _TEMPLATE = "resolv.conf.j2"
 
@@ -206,7 +207,7 @@ def test_the_live_corefile_keeps_pihole_first() -> None:
 
 def test_the_node_points_only_at_its_own_forwarder() -> None:
     """A second nameserver here makes a dead forwarder degrade silently to unfiltered DNS."""
-    values = role_context(_ROLES / "setup" / "k3s")
+    values = role_context(K3S_ROLE)
     assert values["k3s_node_dns_upstreams"] == ["127.0.0.1"], (
         "daniel-box resolves through its host forwarder and nothing else; a fallback entry "
         "here turns a dead forwarder from a loud outage into silent unfiltered DNS"

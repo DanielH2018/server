@@ -1,11 +1,8 @@
 """Tests for the shared Backup CR reader and the backup group names (#3735, #3737)."""
 
-from pathlib import Path
-
 import longhorn_backups as backups
 from _shell_render import rendered_shell_text
-
-ROLE = Path(__file__).resolve().parents[1]
+from lib.repo_paths import K3S_FILES
 
 
 def _item(**status):
@@ -67,7 +64,5 @@ def test_the_restore_drill_selects_on_the_group_names():
 
 def test_the_nobackup_storageclass_names_the_no_backup_group():
     """The static StorageClass cannot call a filter, so it alone still spells the group out."""
-    nobackup_class = (
-        ROLE / "files" / "longhorn-storageclass-nobackup.yaml"
-    ).read_text()
+    nobackup_class = (K3S_FILES / "longhorn-storageclass-nobackup.yaml").read_text()
     assert f'"name":"{backups.NO_BACKUP_GROUP}","isGroup":true' in nobackup_class

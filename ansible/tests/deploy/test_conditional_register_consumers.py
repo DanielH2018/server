@@ -61,9 +61,10 @@ from _check_mode import unguarded_deref
 from _helpers import ROLES as _ROLES
 from _role_census import task_files
 from _skip_result_rule import _offenders
+from lib.repo_paths import K3S_ROLE
 
 
-_COREDNS = _ROLES / "setup" / "k3s" / "tasks" / "coredns.yml"
+_COREDNS = K3S_ROLE / "tasks" / "coredns.yml"
 
 # Files the census must walk. Each holds a consumer the check-mode producer rule flags, so a
 # glob that stops reaching them would turn the per-file test green over files it never read.

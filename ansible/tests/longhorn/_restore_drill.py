@@ -16,10 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from lib.proc_testing import run as launch
 
-from _helpers import ANSIBLE
 from _shell_render import render_shell_script
 
-K3S = ANSIBLE / "roles" / "setup" / "k3s"
 DRILL_TEMPLATE = ("setup", "k3s", "longhorn-restore-drill.sh.j2")
 
 STUB = r"""

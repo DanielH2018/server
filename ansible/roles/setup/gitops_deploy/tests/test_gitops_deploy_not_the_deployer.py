@@ -14,15 +14,14 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_no
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_not_the_deployer.py
 
 import json
-from pathlib import Path
 
 import pytest
 
 import deploy_alerts
 from deploy_inventory import declares_no_gitops
+from lib.repo_paths import HOST_VARS
 
 ORIGIN = "2" * 40
-HOST_VARS = Path(__file__).resolve().parents[4] / "inventory" / "host_vars"
 
 
 # ── declares_no_gitops(): the paired proof ────────────────────────────────────────────────────

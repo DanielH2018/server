@@ -32,10 +32,10 @@ from pathlib import Path
 
 from _helpers import ANSIBLE
 from _helpers import load_yaml, load_defaults
+from lib.repo_paths import K3S_ROLE
 
 
-K3S = ANSIBLE / "roles" / "setup" / "k3s"
-CRONS = K3S / "tasks" / "health-crons.yml"
+CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
 DRILL = Path(ANSIBLE).parent / "scripts" / "backup" / "etcd_restore_drill.sh"
 CRON_TASK = "Schedule the etcd restore drill"
 
@@ -109,14 +109,14 @@ def test_the_drill_can_be_disarmed_without_deleting_the_task() -> None:
     assert "absent" in state, (
         "the disarmed branch must remove the cron, not leave it installed"
     )
-    assert load_defaults(K3S)["k3s_etcd_restore_drill_armed"] is True, (
+    assert load_defaults(K3S_ROLE)["k3s_etcd_restore_drill_armed"] is True, (
         "the drill ships armed; a default-off drill is the unproven state this closes"
     )
 
 
 def test_the_cadence_is_weekly_and_clear_of_every_backup_window() -> None:
     """Contending with a backup window would make the drill the thing that broke the backup."""
-    minute, hour, dom, month, dow = load_defaults(K3S)[
+    minute, hour, dom, month, dow = load_defaults(K3S_ROLE)[
         "k3s_etcd_restore_drill_cron"
     ].split()
     assert (dom, month) == ("*", "*")

@@ -13,7 +13,7 @@ import pathlib
 
 import deploy_remediation
 
-from lib.repo_paths import REPO
+from lib.repo_paths import K3S_ROLE, REPO
 
 import deploy_defer
 from deploy_changes import (
@@ -396,7 +396,7 @@ def test_the_manual_plane_remediation_carries_the_warning_too():
     assert "--tags kubeconfig" not in cmd.split("WARNING")[0]
 
 
-_K3S_TASKS = pathlib.Path(__file__).parents[2] / "k3s" / "tasks"
+_K3S_TASKS = K3S_ROLE / "tasks"
 
 
 def test_every_narrower_tag_the_warning_names_exists_in_the_role():

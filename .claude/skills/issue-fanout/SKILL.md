@@ -125,7 +125,9 @@ uv run python scripts/dev/fanout_place.py launch --batch 1345,1386 --batch 1288
 
 The dispatcher claims each batch (step 2), writes the brief (issue bodies verbatim, the claim
 note, the landing path or the stop-at-PR rule, and the session-health lines of the placed host
-that name a role or host the batch's issues cite, the rest as a count) and starts a headless
+that name a role or host the batch's issues cite, the rest as a count, and, for this repo, the
+deploy tag and the test files the cited paths imply, which `findings.py show <n> --brief`
+prints for a solo session) and starts a headless
 Opus agent as a transient user service in a fresh worktree on whichever host has the
 most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means a dropped
 claim (step 2) or one of three placement refusals, which claim nothing: neither host has a

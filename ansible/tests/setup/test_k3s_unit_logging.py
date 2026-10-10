@@ -14,10 +14,10 @@ the next crash loop is the first anyone learns the file stopped being written.
 import pytest
 from lib import yaml_fast
 from _helpers import SETUP_ROLES, walk_tasks
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 
-ROLE = SETUP_ROLES / "k3s"
-UNIT_LOGGING = ROLE / "tasks" / "unit-logging.yml"
-DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
+UNIT_LOGGING = K3S_ROLE / "tasks" / "unit-logging.yml"
+DEFAULTS = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
 LOG_FILE = DEFAULTS["k3s_log_file"]
 
 # The unit each node type runs, and the task file that must import the drop-in for it. The
@@ -25,8 +25,8 @@ LOG_FILE = DEFAULTS["k3s_log_file"]
 # placement that survives — and the agent is a separate host, so fixing the server alone is the
 # entry-points failure: a daniel-server crash loop would be exactly as unrecoverable.
 UNITS = {
-    "k3s": ROLE / "tasks" / "server.yml",
-    "k3s-agent": ROLE / "tasks" / "agent.yml",
+    "k3s": K3S_ROLE / "tasks" / "server.yml",
+    "k3s-agent": K3S_ROLE / "tasks" / "agent.yml",
 }
 
 SYSTEM_TUNING = SETUP_ROLES / "initial_setup" / "tasks" / "system-tuning.yml"

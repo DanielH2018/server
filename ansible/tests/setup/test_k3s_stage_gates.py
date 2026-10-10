@@ -20,11 +20,11 @@ import re
 
 import pytest
 
-from _helpers import ROLES, load_tasks, load_yaml
+from _helpers import load_tasks, load_yaml
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 
-K3S = ROLES / "setup" / "k3s"
-MAIN = K3S / "tasks" / "main.yml"
-DEFAULTS = K3S / "defaults" / "main.yml"
+MAIN = K3S_ROLE / "tasks" / "main.yml"
+DEFAULTS = K3S_DEFAULTS
 
 # `k3s_manage_backup_targets | bool` -> k3s_manage_backup_targets. Anchored at the start so a
 # compound condition yields nothing and trips the "must be a bare flag" assertion below

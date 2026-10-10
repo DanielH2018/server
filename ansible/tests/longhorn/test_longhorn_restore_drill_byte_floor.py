@@ -22,12 +22,11 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill_byte_floor
 import re
 import subprocess
 
-from _helpers import ROLES
 from _helpers import load_yaml
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run
+from lib.repo_paths import K3S_DEFAULTS
 
-K3S = ROLES / "setup" / "k3s"
 DRILL = ("setup", "k3s", "longhorn-restore-drill.sh.j2")
 
 # Starts at EMPTY_OK rather than at the first `[[`, so the waiver's own derivation runs here
@@ -57,7 +56,7 @@ def _run_floor_guard(
     # Non-vacuity for the lift, and what the three dropped `.replace()` calls used to assert: a
     # regex that matched a slice missing one of the three tunables would run a guard the host
     # does not have, and `"{{" not in guard` cannot see that on a rendered script.
-    defaults = load_yaml(K3S / "defaults" / "main.yml")
+    defaults = load_yaml(K3S_DEFAULTS)
     for key in (
         "k3s_longhorn_restore_drill_min_bytes",
         "k3s_longhorn_restore_drill_empty_ok_max_actual_bytes",
@@ -91,9 +90,7 @@ def test_files_holding_no_bytes_fail_the_floor() -> None:
 def test_a_declared_empty_volume_passes_with_no_files() -> None:
     """CLEAN half of the waiver: n8n-files restores to files=0 and that is its proven state."""
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
-    declared = load_yaml(K3S / "defaults" / "main.yml")[
-        "k3s_longhorn_restore_drill_empty_ok_pvcs"
-    ]
+    declared = load_yaml(K3S_DEFAULTS)["k3s_longhorn_restore_drill_empty_ok_pvcs"]
     assert "n8n-files" in declared
     result = _run_floor_guard(files=0, byte_count=0, pvc="n8n-files")
     assert result.returncode == 0, result.stderr
@@ -102,7 +99,7 @@ def test_a_declared_empty_volume_passes_with_no_files() -> None:
 def test_a_declared_volume_over_the_size_gate_fails_with_no_files() -> None:
     """FLAGGED half of the size gate: the waiver is withdrawn once the source holds real data."""
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
-    defaults = load_yaml(K3S / "defaults" / "main.yml")
+    defaults = load_yaml(K3S_DEFAULTS)
     ceiling = defaults["k3s_longhorn_restore_drill_empty_ok_max_actual_bytes"]
     result = _run_floor_guard(
         files=0, byte_count=0, pvc="n8n-files", actual_size=ceiling + 1
