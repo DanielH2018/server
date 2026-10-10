@@ -28,9 +28,9 @@ which `tags` maps to uptime-kuma (it `lookup()`s the file) and `changes` does no
 direction stays: the tick defers a k8s change either way, and the landing deploying the reader
 is the wider answer.
 
-The range form with content reads, `narrow_broad.narrow`, still builds its own answer and
-reaches the mapper through `Reach.changes`. Folding it in waits on #3661, because
-`narrow_broad.py` sits at the 600-line cap.
+The range form with content reads, `narrow_broad.narrow`, takes its deploy-plane paths from
+`Reach.deploy_plane` and its other tags from `Reach.changes`. The per-path content rules stay
+in `narrow_broad`, because they read two trees and this module reads only the path list.
 
 It imports nothing from `scripts/deploy_tools/` and nothing above `lib/`. `deploy_tags`,
 `land_shared`, `land_tags`, `land_reach`, `narrow_broad` and `deploy_staleness` all import
@@ -172,6 +172,19 @@ class Reach(NamedTuple):
         return {t for p in self.loud if (t := tag_for(p, declared))} | (
             (readers | holders) & declared
         )
+
+    @property
+    def deploy_plane(self) -> list[str]:
+        """The loud paths the deployer applies as `deploy.yml`, in input order.
+
+        Each path is asked of the deployer's own mapper rather than matched against
+        `_BROAD_DEPLOY_PREFIXES`, so a test file or a document under one of those prefixes is
+        dropped here as the tick drops it. `narrow_broad.narrow` matched the prefixes itself,
+        so it sent `ansible/tasks/tests/test_x.py` to `broad_path_tags`, which refused it as
+        read by every deploy. The tick then ran the whole play for a file its own mapper says
+        reaches no host.
+        """
+        return [p for p in self.loud if services_from_changed_paths([p]).broad_deploy]
 
     def touched(self, repo: Path | str = REPO) -> set[str]:
         """Every role whose rendered output a loud path could change.
