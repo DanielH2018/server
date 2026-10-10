@@ -103,6 +103,7 @@ exporting it is an operator-only step.
 
 ```bash
 uv run python evals/ablate.py rank                     # repo docs by instructions.log loads
+uv run python evals/ablate.py rank --sections CLAUDE.md   # that doc's sections by reads
 uv run python evals/ablate.py run --dry-run --agent skeptic   # the plan and section sizes, free
 uv run python evals/ablate.py run --agent skeptic --section "Secrets Management" --k 3
 ```
@@ -117,6 +118,15 @@ uv run python evals/ablate.py run --agent skeptic --section "Secrets Management"
   an invocation ends, so the runner calls it once per case per repetition at `--k 1`. The
   worst-case floor is what keeps a launched run under the cap; it also means about $6.25 of
   each $10 run is spendable.
+- **A plan that cannot finish one section arm is refused, dry run included (#4308).** A default
+  plan's baseline arm alone is 90 runs, about $7, so before #4308 it spent the money and
+  measured nothing. `run` prices each case at its costliest past run, from the engine reports
+  under the ablation cache and the sweep archive (`/var/lib/homelab/eval-run.d/sweeps`). A case
+  with no past report is priced at $0.12 a run: the sweep's average of about $0.078 times 1.5.
+  The runner then plays the plan through its own budget stop. When the baseline, `-doc` and one
+  section arm do not all finish, it exits 2 and prints the largest `--case`/`--section`
+  selection that does: cases cheapest first, then sections in order while they fit. `--k` stays
+  at its value, because the thresholds assume 3. `--cost-reports DIR` replaces the two sources.
 - **A case changes only when its verdict changes.** The runner applies each case's own
   `threshold` to its pass count in both arms, as a sweep does. `--k` defaults to 3 because the
   thresholds assume 3; at `--k 1` one noisy run can flip a verdict.
@@ -133,9 +143,15 @@ uv run python evals/ablate.py run --agent skeptic --section "Secrets Management"
   so a section about shell commands or deploy steps has nothing here to change. "Same" then
   means the cases do not exercise the section, not that the section is useless. Read a verdict
   against the cases it ran on before you delete or shorten a section.
-- **`instructions.log` ranks docs, not sections.** It records which doc loaded, so `rank` picks
-  the doc, counting the rotated `instructions.log.1` too. `run` takes that doc's sections in
-  doc order unless `--section` names them.
+- **`instructions.log` ranks docs; transcripts rank sections (#4302).** The log records which
+  doc loaded, so `rank` picks the doc, counting the rotated `instructions.log.1` too.
+  `rank --sections <doc>` counts, for each `## ` heading, the sessions under
+  `~/.claude/projects/` whose assistant turns name it: prose, thinking and tool call inputs.
+  User turns and tool results are skipped, because they carry the whole doc whenever it loads.
+  A heading matches on its text before any em-dash or bracket. A session counts once per
+  heading, its subagents' transcripts included.
+  `run --by-reads` ablates the sections in that order, so a budget stop cuts the least-read.
+  Without it, `run` takes the doc's sections in doc order unless `--section` names them.
 
 ## Review outcomes (structured data, not prose)
 
