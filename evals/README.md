@@ -90,6 +90,37 @@ uv run python evals/trend.py report.json --no-write                 # report onl
 - `history.json` is committed (a hermetic run is reproducible, so it's a real baseline). The pure
   trend logic is offline-tested in `test_trend.py`, part of `uv run pytest evals/tests`.
 
+## Section ablation (does a CLAUDE.md section change an outcome?)
+
+`ablate.py` measures whether a doc section changes what an agent does (#4259). A hermetic run
+loads no `CLAUDE.md` at all, so the script appends the doc to each case's agent body itself and
+points the engine at the copies through `EVAL_AGENT_DIRS`. The baseline arm gets the whole doc.
+The `-doc` arm gets none of it. Each `-<heading>` arm gets the doc minus one `## ` section.
+
+```bash
+uv run python evals/ablate.py rank                     # repo docs by instructions.log loads
+uv run python evals/ablate.py run --dry-run --agent skeptic   # the plan and section sizes, free
+uv run python evals/ablate.py run --agent skeptic --section "Secrets Management" --k 3
+```
+
+- **Each run stays under $10.** The operator set that cap on 2026-10-10, and `--cap-usd` can
+  only lower it. Before each engine call the runner projects the next run at 1.5x the costliest
+  run so far, and it stops when that projection would cross the cap. It also stops as soon as
+  the measured spend crosses it. The report then names the arms it did not measure.
+- **The cap is checked between runs, not inside one.** The engine writes its `--json` only when
+  an invocation ends, so the runner calls it once per case per repetition at `--k 1`. One run
+  can still cost more than its projection; the engine's per-call `--max-budget-usd` bounds that.
+- **It refuses the weekly sweep's day**, and any day `history.json` records a sweep on, because
+  both spend the same monthly credit.
+- **The report goes to `~/.cache/homelab-evals/ablation/<stamp>/`**, never to `history.json`. An
+  ablation arm is not a sweep, and `trend.py` would mix it into the regression baseline.
+- **A "same" verdict is bounded by the task set.** The cases grade tool-less reviewer judgment,
+  so a section about shell commands or deploy steps has nothing here to change. "Same" then
+  means the cases do not exercise the section, not that the section is useless. Read a verdict
+  against the cases it ran on before you delete or shorten a section.
+- **`instructions.log` ranks docs, not sections.** It records which doc loaded, so `rank` picks
+  the doc, and `run` takes that doc's sections in doc order unless `--section` names them.
+
 ## Review outcomes (structured data, not prose)
 
 `review_outcomes.jsonl` holds one JSON object per `/homelab-review` run — `date`, the confirmed
