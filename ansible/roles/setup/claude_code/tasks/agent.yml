@@ -331,6 +331,7 @@
   when:
     - claude_code_agent_user_enabled
     - claude_code_agent_cc_wait.stat.exists | default(false)
+    - not claude_code_agent_dotfiles
 
 - name: Look for the operator's deployed jsonq
   tags: [claude_code]
@@ -363,6 +364,7 @@
   when:
     - claude_code_agent_user_enabled
     - claude_code_agent_jsonq.stat.exists | default(false)
+    - not claude_code_agent_dotfiles
 
 - name: Give the agent user its GitHub identity
   tags: [claude_code]
@@ -390,10 +392,19 @@
   when: claude_code_agent_user_enabled
   ansible.builtin.import_tasks: agent_access.yml
 
+# One of the two, never both: chezmoi rewrites settings.json whole, and the subset's settings
+# task would strip on each apply the env keys chezmoi writes.
 - name: Give the agent a subset of the operator's Claude config, or take it back
   tags: [claude_code]
-  when: claude_code_agent_user_enabled
+  when:
+    - claude_code_agent_user_enabled
+    - not claude_code_agent_dotfiles
   ansible.builtin.import_tasks: agent_operator_config.yml
+
+- name: Apply the operator's dotfiles to the agent, or take them back
+  tags: [claude_code]
+  when: claude_code_agent_user_enabled
+  ansible.builtin.import_tasks: agent_dotfiles.yml
 
 # Once, when the phone host moves to the agent: its sessions would otherwise start with an
 # empty memory store. Guarded again inside by the agent's own MEMORY.md.

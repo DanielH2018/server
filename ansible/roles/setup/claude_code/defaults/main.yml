@@ -316,6 +316,20 @@ claude_code_agent_memory_seed_strip: "{{ claude_code_operator_checkout }}/"
 claude_code_agent_operator_config: true
 claude_code_agent_operator_config_src: /home/{{ sys_user }}/.claude
 
+# Whether the agent user takes the operator's dotfiles through chezmoi, with the dotfiles
+# repo's `agent` flag on, in place of the subset above (tasks/agent_dotfiles.yml). The operator
+# chose it on 2026-10-10 (#4193-#4195): the agent then runs the operator's guard hooks, agents,
+# commands and CLIs. True only in daniel-box's host_vars. It needs the operator's chezmoi
+# (has_chezmoi) and a dotfiles source with the flag; a source without it is refused, and the
+# agent keeps what it had. False stops the sync and puts the subset back.
+claude_code_agent_dotfiles: false
+claude_code_agent_dotfiles_repo: https://github.com/DanielH2018/dotfiles.git
+# The dotfiles' `profile` answer: `server`, as chezmoi_setup gives the operator on these hosts.
+claude_code_agent_dotfiles_profile: server
+# How often <name>-dotfiles-sync.timer pulls the source and applies it. A dotfiles merge applies
+# no role here, so this bounds how long the agent runs the old hooks.
+claude_code_agent_dotfiles_sync_interval: 15min
+
 # The agent user's GitHub machine account, created 2026-10-05 (tasks/agent_github.yml). It is a
 # write collaborator and a bypass actor on no ruleset. "agent branch fence" lets it create,
 # update and delete only refs/heads/worktree-claude+**, the branch EnterWorktree gives a
@@ -434,6 +448,7 @@ claude_code_agent_primary_profile:
   operator_read: "{{ claude_code_agent_operator_read }}"
   operator_config: "{{ claude_code_agent_operator_config }}"
   memory_seed: "{{ claude_code_agent_memory_seed }}"
+  dotfiles: "{{ claude_code_agent_dotfiles }}"
 
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # The agent's account cannot merge its own PRs: "master review gate" wants an approval from

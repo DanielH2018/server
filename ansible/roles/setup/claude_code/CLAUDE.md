@@ -18,8 +18,9 @@ uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "claude_code"` when `has_claude_code`
-- **Timers (4):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
+- **Timers (5):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
   `claude-clone-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
+  `claude-dotfiles-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
   `claude-memory-sync.timer` (`OnBootSec=5min`, `OnUnitActiveSec=15min`),
   `claude-rc-restart.timer` (`OnCalendar=weekly`)
 <!-- /generated_from -->
@@ -57,8 +58,8 @@ directory.
 `ansible/tests/setup/test_claude_login_slice_caps.py` and
 `ansible/tests/setup/test_claude_fleet_slice_cap.py` enforce the two slice planes.
 
-- **`--spawn=` must be passed explicitly**, or Claude Code asks on stdin which mode to use and the
-  host hangs under systemd, never connected, while the unit reads `active`.
+- **`--spawn=` must be passed explicitly**, or Claude Code asks on stdin and the host hangs,
+  never connected, while the unit reads `active`.
 - **`PATH` must name `/usr/local/bin`**, as with cron: without it a spawned session loses `kubectl`
   and `uv` and reports an **empty cluster** rather than failing.
 - **No `MemoryMax`**: systemd applies it to the whole cgroup, so one runaway session takes the
@@ -66,8 +67,8 @@ directory.
 - **`claude_code_rc_capacity` bounds session count, not memory**, and `MemoryHigh` throttles rather
   than caps. `claude_code_rc_memory_swap_max` is the ceiling, and **0 is wrong**.
 - **`claude_code_rc_pytest_workers` caps one pytest run's fan-out, not the number of runs**, via
-  `PYTEST_XDIST_AUTO_NUM_WORKERS` in the unit. **`~/.claude/settings.json` carries the same
-  variable**: this role writes the agent's, so keep chezmoi's equal.
+  `PYTEST_XDIST_AUTO_NUM_WORKERS` in the unit. **chezmoi's `settings.json` carries
+  the same variable** for both users, so keep the two equal.
 - **A session started with `claude agents` reads none of the unit's directives**: it lands in
   `user-<uid>.slice`. `login-slice-caps.conf.j2` and `pytest-fanout-cap.conf.j2` carry
   the unit's caps there for each uid in `claude_code_login_uids` and the agent's. A uid that
@@ -90,10 +91,8 @@ profile field (`ansible/filter_plugins/claude_agents.py`) onto the `claude_code_
 the tasks read. `docs/claude-agent-user.md` has the rest. `claude` lands a PR through
 `claude-land@<n>.service`.
 
-`claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as, and its home
-and `claude_code_rc_workdir` follow it. The unit is sandboxed (`ProtectHome=yes` and three more)
-only when it differs from `sys_user`. The first apply as the
-agent copies the operator's memory store once (`tasks/agent_memory_seed.yml`).
+`claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as; its home and
+`claude_code_rc_workdir` follow it, and the unit is sandboxed only when it is not `sys_user`.
 
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 
@@ -107,10 +106,11 @@ agent copies the operator's memory store once (`tasks/agent_memory_seed.yml`).
 - **Evidence:** `journalctl -u claude-memory-sync` lists each file a run changed or deleted;
   a failure pages Discord.
 
-## Autonomous-role contract (`claude-clone-sync`)
+## Autonomous-role contract (`claude-clone-sync`, `claude-dotfiles-sync`)
 
-- **Scope:** a `--ff-only` pull of each agent's clone every
-  `claude_code_agent_clone_sync_interval`, then the venv and collections if their locks moved.
-- **Mode:** the agent's `state`; absent removes its `<name>-clone-sync` units.
-- **Abort valve:** it skips, exiting 0, unless the clone is a clean `master`.
-- **Evidence:** `journalctl -u <name>-clone-sync`; a failure pages Discord.
+- **Scope:** per agent: a `--ff-only` pull of its clone, then the venv and
+  collections if their locks moved; and a pull and `chezmoi apply` of the operator's dotfiles.
+- **Mode:** the agent's `state` and `dotfiles`; off removes its `<name>-*-sync` units.
+- **Abort valve:** the clone sync skips unless the clone is a clean `master`; the dotfiles sync
+  refuses a source without the agent variant.
+- **Evidence:** `journalctl -u <name>-{clone,dotfiles}-sync`; a failure pages Discord.

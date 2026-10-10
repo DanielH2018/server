@@ -1,0 +1,9 @@
+[Unit]
+Description=Apply the operator's dotfiles to the {{ claude_code_agent_user }} agent user every {{ claude_code_agent_dotfiles_sync_interval }}
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec={{ claude_code_agent_dotfiles_sync_interval }}
+
+[Install]
+WantedBy=timers.target

@@ -46,13 +46,19 @@ def operator_tasks() -> list[dict]:
     return tasks("agent_operator_config.yml")
 
 
-def test_the_subset_is_installed_only_for_an_enabled_agent_user() -> None:
+def test_the_subset_is_installed_only_for_an_enabled_agent_user_without_dotfiles() -> (
+    None
+):
+    """chezmoi rewrites settings.json whole, so the subset's settings task would fight it."""
     task = named(
         tasks("agent.yml"),
         "Give the agent a subset of the operator's Claude config, or take it back",
     )
     assert task["ansible.builtin.import_tasks"] == "agent_operator_config.yml"
-    assert task["when"] == "claude_code_agent_user_enabled"
+    assert task["when"] == [
+        "claude_code_agent_user_enabled",
+        "not claude_code_agent_dotfiles",
+    ]
 
 
 def test_the_true_arm_installs_the_four_pieces_root_owned_and_without_hooks() -> None:

@@ -26,6 +26,7 @@ FURTHER_AGENT_DEFAULTS = {
     "operator_read": True,
     "operator_config": True,
     "memory_seed": False,
+    "dotfiles": False,
 }
 PROFILE_FIELDS = frozenset(FURTHER_AGENT_DEFAULTS) | {
     "name",
@@ -39,6 +40,7 @@ BOOL_FIELDS = (
     "operator_read",
     "operator_config",
     "memory_seed",
+    "dotfiles",
 )
 STATES = ("present", "absent")
 # useradd's own rule for a portable name, without the trailing `$` it allows for machine accounts.

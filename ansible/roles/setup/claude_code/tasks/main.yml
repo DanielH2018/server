@@ -357,6 +357,9 @@
     claude_code_agents_present: >-
       {{ claude_code_agent_profiles | selectattr('state', 'eq', 'present')
          | map(attribute='name') | list }}
+    claude_code_agents_with_dotfiles: >-
+      {{ claude_code_agent_profiles | selectattr('state', 'eq', 'present')
+         | selectattr('dotfiles') | map(attribute='name') | list }}
 
 - name: Install the agent user's clone sync script
   tags: [claude_code]
@@ -397,6 +400,7 @@
     claude_code_agent_operator_read: "{{ claude_code_agent.operator_read }}"
     claude_code_agent_operator_config: "{{ claude_code_agent.operator_config }}"
     claude_code_agent_memory_seed: "{{ claude_code_agent.memory_seed }}"
+    claude_code_agent_dotfiles: "{{ claude_code_agent.dotfiles }}"
 
 # The primary agent's homelab-ui login, browser and MCP registration, from the
 # claude_code_agent_* scalars. Outside the loop, so agent_browser.yml stays a static import of
@@ -449,6 +453,18 @@
   become: true
   when: claude_code_agents_present | length == 0
 
+# The same for the script every agent's dotfiles sync unit runs (tasks/agent_dotfiles.yml).
+- name: Remove the dotfiles sync script when no agent user takes the dotfiles
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/claude-dotfiles-sync.sh
+    - /var/lib/homelab/setup-deployed-manifest.d/claude-code-dotfiles-sync
+  become: true
+  when: claude_code_agents_with_dotfiles | length == 0
+
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # In its own file, because that file is on the lander's approval list and pins the lander's
 # settings against an inventory override (tasks/lander.yml).
@@ -480,6 +496,9 @@
       - ansible/roles/setup/claude_code/templates/claude-memory-sync.timer.j2
       - ansible/roles/setup/claude_code/templates/claude-clone-sync.service.j2
       - ansible/roles/setup/claude_code/templates/claude-clone-sync.timer.j2
+      - ansible/roles/setup/claude_code/templates/claude-dotfiles-sync.service.j2
+      - ansible/roles/setup/claude_code/templates/claude-dotfiles-sync.timer.j2
+      - ansible/roles/setup/claude_code/templates/agent-chezmoi-seed.toml.j2
       - ansible/roles/setup/claude_code/templates/claude-land@.service.j2
       - ansible/roles/setup/claude_code/templates/50-claude-land.rules.j2
       - ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2
@@ -507,3 +526,13 @@
     stamp_deployed_pairs:
       - live: /usr/local/bin/claude-clone-sync.sh
         src: ansible/roles/setup/claude_code/files/claude-clone-sync.sh
+
+- name: Record the deployed dotfiles sync script for drift checking
+  tags: [claude_code]
+  when: claude_code_agents_with_dotfiles | length > 0
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: claude-code-dotfiles-sync
+    stamp_deployed_pairs:
+      - live: /usr/local/bin/claude-dotfiles-sync.sh
+        src: ansible/roles/setup/claude_code/files/claude-dotfiles-sync.sh

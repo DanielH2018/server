@@ -1,0 +1,18 @@
+[Unit]
+Description=Apply the operator's dotfiles to the {{ claude_code_agent_user }} agent user
+OnFailure={{ claude_code_agent_user }}-dotfiles-sync-alert.service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# As the agent: chezmoi writes into its home, and git refuses a source another user owns.
+User={{ claude_code_agent_user }}
+Environment=HOME={{ claude_code_agent_user_home }}
+Environment=USER={{ claude_code_agent_user }}
+Environment=TMPDIR=/tmp
+# The dotfiles' scripts expect ~/.local/bin, where the agent's uv and chezmoi live, first on
+# PATH, and /usr/local/bin for kubectl.
+Environment=PATH={{ claude_code_agent_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+# The script refuses, failing the unit, when the source does not render the agent variant.
+ExecStart=/usr/local/bin/claude-dotfiles-sync.sh {{ claude_code_agent_user_home }}/.local/bin/chezmoi {{ claude_code_agent_user_home }}/.config/chezmoi/seed.toml
