@@ -144,16 +144,9 @@ SOPS, unreferenced by the k8s role, because the archived Docker authelia role st
 
 ## Why the snapshot cap is 16 GiB and deliberately loose
 
-Longhorn picks the number, not you: it accepts `"0"` or a value no smaller than `Volume.Spec.Size` ×
-2, and it raises the value to exactly that when a volume is expanded. So 16 GiB is the smallest legal
-cap for an 8Gi PVC, and `jellyfin_k8s_snapshot_max_size` is derived rather than written out — a
-hardcoded one goes illegal the moment the PVC is raised past half of it, and the admission webhook
-then refuses the patch on every jellyfin deploy.
-
-16 GiB against about 1.9 GiB of live snapshots (2026-09-10) is loose on purpose rather than tuned to
-usage, because **a reached cap refuses rather than prunes**: Longhorn stops accepting new snapshots
-until some are deleted, and `k8s/volume-snapshot` snapshots BEFORE it prunes — so a cap tight enough
-to be hit would latch, with the snapshot failing, the deploy failing, and the prune that would free
-headroom never running. The weekly Longhorn backup job snapshots the same volume and would fail with
-it. Filed as #1560, unreachable at today's headroom. `actualSize` was not used to size the cap: it
-counts allocated blocks, including the snapshot chain, so it overshoots what the filesystem holds.
+The rules are in the role doc, *The snapshot-space cap on `jellyfin-config`*: Longhorn accepts
+no cap smaller than `Volume.Spec.Size` × 2, and a reached cap refuses rather than prunes. This
+page keeps the headroom measurement. About 1.9 GiB of live snapshots on 2026-09-10 sat against
+the 16 GiB cap, so the latch in #1560 is unreachable at that headroom. `actualSize` was not used
+to size the cap, because it counts allocated blocks including the snapshot chain, so it
+overshoots what the filesystem holds.

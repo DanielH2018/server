@@ -1,10 +1,11 @@
-# Authelia sessions, second factors, OIDC clients and the CrowdSec init containers
+# Authelia sessions, second factors and the SSO traps
 
 Working-out moved off `ansible/roles/k8s/authelia/CLAUDE.md` (#2997), which a session reads on
 every touch of the SSO gate. The role doc keeps the access-control rule, the OIDC client list and
 the traps a session must not break; this page keeps the second-factor account, the redis session
 incident and its init-container gate, the identity-verification notifier's history, the
-cookie-name-versus-secret-name investigation and the three CrowdSec seeding init containers.
+cookie-name-versus-secret-name rule and the `claude-ui` user. The three CrowdSec seeding init containers
+are in `docs/crowdsec-waf-record.md`.
 
 ## Second factors
 
@@ -138,17 +139,14 @@ boot.
 Codes still expire in ~5 min, the Authelia elevated-session default. Resend in the browser if
 one goes stale.
 
-**A schema check covers the parse; nothing covers the boot.** daniel-stage rehearsed this
-branch on a credential that authenticated nothing: the startup check being off is what made
-that possible — Authelia opens no SMTP connection at boot, so a literal stand-in in its
-host_vars proved that the config parses and the pod comes up on it. That guest was retired on
-2026-09-29 (#2941), and its rehearsal went with it.
+**A schema check covers the parse; nothing covers the boot.**
+`ansible/tests/services/test_authelia_config_schema.py` validates the rendered `notifier` block's
+values against the vendored schema for the pinned release (#2945). It rejects a wrong address scheme,
+a quoted `true` or a malformed timeout. No check covers the pod starting on the config, so a notifier
+change reaches production as its first boot. With the startup check off, Authelia opens no SMTP
+connection at boot, so a literal stand-in credential proves the config parses and the pod comes up.
 
-`ansible/tests/services/test_authelia_config_schema.py` holds the parse half without a cluster
-(#2945). It validates the rendered `notifier` block's values against the vendored schema for
-the pinned release, which rejects a wrong address scheme, a quoted `true` or a malformed
-timeout. The key half was already there. What no check covers is the pod starting on the
-config, so a notifier change still reaches production as its first boot.
+**HISTORY — a staging guest rehearsed notifier changes on such a stand-in credential until it was retired on 2026-09-29 (#2941).**
 
 If mail is down and you need the break-glass path, the file notifier is one edit away in
 `templates/config-secret.yaml.j2`; reading it back needs `sudo k3s kubectl` on **daniel-box**
@@ -165,94 +163,22 @@ string in the tree is a **cookie** name instead: `authelia_session` on the Docke
 Searching the rotation registry for `authelia_session*` therefore
 finds nothing, which reads as an untracked credential.
 
-That is what the open item standing here until 2026-09-05 had found. It said the Docker
-portal's session keys were never rotated after this portal took over `auth.<domain>`, and that
-the key the note meant was recorded nowhere. Both halves are settled:
+The rotation state of `authelia_secret` is settled:
 
 - `authelia_secret` is in `ansible/secret_rotation.yml` at tier `assisted`, and
   `secret_rotation.py audit` reads it `ok`. `sync` adds nothing.
 - The tier is right. Rotating this key re-signs session cookies, so every user is logged out
   and no data is lost. It needs none of the `pinned` care `authelia_storage` takes
   (`docs/secret-rotation.md`).
-- Its ciphertext last changed on 2026-08-30, two weeks after this portal took over
-  `auth.<domain>`.
 
 **The registry records `last_rotated: '2025-12-15'` for this key, and that is not drift.**
 `audit` advances the date in memory to the day git shows the ciphertext last changed, then
 writes nothing back — git is the source of truth, which is why `sync` leaves an existing date
 alone. Read the audit line before concluding that a registry date means a key is stale.
 
-### The `crowdsec-agent` sidecar is seeded by an init container, not by its entrypoint
+### The `crowdsec-agent` sidecar is seeded by init containers
 
-The traefik pod carries the same sidecar and the same three init containers. Both pods render
-them from `ansible/templates/crowdsec-agent.yml.j2`, so the order and the tolerances below hold
-for both, and a change to one is a change to both (#3741).
-
-The CrowdSec image entrypoint opens with a "Populating configuration directory" step — an
-`rsync -a --ignore-existing /staging/etc/crowdsec/* /etc/crowdsec` — that runs under `set -e`
-and only while `/etc/crowdsec/config.yaml` is absent. About twenty staged files are root-only
-(the LAPI and online credentials, the bundled hub tree), so the non-root sidecar exits 23 on
-it and the kubelet restarts the container. The restart finds `config.yaml` present, skips the
-block, and the pod settles at 2/2 Running with one restart on the clock.
-
-That one restart failed every authelia deploy's health gate. `probe.py health` fails closed on
-any container restart inside its 180s window, so `land.sh` read `VERDICT: unhealthy` while
-nothing was actually wrong (#1173). Traefik hit the same thing first (#976).
-
-`crowdsec-config-install` therefore runs that rsync itself, before its own `install` steps, so
-the seeds win over the staged copies of the same names and the sidecar's entrypoint finds
-`config.yaml` already there. **Exit 23 is the only status tolerated.** Authelia rolls under
-`Recreate`, so a failed init container means the old pod is already gone and SSO is down — but
-a blanket `|| true` would trade that for an agent started on a half-populated config with
-nothing saying so. `ansible/tests/services/test_crowdsec_config_install_seeds_staged_tree.py`
-holds both pods to this.
-
-`crowdsec-data-install` is the second init container, and it fixes a different half of the
-same image's staging behaviour. The image ships its datafiles at
-`/staging/var/lib/crowdsec/data` mode 0600 root:root and the entrypoint SYMLINKS them into the
-data volume rather than copying, so the non-root agent cannot read through the link. GeoIP then
-never initialises — `unable to open GeoLite2-City.mmdb: permission denied` — and the
-`geoip-enrich` parser is dead behind a pod that reads 2/2 Running (#1177; traefik hit the same
-thing first as #990). Copying the files in world-readable defeats the symlink, because the
-entrypoint's `[ ! -e ]` guard skips a name that already exists. It runs as root with
-`DAC_READ_SEARCH` — the read-only half of root's permission-bit override, which is what reaches
-the 0600 sources — and ends in `exit 0`, so an unreadable file leaves that one name on the
-symlink path instead of taking SSO down under `Recreate`.
-`ansible/tests/services/test_crowdsec_optional.py` holds both pods to this.
-
-`crowdsec-hub-install` runs **first**, ahead of `crowdsec-config-install`, and it fixes the
-level above the datafiles. The rsync skips the image's root-only staged **hub tree** — that is part of
-the exit 23 it tolerates — while copying the parser *configs*, which are symlinks into that
-tree. `/etc/crowdsec/parsers/s02-enrich/geoip-enrich.yaml` therefore resolved to a hub file
-that was never staged, and the agent dropped the parser once per parser-load pass:
-`Ignoring file … lstat /etc/crowdsec/hub/parsers/s02-enrich/crowdsecurity/geoip-enrich.yaml:
-no such file or directory`. GeoIP enrichment stayed dead behind a 2/2 Running pod even with
-the datafiles installed and the enrichers registered (#1211; traefik logged the identical
-warning, so this was never an authelia gap). It copies the tree as root with `DAC_READ_SEARCH`
-and `CHOWN`, hands it to uid 1000 — the agent's entrypoint installs parsers into it on every
-start, and a root-owned copy fails that with `permission denied` and exits the sidecar —
-then `chmod -R a+rX,u+w`, and ends in `exit 0` for the same Recreate reason as
-`crowdsec-data-install`.
-
-**Running it after the rsync would no-op silently.** rsync recurses from the parent listing,
-so it creates `/etc/crowdsec/hub` owned by uid 1000 before it fails to read into it, and root
-with `ALL` dropped cannot write into another uid's directory — `DAC_READ_SEARCH` is the read
-half of the override, `DAC_OVERRIDE` the write half. The copy would fail, `exit 0` would
-swallow it, and the pod would come up 2/2 with the warning intact. Going first, it creates the
-directory root-owned and world-readable while the emptyDir is still empty, and the rsync's own
-`--ignore-existing` then leaves those files alone.
-`ansible/tests/services/test_crowdsec_hub_install_stages_the_hub_tree.py` holds both pods to
-this.
-
-**The `DECIDED:` marker on the rsync tolerance was amended, not reversed.** Its reasoning
-against `|| true` stands; what #1211 disproved is the half claiming the skipped files are all
-re-downloaded by `cscli hub update` on start. They are not, or not before the parser load.
-
-Verify a deploy of this role by the sidecar's restart count, not just by pod readiness:
-
-```
-kubectl get pod -n homelab -l app=authelia -o jsonpath='{.items[*].status.containerStatuses[*].restartCount}'
-```
+Three init containers seed the sidecar, and the traefik pod runs the same three. `docs/crowdsec-waf-record.md` (*Sidecar agent seeding*) owns the order, the tolerances and the tests. `wait-for-redis` runs after them, as the redis section above describes.
 
 ## The `claude-ui` user
 

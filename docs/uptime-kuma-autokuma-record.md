@@ -10,23 +10,13 @@ rendered declarations.
 
 ## AutoKuma 2.0.0 dropped `resendInterval` on push monitors
 
-AutoKuma **v2.0.0** declared `resendInterval` on three monitor variants only — `MonitorHttp`,
-`MonitorJsonQuery`, `MonitorKeyword`. `MonitorPush` had no such field, so serde dropped it as
-unknown and the value never reached Kuma. The fleet-wide `kuma_push_resend_interval_minutes: 360`
-set on 2026-08-16 (renamed `uptime_kuma_k8s_push_resend_down_beats` on 2026-09-17) applied to the 25 `http`
-tiles and to none of the 50 push tiles, which notified once per outage and then stayed silent.
-
-Fixed on **2026-08-21** by taking `ghcr.io/bigboot/autokuma:2.1.0-rc.2` (PR #308). Upstream moved
-`resend_interval` into `with_monitor_common_fields_impl!` in 2.1.0-rc.1 (#152), where every
-variant carries it. The deploy produced 51 `Updating push:` lines where 2.0.0 produced zero.
-
-The guard in `test_kuma_static_monitors.py` asserts the rendered template, and the template was
-always correct — field spelled right, value right. Nothing between the template and Kuma was
-checked, so a discarded setting read as applied at every repo-side gate. A serde model that
-ignores unknown fields turns a config typo or a version skew into silence.
-
-The tell is an edit that produces no `Updating <type>:` line in the `autokuma` sidecar log while
-another edit in the same deploy does.
+AutoKuma 2.0.0 declared `resendInterval` on three monitor variants but not on `MonitorPush`, so
+serde dropped the field as unknown and the 50 push tiles notified once per outage (fixed
+2026-08-21 by the 2.1.0-rc.2 pin, PR #308). The template was always correct, and every repo-side
+gate read a discarded setting as applied. A serde model that ignores unknown fields turns a
+config typo or a version skew into silence, so confirm the field exists on the pinned monitor
+variant. The tell is an edit that produces no `Updating <type>:` line in the `autokuma` sidecar
+log while another edit in the same deploy does.
 
 ## `resendInterval` counts DOWN beats, not minutes
 
@@ -130,25 +120,13 @@ so read the timestamp inside the line.
 
 ## A startupProbe on the sidecar gated the whole pod's Service
 
-Until 2026-09-06 the liveness allowance was a startupProbe (`/health`, 30 x 10s). The kubelet holds
-`Ready = false` for a container whose startup probe has not succeeded, whether or not that container
-has a readinessProbe (`pkg/kubelet/prober/prober_manager.go`, `UpdatePodStatus`:
-`if !started { continue }`). Pod Ready is the AND of all containers, so the uptime-kuma Service had
-no endpoint until the `autokuma` container's first reconcile landed: a measured **76s** of Kuma serving with nothing
-routed to it, on every pod replacement, six of them in the 48h to 2026-09-06 (#1348).
-
-Most of that was not reconcile work: the container's first connect fails while Kuma is still starting,
-kuma-client then waits a hardcoded 9.0s for readiness (`for i in 0..10 { sleep(200ms * i) }` in
-`client.rs` at the pinned `v2.1.0-rc.2` — 200 x 45 = 9000ms, matching a measured 9.012s), and the
-sync loop sleeps a full `AUTOKUMA__SYNC_INTERVAL` before retrying.
-**`AUTOKUMA__KUMA__CONNECT_TIMEOUT` does not shorten it.** The option is real (default 30.0,
-`kuma-client/src/config.rs`) but that readiness loop reads no config value at all.
-
-The fix was to delete the startupProbe and move its 300s onto `livenessProbe.initialDelaySeconds`.
-Same allowance, same steady-state detection (3 x 30s); the one cost is that a fixed grace is not
-adaptive, so a container that never becomes healthy is killed at ~360s rather than ~300s. Adding a
-readinessProbe to compensate re-creates the same 76s gap by the same AND, which is what
-`test_readiness_coverage.py` records this container's exemption for.
+A startupProbe holds a container `Ready = false` until it succeeds, readinessProbe or not, and pod
+Ready is the AND of all containers. The `autokuma` sidecar's startupProbe therefore left the
+uptime-kuma Service with no endpoint for a measured 76s on every pod replacement (#1348). The
+cause was the first reconcile, not probe tuning: kuma-client waits a hardcoded 9.0s for Kuma, and
+`AUTOKUMA__KUMA__CONNECT_TIMEOUT` does not shorten that wait. The allowance is
+`livenessProbe.initialDelaySeconds: 300` instead, and adding a readinessProbe to compensate
+re-creates the gap, which `test_readiness_coverage.py` records as this container's exemption.
 
 ## AutoKuma compares notification configs by key count
 

@@ -38,29 +38,22 @@ the last step.
 
 ## The ninth step, removed 2026-09-01
 
-The sequence ended with a ninth step until 2026-09-01: stripping the PVC's
-`homelab.daniel-hunter.com/seeded` annotation. It existed to reverse `k8s/volume-claim`'s
-short-circuit, which skipped the seed pod cycle whenever that key was present — a claim about the
-volume's contents that the revert replaces wholesale. `k8s/volume-claim` stopped seeding when
-Docker's bind-mount sources ceased to exist, so nothing sets or reads that key any more and the
-reversal had nothing left to reverse. It was removed with the forward state rather than left
-behind: a reverse-state task for a mechanism that no longer exists reads as a live invariant.
+The sequence's ninth step, which stripped the PVC's `homelab.daniel-hunter.com/seeded`
+annotation, was removed on 2026-09-01 because `k8s/volume-claim` stopped seeding and nothing
+reads that key.
 
 ## The dry-run guard is per-task, not tag-keyed
 
-The role mutates outside `roles/k8s/manifests` and is reached as a dependency rather than named on
-the command line, so no tag-keyed refusal could ever have covered it. `volume-claim`,
-`image-builder`, `cronjob-gate` and `volume-snapshot` are all in the same position. Every mutating
-task and every wait therefore carries `when: not (k8s_no_mutate | bool)`, which is
-`ansible_check_mode or (k8s_dry_run | bool)`. The `k8s_dry_run_unsupported` list that once held the
-alternative was deleted empty in #2876.
+Every mutating task and every wait carries `when: not (k8s_no_mutate | bool)`, because this role
+is reached as a dependency and no tag-keyed refusal could cover it.
+[`volume-snapshot-drills.md`](volume-snapshot-drills.md), *The internal `k8s_no_mutate` guards are
+defence in depth*, holds the reasoning that both roles share.
 
 Both halves of the pair stay in `claim.yml`: `Fail when no snapshot matches this deploy` under
 `when: not (k8s_no_mutate | bool)`, and `Report a dry run with nothing to revert` under the
-opposite guard. That matches the choice `k8s/volume-snapshot` made for its own internal guards.
-Nothing in this repo exercises the `k8s_no_mutate: true` branch — the one call site that exists
-keeps the role from starting under either mode — so `test_volume_revert.py`'s coverage of it pins
-the branch's own correctness in isolation, not that anything reaches it.
+opposite guard. Nothing in this repo exercises the `k8s_no_mutate: true` branch, so
+`test_volume_revert.py`'s coverage of it pins the branch's own correctness in isolation, not that
+anything reaches it.
 
 ## The attach and the detach pair on an empty ticket key
 

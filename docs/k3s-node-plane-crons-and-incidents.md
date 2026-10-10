@@ -122,21 +122,21 @@ and ship to Loki. `ansible/tests/setup/test_k3s_unit_logging.py` holds both node
 Nothing pages when it does (#2749). `k3s_oidc_issuer_urls` in
 `ansible/roles/setup/k3s/defaults/main.yml` points the apiserver at two names Authelia serves
 behind Traefik, so every boot races workloads this same apiserver schedules. `oidc.go` retries the
-discovery fetch every 10s, which normally makes the race free. It is not free when the answer is
-421: Traefik's SNICheck pins a connection's TLS-options name at handshake time, Go's HTTP client
-reuses that connection forever, and the apiserver never redials. On 2026-09-27 that left 3924
-`oidc authenticator: initializing plugin` errors in `/var/log/k3s.log` from 07:40:23Z with no
-success, one per issuer, so Headlamp login was dead for 5.5 hours.
+discovery fetch every 10s, which normally makes the race free. It is not free when Traefik answers
+the first fetch with a 421: the connection keeps that answer, and the apiserver never redials. The
+mechanism is in the Traefik record's *Why a 421 outlives the misconfiguration that caused it*
+(`docs/traefik-plugins-and-startup.md`).
+
+On 2026-09-27 the wedge left 3924 `oidc authenticator: initializing plugin` errors in
+`/var/log/k3s.log` from 07:40:23Z with no success, one per issuer, so Headlamp login was dead for
+5.5 hours.
 
 **The tell is which auth still works:** client certificates and every ServiceAccount are
 untouched, so kubectl, the controllers and every probe read green throughout. To recover without
 restarting the control plane, close **both** sockets — `sudo ss -tnp | grep k3s-server` on
 daniel-box names them, one per issuer, and healing only the VIP one leaves the public issuer's
 errors running — then let the next 10s tick redial. The full sequence, the recovery caveat and the
-measured error chain are in that defaults file's comment above the key. The same pin wedged the
-Pi's Alloy on the same reboot (#2747). The traefik role prevents the common case since #2758: its
-CRD provider keeps Authelia's routers while Authelia has no ready pods, so the fetch gets a 503 it
-retries through rather than a pinned 421.
+measured error chain are in that defaults file's comment above the key.
 
 ## The release-staleness check is the durable half of a one-shot Discord page
 

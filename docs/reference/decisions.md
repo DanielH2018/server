@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-10 21:30 UTC
-generated_sha: 381ff7ec4
+generated_at: 2026-10-10 21:38 UTC
+generated_sha: f0f0f3c89
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 381ff7ec4
 
 # Decisions
 
-658 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+655 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -20,14 +20,14 @@ generated_sha: 381ff7ec4
     * `.claude/hooks/_claude_guard.py:19` and `scripts/lib/_claude_worktree.py:11`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/post-merge-automation.md:268`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:591`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:513`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1406`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `.claude/rules/facts.md:30` and `scripts/lib/tests/test_facts_citations.py:86`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/k8s/wg-easy/CLAUDE.md:73`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/setup/common/CLAUDE.md:26`
-    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `docs/gitops-pipeline.md:1874`
-    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `docs/monitor-bridge-checks.md:476`
+    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `docs/monitor-bridge-checks.md:455`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `prek.toml:443`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/k8s/artifacts/CLAUDE.md:72`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287`
@@ -37,6 +37,7 @@ generated_sha: 381ff7ec4
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15`
@@ -45,6 +46,7 @@ generated_sha: 381ff7ec4
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/authelia/tasks/main.yml:238` and `ansible/roles/k8s/nut/tasks/main.yml:22`
     * `ansible/roles/k8s/configarr/tasks/main.yml:123` and `ansible/roles/k8s/observability/tasks/main.yml:283`
@@ -84,43 +86,47 @@ generated_sha: 381ff7ec4
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `ansible/roles/setup/common/CLAUDE.md:26`
-    * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `docs/gitops-pipeline.md:1874`
-    * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `docs/monitor-bridge-checks.md:476`
+    * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `docs/monitor-bridge-checks.md:455`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `prek.toml:443`
-    * `ansible/roles/setup/common/CLAUDE.md:26` and `docs/gitops-pipeline.md:1874`
-    * `ansible/roles/setup/common/CLAUDE.md:26` and `docs/monitor-bridge-checks.md:476`
+    * `ansible/roles/setup/common/CLAUDE.md:26` and `docs/monitor-bridge-checks.md:455`
     * `ansible/roles/setup/common/CLAUDE.md:26` and `prek.toml:443`
     * `ansible/roles/setup/docker_install/tasks/go-runtime.yml:13` and `ansible/roles/setup/optimize_pi/CLAUDE.md:88`
-    * `ansible/roles/setup/docker_install/tasks/go-runtime.yml:13` and `docs/monitor-bridge-checks.md:1242`
+    * `ansible/roles/setup/docker_install/tasks/go-runtime.yml:13` and `docs/monitor-bridge-checks.md:1221`
     * `ansible/roles/setup/gitops_deploy/files/deploy_broad_k8s.py:168` and `scripts/lib/tests/test_ansible_jinja_env.py:168`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `docs/gitops-pipeline.md:1039`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/initial_setup/tasks/crons.yml:900` and `ansible/roles/setup/initial_setup/tasks/crons.yml:980`
     * `ansible/roles/setup/initial_setup/tasks/network.yml:201` and `ansible/roles/setup/initial_setup/tasks/system-tuning.yml:197`
     * `ansible/roles/setup/k3s/files/longhorn_backup_health.py:402` and `ansible/roles/setup/k3s/files/longhorn_skipped_volumes_logic.py:46`
-    * `ansible/roles/setup/optimize_pi/CLAUDE.md:88` and `docs/monitor-bridge-checks.md:1242`
+    * `ansible/roles/setup/optimize_pi/CLAUDE.md:88` and `docs/monitor-bridge-checks.md:1221`
     * `ansible/tests/_ratchet.py:49` and `ansible/tests/_ratchet.py:243`
     * `ansible/tests/_shell_render.py:11` and `ansible/tests/services/test_alloy_pi_http_surface.py:67`
     * `ansible/tests/repo/test_adr_links.py:1` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:170`
     * `ansible/tests/repo/test_adr_links.py:12` and `docs/archive/docs-ui-and-adrs/design.md:27`
+    * `ansible/tests/repo/test_adr_links.py:12` and `docs/gitops-pipeline.md:1039`
     * `ansible/tests/repo/test_adr_links.py:12` and `scripts/lib/b2.py:21`
     * `ansible/tests/repo/test_adr_links.py:33` and `ansible/tests/repo/test_census_rows_roles.py:270`
     * `docs/adr/index.md:9` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:100`
@@ -128,24 +134,30 @@ generated_sha: 381ff7ec4
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:162` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:344`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:7`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:137`
-    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:591`
+    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:513`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/docs-ui-and-adrs/design.md:137`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/post-merge-automation.md:268`
+    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1406`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/tests/test_probe_health.py:323`
+    * `docs/archive/docs-ui-and-adrs/design.md:27` and `docs/gitops-pipeline.md:1039`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/lib/b2.py:21`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/archive/post-merge-automation.md:268`
+    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1406`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:591`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:513`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1406`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/break-glass.md:129` and `scripts/deploy_tools/shared_role_reach.py:22`
-    * `docs/gitops-pipeline.md:591` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:591` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/gitops-pipeline.md:1874` and `docs/monitor-bridge-checks.md:476`
-    * `docs/gitops-pipeline.md:1874` and `prek.toml:443`
-    * `docs/monitor-bridge-checks.md:476` and `prek.toml:443`
+    * `docs/break-glass.md:130` and `scripts/deploy_tools/shared_role_reach.py:22`
+    * `docs/gitops-pipeline.md:513` and `docs/gitops-pipeline.md:1406`
+    * `docs/gitops-pipeline.md:513` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:513` and `scripts/diagnostics/tests/test_probe_health.py:323`
+    * `docs/gitops-pipeline.md:1039` and `scripts/lib/b2.py:21`
+    * `docs/gitops-pipeline.md:1406` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:1406` and `scripts/diagnostics/tests/test_probe_health.py:323`
+    * `docs/monitor-bridge-checks.md:455` and `prek.toml:443`
     * `scripts/deploy_tools/tests/test_shared_role_reach.py:111` and `scripts/deploy_tools/tests/test_shared_role_reach.py:125`
     * `scripts/dev/fanout_lib/brief.py:268` and `scripts/dev/findings_lib/history_cli.py:199`
     * `scripts/dev/findings_lib/claim_cli.py:29` and `scripts/dev/findings_lib/export_cli.py:37`
@@ -164,7 +176,7 @@ generated_sha: 381ff7ec4
 | the check is `os.path.realpath` then `str.startswith`, not `Path.resolve` then | `ansible/roles/k8s/artifacts/files/artifact_server.py:200` | 2026-09-04 |
 | a failure goes to the journal, and only the run that REACHES the threshold writes to stderr, which is what cron mails. The old script mailed every failure: 145 messages reached /var/mail/ubuntu between 2026-08-20 and 2026-09-24, nobody reads that spool, and a peer that is simply powered off is the common case. Alerting once per outage keeps the mail as an alert without making it a log. The Kuma push after the loop is the monitor (#2516); the mail stays as the one alert that does not depend on Kuma being up. | `ansible/roles/k8s/artifacts/templates/sync-artifacts.sh.j2:52` | 2026-09-24 |
 | no file-age staleness check. at 30 days, so the newest file's age measures how often sessions on the peer write artifacts, not whether this sync runs — a quiet week on daniel-server would page. A successful rsync --delete leaves the mirror equal to the peer by construction, so the failure streak covers a broken transport and the push deadline covers a cron that stopped running at all. | `ansible/roles/k8s/artifacts/templates/sync-artifacts.sh.j2:80` | 2026-09-25 |
-| ` marker sits at the line. | `ansible/roles/k8s/authelia/CLAUDE.md:69` | 2026-09-29 |
+| ` marker sits at the line. | `ansible/roles/k8s/authelia/CLAUDE.md:70` | 2026-09-29 |
 | separate from traefik_k8s_manage_crowdsec rather than one shared variable. shared one would live in group_vars/all.yml, an `ansible/inventory/` path the GitOps deployer treats as broad — it defers and returns WITHOUT fast-forwarding, so the change would need clearing by hand. The surfaces are asymmetric too: this pod carries only an agent and PRODUCES signals, where Traefik carries a bouncer plugin and enforces bans. | `ansible/roles/k8s/authelia/defaults/main.yml:17` | 2026-08-28 |
 | a second user rather than putting the OPERATOR's TOTP secret in SOPS. two_factor tier unattended means the second factor becomes another value under the age key either way, so the factor count is not what this buys. What it buys is a blast radius with an edge: revoking Claude's reach into code-server, n8n and longhorn is deleting one block from `users_database.yml`, and rotating either credential is a `sops set` plus a deploy rather than re-enrolling a phone. The operator's own login is untouched by both. | `ansible/roles/k8s/authelia/defaults/main.yml:130` | 2026-09-06 |
 | no groups, unlike claude-ui, which copies the operator's two. privilege in the apps behind the portal: Grafana maps `admins` to its Admin role (observability/templates/grafana.yaml.j2), and Headlamp binds `oidc:admins` to the cluster's read RBAC (headlamp_k8s_oidc_group). claude-ui keeps them because its job is to assert against the same pages the operator sees. This account only has to render a service page, so a group nothing reads costs it nothing. The access_control rules are domain-scoped, never `subject:`-scoped, so groups cannot narrow what it REACHES; it reaches every `one_factor` `*.local.<domain>` route from RFC1918, the set the operator's own UI jar reaches. It has no TOTP registration, so the `two_factor` routes (code-server, n8n, longhorn, deploy-ui) refuse it at the second factor, and it has no public name. | `ansible/roles/k8s/authelia/defaults/main.yml:175` | 2026-10-09 |
@@ -291,7 +303,7 @@ generated_sha: 381ff7ec4
 | ` marker at `FINALDELAY` in `roles/setup/nut_host/templates/host-upsmon.conf.j2`. | `ansible/roles/k8s/nut/CLAUDE.md:49` | 2026-09-17 |
 | nut stays off `manifests_prune` (#3388, operator decision 2026-10-05). adds the role label to this Deployment and restarts the UPS monitor once, which leaves about a minute without power-cut shutdown coverage. #3388 counts nut as deliberately excluded. The prune is armed by default since #3662, so this line is the opt-out. | `ansible/roles/k8s/nut/tasks/main.yml:22` | 2026-10-05 |
 | these apt packages resolve at build time. archive supersedes it (the pool keeps only the current deb) and nothing bumps it, and a snapshot mirror freezes security updates with no Renovate datasource to raise a PR. The base digest above is the pin; #2211 holds the evidence and the operator's decision. | `ansible/roles/k8s/nut/templates/Dockerfile.j2:7` | 2026-09-22 |
-| observability tiers — Prometheus is `homelab-critical`; the other five pod templates | `ansible/roles/k8s/observability/CLAUDE.md:42` | 2026-10-01 |
+| observability tiers — Prometheus is `homelab-critical`; the other five pod templates | `ansible/roles/k8s/observability/CLAUDE.md:41` | 2026-10-01 |
 | grafana-data stays on longhorn-nobackup (operator declined a backup 2026-08-21); dashboards and datasources are provisioned from git. Grafana's schema migrations are one-way, which is tolerable because of that: the DB holds only preferences, version history and annotations. Recovery is deleting the PVC. | `ansible/roles/k8s/observability/defaults/main.yml:17` | 2026-09-30 |
 | this list has no folder-level prune, and that is deliberate (operator 2026-08-28). Dropping a name here removes the folder's volume and volumeMount from grafana.yaml.j2 (both rendered by `{% for folder in observability_dashboard_folders %}`, at the volumeMounts and volumes blocks) but leaves the staged dir, the annotated dir and the live grafana-dashboards-<folder> ConfigMap behind. That orphan is INERT: the mount is by explicit per-folder volume name, so an unlisted ConfigMap is never mounted and never reaches Grafana. Adding a prune would trade an inert orphan for deletion behaviour that can remove a live ConfigMap — a worse failure than the one it closes, and the reason the 2026-08-28 review's fix-skeptic pass rejected it. Reopen only with a case where the orphan is reachable, not merely present. | `ansible/roles/k8s/observability/defaults/main.yml:110` | 2026-08-28 |
 | the size cap binds before the 30d time cap; read (time() - prometheus_tsdb_lowest_timestamp_seconds)/86400 before any retention claim. | `ansible/roles/k8s/observability/defaults/main.yml:142` | 2026-09-30 |
@@ -314,9 +326,9 @@ generated_sha: 381ff7ec4
 | the schedule stays INTERNAL to the app rather than becoming a k8s CronJob. #1483 raised the CronJob because nothing outside the container can see a tick fire. Measured 2026-09-10, the internal scheduler is not the flaky part: rows 825-849 land on :00 at 05/11/17/23 UTC every day, with exactly ONE miss — 2026-09-09 17:00, on a day the pod was rescheduled by the 20:12 daniel-box reboot. A CronJob would move the transcript, not the reliability, and it cannot write into the app's own results table without reimplementing the Ookla run. Revisit if a miss ever occurs without a pod restart beside it. | `ansible/roles/k8s/speedtest/templates/deployment.yaml.j2:54` | 2026-09-10 |
 | no startupProbe; its case is a first-boot DOCKER_MODS install, which this image does | `ansible/roles/k8s/tdarr/templates/deployment.yaml.j2:89` | 2026-09-30 |
 | permanent posture (operator 2026-08-14) — with ETP Local load-bearing for client IPs, announcement and placement stay on one node as a unit; this pin only ever moves together with the L2Advertisement nodeSelector. | `ansible/roles/k8s/terraria/templates/deployment.yaml.j2:27` | 2026-08-27 |
-| no usage-metrics ticker` comment in | `ansible/roles/k8s/traefik/CLAUDE.md:42` | 2026-09-29 |
-| ` comment has why. | `ansible/roles/k8s/traefik/CLAUDE.md:63` | 2026-09-29 |
-| keep a router` marker, and | `ansible/roles/k8s/traefik/CLAUDE.md:80` | 2026-09-29 |
+| no usage-metrics ticker` comment in | `ansible/roles/k8s/traefik/CLAUDE.md:41` | 2026-09-29 |
+| ` comment has why. | `ansible/roles/k8s/traefik/CLAUDE.md:62` | 2026-09-29 |
+| keep a router` marker, and | `ansible/roles/k8s/traefik/CLAUDE.md:79` | 2026-09-29 |
 | these are one-way for a cluster that has already deployed with them on. name from manifests_files deletes the STAGED file (manifests/tasks/main.yml:148) but never the live object — see kubectl-apply-leaves-orphaned-objects. Flipping either to false on prod therefore needs a hand `kubectl delete`, which the manifest-prune-check cron flags. Nothing does that today; the flags exist so a new cluster can come up without the subsystem, not so prod can shed it. Namespaces this cluster's Traefik watches. rbac.yaml.j2 renders one namespaced Role per entry, and static-config.yaml.j2 lists the same set as `providers.kubernetesCRD.namespaces`. ONE variable, so the two cannot drift — they were two hand-maintained lists with a comment on each asking the next editor to keep them in step. ENFORCED by ansible/tests/services/test_traefik_watched_namespaces.py, which compares the RENDERED manifests (Role namespaces vs the provider list), not the templates' text. | `ansible/roles/k8s/traefik/defaults/main.yml:34` | 2026-08-28 |
 | role-local, and paired with authelia_k8s_manage_crowdsec rather than shared. variable in group_vars/all.yml would be an `ansible/inventory/` path, which the GitOps deployer treats as broad — it defers and returns WITHOUT fast-forwarding, so the change would need clearing by hand. The two surfaces are also asymmetric: Traefik carries a bouncer plugin and a Middleware and ENFORCES bans, where Authelia carries only an agent and produces the failed-login lines the scenarios read. | `ansible/roles/k8s/traefik/defaults/main.yml:72` | 2026-08-28 |
 | a flag, not generated staging tokens. generated values would render harmlessly — and that was wrong twice. The routers name backends a staging cluster does not run, so it is the same class as CrowdSec rather than an inert Secret. And staging's secrets file is encrypted to daniel-server's key alone and holds exactly one key by design (Decision 5), so minting tokens into it is operator work on that host, not something a deploy can arrange. | `ansible/roles/k8s/traefik/defaults/main.yml:84` | 2026-08-28 |
@@ -700,40 +712,37 @@ generated_sha: 381ff7ec4
 | ` block records that with the remote-control unit | `docs/archive/self-hosted-runner-spike.md:179` | 2026-09-22 |
 | ` block has to be redone: | `docs/archive/self-hosted-runner-spike.md:190` | 2026-09-22 |
 | ` marker above the retirement tasks in `roles/setup/gitops_deploy/tasks/install.yml`. | `docs/archive/staging-phase-c.md:529` | 2026-09-24 |
-| ` marker sits at the line; `ansible/tests/services/test_smtp_wiring.py` holds the | `docs/authelia-sessions-and-crowdsec-init.md:134` | 2026-09-29 |
-| ` marker on the rsync tolerance was amended, not reversed.** Its reasoning | `docs/authelia-sessions-and-crowdsec-init.md:247` | 2026-09-29 |
-| ` comment on | `docs/break-glass.md:129` | 2026-10-04 |
-| ` marker sits | `docs/claude-shell-permissions.md:100` | 2026-09-18 |
-| no | `docs/crowdsec-waf-record.md:45` | 2026-09-29 |
-| ` marker above `_BROAD_MANUAL_PREFIXES` in `deploy_changes.py` carries the evidence. | `docs/gitops-pipeline.md:156` | 2026-09-28 |
-| ` marker. | `docs/gitops-pipeline.md:591` | 2026-09-21 |
-| ` at the fallback in | `docs/gitops-pipeline.md:769` | 2026-09-21 |
-| ` on | `docs/gitops-pipeline.md:775` | 2026-09-21 |
-| ` marker and the measurement. | `docs/gitops-pipeline.md:831` | 2026-10-04 |
-| ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:882` | 2026-09-21 |
-| ` at the `cs.k8s` branch of | `docs/gitops-pipeline.md:1090` | 2026-09-21 |
-| ` that says how each one does. | `docs/gitops-pipeline.md:1355` | 2026-10-09 |
-| ` at that task says why the state | `docs/gitops-pipeline.md:1388` | 2026-09-21 |
-| ` marker in | `docs/gitops-pipeline.md:1874` | 2026-09-21 |
-| ` in `files/deploy_locks.py`. | `docs/gitops-pipeline.md:2029` | 2026-09-30 |
-| ` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean | `docs/homepage-widgets-and-layout.md:154` | 2026-09-29 |
-| HMAC-SHA256 under a host-local key` | `docs/k8s-manifest-cycle-record.md:359` | 2026-10-02 |
-| this digest names the bytes` | `docs/k8s-manifest-cycle-record.md:408` | 2026-10-02 |
-| ` at `smoke_caller` holds | `docs/landing.md:367` | 2026-10-01 |
-| ` in `healthchecks_verdict`). | `docs/monitor-bridge-checks.md:404` | 2026-09-25 |
-| ` marker in | `docs/monitor-bridge-checks.md:476` | 2026-09-21 |
-| 12 cycles` marker | `docs/monitor-bridge-checks.md:503` | 2026-09-21 |
-| ` at the fetch in | `docs/monitor-bridge-checks.md:787` | 2026-10-01 |
-| ` marker at that switch in `group_vars/all.yml` records why it stays off — arming it | `docs/monitor-bridge-checks.md:1083` | 2026-09-25 |
-| ` marker in `bridge/config_io.py`) over the window; the message names which reason fired when the | `docs/monitor-bridge-checks.md:1170` | 2026-09-21 |
-| ` marker at the | `docs/monitor-bridge-checks.md:1242` | 2026-10-01 |
+| ` marker sits at the line; `ansible/tests/services/test_smtp_wiring.py` holds the | `docs/authelia-sessions-and-crowdsec-init.md:135` | 2026-09-29 |
+| ` comment on | `docs/break-glass.md:130` | 2026-10-04 |
+| no | `docs/crowdsec-waf-record.md:32` | 2026-09-29 |
+| ` marker on that tolerance in | `docs/crowdsec-waf-record.md:162` | 2026-10-10 |
+| ` marker above | `docs/gitops-pipeline.md:156` | 2026-10-10 |
+| ` marker. | `docs/gitops-pipeline.md:513` | 2026-10-10 |
+| ` on `deploy_narrow.denylisted_in` is the long form, and the journal names the | `docs/gitops-pipeline.md:623` | 2026-10-10 |
+| ` at the fallback in `deploy_narrow.py` | `docs/gitops-pipeline.md:624` | 2026-10-10 |
+| ` marker and the measurement. | `docs/gitops-pipeline.md:655` | 2026-10-10 |
+| ` at the `cs.k8s` branch of `deploy_alerts.alert_deferred` points here. | `docs/gitops-pipeline.md:834` | 2026-10-10 |
+| ` | `docs/gitops-pipeline.md:1039` | 2026-10-10 |
+| ` at that task says why the | `docs/gitops-pipeline.md:1071` | 2026-10-10 |
+| ` marker | `docs/gitops-pipeline.md:1406` | 2026-10-10 |
+| ` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean | `docs/homepage-widgets-and-layout.md:148` | 2026-09-29 |
+| HMAC-SHA256 under a host-local key` | `docs/k8s-manifest-cycle-record.md:360` | 2026-10-02 |
+| this digest names the bytes` | `docs/k8s-manifest-cycle-record.md:409` | 2026-10-02 |
+| ` at `smoke_caller` holds | `docs/landing.md:352` | 2026-10-01 |
+| ` in `healthchecks_verdict`). | `docs/monitor-bridge-checks.md:386` | 2026-10-10 |
+| ` marker in | `docs/monitor-bridge-checks.md:455` | 2026-09-21 |
+| 12 cycles` marker | `docs/monitor-bridge-checks.md:482` | 2026-09-21 |
+| ` at the fetch in | `docs/monitor-bridge-checks.md:766` | 2026-10-01 |
+| ` marker at that switch in `group_vars/all.yml` records why it stays off — arming it | `docs/monitor-bridge-checks.md:1062` | 2026-09-25 |
+| ` marker in `bridge/config_io.py`) over the window; the message names which reason fired when the | `docs/monitor-bridge-checks.md:1149` | 2026-09-21 |
+| ` marker at the | `docs/monitor-bridge-checks.md:1221` | 2026-10-01 |
 | ` marker with the byte | `docs/pi-host-tuning-record.md:63` | 2026-10-10 |
-| ` marker carries the | `docs/pi-host-tuning-record.md:244` | 2026-09-30 |
-| ` marker at the top of `module_length_allowlist.txt` is the ruling. | `docs/python-code-organization.md:249` | 2026-10-10 |
+| ` marker carries the | `docs/pi-host-tuning-record.md:242` | 2026-09-30 |
+| ` marker at the top of `module_length_allowlist.txt` is the ruling. | `docs/python-code-organization.md:245` | 2026-10-10 |
 | ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
 | ` comment beside it accepts a grouped VERSION bump paging four days early as the cost. | `docs/renovate-notify-internals.md:81` | 2026-10-02 |
-| keep a router` marker | `docs/traefik-client-identity-and-tls.md:82` | 2026-09-29 |
-| no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` has the | `docs/traefik-plugins-and-startup.md:59` | 2026-09-29 |
+| no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` has the | `docs/traefik-plugins-and-startup.md:54` | 2026-09-29 |
+| keep a router` marker | `docs/traefik-plugins-and-startup.md:153` | 2026-10-10 |
 
 ## other
 

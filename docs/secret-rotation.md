@@ -75,8 +75,8 @@ by an edit to its `tier` in the registry after that `sync`, and `sync` preserves
 ## `auto` — automated
 
 `rotate --commit` generates a new 32-char token, writes it via `sops set`, and records the
-date. Then redeploy whatever reads it, for example, `uv run ansible-playbook ansible/deploy.yml
---tags monitor-bridge`. Uptime Kuma honours the new push token on the next push — no Kuma
+date. Then redeploy whatever reads it, for example `./scripts/deploy.sh --tags monitor-bridge`.
+Uptime Kuma honours the new push token on the next push — no Kuma
 UI step. Because only **coming-due** secrets rotate (due within `ROTATE_LEAD_DAYS` = 8 —
 one weekly cron interval, so a token rotates the Sunday *before* it goes overdue and the
 daily audit never pages DOWN on a rotation the cron was about to do), runs stay staggered.
@@ -211,8 +211,7 @@ before you destroy the old one):
 1. **Back up the anchored data first** (snapshot `authelia/config/db.sqlite3` — a Longhorn
    snapshot of the authelia PVC, or `kubectl cp` the file out). This backup is the recovery
    path — keep it until step 5 passes.
-2. **Re-key through the tool, not `sops set`** (`authelia storage encryption change-key`;
-   retired instance: `kopia repository change-password`) so the data is re-anchored to the
+2. **Re-key through the tool, not `sops set`** (`authelia storage encryption change-key`) so the data is re-anchored to the
    new value.
 3. **Prove the new value opens the data BEFORE overwriting the old one.** **Whether you still
    hold a live fallback here depends on the tool, so check before you rely on one.** Some
@@ -226,17 +225,16 @@ before you destroy the old one):
    see step 3 for why the old value itself may no longer be a fallback.
 
 The failure this prevents: `sops set` first, redeploy, discover the data is now undecryptable — and
-the only value that could open it has already been overwritten. The two procedures below are concrete
-instances of this discipline:
+the only value that could open it has already been overwritten. The procedure below is a concrete
+instance of this discipline, and the history entry shows the retirement variant:
 
-- **`kopia_password`** — REMOVED (8edb11cd, 2026-08-13). The kopia B2 repo it anchored was
-  deleted after the first verified Longhorn-only nightly, per the retirement plan
-  (`docs/archive/k3s-migration/backup-consolidation-longhorn.md`), and the residual hidden object
-  versions were hard-purged 2026-08-14 — the value opens nothing anymore. Kept here as the
-  worked example of a pinned secret leaving the registry: the anchored data is destroyed
-  first, deliberately, and only then does the key go. (The B2 account keys are a separate
-  thing and still live: they are Longhorn's backup-target credential, renamed `kopia_b2_*` →
-  `longhorn_b2_*` on 2026-09-09.)
+- **HISTORY — `kopia_password`** was removed on 2026-08-13 (8edb11cd) and the kopia B2 repo it
+  anchored was deleted after the first verified Longhorn-only nightly. The residual hidden
+  object versions were hard-purged on 2026-08-14, so the value opens nothing
+  ([ADR-0014](adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md)). It is the worked
+  example of a pinned secret leaving the registry: the anchored data is destroyed first, and
+  only then does the key go. The B2 account keys are a separate thing and still live: they are
+  Longhorn's backup-target credential, renamed `kopia_b2_*` to `longhorn_b2_*` on 2026-09-09.
 - **`authelia_storage`** — the Authelia DB encryption key. It encrypts the TOTP secrets and
   WebAuthn credentials in `/config/db.sqlite3` on the authelia Longhorn PVC. A raw swap makes
   that database undecryptable, and code-server, n8n and longhorn are `two_factor` — so a

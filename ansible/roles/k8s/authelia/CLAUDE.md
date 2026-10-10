@@ -1,8 +1,9 @@
 # authelia — SSO / forward-auth for the cluster
 
 Authelia guards most public routes as a Traefik forward-auth middleware. The second factors, the
-redis session incident and its init-container gate, the notifier's history, the OIDC derivations and
-the three CrowdSec seeding containers are in `docs/authelia-sessions-and-crowdsec-init.md`.
+redis incident, the notifier's history and the OIDC derivations are in
+`docs/authelia-sessions-and-crowdsec-init.md`; the CrowdSec seeding containers are in
+`docs/crowdsec-waf-record.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->

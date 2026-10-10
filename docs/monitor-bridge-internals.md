@@ -3,7 +3,8 @@
 Working-out moved off `ansible/roles/k8s/monitor-bridge/CLAUDE.md` (#2993), which a session reads on
 every touch of the alert pipeline. The role doc keeps the rules; this page keeps the per-module
 table, the gate-set membership, the operator prerequisites and the test-side seams.
-`docs/monitor-bridge-checks.md` is the sibling page for the checks themselves.
+`docs/monitor-bridge-checks.md` is the sibling page: the per-check record that links here for
+the plumbing.
 
 ## Gate-set membership
 
@@ -73,8 +74,19 @@ The rules below shaped those memberships.
 4. `cloudflare_analytics_token`: a Custom token with exactly **Account → Account Analytics →
    Read** — never write or R2 permissions, which would let the bridge hard-stop the bucket it
    guards; the monitor pages and a human decides. Run `secret_rotation.py sync`, then smoke-test
-   with `--once`. The bucket's 7-day `AbortIncompleteMultipartUpload` lifecycle rule is set by
-   hand (`wrangler r2 bucket lifecycle add`); the uploads arm notices it missing.
+   with `--once`: the unit tests mock the payload, so only the live run proves Cloudflare
+   accepts the query and the token's scope. The check also reads the existing `r2_account_id`
+   and `r2_bucket`.
+   - **Break-glass stop:** a hard stop is a manual step, never routine. Revoke the key under
+     R2 → Manage R2 API Tokens, and restore the path by re-minting it and updating
+     `r2_access_key_id` and `r2_secret_access_key`. A token that could revoke R2 access would
+     park a more privileged standing credential in the cluster, and its firing would break the
+     backup path it guards.
+   - **Lifecycle rule:** the bucket's 7-day `AbortIncompleteMultipartUpload` rule is set by hand,
+     because it needs the S3 API or Wrangler and the stdlib-only bridge has neither:
+     `npx wrangler r2 bucket lifecycle add <bucket> --name abort-mpu --abort-multipart-days 7`,
+     or dashboard → R2 → the bucket → Settings → Object Lifecycle Rules. The uploads arm
+     notices it missing.
 5. `monitor_bridge_ha_token`: an HA Long-Lived Access Token (Profile → Security), tier
    `assisted`.
 6. `healthchecks_api_read_only_key`: the Healthchecks.io project's **read-only** API key (project

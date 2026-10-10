@@ -95,26 +95,7 @@ mod. The script says so itself: "If no other containers are using this mod you m
 
 ## The rollout-gate exposure was not unique to this role
 
-`roles/k8s/manifests` does not wait for a rollout — it queues it, and
-`roles/k8s/manifests/tasks/drain.yml` runs `rollout status` for the whole batch afterwards. So a
-role's own `verify.yml` runs before its rollout finishes and `get pod -l app=<x>` returns the
-outgoing pod. That went unnoticed here for as long as every proof held for the old pod too: a
-tunnel and a return path look identical either side of a roll. Proof 3 is the first assertion whose
-answer differs, and it failed the 2026-08-27 deploy against a pod that was already `Terminating`
-while the correctly mounted new pod came up seconds later.
-
-Three primitives look like they solve this and do not, all because the outgoing pod satisfies them:
-
-| primitive | why it returns instantly mid-roll |
-|---|---|
-| `wait --for=condition=Available deploy/<x>` | Available is true of the old ReplicaSet |
-| `wait --for=condition=ready pod -l app=<x>` | the old pod is still Ready until it stops |
-| `--field-selector status.phase=Running` | `.status.phase` stays `Running` while Terminating — that word is kubectl's rendering of `deletionTimestamp`, not a phase |
-
-The same gap was found on 2026-08-27 in `roles/k8s/jellyfin` and `roles/k8s/tdarr` (pod lookup with
-no wait at all) and in `roles/k8s/janitorr` (a `wait --for=condition=ready pod` the old pod
-satisfies). All three are fixed. None had been caught because, as here, their assertions happened
-to hold on both sides of a roll.
+`roles/k8s/manifests` queues a rollout and runs `rollout status` for the whole batch afterwards, so a role's own `verify.yml` runs before its rollout finishes and `get pod -l app=<x>` returns the outgoing pod. `wait --for=condition=Available`, `wait --for=condition=ready pod` and `--field-selector status.phase=Running` all return instantly mid-roll, because the old pod satisfies each of them.
 
 ## The whole `apply_prefs.py` command
 

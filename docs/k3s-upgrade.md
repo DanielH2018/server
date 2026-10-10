@@ -28,14 +28,14 @@ curl -fsSL "https://raw.githubusercontent.com/k3s-io/k3s/<new tag>/install.sh" |
 
 ## Sequence at a glance
 
-Upgrade the cluster first, merge the pin second. That order is forced — see *Merging first parks the
-GitOps deployer* below.
+Upgrade the cluster first, merge the pin second. A failed upgrade then leaves master unpinned.
+Merging does not park the deployer either way — see *After merging the pin* below.
 
 1. Pass the gates.
 2. Record pre-upgrade state.
 3. Upgrade the server node, verify.
 4. Upgrade the agent node, verify.
-5. Merge the pin, then fast-forward the primary checkout so the deployer unparks.
+5. Merge the pin, then clear the `manual_plane` line the deployer records for `k3s`.
 
 ## The gates — before any install
 
@@ -160,23 +160,30 @@ uv run python scripts/diagnostics/probe.py monitors
 # blacked out twice on a node rejoin with every host-local probe green.
 ```
 
-## Merging first parks the GitOps deployer
+## After merging the pin
 
-`ansible/roles/setup/` is in `_BROAD_SETUP_PREFIXES` (`deploy_changes.py`), so the deployer treats a
-pin change as a broad setup-plane change and looks for an `initial_setup.yml` tag to apply it with.
-The `k3s` role is not in `initial_setup.yml` — it lives in `k3s-bringup.yml` — so `setup_tags_for`
-resolves no tag, `handle_broad` parks, and the tick does **not** fast-forward. Every other session's
-deploy then fails `deploy.sh` exit 4 until an operator clears it. This happened on 2026-09-09
-(issue #1467) for this exact path.
+The deployer records a pin change instead of parking on it. `k3s` is in
+`_SETUP_ROLES_OUTSIDE_INITIAL_SETUP` (`deploy_setup_roles.py`), so `tick_applies_setup_role`
+returns false for it. `handle_broad` (`deploy_handlers.py`) then fast-forwards the primary
+checkout and writes a `manual_plane` line for `k3s` to `/var/lib/gitops-deploy/owed.jsonl`. Only
+the bring-up playbooks in `_BROAD_MANUAL_PREFIXES` (`deploy_changes.py`) still park the tick. A
+pin change alone touches none of them, so other sessions' deploys are not held. Before 2026-09-11
+a `k3s` change did park the tick (issue #1467).
 
-So merge last, and clear the park immediately afterwards by fast-forwarding the primary checkout:
+The recorded line pages **GitOps Deploy — Status** six hours later unless something clears it.
+The cluster is already upgraded by step 4, so the hand-apply the line asks for is a verification
+run, not a change. After the merge, run the apply the deployer printed if you want that
+verification, then clear the line:
 
 ```bash
-git -C /home/ubuntu/server pull --ff-only
+uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s
 ```
 
-With the cluster already on the new version, the hand-apply the alert asks for is a verification
-run rather than a change.
+[A role only a hand can apply is recorded, not parked](gitops-pipeline.md#a-role-only-a-hand-can-apply-is-recorded-not-parked)
+owns the ledger, the narrowed `--applied` form of the clear, and the page. Do not run
+`git pull --ff-only` on the primary checkout to release the deployer. The deployer has no park
+to clear here, and a hand fast-forward empties the `local..origin` range, which cancels the deploys
+those commits were due ([gitops-pipeline.md](gitops-pipeline.md), "The tree is dirty").
 
 ## Rollback
 

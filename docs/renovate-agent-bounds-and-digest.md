@@ -18,13 +18,6 @@ plumbing. `docs/renovate-notify-internals.md` is the sibling page for the report
 - `land_renovate_pr.py` — the lander, run by `renovate-agent-land@<n>.service` rather than by
   the session. *The lander* below says why it is separate.
 
-`run_worktree.py` and `agent_toolbox.py` came out of `renovate_agent.py` on 2026-09-30, which
-had reached the 600-line cap `ansible/tests/repo/test_module_length_ratchet.py` enforces
-(#3036). The seam was already there: the worktree half talks only to git and to the forge, it
-had its own test module, and it shared nothing with the census and digest halves except the
-toolbox. `agent_toolbox.py` is a third module rather than a name the other two pass between
-them, because either of the two-module shapes makes the import a cycle.
-
 The role names each module twice — once in the "Install agent Python files" copy loop, once in
 `stamp_deployed_pairs` for manifest-prune-check.sh's stale-script arm. Neither list is derived
 from the directory, so a module in `files/` and in neither list is one the host never receives.
@@ -283,15 +276,11 @@ fails CLOSED — an unreadable `worktree list` reads as a directory git owns —
 tree that might be registered. Every case that holds real work is still refused by `worktree_is_reusable` before
 this runs.
 
-**The push URL lives in `/etc/renovate-agent/config.env` (0600), not in the unit.** A unit line is
-public: `systemctl show <unit> -p ExecStartPost` serves it over the system bus to any local user,
-and `/proc` here has no `hidepid`. The unit inlined the whole URL until 2026-09-09, which put a
-rotation-tracked token in clear text behind a command the harness guard recommended as the SAFE
-alternative to `systemctl cat` (issue #1489). `ExecStartPost` now sources `config.env` and passes
-`$KUMA_PUSH_URL` to `curl` on stdin (`-K -`), the form `renovate-notify.service.j2` already used.
-ENFORCED: `ansible/tests/setup/test_renovate_agent_unit.py`. `report_crash` sends its `down` the
-same way. Until 2026-10-03 it passed the URL as curl's last argument, which put the token in
-`/proc/<pid>/cmdline` for the length of the push. ENFORCED:
+**The push URL lives in the role's root-only env file, not in the unit.** `ExecStartPost`
+sources that file and passes `$KUMA_PUSH_URL` to `curl` on stdin (`-K -`), the form
+`renovate-notify.service.j2` uses and `renovate-notify-internals.md` (*The unit is sandboxed*)
+explains. ENFORCED: `ansible/tests/setup/test_renovate_agent_unit.py`. `report_crash` sends its
+`down` the same way. ENFORCED:
 `ansible/roles/setup/renovate_agent/tests/test_crash_report.py::test_a_crash_pushes_a_down_carrying_the_exception_text`.
 
 The tile's deadline is 28h, not the 25h the other daily tiles use, because the beat lands at the
@@ -305,24 +294,13 @@ tile and `initial_setup.yml --tags renovate_agent` for the unit. That is why it 
 
 ## The denylist marker's own history
 
-The contract's rule is that the session never touches a PR whose title or branch carries
-`k8s_autodeploy: false`. How the marker comes to be there took several rounds:
+The session never touches a PR whose title or branch carries `k8s_autodeploy: false`. Two rules
+keep that marker reachable:
 
-- The denylist rule in `renovate.json` leads its parenthetical with the marker. A per-package rule
-  whose pin a denied role owns ends its own with it (the CrowdSec bouncer plugin in Traefik,
-  Meilisearch and the time-tagger dependencies in Karakeep, n8n's Dockerfile pins, #1963), because
-  those rules override the denylist rule's `groupName`.
 - **Read the branch as well as the title** (#2641). Renovate titles a single-dependency group
   `Update <dep> …` and drops the group name, so the marker can survive in the branch alone,
-  slugified as `k8s_autodeploy-false` — #2620 was `Update klutchell/unbound Docker tag to v1.26.1`
-  against Pi-hole's defaults. The prompt therefore reads `headRefName` beside the title, and
-  `test_the_prompt_leaves_a_denylisted_pr_to_a_person` pins both tells.
-- Every rule carrying the marker sets `groupSingleUpdates: true`, which applies the group's
-  `commitMessageTopic` to a one-dependency branch too and so puts the marker in their titles: the
-  denylist and base-image rules since #2646, the per-package manual rules since #2654. A PR raised
-  before that flag landed still arrives bare-titled.
-- A third rule carries it for a denied role's base image — the `FROM` in
-  `templates/Dockerfile*.j2`, which Renovate's built-in dockerfile manager finds and the denylist
-  rule's `custom.regex` scope never reaches (#2117: nut's Debian digest bump #2115 arrived with a
-  bare title). Its file list is the denylist restricted to the roles that carry a Dockerfile, and
-  the same guard derives it.
+  slugified as `k8s_autodeploy-false`. The prompt therefore reads `headRefName` beside the title,
+  and `test_the_prompt_leaves_a_denylisted_pr_to_a_person` pins both tells.
+- **Every rule carrying the marker sets `groupSingleUpdates: true`**, which applies the group's
+  `commitMessageTopic` to a one-dependency branch too and so puts the marker in its title.
+  `ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py` holds it.

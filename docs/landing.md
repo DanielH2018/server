@@ -5,29 +5,20 @@ wait for master CI on the merge commit, deploy that commit, kick the tick, gate 
 print a `VERDICT:` line. The `land-after-merge` skill carries the invocation and the verdict
 decoder. This page carries the reasoning behind each rule, and the incident that put it there.
 
-It reads as reference rather than as a procedure. The skill was 418 lines and changed in 47
-commits in the three months to 2026-09-30, more than any other file under `.claude/` — because
-every measurement landed in the one file a session loads before every landing. The measurements
-still matter; they just do not have to be resident (issue #2853).
-
 ## The command line
 
 `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>` is the whole landing.
 `land.sh --help` prints the flags, the exit codes and the verdicts.
 
-**`--detach` and `cc-wait land` replaced three hand-written steps.** The skill used to spell out
-`git rev-parse origin/master` for `--since`, a redirect to a logfile under
-`$CLAUDE_JOB_DIR/tmp`, and `timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'`. Each was
-a step to get wrong. `land_lib/detach.py` does the first two, and its docstring carries why the
-child's exit code is the authority rather than the grep. The third is `cc-wait`'s `land` source,
-`scripts/deploy_tools/land_probe.py`.
+**`--detach` and `cc-wait land` replace three hand-written steps.** `land_lib/detach.py`
+resolves `--since` and redirects the log, and its docstring explains why the child's exit code
+is the authority rather than a grep for `VERDICT:`. `cc-wait`'s `land` source
+(`scripts/deploy_tools/land_probe.py`) does the waiting.
 
-**The wait is `cc-wait`'s, and it fits a foreground Bash call.** `cc-wait` is the one wait loop
-every repo shares (the dotfiles `cc-wait` package). Its predecessor, `--await-verdict`, waited
-up to 1200s, twice the 600s limit of a foreground Bash call. 15 such waits overran that limit in
-the 30 days to 2026-10-04; the harness moved each one to the background, and 12 of the 15, all
-in fan-out `claude -p` agents, never woke. `cc-wait` waits at most 570s, then exits 75 with the
-command that resumes the wait. Re-run that, never `land.sh`, which would start a second landing.
+**`cc-wait` waits at most 570s, which fits a foreground Bash call.** It then exits 75 with the
+command that resumes the wait. Re-run that command, never `land.sh`, which would start a second
+landing. The predecessor, `--await-verdict`, waited up to 1200s, past the 600s foreground limit,
+so the harness moved it to the background, where fan-out `claude -p` agents never woke.
 
 **`--since` is the PRE-merge tip.** It bounds the range the truncated-list fallback derives tags
 from, so `--detach` resolves it before the arm. Reading it afterwards would capture the tip that
@@ -40,24 +31,21 @@ hands the script a non-blocking pipe, and Ansible refuses to start on one:
 ERROR: Ansible requires blocking IO on stdin/stdout/stderr. Non-blocking file handles detected: <stdout>, <stderr>
 ```
 
-`land.sh` then prints `VERDICT: deploy-failed` with nothing deployed, and the error names Ansible
-rather than the harness, so it reads as a playbook bug. Session transcripts on this host record
-it at least ten times before the redirect became the rule.
+`land.sh` then prints `VERDICT: deploy-failed` with nothing deployed. The error names Ansible
+rather than the harness, so it reads as a playbook bug.
 
 **Do not end your turn on a backgrounded landing.** A backgrounded Bash call whose output is
-redirected to a file is not a harness-tracked child, so nothing wakes the session when it exits.
-Four of four fanned-out agents ended their turn at step 0/6 or 3/6 believing otherwise on
-2026-09-06, three of them saying in as many words that a watcher was armed (issue #1291).
+redirected to a file is not a harness-tracked child, so nothing wakes the session when it exits
+(issue #1291).
 
 **A task that comes back "stopped because the system is running low on memory" was reaped, not
-failed.** Claude Code kills every running backgrounded Bash task when Node emits a
-`memoryPressure` event, and the kill arrives as a task notification rather than an error in the
-logfile — so the session reads clean while the PR has merged and nothing followed it through.
-Re-running the same command is the fix: it is idempotent, and a PR already `MERGED` is left
-alone. On `daniel-box` the host unit turns the reaper off
-(`CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` in
-`roles/setup/claude_code/templates/claude-rc.service.j2`), so this only reaches a session
-started some other way. Three kills in a row on 2026-09-04, issue #1096.
+failed.** Claude Code kills every running backgrounded Bash task on a Node `memoryPressure`
+event. The kill arrives as a task notification rather than an error in the logfile, so the
+session reads clean while the PR has merged and nothing followed it through. Re-running the same
+command is the fix: it is idempotent, and a PR already `MERGED` is left alone. On `daniel-box`
+the host unit turns the reaper off (`CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` in
+`roles/setup/claude_code/templates/claude-rc.service.j2`), so only a session started some other
+way meets it.
 
 ### Exit codes and verdicts
 
@@ -81,22 +69,20 @@ cleanly. `--subject` overrides the squash commit's subject; the PR's own title i
 otherwise.
 
 **Every PR is merged directly, never armed for GitHub's auto-merge.** Every PR into master
-needs a ruleset bypass, and auto-merge never applies one. A PR reads `REVIEW_REQUIRED` until it
-is approved, and that needs the bypass for the master review gate (ruleset 24514824). An
-`APPROVED` PR needs it for the agent branch fence (ruleset 24517167), which restricts updates
-to every branch except `worktree-claude+**`, master included. An approved agent PR that was
-armed sat `BLOCKED` until a hand merge (#3911). After #3613 merged during the fence's cutover
-on 2026-10-05, #3911 was the only PR armed for auto-merge, and that arm never fired. The arm
-path was removed on 2026-10-09 (#4001). A `CHANGES_REQUESTED` PR is refused before any merge call, because the direct
-merge would apply the operator's bypass to it. `--await-merge` then merges it through the REST
-merge endpoint on the first poll where `await_ci` reads its head green, pinned to that head SHA.
-GitHub's auto-merge does not apply a ruleset bypass, so an armed PR stays `BLOCKED` until
-`merge-timeout` (github/docs#45265). The REST endpoint does apply the bypass, and
-a ruleset with no bypass actor, such as the master CI gate, still refuses the call until its
-checks pass. A refused merge is printed once and the wait continues, so a caller who cannot
-bypass ends at `merge-timeout`. Without `--await-merge` the arm dies, because nothing else in the
-run would merge the PR. The direct merge needs both flags in one run: `--await-merge` alone only
-polls, because it merges only a PR the arm left for it.
+needs a ruleset bypass, and auto-merge never applies one (github/docs#45265). A PR reads
+`REVIEW_REQUIRED` until it is approved, and approving needs the bypass for the master review
+gate (ruleset 24514824). An `APPROVED` PR still needs the bypass for the agent branch fence
+(ruleset 24517167), which restricts updates to every branch except `worktree-claude+**`, master
+included. An armed approved agent PR sat `BLOCKED` until a hand merge (#3911), so the arm path
+was removed (#4001).
+
+`--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because the direct merge
+would apply the operator's bypass to it. `--await-merge` merges the PR through the REST merge
+endpoint on the first poll where `await_ci` reads its head green, pinned to that head SHA. The
+REST endpoint applies the bypass, and a ruleset with no bypass actor, such as the master CI gate,
+still refuses the call until its checks pass. A refused merge is printed once and the wait
+continues, so a caller who cannot bypass ends at `merge-timeout`. The direct merge needs both
+flags in one run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge
@@ -140,12 +126,10 @@ gh pr edit <n> --body-file <path>   # then replace the body
 ```
 
 `--fill` takes the title from the commit subject, so the command line carries no title text to
-judge, and `--body-file` carries no body text either. Measured on Claude Code 2.1.263
-(2026-09-06, issue #1431): three of four refusals in one isolated session were false, and the
-`gh pr create` one cost three turns. Re-measured 2026-09-10 on the same surface — a
-`for i in …; do gh issue comment …; done` was refused on its comment text — so the class is
-narrower than it was (2.1.257 fixed loops and heredocs that never touch git) but not gone. The
-rule generalises: keep the prose out of the command string and inside a file or a script.
+judge, and `--body-file` carries no body text either. The class of false refusals narrowed after
+Claude Code 2.1.257 (it fixed loops and heredocs that never touch git) and is not gone: a
+`for … do gh issue comment …; done` was refused on its comment text on 2026-09-10 (issue #1431).
+The rule generalises: keep the prose out of the command string and inside a file or a script.
 
 ## The merge wait
 
@@ -164,9 +148,10 @@ field asynchronously — and bails only after two consecutive `CONFLICTING` poll
 base moving under a PR flips it for one poll.
 
 **A PR whose own CI is red ends the wait too**, exit `LAND_FAILED` with `VERDICT: pr-ci-red`, quoting what
-`await_ci.py` said. GitHub reports it only as `mergeStateStatus: BLOCKED` — the same word it
-uses while the checks are still running. The repo's ruleset requires status checks and
-signatures and no review, so a `BLOCKED` PR here is always about checks. The wait keeps going
+`await_ci.py` said. GitHub reports it only as `mergeStateStatus: BLOCKED`, the same word it
+uses while the checks are still running. The master review gate also holds a PR until it is
+approved, but that state reads `REVIEW_REQUIRED` and the direct merge applies the bypass, so
+the wait treats `BLOCKED` as a question about checks. The wait keeps going
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
 
@@ -387,16 +372,12 @@ Four things sit in that position:
   `land_tags.py`).
 
 **A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and `common`
-the tick fast-forwards the range and records the role as a `manual_plane` line in
-`/var/lib/gitops-deploy/owed.jsonl`,
-which pages **GitOps Deploy — Status** six hours later. So the printed remediation ends with
-`uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane <role>`, and running the
-playbook without it leaves a page over work that is already live. Where the apply it printed was
-narrowed, the clear carries `--applied <tags>`: the row can gain a tag between the note and your
-clear — a second PR touching the same role — and the bare form would drop that tag with yours.
-Run the printed pair as printed. A bring-up playbook gets no such line: the tick parks on those
-and writes no marker. Nothing is queued behind either — a landing behind a recorded role reads
-`settled`, because the tree converged.
+the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger. Run the
+printed apply and clear commands as printed, including any `--applied <tags>`. A bring-up
+playbook gets no such line, because the tick parks on those and writes no marker. A landing
+behind a recorded role reads `settled`, because the tree converged. The clear, `--applied` and
+the six-hour page are in
+[A role only a hand can apply is recorded, not parked](gitops-pipeline.md#a-role-only-a-hand-can-apply-is-recorded-not-parked).
 
 ## `nothing-to-deploy`
 
