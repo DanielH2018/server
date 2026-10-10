@@ -5,11 +5,24 @@ As the `claude` agent user on daniel-box, `kubectl` is on PATH but falls back to
 missing binary, and must skip the same way. A stub `kubectl` that fails every call with the
 recorded stderr stands in for that client, so the case is reproduced on any machine.
 `test_cronjob_gate_decision.py` sits at its module-length ceiling, so this lives beside it.
+
+The seam test runs in a child pytest, and its JUnit testcase is the oracle. A skip written as a
+`skipif` marker or a fixture reaches pytest's report but never a plain function call.
 """
 
-import pytest
-from lib.proc_testing import fake_bin, path_with
+import os
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
 
+import pytest
+from _helpers import REPO
+from lib.proc_testing import fake_bin, run
+
+_SEAM = (
+    "ansible/tests/deploy/test_cronjob_gate_decision.py"
+    "::test_the_jsonpath_parses_against_the_live_api"
+)
 # Recorded 2026-10-10 as `claude` on daniel-box: the k3s wrapper's warning, then kubectl's error.
 _UNREADABLE_KUBECONFIG = (
     'time="2026-10-10T15:02:24Z" level=warning msg="Unable to read /etc/rancher/k3s/k3s.yaml, '
@@ -25,12 +38,29 @@ _NO_CONFIGURATION = (
 )
 
 
-def _kubectl_failing_with(stderr: str, tmp_path, monkeypatch) -> None:
-    stub = fake_bin(
-        tmp_path / "bin", kubectl=f"cat >&2 <<'STDERR'\n{stderr}STDERR\nexit 1\n"
+def _seam_outcome(stub: Path, tmp_path: Path) -> ET.Element:
+    """Run the seam test in a child pytest with `stub` first on PATH, and return its testcase."""
+    report = tmp_path / "report.xml"
+    env = {k: v for k, v in os.environ.items() if k != "KUBECONFIG"}
+    run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            _SEAM,
+            "-n0",
+            "-p",
+            "no:cacheprovider",
+            f"--junitxml={report}",
+        ],
+        cwd=REPO,
+        env=env,
+        stub_bin=stub,
+        timeout=120,
     )
-    monkeypatch.setenv("PATH", path_with(stub))
-    monkeypatch.delenv("KUBECONFIG", raising=False)
+    cases = ET.parse(report).getroot().findall(".//testcase")
+    assert len(cases) == 1, f"{_SEAM} matched {len(cases)} tests"
+    return cases[0]
 
 
 @pytest.mark.parametrize(
@@ -39,10 +69,16 @@ def _kubectl_failing_with(stderr: str, tmp_path, monkeypatch) -> None:
     ids=["unreadable-kubeconfig", "no-configuration"],
 )
 def test_the_live_jsonpath_seam_skips_a_kubectl_with_no_config(
-    stderr, tmp_path, monkeypatch
+    stderr, tmp_path
 ) -> None:
-    from test_cronjob_gate_decision import test_the_jsonpath_parses_against_the_live_api
-
-    _kubectl_failing_with(stderr, tmp_path, monkeypatch)
-    with pytest.raises(pytest.skip.Exception):
-        test_the_jsonpath_parses_against_the_live_api()
+    stub = fake_bin(
+        tmp_path / "bin", kubectl=f"cat >&2 <<'STDERR'\n{stderr}STDERR\nexit 1\n"
+    )
+    case = _seam_outcome(stub, tmp_path)
+    failure = case.find("failure")
+    detail = (
+        failure.get("message") if failure is not None else ET.tostring(case, "unicode")
+    )
+    assert case.find("skipped") is not None, (
+        f"the seam test did not skip a kubectl that can load no config: {detail}"
+    )
