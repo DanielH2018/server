@@ -85,6 +85,12 @@ agent gets a lander of the same shape.
 - **The agent belongs to none of `ubuntu`, `sudo`, `adm`, `docker`, `lxd` or `kvm`.** Without
   `adm` or `systemd-journal`, `journalctl` shows the agent only its own units. The operator
   granted `systemd-journal` on 2026-10-09, after a secrets scan of the journal. Slice 4 adds it.
+- **The agent's one sudo grant is the worktree holder scan.** The operator granted it on
+  2026-10-10 (#4021). `/usr/local/libexec/worktree-holders` runs as root with no arguments and
+  reports only under the agent's own clone, so a worktree removal in `/var/lib/claude/server`
+  sees an `ubuntu` process inside the tree. initial_setup's `worktree-sweep` tag installs the
+  sudoers line and a named-user ACL entry that lets the agent execute the helper. `sudo -n true`
+  still fails.
 - **The agent has its own GitHub identity and signing key.** A PR author cannot approve their
   own PR, so any approval gate needs a second identity.
 - **Remote Control needs one interactive step.** It requires a claude.ai `/login`, and without a

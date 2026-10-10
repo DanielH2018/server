@@ -278,11 +278,12 @@ def test_a_stub_a_live_process_still_uses_is_kept_not_deleted(tmp_path):
     assert BRANCH in _branches(repo)
 
 
-def _busy_with_helper(tmp_path, worktree, helper_body):
+def _busy_with_helper(tmp_path, worktree, helper_body, status="/proc/self/status"):
     """What `live_process_scan` sets `busy` to when a stand-in root helper answers."""
     helper = write_exec(tmp_path / "worktree-holders", helper_body)
     script = (
-        live_process_scan(str(worktree), helper=str(helper), sudo="") + 'echo "$busy"'
+        live_process_scan(str(worktree), helper=str(helper), sudo="", status=status)
+        + 'echo "$busy"'
     )
     return subprocess.run(
         ["bash", "-c", script], capture_output=True, text=True, check=True, timeout=30
@@ -308,6 +309,28 @@ def test_a_failed_or_blind_root_helper_keeps_the_tree_is_flagged(tmp_path):
     assert _busy_with_helper(tmp_path, worktree, "exit 1\n").startswith("unknown")
     blind = "printf '7\\tunreadable\\tcwd: EPERM\\n'\n"
     assert _busy_with_helper(tmp_path, worktree, blind) == "7"
+
+
+def test_a_shell_with_no_new_privs_skips_the_helper_is_clean(tmp_path):
+    # claude-rc.service sets NoNewPrivileges=yes for the agent user, so sudo cannot gain root
+    # there. Asking would fail and keep every tree.
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    status = tmp_path / "status"
+    status.write_text("Name:\tbash\nNoNewPrivs:\t1\n")
+
+    assert _busy_with_helper(tmp_path, worktree, "exit 1\n", str(status)) == ""
+
+
+def test_a_shell_without_no_new_privs_still_asks_the_helper_is_flagged(tmp_path):
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    status = tmp_path / "status"
+    status.write_text("Name:\tbash\nNoNewPrivs:\t0\n")
+
+    assert _busy_with_helper(tmp_path, worktree, "exit 1\n", str(status)).startswith(
+        "unknown"
+    )
 
 
 def test_a_helper_that_names_only_other_trees_leaves_the_tree_free_is_clean(tmp_path):
