@@ -23,7 +23,6 @@ from fanout_lib.target import (
     branch_name,
 )
 from findings_lib.issue_model import cited_paths
-from findings_lib.precomputed import precomputed
 from lib.ansible_inventory import GITOPS_HOST
 
 # `land.sh` and the deployer run on the GitOps host, so only batches placed there land.
@@ -262,6 +261,20 @@ other final message is a progress report: a Stop hook sends you back to work, an
 """
 
 
+def _precomputed(cited: list[str]) -> str:
+    """`findings_lib.precomputed`'s block, imported only here, where a brief is rendered.
+
+    DECIDED: a call-time import. That module reaches `land.sh`'s classifier, which imports
+    PyYAML. `fanout_review.py` and `clean`'s remote leg import this module under
+    `uv run --no-project`, which has no PyYAML. A module-level import killed every review
+    unit and every remote clean at import (#4167). Only `launch` renders a brief, and it runs
+    in the project env.
+    """
+    from findings_lib.precomputed import precomputed
+
+    return precomputed(cited)
+
+
 def render_brief(
     issues: Sequence[Issue],
     host: str,
@@ -303,7 +316,7 @@ def render_brief(
     holder = orchestrator_branch if target.is_server else branch
     # Only this repo's paths mean anything to `land.sh`'s classifier and this tree's tests.
     cited = sorted({p for i in issues for p in cited_paths(i.body)})
-    facts = precomputed(cited) if target.is_server else ""
+    facts = _precomputed(cited) if target.is_server else ""
     if target.is_server:
         findings = "`findings.py open`"
     else:
