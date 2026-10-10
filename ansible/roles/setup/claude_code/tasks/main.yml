@@ -822,6 +822,9 @@
     - /etc/systemd/system/claude-clone-sync.timer
     - /etc/systemd/system/claude-clone-sync-alert.service
     - /usr/local/bin/claude-clone-sync.sh
+    # The drift-check fragment the stamp at the end of this file writes. Left behind, it names
+    # the script removed above, and the setup drift check reports it missing for good.
+    - /var/lib/homelab/setup-deployed-manifest.d/claude-code-clone-sync
   become: true
   when: not claude_code_agent_user_enabled
   notify: Reload systemd

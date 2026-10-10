@@ -210,3 +210,19 @@ def test_the_report_fires_when_the_clone_was_left_behind() -> None:
 def test_the_venv_sync_reads_the_fast_forwarded_lock() -> None:
     names = [t.get("name") for t in tasks()]
     assert names.index(PULL) < names.index(SYNC)
+
+
+def test_switching_the_agent_off_removes_what_the_drift_stamp_names() -> None:
+    """A fragment left behind names a removed script, and the drift check stays red for good."""
+    stamp = named("Record the deployed agent clone sync script for drift checking")[
+        "vars"
+    ]
+    removed = named(
+        "Remove the agent clone sync units and script when the agent user is switched off"
+    )["loop"]
+    fragment = (
+        "/var/lib/homelab/setup-deployed-manifest.d/" + stamp["stamp_deployed_name"]
+    )
+    assert fragment in removed
+    for pair in stamp["stamp_deployed_pairs"]:
+        assert pair["live"] in removed
