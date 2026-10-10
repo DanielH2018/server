@@ -251,3 +251,13 @@ def test_lint_flags_a_value_only_a_built_in_renovate_manager_bumps(tmp_path, cap
     assert main(["lint", "--repo", str(repo)]) == 1
     out = capsys.readouterr().out
     assert "renovate-pin" in out and "CLAUDE.md#Gate" in out
+
+
+def test_reverify_records_a_section_given_its_first_citation(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it.\n\n## Style\nwhy, not `t/m.py:OTHER`.\n"
+    )
+    assert main(["reverify", "--repo", str(repo), "--changed-since", "HEAD"]) == 1
+    assert "recorded CLAUDE.md#Style" in capsys.readouterr().out
+    assert set(read_lock(repo / "docs" / "facts.lock")) == {"CLAUDE.md#Style"}

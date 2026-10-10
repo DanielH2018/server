@@ -454,13 +454,37 @@ def changed_units(repo: Path, since: str) -> set[str]:
     changed: set[str] = set()
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
-        old = git("show", f"{since}:{rel}", cwd=repo, check=False)
-        before = (
-            {s.key: s.body for s in sections(rel, old.stdout)}
-            if old.returncode == 0
-            else {}
-        )
+        before = _bodies_at(repo, since, rel)
         for s in sections(rel, doc.read_text(encoding="utf-8")):
             if before.get(s.key) != s.body:
                 changed.add(s.key)
     return changed
+
+
+def _bodies_at(repo: Path, since: str, rel: str) -> dict[str, str]:
+    """Each section body of the doc ``rel`` as ``since`` holds it; empty when the doc is absent there."""
+    old = git("show", f"{since}:{rel}", cwd=repo, check=False)
+    if old.returncode != 0:
+        return {}
+    return {s.key: s.body for s in sections(rel, old.stdout)}
+
+
+def first_cited_units(repo: Path, since: str, keys: set[str]) -> set[str]:
+    """The sections in ``keys`` that cite nothing at ``since``: absent there, or citing no tracked atom.
+
+    The reverify hook records such a section when it cites something now and has no lock row,
+    so its first citation lands verified in the commit that adds it. A backlog section that
+    already cited an atom at ``since`` is not in this set: a prose edit to it is not the moment
+    its citations were written. Citations at ``since`` are judged against today's tracked set.
+    """
+    tracked = tracked_files(repo)
+    out: set[str] = set()
+    for rel in sorted({k.partition("#")[0] for k in keys}):
+        before = _bodies_at(repo, since, rel)
+        for key in keys:
+            if key.partition("#")[0] != rel:
+                continue
+            cites, _ = parse_citations(before.get(key, ""))
+            if not any(in_tree(c, tracked) for c in cites):
+                out.add(key)
+    return out

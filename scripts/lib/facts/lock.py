@@ -35,6 +35,7 @@ FINDING_KINDS = frozenset(
         "interpreter-moved",
         "lock-tampered",
         "ambiguous",
+        "empty-row",
     }
 )
 _PYTHON = f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -213,6 +214,20 @@ def check_lock(
                 )
             )
             continue
+        # A row whose section cites nothing records nothing, and `status` grades the section
+        # CONVENTION whatever the row says. A probe-only row also holds no atom, but its
+        # section cites the probe, and the row is what makes it UNKNOWN; so the test is the
+        # section's citations, never the row's atoms.
+        if not by_unit[unit] and not rec.get("atoms"):
+            findings.append(
+                Finding(
+                    unit,
+                    "",
+                    "empty-row",
+                    "the section cites nothing, so the row records nothing; drop it with `fact_status.py forget`",
+                )
+            )
+            continue
         # An atom hash is only comparable against the interpreter that produced it: a symbol
         # and a test are hashed through `ast.unparse`, whose rendering is a property of the
         # running CPython. Report the move and skip the comparison rather than grade every
@@ -299,12 +314,19 @@ def verify_units(
     Returns the whole lock and the sorted citations that did NOT resolve, so the caller can
     say so: a section can otherwise read `verified` while the atom the author cared about
     was silently dropped. Raises ``KeyError`` on an unknown unit.
+
+    A named section that cites nothing gets no row, and loses the one it had: such a row is
+    the ``empty-row`` finding. This is also how the reverify hook retires the row of a section
+    whose last citation the commit deleted.
     """
     if by_unit is None:
         by_unit = repo_citations(repo)
     lock = read_lock(lock_path)
     skipped: set[str] = set()
     for key in unit_keys:
+        if not by_unit[key]:
+            lock.pop(key, None)
+            continue
         atoms: dict[str, str] = {}
         for c in by_unit[key]:
             h = hash_atom(c, repo)
@@ -317,7 +339,7 @@ def verify_units(
     return lock, sorted(skipped)
 
 
-BENIGN_KINDS = frozenset({"unrecorded-atom", "atom-no-longer-cited"})
+BENIGN_KINDS = frozenset({"unrecorded-atom", "atom-no-longer-cited", "empty-row"})
 """The findings a prose edit produces, and the only ones re-verified without a human reading the section.
 
 Both are set-membership changes: the section gained a citation or dropped one, which the
@@ -332,6 +354,9 @@ citation is support only while it names a tracked file, so removing a cited file
 index drops the atom out of the section's citations exactly as deleting the sentence would —
 same finding, opposite meaning. One is the author withdrawing a claim; the other is the
 claim's subject going away while the sentence still names it, and that one is refused.
+
+`empty-row` is a row whose section the author left citing nothing. Folding it drops the row,
+since ``verify_units`` writes none for such a section.
 """
 
 
@@ -355,6 +380,7 @@ def reverify_benign(
     changed_keys: set[str],
     head_sha: str,
     by_unit: Citations | None = None,
+    first_cited: set[str] | None = None,
 ) -> tuple[list[str], list[Finding]]:
     """Re-hash the edited sections whose findings are all benign; name the ones that need a human.
 
@@ -369,6 +395,12 @@ def reverify_benign(
     round-trip the hook exists to remove. A unit carrying even one blocking finding is left
     whole: its benign findings are not fixed either, because the author is going to run
     ``verify`` on that unit anyway.
+
+    ``first_cited`` names the sections the commit gave their first citation
+    (``lint.first_cited_units``). One with no lock row is recorded here too: adding a section's
+    first citation is the same set-membership event as adding its second, and the author is
+    reading that section now. A section that already has a row is never in this path, so a
+    moved atom stays a person's ``verify`` (#2817). The returned list holds both kinds.
     """
     if by_unit is None:
         by_unit = repo_citations(repo)
@@ -398,6 +430,7 @@ def reverify_benign(
             and f.unit not in blocked_units
             and f.unit in lock
         }
+        | {u for u in first_cited or () if u not in lock and by_unit.get(u)}
     )
     if todo:
         verify_units(repo, lock_path, todo, head_sha, by_unit)
