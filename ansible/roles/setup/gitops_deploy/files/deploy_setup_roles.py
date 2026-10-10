@@ -27,8 +27,9 @@ from typing import NamedTuple
 INITIAL_SETUP = "ansible/initial_setup.yml"
 
 ROUTING_SCRIPT = "scripts/deploy_tools/setup_routing.py"
-# Three playbooks and the vars files, parsed once; a run still going at a minute has wedged.
-ROUTING_TIMEOUT_S = 60.0
+# Three playbooks and the vars files, parsed once: 0.8s measured under a loaded suite run.
+# Thirty seconds is the wedged case, as for the setup narrowing (`NARROW_SETUP_TIMEOUT_S`).
+ROUTING_TIMEOUT_S = 30.0
 
 
 class SetupRoute(NamedTuple):
@@ -161,6 +162,11 @@ def roles_outside_initial_setup_in(playbook: str) -> set[str]:
     if playbook == INITIAL_SETUP:
         return set()
     return {role for role, r in routing().items() if r.playbook == playbook}
+
+
+def is_routed(role: str) -> bool:
+    """Whether the routing places `role`; False for one it could not read, or with none."""
+    return role in routing()
 
 
 def setup_role_playbook(role: str) -> str | None:

@@ -20,21 +20,11 @@ from deploy_changes import setup_tags_for, tick_applies_setup_role
 GITOPS_TASKS = "ansible/roles/setup/gitops_deploy/tasks/main.yml"
 
 
-@pytest.fixture
-def installed_routing():
-    """The routing a test installs, put back afterwards so no later test inherits it."""
-    saved = deploy_setup_roles.current_routing()
-    yield
-    deploy_setup_roles.use_routing(saved)
-
-
 def _with_routing(tick, routing):
     return dataclasses.replace(tick.tools, setup_routing=routing)
 
 
-def test_plan_tick_routes_by_origins_tree_for_this_host(
-    tick, settings, state, installed_routing
-):
+def test_plan_tick_routes_by_origins_tree_for_this_host(tick, settings, state):
     asked = []
 
     def routing(repo, ref, host):
@@ -57,9 +47,7 @@ def test_plan_tick_routes_by_origins_tree_for_this_host(
     ],
     ids=["timeout", "exit-nonzero", "bad-json"],
 )
-def test_a_failed_derivation_routes_no_role(
-    tick, settings, state, installed_routing, capsys, error
-):
+def test_a_failed_derivation_routes_no_role(tick, settings, state, capsys, error):
     """A guessed `--tags` exits 0 having applied nothing (PR #702), so nothing is guessed."""
 
     def routing(_repo, _ref, _host):
@@ -74,9 +62,7 @@ def test_a_failed_derivation_routes_no_role(
     )
 
 
-def test_an_unplaced_role_is_not_applied_and_its_neighbours_are(
-    tick, settings, installed_routing, capsys
-):
+def test_an_unplaced_role_is_not_applied_and_its_neighbours_are(tick, settings, capsys):
     routes, _ = checkout_routing()
     routes = {r: v for r, v in routes.items() if r != "nut_host"}
     unplaced = {"nut_host": "its gate cannot be read: `ups_host` is undefined"}
@@ -131,3 +117,29 @@ def test_a_role_gated_off_this_host_is_recorded_with_its_host(
     (entry,) = state.manual_plane_pending()
     assert (entry.role, entry.host) == ("optimize_pi", "daniel-pi")
     assert "--tags optimize_pi -e target=daniel-pi" in capsys.readouterr().out
+
+
+def test_an_idle_tick_routes_before_it_names_a_pending_role(
+    gitops_deploy, tick, capsys, state
+):
+    """The deployer's directory cannot derive routing, so a tick starts with none installed.
+
+    `log_pending` runs on every tick, ahead of `plan_tick`, and an idle tick never reaches
+    `plan_tick` at all.
+    """
+    deploy_setup_roles.use_routing({})
+    playbook = "ansible/initial_setup.yml"
+    state.record_manual_plane("e" * 40, playbook, "optimize_pi", 1000.0, "daniel-pi")
+    tick.paths = []
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert "--tags optimize_pi -e target=daniel-pi" in capsys.readouterr().out
+
+
+def test_an_unrouted_role_is_named_as_unrouted_not_as_playbookless():
+    """`common` is applied by no playbook; a role the routing lost is not `common`."""
+    import deploy_remediation
+
+    deploy_setup_roles.use_routing({})
+    (cmd,) = deploy_remediation._setup_commands({"gitops_deploy"})
+    assert "could not be routed from the playbooks" in cmd
+    assert "applied by no playbook" not in cmd

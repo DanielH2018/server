@@ -152,3 +152,18 @@ def test_the_live_tree_routes_the_shapes_the_hand_tables_held():
 def test_an_unreadable_ref_exits_1(capsys):
     assert setup_routing.main(["--ref", "0" * 40, "--host", "daniel-box"]) == 1
     assert "cannot read" in capsys.readouterr().err
+
+
+def test_routed_by_places_roles_for_the_has_gitops_host_and_restores(tmp_path):
+    """A landing on daniel-server must still see a box-only role as the tick's to apply."""
+    from deploy_changes import tick_applies_setup_role
+    import deploy_setup_roles
+
+    tree = _tree(
+        tmp_path,
+        {INITIAL: [{"role": "box_only", "tags": ["box_only"], "when": "has_gitops"}]},
+    )
+    saved = deploy_setup_roles.current_routing()
+    with setup_routing.routed_by(tree):
+        assert tick_applies_setup_role("box_only")
+    assert deploy_setup_roles.current_routing() is saved

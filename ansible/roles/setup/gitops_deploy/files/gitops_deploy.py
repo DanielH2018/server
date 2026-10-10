@@ -250,6 +250,10 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
     # it fast-forwarded — so from the next tick on this deployer is converged and re-enters
     # the broad arm never again. Without a line here the journal would say nothing at all
     # about a role nobody has applied yet.
+    # Route setup roles by the checkout before anything prints a role's command: the
+    # deployer's own directory cannot derive the routing, so until this runs it routes none.
+    # `plan_tick` re-reads it at origin for the range it classifies.
+    deploy_phases.adopt_setup_routing(tools, config, "HEAD")
     deploy_defer.log_pending(state)
     # Same shape, one plane over: the k8s changes a tick merged and did not apply (#2449,
     # #2570). `reconcile` discharges what a deploy has since covered, then names the rest.

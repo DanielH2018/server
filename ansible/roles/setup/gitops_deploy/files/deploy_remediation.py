@@ -13,6 +13,7 @@ from collections.abc import Iterable
 
 from deploy_changes import (
     ChangeSet,
+    is_routed,
     roles_outside_initial_setup_in,
     setup_role_host,
     setup_role_playbook,
@@ -307,6 +308,12 @@ def _setup_commands(
         return ["`ansible-playbook ansible/initial_setup.yml --tags <role>`"]
     narrow_tags = narrow_tags or {}
     for role in sorted(roles):
+        if not is_routed(role):
+            cmds.append(
+                f"`{role}` could not be routed from the playbooks (the deployer's journal says "
+                "why) — apply it with the playbook and `--tags` value that include it"
+            )
+            continue
         playbook = setup_role_playbook(role)
         if playbook is None:
             # No playbook includes this role, so there is no single command to print. Naming

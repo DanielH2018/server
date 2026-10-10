@@ -32,7 +32,21 @@ from types import ModuleType
 import pytest
 
 import deploy_io
+import deploy_setup_roles
 from _deploy_fakes import ScriptedTick, build_tools
+
+
+@pytest.fixture(autouse=True)
+def _restore_setup_routing():
+    """Put back the setup-role routing a test's tick installed, so no later test routes by it.
+
+    Every `main()` installs routing for the rest of the process, and a test that scripts a
+    failed derivation installs none at all; a later test on the same worker would inherit it.
+    """
+    saved = deploy_setup_roles.current_routing()
+    yield
+    deploy_setup_roles.use_routing(saved)
+
 
 FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 GITOPS_SRC = FILES / "gitops_deploy.py"

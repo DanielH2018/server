@@ -386,8 +386,9 @@ def remaining_setup_hosts_note(
     paths = (_INITIAL_SETUP_YML, ALL_VARS, HOST_VARS, _SETUP_ROLES_DIR)
     with tree_at(ref, repo) if ref else contextlib.nullcontext() as root:
         at = [(root or repo) / p.relative_to(REPO) for p in paths]
-        # Which roles the tick applied is a question about the same tree.
-        with setup_routing.routed_by(root or repo, local_host):
+        # Which roles the tick applied is a question about the same tree, and about the tick's
+        # host (`has_gitops`), not the host this landing runs on.
+        with setup_routing.routed_by(root or repo):
             return _remaining_note(
                 files, local_host, quiet, at[0], at[1], at[2], at[3], pr_range, repo
             )

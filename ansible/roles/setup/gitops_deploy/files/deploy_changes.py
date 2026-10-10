@@ -22,6 +22,7 @@ import deploy_cross_role
 
 from deploy_setup_roles import (  # noqa: F401  (re-exported for this module's readers)
     INITIAL_SETUP,
+    is_routed,
     roles_outside_initial_setup_in,
     setup_role_host,
     setup_role_playbook,
@@ -548,7 +549,8 @@ def setup_roles_for(path: str) -> set[str]:
         path, frozenset()
     )
     # DECIDED: `common` is not named beside its file's shippers (#3312); see its CLAUDE.md.
-    owner = set() if shippers and setup_role_playbook(at.role) is None else {at.role}
+    no_playbook = is_routed(at.role) and setup_role_playbook(at.role) is None
+    owner = set() if shippers and no_playbook else {at.role}
     return owner | shippers
 
 

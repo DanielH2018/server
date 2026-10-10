@@ -48,6 +48,7 @@ from deploy_changes import (  # noqa: F401
     setup_roles_for,
     comment_only_broad_changes,
     is_doc,
+    is_routed,
     role_of,
     services_from_changed_paths,
     setup_role_host,
