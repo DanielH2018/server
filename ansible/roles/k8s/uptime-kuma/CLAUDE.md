@@ -53,7 +53,7 @@ same convention in plain text. Both read `heartbeatJSON.msg`, `monitorJSON.descr
 
 - **A Liquid body ships inside a Tera `raw` block**, because AutoKuma runs every entity through
   Tera first and Tera claims Liquid's delimiters; the first deploy without the wrapper detached
-  every alert from all 108 monitors behind green tiles. ENFORCED:
+  every alert from every monitor behind green tiles. ENFORCED:
   `ansible/tests/services/test_kuma_entities_parse_for_autokuma.py`.
 - **`ON_DELETE=delete` stays** (decided 2026-09-19, #2076; the `DECIDED:` marker sits at the
   variable in `templates/deployment.yaml.j2`), so an unparseable entity is a deleted one and the

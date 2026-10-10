@@ -13,7 +13,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from .atoms import HASHED_FORMS, Ambiguous, backrefs, hash_atom
+from .atoms import Ambiguous, backrefs, hash_atom
 from .citations import (
     Citation,
     in_tree,
@@ -138,30 +138,16 @@ def repo_citations(repo: Path) -> Citations:
 def build_repo_edb(
     repo: Path, lock: dict[str, dict], by_unit: Citations | None = None
 ) -> Edb:
-    """The repo store's ``Edb``: the tree supplies the citations and current hashes, ``lock`` the recorded ones.
-
-    Every probe atom is put in both ``live`` and ``transport_failed``, because nothing here
-    runs one — slice 5's reconcile timer supplies the shape. The effect is that a probe
-    citation reads UNKNOWN rather than dragging its section OUT. ``memory_units`` and
-    ``links`` stay empty until slice 4 adds the memory store.
-    """
+    """The repo store's ``Edb``: the tree supplies the citations and current hashes, ``lock`` the recorded ones."""
     if by_unit is None:
         by_unit = repo_citations(repo)
     cites: set[tuple[str, str]] = set()
     current: dict[str, str] = {}
-    live: set[str] = set()
-    failed: set[str] = set()
     backref: set[tuple[str, str]] = set()
     test_atoms: set[str] = set()
     for unit, cs in by_unit.items():
         for c in cs:
             cites.add((unit, c.raw))
-            if c.form == "probe":
-                live.add(c.raw)
-                failed.add(
-                    c.raw
-                )  # never run here; slice 5's reconcile supplies the shape
-                continue
             if c.form == "test":
                 test_atoms.add(c.raw)
                 backref.update((c.raw, u) for u in backrefs(c, repo))
@@ -179,11 +165,7 @@ def build_repo_edb(
         recorded=recorded,
         recorded_units=frozenset(lock),
         current=current,
-        live=frozenset(live),
-        transport_failed=frozenset(failed),
         backref=frozenset(backref),
-        links=frozenset(),
-        memory_units=frozenset(),
         test_atoms=frozenset(test_atoms),
     )
 
@@ -220,9 +202,7 @@ def check_lock(
             )
             continue
         # A row whose section cites nothing records nothing, and `status` grades the section
-        # CONVENTION whatever the row says. A probe-only row also holds no atom, but its
-        # section cites the probe, and the row is what makes it UNKNOWN; so the test is the
-        # section's citations, never the row's atoms.
+        # CONVENTION whatever the row says.
         if not by_unit[unit] and not rec.get("atoms"):
             findings.append(
                 Finding(
@@ -301,8 +281,8 @@ def check_lock(
         # it (relations.unrecorded), and this check reports it too, so a new fact cannot be
         # added to a locked section and land unsupported behind a green master.
         recorded_atoms = rec.get("atoms", {})
-        for atom, c in sorted(cited.items()):
-            if atom in recorded_atoms or c.form not in HASHED_FORMS:
+        for atom in sorted(cited):
+            if atom in recorded_atoms:
                 continue
             findings.append(
                 Finding(
@@ -334,7 +314,7 @@ def verify_units(
     head_sha: str,
     by_unit: Citations | None = None,
 ) -> tuple[dict[str, dict], list[str]]:
-    """Re-hash every hashable atom the named sections cite, write the lock, and name what it skipped.
+    """Re-hash every atom the named sections cite, write the lock, and name what it skipped.
 
     Returns the whole lock and the sorted citations that did NOT resolve, so the caller can
     say so: a section can otherwise read `verified` while the atom the author cared about
@@ -357,7 +337,7 @@ def verify_units(
             h = hash_atom(c, repo)
             if h is not None:
                 atoms[c.raw] = h
-            elif c.form in HASHED_FORMS:
+            else:
                 skipped.add(c.raw)
         lock[key] = {"verified_sha": head_sha, "python": _PYTHON, "atoms": atoms}
     write_lock(lock_path, lock)

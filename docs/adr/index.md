@@ -44,6 +44,7 @@ wrong is worth more than the record of one that did not.
 | [0016](0016-code-scanning-stays-on-default-setup.md) | Code scanning stays on default setup, and false positives are removed in code | Accepted | 2026-09-02 |
 | [0017](0017-the-tree-lock-guards-the-tree-not-the-cluster.md) | The tree lock guards the tree, and per-service locks guard the cluster | Accepted | 2026-09-11 |
 | [0018](0018-the-repository-stays-public-and-ci-stays-hosted.md) | The repository stays public, and CI stays on GitHub-hosted runners | Accepted | 2026-09-28 |
+| [0019](0019-fact-support-stops-at-the-repo-store.md) | Fact support stops at the repo store, and the lock carries its own retirement test | Accepted | 2026-10-10 |
 
 ## The long-form behind a record
 

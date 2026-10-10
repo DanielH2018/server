@@ -4,7 +4,7 @@ import textwrap
 
 import pytest
 
-from lib.facts.atoms import HASHED_FORMS, Ambiguous, backrefs, hash_atom
+from lib.facts.atoms import Ambiguous, backrefs, hash_atom
 from lib.facts.citations import Citation
 
 
@@ -227,18 +227,6 @@ def test_marker_ambiguous_raises_and_missing_is_none(tmp_path):
         hash_atom(Citation("marker", "m.py:DECIDED: zzz", "m.py", "zzz"), tmp_path)
         is None
     )
-
-
-def test_probe_is_never_hashed_here(tmp_path):
-    assert (
-        hash_atom(Citation("probe", "probe.py kuma-drift", "", "kuma-drift"), tmp_path)
-        is None
-    )
-    assert "probe" not in HASHED_FORMS
-
-
-def test_hashed_forms_census():
-    assert HASHED_FORMS == frozenset({"path", "symbol", "yaml", "test", "marker"})
 
 
 def test_path_outside_repo_is_none(tmp_path):
