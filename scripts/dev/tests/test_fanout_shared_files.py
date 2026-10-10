@@ -1,7 +1,7 @@
 """The file-level collision check: two batches citing one file are refused at launch."""
 
 from fanout_lib.brief import Issue
-from fanout_lib.collisions import shared_files
+from fanout_lib.launch_gates import shared_files
 from fanout_place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 

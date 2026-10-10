@@ -72,13 +72,14 @@ from fanout_lib import manifest as manifest_mod
 from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
-from fanout_lib.collisions import refuse_shared_files, refuse_solo_only
 from findings_lib.tracked_paths import tracked_files
 from fanout_lib.red_gate import review_flags
 from fanout_lib.launch_gates import (
     live_elsewhere,
     over_live_batch_cap,
     over_ssh_budget,
+    refuse_shared_files,
+    refuse_solo_only,
 )
 from lib.git import git
 from fanout_lib.placement import NoHeadroom, place
