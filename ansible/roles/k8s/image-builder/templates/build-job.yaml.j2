@@ -1,3 +1,4 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -128,13 +129,7 @@ spec:
             # would duplicate that at higher cost, and would pin builds to one node.
             - name: image-builder-buildkitd
               mountPath: /home/user/.local/share/buildkit
-          resources:
-            limits:
-              cpu: "2"
-              memory: 2048Mi
-            requests:
-              cpu: "200m"
-              memory: 256Mi
+{{ container_resources(cpu_limit="2", mem_limit="2048Mi", cpu_request="200m", mem_request="256Mi") }}
       volumes:
         - name: image-builder-context
           configMap:

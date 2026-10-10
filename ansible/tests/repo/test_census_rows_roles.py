@@ -126,6 +126,15 @@ _JOB_RESOURCES_LITERAL = re.compile(
 )
 _JOB_RESOURCES_CALL = "{{ job_container_resources("
 
+# ── A pod-template container takes its resources from container_resources() ──────────────
+
+# The `limits:`/`requests:` line is what separates a container's block from authelia's
+# access-control `resources:` list, which sits at the same 10 spaces.
+_POD_RESOURCES_LITERAL = re.compile(
+    r"^ {10}resources:\n {12}(limits|requests):", re.MULTILINE
+)
+_POD_RESOURCES_CALL = "{{ container_resources("
+
 
 ROWS = (
     Census(
@@ -407,6 +416,59 @@ ROWS = (
                 "ansible/roles/k8s/pi-peer-backup/templates/cronjob.yaml.j2",
                 "ansible/roles/k8s/uptime-kuma/templates/maintenance-sync-cronjob.yaml.j2",
                 "ansible/roles/k8s/uptime-kuma/templates/status-page-sync-cronjob.yaml.j2",
+            }
+        ),
+    ),
+    Census(
+        name="pod-container-resources-is-the-macro",
+        reason=(
+            "A Deployment, DaemonSet, StatefulSet or Job container sits 10 spaces in and takes "
+            "its requests and limits from `container_resources()` in "
+            "ansible/templates/container-resources.yml.j2. The CronJob row above covers only "
+            "`jobTemplate` depth, so a hand-written block here passed every check (#4090). A "
+            "copy is where a request loses its limit and is refused at admission against the "
+            "namespace default."
+        ),
+        files=lambda: tracked("ansible/roles/k8s/*/templates/*.j2"),
+        offence=lambda s: [
+            f"`resources.{m.group(1)}` written out instead of container_resources()"
+            for m in _POD_RESOURCES_LITERAL.finditer(s.text)
+        ],
+        count=lambda s: s.text.count(_POD_RESOURCES_CALL),
+        red=(
+            Subject(
+                "deployment.yaml.j2",
+                "          resources:\n            limits:\n"
+                '              cpu: "100m"\n',
+            ),
+            Subject(
+                "deployment.yaml.j2",
+                "          resources:\n            requests:\n"
+                '              cpu: "100m"\n',
+            ),
+        ),
+        green=(
+            Subject(
+                "deployment.yaml.j2",
+                f'{_POD_RESOURCES_CALL}cpu_limit="1", mem_limit="1Gi", '
+                'cpu_request="1", mem_request="1Gi") }}\n',
+            ),
+            # authelia's access-control rules carry a `resources:` list at the same depth.
+            Subject(
+                "config-secret.yaml.j2",
+                '          resources:\n            - "^/api/push/.*$"\n',
+            ),
+            # CronJob depth belongs to job_container_resources(), the row above.
+            Subject(
+                "cronjob.yaml.j2", "              resources:\n                limits:\n"
+            ),
+        ),
+        # 103 calls across 71 templates when the row landed (2026-10-10).
+        min_matches=100,
+        must_find=frozenset(
+            {
+                "ansible/roles/k8s/bento-pdf/templates/deployment.yaml.j2",
+                "ansible/roles/k8s/image-builder/templates/build-job.yaml.j2",
             }
         ),
     ),
