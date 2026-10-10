@@ -168,6 +168,30 @@ def test_the_green_gate_passes_a_fix_and_refuses_an_edited_red_test(tmp_path):
     assert git_out(repo, "rev-parse", "HEAD") != red
 
 
+def test_the_green_gate_passes_a_fix_that_appends_a_test_to_a_red_file(tmp_path):
+    """#4213: the fix round added the test a reviewer asked for to the red file (#4214)."""
+    repo, base, red = _repo(tmp_path, **{"tests/test_mod.py": OLD_TEST + NEW_TEST})
+    gate = red_gate(run, repo, base, red)
+    extra = "\n\ndef test_three():\n    from mod import double\n\n    assert double(3) == 6\n"
+    commit(
+        repo,
+        "fix",
+        **{"mod.py": FIXED, "tests/test_mod.py": OLD_TEST + NEW_TEST + extra},
+    )
+    assert green_gate(run, repo, red, gate) == ""
+
+
+def test_the_green_gate_refuses_an_edit_to_a_test_already_in_a_red_file(tmp_path):
+    """#4183: the fix edited a pre-existing test in the red file instead of the code."""
+    repo, base, red = _repo(tmp_path, **{"tests/test_mod.py": OLD_TEST + NEW_TEST})
+    gate = red_gate(run, repo, base, red)
+    weakened = OLD_TEST.replace("double(0) == 0", "True") + NEW_TEST
+    commit(repo, "fix", **{"mod.py": FIXED, "tests/test_mod.py": weakened})
+    assert green_gate(run, repo, red, gate).endswith(
+        "tests/test_mod.py changes or removes `def test_zero`"
+    )
+
+
 def test_the_green_gate_refuses_an_uncommitted_edit_the_pushed_head_lacks(tmp_path):
     """pytest runs the tree and the PR ships HEAD, so a vacuous uncommitted test is no pass."""
     repo, base, red = _repo(tmp_path, **{"tests/test_new.py": NEW_TEST})
