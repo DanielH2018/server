@@ -631,7 +631,11 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     records the role in `manual_plane` under a guessed tag or playbook. A failed or timed-out
     run is transient, so a range carrying a setup role parks with no fast-forward and the next
     tick derives again. Any other answer is deterministic and never parks (#4326). A role whose
-    directory the range deletes is dropped, as a deleted k8s role is. A role the routing came
+    directory the range deletes is dropped, as a deleted k8s role is. A line an earlier tick
+    wrote before a later range deleted its role is dropped at the start of the next tick by
+    `deploy_defer.drop_deleted_manual_plane` (#4334). A line is keyed by the role's tag, so it
+    goes only when its key is neither a role directory at `HEAD` nor a tag the routing places.
+    A failed routing or an unreadable listing drops nothing. A role the routing came
     back without placing is recorded in `manual_plane` with the playbook `unrouted`, keyed by
     its directory name. `clear-owed manual_plane <role>` matches that key, and the tick clears
     the line itself once a later routing places the role and an apply runs its tag.

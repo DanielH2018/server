@@ -219,3 +219,19 @@ def setup_role_host(role: str) -> str | None:
     """The one host a role the tick's host does not run is gated onto, else None."""
     route = routing().get(role)
     return route.host if route else None
+
+
+def keys_naming_no_role(keys: set[str], present: set[str]) -> set[str]:
+    """The `manual_plane` keys that name no setup role left at the routed ref (#4334).
+
+    A key is a role's tag (`chezmoi` for `chezmoi_setup`) or, for an unrouted line, its
+    directory. A deleted role's route is gone with it, so the tag cannot be mapped back to
+    the directory; a key is gone when it is neither a directory in `present` nor the tag of
+    a role the routing places. A failed or empty routing, or an empty listing, names none:
+    `chezmoi` would otherwise read as deleted beside a live `chezmoi_setup`.
+    """
+    routes = routing()
+    if routing_failed() or not routes or not present:
+        return set()
+    tags = {r.tag for r in routes.values()}
+    return {k for k in keys if k not in present and k not in tags}
