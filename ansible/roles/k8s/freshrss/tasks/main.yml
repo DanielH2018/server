@@ -4,8 +4,6 @@
     name: k8s/manifests
   vars:
     manifests_service: freshrss
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
-    manifests_prune: true
     # The feed cache is nginx, and nginx rereads conf.d only on start or SIGHUP. Its config
     # arrives as a ConfigMap this role renders, so kubelet updates the file on disk and nothing
     # tells nginx: an edited cache config applies, reports changed, and never takes effect.

@@ -10,10 +10,8 @@
   vars:
     manifests_service: wg-easy
     manifests_rollout: wg-easy
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
     # Secret and PersistentVolumeClaim are outside the prune allowlist, so neither the claim
     # holding the server keypair nor the orphaned wg-easy-env Secret below can be pruned.
-    manifests_prune: true
     manifests_files:
       - deployment.yaml
       - service.yaml

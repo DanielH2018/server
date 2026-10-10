@@ -24,8 +24,6 @@
     name: k8s/manifests
   vars:
     manifests_service: valheim
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
-    manifests_prune: true
     manifests_rollout: valheim
     # The shared default is not enough for the first boot: the pod is not Ready until SteamCMD
     # has pulled ~1.8 G into the empty install PVC and the world has loaded. The number lives in

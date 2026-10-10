@@ -8,8 +8,6 @@
     name: k8s/manifests
   vars:
     manifests_service: bazarr
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
-    manifests_prune: true
     manifests_files:
       # Listed FIRST so it exists before the pod can be scheduled. Ordering within a single
       # `kubectl apply -f <dir>` is not guaranteed, which is why the pod also cannot be reached

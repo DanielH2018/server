@@ -16,9 +16,7 @@
     name: k8s/manifests
   vars:
     manifests_service: dri-device-plugin
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
     # The DaemonSet lives in kube-system, so the armed apply and its prune run there.
-    manifests_prune: true
     manifests_prune_namespace: kube-system
     manifests_files:
       - daemonset.yaml

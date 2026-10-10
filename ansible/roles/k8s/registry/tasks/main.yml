@@ -9,10 +9,9 @@
       - networkpolicy.yaml
       - deployment.yaml
       - service.yaml
-    # Live prune (see k8s/manifests defaults/main.yml manifests_prune DECIDED comment). The
+    # The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The
     # render stamps homelab/role on every document, the k8s_claims claim included; the fixed
     # allowlist never names PersistentVolumeClaim, so the claim is applied but never pruned.
-    manifests_prune: true
 
 # THE SECOND ROLE THAT MUST WAIT INLINE (crowdsec is the other; see its header). k8s/manifests
 # deliberately does NOT wait — it queues the rollout for k8s/manifests/tasks/drain.yml at the end of the
@@ -58,7 +57,7 @@
 # belongs to `k8s/manifests`, whose prune task deletes every file in it that the caller does
 # not name in `manifests_files`/`manifests_secret_files`. These four are this role's own files
 # rather than manifests of the workload, so no caller names them and the prune would delete
-# all four at the start of every registry deploy. `manifests_prune: true` above is the
+# all four at the start of every registry deploy. The `manifests_prune` default is the
 # LIVE-object prune and is orthogonal to that staged-file prune.
 #
 # `gc-job.yaml` is why this is more than cosmetic. `registry-gc.sh` reads it at CRON time, not

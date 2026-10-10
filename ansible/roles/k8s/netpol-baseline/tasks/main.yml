@@ -121,8 +121,6 @@
   vars:
     manifests_service: netpol-baseline
     manifests_rollout: ""
-    # Live prune: a policy dropped from manifests_files is deleted on the next deploy (#3388).
-    manifests_prune: true
     manifests_files:
       - networkpolicy.yaml
       - networkpolicy-traefik.yaml

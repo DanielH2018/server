@@ -35,8 +35,6 @@
     name: k8s/manifests
   vars:
     manifests_service: n8n
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
-    manifests_prune: true
     # deployment-runners.yaml is a second Deployment running a second built image. Without this
     # nothing rolls it: the rebuilt-image trigger keys on manifests_service (`n8n`) while
     # image-builder records `n8n-runners`, and the rollout targets one name regardless.

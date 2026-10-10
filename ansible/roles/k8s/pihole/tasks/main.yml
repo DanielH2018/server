@@ -47,11 +47,10 @@
     manifests_deferred_files:
       - deployment-2.yaml
     manifests_deferred_dir_name: pihole-instance-2
-    # Live prune (#3388). The armed render stamps `homelab/role: pihole` on the four files and the
-    # Secret above, and on both claims. Instance 2's Deployment stays out of reach: the deferred
+    # The default prune (#3388): the armed render stamps `homelab/role: pihole` on the four
+    # files and the Secret above, and on both claims. Instance 2's Deployment stays out of reach: the deferred
     # render does not go through the labelling wrapper, so pihole-2 carries no `homelab/role`
     # label and `-l homelab/role=pihole` cannot select it.
-    manifests_prune: true
 
 # Instance 2's Deployment is applied SEPARATELY, from its own directory, and the apply above
 # therefore carries instance 1 alone.
