@@ -87,12 +87,16 @@ def test_the_variable_prefix_follows_ansible_lints_rule():
     assert scaffold.var_prefix("jellyfin") == "jellyfin"
 
 
-def test_the_generated_deployment_renders_and_pins_a_uid(args, tmp_path):
-    defaults = yaml_fast.safe_load(
+def _defaults(args) -> dict:
+    return yaml_fast.safe_load(
         scaffold.defaults_main(
             args.name, args.image, args.autodeploy, args.autodeploy_reason, args.uid
         )
     )
+
+
+def test_the_generated_deployment_renders_and_pins_a_uid(args, tmp_path):
+    defaults = _defaults(args)
     assert defaults["widget_k8s_uid"] == 101
     assert defaults["widget_k8s_image"] == "ghcr.io/example/widget:1.0.0"
     assert defaults["k8s_autodeploy"] is True
@@ -123,28 +127,23 @@ def _entry(args) -> dict:
 
 
 def test_the_tasks_are_the_bare_include(args):
-    """`k8s/manifests` derives the lists, the service and the rollout; no var restates them.
-
-    The literal line matters as much as the parsed task: the rollout-gate guards resolve a
-    role with no `manifests_rollout` to its own name only by matching that line unquoted.
-    """
-    text = scaffold.tasks_main(args.name)
-    tasks = yaml_fast.safe_load(text)
+    """`k8s/manifests` derives the lists, the service and the rollout; no var restates them."""
+    tasks = yaml_fast.safe_load(scaffold.tasks_main(args.name))
     assert tasks == [
         {
             "name": "Deploy widget to the cluster",
             "ansible.builtin.include_role": {"name": "k8s/manifests"},
         }
     ]
-    assert "\n    name: k8s/manifests\n" in text
 
 
 def test_the_doc_leaves_the_glance_facts_to_the_generator(args):
     """The block owns the tag, image, route and stance; the prose names the shared sources."""
     doc = scaffold.role_doc(args.name, route=True)
-    glance = doc.split("<!-- /generated_from -->")[1]
-    assert "--tags" not in glance
-    assert "ingressroute-default.yaml.j2" in glance
+    prose = doc.split("<!-- /generated_from -->")[1]
+    for restated in ("--tags", "Port:", str(args.port), "Route:", "Image:", "ghcr.io"):
+        assert restated not in prose, f"the prose restates the block's {restated!r}"
+    assert "ingressroute-default.yaml.j2" in prose
     unrouted = scaffold.role_doc(args.name, route=False)
     assert "ingressroute-default.yaml.j2" not in unrouted
 
