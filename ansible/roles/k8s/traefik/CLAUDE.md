@@ -87,9 +87,11 @@ origin-pull, the 421 incidents).
   handling ORs group bits into every file on the volume at mount time, which flips
   Traefik's own `0600` back to `0660` and makes it refuse to load the ACME account.
 - **Three more initContainers set the CrowdSec sidecars up, and their ORDER is load-bearing**:
-  the hub-tree rsync runs before the config seed, or the agent drops `geoip-enrich` on every
-  start (#1211). The second seeds the bouncer's config (`traefik_k8s_manage_crowdsec`), which
-  is why traefik's `containers_list` entry declares `depends_on: [crowdsec]`. The third copies
+  the hub-tree copy runs before the config seed, or the agent drops `geoip-enrich` on every
+  start (#1211). The second seeds the agent sidecar's `/etc/crowdsec`: its acquisition and its
+  whitelists. The traefik `containers_list` entry declares `depends_on: [crowdsec]` because that
+  sidecar logs into the crowdsec engine's LAPI, whose machine credential the crowdsec role
+  registers. The third copies
   the image's datafiles world-readable; it and the first are the pod's two `runAsUser: 0`
   containers. All three and the agent sidecar render from `ansible/templates/crowdsec-agent.yml.j2`,
   which authelia's pod shares. `docs/traefik-plugins-and-startup.md` has what each one is

@@ -91,7 +91,7 @@ both, and the gaps the alive monitor leaves.
 
 Two pure modules, `files/notify_logic.py` and `files/pending_logic.py`, with
 `files/renovate_notify.py` as the fetch/persist/post shell. **A new module here needs BOTH
-ship-list sites in `tasks/main.yml`**: the copy loop and the `stamp_deployed_pairs` drift
+ship-list sites in `tasks/code.yml`**: the copy loop and the `stamp_deployed_pairs` drift
 list. `host_lib.py` is copied in from `roles/setup/common/files/` — edit it there, not here.
 
 ```bash
