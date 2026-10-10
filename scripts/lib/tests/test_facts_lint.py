@@ -1,5 +1,7 @@
 """Each lint rule as a clean/flagged pair over a one-file repo."""
 
+import json
+
 import pytest
 
 from lib.git_testing import git, init_repo
@@ -65,6 +67,41 @@ def test_dir_with_slash_is_clean(tmp_path):
     (repo / "d" / "sub" / "g.txt").write_text("g\n")
     git(repo, "add", "d/sub")
     assert not lint_sections(repo, None)
+
+
+_RENOVATE = {
+    "customManagers": [
+        {
+            "managerFilePatterns": ["/(^|/)v\\.yml$/"],
+            "matchStrings": [
+                "_image:\\s*(?<depName>[^:\\s@]+):(?<currentValue>[^\\s@]+)"
+            ],
+        }
+    ]
+}
+
+
+def _pinned_repo(tmp_path, doc):
+    repo = _repo(tmp_path, doc)
+    (repo / "renovate.json").write_text(json.dumps(_RENOVATE))
+    (repo / "d" / "v.yml").write_text("app_image: org/app:1.2\napp_port: 80\n")
+    git(repo, "add", "-A")
+    return {(f.unit, f.rule) for f in lint_sections(repo, None)}
+
+
+def test_renovate_pin_is_flagged(tmp_path):
+    assert ("CLAUDE.md#A", "renovate-pin") in _pinned_repo(
+        tmp_path, "## A\n`d/v.yml:app_image`\n"
+    )
+
+
+def test_renovate_pin_file_and_unmanaged_key_are_clean(tmp_path):
+    assert (
+        _pinned_repo(
+            tmp_path, "## A\n`d/v.yml` holds `app_image`; `d/v.yml:app_port`\n"
+        )
+        == set()
+    )
 
 
 def test_unresolved_atom_is_flagged(tmp_path):
@@ -173,6 +210,7 @@ def test_rule_census():
             "date-as-verification",
             "duplicate-heading",
             "unbalanced-fence",
+            "renovate-pin",
         }
     )
     assert WARN_RULES == frozenset({"count-as-fact", "one-way-test"})

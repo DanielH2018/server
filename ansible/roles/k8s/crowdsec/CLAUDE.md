@@ -89,7 +89,7 @@ one request the WAF never sees, about 0.05% of traffic. Nothing here fixes it, a
 sources (`ansible/roles/k8s/crowdsec/templates/node-agent-acquis.yaml.j2`) lose lines silently.
 
 **Re-check #2124 on the next `crowdsec_k8s_image` bump**
-(`ansible/inventory/group_vars/all.yml:crowdsec_k8s_image`): a release carrying
+(set in `ansible/inventory/group_vars/all.yml`): a release carrying
 crowdsecurity/crowdsec#4678 closes it. Verify with
 `probe.py loki-query '{container="crowdsec-agent"} |= "UnmarshalJSON"' --since 24h` returning
 nothing.

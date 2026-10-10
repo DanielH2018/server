@@ -28,6 +28,7 @@ from .citations import (
     tracked_files,
 )
 from .lock import LOCK_REL, lock_tampered
+from .pins import pinned_keys
 
 RULES = frozenset(
     {
@@ -41,6 +42,7 @@ RULES = frozenset(
         "date-as-verification",
         "duplicate-heading",
         "unbalanced-fence",
+        "renovate-pin",
     }
 )
 WARN_RULES = frozenset({"count-as-fact", "one-way-test"})
@@ -82,6 +84,13 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
     """
     out: list[LintFinding] = []
     tracked = tracked_files(repo)
+    pins: dict[str, frozenset[str]] = {}
+
+    def _pins(rel: str) -> frozenset[str]:
+        if rel not in pins:
+            pins[rel] = pinned_keys(repo, rel)
+        return pins[rel]
+
     if lock_tampered(repo / LOCK_REL):
         out.append(
             _f(
@@ -166,6 +175,14 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
                 if not resolved:
                     out.append(
                         _f(sec.key, "unresolved-atom", f"`{c.raw}` does not resolve")
+                    )
+                elif c.form == "yaml" and c.selector.split(".")[0] in _pins(c.path):
+                    out.append(
+                        _f(
+                            sec.key,
+                            "renovate-pin",
+                            f"`{c.raw}` is a value Renovate bumps; cite `{c.path}` and name the key in prose",
+                        )
                     )
                 elif c.form == "test" and sec.key not in backrefs(c, repo):
                     out.append(

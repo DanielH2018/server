@@ -48,6 +48,13 @@ key, a decision marker or a test node to pin content. A citation is support only
 names a tracked file or a directory holding one, so an untracked path is prose. The reasons
 are in the module docstrings under `scripts/lib/facts/`.
 
+A YAML key whose value Renovate bumps is not citable as a YAML atom. Every bump would move the
+atom, and the Renovate PR cannot run `verify`, so it stays red until a person commits to it
+(#4012). Cite the file as a path atom and name the key in prose. The lint's `renovate-pin`
+rule derives the managed keys from `renovate.json`'s `customManagers`
+(`scripts/lib/facts/pins.py`). A claim that must hold for one specific version belongs in a
+test, which the bump PR runs.
+
 ## Commands
 
 `docs/facts.lock` records the hashes each verified section was checked against. The tool
