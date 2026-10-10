@@ -35,8 +35,8 @@ def test_a_scaffolded_deployment_under_another_name_reads_as_ungated(
 ) -> None:
     """Control: the check above goes red when the Deployment and the role name disagree."""
     role = _scaffolded_widget(tmp_path)
-    template = role / "templates" / "deployment.yaml.j2"
-    template.write_text(
-        template.read_text().replace("  name: widget\n", "  name: widget-app\n", 1)
+    args = scaffold.parse_args(["widget", "--image", "img:1", "--port", "8080"])
+    (role / "templates" / "deployment.yaml.j2").write_text(
+        scaffold.deployment_template("widget-app", args.strategy, args.priority_class)
     )
     assert _ungated_deployments(role) == ["deployment.yaml.j2"]
