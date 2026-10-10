@@ -448,7 +448,9 @@ class Pipeline:
                 delta = self._claude(
                     "review-delta",
                     self._reviewer(),
-                    delta_prompt(issues, head, after, self.record.actionable, fix.text),
+                    delta_prompt(
+                        issues, base, head, after, self.record.actionable, fix.text
+                    ),
                 )
                 left, delta_error = findings_of(delta)
                 # A failed delta review proves nothing was resolved.

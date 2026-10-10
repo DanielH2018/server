@@ -58,6 +58,7 @@ LABELS: dict[str, tuple[str, str]] = {
         "6c7086",
         "Reserved for the operator; no Claude session claims or fans this out",
     ),
+    "review-leftover": ("fab387", "Left after a fan-out fix round; next ranks it last"),
     "claimed": (
         "9399b2",
         "A session is working this issue; see the newest Claim: comment",
@@ -536,6 +537,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "verify_by": parse_verify_by(issue.get("body") or "") is not None,
                 "paths": cited_paths(issue.get("body") or ""),
                 "manual": "manual" in names,
+                "review_leftover": "review-leftover" in names,
                 "not_before": day.isoformat() if day else None,
                 "claimed": current_claim(issue),
                 "first_seen": (issue.get("createdAt") or "")[:10],
@@ -568,7 +570,7 @@ def pickable(
         and r["number"] not in live_claims
         and r["number"] not in pr_refs
     ]
-    return sorted(rows, key=sort_key)
+    return sorted(rows, key=lambda r: (r["review_leftover"], sort_key(r)))
 
 
 def deferred(issues: list[dict], *, today: date) -> list[dict]:

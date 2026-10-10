@@ -89,7 +89,11 @@ def test_an_actionable_finding_runs_a_fix_a_delta_review_and_the_landing_in_orde
     assert "land.sh" not in review_stdin
     for argv, _, _ in (run.claude[2], run.claude[4]):
         assert argv[-2:] == ["--resume", "sid-1"]
-    assert "git diff aaa..bbb" in run.claude[3][1]
+    # The delta reviewer gets the fix round and the whole change it sits in, each named (#3954).
+    assert "The fix round: `git diff aaa..bbb`" in run.claude[3][1]
+    assert (
+        "The whole change, the fix included: `git diff base0...bbb`" in run.claude[3][1]
+    )
     assert "./scripts/deploy_tools/land.sh" in run.claude[4][1]
     assert "1 findings, 1 actionable" in run.comments[0]
     assert "0 left after the fix round" in run.comments[0]

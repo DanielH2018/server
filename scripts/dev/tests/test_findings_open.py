@@ -155,6 +155,15 @@ def test_open_cli_exits_3_on_refuted(tmp_path, issue, make_tools):
     assert not calls.gh
 
 
+def test_open_review_leftover_applies_the_label(tmp_path, make_tools):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    tools, calls = make_tools(Fakes(issues=[]))
+    assert findings.main([*_open_argv(body), "--review-leftover"], tools) == 0
+    create = next(c for c in calls.gh if c[:2] == ["issue", "create"])
+    assert "review-leftover" in create
+
+
 def test_open_cli_exits_3_on_accepted(tmp_path, capsys, issue, make_tools):
     """Exit 3 is what the review skill reads as 'already decided'; 0 would be silent."""
     body = tmp_path / "b.md"
