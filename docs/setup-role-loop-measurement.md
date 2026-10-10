@@ -11,7 +11,7 @@ the per-block tags inside each role, which the deployer's narrowed setup apply s
 **The loop selects the same tasks, in the same order, for every tag on every host.** #3734 can
 loop at runtime; tag selection does not force a generated playbook. A runtime loop still has
 costs that a generated playbook avoids. Ansible can no longer list the playbook's tasks or tags,
-13 modules and tests read the `roles:` list as text and would have to change, and a cross-role
+18 test modules and the 4 production readers behind them parse the `roles:` list and would have to change, and a cross-role
 notify into a gated role fails the play instead of being skipped. *What the loop costs* weighs
 them against the generator a generated playbook needs.
 
@@ -133,24 +133,39 @@ The harness and the probe leave two differences unmeasured, and neither applies 
   tag miss is told apart from a false `when`. The k3s listing tests read `k3s-bringup.yml` and
   are unaffected. The diagnostic for `initial_setup.yml` would need a replacement, such as a
   static `--list-tags` derived from the tasks tree.
-- **13 modules and tests read `initial_setup.yml`'s `roles:` list.** The production readers are
-  `narrow_setup_playbook.playbook_roles`, `narrow_setup_index.foreign_tags`, `land_reach` and
-  `scripts/docs/glance_facts.py`. The tests are `test_every_playbook_task_is_tag_selectable`,
-  `test_setup_roles_the_tick_host_skips`, `test_initial_setup_roles_are_visible_to_the_deployer`,
-  `test_setup_handlers_resolve` and five `test_land_reach*` files. Under a loop, `playbook_roles`
-  returns the empty set, so `narrow_setup.role_tags` refuses every narrowing until it reads
-  `setup_roles:` instead.
+- **18 test modules go red under a loop, 51 tests in all.** This count was measured, not
+  grepped. The run replaced `initial_setup.yml` with the looped shape from *Method*, keeping
+  the play's preamble, and ran `uv run pytest` against it. The same suite on the static playbook
+  failed 2 live-service UI tests and nothing else. The modules that fail only under the loop:
+    - `ansible/tests/deploy/`: `test_setup_role_playbooks_agree` (2),
+      `test_setup_roles_the_tick_host_skips` (1).
+    - `ansible/tests/setup/`: `test_gitops_deploy_reaps_on_non_deployer` (1),
+      `test_initial_setup_roles_are_visible_to_the_deployer` (1),
+      `test_k3s_host_has_no_docker` (1), `test_nut_host_secondary` (1),
+      `test_setup_handlers_resolve` (3).
+    - `scripts/deploy_tools/tests/`: `test_land_nut_host_reaches_both_hosts` (2),
+      `test_land_reach` (6), `test_land_reach_block_gate` (7),
+      `test_land_reach_changed_tasks` (3), `test_land_reach_handlers` (2),
+      `test_land_reach_repo_shipped_files` (10), `test_land_reach_role_tests` (5),
+      `test_land_reach_vars_files` (3), `test_narrow_setup` (1), `test_narrow_setup_edges` (1).
+    - `scripts/docs/tests/`: `test_gen_role_glance` (1).
+
+  Behind those tests sit the production readers `narrow_setup_playbook.playbook_roles`,
+  `narrow_setup_index.foreign_tags`, `land_reach` and `scripts/docs/glance_facts.py`. Under a
+  loop, `playbook_roles` returns the empty set, so `narrow_setup.role_tags` refuses every
+  narrowing until it reads `setup_roles:` instead. `test_nut_host_secondary` asserts the gate's
+  text, so it passes again only if the new encoding keeps that text.
 - **`nut_host` does not fit the four placements the issue proposes.** Its gate is
   `inventory_hostname == ups_host or nut_host_secondary_armed | bool`, a `host:` and a `flag:`
   joined by `or`. The list needs a fifth placement, or a per-role gate variable as the
   measurement used.
 
 A generated playbook avoids the first two costs. It still writes a static `roles:` list, so
-listing works and the 13 readers stay unchanged. In exchange it needs a generator and a drift
+listing works and the `roles:` readers stay unchanged. In exchange it needs a generator and a drift
 check. #3734 therefore chooses between two trade-offs, because tag selection is equal in both
 shapes:
 
-- **Loop at runtime.** No generator, but 13 readers change and listing is lost.
+- **Loop at runtime.** No generator, but the `roles:` readers change (18 test modules, 51 tests) and listing is lost.
 - **Generate the playbook.** Readers and listing are kept, but a generator and its drift check
   are added.
 
