@@ -301,7 +301,8 @@ still opens PRs, and the operator lands them.
 
 **Decisions (operator, 2026-10-09):**
 
-- **The agent gets a subset of the operator's user-level config.** That subset is the user
+- **The agent gets a subset of the operator's user-level config.** On daniel-box,
+  [The operator's dotfiles](#the-operators-dotfiles) replaced it on 2026-10-10. That subset is the user
   `CLAUDE.md`, the output style, the rules, the skills and the `env` block of `settings.json`
   (operator, 2026-10-09). The `env` copy leaves out `SUDO_ASKPASS`, and the role sets the
   pytest cap from its own variable. The agent's telemetry carries the resource attribute
@@ -612,6 +613,68 @@ ServiceAccount every request whose `request.dryRun` is false.
 
 **Unverified:** whether this k3s version's admission CEL exposes `request.dryRun`, and whether
 the dry-run path's kubectl calls can run without `become`.
+
+## The operator's dotfiles
+
+**Decision (operator, 2026-10-10):** the agent takes the operator's dotfiles through chezmoi,
+with the dotfiles repo's `agent` flag on. This replaces the slice 4 subset. An audit found that
+the subset left the agent with fewer safeguards than the operator: none of the operator's 32
+user hooks, 6 of the 37 top-level settings keys, and none of the user agents, commands or CLIs
+its imported `CLAUDE.md` names (#4193, #4194, #4195). The subset was hand-picked, so each new
+operator tool reached the agent only when someone remembered to copy it.
+
+The dotfiles decide what an agent does not get (DanielH2018/dotfiles#809). Under the flag, they
+leave alone what Ansible owns for the agent: its login profile, git identity and signers, ssh,
+and its own `CLAUDE.md`. They render the user `CLAUDE.md` to `~/.claude/operator/CLAUDE.md`
+instead, which the agent's own file imports. They also skip the scripts that need sudo or a
+terminal, the uv and prek install that Ansible pins, and daniel-box's once-per-host timers. The
+rendered `settings.json` drops `SUDO_ASKPASS`, names the `<host>-<user>` artifacts path and
+labels telemetry `process.owner=<user>`. Every guard hook stays. `chezmoi-guard` and
+`serve-artifacts` are off: the agent's source is a clone it only pulls, and the artifact port is
+the operator's.
+
+`tasks/agent_dotfiles.yml` installs it, and `claude_code_agent_dotfiles` switches it. The
+steps:
+
+1. Copy the operator's pinned chezmoi.
+1. Seed the three prompt answers.
+1. Clone the dotfiles as the agent's chezmoi source.
+1. Run `files/claude-dotfiles-sync.sh`. `<name>-dotfiles-sync.timer` runs the same script every
+   15 minutes, since a dotfiles merge applies no role here.
+1. Delete the subset the script moved aside.
+
+The script has three guards:
+
+- It refuses a source that does not render `is-agent` as true. Applied anyway, such a source
+  would write the operator's `.gitconfig` over the agent's identity. The refusal is not fatal
+  to the apply, so a host can switch the flag on before the dotfiles change lands.
+- After that check, and only then, it renames each root-owned subset tree to
+  `~/.claude/.subset-copy-<name>`. chezmoi, running as the agent, cannot write into a root-owned
+  directory, and the agent cannot delete one. It owns `~/.claude`, though, so it can rename one
+  in place, and the role deletes the renamed tree on its next apply. A refused source therefore
+  leaves the subset where it was, and the agent always has one of the two.
+- It applies in two passes, every directory but `~/.claude` and then everything but
+  directories. The source names the directory `private_dot_claude`, and a plain apply sets its mode
+  to 0700. That would cut the operator off from the agent's memory store and artifacts, which
+  `agent_github.yml` opens at 0710 for the operator's group.
+
+**What the agent loses:** root ownership of its copied config. The subset was root-owned, which
+stopped an injected session from editing it in place. chezmoi writes as the agent, so the agent
+owns the files, and an edit lasts until the next sync, at most 15 minutes. The root ownership
+never stopped a rename of the whole directory, so the gap it closed was narrow. The hooks come
+from the dotfiles repo, where DanielClaudeBot can merge its own PRs. They guard against mistakes,
+not against a hostile session, as the copied skills already did.
+
+**Check:** a scratch run of the script as `claude`, against the dotfiles branch, applied the
+agent variant and left `~/.claude` at the mode it started with. A pre-existing `.profile` and `.gitconfig` kept
+their contents. The rendered `settings.json` carried 10 hook events, every guard hook among
+them, with `SUDO_ASKPASS` unset, `CLAUDE_ARTIFACTS_HOST=daniel-box-claude` and
+`OTEL_RESOURCE_ATTRIBUTES=process.owner=claude`. A second run was a no-op, with an empty
+`chezmoi diff`. Against `main`, which predates the flag, the script exited 1 and applied
+nothing.
+
+**Rollback:** delete `claude_code_agent_dotfiles: true` from daniel-box's `host_vars`. The next
+apply stops the timer, removes its units, and installs the subset again.
 
 ## More than one agent
 

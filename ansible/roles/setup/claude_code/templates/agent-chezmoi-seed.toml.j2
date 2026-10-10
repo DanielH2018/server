@@ -1,0 +1,8 @@
+# Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
+# The answers to the dotfiles' .chezmoi.toml.tmpl prompts for the {{ claude_code_agent_user }}
+# agent user. claude-dotfiles-sync.sh copies this over chezmoi.toml and runs `chezmoi init`,
+# which renders the full config from the template with these answers, on every run.
+[data]
+    work = false
+    profile = "{{ claude_code_agent_dotfiles_profile }}"
+    agent = true

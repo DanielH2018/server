@@ -34,6 +34,7 @@ PRIMARY = {
     "operator_read": True,
     "operator_config": True,
     "memory_seed": True,
+    "dotfiles": True,
 }
 SECOND = {
     "name": "claude2",

@@ -1,0 +1,210 @@
+---
+# The operator's dotfiles, applied to the agent user by chezmoi, with the dotfiles repo's
+# `agent` flag on. The operator chose this over the hand-picked copy in agent_operator_config.yml
+# (2026-10-10, #4193-#4195): the agent gets the operator's guard hooks, settings, agents,
+# commands and CLIs by construction, and the dotfiles repo decides what an agent does not get.
+# docs/claude-agent-user.md, "The operator's dotfiles", has the decision and the trade-off.
+#
+# Imported from agent.yml per agent. The way out is `dotfiles: false` (the primary's
+# claude_code_agent_dotfiles): its arm below removes the units, and agent.yml then installs the
+# copy again, which replaces what chezmoi wrote. Every path under the home gets the owner and
+# group the shared agent_user.yml's closing chown sets.
+
+- name: Look for the operator's chezmoi
+  ansible.builtin.stat:
+    path: /home/{{ sys_user }}/.local/bin/chezmoi
+  register: claude_code_agent_chezmoi_src
+  become: true
+  when: claude_code_agent_dotfiles
+
+# The release chezmoi_setup pins, copied as uv is in agent_user.yml rather than pinned twice.
+- name: Refuse to apply the dotfiles without the operator's chezmoi
+  ansible.builtin.assert:
+    that: claude_code_agent_chezmoi_src.stat.exists
+    fail_msg: >-
+      dotfiles is on for {{ claude_code_agent_user }}, but /home/{{ sys_user }}/.local/bin/chezmoi
+      does not exist. Apply initial_setup.yml --tags chezmoi first, or switch dotfiles off.
+    quiet: true
+  when: claude_code_agent_dotfiles
+
+- name: Give the agent user the operator's chezmoi
+  ansible.builtin.copy:
+    src: /home/{{ sys_user }}/.local/bin/chezmoi
+    dest: "{{ claude_code_agent_user_home }}/.local/bin/chezmoi"
+    remote_src: true
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+  when: claude_code_agent_dotfiles
+
+- name: Create the agent user's chezmoi config directory
+  ansible.builtin.file:
+    path: "{{ claude_code_agent_user_home }}/.config/chezmoi"
+    state: directory
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
+  become: true
+  when: claude_code_agent_dotfiles
+
+# The answers to the dotfiles' three prompts. files/claude-dotfiles-sync.sh renders chezmoi.toml
+# from this file on every run, so the `agent` answer survives a render from a template that
+# predates it.
+- name: Seed the agent user's chezmoi answers
+  ansible.builtin.template:
+    src: agent-chezmoi-seed.toml.j2
+    dest: "{{ claude_code_agent_user_home }}/.config/chezmoi/seed.toml"
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  when: claude_code_agent_dotfiles
+
+- name: Seed the agent user's chezmoi config for its first init
+  ansible.builtin.copy:
+    src: "{{ claude_code_agent_user_home }}/.config/chezmoi/seed.toml"
+    dest: "{{ claude_code_agent_user_home }}/.config/chezmoi/chezmoi.toml"
+    remote_src: true
+    force: false
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  when: claude_code_agent_dotfiles and not ansible_check_mode
+
+- name: Clone the dotfiles as the agent user's chezmoi source
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - "{{ claude_code_agent_user_home }}/.local/bin/chezmoi"
+      - init
+      - --no-tty
+      - "{{ claude_code_agent_dotfiles_repo }}"
+    creates: "{{ claude_code_agent_user_home }}/.local/share/chezmoi/.git"
+  environment:
+    HOME: "{{ claude_code_agent_user_home }}"
+    # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the agent cannot write.
+    TMPDIR: /tmp
+  become: true
+  when: claude_code_agent_dotfiles
+
+- name: Install the agent user's dotfiles sync script
+  ansible.builtin.copy:
+    src: claude-dotfiles-sync.sh
+    dest: /usr/local/bin/claude-dotfiles-sync.sh
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  when: claude_code_agent_dotfiles
+
+# Never fatal, for the reason the clone pull in agent.yml gives: the GitOps tick applies this
+# role, and a red task holds the deployer over the agent's own config. The script refuses to
+# apply a source that does not render the agent variant, and the report below names it.
+- name: Apply the operator's dotfiles to the agent user
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - /usr/local/bin/claude-dotfiles-sync.sh
+      - "{{ claude_code_agent_user_home }}/.local/bin/chezmoi"
+      - "{{ claude_code_agent_user_home }}/.config/chezmoi/seed.toml"
+  environment:
+    HOME: "{{ claude_code_agent_user_home }}"
+    USER: "{{ claude_code_agent_user }}"
+    TMPDIR: /tmp
+    # The unit's PATH, so an apply and a timer run find the same tools.
+    PATH: "{{ claude_code_agent_user_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+  register: claude_code_agent_dotfiles_apply
+  changed_when: claude_code_agent_dotfiles_apply.stdout | default('') is search('^applied [0-9a-f]+\.\.', multiline=True)
+  failed_when: false
+  become: true
+  when: claude_code_agent_dotfiles and not ansible_check_mode
+
+# The script renames the root-owned subset aside before its first apply, because the agent
+# cannot delete it (files/claude-dotfiles-sync.sh). Root can.
+- name: Remove the subset the dotfiles sync moved aside
+  ansible.builtin.file:
+    path: "{{ claude_code_agent_user_home }}/.claude/.subset-copy-{{ item }}"
+    state: absent
+  loop: [operator, rules, output-styles, skills]
+  become: true
+  when: claude_code_agent_dotfiles
+
+- name: Report that the agent user's dotfiles were not applied
+  ansible.builtin.debug:
+    msg: >-
+      The dotfiles were not applied to {{ claude_code_agent_user }}:
+      {{ claude_code_agent_dotfiles_apply.stderr | default('') | trim }}.
+      It keeps the dotfiles an earlier run applied, or none.
+  when:
+    - claude_code_agent_dotfiles
+    - not ansible_check_mode
+    - claude_code_agent_dotfiles_apply.rc | default(0) != 0
+
+- name: Install the agent user's dotfiles sync units
+  ansible.builtin.template:
+    src: "claude-dotfiles-sync.{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ claude_code_agent_user }}-dotfiles-sync.{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: [service, timer]
+  become: true
+  when: claude_code_agent_dotfiles
+  notify: Reload systemd
+
+# Shares claude-rc's webhook file in /etc/claude-rc, which the role creates on every host.
+- name: Install the agent user's dotfiles sync failure alert
+  when: claude_code_agent_dotfiles
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  vars:
+    alert_unit_name: "{{ claude_code_agent_user }}-dotfiles-sync"
+    alert_unit_description: Alert when the {{ claude_code_agent_user }} agent user's dotfiles cannot be applied
+    alert_unit_message: "{{ claude_code_agent_user }}-dotfiles-sync failed on {{ inventory_hostname }}: the {{ claude_code_agent_user }} agent user keeps its last dotfiles. Check `journalctl -u {{ claude_code_agent_user }}-dotfiles-sync`."
+    alert_unit_env_dir: /etc/claude-rc
+
+- name: Enable and start the agent user's dotfiles sync timer
+  ansible.builtin.systemd:
+    name: "{{ claude_code_agent_user }}-dotfiles-sync.timer"
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: claude_code_agent_dotfiles
+
+# The way out. An expired account does not stop a `User=` service, so the units must go.
+- name: Check whether a dotfiles sync timer is installed for the agent user
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ claude_code_agent_user }}-dotfiles-sync.timer"
+  register: claude_code_agent_dotfiles_timer_file
+  become: true
+  when: not claude_code_agent_dotfiles
+
+- name: Stop and disable the agent user's dotfiles sync timer when its dotfiles are switched off
+  ansible.builtin.systemd:
+    name: "{{ claude_code_agent_user }}-dotfiles-sync.timer"
+    enabled: false
+    state: stopped
+  become: true
+  when:
+    - not claude_code_agent_dotfiles
+    - claude_code_agent_dotfiles_timer_file.stat.exists
+
+- name: Remove the agent user's dotfiles sync units when its dotfiles are switched off
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ claude_code_agent_user }}-{{ item }}"
+    state: absent
+  loop:
+    - dotfiles-sync.service
+    - dotfiles-sync.timer
+    - dotfiles-sync-alert.service
+  become: true
+  when: not claude_code_agent_dotfiles
+  notify: Reload systemd

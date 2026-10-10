@@ -48,14 +48,21 @@ leave the PR open, tell the operator it needs their review, and stop. Once they 
 head commit on GitHub, run the same command again. A push after their approval needs a new
 approval.
 {% endif %}
-{% if claude_code_agent_operator_config %}
+{% if claude_code_agent_operator_config or claude_code_agent_dotfiles %}
 
 ## The operator's own instructions
 
 The operator's user-level instructions are imported below from `operator/CLAUDE.md`, beside
-this file. This file wins where they conflict. You run none of the operator's hooks and have
-no sudo, so a line that names a hook, a `sudo` step or a tool in the operator's home does not
-apply to you.
+this file. This file wins where they conflict.
+{% if claude_code_agent_dotfiles %}
+You run the operator's dotfiles, applied by chezmoi under its `agent` flag, so the hooks and
+tools they name are yours too, except the ones that need sudo or the operator's home. You have
+no sudo, so a `sudo` step does not apply to you. `<name>-dotfiles-sync.timer` applies a dotfiles
+change within 15 minutes of its merge.
+{% else %}
+You run none of the operator's hooks and have no sudo, so a line that names a hook, a `sudo` step
+or a tool in the operator's home does not apply to you.
+{% endif %}
 
 @operator/CLAUDE.md
 {% endif %}

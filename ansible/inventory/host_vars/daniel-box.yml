@@ -945,6 +945,11 @@ claude_code_lander_enabled: true
 # The agent user's own Node, @playwright/mcp, Chromium and homelab-ui MCP registration, so a
 # phone session can check that a UI renders (#4058). False removes all four.
 claude_code_agent_homelab_ui_enabled: true
+# The agent user takes the operator's dotfiles through chezmoi, under their `agent` flag, in
+# place of the hand-picked config copy (operator, 2026-10-10; docs/claude-agent-user.md, "The
+# operator's dotfiles"). A dotfiles source without the flag is refused and changes nothing.
+# Rollback: delete this line; the copy comes back on the next apply.
+claude_code_agent_dotfiles: true
 # Slice 6 (docs/claude-agent-user.md): no Claude session runs as ubuntu here since the operator
 # said so on 2026-10-09. The login caps leave user-1000.slice, and claude-cgroup-metrics.sh
 # counts any `claude` process uid 1000 still runs, which the Memory tile pages on. Rollback:
