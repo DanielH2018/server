@@ -115,7 +115,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: monitor-bridge
     # The script ConfigMap is applied above from its own directory, unlabelled, so the prune
     # never selects it.
     manifests_rollout: monitor-bridge

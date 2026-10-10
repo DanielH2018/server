@@ -5,7 +5,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: scrutiny
     manifests_rollout: scrutiny-web
     # networkpolicy-influxdb.yaml is listed HERE rather than in netpol-baseline on purpose.
     # scrutiny-web panics rather than retries when InfluxDB is unreachable, so the policy

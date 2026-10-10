@@ -235,7 +235,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: authelia
     # DECIDED: authelia stays off `manifests_prune` (#3388, operator decision 2026-10-05). An
     # armed prune deletes what the lever below drops, so turning `authelia_k8s_redis_sessions`
     # off would delete the live redis Deployment, Service and NetworkPolicy the lever exists to

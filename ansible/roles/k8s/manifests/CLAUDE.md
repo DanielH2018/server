@@ -17,8 +17,7 @@ read it when you change one.
 - name: Deploy <service>
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_service: <service>          # also the manifest subdirectory
+  vars:                                   # manifests_service defaults to the role's name
     manifests_files: [deployment.yaml, service.yaml, ingressroute.yaml]
     manifests_secret_files: [secret.yaml] # rendered 0600 under no_log
     manifests_rollout: <deployment name>  # '' skips the wait entirely

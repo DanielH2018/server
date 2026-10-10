@@ -8,7 +8,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: wg-easy
     manifests_rollout: wg-easy
     # Secret and PersistentVolumeClaim are outside the prune allowlist, so neither the claim
     # holding the server keypair nor the orphaned wg-easy-env Secret below can be pruned.
