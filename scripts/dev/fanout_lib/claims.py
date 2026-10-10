@@ -93,6 +93,30 @@ def orchestrator_branch(tools: Tools, target: Target, verb: str) -> str | None:
     return branch
 
 
+def reap_register(tools: Tools, target: Target) -> None:
+    """Run `findings.py reap` on the batches' register before `launch` claims anything.
+
+    The issue-fanout skill had the orchestrator run `reap` by hand, as the one place anything
+    invokes it (#3943). Here it runs on every launch instead. A failed reap only warns: each
+    `claim` still reaps a stale claim on the issue it takes, and `reap` releases nothing when
+    its git read fails.
+    """
+    argv = ["reap"] if target.is_server else ["reap", "--repo", target.repo]
+    try:
+        proc = tools.findings(argv)
+    except subprocess.TimeoutExpired:
+        print("launch: reap timed out; claiming without it", file=sys.stderr)
+        return
+    for line in proc.stdout.splitlines():
+        print(f"launch: {line}")
+    if proc.returncode != 0:
+        detail = " ".join(proc.stderr.split())
+        print(
+            f"launch: reap failed ({proc.returncode}): {detail}; claiming without it",
+            file=sys.stderr,
+        )
+
+
 def claim_for_orchestrator(
     tools: Tools, issues: list[int], holder: str
 ) -> tuple[list[int], list[str]]:

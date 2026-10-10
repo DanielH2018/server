@@ -231,6 +231,8 @@ def cmd_launch(args, tools: Tools) -> int:
         for host in sorted({host for _, host in placed})
         for ln in _health_lines(tools, host)
     ]
+    # After every gate, like the claims: a refused launch writes nothing to the register.
+    claims_mod.reap_register(tools, target)
     run = manifest_mod.Manifest(manifest_mod.new_run_id(datetime.now(UTC)), holder, [])
     refused = False
     for batch, host in placed:
