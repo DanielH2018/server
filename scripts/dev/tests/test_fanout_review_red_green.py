@@ -43,7 +43,6 @@ def test_a_red_green_batch_hands_the_implementer_the_red_commit_it_must_not_edit
         _red_report(behaviours=2),
         _report(f"Opened {PR}"),
         _report(structured={"summary": "", "findings": []}),
-        _report(f"{PR}\nVERDICT: settled"),
     ]
     pipeline, run = _pipeline(
         tmp_path, reports, heads=("base", "red1", "red1"), gates=gates
@@ -55,8 +54,8 @@ def test_a_red_green_batch_hands_the_implementer_the_red_commit_it_must_not_edit
         "red",
         "implement",
         "review",
-        "land",
     ]
+    assert len(run.lands) == 2
     red_argv, red_stdin, _ = run.claude[0]
     assert "--resume" not in red_argv and "--json-schema" in red_argv
     assert "body one" in red_stdin and "land.sh" not in red_stdin
@@ -336,4 +335,4 @@ def test_a_fix_round_after_a_passing_green_gate_runs_the_gate_again_and_holds_a_
     assert "The red tests committed at red1 stay as they are" in run.claude[3][1]
     assert final["result"].startswith("needs input: the PR fails the green gate")
     assert pipeline.record.green_gate == edited
-    assert "land" not in [phase for _, _, phase in run.claude]
+    assert run.lands == []
