@@ -589,9 +589,12 @@ k8s_tls_cert_resolver: cloudflare
 # ClientIP-gated to it so an un-Authelia'd route is reachable from that host and from
 # nowhere else on the LAN — see ingressroute.yml.j2 for why ClientIP is sound here.
 #
-# A literal rather than hostvars['daniel-server'].server_ip: the k8s play runs against
-# daniel-box, and daniel-server is not necessarily in its play's hostvars.
-k8s_bridge_client_ip: 10.0.0.161
+# Derived from daniel-server's one literal, the way k8s_pi_client_ip below is (#4063).
+# `hostvars` holds every host in hosts.ini whatever the play targets, so the k8s play on
+# daniel-box resolves it, and the manifest-render harness lays down each host's `server_ip` as
+# `hostvars` (scripts/lib/render_context.py). A lookup that loses the host's entry resolves to
+# None without raising, so the guards compare the render against the host_vars literal.
+k8s_bridge_client_ip: "{{ hostvars['daniel-server'].server_ip }}"
 # daniel-pi's address as the cluster sees it, derived from the Pi's one literal (#3719).
 # `hostvars` holds every host in hosts.ini whatever the play targets, so the k8s play on
 # daniel-box resolves it; uptime-kuma, pihole and monitor-bridge index it the same way. The
@@ -601,16 +604,15 @@ k8s_bridge_client_ip: 10.0.0.161
 # Two consumers: loki-homelab's push-only IngressRoute (ClientIP allowlist) and the Pi's
 # static Prometheus scrape jobs.
 k8s_pi_client_ip: "{{ hostvars['daniel-pi'].server_ip }}"
-# daniel-box's own LAN address, as a POD sees it. A literal for the same reason as
-# k8s_bridge_client_ip above, and needed for the same reason despite daniel-box being the host the k8s play runs
-# on: `server_ip` is a host_var, so a manifest that used it would render correctly under
-# Ansible and blow up in the manifest-render test harness, which has no host_vars either.
+# daniel-box's own LAN address, as a POD sees it, derived from its one literal the way
+# k8s_bridge_client_ip above is (#4063). Named rather than read as plain `server_ip` because
+# the name says which host's address a manifest means, whatever host the play targets.
 #
 # Two consumers: the `coredns-host` scrape job and deploy-ui's EndpointSlice. A pod cannot
 # reach the host forwarder at 127.0.0.1 — that is the pod's own loopback — so the job needs
 # the node's routable address; deploy-ui needs it because its backend is a host process
 # (deploy-ui.service) rather than a pod.
-k8s_node_client_ip: 10.0.0.215
+k8s_node_client_ip: "{{ hostvars['daniel-box'].server_ip }}"
 # The port daniel-box's host CoreDNS publishes its Prometheus endpoint on. DUPLICATED FROM
 # `k3s_host_dns_metrics_port` in roles/setup/k3s/defaults/main.yml, deliberately: role
 # defaults are only in scope while that role runs, and the k8s play never includes it, so a

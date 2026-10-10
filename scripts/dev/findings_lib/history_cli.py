@@ -41,7 +41,6 @@ from dev.findings_lib.issue_model import (
     label_names,
     settled_reason,
 )
-from dev.findings_lib.precomputed import precomputed
 from lib.json_types import as_object
 
 # `plan_close` writes this comment on `close --fixed --pr N`. A close that way leaves
@@ -197,6 +196,12 @@ def cmd_show(args: argparse.Namespace, tools: FindingsTools) -> int:
         return 3
     if args.brief:
         # The fan-out brief's block, for a session working the issue by hand (#3955).
+        # DECIDED: a call-time import. `precomputed` reaches land.sh's classifier, which
+        # imports from `ansible/roles/setup/gitops_deploy/files/`. Another repo's batch runs
+        # findings.py from a snapshot holding only `launch.SNAPSHOT_PATHS`, with no `ansible/`,
+        # and a module-level import crashed every subcommand there on import (#4271).
+        from dev.findings_lib.precomputed import precomputed
+
         block = precomputed(cited_paths(issue.get("body") or ""))
         print(block.rstrip() if block else f"#{args.number} cites no repo path")
         return 0
