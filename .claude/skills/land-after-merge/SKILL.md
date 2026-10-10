@@ -25,6 +25,15 @@ is the wait: it prints the landing's `VERDICT:` line and exits with the landing'
 No PR is armed for GitHub's auto-merge, because every PR into master needs a ruleset bypass
 and auto-merge ignores one (`docs/landing.md` has the detail).
 
+**A stale base costs one branch update first.** Before the merge, `land.sh` asks whether master
+changed any path since the PR's merge base. When it did, it merges master into the PR branch
+once, prints `updating its branch so CI re-tests it against master before the merge`, and
+merges only after CI is green on the updated head. That is the normal path for about half of
+PRs and adds a CI run's worth of time, not a fault. The exception is a head the operator
+approved: the update would void the approval, so `land.sh` refuses it and names the remedy,
+which is to rebase onto origin/master, push and get the new head approved.
+`land_lib/merge.py`'s module docstring owns the rule.
+
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
 `cc-wait land <n>`, never `land.sh`, which would start a second landing. State `gave-up` (exit 3)
 is `land.sh`'s own give-up, a resume point for the whole command. State `deferred` (exit 4) is
@@ -71,6 +80,12 @@ gh pr edit <n> --body-file <path>   # then replace the body
 otherwise and prints the offending line, because GitHub closes an issue named after
 `close`/`fixes`/`resolved` however the sentence reads. Reword to `Filed for later: #N` with
 `gh pr edit <n> --body-file`, then re-run the same landing command — the arm is idempotent.
+
+**After a squash merge, reset the branch before any follow-up commit.** Run
+`git fetch origin && git reset --hard origin/master` in the worktree, then commit the follow-up
+work. A plain push from the old branch recreates the deleted remote branch with the
+pre-squash commits, so the follow-up PR opens CONFLICTING and GitHub runs no checks on it
+(PR #543).
 
 ## Reading the verdict
 
