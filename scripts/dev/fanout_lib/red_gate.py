@@ -25,8 +25,9 @@ refs and the settings that move or skip a reset do not apply (#3871).
 
 THE GREEN GATE runs after the implementer and again after every fix round. The working tree
 must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
-would otherwise pass a gate the pushed head fails (#3821). The red files, every pytest config
-file and the `leakguard` plugin must be unchanged since `red`, no untracked config file may
+would otherwise pass a gate the pushed head fails (#3821). Every pytest config file, the
+`leakguard` plugin and any red data file must be unchanged since `red`. A red `test_*.py` may
+only gain appended tests, which `red_lock` defines (#4214). No untracked config file may
 exist, and every red node must pass in a fresh clone of HEAD. The clone is what makes the
 verdict HEAD's: the implementer controls the worktree's index and git config, so a
 skip-worktree entry, an `info/exclude` line or `status.showUntrackedFiles=no` each hides an
@@ -61,6 +62,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import _fence
 from fanout_lib.red_cause import red_by_absence
+from fanout_lib.red_lock import append_only
 
 # The reset that clears the red phase, split out at this module's length cap; every name
 # stays importable from here.
@@ -243,6 +245,26 @@ def _pytest(worktree: Path, *args: str) -> list[str]:
     ]  # fmt: skip
 
 
+def _red_file_change(
+    run: Runner, worktree: Path, red: str, path: str, gate: Gate
+) -> str:
+    """How the fix changed `path` beyond what `red_lock` allows, or "" when it only appended.
+
+    A red `test_*.py` may gain tests (#4214). A red data file, a pytest config file and the
+    `leakguard` plugin may not change at all, and neither may a red file be deleted.
+    """
+    if path not in gate.files or not path.endswith(".py"):
+        return path
+    blobs = [
+        _git(run, worktree, "cat-file", "blob", f"{rev}:{path}")
+        for rev in (red, "HEAD")
+    ]
+    if any(b.returncode for b in blobs):
+        return f"{path} deleted"
+    problem = append_only(blobs[0].stdout, blobs[1].stdout)
+    return f"{path} {problem}" if problem else ""
+
+
 # git with no configuration the implementer can write: no global or system file, which a
 # clone's own fresh config leaves as the only other sources, and no user attributes file. The
 # green gate checks HEAD out this way, so no filter, `info/attributes` line or config value
@@ -362,11 +384,13 @@ def green_gate(run: Runner, worktree: Path, red: str, gate: Gate) -> str:
             f"discard these changes: {dirty}"
         )
     touched = _git(
-        run, worktree, "diff", "--name-only", red, "HEAD", "--",
+        run, worktree, "diff", "--name-only", "--no-renames", red, "HEAD", "--",
         *gate.files, *GREEN_PROTECTED,
     ).stdout.split()  # fmt: skip
-    if touched:
-        return f"the fix changed what the red tests stand on: {', '.join(touched)}"
+    changed = [_red_file_change(run, worktree, red, f, gate) for f in touched]
+    changed = [c for c in changed if c]
+    if changed:
+        return f"the fix changed what the red tests stand on: {', '.join(changed)}"
     stray = stray_config(run, worktree)
     if stray:
         return f"untracked pytest configuration: {', '.join(stray)}"
@@ -449,9 +473,10 @@ def red_section(red: str, gate: Gate) -> str:
     return f"""## Red tests
 A separate session wrote failing tests for these issues from the issue text alone, committed
 as {red} on this branch. A gate proved they fail on the code as it stands. Your change must
-make them pass. Do not change them, any `conftest.py` or `pyproject.toml`: a gate after your
-session runs them again and refuses the PR if you did. Where a red test is wrong, say why in
-the PR body instead. The red nodes:
+make them pass. Do not change them, anything else already in their files, any `conftest.py`
+or `pyproject.toml`: a gate after your session runs them again and refuses the PR if you did.
+You may append new test functions, fixtures, helpers and imports to a red test file. Where a
+red test is wrong, say why in the PR body instead. The red nodes:
 {fence}
 {nodes}
 {fence}
@@ -460,8 +485,12 @@ the PR body instead. The red nodes:
 
 
 def green_finding(reason: str, red: str, gate: Gate) -> dict:
-    """The green gate's failure as a finding the fix round acts on, with how to undo it."""
-    restore = f"git checkout {red} -- {' '.join(gate.files)}"
+    """The green gate's failure as a finding the fix round acts on, with how to undo it.
+
+    `git checkout <red> -- <file>` would also drop tests appended since, so the detail names
+    the red version to restore from instead.
+    """
+    files = " ".join(gate.files)
     return {
         "title": "The PR fails the red/green gate",
         "file": GREEN_FILE,
@@ -469,8 +498,9 @@ def green_finding(reason: str, red: str, gate: Gate) -> dict:
         "confidence": 1.0,
         "category": "test",
         "detail": (
-            f"{reason}. The red tests are the ones committed at {red}; restore an edited "
-            f"one with `{restore}` and make the code pass them instead."
+            f"{reason}. The red tests are the ones committed at {red} in {files}. Restore "
+            f"what the reason names as `git show {red}:<file>` has it, keeping any test you "
+            "appended, and make the code pass the red tests instead."
         ),
     }
 

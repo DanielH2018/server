@@ -307,7 +307,7 @@ def test_a_pr_still_failing_the_green_gate_after_the_fix_is_not_landed(tmp_path)
         "review",
     ]
     assert edited in run.claude[3][1]
-    assert "git checkout red1 -- t.py" in run.claude[3][1]
+    assert "`git show red1:<file>`" in run.claude[3][1]
     assert final["result"].startswith("needs input: the PR fails the green gate")
     assert final["result"].endswith(PR)
 
@@ -333,6 +333,7 @@ def test_a_fix_round_after_a_passing_green_gate_runs_the_gate_again_and_holds_a_
     final = pipeline.run_all()
 
     assert "The red tests committed at red1 stay as they are" in run.claude[3][1]
+    assert "keep it and append a test" in run.claude[3][1]
     assert final["result"].startswith("needs input: the PR fails the green gate")
     assert pipeline.record.green_gate == edited
     assert run.lands == []
