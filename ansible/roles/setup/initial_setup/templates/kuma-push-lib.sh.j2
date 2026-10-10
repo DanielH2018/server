@@ -232,9 +232,9 @@ kuma_push() {
 # that runs as neither root nor that group still gets no ping.
 #
 # BODY is sent as the ping body when given. Omitted means no body at all, not an empty one:
-# manifest-prune-check withholds its message, because it names live objects and
-# healthchecks.io stores ping bodies, and the uptime-kuma-alive slug has nothing to say beyond
-# its status.
+# etcd-snapshot-offbox and the uptime-kuma-alive slug send none, because the status is the
+# whole signal. healthchecks.io stores ping bodies, so a caller whose message names internal
+# objects passes a fixed BODY instead, as manifest-prune-check does.
 #
 # The slug is bare, never `?create=1`. Auto-provisioning turns a typo into a new check that
 # nobody watches and that reads green forever (`ansible/tests/services/test_healthchecks_pings.py`).

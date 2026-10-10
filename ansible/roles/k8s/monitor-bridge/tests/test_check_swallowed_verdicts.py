@@ -202,11 +202,12 @@ def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
     # reading KUMA_PUSH_OK to route `/fail` has to be listed here, and one that stops has to
     # be dropped, or the tile pages twice / not at all for that cron. Read from the RENDER,
     # not the source: a value that moves into a role default leaves a source-text match
-    # reading `{{ ... }}`, which passes on nothing (#3178).
+    # reading `{{ ... }}`, which passes on nothing (#3178). The library itself is a shell
+    # template since #4219, and it sets the variable rather than reading it.
     readers = {
         name.removesuffix(".sh.j2")
         for _plane, _role, name, text in rendered_shell_texts()
-        if "KUMA_PUSH_OK" in text
+        if "KUMA_PUSH_OK" in text and name != "kuma-push-lib.sh.j2"
     }
     assert readers == HC_ROUTED_TAGS, sorted(readers ^ HC_ROUTED_TAGS)
 
