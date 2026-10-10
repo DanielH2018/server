@@ -10,12 +10,15 @@ the budget and the output; this answers one question per call: where is this dep
 The contract is the dotfiles repo's docs/specs/2026-10-04-cc-wait-design.md.
 
 WHICH DEPLOY. `--log` names it exactly, and `deploy.sh --detach` prints the command with it.
-Without `--log`, `<tags>` is the comma-separated `--tags` value the deploy was given, and the
-newest `deploy-<label>-<stamp>-<pid>.log` in `--log-dir` (default: `deploy_detach.LOG_DIR`) is
-the deploy. The match is exact on the label, so `sonarr` never picks up a `sonarr-exporter`
-log. `deploy.sh --detach` creates the log before it returns, so a wait chained after it never
-reads an earlier deploy of the same tags. A deploy of so many tags that `Run.label` cut the
-label short needs `--log`.
+Without `--log`, `<tags>` is the comma-separated tag list the deploy ran, and the newest
+`deploy-<label>-<stamp>-<pid>.log` in `--log-dir` (default: `deploy_detach.LOG_DIR`) is the
+deploy. The match is exact on the label, so `sonarr` never picks up a `sonarr-exporter` log.
+`deploy.sh --detach` creates the log before it returns, so a wait chained after it never reads
+an earlier deploy of the same tags.
+
+The tags the deploy ran are the typed `--tags` value, except in three cases that need `--log`:
+`--changed` derives them, `deploy_run.expand_shared_roles` replaces a shared role with its
+callers, and `Run.label` cuts a long list short.
 
 THE EXIT CODE IS THE AUTHORITY. The detached child records the notifier's exit code beside the
 log (`deploy_detach.child`): 0 when the health gate settled, 1 when the playbook or the gate
@@ -75,7 +78,10 @@ def find_log(tags: str, log: str, log_dir: str) -> Path:
         if (m := name.match(p.name))
     ]
     if not runs:
-        raise NoDeploy(f"no deploy-{label(tags)}-*.log in {base}")
+        raise NoDeploy(
+            f"no deploy-{label(tags)}-*.log in {base}. A --changed or shared-role deploy "
+            "runs other tags than the ones typed: use the `wait:` line `--detach` printed"
+        )
     return max(runs)[2]
 
 

@@ -223,5 +223,7 @@ A returned `--detach` is not a verified deploy. To wait for its health gate, cha
 `cc-wait deploy` ends `settled` (exit 0) once the notifier's health gate passes, and `failed` or
 `died` (exit 1) otherwise; the detail is the notifier's verdict line. It waits at most 570s.
 Exit 75 means the deploy is still running: re-run only the `cc-wait` command, never
-`deploy.sh`. `--detach` also prints the exact wait command with `--log`, which a deploy of many
-tags needs. The probe is `scripts/deploy_tools/deploy_probe.py`.
+`deploy.sh`. `--detach` also prints the exact wait command with `--log`. Use that printed
+command for a `--changed` deploy, a shared role's tag (`deploy.sh` expands it to its callers)
+or a long tag list, because the bare form finds the log by the tags typed. The probe is
+`scripts/deploy_tools/deploy_probe.py`.
