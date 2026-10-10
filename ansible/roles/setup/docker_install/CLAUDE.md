@@ -83,13 +83,14 @@ draw from it; it also sets json-file log limits and `live-restore: true`, so a c
 restarts Docker — see the first bullet under *Notable*.
 
 ## Notable
-- **`live-restore` keeps containers running across a dockerd restart, not across an engine
-  upgrade.** A `daemon.json` edit restarts dockerd and leaves the containers up. An upgrade
-  also replaces the containerd shim under every running container, and a `docker.socket`
-  restart gives `/var/run/docker.sock` a new inode that a container bind-mounting the file
-  never sees. A dist-upgrade did both: autoheal's shim died and docker-proxy sat at 503 until
-  a redeploy recreated it. So `tasks/engine-upgrade.yml` stops every Compose project before
-  apt runs and recreates each one afterwards; its header comment has the reasoning.
+- **`live-restore` keeps containers running across a dockerd restart, but docker-proxy stops
+  working.** Any `daemon.json` edit restarts dockerd, and the restart gives
+  `/var/run/docker.sock` a new inode. A container that bind-mounts the file keeps the old
+  inode, so docker-proxy stays up and answers 503 until it is recreated, and `autoheal` cannot
+  see the fault. The Traps section of `ansible/roles/containers/docker-proxy/CLAUDE.md` has the
+  inode check and the recreate command. An engine upgrade also replaces the containerd shim
+  under every running container. So `tasks/engine-upgrade.yml` stops every Compose project
+  before apt runs and recreates each one afterwards; its header comment has the reasoning.
 - **The GPG key stays ASCII-armored at `/etc/apt/keyrings/docker.asc`.** Do **not** reintroduce
   `gpg --dearmor` via `command`: it writes the file under the `027` umask [[initial_setup]] set
   earlier in the same play, and apt then reports the repo as unsigned. Guarded by

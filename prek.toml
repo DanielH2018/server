@@ -478,7 +478,8 @@ files = "(\\.py|^ansible/tests/repo/(module_length|monkeypatch)_allowlist\\.txt)
 # removed from the last non-Markdown file holding it. That commit is usually code-only, so the
 # gate fires on any non-Markdown file as well as on a CLAUDE.md. A commit touching only other
 # Markdown stays skipped, as the docs-refresh and eval-run crons' commits did before. Measured
-# 2026-10-10 on daniel-box, three runs each, against the same 4-commit branch diff: the code
+# 2026-10-10 on daniel-box, three runs each, against the same branch diff (3 commits plus the
+# uncommitted rule): the code
 # before the rule took 0.32-0.33s and the code with it 0.37-0.39s. A code-only commit used to
 # skip the hook, so it pays the whole ~0.4s. Against a 300-commit range the run took 1.9s.
 [[repos.hooks]]
@@ -488,6 +489,10 @@ entry = "uv run --frozen python scripts/dev/fact_status.py lint --changed-since 
 language = "system"
 pass_filenames = false
 files = "(^|/)CLAUDE\\.md$|^(?!.*\\.md$)"
+# The non-Markdown paths the docs-refresh and eval-run crons commit. Neither cron can edit a
+# CLAUDE.md, so a finding there would only park its publish, which the docs-refresh contract's
+# next-run review says to check before a hook gains one of its staged paths.
+exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|evals/history\\.json$)"
 
 # Eight static test modules that turned more PRs red than any other test the author's own code
 # did not break. The first four were 24 of 154 failed CI runs from 2026-08-30 to 2026-10-05
