@@ -74,7 +74,7 @@ def _run_push(tmp_path, responses, extra_prelude=""):
     }}
     sleep() {{ echo "$1" >> "{sleeps_file}"; }}
     logger() {{ shift; echo "$*" >> "{logs_file}"; }}
-    kuma_push up test-msg https://push.example/secret-token kuma.local 10.0.0.1 test-tag
+    kuma_push up test-msg secret-token test-tag
     echo "rc=$? ok=$KUMA_PUSH_OK"
     """
     result = run(["bash", "-c", script])
@@ -102,8 +102,8 @@ def test_connection_failure_then_success_delivers_the_beat(tmp_path):
     assert sleeps == [30]
     assert any("retrying" in line for line in logs)
     # The push URL carries the token (repo-root CLAUDE.md: never print a line that could hold
-    # it). Assert the retry log line doesn't carry the URL string at all.
-    assert not any("push.example" in line for line in logs)
+    # it). Assert the retry log line does not carry the token at all.
+    assert not any("secret-token" in line for line in logs)
 
 
 def test_a_recovered_transport_failure_writes_nothing_to_stderr(tmp_path):

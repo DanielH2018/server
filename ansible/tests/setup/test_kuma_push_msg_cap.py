@@ -26,7 +26,7 @@ def _pushed_msg(tmp_path, msg):
       printf '200 application/json'
     }}
     logger() {{ :; }}
-    kuma_push down "$1" https://push.example/secret-token kuma.local 10.0.0.1 test-tag
+    kuma_push down "$1" secret-token test-tag
     """
     run(["bash", "-c", script, "_", msg], check=True)
     return msg_file.read_text()

@@ -244,10 +244,10 @@ def test_the_audit_watches_for_an_unlanded_rotation_branch():
 # guard, so each carries its provenance and test_the_cron_env_allowlist_is_still_exported
 # checks that provenance still exists.
 _CRON_ENV = {
-    "PATH": "set on the cron job line (crons.yml:481 docs-refresh, :531 eval-run) and "
+    "PATH": "set on the cron job line (crons.yml 'Refresh generated docs', 'Homelab eval sweep') and "
     "exported by secret-rotate.sh.j2 itself",
-    "KUBECONFIG": "set on the docs-refresh cron job line (crons.yml:481)",
-    "HOME": "set on the eval-run cron job line (crons.yml:531)",
+    "KUBECONFIG": "set on the docs-refresh cron job line (crons.yml 'Refresh generated docs')",
+    "HOME": "set on the eval-run cron job line (crons.yml 'Homelab eval sweep')",
 }
 
 KUMA_LIB = rendered_shell_text("setup", "initial_setup", "kuma-push-lib.sh.j2")
@@ -384,7 +384,7 @@ def test_the_cron_env_allowlist_is_still_exported():
 #
 # /proc is mounted without hidepid on all three hosts, so any local user can read another user's
 # /proc/<pid>/cmdline. A Kuma push token in there is enough to forge or suppress a heartbeat,
-# which hides a real outage. kuma-push-lib.sh:26-30 states the threat model; the fix is to feed
+# which hides a real outage. kuma_push in kuma-push-lib.sh.j2 states the threat model; the fix is to feed
 # the token-bearing URL to curl on stdin as a config file (`-K -`) instead of as an argument.
 #
 # WHY THE CORPUS IS DERIVED, NOT LISTED. A guard that iterates only the files its own fix
@@ -526,12 +526,12 @@ def test_no_push_token_reaches_curls_argv():
         "these templates pass a token-bearing push URL to curl as an argv element, which "
         "exposes it in /proc/<pid>/cmdline for the life of the call. Feed it in on stdin "
         'instead -- `printf \'url = "%s"\\n\' "$URL" | curl -G -K - ...`, as '
-        f"kuma-push-lib.sh:41-46 does: {offenders}"
+        f"kuma_push in kuma-push-lib.sh.j2 does: {offenders}"
     )
 
 
 def test_every_shell_push_script_sources_the_shared_library():
-    """crons.yml:15-19 asserts this in prose.
+    """The "Deploy the shared Kuma-push helper" task in crons.yml asserts this in prose.
 
     Two files are honestly exempt; both are named with their reason, and both remain bound by the
     argv assertion above.
@@ -543,7 +543,7 @@ def test_every_shell_push_script_sources_the_shared_library():
         if "kuma-push-lib.sh" not in text:
             offenders.append(str(path.relative_to(REPO)))
     assert not offenders, (
-        "these push scripts do not source the shared library, contradicting crons.yml:15-19. "
+        "these push scripts do not source the shared library, contradicting the push-helper task in crons.yml. "
         "Either source it or add a named exemption to _LIBRARY_EXEMPT with the reason: "
         + ", ".join(offenders)
     )
