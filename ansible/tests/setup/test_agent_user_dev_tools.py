@@ -15,7 +15,7 @@ from lib import yaml_fast
 
 SETUP = ANSIBLE / "roles" / "setup"
 SHARED = SETUP / "common" / "tasks" / "agent_user.yml"
-CLAUDE_TASKS = SETUP / "claude_code" / "tasks" / "main.yml"
+CLAUDE_TASKS = SETUP / "claude_code" / "tasks" / "agent.yml"
 PREK_COPY = "Give the agent user the operator's pinned prek"
 HOOK_INSTALL = "Install the commit hooks in the agent user's clone"
 GALAXY = "Install the pinned Ansible collections in the agent user's clone"

@@ -339,61 +339,25 @@
   when: not claude_code_memory_sync_enabled
   notify: Reload systemd
 
-# ── The agent user ──────────────────────────────────────────────────────────────────────
-# A Unix user for the operator's Claude sessions with no sudo, no group membership and no read
-# on /home/{{ sys_user }}. See defaults/main.yml and this role's CLAUDE.md.
+# ── The agent users ─────────────────────────────────────────────────────────────────────
+# Unix users for Claude sessions with no sudo, no group membership and no read on
+# /home/{{ sys_user }}, one per entry of claude_code_agents. See defaults/main.yml and this
+# role's CLAUDE.md.
 
-- name: Create the agent user, its tools and its clone
+- name: Work out each agent user's profile
   tags: [claude_code]
-  when: claude_code_agent_user_enabled
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/agent_user.yml"
-  vars:
-    agent_user_name: "{{ claude_code_agent_user }}"
-    agent_user_home: "{{ claude_code_agent_user_home }}"
-    agent_user_clone_dir: "{{ claude_code_agent_user_clone_dir }}"
-    agent_user_repo: "{{ claude_code_agent_user_repo }}"
+  ansible.builtin.set_fact:
+    claude_code_agent_profiles: >-
+      {{ claude_code_agents | claude_agent_profiles(claude_code_agent_user,
+                                                    claude_code_agent_primary_profile) }}
 
-# The reverse of the expiry the switched-off arm below sets.
-- name: Lift the agent user's account expiry
+- name: Name the agent users that are switched on
   tags: [claude_code]
-  ansible.builtin.user:
-    name: "{{ claude_code_agent_user }}"
-    expires: -1
-  become: true
-  when: claude_code_agent_user_enabled
+  ansible.builtin.set_fact:
+    claude_code_agents_present: >-
+      {{ claude_code_agent_profiles | selectattr('state', 'eq', 'present')
+         | map(attribute='name') | list }}
 
-- name: Keep the agent user's manager alive after logout, so its fan-out batches survive
-  # The same reason as the operator's linger above, for the agent user: fanout_place.py
-  # launches a batch with `systemd-run --user` as the agent, locally or over ssh, and the batch
-  # outlives that call. After the user exists: loginctl refuses a name it cannot look up, which
-  # failed a host's first apply (daniel-server, 2026-10-10).
-  tags: [claude_code]
-  ansible.builtin.command: "loginctl enable-linger {{ claude_code_agent_user }}"
-  args:
-    creates: "/var/lib/systemd/linger/{{ claude_code_agent_user }}"
-  become: true
-  when: claude_code_agent_user_enabled
-
-- name: Give the agent user a login profile
-  tags: [claude_code]
-  ansible.builtin.template:
-    src: agent-user-profile.j2
-    dest: "{{ claude_code_agent_user_home }}/.profile"
-    owner: "{{ claude_code_agent_user }}"
-    # The group the shared task file's recursive chown sets, so the two never flip each other.
-    group: "{{ sys_user }}"
-    mode: "0644"
-  become: true
-  when: claude_code_agent_user_enabled
-
-# The shared task file clones once and never pulls, yet two things run from this clone's main
-# working tree rather than from a session's worktree: the hook shim (the profile above) and the
-# homelab-ui MCP launcher (agent_browser.yml). A clone left 94 commits behind ran a ui_mcp.sh
-# that still decrypted SOPS, which the agent cannot do, and the MCP server never connected
-# (#4067, #4099). files/claude-clone-sync.sh fast-forwards it when it is a clean master, and
-# leaves anything else alone as the agent's work in progress. This apply runs it before the venv
-# sync below reads the clone's uv.lock. claude-clone-sync.timer runs it between applies, since a
-# merge touching only the launcher or .claude/hooks/ applies no role at all (#4162).
 - name: Install the agent user's clone sync script
   tags: [claude_code]
   ansible.builtin.copy:
@@ -403,463 +367,62 @@
     owner: root
     group: root
   become: true
-  when: claude_code_agent_user_enabled
+  when: claude_code_agents_present | length > 0
 
-- name: Fast-forward the agent user's clone to origin's master
+- name: Build each agent user, or take it back
   tags: [claude_code]
-  # Never fatal. The GitOps tick applies this role, and a red task there holds the deployer
-  # over the agent's own clone. A session's fetch holding a ref lock, a diverged local master
-  # or a network blip fails this pull; the report task below names it instead.
-  ansible.builtin.command:
-    argv:
-      - runuser
-      - -u
-      - "{{ claude_code_agent_user }}"
-      - --
-      - /usr/local/bin/claude-clone-sync.sh
-      - "{{ claude_code_agent_user_clone_dir }}"
-  environment:
-    HOME: "{{ claude_code_agent_user_home }}"
-    # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the agent cannot write.
-    TMPDIR: /tmp
-  register: claude_code_agent_clone_pull
-  changed_when: claude_code_agent_clone_pull.stdout | default('') is search('^advanced ', multiline=True)
-  failed_when: false
-  become: true
-  when: claude_code_agent_user_enabled
-
-- name: Report that the agent user's clone was left behind
-  tags: [claude_code]
-  ansible.builtin.debug:
-    msg: >-
-      {{ claude_code_agent_user_clone_dir }} was not fast-forwarded:
-      {{ 'its sync failed: ' ~ (claude_code_agent_clone_pull.stderr | default(''))
-      if claude_code_agent_clone_pull.rc | default(0) != 0
-      else claude_code_agent_clone_pull.stdout | default('the sync did not run') }}.
-      The agent's hook shim and homelab-ui launcher keep running its old code until it moves.
-  when:
-    - claude_code_agent_user_enabled
-    - not ansible_check_mode
-    - >-
-      claude_code_agent_clone_pull is skipped
-      or claude_code_agent_clone_pull.rc | default(0) != 0
-      or claude_code_agent_clone_pull.stdout | default('') is search('^skipped: ', multiline=True)
-
-- name: Install the agent user's clone sync units
-  tags: [claude_code]
-  ansible.builtin.template:
-    src: "{{ item }}.j2"
-    dest: "/etc/systemd/system/{{ item }}"
-    owner: root
-    group: root
-    mode: "0644"
-  loop:
-    - claude-clone-sync.service
-    - claude-clone-sync.timer
-  become: true
-  when: claude_code_agent_user_enabled
-  notify: Reload systemd
-
-# Shares claude-rc's webhook file in /etc/claude-rc, which the role creates on every host.
-- name: Install the agent user's clone sync failure alert
-  tags: [claude_code]
-  when: claude_code_agent_user_enabled
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  ansible.builtin.include_tasks:
+    file: agent.yml
+    apply:
+      tags: [claude_code]
+  loop: "{{ claude_code_agent_profiles }}"
+  loop_control:
+    loop_var: claude_code_agent
+    label: "{{ claude_code_agent.name }}"
+  # Each profile field onto the name the task files and templates read. Include vars outrank
+  # role defaults and the inventory, so inside agent.yml these hold this agent's values. The
+  # token and the password are looked up by variable name, so a profile never carries a secret.
   vars:
-    alert_unit_name: claude-clone-sync
-    alert_unit_description: Alert when the claude agent user's clone cannot be fast-forwarded
-    alert_unit_message: "claude-clone-sync failed on {{ inventory_hostname }}: the claude agent user keeps running old hooks and an old homelab-ui launcher. Check `journalctl -u claude-clone-sync`."
-    alert_unit_env_dir: /etc/claude-rc
+    claude_code_agent_user: "{{ claude_code_agent.name }}"
+    claude_code_agent_user_enabled: "{{ claude_code_agent.state == 'present' }}"
+    claude_code_agent_is_primary: "{{ claude_code_agent.primary }}"
+    claude_code_agent_user_home: "{{ claude_code_agent.home }}"
+    claude_code_agent_user_clone_dir: "{{ claude_code_agent.clone_dir }}"
+    claude_code_agent_user_repo: "{{ claude_code_agent.repo }}"
+    claude_code_agent_github_login: "{{ claude_code_agent.github_login }}"
+    claude_code_agent_github_id: "{{ claude_code_agent.github_id }}"
+    claude_code_agent_gh_token_value: "{{ lookup('vars', claude_code_agent.github_token_var, default='') }}"
+    claude_code_agent_worktree_prefix: "{{ claude_code_agent.worktree_prefix }}"
+    claude_code_agent_homelab_ui_enabled: "{{ claude_code_agent.homelab_ui }}"
+    claude_code_homelab_ui_username: "{{ claude_code_agent.homelab_ui_username }}"
+    claude_code_homelab_ui_password: >-
+      {{ lookup('vars', claude_code_agent.homelab_ui_password_var, default='')
+         if claude_code_agent.homelab_ui_password_var else '' }}
+    claude_code_agent_journal_access: "{{ claude_code_agent.journal_access }}"
+    claude_code_agent_operator_read: "{{ claude_code_agent.operator_read }}"
+    claude_code_agent_operator_config: "{{ claude_code_agent.operator_config }}"
+    claude_code_agent_memory_seed: "{{ claude_code_agent.memory_seed }}"
 
-- name: Enable and start the agent user's clone sync timer
-  tags: [claude_code]
-  ansible.builtin.systemd:
-    name: claude-clone-sync.timer
-    enabled: true
-    state: started
-    daemon_reload: true
-  become: true
-  when: claude_code_agent_user_enabled
-
-- name: Sync the repo's venv in the agent user's clone
-  tags: [claude_code]
-  # The profile points the hook shim at this clone, and the shim runs every guard with
-  # `uv run --no-sync`. A clone with no .venv has guards that cannot import, and each one
-  # falls back to `ask` (#3513). renovate-agent syncs its own worktree before each session
-  # (renovate_agent/files/run_worktree.py); nothing else does it for this user. runuser for
-  # the reason the shared task file gives: a root-run sync leaves a root-owned .venv.
-  ansible.builtin.command:
-    argv:
-      - runuser
-      - -u
-      - "{{ claude_code_agent_user }}"
-      - --
-      - "{{ claude_code_agent_user_home }}/.local/bin/uv"
-      - sync
-      - --frozen
-    chdir: "{{ claude_code_agent_user_clone_dir }}"
-  environment:
-    HOME: "{{ claude_code_agent_user_home }}"
-    # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the agent cannot write.
-    TMPDIR: /tmp
-  register: claude_code_agent_user_sync
-  changed_when: >-
-    claude_code_agent_user_sync.stderr is search('^(Installed|Uninstalled) ', multiline=True)
-  become: true
-  when: claude_code_agent_user_enabled
-
-- name: Install the pinned Ansible collections in the agent user's clone
-  tags: [claude_code]
-  # ansible.cfg's absolute collections fallback is the operator's checkout, under the 0750
-  # /home/{{ sys_user }}, so a worktree of this clone resolved no collection at all and every
-  # playbook the agent ran died at `couldn't resolve module/action` (#4108). The login profile
-  # points ANSIBLE_COLLECTIONS_PATH's fallback here instead. The venv's ansible-galaxy, which
-  # the sync above just installed, rather than `uv run`, which would sync again.
-  ansible.builtin.command:
-    argv:
-      - runuser
-      - -u
-      - "{{ claude_code_agent_user }}"
-      - --
-      - "{{ claude_code_agent_user_clone_dir }}/.venv/bin/ansible-galaxy"
-      - collection
-      - install
-      - -r
-      - ansible/requirements.yml
-      - -p
-      - ansible/collections
-    chdir: "{{ claude_code_agent_user_clone_dir }}"
-  environment:
-    HOME: "{{ claude_code_agent_user_home }}"
-    TMPDIR: /tmp
-  register: claude_code_agent_collections
-  changed_when: claude_code_agent_collections.stdout is search('was installed successfully')
-  # Never fatal, for the clone pull's reason above: a Galaxy outage would otherwise hold the
-  # deployer over the agent's development environment. A failure leaves the collections the
-  # last apply installed, and the warning below names it.
-  failed_when: false
-  become: true
-  when: claude_code_agent_user_enabled
-
-- name: Report that the agent user's collections were not installed
-  tags: [claude_code]
-  ansible.builtin.debug:
-    msg: >-
-      ansible-galaxy failed in {{ claude_code_agent_user_clone_dir }}:
-      {{ claude_code_agent_collections.stderr | default('') }}.
-      The agent's playbooks keep the collections an earlier apply installed, or none.
-  when:
-    - claude_code_agent_user_enabled
-    - not ansible_check_mode
-    - claude_code_agent_collections.rc | default(0) != 0
-
-- name: Install the commit hooks in the agent user's clone
-  tags: [claude_code]
-  # Without them the agent's commits skip gitleaks and the commit-time ratchets, and a
-  # plaintext secret reaches a pushed branch before anything scans it (#4100). One install
-  # covers every worktree of the clone, since worktrees share its .git/hooks. The hook calls
-  # the prek that installed it by absolute path, so it runs the agent's copy. `removes:` skips
-  # a host where agent_user.yml found no prek to copy; renovate_agent imports that file too
-  # and gets the binary but no hooks, so its unattended commits behave as before.
-  ansible.builtin.command:
-    argv:
-      - runuser
-      - -u
-      - "{{ claude_code_agent_user }}"
-      - --
-      - "{{ claude_code_agent_user_home }}/.local/bin/prek"
-      - install
-    chdir: "{{ claude_code_agent_user_clone_dir }}"
-    creates: "{{ claude_code_agent_user_clone_dir }}/.git/hooks/pre-commit"
-    removes: "{{ claude_code_agent_user_home }}/.local/bin/prek"
-  environment:
-    HOME: "{{ claude_code_agent_user_home }}"
-    TMPDIR: /tmp
-  register: claude_code_agent_hooks
-  # Never fatal, for the clone pull's reason above. prek refuses while the clone sets
-  # core.hooksPath, and the report below names that.
-  failed_when: false
-  become: true
-  when: claude_code_agent_user_enabled
-
-- name: Report that the agent user's commit hooks were not installed
-  tags: [claude_code]
-  ansible.builtin.debug:
-    msg: >-
-      prek install failed in {{ claude_code_agent_user_clone_dir }}:
-      {{ claude_code_agent_hooks.stderr | default('') }}.
-      The agent's commits skip gitleaks and the commit-time checks until it succeeds.
-  when:
-    - claude_code_agent_user_enabled
-    - not ansible_check_mode
-    - claude_code_agent_hooks.rc | default(0) != 0
-
-- name: Create the agent user's kubeconfig directory
-  tags: [claude_code]
-  ansible.builtin.file:
-    path: "{{ claude_code_agent_user_home }}/.kube"
-    state: directory
-    owner: "{{ claude_code_agent_user }}"
-    # The group the shared task file's recursive chown sets, so the two never flip each other.
-    group: "{{ sys_user }}"
-    mode: "0700"
-  become: true
-  when: claude_code_agent_user_enabled
-
-- name: Look for the operator's read-only kubeconfig
-  tags: [claude_code]
-  ansible.builtin.stat:
-    path: "/home/{{ sys_user }}/.kube/config"
-  register: claude_code_operator_kubeconfig
-  become: true
-  when: claude_code_agent_user_enabled
-
-# Only where the operator has one. daniel-server, a k3s agent node, has none, and its agent
-# runs fan-out batches that stop at the PR, so it reads no cluster state (2026-10-10).
-- name: Give the agent user the operator's read-only kubeconfig
-  tags: [claude_code]
-  # The homelab-readonly ServiceAccount the k3s role writes for {{ sys_user }}: get, list and
-  # watch, with Secrets and pods/exec refused. Never /etc/rancher/k3s/k3s.yaml, which is
-  # cluster-admin. Copied, as uv is, so a token the k3s role re-mints reaches the agent on the
-  # next apply of this role.
-  ansible.builtin.copy:
-    src: "/home/{{ sys_user }}/.kube/config"
-    dest: "{{ claude_code_agent_user_home }}/.kube/config"
-    remote_src: true
-    owner: "{{ claude_code_agent_user }}"
-    group: "{{ sys_user }}"
-    mode: "0600"
-  become: true
-  # The file carries the ServiceAccount's token, which a --diff run would print.
-  diff: false
-  no_log: true
-  when:
-    - claude_code_agent_user_enabled
-    - claude_code_operator_kubeconfig.stat.exists
-
-- name: Look for the operator's deployed cc-wait
-  tags: [claude_code]
-  ansible.builtin.stat:
-    path: /home/{{ sys_user }}/.local/share/cc-wait/cc_wait
-  register: claude_code_agent_cc_wait
-  become: true
-  when: claude_code_agent_user_enabled
-
-- name: Create the agent user's cc-wait directory
-  tags: [claude_code]
-  ansible.builtin.file:
-    path: "{{ claude_code_agent_user_home }}/.local/share/cc-wait"
-    state: directory
-    owner: "{{ claude_code_agent_user }}"
-    group: "{{ sys_user }}"
-    mode: "0755"
-  become: true
-  when: claude_code_agent_user_enabled
-
-- name: Give the agent user the operator's cc-wait
-  tags: [claude_code]
-  # The repo's skills wait with cc-wait, `land.sh ... --detach && cc-wait land <n>` among them,
-  # and the dotfiles repo deploys it under the operator's home only. Copied, as claude_guard is,
-  # so the agent waits with the operator's version. A host without the dotfiles deploy skips
-  # this. `default`: a skipped stat above still sets the register, with no `stat` key in it.
-  ansible.builtin.copy:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
-    remote_src: true
-    owner: "{{ claude_code_agent_user }}"
-    group: "{{ sys_user }}"
-    mode: preserve
-  loop:
-    - src: /home/{{ sys_user }}/.local/share/cc-wait/cc_wait
-      dest: "{{ claude_code_agent_user_home }}/.local/share/cc-wait/"
-    - src: /home/{{ sys_user }}/.local/bin/cc-wait
-      dest: "{{ claude_code_agent_user_home }}/.local/bin/cc-wait"
-  become: true
-  when:
-    - claude_code_agent_user_enabled
-    - claude_code_agent_cc_wait.stat.exists | default(false)
-
-- name: Look for the operator's deployed jsonq
-  tags: [claude_code]
-  ansible.builtin.stat:
-    path: /home/{{ sys_user }}/.local/share/jsonq
-  register: claude_code_agent_jsonq
-  become: true
-  when: claude_code_agent_user_enabled
-
-- name: Give the agent user the operator's jsonq
-  tags: [claude_code]
-  # The operator's CLAUDE.md, which the agent imports, says jsonq is installed for JSON work jq
-  # cannot express; without it a session falls back to the prompting `python3 -c` (#4101). The
-  # dotfiles repo deploys it under the operator's home only. The script loads its modules from
-  # ../share/jsonq beside its own real path, so both halves are copied. Copied as cc-wait is
-  # above, and skipped the same way on a host without the dotfiles deploy.
-  ansible.builtin.copy:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
-    remote_src: true
-    owner: "{{ claude_code_agent_user }}"
-    group: "{{ sys_user }}"
-    mode: preserve
-  loop:
-    - src: /home/{{ sys_user }}/.local/share/jsonq
-      dest: "{{ claude_code_agent_user_home }}/.local/share/"
-    - src: /home/{{ sys_user }}/.local/bin/jsonq
-      dest: "{{ claude_code_agent_user_home }}/.local/bin/jsonq"
-  become: true
-  when:
-    - claude_code_agent_user_enabled
-    - claude_code_agent_jsonq.stat.exists | default(false)
-
-- name: Give the agent user its GitHub identity
-  tags: [claude_code]
-  when: claude_code_agent_user_enabled
-  ansible.builtin.import_tasks: agent_github.yml
-
-# The login only feeds the homelab-ui browser (scripts/diagnostics/ui_login.py), so a host
-# without the browser holds no Authelia credential.
-- name: Give the agent user its homelab-ui login
-  tags: [claude_code]
-  when:
-    - claude_code_agent_user_enabled
-    - claude_code_agent_homelab_ui_enabled
-  ansible.builtin.import_tasks: agent_homelab_ui.yml
-
-- name: Give the agent user an ssh key for the peers and name them
-  tags: [claude_code]
-  when:
-    - claude_code_agent_user_enabled
-    - inventory_hostname == claude_agent_ssh_key_host
-  ansible.builtin.import_tasks: agent_peers.yml
-
-- name: Let the key host's agent log in as this host's agent user, or take it back
-  tags: [claude_code]
-  when:
-    - claude_code_agent_user_enabled
-    - inventory_hostname != claude_agent_ssh_key_host
-  ansible.builtin.import_tasks: agent_ssh_login.yml
-
-- name: Give the agent user its homelab-ui browser and MCP registration, or take them back
-  tags: [claude_code]
-  when: claude_code_agent_user_enabled
-  ansible.builtin.import_tasks: agent_browser.yml
-
-- name: Set what the agent reads of the host, and what the operator reads of the agent
-  tags: [claude_code]
-  when: claude_code_agent_user_enabled
-  ansible.builtin.import_tasks: agent_access.yml
-
-- name: Give the agent a subset of the operator's Claude config, or take it back
-  tags: [claude_code]
-  when: claude_code_agent_user_enabled
-  ansible.builtin.import_tasks: agent_operator_config.yml
-
-# Once, when the phone host moves to the agent: its sessions would otherwise start with an
-# empty memory store. Guarded again inside by the agent's own MEMORY.md.
-- name: Copy the operator's memory store into the agent's, the first time the agent is the host's user
-  tags: [claude_code]
-  when:
-    - claude_code_agent_user_enabled
-    - claude_code_user == claude_code_agent_user
-    - claude_code_agent_memory_seed
-  ansible.builtin.import_tasks: agent_memory_seed.yml
-
-# After the agent user exists: the caps follow its uid, looked up from the passwd database.
+# After the agent users exist: the caps follow their uids, looked up from the passwd database.
 # The block sits down here, not beside the cgroup metrics above, because a first apply that
-# built the user in the same run would otherwise find no uid to cap.
+# built a user in the same run would otherwise find no uid to cap.
 - name: Cap the login-session slices of every account that starts Claude sessions
   tags: [claude_code]
   ansible.builtin.import_tasks: login_caps.yml
 
-# The token is the one credential in the home that works off this host, so switching the user
-# off removes it. The signing key stays: it can only sign, and a new one would need adding to
-# the account again. Revoking the token on GitHub is the operator's half of this.
-- name: Remove the agent user's GitHub token when it is switched off
-  tags: [claude_code]
-  ansible.builtin.file:
-    path: "{{ claude_code_agent_user_home }}/.config/gh/hosts.yml"
-    state: absent
-  become: true
-  when: not claude_code_agent_user_enabled
-
-# The homelab-ui login is a live Authelia credential, so switching the user or its browser off
-# removes it too. Disabling the Authelia account itself is the operator's half: delete the
-# `claude-agent` block in the authelia role and redeploy.
-- name: Remove the agent user's homelab-ui login when it or its browser is switched off
-  tags: [claude_code]
-  ansible.builtin.file:
-    path: "{{ claude_code_homelab_ui_credentials }}"
-    state: absent
-  become: true
-  when: not (claude_code_agent_user_enabled and claude_code_agent_homelab_ui_enabled)
-
-- name: Look for the agent user on a host that has it switched off
-  tags: [claude_code]
-  ansible.builtin.getent:
-    database: passwd
-    key: "{{ claude_code_agent_user }}"
-    fail_key: false
-  when: not claude_code_agent_user_enabled
-
-# The way out. Expired rather than removed: removing the user strands its files under a bare
-# uid, and the home holds the agent's clone and any work it has not pushed. 86400 is
-# 1970-01-02, because a shadow expiry of day 0 also reads as "never expires".
-- name: Expire the agent user's account when it is switched off
-  tags: [claude_code]
-  ansible.builtin.user:
-    name: "{{ claude_code_agent_user }}"
-    expires: 86400
-  become: true
-  when:
-    - not claude_code_agent_user_enabled
-    - ansible_facts.getent_passwd[claude_code_agent_user] is not none
-
-- name: Stop the switched-off agent user's manager lingering
-  tags: [claude_code]
-  ansible.builtin.command: "loginctl disable-linger {{ claude_code_agent_user }}"
-  args:
-    removes: "/var/lib/systemd/linger/{{ claude_code_agent_user }}"
-  become: true
-  when: not claude_code_agent_user_enabled
-
-# The way out for the clone sync. An expired account does not stop a `User=` service, which
-# runs with no PAM account check, so the units must go or the timer keeps pulling.
-- name: Check whether an agent clone sync timer is installed
-  tags: [claude_code]
-  ansible.builtin.stat:
-    path: /etc/systemd/system/claude-clone-sync.timer
-  register: claude_code_agent_clone_sync_timer_file
-  become: true
-  when: not claude_code_agent_user_enabled
-
-# Guarded on the file: systemd refuses to stop a unit it has never heard of.
-- name: Stop and disable the agent clone sync timer when the agent user is switched off
-  tags: [claude_code]
-  ansible.builtin.systemd:
-    name: claude-clone-sync.timer
-    enabled: false
-    state: stopped
-  become: true
-  when:
-    - not claude_code_agent_user_enabled
-    - claude_code_agent_clone_sync_timer_file.stat.exists
-
-- name: Remove the agent clone sync units and script when the agent user is switched off
+# The script every agent's clone sync unit runs goes only once no agent is left to run it.
+- name: Remove the agent clone sync script when no agent user is switched on
   tags: [claude_code]
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
   loop:
-    - /etc/systemd/system/claude-clone-sync.service
-    - /etc/systemd/system/claude-clone-sync.timer
-    - /etc/systemd/system/claude-clone-sync-alert.service
     - /usr/local/bin/claude-clone-sync.sh
     # The drift-check fragment the stamp at the end of this file writes. Left behind, it names
     # the script removed above, and the setup drift check reports it missing for good.
     - /var/lib/homelab/setup-deployed-manifest.d/claude-code-clone-sync
   become: true
-  when: not claude_code_agent_user_enabled
-  notify: Reload systemd
+  when: claude_code_agents_present | length == 0
 
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # In its own file, because that file is on the lander's approval list and pins the lander's
@@ -908,11 +471,11 @@
       - live: /usr/local/bin/claude-cgroup-metrics.sh
         src: ansible/roles/setup/claude_code/files/claude-cgroup-metrics.sh
 
-# Its own group, so a host with the agent user switched off claims no clone sync script. The
-# switched-off arm above removes this fragment with the script.
+# Its own group, so a host with every agent user switched off claims no clone sync script. The
+# arm above that removes the script removes this fragment with it.
 - name: Record the deployed agent clone sync script for drift checking
   tags: [claude_code]
-  when: claude_code_agent_user_enabled
+  when: claude_code_agents_present | length > 0
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
   vars:
     stamp_deployed_name: claude-code-clone-sync

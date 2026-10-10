@@ -240,11 +240,23 @@ def _swept(capped: list[int]) -> list[str]:
 
 
 def test_without_the_agent_only_the_operator_uid_is_capped() -> None:
-    assert _capped_uids(claude_code_agent_user_enabled=False) == [1000]
+    assert _capped_uids(claude_code_agents_present=[]) == [1000]
 
 
 def test_with_the_agent_both_uids_are_capped() -> None:
-    assert _capped_uids(claude_code_agent_user_enabled=True) == [1000, 996]
+    assert _capped_uids(claude_code_agents_present=["claude"]) == [1000, 996]
+
+
+def test_every_switched_on_agent_is_capped() -> None:
+    two_agents = {
+        **PASSWD,
+        "claude2": ["x", "995", "995", "", "/var/lib/claude2", "/bin/bash"],
+    }
+    capped = _capped_uids(
+        claude_code_agents_present=["claude", "claude2"],
+        ansible_facts={"getent_passwd": two_agents},
+    )
+    assert capped == [1000, 996, 995]
 
 
 def test_the_agent_uid_is_looked_up_not_written_down() -> None:
@@ -253,7 +265,7 @@ def test_the_agent_uid_is_looked_up_not_written_down() -> None:
         "claude": ["x", "1234", "1234", "", "/var/lib/claude", "sh"],
     }
     capped = _capped_uids(
-        claude_code_agent_user_enabled=True,
+        claude_code_agents_present=["claude"],
         ansible_facts={"getent_passwd": renumbered},
     )
     assert capped == [1000, 1234]
@@ -261,7 +273,7 @@ def test_the_agent_uid_is_looked_up_not_written_down() -> None:
 
 def test_an_agent_that_does_not_exist_yet_adds_no_uid() -> None:
     capped = _capped_uids(
-        claude_code_agent_user_enabled=True,
+        claude_code_agents_present=["claude"],
         ansible_facts={"getent_passwd": {"ubuntu": PASSWD["ubuntu"]}},
     )
     assert capped == [1000]
@@ -269,7 +281,7 @@ def test_an_agent_that_does_not_exist_yet_adds_no_uid() -> None:
 
 def test_switching_the_caps_off_caps_no_uid() -> None:
     capped = _capped_uids(
-        claude_code_agent_user_enabled=True, claude_code_login_caps_enabled=False
+        claude_code_agents_present=["claude"], claude_code_login_caps_enabled=False
     )
     assert capped == []
 

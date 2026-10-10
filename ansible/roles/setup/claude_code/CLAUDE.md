@@ -85,10 +85,10 @@ start**, so the deploy that changes it drops the RC host's sessions.
 
 ## The agent user
 
-`claude_code_agent_user_enabled` builds `claude` with
-`ansible/roles/setup/common/tasks/agent_user.yml`. The agent lands a PR by starting
-`claude-land@<n>.service`, which runs `land.sh` as the operator under the landing policy.
-`defaults/main.yml` covers login, the GitHub account, the lander and each switch.
+`tasks/agent.yml` builds one agent user per `claude_code_agents` entry; the include maps each
+profile field (`ansible/filter_plugins/claude_agents.py`) onto the `claude_code_agent_*` name
+the tasks read. `docs/claude-agent-user.md` has the rest. `claude` lands a PR through
+`claude-land@<n>.service`.
 
 `claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as, and its home
 and `claude_code_rc_workdir` follow it. The unit is sandboxed (`ProtectHome=yes` and three more)
@@ -109,8 +109,8 @@ agent copies the operator's memory store once (`tasks/agent_memory_seed.yml`).
 
 ## Autonomous-role contract (`claude-clone-sync`)
 
-- **Scope:** a `--ff-only` pull of the agent's clone every
+- **Scope:** a `--ff-only` pull of each agent's clone every
   `claude_code_agent_clone_sync_interval`, then the venv and collections if their locks moved.
-- **Mode:** `claude_code_agent_user_enabled`; false removes it.
+- **Mode:** the agent's `state`; absent removes its `<name>-clone-sync` units.
 - **Abort valve:** it skips, exiting 0, unless the clone is a clean `master`.
-- **Evidence:** `journalctl -u claude-clone-sync`; a failure pages Discord.
+- **Evidence:** `journalctl -u <name>-clone-sync`; a failure pages Discord.
