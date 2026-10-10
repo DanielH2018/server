@@ -54,6 +54,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "deploy_tools"))
 
+import functools
 import json
 import os
 import re
@@ -66,7 +67,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from land_lib.detach import _VERDICT_LINE, default_log_dir, error_in, verdict_in
-from lib import deployer_park
+from lib import deployer_park, yaml_fast
+from lib.ansible_inventory import GITOPS_HOST, host_vars_file
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO, ROLES
 
 # The deployer's own modules, so the CI and ledger rules are its rules and not a copy.
@@ -78,11 +80,7 @@ from gitops_ledger import held_planes, manual_plane_entries
 # deploy-ui's daemon on the deployer's host: `deploy_ui_port` in
 # `ansible/roles/setup/deploy_ui/defaults/main.yml`. Its ufw rule admits every node IP, which
 # is what lets a session on daniel-server read it.
-# The address is the host's LAN IP, not its name. The unit binds `DEPLOY_UI_BIND={{ server_ip }}`
-# only, and on daniel-box itself `/etc/hosts` resolves `daniel-box` to 127.0.1.1, where nothing
-# listens: every `runs` read from the deployer's own host failed with Connection refused.
-# `test_deploy_ui_url_is_the_gitops_hosts_server_ip_and_port` pins both to the inventory.
-DEPLOY_UI_URL = "http://10.0.0.215:8790"
+DEPLOY_UI_PORT = 8790
 HTTP_TIMEOUT_S = 5
 SUBPROCESS_TIMEOUT_S = 30
 
@@ -237,8 +235,24 @@ def _owed_locally(
     return snap.hold, snap.owed
 
 
+@functools.cache
+def deploy_ui_url(host_vars: Path | None = None) -> str:
+    """The base URL of deploy-ui, addressed by the GitOps host's `server_ip`.
+
+    The address is the IP, not the hostname. The unit binds `DEPLOY_UI_BIND={{ server_ip }}`
+    only, and on daniel-box itself `/etc/hosts` resolves `daniel-box` to 127.0.1.1, where
+    nothing listens. The IP is read rather than typed because host_vars is its one source
+    (`ansible/tests/repo/test_lan_facts_have_one_source.py`).
+
+    Args:
+        host_vars: the host_vars file to read; the GitOps host's when omitted.
+    """
+    data = yaml_fast.safe_load((host_vars or host_vars_file(GITOPS_HOST)).read_text())
+    return f"http://{data['server_ip']}:{DEPLOY_UI_PORT}"
+
+
 def _get_text(path: str) -> str:
-    with urllib.request.urlopen(DEPLOY_UI_URL + path, timeout=HTTP_TIMEOUT_S) as resp:
+    with urllib.request.urlopen(deploy_ui_url() + path, timeout=HTTP_TIMEOUT_S) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
 
