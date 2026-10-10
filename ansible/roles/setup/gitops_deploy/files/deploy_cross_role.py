@@ -62,7 +62,11 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
 # `k3s` runs only from `k3s-bringup.yml`, and `optimize_pi` only on daniel-pi, by its gate in
 # `initial_setup.yml` (#3933). Recording `common` prints the
 # two-host remediation in `deploy_remediation._setup_commands` as one line.
-SETUP_FILES_ROUTED_TO_OWNER = frozenset({f"{_COMMON}/templates/resolv.conf.j2"})
+# The value names the roles that render the file. `_setup_commands` builds `common`'s command
+# from them and the routing (#4316), so neither a host nor a playbook is written down twice.
+SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {
+    f"{_COMMON}/templates/resolv.conf.j2": frozenset({"k3s", "optimize_pi"}),
+}
 
 # The k8s roles that import a setup file by path, so a change to it defer-and-alerts each one
 # (#3320). The deployer never applies a k8s role for a change that is not an image-pin bump, so
@@ -79,8 +83,8 @@ K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
 
 
 # A filter plugin mapped to the setup roles whose rendered state calls one of its filters
-# (#3874). `ansible/deploy.yml` runs no setup role, so neither a narrowed deploy plane nor the
-# full play it falls back to re-renders these. `setup_roles_for` returns them, and the tick
+# (#3874). `ansible/deploy.yml` runs no setup role, so no deploy-plane apply, narrowed or
+# whole, re-renders these. `setup_roles_for` returns them, and the tick
 # applies or records each as it would its own change: `gitops_deploy` through
 # `initial_setup.yml`, and `k3s` as a `manual_plane` line, since only `k3s-bringup.yml` runs it.
 # `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
@@ -207,6 +211,24 @@ def _collection(value, kinds):
 def current_tables() -> dict[str, object]:
     """The tables this module holds, by name, in the shape `use_tables` takes."""
     return {name: globals()[name] for name in TABLE_NAMES}
+
+
+def owner_routed_consumers(owner: str) -> frozenset[str]:
+    """The roles that render a file of `owner`'s that `SETUP_FILES_ROUTED_TO_OWNER` records.
+
+    Read from this module's globals, so a copy `use_tables` adopted answers. A copy that
+    predates #4316 holds a frozenset of paths, with no consumers to read, and answers none.
+    """
+    table = globals()["SETUP_FILES_ROUTED_TO_OWNER"]
+    if not isinstance(table, dict):
+        return frozenset()
+    prefix = f"ansible/roles/setup/{owner}/"
+    return frozenset(
+        role
+        for path, roles in table.items()
+        if path.startswith(prefix)
+        for role in roles
+    )
 
 
 def use_tables(tables: dict[str, object]) -> None:

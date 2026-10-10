@@ -23,6 +23,7 @@ import deploy_cross_role
 from deploy_setup_roles import (  # noqa: F401  (re-exported for this module's readers)
     INITIAL_SETUP,
     is_routed,
+    keys_naming_no_role,
     roles_outside_initial_setup_in,
     routing_failed,
     setup_role_host,
@@ -220,10 +221,10 @@ def _content_lines(text: str) -> list[str]:
 # superset of _BROAD_MANUAL_PREFIXES (all three bring-up playbooks are listed there too) --
 # written as the union so widening either list widens this with it.
 #
-# The DEPLOY plane is deliberately absent. A comment-only edit under ansible/templates/ or
-# ansible/inventory/ still runs a full deploy.yml, which costs twenty minutes and tells no
-# lie; the failure this exists to stop is a verdict that sends an operator to a playbook with
-# nothing to do, and that verdict only comes off the setup plane.
+# The DEPLOY plane is deliberately absent. Its narrowing reads a comment-only edit itself
+# (`narrow_templates.comment_edit`, and inventory keys compared as parsed values) and applies
+# nothing for one; the failure this exists to stop is a verdict that sends an operator to a
+# playbook with nothing to do, and that verdict only comes off the setup plane.
 _COMMENT_ONLY_PREFIXES = tuple(
     dict.fromkeys(_BROAD_MANUAL_PREFIXES + _BROAD_SETUP_PREFIXES)
 )

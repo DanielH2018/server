@@ -227,9 +227,13 @@ def handle_broad(
     # lock on the second plane resets the ff-merge like one on the first: the setup plane
     # is idempotent, and the next tick re-crosses the whole range.
     deadline = time.monotonic() + config.broad_deploy_timeout_s
-    releases_before = deploy_narrow.releases_before(tools.release_records, plans)
     for broad in plans:
         playbook, tags = broad.playbook, broad.tags
+        if broad.deferred:
+            # Nothing ran, so no receipt, no hold cleared and no line cleared: an empty tag
+            # list in the receipt reads as "the whole play ran" to land.sh (#4333).
+            # `apply_broad_k8s` records what it owes.
+            continue
         try:
             if broad.apply:
                 deploy_io.deploy_broad(
@@ -267,7 +271,13 @@ def handle_broad(
             # from each exit that leaves the range merged keeps #2383's property — every one
             # of them is reached with `local == origin`, where no later tick re-evaluates.
             deploy_k8s_owed.alert_and_record_deferred(
-                tools, state, config, origin, set(), cs, plan.k8s_services
+                tools,
+                state,
+                config,
+                origin,
+                set(),
+                deploy_broad_k8s.fold_deferred(cs, plans, plan.k8s_services),
+                plan.k8s_services,
             )
             deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
             posted = deploy_alerts.discord(
@@ -292,9 +302,6 @@ def handle_broad(
         # past — `behind_since` empty cannot (issue #1537). Written per plan and on nothing
         # else: a range whose whole broad half is a role this deployer cannot apply has no
         # plan, so no receipt says an apply happened — #1537's failure, in reverse.
-        deploy_narrow.log_applied_shadow(
-            tools.release_records, tools.applied_diff, releases_before, origin, broad
-        )
         state.record_receipt(origin, target.local, applied={playbook: tags})
         state.clear_broad_hold(playbook, tags)
         deploy_defer.clear_applied(state, playbook, tags)

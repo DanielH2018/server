@@ -31,6 +31,7 @@ from deploy_tools.land_lib.outcome import (
     unrecorded_apply_note,
 )
 from deploy_tools.land_lib.pr_json import PrView, parse_view
+from deploy_tools import land_tags
 from deploy_tools.land_lib.tools import Classifier, Tools
 from lib.json_types import as_object
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -335,7 +336,19 @@ class Landing:
         the other direction is the bug.
         """
         receipt = self.receipt_for(sha)
-        return bool(receipt and receipt.applied)
+        if not (receipt and receipt.applied):
+            return False
+        # Every plane this PR's broad half needs, not just any plane (#4333): a refused
+        # deploy-plane narrowing applies nothing and writes no `ansible/deploy.yml` entry,
+        # while a setup plane in the same tick still writes its own. An unread answer is the
+        # conservative False the docstring gives.
+        try:
+            needed = land_tags.self_applied_playbooks(
+                list(self.classification.pr_paths), self.classification.quiet
+            )
+        except Exception:
+            return False
+        return needed <= set(receipt.applied)
 
     def receipt_for(self, sha: str) -> Receipt | None:
         """The deployer's receipt for the tick that crossed `sha`, or None when there is none.

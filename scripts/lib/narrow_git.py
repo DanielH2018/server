@@ -31,10 +31,18 @@ from lib.git import git
 class CannotNarrow(Exception):
     """This change reaches something no narrow tag list covers.
 
-    Both callers act on it by widening: the deploy plane runs the whole `ansible/deploy.yml`
-    play, and the setup plane prints the whole-role tag. Neither is wrong, only slow — so any
-    doubt raises this rather than guessing a narrower answer.
+    Both callers act on it by widening: the deploy plane defers every service it may reach
+    to `k8s_unapplied` (#4333), and the setup plane prints the whole-role tag. Neither is
+    wrong, only coarse, so any doubt raises this rather than guessing a narrower answer.
+
+    Attributes:
+        reached: the tags the derivation did reach, when the refusal is about their number
+            rather than about what it could not read. Empty for every other refusal.
     """
+
+    def __init__(self, message: str, reached: set[str] | None = None) -> None:
+        super().__init__(message)
+        self.reached = frozenset(reached or ())
 
 
 def show_at(ref: str, path: str, repo) -> str | None:

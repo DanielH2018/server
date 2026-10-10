@@ -11,12 +11,14 @@ import subprocess
 
 import pytest
 
+import deploy_cross_role
 import deploy_defer
 import deploy_phases
 import deploy_setup_roles
 import setup_routing
 from _deploy_fakes import checkout_routing
 from deploy_changes import setup_tags_for, tick_applies_setup_role
+from deploy_remediation import broad_remediation
 from gitops_markers import NO_PLAYBOOK, UNROUTED_PLAYBOOK, by_hand
 
 GITOPS_TASKS = "ansible/roles/setup/gitops_deploy/tasks/main.yml"
@@ -207,6 +209,53 @@ def test_a_range_carrying_an_unplaced_role_fast_forwards_and_records_it(
     assert "`chezmoi_setup` could not be routed from the playbooks" in out
 
 
+# ── a pending line for a setup role a later range deleted is dropped (#4334) ─────────────
+_SETUP_LISTING = "ansible/roles/setup/chezmoi_setup\nansible/roles/setup/k3s\n"
+
+
+@pytest.mark.parametrize(
+    ("listing", "owed"),
+    [
+        (_SETUP_LISTING, []),
+        # The red half: the role is still on disk, so its line stays for a hand.
+        (_SETUP_LISTING + "ansible/roles/setup/fake_remux\n", ["fake_remux"]),
+        ("", ["fake_remux"]),
+    ],
+)
+def test_a_manual_plane_line_for_a_role_deleted_since_is_dropped_on_the_next_tick(
+    gitops_deploy, tick, state, listing, owed
+):
+    state.record_manual_plane("e" * 40, INITIAL_SETUP, "fake_remux", 1000.0)
+    tick.paths = []
+    tick.tree_listing = listing
+    tools = _with_routing(tick, _routing_without("fake_remux", None))
+    assert gitops_deploy.main(tools, tick.config, state) == 0
+    assert [e.role for e in state.manual_plane_pending()] == owed
+
+
+def test_a_line_keyed_by_a_live_roles_tag_is_kept(gitops_deploy, tick, state):
+    """`chezmoi` names no directory; `chezmoi_setup`'s route maps it back to a live role."""
+    state.record_manual_plane("e" * 40, INITIAL_SETUP, "chezmoi", 1000.0)
+    tick.paths = []
+    tick.tree_listing = _SETUP_LISTING
+    tools = _with_routing(tick, _routing_without("fake_remux", None))
+    assert gitops_deploy.main(tools, tick.config, state) == 0
+    assert [e.role for e in state.manual_plane_pending()] == ["chezmoi"]
+
+
+def test_a_failed_routing_drops_no_manual_plane_line(gitops_deploy, tick, state):
+    """With no routes every tag key reads as deleted, so a failure must keep them all."""
+
+    def routing(_repo, _ref, _host):
+        raise subprocess.TimeoutExpired(["uv"], 30)
+
+    state.record_manual_plane("e" * 40, INITIAL_SETUP, "chezmoi", 1000.0)
+    tick.paths = []
+    tick.tree_listing = _SETUP_LISTING
+    assert gitops_deploy.main(_with_routing(tick, routing), tick.config, state) == 0
+    assert [e.role for e in state.manual_plane_pending()] == ["chezmoi"]
+
+
 # ── clear_applied keys on the --tags values the apply ran ─────────────────────────────────
 def test_a_chezmoi_apply_clearing_chezmoi_setups_line_is_clean(state):
     """`chezmoi_setup` is keyed and applied as `chezmoi`, which no role directory is named."""
@@ -243,3 +292,33 @@ def test_an_unplaced_roles_line_is_flagged_unrouted_and_clears_once_routed(state
     deploy_setup_roles.use_routing(routes)
     deploy_defer.clear_applied(state, INITIAL_SETUP, ["chezmoi"])
     assert state.manual_plane_pending() == []
+
+
+# ── common's remediation names its consumers from the routing (#4316) ─────────────────────
+def test_commons_consumer_commands_follow_the_routing_not_literals():
+    """#4316: a consumer that moves host changes the printed command with it."""
+    routes, _ = checkout_routing()
+    moved = routes["optimize_pi"]._replace(host="daniel-elsewhere")
+    deploy_setup_roles.use_routing({**routes, "optimize_pi": moved})
+    cmd = broad_remediation(False, True, {"common"})
+    assert "--tags optimize_pi -e target=daniel-elsewhere`" in cmd
+    assert "daniel-pi" not in cmd
+
+
+def test_commons_consumers_come_from_the_adopted_cross_role_table():
+    """A third role rendering `resolv.conf.j2` is named once origin's table carries it."""
+    path = "ansible/roles/setup/common/templates/resolv.conf.j2"
+    saved = deploy_cross_role.current_tables()
+    deploy_cross_role.use_tables(
+        {
+            **saved,
+            "SETUP_FILES_ROUTED_TO_OWNER": {
+                path: frozenset({"k3s", "optimize_pi", "chezmoi_setup"})
+            },
+        }
+    )
+    try:
+        cmd = broad_remediation(False, True, {"common"})
+    finally:
+        deploy_cross_role.use_tables(saved)
+    assert "`ansible-playbook ansible/initial_setup.yml --tags chezmoi`" in cmd

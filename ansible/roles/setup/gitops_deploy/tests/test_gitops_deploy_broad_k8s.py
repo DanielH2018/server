@@ -24,7 +24,6 @@ from _broad_k8s_range import (
     APPLY_GITOPS_DEPLOY,
     APPLYABLE_ROLE,
     DEPLOY_PLANE,
-    DEPLOY_PLANE_FULL,
     DEPLOY_SONARR,
     LOCAL,
     ORIGIN,
@@ -131,13 +130,16 @@ def test_a_failed_bump_holds_the_sha_and_its_plane_and_does_not_reset(
 
 @pytest.mark.parametrize(
     ("narrow", "expected"),
-    [((0, "sonarr"), [DEPLOY_SONARR]), ((3, ""), [DEPLOY_PLANE_FULL])],
-    ids=["narrowed-to-the-bump", "refused-full-run"],
+    [((0, "sonarr"), [DEPLOY_SONARR]), ((3, ""), [DEPLOY_SONARR])],
+    ids=["narrowed-to-the-bump", "refused-plane-deploys-only-the-bump"],
 )
 def test_a_bump_the_deploy_plane_applies_is_not_deployed_again(
     gitops_deploy, tick, settings, narrow, expected, state
 ):
-    """A second `--tags sonarr` re-takes the Longhorn snapshot and spends the shared budget."""
+    """A second `--tags sonarr` re-takes the Longhorn snapshot and spends the shared budget.
+
+    A refused plane runs nothing since #4333, so the bump is deployed once on its own path.
+    """
     config = mixed(settings, tick, DEPLOY_PLANE)
     tick.narrow = narrow
     assert gitops_deploy.main(tick.tools, config, state) == 0

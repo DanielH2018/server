@@ -22,9 +22,8 @@ can move because of it:
     `FilterModule.filters()` registers (`narrow_filters`, #3843). A caller under the play's
     own trees refuses, as `toposort.py`'s in `deploy.yml` does.
 
-ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` turns a refusal back into today's
-full run. A missed consumer is a service left silently stale until something unrelated
-redeploys it; a full run is only slow.
+ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` defers a refused plane to
+`k8s_unapplied`, naming every candidate, rather than running the whole play (#4333).
 
 `lib.narrow_git` holds the primitives this shares with `narrow_setup`: `CannotNarrow`,
 `show_at` and the YAML mapping parse, one copy each.
@@ -374,10 +373,8 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
 
     The unit both consumers share: `narrow` calls it per path of the tick's range, and
     `releases.compute_stale` per path of a record's range. Raises `CannotNarrow` where no
-    rule can say — and the two consumers read that refusal differently. The tick runs the
-    whole play, which re-stamps every service; the census marks every service sharing the
-    record stale, which is the set that full run would have re-stamped. The two agree by
-    construction, so a refusal never leaves a service the tick applied reading stale.
+    rule can say. The tick then defers the plane to `k8s_unapplied` (#4333), and the census
+    marks every service sharing the record stale: the set a full deploy would re-stamp.
     """
     if narrow_paths.is_prose(path):  # a doc no playbook applies
         return set()
@@ -520,7 +517,8 @@ def narrow(
     if len(tags) * 2 > len(ctx.declared):
         raise CannotNarrow(
             f"{len(tags)} of {len(ctx.declared)} services — most of the fleet, which is not a "
-            "narrowing"
+            "narrowing",
+            reached=tags,
         )
     return tags
 
@@ -582,14 +580,15 @@ def narrow_cmd(
             explain=explain,
         )
     except CannotNarrow as exc:
-        print(f"narrow: cannot narrow ({exc}) — full deploy.yml", file=sys.stderr)
+        print(f"narrow: cannot narrow ({exc}) — deferring the plane", file=sys.stderr)
+        if exc.reached:  # the deferral owes these, not the whole fleet (#4333)
+            print(",".join(sorted(exc.reached)))
         return DEPLOY_BROAD
     except subprocess.CalledProcessError as exc:
         # `service_tags_at` and the diff read refs the caller handed us; an unreadable one
         # is a refusal like any other, not a traceback the deployer logs as a crash.
         print(
-            f"narrow: cannot narrow (git could not read the range: {exc}) — full "
-            "deploy.yml",
+            f"narrow: cannot narrow (git could not read the range: {exc})",
             file=sys.stderr,
         )
         return DEPLOY_BROAD

@@ -260,6 +260,20 @@ def plane_note(
     return " ".join(notes)
 
 
+def self_applied_playbooks(files, quiet=()) -> frozenset[str]:
+    """The playbooks the TICK runs for this PR's broad half; empty when it runs none.
+
+    `self_applied` is whether this is non-empty. `Landing.tick_applied` asks the tick's
+    receipt for each of them, because a receipt naming only the setup plane says nothing
+    about a deploy plane the tick deferred (#4333).
+    """
+    cs = reach.reach(files, quiet).changes
+    out = {setup_role_playbook(r) for r in cs.setup_roles if tick_applies_setup_role(r)}
+    if cs.broad_deploy:
+        out.add("ansible/deploy.yml")
+    return frozenset(p for p in out if p)
+
+
 def self_applied(files, quiet=()) -> bool:
     """Whether the PR carries a broad change that the TICK applies, not deploy.sh.
 
@@ -274,10 +288,7 @@ def self_applied(files, quiet=()) -> bool:
     edit is nothing for the tick to apply, so waiting on the deployer's state to prove it
     did is waiting on a convergence that means something else.
     """
-    cs = reach.reach(files, quiet).changes
-    if cs.broad_deploy:
-        return True
-    return any(tick_applies_setup_role(r) for r in cs.setup_roles)
+    return bool(self_applied_playbooks(files, quiet))
 
 
 def self_applied_command(files, quiet=()) -> str:

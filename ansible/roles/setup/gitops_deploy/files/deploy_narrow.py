@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Whether a deploy-plane tick applies a narrowed `--tags` list or today's whole play.
+"""Whether a deploy-plane tick applies a narrowed `--tags` list or defers the plane.
 
 `handle_broad` used to run `ansible/deploy.yml` unscoped for any change under
 `ansible/templates/` or `ansible/inventory/`. That is ~20 minutes under the tree lock across
 every role, it was 47% of all lock-busy time from 2026-09-04, and twice it failed on a gate
-belonging to a service the change never touched and held the fleet.
+belonging to a service the change never touched and held the fleet. A range the derivation
+refuses no longer runs it either: the tick defers the plane to `k8s_unapplied` (#4333).
 
 The derivation lives in `scripts/deploy_tools/narrow_broad.py` and is reached as a
 SUBPROCESS, not imported: it parses YAML and this unit runs under `uv run --no-project`,
@@ -32,8 +33,8 @@ from gitops_hold import held_tag
 NARROWED_TO_NOTHING = "narrowed-to-nothing"
 
 # How long the derivation gets. It is a handful of `git grep`s over a 54-role tree, so a run
-# that is still going at two minutes has wedged rather than slowed; the tick then takes the
-# full play, which is what it did before this existed.
+# that is still going at two minutes has wedged rather than slowed; the tick then defers the
+# plane, as for any other refusal (#4333).
 NARROW_TIMEOUT_S = 120.0
 
 NARROW_SCRIPT = "scripts/deploy_tools/deploy_tags.py"
@@ -65,7 +66,8 @@ class BroadPlan(NamedTuple):
 
     Attributes:
         playbook: the playbook to run.
-        tags: its `--tags` value, empty for the whole playbook.
+        tags: its `--tags` value. Never empty on a plan that applies: the whole
+            `deploy.yml` does not fit the tick's budget (#4333).
         apply: False when there is nothing to run, and the ff-merge is the whole apply.
         hold_tags: what a FAILED apply holds, when it differs from what it ran. None
             means the two are the same, which is every plan but the narrowed setup plane.
@@ -76,6 +78,11 @@ class BroadPlan(NamedTuple):
     tags: list[str]
     apply: bool
     hold_tags: list[str] | None = None
+    # A refused deploy-plane narrowing (#4333): nothing runs, no receipt is written, and the
+    # services in `owed` go to `k8s_unapplied`. Empty `owed` means the derivation named
+    # none, so every declared service is owed.
+    deferred: bool = False
+    owed: tuple[str, ...] = ()
 
     # The narrowed setup plane holds the block tags it RAN, each qualified by the role tag it
     # narrowed from: `gitops_deploy:gitops-config`, not `gitops-config` and not the whole
@@ -101,7 +108,9 @@ def narrow_deploy_plane(
 
     Returns:
         (exit code, stdout). Exit 0 with a comma-joined tag list narrows; exit 0 with empty
-        stdout means the range reaches no rendered output; anything else is a refusal.
+        stdout means the range reaches no rendered output; anything else is a refusal. A
+        refusal that knows its tags, the fleet-coverage ceiling, prints them anyway, and the
+        deferral records exactly those.
 
     Raises:
         subprocess.TimeoutExpired: the child outlived `timeout`.
@@ -320,7 +329,7 @@ def _one_setup_role(
 ) -> set[str]:
     """One role's narrow tags, or `{role_tag}` with the refusal logged.
 
-    DECIDED: the whole-role tag on any doubt, the way `_deploy_plane` takes the full play.
+    DECIDED: the whole-role tag on any doubt, the way `_deploy_plane` defers the plane.
     `narrow_setup.role_tags` already refuses on every ambiguity it can name — an untagged task
     file, a tag a second role declares, a derivation landing back on the role tag — and this
     adds the ones it cannot: a non-zero exit, empty output, and anything the subprocess layer
@@ -355,7 +364,7 @@ def _one_setup_role(
 
 
 def _whole_role(role: str, role_tag: str, reason: str) -> set[str]:
-    """The fallback, logged every tick it is taken, as `_full_run` is for the deploy plane."""
+    """The fallback, logged every tick it is taken, as `_deferred` is for the deploy plane."""
     log(f"narrow-setup: cannot narrow {role} ({reason}) — applying --tags {role_tag}")
     return {role_tag}
 
@@ -434,12 +443,12 @@ def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
         for key, names in sorted(verdicts.items())
         if key.startswith("unknown: ")
     )
-    if not deploy.apply:
+    if deploy.deferred:
+        chose = "to defer the plane"
+    elif not deploy.apply:
         chose = "nothing"
-    elif deploy.tags:
-        chose = ",".join(deploy.tags)
     else:
-        chose = "the full play"
+        chose = ",".join(deploy.tags)
     log(
         f"narrow shadow: render digest at {origin[:8]} would apply "
         f"{','.join(drifted) or 'nothing'} (current {len(verdicts.get('current', []))}; "
@@ -447,63 +456,8 @@ def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
     )
 
 
-# DECIDED: the shadow's evidence comes from the full play itself, not from an extra render.
-# The line above compares against an hourly render, which matched the commit being applied on
-# 0 of 39 deploy-plane ticks from 2026-10-01 to 2026-10-05: the tick applies a merge that no
-# render has seen yet. A full play stamps every service it applies through the same
-# `release_digest.yml` a render uses (56 of 56 release digests equalled the render digests
-# at one commit, 2026-10-05), so the records either side of the play name exactly what a digest
-# diff would have applied. That costs no render and no lock time. Rendering inside the tick
-# would add ~500s of lock time to every broad tick to measure something that applies nothing.
-# A narrowed tick re-stamps only its own tags, so it measures nothing here, and its line
-# above stays the only evidence for it.
-def is_full_deploy_play(broad: BroadPlan) -> bool:
-    """True for the unscoped `deploy.yml` run a refused narrowing falls back to."""
-    return broad.apply and not broad.tags and broad.playbook == "ansible/deploy.yml"
-
-
-def releases_before(release_records, plans: list[BroadPlan]) -> dict | None:
-    """The release records before a full deploy play, or None when no plan is one.
-
-    Never raises: it runs after the ff-merge and before the apply, where an escape would
-    leave the merged range unapplied.
-    """
-    if not any(is_full_deploy_play(broad) for broad in plans):
-        return None
-    try:
-        return release_records()
-    except Exception as exc:
-        log(f"narrow measured: no release records ({type(exc).__name__}: {exc})")
-        return None
-
-
-def log_applied_shadow(
-    release_records, applied_diff, before: dict | None, origin: str, broad: BroadPlan
-) -> None:
-    """After a full play succeeds, log the services whose applied digests it moved.
-
-    `before` is `releases_before`'s snapshot; None, or a plan that is not the full play,
-    logs nothing. Never raises, for the reason `releases_before` gives.
-    """
-    if before is None or not is_full_deploy_play(broad):
-        return
-    try:
-        verdicts = applied_diff(before, release_records(), origin)
-    except Exception as exc:
-        log(f"narrow measured: no applied diff ({type(exc).__name__}: {exc})")
-        return
-    moved = verdicts.get("moved", [])
-    log(
-        f"narrow measured: the full play at {origin[:8]} moved "
-        f"{','.join(moved) or 'nothing'} (moved {len(moved)}; "
-        f"unchanged {len(verdicts.get('unchanged', []))}; "
-        f"unstamped {len(verdicts.get('unstamped', []))}); "
-        "a render-digest diff would have applied only the moved services"
-    )
-
-
 def _deploy_plane(narrow, config, target) -> BroadPlan:
-    """The deploy plane: a narrowed `--tags`, nothing at all, or the whole play.
+    """The deploy plane: a narrowed `--tags`, nothing at all, or a deferral.
 
     Whichever it is, `config.k8s_autodeploy_denylist` does not subtract from it — see
     `denylisted_in` and the DECIDED marker on it.
@@ -512,18 +466,22 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
     try:
         rc, out = narrow(config.repo, target.local, target.origin, NARROW_TIMEOUT_S)
     except Exception as exc:
-        return _full_run(playbook, f"{type(exc).__name__}: {exc}")
-    # DECIDED: a full run on any doubt. Every way the derivation can be unsure — a variable
-    # the play itself reads, a tag list covering most of
-    # the fleet, a crash here — lands on this branch and runs what the tick ran before.
+        return _deferred(playbook, f"{type(exc).__name__}: {exc}", "")
+    # DECIDED: a deferral on any doubt, never the whole play (#4333). Every way the
+    # derivation can be unsure — a variable the play itself reads, a tag list covering most
+    # of the fleet, a crash here — lands on this branch. Until #4333 it ran an untagged
+    # `deploy.yml`, about 20 minutes, inside a budget the lock wait shares: on 2026-10-10 the
+    # run got 776s, timed out, and the hold parked every landing until a hand cleared it. A
+    # full run that cannot finish is a hold, not an apply. So the plane is merged and each
+    # service it may reach is recorded in `k8s_unapplied`, which names the command and
+    # discharges itself once a deploy carries the change. A missed consumer is still never
+    # silent: the derivation's refusal names the whole set it could not rule out.
     # `except Exception` is deliberate and the narrowest correct width: the call decodes a
     # subprocess's output, so it can raise UnicodeDecodeError as well as SubprocessError,
     # and an escape parks every landing behind this tick — `plan` runs BEFORE the ff-merge.
-    # A missed consumer is a service left silently stale until something unrelated
-    # redeploys it, and nothing reports that; a full run is only slow. The rules and what
-    # each one refuses are in scripts/deploy_tools/narrow_broad.py.
+    # The rules and what each one refuses are in scripts/deploy_tools/narrow_broad.py.
     if rc != 0:
-        return _full_run(playbook, f"exit {rc}")
+        return _deferred(playbook, f"exit {rc}", out)
     tags = [t for t in out.split(",") if t]
     if not tags:
         # A tag list nothing would match is NOT the same as no tags: `--tags <nothing>`
@@ -549,10 +507,11 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
 # revert would corrupt, a platform role whose rollback needs the access it just broke. The
 # broad plane has none of that machinery. It runs the plain playbook forward-only and holds
 # the SHA on failure, which is what an operator's `deploy.sh --tags <role>` does for the same
-# role, and it has applied every denied role that way on every unscoped run since 2026-08-29.
-# Three things made a filter the wrong shape. It could only gate the NARROWED path: a refused
-# range still runs the whole play, over all forty denied roles, so the filter would gate the
-# derivation that is certain and leave the one that is not wide open. Forty of the fifty-four
+# role, and it applied every denied role that way on every unscoped run from 2026-08-29 until a
+# refused range stopped running the whole play (#4333). Three things made a filter the wrong
+# shape. It could only gate the NARROWED path: a refused range then ran the whole play, over all
+# forty denied roles, so the filter would have gated the derivation that is certain and left the
+# one that is not wide open. Forty of the fifty-four
 # k8s roles are denied, so a filtered narrowed range would mostly apply nothing and hand a
 # tag list to a human — for a change a human authored and merged, with `land.sh` already
 # waiting on this tick to apply it. The third reason, that a dropped tag would be a service
@@ -577,7 +536,15 @@ def denylisted_in(tags: list[str], denylist: frozenset[str] | set[str]) -> list[
     return [t for t in tags if t in denylist]
 
 
-def _full_run(playbook: str, reason: str) -> BroadPlan:
-    """The fallback, logged every tick it is taken so the journal says why the play was whole."""
-    log(f"narrow: cannot narrow ({reason}) — full {playbook}")
-    return BroadPlan(playbook, [], True)
+def _deferred(playbook: str, reason: str, out: str) -> BroadPlan:
+    """The fallback: apply nothing and owe the services the refusal named, or every one.
+
+    Logged every tick it is taken, so the journal says why the plane was not applied.
+    """
+    owed = tuple(sorted({t for t in out.split(",") if t}))
+    scope = f"{len(owed)} services it reached" if owed else "every declared service"
+    log(
+        f"narrow: cannot narrow ({reason}) — not running the whole {playbook} inside the "
+        f"tick's budget; deferring {scope} to k8s_unapplied"
+    )
+    return BroadPlan(playbook, [], False, deferred=True, owed=owed)

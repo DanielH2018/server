@@ -144,7 +144,8 @@ K8S_DEPLOY_TIMEOUT_S = CONFIG.k8s_deploy_timeout_s
 # defaults/main.yml's gitops_deploy_k8s_rollback_timeout_s comment — this fallback is only what a
 # host runs on before its config.env is re-templated with the new value.
 K8S_ROLLBACK_TIMEOUT_S = CONFIG.k8s_rollback_timeout_s
-# Bounds ONE broad-plane apply (initial_setup.yml --tags <role>, or a full deploy.yml).
+# Bounds ONE broad-plane apply (initial_setup.yml --tags <role>, or a narrowed deploy.yml; a
+# refused narrowing defers rather than starting the whole play inside it, #4333).
 # Bounded because that arm is forward-only: without a timeout a wedged run spends the unit's
 # whole TimeoutStartSec and is SIGTERMed with no hold written and no alert sent, leaving the
 # tree fast-forwarded onto a commit nothing recorded as bad. 1800s covers the 1212s measured
@@ -254,6 +255,7 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
     # deployer's own directory cannot derive the routing, so until this runs it routes none.
     # `plan_tick` re-reads it at origin for the range it classifies.
     deploy_phases.adopt_setup_routing(tools, config, "HEAD")
+    deploy_defer.drop_deleted_manual_plane(tools, state, config)
     deploy_defer.log_pending(state)
     # Same shape, one plane over: the k8s changes a tick merged and did not apply (#2449,
     # #2570). `reconcile` discharges what a deploy has since covered, then names the rest.

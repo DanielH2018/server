@@ -209,6 +209,7 @@ def test_a_contended_second_plan_takes_back_the_first_plans_receipt(
     the receipt to tell a plane the tick APPLIED from one it merely fast-forwarded past, and
     after the reset this tree carries neither.
     """
+    tick.narrow = (0, "sonarr")
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy(BUSY)]
     code = deploy_handlers.handle_broad(
         tick.tools,
@@ -244,6 +245,7 @@ def test_a_contended_tick_leaves_an_earlier_ticks_receipt_alone(
         sort_keys=True,
     )
     (state_dir / "receipts.jsonl").write_text(earlier)
+    tick.narrow = (0, "sonarr")
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy(BUSY)]
     deploy_handlers.handle_broad(
         tick.tools,

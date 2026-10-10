@@ -14,14 +14,15 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_br
 
 import dataclasses
 
+import pytest
+
 import deploy_locks
-from gitops_ledger import OWED_K8S_DEFERRED, parse_owed
+from gitops_ledger import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, parse_owed
 from _broad_k8s_range import (
     alerted,
     APPLYABLE_ROLE,
     DECLARES_SONARR,
     DEPLOY_PLANE,
-    DEPLOY_PLANE_FULL,
     DEPLOY_SONARR,
     HAND_EDITED_K8S,
     LOCAL,
@@ -118,37 +119,22 @@ def test_a_k8s_role_the_narrowed_plane_applied_is_not_called_unapplied(
     assert not [post for post in tick.posts if "radarr" in post]
 
 
-def test_a_k8s_role_a_refused_narrowing_applied_is_not_called_unapplied(
-    gitops_deploy, tick, settings, state_dir, state
+@pytest.mark.parametrize("declared", [True, False])
+def test_a_k8s_role_beside_a_refused_narrowing_is_called_unapplied(
+    gitops_deploy, tick, settings, state_dir, state, declared
 ):
-    """The other applying branch: a refused narrowing runs the whole `deploy.yml`.
+    """A refused narrowing runs nothing since #4333, so it covers no role in the range.
 
-    `_deploy_plane` takes a full run on any doubt, which applies every declared k8s entry —
-    radarr among them. The subtraction has to cover this branch too, or the common case of a
-    range the derivation cannot narrow keeps posting the false "not applied".
+    Until then it ran the whole `deploy.yml`, and a declared role was subtracted as applied.
     """
-    config = _hand_edited_radarr(settings, tick, declared=True)
+    config = _hand_edited_radarr(settings, tick, declared=declared)
     tick.narrow = (3, "")
     assert gitops_deploy.main(tick.tools, config, state) == 0
-    assert tick.playbooks == [DEPLOY_PLANE_FULL]
-    assert alerted(state_dir, "k8s") is None
-
-
-def test_a_k8s_role_this_host_does_not_declare_is_still_called_unapplied(
-    gitops_deploy, tick, settings, state_dir, state
-):
-    """The rejecting half for the full run: `deploy.yml` applies no undeclared role.
-
-    `covered_by_plane` returns the WHOLE set when a plan carries no tags, so without the
-    intersection against the declared entries a role with no `containers_list` entry here
-    would be subtracted from the post and named nowhere at all.
-    """
-    config = _hand_edited_radarr(settings, tick, declared=False)
-    tick.narrow = (3, "")
-    assert gitops_deploy.main(tick.tools, config, state) == 0
-    assert tick.playbooks == [DEPLOY_PLANE_FULL]
+    assert tick.playbooks == []
     assert alerted(state_dir, "k8s") == ORIGIN
     assert any("radarr" in post for post in tick.posts)
+    owed = {e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)}
+    assert "radarr" in owed
 
 
 def test_a_k8s_role_the_deploy_plane_missed_is_still_called_unapplied(

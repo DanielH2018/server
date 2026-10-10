@@ -4,8 +4,9 @@ The deployer records each plane it applied in the receipt of the range it crosse
 `--tags` it narrowed to: a tag list, `[]` for the whole play, or `narrowed-to-nothing` when the
 range moves no rendered output at all (#3391).
 
-The verdict reads WHETHER a plane was applied, never WHICH tags. `handle_broad` scopes the tags
-to the range it crossed, not to this PR's own roles, so a tag comparison would report
+The verdict reads WHETHER each plane this PR needs was applied, never WHICH tags.
+`handle_broad` scopes the tags to the range it crossed, not to this PR's own roles, so a tag
+comparison would report
 `needs-manual-apply` for a PR the tick applied alongside somebody else's merge. That is the
 converged-but-unapplied failure arriving from the other side.
 
@@ -20,11 +21,14 @@ from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.landing import Classification
 
 
-def _verdict(landing, state: dict, is_ancestor_rc: int = 0) -> Outcome:
+def _verdict(
+    landing, state: dict, is_ancestor_rc: int = 0, pr_paths: tuple[str, ...] = ()
+) -> Outcome:
     """The verdict for a deploy-plane PR against a deployer holding `state`."""
     ln, _ = landing(Fakes(state=state, is_ancestor_rc=is_ancestor_rc))
     ln.merge_sha = MERGE_SHA
     ln.classification = Classification(
+        pr_paths=pr_paths,
         plane="",
         self_applied=True,
         self_applied_command="`ansible-playbook ansible/deploy.yml`",
@@ -65,6 +69,33 @@ def test_a_receipt_recording_no_apply_of_this_pr_still_needs_a_hand(
     outcome = _verdict(landing, state, is_ancestor_rc)
     assert outcome.verdict == "needs-manual-apply"
     assert "converged without recording an apply" in outcome.detail
+
+
+@pytest.mark.parametrize(
+    "applied, verdict",
+    [
+        ({"ansible/initial_setup.yml": ["gitops_deploy"]}, "needs-manual-apply"),
+        (
+            {
+                "ansible/initial_setup.yml": ["gitops_deploy"],
+                "ansible/deploy.yml": ["sonarr"],
+            },
+            "settled",
+        ),
+    ],
+    ids=["deploy-plane-deferred", "both-planes-applied"],
+)
+def test_a_deploy_plane_pr_settles_only_on_a_deploy_plane_apply(
+    landing, applied, verdict
+):
+    """#4333: a refused narrowing defers the deploy plane and writes no entry for it.
+
+    A setup plane applied in the same tick still writes its own, so "any plane" read this
+    deploy-plane PR as settled while its services sat in `k8s_unapplied`.
+    """
+    paths = ("ansible/inventory/group_vars/all.yml",)
+    outcome = _verdict(landing, receipt(applied), pr_paths=paths)
+    assert outcome.verdict == verdict
 
 
 def test_the_receipt_is_read_from_the_file_the_tick_writes(landing, tmp_path):

@@ -4,7 +4,7 @@ Split out of `test_deploy_tags_narrow.py` when that module crossed its 500-line 
 rules themselves are tested there; this covers only `narrow_cmd`'s contract with
 `deploy_narrow.narrow_deploy_plane`, which reads stdout straight: the tag list and nothing
 else on exit 0, an empty stdout for "reaches no rendered output", and `DEPLOY_BROAD` with
-the reason on stderr for every refusal. The checkout is `_narrow_fixtures.build_tree`.
+the reason on stderr for every refusal, plus the reached tags on stdout for the fleet-wide one. The checkout is `_narrow_fixtures.build_tree`.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_narrow_cmd.py
 """
@@ -55,7 +55,23 @@ def test_the_command_exits_three_when_it_cannot_narrow(tree: Tree, capsys):
     old, new = _refs(tree)
     rc = narrow_broad.narrow_cmd(old, new, cwd=tree.root, declared=DECLARED, callers={})
     assert rc == DEPLOY_BROAD
-    assert "hosts.ini" in capsys.readouterr().err
+    out = capsys.readouterr()
+    assert "hosts.ini" in out.err
+    assert out.out == ""
+
+
+def test_the_fleet_wide_refusal_prints_the_tags_it_reached(tree: Tree, capsys):
+    """Exit 3 with tags: the deployer owes exactly these, not the whole fleet (#4333)."""
+    tree.write(
+        "ansible/inventory/group_vars/all.yml",
+        GROUP_VARS.replace("everywhere", "everywhere-else"),
+    )
+    old, new = _refs(tree)
+    rc = narrow_broad.narrow_cmd(old, new, cwd=tree.root, declared=DECLARED, callers={})
+    assert rc == DEPLOY_BROAD
+    out = capsys.readouterr()
+    assert len(out.out.strip().split(",")) * 2 > len(DECLARED)
+    assert "most of the fleet" in out.err
 
 
 def test_the_command_exits_three_when_a_ref_cannot_be_read(tree: Tree, capsys):

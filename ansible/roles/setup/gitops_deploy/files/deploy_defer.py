@@ -17,7 +17,8 @@ applyable role from one it must record. The next tick derives again (#4326).
 `k3s-bringup.yml`, and `common`, applied by no playbook at all — or one the routing came back
 without placing (`UNROUTED_PLAYBOOK`). The tick fast-forwards and writes the role to the `owed`
 ledger's `manual_plane` class instead of parking. A role whose directory the range deletes is
-neither: it owes nothing, and `drop_deleted_setup_roles` drops it.
+neither: it owes nothing, and `drop_deleted_setup_roles` drops it. A line recorded BEFORE a
+later range deleted the role is dropped by `drop_deleted_manual_plane` (#4334).
 
 # DECIDED: an unapplyable setup ROLE no longer parks the tick, with one exception: a
 transient routing failure (the subprocess failed or timed out) parks until a tick can route.
@@ -46,6 +47,7 @@ import deploy_narrow
 from deploy_changes import (
     ChangeSet,
     is_routed,
+    keys_naming_no_role,
     role_of,
     routing_failed,
     services_from_changed_paths,
@@ -169,6 +171,34 @@ def drop_deleted_setup_roles(
     kept = services_from_changed_paths([p for p in paths if not gone(p)])
     kept.setup_roles -= deleted
     return kept
+
+
+def drop_deleted_manual_plane(
+    tools: DeployTools, state: DeployerState, config: Config
+) -> set[str]:
+    """Drop each `manual_plane` line whose setup role is gone from `HEAD` (#4334).
+
+    The counterpart of `deploy_k8s_owed.drop_deleted_k8s_unapplied`. A line written before a
+    later range deleted the role never clears: no play can apply the role, so `clear_applied`
+    never matches it. `main()` runs this after the routing is adopted at `HEAD`, which the
+    key check reads. An unreadable listing drops nothing, as `drop_deleted_setup_roles` does.
+    """
+    keys = {e.role for e in state.manual_plane_pending()}
+    if not keys:
+        return set()
+    try:
+        listing = tools.run(
+            ["git", "ls-tree", "--name-only", "HEAD", "ansible/roles/setup/"],
+            cwd=config.repo,
+        )
+    except Exception as exc:
+        log(f"could not list the setup roles at HEAD ({exc}) — dropping none")
+        return set()
+    gone = keys_naming_no_role(keys, setup_roles_listed(listing))
+    for key in sorted(gone):
+        state.clear_manual_plane(key)
+        log(f"manual_plane dropped for {key}: setup role deleted at HEAD")
+    return gone
 
 
 def parks_the_tick(cs, setup_tags: set[str], pending: list[str]) -> bool:
