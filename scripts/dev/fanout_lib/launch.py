@@ -91,6 +91,7 @@ SNAPSHOT_PATHS = (
 # default alias is where `node` lives: the dotfiles repo's `bin/gate` runs `node --test`, and an
 # interactive shell finds node only through fnm's per-shell directory, which a unit never gets.
 # Both sit under the launching user's HOME, which is /var/lib/claude for the agent user (#3627).
+# systemd-run resolves `claude`/`uv` in its caller's PATH, so it runs under this one too (#4192).
 def unit_path(home: str) -> str:
     """The PATH a batch's unit runs with, for a user whose home directory is `home`."""
     return (
@@ -292,7 +293,7 @@ def systemd_run_command(
     runtime = REVIEW_RUNTIME_MAX_S if review else RUNTIME_MAX_S
     return _step(
         (
-            f"systemd-run --user --unit {unit_name(batch, target)} "
+            f"env PATH={unit_path(home)} systemd-run --user --unit {unit_name(batch, target)} "
             f"-p WorkingDirectory={wt} "
             f"-p StandardInput=file:{wt}/.fanout/brief.md "
             f"-p StandardOutput=file:{wt}/.fanout/report.json "
@@ -338,13 +339,15 @@ _STEP_SENTINEL_RE = re.compile(r"^fanout-step: (.+)$", re.MULTILINE)
 # Cleanup removes the worktree and its branch, so it only runs for a step that could have
 # left one half-made: `worktree add`/`worktree lock` do; a `fetch` failure
 # precedes both and created nothing (cleanup there would fail its own `worktree remove` with a
-# confusing "not a working tree"); `brief write`/`systemd-run` come after the tree already exists and
-# leave it in place for inspection instead. `exists` is the one that must never be here: it
+# confusing "not a working tree"). A refused `systemd-run` started no unit and no manifest names
+# its tree, so it goes too (#4192); `brief write` leaves it. `exists` must never be here: it
 # fails BECAUSE a tree is there, and that tree belongs to an earlier batch, not this launch.
 # The snapshot step runs inside a tree this launch just made, before the claim, so a failed
 # fetch or archive removes that tree too: nothing has started in it.
 _SNAPSHOT_STEP = "server snapshot"
-_CLEANUP_STEPS = frozenset({"worktree add", "worktree lock", _SNAPSHOT_STEP})
+_CLEANUP_STEPS = frozenset(
+    {"worktree add", "worktree lock", "systemd-run", _SNAPSHOT_STEP}
+)
 
 _EXISTS_STEP = "exists"
 
@@ -472,9 +475,8 @@ def _launch_elsewhere(
     if refused:
         cleanup = _cleanup_worktree(tools, host, batch, target) or ""
         raise LaunchError(f"claim: {refused}{cleanup}")
-    # From here the claim is held, and a failure must give it back. The tree stays locked for
-    # inspection, which keeps a claim under it live for good, and a first batch that fails
-    # leaves no manifest naming either.
+    # From here the claim is held, and a failure must give it back. A refused `systemd-run`
+    # removes the tree too (`_CLEANUP_STEPS`); a timeout keeps it, as the unit may be live.
     try:
         proc = _run(
             tools,
@@ -555,9 +557,8 @@ def launch(
             removed. A `worktree add`/`worktree lock` failure (or a timeout, which is a
             hung git step in practice — see the `DECIDED:` note above the cleanup check)
             removes the half-made tree and its branch before raising, folding a cleanup
-            failure into the same message. A `fetch`, `brief write` or
-            `systemd-run` failure, or one this can't attribute, leaves the worktree as it
-            found it instead.
+            failure into the same message; so does a refused `systemd-run`. A `fetch` or
+            `brief write` failure, or one this can't attribute, leaves the tree in place.
         review: start `fanout_lib.review`'s pipeline instead of one `claude -p`.
         red_green: give that pipeline its red phase (`fanout_lib.red_gate`); this repo
             only, as `red_gate.review_flags` decides.
