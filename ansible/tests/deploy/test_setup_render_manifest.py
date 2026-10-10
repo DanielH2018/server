@@ -23,6 +23,7 @@ import re
 from pathlib import Path
 
 from lib import yaml_fast
+from _ansible_collections import INSTALL_HINT, collection_resolves
 from _helpers import REPO
 from _shell_render import rendered_names_for, rendered_shell_text
 from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
@@ -410,15 +411,19 @@ def test_the_tag_scoping_actually_selects_one_stamp_per_family():
     import subprocess
     import sys
 
-    if shutil.which("ansible-playbook") is None:
-        import pytest
+    import pytest
 
+    playbook_bin = shutil.which("ansible-playbook")
+    if playbook_bin is None:
         pytest.skip("ansible-playbook not on PATH")
 
     # --list-tasks discovers no interpreter, so the pin only keeps this spawn in step with the
     # longhorn tests' real plays.
     env = dict(os.environ)
     env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
+    # k3s-bringup.yml names community.general.ufw, so without it every tag fails to parse (#4226).
+    if not collection_resolves("community.general", playbook_bin, _REPO, env):
+        pytest.skip(f"community.general does not resolve here: {INSTALL_HINT}")
     playbook = _REPO / "ansible/k3s-bringup.yml"
     for _name, tag in sorted(_GROUP_TAGS.items()):
         result = subprocess.run(
