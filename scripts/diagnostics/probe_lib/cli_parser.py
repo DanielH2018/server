@@ -57,7 +57,7 @@ def cert_stages(host, port, sni):
     return [s_client, x509]
 
 
-# routing (pure given resolve_ip)
+# routing (pure given the endpoint lookups)
 
 
 def _build_parser():
