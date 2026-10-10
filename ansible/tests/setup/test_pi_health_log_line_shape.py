@@ -111,6 +111,7 @@ def test_the_timestamp_format_is_the_load_bearing_half(tmp_path):
     than trusted: it proves the parser really does discriminate on the prefix, and that the
     ACCEPT cases above are not passing for some unrelated reason.
     """
+    # fact: ansible/roles/setup/optimize_pi/CLAUDE.md#What it does (`tasks/main.yml`)
     _, _, _, lines = run("pi-recovery-health", tmp_path, running=["docker-proxy"])
     line = _only_line(lines)
     _, rest = line.split(" ", 1)

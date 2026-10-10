@@ -22,6 +22,7 @@ from .citations import (
     sections,
     tracked_files,
 )
+from .evidence import EvidenceCache, moved_evidence
 from .relations import Edb
 
 LOCK_REL = "docs/facts.lock"
@@ -35,6 +36,7 @@ FINDING_KINDS = frozenset(
         "interpreter-moved",
         "lock-tampered",
         "ambiguous",
+        "empty-row",
     }
 )
 _PYTHON = f"{sys.version_info.major}.{sys.version_info.minor}"
@@ -68,11 +70,12 @@ def read_lock(path: Path) -> dict[str, dict]:
     """
     if not path.is_file():
         return {}
-    body = "\n".join(
-        ln
-        for ln in path.read_text(encoding="utf-8").splitlines()
-        if not ln.startswith("#")
-    )
+    return parse_lock(path.read_text(encoding="utf-8"))
+
+
+def parse_lock(text: str) -> dict[str, dict]:
+    """The ``units`` mapping of a lock's text, such as one ``git show`` read from a commit."""
+    body = "\n".join(ln for ln in text.splitlines() if not ln.startswith("#"))
     return json.loads(body)["units"] if body.strip() else {}
 
 
@@ -202,6 +205,9 @@ def check_lock(
     if by_unit is None:
         by_unit = repo_citations(repo)
     findings: list[Finding] = []
+    # Read only when an atom moved: the evidence costs a diff, and most runs have no move.
+    prose: dict[str, str] = {}
+    evidence_cache = EvidenceCache()
     for unit, rec in sorted(lock.items()):
         if unit not in by_unit:
             findings.append(
@@ -210,6 +216,20 @@ def check_lock(
                     "",
                     "section-gone",
                     "no section with this heading; re-verify under the new heading with `fact_status.py verify`, then drop this row with `fact_status.py forget`",
+                )
+            )
+            continue
+        # A row whose section cites nothing records nothing, and `status` grades the section
+        # CONVENTION whatever the row says. A probe-only row also holds no atom, but its
+        # section cites the probe, and the row is what makes it UNKNOWN; so the test is the
+        # section's citations, never the row's atoms.
+        if not by_unit[unit] and not rec.get("atoms"):
+            findings.append(
+                Finding(
+                    unit,
+                    "",
+                    "empty-row",
+                    "the section cites nothing, so the row records nothing; drop it with `fact_status.py forget`",
                 )
             )
             continue
@@ -266,7 +286,15 @@ def check_lock(
                         unit,
                         atom,
                         "moved",
-                        f"recorded {recorded_hash[:8]}, now {now[:8]}",
+                        f"recorded {recorded_hash[:8]}, now {now[:8]}"
+                        + moved_evidence(
+                            repo,
+                            cited[atom],
+                            rec.get("verified_sha", ""),
+                            recorded_hash,
+                            prose.setdefault(unit, _section_prose(repo, unit)),
+                            evidence_cache,
+                        ),
                     )
                 )
         # A citation ADDED to an already-verified section. `status` grades the unit OUT for
@@ -287,6 +315,18 @@ def check_lock(
     return findings
 
 
+def _section_prose(repo: Path, unit: str) -> str:
+    """The body of the section ``unit`` names, read from its doc; empty when it is gone."""
+    doc = unit.partition("#")[0]
+    path = repo / doc
+    if not path.is_file():
+        return ""
+    for sec in sections(doc, path.read_text(encoding="utf-8")):
+        if sec.key == unit:
+            return sec.body
+    return ""
+
+
 def verify_units(
     repo: Path,
     lock_path: Path,
@@ -299,12 +339,19 @@ def verify_units(
     Returns the whole lock and the sorted citations that did NOT resolve, so the caller can
     say so: a section can otherwise read `verified` while the atom the author cared about
     was silently dropped. Raises ``KeyError`` on an unknown unit.
+
+    A named section that cites nothing gets no row, and loses the one it had: such a row is
+    the ``empty-row`` finding. This is also how the reverify hook retires the row of a section
+    whose last citation the commit deleted.
     """
     if by_unit is None:
         by_unit = repo_citations(repo)
     lock = read_lock(lock_path)
     skipped: set[str] = set()
     for key in unit_keys:
+        if not by_unit[key]:
+            lock.pop(key, None)
+            continue
         atoms: dict[str, str] = {}
         for c in by_unit[key]:
             h = hash_atom(c, repo)
@@ -317,7 +364,7 @@ def verify_units(
     return lock, sorted(skipped)
 
 
-BENIGN_KINDS = frozenset({"unrecorded-atom", "atom-no-longer-cited"})
+BENIGN_KINDS = frozenset({"unrecorded-atom", "atom-no-longer-cited", "empty-row"})
 """The findings a prose edit produces, and the only ones re-verified without a human reading the section.
 
 Both are set-membership changes: the section gained a citation or dropped one, which the
@@ -332,6 +379,9 @@ citation is support only while it names a tracked file, so removing a cited file
 index drops the atom out of the section's citations exactly as deleting the sentence would —
 same finding, opposite meaning. One is the author withdrawing a claim; the other is the
 claim's subject going away while the sentence still names it, and that one is refused.
+
+`empty-row` is a row whose section the author left citing nothing. Folding it drops the row,
+since ``verify_units`` writes none for such a section.
 """
 
 
@@ -355,6 +405,7 @@ def reverify_benign(
     changed_keys: set[str],
     head_sha: str,
     by_unit: Citations | None = None,
+    first_cited: set[str] | None = None,
 ) -> tuple[list[str], list[Finding]]:
     """Re-hash the edited sections whose findings are all benign; name the ones that need a human.
 
@@ -369,6 +420,12 @@ def reverify_benign(
     round-trip the hook exists to remove. A unit carrying even one blocking finding is left
     whole: its benign findings are not fixed either, because the author is going to run
     ``verify`` on that unit anyway.
+
+    ``first_cited`` names the sections the commit gave their first citation
+    (``lint.first_cited_units``). One with no lock row is recorded here too: adding a section's
+    first citation is the same set-membership event as adding its second, and the author is
+    reading that section now. A section that already has a row is never in this path, so a
+    moved atom stays a person's ``verify`` (#2817). The returned list holds both kinds.
     """
     if by_unit is None:
         by_unit = repo_citations(repo)
@@ -398,10 +455,41 @@ def reverify_benign(
             and f.unit not in blocked_units
             and f.unit in lock
         }
+        | {
+            u
+            for u in first_cited or ()
+            if u not in lock
+            and by_unit.get(u)
+            and not _carries_a_moved_atom(repo, lock, findings, by_unit[u])
+        }
     )
     if todo:
         verify_units(repo, lock_path, todo, head_sha, by_unit)
     return todo, blocking
+
+
+def _carries_a_moved_atom(
+    repo: Path, lock: dict[str, dict], findings: list[Finding], cites: list[Citation]
+) -> bool:
+    """Whether a first-cited section cites an atom a `section-gone` row recorded at another hash.
+
+    A renamed heading, or a moved doc, makes a new key with no row while the old row goes
+    `section-gone`. Recording the new key would carry an atom that moved in the same commit
+    into the lock with nobody reading the prose, which is the #2817 contract broken by a
+    rename. A rename that moved nothing is still recorded.
+    """
+    gone = [lock[f.unit].get("atoms", {}) for f in findings if f.kind == "section-gone"]
+    for c in cites:
+        recorded = [atoms[c.raw] for atoms in gone if c.raw in atoms]
+        if not recorded:
+            continue
+        try:
+            now = hash_atom(c, repo)
+        except Ambiguous:
+            return True
+        if any(h != now for h in recorded):
+            return True
+    return False
 
 
 def forget_units(lock_path: Path, keys: list[str]) -> dict[str, dict]:

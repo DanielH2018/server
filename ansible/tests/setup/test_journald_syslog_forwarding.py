@@ -95,6 +95,7 @@ def test_raising_the_forwarding_level_requires_the_syslog_filter():
     with no rsyslog (`test_the_filter_is_gated_on_has_rsyslog`), where forwarding reaches
     nothing and the filter has nothing to pair with.
     """
+    # fact: ansible/roles/setup/initial_setup/CLAUDE.md#Rules the task files do not state
     if setting(copy_content(SYSTEM_TUNING, JOURNALD_DEST), "MaxLevelSyslog") != "info":
         pytest.skip("forwarding is not raised, so the filter is not required")
     content = copy_content(SYSTEM_TUNING, FILTER_DEST)

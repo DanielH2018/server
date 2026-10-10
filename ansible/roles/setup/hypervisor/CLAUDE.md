@@ -70,8 +70,9 @@ aborts the run with nothing staged.
 - **An unproven target does not fail the drill**, per the `# DECIDED: a leak aborts` marker. It
   alarms on the fence's OWN Kuma tile: the drill's tile reads `up` through an unproven range.
 
-ENFORCED by `ansible/tests/staging/test_staging_egress_fence.py`, which holds the filter's shape
-and runs the leg against stub dials — one test per verdict.
+ENFORCED by `ansible/tests/staging/test_staging_egress_fence.py`, which holds the filter's
+shape, and by `ansible/tests/staging/test_staging_egress_fence_fires.py`, which runs the leg
+against stub dials — one test per verdict.
 
 ## Autonomous-role contract (the monthly drill creates and destroys a guest)
 

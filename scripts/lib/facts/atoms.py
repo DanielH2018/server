@@ -153,27 +153,35 @@ def hash_atom(c: Citation, repo: Path) -> str | None:
         return _sha(c.path.encode()) if target.is_file() else None
     if not target.is_file():
         return None
-    if c.form == "symbol":
-        node = _top_level(ast.parse(target.read_text(encoding="utf-8")), c.selector)
-        return _sha(ast.unparse(_strip_docstrings(node)).encode()) if node else None
+    content = atom_content(c, target.read_text(encoding="utf-8"))
+    return _sha(content.encode()) if content is not None else None
+
+
+def atom_content(c: Citation, source: str) -> str | None:
+    """The text a symbol, YAML, test or marker atom hashes, read from ``source``, the cited file's text.
+
+    ``None`` for a path or probe atom, or when the atom does not resolve in ``source``. Raises
+    ``Ambiguous`` for a marker prefix matching twice. Taking the file's text rather than a path
+    is what lets ``evidence`` read the same atom out of an older commit.
+    """
+    if c.form in ("symbol", "test"):
+        tree = ast.parse(source)
+        find = _top_level if c.form == "symbol" else _test_node
+        node = find(tree, c.selector)
+        return ast.unparse(_strip_docstrings(node)) if node else None
     if c.form == "yaml":
         try:
-            value = _walk(safe_load(target.read_text(encoding="utf-8")), c.selector)
+            value = _walk(safe_load(source), c.selector)
         except KeyError:
             return None
-        return _sha(json.dumps(value, sort_keys=True, default=str).encode())
-    if c.form == "test":
-        node = _test_node(ast.parse(target.read_text(encoding="utf-8")), c.selector)
-        return _sha(ast.unparse(_strip_docstrings(node)).encode()) if node else None
+        return json.dumps(value, sort_keys=True, default=str)
     if c.form == "marker":
         hits = [
-            ln.strip()
-            for ln in target.read_text(encoding="utf-8").splitlines()
-            if f"DECIDED: {c.selector}" in ln
+            ln.strip() for ln in source.splitlines() if f"DECIDED: {c.selector}" in ln
         ]
         if len(hits) > 1:
             raise Ambiguous(c.raw)
-        return _sha(hits[0].encode()) if hits else None
+        return hits[0] if hits else None
     return None
 
 

@@ -35,6 +35,7 @@ from .citations import (
 )
 from .lock import LOCK_REL, lock_tampered
 from .pins import image_pins, pinned_keys, split_image_ref
+from .removed import identifiers, removed_tokens, still_present
 
 RULES = frozenset(
     {
@@ -309,94 +310,6 @@ def _version_facts(
 # stale sentence whatever the lock says. A replay of the 1,026 commits from 2026-09-19 to
 # 8181ee59f found six such sentences this way, against at most one catch by the lock.
 
-_TOKEN = re.compile(r"[A-Za-z0-9_./-]*[A-Za-z_][A-Za-z0-9_./-]*")
-# A version or a number: `v0.33.0-rootless`, `3.14-alpine`, `2026.10.0-ls253`, `10.0.0.240`.
-# `version-as-fact` owns a version in prose, and a Renovate bump removes one on every PR, which
-# #4012 ruled must not arrive red over documentation.
-_VERSIONISH = re.compile(r"v?\d")
-_EDGE = re.compile(r"^(?:\./|[-/])+")
-# Markdown is the prose under test, not the tree it describes, and the lock records citations.
-_CODE = (".", ":!*.md", f":!{LOCK_REL}")
-
-
-def identifiers(text: str) -> set[str]:
-    """The identifier-shaped tokens in ``text``.
-
-    Six or more characters holding ``_``, ``.``, ``/`` or ``-``, with no edge punctuation, and
-    not starting like a version or a number. A bare word is too common to have "vanished".
-    """
-    out = set()
-    for raw in _TOKEN.findall(text):
-        # A leading `.` stays: `.claude/rules/facts.md` is a path, and `claude/rules/...` is not.
-        tok = _EDGE.sub("", raw).rstrip("./-")
-        if (
-            len(tok) >= 6
-            and any(c in tok for c in "_./-")
-            and not _VERSIONISH.match(tok)
-        ):
-            out.add(tok)
-    return out
-
-
-def _removed_tokens(repo: Path, base: str) -> set[str]:
-    """Identifiers on the lines the working tree removed from ``base``, outside ``_CODE``'s exclusions.
-
-    Against the working tree, not HEAD: the prek hook runs before the commit exists, and prek
-    stashes unstaged edits first, so the tree it reads is the index about to be committed.
-    ``--no-textconv`` keeps git from decrypting ``ansible/vars/secrets.yml`` through its
-    ``diff=sops`` attribute.
-    """
-    diff = git(
-        "diff",
-        "--no-color",
-        "--no-ext-diff",
-        "--no-textconv",
-        "-U0",
-        base,
-        "--",
-        *_CODE,
-        cwd=repo,
-    ).stdout
-    removed: set[str] = set()
-    in_hunk = False
-    for line in diff.splitlines():
-        if line.startswith("diff --git"):
-            in_hunk = False
-        elif line.startswith("@@"):
-            in_hunk = True
-        elif in_hunk and line.startswith("-"):
-            removed |= identifiers(line[1:])
-    return removed
-
-
-def _still_present(repo: Path, tokens: list[str], tracked: frozenset[str]) -> set[str]:
-    """The ``tokens`` that a tracked path ends with or a tracked non-Markdown file holds.
-
-    A path counts component-aligned, so ``tasks/agent.yml`` is held by any ``.../tasks/agent.yml``
-    and ``roles/setup/deploy_ui`` by any file under it.
-
-    DECIDED: content counts as a substring, not a whole word. Docs name a family by its stem
-    (speedtest's `_upload_bits` for `speedtest_tracker_upload_bits`), and `git grep -w` read
-    every such stem as vanished. The cost is a rename that only appends to the old name, which
-    this rule then misses. The 2026-10-10 replay that measured the rule's precision used
-    substring matching too.
-    """
-    held = {t for t in tokens if any(f"/{t}/" in f"/{p}/" for p in tracked)}
-    rest = [t for t in tokens if t not in held]
-    if not rest:
-        return held
-
-    def grep(*args: str) -> str:
-        return git(
-            "grep", "-I", "-F", *args, "--", *_CODE, cwd=repo, check=False
-        ).stdout
-
-    held |= set(grep("-o", "-h", *[a for t in rest for a in ("-e", t)]).splitlines())
-    # `-o` prints one match per position, so a token that occurs only inside a longer token
-    # that also matched is never printed. Ask once more, alone, for each one not seen.
-    held |= {t for t in rest if t not in held and grep("-l", "-e", t)}
-    return held & set(tokens)
-
 
 def vanished_identifiers(
     repo: Path, since: str, tracked: frozenset[str]
@@ -405,7 +318,7 @@ def vanished_identifiers(
 
     The branch is ``merge-base(since, HEAD)`` to the working tree, so a ``since`` that moved on
     after the branch was cut does not read master's own additions as this branch's removals.
-    A token is reported only if it occurs nowhere at HEAD (``_still_present``), and only in a
+    A token is reported only if it occurs nowhere at HEAD (``still_present``), and only in a
     section that still names it, so a commit that fixes its own sentence stays silent. A
     history paragraph or bullet is skipped, and so is a ``generated_from`` block: its
     generator rewrites it, and the hook that checks those blocks fails until it has.
@@ -413,7 +326,7 @@ def vanished_identifiers(
     base = (
         git("merge-base", since, "HEAD", cwd=repo, check=False).stdout.strip() or since
     )
-    removed = _removed_tokens(repo, base)
+    removed = removed_tokens(repo, base)
     if not removed:
         return []
     named: dict[str, set[str]] = {}
@@ -423,7 +336,7 @@ def vanished_identifiers(
             for span in spans(_GENERATED.sub("", mask_history(sec.body))):
                 for tok in identifiers(span) & removed:
                     named.setdefault(tok, set()).add(sec.key)
-    held = _still_present(repo, sorted(named), tracked)
+    held = still_present(repo, sorted(named), tracked)
     return [
         _f(
             key,
@@ -454,13 +367,37 @@ def changed_units(repo: Path, since: str) -> set[str]:
     changed: set[str] = set()
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
-        old = git("show", f"{since}:{rel}", cwd=repo, check=False)
-        before = (
-            {s.key: s.body for s in sections(rel, old.stdout)}
-            if old.returncode == 0
-            else {}
-        )
+        before = bodies_at(repo, since, rel)
         for s in sections(rel, doc.read_text(encoding="utf-8")):
             if before.get(s.key) != s.body:
                 changed.add(s.key)
     return changed
+
+
+def bodies_at(repo: Path, since: str, rel: str) -> dict[str, str]:
+    """Each section body of the doc ``rel`` as ``since`` holds it; empty when the doc is absent there."""
+    old = git("show", f"{since}:{rel}", cwd=repo, check=False)
+    if old.returncode != 0:
+        return {}
+    return {s.key: s.body for s in sections(rel, old.stdout)}
+
+
+def first_cited_units(repo: Path, since: str, keys: set[str]) -> set[str]:
+    """The sections in ``keys`` that cite nothing at ``since``: absent there, or citing no tracked atom.
+
+    The reverify hook records such a section when it cites something now and has no lock row,
+    so its first citation lands verified in the commit that adds it. A backlog section that
+    already cited an atom at ``since`` is not in this set: a prose edit to it is not the moment
+    its citations were written. Citations at ``since`` are judged against today's tracked set.
+    """
+    tracked = tracked_files(repo)
+    out: set[str] = set()
+    for rel in sorted({k.partition("#")[0] for k in keys}):
+        before = bodies_at(repo, since, rel)
+        for key in keys:
+            if key.partition("#")[0] != rel:
+                continue
+            cites, _ = parse_citations(before.get(key, ""))
+            if not any(in_tree(c, tracked) for c in cites):
+                out.add(key)
+    return out

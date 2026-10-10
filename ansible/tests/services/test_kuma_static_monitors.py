@@ -86,6 +86,7 @@ def test_autokuma_pin_carries_resend_interval_on_push_monitors():
     moves off a version known to carry the field, so whoever moves it re-reads the paragraph
     above and checks whether the push tiles are still re-notifying.
     """
+    # fact: ansible/roles/k8s/uptime-kuma/CLAUDE.md#Traps
     # Versions verified BY READING kuma-client/src/models/monitor.rs at the tag, not by trusting
     # a release note. Add a version here only after doing the same.
     CARRIES_RESEND_ON_PUSH = {"2.1.0-rc.2"}

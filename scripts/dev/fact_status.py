@@ -5,11 +5,14 @@
 and exits 1 when any section is OUT. ``verify`` re-hashes the named sections' atoms into
 the lock at HEAD — the only path from OUT back to IN — and ``--unverified`` does it for every
 section that has no row yet. ``reverify`` is the prek hook's half: it re-hashes a section
-whose citation set an edit changed, and refuses one whose recorded atom moved. ``forget`` drops a lock row whose
+whose citation set an edit changed, records a section the edit gave its first citation, and
+refuses one whose recorded atom moved. ``forget`` drops a lock row whose
 section no longer exists, which is the way out of a ``section-gone`` finding: a renamed
 heading is a new unit, and the old row cannot be hand-deleted without tripping the lock's
-own checksum. ``lint`` reports citations that cannot be support. Repo store only until
-slice 4 adds ``--store memory``.
+own checksum. ``lint`` reports citations that cannot be support. ``report`` measures the
+lock from git and the instructions log: potential against actual moves per atom form, and the
+sections not IN ranked by how often their doc loads (``--json`` for a cron or an agent). Repo
+store only until slice 4 adds ``--store memory``.
 """
 
 import sys as _sys
@@ -18,9 +21,10 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import argparse
+import json
 from pathlib import Path
 
-from lib.facts.lint import changed_units, lint_sections
+from lib.facts.lint import changed_units, first_cited_units, lint_sections
 from lib.facts.lock import (
     LOCK_REL,
     build_repo_edb,
@@ -32,6 +36,7 @@ from lib.facts.lock import (
     verify_units,
 )
 from lib.facts.relations import derive, status_of
+from lib.facts.report import build, default_log, render
 from lib.git import git_stdout
 from lib.repo_paths import REPO
 
@@ -93,7 +98,10 @@ def cmd_verify(args: argparse.Namespace) -> int:
     head = git_stdout("rev-parse", "--short=9", "HEAD", cwd=repo)
     lock, skipped = verify_units(repo, repo / LOCK_REL, args.units, head, by_unit)
     for u in args.units:
-        print(f"verified {u} at {head}: {len(lock[u]['atoms'])} atoms")
+        if u in lock:
+            print(f"verified {u} at {head}: {len(lock[u]['atoms'])} atoms")
+        else:
+            print(f"{u} cites nothing, so it has no row; `status` grades it CONVENTION")
     if skipped:
         print(f"skipped {len(skipped)} unresolved: {', '.join(skipped)}")
     return 0
@@ -113,7 +121,8 @@ def cmd_reverify(args: argparse.Namespace) -> int:
         print(unresolvable, file=_sys.stderr)
         return _USAGE
     head = git_stdout("rev-parse", "--short=9", "HEAD", cwd=repo)
-    done, blocking = reverify_benign(repo, repo / LOCK_REL, changed, head)
+    first = first_cited_units(repo, args.changed_since, changed)
+    done, blocking = reverify_benign(repo, repo / LOCK_REL, changed, head, None, first)
     # Two headings, because the remedy differs. A finding in a section this commit edits is
     # one the author is looking at. A finding elsewhere is CI's next failure, and saying so
     # here is cheaper than letting them push and read it from the run.
@@ -125,10 +134,16 @@ def cmd_reverify(args: argparse.Namespace) -> int:
         print("not folded, and CI fails on these:", file=_sys.stderr)
         for f in elsewhere:
             print(f"  {f.kind}: {f.unit} {f.atom} — {f.detail}", file=_sys.stderr)
+    recorded = read_lock(repo / LOCK_REL)
     for u in done:
-        print(
-            f"re-verified {u} at {head}: its citation set changed, no recorded atom moved"
-        )
+        if u not in recorded:
+            print(f"dropped the row of {u}: the section cites nothing now")
+        elif u in first:
+            print(f"recorded {u} at {head}: the commit gives it its first citation")
+        else:
+            print(
+                f"re-verified {u} at {head}: its citation set changed, no recorded atom moved"
+            )
     if done:
         print(
             f"\n{LOCK_REL} rewritten — `git add {LOCK_REL}` and commit again.",
@@ -163,6 +178,18 @@ def cmd_lint(args: argparse.Namespace) -> int:
     for f in findings:
         print(f"{'warn ' if f.warn else 'ERROR'} {f.rule:<20} {f.unit}: {f.detail}")
     return 1 if any(not f.warn for f in findings) else 0
+
+
+def cmd_report(args: argparse.Namespace) -> int:
+    repo = Path(args.repo)
+    by_unit = repo_citations(repo)
+    edb = build_repo_edb(repo, read_lock(repo / LOCK_REL), by_unit)
+    idb = derive(edb)
+    statuses = {u: status_of(edb, idb, u) for u in by_unit}
+    log = Path(args.log) if args.log else default_log(repo)
+    report = build(repo, statuses, args.days, log)
+    print(json.dumps(report, indent=2) if args.json else render(report, args.top))
+    return 0
 
 
 def _add_common(sp: argparse.ArgumentParser) -> None:
@@ -204,6 +231,19 @@ def main(argv: list[str] | None = None) -> int:
     _add_common(ln)
     ln.add_argument("--changed-since", default=None)
     ln.set_defaults(fn=cmd_lint)
+    rp = sub.add_parser("report")
+    _add_common(rp)
+    rp.add_argument("--days", type=int, default=30, help="the window, in days")
+    rp.add_argument(
+        "--log",
+        default=None,
+        help="the instructions log (default: the primary checkout's)",
+    )
+    rp.add_argument(
+        "--top", type=int, default=15, help="sections to print in text form"
+    )
+    rp.add_argument("--json", action="store_true", help="print one JSON object")
+    rp.set_defaults(fn=cmd_report)
     args = p.parse_args(argv)
     return args.fn(args)
 
