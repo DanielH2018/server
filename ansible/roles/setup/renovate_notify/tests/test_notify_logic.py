@@ -1,8 +1,5 @@
-import pathlib
-import sys
 from datetime import datetime, timezone
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import notify_logic as nl
 
 

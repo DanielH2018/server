@@ -1,16 +1,4 @@
-import os
-import sys
-
-_HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(_HERE, "..", "files"))
-# configarr_status.py is deployed as a runtime sibling (tasks/main.yml copies it here from the
-# Docker role), so the import resolves on the host. It does not in the repo, where the file still
-# lives with its own tests — hence the second path insert.
-sys.path.insert(
-    0,
-    os.path.join(_HERE, "..", "..", "..", "containers", "configarr", "files"),
-)
-from configarr_health_logic import (  # noqa: E402
+from configarr_health_logic import (
     decide,
     finished_at,
     latest_finished,

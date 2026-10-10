@@ -9,13 +9,7 @@ them as plain, non-clickable text. process_obsidian_ics hoists that link into a
 real URL property (which Homepage turns into an <a href>) and cleans up the row.
 """
 
-import os
 import re
-import sys
-
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
-)
 
 import ical_proxy as app
 

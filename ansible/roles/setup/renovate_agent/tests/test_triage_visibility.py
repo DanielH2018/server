@@ -9,10 +9,7 @@ Run: uv run pytest ansible/roles/setup/renovate_agent/tests/test_triage_visibili
 """
 
 import json
-import pathlib
-import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import agent_logic as al
 import renovate_agent
 

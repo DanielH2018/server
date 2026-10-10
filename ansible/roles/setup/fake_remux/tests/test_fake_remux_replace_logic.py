@@ -1,7 +1,11 @@
 import importlib.util
 import json
 import pathlib
-import sys
+
+# The shell resolves its sibling imports via sys.path.insert(0, <own dir>), same as fake_remux_scan.py
+# itself. Importing it by name (rather than another importlib.util load) exercises that resolution;
+# `ansible/roles/conftest.py` puts this role's `files/` on sys.path for the import.
+import fake_remux_replace as sh
 
 _FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 
@@ -13,11 +17,6 @@ _SPEC = importlib.util.spec_from_file_location(
 assert _SPEC and _SPEC.loader, "spec_from_file_location found no loader"
 rl = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(rl)
-
-# The shell resolves its sibling imports via sys.path.insert(0, <own dir>), same as fake_remux_scan.py
-# itself — importing it here (rather than another importlib.util load) exercises that resolution.
-sys.path.insert(0, str(_FILES))
-import fake_remux_replace as sh  # noqa: E402
 
 POLICY = {
     "deny_release_groups": ["NTRX"],

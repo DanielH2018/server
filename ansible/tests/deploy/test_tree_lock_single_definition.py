@@ -8,14 +8,14 @@ tree under a snapshot (#3276).
 Run: uv run pytest ansible/tests/deploy/test_tree_lock_single_definition.py
 """
 
-from _helpers import REPO, load_yaml
+from _helpers import load_yaml
 from deploy_locks import TREE_LOCK
+
+from lib.repo_paths import ALL_VARS, REPO
 
 
 def _group_var() -> str:
-    return load_yaml(REPO / "ansible/inventory/group_vars/all.yml")[
-        "server_git_tree_lock"
-    ]
+    return load_yaml(ALL_VARS)["server_git_tree_lock"]
 
 
 def test_the_template_var_and_the_python_constant_agree_is_clean():

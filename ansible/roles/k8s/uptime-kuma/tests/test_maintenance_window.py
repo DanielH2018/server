@@ -8,7 +8,6 @@ suppress an ordinary hour and page through the restart.
 """
 
 import json
-import sys as _sys
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path as _Path
@@ -16,18 +15,15 @@ from pathlib import Path as _Path
 import yaml
 from validate.k8s_manifests import make_env, make_lookup, register_ansible_filters
 
-from lib.repo_paths import REPO
+from lib.repo_paths import ALL_VARS, REPO
+
+from render_maintenance import opens_within, window_cron
 
 ROLE = _Path(__file__).resolve().parents[1]
-_sys.path.insert(0, str(ROLE / "files"))
-
-from render_maintenance import opens_within, window_cron  # noqa: E402
 
 SHARED_TEMPLATES = REPO / "ansible" / "templates"
 DEFAULTS = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
-GROUP_VARS = yaml.safe_load(
-    (REPO / "ansible" / "inventory" / "group_vars" / "all.yml").read_text()
-)
+GROUP_VARS = yaml.safe_load(ALL_VARS.read_text())
 CRONS = (
     REPO / "ansible" / "roles" / "setup" / "initial_setup" / "tasks" / "crons.yml"
 ).read_text()

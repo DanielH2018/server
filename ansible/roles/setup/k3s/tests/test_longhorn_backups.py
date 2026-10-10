@@ -1,9 +1,7 @@
 """Tests for the shared Backup CR reader and the backup group names (#3735, #3737)."""
 
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
 import longhorn_backups as backups
 from _shell_render import rendered_shell_text
 

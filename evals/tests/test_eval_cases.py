@@ -12,10 +12,10 @@ from pathlib import Path
 
 import yaml
 
-from lib.repo_paths import REPO
+from lib.repo_paths import HOST_VARS, REPO
 
 CASES_DIR = Path(__file__).parent.parent / "cases"
-PI_HOST_VARS = REPO / "ansible/inventory/host_vars/daniel-pi.yml"
+PI_HOST_VARS = HOST_VARS / "daniel-pi.yml"
 # A Compose role path, cited bare or under `ansible/`. The role-name class excludes `*`, so the
 # `roles/containers/**` glob a Renovate ruling quotes is not read as a role.
 _CONTAINER_ROLE_RE = re.compile(

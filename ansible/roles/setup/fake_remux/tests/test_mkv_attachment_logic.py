@@ -7,9 +7,6 @@ DOWN is the arm that catches a sweep which stopped seeing files.
 """
 
 import pathlib
-import sys
-
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 
 import mkv_attachment_logic as mal
 

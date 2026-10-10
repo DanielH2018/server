@@ -8,10 +8,6 @@ subprocess runs in `test_longhorn_backup_health_reader.py`.
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_restore_drill_checks.py
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
 import longhorn_backup_health_logic as logic
 
 HOUR = 3600.0

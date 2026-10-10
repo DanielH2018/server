@@ -7,12 +7,8 @@ arbitrary host files behind an authenticated route).
 """
 
 import json
-import sys
-from pathlib import Path
 
 import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "files"))
 
 import artifact_meta as tax  # the taxonomy and the metadata parsers
 import artifact_server as srv

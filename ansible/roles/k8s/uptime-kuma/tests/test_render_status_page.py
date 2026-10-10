@@ -5,15 +5,13 @@ only ever observed passing is a check with no evidence it can fail.
 """
 
 import json
-import sys as _sys
 from pathlib import Path as _Path
 
 import pytest
 
-ROLE = _Path(__file__).resolve().parents[1]
-_sys.path.insert(0, str(ROLE / "files"))
+from render_status_page import main
 
-from render_status_page import main  # noqa: E402
+ROLE = _Path(__file__).resolve().parents[1]
 
 INDEX = {
     "grafana-k8s": "k3s Grafana",

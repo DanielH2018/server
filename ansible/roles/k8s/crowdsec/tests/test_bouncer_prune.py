@@ -5,13 +5,7 @@ Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_bouncer_prune.py
 """
 
 import json
-import os
-import sys
 from datetime import UTC, datetime, timedelta
-
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
-)
 
 import bouncer_prune as bp
 
