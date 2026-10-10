@@ -79,16 +79,6 @@
     creates: "/var/lib/systemd/linger/{{ sys_user }}"
   become: true
 
-- name: Keep the agent user's manager alive after logout, so its fan-out batches survive
-  # The same reason as above, for the agent user: fanout_place.py launches a batch with
-  # `systemd-run --user` as the agent, locally or over ssh, and the batch outlives that call.
-  tags: [claude_code]
-  ansible.builtin.command: "loginctl enable-linger {{ claude_code_agent_user }}"
-  args:
-    creates: "/var/lib/systemd/linger/{{ claude_code_agent_user }}"
-  become: true
-  when: claude_code_agent_user_enabled
-
 - name: Check whether Claude Code has been authenticated
   tags: [claude_code]
   # ~/.claude/.credentials.json is written by an interactive `claude login` and holds a
@@ -369,6 +359,18 @@
   ansible.builtin.user:
     name: "{{ claude_code_agent_user }}"
     expires: -1
+  become: true
+  when: claude_code_agent_user_enabled
+
+- name: Keep the agent user's manager alive after logout, so its fan-out batches survive
+  # The same reason as the operator's linger above, for the agent user: fanout_place.py
+  # launches a batch with `systemd-run --user` as the agent, locally or over ssh, and the batch
+  # outlives that call. After the user exists: loginctl refuses a name it cannot look up, which
+  # failed a host's first apply (daniel-server, 2026-10-10).
+  tags: [claude_code]
+  ansible.builtin.command: "loginctl enable-linger {{ claude_code_agent_user }}"
+  args:
+    creates: "/var/lib/systemd/linger/{{ claude_code_agent_user }}"
   become: true
   when: claude_code_agent_user_enabled
 
