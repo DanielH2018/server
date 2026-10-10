@@ -31,21 +31,12 @@ before trusting the bare-`error` branch.
 
 ## The host plane, and the prune that has no successor
 
-Both host crons run as `sys_user` in the docker group, never root, and each reports through a
-`{ts,ok,msg}` state file monitor-bridge reads.
-
-**disk-autoprune retired 2026-08-14, with no successor.** It pruned daniel-server's Docker
-daemon, which was uninstalled that day; the template survives only in git history,
-`autofix_disk_threshold_pct` and `autofix_disk_dry_run` are set nowhere, and monitor-bridge
-dropped the matching `disk_prune` check with it. **Nothing prunes disk on the cluster nodes**
-— containerd's own image GC is the only reclaim, and monitor-bridge's Root Disk threshold
-pager (`DISK_MAX_PCT=90`) is the only signal. That is alerting without remediation, which is a
-deliberate state rather than an oversight: revisit it if `/` pressure ever becomes routine.
+The two fake-remux crons run on daniel-box from `ansible/roles/setup/fake_remux`, whose `CLAUDE.md` owns their schedule, lock and contract. The disk-autoprune cron retired on 2026-08-14 with no successor: nothing prunes disk on the cluster nodes, so monitor-bridge's Root Disk pager is alerting without remediation, deliberately.
 
 ## fake-remux scan: what counts as fake
 
-`files/fake_remux_scan.py` plus the pure `fake_remux_logic.py`, deployed to
-`/opt/autofix-fake-remux/`, daily at `04:45`, configured from
+`ansible/roles/setup/fake_remux/files/fake_remux_scan.py` plus the pure `fake_remux_logic.py`, deployed
+to `/opt/autofix-fake-remux/`, daily at `04:45`, configured from
 `/etc/autofix-fake-remux/config.env` (0600). It is ffprobe-backed detection of files whose
 quality claims a **Remux** but whose video stream is a re-encode, by either of two tells:
 
@@ -58,10 +49,12 @@ This **supersedes** the codec heuristic that lived in the sidecar until 2026-07-
 definitive and independent of codec, resolution and size, so it catches an AVC remux that is
 really an AVC re-encode and needs no 2160p exclusion.
 
-It runs ffprobe via **`docker exec jellyfin`**, which matters twice: jellyfin mounts the media
-read-only at `/data/media`, so Sonarr's absolute path resolves unchanged with no translation
-and a probe cannot write; and jellyfin being down SKIPS files rather than flagging them, which
-is fail-safe. The scan never deletes or re-searches itself — each newly found fake is seeded
+It runs the host's `ffprobe` directly, because daniel-box runs no Docker. `HOST_DATA_ROOT` maps
+Sonarr's `/data` view to the host path, and an empty `fake_remux_jellyfin_container` selects this
+host mode (the `docker exec jellyfin` mode in the script is the retired daniel-server path). A probe
+glitch, a missing binary or a wrong path SKIPS the file rather than flagging it, which is
+fail-safe: the scan seeds a ledger the live reconciler acts on, so a false positive costs a
+real file. The scan never deletes or re-searches itself — each newly found fake is seeded
 into the ledger (`/var/lib/autofix-fake-remux/replacements.json`) for the reconciler.
 `MAX_PER_SCAN`=5 is the blast valve, so a whole-library match acts on none and alerts. The
 pure core is unit-tested in `test_fake_remux_logic.py`.
@@ -86,22 +79,16 @@ something this policy controls.
 **daniel-box runs `live`** (`autofix_fake_remux_replace_mode` in `host_vars/daniel-box.yml`),
 so it deletes and re-grabs for real. The template default is `shadow`, but the inventory
 override to `live` is the intended setting, confirmed by the operator — do not "restore" it to
-shadow. Ledger and outcome state live under `/var/lib/autofix-fake-remux/`, and commit
-`f99404c31` wired the reconciler.
+shadow. Ledger and outcome state live under `/var/lib/autofix-fake-remux/`.
 
-## Deploy ordering and the first-deploy seed
+## Host-cron wiring
 
-The state dir `/var/lib/autofix-fake-remux` is created `sys_user`-owned, and both state files
-are seeded on first deploy: `state.json` by running the scan once (`command:` with `creates:`),
-`replace_state.json` by writing a neutral placeholder (`copy:` with `force: false`, mirroring
-kopia's content-verify seed). The reason is the same one disk-prune had — monitor-bridge's
-**Fake Remux Scan** and **Fake Remux Replace** checks would otherwise false-DOWN on a fresh
-host before the first tick.
-
-Deploy `autofix-bridge` before `monitor-bridge`, which bind-mounts the state dir `:ro`. Both
-host crons import the shared `host_lib.py` (copied from `roles/setup/common`) and run via `uv
-run --no-project --python <pin>`, the `host_python_version` pin in
-`ansible/inventory/group_vars/all.yml`.
+The state dir `/var/lib/autofix-fake-remux` is created `sys_user`-owned. Both crons import the
+shared `host_lib.py`, which the role installs beside the scripts from `roles/setup/common`, and
+run via `uv run --no-project --python <pin>`, the `host_python_version` pin in
+`ansible/inventory/group_vars/all.yml`. monitor-bridge no longer reads these state files, so no
+deploy order applies between `autofix-bridge` and `monitor-bridge`: `fake-remux-health.sh` pushes
+the three Kuma tiles from the state files itself.
 
 ## Running either cron by hand
 
@@ -126,7 +113,7 @@ FAKE_REMUX_REPLACE_MODE=shadow SONARR_API_KEY=… LEDGER_FILE=/tmp/l.json \
 ```
 
 Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` for the sidecar, and `uv run
-pytest ansible/roles/setup/fake_remux/files` for the two fake-remux logic suites.
+pytest ansible/roles/setup/fake_remux/tests` for the fake-remux logic suites.
 
 ## The survey that decided what this role does NOT fix
 

@@ -31,25 +31,17 @@ desktop, so your real ISP IP is never exposed to anything.
 | `.local` auth portal | `https://auth.local.daniel-hunter.com` (one_factor) |
 | New-client DNS default | The Pi-hole DNS VIP in the first table (`default_dns: {{ dns_k8s_vip }}` on wg-easy's `containers_list` entry) |
 
-### One ingress IP (since the migration completed, 2026-08-14)
+### One ingress IP
 
-This doc previously described a **two-IP split** — Docker services on `10.0.0.161` and
-migrated ones on the k3s VIP. **That split is gone.** The k3s migration completed on
-2026-08-14 and Docker was uninstalled from `daniel-server`, so there is no Docker edge on
-`10.0.0.161` to reach. Pi-hole's `local.<domain>` wildcard now answers the cluster ingress
-VIP for everything (`pihole_wildcard_ip = k3s_metallb_ingress_vip` in
-`ansible/roles/k8s/pihole/templates/configmap.yaml.j2`).
+Pi-hole's `local.<domain>` wildcard answers the cluster ingress VIP for everything
+(`pihole_wildcard_ip = k3s_metallb_ingress_vip` in `ansible/roles/k8s/pihole/templates/configmap.yaml.j2`).
 
-Practical consequences:
-
-- **Let Pi-hole resolve** and you need no per-service mapping at all — one wildcard covers
+- **Let Pi-hole resolve** and you need no per-service mapping at all, because one wildcard covers
   every `.local` name.
-- The hosts-file option in A3 and the `AllowedIPs` narrowing in A2 (the two places that name
-  IPs by hand) now need **`10.0.0.240`** — plus `10.0.0.243` if you point at Pi-hole.
-- The transitional **`-k8s` hostname suffixes are retired**; services answer on their plain
-  names again. If a `<name>-k8s.local.…` URL is saved in a bookmark, drop the suffix.
-- `daniel-pi` runs a second, **LAN-only** wg-easy on `51822/udp`. It is deliberately not
-  forwarded and is not the endpoint above — don't point a remote client at it.
+- The hosts-file option in A3 and the `AllowedIPs` narrowing in A2 (the two places that name IPs by
+  hand) need **`10.0.0.240`**, plus `10.0.0.243` if you point at Pi-hole.
+- `daniel-pi` runs a second, **LAN-only** wg-easy on `51822/udp`. It is deliberately not forwarded
+  and is not the endpoint above, so don't point a remote client at it.
 
 ---
 
@@ -229,17 +221,9 @@ Pi's LAN-only wg-easy is the only Docker copy left, and it isn't on this path.
   homelab operator before doing so.
 - This adds a private path; it changes nothing about the public path's security.
 
-## Retired: the server's bcrypt admin auth (history)
+## Retired: the server's bcrypt admin auth
 
-The server's wg-easy entry carried `password_hash: "{{ wg_easy_password_hash }}"`, which fed
-the compose `PASSWORD_HASH` env starting 2026-07-04. That closed an admin UI and API that was
-otherwise unauthenticated to every `monitoring`-net neighbour.
-
-The k3s migration retired that mechanism on 2026-08-14. The k8s wg-easy instance runs v15,
-which keeps credentials in its own SQLite DB, so the `wg-easy-env` Secret lost its only
-consumer. The operator removed `wg_easy_password_hash` from `ansible/vars/secrets.yml` and the
-rotation registry on 2026-08-24 (review M-7). Do not reintroduce that var name expecting it to
-exist.
+**HISTORY — the server's bcrypt admin auth.** The server's wg-easy entry carried `password_hash: "{{ wg_easy_password_hash }}"`, which fed the compose `PASSWORD_HASH` env from 2026-07-04 and closed an admin UI that was otherwise unauthenticated to every `monitoring`-net neighbour. The k3s migration retired that mechanism on 2026-08-14, because the k8s wg-easy v15 keeps credentials in its own SQLite DB. The operator removed `wg_easy_password_hash` from `ansible/vars/secrets.yml` and the rotation registry on 2026-08-24 (review M-7), so do not reintroduce that var name expecting it to exist.
 
 The bcrypt `$`-doubling note still applies to any `password_hash` set on the Pi's entry, which
 is the only live use of that field now.

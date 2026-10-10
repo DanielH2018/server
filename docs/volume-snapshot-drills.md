@@ -14,123 +14,40 @@ what the role does; where a paragraph here disagrees with it, the task file is r
 ## The maintenance-mode attach was never reached by a deploy, and #2740 retired it
 
 Between 2026-08 and 2026-09-27 a claim whose readiness wait timed out on a non-`attached` volume
-was attached in maintenance mode, given a second snapshot attempt, then detached, and warned
-"THIS DEPLOY IS UNPROTECTED" when that attach failed. The two drills below measured it unreachable on
-Longhorn v1.12.1, on both ways a volume reaches the role detached, and #2740 removed it. The
-measurements are kept because they are the evidence for the removal, and because they are what a
-future session would otherwise re-derive before adding such a block back.
+was attached in maintenance mode, given a second snapshot attempt, then detached. #2740 removed
+that block, because two drills measured it unreachable on Longhorn v1.12.1 for both ways a
+volume reaches the role detached. The measurements stay as the evidence for the removal.
 
-Measured by the task-6 drill, 2026-08-21, on `speedtest` / `speedtest-config` (1Gi,
-`longhorn-nobackup`, Longhorn v1.12.1). The drill found two reasons. Only the second still
-holds.
+- **A volume that had been attached before (task-6 drill, 2026-08-21, `speedtest-config`).**
+  Invoked against a genuinely detached volume, the ordinary apply and wait path succeeded in
+  10.8s, and `volume_snapshot_detached` came out `false`. The Snapshot CR was a real recovery
+  point (`size=10436608`, `children={"volume-head":true}`) and survived the re-attach still
+  `readyToUse`. The seed pod of `k8s/volume-claim` had also attached the volume before this
+  role looked. That cause ended on 2026-09-01, when volume-claim stopped seeding.
+- **A volume never attached (#2698 drill, 2026-09-27).** A scratch 1Gi `longhorn-nobackup`
+  PVC, `drill-never-attached`, was never mounted by any pod. It read `state=detached` with
+  empty `currentNodeID` and `lastAttachedBy`, and its engine was `stopped`. The ordinary path
+  returned `readyToUse=true` 13 s after the PVC was created, with `size=0`, and skipped the
+  maintenance-mode attach. Longhorn then released its own attachment ticket.
+- **Why Longhorn snapshots a detached volume.** In `longhorn-manager` v1.12.1, a new Snapshot
+  CR with `createSnapshot: true` makes the snapshot controller call
+  `handleAttachmentTicketCreation` before it checks the engine. Longhorn attaches the volume
+  itself, takes the snapshot, and deletes its ticket. The code draws no line between a volume
+  attached before and one never attached.
+- **Why the premise existed.** It entered the tree in `410751a` (2026-08-21), generalised from
+  two adjacent operations: the orphan reaper refusing a detached volume, and a revert that got
+  a `500`. Neither is snapshot creation. Longhorn has been pinned at v1.12.1 since `ceb8723`
+  (2026-08-15), so no older version existed for the premise to be true on.
+- **A cleanup trap.** The snapshot of a never-attached volume cannot be deleted until the
+  volume attaches. The delete waits on `snapshot deletion delayed: volume engine
+  <volume>-e-0 is upgrading from image  to docker.io/longhornio/longhorn-engine:v1.12.1`,
+  where the blank image means the engine never ran. Deleting the PVC removes the snapshot CR
+  with it. A real first deploy is unaffected, because the pod attaches the volume within the
+  run.
 
-**1. (History, void since 2026-09-01.) `k8s/volume-claim` attached the volume first.** Its seed
-pod mounted the claim before this role ran, so in the drill a volume scaled to zero was attached
-again 11s before this role looked. volume-claim stopped seeding on 2026-09-01, so on a deploy
-today a scaled-to-zero service's volume IS detached when this role reads it.
-
-**2. Longhorn took a snapshot of the detached volume anyway.** Invoked directly against a genuinely
-detached volume — the same include `k8s/manifests` makes, only without volume-claim ahead of it —
-the ordinary `apply` + wait path SUCCEEDED in 10.8s. `volume_snapshot_detached` came out
-`false`, so the maintenance-mode attach never fired. The resulting Snapshot CR is a real
-recovery point, not an empty marker: `size=10436608`, `children={"volume-head":true}`, no error,
-and it survived the volume's later re-attach still `readyToUse` and correctly positioned in the
-chain.
-
-So the premise this section's code rests on — "a Longhorn snapshot needs a running engine, and a
-workload scaled to zero has none" — does not hold for a volume that is detached but still has
-healthy replicas. Reason 2 alone keeps the maintenance-mode attach unreached for such a volume,
-and the end of volume-claim's seeding does not change that.
-
-**Established from the code path 2026-09-26, answering #2681: a detached volume is not enough to
-reach the block.** `volume_snapshot_detached` is set from three conditions at once — this claim's
-snapshot is not `readyToUse`, it is not `markRemoved`, and the volume's `status.state` is not
-`attached`. Reason 2 measured the first of those false: Longhorn completed the snapshot of a
-plainly detached volume, so the wait succeeded and the flag came out `false` however detached the
-volume was. Reason 1's death moves which volumes arrive here detached; it does not make a
-Longhorn-side snapshot failure any likelier. Reaching the block still needs the snapshot itself
-to fail on a volume the state read also finds unattached.
-
-**A service's first deploy was the one path where that was unestablished until #2698.** A
-never-attached volume is a genuinely different state, the task-6 drill did not test it, and with seeding gone nothing attaches
-the volume before this role reads it. The claim does still bind: both Longhorn StorageClasses
-here set `volumeBindingMode: Immediate`
-(`ansible/roles/setup/k3s/files/longhorn-storageclass.yaml`,
-`ansible/roles/setup/k3s/files/longhorn-storageclass-nobackup.yaml`), so a PVC no pod has ever
-consumed carries a `spec.volumeName` and passes this role's binding assert rather than stopping
-the deploy there. Whether Longhorn then completes a snapshot of it is what decides reachability,
-and that is untested.
-
-**The Longhorn source explains reason 2, and predicts the never-attached answer.** Read from
-`longhorn-manager` v1.12.1 on 2026-09-27. For a new Snapshot CR with `createSnapshot: true`, the
-snapshot controller calls `handleAttachmentTicketCreation` before it checks the engine. That
-call adds the controller's own attachment ticket, so Longhorn attaches a detached volume by
-itself. The controller then waits for the engine to run, takes the snapshot, and deletes its
-ticket once the snapshot exists. That is why task-6's detached volume got its snapshot on the
-ordinary path. The code draws no line between a detached volume and a never-attached one, so the
-prediction is that a first deploy also snapshots on the ordinary path and the block stays dead.
-The #2698 drill below confirmed it.
-
-**Measured by the #2698 drill, 2026-09-27: a never-attached volume snapshots on the ordinary
-path too.** An operator-run scratch play created a 1Gi `longhorn-nobackup` PVC,
-`drill-never-attached`, in `homelab`, and no pod ever mounted it. The play included
-`k8s/volume-snapshot` the way `k8s/manifests` does, as service `drill`, whose prune can reach
-only `autodeploy-drill-*`. What it recorded:
-
-- **Before the snapshot, the volume had never been attached.** It read `state=detached`, with
-  `currentNodeID` and `lastAttachedBy` both empty. Its one engine was `stopped` with no
-  snapshots, and its `volumeattachments.longhorn.io` ticket map was empty.
-- **The ordinary path succeeded.** The first wait returned `readyToUse=true`, with the snapshot
-  13 s after the PVC was created. `volume_snapshot_detached` came out `False`, and the
-  maintenance-mode attach was skipped.
-- **Longhorn released its own attachment.** Straight after the role, the ticket map was empty
-  again and the volume read `detached` on the first poll.
-- **The snapshot was real but empty.** `readyToUse=true`, `size=0`,
-  `children={"volume-head":true}`, no error. Nothing had been written to the volume.
-
-So the block is unreachable on every deploy path on this Longhorn version: the 2026-08-21 drill
-covered a detached volume that had been attached before, and this drill covers one that never
-was. #2740 retired it.
-
-**A never-attached volume's snapshot cannot be deleted until the volume attaches.** The drill's
-cleanup found this. Its `kubectl delete` of the snapshot CR set the `deletionTimestamp` and then
-waited indefinitely. Its `status.error` read as follows:
-
-```text
-snapshot deletion delayed: volume engine <volume>-e-0 is upgrading from image  to docker.io/longhornio/longhorn-engine:v1.12.1
-```
-
-The image before `to` is blank. An engine that has never run has an empty current image, so Longhorn reads it as mid-upgrade and
-defers the delete. Deleting the PVC removed the volume, and the snapshot CR went with it. This
-does not affect a real first deploy: the service's pod attaches the volume within the same run,
-long before the prune could select that snapshot.
-
-### The premise was never true on this Longhorn version
-
-Settled from git history 2026-08-21, because it decides whether the block above is dead code to
-retire or a version-compat guard worth keeping. **It is dead for a detached volume with healthy
-replicas, and it was never a guard.** The #2698 drill measured it dead for a never-attached
-volume too:
-
-- The premise entered the tree in `410751a`, 2026-08-21. Its commit message derives it from two
-  observations: `longhorn-reap-orphan-snapshots.sh` refusing to reap on a detached volume, and
-  slice 7's drill getting a `500` reverting a plainly detached one. **Neither is snapshot
-  creation** — one is a purge, the other a revert. The premise was generalised from adjacent
-  operations, and snapshot creation on a detached volume was never actually tried.
-- Longhorn has been pinned at **v1.12.1 since `ceb8723`, 2026-08-15** — six days before that
-  commit, and unchanged since. So the premise was written against v1.12.1 and is false on
-  v1.12.1. There is no older version here for it to have been true on.
-
-Retiring the block is therefore a cleanup, not a compatibility decision. It is still a
-behaviour change, so it belongs in its own change with its own justification, not folded into a
-drill. The case that would have kept it honest, a volume that has never been attached, was
-measured on 2026-09-27 and snapshots on the ordinary path.
-
-**What this meant for the code.** The maintenance-attach block, its `longhorn-api` include, its
-detach and both of their state waits were dead on this Longhorn version on every deploy path, as
-was the "THIS DEPLOY IS UNPROTECTED" warning `claim.yml` fell through to. #2740 retired all of
-it, so a detached claim now takes the ordinary path and an unready snapshot fails the deploy
-whatever the volume's state.
+After #2740 a detached claim takes the ordinary path, and an unready snapshot fails the deploy
+whatever the volume's state. The change also removed the `faulted` / `attaching` / `detaching`
+ambiguity the old block carried, because it read those states as detached.
 
 ## Things measured rather than assumed
 
@@ -182,8 +99,9 @@ The create path and the prune have both run on real deploys. On 2026-09-26 the c
 `readyToUse`, and most claims sat at exactly `volume_snapshot_retain` (3). The 13 that were not
 ready were the over-long CRs from 2026-08-22, which no supported route could delete (#2686). The
 operator removed them on 2026-09-27 by bypassing Longhorn's webhook for exactly those objects
-(#2734). The role doc's *The 13 over-long CRs the prune retries and Longhorn refuses, removed by
-hand 2026-09-27* has the source reading and the method. Still unverified:
+operator removed them on 2026-09-27 by bypassing Longhorn's webhook for exactly those objects
+(#2734). *The 13 over-long CRs the prune retries and Longhorn refuses, removed by hand
+2026-09-27* below has the source reading and the method. Still unverified:
 
 - **`readyToUse` timing** against the 120s ceiling has not been measured.
 
@@ -212,7 +130,7 @@ stay at `volume_snapshot_retain: 3`, `volume_snapshot_timeout: 120` until a call
 something else, at which point the fix is adding them to the `vars:` block of that
 `Snapshot the stateful volumes` task, not a role default.
 
-### The opt-in set and why it started at 13 of 31
+### Which roles opt in
 
 The set of roles that opt in is the table below. It is generated from each role's
 `defaults/main.yml`, so it moves when a role declares or drops `k8s_autodeploy_snapshot_pvcs`.
@@ -221,20 +139,10 @@ in it.
 
 --8<-- "assets/generated/fragments/snapshot-optin.md"
 
-The rest of this section is the record of the first slice. It is dated 2026-08-21 and the
-counts in it are not the live ones.
-
-**Scope for that slice: 13 of 31.** Measured 2026-08-21, 31 roles in this repo carry the
-`Recreate` + rendered-RWO-claim shape this role exists for. Task 3 declared
-`k8s_autodeploy_snapshot_pvcs` for 13 of them, the ones drawn from the auto-deploy promotion
-criteria rather than from a data-migration survey. The other 18 (`authelia`, `observability`,
-`crowdsec`, `healthchecks`, `karakeep`, `loki-homelab`, `mosquitto`, `n8n`, `pihole`,
-`registry`, `scrutiny`, `terraria`, `terraria-stats`, `traefik`, `uptime-kuma`, `valheim`,
-`valheim-stats`, `wg-easy`) carried the same manual-deploy migration risk. `karakeep` opted in
-later (`c49d5c4a4`), so 17 of those 18 remained, and the table above has 14 roles: the 13 plus
-`karakeep`. Three names in that list (`healthchecks`, `terraria-stats`, `valheim-stats`) have no
-role directory today. Widening was deferred on 2026-08-21 because the create path had not yet
-run live. It has since run; see *What is unverified* above.
+The opt-in set follows the auto-deploy promotion criteria, not a data-migration survey. The
+roles with the `Recreate` + rendered-RWO-claim shape that did not opt in carry the same
+manual-deploy migration risk. Widening was deferred until the create path had run live, and
+it has since; see *What is unverified* above.
 
 ### The revert needs two, not one
 
@@ -251,7 +159,7 @@ revert that immediately follows it in the same play. The floor is 2 so both alwa
 run's own prune, regardless of what `volume_snapshot_retain` is set to.
 
 **The retention window holds the 3 most recent deploy runs, not the 3 most recent distinct
-commits.** The per-run token (see "The snapshot name is deterministic" above) gives every run its
+commits.** The per-run token (see "The snapshot name is deterministic" in the role doc) gives every run its
 own snapshot, so redeploying the same commit three times fills the window with three snapshots of
 that one commit and prunes out whatever came before it — including a pre-migration snapshot that
 was the actual recovery point this role exists to hold. An operator who redeploys the same
@@ -357,21 +265,6 @@ not on a short loop, so nothing raced the patch and the restore was the play's j
 `failed=0` with nothing left afterwards: the eleven lost-track CRs, then the two `markRemoved`
 ones.
 
-### The two drills behind the ordinary detached path
-
-**Two drills measured it, covering both ways a volume reaches this role detached.** The
-2026-08-21 task-6 drill snapshotted a volume that had been attached before; the #2698 drill on
-2026-09-27 snapshotted a throwaway PVC no pod had ever mounted, `readyToUse=true` about 13 s
-after the PVC was created. `docs/volume-snapshot-drills.md` holds both records.
-
-**#2740 retired the maintenance-mode attach those drills made dead code.** Between 2026-08 and
-2026-09-27 a claim whose first wait timed out read the volume's `status.state`, and a state other
-than `attached` triggered an attach through `k8s/longhorn-api` with `disableFrontend: true`, a
-retake, a detach, and — when the attach itself failed — a warning that the deploy was proceeding
-with no recovery point. No deploy ever reached it. The retirement also removed the `faulted` /
-`attaching` / `detaching` ambiguity that block carried: those states were read as "detached" and
-took the same unprotected path as a genuinely detached volume.
-
 ### The internal `k8s_no_mutate` guards are defence in depth
 
 The internal `k8s_no_mutate` guards on every task inside this role (the apply, the wait, the
@@ -382,5 +275,5 @@ because the one call site that exists already keeps this role from starting unde
 
 This role is reached as a dependency rather than named on the command line, so a tag-keyed
 refusal could never have covered it — which is why it guards itself. `volume-claim`,
-`image-builder` and `cronjob-gate` are all in the same position. The `k8s_dry_run_unsupported`
+`image-builder`, `cronjob-gate` and `volume-revert` are all in the same position. The `k8s_dry_run_unsupported`
 list that once held the alternative was deleted empty in #2876.

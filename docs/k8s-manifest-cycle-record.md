@@ -239,8 +239,9 @@ no Secret at all.
 ## Pre-deploy snapshots
 
 A role declares `k8s_autodeploy_snapshot_pvcs` in its `defaults/main.yml` and nothing is plumbed
-through the include — role defaults are in scope for an included role. 13 roles opt in; the rest
-evaluate `| default([]) | length == 0` and never make the call. The snapshot is taken **before**
+through the include — role defaults are in scope for an included role. The
+`ansible/roles/k8s/volume-snapshot/CLAUDE.md` section *How a role opts in* holds the opt-in
+count. A role that does not opt in evaluates `| default([]) | length == 0` and never makes the call. The snapshot is taken **before**
 the apply, since the apply is what starts the pod that migrates the on-disk format.
 
 ## What a green `--dry-run` does not cover

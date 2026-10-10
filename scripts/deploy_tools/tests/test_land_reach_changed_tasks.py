@@ -15,7 +15,7 @@ import yaml
 import land_reach
 from lib.proc_testing import run
 from lib.repo_paths import REPO
-from setup_role_diff import changed_task_texts
+from setup_role_chains import changed_task_texts
 
 _CRONS = """\
 - name: Weekly apt autoremove

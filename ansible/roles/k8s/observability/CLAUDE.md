@@ -10,9 +10,8 @@ Claude Code runs on the **host**, not in a container, and exports to `127.0.0.1:
 and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another host process.
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
-The working-out lives in `docs/observability-dashboards.md` (the boards) and
-`docs/observability-oidc-and-idle-diagnosis.md` (OIDC measurements, idle versus broken, the
-verification commands).
+The working-out lives in `docs/observability-dashboards.md`: the boards, the OIDC measurements,
+idle versus broken and the verification commands.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -80,7 +79,7 @@ OIDC login, keeping the admin form on as the break-glass path; the Authelia clie
 `with_groups` claims policy, or an `admins` user logs in as Viewer behind a green health gate;
 and the client secret is one credential in two SOPS keys, rotated together.
 `ansible/tests/services/test_grafana_authelia_oidc.py` holds both roles to the three settings
-that are written twice. `docs/observability-oidc-and-idle-diagnosis.md` has each rule in full.
+that are written twice. `docs/observability-dashboards.md` has each rule in full.
 
 ## Dashboards
 

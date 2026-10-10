@@ -1,15 +1,13 @@
 # Issue claiming and fan-out
 
-**Status: live.** The claim protocol and the `/issue-fanout` skill described below are in
-`scripts/dev/findings.py` and `.claude/skills/issue-fanout/`.
-
 Several Claude sessions work this repo at once. `findings.py` gives the backlog a status field
 and an owner-of-record, but nothing says which *session* is working an issue right now, and
 nothing marks an issue as yours alone. Two sessions can pick the same issue, and an issue you
 want to keep for yourself gets picked up by the next session that reads the register.
 
-This spec adds three things: a claim protocol, a `manual` reservation, and a fan-out skill that
-dispatches Opus agents at a batch of issues after triage.
+This page describes three things in `scripts/dev/findings.py` and `.claude/skills/issue-fanout/`:
+a claim protocol, a `manual` reservation, and a fan-out skill that dispatches Opus agents at a
+batch of issues after triage.
 
 ## What already exists
 
@@ -29,7 +27,7 @@ raises rather than falls back, so a host without the deploy prunes and reaps not
 
 Every open issue except #3 carries the `claude` label. #3 is Renovate's Dependency Dashboard,
 created 2026-06-06 with no labels. Scoping claims to `claude`-labelled issues therefore costs
-nothing, and this spec keeps that scope.
+nothing, and the claim protocol keeps that scope.
 
 ## Why the claim is not an assignee
 
@@ -265,10 +263,10 @@ hook state is then unknown, which is exactly when a batch must not be placed on 
 
 **It does nothing on daniel-box.** The tick pulls that checkout every 10 minutes, so the window
 there is bounded already, and the tick takes `/var/lock/server-git-tree.lock` for its own
-`--ff-only` merge — moving HEAD under an in-flight deploy ships a different SHA than the one the
-health gate cleared. A launch cannot hold that lock, since a deploy holds it for up to 20
-minutes and `LAUNCH_TIMEOUT_S` is 120 seconds, so taking it would turn a bounded stale-hook
-window into a failed launch.
+`--ff-only` merge. A launch does not take that lock. The tick holds it for its whole unit run,
+which can outlast `LAUNCH_TIMEOUT_S` (120 seconds), so taking it would turn a bounded stale-hook
+window into a failed launch. A hand `deploy.sh` holds the same lock only for its snapshot
+([ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)).
 
 That check compares each candidate host's `user.signingkey` against the account's live list,
 read with `gh api /users/<login>/ssh_signing_keys`. `launch` exits 6 when no candidate host
@@ -279,105 +277,21 @@ what exit 6 would refuse without spending an agent.
 
 ## The `/issue-fanout` skill
 
-1. **Triage.** Read `findings.py next --json`. Group the candidates so that no two agents touch
-   the same Ansible role — the repo's parallel-sessions guidance already warns about several
-   sessions editing a shared role, and two agents in one role is the same hazard with more
-   agents — and so that no two agents touch the same file. Each row carries `paths`, the
-   files its body cites; two issues that share one go in one batch, since the role rule does
-   not see the shared code under `scripts/` (#1798: two batches, one `alerts.py`, two
-   identical fixes). `fanout_place.py launch` refuses a grouping that shares a file, and
-   `--allow-shared-file <path>` excuses a citation that is context rather than an edit
-   target. Two shapes collide across roles and are bounded per wave instead: at most one batch
-   touches `ansible/vars/secrets.yml` (ciphertext conflicts are not hand-resolvable), and a
-   batch that adds a `containers_list` entry runs alone (a broad apply that fails on any
-   service parks every other batch's landing). The skill's triage step has the measured cases.
-   Present the grouping and **stop for approval**: spawning N Opus agents is not a routine
-   action.
-2. **Claim, then spawn.** Every issue of a batch is claimed before that batch's agent starts.
-   This is what removes the race from the fan-out. `launch` takes the claims itself, one
-   `findings.py claim` per issue, after every placement gate has passed: a refused issue is
-   dropped from its batch, and a failed launch releases what it took. The claim goes under the
-   **orchestrator's** worktree name, which `launch` reads from HEAD and refuses when HEAD is
-   detached or is `master`. A subagent's worktree name is auto-generated and unknown until it
-   starts, and a claim naming a worktree that does not exist yet would read as stale
-   immediately. The orchestrator's worktree is live for the whole fan-out, so the claim is too.
-   The Agent-tool fallback takes the same claims with `fanout_place.py claim --batch …`.
-3. **Spawn.** `uv run python scripts/dev/fanout_place.py launch --batch … ` places one Opus
-   agent per batch across both hosts and writes each brief itself — see *Placement across
-   hosts* above. The Agent tool is the fallback, not the default: the skill's *When the
-   dispatcher is unavailable* section covers a session with no ssh reach to daniel-server,
-   and there `isolation: "worktree"` and `model: "opus"` are both load-bearing and neither is
-   a default. An `Agent` call without `isolation` runs in the orchestrator's own checkout, so
-   every agent shares one working tree and commits over the others — the race the claim
-   protocol assumes away. The worktree it gets is auto-named, per the measurement below. Either
-   way the brief carries the
-   issue bodies, the claim the agent already holds, the repo's `land-after-merge` contract, the
-   blocking wait on the `VERDICT:` line (a backgrounded `land.sh` with redirected output is not
-   a harness-tracked child, so nothing wakes the agent when it finishes), the
-   `close --fixed` restriction above, and the instruction to file anything it does not fix with
-   `findings.py open`.
-4. **Land.** Each agent goes all the way to a verified deploy. Every agent's `land.sh` queues on
-   `/var/lock/server-git-tree.lock`, so the brief must say that exit 75 is a resume point to
-   retry rather than a failure to report. A `needs-manual-apply` or `blocked` verdict means the
-   PR merged and a host apply is still owed, so the brief also tells the agent to read
-   `hold_sha` and `manual_plane` after the verdict and either apply the change or file the
-   pending apply with `findings.py open`, under a `MANUAL APPLY PENDING` heading in its report.
-   At least five headless sessions between 2026-09-12 and 2026-09-26 left that apply in
-   end-of-job prose, which no register tracks (issue #2683).
-5. **Report.** A table of issue → worktree → PR → verdict. Any issue still claimed when the
-   fan-out ends is named explicitly, so nothing is held silently, and every agent's
-   `MANUAL APPLY PENDING` heading is carried into the report.
+`.claude/skills/issue-fanout/SKILL.md` owns the five steps (triage, claim, spawn, land, report),
+the brief every agent receives, and the width bound. This page owns the claim protocol the
+steps rely on.
 
-### Width is bounded by measured headroom
+Three facts from that protocol shape the skill:
 
-The dispatcher (`scripts/dev/fanout_place.py`) bounds a fan-out's width by reading live memory
-headroom rather than a fixed count — see *Placement across hosts* above for how it places a
-batch. The caps behind that read: `user.slice`'s fleet `MemoryHigh`
-is 14G on daniel-box with a 10G per-plane sub-bound, and 13G on daniel-server, where the 11G
-login-plane cap is the effective bound because `claude-rc.service` does not run on that host.
-`MemoryHigh` throttles rather than caps — the 2026-09-05 reclaim stall (issue #1264) happened
-with it in force, leaving remote control unreachable for ~30 minutes while the unit read
-`active (running)`. The failure mode of an over-wide fan-out is that stall, not an OOM kill.
-
-The deploy lock serialises the other half. Every agent's landing queues on it, so past some width
-the fan-out buys parallel *implementation* and no parallel *landing* at all.
-
-The Agent-tool fallback path (*When the dispatcher is unavailable* in the skill) takes no
-agent-count parameter of its own; its bound is still the host's cgroup configuration, which
-exists already and is the right place for it — a per-skill number would be a second bound that
-drifts from the first.
-
-## Testing
-
-Following the repo's rule that a new check ships with a proof it can go red, and that a check
-finding its own subject by pattern ships with a named member it must find:
-
-The claim tests live in six files under `scripts/dev/tests/`, split by what each reads:
-
-| File | What it covers |
-|---|---|
-| `test_findings_claim_record.py` | the comment format and the fold: who holds an issue, and how the parser is hardened |
-| `test_findings_claim_plans.py` | the pure argv `plan_claim` and `plan_release` return |
-| `test_findings_claim_cli.py` | `claim`, `release`, `claims` and `reap` driven through `main()` |
-| `test_findings_claim_staleness.py` | `claim_is_live` against invented worktree state |
-| `test_findings_claim_reap_then_claim.py` | the reap-then-claim path `next` sends a session down |
-| `test_findings_claims_filter.py` | `claims --worktree` and the run-manifest read that widens it |
-
-Two of them carry the checks this page asked for by name:
-
-- The staleness pair, named so a rule that stops matching fails its own test:
-  `test_claim_is_stale_when_its_worktree_is_gone` and
-  `test_claim_is_not_stale_when_its_worktree_is_dirty_with_a_dead_owner`.
-- The non-vacuity assertion on the claim parser, which the page asked for and nothing wrote
-  until #1285: `CLAIM_PARSER_FIXTURES` in `test_findings_claim_record.py` names each case,
-  `REQUIRED_CLAIM_PARSER_CASES` asserts every name is present, and the verdicts are asserted
-  per name. A rename then fails saying which member went missing, rather than passing over
-  whatever survived.
-
-## Documentation changes, same PR
-
-- `docs/reference/backlog.md` is generated and a hook rejects hand edits, so the claim column
-  goes into `scripts/docs/reference/backlog.py`.
-- Root `CLAUDE.md` gains a routing row: picking up an open issue starts at `findings.py next`,
-  then `/issue-fanout`.
-- This page loses its "drafted, not started" banner when the work lands.
+- **Every issue of a batch is claimed before that batch's agent starts.** `launch` takes the
+  claims itself, under the orchestrator's worktree name, because a subagent's worktree name is
+  unknown until it starts and a claim naming a worktree that does not exist yet reads as stale.
+- **A landing queues on per-service locks, not on the tree lock.** `deploy.sh` holds
+  `/var/lock/server-git-tree.lock` only for its snapshot
+  ([ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)), so two agents landing
+  disjoint services proceed together. A `deploy.sh` exit 75 is a resume point to retry, not a
+  failure to report.
+- **Width follows memory headroom, not a count.** `scripts/dev/fanout_place.py` reads the
+  `user.slice` and `user-1000.slice` caps and places each batch on the host with the most left.
+  `MemoryHigh` throttles rather than kills, so an over-wide fan-out stalls the host, as it did
+  on 2026-09-05 (issue #1264).

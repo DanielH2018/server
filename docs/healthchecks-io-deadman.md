@@ -167,60 +167,30 @@ For `pi-peer-backup` the URL is a key in the existing k8s Secret, not a file on 
 
 Both crons also pinged the self-hosted Healthchecks on their old UUIDs until it retired (#2806), so neither the old checks nor the new ones went silent during the move.
 
-## Activating it
+## Adding a check
 
-The wiring is inert until a ping key exists — `healthchecks_ping_key` renders empty and every
-call site skips its block, leaving the hosts exactly as they were. To turn it on:
+The wiring is live: `healthchecks_ping_key` is set, and every call site pings. A new slug needs
+these steps, and no new secret, because one project ping key covers every check.
 
-1. **Create the six checks by hand** in the Healthchecks.io console, using the slugs in the
-   table above. Set each one's period and grace to match the cadence column — a check whose
-   period disagrees with its cron fires false alarms, and false alarms are how monitoring
-   gets ignored.
+1. **Create the check by hand** in the Healthchecks.io console with the slug and the period and
+   grace from the table above. Never let the ping URL auto-provision it: a typo'd slug becomes a
+   second, unwatched check that reads green forever because something pings it.
+   `ansible/tests/services/test_healthchecks_pings.py` fails the build if a call site adds the
+   auto-provisioning parameter.
+2. **Match the schedule type to the job.** A cron-driven job takes the console's **Cron** type
+   with the same expression and timezone, so the two cannot drift. An interval job takes Simple.
+   A check whose period disagrees with its cron fires false alarms, and false alarms get ignored.
+3. **Size the grace to the slowest legitimate run.** `registry-gc` allows an hour because its
+   own deadline is 20 minutes, plus up to 120 s for the registry pod to terminate and 180 s for
+   the rollout back up. `etcd-snapshot-offbox` allows an hour because nothing bounds how long
+   `k3s etcd-snapshot save` may block, so the grace is what separates a slow run from a hung one.
+4. **Add the slug to the table, the fragment's cron variable and
+   `monitor_bridge_healthchecks_expected` in the same PR**, as *The console drifts* below says.
+5. **Point the check at Discord**, the same webhook the rest of the homelab alerts to.
 
-   For a job that runs on a cron rather than an interval, use the console's **Cron** schedule
-   type and paste the same expression, so the two cannot drift. `registry-gc` is `20 4 * * 0`
-   in **UTC**, grace 1 hour — its own deadline is 20 min, plus up to 120s for the registry pod
-   to terminate and 180s for the rollout back up, so an hour covers a slow run with margin.
-   `etcd-snapshot-offbox` is `45 2 * * *` in **UTC**, grace 1 hour — the snapshot itself is
-   seconds and the upload is ~30 MB, but nothing in the script bounds how long `k3s
-   etcd-snapshot save` may block, so the grace is what distinguishes a slow run from a hung one.
-
-   Create them manually rather than letting the URL auto-provision them. Auto-provisioning
-   turns a typo'd slug into a second, unwatched check that reads green forever because
-   something is pinging it. `ansible/tests/services/test_healthchecks_pings.py` fails the build if a
-   call site ever adds the auto-provisioning parameter.
-
-2. **Add the project ping key** (Settings → Ping key, *not* an API key):
-
-   ```bash
-   sops ansible/vars/secrets.yml          # add: healthchecks_ping_key: <key>
-   uv run python scripts/secrets_mgmt/secret_rotation.py sync
-   ```
-
-   One key covers every check — the slug in the URL selects which one. Adding a fifth check
-   later needs no new secret.
-
-3. **Deploy** the five call sites:
-
-   The three k3s-setup host heartbeats live in the k3s setup role, which `k3s-bringup.yml` runs —
-   `scripts/deploy.sh` is hardcoded to `deploy.yml` and does not reach them, so take the
-   git-tree lock by hand for that one:
-
-   ```bash
-   flock -w 180 /var/lock/server-git-tree.lock \
-     uv run ansible-playbook ansible/k3s-bringup.yml \
-     --tags "backup-health,disk-health,manifest-prune,etcd-snapshot"
-
-   ./scripts/deploy.sh --tags "pi-peer-backup"
-   ./scripts/deploy.sh --tags "registry"
-   ```
-
-   `pi-peer-backup` bakes its script into an image, so this rebuilds it. The CronJob needs no
-   pod-annotation dance to pick up the changed Secret: each scheduled run creates a fresh pod
-   that reads it at start.
-
-4. **Point the checks at Discord** — the same webhook the rest of the homelab alerts to. The
-   free tier allows the integration.
+The three k3s-setup host heartbeats live in the k3s setup role, which `k3s-bringup.yml` runs.
+`scripts/deploy.sh` is hardcoded to `deploy.yml` and does not reach them, so take the git-tree
+lock by hand for that playbook.
 
 ## What it recorded on 2026-09-09
 
@@ -252,17 +222,10 @@ The 25-minute grace on the other two cost five minutes of detection.
 
 ### The console drifts, and monitor-bridge checks it
 
-A read on 2026-09-25 found two console settings that broke their checks (#2563):
-
-- `pi-peer-backup` still carried `30 23 * * *` after the CronJob moved to `0 23`. The check
-  went DOWN at 06:30 UTC every day from 2026-09-22, although every run succeeded.
-- `longhorn-backup-health` carried `0 23 * * *` in `America/Chicago` as a Cron check. Its
-  `*/10` pings kept it green. However, a silent script would have gone undetected until the
-  next day's slot. That is probably where the 2026-09-21 edit meant for `pi-peer-backup`
-  landed.
-
-The operator corrected both the same day. The graces that differed from this doc were
-recorded as the documented values instead, and the table above now matches the console.
+On 2026-09-25 two console settings had drifted from the crons feeding them and broke their checks
+(#2563): `pi-peer-backup` kept a stale cron and went DOWN every day although every run succeeded,
+and `longhorn-backup-health` carried a Cron schedule that hid a silent script behind its `*/10`
+pings. The operator corrected both the same day.
 
 Nothing in the repo can set these values. Since #2566, monitor-bridge reads them.
 `checks/healthchecks.py` calls `GET /api/v3/checks/` with `healthchecks_api_read_only_key` and
@@ -309,7 +272,7 @@ catches by silence.
   RecurringJob CRDs, not rendered by this repo, so there is no command to append to.
   `longhorn-backup-health` covers the same ground and covers it better: it asserts backup
   *freshness and coverage* rather than that a job ran.
-- **The other ~15 Kuma push sites.** Free-tier headroom is 20 checks and six are used; the
+- **The other ~15 Kuma push sites.** Free-tier headroom is 20 checks and eleven slugs are used; the
   limit is not the reason. An off-site check earns its slot only where the silence is both
   invisible and consequential, and adding the rest would mostly duplicate what Kuma already
   reports correctly whenever the cluster is up enough to have a problem worth reporting.

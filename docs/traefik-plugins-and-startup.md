@@ -1,11 +1,6 @@
-# Traefik startup: plugins, the edge probe and the init containers
+# Traefik record
 
-`ansible/roles/k8s/traefik/CLAUDE.md` is the role doc, and it keeps the rules: the probe
-exists, the bouncer's metrics ticker stays at zero, and the init containers run in the order
-they are written in. This page is the working-out — the outage that bought the probe, the
-measured red path, what Traefik's plugin manager does at every process start, how to change
-the in-repo local plugin, and what each CrowdSec init container works around. A session reads
-it when it edits the plugin, probe or sidecar wiring (#2989).
+`ansible/roles/k8s/traefik/CLAUDE.md` is the role doc, and it keeps the rules. This page is the working-out behind them, in two halves. The first half covers startup: the outage that bought the startupProbe, the measured red path, what Traefik's plugin manager does at every process start, and how to change the in-repo local plugin. The second half covers client identity and TLS: the incidents that fixed each `X-Forwarded-For`, origin-pull and 421 rule, the verification commands, and the source trail for `allowEmptyServices`. A session reads it when it edits the plugin, probe, routing or TLS wiring (#2989).
 
 ## The outage the startupProbe exists for
 
@@ -78,23 +73,87 @@ To change the Go source, run it first under the release binary of `traefik_k8s_i
 version with a local `plugins-local/` tree: a Yaegi error appears only at Traefik startup, as
 `Plugins are disabled because an error has occurred`.
 
-## What each CrowdSec init container works around
+## The CrowdSec init containers
 
-Three init containers run before the agent and bouncer sidecars, and their order is
-load-bearing. The authelia pod runs the same three ahead of its own agent: both pods render
-them, the agent and their volumes from `ansible/templates/crowdsec-agent.yml.j2` (#3741).
+The traefik pod runs three CrowdSec init containers ahead of its agent sidecar, and their order is load-bearing. `docs/crowdsec-waf-record.md` (*Sidecar agent seeding*) holds what each one works around, for this pod and for authelia's.
 
-1. **The hub-tree rsync** stages the CrowdSec image's bundled hub into `/etc/crowdsec`, owned
-   by the pod uid, and runs **before** the config seed. That rsync runs as the pod's own uid
-   and cannot read the root-only staged hub, so the parser configs it does copy — symlinks
-   into that tree — resolved to nothing and the agent dropped `geoip-enrich` on every start
-   (#1211). Ordering is the fix: after the rsync the hub directory already exists owned by the
-   pod uid, and root with `ALL` dropped cannot write into it.
-2. **The bouncer config seed** (`traefik_k8s_manage_crowdsec`) needs the `crowdsec` role's
-   LAPI machine credential to exist already, which is why traefik's `containers_list` entry
-   declares `depends_on: [crowdsec]`.
-3. **The datafile copy** puts the image's bundled datafiles into the agent's data volume
-   world-readable. The image ships them `0600 root:root` and its entrypoint symlinks rather
-   than copies them, so the non-root sidecar could not read through the link and GeoIP never
-   initialised. It and the hub-tree rsync are the pod's two `runAsUser: 0` containers, and
-   this one reaches nothing but that volume.
+## The access log's `ClientHost` is a chain, and readers take its rightmost entry
+
+The access-log handler wraps outside the entrypoint middlewares, so it records `ClientHost`
+before `cloudflare-realip` runs (#2446). From a Cloudflare source the field reads
+`<client-sent>, <client>`: Cloudflare merges any client-sent header lines and appends the
+address it saw, so only the rightmost entry is not client-chosen. From any other source
+`forwardedHeaders` has already dropped the header, which leaves the connection address.
+
+Two readers take that rightmost entry. The CrowdSec agent sidecar's
+`crowdsecurity/traefik-logs` parser does from hub version 1.5 (hub PR #1665), and the
+sidecar's `hub upgrade` floats that version at every start rather than pinning it.
+`ansible/roles/k8s/crowdsec/files/remote_allowlist.py:authenticated_clients` takes the same
+entry, so the allowlist holds the address CrowdSec bans.
+
+On 2026-09-22 a scanner sent `X-Forwarded-For: 127.0.0.1` through Cloudflare, and Traefik
+logged `127.0.0.1,195.178.110.72`. The agent's single-event alert on that line named
+195.178.110.72.
+
+**A harness that sends `X-Forwarded-For` straight from a trusted source proves nothing about
+either reader**: it skips Cloudflare's append, so its leftmost entry is also its rightmost.
+
+## Cloudflare origin-pull, and the two traps the guard exists for
+
+`ansible/templates/origin-pull.yml.j2` renders the `cloudflare-origin-pull` TLSOption
+(`modern` plus `clientAuth: RequireAndVerifyClientCert`) and the `cloudflare-origin-pull-ca`
+Secret it verifies against, from `files/cloudflare-origin-pull-ca.crt` — Cloudflare's
+published CA, public, provenance and expiry (2029-11-01) in the file header (#1990).
+
+The zone has Authenticated Origin Pulls on, so Cloudflare presents the certificate on every
+origin connection; a direct client with a public SNI fails the handshake even from inside
+`cloudflare_ips`, which is all the #1974 netpol on :8443 checks. Traefik picks TLS options by
+SNI, so the `ingressroute()` macro renders the public and `.local.` hosts as two objects
+(`<name>-public` and `<name>`) and only the public one names the option; a LAN or WireGuard
+client holds no certificate.
+
+`ansible/tests/k8s/test_public_routes_require_cloudflare_origin_pull.py` exists for two traps:
+
+- Every router on ONE public host must name the SAME option, or Traefik falls back to the
+  default options, which require nothing — the bypass documents and healthchecks' ping twin
+  share hosts with the main objects.
+- The option and its Secret resolve in the ROUTE's namespace, so observability carries the
+  observability copies for `grafana`.
+
+A request whose Host header maps to a different option than its SNI (no SNI, or a `.local.`
+SNI with a public Host) is answered 421 before any router sees it, so the certificate cannot
+be dodged by handshaking as a LAN name.
+
+To verify from the LAN: `curl -k --resolve <svc>.<domain>:443:<VIP>
+https://<svc>.<domain>/` fails the handshake, `https://<svc>.local.<domain>/` answers without
+a certificate, and the public name through Cloudflare answers.
+
+## Why a 421 outlives the misconfiguration that caused it
+
+Traefik's SNICheck records the TLS-options name once per CONNECTION, at handshake time, and
+answers 421 to every later request on that connection whose router declares a different name
+(#2747, #2749). A handshake whose SNI maps to no router records `default`, so a long-lived
+client that connects while its host has no router gets 421 forever once the router returns
+naming `modern`.
+
+On 2026-09-27 that wedged the Pi's Alloy (`loki.write` dropping every batch) and both of the
+kube-apiserver's OIDC discovery fetches, for 4h15m and 5h30m respectively, while a fresh
+`curl` to the same URLs answered 200 throughout. The only recovery is to make the client
+redial, which is why a restart fixes it and a config change does not.
+
+The request never reaches a backend, so the per-service 5xx and latency checks are blind and
+`check_traefik_404_flood` counts a different code. monitor-bridge's `check_traefik_421` reads
+the per-router 421 rate instead and pages when one stays up for 15 minutes (#2757).
+
+## The router-less window `allowEmptyServices` closes
+
+The CRD provider drops a route whose Service has no endpoints (`no servers found for
+homelab/loki-homelab`, 07:49:00Z–07:49:35Z on the reboot, 16s before the first 421 — #2747,
+#2758). `static-config.yaml.j2` keeps the router instead, so the handshake records the
+router's own option and the client retries through a 503; its `DECIDED: keep a router` marker
+has the source trail.
+
+Traefik itself serves nothing before its first CRD sync, because the startupProbe that gates
+readiness targets an IngressRoute. A 421 can still arise when a router is rejected for another
+reason, such as a missing Middleware, so the redial recovery above still applies. This is
+reasoned from Traefik's source; the next weekly reboot is its measurement.

@@ -65,69 +65,24 @@ restore drill's stamp, which exists only there.
 5. **Verify** before declaring the hop done: every volume healthy, the StorageClass still carries no
    `numberOfReplicas`, and `default-replica-count` still reads its expected value.
 
-## Hop-specific notes
+## Lessons from the ladder
 
-| Hop | Target | Note |
-|---|---|---|
-| 0 | v1.7.3 | Patch, same minor. StorageClass is identical to v1.7.2's. A rehearsal of the loop at the lowest possible risk. |
-| 1 | v1.8.2 | **See the landmine below.** Multiple backup targets arrive here; the StorageClass gains `backupTargetName: "default"`. |
-| 2 | v1.9.2 | No deprecations noted upstream. |
-| 3 | v1.10.2 | Image refs become fully qualified (`docker.io/longhornio/...`), so every node re-pulls rather than reusing its cached copy — expect a transient `ImagePullBackOff` and `Ready=False` while that happens. Adds a `KernelModulesLoaded` node condition; see below. |
-| 4 | v1.11.3 | Requires **Kubernetes ≥ v1.34** (CSI external-provisioner v6.3.0). Confirm CSI pods land before declaring done. |
-| 5 | v1.12.1 | Deprecates legacy **V2** linked-clone volumes. Does not apply while every volume is `dataEngine: v1` — re-check before the hop. `default-replica-count` becomes a per-data-engine map (`{"v1":"2","v2":"2"}`); the role still patches a scalar `"2"` and Longhorn normalises it, so the task stays idempotent. |
+The ladder from v1.7.2 to v1.12.1 is walked, and `k3s_longhorn_version` records where it
+stands. Four lessons carry to the next hop:
 
-### Landmine at hop 1: StorageClass parameters are immutable
-
-v1.8.2 adds `backupTargetName: "default"` to the default StorageClass. Kubernetes forbids updating
-`parameters` on an existing StorageClass, so `kubectl apply` **cannot** make this change — it fails
-rather than silently diverging.
-
-The role already handles one instance of this (*Delete the StorageClass while it still pins a
-replica count*), but that guard only fires when `numberOfReplicas` is present:
-
-```yaml
-when: k3s_longhorn_sc_replicas.stdout | default('', true) | length > 0
-```
-
-A `backupTargetName` addition does not match it. The guard now compares the whole live parameter
-map against the rendered class and deletes when they differ. Deleting is safe — parameters are read
-at provision time only, so it neither touches an existing PV nor unbinds a PVC.
-
-### Second landmine at hop 1: backup-target config moved out of settings
-
-v1.8.0 moved backup-target configuration off the global settings and onto
-`backuptargets.longhorn.io`, as part of supporting more than one target. The
-`backupstore-poll-interval` **setting no longer exists**, so the role's patch failed with:
-
-```
-Error from server (NotFound): settings.longhorn.io "backupstore-poll-interval" not found
-```
-
-The task now patches `backuptargets.longhorn.io/default` at `spec.pollInterval`, which takes a
-duration string (`"0s"`) where the setting took bare seconds (`0`). The upgrade itself migrates the
-existing value across correctly — the CR came out of the hop already holding `0s` — so the risk is
-the play aborting mid-hop, not a lost setting.
-
-The general lesson for the remaining hops: **the manager manifest applies before the role's settings
-patches run**, so a removed or renamed setting fails *after* the new version is already live. That
-is recoverable (fix the task, re-run), but expect it once per hop where upstream reorganises
-settings.
-
-**A tag can hide the same breakage.** `backupstore-poll-interval` was caught because its task is
-tagged `[longhorn, longhorn_backup]` and the ladder ran `--tags longhorn`. The two tasks that set
-the target itself are tagged `longhorn_backup` **only**, so they were never exercised during the
-upgrade — and by v1.12.1 the `backup-target` and `backup-target-credential-secret` settings are
-*also* gone. They now patch `backuptargets.longhorn.io/default` at `spec.backupTargetURL` and
-`spec.credentialSecret`.
-
-The arm/disarm semantics are unchanged and were re-verified against a disarmed cluster: with
-`--type=merge`, an empty string is written rather than the field being removed, so
-`k3s_longhorn_backup_armed=false` still *enforces* the blank instead of leaving whatever is live.
-After the migration a disarmed run reported `changed=0` and the target stayed
-`backupTargetURL=""`, `available=false`.
-
-**When a hop finishes, run every tag the role owns, not just the one you upgraded under** —
-otherwise a whole code path stays untested until the night you need it.
+- **StorageClass parameters are immutable.** Kubernetes forbids updating `parameters` on an
+  existing StorageClass, so `kubectl apply` fails when a release adds one (v1.8 added
+  `backupTargetName`). The task *Delete the StorageClass while its parameters differ…* in
+  `roles/setup/k3s/tasks/longhorn.yml` therefore compares the whole live parameter map against
+  the rendered class. Deleting is safe, because parameters are read at provision time only.
+- **The manager manifest applies before the role's settings patches run.** A removed or
+  renamed setting fails after the new version is live (v1.8 moved backup-target configuration
+  from settings to `backuptargets.longhorn.io`). Fix the task and re-run.
+- **Run every tag the role owns after a hop, not only the one you upgraded under.** Tasks
+  tagged `longhorn_backup` alone were not exercised by `--tags longhorn`.
+- **Read the release notes for image and Kubernetes floors.** v1.10 fully qualified image
+  refs, so every node re-pulls and shows a transient `ImagePullBackOff`. v1.11 requires
+  Kubernetes ≥ v1.34.
 
 ### Expected-red node conditions
 
@@ -135,19 +90,17 @@ Two node-CR conditions read `False` here and neither is an upgrade failure:
 
 - **`Multipathd=False`** — long-standing. `multipathd` runs, and the role blacklists Longhorn
   devices from it (`/etc/multipath.conf`). Longhorn flags the daemon's presence regardless.
-- **`KernelModulesLoaded=False`** — new node condition, first seen at hop 3. It reports
-  `dm_crypt` missing, which is only required for **encrypted** volumes. Nothing here uses volume
-  encryption, so this is informational. It would become real if an encrypted StorageClass were ever
-  added.
+- **`KernelModulesLoaded=False`** — a node condition added in v1.10. It reports `dm_crypt`
+  missing, which is only required for **encrypted** volumes. Nothing here uses volume
+  encryption, so this is informational. It would become real if an encrypted StorageClass were
+  ever added.
 
 Check `Ready` for the actual health signal; the other conditions are advisory.
 
 ## Staying current afterwards
 
 Renovate tracks the pin (`renovate.json`, manager for
-`ansible/roles/setup/k3s/defaults/main.yml`) with `automerge: false`. While the ladder is being
-walked it offers the newest release — several minors ahead and therefore **not** directly
-mergeable. Treat those PRs as a signal to take the next hop, not as the hop itself.
-
-Once current, you are at most one minor behind at any time and the no-skip rule stops binding, so
-the PR becomes directly actionable via the per-hop procedure above.
+`ansible/roles/setup/k3s/defaults/main.yml`) with `automerge: false`. A Renovate PR that jumps
+more than one minor is not directly mergeable, because Longhorn supports one minor per hop.
+Treat that PR as the signal to take the next minor through the per-hop procedure above. A PR
+for the next minor or a patch is directly actionable through that procedure.
