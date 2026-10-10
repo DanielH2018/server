@@ -1025,7 +1025,7 @@ untouched.
   runs it carries the change, as `scripts/deploy_tools/shared_role_callers.py:caller_tags`
   derives them.
 - Two more callers run the same discharge, so a deployed change does not wait ten minutes for the
-  next tick. A successful `deploy.sh` runs it last (`deploy_owed_k8s.discharge_owed_k8s`), and a
+  next tick. A successful `deploy.sh` runs it last (`deploy_playbook.discharge_owed_k8s`), and a
   `--detach` run runs it before its health gate (`deploy_detach.deploy_and_gate`). It waits 5 s
   for the tree lock and otherwise leaves the line to the next tick. The tick that records a line
   also drops it at once when the service's own release record already carries it
