@@ -127,6 +127,16 @@ def test_pickable_orders_high_severity_first():
     assert [r["number"] for r in rows] == [2, 1]
 
 
+def test_a_review_leftover_ranks_after_every_fresh_issue_whatever_its_severity():
+    leftover = _issue(1, labels=["severity/high", "review-leftover"])
+    fresh_low = _issue(2, labels=["severity/low"])
+    fresh_high = _issue(3, labels=["severity/high"])
+    rows = pickable(
+        [leftover, fresh_low, fresh_high], live_claims=set(), pr_refs=set(), today=TODAY
+    )
+    assert [r["number"] for r in rows] == [3, 2, 1]
+
+
 def test_pr_refs_finds_every_closing_keyword():
     assert pr_refs(["Closes #1", "fixes #2", "Resolved #3"]) == {1, 2, 3}
 

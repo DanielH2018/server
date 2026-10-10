@@ -104,6 +104,12 @@ def _parser(description: str) -> argparse.ArgumentParser:
         help="reserve for the operator: `next` withholds it and `claim` refuses it. On an "
         "issue the dedup matches, adds the label there too",
     )
+    o.add_argument(
+        "--review-leftover",
+        action="store_true",
+        help="a finding a fan-out review left after its fix round; `next` offers it after "
+        "every fresh issue (#3958)",
+    )
 
     df = sub.add_parser(
         "defer",

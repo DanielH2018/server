@@ -200,6 +200,8 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         labels.append("no-vetted-remediation")
     if args.manual:
         labels.append("manual")
+    if args.review_leftover:
+        labels.append("review-leftover")
     # `gh issue create --label` fails on a label the repo does not have, so the first `open`
     # in a fresh repo has to create the label set before it can use it.
     have = _existing_labels(tools)

@@ -81,14 +81,24 @@ the diff alone does not show the behaviour, and run the tests that cover the cha
 
 
 def delta_prompt(
-    issues: str, before: str, after: str, asked: list[dict], reply: str
+    issues: str, base: str, before: str, after: str, asked: list[dict], reply: str
 ) -> str:
+    """The second reviewer's prompt: the fix round, inside the whole change it sits in.
+
+    The fix alone hid how it interacts with the rest of the PR: 3 of 10 findings left after a
+    fix round were new titles the delta pass surfaced (#3954). So the reviewer reads the whole
+    change and is told which part of it is the fix.
+    """
     return f"""An earlier review of this pull request raised the findings below, and the author
-then pushed fixes. Review only the fix: `git diff {before}..{after}`.
+then pushed fixes.
+
+- The fix round: `git diff {before}..{after}`.
+- The whole change, the fix included: `git diff {base}...{after}`.
 
 Report each earlier finding the fix does not resolve, keeping its title. The author's reply
 may argue a finding is wrong; report it again only if the argument does not hold. Report any
-new defect the fix introduces as well.
+new defect the fix introduces as well, including one that only shows against the rest of the
+change.
 
 {_as_data("The earlier findings", asked)}
 
@@ -131,8 +141,9 @@ def land_prompt(record: "Record", landing: str) -> str:
         state = f"The review did not complete: {record.review_error}. Land without it, and say so."
     elif public:
         state = (
-            "These findings were not resolved. File each with `findings.py open` before you "
-            "land, and name it in the PR body as `Filed for later: #N`.\n\n"
+            "These findings were not resolved. File each with "
+            "`findings.py open --review-leftover` before you land, and name it in the PR "
+            "body as `Filed for later: #N`.\n\n"
             + _as_data("The unresolved findings", public)
         )
     else:
@@ -149,7 +160,8 @@ End your final message with the PR URL and quote `land.sh`'s `VERDICT:` line.
 def file_prompt(record: "Record") -> str:
     public = [f for f in record.remaining if not is_held(f)]
     return f"""The review of {record.pr} is finished. These findings were not resolved. File
-each with `findings.py open`, and add `Filed for later: #N` to the PR body with `gh pr edit`.
+each with `findings.py open --review-leftover`, and add `Filed for later: #N` to the PR body
+with `gh pr edit`.
 Do not merge or land.
 
 {_as_data("The unresolved findings", public)}

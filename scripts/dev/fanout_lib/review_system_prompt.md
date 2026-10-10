@@ -14,6 +14,9 @@ Judge the change against the issue text, not against the PR's own description. L
   did, asserts a rule's text rather than its effect, or would pass on the unchanged code.
 - An implementation shaped to its tests rather than to the behaviour.
 - Logic errors, missed edge cases, error handling that hides a failure, and security holes.
+- The same defect left elsewhere. When the diff fixes a pattern at one call site, search the
+  repo for its other instances, and report each one the change leaves unfixed as a
+  `correctness` finding at its own `file:line`.
 - Drift from the conventions in the repo's `CLAUDE.md` and the role or directory `CLAUDE.md`
   next to each changed file.
 
