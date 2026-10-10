@@ -9,7 +9,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: longhorn-ui
     # The route and its middlewares live in longhorn-system, so the armed apply and its prune
     # run there.
     manifests_prune_namespace: "{{ k8s_longhorn_namespace }}"

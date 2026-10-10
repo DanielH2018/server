@@ -57,7 +57,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: traefik
     # The ClusterRoleBinding in rbac-binding.yaml is cluster-scoped, so the namespaced prune
     # allowlist in k8s/manifests never selects it; dropping it still leaves it live. The Roles
     # rbac.yaml.j2 places in other namespaces are applied by the task above, outside this

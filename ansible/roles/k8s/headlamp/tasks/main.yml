@@ -5,7 +5,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: headlamp
     manifests_files:
       # The policy is listed FIRST so it exists before the pod can be scheduled. `kubectl apply
       # -f <dir>` does not guarantee that ordering, which is why the gap is also survivable: the

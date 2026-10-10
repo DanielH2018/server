@@ -83,7 +83,6 @@ def tasks_main(name: str, route: bool) -> str:
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: {name}
     manifests_files:
 {rendered}
     manifests_rollout: {name}

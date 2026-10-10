@@ -1,4 +1,14 @@
 ---
+# The service this include deploys: the manifest subdirectory, the release and render record
+# names, the `homelab/role` label and the key `k8s_rebuilt_images` is matched on. It defaults
+# to the calling role's directory name (#4053), which every caller passed by hand until then.
+# A caller still overrides it at its include.
+#
+# The `reject` is load-bearing. Ansible templates a role default where it is read, not where it
+# is declared, so inside the volume-snapshot and volume-revert includes that tasks/main.yml
+# makes, `ansible_parent_role_names[0]` is `k8s/manifests` rather than the caller.
+manifests_service: "{{ ansible_parent_role_names | reject('equalto', 'k8s/manifests') | first | basename }}"
+
 # Where release_stamp.yml records which commit produced each service's applied manifests.
 #
 # Under /var/lib/homelab/ with the setup plane's two stamp manifests

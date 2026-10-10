@@ -92,3 +92,20 @@ def task_files_by_role(plane: Path | None = None) -> list[tuple[Path, Path]]:
     """
     roles = every_plane_role_dirs() if plane is None else role_dirs(plane)
     return [(role, path) for role in roles for path in role_task_files(role)]
+
+
+def manifests_service_of(task: dict, role: str) -> str | None:
+    """The service a `k8s/manifests` include deploys, or None for any other task.
+
+    A caller that omits `manifests_service` deploys under its own role directory's name, which
+    is the default `k8s/manifests/defaults/main.yml` computes (#4053). A guard reading the
+    include's `vars:` has to apply the same fallback, or it reads every caller as nameless.
+
+    Args:
+        task: one task as loaded from a role's tasks file.
+        role: the directory name of the role whose tasks file holds `task`.
+    """
+    include = task.get("ansible.builtin.include_role") or task.get("include_role") or {}
+    if not isinstance(include, dict) or include.get("name") != "k8s/manifests":
+        return None
+    return str((task.get("vars") or {}).get("manifests_service", role)).strip()
