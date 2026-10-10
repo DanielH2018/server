@@ -63,7 +63,7 @@ def build_rows(
             if entry.get("platform") != "k8s":
                 continue
             name = entry["name"]
-            templates = ingressroute_templates(k8s_roles / str(name))
+            templates = ingressroute_templates(k8s_roles / str(name), entry)
             if not templates:
                 continue
             text = "\n".join(p.read_text() for p in templates)
@@ -76,7 +76,7 @@ def build_rows(
                 middlewares.extend(_QUOTED_RE.findall(match.group(1)))
 
             label = str(entry.get("hostname", name))
-            reach = reachability(k8s_roles / str(name), group_vars)
+            reach = reachability(k8s_roles / str(name), group_vars, entry)
             rows.append(
                 {
                     "name": str(name),

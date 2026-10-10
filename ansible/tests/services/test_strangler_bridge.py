@@ -16,6 +16,7 @@ cluster-safe home). The failure modes this suite guards are:
 Run: uv run pytest ansible/tests/services/test_strangler_bridge.py
 """
 
+from lib.k8s_roles import resolved_manifest_files
 from lib import yaml_fast
 from jinja2 import ChainableUndefined
 from lib.ansible_jinja_env import template_env
@@ -151,8 +152,11 @@ def test_gate_stays_out_of_crd_objects():
     assert not (
         ANSIBLE / "roles" / "k8s" / "livesync" / "templates" / "ingressroute.yaml.j2"
     ).exists(), "livesync must render no IngressRoute — the token gate owns its names"
-    tasks = (ANSIBLE / "roles" / "k8s" / "livesync" / "tasks" / "main.yml").read_text()
-    assert "ingressroute" not in tasks
+    files, _secret = resolved_manifest_files("livesync")
+    assert "ingressroute.yaml" not in files, (
+        "livesync's containers_list entry carries a hostname, which earns the shared route "
+        "unless its include excludes it"
+    )
 
 
 def test_reverse_bridge_stays_retired():

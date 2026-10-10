@@ -2,17 +2,8 @@
 # No PVC, unlike freshrss/speedtest/zigbee2mqtt: homepage carries no runtime state. Every byte under /app/config is Ansible-rendered on every deploy, so nothing needs
 # seeding.
 
+# The ClusterRole and ClusterRoleBinding in rbac.yaml are cluster-scoped, so the namespaced
+# prune allowlist in k8s/manifests never selects them; dropping one still leaves it live.
 - name: Deploy homepage to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # The ClusterRole and ClusterRoleBinding in rbac.yaml are cluster-scoped, so the namespaced
-    # prune allowlist in k8s/manifests never selects them; dropping one still leaves it live.
-    manifests_files:
-      - rbac.yaml
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-      - icons-configmap.yaml
-    manifests_secret_files:
-      - config-secret.yaml

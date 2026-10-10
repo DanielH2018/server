@@ -17,8 +17,6 @@
   vars:
     # The DaemonSet lives in kube-system, so the armed apply and its prune run there.
     manifests_prune_namespace: kube-system
-    manifests_files:
-      - daemonset.yaml
     manifests_rollout: ''
 
 - name: Wait for the device plugin to roll out

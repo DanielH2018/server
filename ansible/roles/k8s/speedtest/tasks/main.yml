@@ -3,10 +3,3 @@
 - name: Deploy speedtest to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-    manifests_secret_files:
-      - secret.yaml

@@ -26,6 +26,7 @@ rendered manifests behind a non-vacuity assertion:
 Run: uv run pytest ansible/tests/services/test_scrutiny_influxdb_policy.py
 """
 
+from lib.k8s_roles import resolved_manifest_files
 import pytest
 from _helpers import REPO
 from _role_census import manifests_service_of
@@ -170,7 +171,7 @@ def test_the_influxdb_policy_opens_the_port_the_web_pod_dials(influxdb_docs):
 
 
 def test_the_influxdb_policy_is_staged_by_the_deploy_task():
-    """Rendering it is not shipping it — `manifests_files` is what reaches the cluster."""
+    """Rendering it is not shipping it — the resolved `manifests_files` is what reaches the cluster."""
     tasks = yaml_fast.safe_load(SCRUTINY_TASKS.read_text())
     deploys = [
         task for task in tasks if manifests_service_of(task, "scrutiny") == "scrutiny"
@@ -178,8 +179,8 @@ def test_the_influxdb_policy_is_staged_by_the_deploy_task():
     assert len(deploys) == 1, (
         f"expected exactly one task deploying the scrutiny manifests, found {len(deploys)}"
     )
-    files = (deploys[0].get("vars") or {}).get("manifests_files") or []
+    files, _secret = resolved_manifest_files("scrutiny")
     assert POLICY_FILE in files, (
-        f"{POLICY_FILE} must be named in the scrutiny role's manifests_files; got {files!r}. "
-        f"Only the names in that list are staged and applied"
+        f"{POLICY_FILE} must be in the scrutiny role's resolved manifests_files; got "
+        f"{sorted(files)!r}. Only the names in that list are staged and applied"
     )

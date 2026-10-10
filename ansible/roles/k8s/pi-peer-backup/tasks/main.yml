@@ -68,10 +68,6 @@
     # A CronJob — nothing to wait on at deploy; the first scheduled (or manually
     # triggered) run is the proof.
     manifests_rollout: ''
-    manifests_files:
-      - cronjob.yaml
-    manifests_secret_files:
-      - secret.yaml
     # The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The
     # render stamps homelab/role on the CronJob, the Secret and the k8s_claims claim; the fixed
     # allowlist names neither Secret nor PersistentVolumeClaim, so those two are applied but

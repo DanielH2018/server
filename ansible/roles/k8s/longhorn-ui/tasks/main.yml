@@ -13,6 +13,5 @@
     # run there.
     manifests_prune_namespace: "{{ k8s_longhorn_namespace }}"
     manifests_rollout: ''
-    manifests_files:
-      - middlewares.yaml
-      - ingressroute.yaml
+    # The entry's `port` is the upstream longhorn-frontend Service's, which setup/k3s installs.
+    manifests_exclude_files: [service.yaml]

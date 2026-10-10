@@ -1,16 +1,13 @@
 ---
 # The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
+#
+# The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The render
+# stamps homelab/role on every document, the k8s_claims claim included; the fixed allowlist
+# never names PersistentVolumeClaim, so the claim is applied but never pruned. The four
+# `*-job.yaml` templates stay out of this include's derived list by their suffix.
 - name: Deploy the image registry to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_files:
-      - networkpolicy.yaml
-      - deployment.yaml
-      - service.yaml
-    # The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The
-    # render stamps homelab/role on every document, the k8s_claims claim included; the fixed
-    # allowlist never names PersistentVolumeClaim, so the claim is applied but never pruned.
 
 # THE SECOND ROLE THAT MUST WAIT INLINE (crowdsec is the other; see its header). k8s/manifests
 # deliberately does NOT wait — it queues the rollout for k8s/manifests/tasks/drain.yml at the end of the

@@ -28,11 +28,6 @@
     manifests_rollout: terraria-stats
     manifests_extra_rollouts:
       - name: valheim-stats
-    manifests_files:
-      - deployment-terraria.yaml
-      - service-terraria.yaml
-      - deployment-valheim.yaml
-      - service-valheim.yaml
 
 # Leftovers from #2813, which merged the terraria-stats and valheim-stats roles into this one
 # (#3088). The manifests role prunes only inside its own `manifests_service` directory, so the

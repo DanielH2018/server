@@ -4,9 +4,6 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_files:
-      - configmap.yaml
-      - deployment.yaml
-      - service.yaml
-    manifests_secret_files:
-      - secret.yaml
+    # No IngressRoute, though the entry carries a `hostname`: traefik's file-provider gate
+    # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2) routes it.
+    manifests_exclude_files: [ingressroute.yaml]

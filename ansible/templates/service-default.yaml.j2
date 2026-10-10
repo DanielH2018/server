@@ -1,6 +1,7 @@
 {# Not a macro — a whole manifest. `k8s/manifests` renders this file as `service.yaml` for
-   every role that names `service.yaml` in its `manifests_files` and ships no
-   `templates/service.yaml.j2` of its own (`manifests_shared_defaults` in that role's
+   every role that resolves `service.yaml` into its `manifests_files` and ships no
+   `templates/service.yaml.j2` of its own. A role resolves it when its containers_list entry
+   carries a `port` and its include does not exclude it (`manifests_shared_defaults` in that role's
    defaults). This file is the three-line wrapper around the `service()` macro below that
    22 roles' Service templates would otherwise repeat byte for byte.
 

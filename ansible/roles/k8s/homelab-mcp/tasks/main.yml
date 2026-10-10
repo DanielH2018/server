@@ -29,10 +29,3 @@
     # The ClusterRole and ClusterRoleBinding in rbac.yaml are cluster-scoped, so the namespaced
     # prune allowlist in k8s/manifests never selects them; dropping one still leaves it live.
     manifests_rollout: homelab-mcp
-    manifests_files:
-      # rbac before deployment: the pod references the ServiceAccount at admission.
-      - rbac.yaml
-      - deployment.yaml
-      - service.yaml
-    manifests_secret_files:
-      - secret.yaml

@@ -19,26 +19,6 @@
     # queued into k8s_pending_rollouts and the batch drain never checks it.
     manifests_extra_rollouts:
       - name: flaresolverr
-    manifests_files:
-      # Both policies are listed FIRST so they exist before their pods can be scheduled. Within a
-      # single `kubectl apply -f <dir>` that ordering is not guaranteed, which is why the pods
-      # also cannot be reached in the gap: they take seconds to pull and start, and the policies
-      # are applied in the same call. Each policy names its own subject:
-      # networkpolicy-flaresolverr.yaml fences flaresolverr, networkpolicy-prowlarr.yaml
-      # fences prowlarr itself.
-      - networkpolicy-flaresolverr.yaml
-      - networkpolicy-prowlarr.yaml
-      - deployment-flaresolverr.yaml
-      - service-flaresolverr.yaml
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-      # The query-only door for monitor-bridge on daniel-server.
-      - ingressroute-monitoring.yaml
-    manifests_secret_files:
-      # The exportarr sidecar's API key. Listed as a SECRET file so it is rendered 0600 under
-      # no_log, like every other decrypted SOPS value.
-      - secret-exportarr.yaml
 
 # flaresolverr runs on an emptyDir, so its config PVC is deleted here: a manifest absent from
 # manifests_files is not staged but its live object remains. --ignore-not-found makes this idempotent, which is what

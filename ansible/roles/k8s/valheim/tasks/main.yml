@@ -28,8 +28,3 @@
     # has pulled ~1.8 G into the empty install PVC and the world has loaded. The number lives in
     # defaults/main.yml because the Deployment's progressDeadlineSeconds reads it too.
     manifests_rollout_timeout: "{{ valheim_k8s_rollout_timeout }}"
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
-    manifests_secret_files:
-      - secret.yaml

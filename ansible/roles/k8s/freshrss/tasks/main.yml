@@ -8,9 +8,3 @@
     # tells nginx: an edited cache config applies, reports changed, and never takes effect.
     manifests_extra_rollouts:
       - name: freshrss-feed-cache
-    manifests_files:
-      - configmap.yaml
-      - deployment.yaml
-      - deployment-feed-cache.yaml
-      - service.yaml
-      - ingressroute.yaml

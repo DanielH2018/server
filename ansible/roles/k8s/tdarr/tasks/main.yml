@@ -70,10 +70,6 @@
     # A cold pull of the 1.4 GiB image outlasts the shared default; the measurement is in
     # defaults/main.yml because the template's progressDeadlineSeconds reads it too.
     manifests_rollout_timeout: "{{ tdarr_k8s_rollout_timeout }}"
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
 
 - name: Prove the GPU and the library are reachable from inside the pod
   tags: [deploy]

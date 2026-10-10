@@ -11,11 +11,8 @@
     manifests_rollout: wg-easy
     # Secret and PersistentVolumeClaim are outside the prune allowlist, so neither the claim
     # holding the server keypair nor the orphaned wg-easy-env Secret below can be pruned.
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-    # No manifests_secret_files: v15 owns its admin credentials in its own SQLite DB, so the
+    #
+    # No secret template: v15 owns its admin credentials in its own SQLite DB, so the
     # wg-easy-env Secret that carried v14's PASSWORD_HASH has no consumer. The prune never
     # deletes a Secret (it is outside manifests_prune_allowlist), so the live Secret
     # survives, orphaned, until someone deletes it by hand. It is unreferenced but still holds

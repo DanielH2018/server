@@ -43,7 +43,11 @@ means writing the role its own `templates/ingressroute.yaml.j2`; the macro heade
 `ansible/templates/ingressroute.yml.j2` lists every parameter.
 
 **The scaffolder writes no PVC, Secret or NetworkPolicy.** Each is a decision about the
-service, so add the template by hand and name it in `manifests_files`.
+service, so add the template by hand. The role passes no file list: `k8s/manifests` renders
+every top-level `templates/*.yaml.j2` it finds, so a new template ships by existing. Name a
+Secret's template with `secret` in its basename (`secret.yaml.j2`), or it renders 0644
+outside `no_log`, which `ansible/tests/k8s/test_derived_manifest_files.py` refuses. A one-off
+Job's template ends `-job.yaml.j2` and stays out of the directory apply.
 
 **Two censuses a new role always joins**, which `prek` does not run and CI does — the
 scaffolder names both when it finishes:

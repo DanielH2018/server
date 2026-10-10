@@ -17,15 +17,6 @@
     manifests_extra_rollouts:
       - name: crowdsec-node-agent
         kind: daemonset
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-      # Per-node auth.log agents (see node-agent-daemonset.yaml.j2).
-      - node-agent-acquis.yaml
-      - node-agent-daemonset.yaml
-    manifests_secret_files:
-      - config-secret.yaml
     # The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The
     # render stamps homelab/role on every document, the k8s_claims claim included; the fixed
     # allowlist never names Secret or PersistentVolumeClaim, so config-secret and crowdsec-db

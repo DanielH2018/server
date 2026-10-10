@@ -118,11 +118,3 @@
     # The script ConfigMap is applied above from its own directory, unlabelled, so the prune
     # never selects it.
     manifests_rollout: monitor-bridge
-    manifests_files:
-      - deployment.yaml
-    manifests_secret_files:
-      - env-secret.yaml
-      # Listed here so verify_secret_keys reconciles it too, and so keys removed from
-      # env-secret.yaml are patched OUT of the live monitor-bridge-env Secret, which
-      # `kubectl apply` would otherwise leave behind indefinitely.
-      - credentials-secret.yaml

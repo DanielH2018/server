@@ -1,12 +1,14 @@
-"""`declared_manifest_files` reads every value shape a caller writes `manifests_files` in.
+"""`declared_manifest_files` reads every value shape a caller writes a file list in.
 
-The offline render harnesses ask this which manifests a role's tasks name, so they can render
+The offline render harnesses ask this which manifests a role renders, so they can render
 the shared default `k8s/manifests` would render for a basename the role ships no template for.
 A shape it fails to read returns fewer names, the harness renders one manifest fewer,
 and every guard built on the corpus passes with less coverage than yesterday.
 
-Three shapes exist in the tree, and the third is the one a YAML load cannot reach: authelia,
-freshrss and traefik build the list with a folded `>-` Jinja expression.
+Most roles pass no list, and `ansible/tests/k8s/test_derived_manifest_files.py` covers the
+derivation they get. A list a role does pass comes in three shapes, and the third is the one a
+YAML load cannot reach: authelia, navidrome and traefik build theirs with a folded `>-` Jinja
+expression.
 
 Run: uv run pytest scripts/lib/tests/test_k8s_roles_manifest_files.py
 """
@@ -14,6 +16,7 @@ Run: uv run pytest scripts/lib/tests/test_k8s_roles_manifest_files.py
 from lib.k8s_roles import (
     declared_manifest_files,
     manifest_template,
+    resolved_manifest_files,
     shared_default_templates,
 )
 
@@ -61,7 +64,7 @@ def test_a_block_list_is_read(tmp_path):
 
 
 def test_a_folded_jinja_expression_is_read(tmp_path):
-    """authelia, freshrss and traefik write it this way; no YAML load resolves it to a list."""
+    """authelia, navidrome and traefik write it this way; no YAML load resolves it to a list."""
     _role(
         tmp_path,
         "widget",
@@ -89,6 +92,33 @@ def test_a_sibling_key_is_not_read_as_a_manifest(tmp_path):
         "  loop_control:\n    label: other.yaml\n",
     )
     assert declared_manifest_files("widget", tmp_path) == {"deployment.yaml"}
+
+
+def test_a_name_in_a_comment_is_not_read(tmp_path):
+    """A comment beside a list may mention a file; only the items count."""
+    _role(
+        tmp_path,
+        "widget",
+        "---\n- name: Deploy widget\n  vars:\n"
+        "    manifests_exclude_files:\n"
+        "      # macro.yaml is imported by deployment.yaml, not applied.\n"
+        "      - macro.yaml  # and so is not service.yaml\n",
+    )
+    assert declared_manifest_files("widget", tmp_path) == set()
+    assert resolved_manifest_files("widget", tmp_path, {"port": 80}) == (
+        {"service.yaml"},
+        set(),
+    )
+
+
+def test_a_name_in_a_list_item_is_read(tmp_path):
+    _role(
+        tmp_path,
+        "widget",
+        "---\n- name: Deploy widget\n  vars:\n"
+        "    manifests_exclude_files:\n      - service.yaml\n",
+    )
+    assert resolved_manifest_files("widget", tmp_path, {"port": 80}) == (set(), set())
 
 
 def test_a_role_with_no_tasks_file_declares_nothing(tmp_path):

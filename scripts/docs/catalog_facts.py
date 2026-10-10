@@ -51,7 +51,7 @@ def k8s_route(
     # Own template or the shared default: 16 roles' IngressRoute moved to
     # `ansible/templates/ingressroute-default.yaml.j2`, and asking the role directory
     # alone printed "no route" for every one of them.
-    if manifest_template(name, "ingressroute.yaml", k8s_roles) is None:
+    if manifest_template(name, "ingressroute.yaml", k8s_roles, entry) is None:
         return "no route (infra role)"
     # ingressroute.yml.j2's own macro call is uniformly
     # `container_item.hostname | default(container_item.name)` — see the shared macro
@@ -62,7 +62,7 @@ def k8s_route(
     # k8s_public_route together, rather than hedging with "if k8s_public_route" — that flag
     # has a value in plaintext group_vars, so printing the condition instead of the answer
     # made the reader do a lookup this generator can do for them.
-    return route_cell(label, reachability(role_dir, all_vars))
+    return route_cell(label, reachability(role_dir, all_vars, entry))
 
 
 def docker_route(entry: dict[str, Any]) -> str:

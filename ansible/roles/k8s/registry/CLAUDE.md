@@ -51,8 +51,8 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
   2026-09-18 (#1937), so before that only the dead-man saw a run.
 - **The four job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
   role's own manifest directory** (#1669). `k8s/manifests` prunes every file in
-  `manifests/registry/` that `manifests_files` does not name, which deleted all four on every
-  deploy. `gc-job.yaml` is the one that mattered: `registry-gc.sh` reads it at cron time, so
+  `manifests/registry/` outside the role's file list, which deleted all four on every deploy.
+  Their `-job.yaml` suffix keeps them out of the derived list. `gc-job.yaml` is the one that mattered: `registry-gc.sh` reads it at cron time, so
   the prune left a window in which GC failed on a missing manifest. Nothing sweeps
   `registry-jobs/`, so a host with `registry_k8s_manage_gc: false` gets an explicit removal
   task outside the GC block.

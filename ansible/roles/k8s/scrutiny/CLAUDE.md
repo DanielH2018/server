@@ -43,7 +43,7 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
   fails `probe.py health scrutiny`'s 180s window. A probe cannot cover this, because the panic
   happens before either probe runs. Same class as authelia's session store
   (#1609). `ansible/tests/services/test_scrutiny_influxdb_policy.py` pins the co-location, the
-  port and the `manifests_files` entry. The policy carries no `netpol_baseline_enforced` branch:
+  port and the file's place in the role's resolved `manifests_files`. The policy carries no `netpol_baseline_enforced` branch:
   that lever is a netpol-baseline role default and role defaults are role-scoped, so it does not
   resolve here.
 - The images are pinned by digest on a **rolling tag**, matching the retired Docker

@@ -16,7 +16,11 @@ import pytest
 
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
-from lib.k8s_roles import SHARED_MANIFEST_DEFAULTS, declared_manifest_files
+from lib.k8s_roles import (
+    SHARED_MANIFEST_DEFAULTS,
+    declared_manifest_files,
+    resolved_manifest_files,
+)
 from lib.render_guard import StubUndefined
 from validate.k8s_manifests import (
     ALL_VARS,
@@ -110,27 +114,37 @@ def test_the_generated_deployment_renders_and_pins_a_uid(args, tmp_path):
     assert container["ports"][0]["containerPort"] == 8080
 
 
-def test_the_tasks_name_the_shared_defaults_without_shipping_a_template(args):
-    """The shared default is only rendered for a basename `manifests_files` names."""
-    tasks = yaml_fast.safe_load(scaffold.tasks_main(args.name, args.route))
-    files = tasks[0]["vars"]["manifests_files"]
-    for basename in ("service.yaml", "ingressroute.yaml"):
-        assert basename in files, (
-            f"{basename} has to stay in manifests_files even though the role ships no "
-            "template for it — that name is the prune keep-set and the digest"
+def _entry(args) -> dict:
+    return yaml_fast.safe_load(
+        scaffold.entry_lines(
+            args.name, args.port, args.hostname, args.authelia, args.route
         )
-        assert basename in SHARED_MANIFEST_DEFAULTS
+    )[0]
 
 
-def test_an_unrouted_service_gets_no_ingressroute_and_no_hostname():
+def test_the_tasks_name_no_file_list(args):
+    """`k8s/manifests` derives the list; a scaffolded one would only restate it."""
+    tasks = yaml_fast.safe_load(scaffold.tasks_main(args.name))
+    assert tasks[0]["vars"] == {"manifests_rollout": args.name}
+
+
+def test_the_entry_earns_the_shared_defaults_without_a_template(args, tmp_path):
+    """The derivation adds a shared default for the entry's `port` and `hostname`."""
+    scaffold.write_role(args, tmp_path)
+    files, secret = resolved_manifest_files("widget", tmp_path, _entry(args))
+    assert files == {"deployment.yaml", "service.yaml", "ingressroute.yaml"}
+    assert secret == set()
+    assert {"service.yaml", "ingressroute.yaml"} <= SHARED_MANIFEST_DEFAULTS.keys()
+
+
+def test_an_unrouted_service_gets_no_ingressroute_and_no_hostname(tmp_path):
     args = scaffold.parse_args(
         ["widget", "--image", "img:1", "--port", "9000", "--no-route"]
     )
-    tasks = yaml_fast.safe_load(scaffold.tasks_main(args.name, args.route))
-    assert "ingressroute.yaml" not in tasks[0]["vars"]["manifests_files"]
-    entry = yaml_fast.safe_load(
-        scaffold.entry_lines(args.name, args.port, args.hostname, args.authelia, False)
-    )[0]
+    entry = _entry(args)
+    scaffold.write_role(args, tmp_path)
+    files, _secret = resolved_manifest_files("widget", tmp_path, entry)
+    assert files == {"deployment.yaml", "service.yaml"}
     assert "hostname" not in entry
     assert "use_authelia" not in entry
 
@@ -208,6 +222,6 @@ def test_the_generated_role_ships_no_service_or_route_template(args, tmp_path):
 def test_the_real_tree_agrees_that_a_scaffolded_role_takes_the_default(args, tmp_path):
     """Non-vacuity: the fallback resolver, run over the generated role, finds the Service."""
     scaffold.write_role(args, tmp_path)
-    declared = declared_manifest_files("widget", tmp_path)
+    declared = declared_manifest_files("widget", tmp_path, _entry(args))
     assert "service.yaml" in declared
     assert "ingressroute.yaml" in declared

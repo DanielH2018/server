@@ -11,15 +11,6 @@
     # The Alloy ClusterRole and ClusterRoleBinding are cluster-scoped, so the namespaced prune
     # allowlist in k8s/manifests never selects them; dropping one still leaves it live.
     manifests_rollout: loki-homelab
-    manifests_files:
-      - configmap.yaml
-      - deployment.yaml
-      - service.yaml
-      - ingressroute.yaml
-      # daniel-pi's push-only door. A separate router rather than another CIDR on the one
-      # above — see the template for why that distinction is the whole point.
-      - ingressroute-push.yaml
-      - alloy-daemonset.yaml
     # manifests_rollout names the loki-homelab DEPLOYMENT; the Alloy shipper reads the same
     # ConfigMap and is a DaemonSet, so it is rolled as an extra. The shared role skips the
     # restart on the run that created it, and queues it for the batch drain like any other.

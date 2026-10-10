@@ -68,7 +68,7 @@
   ansible.builtin.stat:
     path: "{{ manifests_dest_dir }}/{{ item }}"
     checksum_algorithm: sha256
-  loop: "{{ (manifests_files | default([])) + manifests_claim_files }}"
+  loop: "{{ manifests_files_resolved + manifests_claim_files }}"
   register: manifests_release_stat
   become: true
 
@@ -162,7 +162,7 @@
   environment:
     UV_PYTHON_INSTALL_DIR: "/home/{{ sys_user }}/.local/share/uv/python"
   become: true
-  when: manifests_secret_files | default([]) | length > 0
+  when: manifests_secret_files_resolved | length > 0
 
 - name: Digest the rendered secret manifests for {{ manifests_service }}
   tags: [deploy]
@@ -184,7 +184,7 @@
       - "{{ role_path }}/files/secret_hmac.py"
       - "{{ manifests_secret_digest_key }}"
       - "{{ manifests_dest_dir }}/{{ item }}"
-  loop: "{{ manifests_secret_files | default([]) }}"
+  loop: "{{ manifests_secret_files_resolved }}"
   register: manifests_release_secret_hmac
   changed_when: false
   failed_when: false
