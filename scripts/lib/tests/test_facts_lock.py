@@ -241,6 +241,7 @@ def test_finding_kinds_census():
             "interpreter-moved",
             "lock-tampered",
             "ambiguous",
+            "empty-row",
         }
     )
 

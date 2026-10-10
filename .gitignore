@@ -90,3 +90,10 @@ id_ed25519
 # with every signal green: the deployer works exactly as designed and the only cause is the
 # file existing.
 .claude/staging-backfill.jsonl
+
+# Claude Code writes a `tsconfig.json` into the root of each plugin it loads from a plugin
+# directory, extending the `.claude-plugin/types/` scaffold it also writes. That scaffold
+# ignores itself; the root file does not. Since dotfiles#797 sets CLAUDE_CODE_PLUGIN_DIRS
+# to `.claude/plugins/deck`, every session on the k3s nodes loads the deck mod from the
+# primary checkout and recreates the file, which would park the GitOps deployer as above.
+.claude/plugins/*/tsconfig.json

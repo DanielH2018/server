@@ -14,8 +14,12 @@ from _scratch_pytest import run
 from fanout_lib.brief import Issue
 from fanout_lib.red_gate import (
     RED_GREEN_LABEL,
+    REPEATED_GREEN,
+    REPEATED_RED,
+    Gates,
     ResetFailed,
     anti_patterns,
+    green_cause,
     green_gate,
     red_gate,
     reset_worktree,
@@ -165,6 +169,46 @@ def test_the_green_gate_refuses_an_edit_to_a_test_already_in_a_red_file(tmp_path
     assert green_gate(run, repo, red, gate).endswith(
         "tests/test_mod.py changes or removes `def test_zero`"
     )
+
+
+# A test that counts its runs in a file outside the repo, so no gate sees an untracked file,
+# and asserts on the count's parity.
+FLAKY = (
+    "\n\ndef test_flaky():\n    import pathlib\n\n    from mod import double\n\n"
+    "    count = pathlib.Path('{counter}')\n"
+    "    n = int(count.read_text()) if count.exists() else 0\n"
+    "    count.write_text(str(n + 1))\n"
+    "    assert double(2) == 4 {op} n % 2 == 1\n"
+)
+
+
+def test_a_red_test_that_fails_only_sometimes_on_the_base_is_refused(tmp_path):
+    """#4178 was itself a minute-boundary flake: one failing run proves nothing."""
+    flaky = FLAKY.format(counter=tmp_path / "runs", op="or")
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": flaky})
+    gate = red_gate(run, repo, base, red, runs=3)
+    assert gate.reason.startswith("failed in only 2 of 3 runs on the unchanged code")
+
+
+def test_a_red_test_that_passes_only_sometimes_after_the_fix_is_refused(tmp_path):
+    """The base runs fail on the assertion; the fix's runs then pass on odd counts only."""
+    flaky_after_fix = FLAKY.format(counter=tmp_path / "runs", op="and")
+    repo, base, red = _repo(tmp_path, **{"tests/test_new.py": flaky_after_fix})
+    gate = red_gate(run, repo, base, red, runs=3)
+    assert gate.passed, gate.reason
+    commit(repo, "fix", **{"mod.py": FIXED})
+    reason = green_gate(run, repo, red, gate, runs=3)
+    assert reason.startswith(
+        "pytest exited 1; not passing: tests/test_new.py::test_flaky (FAILED) in run 2 of 3"
+    )
+    # A pass that does not repeat is not the red phase's catch, which `unmet` counts.
+    assert green_cause(reason) == "flaky"
+
+
+def test_the_pipeline_runs_each_gate_three_times():
+    gates = Gates()
+    assert gates.red is REPEATED_RED and REPEATED_RED.keywords == {"runs": 3}
+    assert gates.green is REPEATED_GREEN and REPEATED_GREEN.keywords == {"runs": 3}
 
 
 def test_the_green_gate_refuses_an_uncommitted_edit_the_pushed_head_lacks(tmp_path):

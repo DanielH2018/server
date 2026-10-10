@@ -10,7 +10,7 @@ to `image_builder_k8s_image` (the BuildKit tool itself) would match no play and 
 while reporting success.
 
 ## At a glance
-- **Builder image:** `moby/buildkit:v0.33.0-rootless` (`image_builder_k8s_image`) — rootless
+- **Builder image:** `moby/buildkit` (`image_builder_k8s_image`) — rootless
   BuildKit, not kaniko (archived upstream) or the daemonful BuildKit variant (wants a
   privileged pod). Runs as uid 1000 with no added capabilities.
 - **Callers:** `ical-proxy`, `terraria`, `pi-peer-backup`, `n8n`, `code-server`,

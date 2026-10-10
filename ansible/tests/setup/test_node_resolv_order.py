@@ -99,6 +99,7 @@ def order_problems(nameservers: list[str], options: str, vip: str) -> list[str]:
 
 
 def test_the_live_defaults_and_template_keep_pihole_first() -> None:
+    # fact: ansible/roles/setup/optimize_pi/CLAUDE.md#What it does (`tasks/main.yml`)
     vip = _vip()
     for host, (caller, servers_var, options_var) in _CALLERS.items():
         caller_vars = role_context(_ROLES / "setup" / caller)
