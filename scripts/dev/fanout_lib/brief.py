@@ -22,6 +22,8 @@ from fanout_lib.target import (
     Target,
     branch_name,
 )
+from findings_lib.issue_model import cited_paths
+from findings_lib.precomputed import precomputed
 from lib.ansible_inventory import GITOPS_HOST
 
 # `land.sh` and the deployer run on the GitOps host, so only batches placed there land.
@@ -299,6 +301,9 @@ def render_brief(
         else "(both hosts reported clean)"
     )
     holder = orchestrator_branch if target.is_server else branch
+    # Only this repo's paths mean anything to `land.sh`'s classifier and this tree's tests.
+    cited = sorted({p for i in issues for p in cited_paths(i.body)})
+    facts = precomputed(cited) if target.is_server else ""
     if target.is_server:
         findings = "`findings.py open`"
     else:
@@ -323,6 +328,7 @@ dispatcher has posted the `Worked by` comment naming your branch on each of them
 ## Host state at launch (what the SessionStart banner would have shown)
 {health_block}
 
+{facts}
 {REVIEW_LANDING if review else _landing(host, batch, target)}
 {_finishing(host, target, review)}
 ## Anything you do not fix
