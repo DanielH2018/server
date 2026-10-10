@@ -24,6 +24,7 @@ from fanout_lib.launch import (
     remove_worktree_command,
     systemd_run_command,
     unit_name,
+    unit_path,
     worktree_path,
     write_brief_command,
 )
@@ -150,7 +151,7 @@ def test_the_worktree_command_fetches_before_adding_from_origin_master():
 
 def test_the_systemd_run_command_is_a_transient_user_service_reading_the_brief():
     cmd = as_operator(systemd_run_command("b"))
-    assert cmd.startswith("systemd-run --user --unit fanout-b ")
+    assert " systemd-run --user --unit fanout-b " in cmd
     assert "--scope" not in cmd  # a scope would tie the agent to the launching ssh
     assert "-p WorkingDirectory=/home/ubuntu/server/.claude/worktrees/fanout-b" in cmd
     assert (
@@ -170,6 +171,14 @@ def test_the_unit_finds_claude_and_uv_under_the_launching_users_home():
     assert "-p Environment=PATH=/var/lib/claude/.local/bin:" in cmd
     assert "-p Environment=HOME=/var/lib/claude " in cmd
     assert "/home/ubuntu/.local" not in cmd
+
+
+def test_systemd_run_itself_finds_the_executable_under_the_launching_users_home():
+    """systemd-run resolves `claude`/`uv` in its caller's PATH, not the unit's; a non-interactive
+    ssh as the agent user has no ~/.local/bin, so every launch there failed (#4192)."""
+    for review in (False, True):
+        cmd = systemd_run_command("b", home="/var/lib/claude", review=review)
+        assert cmd.startswith(f"env PATH={unit_path('/var/lib/claude')} systemd-run ")
 
 
 def test_the_unit_is_bounded_by_a_runtime_cap_and_a_budget():
@@ -357,8 +366,9 @@ def test_a_failed_systemd_run_raises_with_its_stderr():
     with pytest.raises(LaunchError, match="systemd-run") as excinfo:
         launch(tools, "daniel-server", "b", "BRIEF", issues=[1])
     assert "Unit fanout-b.service already exists." in str(excinfo.value)
-    # The worktree stays for inspection after a systemd-run failure — no cleanup command.
-    assert len(run.calls) == 1
+    # No unit started and no manifest will name the batch, so the tree goes (#4192).
+    assert len(run.calls) == 2
+    assert run.calls[1][1] == remove_worktree_command("b")
 
 
 def test_an_unattributable_failure_reports_launch_command_failed_with_no_cleanup():

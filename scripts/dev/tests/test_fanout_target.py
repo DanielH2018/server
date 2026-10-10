@@ -146,7 +146,7 @@ def test_a_dotfiles_launch_claims_between_the_tree_and_the_agent():
     assert claim == (
         "claim 763 --worktree worktree-fanout-763 --repo DanielH2018/dotfiles"
     )
-    assert start.startswith("systemd-run --user --unit fanout-dotfiles-763 ")
+    assert " systemd-run --user --unit fanout-dotfiles-763 " in start
     assert batch.repo == "DanielH2018/dotfiles" and batch.worktree == DOT_WT
 
 
@@ -164,8 +164,11 @@ def test_a_failed_systemd_run_after_the_claim_gives_the_claim_back():
         "findings",
         "daniel-box",
         "findings",
+        "daniel-box",
     ]
     assert run.calls[3][1].startswith("release 763 --worktree worktree-fanout-763 ")
+    # No unit started and no manifest names the batch, so the tree goes too (#4192).
+    assert f"worktree remove --force {DOT_WT}" in run.calls[4][1]
 
 
 def test_a_refused_dotfiles_claim_releases_removes_the_tree_and_starts_nothing():
