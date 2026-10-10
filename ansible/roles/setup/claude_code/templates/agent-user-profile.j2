@@ -1,7 +1,7 @@
 # Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
 #
-# A login shell as {{ claude_code_agent_user }}. Its own claude and uv come first on PATH:
-# /usr/local/bin/uv is a symlink into /home/{{ sys_user }}, which this user cannot read.
+# A login shell as {{ claude_code_agent_user }}. Its own claude and uv come first on PATH,
+# ahead of the operator's tooling under /usr/local/bin.
 PATH="$HOME/.local/bin:$PATH"
 # The repo's hook shim (.claude/hooks/run-hook.sh) defaults to the operator's checkout and uv,
 # so without these every guarded hook fails its cd and asks instead of running. renovate-agent's

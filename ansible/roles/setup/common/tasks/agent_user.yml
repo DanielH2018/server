@@ -73,8 +73,8 @@
   become: true
 
 - name: Give the agent user the operator's pinned uv and uvx
-  # /usr/local/bin/uv is a symlink into /home/{{ sys_user }}, which ProtectHome= and the 0750
-  # home both hide from this user. A copy of the binary initial_setup pins, rather than a second
+  # The agent's own uv, on the PATH its login shell and units set, where ProtectHome= hides
+  # /home/{{ sys_user }}. A copy of the binary initial_setup pins, rather than a second
   # installer pin, so a uv bump reaches the agent on the next apply of the calling role. uvx
   # ships in the same installer and is copied for the same reason.
   ansible.builtin.copy:
