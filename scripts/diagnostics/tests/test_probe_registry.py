@@ -156,3 +156,17 @@ def test_a_routed_subcommand_streams_when_its_callable_does_not_apply(
     assert probe.main(argv, plan=fake_plan) == 0
     assert planned == [argv]
     assert capsys.readouterr().out == "curl planned\n"
+
+
+def test_main_plans_a_streaming_subcommand_from_argv_alone(monkeypatch, capsys):
+    # #4332: plan() takes no resolve_ip, so main() hands it the argv and nothing else.
+    argv = ["--dry-run", "targets"]
+    calls = []
+
+    def fake_plan(*args, **kwargs):
+        calls.append((args, kwargs))
+        return [["curl", "planned"]]
+
+    assert probe.main(argv, plan=fake_plan) == 0
+    assert calls == [((argv,), {})]
+    assert capsys.readouterr().out == "curl planned\n"

@@ -10,9 +10,14 @@ and `cert_stages` into `probe_lib/cli_parser.py`.
 Run: uv run pytest scripts/diagnostics/tests/test_probe_curl_pipeline.py
 """
 
+import ast
+import os
+from typing import Any, Callable, cast
+
 import pytest
 
 from diagnostics.probe_lib import cli_parser, core, curl_pipeline
+from lib.proc_testing import run
 
 
 def test_plan_metric_uses_cluster_prometheus_route(fake_resolve, fake_k8s_endpoint):
@@ -231,3 +236,114 @@ def test_observability_loki_ip_reads_the_role_default():
     # silently returned nothing would build `http://:3100`.
     ip = core.observability_loki_ip()
     assert ip.startswith("10.43."), ip
+
+
+# #4332: `plan()` reaches every service through `k8s_endpoint` or `observability_loki_ip`, so
+# the Docker `resolve_ip` lookup it used to take is a parameter no branch calls. The calls below
+# omit it on purpose, so they go through an untyped alias the type checker does not hold to the
+# old signature.
+_plan = cast(Callable[..., Any], curl_pipeline.plan)
+
+
+def test_plan_takes_no_resolve_ip_parameter():
+    import inspect
+
+    assert "resolve_ip" not in inspect.signature(curl_pipeline.plan).parameters
+
+
+def test_plan_needs_nothing_beyond_args_for_a_lookup_free_subcommand():
+    # `cert` consults neither endpoint lookup, so its args alone must be enough to plan it.
+    host = "homepage.daniel-hunter.com"
+    try:
+        stages = _plan(["cert", host])
+    except TypeError as exc:
+        pytest.fail(f"plan() still requires an argument beyond args: {exc}")
+    assert stages == cli_parser.cert_stages(host, 443, host)
+
+
+def test_plan_routes_when_given_only_its_endpoint_lookups(fake_k8s_endpoint):
+    try:
+        stages = _plan(["scrutiny"], k8s_endpoint=fake_k8s_endpoint)
+    except TypeError as exc:
+        pytest.fail(f"plan() still requires an argument beyond its lookups: {exc}")
+    assert stages == [
+        core.curl_argv(
+            "https://scrutiny.example/api/summary",
+            resolve="scrutiny.example:443:10.0.0.240",
+        )
+    ]
+
+
+def _resolve_ip_names(tree):
+    """Every identifier in `tree` that names `resolve_ip`: a name, a parameter, an import."""
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id == "resolve_ip":
+            found.append(node.lineno)
+        elif isinstance(node, ast.arg) and node.arg == "resolve_ip":
+            found.append(node.lineno)
+        elif isinstance(node, ast.alias) and node.name == "resolve_ip":
+            found.append(node.lineno)
+    return found
+
+
+def test_no_plan_caller_passes_a_resolve_lookup():
+    """Census: neither probe.py nor any tracked diagnostics test hands plan() a resolver."""
+    root = run(
+        ["git", "rev-parse", "--show-toplevel"],
+        check=True,
+        cwd=os.path.dirname(os.path.abspath(__file__)),
+    ).stdout.strip()
+    tracked = run(
+        [
+            "git",
+            "ls-files",
+            "scripts/diagnostics/probe.py",
+            "scripts/diagnostics/tests/*.py",
+        ],
+        check=True,
+        cwd=root,
+    ).stdout.split()
+    # The census must at least read probe.py and this file, or it checks nothing.
+    assert "scripts/diagnostics/probe.py" in tracked
+    assert "scripts/diagnostics/tests/test_probe_curl_pipeline.py" in tracked
+
+    offenders = []
+    for rel in tracked:
+        with open(os.path.join(root, rel), encoding="utf-8") as fh:
+            tree = ast.parse(fh.read(), filename=rel)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = (
+                func.attr
+                if isinstance(func, ast.Attribute)
+                else getattr(func, "id", None)
+            )
+            if name != "plan":
+                continue
+            for arg in [*node.args, *(kw.value for kw in node.keywords)]:
+                if isinstance(arg, ast.Name) and "resolve" in arg.id:
+                    offenders.append(f"{rel}:{node.lineno} passes {arg.id}")
+        for node in ast.walk(tree):
+            # A stand-in for plan() that still accepts the resolver keeps the old contract.
+            if isinstance(node, ast.FunctionDef) and node.name.endswith("plan"):
+                offenders += [
+                    f"{rel}:{node.lineno} {node.name} accepts {a.arg}"
+                    for a in node.args.args
+                    if "resolve" in a.arg
+                ]
+        if rel == "scripts/diagnostics/probe.py":
+            offenders += [
+                f"{rel}:{n} names resolve_ip" for n in _resolve_ip_names(tree)
+            ]
+    assert offenders == []
+
+
+def test_curl_pipeline_module_names_no_resolve_ip():
+    """plan()'s signature and docstring both drop the lookup, so the module never names it."""
+    with open(curl_pipeline.__file__, encoding="utf-8") as fh:
+        source = fh.read()
+    assert _resolve_ip_names(ast.parse(source)) == []
+    assert "resolve_ip" not in (curl_pipeline.plan.__doc__ or "")
