@@ -41,7 +41,6 @@ import os
 import re
 import subprocess
 import sys
-import shlex
 import tempfile
 import time
 from collections.abc import Callable
@@ -59,6 +58,7 @@ from ablate_budget import (
     fitting_selection,
     report_entries,
     run_costs,
+    selection_flags,
 )
 from ranking import default_transcripts, rank_docs, section_reads
 
@@ -528,15 +528,15 @@ def main(argv=None) -> int:
         fit_cases, fit_sections = fitting_selection(
             list(per_run), per_run, args.k, sections, args.cap_usd
         )
-        if fit_cases:
-            flags = [f"--case {c}" for c in fit_cases]
-            flags += [f"--section {shlex.quote(h)}" for h in fit_sections]
-            print(f"largest selection that fits: {' '.join(flags)}", file=sys.stderr)
-        else:
-            print(
-                "no selection fits: one case's three arms exceed the cap",
-                file=sys.stderr,
-            )
+        plan = {n: getattr(args, n) for n in ("doc", "k", "cap_usd")}
+        defaults = {n: a.get_default(n) for n in plan}
+        flags = selection_flags(plan, defaults, fit_cases, fit_sections)
+        print(
+            f"largest selection that fits: {flags}"
+            if fit_cases
+            else "no selection fits: one case's three arms exceed the cap",
+            file=sys.stderr,
+        )
         return EXIT_REFUSED
     if args.dry_run:
         sizes = dict(split_sections(doc)[1])

@@ -6,6 +6,7 @@ whose baseline, -doc and first section arm cannot all finish is refused before i
 """
 
 import json
+import shlex
 from pathlib import Path
 
 # The operator's ruling on #4259 (2026-10-10): each ablation run stays under $10.
@@ -134,3 +135,22 @@ def fitting_selection(
     arms = complete_arms(in_run_order(picked), k, 2 + len(sections), cap)
     picked_ids = [c for c in case_ids if c in picked]
     return picked_ids, sections[: arms - 2]
+
+
+def selection_flags(
+    plan: dict, defaults: dict, case_ids: list[str], sections: list[str]
+) -> str:
+    """The `run` flags for a selection, ready to paste back.
+
+    `plan` maps option dests (doc, k, cap_usd) to the values the selection was priced at.
+    Each one that differs from `defaults` is printed too, because a command without it
+    would price, or fail to find, a different plan.
+    """
+    flags = [
+        f"--{name.replace('_', '-')} {shlex.quote(str(value))}"
+        for name, value in plan.items()
+        if value != defaults[name]
+    ]
+    flags += [f"--case {c}" for c in case_ids]
+    flags += [f"--section {shlex.quote(h)}" for h in sections]
+    return " ".join(flags)

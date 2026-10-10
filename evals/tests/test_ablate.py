@@ -263,7 +263,22 @@ def test_a_plan_that_fits_is_priced_at_the_unpriced_rate_and_accepted(tmp_path, 
     assert "1 of 1 section arm(s) expected to finish" in out
 
 
-def test_the_printed_selection_is_accepted_when_pasted_back(tmp_path, capsys):
+@pytest.mark.parametrize(
+    "plan",
+    [
+        [],
+        # A doc whose heading carries a quote, and a k and cap the selection was priced at.
+        [
+            "--doc",
+            "ansible/roles/k8s/manifests/CLAUDE.md",
+            "--k",
+            "2",
+            "--cap-usd",
+            "9",
+        ],
+    ],
+)
+def test_the_printed_selection_is_accepted_when_pasted_back(plan, tmp_path, capsys):
     # The skeptic cases' real prices on 2026-10-10. They sort last in file order and first
     # by cost, so a selection checked cheapest first is refused in the runner's order.
     priced = {
@@ -274,8 +289,9 @@ def test_the_printed_selection_is_accepted_when_pasted_back(tmp_path, capsys):
     entries = [{"id": f"skeptic/{c}", "k": 1, "costUsd": v} for c, v in priced.items()]
     (tmp_path / "runs.json").write_text(json.dumps(entries))
     reports = ["--cost-reports", str(tmp_path)]
-    assert main(["run", "--dry-run", *reports]) == EXIT_REFUSED
+    assert main(["run", "--dry-run", *reports, *plan]) == EXIT_REFUSED
     line = capsys.readouterr().err.split("largest selection that fits: ", 1)[1]
     flags = shlex.split(line.splitlines()[0])
+    # Pasted back alone: the printed flags must carry the plan's own options.
     assert main(["run", "--dry-run", *reports, *flags]) == EXIT_DONE
     assert "1 of 1 section arm(s) expected to finish" in capsys.readouterr().out
