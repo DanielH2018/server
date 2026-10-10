@@ -244,4 +244,15 @@ def test_main_records_one_cost_entry_per_run(tmp_path):
     assert main(["--history", str(hist), str(report)]) == 0
     saved = load_history(hist)
     assert [r["costUsd"] for r in saved[RUNS_KEY]] == [0.25, 0.25]
-    assert classify(saved)["stable"] == ["a/1"]
+
+
+def test_classify_skips_the_runs_key_even_if_its_entries_look_like_signal():
+    # Real run entries carry no thresholdMet, so _signal alone would drop them. These do,
+    # so only the explicit RUNS_KEY skip in classify keeps _runs out of the buckets.
+    hist = {RUNS_KEY: [_entry(True), _entry(True), _entry(False)]}
+    assert classify(hist) == {
+        "regressed": [],
+        "recovered": [],
+        "flaky": [],
+        "stable": [],
+    }
