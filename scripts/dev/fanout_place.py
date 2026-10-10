@@ -55,6 +55,7 @@ leaves a batch that isn't ready to go both locked and in the manifest.
 
 import argparse
 import dataclasses
+import json
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -308,34 +309,12 @@ def _one_line(text: str, limit: int = 300) -> str:
 
 def cmd_status(args, tools: Tools) -> int:
     run = manifest_mod.load(args.run_id, root=args.manifest_root)
-    worst = 0
-    # A cleaned batch is reported from the manifest and never read remotely. `clean` resets
-    # the failed unit and takes .fanout/report.json with the worktree, so status_command
-    # finds no active state, no result and no report — and `parse_status` reads exactly that
-    # as `failed`, which would exit 5 for a batch that landed its PR and was tidied up.
-    for b in run.batches:
-        if b.removed_at:
-            print(f"{b.batch} on {b.host}: cleaned ({b.removed_at})")
-    live = [b for b in run.batches if not b.removed_at]
-    for host in sorted({b.host for b in live}):
-        mine = [b for b in live if b.host == host]
-        try:
-            proc = tools.run(
-                host, status_mod.status_command(mine), status_mod.STATUS_TIMEOUT_S, None
-            )
-        except subprocess.TimeoutExpired:
-            for b in mine:
-                print(f"{b.batch} on {host}: status read timed out")
-            worst = max(worst, 1)
-            continue
-        by_id = {b.batch: b for b in mine}
-        for st in status_mod.parse_status(mine, proc.stdout):
-            b = by_id[st.batch]
-            line, tier = status_mod.status_line(
-                st, host, b.branch, tools.merged_pr, _one_line, b.repo
-            )
-            worst = max(worst, tier)
-            print(line)
+    rows, worst = status_mod.collect(run, tools, _one_line)
+    if args.json:
+        print(json.dumps(rows, indent=2))
+    else:
+        for row in rows:
+            print(row["line"])
     return worst
 
 
@@ -531,6 +510,9 @@ def main(argv=None, tools: Tools | None = None) -> int:
         _add_manifest_root(run_parsers[name])
         run_parsers[name].set_defaults(fn=fn)
     run_parsers["stop"].add_argument("batch", nargs="?")
+    run_parsers["status"].add_argument(
+        "--json", action="store_true", help="one object per batch, for fanout_probe.py"
+    )
     run_parsers["abandon"].add_argument("batch")
     # No `help=` here, matching every other subparser above: argparse only lists a
     # subcommand under "positional arguments" when its own help text is set, so leaving it

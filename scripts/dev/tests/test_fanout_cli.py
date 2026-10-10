@@ -203,6 +203,23 @@ def test_stop_stops_the_unit_and_names_clean_as_the_next_step(tmp_path, capsys):
     assert "on daniel-box: systemctl --user list-units 'land*' 'deploy-*'" in out
 
 
+def test_status_json_prints_one_row_per_batch_with_its_state(tmp_path, capsys):
+    cleaned = Batch("1", "daniel-box", "/w1", "b1", "u1", [1], "2026", "2026-10-09")
+    live = Batch("2", "daniel-server", "/w2", "b2", "u2", [2], "t")
+    manifest = Manifest("20260101T000010Z", "o", [cleaned, live])
+    save(manifest, root=tmp_path)
+    tools, run = fake_tools()
+    run.answers_by_call = [subprocess.TimeoutExpired("ssh", 30)]
+    argv = ["status", manifest.run_id, "--json", "--manifest-root", str(tmp_path)]
+    assert main(argv, tools) == 1
+    rows = json.loads(capsys.readouterr().out)
+    assert [(r["batch"], r["host"], r["state"]) for r in rows] == [
+        ("1", "daniel-box", "cleaned"),
+        ("2", "daniel-server", "unread"),
+    ]
+    assert rows[1]["line"] == "2 on daniel-server: status read timed out"
+
+
 def test_stop_makes_no_call_for_a_batch_clean_already_took(tmp_path, capsys):
     cleaned = Batch(
         "1",

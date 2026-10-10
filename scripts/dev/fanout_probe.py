@@ -11,9 +11,10 @@ in the two weeks to 2026-10-04 (`while true; do fanout_place.py status <id> | gr
 
 The contract is the dotfiles repo's docs/specs/2026-10-04-cc-wait-design.md.
 
-ONE DEFINITION OF A BATCH'S STATE. This runs `fanout_place.main(["status", <run-id>])` and
-reads what it prints, so `status` stays the only code that decides a batch's state and its
-exit tier (the issue-fanout skill documents both).
+ONE DEFINITION OF A BATCH'S STATE. This runs `fanout_place.main(["status", <run-id>,
+"--json"])` and reads the `state` field of each row it prints, so `status` stays the only code
+that decides a batch's state and its exit tier (the issue-fanout skill documents both). It
+read the text lines with a regex until #3926, so a change to their wording broke it silently.
 
 THE STATE. `running` while any batch runs or could not be read, with the finished batches as
 its detail. A Monitor running `cc-wait fanout` therefore prints one line each time a batch
@@ -37,33 +38,50 @@ import argparse
 import contextlib
 import io
 import json
-import re
 import sys
 from collections.abc import Callable
 
 import fanout_place
 from fanout_lib import manifest as manifest_mod
+from fanout_lib.status import UNREAD
 
 TERMINAL = {"finished": 0, "needs-attention": 1, "failed": 5}
 
-_LINE = re.compile(r"^(?P<batch>\S+) on (?P<host>\S+): (?P<state>\S+)")
-_TIMED_OUT = "status read timed out"
 _SUCCESS = frozenset({"done", "landed", "cleaned"})
+# A batch still working, or one whose host read timed out: neither has finished.
+_OPEN = frozenset({"running", UNREAD})
 
-# (exit tier, printed lines) for one run id.
-StatusReader = Callable[[str], tuple[int, str]]
+# (exit tier, the rows `status --json` printed) for one run id.
+StatusReader = Callable[[str], tuple[int, list[dict]]]
 
 
 class Unreadable(Exception):
-    """`status` printed no batch line this probe can parse."""
+    """`status` printed no batch row this probe can read."""
 
 
-def read_status(run_id: str) -> tuple[int, str]:
-    """`fanout_place.py status <run_id>`'s exit tier and output, run in this process."""
+def read_status(
+    run_id: str, main: Callable[[list[str]], int] | None = None
+) -> tuple[int, list[dict]]:
+    """`fanout_place.py status <run_id> --json`'s exit tier and rows, run in this process.
+
+    Args:
+        run_id: the run to read.
+        main: `fanout_place.main`-shaped; a seam so a test can point it at its own
+            manifest root and fake tools.
+
+    Raises:
+        Unreadable: the output is not a JSON array.
+    """
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        rc = fanout_place.main(["status", run_id])
-    return rc, out.getvalue()
+        rc = (main or fanout_place.main)(["status", run_id, "--json"])
+    try:
+        rows = json.loads(out.getvalue())
+    except ValueError as exc:
+        raise Unreadable(f"`status {run_id} --json` printed no JSON: {exc}") from exc
+    if not isinstance(rows, list):
+        raise Unreadable(f"`status {run_id} --json` printed no array")
+    return rc, rows
 
 
 def describe() -> dict:
@@ -76,22 +94,19 @@ def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
     running: list[str] = []
     finished: list[tuple[str, str, str]] = []
     for run_id in run_ids:
-        rc, text = status(run_id)
+        rc, rows = status(run_id)
         worst = max(worst, rc)
-        for line in text.splitlines():
-            match = _LINE.match(line)
-            if not match:
-                continue
-            if match["state"] == "running" or line.endswith(_TIMED_OUT):
-                running.append(match["batch"])
+        for row in rows:
+            if row["state"] in _OPEN:
+                running.append(row["batch"])
             else:
-                finished.append((match["batch"], match["state"], line.strip()))
+                finished.append((row["batch"], row["state"], row["line"]))
     finished.sort()
     if not running and not finished:
-        # No line parsed is an unreadable output, not a finished run: the worst tier of an
-        # empty read is 0, which would end the wait as `finished`. Unreadable is a failed
-        # read, which cc-wait retries and then gives up on with exit 2.
-        raise Unreadable(f"no batch line in `status` output for {', '.join(run_ids)}")
+        # No row is an unreadable output, not a finished run: the worst tier of an empty
+        # read is 0, which would end the wait as `finished`. Unreadable is a failed read,
+        # which cc-wait retries and then gives up on with exit 2.
+        raise Unreadable(f"no batch row in `status` output for {', '.join(run_ids)}")
     if running:
         done = ", ".join(f"{batch} {state}" for batch, state, _ in finished) or "none"
         return {
