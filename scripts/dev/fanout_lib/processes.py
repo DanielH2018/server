@@ -9,7 +9,7 @@ the worktree is reset. While the block is open the pipeline is a child subreaper
 orphaned descendant reparents to it rather than to init, `setsid` or not, and the block's exit
 kills each one.
 
-DECIDED: only the red phase is reaped. The land phase runs `land.sh --detach`, which
+DECIDED: only the red phase is reaped. The landing runs `land.sh --detach`, which
 double-forks so the landing outlives the call (`land_lib/detach.py`). Under a subreaper the
 landing would reparent to the pipeline and be killed.
 

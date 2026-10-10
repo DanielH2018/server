@@ -19,8 +19,9 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    batch whose PR fails `red_gate.green_gate` gets that failure as one more finding, and the
    gate runs again after the fix; a batch still failing it is not landed.
 4. delta review — a fresh reviewer reads only the fix's commits.
-5. land — on the deploy host, the implementer session is resumed with the brief's Landing
-   section. Elsewhere, a session resumes only to file what is left.
+5. land — on the deploy host, the pipeline runs `land.sh` itself (`review_land`) and resumes
+   the implementer only for a verdict that needs a decision, as the `apply` phase. Before the
+   landing, and on every other host instead of it, a session resumes to file what is left.
 
 DECIDED: a refused red commit does not stop the batch. The refusal is what the red phase
 measures, a vacuous test caught before it shipped, and the issue still deserves its fix. The
@@ -33,8 +34,8 @@ on the fix. A fresh fixer would re-read the whole change for no extra separation
 
 THE STOP HOOK. `.claude/hooks/fanout-stop.py` fires in every session under the worktree. The
 pipeline writes the running phase to `.fanout/phase` and resets the hook's block counter before
-each call. The hook never blocks a `review` phase, whose final message is JSON, and holds a
-`land` phase to a `VERDICT:` line.
+each call. The hook never blocks a `review` phase, whose final message is JSON. Every other
+phase owes a PR URL; the landing's `VERDICT:` line is in its log, which the pipeline wrote.
 
 WHAT THE IMPLEMENTER CAN WRITE. The worktree, and for another repo's batch the `.fanout/server`
 snapshot this module runs from. The pipeline therefore reads the review prompt, the headless
@@ -69,7 +70,7 @@ import sys as _sys
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fanout_lib.brief import ISSUES_HEADING, _landing, lands
+from fanout_lib.brief import ISSUES_HEADING, lands
 from fanout_lib.held_hooks import (
     held_secret_paths,
     pointed_settings,
@@ -82,7 +83,7 @@ from fanout_lib.review_prompts import (
     file_prompt,
     fix_prompt,
     is_held,
-    land_prompt,
+    apply_prompt,
     review_prompt,
 )
 from fanout_lib.red_gate import (
@@ -98,6 +99,8 @@ from fanout_lib.red_gate import (
     reset_worktree,
 )
 from fanout_lib.processes import reaping, run_process
+from fanout_lib.review_land import RESUME_VERDICTS, land
+from fanout_lib.review_land import report as landing_report
 from fanout_lib.review_record import (
     Phase,
     Record,
@@ -129,8 +132,8 @@ OWN_COPY = Path(".fanout") / "stop-hook"
 REVIEW_BUDGET_USD = 15
 # A finding the fix round acts on. The reviewer reports everything, as the user-level
 # `## Code review` rule asks; this is the separate filtering pass.
-# `land.sh` waits up to about an hour for CI and the tick. A land phase started with less than
-# this left on the unit's `RuntimeMaxSec` would be killed mid-landing, so it is skipped.
+# `land.sh` waits up to about an hour for CI and the tick. A landing started with less than
+# this left on the unit's `RuntimeMaxSec` would outlive the wait on it, so it is skipped.
 LAND_MARGIN_S = 90 * 60
 GATES = Gates()
 STATE_DIR = Path.home() / ".local" / "state" / "fanout-review"
@@ -540,10 +543,28 @@ class Pipeline:
                         f"time to land safely; land {self.record.pr} by hand.\n{self.record.pr}"
                     ),
                 }
-            landing = _landing(self.host, self.batch, self.target)
-            return self._claude(
-                "land", self._resume(), land_prompt(self.record, landing)
-            ).report
+            # Filed before the merge, so the PR body names each leftover's issue.
+            self._file_leftovers()
+            landing = land(
+                self.run,
+                self.worktree,
+                self.record.pr,
+                lambda: self.deadline - self.clock(),
+            )
+            self.record.verdict = landing.line or f"none (exit {landing.rc})"
+            if landing.verdict in RESUME_VERDICTS and self.session:
+                prompt = apply_prompt(
+                    self.record.pr,
+                    landing.line,
+                    landing.tail,
+                    str(self.worktree / ".fanout"),
+                )
+                return self._claude("apply", self._resume(), prompt).report
+            return landing_report(self.record.pr, landing)
+        return self._file_leftovers() or last.report
+
+    def _file_leftovers(self) -> dict | None:
+        """Resume the implementer to file the public leftovers; its report, or None if none."""
         if any(not is_held(f) for f in self.record.remaining) and self.session:
             return self._claude("file", self._resume(), file_prompt(self.record)).report
-        return last.report
+        return None

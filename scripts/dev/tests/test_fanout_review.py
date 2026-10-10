@@ -45,7 +45,6 @@ def test_a_resumed_phase_records_only_what_it_added_to_the_session(tmp_path):
         _report(structured={"summary": "", "findings": [_finding("off by one")]}),
         _report(f"Fixed it. {PR}", cost=4.0),
         _report(structured={"summary": "resolved", "findings": []}),
-        _report(f"{PR}\nVERDICT: settled", cost=4.5),
     ]
     pipeline, _run = _pipeline(tmp_path, reports)
     pipeline.run_all()
@@ -55,7 +54,6 @@ def test_a_resumed_phase_records_only_what_it_added_to_the_session(tmp_path):
         "review": 1.0,
         "fix": 1.0,
         "review-delta": 1.0,
-        "land": 0.5,
     }
     assert record["outcome"] == "pr"
 
@@ -68,18 +66,16 @@ def test_an_actionable_finding_runs_a_fix_a_delta_review_and_the_landing_in_orde
         _report(structured={"summary": "", "findings": [_finding("off by one")]}),
         _report(f"Fixed it. {PR}"),
         _report(structured={"summary": "resolved", "findings": []}),
-        _report(f"{PR}\nVERDICT: settled"),
     ]
     pipeline, run = _pipeline(tmp_path, reports)
     final = pipeline.run_all()
 
-    assert final["result"].endswith("VERDICT: settled")
+    assert final["result"] == f"VERDICT: settled (deployed)\n{PR}"
     assert [phase for _, _, phase in run.claude] == [
         "implement",
         "review",
         "fix",
         "review",
-        "land",
     ]
     reviewer, review_stdin, _ = run.claude[1]
     assert "--disallowedTools" in reviewer and "--json-schema" in reviewer
@@ -87,14 +83,17 @@ def test_an_actionable_finding_runs_a_fix_a_delta_review_and_the_landing_in_orde
     # The reviewer learns the issue and the diff range, not the landing instructions.
     assert "body one" in review_stdin and "git diff base0...aaa" in review_stdin
     assert "land.sh" not in review_stdin
-    for argv, _, _ in (run.claude[2], run.claude[4]):
-        assert argv[-2:] == ["--resume", "sid-1"]
+    assert run.claude[2][0][-2:] == ["--resume", "sid-1"]
     # The delta reviewer gets the fix round and the whole change it sits in, each named (#3954).
     assert "The fix round: `git diff aaa..bbb`" in run.claude[3][1]
     assert (
         "The whole change, the fix included: `git diff base0...bbb`" in run.claude[3][1]
     )
-    assert "./scripts/deploy_tools/land.sh" in run.claude[4][1]
+    # The pipeline lands the PR itself (#3960), under a login shell for the agent user's
+    # LAND_HANDOFF_UNIT.
+    land_sh = [str(tmp_path / "scripts/deploy_tools/land.sh"), "--pr", "4000"]
+    assert run.lands[0][:3] == land_sh and "--detach" in run.lands[0]
+    assert run.lands[1][:3] == ["cc-wait", "land", "4000"]
     assert "1 findings, 1 actionable" in run.comments[0]
     assert "0 left after the fix round" in run.comments[0]
 
@@ -126,7 +125,7 @@ def _fix_round(left):
         _report(structured={"summary": "", "findings": [first]}),
         _report(f"Fixed. {PR}"),
         _report(structured={"summary": "", "findings": left}),
-        _report(f"{PR}\nVERDICT: settled"),
+        _report(f"Filed #9. {PR}"),
     ]
 
 
@@ -137,14 +136,16 @@ def test_a_confident_medium_leftover_holds_the_pr_instead_of_landing(tmp_path):
     assert final["result"].startswith("needs input:")
     assert "still off by one (scripts/x.py)" in final["result"]
     assert final["result"].endswith(PR)
-    assert "land" not in [phase for _, _, phase in run.claude]
+    assert run.lands == []
 
 
 def test_a_leftover_under_the_hold_bar_still_lands(tmp_path):
     left = [_finding("maybe off by one", severity="medium", confidence=0.79)]
     pipeline, run = _pipeline(tmp_path, _fix_round(left))
     pipeline.run_all()
-    assert [phase for _, _, phase in run.claude][-1] == "land"
+    # Filed before the merge, so the PR body can name the leftover's issue.
+    assert [phase for _, _, phase in run.claude][-1] == "file"
+    assert len(run.lands) == 2
 
 
 def test_the_pr_comment_lists_only_actionable_findings_and_counts_the_rest(tmp_path):
@@ -158,7 +159,6 @@ def test_the_pr_comment_lists_only_actionable_findings_and_counts_the_rest(tmp_p
         _report(structured={"summary": "", "findings": findings}),
         _report(f"Fixed. {PR}"),
         _report(structured={"summary": "", "findings": []}),
-        _report(f"{PR}\nVERDICT: settled"),
     ]
     pipeline, run = _pipeline(tmp_path, reports)
     pipeline.run_all()
@@ -177,16 +177,14 @@ def test_a_security_finding_stays_off_the_public_comment_and_the_tracker(tmp_pat
         _report(structured={"summary": "", "findings": [held]}),
         _report(f"Fixed. {PR}"),
         _report(structured={"summary": "", "findings": [held]}),
-        _report(f"{PR}\nVERDICT: settled"),
     ]
     pipeline, run = _pipeline(tmp_path, reports)
     final = pipeline.run_all()
 
     assert "token leaks" not in run.comments[0]
     assert "1 security findings are held" in run.comments[0]
-    assert (
-        "token leaks" not in run.claude[4][1]
-    )  # the land prompt files public ones only
+    # A held finding is never filed, so no session resumes to file it.
+    assert "file" not in [phase for _, _, phase in run.claude]
     assert "held off the public tracker" in final["result"]
     (record,) = [f for f in (tmp_path / "state").iterdir() if f.suffix == ".json"]
     assert "token leaks" in record.read_text()
@@ -196,13 +194,12 @@ def test_a_failed_review_is_said_on_the_pr_and_the_batch_still_lands(tmp_path):
     reports = [
         _report(f"Opened {PR}"),
         _report(is_error=True),
-        _report(f"{PR}\nVERDICT: settled"),
     ]
     pipeline, run = _pipeline(tmp_path, reports)
     pipeline.run_all()
     assert "did not complete" in run.comments[0]
-    assert [phase for _, _, phase in run.claude] == ["implement", "review", "land"]
-    assert "did not complete" in run.claude[2][1]
+    assert [phase for _, _, phase in run.claude] == ["implement", "review"]
+    assert len(run.lands) == 2
 
 
 def test_the_landing_is_skipped_when_too_little_run_time_is_left(tmp_path):
@@ -222,6 +219,7 @@ def test_the_landing_is_skipped_when_too_little_run_time_is_left(tmp_path):
     final = pipeline.run_all()
     assert final["result"].startswith("needs input:")
     assert [phase for _, _, phase in run.claude] == ["implement", "review"]
+    assert run.lands == []
 
 
 def test_actionable_keeps_medium_at_the_confidence_floor_and_drops_the_rest():
@@ -289,7 +287,6 @@ def test_every_phase_runs_the_prompt_and_hooks_read_at_start(tmp_path):
         _report(structured={"summary": "", "findings": [_finding("off by one")]}),
         _report(f"Fixed it. {PR}"),
         _report(structured={"summary": "resolved", "findings": []}),
-        _report(f"{PR}\nVERDICT: settled"),
     ]
     pipeline, run = _pipeline(tmp_path, reports)
     pipeline.headless_prompt = "PROMPT AT START"
@@ -312,35 +309,36 @@ def test_every_phase_runs_the_prompt_and_hooks_read_at_start(tmp_path):
     pipeline.run = agent_edits_the_hooks
     pipeline.run_all()
 
-    for argv in (run.claude[0][0], run.claude[2][0], run.claude[4][0]):
+    for argv in (run.claude[0][0], run.claude[2][0]):
         assert "--append-system-prompt-file" not in argv
         assert argv[argv.index("--append-system-prompt") + 1] == "PROMPT AT START"
         settings = json.loads(argv[argv.index("--settings") + 1])
         stops = [h for group in settings["hooks"]["Stop"] for h in group["hooks"]]
         assert [h["command"] for h in stops] == [f"{hooks}/run-hook.sh fanout-stop"]
     # Every phase starts from the bytes read at start, not the last phase's edit or plant.
-    assert seen == [(b"HOOK AT START", False)] * 5
+    assert seen == [(b"HOOK AT START", False)] * 4
     # The worktree's own copy stands down on this marker; the snapshot path is the proof.
     assert (tmp_path / ".fanout" / "stop-hook").read_text().strip() == str(hook)
 
 
 def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
-    """The fix and land phases resume the implementer's session after it could edit
+    """The fix and apply phases resume the implementer's session after it could edit
     `.claude/settings.json` and every guard hook (#3810)."""
     reports = [
         _report(f"Opened {PR}"),
         _report(structured={"summary": "", "findings": [_finding("off by one")]}),
         _report(f"Fixed it. {PR}"),
         _report(structured={"summary": "resolved", "findings": []}),
-        _report(f"{PR}\nVERDICT: settled"),
+        _report(f"Applied. {PR}"),
     ]
     pipeline, run = _pipeline(tmp_path, reports)
+    run.verdict = "VERDICT: needs-manual-apply (run the playbook)"
     held = json.loads(pipeline.project_settings)
     pipeline.run_all()
 
     hooks = pipeline.hook_root / ".claude" / "hooks"
-    fix, land = run.claude[2][0], run.claude[4][0]
-    for argv in (fix, land):
+    fix, apply = run.claude[2][0], run.claude[4][0]
+    for argv in (fix, apply):
         assert argv[argv.index("--setting-sources") + 1] == "user"
         settings = json.loads(argv[argv.index("--settings") + 1])
         commands = [
@@ -372,7 +370,6 @@ def test_the_reviewers_load_no_settings_file_and_get_claude_md_read_at_start(tmp
         _report(structured={"summary": "", "findings": [_finding("off by one")]}),
         _report(f"Fixed it. {PR}"),
         _report(structured={"summary": "resolved", "findings": []}),
-        _report(f"{PR}\nVERDICT: settled"),
     ]
     pipeline, run = _pipeline(tmp_path, reports)
     assert pipeline.project_claude_md.startswith("# Server Homelab")

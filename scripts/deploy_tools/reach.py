@@ -12,18 +12,21 @@ THREE READINGS, NOT ONE. The callers ask three different questions of the same p
 - `Reach.changes` is the deployer's `ChangeSet`. `deploy.sh --changed` deploys
   `changes.k8s | changes.services`, which includes every k8s role that
   `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES` lists for a changed setup-role file.
-- `Reach.tags` is the landing's tag list: each path's own declared role, plus every role
-  that `lookup()`s a changed file. It has no copy-holder expansion.
+- `Reach.tags` is the landing's tag list: each path's own declared role, every role
+  that `lookup()`s a changed file, and every k8s role that
+  `K8S_ROLES_IMPORTING_SETUP_FILES` lists for a changed setup-role file.
 - `Reach.touched` is everything a path could re-render, for the staleness refusal. It is
   the widest of the three, because being behind on a path that MIGHT reach a service is the
   reversion that refusal exists to stop.
 
 The first two disagreed on 3 of the last 400 master commits on 2026-10-10. Two were a change
-to `roles/setup/common/files/host_lib.py`, which `changes` maps to configarr and janitorr
-(they install a copy) and `tags` maps to nothing (#4136). One was monitor-bridge's `check_table.py`,
-which `tags` maps to uptime-kuma (it `lookup()`s the file) and `changes` does not. Each
-answer is kept as it was: unifying them changes what a landing deploys, which is its own
-change with its own test.
+to `roles/setup/common/files/host_lib.py`, which `changes` mapped to configarr and janitorr
+(they install a copy) and `tags` mapped to nothing. A landing then deployed neither, and their
+copies stayed stale behind a green master, because the tick only defer-and-alerts a k8s role.
+`tags` reads the same table since #4136. The third was monitor-bridge's `check_table.py`,
+which `tags` maps to uptime-kuma (it `lookup()`s the file) and `changes` does not. That
+direction stays: the tick defers a k8s change either way, and the landing deploying the reader
+is the wider answer.
 
 The range form with content reads, `narrow_broad.narrow`, still builds its own answer and
 reaches the mapper through `Reach.changes`. Folding it in waits on #3661, because
@@ -153,10 +156,21 @@ class Reach(NamedTuple):
         monitor-bridge's `files/check_table.py`, so a new check landed as
         `--tags monitor-bridge` alone would ship the check and leave its tile undeployed
         (#3781).
+
+        A changed setup-role file also maps to every k8s role that ships a copy of it. Those
+        are `K8S_ROLES_IMPORTING_SETUP_FILES`, the table `changes` reads. The table is read
+        directly rather than through `changes.k8s`, which also holds each path's own role
+        before `tag_for` drops a role test (#4136).
         """
         readers = deploy_cross_role.k8s_lookup_readers(self.loud, repo)
+        holders = set().union(
+            *(
+                deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES.get(p, frozenset())
+                for p in self.loud
+            )
+        )
         return {t for p in self.loud if (t := tag_for(p, declared))} | (
-            readers & declared
+            (readers | holders) & declared
         )
 
     def touched(self, repo: Path | str = REPO) -> set[str]:

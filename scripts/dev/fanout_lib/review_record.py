@@ -68,6 +68,8 @@ class Record:
     # `failed`, `needs-input` or `no-pr` before a PR exists, then `pr` once one does, or
     # `failed` / `needs-input` when the last phase says so.
     outcome: str = ""
+    # The VERDICT line of the landing the pipeline ran (#3960), "" when it ran none.
+    verdict: str = ""
     # Per phase: wall-clock seconds, and the tool calls the classifier denied.
     durations: dict[str, float] = field(default_factory=dict)
     permission_denials: dict[str, int] = field(default_factory=dict)
