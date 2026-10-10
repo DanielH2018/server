@@ -318,6 +318,28 @@ def cmd_status(args, tools: Tools) -> int:
     return worst
 
 
+def cmd_runs(args, tools: Tools) -> int:
+    """List every run manifest on this host, so a lost run-id is recoverable (#3923)."""
+    runs = [
+        r
+        for r in manifest_mod.all_runs(args.manifest_root)
+        if not args.orchestrator or r.orchestrator_branch == args.orchestrator
+    ]
+    if args.json:
+        print(json.dumps([dataclasses.asdict(r) for r in runs], indent=2))
+        return 0
+    for r in runs:
+        print(f"{r.run_id}  orchestrator {r.orchestrator_branch}")
+        for b in r.batches:
+            state = f"cleaned {b.removed_at}" if b.removed_at else "standing"
+            issues = ",".join(f"#{n}" for n in b.issues)
+            print(f"  {b.batch} on {b.host}: {b.branch} {issues} {state}")
+    if not runs:
+        whose = f" for {args.orchestrator}" if args.orchestrator else ""
+        print(f"no fan-out runs{whose} under {args.manifest_root}")
+    return 0
+
+
 def cmd_clean_one(
     args,
     tools: Tools,
@@ -509,6 +531,11 @@ def main(argv=None, tools: Tools | None = None) -> int:
         run_parsers[name].add_argument("run_id")
         _add_manifest_root(run_parsers[name])
         run_parsers[name].set_defaults(fn=fn)
+    runs_parser = sub.add_parser("runs")
+    runs_parser.add_argument("--json", action="store_true")
+    runs_parser.add_argument("--orchestrator", metavar="BRANCH")
+    _add_manifest_root(runs_parser)
+    runs_parser.set_defaults(fn=cmd_runs)
     run_parsers["stop"].add_argument("batch", nargs="?")
     run_parsers["status"].add_argument(
         "--json", action="store_true", help="one object per batch, for fanout_probe.py"

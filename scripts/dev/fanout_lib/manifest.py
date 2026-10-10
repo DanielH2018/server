@@ -116,14 +116,38 @@ def load(run_id: str, root: Path = MANIFEST_DIR) -> Manifest:
     )
 
 
+def all_runs(root: Path = MANIFEST_DIR) -> list[Manifest]:
+    """Every run manifest under `root`, oldest run-id first.
+
+    A manifest that cannot be read is skipped on its own rather than raising: every caller is
+    a read view or a launch gate, and one bad file must fail neither. `fanout_place.py runs`
+    lists these, so a run-id lost to compaction or a resumed session is recoverable (#3923).
+    """
+    if not root.is_dir():
+        return []
+    runs = []
+    for manifest_file in sorted(root.glob("*.json")):
+        try:
+            data = json.loads(manifest_file.read_text())
+            runs.append(
+                Manifest(
+                    data["run_id"],
+                    data["orchestrator_branch"],
+                    [Batch(**b) for b in data["batches"]],
+                )
+            )
+        except OSError, ValueError, KeyError, TypeError:
+            continue
+    return runs
+
+
 def live_batches(root: Path = MANIFEST_DIR) -> dict[tuple[str, str], tuple[str, Batch]]:
     """Every batch id still standing across every run under `root`, to its run and record.
 
     "Still standing" means no `removed_at`: a batch cleaned in one run and relaunched in
     another must not be found through the cleaned entry, so only live entries are keyed and
-    a later live one wins. Callers use this to refuse a duplicate launch, so a manifest it
-    cannot read is skipped on its own rather than raising — one unreadable file must not
-    refuse every launch on the host.
+    a later live one wins. Callers use this to refuse a duplicate launch; `all_runs` skips a
+    manifest it cannot read, so one unreadable file does not refuse every launch on the host.
 
     Keyed by repo as well as batch id, because a batch id is only issue numbers and those
     collide across repos: dotfiles batch `763` is not server batch `763`.
@@ -131,20 +155,12 @@ def live_batches(root: Path = MANIFEST_DIR) -> dict[tuple[str, str], tuple[str, 
     Returns:
         `{(repo, batch id): (run_id, Batch)}` for every batch with no `removed_at`.
     """
-    live: dict[tuple[str, str], tuple[str, Batch]] = {}
-    if not root.is_dir():
-        return live
-    for manifest_file in sorted(root.glob("*.json")):
-        try:
-            data = json.loads(manifest_file.read_text())
-            run_id = data["run_id"]
-            batches = [Batch(**b) for b in data["batches"]]
-        except OSError, ValueError, KeyError, TypeError:
-            continue
-        for b in batches:
-            if not b.removed_at:
-                live[(b.repo, b.batch)] = (run_id, b)
-    return live
+    return {
+        (b.repo, b.batch): (run.run_id, b)
+        for run in all_runs(root)
+        for b in run.batches
+        if not b.removed_at
+    }
 
 
 def branches_launched_by(
@@ -155,19 +171,12 @@ def branches_launched_by(
     What `findings.py claims --worktree` widens its filter with. A batch in this repo is
     claimed under the orchestrator's own branch, but `launch` claims another repo's batch
     under the batch's branch, so an orchestrator asking "what do I hold" has to count those
-    too. Filtered by repo because issue numbers collide across registers. An unreadable
-    manifest is skipped, as `live_batches` skips one: a read view must not fail on one bad file.
+    too. Filtered by repo because issue numbers collide across registers.
     """
-    branches: set[str] = set()
-    if not root.is_dir():
-        return branches
-    for manifest_file in sorted(root.glob("*.json")):
-        try:
-            data = json.loads(manifest_file.read_text())
-            if data["orchestrator_branch"] != orchestrator_branch:
-                continue
-            batches = [Batch(**b) for b in data["batches"]]
-        except OSError, ValueError, KeyError, TypeError:
-            continue
-        branches |= {b.branch for b in batches if not b.removed_at and b.repo == repo}
-    return branches
+    return {
+        b.branch
+        for run in all_runs(root)
+        if run.orchestrator_branch == orchestrator_branch
+        for b in run.batches
+        if not b.removed_at and b.repo == repo
+    }
