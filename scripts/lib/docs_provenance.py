@@ -23,6 +23,7 @@ to write the result.
 """
 
 import datetime as dt
+import functools
 import subprocess
 import sys
 from collections.abc import Callable, Sized
@@ -40,6 +41,17 @@ _DO_NOT_EDIT = (
     "    overwritten by the next run, and a prek hook rejects them at commit time.\n"
     "    To change what appears here, change the generator or the source it reads.\n"
 )
+
+
+@functools.cache
+def _run_started() -> dt.datetime:
+    """The clock reading taken on this process's first unstamped banner.
+
+    Read once per process, so two renders of one page in one run carry the same
+    stamp. Read per call, a pair of renders straddling a minute boundary differed
+    in the banner alone, and a comparison of whole renders failed (#4178).
+    """
+    return dt.datetime.now(dt.timezone.utc)
 
 
 def head_sha(repo: Path | None = None) -> str:
@@ -69,9 +81,10 @@ def generated_banner(
     """YAML frontmatter plus a do-not-edit admonition, for the top of a page.
 
     `source` is the generator's repo-relative path. `when` and `sha` are injectable
-    so tests do not depend on the clock or on the checkout.
+    so tests do not depend on the clock or on the checkout. Without `when`, the
+    stamp is the time of the first banner this process rendered, not of this call.
     """
-    stamp = when or dt.datetime.now(dt.timezone.utc)
+    stamp = when or _run_started()
     commit = sha if sha is not None else head_sha()
     iso = stamp.strftime("%Y-%m-%d %H:%M UTC")
     return (
