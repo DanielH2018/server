@@ -18,6 +18,7 @@ from _helpers import load_defaults, load_tasks
 from lib.ansible_jinja_env import make_ansible_env
 from longhorn_groups import (
     backup_group_label,
+    longhorn_backup_name,
     weekly_backup_group,
     weekly_backup_shard,
 )
@@ -164,3 +165,27 @@ def test_a_shard_outside_the_week_is_refused():
     assert weekly_backup_group(6) == "weekly-backup-d6"
     with pytest.raises(ValueError, match="outside 0-6"):
         weekly_backup_group(7)
+
+
+def test_the_bare_names_are_the_live_ones():
+    """The drill and seed playbook match on these; typed out, as the labels above are."""
+    assert {
+        key: longhorn_backup_name(key)
+        for key in (
+            "label_prefix",
+            "default_group",
+            "no_backup_group",
+            "weekly_legacy_group",
+            "b2_target",
+            "r2_target",
+        )
+    } == {
+        "label_prefix": "recurring-job-group.longhorn.io/",
+        "default_group": "default",
+        "no_backup_group": "no-backup",
+        "weekly_legacy_group": "weekly-backup",
+        "b2_target": "default",
+        "r2_target": "r2",
+    }
+    with pytest.raises(ValueError, match="not a Longhorn backup name"):
+        longhorn_backup_name("no-backup")

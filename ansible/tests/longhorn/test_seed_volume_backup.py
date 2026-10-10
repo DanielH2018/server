@@ -29,6 +29,7 @@ Run: uv run pytest ansible/tests/longhorn/test_seed_volume_backup.py
 from datetime import datetime, timezone
 
 from lib import yaml_fast
+from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ANSIBLE, jinja_env
 
 PLAYBOOK = ANSIBLE / "seed_volume_backup.yml"
@@ -45,8 +46,18 @@ def test_it_refuses_a_volume_in_no_backup_tier():
     """Longhorn's retain is per job, so a tierless backup is never pruned."""
     task = _named("in no backup tier")
     assert task, "expected a refusal for a volume in no recurring-job group"
-    conditions = str(task[0]["ansible.builtin.assert"]["that"])
-    assert "no-backup" in conditions and "seed_group" in conditions
+    conditions = task[0]["ansible.builtin.assert"]["that"]
+    env = make_ansible_env()
+
+    def passes(group):
+        return all(
+            env.from_string("{{ (%s) | bool }}" % c).render(seed_group=group) == "True"
+            for c in conditions
+        )
+
+    assert not passes("no-backup"), "the opt-out group must be refused"
+    assert not passes(""), "a volume in no group must be refused"
+    assert passes("weekly-backup-d3")
 
 
 def test_it_refuses_a_disarmed_target():

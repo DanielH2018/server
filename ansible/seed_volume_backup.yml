@@ -89,12 +89,12 @@
 
     - name: Note what is being seeded
       ansible.builtin.set_fact:
-        seed_target: "{{ (seed_volume.stdout | from_json).spec.backupTargetName | default('default', true) }}"
+        seed_target: "{{ (seed_volume.stdout | from_json).spec.backupTargetName | default('b2_target' | longhorn_backup_name, true) }}"
         seed_robustness: "{{ (seed_volume.stdout | from_json).status.robustness | default('unknown') }}"
         seed_group: >-
           {{ ((seed_volume.stdout | from_json).metadata.labels | default({}))
              | dict2items | sort(attribute='key')
-             | selectattr('key', 'search', '^recurring-job-group.longhorn.io/')
+             | selectattr('key', 'search', '^' ~ ('label_prefix' | longhorn_backup_name | regex_escape))
              | map(attribute='key') | map('regex_replace', '^.*/', '') | list | first | default('') }}
 
     # A volume in no tier is not "missing a backup", it is opted out. Seeding one writes a recovery
@@ -105,7 +105,7 @@
       ansible.builtin.assert:
         that:
           - seed_group | length > 0
-          - seed_group != 'no-backup'
+          - seed_group != ('no_backup_group' | longhorn_backup_name)
         fail_msg: >-
           {{ seed_claim }} is in recurring-job group '{{ seed_group | default('(none)', true) }}',
           so nothing would ever prune the backup this creates - Longhorn's retain is per job, and

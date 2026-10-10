@@ -208,7 +208,9 @@
 - name: Remove the retired flat weekly-backup recurring job
   tags: [longhorn_backup]
   ansible.builtin.command:
-    cmd: k3s kubectl -n longhorn-system delete recurringjob weekly-backup --ignore-not-found
+    cmd: >-
+      k3s kubectl -n longhorn-system delete recurringjob
+      {{ 'weekly_legacy_group' | longhorn_backup_name }} --ignore-not-found
   register: k3s_longhorn_legacy_weekly
   become: true
   changed_when: "'deleted' in k3s_longhorn_legacy_weekly.stdout"

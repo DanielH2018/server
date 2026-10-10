@@ -54,13 +54,19 @@ from deploy_tools.runbook_gates import (
     unreachable_targets,
 )
 from lib.kubectl import DEFAULT_TOOLS, Tools
+from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
+
+# The backup target names, shared with the backup-health cron (#3737); it imports host_lib.
+sys.path.insert(0, str(HOST_LIB_FILES))
+sys.path.insert(0, str(K3S_FILES))
+import longhorn_backups
 
 CLUSTER = "prod"
 RUNBOOK = "docs/longhorn-disaster-recovery.md"
 
-# The two targets the k3s role renders: B2 (`default`) and R2. Both must hold what they hold
-# for a full recovery, so both are required here where the upgrade runbook needs only `default`.
-REQUIRED_TARGETS = ("default", "r2")
+# The two targets the k3s role renders, B2 and R2. Both must hold what they hold for a full
+# recovery, so both are required here where the upgrade runbook needs only B2.
+REQUIRED_TARGETS = (longhorn_backups.B2_TARGET, longhorn_backups.R2_TARGET)
 
 BACKUP_VOLUMES_ARGS = (
     "-n",

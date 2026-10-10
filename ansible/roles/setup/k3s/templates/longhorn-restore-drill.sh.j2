@@ -106,11 +106,11 @@ BACKED=$($KUBECTL -n longhorn-system get backups.longhorn.io -o json 2>/dev/null
 VOLUMES=$($KUBECTL -n longhorn-system get volume -o json 2>/dev/null)
 [[ -n "$VOLUMES" ]] || fail "cannot list Longhorn volumes"
 # The backup-group selector, shared by the eligible set and the oversize set below so the two
-# cannot disagree about which volumes are tiered.
+# cannot disagree about which volumes are tiered. The names come from longhorn_backups (#3737).
 IN_BACKUP_GROUP='[.metadata.labels // {} | keys[]
-                 | select(startswith("recurring-job-group.longhorn.io/"))
-                 | sub("recurring-job-group.longhorn.io/"; "")
-                 | select(. != "no-backup")] | length > 0'
+                 | select(startswith("{{ 'label_prefix' | longhorn_backup_name }}"))
+                 | ltrimstr("{{ 'label_prefix' | longhorn_backup_name }}")
+                 | select(. != "{{ 'no_backup_group' | longhorn_backup_name }}")] | length > 0'
 ELIGIBLE=$(jq -r --argjson backed "$BACKED" --argjson max "$MAX_BYTES" '
       [.items[]
        | select('"$IN_BACKUP_GROUP"')
@@ -124,7 +124,7 @@ ELIGIBLE=$(jq -r --argjson backed "$BACKED" --argjson max "$MAX_BYTES" '
           vol: .metadata.name,
           size: (.spec.size | tostring),
           bs: ((.spec.backupBlockSize // 16777216) | tostring),
-          target: (.spec.backupTargetName // "default"),
+          target: (.spec.backupTargetName // "{{ 'b2_target' | longhorn_backup_name }}"),
           # Carried through for the empty-content waiver below, which needs to know what the
           # SOURCE volume holds. It is already read two lines up for the size cap; emitting it
           # is what lets a declared-empty volume stop being waived once it fills up.
