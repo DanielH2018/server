@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-"""Shared base images must carry an `@sha256:` digest, not a tag alone.
+"""Every external image pin must carry an `@sha256:` digest, not a tag alone.
 
-WHY THIS EXISTS. A tag is mutable: the publisher can re-push it with new bytes and every
+Two rules live here. The base-image rule below is the older and stricter one: it has no
+exemptions. The fleet rule (`test_every_external_image_pin_carries_a_digest`, issue #3281)
+extends the same requirement to every `*_image` default, so the repo has one pinning policy
+rather than a digest for half the fleet and a bare tag for the rest. Renovate adds the
+digests itself (`pinDigests`, re-enabled for the regex manager by PR #3326), so a bare pin
+outside `PENDING_DIGEST_PINS` is a pin Renovate could not see or was told to skip.
+
+WHY THE BASE-IMAGE RULE HAS NO EXEMPTIONS. A tag is mutable: the publisher can re-push it with new bytes and every
 consumer silently changes on its next pull. For an application image that barely matters here,
 because the tags this repo pins are exact upstream releases (`traefik:v3.7.11`,
 `lscr.io/linuxserver/sonarr:4.0.17.2952-ls312`) and a publisher re-pushing one of those is
@@ -60,7 +67,7 @@ BASE_IMAGE_REPOS = frozenset(
 # Mirrors renovate.json's k8s-defaults `matchStrings` entry: repo, tag, optional digest.
 # Deliberately the same shape, so a pin one of them can see is a pin the other can see too.
 IMAGE_RE = re.compile(
-    r"^\s*[a-z0-9_]*_image:\s*[\"']?"
+    r"^\s*(?P<var>[a-z0-9_]*_image):\s*[\"']?"
     r"(?P<repo>[^:\s\"'@]+):(?P<tag>[^\s\"'@]+)"
     r"(?:@(?P<digest>sha256:[a-f0-9]+))?[\"']?"
 )
@@ -94,6 +101,67 @@ def test_every_base_image_pin_carries_a_digest():
         "These base-image pins carry a mutable tag and no digest, so the bytes they resolve to "
         "can change between the staging gate's run and prod's:\n  "
         + "\n  ".join(offenders)
+    )
+
+
+# Bare pins whose digest Renovate has already computed but cannot deliver yet. Renovate puts a
+# dep's pinDigest in the same branch as its version bump, so the digest lands when that bump
+# merges, and each bump below is held by a rule in renovate.json. Measured 2026-10-10 on the
+# Dependency Dashboard (#3): every one lists its current tag as an update, which is the pin.
+# The test below fails once an entry gains its digest, so the list only shrinks.
+PENDING_DIGEST_PINS = {
+    # "Awaiting Schedule": the meilisearch rule runs before 6am on Mondays.
+    "karakeep_k8s_meili_image": "meilisearch manual-upgrade branch, Monday schedule",
+    # "Pending Status Checks": a Docker Hub version bump soaks 7 days.
+    "observability_k8s_collector_image": "otel collector version bump, 7-day soak",
+    # "Awaiting Schedule".
+    "observability_k8s_tempo_image": "grafana/tempo version bump, awaiting schedule",
+}
+
+
+def _bare_pins(text):
+    """Return (var, repo, tag) for every external image pin in `text` carrying no digest.
+
+    A built image's pin starts with `{{ k8s_registry_pull_host }}`, which IMAGE_RE cannot
+    match, so in-cluster builds are out of scope by construction.
+    """
+    found = []
+    for line in text.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        m = IMAGE_RE.match(line)
+        if m and not m.group("digest"):
+            found.append((m.group("var"), m.group("repo"), m.group("tag")))
+    return found
+
+
+def _all_bare_pins():
+    return {
+        var: f"{path.relative_to(ANSIBLE)}: {repo}:{tag}"
+        for path in _pin_files()
+        for var, repo, tag in _bare_pins(path.read_text())
+    }
+
+
+def test_every_external_image_pin_carries_a_digest():
+    offenders = {
+        var: where
+        for var, where in _all_bare_pins().items()
+        if var not in PENDING_DIGEST_PINS
+    }
+    assert not offenders, (
+        "These image pins carry a tag and no digest. Renovate's pinDigests should have "
+        "proposed one; find out why it did not, rather than adding the pin to "
+        "PENDING_DIGEST_PINS:\n  " + "\n  ".join(sorted(offenders.values()))
+    )
+
+
+def test_pending_digest_pins_are_still_bare():
+    """An entry whose pin gained a digest, or went away, must leave the list."""
+    stale = sorted(set(PENDING_DIGEST_PINS) - set(_all_bare_pins()))
+    assert not stale, (
+        "Delete these from PENDING_DIGEST_PINS; each now carries a digest or no longer "
+        "exists: " + ", ".join(stale)
     )
 
 
@@ -149,3 +217,21 @@ def test_bare_base_image_tag_is_flagged(line):
 )
 def test_pinned_or_exempt_image_is_clean(line):
     assert not _unpinned(line), f"should not have been flagged: {line}"
+
+
+def test_bare_application_pin_is_flagged_by_the_fleet_rule():
+    assert _bare_pins("authelia_k8s_image: authelia/authelia:4.39.20") == [
+        ("authelia_k8s_image", "authelia/authelia", "4.39.20")
+    ]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "authelia_k8s_image: authelia/authelia:4.39.20@sha256:" + "c" * 64,
+        'code_server_k8s_image: "{{ k8s_registry_pull_host }}/code-server:latest"',
+        "# authelia_k8s_image: authelia/authelia:4.39.20",
+    ],
+)
+def test_digest_pinned_or_built_image_is_clean_for_the_fleet_rule(line):
+    assert not _bare_pins(line), f"should not have been flagged: {line}"
