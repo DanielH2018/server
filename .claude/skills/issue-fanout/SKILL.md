@@ -176,6 +176,10 @@ That line names every batch that is not plain success. The source is
 `scripts/dev/fanout_probe.py`, which reads the `status` command below and shares one read per
 90s among every watcher on the host.
 
+To recover a run-id lost to compaction or a resumed session, run `fanout_place.py runs
+--orchestrator <branch>`. It lists every run manifest on the host with its batches, hosts,
+branches, issues and whether each was cleaned; `--json` prints the manifests themselves.
+
 For a batch's detail, run `uv run python scripts/dev/fanout_place.py status <run-id>`. It prints
 one line per batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, `landed
 <PR URL>`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
