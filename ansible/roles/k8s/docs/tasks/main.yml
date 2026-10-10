@@ -18,8 +18,6 @@
     name: k8s/manifests
   vars:
     manifests_service: docs
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
-    manifests_prune: true
     manifests_files:
       - configmap.yaml
       - deployment.yaml

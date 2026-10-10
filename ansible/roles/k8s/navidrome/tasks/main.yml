@@ -8,8 +8,6 @@
     name: k8s/manifests
   vars:
     manifests_service: navidrome
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
-    manifests_prune: true
     # The route is listed only while the workload has pods (see templates/ingressroute.yaml.j2).
     # Parking the workload drops the name, and the prune deletes the live IngressRoute.
     manifests_files: >-

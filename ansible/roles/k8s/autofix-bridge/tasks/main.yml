@@ -101,10 +101,8 @@
     name: k8s/manifests
   vars:
     manifests_service: autofix-bridge
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
     # The script ConfigMap is applied above from its own directory, unlabelled, so the prune
     # never selects it.
-    manifests_prune: true
     manifests_rollout: autofix-bridge
     manifests_files:
       - deployment.yaml

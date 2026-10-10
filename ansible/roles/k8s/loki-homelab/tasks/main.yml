@@ -9,10 +9,8 @@
     name: k8s/manifests
   vars:
     manifests_service: loki-homelab
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
     # The Alloy ClusterRole and ClusterRoleBinding are cluster-scoped, so the namespaced prune
     # allowlist in k8s/manifests never selects them; dropping one still leaves it live.
-    manifests_prune: true
     manifests_rollout: loki-homelab
     manifests_files:
       - configmap.yaml

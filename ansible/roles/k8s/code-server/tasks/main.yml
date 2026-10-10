@@ -33,8 +33,6 @@
   vars:
     manifests_service: code-server
     manifests_rollout: code-server
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
-    manifests_prune: true
     manifests_files:
       - deployment.yaml
       - service.yaml

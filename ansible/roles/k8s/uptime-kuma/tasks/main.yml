@@ -54,9 +54,7 @@
     name: k8s/manifests
   vars:
     manifests_service: uptime-kuma
-    # Live prune: an object dropped from manifests_files is deleted on the next deploy (#3388).
     # The two Secrets are never pruned: Secret is not in manifests_prune_allowlist.
-    manifests_prune: true
     manifests_rollout: uptime-kuma
     manifests_files:
       - deployment.yaml

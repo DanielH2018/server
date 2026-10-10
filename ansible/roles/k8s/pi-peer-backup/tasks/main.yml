@@ -73,14 +73,13 @@
       - cronjob.yaml
     manifests_secret_files:
       - secret.yaml
-    # Live prune (see k8s/manifests defaults/main.yml manifests_prune DECIDED comment). The
+    # The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The
     # render stamps homelab/role on the CronJob, the Secret and the k8s_claims claim; the fixed
     # allowlist names neither Secret nor PersistentVolumeClaim, so those two are applied but
     # never pruned. The deploy-gate Job k8s/cronjob-gate creates is made with
     # `kubectl create job --from=cronjob` and never staged here, and batch/v1 Job is not in the
     # allowlist, so the prune cannot reach it. k8s/image-builder
     # stages its build Job and ConfigMap under `build-pi-peer-backup/`, outside this directory.
-    manifests_prune: true
 
 # A CronJob has no rollout to wait on, so an image bump would otherwise deploy unobserved.
 # pi-peer-backup is a retention-free rsync mirror and sets concurrencyPolicy: Forbid.
