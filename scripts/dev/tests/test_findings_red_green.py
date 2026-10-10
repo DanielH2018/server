@@ -6,7 +6,7 @@ Run: uv run pytest scripts/dev/tests/test_findings_red_green.py
 
 from _findings_fakes import Fakes
 from _review_fakes import PR, _pipeline, _report
-from fanout_lib.red_gate import red_skip_reason
+from fanout_lib.review.red_gate import red_skip_reason
 
 from dev import findings
 from dev.findings_lib.red_green import RED_GREEN_LABEL, red_green_eligible

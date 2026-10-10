@@ -10,10 +10,10 @@ batches: `red` (the red gate passed), `red-refused` (a red phase ran and was ref
   first attempt did not do what the red tests ask. `flaky` is a red node that passed once
   and failed a repeat, and `lock` is a refusal about what the fix touched; neither is a
   catch.
-- `hunks`: fix hunks reverted one at a time under the red tests (`fanout_lib.hunk_check`),
+- `hunks`: fix hunks reverted one at a time under the red tests (`fanout_lib.review.hunk_check`),
   how many no red test noticed, and how many were noticed only through a missing name.
 - `base`: the PR's new tests that pass with its code changes taken out
-  (`fanout_lib.base_check`), which every batch measures, red phase or not.
+  (`fanout_lib.review.base_check`), which every batch measures, red phase or not.
 - `test_findings`: the reviewer's `test` findings at confidence 0.6 or more, by subkind.
 - `red_cost_share`: the red phase's share of the group's spend.
 
@@ -34,8 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fanout_lib.review import STATE_DIR
-from fanout_lib.review_record import CONFIDENCE_FLOOR
+from fanout_lib.review.api import CONFIDENCE_FLOOR, STATE_DIR
 
 # `<batch>-<YYYYMMDDTHHMMSSZ>.json`, as `Pipeline._save` names a record.
 _STAMP = re.compile(r"-(\d{8})T\d{6}Z\.json$")

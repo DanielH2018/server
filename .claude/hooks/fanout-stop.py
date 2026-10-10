@@ -42,7 +42,7 @@ in its worktree, so `launch.py` passes the hook to that `claude -p` through `--s
 this repo's `origin/master` (`launch.snapshot_command`), not the host's primary checkout.
 
 THE REVIEW PIPELINE. A `launch --review` batch runs several sessions in one worktree
-(`scripts/dev/fanout_lib/review.py`), and the pipeline names the running one in
+(`scripts/dev/fanout_lib/review/review.py`), and the pipeline names the running one in
 `.fanout/phase`. A `review` session never blocks: it is a read-only reviewer whose final
 message is structured JSON, with no PR URL to give. No phase owes a `VERDICT:` line: the
 pipeline runs `land.sh` itself (#3960), and a review batch's brief stops at the PR. With no

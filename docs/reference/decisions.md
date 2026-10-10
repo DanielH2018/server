@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-10 21:32 UTC
-generated_sha: c3e751d60
+generated_at: 2026-10-10 21:38 UTC
+generated_sha: f0f0f3c89
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: c3e751d60
 
 # Decisions
 
-654 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+655 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -159,7 +159,7 @@ generated_sha: c3e751d60
     * `docs/gitops-pipeline.md:1406` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `docs/monitor-bridge-checks.md:455` and `prek.toml:443`
     * `scripts/deploy_tools/tests/test_shared_role_reach.py:111` and `scripts/deploy_tools/tests/test_shared_role_reach.py:125`
-    * `scripts/dev/fanout_lib/brief.py:267` and `scripts/dev/findings_lib/history_cli.py:199`
+    * `scripts/dev/fanout_lib/brief.py:268` and `scripts/dev/findings_lib/history_cli.py:199`
     * `scripts/dev/findings_lib/claim_cli.py:29` and `scripts/dev/findings_lib/export_cli.py:37`
     * `scripts/dev/findings_lib/claim_cli.py:29` and `scripts/dev/findings_lib/history_cli.py:32`
     * `scripts/dev/findings_lib/export_cli.py:37` and `scripts/dev/findings_lib/history_cli.py:32`
@@ -567,21 +567,22 @@ generated_sha: c3e751d60
 | ` comment and was sent to deploy.yml (#2581).""" | `scripts/deploy_tools/tests/test_shared_role_reach.py:108` | 2026-09-25 |
 | the timeout is a deploy-time read.\n" + TASKS, | `scripts/deploy_tools/tests/test_shared_role_reach.py:111` | 2026-09-25 |
 | the timeout is a deploy-time read.\n" + TASKS, | `scripts/deploy_tools/tests/test_shared_role_reach.py:125` | 2026-09-25 |
-| a call-time import. | `scripts/dev/fanout_lib/brief.py:267` | 2026-10-10 |
+| a call-time import. | `scripts/dev/fanout_lib/brief.py:268` | 2026-10-10 |
 | the gone-tree leg keeps its own `gh pr list` merged check in shell rather than calling `lib.worktrees.is_merged`. The interpreter leg runs the worktree's own copy of this code, and that copy is deleted with the tree, so when the tree is gone there is no Python left to import (Ruling 30). The shell answers before an interpreter is needed. It asks only the forge question because a squash-merged branch fails every local layer. Full reasoning in this function's docstring. | `scripts/dev/fanout_lib/clean.py:412` | 2026-10-09 |
-| refuse on change, never restore. | `scripts/dev/fanout_lib/git_state.py:10` | 2026-10-10 |
-| in this repo's batch, every phase that starts after the implementer ran (review, fix, | `scripts/dev/fanout_lib/held_hooks.py:10` | 2026-10-09 |
-| the implement phase keeps the project source only when no red phase ran before it. | `scripts/dev/fanout_lib/held_hooks.py:20` | 2026-10-09 |
 | `RuntimeMaxSec=` here, where `claude-rc-restart.service.j2` rejects it for claude-rc.service. systemd records its expiry as a failure (`Result=timeout`); for a long-lived service host that is a false alarm, and for a batch that ran out of time it is the verdict `status` should print. Five hours covers the longest fan-out session measured (286 minutes; the next longest was 104) and bounds one that waits on something forever. | `scripts/dev/fanout_lib/launch.py:57` | 2026-09-28 |
 | ` note above the cleanup check) | `scripts/dev/fanout_lib/launch.py:558` | 2026-09-10 |
 | no exit or timeout from this call can happen after the unit is live. `systemd-run` (without --wait/--pty/--scope) starts the transient unit and returns immediately, so this call is still running only while an earlier step (fetch, worktree add/lock, or the brief write) is — never after `systemd-run` has handed off. That's what makes an unconditional cleanup safe on a timeout, and what makes `--scope` forbidden here: it would tie the agent to this ssh connection, and a cleanup after that would remove a worktree a live unit still needs. `test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run` asserts `"--scope" not in cmd` as the guard. | `scripts/dev/fanout_lib/launch.py:566` | 2026-09-10 |
-| no LOCAL_HOST exemption, unlike `over_ssh_budget` above. there because its launches go over `bash -c` and spend no ssh connection at all; that reason does not transfer to memory, which a local agent consumes exactly as a remote one does. The two caps share the number 3 and nothing else. | `scripts/dev/fanout_lib/launch_gates.py:78` | 2026-09-29 |
+| no LOCAL_HOST exemption, unlike `over_ssh_budget` above. there because its launches go over `bash -c` and spend no ssh connection at all; that reason does not transfer to memory, which a local agent consumes exactly as a remote one does. The two caps share the number 3 and nothing else. | `scripts/dev/fanout_lib/launch_gates.py:89` | 2026-09-29 |
 | 2.5 GiB per agent. (claude_code defaults/main.yml derivation) with three to four `claude` processes live, so ~2 GiB each at peak; 2.5 GiB adds a pytest fan-out's worth (4 workers x ~150 MB). Confirm against claude_cgroup_memory_current_bytes / claude_cgroup_pids_current before raising. | `scripts/dev/fanout_lib/placement.py:10` | 2026-09-10 |
-| only the red phase is reaped. | `scripts/dev/fanout_lib/processes.py:12` | 2026-10-10 |
-| a refused red commit does not stop the batch. | `scripts/dev/fanout_lib/review.py:29` | 2026-10-10 |
-| the fix round resumes the implementer session rather than starting a fresh one. | `scripts/dev/fanout_lib/review.py:34` | 2026-10-08 |
-| the worktree's own `land.sh` runs, the copy the model ran before. | `scripts/dev/fanout_lib/review_land.py:14` | 2026-10-10 |
-| pin settings rather than snapshot and restore the config file. | `scripts/dev/fanout_lib/worktree_reset.py:56` | 2026-10-10 |
+| refuse on change, never restore. | `scripts/dev/fanout_lib/review/git_state.py:10` | 2026-10-10 |
+| pin settings rather than snapshot and restore the config file. | `scripts/dev/fanout_lib/review/hardened_runs.py:67` | 2026-10-10 |
+| in this repo's batch, every phase that starts after the implementer ran (review, fix, | `scripts/dev/fanout_lib/review/held_hooks.py:10` | 2026-10-09 |
+| the implement phase keeps the project source only when no red phase ran before it. | `scripts/dev/fanout_lib/review/held_hooks.py:20` | 2026-10-09 |
+| only the red phase is reaped. | `scripts/dev/fanout_lib/review/processes.py:12` | 2026-10-10 |
+| a refused red commit does not stop the batch. | `scripts/dev/fanout_lib/review/review.py:29` | 2026-10-10 |
+| the fix round resumes the implementer session rather than starting a fresh one. | `scripts/dev/fanout_lib/review/review.py:34` | 2026-10-08 |
+| one module over the 600-line guideline rather than a mixin. green gate read the pipeline's state and call its `_claude`, `_git` and argv builders, so a module holding them alone could not be read without this class (#3661's `conjoined:` rule). | `scripts/dev/fanout_lib/review/review.py:154` | 2026-10-10 |
+| the worktree's own `land.sh` runs, the copy the model ran before. | `scripts/dev/fanout_lib/review/review_land.py:14` | 2026-10-10 |
 | the leaves are imported as `dev.findings_lib.<leaf>`, never as bare siblings. `scripts/docs/reference/backlog.py` reaches this code as `dev.findings` with only `scripts/` on sys.path, so a bare `from issue_model import ...` would raise ModuleNotFoundError under the docs-refresh cron while pytest stayed green. | `scripts/dev/findings.py:129` | 2026-09-06 |
 | \`Claim:\` wins over \`Released:\`` in findings_lib/issue_model.py for the reasoning; `test_a_body_carrying_both_trailers_ages_the_claim_from_the_comment_ that_opened_it` is what fails if the two diverge. | `scripts/dev/findings_lib/claim.py:221` | 2026-09-06 |
 | imported as `dev.findings_lib.<leaf>`, never as bare siblings — see the marker in findings.py. | `scripts/dev/findings_lib/claim_cli.py:29` | 2026-09-06 |

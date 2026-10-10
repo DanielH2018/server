@@ -60,7 +60,7 @@ def stop_hook_settings(root: str) -> dict:
 # the verdict `status` should print. Five hours covers the longest fan-out session measured
 # (286 minutes; the next longest was 104) and bounds one that waits on something forever.
 RUNTIME_MAX_S = 5 * 3600
-# A `--review` batch runs up to five sessions under one unit (`fanout_lib.review`): the
+# A `--review` batch runs up to five sessions under one unit (`fanout_lib.review.review`): the
 # implementer, a review, a fix, a delta review and the landing. The reviews and the fix are far
 # shorter than the implementer, so three hours on top of its five covers them.
 # `review.LAND_MARGIN_S` skips the landing rather than start it too close to this cap.
@@ -559,8 +559,8 @@ def launch(
             removes the half-made tree and its branch before raising, folding a cleanup
             failure into the same message; so does a refused `systemd-run`. A `fetch` or
             `brief write` failure, or one this can't attribute, leaves the tree in place.
-        review: start `fanout_lib.review`'s pipeline instead of one `claude -p`.
-        red_green: give that pipeline its red phase (`fanout_lib.red_gate`); this repo
+        review: start `fanout_lib.review.review`'s pipeline instead of one `claude -p`.
+        red_green: give that pipeline its red phase (`fanout_lib.review.red_gate`); this repo
             only, as `red_gate.review_flags` decides.
     """
     # DECIDED: no exit or timeout from this call can happen after the unit is live.

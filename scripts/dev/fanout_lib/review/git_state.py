@@ -1,15 +1,15 @@
 """The git state outside a red batch's worktree that the red author could write (#3864, #3879).
 
-`reset_worktree` returns the worktree to a commit and runs every git call under `_hardened`, so
+`reset_worktree` returns the worktree to a commit and runs every git call under `hardened_runs.hardened`, so
 nothing planted in git's own state runs during the reset. That state still outlives it. Every
 worktree shares one common git dir, so a hook, a filter driver, an `include` or a
 `core.fsmonitor` planted there runs in the implementer's `git commit`, in the landing, and in
 every other worktree on the host. A rewritten `.git` pointer file aims the worktree at another
-git dir. `~/.gitconfig` reaches every git call no `_hardened` prefix guards.
+git dir. `~/.gitconfig` reaches every git call no `hardened_runs.hardened` prefix guards.
 
 DECIDED: refuse on change, never restore. Other sessions write `branch.*` keys into the shared
 config while a batch runs, so a restore would undo their writes, which is the reason
-`_hardened`'s own DECIDED note gives. The snapshot therefore leaves `branch.*` out and keeps
+`hardened_runs.hardened`'s own DECIDED note gives. The snapshot therefore leaves `branch.*` out and keeps
 every other key, and the pipeline fails the batch before the implementer runs when anything
 else differs.
 """
