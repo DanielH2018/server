@@ -276,3 +276,38 @@ def test_markdown_ends_with_exactly_one_newline():
     )
     assert out.endswith("\n")
     assert not out.endswith("\n\n")
+
+
+def test_stability_check_survives_a_minute_boundary(monkeypatch, request):
+    """#4178: the stability test must not depend on both renders landing in one minute.
+
+    generated_banner stamps the clock to the minute, so two renders that straddle a
+    minute boundary differ in the banner alone. A clock that advances a minute per
+    read forces that straddle on every run; the ordering check must still pass.
+    """
+    import datetime
+    import inspect
+
+    real_datetime = datetime.datetime
+    ticks = iter(range(10_000))
+
+    class _AdvancingClock(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            base = real_datetime(2026, 10, 10, 0, 6, 59, tzinfo=tz)
+            return base + datetime.timedelta(minutes=next(ticks))
+
+    # The stdlib clock, not a first-party seam: render_markdown exposes no `when`.
+    monkeypatch.setattr(datetime, "datetime", _AdvancingClock)
+    # Resolve whatever fixtures the fix gives the stability test, so it runs either way.
+    fixtures = {
+        name: request.getfixturevalue(name)
+        for name in inspect.signature(test_markdown_is_stable_across_calls).parameters
+    }
+    try:
+        test_markdown_is_stable_across_calls(**fixtures)
+    except AssertionError as exc:
+        raise AssertionError(
+            "test_markdown_is_stable_across_calls compares the banner timestamp; "
+            f"strip the banner or inject a fixed `when` before comparing ({exc})"
+        ) from exc

@@ -146,12 +146,13 @@ def test_discover_templates_finds_the_known_set():
         "renovate-agent.timer.j2",
         "renovate-agent-land@.service.j2",
         "claude-land@.service.j2",
+        "claude-clone-sync.service.j2",
         "node_exporter.service.j2",
         "kuma-check.service.j2",
         "kuma-check.timer.j2",
         "unit-failure-alert.service.j2",
     } <= names
-    assert len(names) == 21
+    assert len(names) == 23
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():
