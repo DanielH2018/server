@@ -7,8 +7,9 @@ batches: `red` (the red gate passed), `red-refused` (a red phase ran and was ref
 `plain` (no red phase).
 
 - `green_first`: how the first green gate run ended. `unmet` is the catch: the implementer's
-  first attempt did not do what the red tests ask. `lock` is a refusal about what the fix
-  touched.
+  first attempt did not do what the red tests ask. `flaky` is a red node that passed once
+  and failed a repeat, and `lock` is a refusal about what the fix touched; neither is a
+  catch.
 - `hunks`: fix hunks reverted one at a time under the red tests (`fanout_lib.hunk_check`),
   how many no red test noticed, and how many were noticed only through a missing name.
 - `base`: the PR's new tests that pass with its code changes taken out
