@@ -3,8 +3,7 @@
 The long form of `CLAUDE.md` → *Claude Tooling in This Repo*. That section keeps one directive
 per tool, the part that has to be in context whether or not anyone opens this page. Everything
 here is detail you read when you are working on one of these tools, or when one of them has
-just surprised you. A hook's own docstring is the fullest record of its rules and incidents,
-and a hook that denies prints its reason.
+just surprised you. A hook that denies prints its reason.
 
 ## `scripts/diagnostics/probe.py`
 
@@ -17,8 +16,8 @@ To see every subcommand with a one-line description, run
 in `probe_lib/subcommands.py`, built on the shared `scripts/lib/cli_registry.py` (the same
 named-entry shape monitor-bridge's check registry uses, in that role's `files/registry.py`).
 
-The registry also drives dispatch. `probe.py`'s `main()` builds its `handlers` table from the
-entries flagged `"handler"`. Four subcommands with a callable (`health`, `targets`, `metric`,
+The registry also drives dispatch: `main()` builds its `handlers` table from the entries
+flagged `"handler"`. Four subcommands with a callable (`health`, `targets`, `metric`,
 `loki-query`) answer from it only for some flags, so `main()` routes them by hand
 (`subcommands.ROUTED_IN_MAIN`). A subcommand with no callable streams through `plan()` in
 `probe_lib/curl_pipeline.py`. The argument parsing stays in `probe_lib/cli_parser.py`, because each
@@ -57,42 +56,30 @@ Reconstructs DOWN alert history from Loki, because Kuma keeps only current state
 firing episode. The same view is the "Alert History" Grafana board (Infrastructure folder).
 
 It reads **two** streams: monitor-bridge's container log, and the `{job="syslog"}` `status=down`
-lines the host crons emit, which push Kuma directly and so have no other durable record. Until
-2026-08-22 it read only the first, and the whole backup/drift plane left no episode anywhere.
+lines the host crons emit, which push Kuma directly and so have no other durable record.
 
-**Every episode row carries both ends, in UTC.** Two things made this view misdate an incident,
-and both are fixed: rows were stamped `America/Chicago` with no marker, five hours off the
-`journalctl --utc` output an operator compares them against, and only the episode's start was
-printed. **Each check's splitting gap is now derived from its own sample cadence**, because a
-fixed 30 minutes matched the `*/30` health crons exactly — a second of cron jitter started a new
-episode, so one 13.5-hour outage on 2026-09-04 rendered as 16 rows, none of them carrying the
-onset. `--gap-min` still pins the gap by hand for every check. See #1104.
+**Every episode row carries both ends, in UTC**, so a row compares directly against
+`journalctl --utc` output. Each check's splitting gap derives from its own sample cadence,
+because a fixed 30 minutes matched the `*/30` health crons exactly and a second of cron jitter
+started a new episode. `--gap-min` pins the gap by hand for every check (#1104).
 
-**Three things made the episode view under-report, and all three are fixed (#1782).**
-monitor-bridge stopped printing its own `[timestamp]` prefix on 2026-09-04 and the reader still
-required it, so every bridge check parsed as nothing — `alerts --days 2 --check traefik` printed
-"no DOWN alerts" over a window holding 21 `traefik_latency` DOWN lines. `--check` and `--pi` did
-not filter `--raw` at all. And a hit `--limit` cut the window at its NEWEST end, so a wider
-window could list fewer recent episodes than a narrower one. The emitter/reader pairing is now
-enforced by `ansible/tests/services/test_monitor_bridge_down_line_shape.py`, and a truncated
-fetch prints its covered window *above* the episode list rather than a warning under an
-all-clear.
-Two more reader-side gaps closed with #1787: the retry-era `push failed (http=… rc=…)` line
-printed its whole scaffolding as the message, and the `push failed transiently` line that
-precedes every final failure twice was listed as an episode of its own.
+**The reader and the emitter stay paired** (#1782).
+`ansible/tests/services/test_monitor_bridge_down_line_shape.py` enforces the pairing. `--check`
+and `--pi` filter `--raw` as well. A truncated fetch prints its covered window *above* the
+episode list rather than a warning under an all-clear. The reader drops the retry-era
+`push failed (http=… rc=…)` scaffolding and the `push failed transiently` line that precedes
+every final failure (#1787).
 
-**Episode counts are still a lower bound against Prometheus `monitor_status`**, and that part is
-by construction: a push monitor also goes DOWN when its heartbeat expires, which writes no log
+**Episode counts are a lower bound against Prometheus `monitor_status`** by construction: a push monitor also goes DOWN when its heartbeat expires, which writes no log
 line anywhere. Cross-check a flap count against `monitor_status` rather than against this view.
 
 ### `arr <app> <api-path>` redacts the credentials it reads
 
 `notification`, `downloadclient`, `indexer` and `importlist` return objects whose
 `fields[].value` hold a live credential — the Discord webhook URL, the qbittorrent password,
-an indexer API key. The subcommand is read-only against the app, which describes what it does
-to the app and not what it does to the transcript: one `arr sonarr notification` put the
-`arr_discord_webhook_url` value into an agent transcript on 2026-09-06, and that webhook then
-had to be rotated (#1388, rotated by #1389).
+an indexer API key. The subcommand is read-only against the app, which says nothing about the transcript: an
+`arr sonarr notification` call put the `arr_discord_webhook_url` value into an agent transcript,
+and the webhook had to be rotated (#1388, #1389).
 
 `redact_arr_payload` in `probe_lib/arr.py` masks those values with `<redacted>` before
 anything is printed, on the `--json` path as well as the pretty-printed one. **Two signals
@@ -107,23 +94,21 @@ raw response, and what it prints lands in the transcript.
 
 `monitors` answers "what is down." **`kuma-drift` answers "what is missing,"** which `monitors`
 structurally cannot — it counts the exporter's own set, so a monitor that is gone rather than
-down leaves the ratio at N/N up (a fenced-off push tile read green for a day on 2026-08-20).
+down leaves the ratio at N/N up.
 
 `kuma-drift` diffs that set against `static-monitors.yaml.j2` and treats a push monitor inside
 its own interval after a Kuma restart as pending, since Kuma exports a monitor only once it has
 beaten. It reads a templated interval (`{{ uptime_kuma_k8s_bridge_push_interval }}`, the etcd drill's
 inventory variable, the UPS tiles' arithmetic) against the role's real render context, so those tiles
-are classified by their interval like a literal one — until 2026-09-18 they parsed as None and
-could only ever read as missing (#2019).
+are classified by their interval like a literal one (#2019).
 
 Pending applies only to a monitor Kuma holds. `kuma-drift` reads which monitors exist from Kuma's
 public status page, which `kuma-status-page-sync` keeps listing every declared monitor. A
 declared name absent from that page is missing once Kuma has been up for one sync period plus
 the sync job's deadline, 1700s, whatever the tile's interval (#4005). A deploy that adds a tile
-restarts Kuma, so before that bound a new tile is absent from the page legitimately. Without the page, a
-weekly tile AutoKuma refused stayed pending forever, because the weekly reboot restarts Kuma
-before the tile's interval elapses. Absent from the page means never created, or added since the
-sync last succeeded. The sync runs every 15 minutes, and it fails while any declared tile is
+restarts Kuma, so before that bound a new tile is absent from the page legitimately. The page
+check exists because a weekly tile AutoKuma refused would otherwise stay pending forever: the
+weekly host restart restarts Kuma before the tile's interval elapses. The sync runs every 15 minutes, and it fails while any declared tile is
 missing from Kuma, so one refused tile also leaves every tile added after it off the page. An
 unreadable page keeps the tiles pending and prints a line saying their existence went
 unverified.
@@ -157,19 +142,16 @@ equivalent of the four cluster checks above, backed by `probe_lib/pi_plane.py`.
   `containers-lose-network-across-pi-reboot.md` (`Up (healthy)` with no network at all) — and an
   unhealthy healthcheck. A merely stopped container (this host runs the short-lived
   `docker-proxy-lifecycle` sub-proxy) is not flagged; gating on any non-running container would
-  read red on a normal day. Measured against the live Pi (2026-09-03, 7 containers, six runs):
-  3.65s–19.3s, almost all ssh/exec overhead on a Zero 2 W — `PI_CONTAINERS_TIMEOUT` in
-  `pi_plane.py` sits at 45s, above the observed tail rather than at `core.py`'s 10s HTTP
-  default, which this call is not.
+  read red on a normal day. `PI_CONTAINERS_TIMEOUT` in `pi_plane.py` sits at 45s, above the
+  3.65s–19.3s measured on the live Pi (almost all ssh/exec overhead on a Zero 2 W), rather than
+  at `core.py`'s 10s HTTP default.
 
 ### `releases [<service>] [--previous] [--json]`
 
 Which commit produced the manifests each k8s service is running. `kubectl` reports what is
-running and git reports what is committed; until this existed, nothing joined the two. That join
-matters here because `deploy.sh` renders from whatever git tree it is invoked in, so the running
-manifests and master can disagree with every repo-side check still green — a worktree 48 commits
-behind reverted observability for nine minutes on 2026-08-19, and the only symptom was a
-scrape-target count moving.
+running and git reports what is committed; this joins the two. The join matters because
+`deploy.sh` renders from whatever git tree it is invoked in, so the running manifests and master
+can disagree with every repo-side check still green.
 
 The records come from `roles/k8s/manifests/tasks/release_stamp.yml`, which writes one JSON file
 per service under `/var/lib/homelab/k8s-releases.d/` after every apply. Secret manifests are
@@ -182,8 +164,8 @@ Two flags carry the finding, and both are normal mid-slice and alarming a week l
 - **`unmerged`** — the commit is not an ancestor of `origin/master`. A service is running code
   that never landed.
 
-Exit 0 when every record is clean, 1 when any service carries a flag, 2 when no records exist —
-which means nothing has been deployed since the stamp shipped, not that the fleet is clean.
+Exit 0 when every record is clean, 1 when any service carries a flag, 2 when no records exist,
+which does not mean the fleet is clean.
 
 `--previous` reads the record kept from before the last deploy. One step of history, not a log:
 the incident question is "what was live before this deploy," and depth beyond that is what git
@@ -203,26 +185,22 @@ Both halves matter — readiness flips a Deployment to Available before a bad li
 killing it, so a rollout check alone reports green on a crashlooping pod.
 
 A third half tells a workload that rolled from one that was merely healthy (issue #1867). The
-service's release record (`/var/lib/homelab/k8s-releases.d/<service>.json`, written by
-`roles/k8s/manifests/tasks/release_stamp.yml` before the restart tasks run) lists each workload
-the apply queued a restart of, decided from the same facts the restart tasks read. Every such
+service's release record (see `releases`; `release_stamp.yml` writes it before the restart
+tasks run) lists each workload the apply queued a restart of, decided from the same facts the
+restart tasks read. Every such
 workload must carry a `kubectl.kubernetes.io/restartedAt` newer than the record's `applied_at`,
 or the gate fails it as `NOT ROLLED`. The pods that were already running satisfy the first two
-halves, which is how a deploy that changed the manifests and rolled nothing read `settled`. The
+halves, so without this check a deploy that rolled nothing reads `settled`. The
 predicate is the record, not the clock, on purpose: an idempotent re-run queues no restart and
 stays green, and a standalone `probe.py health` with no record keeps the two-half verdict.
 
-`--docker` inspects the Pi's container over ssh instead. That was the only mode until 2026-08-16,
-which is why it died with `FileNotFoundError: 'docker'` on both cluster nodes for the two days
-after the Docker retirement.
+`--docker` inspects the Pi's container over ssh instead.
 
-A role with no Deployment/DaemonSet/StatefulSet but a CronJob — configarr and pi-peer-backup
-today — is gated the same way on its most recent Job instead
+A role with no Deployment/DaemonSet/StatefulSet but a CronJob (configarr and pi-peer-backup) is gated the same way on its most recent Job instead
 (`scripts/diagnostics/probe_lib/health_cronjob.py`'s `format_cronjob_health`): the Job must have
 succeeded, be newer than the deploy that just ran (read from the `release_stamp.yml` record),
 and carry no restarted container. `homelab-readonly`, the identity `probe.py` runs as, cannot
-create a Job — verified live with `k3s kubectl auth can-i create jobs`, which the `view`
-ClusterRole it is bound to refuses — so this only ever reads the Job `k8s/cronjob-gate` already
+create a Job (the `view` ClusterRole it is bound to refuses it), so this only ever reads the Job `k8s/cronjob-gate` already
 created at deploy time, never triggers one. When no Job has landed since the deploy, it falls
 back to the CronJob's own daily/weekly schedule: the previous run must have succeeded and not be
 more than twice its interval old. Any other schedule shape fails closed rather than guess an
@@ -263,7 +241,6 @@ agrees. Each fact comes from a reader that already exists:
 A source that fails is named in `errors`, and its field stays `null`. One read takes about 3 s
 on daniel-server: one `gh` call, two deploy-ui GETs and one `findings.py` run.
 
-
 ### `gitops-state [--json]`
 
 `gitops-state` prints every marker the GitOps deployer keeps, without ticking (#3931). It reads
@@ -278,6 +255,7 @@ It reads `/var/lib/gitops-deploy` directly, so it answers only on daniel-box as 
 user. Elsewhere it says there is no state directory. A marker that exists and cannot be read is
 reported as unreadable, never as absent. Exit 1 means the directory or a marker could not be
 read; the exit says nothing about what the markers hold.
+
 ### `ha …`
 
 Reads live Home Assistant state, authed with the SOPS `claude_ha_token`. `ha automation
@@ -288,8 +266,7 @@ Reads live Home Assistant state, authed with the SOPS `claude_ha_token`. `ha aut
 A headless Chromium Claude drives against the LAN routes, so it can *see* a service's UI
 (navigate, click, type, accessibility snapshot, screenshot) rather than infer it from a status
 code. This is the half `probe.py health` structurally cannot cover: readiness flips a Deployment
-to Available while the UI behind it is broken, which is how 19 dead Grafana panels sat behind a
-1/1 pod. Registered user-scope, so it is per-operator config rather than a repo file, and
+to Available while the UI behind it is broken. Registered user-scope, so it is per-operator config rather than a repo file, and
 launched by `scripts/diagnostics/ui_mcp.sh`.
 
 ### The three things a browser needs here
@@ -325,7 +302,7 @@ and it reads a portal 302 as a failure rather than as a reachable service.
 The MCP server reads the state file when it builds a browser context, not on each navigation.
 So re-minting the session fixes the FILE and the browser keeps bouncing to the Authelia portal,
 because its context still holds the cookie it was built with at launch. That symptom reads
-exactly like a route that lost its session middleware, which is the trap worth knowing.
+exactly like a route that lost its session middleware.
 
 `browser_close` is the reload. It disposes the context, and the next `browser_navigate` builds
 a fresh one — which re-reads the state file from disk. Recovering from inside a Claude session
@@ -338,25 +315,14 @@ uv run python scripts/diagnostics/ui_login.py --verify homepage   # the file is 
 
 then `mcp__homelab-ui__browser_close` followed by any `mcp__homelab-ui__browser_navigate`.
 
-Measured 2026-09-06 against a `playwright-mcp` launched on this host's own config, swapping the
-state file underneath it: an empty state at launch landed on the Authelia portal, copying a good
-state in and calling `browser_close` landed on the service, and writing the empty state back and
-calling `browser_close` again landed on the portal. The file decides, and `browser_close` is what
-makes it decide again.
-
-The procedure itself was run end to end on the live server the same day: `browser_close`, then a
-`browser_navigate` to `homepage.local.<domain>`, which returned the service's own title rather
-than the portal.
-
 The `-m ui` suite is unaffected either way — it launches its own server per run, so it reads the
 state file as it stands.
 
-`scripts/diagnostics/tests/test_ui_state_reload.py` is the guard on this procedure, under the
-`ui` marker, so a `@playwright/mcp` bump that changed what `browser_close` disposes fails a test
-rather than leaving this section quietly wrong. It launches its own server against a private
-state file — `UI_MCP_STATE_PATH`, which `ui_mcp.sh` takes in place of the tier's shared jar — so
-it can swap the file underneath a running server without touching the session other sessions
-read.
+`scripts/diagnostics/tests/test_ui_state_reload.py` (marker `ui`) guards this procedure, so a
+`@playwright/mcp` bump that changes what `browser_close` disposes fails a test. It launches its
+own server against a private state file (`UI_MCP_STATE_PATH`, which `ui_mcp.sh` takes in place
+of the tier's shared jar), so it can swap the file under a running server without touching the
+session other sessions read.
 
 ### `--check` asks Authelia, never the clock
 
@@ -391,8 +357,8 @@ substring like `FreshRSS` also matches `Login · FreshRSS` and scores a broken a
 **The title is read back after the page settles, not taken from the navigate report.** A
 single-page app can pass through a title of its own before applying its configured one —
 homepage momentarily reads `Homepage` before `My Awesome Homepage` — and the report captures
-whichever moment load-complete caught. Reading once failed a service whose title was correct
-half a second later, and looked exactly like a rename.
+whichever moment load-complete caught. A single read fails a service whose title is correct
+half a second later, and looks like a rename.
 
 Two retries in `McpClient` absorb transients rather than reporting them, and
 `test_ui_smoke_helpers.py` holds a pass/fail pair for each. `evaluate` retries a reply that
@@ -404,8 +370,8 @@ assertion.
 
 `test_grafana_dashboard_renders_its_panels` goes one step further for Grafana alone: it logs
 in and counts the panels a dashboard actually drew. A title check cannot do that, and the
-gap is the reason the tier exists — 19 Angular panels were provisioned to a Grafana that had
-dropped Angular and rendered nothing for 55 minutes behind a 1/1 pod.
+gap is the reason the tier exists: 19 Angular panels were provisioned to a Grafana that had
+dropped Angular and rendered nothing behind a 1/1 pod.
 
 It authenticates through Authelia. Grafana is an OIDC client of the portal (issue #1374), so
 the tier signs out of whatever session the browser profile carried, navigates to
@@ -415,7 +381,7 @@ username, which is the half a 302 cannot prove: the forward-auth middleware redi
 the backend is reached, so only the logged-in identity shows the OIDC round trip finished.
 OIDC login is LAN-only: `root_url` pins the callback to `grafana.local.<domain>`.
 
-**This tier is still how a Claude session verifies a Grafana board.** A
+**This tier is how a Claude session verifies a Grafana board.** A
 `mcp__homelab-ui__browser_navigate` to `/d/<uid>/` lands on Grafana's own login page — the
 admin form stays on as break-glass and as the intended public path — and getting past it by hand
 means clicking "Sign in with Authelia" and then re-checking the panels anyway. The tier does
@@ -439,7 +405,7 @@ setup on `could not decrypt domain`, which reads like a missing age key rather t
 `sops`.
 
 `grafana_panel_report.classify()` holds the judgement and is unit-tested without a browser.
-Three things it separates, each of which cost a debugging session to find:
+Four things it separates:
 
 - **A page that never mounted is retried, never reported.** Its signature is a URL still at
   the bare `/d/<uid>/` — Grafana rewrites it to `/d/<uid>/<slug>` once it has the dashboard —
@@ -447,9 +413,9 @@ Three things it separates, each of which cost a debugging session to find:
   testid count alone reads a dashboard-shaped hole as a mounted page.
 - **A row-only dashboard passes on rows.** `crowdsec-details-per-machine` is 4 panels, every
   one a `row`; it draws no panel header until a row is expanded.
-- **A dashboard that drew *nothing* gets a second load before it is reported.** Measured
-  2026-08-30: that same dashboard drew its 12 rows in 2.1s on 6 of 6 isolated loads and drew
-  nothing as the fourth dashboard of a run in the same browser. Re-navigating cannot hide a
+- **A dashboard that drew *nothing* gets a second load before it is reported.** That same
+  dashboard drew its 12 rows in 2.1s on 6 of 6 isolated loads and drew nothing as the fourth
+  dashboard of a run in the same browser. Re-navigating cannot hide a
   real break — an empty dashboard is empty on every attempt. A **partial** render is never
   retried: some panels drawn and some missing is the finding.
 - **`No data` is not an error.** Grafana marks an empty panel with the same testid it marks a
@@ -457,9 +423,8 @@ Three things it separates, each of which cost a debugging session to find:
   message decides. The cost is that a panel whose metric *died* also reads `No data` and
   passes here.
 
-**Rendering these dashboards is expensive server-side.** Opening four of them OOMKilled
-Grafana at its old 512Mi limit and again at 1Gi; the working set peaks at ~1084 MiB, and the
-limit is now 2Gi. A pod in `CrashLoopBackOff` with nothing but 200s in its log is this, not a
+**Rendering these dashboards is expensive server-side.** The working set peaks at ~1084 MiB, so
+the limit is 2Gi; 512Mi and 1Gi both OOMKilled Grafana. A pod in `CrashLoopBackOff` with nothing but 200s in its log is this, not a
 fault — check `Last State` for `OOMKilled`.
 
 ### The `two_factor` services
@@ -474,13 +439,10 @@ only for the headless browser, and both of its credentials — `authelia_claude_
 reading one off a phone. The TOTP registration is seeded into Authelia's SQLite database by the
 role's own deploy (`authelia storage user totp generate`), not templated.
 
-Deriving a code means the second factor is another value under the same age key as the first.
-The dedicated identity is what makes that trade acceptable: the operator's enrollment is
-untouched, revoking Claude's reach into those three services is deleting one block from the
-rendered `users_database.yml`, and rotating either credential is a `sops set` plus a deploy.
-Until 2026-09-06 the code was typed, and the consequence was that
-`test_two_factor_service_serves_its_own_ui` skipped rather than ran — the jar on disk was eight
-days stale when this was measured.
+Deriving a code puts the second factor under the same age key as the first. The dedicated
+identity makes that acceptable: the operator's enrollment is untouched, revoking Claude's reach
+into those three services is deleting one block from the rendered `users_database.yml`, and
+rotating either credential is a `sops set` plus a deploy.
 
 `ui_login.py --totp <code>` still accepts a typed code, as break-glass for a seeded secret that
 has drifted from Authelia's own row.
@@ -537,16 +499,15 @@ hook's `.py` carries its own `# gen-hooks: register` block, and `args:` there ho
 
 Each session runs the hooks its own checkout carries (#3394). Claude Code sets
 `$CLAUDE_PROJECT_DIR` to the directory the session started in, which is the worktree root for
-a worktree session. A registration that names an absolute path into the primary checkout breaks
-when a worktree is cut from a fresher `origin/master` than the primary checkout: `/bin/sh` exits
-127 on the missing script, and the tool call runs with the guard skipped. The `--project` posture
-still runs the hook from the primary checkout's directory, so a fresh worktree needs no `.venv`
-of its own.
+a worktree session. A registration naming an absolute path into the primary checkout breaks
+when the worktree is cut from a fresher `origin/master`: `/bin/sh` exits 127 on the missing
+script, and the tool call runs with the guard skipped. The `--project` posture still runs the
+hook from the primary checkout's directory, so a fresh worktree needs no `.venv` of its own.
 
 The two PreToolUse guards, `bash-pretool` and `block-protected-edits`, take a different posture
 on a failed `cd`, through `--ask-on-cd`. `run-hook.sh --ask-on-cd` emits an **ask** naming the
 guards that did not run, because a bare exit 0 from a deny guard is an allow (#2171). The guards
-also deny when the runner itself is gone (#3887). A session outlives its starting worktree's
+also deny when the runner itself is gone (#3887): a session outlives its starting worktree's
 deletion, and `/bin/sh` then exits 127 on every hook, which the harness treats as non-blocking.
 The generator appends `scripts/dev/gen_hook_settings.py:GUARD_SUFFIX` to each `--ask-on-cd`
 registration. That suffix exits 2 with a stderr reason when `run-hook.sh` is not executable, and
@@ -555,11 +516,11 @@ passes every other exit through. The other hooks keep the non-blocking error, be
 
 ### `bash-pretool` (PreToolUse, Bash)
 
-It *decides nothing itself*. It is the one process that runs the Bash arms —
-`block-protected-bash`, `block-footguns`, `inject-nested-docs` and `uv-python`, each of which used to be its own hook with its own `uv run` start, and `strip-cd-cwd` (#3957). A sixth arm,
-`auto-approve-readonly`, moved into the dotfiles `claude_guard` package as `readonly.py`
-(dotfiles #628). All five imported `_hook_common` and `claude_guard.segment`, so four of the five
-interpreter starts bought nothing (#2394).
+It *decides nothing itself*. It is the one process that runs the Bash arms:
+`block-protected-bash`, `block-footguns`, `inject-nested-docs`, `uv-python` and
+`strip-cd-cwd` (#3957). One interpreter start serves all of them, since each imports
+`_hook_common` and `claude_guard.segment` (#2394). The `auto-approve-readonly` arm lives in the
+dotfiles `claude_guard` package as `readonly.py` (dotfiles #628).
 
 Each arm runs under its own `try/except` and contributes a `(decision, reason)` pair or
 nothing. `bash-pretool.py` then merges them the way the harness merges separate hooks — `deny`
@@ -568,11 +529,8 @@ one `hookSpecificOutput` carrying both that decision and `inject-nested-docs`'s
 `additionalContext`. An arm that raises loses its own verdict, keeps the others, and says so
 on stderr naming itself.
 
-`uv-python` is an arm since #3286, and one of the two that rewrite rather than judge. The
-rewrite arms run LAST, so every decision arm still reads the command the session typed — which
-is what the two separate hooks did, `bash-pretool.sh` at order 10 and `uv-python.sh` at order
-20. It was 269 lines of shell, justified by "the interpreter start is the whole cost"; #2394
-already pays that start on every Bash call, so a second process bought nothing.
+`uv-python` (an arm since #3286) is one of the two arms that rewrite rather than judge. The
+rewrite arms run LAST, so every decision arm still reads the command the session typed.
 
 `strip-cd-cwd` is the other rewrite arm, and it runs before `uv-python`. It drops a leading
 `cd <dir> &&` when `<dir>` resolves to the session's own cwd, read from the payload rather than
@@ -580,16 +538,12 @@ the hook's own directory. The auto-mode classifier refuses a compound command it
 alone, and a `cd` into the directory the shell is already in makes any command compound while
 changing nothing it does (#3957). Any other `cd` stands.
 
-The rewrite rides in the same `hookSpecificOutput` as the verdict. Read from the 2.1.267
-bundle: a `deny` drops the `updatedInput` and the call keeps the text as typed, an `ask`
+The rewrite rides in the same `hookSpecificOutput` as the verdict. Per the Claude Code 2.1.267
+bundle, a `deny` drops the `updatedInput` and the call keeps the text as typed, an `ask`
 carries it so the prompt is about the rewritten command, and a rewrite with no verdict takes
 the plain rewrite path. The harness flattens every PreToolUse hook's output into one
 `{deny, ask, allow, updatedInput, additionalContext}` before deciding, so one hook emitting
 both keys is indistinguishable from two hooks emitting one each.
-
-A failed `cd` into the repo makes the shim **ask**, naming `block-protected-bash` and
-`block-footguns` as the guards that did not run. A missed approval or doc injection costs a prompt
-and a re-read, where a missed deny is a bypass.
 
 ### `block-protected-edits` (PreToolUse, `Edit|Write`)
 
@@ -605,9 +559,7 @@ short scripts, so `sed -i … ansible/vars/secrets.yml` reached a bare permissio
 nothing saying the file was encrypted. A write here becomes an **ask** carrying `classify()`'s
 reason — never a deny, because the path extraction is a heuristic over command text and a wrong
 extraction must not block work. Each written path is classified against the checkout that owns
-it, as `block-protected-edits` does, not against the session's cwd. Until 2026-10-03 a write by
-absolute path into another worktree's generated pages, or by `../` from a subdirectory, was
-checked against the wrong tree and passed without a prompt.
+it, as `block-protected-edits` does, not against the session's cwd.
 
 It also **denies** a content-printing read (`cat`, `head`, `grep` without `-o`/`-c`/`-l`) of a
 deployed host script that renders a credential inline;
@@ -616,29 +568,26 @@ deployed host script that renders a credential inline;
 A Bash write that leaves an isolated session's worktree is **denied** by the dotfiles
 `claude_guard` package, not by this hook (`checks/worktree_escape.py`, moved there by #2818).
 `isolation-guard.sh` covers `Edit|Write` only, so `cd /home/ubuntu/server && python3 - <<'EOF'`
-escaped into the primary checkout and parked the GitOps deployer on 2026-09-06 (#1419). The
+could write into the primary checkout and park the GitOps deployer (#1419). The
 check reads nothing this repo owns, so it runs from `guard-pre-tool-use.sh` in every repo.
 
-`block-footguns` splits with the same segment parser through `_hook_common.split_stages` (#2134), so a
-newline separates stages for it too, and a here-document body is never one. On text it cannot split,
-`block-footguns` asks when the command names a binary one of its rules keys on and stays silent
-otherwise. The
-allow-side classifier keeps its own splitter: the package splits `cmd &>/dev/null` at the `&`,
-which would turn a redirect the classifier allows into a background job it refuses.
+`block-footguns` splits with the same segment parser through `_hook_common.split_stages` (#2134),
+so a newline separates stages for it too, and a here-document body is never one. On text it
+cannot split, it asks when the command names a binary one of its rules keys on and stays silent
+otherwise. The allow-side classifier keeps its own splitter: the package splits `cmd &>/dev/null`
+at the `&`, which would turn a redirect the classifier allows into a background job it refuses.
 
 ### `inject-nested-docs` (a `bash-pretool` arm)
 
 It *adds context* and never makes a decision. A role's `CLAUDE.md` and a `.claude/rules/*.md`
 load only when Read/Edit/Write touches a matching path. A `cat`/`sed -n` through Bash — the form
-auto mode instructs — loads neither, and 74 of 113 Bash-only session×role pairs never saw the
-role doc (measured 2026-09-19, #2125). `.claude/hooks/inject-nested-docs.py` reads the paths a
+auto mode instructs — loads neither (#2125). `.claude/hooks/inject-nested-docs.py` reads the paths a
 command names, returns each ancestor `CLAUDE.md` and matching rule as `additionalContext` once
 per session, and logs the row to `.claude/logs/instructions.log` as `bash_path_match` so the
-same log grades it. Every checkout writes that log in the primary checkout, which
-`instructions_log_path` in `.claude/hooks/_hook_common.py` finds through `primary_checkout`,
-the parent of `git rev-parse --git-common-dir`. Each
-session runs its own checkout's hooks (#3394), and a log in a worktree is deleted with the
-worktree. A doc the hook cannot fit arrives as its HEAD up to the budget, then the
+same log grades it. Every checkout writes that log in the primary checkout, because a log in a
+worktree is deleted with the worktree. `instructions_log_path` in
+`.claude/hooks/_hook_common.py` finds the primary checkout through `primary_checkout`, the
+parent of `git rev-parse --git-common-dir`. A doc the hook cannot fit arrives as its HEAD up to the budget, then the
 headings of the sections the head cut off, then a read pointer: the harness persists a longer
 `additionalContext` to disk and hands the model a preview stub instead. The payload is 7,500
 chars, and what a doc is weighed against is the 7,272 the preamble leaves, less its own
@@ -646,57 +595,46 @@ chars, and what a doc is weighed against is the 7,272 the preamble leaves, less 
 budget by `ansible/tests/_doc_size.py:MAX_CHARS`, which derives it rather than restating the
 7,500 (#3245).
 
-That over-budget form was the heading outline alone until #2650. Sessions read the full doc
-after 61 of 262 outline injections (23%), against 69 of 425 Bash-only pairs (16%) before the
-hook existed, so the headings bought almost nothing over no injection at all — and the budget
-cannot grow, because the remote-control wire path truncates at 8,000 chars / 200 lines. The
-head spends the same budget on text a session acts on without a second read: a role doc opens
-with its generated `## At a glance` block and its operative rules. It cuts at a heading rather
-than mid-section, and the trailer names up to 40 headings it did not reach. Both budgets are
-the payload's, not one doc's, so a head that fills the payload defers the next doc to the
-next command.
+The head spends the budget on text a session acts on without a second read: a role doc opens
+with its generated `## At a glance` block and its operative rules (#2650). It cuts at a heading
+rather than mid-section, and the trailer names up to 40 headings it did not reach. The budget
+cannot grow, because the remote-control wire path truncates at 8,000 chars / 200 lines. Both
+budgets are the payload's, not one doc's, so a head that fills the payload defers the next doc
+to the next command.
 
 A `CLAUDE.md` inlined whole carries one more line under its header when `docs/facts.lock` has
 no verify row for some of the doc's sections that cite the tree: the sections
 `fact_status.py status` grades UNVERIFIED. `.claude/hooks/_facts_line.py` writes it, for
 example `facts.lock: not verified: "Traps"`, naming at most six sections and then `(+N more)`.
-A section that cites nothing is a convention and is never named, and a doc whose citing
-sections all have a row gets no line. The line says what the lock lacks, not that a section
-with a row is true. The library reads the lock's keys, `git ls-files` and the doc through
-`scripts/lib/facts/citations.py`, and hashes no atom: master CI already fails on a section
-whose recorded hashes moved. The doc's text outranks the line. The line is added only when the
-doc plus the line fits the budget, and a head never carries it, so
-`ansible/tests/_doc_size.py:MAX_CHARS` still promises a whole doc. A failure to import or read
-anything costs the line, never the injection.
+A section that cites nothing is never named, and a doc whose citing sections all have a row
+gets no line. The line says what the lock lacks, not that a section with a row is true. The
+library reads the lock's keys, `git ls-files` and the doc through
+`scripts/lib/facts/citations.py`, and hashes no atom, because master CI already fails on a
+section whose recorded hashes moved. The line is added only when the doc plus the line fits the
+budget, and a head never carries it, so `ansible/tests/_doc_size.py:MAX_CHARS` still promises a
+whole doc. A failure to import or read anything costs the line, never the injection.
 
 An editing rule arrives with a write, not a read (#2811). Every rule outside `READ_RULES`
 (`secrets.md` and `facts.md`, which a read needs) is injected only for a path the command
 writes, as `block-protected-bash`'s `written_paths` finds it, or for every named path when the
-command runs an inline interpreter such as `python3 -`. Rules were 1.30 MB of the hook's 2.36 MB
-in the 7 days to 2026-09-28, spent mostly on reads. They are not dropped from Bash entirely,
-because 23% of writes to rule-scoped paths went through Bash that week, and in 5 of 33
-session×rule pairs nothing else would have delivered the rule. A rule skipped on a read is not
-recorded as injected, so the first write still gets it.
+command runs an inline interpreter such as `python3 -`. Rules are not dropped from Bash
+entirely, because writes to rule-scoped paths also go through Bash and nothing else would
+deliver the rule there. A rule skipped on a read is not recorded as injected, so the first
+write still gets it.
 
-A subagent gets each doc once more. Its payload carries the parent's `session_id`, so the hook
-keys its once-only state on the `agent_id` as well. It also tags that subagent's log rows
-`agent=<id>`, so a row the subagent caused never suppresses the parent. A small doc that no
+A subagent gets each doc once more (#2192). Its payload carries the parent's `session_id`, so
+the hook keys its once-only state on the `agent_id` as well. It also tags that subagent's log
+rows `agent=<id>`, so a row the subagent caused never suppresses the parent. A small doc that no
 longer fits the budget left by earlier docs in the same command waits for the next command.
-The hook does not outline it.
 
 A path inside a git object resolves too. `git show origin/master:ansible/roles/k8s/foo/
-tasks/main.yml` names a path only after its `<ref>:` prefix is stripped, which the hook missed
-until #2651 — a common read form in review sessions and subagents. `path_tokens` emits both
+tasks/main.yml` names a path only after its `<ref>:` prefix is stripped, (#2651), a common read form in review sessions and subagents. `path_tokens` emits both
 the whole token and the part after its last `:`, and the existence check keeps whichever is
 real. A `file:line` token is unaffected: what follows its last `:` is a line number carrying
 no `/`.
 
-Re-measured 2026-09-26 (#2192) over the five days after the hook landed, with the same
-cross-tab on both sides. The Bash-only no-doc share fell from 85% to 14% in main sessions and
-from 82% to 56% in subagents; the subagent gap is what the `agent_id` key closes. The 23%
-read-after rate on the outline form is what #2650 replaced. A path named only inside quoted
-text or a here-document accounted for 30 of 374 role-doc injections. Some of those were real reads
-(`bash -c '…'`, `ssh host '…'`), so the hook does not filter quoted text.
+The hook does not filter quoted text. A path named only inside quoted text or a here-document
+is sometimes a real read (`bash -c '…'`, `ssh host '…'`).
 
 ### `block-footguns` (a `bash-pretool` arm)
 
@@ -729,10 +667,10 @@ import is reported in the fan-out section below. A read that fails at run time, 
 `git status` timeout or an unreadable marker file, returns no line, so a silent banner is not
 proof of health. The release-staleness check is the one read that reports its own failure.
 
-The dirty checkout and the park stop every deploy in the fleet, and a worktree session cannot
-look at either for itself: the isolation guard refuses a git command targeting the shared
-checkout, and the failure it does see (`deploy.sh` exit 4) names its own tree instead. The
-banner is the only place that cause reaches the session that pays for it.
+The dirty checkout and the park stop every deploy in the fleet. A worktree session cannot
+inspect either, because the isolation guard refuses a git command targeting the shared
+checkout, and `deploy.sh` exit 4 names the session's own tree. The banner is the only place
+that cause reaches the session that pays for it.
 
 The banner ends with a triage line of whole `probe.py` commands joined by `or`: `targets` and
 `health <svc>` always, and `landing` first whenever a deployer line is present.
@@ -748,11 +686,10 @@ nothing everywhere else. There it *blocks* a stop whose final message carries ne
 nor a line starting `needs input:` or `failed:`, and its reason names the open item. A counter
 in `.fanout/stop-blocks` caps it at three blocks per batch.
 
-The cause is how `claude -p` ends. A turn that ends in text with no tool call ends the process,
-and Opus writes progress reports (for example, one announcing that the PR comes next) that
-sometimes end the turn (issue
-#2816). A probe on 2026-09-28 confirmed the mechanism under `claude -p`: the Stop hook fires, and
-a `block` continues the session. `fanout_place.py status` reads the same two patterns from the
+The cause is how `claude -p` ends: a turn that ends in text with no tool call ends the process,
+and Opus progress reports (for example, one announcing that the PR comes next) sometimes end
+the turn (issue #2816). Under `claude -p` the Stop hook fires, and a `block` continues the session.
+`fanout_place.py status` reads the same two patterns from the
 same final text. A batch reads `done` only with a PR URL, `needs-input` with a blocker line and
 `no-pr` otherwise.
 
@@ -767,10 +704,8 @@ denied about 1 run in 7 on identical text, which is classifier variance rather t
 a compound command that merely contains the tick gets none — the classifier judged the whole line.
 
 On a **failure**, it names a `deploy.sh` exit a refusal rather than a playbook failure, and
-points at the wrapper's own last two lines for what it was. It decoded the whole exit-code
-table until 2026-09-30, as the fifth copy of it; `deploy_run.py:report` now prints the name,
-the meaning and the remedy from `scripts/lib/exit_codes.py` on every non-zero exit. What the
-hook still holds is the split -- `_REFUSALS` against `_PLAYBOOK_FAILED`, two integers with no
+points at the wrapper's own last two lines for what it was. `deploy_run.py:report` prints the name, the meaning and the remedy from
+`scripts/lib/exit_codes.py` on every non-zero exit. The hook holds only the split -- `_REFUSALS` against `_PLAYBOOK_FAILED`, two integers with no
 prose, pinned to that module by `test_auto_mode_bridge.py`.
 
 It does **not** use `classifierContext`: that field is PostToolUse-only, so a failed deploy can't
