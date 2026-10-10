@@ -4,9 +4,19 @@ import json
 
 import pytest
 
+from lib.ansible_inventory import host_names
 from lib.git_testing import git, init_repo
-from lib.facts.lint import RULES, WARN_RULES, LintFinding, changed_units, lint_sections
+from lib.facts.lint import (
+    INVENTORY_REL,
+    RULES,
+    WARN_RULES,
+    LintFinding,
+    changed_units,
+    host_pattern,
+    lint_sections,
+)
 from lib.facts.lock import LOCK_REL, write_lock
+from lib.repo_paths import REPO
 
 
 def _repo(tmp_path, doc):
@@ -211,6 +221,7 @@ def test_rule_census():
             "duplicate-heading",
             "unbalanced-fence",
             "renovate-pin",
+            "retired-host",
         }
     )
     assert WARN_RULES == frozenset({"count-as-fact", "one-way-test"})
@@ -227,3 +238,80 @@ def test_hand_edited_lock_is_flagged(tmp_path):
     p.write_text(p.read_text().replace('"h"', '"hh"'))
     found = {(f.unit, f.rule): f.warn for f in lint_sections(repo, None)}
     assert found[("", "lock-tampered")] is False
+
+
+# ── retired-host ─────────────────────────────────────────────────────────────────────────
+
+# The two sentences that still described daniel-stage at 8181ee59f, twelve days after
+# 8adf98ecc retired it. Both sections graded IN, because no atom they cite had moved.
+_K3S_PRE_FIX = """# `setup/k3s` — the host plane
+
+The role that turns a host into a k3s node. `daniel-box` is
+the server, `daniel-server` an agent (`tasks/agent.yml`), `daniel-stage` the
+staging guest whose `host_vars` turn the backup targets and the health crons off, because both
+would push to prod's Kuma and B2.
+"""
+_DEPLOY_UI_PRE_FIX = """## At a glance
+Authelia policy: `auth_tier: two_factor` on the containers_list entry.
+Kept out of `STAGING_SUBSET`: daniel-stage has no daemon to route to.
+"""
+
+
+def _host_findings(tmp_path, **docs):
+    """``retired-host`` findings over ``docs``, against a copy of the REAL inventory."""
+    repo = _repo(tmp_path, docs.pop("CLAUDE.md", "## A\nnothing\n"))
+    for rel, text in {
+        INVENTORY_REL: (REPO / INVENTORY_REL).read_text(),
+        **docs,
+    }.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(text)
+    git(repo, "add", "-A")
+    return {
+        (f.unit, f.detail.split("`")[1], f.warn)
+        for f in lint_sections(repo, None)
+        if f.rule == "retired-host"
+    }
+
+
+def test_the_real_inventory_yields_the_three_hosts_and_their_prefix():
+    hosts = frozenset(host_names(REPO / INVENTORY_REL))
+    assert hosts == {"daniel-box", "daniel-server", "daniel-pi"}
+    rx = host_pattern(hosts)
+    assert rx is not None and r"daniel\-[a-z0-9]+" in rx.pattern
+
+
+def test_retired_host_is_flagged(tmp_path):
+    docs = {"k3s/CLAUDE.md": _K3S_PRE_FIX, "deploy-ui/CLAUDE.md": _DEPLOY_UI_PRE_FIX}
+    assert _host_findings(tmp_path, **docs) == {
+        ("k3s/CLAUDE.md#`setup/k3s` — the host plane", "daniel-stage", False),
+        ("deploy-ui/CLAUDE.md#At a glance", "daniel-stage", False),
+    }
+
+
+@pytest.mark.parametrize(
+    "line",
+    ["run it on daniel-stage.", "`-e target=daniel-stage`", "**daniel-stage** is gone"],
+)
+def test_retired_host_in_any_host_position_is_flagged(tmp_path, line):
+    assert _host_findings(tmp_path, **{"CLAUDE.md": f"## A\n{line}\n"}) == {
+        ("CLAUDE.md#A", "daniel-stage", False)
+    }
+
+
+def test_live_hosts_and_host_shaped_identifiers_are_clean(tmp_path):
+    doc = (
+        "## A\nOn daniel-box. `-e target=daniel-pi` and **daniel-server**.\n"
+        "The site is www.daniel-hunter.com, and daniel-hunter.com/x too.\n"
+        "It writes `/srv/artifacts/daniel-box-claude` and `host_vars/daniel-pi.yml`.\n"
+        "A retired name inside a path: `/srv/daniel-stage-old/` and `vm-daniel-stage`.\n"
+    )
+    assert _host_findings(tmp_path, **{"CLAUDE.md": doc}) == set()
+
+
+def test_retired_host_in_a_history_bullet_is_clean(tmp_path):
+    doc = (
+        "## A\n- **HISTORY — the staging guest, retired 2026-09-28.** It lived on\n"
+        "  daniel-stage, a KVM guest on daniel-server.\n- daniel-box is the server.\n"
+    )
+    assert _host_findings(tmp_path, **{"CLAUDE.md": doc}) == set()

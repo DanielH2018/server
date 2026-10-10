@@ -56,6 +56,22 @@ github-actions and ansible managers, whose default file patterns `scripts/lib/fa
 restates. A claim that must hold for one specific version belongs in a
 test, which the bump PR runs.
 
+## Rules that read prose, and the history marker
+
+The lock hashes cited atoms only, so a sentence that cites nothing can go stale behind an IN
+grade. Some lint rules therefore read the prose itself.
+
+- `retired-host` (error) flags a host-shaped word that names no host in
+  `ansible/inventory/hosts.ini`. The rule derives the host prefix from the inventory, never
+  from a list. A word inside a path or a longer name, such as `/srv/artifacts/daniel-box-claude`
+  or the domain `daniel-hunter.com`, is not a host mention.
+
+A paragraph or bullet that opens with `**HISTORY —` is history, and every prose rule skips it.
+A sentence such as "it lived on the staging guest until 2026-09-28" is correct exactly because
+the thing it names is gone, and the marker says so. A history bullet takes its indented
+continuation lines and nested bullets with it; a history paragraph ends at the next blank line.
+`scripts/lib/facts/citations.py:HISTORY_MARKER` is the one definition.
+
 ## Commands
 
 `docs/facts.lock` records the hashes each verified section was checked against. The tool

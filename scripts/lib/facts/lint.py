@@ -3,11 +3,13 @@
 Two severities. An error is a citation that cannot be support (a rejected form, an atom that
 does not resolve, an ambiguous marker), a support record someone edited by hand, or a document
 shape the section parser reads as something the author did not mean (two sections under one
-heading text, a fence with no closing marker). A warning is a habit the spec asks writers to
+heading text, a fence with no closing marker), or prose naming a host the inventory no longer
+holds. A warning is a habit the spec asks writers to
 drop but a machine cannot judge (a number that may or may not be a count, a test with no
 backref). ``fact_status.py lint`` exits non-zero on errors only.
 """
 
+import os
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -17,11 +19,14 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from lib.ansible_inventory import host_names
 from lib.git import git
 
 from .atoms import Ambiguous, backrefs, hash_atom
 from .citations import (
+    HISTORY_MARKER,
     in_tree,
+    mask_history,
     parse_citations,
     repo_docs,
     sections,
@@ -43,6 +48,7 @@ RULES = frozenset(
         "duplicate-heading",
         "unbalanced-fence",
         "renovate-pin",
+        "retired-host",
     }
 )
 WARN_RULES = frozenset({"count-as-fact", "one-way-test"})
@@ -55,6 +61,25 @@ _COUNT = re.compile(
     re.I,
 )
 _DATE_CLAIM = re.compile(r"\bverified\b[^.\n]{0,40}\b\d{4}-\d{2}-\d{2}\b", re.I)
+
+INVENTORY_REL = "ansible/inventory/hosts.ini"
+
+
+def host_pattern(hosts: frozenset[str]) -> re.Pattern | None:
+    """A token shaped like one of ``hosts``: their shared ``<prefix>-`` and one more word.
+
+    The prefix is derived, never listed, so a host added to the inventory widens it. The
+    boundaries keep out identifiers that merely contain a host name. A token preceded by a
+    word character, ``/``, ``.`` or ``-`` is inside a path or a longer name
+    (``/srv/artifacts/daniel-box-claude``, ``host_vars/daniel-pi.yml``). One followed by a
+    word character, ``-`` or ``.<word>`` is a longer name or a domain (``daniel-hunter.com``).
+    A sentence-final period still ends a host mention. None when the hosts share no prefix.
+    """
+    common = os.path.commonprefix(sorted(hosts))
+    prefix = common[: common.rfind("-") + 1]
+    if not prefix:
+        return None
+    return re.compile(rf"(?<![\w./-]){re.escape(prefix)}[a-z0-9]+(?![\w-]|\.\w)")
 
 
 @dataclass(frozen=True)
@@ -85,6 +110,8 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
     out: list[LintFinding] = []
     tracked = tracked_files(repo)
     pins: dict[str, frozenset[str]] = {}
+    hosts = frozenset(host_names(repo / INVENTORY_REL))
+    host_rx = host_pattern(hosts)
 
     def _pins(rel: str) -> frozenset[str]:
         if rel not in pins:
@@ -208,6 +235,17 @@ def lint_sections(repo: Path, unit_keys: set[str] | None) -> list[LintFinding]:
                         f"'{m.group(0)}': the lock's verified_sha is the only stamp",
                     )
                 )
+            prose = mask_history(sec.body)
+            named_hosts = set(host_rx.findall(prose)) if host_rx else set()
+            out.extend(
+                _f(
+                    sec.key,
+                    "retired-host",
+                    f"`{name}` is not a host in {INVENTORY_REL}; rewrite the sentence, "
+                    f"or open its paragraph or bullet with `{HISTORY_MARKER}`",
+                )
+                for name in sorted(named_hosts - hosts)
+            )
     return out
 
 
