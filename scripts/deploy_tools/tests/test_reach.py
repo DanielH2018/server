@@ -56,3 +56,10 @@ def test_tags_keeps_only_declared_roles_and_drops_role_tests():
 
 def test_tag_for_rejects_a_path_outside_the_role_trees():
     assert tag_for("ansible/inventory/host_vars/daniel-box.yml", {"daniel-box"}) is None
+
+
+def test_deploy_plane_is_the_deployers_split_not_a_prefix_match():
+    """A test file under a deploy-plane prefix reaches no host, as the tick reads it."""
+    play = "ansible/tasks/k8s_batch.yml"
+    r = reach([_SERVICE, play, "ansible/tasks/tests/test_k8s_batch.py", _BRINGUP])
+    assert r.deploy_plane == [play]

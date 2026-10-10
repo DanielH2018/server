@@ -29,9 +29,10 @@ redeploys it; a full run is only slow.
 `lib.narrow_git` holds the primitives this shares with `narrow_setup`: `CannotNarrow`,
 `show_at` and the YAML mapping parse, one copy each.
 
-`narrow` agrees with `deploy_tags.py changed` wherever both answer: the non-broad half of a
-range goes through the same `reach.reach(...).changes` mapper, less the roles the range
-DELETED (`narrow_paths.role_is_gone`). Where `changed` prints a tag list PLUS a note about a
+`narrow` agrees with `deploy_tags.py changed` wherever both answer: one `reach.reach(...)`
+splits the range, so the paths it reads per rule are the deployer's own deploy-plane paths,
+and the rest go through the same `.changes` mapper, less the roles the range DELETED
+(`narrow_paths.role_is_gone`). Where `changed` prints a tag list PLUS a note about a
 shared role a human must still apply, `narrow` refuses: the tick has no human to read it.
 
 `Release Staleness Drift` (`probe_lib/releases.py`) asks `broad_path_tags` the same per-path
@@ -442,7 +443,7 @@ def _filter_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     return tags
 
 
-def _changed_half(paths: list[str], ctx: Context) -> set[str]:
+def _changed_half(cs, ctx: Context) -> set[str]:
     """The tags the NON-broad paths in the range reach — the mapper `changed` already uses.
 
     A setup-plane path contributes nothing here: `deploy_narrow.plan` gives the setup half
@@ -455,10 +456,10 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
     them. A rotated secret reaches a service only when that service renders again, so
     narrowing a range that carries one would leave every service outside the tag list on the
     old value.
-    """
-    from reach import reach
 
-    cs = reach(paths).changes
+    `cs` is the range's whole `ChangeSet`. A deploy-plane path sets only the plane flags and
+    `setup_roles`, which this does not read, so the deploy half needs no carving out first.
+    """
     if cs.broad_manual:
         raise CannotNarrow("the range also changes a bring-up playbook")
     if cs.secrets:
@@ -504,14 +505,13 @@ def narrow(
     """
     cwd = Path(cwd)
     ctx = context_for(new_ref, cwd, declared=declared, callers=callers, explain=explain)
-    # Through the deployer's own index, the way `_changed_half` reaches its mapper.
-    from deploy_logic import _BROAD_DEPLOY_PREFIXES as broad_prefixes
+    # Lazy because `reach` imports `deploy_logic` at module scope.
+    from reach import reach
 
     diff = git_stdout("diff", "--name-only", f"{old_ref}..{new_ref}", cwd=cwd)
-    paths = [p for p in diff.splitlines() if p]
-    broad = [p for p in paths if any(p.startswith(x) for x in broad_prefixes)]
-    tags = _changed_half([p for p in paths if p not in set(broad)], ctx)
-    for path in broad:
+    one = reach([p for p in diff.splitlines() if p])
+    tags = _changed_half(one.changes, ctx)
+    for path in one.deploy_plane:
         tags |= broad_path_tags(path, old_ref, ctx)
     # A tag list covering most of the fleet saves none of the twenty minutes this exists to
     # save, and adds a way to miss something the whole play would have done. `manifests` is
