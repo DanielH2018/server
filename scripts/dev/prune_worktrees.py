@@ -75,6 +75,7 @@ from lib.worktrees import (
 
 ORPHAN = "orphan"
 STALE = "stale"
+VANISHED = "vanished"
 
 
 def find_orphan_dirs(worktrees_dir: str, registered: set[str]) -> list[str]:
@@ -191,12 +192,24 @@ def sweep_branches(repo: str, branches: list[str]) -> None:
 
 
 def survey(repo: str) -> list[tuple[str, Worktree, str]]:
-    """(verdict, worktree, reason) for every session worktree, primary excluded."""
+    """(verdict, worktree, reason) for every session worktree, primary excluded.
+
+    A registration whose directory is gone reads VANISHED and is never asked is_dirty, which
+    runs git with the tree as its cwd and raised FileNotFoundError, taking the whole report and
+    the weekly `--prune --brief` down with it (#4191). It is never REMOVABLE either: there is
+    nothing to remove, and the `git worktree prune` in repair_object_store, at prune_all's
+    tail, drops the registration on the next `--prune`.
+    """
     trees = parse_worktree_list(
         git_stdout("worktree", "list", "--porcelain", cwd=repo, check=False)
     )
     out = []
     for tree in trees[1:]:
+        if not Path(tree.path).is_dir():
+            out.append(
+                (VANISHED, tree, "directory gone — `--prune` drops the registration")
+            )
+            continue
         verdict, reason = classify(
             tree,
             merged=is_merged(repo, tree.head, tree.branch or ""),
