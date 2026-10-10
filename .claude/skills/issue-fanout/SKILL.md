@@ -1,6 +1,6 @@
 ---
 name: issue-fanout
-description: Dispatch parallel Opus agents at a batch of open GitHub issues, one worktree and one PR each, claiming every issue before any agent starts. Use when asked to work through the backlog, clear the open findings, or fan out on issues. Not for a single issue — claim it and work it directly.
+description: Dispatch parallel Opus agents at a batch of open GitHub issues, one worktree and one PR each, claiming every issue before any agent starts. Use when asked to work through the backlog, clear the open findings, or fan out on issues. A single issue nobody needs to steer can launch as a batch of one with `--review`, which gets the independent reviewer and red gate a solo session lacks; claim and work an issue directly only when you will steer it.
 allowed-tools: Bash, Read, Grep, Glob, Agent
 ---
 
