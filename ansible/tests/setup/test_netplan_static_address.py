@@ -1,4 +1,4 @@
-"""Guard: the k3s server pins server_ip statically on the link that carries it, with DHCPv4 off.
+"""Guard: each k3s node pins server_ip statically on the link that carries it, with DHCPv4 off.
 
 WHY THIS EXISTS. k3s binds server_ip itself, so a node whose address comes from DHCP cannot
 start k3s while the gateway's DHCP server is down. A WAN outage spanning the 2026-10-05 reboot
