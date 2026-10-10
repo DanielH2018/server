@@ -39,15 +39,17 @@ is the text under one heading up to the next heading of any level, keyed `<doc>#
    status output also prints indented `one-way:` lines. An UNVERIFIED section has no row in
    `docs/facts.lock`, so nobody has checked its support since it was written.
 3. **Sections whose cited files changed most in the last 30 days.** Run
-   `git log --since=30.days --name-only --format= | sort | uniq -c | sort -rn | head -40`. Skip
-   the generated and bookkeeping files at the top of that list (`docs/facts.lock`,
-   `docs/reference/`, shard-weight JSON, generated SVGs). For each remaining hot path, run
-   `git grep -nF '<path>' -- '*CLAUDE.md'` to find the sections that cite it.
+   `git log --since=30.days --name-only --format= -- . ':!docs/facts.lock' ':!*CLAUDE.md' ':!docs/reference/' | sort | uniq -c | sort -rn | head -40`.
+   Skip any generated file still near the top, such as shard-weight JSON or a generated SVG. For
+   each remaining hot path, run `git grep -nF '<path>' -- '*CLAUDE.md'` to find the sections
+   that cite it.
 
 When the dispatch names a scope (a role, a directory, a list of sections), intersect it with this
-list rather than replacing the list. Stop at **about 25 sections**, taken from the top of the
-order. Say in the output how many sections each tier offered and how many you reached. An
-unreached section is unreviewed, not clean.
+list rather than replacing the list. A dispatched path the fact tooling does not grade, such as a
+`docs/*.md` page, is reported as unreviewed, never as clean. Stop at **about 25 sections**, taken
+in order, and take at most 15 from tier 1 so that tiers 2 and 3 are always reached. Say in the
+output how many sections each tier offered and how many you reached. An unreached section is
+unreviewed, not clean.
 
 ## The question — one per sentence
 For each sentence in a section, ask exactly one thing: **does the code at HEAD contradict this
@@ -64,7 +66,7 @@ sentence?**
   over-promise, which you report as a contradiction of the promise).
 - A sentence about runtime state may be checked with `scripts/diagnostics/probe.py`. A sentence
   the repo cannot settle is not a contradiction: list it under `NEEDS VALIDATION` with the exact
-  fact that decides it.
+  fact that decides it and an owner-observed check that would settle it.
 - Before you report a sentence about a role, `grep -rn '# DECIDED:'` that role's tree. A doc that
   deliberately keeps an old name (an id or token preserved for compatibility) is correct. Honor
   the don't-re-flag items in your dispatch context the same way.
@@ -96,8 +98,9 @@ Each finding carries:
 - the section key `<doc>#<heading>`, the stale `doc:line`, and the sentence quoted verbatim;
 - the contradicting `file:line` at HEAD, and that line quoted verbatim;
 - **confidence**, from 0.0 to 1.0: 0.9 or above when the quoted line plainly negates the sentence;
-  about 0.6 when the contradiction depends on how a reader takes the sentence's wording; below 0.5,
-  do not report it;
+  about 0.6 when the contradiction depends on how a reader takes the sentence's wording; about 0.3
+  when the contradicting line is indirect, such as a caller of the code the sentence describes.
+  Report every quoted contradiction with its score, because the orchestrator does the filtering;
 - the concrete doc edit that would make the sentence true.
 
 After the findings, list any `NEEDS VALIDATION` leads, then one line naming the sections you
