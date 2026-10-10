@@ -240,7 +240,8 @@ containers_list:
       - autofix-bridge  # env-secret.yaml.j2, cluster FQDN
       - bazarr          # app DB, bare name — see the policy's header
       - prowlarr        # Application Sync writes indexers in — see the policy's header
-      - homepage        # dashboard widget, ClusterIP — see the policy's header
+    # homepage's Sonarr widget dials the ClusterIP; this key adds homepage to the callers above.
+    homepage_widget: true
   # Runs a WireGuard/Mullvad sidecar sharing the pod's netns, gating qbittorrent's start so
   # it cannot talk to a tracker before the kill-switch exists.
   - name: qbittorrent
@@ -260,7 +261,8 @@ containers_list:
       - sonarr                   # download client, app DB host `wireguard` (compat Service)
       - radarr                   # same as sonarr
       - qbittorrent-reach-probe  # tasks/verify.yml pod-CIDR reachability check
-      - homepage                 # dashboard widget, ClusterIP — see the policy's header
+    # homepage's qBittorrent widget dials the ClusterIP; this key adds homepage to the callers.
+    homepage_widget: true
   - name: radarr
     platform: k8s
     weekly_backup_claims: {radarr-config: 2}  # Tue
@@ -287,7 +289,8 @@ containers_list:
       - autofix-bridge
       - bazarr
       - prowlarr        # Application Sync writes indexers in — see the policy's header
-      - homepage        # dashboard widget, ClusterIP — see the policy's header
+    # homepage's Radarr widget dials the ClusterIP; this key adds homepage to the callers above.
+    homepage_widget: true
   # Brings a second workload with it — flaresolverr, which renders attacker-supplied
   # Cloudflare pages. An INGRESS NetworkPolicy keeps it reachable from prowlarr alone;
   # ingress is the direction actually enforced on this cluster.
@@ -692,8 +695,10 @@ containers_list:
     # this list both callers are denied. Traefik keeps its access through the baseline, and the
     # daniel-server-guarded route still works.
     netpol_from:
-      - homepage     # the three calendar widgets
       - uptime-kuma  # the "iCal Proxy k8s" monitor, which probes /calendar1.ics
+    # homepage's Calendar tile reads three feeds over the ClusterIP; this key adds homepage
+    # to the callers above.
+    homepage_widget: true
 
   # The tunnel answers on the node IP (the wg-easy-udp Service's externalIP) rather than a
   # VIP: router UIs forward to devices, and VIPs have no lease. There is no password_hash on
@@ -878,8 +883,9 @@ containers_list:
                             # Kuma disk-health tile
       - homelab-mcp         # SCRUTINY_URL (homelab-mcp/templates/deployment.yaml.j2), Claude's
                             # disk-health read tool
-      - homepage            # dashboard widget, ClusterIP: scrutiny's route is Authelia-gated,
-                            # so this is the only grant, and a denial reads as a widget error
+    # homepage's Scrutiny widget dials the ClusterIP, because scrutiny's route is Authelia-gated.
+    # This key adds homepage to the callers above and is its only grant.
+    homepage_widget: true
   # LAST on purpose, and it must NOT sit in traefik's rollout batch.
   #
   # Not for the usual "after traefik" reason — this role renders no Traefik CRDs, and a

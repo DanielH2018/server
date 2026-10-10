@@ -3,6 +3,8 @@
    speedtest, ical-proxy, home-assistant, karakeep, uptime-kuma and scrutiny. Each admits its listed
    callers on the entry's `port`, and the reason for each caller sits beside it in
    inventory/host_vars/daniel-box.yml. The macro's header says which fences fit this shape.
+   `netpol_callers` adds homepage to that list for an entry setting `homepage_widget: true`
+   (ical-proxy, scrutiny), and an entry carrying only that key still gets a fence.
 
    The fence selects, and is named after, the entry's `netpol_app` where the entry sets one
    and the entry's own name otherwise. scrutiny sets it because its pod label is
@@ -22,9 +24,9 @@
 
    Each fence reads `netpol_baseline_enforced`, so the rollback lever still covers it; the
    reasoning is in networkpolicy-traefik.yaml.j2. #}
-{% for entry in containers_list if 'netpol_from' in entry and not entry.get('netpol_role_owned', false) %}
+{% for entry in containers_list if entry | netpol_callers and not entry.get('netpol_role_owned', false) %}
 ---
-{{ networkpolicy(entry.get('netpol_app', entry.name), entry.port, entry.netpol_from, netpol_baseline_enforced | bool) }}
+{{ networkpolicy(entry.get('netpol_app', entry.name), entry.port, entry | netpol_callers, netpol_baseline_enforced | bool) }}
 {% endfor %}
 {% for entry in containers_list %}
 {% for fence in entry.get('netpol_fences', []) if not fence.get('role_owned', false) %}

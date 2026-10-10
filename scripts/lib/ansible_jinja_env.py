@@ -120,7 +120,10 @@ def register_ansible_filters(env: Environment) -> Environment:
     role reads its exporter's port through ``metrics_port``; both raise on a malformed
     ``metrics`` item. Its hand-written jobs read their entry's own port through ``entry_port``,
     which raises on an entry name it cannot find. uptime-kuma's ingress tiles derive from
-    ``kuma_ingress_monitors``, which raises on a malformed ``kuma`` key.
+    ``kuma_ingress_monitors``, which raises on a malformed ``kuma`` key. Every caller fence
+    reads its callers through ``netpol_callers``. homepage's tiles build their links and
+    ClusterIP widget URLs through ``homepage_href`` and ``homepage_widget_url``, which raise on
+    an entry that lacks the route or the ``homepage_widget`` key.
     ``py_table`` reads monitor-bridge's check table out of its Python source, for the
     env-secret and the Kuma tiles. The k3s RecurringJob template names each weekly shard
     through ``weekly_backup_group``, which raises on a shard outside 0-6, and the restore drill
@@ -137,6 +140,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     if str(ANSIBLE / "filter_plugins") not in _sys.path:
         _sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
     from authelia_access import authelia_service_rules
+    from homepage_tiles import homepage_href, homepage_widget_url, netpol_callers
     from kuma_monitors import kuma_ingress_monitors
     from longhorn_groups import (
         backup_group_label,
@@ -173,6 +177,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["entry_port"] = entry_port
     env.filters["py_table"] = py_table
     env.filters["kuma_ingress_monitors"] = kuma_ingress_monitors
+    env.filters["netpol_callers"] = netpol_callers
+    env.filters["homepage_widget_url"] = homepage_widget_url
+    env.filters["homepage_href"] = homepage_href
     env.filters["backup_group_label"] = backup_group_label
     env.filters["weekly_backup_group"] = weekly_backup_group
     env.filters["weekly_backup_shard"] = weekly_backup_shard

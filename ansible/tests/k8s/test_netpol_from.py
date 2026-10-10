@@ -20,6 +20,7 @@ Run: uv run pytest ansible/tests/k8s/test_netpol_from.py
 
 from _helpers import K8S_ROLES
 from _k8s_render import host_context, pod_template, rendered_docs
+from homepage_tiles import netpol_callers
 from lib.ansible_inventory import containers_entries_in
 
 # Entries this guard must find, by the policy name each renders, with its renderer. Named rather
@@ -49,6 +50,14 @@ KNOWN_FENCES = {
 }
 
 
+# Fences that admit homepage through `homepage_widget: true` on the entry rather than through
+# `netpol_from`, one per renderer: a role-owned fence and a netpol-baseline one. Named so the
+# key's derivation cannot quietly stop reaching either.
+HOMEPAGE_WIDGET_FENCES = frozenset(
+    {"sonarr", "qbittorrent", "scrutiny-web", "ical-proxy"}
+)
+
+
 def fence_name(entry: dict) -> str:
     """The pod label a fence selects, which is also the NetworkPolicy's name."""
     return entry.get("netpol_app", entry["name"])
@@ -65,17 +74,17 @@ UNRENDERED_CALLERS = {
 def declared_fences() -> dict[str, dict]:
     """Each fence daniel-box's entries declare, by the policy name it renders.
 
-    Covers an entry's own `netpol_from` and each of its `netpol_fences` items, normalised to
-    `{"owner", "port", "callers"}`. A fence is role-owned through the entry's
+    Covers an entry's own callers (`netpol_from`, plus homepage for `homepage_widget`) and
+    each of its `netpol_fences` items, normalised to `{"owner", "port", "callers"}`. A fence is role-owned through the entry's
     `netpol_role_owned` or the item's `role_owned`, and its owner is then the entry's role.
     """
     fences = {}
     for e in containers_entries_in(host_context()):
-        if "netpol_from" in e:
+        if callers := netpol_callers(e):
             fences[fence_name(e)] = {
                 "owner": e["name"] if e.get("netpol_role_owned") else "netpol-baseline",
                 "port": e["port"],
-                "callers": e["netpol_from"],
+                "callers": callers,
             }
         for f in e.get("netpol_fences", []):
             fences[f["app"]] = {
@@ -121,6 +130,14 @@ def admitted(doc: dict) -> list[tuple[frozenset[str], frozenset[int]]]:
 def test_the_census_finds_every_known_fence():
     """Non-vacuity: the tests below pass on an empty census."""
     assert KNOWN_FENCES.keys() <= declared_fences().keys()
+
+
+def test_each_homepage_widget_entry_admits_homepage():
+    """Non-vacuity for `homepage_widget`: the test below checks only fences the census finds."""
+    fences = declared_fences()
+    assert {
+        n for n in HOMEPAGE_WIDGET_FENCES if "homepage" in fences[n]["callers"]
+    } == (HOMEPAGE_WIDGET_FENCES)
 
 
 def test_no_network_policy_renders_from_two_roles():

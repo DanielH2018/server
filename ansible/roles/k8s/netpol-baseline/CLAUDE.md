@@ -67,6 +67,10 @@ needs, decides which one.
   `scrutiny-web`). A sub-workload with no entry of its own is a `netpol_fences: [{app, port,
   from}]` item on its role's entry, carrying its own label and port (freshrss's feed cache).
   An entry whose role renders its own copy also sets `netpol_role_owned: true`, and the loop skips it.
+  `homepage_widget: true` on an entry adds `homepage` to its callers, because homepage's
+  dashboard widget dials that ClusterIP. Every renderer reads the callers through the
+  `netpol_callers` filter in `ansible/filter_plugins/homepage_tiles.py`, never `netpol_from`
+  alone, so the key reaches role-owned fences too.
   A `netpol_fences` item its role renders sets `role_owned: true`, and the loop skips that too.
   `ansible/tests/k8s/test_netpol_from.py` fails if a policy name renders from two roles.
 - **In the workload's own role**, when the workload's deploy depends on the policy:

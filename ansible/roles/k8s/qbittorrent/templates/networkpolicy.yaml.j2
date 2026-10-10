@@ -43,5 +43,6 @@
 #
 # The caller list is `netpol_from:` on this role's containers_list entry
 # (inventory/host_vars/daniel-box.yml), each caller's reason beside it. The entry's
+# `homepage_widget: true` adds homepage through the `netpol_callers` filter. The entry's
 # `netpol_role_owned: true` keeps netpol-baseline from rendering a second copy.
-{{ networkpolicy(container_item.name, qbittorrent_k8s_webui_port, container_item.netpol_from) }}
+{{ networkpolicy(container_item.name, qbittorrent_k8s_webui_port, container_item | netpol_callers) }}
