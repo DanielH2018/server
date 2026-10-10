@@ -177,6 +177,13 @@ def foreign_key_tags(
     A changed key the role never names is skipped, as `plugin_tags` skips a filter: the
     owner's `defaults/main.yml` holds many keys and the reader names few.
 
+    Args:
+        path: the other role's `defaults/` or `vars/` file, as the table records it.
+        index: the reading role, read at `new`.
+        old: the commit the checkout was on.
+        new: the commit carrying the change.
+        repo: the checkout to read.
+
     Raises:
         CannotNarrow: every refusal `changed_keys` and `key_readers` make, or a range that
             changed no key the role names, which means the table calling it a reader and this

@@ -334,6 +334,10 @@ def test_an_initial_setup_defaults_change_reaches_claude_code():
     """claude_code puts every agent in `initial_setup_worktree_holders_group` (#4303), so a
     rename re-applied only initial_setup and left the agents in the old group."""
     path = "ansible/roles/setup/initial_setup/defaults/main.yml"
+    assert services_from_changed_paths([path]).setup_roles == {
+        "initial_setup",
+        "claude_code",
+    }
     assert setup_roles_for(path) == {"initial_setup", "claude_code"}
     assert setup_tags_for([path]) == {"initial_setup", "claude_code"}
     tasks = "ansible/roles/setup/initial_setup/tasks/crons.yml"
