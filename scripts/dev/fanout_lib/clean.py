@@ -210,6 +210,31 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
     return "failed", f"clean failed (exit {proc.returncode}): {detail}"
 
 
+def live_process_scan(wt: str) -> str:
+    """Shell that sets `busy` to the first pid whose cwd or `CLAUDE_PROJECT_DIR` is in `wt`.
+
+    `lib.worktrees.processes_using` in shell, for the chains that run before or without an
+    interpreter (Ruling 30): `remove` refuses a tree a live process uses (#3910), and a chain
+    that deletes the tree itself skipped that check (#3995). As there, another uid's process
+    cannot be read and is skipped, not counted. `busy` is empty when nothing uses the tree.
+    """
+    return (
+        "busy=; for p in /proc/[0-9]*; do "
+        'c=$(readlink "$p/cwd" 2>/dev/null); '
+        f'case "$c" in "{wt}"|"{wt}"/*) busy=${{p#/proc/}}; break;; esac; '
+        'if tr "\\0" "\\n" < "$p/environ" 2>/dev/null '
+        f'| grep -q -F -x -e "CLAUDE_PROJECT_DIR={wt}" '
+        f'|| tr "\\0" "\\n" < "$p/environ" 2>/dev/null '
+        f'| grep -q -F -e "CLAUDE_PROJECT_DIR={wt}/"; '
+        "then busy=${p#/proc/}; break; fi; done; "
+    )
+
+
+def busy_refusal(wt: str) -> str:
+    """The `kept:` line a chain prints when `live_process_scan` found a pid using `wt`."""
+    return f'echo "kept: {wt} — pid $busy still uses it"'
+
+
 def remote_clean_command(
     b: Batch, repo: str | None = None, target: Target = SERVER_TARGET
 ) -> str:
@@ -342,6 +367,8 @@ def remote_clean_command(
         f"systemctl --user reset-failed {b.unit} 2>/dev/null; "
         f"git -C {repo} fetch --quiet origin {target.base_branch} && "
         f"if [ ! -e {wt}/.git ]; then "
+        f"{live_process_scan(wt)}"
+        f'if [ -n "$busy" ]; then {busy_refusal(wt)}; else '
         f"rm -rf {wt}; "
         f"git -C {repo} worktree unlock {wt} 2>/dev/null; "
         f"git -C {repo} worktree remove --force {wt} 2>/dev/null || true; "
@@ -356,6 +383,7 @@ def remote_clean_command(
         f"git -C {repo} branch -D {branch} >/dev/null 2>&1 && {gone_branch} "
         f'|| echo "kept: {wt} — branch {branch} not deleted"; '
         f'else echo "kept: {wt} — branch {branch} unmerged, tree gone"; '
+        f"fi; "
         f"fi; "
         f"fi; "
         f"else cd {repo} && uv run --no-project --no-python-downloads --python 3.14.6 "

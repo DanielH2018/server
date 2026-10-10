@@ -20,6 +20,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_clean_chain.py
 """
 
 import shlex
+import subprocess
 import shutil
 
 from fanout_lib.clean import remote_clean_command
@@ -259,4 +260,19 @@ def test_a_directory_that_is_still_a_checkout_reaches_clean_one(tmp_path):
         BRANCH,
     ]
     assert worktree.exists()
+    assert BRANCH in _branches(repo)
+
+
+def test_a_stub_a_live_process_still_uses_is_kept_not_deleted(tmp_path):
+    """#3995: the gone-tree leg deleted the stub without `remove`'s live-process refusal."""
+    repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
+    (worktree / ".remember").mkdir(parents=True)
+    holder = subprocess.Popen(["sleep", "60"], cwd=worktree)
+    try:
+        proc = _run_chain(repo, worktree, _stub_bin(tmp_path, f"{tip}\n"))
+    finally:
+        holder.kill()
+        holder.wait()
+    assert proc.stdout.strip() == f"kept: {worktree} — pid {holder.pid} still uses it"
+    assert (worktree / ".remember").is_dir()
     assert BRANCH in _branches(repo)
