@@ -155,10 +155,53 @@ def test_the_rule_admits_only_a_landing_unit_for_a_plain_pr_number(
 
 
 def test_the_rule_admits_only_the_agent_user_and_only_the_start_verb() -> None:
-    rendered = render_setup_text("claude_code", RULE, {"claude_code_agent_user": AGENT})
-    assert f'subject.user !== "{AGENT}"' in rendered
+    rendered = render_setup_text("claude_code", RULE)
+    agent = defaults()["claude_code_agent_user"]
+    assert f'subject.user !== "{agent}"' in rendered
     assert 'action.lookup("verb") !== "start"' in rendered
     assert rendered.count("polkit.Result.YES") == 1
+
+
+# The agent profile's variables, which the inventory may set, and a value for each that is not
+# the agent's.
+AGENT_PROFILE_OVERRIDES = {
+    "claude_code_agent_user": AGENT,
+    "claude_code_agent_github_login": "lander-sentinel-login",
+    "claude_code_agent_worktree_prefix": "lander-sentinel-prefix",
+}
+
+
+def test_the_inventory_cannot_repoint_who_the_lander_serves() -> None:
+    """Moving the agent profile in the inventory leaves the unit and the rule as they were."""
+    assert unit(AGENT_PROFILE_OVERRIDES) == unit()
+    assert render_setup_text("claude_code", RULE, AGENT_PROFILE_OVERRIDES) == (
+        render_setup_text("claude_code", RULE)
+    )
+
+
+def test_the_unit_and_rule_follow_the_lander_variables() -> None:
+    """The red half of the test above: the templates do read the pinned variables."""
+    moved = {
+        "claude_code_lander_author": "lander-sentinel-login",
+        "claude_code_lander_branch_prefix": "lander-sentinel-prefix+",
+        "claude_code_lander_agent_user": AGENT,
+    }
+    env = environment(unit(moved))
+    assert env[options.REQUIRE_AUTHOR_ENV] == "lander-sentinel-login"
+    assert env[options.REQUIRE_BRANCH_PREFIX_ENV] == "lander-sentinel-prefix+"
+    assert f'subject.user !== "{AGENT}"' in render_setup_text(
+        "claude_code", RULE, moved
+    )
+
+
+def test_the_pinned_lander_values_name_the_agent_profile() -> None:
+    """The pins are literals, so this is what keeps them equal to the agent they serve."""
+    d = defaults()
+    assert d["claude_code_lander_author"] == d["claude_code_agent_github_login"]
+    assert d["claude_code_lander_agent_user"] == d["claude_code_agent_user"]
+    assert d["claude_code_lander_branch_prefix"] == (
+        f"worktree-{d['claude_code_agent_worktree_prefix']}+"
+    )
 
 
 # The approval floor the operator chose on 2026-10-10: the grant points and the gate itself.
@@ -245,10 +288,14 @@ def test_the_lander_settings_are_pinned_above_the_inventory_at_their_defaults() 
     assert set(pinned) == {
         "claude_code_lander_checkout",
         "claude_code_lander_branch_prefix",
+        "claude_code_lander_author",
+        "claude_code_lander_agent_user",
         "claude_code_lander_approver",
     }
     for name, value in pinned.items():
         assert value == defaults()[name], name
+        # A pin that templates an inventory variable resolves from the inventory.
+        assert "{{" not in value or value == "/home/{{ sys_user }}/server", name
 
 
 def test_main_imports_the_lander_file() -> None:
