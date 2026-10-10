@@ -32,6 +32,9 @@
 
 # The two fleet constants. Every line after the `raw` marker below is shell that Jinja must not
 # read: its string-length expansions open a Jinja comment.
+#
+# On the Pi, `domain` is still the server's domain. initial_setup.yml loads the SOPS secrets in
+# its pre_tasks, and those vars outrank the Pi host_vars' own `domain`.
 # shellcheck disable=SC2034  # read by kuma_push below
 KUMA_LIB_HOST="uptime-kuma.local.{{ domain }}"
 # Pinned to the cluster ingress VIP: this name resolves through Pi-hole's wildcard, and a DNS

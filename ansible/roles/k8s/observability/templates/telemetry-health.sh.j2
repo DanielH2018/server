@@ -34,11 +34,7 @@ source /usr/local/lib/kuma-push-lib.sh || {
   exit 1
 }
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_URL="https://${KUMA_HOST}/api/push/{{ claude_otel_push_token }}"
+PUSH_TOKEN="{{ claude_otel_push_token }}"
 
 if timeout 5 bash -c "exec 3<>/dev/tcp/{{ observability_otlp_host_ip }}/{{ observability_otlp_port }}" 2>/dev/null; then
   STATUS=up
@@ -48,4 +44,4 @@ else
   MSG="OTLP receiver unreachable on {{ observability_otlp_host_ip }}:{{ observability_otlp_port }}"
 fi
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" claude-otel-health
+kuma_push "$STATUS" "$MSG" "$PUSH_TOKEN" claude-otel-health

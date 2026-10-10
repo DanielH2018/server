@@ -27,7 +27,7 @@ DECLARED = [
 ]
 
 # kuma_push, recording instead of pushing. Signature from
-# roles/setup/initial_setup/files/kuma-push-lib.sh: STATUS MSG PUSH_URL HOST RESOLVE_IP TAG.
+# roles/setup/initial_setup/templates/kuma-push-lib.sh.j2: STATUS MSG TOKEN TAG.
 LIB_STUB = """\
 kuma_push() {
   printf '%s\\n%s\\n' "$1" "$2" > "$KUMA_PUSH_OUT"

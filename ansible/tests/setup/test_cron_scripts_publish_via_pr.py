@@ -250,9 +250,7 @@ _CRON_ENV = {
     "HOME": "set on the eval-run cron job line (crons.yml:531)",
 }
 
-KUMA_PUSH_LIB_TEXT = rendered_shell_text(
-    "setup", "initial_setup", "kuma-push-lib.sh.j2"
-)
+KUMA_LIB = rendered_shell_text("setup", "initial_setup", "kuma-push-lib.sh.j2")
 
 # Templates whose reads are checked, and one name each that the read census MUST contain. A
 # census that silently stops matching returns an empty set, and "no unsatisfied reads" is what
@@ -261,7 +259,7 @@ _READ_CENSUS_MUST_FIND = {
     DOCS_REFRESH: frozenset({"PUSH_STATUS", "PUSH_MSG", "PUB_MSG", "UV", "REPO"}),
     EVAL_RUN: frozenset({"PUSH_STATUS", "PUB_MSG", "UNLANDED_RC", "REPO", "TREND_RC"}),
     SECRET_ROTATE: frozenset({"PUB_MSG", "STALE_HEADS", "TRACKED", "UV"}),
-    ROTATION_AUDIT: frozenset({"KUMA_HOST", "EXTRA_DOWN", "STALE_HEADS", "UV"}),
+    ROTATION_AUDIT: frozenset({"reason", "EXTRA_DOWN", "STALE_HEADS", "UV"}),
 }
 
 # `${NAME` plus the operator that follows, when there is one.
@@ -311,9 +309,7 @@ def shell_assignments(text: str) -> set[str]:
 
 def unsatisfied_reads(text: str) -> set[str]:
     """Names the script reads that neither it, the shared library, nor the cron env supplies."""
-    supplied = (
-        shell_assignments(text) | shell_assignments(KUMA_PUSH_LIB_TEXT) | set(_CRON_ENV)
-    )
+    supplied = shell_assignments(text) | shell_assignments(KUMA_LIB) | set(_CRON_ENV)
     return shell_reads(text) - supplied
 
 
@@ -466,9 +462,10 @@ _MIN_CORPUS = 23
 
 
 def push_corpus() -> dict[Path, str]:
-    """Every template that mentions a push URL, whatever its extension."""
+    """Every template that mentions a push URL or calls `kuma_push` (a token alone, #4219)."""
     texts = {p: rendered_or_source_text(p) for p in sorted(ROLES.rglob("*.j2"))}
-    return {p: t for p, t in texts.items() if PUSH_LITERAL in t or "PUSH_URL" in t}
+    marks = (PUSH_LITERAL, "PUSH_URL", "kuma_push ")
+    return {p: t for p, t in texts.items() if any(m in t for m in marks)}
 
 
 def _logical_lines(text: str) -> list[str]:

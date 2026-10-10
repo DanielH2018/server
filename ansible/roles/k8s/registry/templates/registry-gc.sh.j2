@@ -43,8 +43,6 @@ JOB_MANIFEST=/etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
 STATE_DIR=/var/lib/registry-gc
 STATE_FILE="${STATE_DIR}/state.json"
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 PUSH_TOKEN="{{ registry_gc_push_token | default('') }}"
 
 # The registry's own HTTP API, reached the way the image-builder role's registry reads reach it:
@@ -66,8 +64,7 @@ finish() {
   chmod 0644 "$STATE_FILE"
 
   if [[ -n "$PUSH_TOKEN" ]]; then
-    kuma_push "$STATUS" "$MSG" "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" \
-      "$KUMA_HOST" "$KUMA_RESOLVE_IP" registry-gc
+    kuma_push "$STATUS" "$MSG" "$PUSH_TOKEN" registry-gc
   else
     logger -t registry-gc "registry_gc_push_token not set — skipping push (see /add-secret)"
   fi

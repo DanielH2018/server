@@ -39,10 +39,6 @@ source /usr/local/lib/kuma-push-lib.sh || {
 # manifest-prune-check.sh beside it.
 export PATH="/usr/local/bin:${PATH}"
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP, same as the sibling heartbeats: this name resolves through
-# Pi-hole's wildcard, and a DNS outage is exactly when the push must still land.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 # Sourced, never inlined: this script lands 0755, so an inlined token is readable by every local
 # account. 0640 root:{{ sys_user }} env file, the same split the R2 credentials below already use
 # (one tier stricter there, because those are write credentials for the backup store).
@@ -54,8 +50,7 @@ PUSH_TOKEN="$ETCD_SNAPSHOT_PUSH_TOKEN"
 push_kuma() {
   local status="$1" msg="$2"
   [[ -z "$PUSH_TOKEN" ]] && return 0
-  kuma_push "$status" "$msg" "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" \
-    "$KUMA_HOST" "$KUMA_RESOLVE_IP" etcd-snapshot-offbox
+  kuma_push "$status" "$msg" "$PUSH_TOKEN" etcd-snapshot-offbox
 }
 
 # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale. Kuma

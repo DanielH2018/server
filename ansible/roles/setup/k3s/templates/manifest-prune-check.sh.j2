@@ -93,10 +93,6 @@ if [[ $EUID -ne 0 ]]; then
   exit 64
 fi
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 # Sourced, never inlined: this script lands 0755, so an inlined token is readable by every local
 # account. 0640 root:{{ sys_user }} env file, same split as ping.env further down.
 MANIFEST_PRUNE_PUSH_TOKEN=""
@@ -113,7 +109,6 @@ if [[ -z "$PUSH_TOKEN" ]]; then
   logger -t manifest-prune-check "MANIFEST_PRUNE_PUSH_TOKEN not set — skipping push (see /add-secret)"
   exit 0
 fi
-PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
 
 # A Persistent catch-up run at boot would read a cluster still coming up and push a false down.
 # Exit 1 without a verdict instead: the timer's Restart=on-failure reruns this in RestartSec,
@@ -126,7 +121,7 @@ fi
 if [[ ! -d "$MANIFEST_ROOT" ]]; then
   STATUS=down
   MSG="${MANIFEST_ROOT} missing — no staged manifests to compare against"
-  kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" manifest-prune-check
+  kuma_push "$STATUS" "$MSG" "$PUSH_TOKEN" manifest-prune-check
   exit 1
 fi
 
@@ -298,7 +293,7 @@ fi
 # DOWN leaves no durable record and `probe.py alerts` can never reconstruct this monitor.
 logger -t manifest-prune-check "status=${STATUS} ${MSG}"
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" manifest-prune-check
+kuma_push "$STATUS" "$MSG" "$PUSH_TOKEN" manifest-prune-check
 
 # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
 # Short version: Kuma runs on the cluster this watches, so an outage silences both the push and

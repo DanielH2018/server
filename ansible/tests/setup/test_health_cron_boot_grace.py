@@ -122,12 +122,12 @@ def test_a_guarded_cron_still_beats_its_kuma_tile():
     #
     # So the guard pushes `up` with a skip message instead of exiting quietly. Asserted at the
     # call site rather than by rendering the tile, because what breaks this is someone moving the
-    # guard back above PUSH_URL for tidiness.
+    # guard back above PUSH_TOKEN for tidiness.
     for name in FREQUENT_SCRIPTS:
         text = rendered_shell_text("setup", "k3s", name)
         guard = text.index(f"boot_grace_active {GRACE_S}")
-        assert text.index('PUSH_URL="') < guard, (
-            f"{name}: the boot guard runs before PUSH_URL is set, so it cannot beat"
+        assert text.index('PUSH_TOKEN="') < guard, (
+            f"{name}: the boot guard runs before PUSH_TOKEN is set, so it cannot beat"
         )
         assert 'kuma_push up "skipped — host still booting"' in text[guard:], (
             f"{name}: the boot guard skips the run without keeping the Kuma tile's heartbeat"

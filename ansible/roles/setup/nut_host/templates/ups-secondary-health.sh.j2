@@ -42,11 +42,6 @@ source /usr/local/lib/kuma-push-lib.sh || {
   exit 1
 }
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP, like every sibling: Kuma serves from the k8s edge and the
-# push must not depend on DNS.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-
 # This role's OWN env file, deliberately not /etc/rancher/k3s/kuma-push.env. That one is a
 # whole-content template owned by roles/setup/k3s, so adding a key to it from here would be
 # clobbered on that role's next run — and nut_host also has to work on a host where the k3s
@@ -58,7 +53,7 @@ if [[ -z "$UPS_SECONDARY_PUSH_TOKEN" ]]; then
   logger -t ups-secondary-health "push token unreadable — skipping push (see /add-secret)"
   exit 0
 fi
-PUSH_URL="https://${KUMA_HOST}/api/push/${UPS_SECONDARY_PUSH_TOKEN}"
+PUSH_TOKEN="$UPS_SECONDARY_PUSH_TOKEN"
 
 UPSMON_CONF=/etc/nut/upsmon.conf
 
@@ -108,4 +103,4 @@ fi
 # Loki (2026-08-29 review M-15, which was exactly that bug in live_drift_check.py).
 logger -p daemon.notice -t ups-secondary-health "status=${STATUS} ${MSG}"
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" ups-secondary-health
+kuma_push "$STATUS" "$MSG" "$PUSH_TOKEN" ups-secondary-health

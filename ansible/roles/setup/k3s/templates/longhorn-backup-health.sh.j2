@@ -68,10 +68,6 @@ source /usr/local/lib/kuma-push-lib.sh || {
 
 export KUBECONFIG=/home/{{ sys_user }}/.kube/config
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 # Token sourced, never inlined: this script lands 0755, so an inlined token is readable by every
 # local account and is enough to forge or suppress a heartbeat — which on THIS monitor would hide
 # a missing backup. 0640 root:{{ sys_user }} env file, same split as ping.env below.
@@ -82,10 +78,10 @@ if [[ -z "$LONGHORN_BACKUP_PUSH_TOKEN" ]]; then
   logger -t longhorn-backup-health "kuma push token unreadable — skipping push (run initial_setup.yml)"
   exit 0
 fi
-PUSH_URL="https://${KUMA_HOST}/api/push/${LONGHORN_BACKUP_PUSH_TOKEN}"
-# The token has to be sourced this early: the boot-grace push below also needs PUSH_URL, so
-# sourcing can't wait until after the reader runs. Once folded into PUSH_URL the raw value has
-# no further use in this script, so drop it from the shell's own variable table right away —
+PUSH_TOKEN="$LONGHORN_BACKUP_PUSH_TOKEN"
+# The token has to be sourced this early: the boot-grace push below also needs PUSH_TOKEN, so
+# sourcing can't wait until after the reader runs. Once copied into PUSH_TOKEN the env file's name
+# has no further use in this script, so drop it from the shell's own variable table right away —
 # kuma-push.env.j2 does not `export` any of its six tokens today, so none of them currently
 # reach a child process's environ, but this makes that true by construction rather than by the
 # env file staying in a particular shape, and closes the same class of risk for good.
@@ -96,7 +92,7 @@ unset -v LONGHORN_BACKUP_PUSH_TOKEN
 # immediately whatever grace the check is configured with — so this guard, not a grace value, is
 # what makes a restart quiet. Exit 0, not 1: a skipped run must not itself read as a failure.
 #
-# The Kuma beat still goes, which is why the guard sits AFTER PUSH_URL rather than at the top of
+# The Kuma beat still goes, which is why the guard sits AFTER PUSH_TOKEN rather than at the top of
 # the script. The `k3s Longhorn Backup` tile has a 1200s window against this 600s cron, so it
 # tolerates exactly one missed push — the one a silent skip would consume, leaving the tile's
 # margin decided by cron jitter and how long the k8s API call takes. Pushing `up` with a skip
@@ -106,13 +102,13 @@ unset -v LONGHORN_BACKUP_PUSH_TOKEN
 # Kept in shell rather than routed through the Python reader: it reads /proc/uptime, which the
 # reader has no reason to touch, and the two checks below (`test_a_guarded_cron_still_beats_its_
 # kuma_tile`, `test_a_skipped_run_pings_no_healthchecks_slug`) assert on this exact block's text
-# and position — before PUSH_URL's dependents run, after PUSH_URL is set.
+# and position — before PUSH_TOKEN's dependents run, after PUSH_TOKEN is set.
 #
 # Neither healthchecks.io slug is pinged here. Their graces are sized for exactly one skipped
 # slot (docs/healthchecks-io-deadman.md), and a success ping for a run that did not happen would
 # be a lie the dead-man exists to catch.
 if boot_grace_active {{ k3s_health_cron_boot_grace_s }} longhorn-backup-health; then
-  kuma_push up "skipped — host still booting" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" longhorn-backup-health
+  kuma_push up "skipped — host still booting" "$PUSH_TOKEN" longhorn-backup-health
   exit 0
 fi
 
@@ -236,7 +232,7 @@ else
   fi
 fi
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" longhorn-backup-health
+kuma_push "$STATUS" "$MSG" "$PUSH_TOKEN" longhorn-backup-health
 
 # Off-premises dead-man's switch. The push above targets Kuma, which runs ON the cluster this
 # script watches — a cluster or WAN outage kills the push AND the monitor waiting for it, so

@@ -78,8 +78,6 @@ FENCE_LONGHORN_URL="{{ hypervisor_etcd_drill_fence_longhorn_url }}"
 FENCE_VERDICT=not-checked
 TAG=etcd-restore-drill-vm
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 ETCD_DRILL_FULL_PUSH_TOKEN=""
 ETCD_DRILL_FENCE_PUSH_TOKEN=""
 # shellcheck source=/dev/null
@@ -100,8 +98,7 @@ log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 push_kuma() {
   local status="$1" msg="$2" token="${3:-$PUSH_TOKEN}"
   [[ -z "$token" ]] && return 0
-  kuma_push "$status" "$msg" "https://${KUMA_HOST}/api/push/${token}" \
-    "$KUMA_HOST" "$KUMA_RESOLVE_IP" "$TAG"
+  kuma_push "$status" "$msg" "$token" "$TAG"
 }
 
 # Every exit path reports through here, and the syslog line is unconditional — a push that lands

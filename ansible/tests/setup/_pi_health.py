@@ -23,7 +23,7 @@ REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 REAL_LOG = "/var/log/pi-health/health.log"
 
 # kuma_push, recording instead of pushing. Signature from
-# roles/setup/initial_setup/files/kuma-push-lib.sh: STATUS MSG PUSH_URL HOST RESOLVE_IP TAG.
+# roles/setup/initial_setup/templates/kuma-push-lib.sh.j2: STATUS MSG TOKEN TAG.
 # KUMA_PUSH_OK mirrors the real lib's contract, so the push-failed branch is reachable.
 LIB_STUB = """\
 kuma_push() {
