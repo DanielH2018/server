@@ -130,6 +130,18 @@ def test_the_agents_work_in_progress_is_left_alone(repos: Repos, state) -> None:
     assert repos.head() == before
 
 
+def test_a_second_run_skips_while_the_first_holds_the_lock(repos: Repos) -> None:
+    before = repos.head()
+    repos.push(README="2\n")
+    lock = repos.clone / ".git" / "claude-clone-sync.lock"
+    held = run(
+        ["flock", str(lock), "bash", str(SCRIPT), str(repos.clone)],
+        env=scrubbed_env(HOME=str(repos.home)),
+    )
+    assert held.stdout.startswith("skipped: another claude-clone-sync run")
+    assert repos.head() == before
+
+
 def test_a_diverged_master_fails(repos: Repos) -> None:
     commit(repos.clone, "local", README="local\n")
     repos.push(README="2\n")

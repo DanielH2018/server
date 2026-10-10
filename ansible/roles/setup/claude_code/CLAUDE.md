@@ -34,8 +34,7 @@ shell** spawns sessions **on demand** up to `--capacity`, so only it lets the ph
 `claude_code_rc_enabled: true` enables and starts the host; back to `false` stops **and** disables
 it and its restart timer, which is the rollback. `ansible/tests/setup/test_claude_rc_unit.py` pins both directions.
 
-One prerequisite Ansible cannot check, a fresh worktree's workspace-trust dialog, is in the doc
-above. **Re-run that check after a Claude Code upgrade or spawn-mode change.**
+One prerequisite Ansible cannot check, the trust dialog, is in `docs/claude-code-rc-caps.md`. **Re-run that check after a Claude Code upgrade or spawn-mode change.**
 
 **Stop any hand-run host before deploying**: it and the service compete for one account and
 directory.
@@ -110,8 +109,8 @@ agent copies the operator's memory store once (`tasks/agent_memory_seed.yml`).
 
 ## Autonomous-role contract (`claude-clone-sync`)
 
-- **Scope:** a `--ff-only` pull of the agent's clone (`claude`) every
-  `claude_code_agent_clone_sync_interval`, with `uv sync` when it moves `uv.lock` (#4162).
+- **Scope:** a `--ff-only` pull of the agent's clone every
+  `claude_code_agent_clone_sync_interval`, then the venv and collections if their locks moved.
 - **Mode:** `claude_code_agent_user_enabled`; false removes it.
 - **Abort valve:** it skips, exiting 0, unless the clone is a clean `master`.
 - **Evidence:** `journalctl -u claude-clone-sync`; a failure pages Discord.

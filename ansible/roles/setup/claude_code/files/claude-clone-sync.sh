@@ -21,6 +21,14 @@ clone=${1:?usage: claude-clone-sync.sh <clone-dir>}
 export LC_ALL=C
 cd "$clone"
 
+# The apply and the timer run this same script; the second to start skips rather than racing
+# the first for git's ref locks.
+exec 9>"$(git rev-parse --git-dir)/claude-clone-sync.lock"
+if ! flock -n 9; then
+  echo "skipped: another claude-clone-sync run holds the lock"
+  exit 0
+fi
+
 status=$(git status --porcelain=v2 --branch --untracked-files=no)
 if ! grep -qx '# branch.head master' <<<"$status"; then
   echo "skipped: $clone is not on master"
