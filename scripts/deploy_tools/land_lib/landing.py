@@ -145,6 +145,10 @@ class Landing:
         # The head SHA the landing policy checked (`policy.check`), which every merge path is
         # then pinned to. Empty when no policy is set, and the merge takes whatever head it finds.
         self.pinned_head = ""
+        # The head SHA whose approval let the landing policy admit a PR on its approval list.
+        # `merge.await_merge` never updates this head's branch: the update would make a head
+        # the approval does not name.
+        self.approved_head = ""
 
     @property
     def plane(self) -> str:

@@ -271,6 +271,7 @@ def check(ln: Landing) -> str:
             if problem:
                 _refuse(ln, f"{why}; {problem}")
             say(f"{o.approver} approved {head[:8]}, lifting the approval-path refusal")
+            ln.approved_head = head
     again = ln.view("headRefOid").get("headRefOid") or ""
     if again != head:
         _refuse(
