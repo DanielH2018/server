@@ -99,6 +99,15 @@ tell is the age of the merge base, not the age of the PR**:
   to 2.37.9 against a live 2.37.10. That downgrade is caught by
   `test_the_ledger_last_entry_is_the_live_pin`, but only after the ledger row is appended.
 
+A `manual —` PR is the exception: a stale base is expected there. Its rule lets Renovate push to
+it only in the Monday window, never to rebase on a master move (`rebaseWhen: "conflicted"`,
+`updateNotScheduled: false`, #4011). Each push reruns a CI run that stays red until a person
+pushes the manual half. So a manual PR can also sit a few releases behind upstream until Monday.
+Do not tick its box during triage. A tick forces an update outside the window too. A PR with a half to finish gets its refresh
+from §4, whose finisher rebases the branch onto master first. A manual PR with nothing to finish
+(an image pin, ansible-core, k3s) still gets §5's tick right before it lands, which costs one
+CI run per landing rather than one per master move.
+
 **A PR whose merge would land nothing is failed by CI, not by this step.** #1741 and #1743
 automerged on 2026-09-11 ten seconds after opening, so no session triaged them (#1755). Renovate
 had reused the previous bump's branch under the next version's title, and master already held
