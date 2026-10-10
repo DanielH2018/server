@@ -106,7 +106,8 @@ writes it, and a hand edit fails `test_every_recorded_atom_hashes_as_recorded` a
 
 Two prek hooks run on a commit. `facts-lint-changed` lints the sections the branch edits, and
 runs `vanished-identifier` over every section. It fires on a commit that touches a `CLAUDE.md`
-or any non-Markdown file. `facts-reverify-changed` re-hashes a section whose prose you edited, when only a citation was
+or any non-Markdown file other than the paths the docs-refresh and eval-run crons commit.
+`facts-reverify-changed` re-hashes a section whose prose you edited, when only a citation was
 added or dropped. It writes the lock and exits non-zero like a formatter, so
 `git add docs/facts.lock` and commit again. A `moved` or `missing` atom stays red until a
 person re-reads the section and runs `verify`.
