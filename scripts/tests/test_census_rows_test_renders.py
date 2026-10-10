@@ -13,6 +13,7 @@ Run: uv run pytest scripts/tests/test_census_rows_test_renders.py
 import pytest
 from _render_helper_rules import (
     bare_jinja_envs,
+    inline_inventory_paths,
     local_repo_roots,
     shell_template_source_reads,
 )
@@ -107,6 +108,51 @@ ROWS = (
             ),
         ),
         min_matches=MODULE_FLOOR,
+    ),
+    Census(
+        name="tests-take-inventory-paths-from-repo-paths",
+        reason=(
+            "`lib.repo_paths` owns `HOSTS_INI`, `ALL_VARS`, `HOST_VARS` and `K3S_DEFAULTS`, and "
+            "#3912 and #3982 moved the test modules onto them. A hit is a `/` chain rooted at "
+            "`REPO`, `_REPO`, `REPO_ROOT`, `ANSIBLE` or `ROLES` (or `Path(<one of them>)`) "
+            "whose string parts spell one of those paths; the message names the constant. A "
+            'repo-relative string such as `"ansible/inventory/group_vars/all.yml"` is not a '
+            "chain, which is how the deploy classifiers' tests pass those as inputs. The walk "
+            'reads one expression, so a path built in two steps (`K3S = ROLES / "setup" / '
+            '"k3s"`, then `K3S / "defaults" / "main.yml"`) is not seen.'
+        ),
+        files=pytest_only_modules,
+        offence=lambda s: inline_inventory_paths(s.text),
+        red=(
+            Subject("a.py", 'REPO / "ansible/inventory/hosts.ini"\n'),
+            Subject("b.py", 'ANSIBLE / "inventory" / "group_vars" / "all.yml"\n'),
+            Subject("c.py", 'Path(REPO) / "ansible/inventory/host_vars" / name\n'),
+            Subject(
+                "d.py", '_REPO / "ansible/roles" / "setup/k3s/defaults/main.yml"\n'
+            ),
+            Subject("e.py", 'ROLES / "setup" / "k3s" / "defaults" / "main.yml"\n'),
+        ),
+        green=(
+            Subject(
+                "a.py", "from lib.repo_paths import ALL_VARS\nALL_VARS.read_text()\n"
+            ),
+            Subject("b.py", 'classify(["ansible/inventory/group_vars/all.yml"])\n'),
+            Subject("c.py", 'tmp_path / "inventory" / "hosts.ini"\n'),
+            Subject("d.py", 'REPO / "ansible" / "templates"\n'),
+            Subject("e.py", 'ROLES / "setup" / "k3s" / "files"\n'),
+        ),
+        min_matches=MODULE_FLOOR,
+        # The classifier tests holding repo-relative inventory strings as inputs, and the four
+        # modules #4002 converted, are in the census the row reads.
+        must_find=frozenset(
+            {
+                "scripts/deploy_tools/tests/test_deploy_tags_blockers.py",
+                "ansible/tests/deploy/test_tree_lock_single_definition.py",
+                "ansible/tests/setup/test_host_python_invocations.py",
+                "evals/tests/test_eval_cases.py",
+                "ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py",
+            }
+        ),
     ),
     Census(
         name="tests-read-shell-templates-rendered",

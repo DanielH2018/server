@@ -117,6 +117,10 @@ _LAYOUT_EXCEPTIONS = {
     # The shared conftest for the `scripts` testpath; pytest finds it by walking up from
     # each collected file, so it has to sit at the root the subdirectories share.
     "scripts/conftest.py",
+    # Puts a role's own `files/` on sys.path for that role's tests (#3746). It sits above every
+    # role so pytest loads it for each `<plane>/<role>/tests/`, and inside none, so no role
+    # ships it.
+    "ansible/roles/conftest.py",
 }
 
 

@@ -15,6 +15,8 @@ import re
 from _helpers import REPO as _REPO, load_tasks, walk_tasks
 from _role_census import task_files
 
+from lib.repo_paths import ALL_VARS
+
 
 # The same export the root crons' templates carry (cron_checks.py enforces it there). A task
 # with `become: true` runs with HOME=/root, and uv finds no managed Python under /root: the pin
@@ -258,9 +260,7 @@ def test_hook_wrappers_pin_the_same_version_as_ansible():
     install — and these are the wrappers that route stderr to /dev/null."""
     import yaml
 
-    pin = yaml.safe_load((_REPO / "ansible/inventory/group_vars/all.yml").read_text())[
-        "host_python_version"
-    ]
+    pin = yaml.safe_load(ALL_VARS.read_text())["host_python_version"]
     offenders = []
     for path in sorted((_REPO / ".claude/hooks").glob("*.sh")):
         for n, line in enumerate(path.read_text().splitlines(), 1):
