@@ -101,8 +101,10 @@ tell is the age of the merge base, not the age of the PR**:
 
 A `manual —` PR is the exception: a stale base is expected there. Its rule sets `rebaseWhen:
 "conflicted"` (#4011), because each rebase reruns a CI run that stays red until a person pushes
-the manual half. Do not tick its box during triage. §4's finisher rebases the branch onto
-master before adding the missing half, and that refresh is the one that counts.
+the manual half. Do not tick its box during triage. A PR with a half to finish gets its refresh
+from §4, whose finisher rebases the branch onto master first. A manual PR with nothing to finish
+(an image pin, ansible-core, k3s) still gets §5's tick right before it lands, which costs one
+CI run per landing rather than one per master move.
 
 **A PR whose merge would land nothing is failed by CI, not by this step.** #1741 and #1743
 automerged on 2026-09-11 ten seconds after opening, so no session triaged them (#1755). Renovate
