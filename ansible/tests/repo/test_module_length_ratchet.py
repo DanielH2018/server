@@ -272,12 +272,22 @@ def test_a_restated_conjoined_reason_lets_an_entry_rise():
         {"scripts/a.py": 650},
         {"scripts/a.py": 680},
         "list.txt",
-        conjoined={
-            "scripts/a.py": "still conjoined: the new marker reads through `read`"
-        },
+        conjoined={"scripts/a.py": "680 since the new marker reads through `read`"},
         old_conjoined={"scripts/a.py": "the mixins call methods only it defines"},
     )
     assert clean == []
+
+
+def test_a_reworded_reason_that_names_no_new_max_does_not_let_an_entry_rise():
+    """A trailing period is not a decision; the restatement must name the number it allows."""
+    flagged = raised_entries(
+        {"scripts/a.py": 650},
+        {"scripts/a.py": 9000},
+        "list.txt",
+        conjoined={"scripts/a.py": "reason one."},
+        old_conjoined={"scripts/a.py": "reason one"},
+    )
+    assert len(flagged) == 1
 
 
 def test_adding_a_path_master_does_not_track_is_clean():

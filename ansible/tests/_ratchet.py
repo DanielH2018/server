@@ -28,7 +28,7 @@ finished — and so does a raised entry, with three exemptions, all passed in as
 the caller that reads git:
 
 - A module-length entry ending `# conjoined: <why>` may be added, and rises only in a diff
-  that rewrites its reason. The `# DECIDED:` marker in `module_length_allowlist.txt` says why.
+  that rewrites its reason to name the new max. The `# DECIDED:` marker in `module_length_allowlist.txt` says why.
 - A path the merge base does not track may be added. That is a new or renamed file, and a
   rename would otherwise read as a deletion plus a forbidden addition.
 - A changed guard lets any path be added AND lets an entry rise. Widening the heuristic (as
@@ -140,7 +140,8 @@ def raised_entries(
         guard_changed: whether the guard differs from the merge base, which may add any path
             and may raise any entry.
         conjoined: path -> the `conjoined:` reason in `new`, which may add the path, and may
-            raise it when the reason differs from `old_conjoined`, the base's reasons.
+            raise it when the reason differs from `old_conjoined`, the base's reasons, and
+            names the new max as a word.
     """
     conjoined = conjoined or {}
     old_conjoined = old_conjoined or {}
@@ -154,7 +155,14 @@ def raised_entries(
             # editing _ratchet.py may also raise a module-length entry; the bound is that the
             # trigger is narrow (this file, its test module, or _helpers.is_test_file) and the
             # guard diff is in the same PR a reviewer reads.
-            restated = path in conjoined and conjoined[path] != old_conjoined.get(path)
+            # A rewording alone would wave through any growth, so the restated reason has
+            # to name the number it approves (#4301 review).
+            reason = conjoined.get(path)
+            restated = (
+                reason is not None
+                and reason != old_conjoined.get(path)
+                and str(limit) in reason.replace(",", " ").split()
+            )
             if limit > old[path] and not guard_changed and not restated:
                 found.append(
                     f"{path}: {name} says {limit}, up from {old[path]} on the merge base "

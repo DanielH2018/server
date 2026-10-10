@@ -242,8 +242,8 @@ changes the guard, since a widened rule finds files that were always over.
 where each piece reads alone. A split whose piece calls methods only its parent defines, or
 copies a literal it may not import, adds an interface and hides nothing. Such a module stays
 whole, and its length entry ends `# conjoined: <why>`. The ratchet accepts that entry as an
-addition. It accepts a rise only in a diff that rewrites the reason, so growth restates the
-decision. The `# DECIDED:` marker at the top of `module_length_allowlist.txt` is the ruling.
+addition. It accepts a rise only in a diff that rewrites the reason to name the new max, so
+growth restates the decision and the number it approves. The `# DECIDED:` marker at the top of `module_length_allowlist.txt` is the ruling.
 The monkeypatch list takes no reason, because a seam can always remove a patch.
 
 That comparison
