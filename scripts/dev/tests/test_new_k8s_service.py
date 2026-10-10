@@ -122,10 +122,31 @@ def _entry(args) -> dict:
     )[0]
 
 
-def test_the_tasks_name_no_file_list(args):
-    """`k8s/manifests` derives the list; a scaffolded one would only restate it."""
-    tasks = yaml_fast.safe_load(scaffold.tasks_main(args.name))
-    assert tasks[0]["vars"] == {"manifests_rollout": args.name}
+def test_the_tasks_are_the_bare_include(args):
+    """`k8s/manifests` derives the lists, the service and the rollout; no var restates them.
+
+    The literal line matters as much as the parsed task: the rollout-gate guards resolve a
+    role with no `manifests_rollout` to its own name only by matching that line unquoted.
+    """
+    text = scaffold.tasks_main(args.name)
+    tasks = yaml_fast.safe_load(text)
+    assert tasks == [
+        {
+            "name": "Deploy widget to the cluster",
+            "ansible.builtin.include_role": {"name": "k8s/manifests"},
+        }
+    ]
+    assert "\n    name: k8s/manifests\n" in text
+
+
+def test_the_doc_leaves_the_glance_facts_to_the_generator(args):
+    """The block owns the tag, image, route and stance; the prose names the shared sources."""
+    doc = scaffold.role_doc(args.name, route=True)
+    glance = doc.split("<!-- /generated_from -->")[1]
+    assert "--tags" not in glance
+    assert "ingressroute-default.yaml.j2" in glance
+    unrouted = scaffold.role_doc(args.name, route=False)
+    assert "ingressroute-default.yaml.j2" not in unrouted
 
 
 def test_the_entry_earns_the_shared_defaults_without_a_template(args, tmp_path):

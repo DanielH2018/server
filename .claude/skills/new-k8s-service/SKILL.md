@@ -18,9 +18,10 @@ uv run python scripts/dev/new_k8s_service.py <name> \
     [--authelia one_factor|two_factor] [--no-route] [--strategy Recreate]
 ```
 
-That writes `tasks/main.yml`, `defaults/main.yml`, `templates/deployment.yaml.j2` and a
-`CLAUDE.md`, appends the `containers_list` entry, and runs the role-glance generator over the
-new doc. Its output renders clean through `prek run --all-files` with no hand edits.
+That appends the `containers_list` entry and writes `templates/deployment.yaml.j2`, the one
+manifest the role ships (#4298). Beside it go a `tasks/main.yml` that is the bare include of
+`k8s/manifests` with no vars, a `defaults/main.yml` holding the image pin, auto-deploy stance,
+resources and uid, and a `CLAUDE.md`. It then runs the role-glance generator over the new doc. Its output renders clean through `prek run --all-files` with no hand edits.
 
 **Copying a sibling is what this replaced** (#2855). A sibling's files carry its narration, and
 that narration is dated — littlelink's Deployment cited a Compose template that had not existed

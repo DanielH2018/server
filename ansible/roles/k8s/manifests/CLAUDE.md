@@ -17,8 +17,8 @@ read it when you change one.
 - name: Deploy <service>
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:                                   # manifests_service defaults to the role's name
-    manifests_rollout: <deployment name>  # '' skips the wait entirely
+  vars:                                   # every one optional; a bare include is the norm
+    manifests_rollout: <deployment name>  # default manifests_service; '' skips the wait
     manifests_rollout_kind: deploy        # or 'daemonset'; default 'deploy'
 ```
 
