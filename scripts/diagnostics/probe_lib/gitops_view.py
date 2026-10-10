@@ -220,7 +220,11 @@ def format_text(snap: dict) -> str:
         return "\n".join(lines)
 
     def unreadable(name: str) -> str:
-        return f"unreadable as this user ({name} is the deploy user's; try `sudo -u ubuntu`)"
+        return (
+            f"unreadable as this user ({name} is the deploy user's; an agent user reads it "
+            "through the ACL that `initial_setup.yml --tags claude_code` or "
+            "`--tags renovate_agent` grants, so check `getfacl /var/lib/gitops-deploy`)"
+        )
 
     last = snap["last_run"]
     if last["status"] == UNREADABLE:

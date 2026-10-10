@@ -288,6 +288,11 @@ claude_code_agent_journal_access: true
 # host runs as the agent (slice 4). tasks/agent_access.yml has how; false closes the agent's
 # ~/.claude to its own user again and removes the ACLs.
 claude_code_agent_operator_read: true
+# Whether the agent reads the GitOps deployer's state directory on the deployer host, so it can
+# check hold_sha and owed.jsonl before it lands (CLAUDE.md, When to wait). Read-only, by ACL,
+# as renovate_agent is granted; nothing there is a secret (the webhook lives in
+# /etc/gitops-deploy/config.env). tasks/agent_access.yml has how; false removes both entries.
+claude_code_agent_gitops_read: true
 # The agent's own memory store: Claude Code keys it by the project directory, the agent's clone.
 claude_code_agent_memory_dir: >-
   {{ claude_code_agent_user_home }}/.claude/projects/{{

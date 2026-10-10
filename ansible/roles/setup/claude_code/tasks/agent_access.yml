@@ -67,3 +67,27 @@
   failed_when:
     - not ansible_check_mode
     - claude_code_agent_read_acl is failed
+
+# The deployer's state directory is 0750 sys_user and the agent belongs to no group, so without
+# this it cannot check hold_sha or owed.jsonl before a landing (#4198). Not recursive, for the
+# reason renovate_agent's grant gives (#3607): the default entry makes each marker readable as
+# the deployer rewrites it, and a recursive rX reports changed on every apply. initial_setup.yml
+# runs gitops_deploy before claude_code, so the directory exists by the time this runs.
+- name: Let the agent user read the deployer's hold markers and owed ledger
+  ansible.posix.acl:
+    path: /var/lib/gitops-deploy
+    entity: "{{ claude_code_agent_user }}"
+    etype: user
+    permissions: "{{ item.permissions }}"
+    default: "{{ item.default }}"
+    state: "{{ 'present' if claude_code_agent_gitops_read else 'absent' }}"
+  loop:
+    - {permissions: rX, default: false}
+    - {permissions: r, default: true}
+  become: true
+  when: has_gitops | default(false)
+  register: claude_code_agent_gitops_acl
+  # Check mode on a fresh deployer creates no state directory, and setfacl on a missing path fails.
+  failed_when:
+    - not ansible_check_mode
+    - claude_code_agent_gitops_acl is failed
