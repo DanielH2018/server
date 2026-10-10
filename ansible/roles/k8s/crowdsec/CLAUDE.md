@@ -30,7 +30,8 @@ dashboard and the dashboard findings.
 Both are LAPI allowlists (`cscli allowlists`), fed by root crons on daniel-box every 5 min, and an
 allowlisted address raises no decision, local or CAPI. **`home-ips`** holds the home public IPv4
 and IPv6 /64 from ipify. **`remote-ips`** is `files/remote_allowlist.py`: a client address that got
-a 2xx on an `authelia`-gated router, kept 7 days, capped at 8 entries, which is what covers a VPN
+a 2xx on an `authelia`-gated router, kept 7 days, capped at
+`ansible/roles/k8s/crowdsec/files/remote_allowlist.py:CAP` entries, which is what covers a VPN
 exit or a phone (#2123). Its module docstring is the design.
 
 To see what is exempt: `… exec deploy/crowdsec -c crowdsec -- cscli allowlists inspect

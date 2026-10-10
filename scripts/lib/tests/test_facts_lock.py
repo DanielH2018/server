@@ -143,8 +143,8 @@ def test_repo_edb_gives_statuses(tmp_path):
     verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
     edb = build_repo_edb(repo, read_lock(repo / LOCK_REL))
     idb = derive(edb)
-    assert status_of(edb, idb, "CLAUDE.md#Gate") == "IN"
-    assert status_of(edb, idb, "CLAUDE.md#Style") == "CONVENTION"
+    assert status_of(idb, "CLAUDE.md#Gate") == "IN"
+    assert status_of(idb, "CLAUDE.md#Style") == "CONVENTION"
     assert ("t/test_m.py::test_limit", "CLAUDE.md#Gate") in edb.backref
     assert not idb.one_way
 
@@ -152,7 +152,7 @@ def test_repo_edb_gives_statuses(tmp_path):
 def test_unverified_section_with_citations_is_unverified(tmp_path):
     repo = _repo(tmp_path)
     edb = build_repo_edb(repo, {})
-    assert status_of(edb, derive(edb), "CLAUDE.md#Gate") == "UNVERIFIED"
+    assert status_of(derive(edb), "CLAUDE.md#Gate") == "UNVERIFIED"
 
 
 def test_new_citation_on_a_locked_unit_is_flagged(tmp_path):

@@ -3,7 +3,7 @@
 The hash is over the *thing the sentence is about*, at that granularity: a symbol's AST with
 docstrings stripped (a reword must not invalidate a claim about a value), a YAML key's value
 (a comment must not either), a marker line's text (moving it must not). ``None`` means the
-atom does not resolve; a probe atom is never hashed here — its shape hash needs a live run.
+atom does not resolve.
 
 A **path** atom is about location, not content, so its hash is over the path itself: the atom
 resolves while the file or directory is there and reads ``None`` once it is gone. A delete or
@@ -37,7 +37,6 @@ from lib.yaml_fast import safe_load
 
 from .citations import Citation
 
-HASHED_FORMS = frozenset({"path", "symbol", "yaml", "test", "marker"})
 _BACKREF = re.compile(r"^\s*#\s*fact:\s*(\S.*?)\s*$", re.MULTILINE)
 
 
@@ -140,8 +139,6 @@ def _outside_repo(target: Path, repo: Path) -> bool:
 
 def hash_atom(c: Citation, repo: Path) -> str | None:
     """The atom's hash now, or ``None`` when it does not resolve. Raises ``Ambiguous`` for a marker prefix matching twice."""
-    if c.form not in HASHED_FORMS:
-        return None
     target = repo / c.path
     if _outside_repo(target, repo):
         return None
@@ -160,7 +157,7 @@ def hash_atom(c: Citation, repo: Path) -> str | None:
 def atom_content(c: Citation, source: str) -> str | None:
     """The text a symbol, YAML, test or marker atom hashes, read from ``source``, the cited file's text.
 
-    ``None`` for a path or probe atom, or when the atom does not resolve in ``source``. Raises
+    ``None`` for a path atom, or when the atom does not resolve in ``source``. Raises
     ``Ambiguous`` for a marker prefix matching twice. Taking the file's text rather than a path
     is what lets ``evidence`` read the same atom out of an older commit.
     """

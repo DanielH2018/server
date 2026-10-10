@@ -20,7 +20,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.git import git
 
-FORMS = frozenset({"path", "symbol", "yaml", "test", "marker", "probe"})
+FORMS = frozenset({"path", "symbol", "yaml", "test", "marker"})
 REJECT_REASONS = frozenset({"file:line"})
 
 
@@ -53,7 +53,6 @@ _PATTERNS = (
     ("marker", re.compile(rf"^(?P<path>{_FILE}):DECIDED: (?P<sel>\S.*)$")),
     ("symbol", re.compile(rf"^(?P<path>{_FILE}\.py):(?P<sel>[A-Za-z_]\w*)$")),
     ("yaml", re.compile(rf"^(?P<path>{_FILE}\.ya?ml):(?P<sel>[\w-]+(?:\.[\w-]+)*)$")),
-    ("probe", re.compile(r"^probe\.py (?P<sel>[\w-]+(?: [\w./:-]+)?)$")),
     ("path", re.compile(rf"^(?P<path>{_FILE}/?)$")),
 )
 _FILE_LINE = re.compile(r"^[\w./-]+\.[a-z][a-z0-9]*:\d+(?:-\d+)?$")
@@ -280,7 +279,7 @@ def tracked_files(repo: Path) -> frozenset[str]:
 
 
 def in_tree(c: Citation, tracked: frozenset[str]) -> bool:
-    """Whether ``c`` is support at all: a probe, or a path naming a tracked file or directory.
+    """Whether ``c`` is support at all: whether it names a tracked file or directory.
 
     A citation is support only when it names a tracked file or a directory holding one, so an
     untracked or gitignored file is prose, not a broken fact — neither an error nor a warning.
@@ -290,8 +289,6 @@ def in_tree(c: Citation, tracked: frozenset[str]) -> bool:
     the non-slash branch needs. A rejected form stays rejected whatever its prefix: a line
     number is a claim about THIS tree however it is spelled.
     """
-    if c.form == "probe":
-        return True
     if c.path.endswith("/"):
         return any(p.startswith(c.path) for p in tracked)
     return c.path in tracked or any(p.startswith(c.path + "/") for p in tracked)
