@@ -1,34 +1,21 @@
-# CrowdSec record — the incidents, the measurements and the removed dashboard
+# CrowdSec record — the incidents, the measurements and the sidecar agent seeding
 
 Working-out moved off `ansible/roles/k8s/crowdsec/CLAUDE.md` (#2991), which a session reads on
 every touch of the WAF. The role doc keeps the rules; this page keeps the incident each rule was
-written after, the measurements behind the numbers, and the Metabase dashboard that used to ship
-in the engine pod.
+written after, the measurements behind the numbers, how the traefik and authelia sidecar agents are
+seeded, and what the removed Metabase dashboard showed.
 
 ## The rollout race the `rollout status` gate closed
 
-The task "Register the remote agent machines on the LAPI" runs
-`k3s kubectl exec deploy/crowdsec -- cscli machines ...`, immediately after `k8s/manifests`'
-rollout-restart, which deliberately does not wait — the drain is queued for the end of the batch.
-So whenever a `crowdsec` manifest actually changed, the exec landed on a pod that was terminating
-or not yet ready, and the task failed.
+The `rollout status` gate ahead of the LAPI tasks (PR #229, 2026-08-16) closed a race between the
+"Register the remote agent machines on the LAPI" task and the manifests' rollout-restart, which
+deliberately does not wait. `no_log: true` on that task censors the error body, so a surviving
+failure reads as an opaque "Module failed: non-zero return code" and looks like a credential or RBAC
+problem. A `kubectl wait --for=condition=Available` gate would not have helped, because the pod is
+single-replica and the old pod satisfies the condition.
 
-Observed 2026-08-16: a one-line comment edit to `deployment.yaml.j2` changed the render,
-triggered the roll, and the deploy came back `failed=1` with two loop items OK and two failed.
-Re-running once the pod was `2/2` gave `failed=0` with no other change.
-
-`no_log: true` on that task — it pipes the agent password over stdin — censors the error body, so
-the failure read as an opaque "Module failed: non-zero return code" with no hint that it was a
-rollout race. It is easy to misread as a credential or RBAC problem.
-
-PR #229 fixed it on 2026-08-16 with a `rollout status` gate ahead of the LAPI tasks, proven by
-the deploy that shipped it: the gate blocked 61.83s, registration then succeeded, and the run was
-`failed=0` on the first pass. A naive `kubectl wait --for=condition=Available` would not have
-helped — the pod is single-replica, so the old pod satisfies the condition.
-
-If the signature returns, wait for `kubectl -n homelab get pods` to show `crowdsec` at `1/1` (`2/2`
-before the Metabase sidecar went on 2026-08-22), then re-run. The second pass rolls nothing and
-succeeds, and a deploy that changes no `crowdsec` manifest never hits it.
+If the signature returns, wait for `kubectl -n homelab get pods` to show `crowdsec` at `1/1`, then
+re-run. The second pass rolls nothing and succeeds.
 
 ## The parser whitelist the remote allowlist supersedes
 
@@ -106,27 +93,85 @@ binary out of Renovate's view for a 0.05% loss.
 
 ## The Metabase dashboard was removed (2026-08-22)
 
-The engine pod carried a Metabase sidecar, plus a `metabase-seed` initContainer, a
-`crowdsec-dashboard` Service and its Authelia-gated IngressRoute at `crowdsec.local.<domain>`. It
-is gone, for two reasons:
+**HISTORY — the Metabase sidecar.** The engine pod carried a Metabase sidecar, a `metabase-seed` initContainer and an Authelia-gated `crowdsec.local.<domain>` route until 2026-08-22. Its startupProbe withheld the `crowdsec` Service endpoints that front LAPI and AppSec (observed 2026-08-16: LAPI serving while the pod sat 1/2 with no endpoints), and the four Security-folder Grafana boards already covered its aggregate view.
 
-- **It gated the edge WAF.** Pod Ready is the AND of all containers, so Metabase's startupProbe
-  withheld the `crowdsec` Service endpoints that front LAPI and AppSec. Observed 2026-08-16: LAPI
-  was serving while the pod sat 1/2 with no endpoints.
-- **Its aggregate view was already Grafana's.** The four Security-folder boards
-  (`ansible/roles/k8s/observability/files/dashboards/Security/`) read the engine's `:6060` metrics.
+**What was lost has no Grafana equivalent.** Metabase read the LAPI's `decisions` and `alerts` tables
+directly, so it showed what Prometheus has no label for: per-IP identity, geography, ASN, decision
+origin and row-level tables. Loki is not a substitute, because the engine's alert insertions never
+reach pod stdout (verified over 7 days against a DB holding 424 alerts younger than that). Use
+`cscli decisions list` and `cscli alerts list` for per-ban detail. Upstream
+`crowdsecurity/grafana-dashboards` is Prometheus-only and ships the same panel set this repo
+already carries, so it cannot fill the gap either.
 
-**What was lost, and has no Grafana equivalent.** Metabase read the LAPI's `decisions` and
-`alerts` tables directly, so it could show what Prometheus has no label for: per-IP identity
-(`Top IPs`, `By Source IP`), geography (`Alerts Map`, `Top countries`), ASN (`Top AS`), decision
-origin (`By Origin`), and row-level tables (`Actives Decisions List`, `Alerts Table`). Loki is not
-a substitute — the engine's alert insertions never reach pod stdout, verified over 7 days against
-a DB holding 424 alerts younger than that. Use `cscli decisions list` and `cscli alerts list` for
-per-ban detail.
+## Sidecar agent seeding
 
-Upstream `crowdsecurity/grafana-dashboards` cannot fill the gap either: it is Prometheus-only, was
-last touched 2023-06-20 targeting CrowdSec v1.5.x, and its `dashboards_v5` panel set is already
-what this repo ships, with identical titles and `instance` relabelled to `machine`.
+The traefik pod and the authelia pod each run a `crowdsec-agent` sidecar and three seeding init
+containers, in the order `crowdsec-hub-install`, `crowdsec-config-install`, `crowdsec-data-install`.
+Both pods render them from `ansible/templates/crowdsec-agent.yml.j2`, so the order and the
+tolerances hold for both, and a change to one is a change to both (#3741). Authelia's pod adds
+`wait-for-redis` after these three, which `docs/authelia-sessions-and-crowdsec-init.md` covers.
+
+The image entrypoint opens with a "Populating configuration directory" step, an
+`rsync -a --ignore-existing /staging/etc/crowdsec/* /etc/crowdsec` that runs under `set -e` and only
+while `/etc/crowdsec/config.yaml` is absent. About twenty staged files are root-only: the LAPI and
+online credentials and the bundled hub tree. The non-root sidecar therefore exits 23 on that rsync,
+and the kubelet restarts it. The restart finds `config.yaml`, skips the block, and the pod settles
+at 2/2 Running with one restart on the clock. That restart failed every authelia deploy's health
+gate, because `probe.py health` fails closed on any container restart inside its 180s window
+(#1173; traefik hit it first as #976). Each init container below works around one half of that
+staging behaviour.
+
+1. **`crowdsec-hub-install` runs first, as root with `CHOWN` and `DAC_READ_SEARCH`.** The rsync
+   skips the staged hub tree, which is part of the exit 23 it tolerates, but it copies the parser
+   configs, which are symlinks into that tree. `geoip-enrich.yaml` then resolved to a hub file that
+   was never staged, and the agent dropped the parser once per parser-load pass with `Ignoring file …
+   lstat /etc/crowdsec/hub/…: no such file or directory`. GeoIP enrichment stayed dead behind a
+   healthy pod (#1211). This container copies the tree with `cp -a`, hands it to the pod uid with
+   `chown -R`, and runs `chmod -R a+rX,u+w`. The agent's entrypoint writes into the tree on every
+   start, so a root-owned copy fails with `permission denied` and exits the sidecar. The container
+   ends in `exit 0`.
+2. **`crowdsec-config-install` runs as the pod uid, never as root.** It runs the entrypoint's rsync
+   itself so the sidecar finds `config.yaml` already present, then installs `acquis.yaml` and the
+   whitelist parsers over the staged copies, and creates the log file the app must write. Root with
+   `ALL` dropped cannot `chown`, so owning the file by creating it as the pod uid sidesteps the
+   capability.
+3. **`crowdsec-data-install` runs as root with `DAC_READ_SEARCH`.** The image ships its datafiles at
+   `/staging/var/lib/crowdsec/data` mode 0600 root:root, and the entrypoint symlinks them into the
+   data volume instead of copying. The non-root agent cannot read through the link, so GeoIP never
+   initialises (`unable to open GeoLite2-City.mmdb: permission denied`) behind a 2/2 Running pod
+   (#1177; traefik hit it first as #990). This container copies the files in world-readable, which
+   defeats the symlink because the entrypoint's `[ ! -e ]` guard skips a name that already exists.
+   It copies per file and ends in `exit 0`, so an unreadable file leaves that one name on the
+   symlink path.
+
+Hub-install and data-install are the pod's two `runAsUser: 0` containers. Each ends in `exit 0`
+because both host pods roll under `Recreate`: the old pod is already gone, so a failing init
+container takes the edge or SSO down for the whole homelab (the #986 outage) instead of costing one
+parser.
+
+**Hub-install must run before the rsync, or it no-ops silently.** The rsync recurses from the parent
+listing, so it creates `/etc/crowdsec/hub` owned by the pod uid before it fails to read into it.
+Root with `ALL` dropped cannot write into another uid's directory, because `DAC_READ_SEARCH` is
+the read half of the override and `DAC_OVERRIDE` the write half. The copy would fail, `exit 0` would
+swallow it, and the pod would come up with the warning intact. Going first, hub-install creates the
+directory while the emptyDir is still empty, and the rsync's `--ignore-existing` then leaves those
+files alone.
+
+**Exit 23 is the only rsync status config-install tolerates.** A blanket `|| true` would start an
+agent on a half-populated config with nothing saying so. The files exit 23 skips are the LAPI and
+online credentials, which the agent regenerates on start. The `DECIDED:` marker on that tolerance in
+the template was amended by #1211, not reversed: the skipped hub tree is not all re-downloaded by
+`cscli hub update` before the parser load, which is why hub-install exists.
+
+Three tests hold both pods to this:
+`ansible/tests/services/test_crowdsec_config_install_seeds_staged_tree.py`,
+`ansible/tests/services/test_crowdsec_optional.py` and
+`ansible/tests/services/test_crowdsec_hub_install_stages_the_hub_tree.py`.
+To verify a deploy of either host role, read the sidecar's restart count rather than pod readiness:
+
+```
+kubectl get pod -n homelab -l app=<traefik|authelia> -o jsonpath='{.items[*].status.containerStatuses[*].restartCount}'
+```
 
 ## What a sidecar scrape job needs, and three dashboard findings
 
