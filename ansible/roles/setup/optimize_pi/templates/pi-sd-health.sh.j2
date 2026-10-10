@@ -22,15 +22,7 @@ source /usr/local/lib/kuma-push-lib.sh || {
 }
 
 COUNTER=/sys/fs/ext4/mmcblk0p2/errors_count
-{# `domain` here is the SOPS-loaded server domain (community.sops.load_vars in
-   initial_setup.yml outranks the Pi host_vars' daniel-pi.com override), NOT
-   hostvars['daniel-server'].domain — secrets are play-scoped, so that lookup
-   fails cross-host. Verified: the Pi's wg-easy renders the same way. #}
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_URL="https://${KUMA_HOST}/api/push/{{ pi_sd_health_push_token }}"
+PUSH_TOKEN="{{ pi_sd_health_push_token }}"
 
 if COUNT=$(cat "$COUNTER" 2>/dev/null); then
   if [ "$COUNT" = "0" ]; then
@@ -65,7 +57,7 @@ if [ "$GZ_STATUS" != "up" ]; then
 fi
 MSG="${MSG}; ${GZ_MSG}"
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-sd-health
+kuma_push "$STATUS" "$MSG" "$PUSH_TOKEN" pi-sd-health
 
 # Durable record of this cycle, so `probe.py alerts` can reconstruct the episode. The full
 # reasoning — why a file and not `logger`, and why the timestamp format is load-bearing —

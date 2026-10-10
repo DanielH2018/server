@@ -29,11 +29,7 @@ export KUBECONFIG=/home/{{ sys_user }}/.kube/config
 export CONFIGARR_NAMESPACE={{ k8s_namespace }}
 export CONFIGARR_MAX_AGE_H={{ configarr_k8s_max_age_hours }}
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_URL="https://${KUMA_HOST}/api/push/{{ monitor_bridge_configarr_push_token }}"
+PUSH_TOKEN="{{ monitor_bridge_configarr_push_token }}"
 
 # The reader prints `up<TAB>msg` or `down<TAB>msg` and always exits 0. A nonzero exit or empty
 # output therefore means the reader ITSELF broke — report that rather than pushing nothing, which
@@ -46,4 +42,4 @@ else
   MSG="${OUT#*$'\t'}"
 fi
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" configarr-health
+kuma_push "$STATUS" "$MSG" "$PUSH_TOKEN" configarr-health

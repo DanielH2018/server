@@ -21,8 +21,10 @@
   # The invariant that binds ALL of them — no push token ever reaches curl's argv — is asserted
   # separately there with no exemptions at all, so opting out of the library cannot opt a script
   # out of the security property.
-  ansible.builtin.copy:
-    src: kuma-push-lib.sh
+  # A template, not a copy: it bakes in the Kuma host and the ingress VIP, which are the same
+  # for every caller, so each caller passes only its token (#4219).
+  ansible.builtin.template:
+    src: kuma-push-lib.sh.j2
     dest: /usr/local/lib/kuma-push-lib.sh
     owner: root
     group: root
@@ -186,8 +188,10 @@
   #
   # One slug per host because a shared check stays green while any host pings it, so one host
   # missing its reboot was invisible.
-  # The key is sourced from ping.env at run time. `[ -r ] &&` guards the `.`, because a failed
-  # `.` exits /bin/sh and would skip the shutdown. The ping discards its output.
+  # The ping is kuma-push-lib.sh's `hc_ping`, which reads the key at run time (#4220). The
+  # library is bash and cron's shell is /bin/sh, so the job runs it in an explicit `bash -c`.
+  # The `.` happens inside that child, so a missing library fails only the ping, never the
+  # shutdown.
   # The schedule and the `-r +N` delay come from group_vars/all.yml, not from literals here:
   # roles/k8s/uptime-kuma derives its Kuma maintenance window from the same four values, and a
   # reboot moved without that window pages Discord for every monitor it takes down.
@@ -198,7 +202,7 @@
     minute: "{{ weekly_reboot_minute }}"
     hour: "{{ weekly_reboot_hour }}"
     weekday: "{{ weekly_reboot_weekday }}"
-    job: "{ [ -r /etc/healthchecks/ping.env ] && . /etc/healthchecks/ping.env ; [ -n \"$HC_PING_KEY\" ] && curl -fs -m 10 --retry 3 \"https://hc-ping.com/$HC_PING_KEY/weekly-reboot-{{ inventory_hostname }}\" >/dev/null 2>&1 ; /sbin/shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}; } 2>&1 | logger -t weekly-restart"
+    job: "{ /bin/bash -c '. /usr/local/lib/kuma-push-lib.sh && hc_ping weekly-reboot-{{ inventory_hostname }} up weekly-restart' ; /sbin/shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}; } 2>&1 | logger -t weekly-restart"
     user: root
   become: true
 
@@ -259,7 +263,7 @@
   # ago is pruned as soon as it's unused — the window protects fresh builds/pulls.)
   # Pings healthchecks.io's `<host>-docker-prune` check ON SUCCESS (`&&`): a failed prune
   # leaves the check un-pinged so it alerts. Ping kept in the Ansible-managed job so a
-  # [crons] redeploy can't silently strip it. The key is sourced as the reboot's is.
+  # [crons] redeploy can't silently strip it. It calls `hc_ping` under `bash -c`, as the reboot does.
   # has_docker-gated: daniel-box and daniel-server have no docker binary; the ping lives inside this same job, so gating it
   # here (rather than skipping only the `docker` call) also retires the monitor cleanly
   # instead of leaving a dead-man that never pings on those two hosts.
@@ -270,7 +274,7 @@
     name: "Clean unused Docker images"
     minute: "{{ initial_setup_docker_prune_cron_minute }}"
     hour: "{{ initial_setup_docker_prune_cron_hour }}"
-    job: '{ /usr/bin/docker system prune -a -f --filter "until=168h" && { [ -r /etc/healthchecks/ping.env ] && . /etc/healthchecks/ping.env; [ -n "$HC_PING_KEY" ] && curl -fs -m 10 --retry 3 "https://hc-ping.com/$HC_PING_KEY/{{ inventory_hostname }}-docker-prune" >/dev/null 2>&1; }; } 2>&1 | logger -t docker-prune'
+    job: '{ /usr/bin/docker system prune -a -f --filter "until=168h" && /bin/bash -c ". /usr/local/lib/kuma-push-lib.sh && hc_ping {{ inventory_hostname }}-docker-prune up docker-prune"; } 2>&1 | logger -t docker-prune'
     user: "{{ ansible_facts.user_id }}"
   become: true
   tags: [prune, crons]
@@ -423,16 +427,26 @@
       - ansible/roles/setup/initial_setup/templates/git-tree-lock.j2
 
 # kuma-push-lib.sh is sourced by EVERY health cron on every host, with a `|| exit 1` guard — so a
-# stale copy silently changes how every heartbeat pushes. `tags: [always]`, matching the copy task it records: this fragment must
-# not be left describing a version a tag-scoped run never deployed.
-- name: Record the deployed shared push library
+# stale copy silently changes how every heartbeat pushes. `tags: [always]`, matching the template task it records: this fragment must
+# not be left describing a version a tag-scoped run never deployed. A render stamp rather than
+# a deployed pair, because the live file is rendered and no longer matches its source byte for
+# byte (#4219).
+- name: Stamp the rendered shared push library
   tags: [always]
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
-    stamp_deployed_name: kuma-push-lib
-    stamp_deployed_pairs:
-      - live: /usr/local/lib/kuma-push-lib.sh
-        src: ansible/roles/setup/initial_setup/files/kuma-push-lib.sh
+    stamp_render_name: kuma-push-lib
+    stamp_render_templates:
+      - ansible/roles/setup/initial_setup/templates/kuma-push-lib.sh.j2
+
+# The library was a `copy:` until #4219, recorded as a deployed pair whose source no longer
+# exists. Left in place, that fragment names a missing source on every host forever.
+- name: Remove the retired deployed-pair record of the push library
+  tags: [always]
+  ansible.builtin.file:
+    path: /var/lib/homelab/setup-deployed-manifest.d/kuma-push-lib
+    state: absent
+  become: true
 
 # The drift library is itself copy:-deployed, so the arm it implements watches it. `tags:
 # [always]`, matching the copy task above, so a tag-scoped run cannot leave this fragment

@@ -28,9 +28,10 @@ window. Each behaviour below is therefore guarded by an accept/reject pair.
 """
 
 from _helpers import ANSIBLE
+from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
-LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
+LIB = ANSIBLE / "roles/setup/initial_setup/templates/kuma-push-lib.sh.j2"
 
 # What real curl writes to stderr when the transport fails and `-S` is in effect. The stub
 # reproduces it so that `test_a_recovered_transport_failure_writes_nothing_to_stderr` is not
@@ -73,7 +74,7 @@ def _run_push(tmp_path, responses, extra_prelude=""):
     }}
     sleep() {{ echo "$1" >> "{sleeps_file}"; }}
     logger() {{ shift; echo "$*" >> "{logs_file}"; }}
-    kuma_push up test-msg https://push.example/secret-token kuma.local 10.0.0.1 test-tag
+    kuma_push up test-msg secret-token test-tag
     echo "rc=$? ok=$KUMA_PUSH_OK"
     """
     result = run(["bash", "-c", script])
@@ -101,8 +102,8 @@ def test_connection_failure_then_success_delivers_the_beat(tmp_path):
     assert sleeps == [30]
     assert any("retrying" in line for line in logs)
     # The push URL carries the token (repo-root CLAUDE.md: never print a line that could hold
-    # it). Assert the retry log line doesn't carry the URL string at all.
-    assert not any("push.example" in line for line in logs)
+    # it). Assert the retry log line does not carry the token at all.
+    assert not any("secret-token" in line for line in logs)
 
 
 def test_a_recovered_transport_failure_writes_nothing_to_stderr(tmp_path):
@@ -245,7 +246,7 @@ def test_retry_budget_is_well_under_the_fastest_affected_cron_period():
     # ansible/roles/k8s/crowdsec/tasks/main.yml). Stated as a floor, and the attempt count is
     # derived from the file text rather than a bare literal, so a future change to any of the
     # three constants has to argue with the arithmetic, not just read as "still small."
-    text = LIB.read_text()
+    text = rendered_shell_text("setup", "initial_setup", "kuma-push-lib.sh.j2")
     assert "retry_delay_s=30" in text
     assert "--max-time 10" in text
     assert "for attempt in 1 2 3" in text
@@ -276,6 +277,6 @@ def test_retry_window_covers_close_to_twice_the_observed_outage():
 def test_kuma_push_still_never_fails_the_cron():
     # A push failure must not become a cron failure (a second alert for the same event) — the
     # retry must preserve this contract, not just add attempts on top of it.
-    text = LIB.read_text()
+    text = rendered_shell_text("setup", "initial_setup", "kuma-push-lib.sh.j2")
     tail = text[text.index("kuma_push() {") :]
     assert "return 0\n}" in tail

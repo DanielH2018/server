@@ -68,10 +68,6 @@ source /usr/local/lib/kuma-push-lib.sh || {
 
 export KUBECONFIG=/home/{{ sys_user }}/.kube/config
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 # Token sourced, never inlined: this script lands 0755, so an inlined token is readable by every
 # local account and is enough to forge or suppress a heartbeat — which on THIS monitor would hide
 # a missing backup. 0640 root:{{ sys_user }} env file, same split as ping.env below.
@@ -82,10 +78,10 @@ if [[ -z "$LONGHORN_BACKUP_PUSH_TOKEN" ]]; then
   logger -t longhorn-backup-health "kuma push token unreadable — skipping push (run initial_setup.yml)"
   exit 0
 fi
-PUSH_URL="https://${KUMA_HOST}/api/push/${LONGHORN_BACKUP_PUSH_TOKEN}"
-# The token has to be sourced this early: the boot-grace push below also needs PUSH_URL, so
-# sourcing can't wait until after the reader runs. Once folded into PUSH_URL the raw value has
-# no further use in this script, so drop it from the shell's own variable table right away —
+PUSH_TOKEN="$LONGHORN_BACKUP_PUSH_TOKEN"
+# The token has to be sourced this early: the boot-grace push below also needs PUSH_TOKEN, so
+# sourcing can't wait until after the reader runs. Once copied into PUSH_TOKEN the env file's name
+# has no further use in this script, so drop it from the shell's own variable table right away —
 # kuma-push.env.j2 does not `export` any of its six tokens today, so none of them currently
 # reach a child process's environ, but this makes that true by construction rather than by the
 # env file staying in a particular shape, and closes the same class of risk for good.
@@ -96,7 +92,7 @@ unset -v LONGHORN_BACKUP_PUSH_TOKEN
 # immediately whatever grace the check is configured with — so this guard, not a grace value, is
 # what makes a restart quiet. Exit 0, not 1: a skipped run must not itself read as a failure.
 #
-# The Kuma beat still goes, which is why the guard sits AFTER PUSH_URL rather than at the top of
+# The Kuma beat still goes, which is why the guard sits AFTER PUSH_TOKEN rather than at the top of
 # the script. The `k3s Longhorn Backup` tile has a 1200s window against this 600s cron, so it
 # tolerates exactly one missed push — the one a silent skip would consume, leaving the tile's
 # margin decided by cron jitter and how long the k8s API call takes. Pushing `up` with a skip
@@ -106,13 +102,13 @@ unset -v LONGHORN_BACKUP_PUSH_TOKEN
 # Kept in shell rather than routed through the Python reader: it reads /proc/uptime, which the
 # reader has no reason to touch, and the two checks below (`test_a_guarded_cron_still_beats_its_
 # kuma_tile`, `test_a_skipped_run_pings_no_healthchecks_slug`) assert on this exact block's text
-# and position — before PUSH_URL's dependents run, after PUSH_URL is set.
+# and position — before PUSH_TOKEN's dependents run, after PUSH_TOKEN is set.
 #
 # Neither healthchecks.io slug is pinged here. Their graces are sized for exactly one skipped
 # slot (docs/healthchecks-io-deadman.md), and a success ping for a run that did not happen would
 # be a lie the dead-man exists to catch.
 if boot_grace_active {{ k3s_health_cron_boot_grace_s }} longhorn-backup-health; then
-  kuma_push up "skipped — host still booting" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" longhorn-backup-health
+  kuma_push up "skipped — host still booting" "$PUSH_TOKEN" longhorn-backup-health
   exit 0
 fi
 
@@ -236,53 +232,35 @@ else
   fi
 fi
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" longhorn-backup-health
+kuma_push "$STATUS" "$MSG" "$PUSH_TOKEN" longhorn-backup-health
 
 # Off-premises dead-man's switch. The push above targets Kuma, which runs ON the cluster this
 # script watches — a cluster or WAN outage kills the push AND the monitor waiting for it, so
 # nothing alerts and the failure is invisible until someone looks. hc-ping.com is off-site and
 # alerts on SILENCE, the one signal an on-prem monitor structurally cannot produce. Optional:
-# with no key configured this renders empty and the block is skipped, leaving the host unchanged.
-# Sourced rather than inlined: this script is 0755 so the {{ sys_user }} cron can execute it,
-# which would make an inlined key readable by every local account. The env file is 0640.
-HC_PING_KEY=""
-# shellcheck source=/dev/null
-[[ -r /etc/healthchecks/ping.env ]] && . /etc/healthchecks/ping.env
-if [[ -n "$HC_PING_KEY" ]]; then
-  # Bare slug, deliberately NOT ?create=1 — auto-provisioning turns a typo'd slug into a brand
-  # new check that nobody is watching and that reads green forever.
-  HC_URL="https://hc-ping.com/${HC_PING_KEY}/longhorn-backup-health"
-  [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
-  # `-fs` without `-S`, and stderr discarded on top of it (#2511): `--retry` writes
-  # `Warning: ... Will retry` to stderr for an attempt a later one recovers, and cron mails
-  # that from a run that succeeded. Whether `-s` alone silences it varies by curl version, so
-  # the redirect is the guarantee. Nothing is lost — the `|| logger` below is the report, and
-  # it fires on the failure this hides the chatter of.
-  curl -fs --max-time 10 --retry 3 --data-raw "$MSG" "$HC_URL" >/dev/null 2>&1 \
-    || logger -t longhorn-backup-health "healthchecks ping failed (status=${STATUS})"
+# alerts on SILENCE, the one signal an on-prem monitor structurally cannot produce. Optional:
+# with no key configured, hc_ping skips both slugs and leaves the host unchanged.
+hc_ping longhorn-backup-health "$STATUS" longhorn-backup-health "$MSG"
 
-  # A SECOND slug, reporting on Kuma itself rather than on backups. The ping above goes out
-  # whether or not the Kuma push above it succeeded, which is correct for a backup check and
-  # leaves one case uncovered: Kuma alone being broken. Every alert in this homelab terminates
-  # in Kuma — there is no Alertmanager — so a dead pod, a wedged SQLite or a fenced-off port
-  # silences all ~82 tiles while every other off-site check keeps reporting green. The cluster
-  # being down is already caught by this script's own silence; Kuma being down was not caught
-  # by anything.
-  #
-  # This carries the Kuma push's exit status off-site, so a Kuma-only outage becomes silence
-  # on hc-ping within one grace period. Chosen here because this script runs every 10 minutes
-  # and already talks to Kuma — no new cron, no new credential, one of the 14 free slots.
-  #
-  # No body: the status IS the signal, and MSG belongs to the other check.
-  #
-  # `${KUMA_PUSH_OK:-1}` — matching pi-sd-health.sh.j2 and pi-recovery-health.sh.j2, the other two
-  # callers that read this var — not a bare `$KUMA_PUSH_OK`: under `set -u`, `(( KUMA_PUSH_OK ))`
-  # expands the variable before evaluating the arithmetic, so an older kuma-push-lib.sh that
-  # never sets it makes the reference fatal, killing this script before the hc-ping call above
-  # even ran and silencing the off-site deadman rather than reddening it.
-  HC_ALIVE_URL="https://hc-ping.com/${HC_PING_KEY}/uptime-kuma-alive"
-  (( ${KUMA_PUSH_OK:-1} )) || HC_ALIVE_URL="${HC_ALIVE_URL}/fail"
-  # No `-S`, stderr discarded, for the reason the backup ping above gives (#2511).
-  curl -fs --max-time 10 --retry 3 "$HC_ALIVE_URL" >/dev/null 2>&1 \
-    || logger -t longhorn-backup-health "healthchecks kuma-alive ping failed (push_ok=${KUMA_PUSH_OK:-1})"
-fi
+# A SECOND slug, reporting on Kuma itself rather than on backups. The ping above goes out
+# whether or not the Kuma push above it succeeded, which is correct for a backup check and
+# leaves one case uncovered: Kuma alone being broken. Every alert in this homelab terminates
+# in Kuma — there is no Alertmanager — so a dead pod, a wedged SQLite or a fenced-off port
+# silences all ~82 tiles while every other off-site check keeps reporting green. The cluster
+# being down is already caught by this script's own silence; Kuma being down was not caught
+# by anything.
+#
+# This carries the Kuma push's exit status off-site, so a Kuma-only outage becomes silence
+# on hc-ping within one grace period. Chosen here because this script runs every 10 minutes
+# and already talks to Kuma — no new cron, no new credential, one of the 14 free slots.
+#
+# No body: the status IS the signal, and MSG belongs to the other check.
+#
+# `${KUMA_PUSH_OK:-1}` — matching pi-sd-health.sh.j2 and pi-recovery-health.sh.j2, the other two
+# callers that read this var — not a bare `$KUMA_PUSH_OK`: under `set -u`, `(( KUMA_PUSH_OK ))`
+# expands the variable before evaluating the arithmetic, so an older kuma-push-lib.sh that
+# never sets it makes the reference fatal, killing this script before the hc-ping call above
+# even ran and silencing the off-site deadman rather than reddening it.
+KUMA_ALIVE=up
+(( ${KUMA_PUSH_OK:-1} )) || KUMA_ALIVE=down
+hc_ping uptime-kuma-alive "$KUMA_ALIVE" longhorn-backup-health

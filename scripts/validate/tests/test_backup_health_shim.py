@@ -21,7 +21,12 @@ from lib.repo_paths import K3S_FILES, K3S_ROLE
 BACKUP_HEALTH = K3S_ROLE / "templates" / "longhorn-backup-health.sh.j2"
 BACKUP_HEALTH_READER = K3S_FILES / "longhorn_backup_health.py"
 KUMA_PUSH_LIB = (
-    v.ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "kuma-push-lib.sh"
+    v.ANSIBLE
+    / "roles"
+    / "setup"
+    / "initial_setup"
+    / "templates"
+    / "kuma-push-lib.sh.j2"
 )
 
 
@@ -175,19 +180,28 @@ def _run_rendered_shim(
     kuma_push_call = tmp_path / "kuma-push-call.txt"
 
     curl_calls = tmp_path / "bin" / "curl-calls"
+    # `hc_ping` hands curl the key-bearing URL on stdin (`-K -`), so the stub records stdin
+    # beside the argv, on one line per call.
     stub_bin = fake_bin(
         tmp_path / "bin",
-        curl=f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {curl_calls}\n",
+        curl=f'#!/bin/sh\nprintf \'%s %s\\n\' "$*" "$(cat)" >> {curl_calls}\n',
         **(extra_stub_files or {}),
     )
     curl_calls.touch()
 
+    # The library reads the ping key since #4220, so the key-file seam goes into a tmp copy
+    # of the rendered library rather than into the script.
+    lib = tmp_path / "kuma-push-lib.sh"
+    lib.write_text(
+        sl.render_template(KUMA_PUSH_LIB, v.template_context(KUMA_PUSH_LIB)).replace(
+            "/etc/healthchecks/ping.env", str(hc_ping_env)
+        )
+    )
     script = rendered
     script = script.replace(
-        "source /usr/local/lib/kuma-push-lib.sh ||", f"source {KUMA_PUSH_LIB} ||"
+        "source /usr/local/lib/kuma-push-lib.sh ||", f"source {lib} ||"
     )
     script = script.replace("/etc/rancher/k3s/kuma-push.env", str(push_token_env))
-    script = script.replace("/etc/healthchecks/ping.env", str(hc_ping_env))
     reader_invocation = re.search(
         r"/usr/local/bin/uv run --no-project --no-python-downloads --python \S+ "
         r"/opt/longhorn-backup-health/longhorn_backup_health\.py",

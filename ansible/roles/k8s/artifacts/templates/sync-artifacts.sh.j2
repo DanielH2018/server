@@ -95,8 +95,7 @@ if [ -r "$kuma_lib" ]; then
   # shellcheck source=/dev/null
   source "$kuma_lib"
   kuma_push "$verdict" "${report:-no peers configured}" \
-    "https://uptime-kuma.local.{{ domain }}/api/push/{{ artifacts_sync_push_token }}" \
-    "uptime-kuma.local.{{ domain }}" "{{ k3s_metallb_ingress_vip }}" sync-artifacts
+    "{{ artifacts_sync_push_token }}" sync-artifacts
 else
   logger -t sync-artifacts "$kuma_lib missing, no Kuma verdict pushed; run initial_setup on this host"
 fi

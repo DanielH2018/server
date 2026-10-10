@@ -137,19 +137,21 @@ second channel. A Kuma that accepts a push and then drops the alert still reads 
 ## What leaves the house
 
 Healthchecks.io stores the ping body (first 100 kB per ping), so the body is the disclosure
-surface. Two of the six send a generic string instead of their Kuma message, because theirs
+surface. Every host cron pings through `hc_ping SLUG STATUS TAG [BODY]` in
+`ansible/roles/setup/initial_setup/templates/kuma-push-lib.sh.j2`, which sends a body only when
+the caller passes one (#4220). Two of the six send a generic string instead of their Kuma message, because theirs
 name internal infrastructure, and one sends no body at all:
 
 | Check | Body sent off-site | Why |
 |---|---|---|
-| `longhorn-backup-health` | full message | Names namespaces/PVCs, and the backup-target condition can carry the B2 bucket. **Kept deliberately** — this is the one whose detail makes a 3 AM page actionable. Drop the `--data-raw` argument to send status only. |
+| `longhorn-backup-health` | full message | Names namespaces/PVCs, and the backup-target condition can carry the B2 bucket. **Kept deliberately** — this is the one whose detail makes a 3 AM page actionable. Drop the BODY argument to send status only. |
 | `daniel-box-disk-health` | full message | A disk percentage. Nothing to withhold. |
 | `etcd-snapshot-offbox` | none | Status only. Its failure message can carry the R2 bucket name and k3s's own error text; the bucket is the same one every Longhorn backup lives in, so nothing about it goes off-site. The detail is in Kuma. |
 | `manifest-prune-check` | generic | Its message names live IngressRoute/Middleware objects — internal service and hostname fragments. |
 | `pi-peer-backup` | generic | An rsync failure echoes `PI_SRC`, which carries the Pi's LAN IP and ssh user. |
 | `registry-gc` | full message | A blob/link count, or a failure naming the cluster namespace and the `registry` Deployment. Low value to an outsider and it is what makes the failure actionable. |
 | `uptime-kuma-alive` | none | Status only, and status is the whole signal — it reports on Kuma, not on what Kuma found. |
-| `weekly-reboot-<host>`, `<host>-docker-prune` | none | Status only. The ping discards curl's output, and the cron sends no body. |
+| `weekly-reboot-<host>`, `<host>-docker-prune` | none | Status only. The cron passes no BODY. |
 
 The withheld detail is still in Kuma, on the LAN. The off-site copy only has to carry *that*
 something is wrong; the diagnosis is available as soon as you can reach the house.
@@ -165,8 +167,9 @@ The `{{ sys_user }}`-run scripts are `0755` (their crons must execute them), so 
 in them is readable by every local account on daniel-box — which is already true of the Kuma push
 tokens sitting in them today. The ping key has a wider blast radius than a Kuma token (one
 spoofs a single monitor, the other spoofs every check in the project), so it lives in
-`/etc/healthchecks/ping.env` at `0640 root:{{ sys_user }}` and is sourced at runtime. That
-covers every caller: `manifest-prune-check` and `registry-gc` run as root, the other two as
+`/etc/healthchecks/ping.env` at `0640 root:{{ sys_user }}`, and `hc_ping` reads it at runtime in a
+child shell, so the key never lands in a caller's variables or in curl's argv. That covers every
+caller: `manifest-prune-check` and `registry-gc` run as root, the other two as
 `{{ sys_user }}`. Same shape as `/etc/renovate-notify/config.env`.
 
 (`registry-gc.sh` is `0700 root:root` — a root-only cron, so it never needed the `0755` the
@@ -175,7 +178,7 @@ what makes the mode of any one of them stop mattering.)
 
 For `pi-peer-backup` the URL is a key in the existing k8s Secret, not a file on a host.
 
-`initial_setup` writes the same file on every host, with the same content, mode and owner as the k3s role's task, because its two pinging crons run on hosts the k3s role does not write it on: the reboot on all three, the Docker prune on the Pi (#2806). The two writers agree, so a second apply on daniel-box reports no change. The reboot cron runs as root. The prune cron runs as `{{ sys_user }}`, which is the file's group. Each cron sources the file inside a `[ -r ] &&` guard, because a `.` of a missing file exits `/bin/sh` and would skip the reboot that follows.
+`initial_setup` writes the same file on every host, with the same content, mode and owner as the k3s role's task, because its two pinging crons run on hosts the k3s role does not write it on: the reboot on all three, the Docker prune on the Pi (#2806). The two writers agree, so a second apply on daniel-box reports no change. The reboot cron runs as root. The prune cron runs as `{{ sys_user }}`, which is the file's group. Each cron calls `hc_ping` inside an explicit `/bin/bash -c`, because the library is bash and cron's shell is `/bin/sh`. The library is sourced inside that child, so a missing library fails only the ping and never skips the reboot that follows.
 
 Both crons also pinged the self-hosted Healthchecks on their old UUIDs until it retired (#2806), so neither the old checks nor the new ones went silent during the move.
 

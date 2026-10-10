@@ -84,9 +84,7 @@ COMMIT_FAILED_LOG="$STAMP_DIR/last-commit-failure.log"
 # the push is skipped until the secret exists, and the monitor in static-monitors.yaml.j2 is
 # gated on the same variable, so neither half sits red waiting for the other.
 DOCS_REFRESH_PUSH_TOKEN="{{ docs_refresh_push_token | default('') }}"
-PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/${DOCS_REFRESH_PUSH_TOKEN}"
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+PUSH_TOKEN="$DOCS_REFRESH_PUSH_TOKEN"
 
 # kuma_push, not an inline curl: the URL embeds the push token, and passing it as an argv
 # element exposes it through /proc/<pid>/cmdline, which is world-readable here (no hidepid).
@@ -120,7 +118,7 @@ on_exit() {
   logger -t docs-refresh "status=${PUSH_STATUS} ${PUSH_MSG}"
   [ -n "$DOCS_REFRESH_PUSH_TOKEN" ] || return 0
   command -v kuma_push >/dev/null 2>&1 || return 0
-  kuma_push "$PUSH_STATUS" "$PUSH_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" docs-refresh
+  kuma_push "$PUSH_STATUS" "$PUSH_MSG" "$PUSH_TOKEN" docs-refresh
 }
 trap on_exit EXIT
 

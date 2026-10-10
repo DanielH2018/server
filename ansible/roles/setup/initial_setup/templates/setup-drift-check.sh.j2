@@ -44,11 +44,6 @@ REPO_DIR=/home/{{ sys_user }}/server
 # which agree — so the age is reported as its own fault rather than left to silence the arms.
 TREE_MAX_DAYS={{ setup_drift_tree_max_days }}
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP like every sibling: Kuma serves from the k8s edge and the
-# push must not depend on DNS.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-
 # Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
 # local account. Its own env file rather than /etc/rancher/k3s/kuma-push.env, which is a
 # whole-content template owned by roles/setup/k3s and does not exist on an agent node at all.
@@ -61,7 +56,7 @@ if [[ -z "$SETUP_DRIFT_PUSH_TOKEN" ]]; then
   logger -t setup-drift-check "SETUP_DRIFT_PUSH_TOKEN not set — skipping push (see /add-secret)"
   exit 0
 fi
-PUSH_URL="https://${KUMA_HOST}/api/push/${SETUP_DRIFT_PUSH_TOKEN}"
+PUSH_TOKEN="$SETUP_DRIFT_PUSH_TOKEN"
 
 setup_drift_scan
 
@@ -97,7 +92,7 @@ fi
 # caps MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
 logger -p daemon.notice -t setup-drift-check "status=${STATUS} ${MSG}"
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" setup-drift-check
+kuma_push "$STATUS" "$MSG" "$PUSH_TOKEN" setup-drift-check
 
 # The exit code is the timer's contract (roles/setup/common/tasks/kuma_check_timer.yml): 1 after
 # a down push so Restart=on-failure reruns the check until the plane is re-applied, 0 after up.

@@ -201,9 +201,9 @@ def run_fence(
         f"lines to source the script; without the strip it would run a real drill."
     )
     lib = tmp_path / "kuma-push-lib.sh"
-    # Records `<status> <url> <message>` per push rather than discarding it, so a test can read
-    # which tile the leg reported to. The URL carries the token, which is what tells the fence
-    # tile's push apart from the drill's.
+    # Records `<status> <token> <message>` per push rather than discarding it, so a test can
+    # read which tile the leg reported to. The token is what tells the fence tile's push apart
+    # from the drill's.
     pushes = tmp_path / "kuma-pushes"
     lib.write_text(
         f'kuma_push() {{ printf "%s %s %s\\n" "$1" "$3" "$2" >>"{pushes}"; }}\n'
@@ -282,8 +282,8 @@ def fence_pushes(tmp_path):
     log = tmp_path / "kuma-pushes"
     made = []
     for line in log.read_text().splitlines() if log.exists() else []:
-        status, url, message = line.split(" ", 2)
-        if url.endswith(f"/{FENCE_TOKEN}"):
+        status, token, message = line.split(" ", 2)
+        if token == FENCE_TOKEN:
             made.append((status, message))
     return made
 

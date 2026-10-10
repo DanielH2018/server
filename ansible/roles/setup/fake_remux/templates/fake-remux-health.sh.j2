@@ -22,11 +22,6 @@ source /usr/local/lib/kuma-push-lib.sh || {
   exit 1
 }
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-
 FAKE_REMUX_SCAN_PUSH_TOKEN=""
 FAKE_REMUX_REPLACE_PUSH_TOKEN=""
 MKV_ATTACHMENT_PUSH_TOKEN=""
@@ -67,6 +62,5 @@ for i in "${!LABELS[@]}"; do
   # /proc is mounted without hidepid here, so any local user can read another user's
   # /proc/<pid>/cmdline and this cron runs every 10 minutes.
   kuma_push "$STATUS" "${LABELS[$i]}: ${MSG}" \
-    "https://${KUMA_HOST}/api/push/${TOKENS[$i]}" \
-    "$KUMA_HOST" "$KUMA_RESOLVE_IP" "${TAGS[$i]}"
+    "${TOKENS[$i]}" "${TAGS[$i]}"
 done

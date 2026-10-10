@@ -140,7 +140,7 @@ daniel-server had no `/var/lib/homelab/setup-render-manifest.d` at all, and its
 `/etc/nut/upsmon.conf` was dated Aug 17 against a template changed on 2026-08-28 (review M-10).
 
 - **The two arms are not reimplemented** — both readers source `files/setup-drift-lib.sh`,
-  copied to `/usr/local/lib` like `kuma-push-lib.sh`. Two copies of a drift check are free to
+  installed in `/usr/local/lib` like `kuma-push-lib.sh`. Two copies of a drift check are free to
   drift from each other, which is the fault a drift check reports.
 - **It does NOT carry the orphan arm.** That needs `/etc/rancher/k3s/manifests` and the control
   plane's staged set; an agent node has neither, and an arm that structurally cannot fire reads

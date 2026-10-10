@@ -23,7 +23,7 @@ import pytest
 from _helpers import ANSIBLE
 from lib.proc_testing import run
 
-LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
+LIB = ANSIBLE / "roles/setup/initial_setup/templates/kuma-push-lib.sh.j2"
 
 
 def _run(tmp_path, script_body, rcs):

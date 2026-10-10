@@ -24,7 +24,7 @@ from lib.repo_paths import K3S_DEFAULTS
 from _shell_render import rendered_names_for, rendered_shell_text
 from lib.proc_testing import run
 
-LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
+LIB = ANSIBLE / "roles/setup/initial_setup/templates/kuma-push-lib.sh.j2"
 K3S_DEFAULT_VALUES = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
 
 GRACE_S = K3S_DEFAULT_VALUES["k3s_health_cron_boot_grace_s"]
@@ -122,12 +122,12 @@ def test_a_guarded_cron_still_beats_its_kuma_tile():
     #
     # So the guard pushes `up` with a skip message instead of exiting quietly. Asserted at the
     # call site rather than by rendering the tile, because what breaks this is someone moving the
-    # guard back above PUSH_URL for tidiness.
+    # guard back above PUSH_TOKEN for tidiness.
     for name in FREQUENT_SCRIPTS:
         text = rendered_shell_text("setup", "k3s", name)
         guard = text.index(f"boot_grace_active {GRACE_S}")
-        assert text.index('PUSH_URL="') < guard, (
-            f"{name}: the boot guard runs before PUSH_URL is set, so it cannot beat"
+        assert text.index('PUSH_TOKEN="') < guard, (
+            f"{name}: the boot guard runs before PUSH_TOKEN is set, so it cannot beat"
         )
         assert 'kuma_push up "skipped — host still booting"' in text[guard:], (
             f"{name}: the boot guard skips the run without keeping the Kuma tile's heartbeat"

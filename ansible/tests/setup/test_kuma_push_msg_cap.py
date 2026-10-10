@@ -8,7 +8,7 @@ have gone over the wire, not on a return code.
 from _helpers import ANSIBLE
 from lib.proc_testing import run
 
-LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
+LIB = ANSIBLE / "roles/setup/initial_setup/templates/kuma-push-lib.sh.j2"
 MSG_MAX = 900
 
 
@@ -26,7 +26,7 @@ def _pushed_msg(tmp_path, msg):
       printf '200 application/json'
     }}
     logger() {{ :; }}
-    kuma_push down "$1" https://push.example/secret-token kuma.local 10.0.0.1 test-tag
+    kuma_push down "$1" secret-token test-tag
     """
     run(["bash", "-c", script, "_", msg], check=True)
     return msg_file.read_text()

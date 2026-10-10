@@ -160,7 +160,7 @@ def test_setup_role_hosts_census_is_not_vacuous():
 def test_remaining_setup_hosts_note_flags_pr_1002():
     """`initial_setup` reaches all three hosts, the tick converges on
     daniel-box alone, and the other two are owed a hand-run."""
-    files = ["ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"]
+    files = ["ansible/roles/setup/initial_setup/templates/kuma-push-lib.sh.j2"]
     note = land_reach.remaining_setup_hosts_note(files, "daniel-box")
     assert "daniel-server" in note
     assert "daniel-pi" in note
@@ -172,7 +172,7 @@ def test_remaining_setup_hosts_note_survives_a_hand_applied_plane_beside_it():
     applies through `k3s-bringup.yml`. The k3s half must not suppress the library's.
     """
     files = [
-        "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
+        "ansible/roles/setup/initial_setup/templates/kuma-push-lib.sh.j2",
         "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
     ]
     note = land_reach.remaining_setup_hosts_note(files, "daniel-box")

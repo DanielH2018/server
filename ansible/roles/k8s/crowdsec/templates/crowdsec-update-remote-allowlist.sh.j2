@@ -17,12 +17,10 @@ source /usr/local/lib/kuma-push-lib.sh || {
   exit 1
 }
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_URL="https://${KUMA_HOST}/api/push/{{ crowdsec_remote_allowlist_push_token }}"
+PUSH_TOKEN="{{ crowdsec_remote_allowlist_push_token }}"
 
 push() { # up|down msg
-  kuma_push "$1" "$2" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" crowdsec-remote-allowlist
+  kuma_push "$1" "$2" "$PUSH_TOKEN" crowdsec-remote-allowlist
 }
 
 # This cron is root (it execs into the engine pod), and the pinned interpreter is installed

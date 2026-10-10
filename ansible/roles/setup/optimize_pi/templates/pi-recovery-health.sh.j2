@@ -23,12 +23,7 @@ source /usr/local/lib/kuma-push-lib.sh || {
   exit 1
 }
 
-{# `domain` is the SOPS-loaded server domain (same reasoning as pi-sd-health.sh.j2). #}
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_URL="https://${KUMA_HOST}/api/push/{{ pi_recovery_push_token }}"
+PUSH_TOKEN="{{ pi_recovery_push_token }}"
 
 {# The watch set is DERIVED, not listed: every containers_list entry this host deploys, plus
     the sub-proxies the docker-proxy role's compose file declares beside its list entry
@@ -143,7 +138,7 @@ else
   [ -n "$DAEMON" ] && MSG="${MSG}; dockerd: ${DAEMON% }"
 fi
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-recovery-health
+kuma_push "$STATUS" "$MSG" "$PUSH_TOKEN" pi-recovery-health
 
 # Durable record of this cycle, so `probe.py alerts` can reconstruct the episode.
 #

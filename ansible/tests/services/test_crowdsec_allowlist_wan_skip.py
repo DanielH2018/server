@@ -12,7 +12,7 @@ so the v6 arm below it is unreachable in that state — wiring it as well would 
 a path that cannot be taken, which reads as coverage.
 """
 
-from _helpers import ALL_VARS, ROLES, load_yaml
+from _helpers import ALL_VARS, load_yaml
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
@@ -22,7 +22,7 @@ from lib.proc_testing import run
 SCRIPT = rendered_shell_text("k8s", "crowdsec", "crowdsec-update-home-allowlist.sh.j2")
 # The shared library is a plain `.sh` in `files/`, shipped verbatim with no render step, so its
 # own text IS what the host runs.
-LIB = (ROLES / "setup/initial_setup/files/kuma-push-lib.sh").read_text()
+LIB = rendered_shell_text("setup", "initial_setup", "kuma-push-lib.sh.j2")
 
 
 def _probe_curls(text: str, label: str) -> list[str]:
