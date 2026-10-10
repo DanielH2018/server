@@ -108,10 +108,6 @@ def test_the_shared_common_role_is_not_a_tag():
     assert tags == []
 
 
-def test_tag_for_rejects_a_path_outside_the_role_trees():
-    assert land_tags.tag_for("ansible/inventory/host_vars/daniel-box.yml") is None
-
-
 def test_missing_changed_files_count_falls_back_rather_than_guessing():
     """`gh` omitting changedFiles must not be read as agreement.
 

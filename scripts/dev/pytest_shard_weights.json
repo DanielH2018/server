@@ -667,7 +667,7 @@
  "scripts/deploy_tools/tests/test_land_annotation_stays_out_of_syslog.py": 0.15,
  "scripts/deploy_tools/tests/test_land_arm_merge_through_the_shim.py": 0.54,
  "scripts/deploy_tools/tests/test_land_broad_fallback_verdict.py": 0.01,
- "scripts/deploy_tools/tests/test_land_changes.py": 0.0,
+ "scripts/deploy_tools/tests/test_reach.py": 0.0,
  "scripts/deploy_tools/tests/test_land_ci.py": 0.0,
  "scripts/deploy_tools/tests/test_land_classify.py": 0.1,
  "scripts/deploy_tools/tests/test_land_deploy.py": 0.0,
