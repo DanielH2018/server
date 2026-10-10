@@ -83,13 +83,13 @@ draw from it; it also sets json-file log limits and `live-restore: true`, so a c
 restarts Docker — see the first bullet under *Notable*.
 
 ## Notable
-- **`live-restore` covers every container EXCEPT the `network_mode: service:wireguard` pair.** A
-  daemon restart — a `docker-ce` upgrade OR **any** `daemon.json` edit — re-triggers
-  `docker-compose-qbittorrent.service` (`Requires=docker.service`, `Type=oneshot`), which
-  RECREATES `wireguard` and `qbittorrent` (the boot-race unit [[qbittorrent]] documents). It
-  self-heals, but confirm the tunnel came back: `docker exec qbittorrent curl -s
-  localhost:8080/api/v2/transfer/info` should show `dht_nodes` > 0. A silent rebind to `eth0`
-  stalls every torrent at 0% while the TCP-only healthcheck stays green.
+- **`live-restore` keeps containers running across a dockerd restart, not across an engine
+  upgrade.** A `daemon.json` edit restarts dockerd and leaves the containers up. An upgrade
+  also replaces the containerd shim under every running container, and a `docker.socket`
+  restart gives `/var/run/docker.sock` a new inode that a container bind-mounting the file
+  never sees. A dist-upgrade did both: autoheal's shim died and docker-proxy sat at 503 until
+  a redeploy recreated it. So `tasks/engine-upgrade.yml` stops every Compose project before
+  apt runs and recreates each one afterwards; its header comment has the reasoning.
 - **The GPG key stays ASCII-armored at `/etc/apt/keyrings/docker.asc`.** Do **not** reintroduce
   `gpg --dearmor` via `command`: it writes the file under the `027` umask [[initial_setup]] set
   earlier in the same play, and apt then reports the repo as unsigned. Guarded by
