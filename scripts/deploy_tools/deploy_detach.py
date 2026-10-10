@@ -23,6 +23,13 @@ cannot reach it, even in the window before this parent exits. The child then mov
 of a fan-out unit's cgroup into `deploy-<pid>.scope`, so stopping the batch's unit does not
 kill a playbook mid-apply. The intermediate child's copies of the lock descriptors close when
 it exits, which releases nothing: the grandchild still holds the same open file descriptions.
+
+THE CHILD RECORDS THE NOTIFIER'S VERDICT AS ITS EXIT CODE, SO `cc-wait deploy` CAN END ON IT
+(issue #3934). The parent writes `<log stem>.pid` and the child writes `<log stem>.rc` through
+`lib/detach_fork.py`'s record helpers: 0 when the notifier's health gate settled, non-zero
+otherwise. `deploy_probe.py` reads them. The code is written after the service locks are
+released, so a caller that chains a second deploy of the same service on the wait's end does
+not queue behind this one.
 """
 
 import contextlib
@@ -42,7 +49,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from deploy_tools import deploy_under_locks as locked
 from deploy_tools.deploy_playbook import annotate, run_playbook
-from lib.detach_fork import close_inherited, fork_detached, leave_unit_cgroup
+from lib.detach_fork import (
+    close_inherited,
+    fork_detached,
+    leave_unit_cgroup,
+    pid_path,
+    record_code,
+)
 from lib.exit_codes import (
     DEPLOY_LOCK_BUSY,
     DEPLOY_LOCK_UNAVAILABLE,
@@ -56,6 +69,11 @@ def log_path(run: locked.Run) -> Path:
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     label = re.sub(r"[^A-Za-z0-9_.-]", "_", run.label)
     return LOG_DIR / f"deploy-{label}-{stamp}-{os.getpid()}.log"
+
+
+def wait_command(tags: list[str], log: Path) -> str:
+    """The `cc-wait` command that waits on this run, and resumes the wait when re-run."""
+    return f"cc-wait deploy {','.join(tags) or 'full'} --log {log}"
 
 
 def take_tree_lock_now() -> int:
@@ -87,8 +105,10 @@ def take_tree_lock_now() -> int:
     return fd
 
 
-def notify(run: locked.Run, status: int, log: Path, notifier: str) -> None:
-    """Gate the deployed tags' health and post the verdict, as a subprocess of the child.
+def notify(run: locked.Run, status: int, log: Path, notifier: str) -> int:
+    """Gate the deployed tags' health and post the verdict; the notifier's exit code.
+
+    Runs as a subprocess of the child. The code is 0 only when the gate settled.
 
     DECIDED: the two halves of this gate come from different trees, and that is accepted.
     `--cwd <snapshot>` makes probe.py render the DEPLOYED commit's manifests, while the notifier
@@ -104,7 +124,7 @@ def notify(run: locked.Run, status: int, log: Path, notifier: str) -> None:
     and an import would have them post to the host's real webhook and probe production.
     UV_PROJECT_ENVIRONMENT for the reason `run_playbook` sets it.
     """
-    subprocess.run(
+    return subprocess.run(
         [
             "uv",
             "run",
@@ -122,7 +142,7 @@ def notify(run: locked.Run, status: int, log: Path, notifier: str) -> None:
         cwd=run.repo_root,
         env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(run.repo_root / ".venv")},
         check=False,
-    )
+    ).returncode
 
 
 @dataclass(frozen=True)
@@ -131,13 +151,16 @@ class ChildSteps:
 
     run_playbook: Callable[[locked.Run], int] = run_playbook
     annotate: Callable[[locked.Run], None] = annotate
-    notify: Callable[[locked.Run, int, Path, str], None] = notify
+    notify: Callable[[locked.Run, int, Path, str], int] = notify
 
 
 def deploy_and_gate(
     run: locked.Run, log: Path, notifier: str, steps: ChildSteps | None = None
-) -> None:
+) -> int:
     """Run the playbook, annotate a success, then run the notifier's health gate.
+
+    Returns:
+      The notifier's exit code: 0 when the gate settled, which needs the playbook's 0 too.
 
     The service locks stay held until the caller's `run.close()`, AFTER the notifier returns
     (#3817). The gate reads one `probe.py health` sample per tag. Released before it, a second
@@ -154,7 +177,7 @@ def deploy_and_gate(
         steps.annotate(run)
     # The snapshot outlives the playbook by exactly this call: the notifier's health gate
     # renders the deployed role's manifests from it to enumerate what to check.
-    steps.notify(run, status, log, notifier)
+    return steps.notify(run, status, log, notifier)
 
 
 def child(run: locked.Run, log: Path, notifier: str) -> None:
@@ -174,8 +197,7 @@ def child(run: locked.Run, log: Path, notifier: str) -> None:
         moved = leave_unit_cgroup("deploy")
         if moved:
             print(moved, flush=True)
-        deploy_and_gate(run, log, notifier)
-        code = 0
+        code = deploy_and_gate(run, log, notifier)
     except SystemExit as stop:
         code = stop.code if isinstance(stop.code, int) else 1
     except Exception:
@@ -186,6 +208,9 @@ def child(run: locked.Run, log: Path, notifier: str) -> None:
         with contextlib.suppress(Exception):
             sys.stdout.flush()
             sys.stderr.flush()
+        # After `run.close()` and the flush: a waiter that reads the code finds the locks free
+        # and the verdict line already in the log.
+        record_code(log, code)
         os._exit(code)
 
 
@@ -222,9 +247,13 @@ def run(
     except locked.Refused as refused:
         state.close()
         return refused.code
+    # Before the fork, so a `cc-wait deploy` chained on this return finds this run's log and
+    # never an earlier one for the same tags.
+    log.touch()
     sys.stdout.flush()
     sys.stderr.flush()
     pid = fork_detached(lambda: child(state, log, notifier))
+    pid_path(log).write_text(f"{pid}\n")
     # The child owns the snapshot and the locks now. Close this process's copies WITHOUT
     # removing the snapshot: `state.close()` here would delete it from under the playbook.
     for fd in state.service_fds:
@@ -234,7 +263,7 @@ def run(
     state.service_fds, state.owner_fd, state.snapshot = [], None, None
     print(f"deploy --detach: running in background (pid {pid}).")
     print(f"  log:  {log}")
-    print(f"  tail: tail -f {log}")
+    print(f"  wait: {wait_command(tags, log)}")
     print(
         "  Posts to the gitops-deploy Discord webhook when it settles, gated on "
         "'probe.py health <svc>' for every deployed tag that supports it."

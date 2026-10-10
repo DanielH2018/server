@@ -213,3 +213,15 @@ The `--detach` playbook run is a grandchild in its own session, outside the call
 tree, so a Bash call killed at its time limit does not kill it. Started from a systemd user
 unit, it also moves into its own `deploy-<pid>.scope`, so stopping that unit does not kill it.
 The deploy log names the scope (`lib/detach_fork.py`).
+
+A returned `--detach` is not a verified deploy. To wait for its health gate, chain the wait:
+
+```bash
+./scripts/deploy.sh --tags "<svc>" --detach && cc-wait deploy <svc>
+```
+
+`cc-wait deploy` ends `settled` (exit 0) once the notifier's health gate passes, and `failed` or
+`died` (exit 1) otherwise; the detail is the notifier's verdict line. It waits at most 570s.
+Exit 75 means the deploy is still running: re-run only the `cc-wait` command, never
+`deploy.sh`. `--detach` also prints the exact wait command with `--log`, which a deploy of many
+tags needs. The probe is `scripts/deploy_tools/deploy_probe.py`.

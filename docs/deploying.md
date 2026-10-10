@@ -147,7 +147,8 @@ So exercise the thing you actually changed as well.
 - Scope your deploy to your own services. A shared SHA range covers other sessions' work too,
   and deploying another session's half-finished landing is not yours to do.
 - **`--detach` returning is not a verified deploy.** It backgrounds the rollout wait, which is
-  most of the deploy.
+  most of the deploy. `deploy.sh --tags <svc> --detach && cc-wait deploy <svc>` waits for the
+  notifier's health gate and exits 0 only when it settled (#3934).
 - A `--detach` run holds its service locks until its notifier's health gate has posted. A
   second deploy of the same service queues behind the gate rather than rolling the workload
   under its sample (#3817).
