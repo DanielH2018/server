@@ -66,7 +66,7 @@ import os
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -177,9 +177,11 @@ def _refused(exc: Exception, marker: object) -> int:
     return 1
 
 
-def marker_key(role: str) -> str:
-    """The `manual_plane` line key for a role, which is the `--tags` value that selects it."""
-    return setup_role_tag(role)
+def marker_key(role: str, pending: Collection[str] = ()) -> str:
+    """The `manual_plane` key for `role`: its tag, or its directory if only that is pending."""
+    # A role the deployer could not route is keyed by its directory name (#4323).
+    key = setup_role_tag(role)
+    return role if key not in pending and role in pending else key
 
 
 # The syslog tag the journal line carries: `journalctl -t gitops-state` reads it back, and
@@ -275,14 +277,12 @@ def clear_manual_plane(
         A narrowed apply against an empty or missing row keeps the line: that row means the
         whole role, which a narrowed apply does not cover.
     """
-    key = marker_key(role)
     try:
         with tree_lock(TREE_LOCK if lock_path is None else lock_path, lock_wait_s):
             # Read the line before dropping it: the journal names what was cleared, not
             # just that something was. Same lock, so it is the line the clear removes.
-            dropped = next(
-                (e for e in state.manual_plane_pending() if e.role == key), None
-            )
+            pending = {e.role: e for e in state.manual_plane_pending()}
+            dropped = pending.get(key := marker_key(role, pending))
             if applied and dropped is None:
                 remaining, cleared = None, False
             elif applied:

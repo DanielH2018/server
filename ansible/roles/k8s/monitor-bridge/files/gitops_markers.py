@@ -138,24 +138,33 @@ ALERT_SLOTS: frozenset[str] = frozenset(
 # What the `playbook` key of a `manual_plane` ledger line holds for a role no playbook applies
 # (`common`).
 NO_PLAYBOOK = "none"
-
-# Setup roles `initial_setup.yml` gates off the GitOps tick's host, mapped to the host each runs
-# on. The tick's own `--tags optimize_pi` run on daniel-box matched no task, exited 0 and
-# recorded an apply (#3933), so the deployer records these in `manual_plane` instead. Here
-# rather than in the deployer's `deploy_setup_roles`, which re-exports it, because the
-# SessionStart banner, monitor-bridge and `probe.py` print the line's apply command and none of
-# them can import the deployer. `ansible/tests/deploy/test_setup_roles_the_tick_host_skips.py`
-# derives the table from the playbook's gates.
-SETUP_ROLES_OFF_THE_TICK_HOST: dict[str, str] = {"optimize_pi": "daniel-pi"}
+# What it holds for a role the deployer's routing could not place (#4323): an entry with no tag
+# or two tags, a role listed in two playbooks, or a gate it cannot read. A distinct value, so no
+# printer names such a role as `common`, and `deploy_defer.clear_applied` can clear the line once
+# a later tick routes the role and applies it.
+UNROUTED_PLAYBOOK = "unrouted"
 
 
-def target_arg(role: str) -> str:
+def by_hand(playbook: str) -> str | None:
+    """What a printer says for a `manual_plane` line naming no playbook, else None."""
+    if playbook == NO_PLAYBOOK:
+        return "apply the role by hand"
+    if playbook == UNROUTED_PLAYBOOK:
+        return (
+            "apply the role by hand with the playbook and `--tags` value that include it "
+            "(the deployer could not route it from the playbooks)"
+        )
+    return None
+
+
+def target_arg(host: str | None) -> str:
     """` -e target=<host>` for a role gated off the tick's host, else "".
 
-    Appended to every printed `ansible-playbook ... --tags <role>`: without it the command
-    runs on the operator's host, skips the role and exits 0.
+    `host` is the `manual_plane` line's own `host` key, which the deployer derives from the
+    playbook's gate when it records the role (#3734). Appended to every printed
+    `ansible-playbook ... --tags <role>`: without it the command runs on the operator's host,
+    skips the role and exits 0 (#3933).
     """
-    host = SETUP_ROLES_OFF_THE_TICK_HOST.get(role)
     return f" -e target={host}" if host else ""
 
 
@@ -283,12 +292,15 @@ class ManualPlaneEntry(NamedTuple):
         at: when the deployer first recorded it, in `time.time()` terms. The age this stamp
             gives is what monitor-bridge pages on, so it is NEVER refreshed for a role
             already listed.
+        host: the one host the playbook gates the role onto, for a role the tick's host
+            does not run, else None. Every printed apply command appends `target_arg(host)`.
     """
 
     origin: str
     playbook: str
     role: str
     at: float
+    host: str | None = None
 
 
 class K8sDeferredEntry(NamedTuple):

@@ -246,6 +246,28 @@ def test_the_role_is_resolved_through_the_deployers_own_tag_map(marker):
     assert gitops_state.marker_key("k3s") == "k3s"
 
 
+def test_clearing_chezmoi_setups_line_under_its_tag_is_clean(tmp_path, run):
+    """The deployer keys a routed role by its tag, `chezmoi`, and the clear finds it there."""
+    (tmp_path / "owed.jsonl").write_text(
+        _line("abc", "ansible/initial_setup.yml", "chezmoi", 1000) + "\n"
+    )
+    assert run(tmp_path, "clear-owed", "manual_plane", "chezmoi_setup") == 0
+    assert pending(tmp_path) == {}
+
+
+def test_clearing_a_line_keyed_by_the_role_directory_is_flagged(tmp_path, run):
+    """A role the deployer could not route is keyed by its directory (#4323).
+
+    Once the routing here places it, its tag no longer names that line, so the clear falls
+    back to the directory name rather than missing the line.
+    """
+    (tmp_path / "owed.jsonl").write_text(
+        _line("abc", "unrouted", "chezmoi_setup", 1000) + "\n"
+    )
+    assert run(tmp_path, "clear-owed", "manual_plane", "chezmoi_setup") == 0
+    assert pending(tmp_path) == {}
+
+
 # ── the journal line a clear leaves ─────────────────────────────────────────
 def test_a_clear_journals_the_role_and_the_line_it_dropped_and_a_no_op_says_so(
     marker, run, journal

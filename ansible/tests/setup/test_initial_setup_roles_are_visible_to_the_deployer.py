@@ -26,8 +26,12 @@ from _helpers import ANSIBLE
 import yaml
 
 import land_reach
-from deploy_changes import services_from_changed_paths, setup_tags_for
-from gitops_markers import SETUP_ROLES_OFF_THE_TICK_HOST
+import setup_routing
+from deploy_changes import (
+    services_from_changed_paths,
+    setup_role_host,
+    setup_tags_for,
+)
 
 INITIAL_SETUP_YML = ANSIBLE / "initial_setup.yml"
 ROLES = ANSIBLE / "roles"
@@ -65,7 +69,7 @@ def invisible_roles(
         cs = services_from_changed_paths([rel])
         # A role gated off the tick's host yields no tag by design: the deployer records it
         # in `manual_plane` instead (#3933).
-        tagged = setup_tags_for([rel]) or role in SETUP_ROLES_OFF_THE_TICK_HOST
+        tagged = setup_tags_for([rel]) or setup_role_host(role) is not None
         if role not in cs.setup_roles or not tagged:
             problems[role] = (
                 f"{rel} does not route to the setup plane in deploy_changes.py "
@@ -102,7 +106,8 @@ def _synthetic_tree(tmp_path: Path, role_rel: str) -> tuple[Path, Path]:
 
 def test_a_role_under_roles_setup_is_clean(tmp_path):
     playbook, roles_dir = _synthetic_tree(tmp_path, "setup/ups_side")
-    assert invisible_roles(playbook, roles_dir) == {}
+    with setup_routing.routed_by(tmp_path, host="daniel-box"):
+        assert invisible_roles(playbook, roles_dir) == {}
 
 
 def test_a_role_beside_roles_setup_is_flagged(tmp_path):

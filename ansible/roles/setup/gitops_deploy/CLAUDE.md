@@ -52,7 +52,7 @@ cluster, and roll the tree and service back on a failed health gate.
 
 ## Safety
 
-Each arm is a rule and the function that holds it. The record page has the incident behind it.
+Each arm is a rule and the function that holds it; the record page has its incident.
 
 - **The health gate is in the play, not the deployer**: a k8s deploy fails when the batch drain
   (`roles/k8s/manifests/tasks/drain.yml`) or `post_tasks/k8s_stabilise_gate.yml` fails, and the
@@ -67,14 +67,14 @@ Each arm is a rule and the function that holds it. The record page has the incid
 - **Broad changes split three ways** (`deploy_changes._BROAD_*_PREFIXES`): a setup-plane change
   (`roles/setup/<name>/`, `requirements.yml`) applies as `initial_setup.yml`; a deploy-plane
   change (`ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) applies as `deploy.yml`;
-  both together apply both, setup first. `setup_role_playbook` / `setup_role_tag` route a role
-  directory to its real tag. `docs/gitops-pipeline.md`'s *Broad changes* has the narrowing and
-  denylist each keeps.
+  both together apply both, setup first.
+  `docs/gitops-pipeline.md`'s *Broad changes* has the narrowing and denylist each keeps.
 - **The ff-merge runs BEFORE the apply**, since applying first renders the pre-merge tree, and
   **every broad arm is FORWARD-ONLY**: a failure writes `hold_sha` and a `hold_plane` entry and
   leaves the tree merged, because a reset would claim the old commit over half-new state.
-- **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**, while a setup role the tick cannot
-  apply (`tick_applies_setup_role`) merges and is recorded in `manual_plane` for a human.
+- **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge.** A setup role parks only while
+  `scripts/deploy_tools/setup_routing.py` fails or times out; any other the tick cannot apply
+  merges into `manual_plane` (#4326, narrowing `deploy_defer`'s `DECIDED:` marker).
 - **k8s roles auto-deploy ONLY for an image-pin bump to a non-denylisted service; every other
   k8s change defers-and-alerts.** `docs/gitops-pipeline.md`'s *The safety arms, in full* has the
   diff-shape eligibility test and the per-tick cap.

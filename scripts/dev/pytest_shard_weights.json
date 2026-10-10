@@ -257,8 +257,6 @@
  "ansible/tests/deploy/test_retried_commands_survive_check_mode.py": 0.78,
  "ansible/tests/deploy/test_setup_drift_check.py": 0.04,
  "ansible/tests/deploy/test_setup_render_manifest.py": 5.22,
- "ansible/tests/deploy/test_setup_role_playbooks_agree.py": 0.0,
- "ansible/tests/deploy/test_setup_roles_the_tick_host_skips.py": 0.02,
  "ansible/tests/deploy/test_toposort.py": 0.0,
  "ansible/tests/deploy/test_tree_lock_single_definition.py": 0.0,
  "ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py": 1.46,

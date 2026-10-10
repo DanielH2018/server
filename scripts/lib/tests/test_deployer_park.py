@@ -106,13 +106,17 @@ def test_a_manual_plane_ledger_line_with_an_unknown_key_reaches_the_banner(tmp_p
 
 
 def test_a_pi_only_role_is_applied_with_its_target(tmp_path):
-    """#3933: run on daniel-box, `--tags optimize_pi` skips the role and exits 0."""
+    """#3933: run on daniel-box, `--tags optimize_pi` skips the role and exits 0.
+
+    The target is the line's own `host` key, which the deployer derives when it records it.
+    """
     line = {
         "class": "manual_plane",
         "subject": "optimize_pi",
         "origin": "f" * 40,
         "at": 500,
         "playbook": "ansible/initial_setup.yml",
+        "host": "daniel-pi",
     }
     (tmp_path / MARKERS["owed"]).write_text(json.dumps(line) + "\n")
     (line_text,) = manual_plane_lines(read_manual_plane_marker(str(tmp_path)), 4000)

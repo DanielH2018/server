@@ -39,7 +39,7 @@ A hardware gate names the FACT it reads, not the host that has it —
 `ansible/inventory/group_vars/all.yml:has_raspi_kernel`,
 `ansible/inventory/group_vars/all.yml:has_ample_ram`. Each defaults false there and is true in
 every carrying host's `host_vars` (#2981), so replacing a machine is a `host_vars` edit. They
-sit in `group_vars` because `scripts/deploy_tools/land_reach.py:_eval_when` resolves a gate
+sit in `group_vars` because `scripts/deploy_tools/setup_gates.py:_eval_when` resolves a gate
 against those two files only, and an unknown name reads as every host.
 
 Three gates keep a host literal behind a `DECIDED:` comment, because they read HOST HISTORY

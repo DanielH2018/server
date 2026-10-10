@@ -19,6 +19,7 @@ from collections.abc import Callable
 
 import pytest
 
+from _deploy_fakes import checkout_routing
 from deploy_toolbox import DeployTools
 
 # The SHAs _tick's `run` answers rev-parse with; `from _deploy_fakes import` is avoided for two
@@ -44,6 +45,7 @@ def _tools(**overrides) -> DeployTools:
         git_status=lambda _repo: _completed(0),
         git_fetch=lambda _repo, _branch: _completed(0),
         discord_post=lambda _webhook, _content: True,
+        setup_routing=lambda _repo, _ref, _host: checkout_routing(),
     )
     return dataclasses.replace(base, **overrides)
 

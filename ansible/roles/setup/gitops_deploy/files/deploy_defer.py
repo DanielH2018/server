@@ -9,12 +9,21 @@ has no command to print and no role to record. Both keep the old behaviour exact
 ff-merge, a journal line every tick, a page once per SHA. Staying parked is what keeps
 `behind_since` set, which is the only durable signal those two have.
 
-**Record** (`record`). A setup ROLE `initial_setup.yml` does not include — `k3s`, applied by
-`k3s-bringup.yml`, and `common`, applied by no playbook at all. The tick fast-forwards and
-writes the role to the `owed` ledger's `manual_plane` class instead of parking.
+A third shape parks too, and it is the only one a setup ROLE reaches: the routing subprocess
+failed or timed out (`routing_failed`), so the tick cannot tell an
+applyable role from one it must record. The next tick derives again (#4326).
 
-# DECIDED: an unapplyable setup ROLE no longer parks the tick. Parking was the signal only
-because nothing else was, and everybody else paid for it. Over the seven days to 2026-09-11
+**Record** (`record`). A setup ROLE `initial_setup.yml` does not include — `k3s`, applied by
+`k3s-bringup.yml`, and `common`, applied by no playbook at all — or one the routing came back
+without placing (`UNROUTED_PLAYBOOK`). The tick fast-forwards and writes the role to the `owed`
+ledger's `manual_plane` class instead of parking. A role whose directory the range deletes is
+neither: it owes nothing, and `drop_deleted_setup_roles` drops it.
+
+# DECIDED: an unapplyable setup ROLE no longer parks the tick, with one exception: a
+transient routing failure (the subprocess failed or timed out) parks until a tick can route.
+A deterministic answer, such as a deleted role or an unplaced one, never parks: no retry
+changes it, and the commit that fixes it lands only after the park clears (#4326). Parking was
+the signal only because nothing else was, and everybody else paid for it. Over the seven days to 2026-09-11
 ten park episodes spanned 30 ticks — the longest about forty minutes — and while parked every
 other session's landing exits 4 from `deploy.sh` (tree behind origin) until a hand pulls the
 primary checkout. None of that waiting brought the hand-apply any closer: the role needs
@@ -35,8 +44,15 @@ import deploy_alert_text
 import deploy_alerts
 import deploy_narrow
 from deploy_changes import (
+    ChangeSet,
+    is_routed,
+    role_of,
+    routing_failed,
+    services_from_changed_paths,
+    setup_role_host,
     setup_role_playbook,
     setup_role_tag,
+    tag_selects_an_off_host_role,
     tick_applies_setup_role,
 )
 from deploy_config import Config, log
@@ -49,6 +65,7 @@ from deploy_state import (
     NO_PLAYBOOK,
     DeployerState,
 )
+from gitops_markers import UNROUTED_PLAYBOOK
 from deploy_tick_types import TickTarget
 from deploy_toolbox import DeployTools
 
@@ -105,8 +122,61 @@ def unapplyable_setup_roles(cs) -> list[str]:
     return sorted(role for role in cs.setup_roles if not tick_applies_setup_role(role))
 
 
+def setup_roles_listed(listing: str) -> set[str]:
+    """Every setup role directory a `git ls-tree --name-only <ref> ansible/roles/setup/` names."""
+    return {
+        parts[3]
+        for parts in (line.split("/") for line in listing.splitlines())
+        if len(parts) >= 4 and parts[:3] == ["ansible", "roles", "setup"] and parts[3]
+    }
+
+
+def drop_deleted_setup_roles(
+    tools: DeployTools, config: Config, origin: str, cs: ChangeSet, paths: list[str]
+) -> ChangeSet:
+    """`cs` without the setup roles whose directory is gone at `origin` (#4326).
+
+    The setup half of `k8s_roles_deleted_at`. A deleted role owes nothing, and the routing
+    never places it, so before this a range deleting one parked on every tick. The range is
+    classified again without the deleted roles' paths, so a range that touched nothing else
+    in the setup plane no longer reads as a setup path naming no role, which parks too.
+
+    An unreadable or empty listing drops nothing, as for the k8s roles.
+    """
+    if not cs.setup_roles:
+        return cs
+    try:
+        listing = tools.run(
+            ["git", "ls-tree", "--name-only", origin, "ansible/roles/setup/"],
+            cwd=config.repo,
+        )
+    except Exception as exc:
+        log(f"could not list the setup roles at {origin[:8]} ({exc}) — dropping none")
+        return cs
+    present = setup_roles_listed(listing)
+    deleted = cs.setup_roles - present if present else set()
+    if not deleted:
+        return cs
+    log(
+        f"{', '.join(sorted(deleted))}: setup role directory deleted at {origin[:8]} — "
+        "nothing left to apply, so no manual_plane line"
+    )
+
+    def gone(p: str) -> bool:
+        at = role_of(p)
+        return at is not None and at.plane == "setup" and at.role in deleted
+
+    kept = services_from_changed_paths([p for p in paths if not gone(p)])
+    kept.setup_roles -= deleted
+    return kept
+
+
 def parks_the_tick(cs, setup_tags: set[str], pending: list[str]) -> bool:
     """Whether this range must be deferred WITHOUT a fast-forward.
+
+    A range carrying a setup role parks when the routing derivation failed or timed out, so
+    the next tick derives again rather than fast-forwarding past a change nothing routed. A
+    role the routing came back without is in `pending` instead, and is recorded (#4326).
 
     Args:
         cs: the range's `ChangeSet`.
@@ -119,7 +189,9 @@ def parks_the_tick(cs, setup_tags: set[str], pending: list[str]) -> bool:
     unroutable and nameless at once. Fast-forwarding it would apply nothing, record nothing
     and say nothing.
     """
-    return cs.broad_manual or (cs.broad_setup and not setup_tags and not pending)
+    if cs.broad_manual or (cs.setup_roles and routing_failed()):
+        return True
+    return cs.broad_setup and not setup_tags and not pending
 
 
 def park(
@@ -263,7 +335,11 @@ def record(
         role
         for role in roles
         if state.record_manual_plane(
-            origin, setup_role_playbook(role) or NO_PLAYBOOK, setup_role_tag(role), now
+            origin,
+            _ledger_playbook(role),
+            setup_role_tag(role),
+            now,
+            setup_role_host(role),
         )
     ]
     narrowed = {}
@@ -291,6 +367,17 @@ def record(
         ),
     )
     return Recorded(recorded, tags_before)
+
+
+def _ledger_playbook(role: str) -> str:
+    """The `playbook` a role's `manual_plane` line records: a path, `NO_PLAYBOOK` or unrouted.
+
+    An unrouted role is keyed by its directory name, which `setup_role_tag` falls back to and
+    `gitops_state.marker_key` matches as well as the tag.
+    """
+    if not is_routed(role):
+        return UNROUTED_PLAYBOOK
+    return setup_role_playbook(role) or NO_PLAYBOOK
 
 
 def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
@@ -336,15 +423,28 @@ def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
 def clear_applied(state: DeployerState, playbook: str, tags: list[str]) -> None:
     """Drop the pending roles this apply covered, and say so.
 
-    The deployer's own reverse of `record`. No role reaches it today — every role the marker
-    can hold is applied by a playbook this tick never runs, or gated off this host — and it
-    is what a role promoted into `initial_setup.yml` needs on the day it is.
+    The deployer's own reverse of `record`, keyed on the `--tags` values the apply ran, never
+    on role directories: `chezmoi_setup`'s line is keyed `chezmoi`, the tag that applies it.
 
     A tag for a role gated off this host is dropped first: `optimize_pi` shares the playbook
     path, so its line would otherwise clear over a run that skipped the role (#3933).
+
+    An `UNROUTED_PLAYBOOK` line names no playbook to match, and is keyed by the role's
+    directory. It clears once the routing places that role on this playbook and host, and
+    the apply ran its tag.
     """
-    tags = [t for t in tags if tick_applies_setup_role(t)]
-    for role in state.clear_manual_plane_applied(playbook, tags):
+    tags = [t for t in tags if not tag_selects_an_off_host_role(t)]
+    cleared = state.clear_manual_plane_applied(playbook, tags)
+    for e in state.manual_plane_pending():
+        if (
+            e.playbook == UNROUTED_PLAYBOOK
+            and tick_applies_setup_role(e.role)
+            and setup_role_playbook(e.role) == playbook
+            and setup_role_tag(e.role) in tags
+            and state.clear_manual_plane(e.role)
+        ):
+            cleared.append(e.role)
+    for role in cleared:
         log(
             f"manual_plane cleared for {role}: this tick applied {playbook} --tags {role}"
         )

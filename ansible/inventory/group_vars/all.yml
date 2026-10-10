@@ -78,7 +78,7 @@ has_igpu: false
 # edit rather than a sweep through three task files.
 #
 # They live here rather than in the role's defaults for the reason `ops_cron_host` gives
-# below: `scripts/deploy_tools/land_reach.py:_eval_when` resolves a gate against
+# below: `scripts/deploy_tools/setup_gates.py:_eval_when` resolves a gate against
 # `group_vars/all.yml` + `host_vars` only, and a name it cannot resolve reads as "every
 # host" — an over-broad verdict.
 #

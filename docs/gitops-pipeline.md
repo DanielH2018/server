@@ -312,10 +312,12 @@ neither `k3s-bringup.yml` nor a playbook for `common`.
 `optimize_pi` is recorded the same way (#3933). `initial_setup.yml` includes it under `when:
 inventory_hostname == optimize_pi_host`, so the tick's `--tags optimize_pi` run on daniel-box
 matched no task, exited 0 and recorded an apply the Pi never received.
-`gitops_markers.SETUP_ROLES_OFF_THE_TICK_HOST` maps the role to its host, and the remediation
-prints `ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`.
-`ansible/tests/deploy/test_setup_roles_the_tick_host_skips.py` derives that table from the
-playbook gates, so a second role gated off the tick's host fails it until the table names it.
+`scripts/deploy_tools/setup_routing.py` reads the role's `when:` against each host's vars and
+finds the one host it admits. The deployer writes that host into the role's `manual_plane` line
+as its `host` key, and every surface that prints the remediation appends `-e target=<host>`
+from it: `ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`.
+A second role gated off the tick's host is derived the same way, with no table to update
+(#3734).
 
 #### The tag the remediation prints is derived, not the role tag
 
@@ -637,10 +639,17 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     would record the change as applied. That happened on 2026-09-01 with a `roles/setup/k3s/`
     change that installed daniel-box's host DNS forwarder. `setup_role_playbook` and
     `setup_role_tag` own the routing, `setup_tags_for` returns nothing for a role
-    `initial_setup.yml` cannot apply, and `broad_remediation` names the real playbook. The map is
-    hand-written because this module runs under `uv run --no-project` and cannot import `yaml`.
-    `ansible/tests/deploy/test_setup_role_playbooks_agree.py` derives the truth from the
-    playbooks and fails when the two drift.
+    `initial_setup.yml` cannot apply, and `broad_remediation` names the real playbook.
+    `scripts/deploy_tools/setup_routing.py` derives the routing from the playbooks (#3734). The
+    deployer runs under `uv run --no-project` and cannot import `yaml`, so each tick runs that
+    script as a subprocess over origin's tree. Nothing applies under a guessed tag, and nothing
+    records the role in `manual_plane` under a guessed tag or playbook. A failed or timed-out
+    run is transient, so a range carrying a setup role parks with no fast-forward and the next
+    tick derives again. Any other answer is deterministic and never parks (#4326). A role whose
+    directory the range deletes is dropped, as a deleted k8s role is. A role the routing came
+    back without placing is recorded in `manual_plane` with the playbook `unrouted`, keyed by
+    its directory name. `clear-owed manual_plane <role>` matches that key, and the tick clears
+    the line itself once a later routing places the role and an apply runs its tag.
   - **The ff-merge happens BEFORE the apply**, since applying first renders from the pre-merge
     tree and deploys nothing. An unrelated commit sharing the tick also lands when the apply
     fails.

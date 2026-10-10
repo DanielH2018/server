@@ -40,7 +40,8 @@ ALLOWED: dict[str, set[str] | None] = {
     "deploy_changes": {"deploy_cross_role", "deploy_setup_roles"},
     "deploy_cross_role": set(),
     # Which playbook and tag apply a setup role, split from the classifier at its line cap.
-    "deploy_setup_roles": {"gitops_markers"},
+    # Stdlib only: it runs the derivation as a subprocess (#3734).
+    "deploy_setup_roles": set(),
     # The narrowing subprocess and the plan it returns: `deploy_config` for `log`, and
     # `gitops_hold` for `held_tag`, the hold-marker format `broad_hold_cleared_by` reads back
     # (#3138) — a stdlib leaf, so no cycle. It must NOT import `deploy_toolbox`, which
@@ -84,6 +85,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_state",
         "deploy_tick_types",
         "deploy_toolbox",
+        "gitops_markers",
     },
     # The k8s changes the deployer owes, `k8s_deferred` and `k8s_unapplied` (#3669). Its own
     # module so no stage module reads or writes those two ledger classes directly.
@@ -138,6 +140,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_io",
         "deploy_narrow",
         "deploy_release",
+        "deploy_setup_roles",
     },
     # Every message body, and nothing that sends one: the ChangeSet its signatures take, the
     # error-text slicers and the k8s remediation it appends. No transport, no state:
@@ -166,6 +169,9 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_changes",
         "deploy_config",
         "deploy_cross_role",
+        # `drop_deleted_setup_roles`, which `plan_tick` asks beside the k8s drop (#4326).
+        "deploy_defer",
+        "deploy_setup_roles",
         "deploy_git",
         "deploy_inventory",
         "deploy_io",
