@@ -142,6 +142,7 @@ def test_the_role_checks_the_duplicate_journald_aware_lines_agree():
     deleting a shipped line. Two copies that DISAGREE are a real signal — the last one silently
     wins — and that is what this task fails on.
     """
+    # fact: ansible/roles/setup/optimize_pi/CLAUDE.md#What it does (`tasks/main.yml`)
     task = _journald_guard()
     assert task, (
         f"no task reads JOURNALD_AWARE from {CONF}. The role leaves upstream's duplicate line "

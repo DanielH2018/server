@@ -139,6 +139,7 @@ def test_display_names_are_unique():
 
 
 def test_no_status_page_is_declared_as_an_autokuma_entity():
+    # fact: ansible/roles/k8s/uptime-kuma/CLAUDE.md#The status page's groups are synced by a CronJob, not by AutoKuma
     text = (ROLE / "templates" / "static-monitors.yaml.j2").read_text()
     assert '"status_page"' not in text, (
         "AutoKuma creates a status page and never edits one (sync.rs has no StatusPage update "

@@ -88,6 +88,7 @@ def test_a_dead_sub_proxy_is_not_the_all_clear(tmp_path):
 @pytest.mark.parametrize("dead", ALL)
 def test_a_dead_container_is_restarted(tmp_path, dead):
     """The restart half: the script brings it back rather than only naming it."""
+    # fact: ansible/roles/setup/optimize_pi/CLAUDE.md#Autonomous-role contract (the container-recovery cron restarts what it finds dead)
     running = [c for c in ALL if c != dead]
     status, msg, still_running, _ = run(SCRIPT, tmp_path, running=running)
 
