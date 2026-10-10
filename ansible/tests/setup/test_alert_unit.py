@@ -31,6 +31,7 @@ TASKS = COMMON / "tasks" / "alert_unit.yml"
 # empty set.
 KNOWN_ALERTS = frozenset(
     {
+        "claude-clone-sync",
         "claude-memory-sync",
         "claude-rc",
         "gitops-deploy",

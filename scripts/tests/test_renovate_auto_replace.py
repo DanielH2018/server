@@ -24,14 +24,17 @@ from _renovate import (
     render_auto_replace,
 )
 
+# The digest pin is named rather than counted, so a rename breaks these guards loudly instead of
+# leaving them asserting over an empty set. It is a k8s role default rather than the one in
+# roles/setup/k3s, which several sessions edit at once.
+TEMPLATE_DIGEST_PIN = "homepage_k8s_image"
+
 # A bare pin is the shape the template exists for: without one, Renovate substitutes
 # currentValue -> newValue inside the matched text and there is no digest to substitute, so
-# `pinDigests: true` never added an @sha256 suffix to a tag-only pin. Each shape is named rather
-# than counted, so a rename breaks these guards loudly instead of leaving them asserting over an
-# empty set. The digest pin is a k8s role default rather than the one in roles/setup/k3s, which
-# several sessions edit at once.
-TEMPLATE_BARE_PIN = "bazarr_k8s_image"
-TEMPLATE_DIGEST_PIN = "homepage_k8s_image"
+# `pinDigests: true` never added an @sha256 suffix to a tag-only pin. The template converts every
+# live bare pin it reaches, so the guards derive one from the digest pin rather than naming a
+# live one: bazarr, the last named bare pin, gained its digest in Renovate #4149.
+_DIGEST_SUFFIX = re.compile(r"@sha256:[0-9a-f]{64}")
 
 
 def _live_k8s_image_spans(tracked: list[str]) -> list[tuple[str, str, re.Match[str]]]:
@@ -50,6 +53,27 @@ def _live_k8s_image_spans(tracked: list[str]) -> list[tuple[str, str, re.Match[s
     return spans
 
 
+def _bare_span(tracked: list[str]) -> tuple[str, str, re.Match[str]]:
+    """TEMPLATE_DIGEST_PIN's live line with its digest removed, matched by the real manager."""
+    path, line = next(
+        (path, line)
+        for path, line, _ in _live_k8s_image_spans(tracked)
+        if line.split(":", 1)[0].strip() == TEMPLATE_DIGEST_PIN
+    )
+    bare_line = _DIGEST_SUFFIX.sub("", line, count=1)
+    assert bare_line != line, (
+        f"{TEMPLATE_DIGEST_PIN} carries no @sha256 digest to remove"
+    )
+    mgr = _k8s_image_manager()
+    match = next(
+        m
+        for ms in mgr["matchStrings"]
+        if (m := re.compile(_to_python_regex(ms)).search(bare_line))
+    )
+    assert match.group("currentDigest") is None, match.group(0)
+    return path, bare_line, match
+
+
 def test_the_k8s_image_template_round_trips_every_live_pin(tracked: list[str]) -> None:
     """The template must reproduce a matched span byte for byte when nothing has changed.
 
@@ -63,10 +87,6 @@ def test_the_k8s_image_template_round_trips_every_live_pin(tracked: list[str]) -
     """
     spans = _live_k8s_image_spans(tracked)
     by_name = {line.split(":", 1)[0].strip(): m for _, line, m in spans}
-    assert TEMPLATE_BARE_PIN in by_name, (
-        f"{TEMPLATE_BARE_PIN} no longer matches the k8s-images manager — this guard is "
-        "asserting over a set that no longer contains the pin shape it was written for."
-    )
     assert (
         TEMPLATE_DIGEST_PIN in by_name
         and by_name[TEMPLATE_DIGEST_PIN].group("currentDigest") is not None
@@ -77,7 +97,7 @@ def test_the_k8s_image_template_round_trips_every_live_pin(tracked: list[str]) -
 
     template = _k8s_image_manager()["autoReplaceStringTemplate"]
     corrupted = []
-    for path, line, m in spans:
+    for path, line, m in [*spans, _bare_span(tracked)]:
         rendered = render_auto_replace(
             template,
             depName=m.group("depName"),
@@ -115,18 +135,7 @@ def test_the_k8s_image_template_pins_a_digest_onto_a_bare_tag(
     and it must leave an unpinnable update (no newDigest) alone.
     """
     template = _k8s_image_manager()["autoReplaceStringTemplate"]
-    bare = next(
-        (
-            m
-            for _, line, m in _live_k8s_image_spans(tracked)
-            if line.split(":", 1)[0].strip() == TEMPLATE_BARE_PIN
-        ),
-        None,
-    )
-    assert bare is not None, f"{TEMPLATE_BARE_PIN} matched no span"
-    assert bare.group("currentDigest") is None, (
-        f"{TEMPLATE_BARE_PIN} now carries a digest — pick another tag-only pin for this guard."
-    )
+    _, _, bare = _bare_span(tracked)
 
     digest = "sha256:" + "ab" * 32
     pinned = render_auto_replace(

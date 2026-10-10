@@ -272,6 +272,11 @@ claude_code_agent_user: claude
 claude_code_agent_user_home: /var/lib/claude
 claude_code_agent_user_clone_dir: "{{ claude_code_agent_user_home }}/server"
 claude_code_agent_user_repo: DanielH2018/server
+# How often claude-clone-sync.timer fast-forwards that clone when it is a clean master. A merge
+# that touches only the hook shim's or the homelab-ui launcher's code applies no role, so this
+# interval bounds how long the agent runs the old copy (#4162). Each apply of this role also
+# runs the sync. Installed while claude_code_agent_user_enabled is true; false removes the units.
+claude_code_agent_clone_sync_interval: 15min
 
 # Whether the agent user reads the system journal, through the systemd-journal group. Without
 # it, `journalctl` shows the agent only its own units. The operator granted it on 2026-10-09,
@@ -344,8 +349,9 @@ claude_code_homelab_ui_credentials: "{{ claude_code_agent_user_home }}/.config/h
 
 # Whether the agent user can launch the homelab-ui MCP server itself (tasks/agent_browser.yml):
 # its own Node, @playwright/mcp and Chromium, plus a user-scope `homelab-ui` registration in its
-# ~/.claude.json pointing at its clone's scripts/diagnostics/ui_mcp.sh (#4058). tasks/main.yml
-# fast-forwards that clone on each apply, so the launcher follows master (#4099). The operator's
+# ~/.claude.json pointing at its clone's scripts/diagnostics/ui_mcp.sh (#4058). claude-clone-sync
+# fast-forwards that clone on each apply and every claude_code_agent_clone_sync_interval, so the
+# launcher follows master (#4099, #4162). The operator's
 # toolchain sits under the 0750 /home/{{ sys_user }}, which this user cannot read, and the
 # operator's registration is user-scope in the operator's own ~/.claude.json. Not the repo's
 # .mcp.json: a project-scope server waits for a per-user approval a phone session cannot give,

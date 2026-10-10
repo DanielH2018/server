@@ -1,0 +1,16 @@
+[Unit]
+Description=Fast-forward the {{ claude_code_agent_user }} agent user's clone to origin's master
+OnFailure=claude-clone-sync-alert.service
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# As the clone's owner: git refuses a repository another user owns, and a root-run uv sync
+# leaves a root-owned .venv.
+User={{ claude_code_agent_user }}
+Environment=HOME={{ claude_code_agent_user_home }}
+Environment=TMPDIR=/tmp
+# The script skips, exiting 0, when the clone is off master or dirty, so the agent's work in
+# progress never pages. A failed pull, sync or collection install fails the unit.
+ExecStart=/usr/local/bin/claude-clone-sync.sh {{ claude_code_agent_user_clone_dir }}

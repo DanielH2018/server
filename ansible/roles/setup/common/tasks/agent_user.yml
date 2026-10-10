@@ -1,7 +1,7 @@
 ---
 # A Claude agent's own Unix user, and what that user needs that the operator's user used to
-# supply: uv and the pinned Python, a Claude Code install, the operator's claude_guard rules and
-# claude_worktree readers, and a clone to work in.
+# supply: uv, uvx, prek and the pinned Python, a Claude Code install, the operator's
+# claude_guard rules and claude_worktree readers, and a clone to work in.
 #
 # WHY A SEPARATE USER. A session running as sys_user can read everything sys_user can: the age
 # key that decrypts the become password, the operator's gh token, ssh keys and the deployer's
@@ -72,19 +72,45 @@
     - "{{ agent_user_home }}/.local/share/claude-worktree"
   become: true
 
-- name: Give the agent user the operator's pinned uv
+- name: Give the agent user the operator's pinned uv and uvx
   # /usr/local/bin/uv is a symlink into /home/{{ sys_user }}, which ProtectHome= and the 0750
   # home both hide from this user. A copy of the binary initial_setup pins, rather than a second
-  # installer pin, so a uv bump reaches the agent on the next apply of the calling role.
+  # installer pin, so a uv bump reaches the agent on the next apply of the calling role. uvx
+  # ships in the same installer and is copied for the same reason.
   ansible.builtin.copy:
-    src: /home/{{ sys_user }}/.local/bin/uv
-    dest: "{{ agent_user_home }}/.local/bin/uv"
+    src: /home/{{ sys_user }}/.local/bin/{{ item }}
+    dest: "{{ agent_user_home }}/.local/bin/{{ item }}"
     remote_src: true
     # The ownership the closing chown sets, so the two tasks do not flip it on every apply.
     owner: "{{ agent_user_name }}"
     group: "{{ sys_user }}"
     mode: "0755"
+  loop: [uv, uvx]
   become: true
+
+- name: Look for the operator's pinned prek
+  ansible.builtin.stat:
+    path: /home/{{ sys_user }}/.local/share/uv/tools/prek/bin/prek
+  register: common_agent_user_prek
+  become: true
+
+- name: Give the agent user the operator's pinned prek
+  # The commit hooks (gitleaks, the static ratchets, facts-reverify-changed) run through prek,
+  # and without a binary the agent's commits skip every one of them (#4100). A copy of the one
+  # initial_setup pins as a uv tool, for the reason uv is copied above: a third `prek==` pin
+  # would be one more twin for test_host_tool_pins_match_their_twins.py to hold equal. The
+  # source is the tool's own binary, not the ~/.local/bin symlink to it. ansible-lint and the
+  # other hook tools need nothing here: prek builds each hook's environment itself. Skipped on
+  # a host whose operator has no prek, which commits from nowhere.
+  ansible.builtin.copy:
+    src: /home/{{ sys_user }}/.local/share/uv/tools/prek/bin/prek
+    dest: "{{ agent_user_home }}/.local/bin/prek"
+    remote_src: true
+    owner: "{{ agent_user_name }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+  when: common_agent_user_prek.stat.exists | default(false)
 
 - name: Look for the operator's deployed claude_guard package
   ansible.builtin.stat:

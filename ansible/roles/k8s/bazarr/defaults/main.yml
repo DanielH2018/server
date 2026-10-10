@@ -1,6 +1,6 @@
 ---
 
-bazarr_k8s_image: lscr.io/linuxserver/bazarr:v1.6.1-ls365
+bazarr_k8s_image: lscr.io/linuxserver/bazarr:v1.6.2-ls367@sha256:c1673816321156b904af9b7e6415ea547ae9622e4acc375358f1e1eb9ed1e904
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — strategy is Recreate and the config volume comes from
