@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # fake-remux heartbeats — managed by Ansible (setup/fake_remux role); edits overwritten.
 #
+# Usage: fake-remux-health.sh [-h|--help]
+# Takes no arguments. Cron job "fake-remux health" runs it as the deploy user every
+# fake_remux_health_cron_minute minutes (cron file fake-remux-health). Run it by hand the same way.
+# It reads the three Kuma push tokens from kuma-push.env in fake_remux_config_dir and the three
+# state files in fake_remux_state_dir, then pushes one heartbeat per state file. It logs to syslog
+# under the tag fake-remux-health. Exit 0 also covers unreadable tokens (the push is skipped);
+# exit 1 means /usr/local/lib/kuma-push-lib.sh is missing.
+#
 # Pushes the SAME two Kuma monitors monitor-bridge used to push, with the same tokens, so both keep
 # their history. Only the pusher moved: monitor-bridge then ran on daniel-server, reading that
 # host's Docker socket and its bind-mounted /var/lib/autofix-fake-remux, and the crons writing
@@ -15,6 +23,12 @@
 # and was enough to forge or suppress either heartbeat. Both tokens moved to the 0640
 # root:{{ sys_user }} env file sourced below, the same split disk-health.sh.j2:29-38 makes.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

@@ -19,7 +19,20 @@
 # still exercised before anything is restored; the restore itself is the k3s leg.
 #
 # Exit code is the drill's own: 0 only when the snapshot restored and served its objects.
+#
+# Usage: etcd-drill-guest-run [--detached]
+# Not run by hand. The etcd-restore-drill-vm cron on daniel-server stages it in the guest as
+# /usr/local/bin/etcd-drill-guest-run and calls it over ssh as root. --detached starts the run
+# in the background and returns at once; the output lands in /var/tmp/etcd-drill.out and the
+# exit code in /var/tmp/etcd-drill.rc. It reads /etc/rancher/k3s/etcd-s3.env
+# (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, ETCD_S3_BUCKET, ETCD_S3_ENDPOINT).
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 S3_ENV=/etc/rancher/k3s/etcd-s3.env
 DRILL=/usr/local/bin/etcd-restore-drill

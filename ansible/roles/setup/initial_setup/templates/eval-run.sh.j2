@@ -2,6 +2,13 @@
 # Weekly hermetic homelab-agent eval sweep: run every case under evals/cases/, roll the
 # result into evals/history.json via evals/trend.py, and publish the change.
 #
+# Usage: eval-run.sh [-h|--help]
+# Takes no arguments. Cron job "Homelab eval sweep" runs it as the deploy user on the ops_cron_host
+# every Sunday at 02:00 with PATH and HOME set. Running it by hand spends API money and publishes
+# a PR for real. It does nothing (and reports UP) without a SOPS anthropic_api_key. Optional env:
+# CLAUDE_EVAL_EPOCH overrides the epoch label that evals/trend.py records, which defaults to the
+# installed Claude Code version.
+#
 # DISARMED UNTIL A SOPS anthropic_api_key SECRET EXISTS. Hermetic grading (evals/README.md
 # "Auth & fidelity") needs ANTHROPIC_API_KEY; without it the chezmoi engine falls back to a
 # non-hermetic subscription run whose numbers are noise, and evals/trend.py refuses to trend
@@ -38,6 +45,12 @@
 # it, and cron inherits neither that nor a login PATH -- same trap scripts/diagnostics/
 # ui_mcp.sh and the archived happy-daemon unit both work around the same way.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 REPO="/home/{{ sys_user }}/server"
 UV="/home/{{ sys_user }}/.local/bin/uv"

@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Witness for the Loki read route — managed by Ansible (initial_setup role); edits overwritten.
 #
+# Usage: loki-read-route-health.sh [-h|--help]
+# Takes no arguments. systemd timer kuma-check-loki-read-route.timer runs it as the deploy user at
+# minute 23 of every hour on each host in loki_route_witness_hosts, and again every 15 minutes
+# while the last run failed. It reads LOKI_ROUTE_WITNESS_PUSH_TOKEN from
+# /etc/homelab/loki-route-kuma-push.env and pushes to this host's own Kuma monitor. It exits 0
+# without pushing when the token is unset.
+#
 # WHAT THIS WATCHES (issue #1712). loki-homelab's IngressRoute has exactly one caller —
 # `probe.py loki-query` / `loki-labels`, running as a host process — and nothing watched it. It
 # was dead from daniel-server for as long as traefik sat on daniel-box (#1693) and nothing
@@ -23,6 +30,12 @@
 # found` comes back with exit 0. loki_route_health.py is what decides, and its tests hold that
 # 404 as a DOWN case.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

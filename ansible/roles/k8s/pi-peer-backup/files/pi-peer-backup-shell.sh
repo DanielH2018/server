@@ -20,7 +20,20 @@
 #
 # The exec'd argv stays `sudo rsync ...`, so it works whether the Pi's sudoers rule is
 # `NOPASSWD: ALL` or scoped to /usr/bin/rsync.
+#
+# Usage: pi-peer-backup-shell <source directory>
+# Not run by hand. sshd runs it as the forced command of the pi-peer-backup key, and the source
+# directory is the argument in that authorized_keys entry. The client's request arrives in
+# SSH_ORIGINAL_COMMAND. -h or --help in argv prints this header and exits 0; the help check
+# never reads SSH_ORIGINAL_COMMAND, so a client cannot reach it.
 set -u
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
 
 SRC="${1:?usage: pi-peer-backup-shell <source directory>}"
 CMD="${SSH_ORIGINAL_COMMAND:-}"

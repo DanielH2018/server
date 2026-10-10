@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Host-side UPS secondary watchdog — managed by Ansible (nut_host role); edits overwritten.
 #
+# Usage: ups-secondary-health.sh [-h|--help]
+# Takes no arguments. Root cron job "UPS secondary watchdog" (cron file ups-secondary-health) runs
+# it every nut_host_watchdog_interval_minutes minutes on daniel-server, only while
+# nut_host_watchdog_armed is true. It reads /etc/nut/upsmon.conf and the Kuma push token from
+# /etc/nut/kuma-push.env. Running it by hand needs root and pushes to the Kuma monitor.
+#
 # Answers the one question nothing else in this estate asks: can THIS host's upsmon still
 # reach upsd, right now?
 #
@@ -35,6 +41,12 @@
 # manifest-prune-check.sh: root buys the file read, nothing more. The consequence worth knowing
 # is that an agent session cannot trigger a beat to verify this one by hand.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 # shellcheck source=/dev/null
 source /usr/local/lib/kuma-push-lib.sh || {

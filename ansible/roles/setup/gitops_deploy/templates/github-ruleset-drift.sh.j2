@@ -5,6 +5,14 @@
 # keep the agent's account to its own branches? Four arms, one push. Ahead of all four, the repo
 # must be public: on the free plan GitHub enforces no ruleset on a private repo (#3610).
 #
+# Usage: github-ruleset-drift.sh [-h|--help]
+# Takes no arguments and changes nothing on GitHub. systemd timer
+# kuma-check-github-ruleset-drift.timer runs it as root once a day
+# (gitops_deploy_ruleset_drift_cron_hour and _minute), and again every 30 minutes while the last
+# run failed. It reads the live rulesets with the deploy user's gh login (anonymous when there is
+# none), compares them with the values rendered into this file, and pushes to the
+# github-ruleset-drift Kuma monitor. Exit 0 = no drift; exit 1 = drift or an unverifiable read.
+#
 # The ruleset is what stops an un-CI'd commit reaching master, and the deployer trusts that: a
 # tick reads the check runs for the origin SHA and deploys on a green verdict. Nothing in the
 # repo watched the ruleset itself, so an edit in the GitHub UI — dropping a required context,
@@ -44,6 +52,12 @@
 #
 # set -uo (not -euo): a failed curl must be captured + reported, not swallowed by an early exit.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin # cron ships a bare PATH
 # What scripts/lib/gh.py sets for every Python caller, and this cron calls `gh` directly. A `gh`

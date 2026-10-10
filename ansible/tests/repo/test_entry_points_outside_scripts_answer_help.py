@@ -87,6 +87,12 @@ ENTRY_POINTS = _entry_points()
 
 def _help_failure(path: Path) -> str | None:
     """Why `path --help` is not a usable answer, or None when it is one."""
+    text = path.read_text(encoding="utf-8")
+    if "--help" not in text and "argparse" not in text:
+        # A script with no help path would do its real work under this run: the host crons
+        # here call cscli, read their config and tick the deployer. argparse answers --help
+        # without the file spelling the flag out.
+        return "has no --help path; not run, because it would do its real work"
     pythonpath = os.pathsep.join(str(p) for p in (path.parent, *SHIPPED_BESIDE))
     try:
         r = subprocess.run(
@@ -136,6 +142,16 @@ def test_a_script_that_reads_stdin_before_argv_is_flagged(tmp_path):
         "    sys.exit(0 if sys.stdin.read() else 1)\n"
     )
     assert _help_failure(script) is not None
+
+
+def test_a_script_with_no_help_path_is_flagged_without_running(tmp_path):
+    marker = tmp_path / "ran"
+    script = tmp_path / "does_work.py"
+    script.write_text(
+        f'"""Does work."""\nimport pathlib\n\npathlib.Path("{marker}").touch()\n'
+    )
+    assert _help_failure(script) is not None
+    assert not marker.exists(), "the check ran a script that has no help path"
 
 
 def test_a_script_that_checks_argv_first_is_clean(tmp_path):

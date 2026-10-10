@@ -15,7 +15,20 @@
 #
 # set -uo (not -euo): a cscli/exec error must be captured and REPORTED, not swallowed by an
 # early exit.
+#
+# Usage: crowdsec-update-home-allowlist.sh (no arguments)
+# Runs from the crowdsec-home-allowlist cron on daniel-box every 5 minutes, piped to
+# `logger -t crowdsec-home-allowlist`. It looks up the home public IPv4 and IPv6 addresses,
+# keeps the last values in /var/lib/crowdsec-home-allowlist, runs `cscli allowlists` inside the
+# crowdsec pod through `k3s kubectl exec`, and pushes the verdict to the home allowlist Kuma
+# push monitor.
 set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
 
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin  # cron ships a bare PATH
 
