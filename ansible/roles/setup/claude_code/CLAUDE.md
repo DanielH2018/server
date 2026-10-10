@@ -18,25 +18,24 @@ uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "claude_code"` when `has_claude_code`
-- **Timers (3):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
+- **Timers (4):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
+  `claude-clone-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
   `claude-memory-sync.timer` (`OnBootSec=5min`, `OnUnitActiveSec=15min`),
   `claude-rc-restart.timer` (`OnCalendar=weekly`)
 <!-- /generated_from -->
 
 ## The two Remote Control modes are different features
 
-`/remote-control` **inside a running session** publishes that one session to the phone. `claude rc`
-**from a shell** is a persistent server that spawns sessions **on demand** up to `--capacity`; only
-it lets the phone create a session, so systemd runs one.
+`/remote-control` **inside a session** publishes that session to the phone. `claude rc` **from a
+shell** spawns sessions **on demand** up to `--capacity`, so only it lets the phone create one.
 
 ## Activating it
 
 `claude_code_rc_enabled: true` enables and starts the host; back to `false` stops **and** disables
 it and its restart timer, which is the rollback. `ansible/tests/setup/test_claude_rc_unit.py` pins both directions.
 
-One prerequisite Ansible cannot check: a phone-created session reaches a prompt in a fresh
-worktree with no workspace-trust dialog. **Re-run that check after a Claude Code upgrade or
-spawn-mode change.**
+One prerequisite Ansible cannot check, a fresh worktree's workspace-trust dialog, is in the doc
+above. **Re-run that check after a Claude Code upgrade or spawn-mode change.**
 
 **Stop any hand-run host before deploying**: it and the service compete for one account and
 directory.
@@ -50,9 +49,8 @@ directory.
   `ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py` holds the whole repo to
   that shape. `no_log: true` hides an undefined-variable failure, so when the task
   fails opaquely, check `gitops_deploy_discord_webhook` is in scope.
-- **It cannot catch an expired login.** The host keeps reporting `active` while every session
-  fails, so no `OnFailure=` fires. Closing it needs a check that the host is *registered*, not
-  just up, and none exists.
+- **It cannot catch an expired login.** The host reads `active` while every session fails, and
+  no check reads whether it is *registered*.
 
 ## Traps already paid for
 
@@ -75,22 +73,16 @@ directory.
   `user-<uid>.slice`. `login-slice-caps.conf.j2` and `pytest-fanout-cap.conf.j2` carry
   the unit's caps there for each uid in `claude_code_login_uids` and the agent's. A uid that
   leaves the list loses both; `claude_code_login_caps_enabled: false` removes all.
-- **The background-shell pressure reaper is turned off.**
-  `claude_code_rc_disable_bg_shell_pressure_reap` drives it both ways: Node derives the kill from
-  the **cgroup**, so `free -m` reads clean while it kills backgrounded Bash tasks.
-- **The weekly restart uses `try-restart`**: plain `restart` would start a host that
-  `claude_code_rc_enabled` keeps stopped on purpose. It picks up the binary Claude Code updates
-  in the background.
+- **The background-shell pressure reaper is off** (`claude_code_rc_disable_bg_shell_pressure_reap`):
+  Node reads the **cgroup**, so `free -m` reads clean while it kills backgrounded Bash tasks.
+- **The weekly restart uses `try-restart`**, which never starts a host kept stopped on purpose.
 
 ## The fleet bound, and why it lives on `user.slice`
 
-One number for both Claude cgroups, on the one slice that parents both:
-`claude_code_fleet_memory_high` / `claude_code_fleet_swap_max`, rendered by
-`templates/fleet-slice-caps.conf.j2`. `claude-rc.service` reaches that parent through a `Slice=`
-line, and `claude_code_fleet_caps_enabled: false` removes both.
-
-**Re-derive the number in `defaults/main.yml`**, never from a summary. **The `Slice=` line takes
-effect at the next start**, so the deploy that changes it drops the RC host's sessions.
+`claude_code_fleet_memory_high` / `claude_code_fleet_swap_max` bound both Claude cgroups on
+`user.slice`, their shared parent; `claude_code_fleet_caps_enabled: false` removes both.
+`docs/claude-code-rc-caps.md` has the derivation. **The `Slice=` line takes effect at the next
+start**, so the deploy that changes it drops the RC host's sessions.
 
 ## The agent user
 
@@ -100,8 +92,8 @@ effect at the next start**, so the deploy that changes it drops the RC host's se
 `defaults/main.yml` covers login, the GitHub account, the lander and each switch.
 
 `claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as, and its home
-and `claude_code_rc_workdir` follow it. The unit gets `ProtectHome=yes`, `NoNewPrivileges=yes`,
-`PrivateTmp=yes` and `UMask=0027` only when it differs from `sys_user`. The first apply as the
+and `claude_code_rc_workdir` follow it. The unit is sandboxed (`ProtectHome=yes` and three more)
+only when it differs from `sys_user`. The first apply as the
 agent copies the operator's memory store once (`tasks/agent_memory_seed.yml`).
 
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
@@ -115,3 +107,11 @@ agent copies the operator's memory store once (`tasks/agent_memory_seed.yml`).
 - **Abort valve:** the unit skips unless the source `MEMORY.md` is non-empty.
 - **Evidence:** `journalctl -u claude-memory-sync` lists each file a run changed or deleted;
   a failure pages Discord.
+
+## Autonomous-role contract (`claude-clone-sync`)
+
+- **Scope:** a `--ff-only` pull of the agent's clone (`claude`) every
+  `claude_code_agent_clone_sync_interval`, with `uv sync` when it moves `uv.lock` (#4162).
+- **Mode:** `claude_code_agent_user_enabled`; false removes it.
+- **Abort valve:** it skips, exiting 0, unless the clone is a clean `master`.
+- **Evidence:** `journalctl -u claude-clone-sync`; a failure pages Discord.

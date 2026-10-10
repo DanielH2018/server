@@ -1,0 +1,9 @@
+[Unit]
+Description=Fast-forward the {{ claude_code_agent_user }} agent user's clone every {{ claude_code_agent_clone_sync_interval }}
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec={{ claude_code_agent_clone_sync_interval }}
+
+[Install]
+WantedBy=timers.target
