@@ -28,6 +28,8 @@ that died without recording a code is `died`, through the pid the parent recorde
 
 import argparse
 import json
+import os
+import pwd
 import re
 import sys
 from pathlib import Path
@@ -37,7 +39,7 @@ from lib.detach_fork import alive, recorded_code, recorded_pid
 
 # `deploy_detach.LOG_DIR`, restated: that module imports the deploy machinery, and this probe
 # runs under a bare interpreter with no project environment. A test holds the two equal.
-LOG_DIR = Path("/tmp/homelab-deploy-logs")
+LOG_DIR = Path(f"/tmp/homelab-deploy-logs-{pwd.getpwuid(os.geteuid()).pw_name}")
 
 # Each terminal state -> the exit code cc-wait ends with.
 TERMINAL = {"settled": 0, "failed": 1, "died": 1}
