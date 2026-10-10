@@ -64,6 +64,8 @@ class Record:
     red_behaviours: int = 0
     red_tests: int = 0
     green_gate: str = ""
+    # Why the batch ran no red phase (`red_gate.red_skip_reason`), "" when it ran one.
+    red_skipped: str = ""
     # How the batch ended, so the records count the batches that never reached a PR (#3940):
     # `failed`, `needs-input` or `no-pr` before a PR exists, then `pr` once one does, or
     # `failed` / `needs-input` when the last phase says so.

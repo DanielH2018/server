@@ -246,6 +246,11 @@ def _parser(description: str) -> argparse.ArgumentParser:
     _add_repo(sh)
     sh.add_argument("number", type=int)
     sh.add_argument("--json", action="store_true")
+    sh.add_argument(
+        "--brief",
+        action="store_true",
+        help="print only the deploy plane and the tests the issue's cited paths imply",
+    )
 
     ex = sub.add_parser(
         "export",

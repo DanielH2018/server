@@ -146,6 +146,7 @@ from dev.findings_lib.gh_calls import (
 )
 from dev.findings_lib.issue_model import (
     NO_REOPEN,
+    cited_paths,
     current_claim,
     deferred,
     now_iso,
@@ -169,6 +170,7 @@ from dev.findings_lib.plans import (
     plan_touch,
 )
 from dev.findings_lib.boundaries import REGISTER_CHECKOUTS, FindingsTools, aimed
+from dev.findings_lib.red_green import RED_GREEN_LABEL, red_green_eligible
 from dev.findings_lib.solo_only import fanout_tooling_paths
 from dev.findings_lib.verify import verification_report
 
@@ -202,17 +204,15 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         labels.append("manual")
     if args.review_leftover:
         labels.append("review-leftover")
-    # `gh issue create --label` fails on a label the repo does not have, so the first `open`
-    # in a fresh repo has to create the label set before it can use it.
+    if tools.repo is None and red_green_eligible(cited_paths(body)):
+        labels.append(RED_GREEN_LABEL)  # a --review fan-out runs a red phase (#3950)
+    # `gh issue create --label` fails on a label the repo lacks, so `open` creates LABELS
+    # first, and a dated label or `red-green` the first time it is used.
     have = _existing_labels(tools)
-    run(plan_sync_labels(have), args.dry_run, tools)
-    if args.not_before:
-        # Dated, so not in LABELS and not synced above; created the first time it is used.
-        run(
-            plan_ensure_label(not_before_label(args.not_before), have),
-            args.dry_run,
-            tools,
-        )
+    extra = [not_before_label(args.not_before)] if args.not_before else []
+    extra += [RED_GREEN_LABEL] if RED_GREEN_LABEL in labels else []
+    ensure = [plan for name in extra for plan in plan_ensure_label(name, have)]
+    run(plan_sync_labels(have) + ensure, args.dry_run, tools)
     existing = fingerprint_match(fp, tools)
     outcome, code, plans = plan_open(
         existing,

@@ -17,6 +17,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from dev.findings_lib.red_green import RED_GREEN_LABEL, RED_GREEN_STYLE
 from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
@@ -48,7 +49,7 @@ def plan_sync_labels(existing: set[str]) -> list[list[str]]:
 
 
 def plan_ensure_label(name: str, existing: set[str]) -> list[list[str]]:
-    """The `label create` a dated `not-before:` label needs before anything can apply it.
+    """The `label create` a label outside `LABELS` needs before anything can apply it.
 
     `gh issue create --label` and `gh issue edit --add-label` both fail on a label the repo
     lacks, and `plan_sync_labels` only knows the static `LABELS` set. Returns `[]` when the
@@ -56,7 +57,7 @@ def plan_ensure_label(name: str, existing: set[str]) -> list[list[str]]:
     """
     if name in existing:
         return []
-    colour, desc = NOT_BEFORE_STYLE
+    colour, desc = RED_GREEN_STYLE if name == RED_GREEN_LABEL else NOT_BEFORE_STYLE
     return [["label", "create", name, "--color", colour, "--description", desc]]
 
 
