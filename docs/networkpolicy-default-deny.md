@@ -53,8 +53,16 @@ All measured on this cluster, not assumed.
 | **Kubelet probe traffic needs no ingress rule** | `flaresolverr` admits :8191 only from prowlarr, yet is probed on :8191 and runs 1/1. Corroborated by `headlamp` (:4466 from traefik only, 1/1 for 28h) |
 | **hostNetwork pods cannot be policed by podSelector** | `node-exporter` (both nodes), `metallb` `speaker` — pod IP *is* the node IP |
 | **hostPort traffic arrives with a node IP**, needing an `ipBlock` | `registry`'s policy carries `ipBlock` entries for exactly this |
-| Node bridge addresses are `10.42.0.1` (daniel-box) and `10.42.1.1` (daniel-server) | `ip -4 -o addr show cni0` on each |
-| All seven LoadBalancers are **ETP=Local**, so external client IPs are preserved | `kubectl get svc -o jsonpath=…externalTrafficPolicy` |
+| Every LoadBalancer Service is **ETP=Local**, so external client IPs are preserved | `kubectl get svc -o jsonpath=…externalTrafficPolicy`; the Services are listed below |
+
+The nodes' `cni0` bridge gateway addresses (`k3s_cni0_gateways`), verified with
+`ip -4 -o addr show cni0` on each node:
+
+--8<-- "assets/generated/fragments/cluster-addresses.md"
+
+The LoadBalancer Services, read from the role templates:
+
+--8<-- "assets/generated/fragments/loadbalancer-services.md"
 
 Two consequences worth stating so nobody "fixes" a non-problem later:
 
@@ -133,9 +141,9 @@ slice 1 a whole-namespace change wearing a six-app label. The selector therefore
 opt-in label (`netpol-baseline: enforced`), each slice labels its own workloads, and a final
 slice switches `netpol_baseline_scope` to `namespace`.
 
-That last switch is **slice 5, with its own PR**, and it is the risky one: at that moment every
-pod nobody remembered to label gets fenced at once, including anything added between now and
-then. It is gated on a check that enumerates pods in the namespace lacking the label and fails
+That last switch was **slice 5, with its own PR**, deployed 2026-08-20 (`f9f36e8f4`). It was the
+risky one: at that moment every pod nobody remembered to label got fenced at once, including
+anything added after the earlier slices. It was gated on a check that enumerates pods in the namespace lacking the label and fails
 if the list is non-empty, which turns a silent catch-all into an explicit reconciliation.
 
 That check catches *unlabelled* pods. It does not catch two more consequences of the same
@@ -239,7 +247,7 @@ reason below.
 | **2** ✅ | Media stack + bridges: sonarr, radarr, prowlarr, bazarr, tdarr, qbittorrent, configarr, janitorr, monitor-bridge, autofix-bridge | Densest genuine app-to-app mesh; several callers are DB-configured and unprobeable. **Deployed 2026-08-17.** jellyfin moved to slice 4 — see below |
 | **3** ✅ | `observability` namespace | Four hostPort ingress paths, cross-namespace inbound from three homelab workloads, thick intra-namespace mesh. **Deployed 2026-08-19.** |
 | **4** ✅ | Infra tier: traefik, authelia, `crowdsec`, pihole, mosquitto, nut, jellyfin | Highest consequence; do it once the pattern is proven. **Deployed 2026-08-20.** registry/headlamp/n8n were NOT labelled — each already carries a bespoke policy *tighter* than the baseline, so labelling would widen it |
-| **5** | Switch `netpol_baseline_scope` to `namespace` | Makes a workload fenced-by-default instead of opt-in. Gated on zero unlabelled pods |
+| **5** ✅ | Switch `netpol_baseline_scope` to `namespace` | Makes a workload fenced-by-default instead of opt-in. Gated on zero unlabelled pods. **Deployed 2026-08-20.** |
 
 **Services born fenced.** A leaf app added after slice 1 shipped belongs to no slice, but has
 slice 1's shape: Traefik is its only caller and it dials nothing. Those carry the label from

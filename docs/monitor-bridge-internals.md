@@ -9,23 +9,25 @@ table, the gate-set membership, the operator prerequisites and the test-side sea
 
 Every set but `EXPORTER_DEPENDENT` derives from the `gate` column of
 `ansible/roles/k8s/monitor-bridge/files/check_table.py`, and each member's row carries the
-reason it is a member. The rules below shaped those memberships.
+reason it is a member. The table lists the members, generated from that column.
 
-- **`LOKI_DEPENDENT`** — `loki_ingestion`, `swallowed_verdicts`, `kuma_notify_failures`.
-  `ha_heartbeat` is deliberately NOT a member: its ban arm fails open on a Loki error, so the
-  heartbeat verdict survives a Loki outage.
-- **`B2_DEPENDENT`** — `b2_storage`. The gate runs one `b2_authorize_account` per
-  `B2_PROBE_INTERVAL_S` (1800 s) with a BILLED outcome cached, because the fault it detects is a
-  transaction cap; a failure that never reached B2 takes the short `B2_TRANSPORT_RETRY_S` TTL.
-- **`WAN_DEPENDENT`** — `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift`, `discord`. The
-  gate reads two provider URLs by hostname and is DOWN only when NEITHER answers, so one
-  provider's outage cannot silence a dependent reading the other. Never a shared-anycast IP: the
-  2026-09-18 outage included DNS failure.
+--8<-- "assets/generated/fragments/bridge-gate-sets.md"
+
+The rules below shaped those memberships.
+
+- **`LOKI_DEPENDENT`**: `ha_heartbeat` is deliberately NOT a member. Its ban arm fails open on a
+  Loki error, so the heartbeat verdict survives a Loki outage.
+- **`B2_DEPENDENT`**: the gate runs one `b2_authorize_account` per `B2_PROBE_INTERVAL_S`
+  (1800 s) with a BILLED outcome cached, because the fault it detects is a transaction cap. A
+  failure that never reached B2 takes the short `B2_TRANSPORT_RETRY_S` TTL.
+- **`WAN_DEPENDENT`**: the gate reads two provider URLs by hostname and is DOWN only when
+  NEITHER answers, so one provider's outage cannot silence a dependent reading the other. It
+  never probes a shared-anycast IP, because the 2026-09-18 outage included DNS failure.
 - **`EXPORTER_DEPENDENT`** — `node` → disk, memory, `host_temp`; `node-pi` → `host_temp`,
   `pi_pressure`. `pvc_fullness` gets no entry keyed on the kubelet job on purpose: its claim-count
   floor exists to page on exactly that partial outage.
-- **`STARTUP_GRACE`** — `n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `speedtest`. Disjoint
-  from every skip set, so a check that gains a gate leaves this set; a test holds both.
+- **`STARTUP_GRACE`** is disjoint from every skip set, so a check that gains a gate leaves
+  this set; a test holds both.
 - **The retired second Prometheus gate.** `Cluster Prometheus Reachable` gated a
   `CLUSTER_DEPENDENT` set reading `CLUSTER_PROMETHEUS_URL` until 2026-09-28. Both URLs named one
   cluster Service after the Docker plane retired (2026-08-14), so its tile could not go red on its
@@ -89,9 +91,10 @@ reason it is a member. The rules below shaped those memberships.
 | `check_table.py` | `CHECKS`, one `PushCheck` per check and gate: its body, push token, gate and Kuma tile |
 | `registry.py` | `build_checks(env)`, a `Check` for every non-gate row of `CHECKS`, with its token read from the environment it is handed |
 | `gates.py` | the `*_DEPENDENT` sets derived from `CHECKS`' `gate` column, `STARTUP_GRACE`, `GATE_DEPENDENTS`, `check_enabled`, `validate_check_filter`, `expand_gates_for_cli`, `down_exporters`, `_evaluate`, `_gate`, and the frozen `Gates` seam `run_once` reads every gate fact through |
+| `gitops_markers.py`, `gitops_ledger.py`, `gitops_hold.py` | generated verbatim copies of the deployer's marker parsers, written by `scripts/dev/gen_gitops_markers.py` (edit the source under `roles/setup/gitops_deploy/files/`, never the copy). `gitops_markers.py` holds the line-format markers, `gitops_ledger.py` the `owed` ledger and tick receipt, and `gitops_hold.py` the `DeployerSnapshot` that `check_gitops_status` reads every marker through |
 | `longhorn_robustness.py` | `SAFE_ROBUSTNESS` and `unsafe_volumes` — which Longhorn robustness states are lost redundancy. Import-free, because `scripts/deploy_tools/runbook_gates.py` imports the same file from the checkout to judge the CRs (#3668) |
 | `bridge/types.py` | `PushCheck`, `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
-| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster` (+ `cluster_etcd`, `cluster_rollout`, `cluster_traefik`, `cluster_zero`), `host`, `host_thermal`, `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `storage`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py` and `gitops_ledger.py`, the generated copies of the deployer's modules; the second reads the `owed` ledger's `manual_plane`, `k8s_deferred` and `hold_plane` classes. `check_gitops_status` reads every marker it judges through `gitops_hold.DeployerSnapshot`, the third generated copy. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
+| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster` (+ `cluster_etcd`, `cluster_rollout`, `cluster_traefik`, `cluster_zero`), `host`, `host_thermal`, `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `storage`, `wan`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py` and `gitops_ledger.py`, the generated copies of the deployer's modules; the second reads the `owed` ledger's `manual_plane`, `k8s_deferred` and `hold_plane` classes. `check_gitops_status` reads every marker it judges through `gitops_hold.DeployerSnapshot`, the third generated copy. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
 | `bridge/config.py` + `config_{host,service,cluster,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)`, `load_config(env)`; one builder per domain. `K8S_EXTENDED_RESOURCES` and `PVC_EXCLUDE` stay in `config.py` because a repo test greps for them by text |
 | `bridge/net.py` | the transport: `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` (which caps its message with `bridge.common.cap_push_msg`), and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST. No check body calls its fetchers; they go through `bridge/sources.py` |
 | `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `loki_vector`, `loki_lines`, `get_json`, `post_json`, and `log_error_counts` composed from two of them). `cli.main()` builds one; `run_once` hands it to every body as `src`. Also `Sink(cfg)`, where `run_once` pushes every verdict, delegating to `bridge.net.push` |

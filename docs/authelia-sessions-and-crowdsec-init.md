@@ -32,7 +32,7 @@ not recognise, this pod rolls under `Recreate` in front of most public routes, a
 `https://raw.githubusercontent.com/authelia/authelia/v<tag>/config.template.yml` — and
 the `authelia-webauthn-is-a-checked-second-factor` row in
 `ansible/tests/k8s/_config_property_rows.py` holds the rendered block to the keys someone
-checked against that source — deliberately narrower than what 4.39.21 accepts, so adding a key
+checked against that source — deliberately narrower than what 4.39.21 accepted when the keys were checked on 2026-09-29, so adding a key
 means editing `WRITTEN_WEBAUTHN_KEYS` there as well, which is where the check belongs.
 
 Enrolment is a browser action at the portal's security settings and needs a physical
@@ -43,8 +43,8 @@ the portal's login page.
 ## Sessions live in redis
 
 `session.redis` in `templates/config-secret.yaml.j2` points at the `authelia-redis` Deployment
-this role also deploys. Without that block Authelia's provider is **in-memory** — 4.39.21's own
-`config.template.yml` says "Memory is the provider unless redis is defined" — so every roll of
+this role also deploys. Without that block Authelia's provider is **in-memory** — the 4.39.21
+`config.template.yml` read on 2026-09-29 says "Memory is the provider unless redis is defined" — so every roll of
 the portal destroyed every session, including remember-me ones. `remember_me: '1M'` sets the
 cookie's lifetime and overrides the inactivity timer; it does not change where the session is
 stored. Three rolls in one day on 2026-09-10 is what surfaced it.

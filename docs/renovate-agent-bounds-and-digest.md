@@ -128,15 +128,20 @@ code ever ran.
 
 ## What bounds the run
 
-The user boundary above bounds what a run can reach. Four vars in `defaults/main.yml` bound what
-it costs:
+The user boundary above bounds what a run can reach. These vars in `defaults/main.yml` bound
+what it costs:
 
-| Bound | Var | Why that one |
-|---|---|---|
-| PRs per tick | `renovate_agent_max_prs` (3) | Each landing is a CI wait plus a tick plus a deploy plus a health gate. Three fits the wall clock; the rest wait for tomorrow. |
-| Wall clock | `renovate_agent_run_timeout_s` (5400) | The wrapper's own kill, which still posts a digest naming the timeout. |
-| Wall clock, backstop | `renovate_agent_unit_timeout` (100min) | systemd's. It kills the whole cgroup and posts only the `OnFailure` alert, so it must never trip first. |
-| Spend | `renovate_agent_budget_usd` (25) | A runaway backstop, not a planned stop — see below. |
+--8<-- "assets/generated/fragments/pr-agent-bounds.md"
+
+Why each bound is the var it is:
+
+- **`renovate_agent_max_prs`:** each landing is a CI wait plus a tick plus a deploy plus a
+  health gate. The cap fits the wall clock, and the rest wait for tomorrow.
+- **`renovate_agent_run_timeout_s`:** the wrapper's own kill, which still posts a digest naming
+  the timeout.
+- **`renovate_agent_unit_timeout`:** systemd's backstop. It kills the whole cgroup and posts
+  only the `OnFailure` alert, so it must never trip first.
+- **`renovate_agent_budget_usd`:** a runaway backstop, not a planned stop. See below.
 
 **The budget must not be the binding constraint.** The PR cap is what bounds a normal run; the
 budget only catches a loop. A landing in flight runs in the lander unit, so a session

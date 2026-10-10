@@ -8,10 +8,12 @@ the hysteresis, the module layout) and is what a session loads before touching t
 page is where the numbers came from and what each arm was added after, and its *Live checks*
 walks the registry in order.
 
-`files/check_table.py`'s `CHECKS` is the authority on which checks exist. Nothing tests
-this page: a bullet here can describe a check that has since moved or been retired, and the
-*Retired and moved checks* section is exactly that record. If a bullet disagrees with the
-registry, the registry is right.
+`files/check_table.py`'s `CHECKS` is the authority on which checks exist, and the
+*Live checks* section opens with a table generated from it. A test
+(`test_fragments_bridge.py`) holds the bullet titles in *Live checks* to that table: every
+live check has a bullet, and a bullet titled for a check that has moved or retired belongs in
+*Retired and moved checks*. The prose inside a bullet is not tested. If a bullet disagrees
+with the registry, the registry is right.
 
 
 ## How the bridge got here
@@ -28,11 +30,11 @@ registry, the registry is right.
 > documentation below predates the moves — Docker-era plumbing details (compose, bind
 > mounts, networks) are history: `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/monitor-bridge/`.
 >
-> **`files/check_table.py`'s `CHECKS` is the authority on which checks exist.** This file
-> is prose and nothing tests it: until 2026-08-16 the three retired above were still written up
-> here in the present tense, as live checks with unit-tested pure functions, four weeks after
-> the functions were deleted. If a bullet below disagrees with the registry, the registry is
-> right.
+> **`files/check_table.py`'s `CHECKS` is the authority on which checks exist.** Until
+> 2026-08-16 the three retired above were still written up here in the present tense, as live
+> checks with unit-tested pure functions, four weeks after the functions were deleted. A test
+> now holds the *Live checks* bullet titles to `CHECKS`, but not the prose in a bullet. If a
+> bullet below disagrees with the registry, the registry is right.
 
 A tiny sidecar that turns host-cron state files into Uptime Kuma **push** monitors, so
 threshold problems actually page. See repo-root `CLAUDE.md`. (The kopia backup checks
@@ -41,8 +43,12 @@ retired with kopia on 2026-08-10 — the backup plane is Longhorn;
 
 ## Live checks
 
-gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and pushes
-`status=up|down&msg=…` to one Kuma push monitor each:
+Each row below is one Kuma push monitor. The table is generated from `CHECKS` and lists every
+check and gate in registry order. The bullets after it carry the measurements and incidents
+behind each tile, under the tile's display name.
+
+--8<-- "assets/generated/fragments/bridge-checks.md"
+
 - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
   prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, every
   prom-dependent check (each row of `files/check_table.py` with `gate="prometheus"`) is
@@ -109,10 +115,10 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   cgroup only exists once somebody has logged in since boot. **Empty disables the whole arm**; the full threshold derivation, settled 2026-09-11 against 5.8 days of
   history that included both cgroups hitting their MemoryHigh caps (#1288), is at
   `CLAUDE_CGROUP_STALL_MAX_PCT` in `bridge/config_host.py`.
-- **Container Restarts** (`changes(container_start_time_seconds[15m]) > RESTART_MAX`)
-- **Container OOM** (`increase(container_oom_events_total[1h]) by (name)` — names the
+- **k3s Container Restarts** (`changes(container_start_time_seconds[15m]) > RESTART_MAX`)
+- **k3s Container OOM** (`increase(container_oom_events_total[1h]) by (name)` — names the
   offender; supersedes the old host-aggregate OOM that lived in the Memory check)
-- **CPU Throttling** (throttled/total CFS *periods* `> CPU_THROTTLE_PCT` **and** throttled
+- **k3s CPU Throttling** (throttled/total CFS *periods* `> CPU_THROTTLE_PCT` **and** throttled
   *seconds*/s `> CPU_MIN_THROTTLED_CORES`, by name — catches a container pinned at its
   `deploy.resources` CPU cap, which throttles silently without OOM/restart/5xx. The cores
   floor (same volume-floor idea as Traefik's `TRAEFIK_MIN_RPS`) is essential: the period
@@ -301,32 +307,6 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   clears the line itself. The arm reads the `owed` ledger's `k8s_deferred` class (#3392).
   Pure `gitops_status()` and its parsers are unit-tested; an
   unparseable marker reads as not-behind rather than paging forever on garbage.)
-- **WG Pi Peer Backup** — RETIRED from this container at the host flips (2026-08-14). The pull
-  became the `pi-peer-backup` k8s CronJob, which pushes its Kuma monitor directly, so there is
-  no `/pi-peers/state.json` on this host and no `pi_peers()` check here. The monitor and the
-  gap it watches are unchanged: the rsync uses no `--delete`, so a silently failing pull leaves
-  the last-good copy in place while the Pi's un-rebuildable WireGuard peer keys go stale.
-- **CrowdSec Home Allowlist** — RETIRED from this container at slice-6 B2 (2026-08-09). `cscli
-  allowlists` is LAPI-machine-only, so the updater cron followed the LAPI into the cluster
-  (`roles/k8s/crowdsec`) and pushes the Kuma monitor directly from daniel-box; there is no
-  state file on this host to read, so the check, its `HOME_ALLOWLIST_*` env, its bind mount and
-  its tests are gone. The monitor itself still exists — its AutoKuma label moved to the
-  `uptime-kuma` role.
-- **Public origin lock & AppSec verifiers** — RETIRED at E7 (2026-08-13) with the docker-edge
-  public 80/443 origin. The Cloudflare-only origin (`docker-user-verify.sh` cron) and Cloudflare-IP-
-  drift checks guarded the legacy Traefik@docker; the CrowdSec AppSec verifier has re-homed to
-  daniel-box as a root cron pushing the same "CrowdSec AppSec" Kuma monitor directly from
-  `roles/k8s/crowdsec/templates/crowdsec-appsec-verify.sh.j2`.
-- **Disk Autoprune** — RETIRED at the Docker uninstall (2026-08-14), with no successor. The
-  cron pruned daniel-server's Docker daemon, which no longer exists; containerd's own image GC
-  owns that concern now (`files/bridge/config.py`, the `disk_prune check REMOVED` comment). Root Disk's threshold pager is what is
-  left on that axis — alerting without remediation, deliberately.
-- **Fake Remux Scan / Fake Remux Replace** — no longer bridge checks. The detector +
-  reconciler crons moved to daniel-box with the media stack (2026-08-08, slice 4 B7c;
-  `roles/setup/fake_remux`), and their Kuma pushes go directly from that host via
-  `state_push.py` — same tokens, so the monitors and their history survived the move. The
-  label declarations live on the uptime-kuma compose now. Nothing in `check.py` references
-  fake-remux anymore.
 - **B2 Reachable** (authenticates against B2's native API (`b2_authorize_account`, Basic auth
   with `B2_PROBE_KEY_ID` + the file-mounted `B2_PROBE_APPLICATION_KEY_FILE`) — Longhorn's own
   B2-backed backups need this probe. Added after the 2026-08-02 transaction-cap incident
@@ -362,6 +342,19 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   `b2_authorize_account` is itself subject to the cap — Backblaze's endpoint docs list
   403/`transaction_cap_exceeded` among its errors. If a future breach leaves this monitor green,
   point `B2_PROBE_URL` at a Class C call instead; it's a URL swap by design.)
+- **B2 Free Tier Headroom** (`files/checks/b2.py:b2_storage_usage`. Lists every file version
+  in the bucket the `B2_PROBE_*` key is scoped to, sums `contentLength` including hidden
+  versions and unfinished large-file parts, and compares the total with `B2_STORAGE_CAP_BYTES`
+  (10 GB). `down` past `B2_STORAGE_MAX_PCT` (80). Those hidden bytes bill as stored data, so a
+  plain object listing reads lower than the invoice. A listing that hits `B2_STORAGE_MAX_PAGES`
+  (50) before the cursor clears is `down`, not a smaller number: the message calls the total a
+  FLOOR. A key with no `bucketId` also reads `down`, because a bucket-scoped key is the only
+  kind that can size one bucket. A success is cached for `B2_STORAGE_INTERVAL_S` (86400), since
+  each 1000 versions costs one Class C call and a budget guard must not be a real part of the
+  spend. A failure is not cached, because `b2_reachable` owns the cap signal and a listing
+  failure is more often a 5xx. Empty credentials disable the check. **In `B2_DEPENDENT`**: a
+  transaction cap fails this check and B2 Reachable together, and one root cause must not light
+  two tiles. Runbook: `longhorn-backup-tiering`.)
 - **R2 Free Tier Headroom** (Cloudflare's GraphQL Analytics API, `r2StorageAdaptiveGroups` +
   `r2OperationsAdaptiveGroups` in ONE POST: month-to-date storage bytes, Class A and Class B
   operation counts as a percentage of the free tier (10 GB / 1M / 10M), `down` past
@@ -802,11 +795,6 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   `roles/k8s/speedtest/CLAUDE.md` records as impossible to set from config at the pinned build,
   on a `longhorn-nobackup` PVC — a human step this alert path should not acquire. The scrape stays
   what #996 added it for: history in Grafana, which a Kuma tile cannot keep.)
-- **Renovate Notifier — Alive** — RETIRED from this container at the host flips (2026-08-14).
-  The notifier pushes its own Kuma monitor from an `ExecStartPost` now, so there is no
-  `/renovate-state/last_run` bind mount and no `renovate_alive()` check here. The monitor and
-  its dead-man semantics are unchanged.
-  It shipped in commit `e02965544` and its neighbours.
 - **Loki Reachable** (a fixed `/loki/api/v1/labels` probe — the root-cause GATE for the
   Loki-querying checks, the peer of Prometheus Reachable. Evaluated each cycle: when Loki is
   unreachable the `LOKI_DEPENDENT` check (`loki_ingestion`) is
@@ -865,14 +853,6 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   disjoint so a graced check reaches the evaluation path every cycle, and the gate covers the
   post-reboot transient the grace covered plus the outage it never could.
   Empty `WAN_PROBE_URLS` = disabled.)
-- **Cluster Prometheus Reachable — RETIRED 2026-09-28** (#2825). A second `vector(1)` gate
-  against `CLUSTER_PROMETHEUS_URL`, kept separate while that URL and `PROMETHEUS_URL` named two
-  instances on two hosts. The Docker plane retired 2026-08-14 and both rendered to one cluster
-  Service after it, so the tile could not go red on its own: `run_once` reused the `prometheus`
-  gate's verdict and pushed the tile `up` regardless (#2780). Its four members —
-  `k8s_workloads`, `cluster_targets`, `pvc_fullness`, `etcd_db_size` — are in `PROM_DEPENDENT`
-  now, and the URL, push token, gate and tile are gone. A `git revert` restores the split; a
-  check reading a second Prometheus needs a gate watching that instance.
 - **k3s Workload Health** (`kube_deployment_status_replicas_unavailable` from kube-state-metrics — the only monitor the seven routeless k8s workloads have, and the
   reason the metric exists at all: `registry`, both `cloudflare-ddns` copies, karakeep's
   `chrome`/`meilisearch`/`time-tagger`, and `n8n-runners`, which executes every workflow's code.
@@ -986,6 +966,21 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   gate delays, it does not suppress — a target genuinely down still pages, one cycle later.
   The floor arm rides the same streak deliberately: an emptied `up` during a Prometheus roll is
   the same transient.)
+- **Longhorn Volume Redundancy** (`files/checks/storage.py:check_longhorn_volumes`. Reads the
+  one-hot `longhorn_volume_robustness` metric. `k3s_longhorn_replica_count` is 2, so a `degraded`
+  volume is down to one copy and a `faulted` one has no healthy replica. The decision is
+  `longhorn_robustness.SAFE_ROBUSTNESS` (`healthy`, `unknown`): any other state pages, so a state
+  Longhorn adds later pages instead of passing a `degraded|faulted` selector. The runbook gates
+  in `scripts/deploy_tools/runbook_gates.py` call the same allow-list on the volume CRs (#3668).
+  `unknown` is a detached volume and is not a fault; 6 of 43 volumes read it on 2026-08-17,
+  including game servers scaled to zero on purpose. The two longhorn-manager pods report
+  disjoint volume subsets, so offenders are deduped by name. **An absent metric is a breach**,
+  not health: `count(longhorn_volume_robustness{state="healthy"})` doubles as the input
+  assertion that the longhorn scrape job is answering, and it reads "replica redundancy is
+  UNMONITORED". A scrape gap and a degraded volume get different hysteresis labels, and both
+  wait `LONGHORN_CONSECUTIVE` (3) cycles so a node drain or the Sunday reboot does not page.
+  Until 2026-08-17 replica loss was silent. **In `PROM_DEPENDENT`**, because its absent-metric
+  branch pages when the longhorn job dies. Runbook: `longhorn-disaster-recovery`.)
 - **k3s PVC Fullness** (`kubelet_volume_stats_available_bytes / _capacity_bytes` via the cluster
   Prometheus, added 2026-09-01 — the SPACE axis of the storage layer, where Longhorn Volume
   Redundancy is the replica axis. A Longhorn PVC is its own filesystem at a fixed capacity, so a
@@ -1103,7 +1098,22 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   Targets — unlike PVC Fullness, whose fail-closed arm exists because 27 of 43 claims survive a
   dead kubelet job; one series carried by two jobs has no partial-coverage case, so empty means
   total scrape loss, which `targets`/`cluster_targets` already page on. **In
-  `CLUSTER_DEPENDENT`**, because it reads `CLUSTER_PROM_URL`.)
+  `PROM_DEPENDENT`**, because it reads Prometheus.)
+- **etcd Restore Drill** (`files/checks/service.py:check_etcd_restore_drill`. Reads the
+  `last-success-list-only` stamp the weekly etcd restore drill cron on daniel-box writes under
+  `ETCD_DRILL_STATE_DIR` (`/etcd-drill-state`, a hostPath), and checks its `epoch=` line against
+  `ETCD_DRILL_MAX_AGE_DAYS` (8 days). It reads the list-only stamp and never
+  `last-success-full`, because only the list-only leg is scheduled: accepting either file would
+  report the object-graph restore as proven when nothing here has proven it. The check fails
+  closed, and each way the stamp can be missing has its own message. **Absent** reads "no etcd
+  restore drill has ever passed". **Unreadable** reads "unreadable by this uid (needs 0644)"; the
+  first run wrote the stamp 0640 root:root while this pod runs as uid 1000. A stamp whose
+  `epoch` does not parse reads "no readable epoch." An **old** stamp reads "last passed N days ago
+  (weekly cadence)". Until 2026-08-28 the drill wrote a stamp no code read, so a failing drill
+  looked the same as a passing one. etcd carries the Longhorn `Backup` CRs that locate the
+  volume backups, so a restore nobody can prove puts the rest of the recovery chain at risk.
+  No gate and no streak: a file read has no upstream to wait on, and a stale stamp does not heal
+  by itself. Runbook: `k3s-etcd-restore`.)
 - **Loki Log Ingestion** (three-arm LogQL freshness against the cluster `loki-homelab` via
   its in-cluster Service, `down`
   if ANY arm is silent — a silently dead Alloy→Loki pipeline (a relabel regression,
@@ -1329,14 +1339,14 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
 
 ## Retired and moved checks
 
-The bullets above that read RETIRED or *moved out* are kept in place so the monitor's
-history stays readable beside its successor. The direct pushers that replaced them: the
+The bullets below are checks that left `CHECKS`, kept so the monitor's history stays
+readable beside its successor. The direct pushers that replaced them: the
 `pi-peer-backup` k8s CronJob (WG Pi Peer Backup), the `crowdsec` role's allowlist cron
 (CrowdSec Home Allowlist), `crowdsec-appsec-verify.sh.j2` (CrowdSec AppSec), the
 `fake_remux` setup role's `state_push.py` (Fake Remux Scan / Replace), `renovate-notify`'s
 `ExecStartPost` (Renovate Notifier — Alive), and the configarr and janitorr roles' health
 crons (Configarr Sync, Janitorr Errors). Disk Autoprune retired with the Docker daemon and has
-no successor.
+no successor. Cluster Prometheus Reachable retired as a gate (#2825).
 
 - *(**Configarr Sync** moved out on 2026-08-08, slice 4 B7a. The nightly guide sync is a k8s
   CronJob on daniel-box now, and the `/configarr/state.json` this bridge read lived beside it on
@@ -1353,6 +1363,45 @@ no successor.
   window, the 600 s startup grace and the uptime-minus-grace cap on the counting slice are all
   preserved, so the verdict does not change with the host. The AutoKuma label moved to the
   uptime-kuma role.)*
+- **WG Pi Peer Backup** — RETIRED from this container at the host flips (2026-08-14). The pull
+  became the `pi-peer-backup` k8s CronJob, which pushes its Kuma monitor directly, so there is
+  no `/pi-peers/state.json` on this host and no `pi_peers()` check here. The monitor and the
+  gap it watches are unchanged: the rsync uses no `--delete`, so a silently failing pull leaves
+  the last-good copy in place while the Pi's un-rebuildable WireGuard peer keys go stale.
+- **CrowdSec Home Allowlist** — RETIRED from this container at slice-6 B2 (2026-08-09). `cscli
+  allowlists` is LAPI-machine-only, so the updater cron followed the LAPI into the cluster
+  (`roles/k8s/crowdsec`) and pushes the Kuma monitor directly from daniel-box; there is no
+  state file on this host to read, so the check, its `HOME_ALLOWLIST_*` env, its bind mount and
+  its tests are gone. The monitor itself still exists — its AutoKuma label moved to the
+  `uptime-kuma` role.
+- **Public origin lock & AppSec verifiers** — RETIRED at E7 (2026-08-13) with the docker-edge
+  public 80/443 origin. The Cloudflare-only origin (`docker-user-verify.sh` cron) and Cloudflare-IP-
+  drift checks guarded the legacy Traefik@docker; the CrowdSec AppSec verifier has re-homed to
+  daniel-box as a root cron pushing the same "CrowdSec AppSec" Kuma monitor directly from
+  `roles/k8s/crowdsec/templates/crowdsec-appsec-verify.sh.j2`.
+- **Disk Autoprune** — RETIRED at the Docker uninstall (2026-08-14), with no successor. The
+  cron pruned daniel-server's Docker daemon, which no longer exists; containerd's own image GC
+  owns that concern now (`files/bridge/config.py`, the `disk_prune check REMOVED` comment). Root Disk's threshold pager is what is
+  left on that axis — alerting without remediation, deliberately.
+- **Fake Remux Scan / Fake Remux Replace** — no longer bridge checks. The detector +
+  reconciler crons moved to daniel-box with the media stack (2026-08-08, slice 4 B7c;
+  `roles/setup/fake_remux`), and their Kuma pushes go directly from that host via
+  `state_push.py` — same tokens, so the monitors and their history survived the move. The
+  label declarations live on the uptime-kuma compose now. Nothing in `check.py` references
+  fake-remux anymore.
+- **Renovate Notifier — Alive** — RETIRED from this container at the host flips (2026-08-14).
+  The notifier pushes its own Kuma monitor from an `ExecStartPost` now, so there is no
+  `/renovate-state/last_run` bind mount and no `renovate_alive()` check here. The monitor and
+  its dead-man semantics are unchanged.
+  It shipped in commit `e02965544` and its neighbours.
+- **Cluster Prometheus Reachable — RETIRED 2026-09-28** (#2825). A second `vector(1)` gate
+  against `CLUSTER_PROMETHEUS_URL`, kept separate while that URL and `PROMETHEUS_URL` named two
+  instances on two hosts. The Docker plane retired 2026-08-14 and both rendered to one cluster
+  Service after it, so the tile could not go red on its own: `run_once` reused the `prometheus`
+  gate's verdict and pushed the tile `up` regardless (#2780). Its four members —
+  `k8s_workloads`, `cluster_targets`, `pvc_fullness`, `etcd_db_size` — are in `PROM_DEPENDENT`
+  now, and the URL, push token, gate and tile are gone. A `git revert` restores the split; a
+  check reading a second Prometheus needs a gate watching that instance.
 
 ## Push-monitor mechanics, and what set each number
 
@@ -1446,22 +1495,19 @@ no successor.
   same role's `fake_remux_scan.py` cron, seeded once on deploy) is created the same way with the
   same ordering. The **Fake Remux Replace** monitor reuses that same mount — its
   `fake_remux_replace.py` cron writes `replace_state.json` into the same directory.
-- Thresholds are env-tunable in the compose template (`GRACE_CYCLES` (startup/redeploy grace),
-  `DISK_MAX_PCT`,
-  `CERT_MIN_DAYS`, `MEM_MAX_PCT`, `RESTART_WINDOW`/`RESTART_MAX`, `OOM_WINDOW`,
-  `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`/`TRAEFIK_SLOW_BUCKET`/`TRAEFIK_SLOW_PCT`,
-  `N8N_FAIL_WINDOW`/`N8N_CONSECUTIVE_MAX`/`N8N_SYSTEMIC_STREAK`/`N8N_SYSTEMIC_MAX`; n8n connection
-  config: `N8N_URL`/`N8N_API_KEY`; arr queue
-  connection config: `SONARR_URL`/`SONARR_API_KEY`/`RADARR_URL`/`RADARR_API_KEY`/`ARR_TITLE_HOLD_GRACE_H`; GitOps
-  liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
-  `PI_ORIGIN`/`PI_HOST`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`/`PI_PUBLISHED_PORTS`/`PI_PORT_TIMEOUT`/`PI_PORTS_CONSECUTIVE`; HA heartbeat:
-  `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`; speedtest:
-  `SPEEDTEST_URL`/`SPEEDTEST_TOKEN`/`SPEEDTEST_DOWNLOAD_MIN_MBPS`/`SPEEDTEST_MAX_AGE_H`/`SPEEDTEST_CONSECUTIVE`/`SPEEDTEST_FLOOR_CONSECUTIVE`;
-  host-coverage floor:
-  `HOST_ORIGINS_MIN`/`HOST_ORIGINS_CONSECUTIVE`, and the thermal check's own pair
-  `HWMON_TEMP_ORIGINS_MIN`/`HWMON_TEMP_ORIGINS_CONSECUTIVE`). A failed
-  query/unreachable source makes that monitor `down` with an explanatory `msg` — a broken
-  exporter is surfaced, not silently green.
+- Thresholds are env-tunable in `templates/env-secret.yaml.j2`, the only place each value is
+  written. *Threshold defaults* below tabulates the numeric ones from that template; the
+  per-check prose above gives the reason for a number. A failed query or unreachable source
+  makes that monitor `down` with an explanatory `msg`, so a broken exporter is surfaced and not
+  silently green.
+
+### Threshold defaults
+
+Every value below is a literal in the template, so a change there moves this table on the next
+`gen_doc_fragments.py` run. A key rendered from a role variable or a secret is not listed.
+`*_CONSECUTIVE` is a count of cycles at `INTERVAL` seconds each.
+
+--8<-- "assets/generated/fragments/bridge-thresholds.md"
 
 ## Operator prerequisites, as first written
 

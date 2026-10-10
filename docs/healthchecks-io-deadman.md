@@ -51,19 +51,7 @@ console kept `30 23` until 2026-09-25 (#2563). Each ping then landed 30 minutes 
 slot, so the check went DOWN at 06:30 UTC every day. The console was reconciled to the table
 below on 2026-09-25.
 
-| Check slug | Schedule type | Grace |
-|---|---|---|
-| `longhorn-backup-health` | Simple | 20 minutes |
-| `daniel-box-disk-health` | Simple | 25 minutes |
-| `uptime-kuma-alive` | Simple | 20 minutes |
-| `manifest-prune-check` | Cron | 2 hours |
-| `etcd-snapshot-offbox` | Cron | 1 hour |
-| `pi-peer-backup` | Cron | 2 hours |
-| `registry-gc` | Cron | 1 hour |
-| `weekly-reboot-daniel-box` | Cron | 1 hour |
-| `weekly-reboot-daniel-server` | Cron | 1 hour |
-| `weekly-reboot-daniel-pi` | Cron | 1 hour |
-| `daniel-pi-docker-prune` | Cron | 1 hour |
+--8<-- "assets/generated/fragments/deadman-graces.md"
 
 **The 20-minute grace on the 10-minute checks is derived, not chosen.** Their crons skip
 their first run after a boot — `boot_grace_active` in `kuma-push-lib.sh`, sized by

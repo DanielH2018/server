@@ -635,3 +635,6 @@ mixin
 [Ll]ogfile
 logfmt
 [Hh]eredocs
+
+# Reviewer domain label (scripts/dev/findings_lib/issue_model.py DOMAINS)
+cicd

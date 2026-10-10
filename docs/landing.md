@@ -59,6 +59,14 @@ alone. On `daniel-box` the host unit turns the reaper off
 `roles/setup/claude_code/templates/claude-rc.service.j2`), so this only reaches a session
 started some other way. Three kills in a row on 2026-09-04, issue #1096.
 
+### Exit codes and verdicts
+
+A generated table lists the exit codes, and generated lists name the verdicts and causes. They
+read `scripts/lib/exit_codes.py` and `scripts/deploy_tools/land_lib/outcome.py`, so a verdict
+added there appears here without an edit.
+
+--8<-- "assets/generated/fragments/land-verdicts.md"
+
 ## Arming the merge, and the two command shapes the classifier refuses
 
 **`--arm-merge` readies the merge inside the script.** A bare `gh pr merge` sits on the
@@ -144,10 +152,10 @@ rule generalises: keep the prose out of the command string and inside a file or 
 `--await-merge` polls the PR's state every 30s until it is merged and only then starts the
 landing. It reads the state, never the checks, so it is not hand-polling. Without it the session
 has to notice the merge itself, which every landing on 2026-09-01 did with a hand-written
-`until MERGED` loop. A PR still open after 45 minutes exits 75: it is not being merged, and the
+`until MERGED` loop. A PR still open after 45 minutes exits `LAND_GAVE_UP`: it is not being merged, and the
 reason is on the PR.
 
-**A conflicting PR ends the wait at once**, exit 1 with `VERDICT: merge-conflict`, rather than
+**A conflicting PR ends the wait at once**, exit `LAND_FAILED` with `VERDICT: merge-conflict`, rather than
 sitting out the 45 minutes. A PR that goes conflicting during the wait never merges, and
 nothing on the PR says so — with several sessions landing at once, another merge moving master
 under an open PR is the ordinary way it happens. Rebase onto master, push, and re-run the same
@@ -155,7 +163,7 @@ command. The wait tolerates a `mergeable` of `UNKNOWN` — GitHub computes the
 field asynchronously — and bails only after two consecutive `CONFLICTING` polls, because the
 base moving under a PR flips it for one poll.
 
-**A PR whose own CI is red ends the wait too**, exit 1 with `VERDICT: pr-ci-red`, quoting what
+**A PR whose own CI is red ends the wait too**, exit `LAND_FAILED` with `VERDICT: pr-ci-red`, quoting what
 `await_ci.py` said. GitHub reports it only as `mergeStateStatus: BLOCKED` — the same word it
 uses while the checks are still running. The repo's ruleset requires status checks and
 signatures and no review, so a `BLOCKED` PR here is always about checks. The wait keeps going
@@ -255,7 +263,7 @@ once, because step 3 already waited on the same SHA.
 A tail that touches nothing your tags render no longer refuses the deploy at all: the gate is
 scoped to the paths the requested tags reach.
 
-**Exhausting those retries prints `tip-outran-retries` (exit 75), not `deploy-failed`.** Every
+**Exhausting those retries prints `tip-outran-retries` (`LAND_GAVE_UP`), not `deploy-failed`.** Every
 attempt lost the same race: master merged faster than one tick-and-deploy cycle. Nothing was
 deployed and re-running is safe — the opposite of what `deploy-failed` reads as, and a session
 that did not read the log took it for a fault in its own change. PR #1460 ended that way twice
@@ -268,7 +276,7 @@ deployer from this; a SHA that advances under an unchanged timestamp is this.
 ## Reading a `deploy-failed`
 
 **One variant means the opposite of the rest.** `a playbook task failed AFTER applying; some
-changes are live` is `deploy.sh` exit 20: the play reached its tasks and one failed, so
+changes are live` is `deploy.sh` exit 20 (`DEPLOY_PLAYBOOK_FAILED`): the play reached its tasks and one failed, so
 everything applied before it took effect. Every other `deploy-failed` line means nothing was
 deployed and re-running is safe; this one is not a resume point. It exists because `deploy.sh`
 returned ansible-playbook's own status until 2026-09-02, and ansible exits 2 on a failed host —
@@ -276,11 +284,11 @@ the same number as the tag miss, which is how a run whose manifests both applied
 `a derived tag matched no service, so nothing deployed` (issue #840).
 
 **Another names `deploy_tags.py hosts` itself**: `deploy_tags.py hosts failed before any
-deploy.sh ran; nothing was touched`. That command failing used to return bare exit 1 from
-`deploy_by_host`, colliding with `deploy.sh`'s own rare `cd $repo_root || exit 1` — the two were
-indistinguishable from `land.sh`'s side even though only one ever ran a deploy (issue #1016).
-`HOST_LOOKUP_FAILED=21` is reserved for it now. Unlike exit 20, it means what every other
-`deploy-failed` means: nothing was deployed, and re-running is safe.
+deploy.sh ran; nothing was touched`. `land_lib/deploy.py:deploy_by_host` exits `LAND_FAILED` and
+records the cause `host-lookup`. `deploy.sh`'s own rare `cd $repo_root || exit 1` records
+`deploy-exit-1` instead. Before the causes existed, both returned a bare exit 1, and only one of
+them had run a deploy (issue #1016). Unlike `DEPLOY_PLAYBOOK_FAILED`, `host-lookup` means what
+every other `deploy-failed` means: nothing was deployed, and re-running is safe.
 
 ## The health gate
 
@@ -307,7 +315,7 @@ middleware before the backend is reached, and 19 dead Grafana panels sat behind 
 
 ## `deferred`, `needs-manual-apply`, and what a hand still has to run
 
-`deferred` (exit 75) means the tick applies this PR itself — a setup role `initial_setup.yml`
+`deferred` (`LAND_GAVE_UP`) means the tick applies this PR itself — a setup role `initial_setup.yml`
 includes, or the deploy plane — and has not crossed this PR's merge commit yet, almost always
 because the CI of a newer merge is still running. The next tick does it. `land.sh` reads that from
 the deployer's `behind_since` and `hold_sha` markers, and checks the merge commit against the
@@ -319,7 +327,7 @@ re-run, because no later tick crosses a hold.
 
 `cc-wait land` tells the two apart for its caller (#3932). A plain `deferred` ends the wait as
 state `deferred`, exit 4. A `deferred` that abandoned a mid-apply tick ends it as `gave-up`,
-exit 3, the same as every other 75 that asks for a re-run of `land.sh`.
+exit 3, the same as every other `LAND_GAVE_UP` that asks for a re-run of `land.sh`.
 
 **Converging is not applying.** `behind_since` empty says local == origin, which any session's
 `git merge --ff-only` produces too — and once it holds, `next_action()` returns `noop` for every

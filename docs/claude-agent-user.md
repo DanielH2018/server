@@ -436,7 +436,7 @@ pod would drop the capability.
 | `claude_code_memory_sync_dir` and the path-derived project key | `ansible/roles/setup/claude_code/defaults/main.yml` |
 | `artifacts_host_dir` and its bind mount | `ansible/roles/k8s/artifacts/defaults/main.yml` |
 | Hooks that hard-code `/home/ubuntu`, and `SUDO_ASKPASS` | the dotfiles repo's `~/.claude` sources |
-| `/home/ubuntu` literals in repo tooling | `scripts/dev/fanout_lib/launch.py`, `scripts/deploy_tools/land_lib/options.py`, `scripts/deploy_tools/land_reach.py` and about 16 more non-test files |
+| `/home/ubuntu` literals in repo tooling | the non-test files `git grep -l /home/ubuntu -- '*.py' '*.sh' '*.j2'` lists outside `tests/` (8 on 2026-10-10) |
 | The SessionStart banner's other-session list | It reads `git worktree list`, so it shows only sessions in the same clone |
 
 **Check:** create a session from the phone, and ask it to do three things.

@@ -204,24 +204,21 @@ limitation applies to them unchanged.
 
 **That limitation is exactly why `classifyAllShell` is on.** A `Bash()` rule cannot see a flag, so
 `Bash(kubectl apply *)` also approves `apply --prune`; the classifier reads the whole line and can.
-The 2026-08-08 note below — that `exec` had to be blanket-allowed because "no rule can distinguish
-`exec -- cat …` from `exec -- rm -rf …`" — was true of the rule syntax and is no longer the binding
-constraint: the classifier makes that distinction, and RBAC refuses `exec` regardless.
+A 2026-08-08 decision blanket-allowed `exec`, `cp` and `port-forward` because no rule could
+distinguish `exec -- cat …` from `exec -- rm -rf …`. That reasoning no longer binds. The classifier makes
+that distinction, no allow rule names those verbs, and RBAC refuses `exec` regardless.
 
 The tiers below describe the **Manual-mode fallback**, not what happens in a normal session:
 
 - **Auto-approved, read-only:** `get`, `logs`, `describe`, `top`, `explain`, `events`,
-  `api-resources`, `api-versions`, `version`, `diff`, `wait`.
-- **Auto-approved, reversible writes:** `apply`, `create`, `patch`, `set`, `scale`, `label`,
-  `annotate`, `cordon`, `uncordon`, `auth`, and `rollout` (restart/undo/pause/resume, plus the
-  read-only status/history that come with the verb). Each is undone by redeploying the role from
-  the Ansible-rendered manifests. Three edges come with the verbs and cannot be carved out:
-  `apply --prune` deletes resources absent from the manifest set, `create token` mints a
-  ServiceAccount credential, and `auth reconcile` rewrites RBAC.
-- **Auto-approved, container access:** `exec`, `cp`, `port-forward`. These are arbitrary code
-  execution inside a container — allowed deliberately (decided 2026-08-08) because in practice they
-  are used for reads, and no rule can distinguish `exec -- cat …` from `exec -- rm -rf …`. Several
-  of these containers mount Longhorn PVCs.
+  `api-resources`, `api-versions`, `version`, `diff`, `wait` and `auth` (this repo's
+  `.claude/settings.json`), plus `config view` and `config current-context` (the chezmoi
+  `settings.permissions.json`).
+- **Prompted in Manual mode, classifier-judged in auto mode:** every mutating verb — `apply`,
+  `create`, `patch`, `set`, `scale`, `label`, `annotate`, `cordon`, `uncordon`, `rollout`,
+  `exec`, `cp`, `port-forward`. No allow list names them. The chezmoi
+  `settings.permissions.json` records them as absent by intent rather than by omission, and RBAC refuses
+  each write regardless, because plain `kubectl` authenticates as the read-only ServiceAccount.
 - **`delete` is denied outright**, not prompted — `Bash(kubectl delete:*)` is in `permissions.deny`
   (user settings), which is evaluated before both the ask tier and the classifier and cannot be
   cleared by stating intent. It costs nothing today, since RBAC already refuses it; it exists so a
@@ -236,8 +233,8 @@ The tiers below describe the **Manual-mode fallback**, not what happens in a nor
   filesystem in a privileged pod), `attach`, `run`, and `edit` (interactive — it just hangs for an
   agent).
 
-Hand-running an auto-approved *write* verb creates drift from the Ansible source of truth; prefer
-`uv run ansible-playbook … --tags <svc>`. The write tier exists for iteration, not for deploys.
+Ansible is the only write path to the cluster. Deploy through `./scripts/deploy.sh --tags <svc>`
+rather than reaching for a write verb.
 
 ## `git diff` on a SOPS path — why a pipe is denied and a flag is not
 
