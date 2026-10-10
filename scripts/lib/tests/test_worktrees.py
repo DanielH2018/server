@@ -10,7 +10,9 @@ drives them is `scripts/dev/tests/test_prune_worktrees.py`'s.
 Run: uv run pytest scripts/lib/tests/test_worktrees.py
 """
 
+import json
 import os
+import pwd
 import shutil
 import subprocess
 from contextlib import contextmanager
@@ -23,6 +25,7 @@ from lib.worktrees import (
     REMOVABLE,
     Worktree,
     classify,
+    holder_root,
     primary_checkout,
     privileged_holders,
     processes_using,
@@ -359,6 +362,32 @@ def test_no_helper_or_a_tree_outside_its_root_falls_back_to_the_slice_rule_is_cl
     )
     found = processes_using(str(tmp_path), proc=proc, privileged=lambda _: None)
     assert [pid for pid, _ in found] == [4242]
+
+
+def test_the_caller_asks_about_the_root_the_helper_maps_it_to_is_flagged(tmp_path):
+    # #4021: the agent user's root is its own clone, /var/lib/claude/server, which the root map
+    # names. Asking only under ~/server/.claude/worktrees could disagree with the root the
+    # helper scans, and then an empty answer would read as "no holder".
+    clone = tmp_path / "clone" / ".claude" / "worktrees"
+    roots = tmp_path / "worktree-holders.json"
+    roots.write_text(json.dumps({pwd.getpwuid(os.getuid()).pw_name: str(clone)}))
+
+    assert holder_root(str(roots)) == clone
+
+
+def test_with_no_map_entry_the_caller_falls_back_to_its_home_checkout_is_clean(
+    tmp_path,
+):
+    # No map, no entry for this user, or a relative path: the helper is not installed for
+    # this user, so the root only decides that the slice-rule fallback runs.
+    home = Path(pwd.getpwuid(os.getuid()).pw_dir) / "server" / ".claude" / "worktrees"
+    other = tmp_path / "other.json"
+    other.write_text(json.dumps({"someone-else": "/elsewhere"}))
+    relative = tmp_path / "relative.json"
+    relative.write_text(json.dumps({pwd.getpwuid(os.getuid()).pw_name: "rel/wt"}))
+
+    for roots in (tmp_path / "absent.json", other, relative):
+        assert holder_root(str(roots)) == home, roots
 
 
 def test_processes_using_takes_the_helpers_answer_over_the_proc_scan_is_flagged(

@@ -231,9 +231,9 @@ def live_process_scan(
     The root helper `initial_setup` installs answers first when this uid can execute it, so
     another uid's process outside this login slice is seen (#4170). As in
     `privileged_holders`, it fails closed: a failed run, an `unreadable` line or a line of an
-    unknown kind sets `busy`. The helper reports only under the caller's
-    `~/server/.claude/worktrees`, so the `/proc` loop still runs when it found nothing, for a
-    tree outside that root. That loop cannot read another uid's process and skips it.
+    unknown kind sets `busy`. The helper reports only under the worktree root
+    `lib.worktrees.holder_root` names for the caller, so the `/proc` loop still runs when it
+    found nothing, for a tree outside that root. That loop cannot read another uid's process and skips it.
 
     Args:
         wt: the worktree path.

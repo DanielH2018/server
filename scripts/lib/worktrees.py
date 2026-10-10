@@ -20,6 +20,7 @@ process using the tree at the moment of removal (`processes_using`).
 """
 
 import functools
+import json
 import os
 import pwd
 import subprocess
@@ -209,11 +210,31 @@ def _inside(held: str, tree: Path) -> bool:
 
 
 # The root-run scan `initial_setup` installs beside the worktree sweep cron, and the sudoers
-# rule that lets the checkout owner run it with no arguments. The source is
-# ansible/roles/setup/initial_setup/files/worktree_holders.py, and it reports only under
-# `~/server/.claude/worktrees` of the uid that ran sudo.
+# rule that lets the checkout owner and each agent user run it with no arguments. The source
+# is ansible/roles/setup/initial_setup/files/worktree_holders.py. It reports only under the
+# root WORKTREE_HOLDER_ROOTS maps the sudo caller's user to, which `holder_root` reads too.
 WORKTREE_HOLDERS = "/usr/local/libexec/worktree-holders"
+WORKTREE_HOLDER_ROOTS = "/etc/worktree-holders.json"
 _HELPER_KINDS = ("cwd", "CLAUDE_PROJECT_DIR", "unreadable")
+
+
+def holder_root(roots: str = WORKTREE_HOLDER_ROOTS) -> Path:
+    """The directory the root helper reports under for this uid.
+
+    It is this user's entry in `roots`, the map the helper itself reads, so the caller never
+    asks about a tree the helper does not scan. With no map or no entry, it is
+    `~/server/.claude/worktrees`. In that case the helper is not installed for this user, so
+    it never runs.
+    """
+    me = pwd.getpwuid(os.getuid())
+    try:
+        mapping = json.loads(Path(roots).read_text())
+    except OSError, ValueError:
+        mapping = {}
+    held = mapping.get(me.pw_name) if isinstance(mapping, dict) else None
+    if isinstance(held, str) and held.startswith("/"):
+        return Path(held)
+    return Path(me.pw_dir) / "server" / ".claude" / "worktrees"
 
 
 def processes_using(
@@ -283,9 +304,10 @@ def privileged_holders(
 
     None means the helper does not apply, and the caller scans `/proc` itself. That is the
     case for a tree outside `root`, which the helper never reports on, and for a caller that
-    cannot execute the helper. The role installs it `root:<checkout owner> 0750`, so execute
-    permission is the same test as the sudoers grant. Asking sudo without that grant makes it
-    log and mail a "not in sudoers" incident.
+    cannot execute the helper. The role installs it `root:<checkout owner> 0750`, with an ACL
+    entry for each agent user that has a sudoers line, so execute permission is the same test
+    as the sudoers grant. Asking sudo without that grant makes it log and mail a "not in
+    sudoers" incident.
 
     Once the helper applies, every failure refuses the removal: a non-zero exit, a timeout, a
     line that does not parse, and any process the helper reports root could not read.
@@ -293,8 +315,7 @@ def privileged_holders(
     Args:
         tree: the resolved worktree directory.
         helper: the installed helper.
-        root: the directory the helper reports under; this uid's
-            `~/server/.claude/worktrees` when None.
+        root: the directory the helper reports under; `holder_root()` when None.
         run: the subprocess runner.
     """
     # DECIDED: the helper fails closed and its absence falls back to the #3994 slice rule.
@@ -304,9 +325,7 @@ def privileged_holders(
     # sessions are always unreadable, so that rule would refuse every removal on a host where
     # the hand apply has not run. The fallback says so on stderr, which the cron journals.
     if root is None:
-        root = (
-            Path(pwd.getpwuid(os.getuid()).pw_dir) / "server" / ".claude" / "worktrees"
-        )
+        root = holder_root()
     if not _inside(str(tree), root.resolve()):
         return None
     if not os.access(helper, os.X_OK):
