@@ -12,6 +12,7 @@ from _catalog_fixtures import make_repo, write
 from catalog_facts import route_for
 from catalog_model import ServiceRow
 from catalog_render import render_html, render_markdown
+from lib.docs_provenance import _body
 
 
 def test_platform_defaults_to_docker_when_key_absent(tmp_path):
@@ -254,14 +255,19 @@ def test_markdown_counts_unknown_fields():
 
 
 def test_markdown_is_stable_across_calls():
-    """Unstable ordering would make the docs-refresh cron commit on every run."""
+    """Unstable ordering would make the docs-refresh cron commit on every run.
+
+    The comparison drops the frontmatter, as write_if_body_changed does when the
+    cron decides whether to write. The banner stamps the clock to the minute, so
+    comparing whole renders failed whenever the two calls straddled a minute (#4178).
+    """
     rows = [
         _ROW("b", "daniel-box", "k8s", "b", "authelia", "none", "no"),
         _ROW("a", "daniel-pi", "docker", "LAN-direct", "none", "none", "no"),
     ]
     first = render_markdown(rows)
     second = render_markdown(list(reversed(rows)))
-    assert first == second, "row or host ordering depends on input order"
+    assert _body(first) == _body(second), "row or host ordering depends on input order"
 
 
 def test_markdown_ends_with_exactly_one_newline():
