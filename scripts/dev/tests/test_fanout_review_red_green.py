@@ -95,6 +95,7 @@ def test_only_a_pr_that_passes_the_green_gate_has_its_hunks_checked(tmp_path, gr
     # The merge base, not the red commit: #4182 and #4183 both merged master into their
     # branch, and `red..HEAD` would count master's hunks as fix hunks the red tests missed.
     assert checked == ([] if green else ["base0"])
+    assert pipeline.record.green_first == ("unmet" if green else "passed")
     assert pipeline.record.red_hunks_missed == ([] if green else ["mod.py:6"])
     noticed = "The red tests noticed 2 of 3 fix hunks"
     assert (noticed in run.comments[0]) is not bool(green)
@@ -359,6 +360,7 @@ def test_a_pr_still_failing_the_green_gate_after_the_fix_is_not_landed(tmp_path)
     ]
     assert edited in run.claude[3][1]
     assert "`git show red1:<file>`" in run.claude[3][1]
+    assert pipeline.record.green_first == "lock"
     assert final["result"].startswith("needs input: the PR fails the green gate")
     assert final["result"].endswith(PR)
 
@@ -387,4 +389,5 @@ def test_a_fix_round_after_a_passing_green_gate_runs_the_gate_again_and_holds_a_
     assert "keep it and append a test" in run.claude[3][1]
     assert final["result"].startswith("needs input: the PR fails the green gate")
     assert pipeline.record.green_gate == edited
+    assert pipeline.record.green_first == "passed"
     assert run.lands == []

@@ -26,8 +26,8 @@ THE PHASES, each one `claude -p` in the batch's worktree:
    the implementer only for a verdict that needs a decision, as the `apply` phase. Before the
    landing, and on every other host instead of it, a session resumes to file what is left.
 
-DECIDED: a refused red commit does not stop the batch. The refusal is what the red phase
-measures, a vacuous test caught before it shipped, and the issue still deserves its fix. The
+DECIDED: a refused red commit does not stop the batch. The refusal means the test author's
+tests proved nothing, not that the issue is wrong, and the issue still deserves its fix. The
 plain implementer then writes its own tests as any batch does, and the record says the red
 phase was refused.
 
@@ -55,8 +55,9 @@ DISCLOSURE. The repo is public. A finding in category `security` reaches the PR 
 count only, is never filed with `findings.py open`, and is kept in full only in the local
 record under `STATE_DIR`.
 
-The local record also carries each phase's cost and the finding counts. It is how slice 1's
-kill criterion is measured, and it outlives the worktree that `clean` removes.
+The local record also carries each phase's cost, the finding counts and the red/green
+measures, and it outlives the worktree that `clean` removes. `scripts/dev/fanout_review_stats.py`
+sums the records into the measures that decide whether the red phase stays.
 """
 
 import json

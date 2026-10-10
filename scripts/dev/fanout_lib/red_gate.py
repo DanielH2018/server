@@ -227,6 +227,17 @@ def judge_red(returncode: int, output: str, nodes: list[str]) -> str:
     return ""
 
 
+def green_cause(reason: str) -> str:
+    """`passed`, `unmet` when a red node did not pass, or `lock` when the gate refused first.
+
+    An `unmet` first run is the red phase's real catch: the implementer's first attempt did
+    not do what the red tests ask. A `lock` refusal is about what the fix touched.
+    """
+    if not reason:
+        return "passed"
+    return "unmet" if reason.startswith("pytest exited") else "lock"
+
+
 def judge_green(returncode: int, output: str, nodes: list[str]) -> str:
     """Why the red nodes do not all pass after the fix, or "" when they do."""
     seen = outcomes(output)
