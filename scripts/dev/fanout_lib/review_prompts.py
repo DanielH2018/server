@@ -15,7 +15,7 @@ from pathlib import Path
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fanout_lib.brief import _fence
+from fanout_lib.brief import APPLY_OWED, _fence
 
 if TYPE_CHECKING:
     from fanout_lib.review_record import Record
@@ -135,25 +135,35 @@ def is_held(finding: dict) -> bool:
     return finding.get("category") == "security"
 
 
-def land_prompt(record: "Record", landing: str) -> str:
-    public = [f for f in record.remaining if not is_held(f)]
-    if record.review_error:
-        state = f"The review did not complete: {record.review_error}. Land without it, and say so."
-    elif public:
-        state = (
-            "These findings were not resolved. File each with "
-            "`findings.py open --review-leftover` before you land, and name it in the PR "
-            "body as `Filed for later: #N`.\n\n"
-            + _as_data("The unresolved findings", public)
-        )
-    else:
-        state = "No finding is left to file."
-    return f"""The review of {record.pr} is finished. {state}
+def apply_prompt(pr: str, line: str, tail: str, log_dir: str) -> str:
+    """The prompt that resumes the implementer after a landing whose verdict needs a decision.
 
-Now land the PR. Your brief's own Landing section said to stop at the PR; this replaces it:
+    The pipeline ran `land.sh` itself (`review_land`), so this session never saw the landing.
+    It gets the verdict, the end of the landing's log, and the brief's apply-owed section,
+    which a review batch's brief does not carry.
+    """
+    number = pr.rstrip("/").rsplit("/", 1)[-1]
+    rerun = (
+        f'./scripts/deploy_tools/land.sh --pr {number} --detach --log-dir "{log_dir}" '
+        f'&& cc-wait land {number} --log-dir "{log_dir}"'
+    )
+    fence = _fence(tail)
+    return f"""The pipeline landed {pr} with `land.sh`, and its verdict needs a decision:
 
-{landing}
-End your final message with the PR URL and quote `land.sh`'s `VERDICT:` line.
+{line}
+
+The end of the landing's log:
+{fence}
+{tail}
+{fence}
+
+For `needs-manual-apply` or `blocked`, follow the section below. For `unhealthy` or
+`deploy-failed`, read the log for whether this PR's change caused it. Where the log names a
+re-run as the remedy, re-land once with `{rerun}`. Otherwise file what you found with
+`findings.py open`, naming the verdict.
+
+{APPLY_OWED}
+End your final message with the PR URL, with any `MANUAL APPLY PENDING` heading above it.
 """
 
 

@@ -52,6 +52,12 @@ class FakeRunner:
         self.claude = []  # (argv, stdin, phase file at call time)
         self.comments = []
         self.git = []
+        # The landing the pipeline runs: each `bash -l` command, the VERDICT line land.sh's
+        # log ends on ("" for none), land.sh's exit code, and cc-wait's exit codes in order.
+        self.lands = []
+        self.verdict = "VERDICT: settled (deployed)"
+        self.land_rc = 0
+        self.waits = [0]
 
     def __call__(self, argv, stdin):
         argv = unprefixed(argv)
@@ -67,12 +73,27 @@ class FakeRunner:
         if argv[0] == "gh":
             self.comments.append(stdin)
             return subprocess.CompletedProcess(argv, 0, "", "")
+        if argv[0] == "bash":
+            return self._landing(argv)
         if argv[0] == "uv":
             self.derived = argv
             return subprocess.CompletedProcess(argv, 0, SECRET_LISTING, "")
         phase = (self.worktree / ".fanout" / "phase").read_text().strip()
         self.claude.append((argv, stdin, phase))
         return subprocess.CompletedProcess(argv, 0, json.dumps(self.reports.pop(0)), "")
+
+    def _landing(self, argv):
+        command = argv[argv.index("land") + 1 :]
+        self.lands.append(command)
+        if command[0].endswith("land.sh"):
+            if self.land_rc == 0:
+                log = self.worktree / ".fanout" / "land4000-20261010T000000Z.log"
+                log.write_text(f"  waiting for CI\n{self.verdict}\n")
+            return subprocess.CompletedProcess(
+                argv, self.land_rc, "", "refused: bad body"
+            )
+        rc = self.waits.pop(0) if len(self.waits) > 1 else self.waits[0]
+        return subprocess.CompletedProcess(argv, rc, "", "")
 
 
 def _pipeline(
