@@ -25,7 +25,15 @@ from fanout_lib.manifest import Batch
 from fanout_lib.target import SERVER_TARGET, Target
 from fanout_lib.transport import REPO
 from lib.git import git
-from lib.worktrees import REMOVABLE, Worktree, classify, is_dirty, is_merged, remove
+from lib.worktrees import (
+    REMOVABLE,
+    WORKTREE_HOLDERS,
+    Worktree,
+    classify,
+    is_dirty,
+    is_merged,
+    remove,
+)
 
 
 def _first_line(proc, what: str) -> str:
@@ -210,23 +218,46 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
     return "failed", f"clean failed (exit {proc.returncode}): {detail}"
 
 
-def live_process_scan(wt: str) -> str:
+def live_process_scan(
+    wt: str, helper: str = WORKTREE_HOLDERS, sudo: str = "/usr/bin/sudo -n"
+) -> str:
     """Shell that sets `busy` to the first pid whose cwd or `CLAUDE_PROJECT_DIR` is in `wt`.
 
     `lib.worktrees.processes_using` in shell, for the chains that run before or without an
     interpreter (Ruling 30): `remove` refuses a tree a live process uses (#3910), and a chain
-    that deletes the tree itself skipped that check (#3995). As there, another uid's process
-    cannot be read and is skipped, not counted. `busy` is empty when nothing uses the tree.
+    that deletes the tree itself skipped that check (#3995). `busy` is empty when nothing
+    uses the tree.
+
+    The root helper `initial_setup` installs answers first when this uid can execute it, so
+    another uid's process outside this login slice is seen (#4170). As in
+    `privileged_holders`, it fails closed: a failed run, an `unreadable` line or a line of an
+    unknown kind sets `busy`. The helper reports only under the caller's
+    `~/server/.claude/worktrees`, so the `/proc` loop still runs when it found nothing, for a
+    tree outside that root. That loop cannot read another uid's process and skips it.
+
+    Args:
+        wt: the worktree path.
+        helper: the installed root helper. A test seam, as is `sudo`.
+        sudo: the command prefix that runs `helper` as root.
     """
     return (
-        "busy=; for p in /proc/[0-9]*; do "
+        "busy=; "
+        f'if [ -x "{helper}" ]; then '
+        f'if out=$({sudo} "{helper}" 2>/dev/null); then '
+        "busy=$(printf '%s\\n' \"$out\" | awk -F '\\t' "
+        f'-v wt="{wt}" '
+        '\'NF && ($2 == "unreadable" || ($2 != "cwd" && $2 != "CLAUDE_PROJECT_DIR") '
+        '|| $3 == wt || index($3, wt "/") == 1) {print $1; exit}\'); '
+        'else busy="unknown (worktree-holders failed)"; fi; fi; '
+        'if [ -z "$busy" ]; then '
+        "for p in /proc/[0-9]*; do "
         'c=$(readlink "$p/cwd" 2>/dev/null); '
         f'case "$c" in "{wt}"|"{wt}"/*) busy=${{p#/proc/}}; break;; esac; '
         'if tr "\\0" "\\n" < "$p/environ" 2>/dev/null '
         f'| grep -q -F -x -e "CLAUDE_PROJECT_DIR={wt}" '
         f'|| tr "\\0" "\\n" < "$p/environ" 2>/dev/null '
         f'| grep -q -F -e "CLAUDE_PROJECT_DIR={wt}/"; '
-        "then busy=${p#/proc/}; break; fi; done; "
+        "then busy=${p#/proc/}; break; fi; done; fi; "
     )
 
 

@@ -12,10 +12,12 @@ Three parts have to hold together per sidecar, and each fails silently on its ow
   containerPort, so the job keeps pods by their `app` label on port 6060.
 - **The sidecar declares that port.** Without it the keep above matches nothing — the job
   renders, applies and discovers zero targets, which reads identically to a job nobody added.
-- **The netpol admits prometheus to it.** Each baseline policy fences every port but the
-  service's own, so an unlisted 6060 reads `up == 0` forever. That grant is a `from` item of
-  its own: a NetworkPolicy rule ANDs its `from` with its `ports`, so appending 6060 to an
-  existing rule admits that rule's caller and not prometheus.
+- **The netpol admits prometheus to it.** netpol-baseline's
+  `networkpolicy-crowdsec-sidecars.yaml.j2` renders one policy per app in
+  `crowdsec_k8s_sidecar_agents`, so a pod that leaves `baseline-ingress` for a bespoke fence
+  does not lose the scrape (#4088). That grant is a `from` item of its own: a NetworkPolicy
+  rule ANDs its `from` with its `ports`, so appending 6060 to an existing rule admits that
+  rule's caller and not prometheus.
 
 Each rule is a predicate with an accepting and a rejecting input, then applied to the real
 rendered manifests behind a non-vacuity assertion — a census that globs for its own subject
@@ -25,7 +27,7 @@ Run: uv run pytest ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py
 """
 
 import pytest
-from _k8s_render import rendered_docs
+from _k8s_render import render_role_template, rendered_docs
 from lib import yaml_fast
 
 SIDECAR = "crowdsec-agent"
@@ -35,8 +37,8 @@ METRICS_PORT = 6060
 # jobs grows, so an equality check would fail on the next addition rather than on a regression.
 SIDECAR_PODS = (
     # (the role and app label, the scrape job that must cover its sidecar, the NetworkPolicy)
-    ("traefik", "crowdsec-traefik-agent", "traefik"),
-    ("authelia", "crowdsec-authelia-agent", "authelia"),
+    ("traefik", "crowdsec-traefik-agent", "traefik-crowdsec-agent-metrics"),
+    ("authelia", "crowdsec-authelia-agent", "authelia-crowdsec-agent-metrics"),
 )
 
 
@@ -220,3 +222,26 @@ def test_each_sidecar_declares_the_port_its_job_keeps_on(role, job_name, policy_
 def test_each_policy_admits_prometheus_to_the_sidecar(role, job_name, policy_name):
     _, _, policies = _rendered()
     assert the_policy_admits_prometheus_on(policies[policy_name], METRICS_PORT)
+
+
+def _sidecar_grants(agents):
+    """netpol-baseline's sidecar grants rendered for `agents`, keyed by the app they select."""
+    text = render_role_template(
+        "netpol-baseline",
+        "networkpolicy-crowdsec-sidecars.yaml.j2",
+        {"crowdsec_k8s_sidecar_agents": agents},
+    )
+    return {
+        doc["spec"]["podSelector"]["matchLabels"]["app"]: doc
+        for doc in yaml_fast.safe_load_all(text)
+        if isinstance(doc, dict)
+    }
+
+
+def test_a_new_map_entry_renders_its_grant_with_no_template_edit():
+    """#4088's Verify-by: a third app in the map gets its :6060 grant from the map alone."""
+    before = _sidecar_grants({"traefik": "t", "authelia": "a"})
+    assert "newapp" not in before, "the grant renders for an app the map does not name"
+    after = _sidecar_grants({"traefik": "t", "authelia": "a", "newapp": "n"})
+    assert set(after) == {"traefik", "authelia", "newapp"}
+    assert the_policy_admits_prometheus_on(after["newapp"], METRICS_PORT)

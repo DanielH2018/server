@@ -6,9 +6,10 @@ of about 120 lines, and the copies had drifted: the scratch volume carried a dif
 each pod.
 
 `crowdsec_k8s_sidecar_agents` in group_vars maps each host app to the LAPI machine its agent
-logs in as. Three readers derive from it, in three roles that cannot see each other's defaults:
-the sidecar's AGENT_USERNAME, the crowdsec role's machine registration loop and observability's
-`crowdsec-<app>-agent` scrape jobs. A machine one reader names and another does not is an agent
+logs in as. Four readers derive from it, in roles that cannot see each other's defaults: the
+sidecar's AGENT_USERNAME, the crowdsec role's machine registration loop, observability's
+`crowdsec-<app>-agent` scrape jobs and netpol-baseline's :6060 grant, which
+`test_crowdsec_sidecars_are_scraped.py` covers. A machine one reader names and another does not is an agent
 that cannot log in, or one nothing scrapes.
 
 The caller guard is textual, because a call and a written-out copy render the same manifest,
