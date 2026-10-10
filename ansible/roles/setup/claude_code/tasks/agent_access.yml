@@ -18,9 +18,13 @@
   ansible.builtin.group:
     name: "{{ initial_setup_worktree_holders_group }}"
     system: true
+  register: claude_code_worktree_holders_group_made
   become: true
 
+# Skipped by a --check run that has not created the group, because usermod refuses a group it
+# cannot find even when it only reports.
 - name: Set the agent user's journal access, its ssh login group and its worktree scan group
+  when: not (ansible_check_mode and claude_code_worktree_holders_group_made is changed)
   ansible.builtin.user:
     name: "{{ claude_code_agent_user }}"
     groups: >-

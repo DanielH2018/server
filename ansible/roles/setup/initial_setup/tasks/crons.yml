@@ -413,13 +413,18 @@
   ansible.builtin.group:
     name: "{{ initial_setup_worktree_holders_group }}"
     system: true
+  register: initial_setup_worktree_holders_group_made
   become: true
 
 - name: Let sys_user connect to the worktree holder scan's socket
   tags: [crons, worktree-sweep]
   # Appended, because other roles give sys_user its other groups. Each agent user gets this
-  # group in claude_code's agent_access.yml instead, whose group list is exact.
-  when: has_claude_code
+  # group in claude_code's agent_access.yml instead, whose group list is exact. Skipped by a
+  # --check run that has not created the group, because usermod refuses a group it cannot
+  # find even when it only reports.
+  when:
+    - has_claude_code
+    - not (ansible_check_mode and initial_setup_worktree_holders_group_made is changed)
   ansible.builtin.user:
     name: "{{ sys_user }}"
     groups: "{{ initial_setup_worktree_holders_group }}"
@@ -446,7 +451,10 @@
 - name: Listen on the worktree holder scan's socket
   tags: [crons, worktree-sweep]
   # Restarted when a unit changed, because a running socket keeps its old SocketGroup and mode.
-  when: has_claude_code
+  # Skipped by a --check run that has not written a changed unit, which systemd cannot load.
+  when:
+    - has_claude_code
+    - not (ansible_check_mode and initial_setup_worktree_holders_units is changed)
   ansible.builtin.systemd_service:
     name: worktree-holders.socket
     enabled: true
