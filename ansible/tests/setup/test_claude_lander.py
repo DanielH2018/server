@@ -34,8 +34,14 @@ def defaults(role: str = "claude_code") -> dict:
     )
 
 
+def lander_block() -> dict:
+    (block,) = yaml_fast.safe_load((ROLE / "tasks" / "lander.yml").read_text())
+    return block
+
+
 def tasks() -> list[dict]:
-    return yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    """The lander's install and removal tasks, which tasks/lander.yml holds in one block."""
+    return lander_block()["block"]
 
 
 def unit(overrides: dict | None = None) -> str:
@@ -155,27 +161,53 @@ def test_the_rule_admits_only_the_agent_user_and_only_the_start_verb() -> None:
     assert rendered.count("polkit.Result.YES") == 1
 
 
-def test_the_approval_list_land_sh_reads_is_the_one_the_defaults_declare(
-    tmp_path,
-) -> None:
+# The approval floor the operator chose on 2026-10-10: the grant points and the gate itself.
+FLOOR = [
+    "ansible/roles/setup/claude_code/tasks/lander.yml",
+    f"ansible/roles/setup/claude_code/templates/{PATHS}",
+    f"ansible/roles/setup/claude_code/templates/{UNIT}",
+    f"ansible/roles/setup/claude_code/templates/{RULE}",
+    "scripts/deploy_tools/land",
+    "pyproject.toml",
+    "uv.lock",
+    "uv.toml",
+    ".python-version",
+    ".github/",
+    "ansible/roles/setup/initial_setup/tasks/access.yml",
+    "ansible/.sops.yaml",
+    "ansible/vars/secrets.yml",
+]
+
+
+def floor_prefixes(tmp_path) -> list[str]:
     listed = tmp_path / "approval-paths"
     listed.write_text(render_setup_text("claude_code", PATHS))
-    assert (
-        policy.read_approval_paths(str(listed))
-        == defaults()["claude_code_lander_approval_paths"]
+    return policy.read_approval_paths(str(listed))
+
+
+def test_the_approval_list_land_sh_reads_is_the_floor(tmp_path) -> None:
+    assert floor_prefixes(tmp_path) == FLOOR
+
+
+def test_the_inventory_cannot_override_the_approval_list(tmp_path) -> None:
+    """The list is literal in the template, so a host_vars entry has nothing to replace."""
+    listed = tmp_path / "approval-paths"
+    listed.write_text(
+        render_setup_text(
+            "claude_code", PATHS, {"claude_code_lander_approval_paths": ["docs/"]}
+        )
     )
+    assert policy.read_approval_paths(str(listed)) == FLOOR
 
 
-# Each file that decides what the lander does. A PR changing one widens what the agent can
-# land, so the agent must not be able to land that PR itself.
+# Each file that decides what the lander does, or grants the agent root-level reach directly.
+# A PR changing one must not land without the operator.
 LANDER_FILES = [
     f"ansible/roles/setup/claude_code/templates/{UNIT}",
     f"ansible/roles/setup/claude_code/templates/{RULE}",
     f"ansible/roles/setup/claude_code/templates/{PATHS}",
-    "ansible/roles/setup/claude_code/defaults/main.yml",
-    "ansible/roles/setup/claude_code/tasks/main.yml",
-    "ansible/inventory/host_vars/daniel-box.yml",
-    "ansible/roles/setup/gitops_deploy/defaults/main.yml",
+    "ansible/roles/setup/claude_code/tasks/lander.yml",
+    "ansible/roles/setup/initial_setup/tasks/access.yml",
     "scripts/deploy_tools/land.sh",
     "scripts/deploy_tools/land.py",
     "scripts/deploy_tools/land_lib/policy.py",
@@ -184,15 +216,44 @@ LANDER_FILES = [
 
 
 @pytest.mark.parametrize("path", LANDER_FILES)
-def test_a_pr_changing_the_lander_needs_the_operator(path) -> None:
+def test_a_pr_changing_the_lander_needs_the_operator(path, tmp_path) -> None:
     assert (ANSIBLE.parent / path).is_file(), f"{path} moved; update this list"
-    prefixes = defaults()["claude_code_lander_approval_paths"]
-    assert policy.approval_hits([{"filename": path}], prefixes) == [path]
+    assert policy.approval_hits([{"filename": path}], floor_prefixes(tmp_path)) == [
+        path
+    ]
 
 
-def test_a_docs_pr_does_not_need_the_operator() -> None:
-    prefixes = defaults()["claude_code_lander_approval_paths"]
-    assert policy.approval_hits([{"filename": "docs/landing.md"}], prefixes) == []
+# Off the floor since 2026-10-10: the agent's own roles, the deployer and the inventory.
+OFF_THE_FLOOR = [
+    "docs/landing.md",
+    "ansible/roles/setup/claude_code/defaults/main.yml",
+    "ansible/roles/setup/claude_code/tasks/main.yml",
+    "ansible/roles/setup/gitops_deploy/defaults/main.yml",
+    "ansible/inventory/host_vars/daniel-box.yml",
+]
+
+
+@pytest.mark.parametrize("path", OFF_THE_FLOOR)
+def test_a_pr_off_the_floor_lands_without_the_operator(path, tmp_path) -> None:
+    assert (ANSIBLE.parent / path).is_file(), f"{path} moved; update this list"
+    assert policy.approval_hits([{"filename": path}], floor_prefixes(tmp_path)) == []
+
+
+def test_the_lander_settings_are_pinned_above_the_inventory_at_their_defaults() -> None:
+    """Block vars outrank host_vars, so the inventory cannot repoint the unit."""
+    pinned = lander_block()["vars"]
+    assert set(pinned) == {
+        "claude_code_lander_checkout",
+        "claude_code_lander_branch_prefix",
+        "claude_code_lander_approver",
+    }
+    for name, value in pinned.items():
+        assert value == defaults()[name], name
+
+
+def test_main_imports_the_lander_file() -> None:
+    main = yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    assert any(t.get("ansible.builtin.import_tasks") == "lander.yml" for t in main)
 
 
 def test_switching_either_flag_off_removes_everything_the_install_writes() -> None:
