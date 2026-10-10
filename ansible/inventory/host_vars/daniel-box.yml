@@ -5,9 +5,10 @@ server_ip: 10.0.0.215
 # out of its DHCP pool before applying it: with DHCPv4 off, nothing renews a lease on it.
 k3s_node_static_link: eno1
 # daniel-server's node-to-node traffic (6443/8472/10250, k3s_join_server_ports) is
-# UFW-allowed here via the k3s role's join-firewall tag.
+# UFW-allowed here via the k3s role's join-firewall tag. Derived from daniel-server's one
+# literal (#4063).
 k3s_agent_node_ips:
-  - 10.0.0.161
+  - "{{ hostvars['daniel-server'].server_ip }}"
 # Cloud-init (subiquity) image: sshd's real config is the drop-in, not the bare
 # /etc/ssh/sshd_config. The SSH-hardening tasks have no `create:` fallback, so a wrong
 # value here fails initial_setup.yml outright.

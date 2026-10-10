@@ -28,6 +28,8 @@ from lib.ansible_jinja_env import make_ansible_env
 from lib.repo_paths import SHARED_TPL
 from _manifest_guards import (
     ALL_VARS_VALUES,
+    BOX_VARS,
+    SERVER_VARS,
     K8S,
     _k8s_entries,
     _render,
@@ -125,7 +127,7 @@ def test_every_arr_route_admits_the_nodes_own_host_traffic_is_clean():
         "is on the other node (#1642)."
     )
     # The LAN address is the wrong grant and must not be what makes the assertion above pass.
-    assert _cidr_mismatches([f"{ALL_VARS_VALUES['k8s_node_client_ip']}/32"])
+    assert _cidr_mismatches([f"{BOX_VARS['server_ip']}/32"])
 
 
 def test_every_arr_route_admits_the_overlay_addresses_too_is_clean():
@@ -155,9 +157,9 @@ def test_no_arr_route_grants_the_dead_bridge_address():
     routes pass `include_bridge_ip=false`; this asserts the parameter is still doing that, which
     a rendered-match check is the only thing that can see.
     """
-    assert sorted(
-        _cidr_mismatches([f"{ALL_VARS_VALUES['k8s_bridge_client_ip']}/32"])
-    ) == sorted(ARR_APPS), (
+    assert sorted(_cidr_mismatches([f"{SERVER_VARS['server_ip']}/32"])) == sorted(
+        ARR_APPS
+    ), (
         "an *arr monitoring route still grants k8s_bridge_client_ip, which no measured caller "
         "arrives as — `include_bridge_ip=false` was dropped from its monitoring_route() call"
     )

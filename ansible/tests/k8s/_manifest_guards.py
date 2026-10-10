@@ -24,6 +24,8 @@ ALL_VARS_VALUES = yaml_fast.safe_load(ALL_VARS.read_text())
 
 BOX_VARS = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())
 
+SERVER_VARS = yaml_fast.safe_load((HOST_VARS / "daniel-server.yml").read_text())
+
 
 def _render(path: Path, **ctx) -> str:
     """Render a template with the given context; undefined values are left to raise.
