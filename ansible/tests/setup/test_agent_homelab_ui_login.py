@@ -35,10 +35,14 @@ def role_defaults(*parts: str) -> dict:
     )
 
 
-def test_the_login_is_given_only_to_an_enabled_agent_user() -> None:
+def test_the_login_is_given_only_to_an_enabled_agent_user_with_its_browser() -> None:
+    """daniel-server's agent has no browser, so it holds no Authelia credential."""
     task = named(tasks("main.yml"), "Give the agent user its homelab-ui login")
     assert task["ansible.builtin.import_tasks"] == "agent_homelab_ui.yml"
-    assert task["when"] == "claude_code_agent_user_enabled"
+    assert task["when"] == [
+        "claude_code_agent_user_enabled",
+        "claude_code_agent_homelab_ui_enabled",
+    ]
 
 
 def test_the_login_file_is_the_agents_alone_and_never_printed() -> None:
@@ -86,16 +90,18 @@ def test_the_file_carries_the_username_password_and_domain() -> None:
     }
 
 
-def test_switching_the_agent_user_off_removes_the_login() -> None:
+def test_switching_the_agent_user_or_its_browser_off_removes_the_login() -> None:
     task = named(
         tasks("main.yml"),
-        "Remove the agent user's homelab-ui login when it is switched off",
+        "Remove the agent user's homelab-ui login when it or its browser is switched off",
     )
     assert task["ansible.builtin.file"] == {
         "path": "{{ claude_code_homelab_ui_credentials }}",
         "state": "absent",
     }
-    assert task["when"] == "not claude_code_agent_user_enabled"
+    assert task["when"] == (
+        "not (claude_code_agent_user_enabled and claude_code_agent_homelab_ui_enabled)"
+    )
 
 
 def test_the_login_names_the_account_the_authelia_role_creates() -> None:

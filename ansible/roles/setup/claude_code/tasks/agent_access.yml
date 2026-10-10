@@ -5,11 +5,16 @@
 # reasoning and the check; defaults/main.yml has both switches.
 
 # Exact, not appended: the agent joins no other group (the shared agent_user.yml gives it
-# none), so an empty list is the way back out.
-- name: Set the agent user's journal access
+# none), so an empty list is the way back out. ssh-users is the one group sshd's AllowGroups
+# admits, and a peer whose claude_agent_ssh_login_enabled is true puts the agent in it so the
+# key host's agent can log in (agent_ssh_login.yml).
+- name: Set the agent user's journal access and its ssh login group
   ansible.builtin.user:
     name: "{{ claude_code_agent_user }}"
-    groups: "{{ ['systemd-journal'] if claude_code_agent_journal_access else [] }}"
+    groups: >-
+      {{ (['systemd-journal'] if claude_code_agent_journal_access else [])
+      + (['ssh-users'] if claude_agent_ssh_login_enabled
+      and inventory_hostname != claude_agent_ssh_key_host else []) }}
     append: false
   become: true
 

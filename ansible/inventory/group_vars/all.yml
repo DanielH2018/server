@@ -828,6 +828,19 @@ has_github_cli: false
 has_chezmoi: false
 has_claude_code: false
 
+# The agent user's ssh login on a peer (docs/claude-agent-user.md, slice 5), which
+# scripts/dev/fanout_place.py uses to place a fan-out batch there. The agent user on
+# `claude_agent_ssh_key_host` holds the key, and a peer whose host_vars set
+# `claude_agent_ssh_login_enabled: true` authorizes it for the peer's own agent user, which
+# claude_code_agent_user_enabled builds. False removes the key and the ssh-users membership.
+# Group vars rather than role defaults, because the key host's ssh config reads every peer's
+# switch through hostvars.
+claude_agent_ssh_login_enabled: false
+claude_agent_ssh_key_host: daniel-box
+# The agent's key for the peers, generated on the key host as the agent
+# (claude_code/tasks/agent_peers.yml). A peer's play reads the `.pub` half over ssh.
+claude_agent_ssh_key_path: /var/lib/claude/.ssh/peers_ed25519
+
 # Physical location, feeds the homepage weather widget.
 lat: 38.89
 long: -77.08

@@ -1,0 +1,71 @@
+---
+# A peer's half of the agent's ssh login: authorize the key host agent's peer key for this
+# host's own agent user. Imported from main.yml when claude_code_agent_user_enabled on every host
+# but `claude_agent_ssh_key_host`, after agent_github.yml, which creates ~/.ssh.
+# `claude_agent_ssh_login_enabled` is the switch: true authorizes the key, false removes it.
+# agent_access.yml puts the account in ssh-users, the one group sshd's AllowGroups admits, on
+# the same switch. docs/claude-agent-user.md (slice 5) has why this is the agent user and not
+# a bare login account.
+#
+# DECIDED: authorized_keys is root-owned in a .ssh the agent owns. The agent can replace the
+# file, and doing so grants a login to nothing it does not already hold. A root-owned home, as
+# PR #4057's bare login had, is not an option here: the agent's clone and tools live in it.
+
+- name: Read the agent's public peer key over ssh from the key host
+  # The peer's play runs on the peer (connection=local), so the key comes over ssh, which the
+  # operator's user is authorized for. The `.pub` is 0644 in a directory the operator's group
+  # reads. The read changes nothing, so check mode runs it too.
+  delegate_to: localhost
+  become: false
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -o
+      - BatchMode=yes
+      - -o
+      - ConnectTimeout=10
+      - "{{ claude_agent_ssh_key_host }}"
+      - cat
+      - "{{ claude_agent_ssh_key_path }}.pub"
+  register: claude_code_agent_peer_pub
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  when: claude_agent_ssh_login_enabled
+
+- name: Refuse to authorize a key that was not read
+  ansible.builtin.assert:
+    that:
+      - claude_code_agent_peer_pub.stdout | default('') is match('^ssh-ed25519 ')
+      # One line: a second line would land in authorized_keys without the options on the first.
+      - (claude_code_agent_peer_pub.stdout | trim).splitlines() | length == 1
+    fail_msg: >-
+      No ssh-ed25519 public key at {{ claude_agent_ssh_key_path }}.pub on
+      {{ claude_agent_ssh_key_host }}. Apply the claude_code role there first: it generates the
+      key when claude_code_agent_user_enabled is true.
+    quiet: true
+  # The key host has no key before its first apply, and a check run before that has nothing to read.
+  when:
+    - claude_agent_ssh_login_enabled
+    - not ansible_check_mode
+
+- name: Authorize the key host agent's peer key for this host's agent user
+  # `restrict` drops port, agent and X11 forwarding and user-rc. The fan-out runs only
+  # non-interactive commands, so no `pty` comes back.
+  ansible.builtin.copy:
+    # A `|` block, so the file ends in a newline.
+    content: |
+      restrict {{ claude_code_agent_peer_pub.stdout | trim }}
+    dest: "{{ claude_code_agent_user_home }}/.ssh/authorized_keys"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: claude_agent_ssh_login_enabled
+
+- name: Remove the agent's authorized key when the peer login is switched off
+  ansible.builtin.file:
+    path: "{{ claude_code_agent_user_home }}/.ssh/authorized_keys"
+    state: absent
+  become: true
+  when: not claude_agent_ssh_login_enabled

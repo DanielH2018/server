@@ -83,20 +83,22 @@ def test_the_agent_user_joins_no_group() -> None:
     assert group_grants(tasks(AGENT_GITHUB)) == []
 
 
-def test_the_claude_agents_only_group_is_the_journal_and_it_switches_off() -> None:
-    """The operator granted systemd-journal on 2026-10-09, and nothing else.
+def test_the_claude_agents_only_groups_are_the_journal_and_ssh_users_and_both_switch_off() -> (
+    None
+):
+    """The operator granted systemd-journal on 2026-10-09, and ssh-users on a peer for fan-out.
 
-    `append: false` makes the list exact, so the switch's false arm removes the group and an
+    `append: false` makes the list exact, so each switch's false arm removes its group and an
     added group would have to be written into this one list.
     """
     access = tasks(AGENT_ACCESS)
-    assert group_grants(access) == [
-        "Set the agent user's journal access: groups",
-        "Set the agent user's journal access: append",
-    ]
-    user = named(access, "Set the agent user's journal access")["ansible.builtin.user"]
-    assert user["groups"] == (
-        "{{ ['systemd-journal'] if claude_code_agent_journal_access else [] }}"
+    name = "Set the agent user's journal access and its ssh login group"
+    assert group_grants(access) == [f"{name}: groups", f"{name}: append"]
+    user = named(access, name)["ansible.builtin.user"]
+    assert " ".join(user["groups"].split()) == (
+        "{{ (['systemd-journal'] if claude_code_agent_journal_access else []) "
+        "+ (['ssh-users'] if claude_agent_ssh_login_enabled "
+        "and inventory_hostname != claude_agent_ssh_key_host else []) }}"
     )
     assert user["append"] is False
 

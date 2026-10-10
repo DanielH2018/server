@@ -1,0 +1,64 @@
+---
+# The key host's half of the agent's ssh login on its peers: an ssh key of the agent's own, and
+# an ssh config that names each peer with that peer's agent user. Imported from main.yml on
+# `claude_agent_ssh_key_host` when claude_code_agent_user_enabled, after agent_github.yml, which
+# creates ~/.ssh. The peer's half is agent_ssh_login.yml, which reads the `.pub` this file
+# generates. scripts/dev/fanout_place.py is the caller: it ssh's to a peer by its inventory name
+# to place a fan-out batch there (docs/claude-agent-user.md, slice 5).
+#
+# The key reaches only the peer's agent user, which has no sudo. Which peers appear is each
+# peer's own `claude_agent_ssh_login_enabled`, so switching a peer off removes its stanza here.
+
+- name: Generate the agent's ssh key for the peers
+  # Once, as the agent, so the private half never leaves its home. A new key has to reach each
+  # peer again, which the next apply of that peer's claude_code role does on its own.
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - "{{ claude_code_agent_user }}"
+      - --
+      - ssh-keygen
+      - -q
+      - -t
+      - ed25519
+      - -N
+      - ""
+      - -C
+      - "{{ claude_code_agent_user }} peers ({{ inventory_hostname }})"
+      - -f
+      - "{{ claude_agent_ssh_key_path }}"
+    creates: "{{ claude_agent_ssh_key_path }}"
+  become: true
+
+- name: Check that the agent's peer key is where the peers read it
+  # The peers read `{{ claude_agent_ssh_key_path }}.pub` from group_vars, and the agent's home is
+  # a claude_code default. The two spellings of one path must agree.
+  ansible.builtin.assert:
+    that:
+      - claude_agent_ssh_key_path is match(claude_code_agent_user_home ~ '/')
+    quiet: true
+
+- name: Give the peer key pair the home's group and its modes
+  # ssh-keygen gives the pair the agent's own group, and on a host's first apply the shared
+  # file's closing chown has already run. The peers read the public half as the operator.
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ claude_agent_ssh_key_path }}", mode: "0600" }
+    - { path: "{{ claude_agent_ssh_key_path }}.pub", mode: "0644" }
+  become: true
+  # In check mode on a first apply the keygen above did not run, so there is no pair to chmod.
+  when: not ansible_check_mode
+
+- name: Name the peers in the agent's ssh config
+  ansible.builtin.template:
+    src: agent-ssh-config.j2
+    dest: "{{ claude_code_agent_user_home }}/.ssh/config"
+    owner: "{{ claude_code_agent_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+  become: true
