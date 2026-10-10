@@ -60,10 +60,9 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import _fence
 
-# The label an issue carries to get a red phase. Only issues whose stated behaviour lives in
-# Python this repo's suite runs belong under it: `scripts/`, monitor-bridge's registry, the
-# filter plugins and the tested HA Jinja macros.
-RED_GREEN_LABEL = "red-green"
+# The label an issue carries to get a red phase. `findings.py open` applies it to a finding
+# whose every cited path is code the suite runs (`findings_lib.red_green`).
+from findings_lib.red_green import RED_GREEN_LABEL
 
 # What the implementer may not change once the red commit exists, besides the red files.
 # The `file` of the finding a failed green gate becomes, which no real path can equal.
@@ -140,10 +139,10 @@ def review_flags(
         review: whether the launch asked for `--review`.
         server: whether the batch works this repo.
     """
-    labelled = [RED_GREEN_LABEL in i.labels for i in issues]
-    if not any(labelled):
+    labels = [i.labels for i in issues]
+    if not any(RED_GREEN_LABEL in names for names in labels):
         return review, False
-    if all(labelled) and review and server:
+    if review and not red_skip_reason(labels, server):
         return review, True
     print(
         f"launch: batch {batch} runs without a red phase: it needs --review, this repo, "
@@ -151,6 +150,16 @@ def review_flags(
         file=sys.stderr,
     )
     return review, False
+
+
+def red_skip_reason(labels: Sequence[Sequence[str]], server: bool) -> str:
+    """Why a batch whose issues carry `labels` runs no red phase; "" when it runs one (#3950)."""
+    if not server:
+        return "other-repo"
+    labelled = [RED_GREEN_LABEL in names for names in labels]
+    if not any(labelled):
+        return "no-label"
+    return "" if all(labelled) else "unlabelled-issue"
 
 
 def is_test_path(path: str) -> bool:
@@ -523,9 +532,13 @@ def anti_patterns(skill: Path = HYGIENE_SKILL) -> str:
 def red_prompt(issues: str, anti: str = "") -> str:
     return f"""Write the failing tests for the issues below, before anyone fixes them.
 
-Write one pytest test per behaviour the issues state, in the `tests/` directory beside the code
-it covers; `.claude/rules/python-layout.md` says where. Each test must fail on the code as it
-stands, through an assertion about the stated behaviour, and pass once the behaviour exists.
+Each issue's `## Verify-by` section is your primary input: write one pytest test per claim it
+makes, then one per behaviour the issue states that those tests do not already check. Put each
+in the `tests/` directory beside the code it covers; `.claude/rules/python-layout.md` says
+where. Each test must fail on the code as it stands, through an assertion about the stated
+behaviour, and pass once the behaviour exists. A claim about the tree rather than about a
+function, such as "this constant is defined only in that module", is a census test: read the
+tracked files with `git ls-files` and assert on what they contain.
 A gate then runs your new tests on the unchanged code and refuses them unless every one
 reports FAILED. A test that errors, skips or xfails proves nothing, and neither does a
 collection error. Where the fix will add a module or a function that does not exist yet,

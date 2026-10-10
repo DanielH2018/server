@@ -55,6 +55,8 @@ class FakeRunner:
         # The landing the pipeline runs: each `bash -l` command, the VERDICT line land.sh's
         # log ends on ("" for none), land.sh's exit code, and cc-wait's exit codes in order.
         self.lands = []
+        # What `gh issue view --json labels` answers for every issue of the batch.
+        self.labels = {"labels": []}
         self.verdict = "VERDICT: settled (deployed)"
         self.land_rc = 0
         self.waits = [0]
@@ -70,6 +72,8 @@ class FakeRunner:
             else:
                 out = ""
             return subprocess.CompletedProcess(argv, 0, out + "\n", "")
+        if argv[:3] == ["gh", "issue", "view"]:
+            return subprocess.CompletedProcess(argv, 0, json.dumps(self.labels), "")
         if argv[0] == "gh":
             self.comments.append(stdin)
             return subprocess.CompletedProcess(argv, 0, "", "")

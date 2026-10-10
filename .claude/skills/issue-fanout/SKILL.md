@@ -158,11 +158,14 @@ stay with the implementer; only the slow model review moves out. The fallback `A
 path below has no review phase.
 
 **A `--review` batch whose every issue carries the `red-green` label also gets a red phase.**
-Label only issues whose stated behaviour is in Python this repo's suite runs: `scripts/`,
-monitor-bridge's registry, the filter plugins and the tested HA Jinja macros. Before the
-implementer starts, a separate session writes one failing test per stated behaviour from the
-issue text alone, and `scripts/dev/fanout_lib/red_gate.py` proves each new test fails on the
-unchanged code. The implementer gets that commit and may not edit it. A refused red commit is
+`findings.py open` applies the label when every path a finding cites is code this repo's suite
+runs: Python under `scripts/`, the filter plugins and the hooks, and a role's `files/` when the
+role has its own `tests/`, such as monitor-bridge's registry and the HA Jinja macros. Add or
+remove it by hand where that rule is wrong. Before the implementer starts, a separate session
+writes one failing test per claim in each issue's `## Verify-by`, and per stated behaviour
+those miss, from the issue text alone. `scripts/dev/fanout_lib/red_gate.py` proves each new
+test fails on the unchanged code. A batch that runs no red phase records why, as
+`red_skipped`. The implementer gets that commit and may not edit it. A refused red commit is
 dropped and the batch runs as usual. A PR that still fails the green gate after the fix round
 is not landed. The PR comment and the local record carry both gates' results.
 

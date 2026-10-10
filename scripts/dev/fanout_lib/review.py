@@ -96,6 +96,7 @@ from fanout_lib.red_gate import (
     green_finding,
     red_prompt,
     red_section,
+    red_skip_reason,
     reset_worktree,
 )
 from fanout_lib.processes import reaping, run_process
@@ -360,6 +361,25 @@ class Pipeline:
         self.record.red_gate = "passed" if gate.passed else gate.reason
         return (red, gate) if gate.passed else None
 
+    def _red_skip_reason(self) -> str:
+        """Why this batch runs no red phase, from its issues' labels as they stand now."""
+        if not self.target.is_server:
+            return "other-repo"
+        labels = []
+        for number in self.batch.split("-"):
+            view = ["gh", "issue", "view", number, "--json", "labels"]
+            try:
+                labels.append(
+                    [
+                        x["name"]
+                        for x in json.loads(self.run(view, None).stdout)["labels"]
+                    ]
+                )
+            except ValueError, KeyError, TypeError:
+                return "labels unreadable"
+        # Every issue labelled, yet launched without the phase: the label came after launch.
+        return red_skip_reason(labels, True) or "labelled after launch"
+
     def _green(self, red: tuple[str, Gate] | None) -> str:
         """Run the green gate on HEAD and record it; "" when it passed or there is no red."""
         if red is None:
@@ -405,6 +425,8 @@ class Pipeline:
         issues = issues_section(self.brief)
         if self.project_settings:
             self.hooks.update(held_secret_paths(self.run, SOURCE_ROOT))
+        if not self.red_green:
+            self.record.red_skipped = self._red_skip_reason()
         try:
             red = self._red(issues) if self.red_green else None
         except ResetFailed as exc:
