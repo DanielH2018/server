@@ -40,10 +40,11 @@ def test_a_filter_only_a_role_template_calls_narrows_to_that_role(tree: Tree):
 
 
 def test_an_added_plugin_narrows_to_the_roles_that_call_it(tree: Tree):
-    """#4333: PR #4310 added a plugin, and the tick took that range for the whole fleet.
+    """A regression guard for behaviour `narrow_filters` already had before #4333.
 
-    The narrowing named the plugin's eight callers; the fleet-wide answer came from a
-    `containers_list` edit beside it. A new plugin and its first caller land together.
+    A plugin added in the same range as its first caller narrows to that caller, as a changed
+    plugin does. #4333 suspected PR #4310's new plugin of the fleet-wide refusal; the plugin
+    narrowed to its callers, and the width came from a `containers_list` edit beside it.
     """
     radarr = "ansible/roles/k8s/radarr/templates/deployment.yaml.j2"
     tree.write("ansible/filter_plugins/whisper.py", _plugin('{"whisper": shout}'))
