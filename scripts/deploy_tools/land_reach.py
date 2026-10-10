@@ -277,6 +277,10 @@ def setup_shipped_file_hosts(
     role_hosts = setup_role_hosts(role, playbook, all_vars, host_vars_dir, roles_dir)
     if not role_hosts:
         return frozenset()
+    if "/defaults/" in path or "/vars/" in path:
+        # A variable the role reads (#4303) has no ship task to gate on, and its bare
+        # `main.yml` would match any task naming that file, so the role's reach stands.
+        return role_hosts
     names = _shipping_names(path, roles_dir)
     chains = task_chains(
         roles_dir / role,
