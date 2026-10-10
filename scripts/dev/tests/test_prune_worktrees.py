@@ -8,6 +8,7 @@ the orphan-directory and orphan-branch scans, and `prune_all`/`main`, which act.
 Run: uv run pytest scripts/dev/tests/test_prune_worktrees.py
 """
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -332,3 +333,60 @@ def test_check_exits_1_for_a_branch_holding_unlanded_work(tmp_path, monkeypatch)
 
     assert done.returncode == 1, done.stderr
     assert done.stdout.strip() == "worktree-open: unlanded"
+
+
+# --- a registered worktree whose directory is gone (#4191) ---------------------------
+#
+# `git worktree list` keeps the registration, marked prunable, until `git worktree prune`
+# runs. survey() asked is_dirty() about it, which ran git with a cwd that does not exist, and
+# the FileNotFoundError took the whole report and every --prune down with it.
+
+
+def _repo_with_a_vanished_worktree(tmp_path: Path) -> Path:
+    """A scratch repo holding one merged live worktree and one registered at a deleted path."""
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    git(repo, "worktree", "add", "-q", "-b", "worktree-done", str(tmp_path / "done"))
+    git(repo, "worktree", "add", "-q", "--detach", str(tmp_path / "gone"))
+    shutil.rmtree(tmp_path / "gone")
+    git(repo, "update-ref", "refs/remotes/origin/master", "master")
+    return repo
+
+
+def test_report_survives_a_worktree_registered_at_a_deleted_path(tmp_path, monkeypatch):
+    scrub_process_git_env(monkeypatch)
+    repo = _repo_with_a_vanished_worktree(tmp_path)
+
+    done = run([sys.executable, str(PRUNER)], cwd=repo, env=scrubbed_env())
+
+    assert "FileNotFoundError" not in done.stderr
+    assert done.returncode == 0, done.stderr
+
+
+def test_report_still_names_the_live_worktrees_beside_a_vanished_one(
+    tmp_path, monkeypatch
+):
+    # One stale registration must not hide the rest: the merged live tree is still reported.
+    scrub_process_git_env(monkeypatch)
+    repo = _repo_with_a_vanished_worktree(tmp_path)
+
+    done = run([sys.executable, str(PRUNER)], cwd=repo, env=scrubbed_env())
+
+    assert f"[{REMOVABLE:9}] {tmp_path / 'done'}" in done.stdout, done.stderr
+
+
+def test_the_weekly_prune_removes_merged_worktrees_beside_a_vanished_one(
+    tmp_path, monkeypatch
+):
+    # `--prune --brief` is the weekly cron's invocation; the stale registration blocked it.
+    scrub_process_git_env(monkeypatch)
+    repo = _repo_with_a_vanished_worktree(tmp_path)
+
+    done = run(
+        [sys.executable, str(PRUNER), "--prune", "--brief"],
+        cwd=repo,
+        env=scrubbed_env(),
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert not (tmp_path / "done").exists()
