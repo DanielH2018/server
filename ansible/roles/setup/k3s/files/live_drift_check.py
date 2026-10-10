@@ -45,6 +45,17 @@ that off managedFields rather than a list of names.
 
 Exit codes: 0 clean, 1 drift or a client-side-applied object with no apply baseline, 2 the
 check itself failed.
+
+Usage: live-drift-check.py   (takes no arguments; -h/--help prints this text)
+
+Run by kuma-check-live-drift.timer (daily) as the sys_user, installed as
+/usr/local/bin/live-drift-check.py. Environment, set by the unit and its env file
+/etc/rancher/k3s/live-drift-check.env:
+  KUBECONFIG     the read-only ServiceAccount kubeconfig kubectl uses
+  KUMA_HOST      Kuma host the verdict is pushed to
+  PUSH_TOKEN     push token of the live-drift monitor
+  BOOT_GRACE_S   exit 1 with no push while uptime is under this many seconds (default 0)
+  HOST_LIB_DIR   directory holding host_lib (default /opt/live-drift-check)
 """
 
 from __future__ import annotations
@@ -451,4 +462,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

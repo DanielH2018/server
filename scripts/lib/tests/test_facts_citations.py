@@ -89,14 +89,9 @@ def test_marker_is_clean():
     assert c.selector == "a fixed slice while"
 
 
-def test_probe_is_clean():
-    c = _one("`probe.py kuma-drift` answers what is missing")
-    assert c == Citation("probe", "probe.py kuma-drift", "", "kuma-drift")
-
-
-def test_probe_with_argument_is_clean():
-    c = _one("`probe.py health traefik`")
-    assert c.selector == "health traefik"
+def test_a_probe_subcommand_is_no_citation():
+    # Nothing runs a probe to hash it, so a probe citation could never grade its section.
+    assert parse_citations("`probe.py kuma-drift` answers what is missing") == ([], [])
 
 
 def test_file_line_is_flagged():
@@ -130,7 +125,7 @@ def test_fenced_code_is_skipped():
 
 
 def test_form_census():
-    assert FORMS == frozenset({"path", "symbol", "yaml", "test", "marker", "probe"})
+    assert FORMS == frozenset({"path", "symbol", "yaml", "test", "marker"})
     assert REJECT_REASONS == frozenset({"file:line"})
 
 
@@ -289,7 +284,9 @@ def test_a_non_macro_span_is_flagged_as_no_citation(line):
     assert macro_citations(line) == []
 
 
-@pytest.mark.parametrize("raw", ["scripts/lib/kubectl.py:run", "probe.py kuma-drift"])
+@pytest.mark.parametrize(
+    "raw", ["scripts/lib/kubectl.py:run", "scripts/lib/kubectl.py"]
+)
 def test_every_citation_round_trips_its_raw(raw):
     assert _one(f"`{raw}`").raw == raw
 
@@ -396,13 +393,6 @@ def test_in_tree_out_of_tree_token_is_flagged():
         Citation("path", "10.42.0.0/16", "10.42.0.0/16", ""),
     ]
     assert [c.raw for c in out_of_tree if in_tree(c, tracked)] == []
-
-
-def test_probe_is_always_in_tree():
-    # A probe citation carries no path at all, so the tracked-set test cannot apply to it.
-    assert in_tree(
-        Citation("probe", "probe.py kuma-drift", "", "kuma-drift"), frozenset()
-    )
 
 
 def test_repo_docs_lists_every_tracked_claude_md(tmp_path):

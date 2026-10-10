@@ -20,6 +20,12 @@ A leaf: it imports nothing from the rest of the deployer, so a test can drive it
 Stdlib only: the unit runs it under `uv run --no-project`, and `deploy_under_locks.py`
 imports it. The CLI below is for reading a plan by hand.
 
+Usage: deploy_locks.py plan [--exclusive-all] TAG [TAG ...]
+       deploy_locks.py -h | --help
+
+`plan` prints one NAME<TAB>shared|exclusive<TAB>PATH line per lock, in the order to take
+them. `--exclusive-all` is a full run. Exit 2 on a usage error. Reads no config or env.
+
 Typical usage example:
 
     with locked_budget({"sonarr", "radarr"}, 900) as budget:
@@ -303,4 +309,7 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main(sys.argv[1:]))

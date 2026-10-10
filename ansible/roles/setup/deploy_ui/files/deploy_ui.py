@@ -10,6 +10,17 @@ the IngressRoute in front of it. Both are named in this role's CLAUDE.md.
 A read that fails answers `{"unavailable": "<reason>"}`, which the page renders in red. It
 never answers an empty list for a failed read, because an empty panel reads as "nothing
 pending" — the deadman trap this repo has paid for.
+
+Usage: deploy_ui.py   (takes no arguments; -h/--help prints this text)
+
+Configuration comes from the environment, which deploy-ui.service sets:
+  DEPLOY_UI_TREE_LOCK  path of the git-tree lock file (required, no default)
+  DEPLOY_UI_REPO       primary checkout (default /home/ubuntu/server)
+  DEPLOY_UI_STATE      gitops-deploy state dir (default gitops_markers.STATE_DIR)
+  DEPLOY_UI_LOGS       log dir (default ~/.local/state/deploy-ui)
+  DEPLOY_UI_LOCKS      dir holding the server-deploy-*.lock files (default /var/lock)
+  DEPLOY_UI_BIND       listen address (default 127.0.0.1)
+  DEPLOY_UI_PORT       listen port (default 8790)
 """
 
 import json
@@ -475,4 +486,7 @@ def serve(config: Config) -> None:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     serve(Config.from_env())

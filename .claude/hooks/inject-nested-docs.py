@@ -3,6 +3,11 @@
 #   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
 """PreToolUse(Bash): load the nested CLAUDE.md and `.claude/rules` a Bash read would skip.
 
+Usage: `bash-pretool.py` loads this file as an arm on PreToolUse:Bash, and it also runs
+standalone. It reads the hook JSON payload on stdin. It prints an `additionalContext` JSON object
+or nothing, and it always exits 0. `-h` or `--help` prints this text and exits 0 without reading
+stdin.
+
 WHY. Claude Code loads a role's `CLAUDE.md` (`nested_traversal`) and a `.claude/rules/*.md`
 whose `paths:` glob matches (`path_glob_match`) only when the Read, Edit or Write tool touches
 a matching path. Auto mode instructs the model to read files with `cat` / `sed -n` / `head`
@@ -579,6 +584,9 @@ def main():
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     try:
         sys.exit(main())
     except Exception:

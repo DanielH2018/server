@@ -170,6 +170,7 @@ nav:
       - "ADR-0016 Code scanning stays on default setup": adr/0016-code-scanning-stays-on-default-setup.md
       - "ADR-0017 The tree lock guards the tree": adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md
       - "ADR-0018 The repository stays public, CI stays hosted": adr/0018-the-repository-stays-public-and-ci-stays-hosted.md
+      - "ADR-0019 Fact support stops at the repo store": adr/0019-fact-support-stops-at-the-repo-store.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a

@@ -3,6 +3,11 @@
 #   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
 """PreToolUse(Bash) guard: the two file rules that only ever watched the Edit tool.
 
+Usage: `bash-pretool.py` loads this file as an arm on PreToolUse:Bash, and it also runs
+standalone. It reads the hook JSON payload on stdin. It prints an `ask` or `deny` decision JSON
+object or nothing, and it exits 0. `-h` or `--help` prints this text and exits 0 without reading
+stdin.
+
 WHY A SECOND SURFACE. `block-protected-edits.py` denies edits to generated docs pages and to
 SOPS-encrypted files — but it is wired at matcher `Edit|Write|MultiEdit|NotebookEdit`, and auto
 mode injects a standing instruction telling the model to make file changes "with sed, heredocs,
@@ -262,4 +267,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

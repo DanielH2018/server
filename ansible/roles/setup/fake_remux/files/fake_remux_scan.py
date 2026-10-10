@@ -17,6 +17,13 @@ ansible/inventory/group_vars/all.yml). Config comes from /etc/autofix-fake-remux
 (0600, embeds SONARR_API_KEY + the Discord webhook). ffprobe uses jellyfin because it mounts the media
 read-only at /data/media, so Sonarr's absolute path resolves unchanged (no translation) and a probe
 can't write.
+
+Usage: fake_remux_scan.py   (takes no arguments; -h/--help prints this text)
+
+Run by the fake-remux-scan cron (daily, under fake_remux_lock). Reads the file named by
+FAKE_REMUX_CONFIG (default: autofix-fake-remux/config.env under /etc), writes the ledger
+(LEDGER_FILE) and the state file (STATE_FILE, default state.json under
+/var/lib/autofix-fake-remux). Always exits 0; the state file carries the verdict.
 """
 
 from __future__ import annotations
@@ -378,4 +385,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(main())

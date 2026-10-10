@@ -143,11 +143,6 @@ def test_backreferenced_test_is_clean(tmp_path):
     assert not lint_sections(repo, None)
 
 
-def test_count_as_fact_is_a_warning(tmp_path):
-    found = lint_sections(_repo(tmp_path, "## A\nThere are 13 entries here.\n"), None)
-    assert [(f.rule, f.warn) for f in found] == [("count-as-fact", True)]
-
-
 def test_date_as_verification_is_flagged(tmp_path):
     found = lint_sections(
         _repo(tmp_path, "## A\nVerified against the tree 2026-09-17.\n"), None
@@ -216,7 +211,6 @@ def test_rule_census():
             "ambiguous-marker",
             "one-way-test",
             "lock-tampered",
-            "count-as-fact",
             "date-as-verification",
             "duplicate-heading",
             "unbalanced-fence",
@@ -226,7 +220,7 @@ def test_rule_census():
             "vanished-identifier",
         }
     )
-    assert WARN_RULES == frozenset({"count-as-fact", "one-way-test", "version-as-fact"})
+    assert WARN_RULES == frozenset({"one-way-test", "version-as-fact"})
 
 
 def test_hand_edited_lock_is_flagged(tmp_path):
