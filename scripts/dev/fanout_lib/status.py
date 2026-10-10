@@ -2,7 +2,9 @@
 
 import json
 import re
+import subprocess
 from collections.abc import Callable, Sequence
+import dataclasses
 from dataclasses import dataclass
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
@@ -13,7 +15,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import lands
-from fanout_lib.manifest import Batch
+from fanout_lib.manifest import Batch, Manifest
+from fanout_lib.transport import Tools
 from fanout_lib.target import SERVER
 
 STATUS_TIMEOUT_S = 30.0
@@ -231,6 +234,19 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
     return out
 
 
+def reconciled(
+    s: BatchStatus, branch: str, merged_pr: Callable[[str, str], str], repo: str
+) -> BatchStatus:
+    """`s`, read as `landed` with its merged PR's url when it is a `no-report` GitHub merged.
+
+    Only a `no-report` batch asks the forge, so every other state costs no network call.
+    """
+    if s.state != NO_REPORT:
+        return s
+    url = merged_pr(branch, repo)
+    return dataclasses.replace(s, state="landed", pr_url=url) if url else s
+
+
 def status_line(
     s: BatchStatus,
     host: str,
@@ -264,13 +280,11 @@ def status_line(
         unreconciled `no-report` and for a clean finish with no PR (`needs-input`, `no-pr`),
         5 for a genuine failure.
     """
+    s = reconciled(s, branch, merged_pr, repo)
     state = s.state
-    landed_url = merged_pr(branch, repo) if state == NO_REPORT else ""
-    if landed_url:
-        state = "landed"
     line = f"{s.batch} on {host}: {state}"
-    if s.pr_url or landed_url:
-        line += f" {s.pr_url or landed_url}"
+    if s.pr_url:
+        line += f" {s.pr_url}"
     if s.permission_denials:
         line += f" permission_denials={s.permission_denials}"
     if state in ("done", NEEDS_INPUT, NO_PR, NO_VERDICT):
@@ -295,3 +309,62 @@ def status_line(
         # land that PR, which nothing here says has merged or deployed.
         return line + " — land.sh printed no VERDICT", 1
     return line, 5 if state == "failed" else 0
+
+
+UNREAD = "unread"
+
+
+def collect(
+    run: Manifest, tools: Tools, one_line: Callable[[str], str]
+) -> tuple[list[dict], int]:
+    """One row per batch in `run`, and the worst exit tier among them; `status`'s whole read.
+
+    Each row carries `batch`, `host`, `branch`, `state`, `pr_url` and `line`, the text line
+    `status` prints. `status --json` prints the rows themselves, so `fanout_probe.py` reads the
+    state field instead of a regex over the line (#3926). Two states come from here rather
+    than from a host: `cleaned` for a batch `clean` removed, and `unread` for a host whose
+    read timed out, which still counts as running.
+
+    A cleaned batch is reported from the manifest and never read remotely. `clean` resets the
+    failed unit and takes .fanout/report.json with the worktree, so `status_command` finds no
+    active state, no result and no report, and `parse_status` reads exactly that as `failed`,
+    which would exit 5 for a batch that landed its PR and was tidied up.
+    """
+    rows, worst = [], 0
+
+    def row(b: Batch, host: str, state: str, pr_url: str, line: str) -> dict:
+        return {
+            "batch": b.batch,
+            "host": host,
+            "branch": b.branch,
+            "state": state,
+            "pr_url": pr_url,
+            "line": line,
+        }
+
+    for b in run.batches:
+        if b.removed_at:
+            line = f"{b.batch} on {b.host}: cleaned ({b.removed_at})"
+            rows.append(row(b, b.host, "cleaned", "", line))
+    live = [b for b in run.batches if not b.removed_at]
+    for host in sorted({b.host for b in live}):
+        mine = [b for b in live if b.host == host]
+        try:
+            proc = tools.run(host, status_command(mine), STATUS_TIMEOUT_S, None)
+        except subprocess.TimeoutExpired:
+            for b in mine:
+                line = f"{b.batch} on {host}: status read timed out"
+                rows.append(row(b, host, UNREAD, "", line))
+            worst = max(worst, 1)
+            continue
+        by_id = {b.batch: b for b in mine}
+        for st in parse_status(mine, proc.stdout):
+            b = by_id[st.batch]
+            st = reconciled(st, b.branch, tools.merged_pr, b.repo)
+            # Already reconciled, so `status_line` must not ask the forge a second time.
+            line, tier = status_line(
+                st, host, b.branch, lambda *_: "", one_line, b.repo
+            )
+            worst = max(worst, tier)
+            rows.append(row(b, host, st.state, st.pr_url, line))
+    return rows, worst
