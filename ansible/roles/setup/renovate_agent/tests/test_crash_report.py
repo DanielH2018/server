@@ -13,9 +13,7 @@ Run: uv run pytest ansible/roles/setup/renovate_agent/tests/test_crash_report.py
 """
 
 import pathlib
-import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import renovate_agent
 
 PUSH_URL = "https://kuma.example/api/push/abc123"

@@ -6,13 +6,6 @@ without a socket. Testing the HTTP transport instead would prove only that urlli
 and would leave the comparison — the part with the trap in it — unexercised.
 """
 
-import os
-import sys
-
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
-)
-
 import apply_prefs
 
 

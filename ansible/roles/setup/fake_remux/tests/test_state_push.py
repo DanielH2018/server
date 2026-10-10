@@ -1,8 +1,5 @@
 import json
-import pathlib
-import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 from state_push import main, read_state, verdict
 
 # The good state file is stamped at this epoch and `main` measures its age from the same one,

@@ -5,15 +5,13 @@ only ever observed passing is a check with no evidence it can fail.
 """
 
 import json
-import sys as _sys
 from pathlib import Path as _Path
 
 import pytest
 
-ROLE = _Path(__file__).resolve().parents[1]
-_sys.path.insert(0, str(ROLE / "files"))
+from render_maintenance import down_monitor_ids, main, window_cron
 
-from render_maintenance import down_monitor_ids, main, window_cron  # noqa: E402
+ROLE = _Path(__file__).resolve().parents[1]
 
 WINDOW = {
     "title": "Weekly system restart",

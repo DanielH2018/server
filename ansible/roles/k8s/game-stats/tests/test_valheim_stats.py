@@ -2,10 +2,6 @@ import os
 import subprocess
 import sys
 
-sys.path.insert(
-    0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
-)
-
 import valheim_stats as stats
 
 # Real shape of a line as it reaches Loki: the image wraps every console line in its own

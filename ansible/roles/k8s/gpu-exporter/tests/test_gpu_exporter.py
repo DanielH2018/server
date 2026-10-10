@@ -7,11 +7,6 @@ and `gt_act_freq_mhz`. Every test asserts a rendered VALUE against the file it c
 read path that silently stops working fails here rather than presenting a flat zero.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "files"))
-
 import gpu_exporter
 
 

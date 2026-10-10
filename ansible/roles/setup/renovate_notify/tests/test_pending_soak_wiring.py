@@ -11,10 +11,7 @@ this check goes inert in the I/O shell, and both are the whole point of it:
 """
 
 import json
-import pathlib
-import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import pending_logic as pl
 import renovate_notify as rn
 

@@ -7,18 +7,16 @@ than landing in the runtime catch-all where nobody looks.
 
 import json
 import re
-import sys as _sys
 from pathlib import Path as _Path
 
 import yaml
 
-ROLE = _Path(__file__).resolve().parents[1]
-_sys.path.insert(0, str(ROLE / "files"))
+from _k8s_render import render_role_template
+from kuma_monitors import kuma_ingress_monitors
+from py_table import py_table
+from render_status_page import bucket
 
-from _k8s_render import render_role_template  # noqa: E402
-from kuma_monitors import kuma_ingress_monitors  # noqa: E402
-from py_table import py_table  # noqa: E402
-from render_status_page import bucket  # noqa: E402
+ROLE = _Path(__file__).resolve().parents[1]
 
 # monitor-bridge's push tiles render from one loop over this table (#3781), so their ids are
 # the rows' `kuma_id`s rather than literal keys in the template.

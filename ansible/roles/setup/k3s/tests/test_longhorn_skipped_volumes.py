@@ -7,10 +7,6 @@ The reader-side half, that the pod-log read reaches this check with the right fl
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_skipped_volumes.py
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "files"))
 import longhorn_skipped_volumes_logic as logic
 from host_lib import rfc3339_to_epoch
 

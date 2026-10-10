@@ -5,10 +5,6 @@ is the clock each arm reads: the dwell arm times the digest on the branch, this 
 branch itself, and only the second can page for a tag re-pushed faster than its own soak.
 """
 
-import pathlib
-import sys
-
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import pending_logic as pl
 
 DAY = 86400.0

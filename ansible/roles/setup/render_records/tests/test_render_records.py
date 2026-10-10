@@ -3,10 +3,6 @@
 Run: uv run pytest ansible/roles/setup/render_records/tests
 """
 
-import pathlib
-import sys
-
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import render_records as rr
 
 TIP, MID, OLD = "a" * 40, "b" * 40, "c" * 40

@@ -8,11 +8,9 @@ Dependencies listing truncated — nothing in notify_logic parses it.
 
 import json
 import pathlib
-import sys
 
 from lib.repo_paths import REPO
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import notify_logic as nl
 import pending_logic as pl
 
