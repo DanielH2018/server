@@ -108,13 +108,20 @@ uv run python evals/ablate.py run --agent skeptic --section "Secrets Management"
 ```
 
 - **Each run stays under $10.** The operator set that cap on 2026-10-10, and `--cap-usd` can
-  only lower it. Before each engine call the runner projects the next run at 1.5x the costliest
-  run so far, and it stops when that projection would cross the cap. It also stops as soon as
-  the measured spend crosses it, and when a run writes no report, because its spend is then
-  unknown. The report names the arms it did not measure.
+  only lower it. Before each engine call, the runner checks that the most that call can bill
+  still fits under the cap. That is $3.75: the agent's $0.75 and the judge's $0.50 per-call
+  limits, each tried up to three times. A call that once cost more raises the projection to
+  1.5x that cost. The runner also stops when a run writes no report, or a report without
+  `costUsd`, because its spend is then unknown. The report names the arms it did not measure.
 - **The cap is checked between runs, not inside one.** The engine writes its `--json` only when
-  an invocation ends, so the runner calls it once per case per repetition at `--k 1`. One run
-  can still cost more than its projection; the engine's per-call `--max-budget-usd` bounds that.
+  an invocation ends, so the runner calls it once per case per repetition at `--k 1`. The
+  worst-case floor is what keeps a launched run under the cap; it also means about $6.25 of
+  each $10 run is spendable.
+- **A case changes only when its verdict changes.** The runner applies each case's own
+  `threshold` to its pass count in both arms, as a sweep does. `--k` defaults to 3 because the
+  thresholds assume 3; at `--k 1` one noisy run can flip a verdict.
+- **Live cases are left out.** The engine's hermetic runner skips `"mode": "live"` cases, so
+  one would write no report.
 - **It refuses the weekly sweep's day**, and any day `history.json` records a sweep on, because
   both spend the same monthly credit. It re-checks before every run, so a run started late on
   Saturday stops at midnight.

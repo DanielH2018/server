@@ -19,10 +19,11 @@ its A/B arms to the same rule.
 THE BUDGET IS CHECKED BETWEEN RUNS, because that is the finest point an outside caller has:
 run-evals.mjs writes its --json report only when its invocation ends. So each invocation is
 one case at --k 1, and before each one the runner stops if the spend so far plus a
-projected next run would cross the cap. The projection is the costliest run seen so far,
-times PROJECTION_MARGIN. It also stops the moment the measured total crosses the cap. The
-residual overshoot is one run that costs more than its projection; the engine's own
-per-call --max-budget-usd ($0.75 agent, $0.50 judge, each retried up to twice) bounds it.
+projected next run would cross the cap. The projection is never below WORST_RUN_USD, the
+most one call can bill under the engine's per-call --max-budget-usd, so a run that launches
+cannot carry the total past the cap. It rises above that floor only when a run has cost
+more, at the costliest run seen so far times PROJECTION_MARGIN. A report with no costUsd,
+or no report at all, stops the run, because its spend is unknown.
 
 The report goes to --out, never to evals/history.json: an ablation arm is not a sweep, and
 trend.py would mix it into the regression baseline.
@@ -53,6 +54,10 @@ CHEZMOI_AGENTS = CHEZMOI / "home" / "private_dot_claude" / "agents"
 # The operator's ruling on #4259 (2026-10-10): each ablation run stays under $10.
 CAP_USD = 10.0
 PROJECTION_MARGIN = 1.5
+# The most one engine call can bill: the agent's and the judge's --max-budget-usd ($0.75 and
+# $0.50, in invoke-agent.mjs and judge.mjs), each tried up to three times. A run launches only
+# when this much still fits under the cap, so no run can carry the total past it.
+WORST_RUN_USD = 3 * 0.75 + 3 * 0.50
 # The weekly sweep's day, as Python's date.weekday() numbers it (Monday is 0). The cron in
 # ansible/roles/setup/initial_setup/tasks/crons.yml says weekday "0", cron's Sunday; a test
 # holds the two together. An ablation run must not share a day with the sweep, because both
@@ -166,26 +171,34 @@ def load_cases(
     picked = [
         c
         for c in found
-        if (not case_ids or c["id"] in case_ids)
+        # The engine's hermetic runner skips live cases, so one would write no report.
+        if c.get("mode") != "live"
+        and (not case_ids or c["id"] in case_ids)
         and (not agents or c["agent"] in agents)
     ]
     missing = set(case_ids) - {c["id"] for c in picked}
     if missing:
-        raise KeyError(f"unknown case id(s): {', '.join(sorted(missing))}")
+        raise KeyError(f"unknown or live case id(s): {', '.join(sorted(missing))}")
     return picked
 
 
 class Budget:
     """Spend so far against the cap, and the projection the pre-launch check uses."""
 
-    def __init__(self, cap: float, margin: float = PROJECTION_MARGIN):
+    def __init__(
+        self,
+        cap: float,
+        margin: float = PROJECTION_MARGIN,
+        floor: float = WORST_RUN_USD,
+    ):
         self.cap = cap
         self.margin = margin
+        self.floor = floor
         self.spent = 0.0
         self.costliest = 0.0
 
     def projected(self) -> float:
-        return self.costliest * self.margin
+        return max(self.costliest * self.margin, self.floor)
 
     def next_run_fits(self) -> bool:
         return self.spent + self.projected() <= self.cap
@@ -249,7 +262,14 @@ def ablate(
                         f"the engine wrote no report for {case['id']}; spend unknown"
                     )
                     return {"results": results, "stopped": stopped, "cut_arm": arm}
-                cost = report.get("costUsd") or 0.0
+                cost = report.get("costUsd")
+                if cost is None:
+                    # An engine from before calls were priced; counting it as $0 would
+                    # disable the cap for the whole run.
+                    stopped = (
+                        f"the report for {case['id']} carries no costUsd; spend unknown"
+                    )
+                    return {"results": results, "stopped": stopped, "cut_arm": arm}
                 budget.add(cost)
                 tally["passes"] += report.get("passes", 0)
                 tally["healthy"] += report.get("healthy", 0)
@@ -260,6 +280,18 @@ def ablate(
                     )
                     return {"results": results, "stopped": stopped, "cut_arm": arm}
     return {"results": results, "stopped": None, "cut_arm": None}
+
+
+def threshold_met(threshold: str, tally: dict) -> bool:
+    """Whether a case's tally meets its `threshold`, as the engine's report.mjs reads it."""
+    passes, healthy = tally["passes"], tally["healthy"]
+    if threshold == "all":
+        return healthy > 0 and passes == healthy
+    m = re.fullmatch(r"rate>=(\d+)/(\d+)", threshold)
+    if not m:
+        raise ValueError(f"bad threshold: {threshold}")
+    rate = passes / healthy if healthy else 0.0
+    return rate >= int(m.group(1)) / int(m.group(2))
 
 
 def summarize(run: dict, arm_names: list[str], cases: list[dict], k: int) -> dict:
@@ -286,10 +318,14 @@ def summarize(run: dict, arm_names: list[str], cases: list[dict], k: int) -> dic
             with_it, without = base[case["id"]], results[arm][case["id"]]
             # An infra error leaves a run unhealthy, and 1/1 against 0/0 is not a flip.
             inconclusive = with_it["healthy"] < k or without["healthy"] < k
+            met_with = threshold_met(case["threshold"], with_it)
+            met_without = threshold_met(case["threshold"], without)
             rows[case["id"]] = {
                 "with": f"{with_it['passes']}/{with_it['healthy']}",
                 "without": f"{without['passes']}/{without['healthy']}",
-                "changed": not inconclusive and with_it["passes"] != without["passes"],
+                # The case's own threshold decides, as it does in a sweep, so a 2/3 case
+                # moving to 3/3 is not a change and a single noisy run is less likely to be.
+                "changed": not inconclusive and met_with != met_without,
                 "inconclusive": inconclusive,
             }
         measured[arm] = {
@@ -392,7 +428,12 @@ def main(argv=None) -> int:
     )
     a.add_argument("--case", action="append", default=[], help="case id (repeatable)")
     a.add_argument("--agent", action="append", default=[], help="agent (repeatable)")
-    a.add_argument("--k", type=int, default=1, help="runs per case per arm")
+    a.add_argument(
+        "--k",
+        type=int,
+        default=3,
+        help="runs per case per arm; the case thresholds assume 3",
+    )
     a.add_argument("--cap-usd", type=float, default=CAP_USD)
     a.add_argument("--out", type=Path, default=None)
     a.add_argument("--engine", type=Path, default=ENGINE)

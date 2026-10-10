@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import sys
@@ -13,9 +14,11 @@ from ablate import (
     REPO,
     SWEEP_WEEKDAY,
     WHOLE_DOC,
+    WORST_RUN_USD,
     Budget,
     ablate,
     doc_without,
+    load_cases,
     rank_docs,
     split_sections,
     summarize,
@@ -40,7 +43,10 @@ Beta body.
 
 AGENT = "---\nname: skeptic\ndescription: d\n---\nYou verify findings.\n"
 
-CASES = [{"id": "a/1", "agent": "x"}, {"id": "a/2", "agent": "x"}]
+CASES = [
+    {"id": "a/1", "agent": "x", "threshold": "all"},
+    {"id": "a/2", "agent": "x", "threshold": "all"},
+]
 
 
 def _arms(*names):
@@ -114,13 +120,58 @@ def test_refuses_the_sweep_weekday_and_a_day_with_a_recorded_sweep():
 def test_stops_before_a_run_projected_to_cross_the_cap(tmp_path: Path):
     invoke, calls = _invoker([4.0] * 10)
     run = ablate(_arms(BASELINE, WHOLE_DOC), CASES, 1, Budget(10.0), invoke, tmp_path)
-    # $4 + $4 spent; the third run projects at $6 and would reach $14.
+    # $4 + $4 spent; the third run projects at 1.5x $4, above the floor, and would reach $14.
     assert len(calls) == 2
     assert run["cut_arm"] == WHOLE_DOC
     assert "would take $8.00 past the $10.00 cap" in run["stopped"]
     summary = summarize(run, [BASELINE, WHOLE_DOC], CASES, 1)
     assert summary["measured"] == {}
     assert summary["unmeasured"] == [WHOLE_DOC]
+
+
+def test_a_run_launches_only_when_its_worst_case_still_fits(tmp_path: Path):
+    invoke, calls = _invoker([0.2] * 10)
+    run = ablate(_arms(BASELINE, WHOLE_DOC), CASES, 1, Budget(4.0), invoke, tmp_path)
+    # $0.40 spent; a third run could bill $3.75 more and reach $4.15.
+    assert WORST_RUN_USD == 3.75
+    assert len(calls) == 2
+    assert "projected at $3.75 would take $0.40 past the $4.00 cap" in run["stopped"]
+
+
+def test_a_report_without_cost_stops_because_its_spend_is_unknown(tmp_path: Path):
+    run = ablate(
+        _arms(BASELINE),
+        CASES,
+        1,
+        Budget(10.0),
+        lambda *_: {"passes": 1, "healthy": 1},
+        tmp_path,
+    )
+    assert run["stopped"] == "the report for a/1 carries no costUsd; spend unknown"
+
+
+def test_live_cases_are_left_out_because_the_engine_skips_them(tmp_path: Path):
+    (tmp_path / "x").mkdir()
+    for cid, mode in (("x/1", None), ("x/2", "live")):
+        case = {"id": cid, "agent": "x", **({"mode": mode} if mode else {})}
+        (tmp_path / f"{cid}.json").write_text(json.dumps(case))
+    assert [c["id"] for c in load_cases([], [], tmp_path)] == ["x/1"]
+    with pytest.raises(KeyError):
+        load_cases(["x/2"], [], tmp_path)
+
+
+def test_a_move_within_the_case_threshold_is_not_a_change(tmp_path: Path):
+    passes = iter([3, 2])  # baseline 3/3, -doc 2/3: both meet rate>=2/3
+
+    def invoke(case_id, env, arm_dir):
+        return {"passes": next(passes), "healthy": 3, "costUsd": 0.1}
+
+    cases = [{"id": "a/1", "agent": "x", "threshold": "rate>=2/3"}]
+    names = [BASELINE, WHOLE_DOC]
+    run = ablate(_arms(*names), cases, 1, Budget(10.0), invoke, tmp_path)
+    row = summarize(run, names, cases, 3)["measured"][WHOLE_DOC]
+    assert row["cases"]["a/1"]["with"] == "3/3"
+    assert row["changed"] is False
 
 
 def test_stops_as_soon_as_the_measured_spend_crosses_the_cap(tmp_path: Path):
