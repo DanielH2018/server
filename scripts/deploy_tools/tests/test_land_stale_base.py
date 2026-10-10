@@ -137,8 +137,8 @@ def test_the_policy_checks_and_pins_the_head_its_own_update_made(landing):
     assert _gh_writes(calls) == ["update-branch aaaa", "merge bbbb"]
 
 
-def test_a_head_the_operator_approved_merges_without_an_update(landing, tmp_path):
-    """The update would make a head the approval does not name, and the policy refuses that."""
+def _approved_landing(landing, tmp_path, compare):
+    """A policy landing whose head OLD the operator approved, armed and ready to await."""
     approval_paths = tmp_path / "approval-paths"
     approval_paths.write_text("scripts/deploy_tools/land\n")
     ln, calls = landing(
@@ -168,7 +168,7 @@ def test_a_head_the_operator_approved_merges_without_an_update(landing, tmp_path
                     "submitted_at": "2026-10-05T20:00:00Z",
                 }
             ],
-            compare=[INCIDENT_2922],
+            compare=compare,
         ),
         arm_merge=True,
         await_merge=True,
@@ -177,7 +177,21 @@ def test_a_head_the_operator_approved_merges_without_an_update(landing, tmp_path
         approver="operator-login",
     )
     merge.arm_merge(ln)
-    merge.await_merge(ln)
     assert ln.approved_head == OLD
+    return ln, calls
+
+
+def test_a_stale_approved_head_is_refused_without_an_update(landing, tmp_path):
+    """The update would make a head the approval does not name; merging it is untested."""
+    ln, calls = _approved_landing(landing, tmp_path, [INCIDENT_2922])
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert exc.value.rc == 1
+    assert "get the new head approved" in exc.value.error
+    assert _gh_writes(calls) == []
+
+
+def test_an_up_to_date_approved_head_merges(landing, tmp_path):
+    ln, calls = _approved_landing(landing, tmp_path, [[]])
+    merge.await_merge(ln)
     assert _gh_writes(calls) == ["merge aaaa"]
-    assert not [c for c in calls if c[0] == "gh:compare"]
