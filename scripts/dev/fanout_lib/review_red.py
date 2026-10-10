@@ -19,7 +19,13 @@ from fanout_lib.base_check import BaseCheck
 from fanout_lib.git_state import GitState, changed, snapshot
 from fanout_lib.hunk_check import HunkCheck
 from fanout_lib.processes import reaping
-from fanout_lib.red_gate import Gate, ResetFailed, red_prompt, reset_worktree
+from fanout_lib.red_gate import (
+    Gate,
+    ResetFailed,
+    green_cause,
+    red_prompt,
+    reset_worktree,
+)
 
 if TYPE_CHECKING:
     from fanout_lib.review import Pipeline
@@ -152,4 +158,5 @@ class RedPhase:
             return ""
         reason = self.gates.green(self.run, self.worktree, *red)
         self.record.green_gate = reason or "passed"
+        self.record.green_first = self.record.green_first or green_cause(reason)
         return reason

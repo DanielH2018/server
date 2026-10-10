@@ -58,14 +58,17 @@ class Record:
     findings: list[dict] = field(default_factory=list)
     actionable: list[dict] = field(default_factory=list)
     remaining: list[dict] = field(default_factory=list)
-    # The red/green measure (#3674): "" when the batch had no red phase, else "passed" or the
-    # gate's reason. A refused red gate is a vacuous test caught.
+    # The red gate's verdict (#3674): "" when the batch had no red phase, else "passed" or the
+    # gate's reason. The test author reruns its tests until they fail, so a refusal is rare
+    # whatever the tests are worth; `green_first` and the `red_hunks` fields measure them.
     red_gate: str = ""
     red_behaviours: int = 0
     red_tests: int = 0
     # How many red tests failed only because a name was missing (#4023).
     red_by_absence: int = 0
     green_gate: str = ""
+    # The first green gate run's `red_gate.green_cause`: `passed`, `unmet` or `lock`.
+    green_first: str = ""
     # The PR's new test nodes outside the red phase, those of them that pass with its code
     # changes taken out (`base_check`), and why the check could not run, if it could not.
     base_tests: int = 0
