@@ -62,10 +62,6 @@ from pathlib import Path as _Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-import fragments_bridge
-import fragments_deploy
-import fragments_hosts
-import fragments_storage
 from dev.k8s_autodeploy_counts import autodeploy_stances
 from fragment_readers import (
     container_udp_port,
@@ -87,6 +83,12 @@ from fragment_renderers import (
     render_longhorn_tiers,
     render_secret_tiers,
     render_traefik_ports,
+)
+from fragments_lib import (
+    fragments_bridge,
+    fragments_deploy,
+    fragments_hosts,
+    fragments_storage,
 )
 from lib.docs_provenance import write_if_body_changed
 from lib.ansible_inventory import K8S_HOST, K8S_HOST_VARS, PI_HOST, PI_HOST_VARS
@@ -250,7 +252,7 @@ FRAGMENTS: dict[str, Callable[[], tuple[str, list[str]]]] = {
     "lan-addresses": _lan,
 }
 
-# The fragments built in the domain modules. A name may appear in only one table, so a
+# The fragments built in the domain modules under fragments_lib/. A name may appear in only one table, so a
 # domain module cannot silently replace a fragment defined here or in another module.
 for _domain in (fragments_bridge, fragments_deploy, fragments_hosts, fragments_storage):
     _clash = set(FRAGMENTS) & set(_domain.FRAGMENTS)
