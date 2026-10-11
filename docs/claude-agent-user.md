@@ -554,7 +554,7 @@ To add a further agent:
 
 To retire one, set `state: absent` rather than deleting the entry. Ansible removes nothing it
 no longer declares. Absent expires the account, keeps the home, and removes the GitHub token
-and the clone sync units.
+and the clone sync units. It also takes the agent out of the `worktree-holders` socket group.
 
 ## Checking and rolling back
 

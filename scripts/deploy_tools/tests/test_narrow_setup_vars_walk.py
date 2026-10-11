@@ -12,7 +12,8 @@ import pytest
 
 import narrow_setup
 
-from _setup_role_fixtures import DEFAULTS, ROLE, Tree, build, narrow
+from _narrow_fixtures import _refs
+from _setup_role_fixtures import BETA, DEFAULTS, ROLE, Tree, build, narrow
 
 
 @pytest.fixture
@@ -202,3 +203,44 @@ def test_a_template_reader_in_a_cycle_is_flagged_beside_the_src_reader(tree):
         narrow_setup.CannotNarrow, match="only templates naming each other"
     ):
         narrow(tree, old, tree.commit("edit the template"))
+
+
+# ── another role's defaults key this role reads maps to the key's readers (#4303) ───────
+
+FOREIGN = "ansible/roles/setup/owner/defaults/main.yml"
+FOREIGN_DEFAULTS = "---\nowner_group: holders\nowner_other: unread\n"
+
+
+@pytest.fixture
+def reads(tree, monkeypatch) -> Tree:
+    """The demo role declared a reader of `FOREIGN`, whose `owner_group` its alpha template names."""
+    monkeypatch.setitem(
+        narrow_setup.deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
+        FOREIGN,
+        frozenset({"demo"}),
+    )
+    tree.write(FOREIGN, FOREIGN_DEFAULTS)
+    tree.write(
+        f"{ROLE}/templates/alpha.conf.j2",
+        "mode = {{ demo_alpha_mode }}\ngroup = {{ owner_group }}\n",
+    )
+    tree.commit("demo reads the owner's group")
+    return tree
+
+
+def test_a_foreign_defaults_key_the_role_reads_narrows_to_its_readers(reads):
+    reads.write(FOREIGN, FOREIGN_DEFAULTS.replace("holders", "renamed"))
+    assert narrow(reads, *_refs(reads)) == frozenset({"alpha"})
+
+
+def test_a_foreign_defaults_key_the_role_never_reads_adds_no_tag(reads):
+    reads.write(FOREIGN, FOREIGN_DEFAULTS.replace("unread", "changed"))
+    reads.write(f"{ROLE}/tasks/beta.yml", BETA + "  # touched\n")
+    assert narrow(reads, *_refs(reads)) == frozenset({"beta"})
+
+
+def test_a_range_changing_only_an_unread_foreign_key_is_flagged(reads):
+    """No tag at all is doubt, never "apply nothing": an empty `--tags` runs everything."""
+    reads.write(FOREIGN, FOREIGN_DEFAULTS.replace("unread", "changed"))
+    with pytest.raises(narrow_setup.CannotNarrow, match="reaches no host"):
+        narrow(reads, *_refs(reads))

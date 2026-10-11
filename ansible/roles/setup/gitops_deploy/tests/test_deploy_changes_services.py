@@ -330,6 +330,20 @@ def test_a_kuma_check_template_change_reaches_the_roles_importing_its_task_file(
     assert setup_tags_for([path]) == consumers
 
 
+def test_an_initial_setup_defaults_change_reaches_claude_code():
+    """claude_code puts every agent in `initial_setup_worktree_holders_group` (#4303), so a
+    rename re-applied only initial_setup and left the agents in the old group."""
+    path = "ansible/roles/setup/initial_setup/defaults/main.yml"
+    assert services_from_changed_paths([path]).setup_roles == {
+        "initial_setup",
+        "claude_code",
+    }
+    assert setup_roles_for(path) == {"initial_setup", "claude_code"}
+    assert setup_tags_for([path]) == {"initial_setup", "claude_code"}
+    tasks = "ansible/roles/setup/initial_setup/tasks/crons.yml"
+    assert setup_roles_for(tasks) == {"initial_setup"}
+
+
 def test_a_host_lib_change_defers_the_k8s_roles_importing_it():
     """janitorr and configarr copy `host_lib.py` through `install_host_lib.yml` (#3320). The
     deployer applies no k8s role for this change, so each lands in `cs.k8s` and defer-alerts.

@@ -60,29 +60,10 @@ grafana_panel_report = _load_by_path(
 # two pythonpath entries would create a second copy.
 
 
-# Fake resolver: maps container name -> a recognizable IP. A wrong container name
-# raises KeyError, so a misrouted subcommand fails loudly.
-IPS = {"prometheus": "10.0.0.1", "loki": "10.0.0.2", "scrutiny": "10.0.0.3"}
-
-
-def _fake_resolve(name):
-    return IPS[name]
-
-
 def _fake_k8s_endpoint(hostname):
     # The (base, --resolve pin) pair the live k8s_endpoint() derives from SOPS +
     # inventory — faked so plan() stays testable without either.
     return f"https://{hostname}.example", f"{hostname}.example:443:10.0.0.240"
-
-
-@pytest.fixture
-def ips():
-    return IPS
-
-
-@pytest.fixture
-def fake_resolve():
-    return _fake_resolve
 
 
 @pytest.fixture
