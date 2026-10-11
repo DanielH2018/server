@@ -6,6 +6,7 @@ that, and the WebSocket codec and trace parser are what `ha why` / `ha trace` ar
 """
 
 import os
+import subprocess
 
 import pytest
 
@@ -382,15 +383,35 @@ def test_tls_context_states_the_protocol_floor():
 
 
 # `ha_curl_argv` has no `--fail`, so a rejected token reaches every HA read as a 200 body.
-def test_ha_json_reads_exit_with_the_server_s_words_on_a_401():
+# The stub sits at the process boundary, so `ha_get`, `ha_base` and `ha_token` all run for real.
+def _sops_ok_curl_401(argv, **_kwargs):
+    stdout = "example.test" if argv[0] == "sops" else "401: Unauthorized"
+    return subprocess.CompletedProcess(argv, 0, stdout=stdout, stderr="")
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["ha", "trace", "x"],
+        ["ha", "verify-automations"],
+        ["ha", "verify-entities"],
+        ["ha", "automation", "x"],
+        ["ha-state"],
+        None,  # ha_state_model.py refresh
+    ],
+)
+def test_ha_reads_exit_with_the_server_s_words_on_a_401(monkeypatch, argv):
+    from diagnostics.probe_lib.cli_parser import _build_parser
+    from home_assistant import ha_state_model
+
+    monkeypatch.setattr(subprocess, "run", _sops_ok_curl_401)
+    if argv is None:
+        call = ha_state_model.cmd_refresh
+    else:
+        ns = _build_parser().parse_args(argv)
+        run = ha.run_ha_state if argv == ["ha-state"] else ha.run_ha
+        call = lambda: run(ns)
     # NonJsonResponse is a SystemExit, so uncaught it prints its message, not a traceback.
     with pytest.raises(core.NonJsonResponse) as exc:
-        core.parse_json("https://h/api/states", "401: Unauthorized")
+        call()
     assert "401: Unauthorized" in str(exc.value)
-
-
-def test_ha_json_reads_still_parse_a_json_body():
-    body = '[{"entity_id": "automation.x"}]'
-    assert core.parse_json("https://h/api/states", body) == [
-        {"entity_id": "automation.x"}
-    ]

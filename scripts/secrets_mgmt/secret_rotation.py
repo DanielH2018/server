@@ -408,7 +408,7 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         # consumer until they are committed.
         print(
             "\nNext: commit secrets.yml and secret_rotation.yml, then redeploy the "
-            "consumer(s): ./scripts/deploy.sh --tags %s" % ",".join(sorted(tags))
+            "consumer(s): `./scripts/deploy.sh --tags %s`" % ",".join(sorted(tags))
         )
     return 0
 
