@@ -256,12 +256,23 @@ def comment_only_broad_changes(paths, old_ref: str, new_ref: str, show) -> set[s
     that is added, deleted or unreadable on either side stays broad -- the fail-safe
     direction is to park, never to fast-forward past a change this did not read.
     """
+    candidates = [
+        p
+        for p in paths
+        if p.endswith(_COMMENT_ONLY_SUFFIXES)
+        and any(p.startswith(prefix) for prefix in _COMMENT_ONLY_PREFIXES)
+    ]
+    return _content_unchanged(candidates, old_ref, new_ref, show)
+
+
+def _content_unchanged(paths, old_ref: str, new_ref: str, show) -> set[str]:
+    """The YAML `paths` whose `_content_lines` are equal at both refs.
+
+    A path that is added, deleted or unreadable on either side is left out -- the fail-safe
+    direction is to keep the change, never to skip past one this did not read.
+    """
     quiet: set[str] = set()
     for p in paths:
-        if not p.endswith(_COMMENT_ONLY_SUFFIXES):
-            continue
-        if not any(p.startswith(prefix) for prefix in _COMMENT_ONLY_PREFIXES):
-            continue
         try:
             before = show(old_ref, p)
             after = show(new_ref, p)

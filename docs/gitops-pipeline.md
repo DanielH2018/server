@@ -921,6 +921,11 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   **A k8s change that is not an eligible bump defers.** A path under `roles/k8s/**` that is not an
   eligible image-pin bump lands in `ChangeSet.k8s` (`deploy_logic.role_of` matches the whole role
   directory). The tick still `--ff-only` merges it and does not deploy it.
+  A role `defaults/` edit that moves no content line is not a change at all
+  (`deploy_k8s.comment_only_k8s_defaults`, #4460): the tick drops the path before it
+  classifies, so it neither defers nor pages. The release-staleness census drops the same
+  path with the same reader, so the role does not read stale either. `templates/` and
+  `tasks/` are outside that read.
   `alert_deferred` posts once per SHA on the `k8s` alert slot. Deploy the change with
   `./scripts/deploy.sh --tags <svc>`, even where the post prints the bare `ansible-playbook`
   form. The compose mechanisms in this page (`containers_for()`, the
