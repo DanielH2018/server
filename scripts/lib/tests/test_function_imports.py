@@ -97,7 +97,7 @@ def _issue_674_tree(tmp_path: Path, *, fixed: bool) -> Path:
 
 def test_issue_674_unfixed_is_flagged_while_help_still_passes(tmp_path):
     """Verify-by: #674's parent commit turns the check red while `--help` still passes."""
-    from lib.function_imports import check  # ty: ignore[unresolved-import]
+    from lib.function_imports import check
 
     scripts = _issue_674_tree(tmp_path, fixed=False)
     entry = scripts / "fx_app" / "fx_model.py"
@@ -119,7 +119,7 @@ def test_issue_674_unfixed_is_flagged_while_help_still_passes(tmp_path):
 
 
 def test_issue_674_fixed_is_clean(tmp_path):
-    from lib.function_imports import check  # ty: ignore[unresolved-import]
+    from lib.function_imports import check
 
     scripts = _issue_674_tree(tmp_path, fixed=True)
     entry = scripts / "fx_app" / "fx_model.py"
@@ -128,7 +128,7 @@ def test_issue_674_fixed_is_clean(tmp_path):
 
 def test_a_break_two_hops_below_a_resolvable_import_is_flagged(tmp_path):
     """`find_spec("fx_helper")` succeeds here; only executing the chain reaches the break."""
-    from lib.function_imports import check  # ty: ignore[unresolved-import]
+    from lib.function_imports import check
 
     scripts = tmp_path / "scripts"
     _write(scripts, "fx_tools/fx_helper.py", "import fx_middle\n")
@@ -182,7 +182,7 @@ MOD_KEY = ("scripts/fx_pkg/fx_mod.py", "run", "fx_sibling")
 
 
 def test_dotted_mode_flags_a_bare_sibling_import_in_a_dotted_loaded_module(tmp_path):
-    from lib.function_imports import check, dotted_loaded  # ty: ignore[unresolved-import]
+    from lib.function_imports import check, dotted_loaded
 
     scripts = _dotted_tree(tmp_path, imported=True)
     mod = scripts / "fx_pkg" / "fx_mod.py"
@@ -196,7 +196,7 @@ def test_dotted_mode_flags_a_bare_sibling_import_in_a_dotted_loaded_module(tmp_p
 
 def test_dotted_mode_skips_a_module_nothing_loads_by_dotted_name(tmp_path):
     """`longhorn_reap.py`'s case: nothing imports it, so its bare imports are only run by path."""
-    from lib.function_imports import check, dotted_loaded  # ty: ignore[unresolved-import]
+    from lib.function_imports import check, dotted_loaded
 
     scripts = _dotted_tree(tmp_path, imported=False)
     mod = scripts / "fx_pkg" / "fx_mod.py"
@@ -208,7 +208,7 @@ def test_dotted_mode_skips_a_module_nothing_loads_by_dotted_name(tmp_path):
 
 
 def test_an_exemption_survives_lines_inserted_above_the_import(tmp_path):
-    from lib.function_imports import check  # ty: ignore[unresolved-import]
+    from lib.function_imports import check
 
     exemptions = {MOD_KEY: "reached only from this module's own __main__ dispatch"}
     scripts = _dotted_tree(tmp_path, imported=True)
@@ -221,7 +221,7 @@ def test_an_exemption_survives_lines_inserted_above_the_import(tmp_path):
 
 
 def test_an_exemption_whose_import_left_its_function_is_reported_stale(tmp_path):
-    from lib.function_imports import check  # ty: ignore[unresolved-import]
+    from lib.function_imports import check
 
     exemptions = {MOD_KEY: "reached only from this module's own __main__ dispatch"}
     scripts = _dotted_tree(tmp_path, imported=True, function="run_moved")
@@ -251,7 +251,7 @@ MUST_COVER = frozenset(
 
 
 def test_the_two_exemptions_the_review_found_are_listed_each_with_a_reason():
-    from lib.function_imports import EXEMPTIONS  # ty: ignore[unresolved-import]
+    from lib.function_imports import EXEMPTIONS
 
     assert EXPECTED_EXEMPTIONS <= set(EXEMPTIONS), sorted(
         EXPECTED_EXEMPTIONS - set(EXEMPTIONS)
@@ -263,7 +263,7 @@ def test_the_two_exemptions_the_review_found_are_listed_each_with_a_reason():
 
 def test_the_exempted_imports_really_fail_under_dotted_loading():
     """Each exemption covers a real failure, so dropping it from the list turns the check red."""
-    from lib.function_imports import check  # ty: ignore[unresolved-import]
+    from lib.function_imports import check
 
     found = set()
     for rel in (HSM, VHC):
@@ -272,7 +272,7 @@ def test_the_exempted_imports_really_fail_under_dotted_loading():
 
 
 def test_dotted_loaded_finds_the_exempted_modules_and_not_longhorn_reap():
-    from lib.function_imports import dotted_loaded  # ty: ignore[unresolved-import]
+    from lib.function_imports import dotted_loaded
 
     names = {p.name for p in dotted_loaded()}
     assert {"ha_state_model.py", "validate_ha_config.py"} <= names
@@ -280,7 +280,7 @@ def test_dotted_loaded_finds_the_exempted_modules_and_not_longhorn_reap():
 
 
 def test_the_entry_point_set_names_the_modules_it_is_measured_against():
-    from lib.function_imports import ENTRY_POINTS  # ty: ignore[unresolved-import]
+    from lib.function_imports import ENTRY_POINTS
 
     names = {Path(p).name for p in ENTRY_POINTS}
     assert MUST_COVER <= names, sorted(MUST_COVER - names)
@@ -288,7 +288,7 @@ def test_the_entry_point_set_names_the_modules_it_is_measured_against():
 
 
 def test_every_entry_point_function_local_import_executes_in_both_modes():
-    from lib.function_imports import ENTRY_POINTS, check  # ty: ignore[unresolved-import]
+    from lib.function_imports import ENTRY_POINTS, check
 
     findings = []
     for path in sorted(ENTRY_POINTS):
