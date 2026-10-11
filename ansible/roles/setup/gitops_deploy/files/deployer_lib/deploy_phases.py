@@ -28,7 +28,7 @@ from deployer_lib.deploy_changes import (
     services_from_changed_paths,
     shared_module_consumers,
 )
-from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_config import ERR, WARNING, Config, log
 from deployer_lib.deploy_git import ci_walk_candidates, is_diverged, next_action
 from deployer_lib.deploy_inventory import declared_k8s_services, declares_no_gitops
 from deployer_lib.deploy_k8s import (
@@ -310,7 +310,8 @@ def adopt_setup_routing(tools: DeployTools, config: Config, origin: str) -> None
         deploy_setup_roles.use_routing({}, failed=True)
         log(
             f"setup-role routing at {origin[:8]} failed ({type(exc).__name__}: {exc}) — "
-            "a range carrying a setup role parks until a tick can route it"
+            "a range carrying a setup role parks until a tick can route it",
+            level=WARNING,
         )
         return
     deploy_setup_roles.use_routing(routes)
@@ -445,7 +446,8 @@ def reconcile_denylist(
     except Exception as exc:
         # No marker write: an unreadable ref is transient, so the next tick tries again.
         log(
-            f"could not read k8s declarations at {head[:8]}: {type(exc).__name__}: {exc}"
+            f"could not read k8s declarations at {head[:8]}: {type(exc).__name__}: {exc}",
+            level=WARNING,
         )
         return False
     # DECIDED: an EMPTY `declared` is damage, never evidence — guard it before the comparison,
@@ -464,7 +466,8 @@ def reconcile_denylist(
         log(
             f"empty k8s declaration read at {head[:8]}: no role under ansible/roles/k8s/ "
             "declared a stance, which is a broken read rather than an empty denylist "
-            "— leaving config.env alone and retrying next tick"
+            "— leaving config.env alone and retrying next tick",
+            level=WARNING,
         )
         return False
     if declared == config.k8s_autodeploy_denylist:
@@ -492,7 +495,7 @@ def reconcile_denylist(
         # already tolerates — auto-deploy stays disarmed by the origin comparison, which is the
         # fail-safe direction. Parking every unrelated service deploy behind a config render
         # would be a strictly larger outage than the one this heals.
-        log(f"denylist re-render failed: {type(exc).__name__}: {exc}")
+        log(f"denylist re-render failed: {type(exc).__name__}: {exc}", level=ERR)
         return True
     log("config.env re-rendered — the next tick reads the fresh denylist")
     return True
@@ -560,7 +563,7 @@ def _promote_k8s_auto_deploys(
             else:
                 detail = f"the declarations at origin could not be read ({read_error})"
                 fix = "check the ref/path on the host — this clears on its own once it reads again"
-            log(f"k8s auto-deploy disarmed — stale denylist ({detail})")
+            log(f"k8s auto-deploy disarmed — stale denylist ({detail})", level=WARNING)
             deploy_alerts.alert_once(
                 tools,
                 state,

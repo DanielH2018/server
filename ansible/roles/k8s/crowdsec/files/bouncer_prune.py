@@ -171,5 +171,8 @@ if __name__ == "__main__":
         words = list(exc.cmd)
         start = words.index("cscli") if "cscli" in words else 1
         verb = " ".join(w for w in words[start : start + 3] if not w.startswith("-"))
-        print(f"{verb} failed rc={exc.returncode}: {tail[-1] if tail else 'no output'}")
+        print(
+            f"{verb} failed rc={exc.returncode}: {tail[-1] if tail else 'no output'}",
+            file=sys.stderr,
+        )
         sys.exit(1)

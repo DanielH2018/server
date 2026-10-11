@@ -65,7 +65,7 @@ def test_manual_cli_clear_exits_3_when_the_issue_is_not_manual(capsys, make_tool
     tools, calls = make_tools(Fakes(view=make_issue(2978)))
     assert findings.main(["manual", "2978", "--clear"], tools) == 3
     assert not calls.gh
-    assert "not manual" in capsys.readouterr().out
+    assert "not manual" in capsys.readouterr().err
 
 
 def _open_argv(tmp_path):

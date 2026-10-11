@@ -125,7 +125,9 @@ def _edit_body(gh: Gh, number: str, body: str) -> str | None:
     return None
 
 
-def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
+def main(
+    argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout, stderr=sys.stderr
+) -> int:
     argv = sys.argv[1:] if argv is None else argv
     # `--help` is a question; the refusal below answered it with 64 and the docstring on
     # stderr, which is a usage error.
@@ -146,7 +148,7 @@ def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
             gh("pr", "view", number, "--json", "body,statusCheckRollup").stdout
         )
     except subprocess.CalledProcessError as exc:
-        print(f"gh pr view {number} failed: {exc.stderr.strip()}", file=out)
+        print(f"gh pr view {number} failed: {exc.stderr.strip()}", file=stderr)
         return RENOVATE_REBASE_GH_FAILED
     body = view.get("body") or ""
     rollup = view.get("statusCheckRollup") or []
@@ -155,7 +157,7 @@ def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
     if outcome == "no-box":
         print(
             f"PR #{number}: body carries no `{UNTICKED}` — not a Renovate PR, or the box was edited away",
-            file=out,
+            file=stderr,
         )
         return 1
     if soak and outcome == "already-ticked":
@@ -186,13 +188,13 @@ def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
             )
             return RENOVATE_REBASE_SOAKING
         if err := _edit_body(gh, number, body.replace(TICKED, UNTICKED, 1)):
-            print(f"gh pr edit {number} failed: {err}", file=out)
+            print(f"gh pr edit {number} failed: {err}", file=stderr)
             return RENOVATE_REBASE_GH_FAILED
         if err := _edit_body(gh, number, body):
             print(
                 f"gh pr edit {number} failed: {err} — the rebase box is now UNTICKED; "
                 "re-run without --retick to tick it",
-                file=out,
+                file=stderr,
             )
             return RENOVATE_REBASE_GH_FAILED
         print(
@@ -209,7 +211,7 @@ def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
         )
         return 0
     if err := _edit_body(gh, number, new_body):
-        print(f"gh pr edit {number} failed: {err}", file=out)
+        print(f"gh pr edit {number} failed: {err}", file=stderr)
         return RENOVATE_REBASE_GH_FAILED
     print(
         f"PR #{number}: rebase box ticked; Renovate refreshes the branch within a cycle",

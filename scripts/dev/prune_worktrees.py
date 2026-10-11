@@ -48,7 +48,6 @@ too when it holds nothing git lacks. One that holds content git never stored is 
 report names each such file. See dev.worktree_orphans.
 """
 
-import argparse
 import subprocess
 import sys
 from collections.abc import Callable
@@ -65,6 +64,7 @@ from dev.worktree_orphans import (
     prune_orphans,
     unstored_files,
 )
+from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 from lib.git import git, git_stdout, repair_object_store
 from lib.worktree_label import with_label
@@ -407,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     Exits 1 when not inside a git repository, or when `--prune` left a removable worktree,
     orphan directory or branch in place; 0 otherwise.
     """
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = ArgumentParser(description=__doc__)
     parser.add_argument(
         "--prune",
         action="store_true",

@@ -24,10 +24,22 @@ from bridge.sources import Sink, Sources
 from bridge.types import Check
 from gates import Gates
 
+# `lib/exit_codes.py:USAGE_ERROR`, which the pod cannot import: it mounts only this role's
+# `files/` (#4487). 2 stays the config-fault exit `main()` documents.
+USAGE_ERROR = 64
+
+
+class _ArgumentParser(argparse.ArgumentParser):
+    """argparse's parser, except that a usage error exits `USAGE_ERROR` rather than 2."""
+
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        self.exit(USAGE_ERROR, f"{self.prog}: error: {message}\n")
+
 
 def build_parser() -> argparse.ArgumentParser:
     """The command line. `python /app/cli.py` with no arguments is the pod's invocation."""
-    parser = argparse.ArgumentParser(
+    parser = _ArgumentParser(
         prog="cli.py",
         description=(
             "Evaluate the homelab health checks and push each result to its Uptime Kuma "
@@ -116,7 +128,12 @@ def main(
     cfg = load_config(environment, problems=bridge.common.CONFIG_PROBLEMS)
     if cfg.CONFIG_PROBLEMS:
         for problem in cfg.CONFIG_PROBLEMS:
-            bridge.common.log("FATAL: bad monitor-bridge config:", problem)
+            print(
+                "FATAL: bad monitor-bridge config:",
+                problem,
+                file=sys.stderr,
+                flush=True,
+            )
         return 2
     checks = registry.build_checks(environment) if checks is None else checks
     sources = Sources(cfg) if sources is None else sources
@@ -134,7 +151,7 @@ def main(
     problems = gates.validate_check_filter(only, cfg.CHECKS_SKIP, checks, dependents)
     if problems:
         for p in problems:
-            bridge.common.log("FATAL: bad CHECKS_ONLY/CHECKS_SKIP:", p)
+            print("FATAL: bad CHECKS_ONLY/CHECKS_SKIP:", p, file=sys.stderr, flush=True)
         return 2
     enabled = [
         c.name for c in checks if gates.check_enabled(c.name, only, cfg.CHECKS_SKIP)

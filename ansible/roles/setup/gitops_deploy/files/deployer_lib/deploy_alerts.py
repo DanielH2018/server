@@ -24,7 +24,7 @@ import os
 
 from deployer_lib import deploy_alert_text
 from deployer_lib.deploy_changes import ChangeSet
-from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_config import WARNING, Config, log
 from deployer_lib.deploy_health import (
     PENDING_ALERTS_MAX,
     apply_drain_result,
@@ -102,7 +102,8 @@ def deliver(
         # outcome the queue exists to prevent. A backlog this deep means the webhook itself has
         # been broken for over a day, and DISCORD_CONSECUTIVE has been paging about that.
         log(
-            f"pending-alert queue over {PENDING_ALERTS_MAX}; dropping oldest undelivered {stale}"
+            f"pending-alert queue over {PENDING_ALERTS_MAX}; dropping oldest undelivered {stale}",
+            level=WARNING,
         )
     if updated != queued:
         write_pending(state.path("pending_alerts"), updated)
