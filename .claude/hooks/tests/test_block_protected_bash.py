@@ -313,6 +313,31 @@ def test_a_payload_cwd_in_a_second_checkouts_subdirectory_still_derives_a_set(tm
     assert INCIDENT in out["permissionDecisionReason"]
 
 
+def test_a_payload_cwd_in_another_checkout_derives_from_that_checkouts_tree(tmp_path):
+    """The cwd's checkout is data: its Ansible tree and registry decide the set, while the
+    code that walks them comes from the hook's checkout. This checkout carries no
+    `scripts/` at all, so only the hook's own module can derive anything here."""
+    root = tmp_path / "data-only-checkout"
+    role_dir = root / "ansible" / "roles" / "demo"
+    (role_dir / "tasks").mkdir(parents=True)
+    (role_dir / "templates").mkdir()
+    (role_dir / "templates" / "thing.sh.j2").write_text("TOKEN={{ demo_push_token }}\n")
+    dest = "/usr/local/bin/only-in-the-data-checkout.sh"
+    (role_dir / "tasks" / "main.yml").write_text(
+        "- name: Install thing\n"
+        "  ansible.builtin.template:\n"
+        "    src: thing.sh.j2\n"
+        f"    dest: {dest}\n"
+    )
+    (root / "ansible" / "secret_rotation.yml").write_text(
+        "entries:\n  demo_push_token:\n    tier: auto\n    last_rotated: '2026-01-01'\n"
+    )
+    (root / ".git").write_text("gitdir: /nonexistent\n")
+    out = _run_hook_process(f"cat {dest}", root)
+    assert out and out["permissionDecision"] == "deny", out
+    assert dest in out["permissionDecisionReason"]
+
+
 def test_a_payload_cwd_in_a_subdirectory_of_the_hooks_checkout_still_derives_a_set():
     out = _run_hook_process(f"cat {INCIDENT}", os.path.join(_REPO, "ansible", "roles"))
     assert out and out["permissionDecision"] == "deny", out
