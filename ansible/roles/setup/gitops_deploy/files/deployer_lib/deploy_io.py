@@ -331,7 +331,7 @@ def deploy_k8s(
     is never added — the call is byte-identical to before this argument existed.
     """
     tags = ",".join(sorted(services))
-    log(f"deploying k8s services: {tags} (timeout {timeout:.0f}s)")
+    log(f"k8s-deploy: deploying {tags} (timeout {timeout:.0f}s)")
     argv = [*PLAYBOOK_ARGV, DEPLOY_PLAYBOOK, "--tags", tags]
     if restore_sha is not None and restore_sha.strip():
         argv += ["-e", f"k8s_restore_snapshot_sha={restore_sha}"]
@@ -395,4 +395,7 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
             timeout=10,
         )
     except Exception as exc:
-        log(f"deploy annotation failed (deploy itself succeeded): {exc}", level=WARNING)
+        log(
+            f"k8s-deploy: annotation failed (deploy itself succeeded): {exc}",
+            level=WARNING,
+        )

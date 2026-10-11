@@ -65,7 +65,7 @@ def fold_deferred(cs: ChangeSet, plans, declared: set[str]) -> ChangeSet:
     if not owed:
         return cs
     log(
-        f"{len(owed)} services deferred to k8s_unapplied: the deploy plane could not be "
+        f"k8s_unapplied: {len(owed)} services deferred here: the deploy plane could not be "
         "narrowed, and the whole play does not fit the tick's budget"
     )
     return replace(cs, k8s=cs.k8s | owed)
@@ -126,7 +126,7 @@ def apply_broad_k8s(
     plane_applied = covered_by_plane(plans, cs.k8s) & plan.k8s_services
     if plane_applied:
         log(
-            f"{sorted(plane_applied)}: the deploy plane applied these, so they are not deferred"
+            f"broad-k8s: {sorted(plane_applied)}: the deploy plane applied these, so they are not deferred"
         )
         cs = replace(cs, k8s=cs.k8s - plane_applied)
     # A bump an EARLIER tick deferred for budget, applied by this tick's deploy plane, is no
@@ -137,7 +137,7 @@ def apply_broad_k8s(
     )
     if bumps and deadline - time.monotonic() < config.k8s_deploy_timeout_s:
         log(
-            f"{sorted(bumps)}: {deadline - time.monotonic():.0f}s of the broad budget left, "
+            f"broad-k8s: {sorted(bumps)}: {deadline - time.monotonic():.0f}s of the broad budget left, "
             f"under the {config.k8s_deploy_timeout_s}s a bump gets — deferring, not deploying"
         )
         cs = replace(cs, k8s=cs.k8s | bumps, k8s_deploy=cs.k8s_deploy - bumps)
@@ -174,7 +174,7 @@ def apply_broad_k8s(
             return deploy_defer.for_contention(tools, state, config, target, exc)
         except Exception as exc:
             log(
-                f"k8s deploy failed for {sorted(bumps)} on a broad tick: {exc}",
+                f"broad-k8s: k8s deploy failed for {sorted(bumps)} on a broad tick: {exc}",
                 level=ERR,
             )
             # The plane is the run that failed, `deploy.yml --tags <bumps>`, ADDED to any plane

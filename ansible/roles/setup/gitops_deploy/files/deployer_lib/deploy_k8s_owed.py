@@ -90,7 +90,7 @@ def clear_applied_k8s_deferred(state: DeployerState, services) -> None:
     """
     cleared = state.clear_owed(OWED_K8S_DEFERRED, services)
     if cleared:
-        log(f"k8s_deferred cleared for {', '.join(cleared)}: this tick applied them")
+        log(f"k8s_deferred: cleared for {', '.join(cleared)}: this tick applied them")
 
 
 def log_k8s_deferred(state: DeployerState) -> None:
@@ -104,7 +104,7 @@ def log_k8s_deferred(state: DeployerState) -> None:
     if not services:
         return
     log(
-        f"k8s_deferred pending: {', '.join(services)} — merged, not applied. Deploy: "
+        f"k8s_deferred: pending {', '.join(services)} — merged, not applied. Deploy: "
         f"{k8s_deferred_deploy_cmd(services)}, "
         f"then {owed_clear_cmd(OWED_K8S_DEFERRED, '<service>')}"
     )
@@ -166,7 +166,7 @@ def alert_and_record_deferred(
     if carried:
         state.clear_owed(OWED_K8S_UNAPPLIED, carried)
         log(
-            f"k8s_unapplied not kept for {', '.join(carried)}: its release record already "
+            f"k8s_unapplied: not kept for {', '.join(carried)}: its release record already "
             f"carries the change"
         )
     deploy_alerts.alert_deferred(
@@ -249,7 +249,7 @@ def discharge_k8s_unapplied(
     if discharged:
         state.clear_owed(OWED_K8S_UNAPPLIED, discharged)
         log(
-            f"k8s_unapplied discharged for {', '.join(sorted(discharged))}: a release "
+            f"k8s_unapplied: discharged for {', '.join(sorted(discharged))}: a release "
             f"record or a matching render names a commit that carries the change"
         )
     return sorted(discharged)
@@ -346,7 +346,7 @@ def log_k8s_unapplied(state: DeployerState) -> None:
         f"{s}: {k8s_unapplied_remedy(s)}" for s in services if s in SHARED_K8S_ROLES
     ]
     log(
-        f"k8s_unapplied pending: {', '.join(services)} — merged, not applied, and this "
+        f"k8s_unapplied: pending {', '.join(services)} — merged, not applied, and this "
         f"deployer never applies them. {'. '.join(remedies)}"
     )
 
@@ -376,7 +376,7 @@ def k8s_roles_deleted_at(
         )
     except Exception as exc:
         log(
-            f"could not list the k8s roles at {ref[:8]} ({exc}) — dropping none",
+            f"k8s_unapplied: could not list the k8s roles at {ref[:8]} ({exc}) — dropping none",
             level=WARNING,
         )
         return set()
@@ -400,6 +400,6 @@ def drop_deleted_k8s_unapplied(
     if deleted:
         state.clear_owed(OWED_K8S_UNAPPLIED, sorted(deleted))
         log(
-            f"k8s_unapplied dropped for {', '.join(sorted(deleted))}: role deleted at HEAD"
+            f"k8s_unapplied: dropped for {', '.join(sorted(deleted))}: role deleted at HEAD"
         )
     return deleted

@@ -201,7 +201,7 @@ class DeployerState:
         left = self._hold.cover(playbook, tags)
         if left:
             log(
-                f"hold kept: {HOLD_PLANE_SEP.join(left)} is still unapplied "
+                f"hold: kept, {HOLD_PLANE_SEP.join(left)} is still unapplied "
                 f"(this tick applied {hold_plane_marker(playbook, tags)})"
             )
 
@@ -218,7 +218,7 @@ class DeployerState:
             return
         applied = hold_plane_marker(DEPLOY_PLAYBOOK, sorted(services))
         suffix = f" (this tick applied {applied})" if services else ""
-        log(f"hold kept: {HOLD_PLANE_SEP.join(left)} is still unapplied{suffix}")
+        log(f"hold: kept, {HOLD_PLANE_SEP.join(left)} is still unapplied{suffix}")
 
     # ── the per-SHA alert dedupe slots, one `alerted` marker for every channel (#3047) ────
 

@@ -101,7 +101,7 @@ def fetch_ci_verdict(
         )
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
         log(
-            f"CI status unavailable for {sha[:8]} ({e}) — deferring this tick",
+            f"ci: status unavailable for {sha[:8]} ({e}) — deferring this tick",
             level=WARNING,
         )
         return "pending"
@@ -128,7 +128,7 @@ def _ci_unconfigured(sha: str) -> str:
     `default_tools`, and the CI gate's whole contract is that an unknown verdict defers.
     """
     log(
-        f"CI verdict for {sha[:8]} requested from an unconfigured DeployTools — deferring",
+        f"ci: verdict for {sha[:8]} requested from an unconfigured DeployTools — deferring",
         level=WARNING,
     )
     return "pending"

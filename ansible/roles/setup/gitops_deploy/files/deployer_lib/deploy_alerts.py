@@ -102,7 +102,7 @@ def deliver(
         # outcome the queue exists to prevent. A backlog this deep means the webhook itself has
         # been broken for over a day, and DISCORD_CONSECUTIVE has been paging about that.
         log(
-            f"pending-alert queue over {PENDING_ALERTS_MAX}; dropping oldest undelivered {stale}",
+            f"alerts: pending-alert queue over {PENDING_ALERTS_MAX}; dropping oldest undelivered {stale}",
             level=WARNING,
         )
     if updated != queued:

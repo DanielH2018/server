@@ -108,7 +108,7 @@ def for_contention(
         target.origin, getattr(exc, "lock", ""), time.time()
     )
     log(
-        f"{exc} — deferring to the next tick (consecutive deferral {entry.count}, "
+        f"contention_since: {exc} — deferring to the next tick (consecutive deferral {entry.count}, "
         f"first at {int(entry.first_seen)})"
     )
     tools.run(["git", "reset", "--hard", target.local], cwd=config.repo)
@@ -154,7 +154,7 @@ def drop_deleted_setup_roles(
         )
     except Exception as exc:
         log(
-            f"could not list the setup roles at {origin[:8]} ({exc}) — dropping none",
+            f"manual_plane: could not list the setup roles at {origin[:8]} ({exc}) — dropping none",
             level=WARNING,
         )
         return cs
@@ -163,7 +163,7 @@ def drop_deleted_setup_roles(
     if not deleted:
         return cs
     log(
-        f"{', '.join(sorted(deleted))}: setup role directory deleted at {origin[:8]} — "
+        f"manual_plane: {', '.join(sorted(deleted))}: setup role directory deleted at {origin[:8]} — "
         "nothing left to apply, so no manual_plane line"
     )
 
@@ -196,14 +196,14 @@ def drop_deleted_manual_plane(
         )
     except Exception as exc:
         log(
-            f"could not list the setup roles at HEAD ({exc}) — dropping none",
+            f"manual_plane: could not list the setup roles at HEAD ({exc}) — dropping none",
             level=WARNING,
         )
         return set()
     gone = keys_naming_no_role(keys, setup_roles_listed(listing))
     for key in sorted(gone):
         state.clear_manual_plane(key)
-        log(f"manual_plane dropped for {key}: setup role deleted at HEAD")
+        log(f"manual_plane: dropped for {key}: setup role deleted at HEAD")
     return gone
 
 
@@ -248,7 +248,7 @@ def park(
     # comment-only path, which read as the cause and was not (#1467). An operator reads this
     # journal when `land.sh` exits 4, and a page they already received an hour ago is not there.
     log(
-        f"origin {origin[:8]}: parked, nothing merged — {broad_park_reason(cs)}. "
+        f"park: origin {origin[:8]}: parked, nothing merged — {broad_park_reason(cs)}. "
         f"Apply by hand: {remediation}"
     )
     # A park doesn't ff-merge, so it re-evals next tick — the per-SHA marker (inside
@@ -426,7 +426,7 @@ def record(
     narrow = state.manual_plane_tags_pending()
     if recorded:
         log(
-            f"manual_plane recorded: {', '.join(recorded)} — merged, not applied; "
+            f"manual_plane: recorded {', '.join(recorded)} — merged, not applied; "
             + manual_plane_remediation(set(recorded), narrow)
         )
     deploy_alerts.alert_once(
@@ -521,7 +521,7 @@ def clear_applied(state: DeployerState, playbook: str, tags: list[str]) -> None:
             cleared.append(e.role)
     for role in cleared:
         log(
-            f"manual_plane cleared for {role}: this tick applied {playbook} --tags {role}"
+            f"manual_plane: cleared for {role}: this tick applied {playbook} --tags {role}"
         )
 
 
@@ -540,6 +540,6 @@ def log_pending(state: DeployerState) -> None:
     if not roles:
         return
     log(
-        f"manual_plane pending: {', '.join(roles)} — apply by hand: "
+        f"manual_plane: pending {', '.join(roles)} — apply by hand: "
         + manual_plane_remediation(set(roles), state.manual_plane_tags_pending())
     )

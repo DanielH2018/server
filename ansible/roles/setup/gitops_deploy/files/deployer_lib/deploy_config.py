@@ -187,7 +187,7 @@ def load_config(env: Mapping[str, str]) -> Config:
         # empty context list would make ci_verdict() return `pass` for everything, turning a
         # half-rendered config.env into a silently ungated deployer. Better to disarm loudly.
         log(
-            "REQUIRE_CI is set but CI_CONTEXTS/GITHUB_REPO is empty — disabling the CI gate"
+            "ci: REQUIRE_CI is set but CI_CONTEXTS/GITHUB_REPO is empty — disabling the CI gate"
         )
         require_ci = False
 

@@ -89,7 +89,7 @@ def test_assess_fast_forwards_to_the_newest_green_ancestor_of_a_pending_tip(
     assert (target.origin, target.action) == (NEWER_GREEN, "deploy")
     assert (target.tip, target.tip_ci) == (ORIGIN, "pending")
     assert (
-        f"origin {ORIGIN[:8]}: CI pending; fast-forwarding to the newest green ancestor "
+        f"ci: origin {ORIGIN[:8]} is pending; fast-forwarding to the newest green ancestor "
         f"{NEWER_GREEN[:8]} (1 behind the tip)" in capsys.readouterr().out
     )
 

@@ -299,7 +299,7 @@ def test_a_refused_range_logs_the_digest_shadow_and_defers_the_plane(
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == []
     assert (
-        "narrow shadow: render digest at 22222222 would apply radarr (current 1; "
+        "narrow-shadow: render digest at 22222222 would apply radarr (current 1; "
         "unknown: render is of another commit 2); the narrowing chose to defer the plane"
     ) in capsys.readouterr().out
 
@@ -319,6 +319,6 @@ def test_a_digest_diff_that_raises_leaves_the_narrowed_apply_alone(
     assert _playbook_argv(tick)[-1:] == ["radarr,sonarr"]
     assert tick.merges == [ORIGIN]
     assert (
-        "narrow shadow: no digest diff (OSError: permission denied)"
+        "narrow-shadow: no digest diff (OSError: permission denied)"
         in capsys.readouterr().out
     )

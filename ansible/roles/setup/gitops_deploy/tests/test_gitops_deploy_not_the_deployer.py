@@ -115,5 +115,5 @@ def test_entrypoint_turns_the_refusal_into_a_silent_exit_0(
         "a refusal must not stamp liveness onto state nothing on this host reads"
     )
     out = capsys.readouterr().out
-    assert "gitops-deploy: test-host declares has_gitops: false" in out
+    assert "not-deployer: test-host declares has_gitops: false" in out
     assert "Traceback" not in out
