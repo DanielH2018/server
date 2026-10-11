@@ -8,9 +8,10 @@
 answer narrow anything — and this module holds the reading that answers them: the git reads,
 the YAML parses, and `RoleIndex`, which walks the role's own name and variable edges.
 
-Split out of `narrow_setup.py` when the parse rewrite (#2371) took that module past the
-600-line cap. The two are one derivation: `narrow_setup` owns the rules `role_tags` states in
-its docstring, and everything here is what those rules read.
+The two modules are one derivation, split by the kind of work. `narrow_setup` owns the rules
+`role_tags` states in its docstring, and everything here is the reading those rules do (#2371).
+The split holds because this half imports nothing from `narrow_setup` and reads none of its
+private names.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_edges.py
 """

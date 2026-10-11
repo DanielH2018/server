@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """The rules `narrow_broad` keeps outside itself: a path shape, and a role-directory read.
 
-Split out for the reason `narrow_lib/containers.py` was: `narrow_lib/broad.py` sits at its
-600-line cap, so a rule added there has to live beside it. It imports nothing from
-`narrow_broad`, so the two cannot cycle — the role trees a caller reads are passed in rather
-than imported back.
+Each rule reads one path, or one role directory at one ref, and nothing `narrow_broad` holds,
+so the module reads alone. It imports nothing from `narrow_broad`, so the two cannot cycle —
+the role trees a caller reads are passed in rather than imported back.
 """
 
 import sys as _sys

@@ -36,10 +36,11 @@ QUALIFIED = {"deploy_io", "deploy_alerts", "deploy_alert_text"}
 # only the entry module gets it. Checked with `==` against what is on disk, not `<=`: a new
 # module with no entry here would otherwise be governed by nothing.
 ALLOWED: dict[str, set[str] | None] = {
-    # The cross-role tables, a leaf of their own so the classifier stays under its line cap.
+    # The cross-role tables, a leaf of their own because the tick and land.sh parse another
+    # commit's copy of that file by path.
     "deploy_changes": {"deploy_cross_role", "deploy_setup_roles"},
     "deploy_cross_role": set(),
-    # Which playbook and tag apply a setup role, split from the classifier at its line cap.
+    # Which playbook and tag apply a setup role, answered for a role name rather than a path.
     # Stdlib only: it runs the derivation as a subprocess (#3734).
     "deploy_setup_roles": set(),
     # The narrowing subprocess and the plan it returns: `deploy_config` for `log`, and

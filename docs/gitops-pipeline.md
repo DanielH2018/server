@@ -137,8 +137,11 @@ so any change to that file names `claude_code`, including a change to a key it n
 are an include rather than a static import. The tick therefore applies the whole `claude_code`
 tag for every edit to that file. In a role whose readers do narrow, `role_tags` maps such a row
 to the readers of the changed keys the consumer names. A key the consumer never names adds no
-tag. The same test file derives these rows from the tree
-and keeps the reads not recorded yet in a pending set (#4357).
+tag. The same test file derives these rows from the tree, and the table must equal them (#4357).
+`initial_setup` reads `claude_code`'s agent defaults, and `deploy_ui` reads `k3s_agent_node_ips`.
+A k3s defaults change therefore records `k3s` in `manual_plane` and applies `deploy_ui`.
+A word match that is not a read, such as a bash local in a template, is exempted in that test
+with the reason.
 
 - A `common/tasks/` file is in the table too. An `import_tasks` is static, so its tasks run under
   each importer's tags, and `narrow_setup` resolves the basename through the importing task.

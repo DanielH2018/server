@@ -29,7 +29,7 @@ from deploy_tools.land_lib.landing import Classification
 # The two planes the deployer never applies: a bring-up playbook, and a setup role that
 # `initial_setup.yml` does not include (k3s lives in k3s-bringup.yml).
 _BRINGUP = ["ansible/k3s-bringup.yml"]
-_UNROUTABLE_ROLE = ["ansible/roles/setup/k3s/defaults/main.yml"]
+_UNROUTABLE_ROLE = ["ansible/roles/setup/k3s/tasks/node.yml"]
 # The plane it does apply itself, as `initial_setup.yml --tags renovate_agent`. This is the
 # shape the receipt's `applied` half exists for.
 _ROUTABLE_ROLE = ["ansible/roles/setup/renovate_agent/files/renovate_agent.py"]

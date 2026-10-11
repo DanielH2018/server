@@ -7,7 +7,8 @@ gate's one sample. A `Recreate` workload then reads `0/1 ready` mid-roll and a h
 fails the gate. `health_verdict.health` asks `later_deploys` after a failed gate and gates
 again once any such deploy has ended.
 
-Its own module beside `land_lib`, because `land_lib/tools.py` is at the 600-line cap.
+It reads alone. It answers that one question from the release records and the deployer's
+locks, and it reads nothing from `land_lib/tools.py`.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_rerolls.py
 """

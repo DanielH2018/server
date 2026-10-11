@@ -17,7 +17,8 @@ Every entry point here returns None when it finds no evidence, so `land_reach` k
 role-level answer rather than narrowing. Narrower than the truth hides an unconverged host,
 where wider costs an operator one no-op command.
 
-Split out of `land_reach.py` at the module-length cap.
+It reads alone. It imports nothing from `land_reach`, which passes in the vars and evaluates
+the chains this returns.
 """
 
 import contextlib

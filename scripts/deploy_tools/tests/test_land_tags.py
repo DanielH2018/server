@@ -192,7 +192,7 @@ def test_docs_and_ordinary_services_are_not_self_applied():
     for files in (
         ["docs/gitops-pipeline.md"],
         ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"],
-        ["ansible/roles/setup/k3s/defaults/main.yml"],
+        ["ansible/roles/setup/k3s/tasks/node.yml"],
     ):
         assert land_tags.self_applied(files) is False, files
 

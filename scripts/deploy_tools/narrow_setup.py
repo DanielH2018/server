@@ -63,8 +63,8 @@ makes one unnecessary — a producer carries every consumer's tag, so narrowing 
 runs both.
 
 The READING those rules do — the git reads, the YAML parses and `RoleIndex` — is
-`narrow_lib/setup_index.py` beside this. One derivation, split at the 600-line module cap. The
-primitives underneath both — `CannotNarrow`, `show_at` and the mapping parse — are
+`narrow_lib/setup_index.py` beside this: one derivation, split between the rules and the
+reading. The primitives underneath both — `CannotNarrow`, `show_at` and the mapping parse — are
 `lib.narrow_git`, shared with `narrow_broad` since #2419.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup.py

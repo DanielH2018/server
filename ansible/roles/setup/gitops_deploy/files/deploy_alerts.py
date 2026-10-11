@@ -4,8 +4,8 @@
 **When to say it** is this module: `alert_once` owns the per-SHA dedupe marker, `deliver` owns
 the retry queue, `drain_pending` empties it, and `alert_deferred` fires the tasks/meta/k8s
 channels. **What to say** is `deploy_alert_text.py`, one pure function per alert — the seam
-this module's docstring named before #2600 split it, so that neither half sits at the
-600-line module cap.
+this module's docstring named before #2600 split it. This module decides delivery and never
+composes a message, so each half reads without the other.
 
 `deploy_health.py` holds the queue's pure half (`apply_send_result`, `cap_pending`,
 `apply_drain_result`); this module is its I/O counterpart.

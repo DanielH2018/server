@@ -8,8 +8,9 @@ of them, and named none of them either, because `alert_deferred` fires its k8s c
 `ChangeSet.k8s` alone. These functions are that half of the broad arm: `apply_broad_k8s`
 deploys it, and `covered_by_plane` says which bumps the deploy plane applies on its own.
 
-A module of its own rather than more functions on `deploy_handlers.py`, which is at its
-length cap. `handle_broad` is the only production caller of these.
+A module of its own because it answers one question from its arguments and the toolbox: which
+image-pin bumps in a broad range deploy. It reads nothing private to `deploy_handlers.py`, and
+`handle_broad` there is the only production caller of these.
 
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """

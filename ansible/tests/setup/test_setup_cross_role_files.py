@@ -37,7 +37,8 @@ for a plugin change to stale, with the reason.
 
 A setup role reading another's `defaults/` variable is a row of the first table too (#4303),
 held by its own census: the scan matches a defaults key as a word, the way the filter-plugin
-census matches a filter name. `_DEFAULTS_READS_PENDING` holds the reads #4357 has yet to record.
+census matches a filter name. `_DEFAULTS_READS_EXEMPT` names each match that is not a read,
+with what it matched instead (#4357).
 
 Run: uv run pytest ansible/tests/setup/test_setup_cross_role_files.py
 """
@@ -385,13 +386,14 @@ def test_a_setup_role_naming_a_filter_only_in_a_comment_or_a_longer_word_is_clea
     assert filter_callers({"p.py": {"tier_claims"}}, texts) == {}
 
 
-# The cross-role `defaults/` reads #4357 tracks, which the table does not record yet. A pair
-# leaves this set in the PR that records it or removes the read, and one the scan no longer
-# finds fails below, so the set only shrinks.
-_DEFAULTS_READS_PENDING = {
-    ("ansible/roles/setup/claude_code/defaults/main.yml", "initial_setup"),
-    ("ansible/roles/setup/k3s/defaults/main.yml", "deploy_ui"),
-    ("ansible/roles/setup/k3s/defaults/main.yml", "hypervisor"),
+# Word matches of a defaults key that are not reads of the variable, each with what the scan
+# matched instead. An exemption the scan no longer finds fails below.
+_DEFAULTS_READS_EXEMPT = {
+    ("ansible/roles/setup/k3s/defaults/main.yml", "hypervisor"): (
+        "etcd-restore-drill-vm.sh.j2 declares a bash local named k3s_version, filled from "
+        "`k3s --version` on the host, and staging-nwfilter.xml.j2 names k3s_agent_node_ips "
+        "only inside an XML comment"
+    ),
 }
 
 
@@ -425,7 +427,7 @@ def _tree_defaults_readers() -> dict[str, frozenset[str]]:
 def test_the_defaults_rows_equal_the_trees_cross_role_reads():
     found = _tree_defaults_readers()
     kept = {
-        path: frozenset(r for r in roles if (path, r) not in _DEFAULTS_READS_PENDING)
+        path: frozenset(r for r in roles if (path, r) not in _DEFAULTS_READS_EXEMPT)
         for path, roles in found.items()
     }
     recorded = {
@@ -439,9 +441,9 @@ def test_the_defaults_rows_equal_the_trees_cross_role_reads():
     }
 
 
-def test_every_pending_defaults_read_is_still_a_read():
+def test_every_defaults_exemption_is_still_matched():
     found = _tree_defaults_readers()
-    for path, role in _DEFAULTS_READS_PENDING:
+    for path, role in _DEFAULTS_READS_EXEMPT:
         assert role in found.get(path, ()), (path, role)
 
 
