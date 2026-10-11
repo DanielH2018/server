@@ -474,3 +474,10 @@ def test_the_final_report_replaces_whatever_was_already_in_report_json(tmp_path)
         write_report(_report("failed: no PR"), out)
 
     assert report.read_text() == json.dumps(_report("failed: no PR")) + "\n"
+
+
+def test_the_review_unit_exits_1_when_its_report_is_an_error():
+    from fanout_lib.review_unit import exit_code
+
+    assert exit_code(_report("failed: no PR", is_error=True)) == 1
+    assert exit_code(_report(f"Opened {PR}")) == 0
