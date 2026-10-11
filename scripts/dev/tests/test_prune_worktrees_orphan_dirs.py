@@ -120,3 +120,25 @@ def test_prune_skips_an_orphan_a_process_still_uses(tmp_path, monkeypatch):
     assert done.returncode == 0, done.stderr
     assert not idle.exists(), done.stdout
     assert held.is_dir(), done.stdout
+
+
+def test_prune_brief_removes_an_empty_orphan_and_keeps_one_with_unstored_content(
+    tmp_path, monkeypatch
+):
+    # `--prune --brief` is the weekly cron's invocation, so it must sweep orphans as `--prune` does.
+    repo = _repo(tmp_path, monkeypatch)
+    empty = _orphan(repo, "bridge-empty")
+    (empty / "docs").mkdir()
+    work = _orphan(repo, "bridge-work")
+    (work / "fresh-content.txt").write_text("work git never stored\n")
+
+    done = run(
+        [sys.executable, str(PRUNER), "--prune", "--brief"],
+        cwd=repo,
+        env=scrubbed_env(),
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert not empty.exists(), done.stdout
+    assert work.is_dir()
+    assert f"kept orphan {work}: 1 file(s)" in done.stdout, done.stdout
