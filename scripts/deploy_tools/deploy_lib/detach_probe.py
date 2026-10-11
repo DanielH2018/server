@@ -113,7 +113,7 @@ def _verdict_detail(text: str, log: Path) -> str:
     return f"no verdict line; read {log}"
 
 
-def read(log: Path) -> dict:
+def read(log: Path, now: float | None = None) -> dict:
     """The deploy's state: terminal once it recorded a code, or once it died without one."""
     code = recorded_code(log)
     if code is None:
@@ -128,7 +128,7 @@ def read(log: Path) -> dict:
                     "detail": f"the deploy (pid {pid}) died without recording an exit code; "
                     f"read {log}",
                 }
-        if pid is None and never_started(log):
+        if pid is None and never_started(log, now):
             return {
                 "state": "died",
                 "detail": f"the deploy recorded neither a pid nor an exit code and its log has "

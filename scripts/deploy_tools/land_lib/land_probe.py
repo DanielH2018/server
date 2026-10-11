@@ -86,7 +86,7 @@ def describe(log: Path) -> dict:
     return {"terminal": TERMINAL, "watch": [str(log.parent)], "interval_s": 10}
 
 
-def read(log: Path) -> dict:
+def read(log: Path, now: float | None = None) -> dict:
     """The landing's state: terminal once it recorded a code, or once it died without one."""
     code = detach.recorded_code(log)
     if code is None:
@@ -102,7 +102,7 @@ def read(log: Path) -> dict:
                     f"read {log}",
                 }
         # No pid and no code past the start grace: nothing will ever write the code (#4513).
-        if pid is None and detach.never_started(log):
+        if pid is None and detach.never_started(log, now):
             return {
                 "state": "died",
                 "detail": f"the landing recorded neither a pid nor an exit code and its log has "

@@ -11,7 +11,6 @@ restates those two rules here so a drift fails in this repo rather than at a ses
 import json
 import os
 import subprocess
-import time
 from pathlib import Path
 
 import pytest
@@ -20,6 +19,9 @@ from deploy_tools.land_lib import land_probe
 from deploy_tools.land_lib.outcome import ABANDONED_WATCH_NOTE
 
 _SHIM = Path(__file__).resolve().parents[3] / ".claude" / "wait-sources" / "land"
+
+# A pinned clock: the grace check compares against `now=`, never the suite's own runtime.
+EPOCH = 1_791_700_000.0
 
 
 def landing(
@@ -126,9 +128,9 @@ def test_a_live_landing_without_a_code_is_still_running(tmp_path):
 def test_a_landing_with_neither_pid_nor_code_past_the_grace_died(tmp_path):
     """No pid and no code means no landing to wait on: the wait must end (#4513)."""
     log = landing(tmp_path, "")
-    stale = time.time() - land_probe.detach.START_GRACE_S - 1
+    stale = EPOCH - land_probe.detach.START_GRACE_S - 1
     os.utime(log, (stale, stale))
-    assert land_probe.read(log)["state"] == "died"
+    assert land_probe.read(log, now=EPOCH)["state"] == "died"
 
 
 def test_the_newest_log_for_the_pr_is_the_landing(tmp_path):
