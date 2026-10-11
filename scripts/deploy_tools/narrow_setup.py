@@ -329,7 +329,8 @@ def role_tags(
             got = index.readers_of(path.rsplit("/", 1)[-1])
             if not got:
                 raise CannotNarrow(f"{path} reaches no task file of {role}")
-        print(f"narrow-setup: {rel} -> {','.join(sorted(got))}", file=sys.stderr)
+        shown = ",".join(sorted(got)) or "(no tag: no value a task reads changed)"
+        print(f"narrow-setup: {rel} -> {shown}", file=sys.stderr)
         tags |= got
     if not tags:
         # Every changed path reaches no host. The deployer should not have deferred this range

@@ -187,9 +187,11 @@ SHARD = """\
 """
 
 
-def _touch_the_included_file(tree: Tree, include: str) -> frozenset[str]:
+def _touch_the_included_file(
+    tree: Tree, include: str, shard: str = SHARD
+) -> frozenset[str]:
     """Commit `include` as a looped include from `main.yml`, edit `shard.yml`, narrow it."""
-    tree.write(f"{ROLE}/tasks/shard.yml", SHARD)
+    tree.write(f"{ROLE}/tasks/shard.yml", shard)
     tree.write(
         f"{ROLE}/tasks/main.yml",
         MAIN
@@ -198,7 +200,7 @@ def _touch_the_included_file(tree: Tree, include: str) -> frozenset[str]:
         + "  loop: [0, 1]\n  loop_control:\n    loop_var: shard\n",
     )
     old = tree.commit("include the shard file")
-    tree.write(f"{ROLE}/tasks/shard.yml", SHARD + "# touched\n")
+    tree.write(f"{ROLE}/tasks/shard.yml", shard + "# touched\n")
     return narrow(tree, old, tree.commit("touch the shard file"))
 
 
@@ -236,3 +238,14 @@ def test_the_real_k3s_weekly_shard_file_narrows_to_longhorn():
     index = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO))
     assert index.tags_of("tasks/longhorn-weekly-shard.yml") == frozenset({"longhorn"})
     assert "longhorn" in index.key_readers("weekly_backup_group")
+
+
+def test_an_included_file_holding_a_never_task_is_flagged(tree):
+    """`apply` adds `alpha` to the `never` task, so `--tags alpha` would run the opt-in work."""
+    include = (
+        "  tags: [alpha]\n  ansible.builtin.include_tasks:\n    file: shard.yml\n"
+        "    apply:\n      tags: [alpha]\n"
+    )
+    opt_in = "- name: Opt-in work\n  ansible.builtin.debug: {}\n  tags: [never]\n"
+    with pytest.raises(narrow_setup.CannotNarrow, match="special tag never"):
+        _touch_the_included_file(tree, include, SHARD + opt_in)

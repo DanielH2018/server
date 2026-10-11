@@ -36,6 +36,7 @@ from deploy_tools.narrow_lib.task_walk import (
     _dynamic_includes,
     _set_facts,
     _static_imports,
+    _task_tags,
     file_tags,
 )
 
@@ -315,7 +316,12 @@ class RoleIndex:
             tags = self.included[rel]
             if isinstance(tags, str):
                 raise CannotNarrow(tags)
-            if "never" in (self.tags[rel] or frozenset()):
+            # Per task, not `self.tags[rel]`: that is None for a file with any untagged task,
+            # which is the shape an include exists for. `apply` adds the include's tag to a
+            # `never` task in it, so that tag would run the opt-in work.
+            doc = yaml_fast.safe_load(self.task_text[rel])
+            per_task = _task_tags(doc if isinstance(doc, list) else [], frozenset())
+            if any("never" in t for t in per_task):
                 raise CannotNarrow(
                     f"{rel} carries the special tag never, which selects opt-in tasks "
                     "rather than this change's work"
