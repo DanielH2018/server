@@ -41,7 +41,7 @@ def test_every_command_prints_its_own_help_from_outside_the_repo(command, tmp_pa
 SHIM_CASES = [
     ("fanout_place.py", "place", ["status", "no-such-run-20000101T000000Z"], 64),
     ("fanout_probe.py", "probe", ["--describe", "no-such-run-20000101T000000Z"], 1),
-    ("fanout_review.py", "review", ["--repo", "DanielH2018/server"], 2),
+    ("fanout_review.py", "review", ["--repo", "DanielH2018/server"], 64),
     ("fanout_review_stats.py", "stats", ["--since"], 64),
 ]
 

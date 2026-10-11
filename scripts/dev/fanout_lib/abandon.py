@@ -102,9 +102,10 @@ def release_batch(
     try:
         proc = tools.findings(argv)
     except subprocess.TimeoutExpired:
-        print(f"  release timed out; run: {retry}")
+        print(f"  release timed out; run: {retry}", file=sys.stderr)
         return False
-    refusals = [ln for ln in proc.stdout.splitlines() if " refused: " in ln]
+    # findings.py prints a refusal on stderr.
+    refusals = [ln for ln in proc.stderr.splitlines() if " refused: " in ln]
     # `stop` then `abandon` releases twice. An issue nobody holds any more is the goal state,
     # so only a refusal naming another holder, or a failure with no refusal line, fails.
     if (
@@ -116,7 +117,10 @@ def release_batch(
         return True
     if proc.returncode != 0:
         detail = " ".join((proc.stderr or proc.stdout).split())
-        print(f"  release failed ({proc.returncode}): {detail}; run: {retry}")
+        print(
+            f"  release failed ({proc.returncode}): {detail}; run: {retry}",
+            file=sys.stderr,
+        )
         return False
     print(f"  released {issues} from `{holder}`")
     return True
@@ -148,17 +152,18 @@ def cmd_abandon(args, tools: Tools) -> int:
     try:
         target = resolve(b.repo, tools.default_ref)
     except ValueError as exc:
-        print(f"{b.batch} on {b.host}: abandon failed: {exc}")
+        print(f"{b.batch} on {b.host}: abandon failed: {exc}", file=sys.stderr)
         return 1
     command = remote_abandon_command(b, target=target)
     try:
         proc = tools.run(b.host, command, 120.0, None)
     except subprocess.TimeoutExpired:
-        print(f"{b.batch} on {b.host}: abandon timed out")
+        print(f"{b.batch} on {b.host}: abandon timed out", file=sys.stderr)
         return 1
     verdict, line = read_clean_result(proc)
-    print(f"{b.batch} on {b.host}: {line}")
-    if verdict != "removed":
+    removed = verdict == "removed"
+    print(f"{b.batch} on {b.host}: {line}", file=sys.stdout if removed else sys.stderr)
+    if not removed:
         return 1
     run.batches[index] = dataclasses.replace(
         b, removed_at=datetime.now(UTC).isoformat()
@@ -201,7 +206,7 @@ def cmd_stop(args, tools: Tools) -> int:
             try:
                 target = resolve(b.repo, tools.default_ref)
             except ValueError as exc:
-                print(f"  claims not released: {exc}")
+                print(f"  claims not released: {exc}", file=sys.stderr)
                 failed = True
             else:
                 failed = not release_batch(tools, run, b, target, "stopped") or failed

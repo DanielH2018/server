@@ -124,9 +124,9 @@ def test_an_empty_orphan_set_is_the_healthy_answer():
 
 def test_a_missing_dashboard_stops_the_sweep_before_any_delete():
     gh, git, deleted = _tools(["renovate/orphan"], [], [])
-    out = io.StringIO()
-    assert main(["--prune"], gh=gh, git=git, out=out) == 2
-    assert "Dependency Dashboard" in out.getvalue()
+    err = io.StringIO()
+    assert main(["--prune"], gh=gh, git=git, stderr=err) == 2
+    assert "Dependency Dashboard" in err.getvalue()
     assert deleted == []
 
 
@@ -137,9 +137,9 @@ def test_a_failed_gh_read_is_reported_not_graded():
     def git(*args, **kwargs):
         raise AssertionError(f"git must not run when the census failed: {args}")
 
-    out = io.StringIO()
-    assert main([], gh=gh, git=git, out=out) == 2
-    assert "not logged in" in out.getvalue()
+    err = io.StringIO()
+    assert main([], gh=gh, git=git, stderr=err) == 2
+    assert "not logged in" in err.getvalue()
 
 
 @pytest.mark.parametrize("prune", [False, True])

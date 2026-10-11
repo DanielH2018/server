@@ -62,6 +62,8 @@ from deployer_lib import deploy_phases
 from deployer_lib import deploy_state
 from deployer_lib import deploy_tick_types
 from deployer_lib.deploy_config import (
+    ERR,
+    WARNING,
     Config,
     ConfigError,
     load_config,
@@ -132,7 +134,8 @@ if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
     # state distinguishable from a host that legitimately has the feature off, and therefore
     # what lets `deploy_phases.reconcile_denylist` re-render the file whose damage caused it.
     log(
-        "K8S_AUTODEPLOY_ENABLED is set but the denylist is empty — disabling k8s auto-deploy"
+        "K8S_AUTODEPLOY_ENABLED is set but the denylist is empty — disabling k8s auto-deploy",
+        level=WARNING,
     )
     K8S_AUTODEPLOY_ENABLED = False
 # Bounds ONE ansible-playbook invocation on the k8s path. Without it the only bound is systemd's
@@ -330,7 +333,7 @@ def entrypoint(
     try:
         head_before = tools.run(["git", "rev-parse", "HEAD"], cwd=config.repo)
     except Exception as e:
-        log(f"could not read HEAD before the tick: {e}")
+        log(f"could not read HEAD before the tick: {e}", level=WARNING)
         head_before = None
     try:
         rc = main(tools, config, state)
@@ -339,7 +342,10 @@ def entrypoint(
         # so the OnFailure alert unit doesn't fire either) and WITHOUT writing last_run — a one-off
         # blip is invisibly retried next tick, while a persistent fetch break ages last_run and trips
         # GitOps-Alive. Must precede the generic handler below (Python matches except-clauses in order).
-        log(f"git fetch failed (retryable) — skipping tick, will retry next run: {e}")
+        log(
+            f"git fetch failed (retryable) — skipping tick, will retry next run: {e}",
+            level=WARNING,
+        )
         return 0
     except deploy_tick_types.NotTheDeployerHost as e:
         # DECIDED: exit 0, no Discord post, no last_run. The unit only reaches this branch on a
@@ -356,7 +362,7 @@ def entrypoint(
         # One clear line, not a traceback. This was an unhandled ValueError raised during IMPORT
         # until load_config deferred the parse, so it reached an operator as a stack trace with no
         # key name in it, before any of the alerting below existed in the process.
-        log(f"gitops-deploy: {e}")
+        log(f"gitops-deploy: {e}", level=ERR)
         posted = deploy_alerts.discord(
             tools, config, deploy_alert_text.bad_config_alert(HOSTNAME, CONFIG_PATH, e)
         )
@@ -390,7 +396,7 @@ def entrypoint(
             fast_forwarded=head_before is not None and local != head_before,
         )
     except Exception as e:
-        log(f"could not record behind-origin state: {e}")
+        log(f"could not record behind-origin state: {e}", level=WARNING)
     # A tick that got here without deferring on a service lock ends any contention streak:
     # the lock has stopped wedging the deployer, whatever else this tick did. Only a tick
     # that reaches this line clears it — a crash above raises past here, and a crash is not

@@ -337,7 +337,7 @@ class Pipeline:
             "-p", "--model", "opus", "--permission-mode", "auto",
             "--output-format", "json", "--max-budget-usd", str(REVIEW_BUDGET_USD),
             "--append-system-prompt", prompt,
-            "--disallowedTools", "Edit,Write,NotebookEdit",
+            "--disallowedTools", "Edit,Write,NotebookEdit", "--effort", self.record.review_effort,
             "--json-schema", json.dumps(FINDINGS_SCHEMA),
         ]  # fmt: skip
 

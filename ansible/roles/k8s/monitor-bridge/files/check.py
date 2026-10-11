@@ -221,4 +221,5 @@ if __name__ == "__main__":
         sys.exit(0)
 
     print("the entry point is cli.py — run `python cli.py` instead", file=sys.stderr)
-    sys.exit(2)
+    # 64 is sysexits' EX_USAGE, the repo's usage-error code (`lib/exit_codes.py`, #4487).
+    sys.exit(64)

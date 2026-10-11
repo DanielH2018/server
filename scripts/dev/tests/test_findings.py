@@ -248,7 +248,7 @@ def test_touch_refuses_a_closed_issue(capsys, issue, make_tools):
     closed = issue(12, state="CLOSED", labels=("refuted",))
     tools, calls = make_tools(Fakes(view=closed))
     assert findings.main(["touch", "12"], tools) == 3
-    assert "closed (refuted)" in capsys.readouterr().out
+    assert "closed (refuted)" in capsys.readouterr().err
     assert not calls.gh
 
 

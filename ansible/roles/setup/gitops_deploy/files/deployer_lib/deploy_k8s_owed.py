@@ -33,7 +33,7 @@ Reach `deploy_alerts` qualified, never by from-import.
 import time
 
 from deployer_lib import deploy_alerts
-from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_config import WARNING, Config, log
 from deployer_lib.deploy_k8s import k8s_roles_listed
 from deployer_lib.deploy_state import (
     OWED_K8S_DEFERRED,
@@ -298,7 +298,8 @@ def _shared_callers(
     except Exception as exc:
         log(
             f"k8s_unapplied: could not derive the callers of {', '.join(sorted(services))} "
-            f"({type(exc).__name__}: {exc}) — keeping their lines"
+            f"({type(exc).__name__}: {exc}) — keeping their lines",
+            level=WARNING,
         )
         return {}
 
@@ -317,7 +318,8 @@ def _digest_provable(
     except Exception as exc:
         log(
             f"k8s_unapplied: could not derive which of {', '.join(sorted(services))} a "
-            f"render digest proves ({type(exc).__name__}: {exc}) — keeping their lines"
+            f"render digest proves ({type(exc).__name__}: {exc}) — keeping their lines",
+            level=WARNING,
         )
         return set()
 
@@ -373,7 +375,10 @@ def k8s_roles_deleted_at(
             cwd=config.repo,
         )
     except Exception as exc:
-        log(f"could not list the k8s roles at {ref[:8]} ({exc}) — dropping none")
+        log(
+            f"could not list the k8s roles at {ref[:8]} ({exc}) — dropping none",
+            level=WARNING,
+        )
         return set()
     present = k8s_roles_listed(listing)
     if not present:

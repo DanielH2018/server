@@ -346,18 +346,6 @@ USAGE_IS_64 = Census(
     ),
     min_matches=200,
     must_find=frozenset({"scripts/dev/fanout_lib/place.py", "scripts/lib/cli_help.py"}),
-    allow={
-        "scripts/deploy_tools/prune_releases.py": (
-            "release_bin.yml copies it alone onto a host, where `scripts/lib` does not exist; #4487"
-        ),
-        "scripts/diagnostics/probe_lib/cli_parser.py": (
-            "held by the #4468/#4475 fan-out batch while #4443 landed; #4487"
-        ),
-        "scripts/dev/prune_worktrees.py": "held by the #4445 session while #4443 landed; #4487",
-        "scripts/dev/fanout_lib/review_unit.py": (
-            "held by the #4445 session while #4443 landed; #4487"
-        ),
-    },
 )
 
 

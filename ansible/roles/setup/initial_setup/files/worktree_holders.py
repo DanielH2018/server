@@ -67,6 +67,10 @@ OK = "ok"
 END = "end"
 REFUSED = "refused"
 
+# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import (#4487). Each
+# misuse `main` refuses is an invocation the socket unit never makes.
+USAGE_ERROR = 64
+
 
 def escape(value: str) -> str:
     """`value` as printable ASCII on one line with no tab, which `unicode_escape` decodes back.
@@ -178,7 +182,7 @@ def main(
 ) -> int:
     if len(argv) > 1:
         print("worktree-holders takes no arguments", file=sys.stderr)
-        return 2
+        return USAGE_ERROR
     try:
         conn = socket.socket(fileno=fd)
     except OSError as e:
@@ -187,11 +191,11 @@ def main(
             f"on stdin ({e.strerror})",
             file=sys.stderr,
         )
-        return 2
+        return USAGE_ERROR
     with conn:
         if conn.family != socket.AF_UNIX:
             print("worktree-holders answers only a unix socket", file=sys.stderr)
-            return 2
+            return USAGE_ERROR
         serve(conn, roots, proc)
     return 0
 

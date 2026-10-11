@@ -324,7 +324,7 @@ def test_cli_publish_exit_code_reaches_the_shell(tmp_path):
         fail_on="push",
     )
     assert proc.returncode == publish_pr.PUBLISH_STILL_LOCAL
-    assert "stub refused" in proc.stdout
+    assert "stub refused" in proc.stderr
     assert not any(c.startswith("gh") for c in calls)
 
 
@@ -358,10 +358,10 @@ def test_cli_unlanded_exit_code_reaches_the_shell(tmp_path):
         check=False,
     )
     assert proc.returncode == publish_pr.UNLANDED_NO_PR, proc.stderr
-    assert proc.stdout.startswith(
+    assert proc.stderr.startswith(
         "branch t/2026-09-03-0600 is on origin with NO open PR"
     )
-    assert "\n" not in proc.stdout.strip(), "the templates alert with this verbatim"
+    assert "\n" not in proc.stderr.strip(), "the templates alert with this verbatim"
 
 
 def test_cli_body_file_is_read(tmp_path):

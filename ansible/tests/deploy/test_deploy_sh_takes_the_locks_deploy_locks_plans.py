@@ -151,14 +151,14 @@ def test_plan_takes_all_exclusively_for_a_full_run(tmp_path):
     ],
 )
 def test_plan_refuses_a_call_it_cannot_plan_and_prints_no_lock(argv):
-    """FLAGGED half: a usage error exits 2 with nothing on stdout the wrapper could take.
+    """FLAGGED half: a usage error exits 64 with nothing on stdout the wrapper could take.
 
     No tags is refused rather than planned as `all` alone -- the wrapper enumerates a full
     run's tags itself, so an empty list here is a wrapper bug, and `all` alone would let it
     deploy everything under one lock.
     """
     result = _cli(*argv)
-    assert result.returncode == 2
+    assert result.returncode == 64
     assert result.stdout == ""
     assert "usage" in result.stderr
 

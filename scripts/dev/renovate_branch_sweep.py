@@ -140,7 +140,11 @@ def census(gh: Gh = _gh) -> list[str]:
 
 
 def main(
-    argv: list[str] | None = None, gh: Gh = _gh, git: Git = _git, out=sys.stdout
+    argv: list[str] | None = None,
+    gh: Gh = _gh,
+    git: Git = _git,
+    out=sys.stdout,
+    stderr=sys.stderr,
 ) -> int:
     parser = ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
@@ -150,10 +154,10 @@ def main(
     try:
         found = census(gh)
     except subprocess.CalledProcessError as exc:
-        print(f"gh failed: {exc.stderr.strip()}", file=out)
+        print(f"gh failed: {exc.stderr.strip()}", file=stderr)
         return RENOVATE_SWEEP_GH_FAILED
     except NoDashboard as exc:
-        print(str(exc), file=out)
+        print(str(exc), file=stderr)
         return RENOVATE_SWEEP_GH_FAILED
     if not found:
         print("no orphan renovate/* branch", file=out)
@@ -176,7 +180,7 @@ def main(
         except subprocess.CalledProcessError as exc:
             print(
                 f"git push origin --delete {branch} failed: {exc.stderr.strip()}",
-                file=out,
+                file=stderr,
             )
             return RENOVATE_SWEEP_GH_FAILED
         print(f"deleted origin/{branch}", file=out)

@@ -20,6 +20,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.arr import ARR_PORTS
 from diagnostics.probe_lib.core import LOKI_STORE_HELP, LOKI_STORES
+from lib.cli_help import ArgumentParser
 from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE, contract
 from lib.kubectl import CLUSTER_NODES, DEFAULT_CLUSTER
 from diagnostics.probe_lib.longhorn import LONGHORN_PREFIX
@@ -100,7 +101,7 @@ def cert_stages(host, port, sni):
 
 
 def _build_parser():
-    p = argparse.ArgumentParser(
+    p = ArgumentParser(
         prog="probe.py", description="read-only homelab diagnostics", epilog=_epilog()
     )
     p.add_argument(

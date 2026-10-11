@@ -202,8 +202,8 @@ def test_main_refuses_an_argument_or_a_stdin_that_is_not_a_socket_is_flagged(tmp
     read_end, write_end = os.pipe()
     os.close(write_end)
     try:
-        assert main(["worktree-holders", "/root"]) == 2
-        assert main(["worktree-holders"], fd=read_end) == 2
+        assert main(["worktree-holders", "/root"]) == 64
+        assert main(["worktree-holders"], fd=read_end) == 64
     finally:
         os.close(read_end)
 

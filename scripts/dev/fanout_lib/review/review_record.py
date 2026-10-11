@@ -22,6 +22,7 @@ ACTIONABLE_SEVERITIES = frozenset({"critical", "high", "medium"})
 # DECIDED: 0.5, not 0.6 (#3675). Judged against 86 batches' records, 5 of the 6 medium findings
 # at 0.5-0.55 were material defects the fix round never saw; at 0.45 it was 3 of 7.
 CONFIDENCE_FLOOR = 0.5
+REVIEW_EFFORT = "medium"
 HOLD_CONFIDENCE = 0.8
 # The `test` findings the fix round takes at any severity: a test that checks nothing. The
 # severity floor dropped 46 of the reviewer's 50 test findings, these among them (#4023).
@@ -57,6 +58,10 @@ class Record:
 
     batch: str
     pr: str = ""
+    # The `--effort` every reviewer call passes, read from here so the record names what ran
+    # and actionable findings per PR can be compared between settings (#3966). A record
+    # written before this field existed has no key.
+    review_effort: str = REVIEW_EFFORT
     costs: dict[str, float] = field(default_factory=dict)
     review_error: str = ""
     findings: list[dict] = field(default_factory=list)
