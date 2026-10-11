@@ -159,7 +159,7 @@ kubectl -n longhorn-system get backupvolumes.longhorn.io | grep <pvc-name>
   comes first, then the same command with `-e prune_apply=true`. The run costs one store
   listing, and its target sync drops the BackupVolume and Backup CRs.
 - On `r2`, `b2-drain` cannot reach the backups. Use
-  `scripts/backup/longhorn_reap_orphan_backups.py --apply-deleted-volumes`, which deletes a
+  `scripts/backup/longhorn_reap.py backups --apply-deleted-volumes`, which deletes a
   deleted volume's backups through Longhorn.
 
 Either way, check `probe.py b2-spend` for the day's Class C headroom before the apply. The

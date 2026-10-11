@@ -158,7 +158,7 @@ def test_markremoved_snapshots_are_excluded_from_the_window_not_counted_in_it() 
         "a markRemoved CR displaced a live snapshot from the window"
     )
     # And they are not re-deleted: deleting an already-removed snapshot is churn that reads as
-    # progress, the failure mode longhorn_reap_orphan_snapshots.py documents having shipped.
+    # progress, the failure mode longhorn_reap_lib/snapshots.py documents having shipped.
     assert not [name for name in _prune(lines, 3) if "6666" in name or "7777" in name]
 
 

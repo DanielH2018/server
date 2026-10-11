@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """The two Longhorn reapers are operator-invoked only; nothing may schedule them.
 
-`scripts/backup/longhorn_reap_orphan_backups.py` and `longhorn_reap_orphan_snapshots.py` delete stranded
+`scripts/backup/longhorn_reap.py backups` and `longhorn_reap.py snapshots` delete stranded
 recovery points, and which ones are safe to delete depends on live state — when the
 weekly tier has produced nothing, the strays are the only recovery a volume has. The k3s role's
 autonomous-role contract therefore lists them under **Never a cron**, and this guard fails a
-`cron:` task or a kuma-check timer naming either script.
+`cron:` task or a kuma-check timer naming the script.
 
 The census is STRUCTURAL, not textual. The names appear on purpose in `defaults/main.yml`
 comments, in the scripts' own docstrings and in the role docs, so "the name appears nowhere under
@@ -27,9 +27,8 @@ import json
 
 SETUP = ANSIBLE / "roles" / "setup"
 BACKUP_SCRIPTS = REPO / "scripts" / "backup"
-REAPERS = frozenset(
-    {"longhorn_reap_orphan_backups.py", "longhorn_reap_orphan_snapshots.py"}
-)
+# Both reapers are subcommands of one entry point since #4345, so its name covers either.
+REAPERS = frozenset({"longhorn_reap.py"})
 CRON_MODULES = frozenset({"cron", "ansible.builtin.cron"})
 INCLUDE_MODULES = frozenset(
     {
@@ -175,10 +174,10 @@ def test_a_scratch_cron_naming_a_reaper_is_flagged(tmp_path: Path) -> None:
         "- name: Reap stranded backups nightly\n"
         "  ansible.builtin.cron:\n"
         "    name: reap\n"
-        "    job: /srv/server/scripts/backup/longhorn_reap_orphan_backups.py --apply\n"
+        "    job: /srv/server/scripts/backup/longhorn_reap.py backups --apply\n"
     )
     assert scheduled_reapers(tmp_path) == [
-        ("scratch/tasks/main.yml#0", "longhorn_reap_orphan_backups.py")
+        ("scratch/tasks/main.yml#0", "longhorn_reap.py")
     ]
 
 
@@ -190,10 +189,10 @@ def test_a_scratch_timer_import_naming_a_reaper_is_flagged(tmp_path: Path) -> No
         "- name: Reap stranded snapshots on a timer\n"
         '  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"\n'
         "  vars:\n"
-        "    kuma_check_exec: /srv/server/scripts/backup/longhorn_reap_orphan_snapshots.py\n"
+        "    kuma_check_exec: /srv/server/scripts/backup/longhorn_reap.py snapshots\n"
     )
     assert scheduled_reapers(tmp_path) == [
-        ("scratch/tasks/main.yml#0", "longhorn_reap_orphan_snapshots.py")
+        ("scratch/tasks/main.yml#0", "longhorn_reap.py")
     ]
 
 
@@ -202,11 +201,27 @@ def test_a_scratch_unit_template_naming_a_reaper_is_flagged(tmp_path: Path) -> N
     templates = tmp_path / "scratch" / "templates"
     templates.mkdir(parents=True)
     (templates / "reap.service.j2").write_text(
-        "[Service]\nExecStart=/srv/server/scripts/backup/longhorn_reap_orphan_backups.py --apply\n"
+        "[Service]\nExecStart=/srv/server/scripts/backup/longhorn_reap.py backups --apply\n"
     )
     assert scheduled_reapers(tmp_path) == [
-        ("scratch/templates/reap.service.j2", "longhorn_reap_orphan_backups.py")
+        ("scratch/templates/reap.service.j2", "longhorn_reap.py")
     ]
+
+
+def test_a_scratch_cron_naming_the_consolidated_entrypoint_is_flagged(
+    tmp_path: Path,
+) -> None:
+    """Red proof for #4345: the guard follows the reapers into `longhorn_reap.py`."""
+    tasks = tmp_path / "scratch" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "- name: Reap stranded backups nightly\n"
+        "  ansible.builtin.cron:\n"
+        "    name: reap\n"
+        "    job: /srv/server/scripts/backup/longhorn_reap.py backups --apply\n"
+    )
+    hits = scheduled_reapers(tmp_path)
+    assert any("longhorn_reap.py" in reaper for _, reaper in hits), hits
 
 
 def test_a_comment_naming_a_reaper_is_clean(tmp_path: Path) -> None:
@@ -214,6 +229,6 @@ def test_a_comment_naming_a_reaper_is_clean(tmp_path: Path) -> None:
     templates = tmp_path / "scratch" / "templates"
     templates.mkdir(parents=True)
     (templates / "other.service.j2").write_text(
-        "# never longhorn_reap_orphan_backups.py here\n[Service]\nExecStart=/bin/true\n"
+        "# never longhorn_reap.py here\n[Service]\nExecStart=/bin/true\n"
     )
     assert scheduled_reapers(tmp_path) == []

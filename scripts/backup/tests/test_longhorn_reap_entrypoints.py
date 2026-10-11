@@ -4,7 +4,7 @@
 Two subjects, both about the entry point rather than about either subcommand's output. The
 bootstrap pair proves the scripts' own sys.path inserts resolve `host_lib` when the script is
 invoked directly, which is how an operator runs it (`uv run python
-scripts/backup/longhorn_reap_orphan_backups.py`). The fail-closed arms prove an unreadable input — a
+scripts/backup/longhorn_reap.py backups`). The fail-closed arms prove an unreadable input — a
 `null` JSON body from kubectl, a non-integral env knob — produces a named ABORT rather than a
 traceback, and never a delete.
 
@@ -40,6 +40,25 @@ def test_snapshots_entrypoint_resolves_its_sibling_imports_when_run_directly(tmp
     assert "ModuleNotFoundError" not in proc.stderr, proc.stderr
 
 
+# ── the dispatcher refuses before either reaper runs ─────────────────────────────────────
+
+
+def test_no_subcommand_exits_2_with_usage_and_no_kubectl_call(tmp_path):
+    proc, calls = _run(BACKUPS_ENTRY[0], [], {"volumes": []}, tmp_path)
+    assert proc.returncode == 2, proc.stderr
+    assert "backups" in proc.stderr and "snapshots" in proc.stderr
+    assert calls == []
+
+
+def test_an_unknown_subcommand_exits_2_and_names_both_reapers(tmp_path):
+    proc, calls = _run(BACKUPS_ENTRY[0], ["--apply"], {"volumes": []}, tmp_path)
+    assert proc.returncode == 2, proc.stderr
+    assert "unknown subcommand: --apply (expected one of: backups, snapshots)" in (
+        proc.stderr
+    )
+    assert calls == []
+
+
 def test_the_apply_refusal_names_the_dry_runs_own_interpreter(tmp_path):
     # Root's `python3` is the distro interpreter, not the pinned one this run uses, so the
     # re-run hint names the interpreter and the script by absolute path rather than leaving
@@ -47,7 +66,7 @@ def test_the_apply_refusal_names_the_dry_runs_own_interpreter(tmp_path):
     proc, calls = _run(BACKUPS_ENTRY, ["--apply"], {"volumes": []}, tmp_path)
     assert proc.returncode != 0
     assert (
-        "sudo %s -B %s --apply" % (sys.executable, BACKUPS_ENTRY)
+        "sudo %s -B %s backups --apply" % (sys.executable, BACKUPS_ENTRY[0])
         in proc.stderr + proc.stdout
     )
     assert calls == []
@@ -59,7 +78,7 @@ def test_the_apply_refusal_names_the_dry_runs_own_interpreter(tmp_path):
 def test_backups_aborts_cleanly_when_the_volume_list_body_is_null(tmp_path):
     # A well-formed but non-object body (`kubectl` emitting a bare `null`) must not reach
     # `.get("items", [])` and raise AttributeError -- a traceback where every other unreadable
-    # read here prints ABORT. See longhorn_reap_logic.parse_kubectl_json_items.
+    # read here prints ABORT. See longhorn_reap_lib/logic.py:parse_kubectl_json_items.
     proc, calls = _run(
         BACKUPS_ENTRY, [], {"volumes": []}, tmp_path, null_kinds=["volumes"]
     )

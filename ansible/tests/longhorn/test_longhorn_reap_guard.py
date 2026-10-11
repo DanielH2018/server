@@ -14,7 +14,7 @@ RecurringJob label, so a single hand-triggered probe backup counts as proof the 
 tier is producing backups, and FLOOR 1 (which fires only at a count of zero) stands down. On
 wg-easy-config that would have deleted 3 of its 5 backups while its tier had produced none.
 
-The classification logic lives in scripts/backup/longhorn_reap_logic.py,
+The classification logic lives in scripts/backup/longhorn_reap_lib/logic.py,
 read with `kubectl -o json` rather than jsonpath, which closes the defect class this file
 guards. The tests below exercise that module directly rather than regex-matching shell source:
 a passing regex proves the RIGHT WORDS are present, never that the behaviour they describe
@@ -27,7 +27,7 @@ import re
 
 from _shell_render import rendered_shell_texts
 
-import longhorn_reap_logic as logic
+from longhorn_reap_lib import logic
 from _reap_entrypoint_harness import _backup
 
 # `{range .metadata.labels}` and friends. Ranging .items[*] is fine and ubiquitous — that IS a
@@ -74,7 +74,7 @@ def test_no_shell_template_ranges_a_label_map_in_jsonpath():
     read the same labels for the same purpose, and the next script to need a volume's group
     will reach for the same idiom. The working form is a label selector (`-l group=enabled`)
     or `-o json` piped through jq/json.loads reading `.metadata.labels | keys[]` — which is what
-    longhorn_reap_logic.backup_owner_map / snapshot_owner_map do.
+    longhorn_reap_lib/logic.py's backup_owner_map / snapshot_owner_map do.
     """
     offenders = [
         name
@@ -126,7 +126,7 @@ def test_reaper_does_not_delete_under_the_readonly_kubeconfig():
     readonly-SA-reads-as-success shape, and it is dangerous here for the opposite of the obvious
     reason: with a broken floor the refusal is the only thing preventing data loss, so "make the
     deletes work" is a change that must never land alone.
-    longhorn_reap_orphan_backups.py refuses before making any kubectl call at all when the admin
+    `longhorn_reap.py backups` refuses before making any kubectl call at all when the admin
     kubeconfig is unreadable — proven directly, not by grepping for a path string.
     """
     path, err = logic.resolve_kubeconfig(
@@ -134,7 +134,7 @@ def test_reaper_does_not_delete_under_the_readonly_kubeconfig():
         admin_readable=False,
         admin_path="/etc/rancher/k3s/k3s.yaml",
         readonly_path="/home/ubuntu/.kube/config",
-        sudo_hint="sudo .venv/bin/python -B scripts/backup/longhorn_reap_orphan_backups.py --apply",
+        sudo_hint="sudo .venv/bin/python -B scripts/backup/longhorn_reap.py backups --apply",
     )
     assert path is None
     assert err is not None and "/etc/rancher/k3s/k3s.yaml" in err
@@ -144,7 +144,7 @@ def test_reaper_does_not_delete_under_the_readonly_kubeconfig():
         admin_readable=True,
         admin_path="/etc/rancher/k3s/k3s.yaml",
         readonly_path="/home/ubuntu/.kube/config",
-        sudo_hint="sudo .venv/bin/python -B scripts/backup/longhorn_reap_orphan_backups.py --apply",
+        sudo_hint="sudo .venv/bin/python -B scripts/backup/longhorn_reap.py backups --apply",
     )
     assert path == "/etc/rancher/k3s/k3s.yaml" and err is None
 
@@ -155,7 +155,7 @@ def test_deleted_volume_strays_need_their_own_flag():
     It is genuinely dead weight — the volume can never come back, so no floor will ever release
     it — but a deleted PVC is also exactly when someone reaches for a restore. classify_backups
     keeps it out of `.candidates` (the plain --apply bucket) and puts it in `.orphaned`, which
-    longhorn_reap_orphan_backups.py's main() only deletes when --apply-deleted-volumes is set —
+    `longhorn_reap.py backups` only deletes when --apply-deleted-volumes is set —
     proven end-to-end in test_longhorn_reap_backups_cli.py
     ::test_backups_apply_deleted_volumes_only_deletes_the_orphaned_bucket.
     """

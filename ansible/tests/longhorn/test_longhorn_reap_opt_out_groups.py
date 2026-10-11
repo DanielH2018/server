@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The snapshot reaper's opt-out group list against the StorageClasses that assign them.
 
-`longhorn_reap_logic.OPT_OUT_GROUPS` hardcodes the recurring-job groups that name no
+`longhorn_reap_lib/logic.py:OPT_OUT_GROUPS` hardcodes the recurring-job groups that name no
 RecurringJob CR by design, because the module is pure stdlib logic with no file or cluster
 reads. That makes it a copy of a fact the k3s role declares in a StorageClass's
 `recurringJobSelector`, and a copy drifts: a second opt-out class added later would put every
@@ -18,7 +18,7 @@ import json
 from lib import yaml_fast
 from _setup_render import rendered_setup_text
 
-import longhorn_reap_logic as logic
+from longhorn_reap_lib import logic
 from lib.repo_paths import K3S_FILES
 
 

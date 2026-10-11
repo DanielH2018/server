@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
 """Reap Longhorn Snapshots left stranded by a tier move.
 
 DRY RUN BY DEFAULT. Pass --apply to delete. No cron, for the same reason as its sibling
-longhorn_reap_orphan_backups.py: the safe-to-delete set depends on live state this script can
+`longhorn_reap.py backups`: the safe-to-delete set depends on live state this script can
 check now but cannot guarantee a week from now.
 
 THE PROBLEM, and why it differs from stranded backups. A RecurringJob's `retain: N` prunes only
@@ -36,14 +35,14 @@ one. The exit code is what an operator reads first, and a run that reclaimed not
 read as a success: every snapshot it deleted stays marked-removed-but-not-coalesced, so no
 space comes back until someone purges from the Longhorn UI or re-runs.
 
-See longhorn_reap_logic.py for the floors (newest-per-volume, detached, the truncated-job-name
+See logic.py beside it for the floors (newest-per-volume, detached, the truncated-job-name
 prefix match, the age floor).
 
 Run from the repo root on a k3s host. The dry run reads through the read-only kubeconfig:
     LONGHORN_REAP_READONLY_KUBECONFIG=~/.kube/config \
-        uv run python scripts/backup/longhorn_reap_orphan_snapshots.py
+        uv run python scripts/backup/longhorn_reap.py snapshots
 Deleting needs the root-only admin kubeconfig, so run the same interpreter under sudo:
-    sudo .venv/bin/python -B scripts/backup/longhorn_reap_orphan_snapshots.py --apply
+    sudo .venv/bin/python -B scripts/backup/longhorn_reap.py snapshots --apply
 """
 
 import os
@@ -53,9 +52,10 @@ import time
 import urllib.request
 
 # host_lib.py is the setup roles' shared host module and stays in ansible/roles/setup/common/files/.
-# A directly-invoked script gets only its own directory on sys.path, so both inserts are needed.
-sys.path.insert(0, str(_Path(__file__).resolve().parent))
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+# The entry point puts only its own directory on sys.path, so both inserts are needed: the
+# package's parent for `longhorn_reap_lib`, and scripts/ for `lib`.
+sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/backup/
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.repo_paths import HOST_LIB_FILES
 
 sys.path.insert(0, str(HOST_LIB_FILES))
@@ -65,7 +65,7 @@ from lib.repo_paths import FILTER_PLUGINS
 sys.path.insert(0, str(FILTER_PLUGINS))
 from longhorn_manager import ready_manager_ip
 from lib.cli_help import answer_help
-import longhorn_reap_logic as logic
+from longhorn_reap_lib import logic
 
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
@@ -95,7 +95,7 @@ ADMIN_KUBECONFIG = os.environ.get(
 # No fallback default. Left unset, a dry run must refuse rather than let KUBECONFIG stay whatever
 # the caller's shell happens to have -- which, run as root, is the admin one. See main().
 READONLY_KUBECONFIG = os.environ.get("LONGHORN_REAP_READONLY_KUBECONFIG", "")
-SUDO_HINT = logic.sudo_hint(__file__)
+SUDO_HINT = logic.sudo_hint(logic.ENTRY_POINT, "snapshots")
 
 
 def _delete_timeout_seconds(text: str) -> float:
@@ -360,7 +360,3 @@ def main(argv: list[str], now: float | None = None) -> int:
         )
         return 1
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))

@@ -1,6 +1,6 @@
 """The two operator-selected Backup CR sets: a migrated volume's old chain, and retired seeds.
 
-Companion to longhorn_reap_logic.py, which holds the strays classifier and the shared pieces
+Companion to logic.py beside it, which holds the strays classifier and the shared pieces
 both reapers use. Split out because one module cannot hold both and stay under the 600-line cap
 `ansible/tests/repo/test_module_length_ratchet.py` enforces; the selection still has exactly one
 implementation, and it is this one.
@@ -30,14 +30,19 @@ the claim now points at -- holds a Completed backup. seeds asks whether the seed
 holds `floor` Completed backups that DO carry a job label. What the three share is parsed-JSON
 selection, the entry point's deletion cap, and its kubeconfig and delete transport.
 
-Stdlib only. Imported by longhorn_reap_orphan_backups.py, which does the kubectl reads/writes
-and the printing.
+Stdlib only. Imported by backups.py beside it, the `longhorn_reap.py backups` subcommand, which
+does the kubectl reads/writes and the printing.
 """
 
 import json
+import sys as _sys
 from dataclasses import dataclass, field
+from pathlib import Path as _Path
 
-import longhorn_reap_logic as logic
+# The package's own parent, so `longhorn_reap_lib` resolves for a directly-invoked entry point
+# that has not inserted it first.
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/backup/
+from longhorn_reap_lib import logic
 
 
 SEED_NAME_PREFIX = "seed-"

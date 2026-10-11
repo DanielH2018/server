@@ -10,15 +10,15 @@ does.
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 from pathlib import Path
 from typing import Any
 
-from catalog_model import K8S_ROLES, UNKNOWN
+from docs.catalog_lib.catalog_model import K8S_ROLES, UNKNOWN
 from lib.k8s_roles import manifest_template
 from lib.render_guard import ALL_VARS
-from route_facts import reachability, route_cell
+from docs.catalog_lib.route_facts import reachability, route_cell
 
 __all__ = [
     "auth_tier",

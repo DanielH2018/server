@@ -9,9 +9,9 @@ Run: uv run pytest scripts/docs/tests/test_service_catalog.py
 
 import service_catalog
 from _catalog_fixtures import make_repo, write
-from catalog_facts import route_for
-from catalog_model import ServiceRow
-from catalog_render import render_html, render_markdown
+from docs.catalog_lib.catalog_facts import route_for
+from docs.catalog_lib.catalog_model import ServiceRow
+from docs.catalog_lib.catalog_render import render_html, render_markdown
 
 
 def test_platform_defaults_to_docker_when_key_absent(tmp_path):
