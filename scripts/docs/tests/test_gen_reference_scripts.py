@@ -100,6 +100,19 @@ def test_a_package_module_names_the_test_beside_its_entrypoint(tmp_path):
     assert rows["fragments_hosts.py"]["tests"] == "test_fragments_hosts.py"
 
 
+def test_a_package_module_names_a_test_named_after_its_family(tmp_path):
+    """`land_lib/ci.py` is tested by `test_land_ci.py`: the family is the package's prefix (#4515).
+
+    The decoy is named after the entrypoint's directory and sorts first, so a lookup that
+    globs `test_*_ci.py` or takes the family from the wrong directory picks it instead.
+    """
+    _write(tmp_path / "deploy_tools" / "land_lib" / "ci.py", '"""Summary."""\n')
+    _write(tmp_path / "deploy_tools" / "tests" / "test_deploy_tools_ci.py", '"""x"""\n')
+    _write(tmp_path / "deploy_tools" / "tests" / "test_land_ci.py", '"""x"""\n')
+    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    assert rows["ci.py"]["tests"] == "test_land_ci.py"
+
+
 def test_only_a_lib_package_reaches_into_the_parents_tests(tmp_path):
     _write(tmp_path / "docs" / "reference" / "backlog.py", '"""Summary."""\n')
     _write(tmp_path / "docs" / "tests" / "test_backlog.py", '"""x"""\n')
