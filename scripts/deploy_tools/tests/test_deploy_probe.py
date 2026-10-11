@@ -19,10 +19,13 @@ from deploy_tools.deploy_lib import detach_run as deploy_detach
 
 from deploy_tools.deploy_lib import detach_probe as deploy_probe
 from deploy_tools.deploy_lib import under_locks as locked
-from lib.detach_fork import recorded_code
+from lib.detach_fork import START_GRACE_S, recorded_code
 
 _SHIM = Path(__file__).resolve().parents[3] / ".claude" / "wait-sources" / "deploy"
 _SETTLED = "deploy --detach settled (ansible exit 0)"
+
+# A pinned clock: the grace check compares against `now=`, never the suite's own runtime.
+EPOCH = 1_791_700_000.0
 
 
 def deploy(
@@ -89,6 +92,20 @@ def test_a_running_deploy_reports_its_newest_task(tmp_path):
 def test_a_deploy_whose_pid_died_without_a_code_died(tmp_path, dead_pid):
     log = deploy(tmp_path, "TASK [x] ****\n", pid=dead_pid)
     assert deploy_probe.read(log)["state"] == "died"
+
+
+def test_a_deploy_with_neither_pid_nor_code_past_the_grace_died(tmp_path):
+    """No pid and no code means no child to wait on: the wait must end, not exit 75 forever (#4513)."""
+    log = deploy(tmp_path, "")
+    stale = EPOCH - START_GRACE_S - 1
+    os.utime(log, (stale, stale))
+    assert deploy_probe.read(log, now=EPOCH)["state"] == "died"
+
+
+def test_a_fresh_deploy_log_without_a_pid_is_still_running(tmp_path):
+    """The parent touches the log before the fork and writes the pid after it."""
+    log = deploy(tmp_path, "")
+    assert deploy_probe.read(log)["state"] == "running"
 
 
 def test_the_newest_log_for_exactly_these_tags_is_the_deploy(tmp_path):
