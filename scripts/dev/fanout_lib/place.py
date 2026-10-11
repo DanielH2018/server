@@ -6,13 +6,13 @@ on the tighter of the two, picks the host with the most headroom per batch, crea
 worktree there, and starts a headless
 Opus agent as a transient user service. daniel-box agents land their PR; daniel-server agents
 stop at `gh pr create`. It shipped in commit bd8e62bf8.
-`launch --review` runs `fanout.py review`: a review between each batch's PR and its landing,
-and a red phase before a `red-green` batch's implementer. `fanout_lib/review/review.py` has the phases.
+`launch` runs `fanout.py review` unless given `--no-review`: a review between each batch's PR
+and its landing, and a red phase before a `red-green` batch's implementer. `fanout_lib/review/review.py` has the phases.
 
 Usage::
 
     fanout.py place read
-    fanout.py place launch --batch 1345,1386 [--batch 1288] [--host daniel-box] [--review]
+    fanout.py place launch --batch 1345,1386 [--batch 1288] [--host daniel-box] [--no-review]
     fanout.py place launch --repo DanielH2018/dotfiles --batch 763
     fanout.py place claim --batch 1345,1386 [--batch 1288]
     fanout.py place status <run-id>
@@ -530,8 +530,12 @@ def main(argv=None, tools: Tools | None = None) -> int:
     )
     launch_parser.add_argument(
         "--review",
-        action="store_true",
-        help="review each batch's PR in a separate session before it lands",
+        # DECIDED: on by default (#3675, operator 2026-10-09). `--no-review` is the way out,
+        # for a batch whose review would cost more than it can catch.
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="review each batch's PR in a separate session before it lands (the default; "
+        "--no-review skips it)",
     )
     _add_manifest_root(launch_parser)
     launch_parser.set_defaults(fn=cmd_launch)

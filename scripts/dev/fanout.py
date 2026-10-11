@@ -4,7 +4,7 @@
 Usage::
 
     fanout.py place read
-    fanout.py place launch --batch 1345,1386 [--batch 1288] [--host daniel-box] [--review]
+    fanout.py place launch --batch 1345,1386 [--batch 1288] [--host daniel-box] [--no-review]
     fanout.py place status <run-id>
     fanout.py probe [--describe] <run-id>...
     fanout.py review --batch 1345-1386 --repo DanielH2018/server [--red-green] < .fanout/brief.md

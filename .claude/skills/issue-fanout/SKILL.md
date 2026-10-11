@@ -1,6 +1,6 @@
 ---
 name: issue-fanout
-description: Dispatch parallel Opus agents at a batch of open GitHub issues, one worktree and one PR each, claiming every issue before any agent starts. Use when asked to work through the backlog, clear the open findings, or fan out on issues. A single issue nobody needs to steer can launch as a batch of one with `--review`, which gets the independent reviewer and red gate a solo session lacks; claim and work an issue directly only when you will steer it.
+description: Dispatch parallel Opus agents at a batch of open GitHub issues, one worktree and one PR each, claiming every issue before any agent starts. Use when asked to work through the backlog, clear the open findings, or fan out on issues. A single issue nobody needs to steer can launch as a batch of one, which gets the independent reviewer and red gate a solo session lacks; claim and work an issue directly only when you will steer it.
 allowed-tools: Bash, Read, Grep, Glob, Agent
 ---
 
@@ -145,7 +145,9 @@ Narrow the fan-out, do not queue. For the third, `clean <run-id>` the finished r
 uncleaned worktree counts against its host. `--host daniel-box` pins a batch that must land in
 the same run or that only daniel-box can verify.
 
-**`--review` adds a separate review to every batch in the run.** The unit runs
+**Every batch gets a separate review unless `launch` is given `--no-review`** (the default
+since #3675, whose judged records found 0.65 real findings per PR at about $2.60 of review
+spend each). The unit runs
 `scripts/dev/fanout.py review` in place of one `claude -p`, the batch worktree's copy, so a host
 whose primary checkout lags `origin/master` still runs the current one. Another repo's batch
 runs the copy in its own snapshot of this repo's `origin/master`, which `launch` archives into
@@ -153,8 +155,8 @@ the batch's `.fanout/server`. The snapshot also supplies that batch's system pro
 `fanout-stop` hook.
 The agent stops at its PR on every host. A fresh reviewer then reads only the issue text and the diff, and returns findings with
 a severity and a confidence. A finding of severity medium or worse, or a test the reviewer
-marks vacuous or scaffold at any severity, resumes the agent for one fix round when its
-confidence is 0.6 or more, and a second reviewer reads only the fix. A finding of
+marks vacuous at any severity, resumes the agent for one fix round when its
+confidence is 0.5 or more, and a second reviewer reads only the fix. A finding of
 severity medium or worse at confidence 0.8 or more that survives the fix round holds the PR:
 the batch ends `needs input:`, naming the finding, and nothing lands it. Otherwise, on
 daniel-box, the pipeline runs `land.sh` itself. It resumes the agent only for an `unhealthy`,
@@ -168,7 +170,7 @@ the PR comment counts them.
 stay with the implementer; only the slow model review moves out. The fallback `Agent(...)`
 path below has no review phase.
 
-**A `--review` batch whose every issue carries the `red-green` label also gets a red phase.**
+**A reviewed batch whose every issue carries the `red-green` label also gets a red phase.**
 `findings.py open` applies the label when every path a finding cites is code this repo's suite
 runs: Python under `scripts/`, the filter plugins and the hooks, and a role's `files/` when the
 role has its own `tests/`, such as monitor-bridge's registry and the HA Jinja macros. Add or
