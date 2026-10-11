@@ -194,6 +194,61 @@ def k8s_deferred_deploy_cmd(services) -> str:
     return './scripts/deploy.sh --tags "%s"' % ",".join(sorted(services))
 
 
+# The k8s roles with no `containers_list` entry: other roles include them, so `deploy.sh
+# --tags <role>` expands to every service that runs one (`deploy_run.expand_shared_roles`),
+# which is a fleet-wide redeploy for most of them. A literal because the SessionStart banner
+# imports this module with no YAML parser and no inventory; `test_gitops_markers.py` derives
+# the set from the role tree and `containers_list` and fails when the two disagree.
+SHARED_K8S_ROLES = frozenset(
+    {
+        "arr-notification",
+        "cronjob-gate",
+        "image-builder",
+        "longhorn-api",
+        "manifests",
+        "volume-revert",
+        "volume-snapshot",
+    }
+)
+
+# The shared roles whose `k8s_unapplied` line discharges on a caller's render digest with no
+# deploy at all. `deploy_k8s_owed.DIGEST_PROVABLE_ROLES` is this set; its `DECIDED:` holds the
+# reasoning and the gap it accepts.
+RENDER_PROOF_SHARED_ROLES = frozenset({"manifests"})
+
+
+def k8s_unapplied_remedy(subject: str) -> str:
+    """What discharges `subject`'s `k8s_unapplied` line, for a surface that prints the remedy.
+
+    An ordinary service gets its `deploy.sh --tags` command. A shared role does not get that
+    command bare, because it expands to every caller (#4373): PR #4343 changed only
+    `manifests/tasks/main.yml` and the printed remedy would have redeployed about 57 services
+    for about 20 minutes to apply nothing. A render-provable role waits for the tick's render
+    proof and names the full redeploy only as the explicit alternative. Every other shared
+    role discharges only once each caller has deployed, so the expansion IS its remedy, and
+    the text says what it costs. The `clear-owed` command stays the caller's to print beside
+    this, as every surface already does.
+
+    Returns:
+        The bare deploy command for an ordinary service, so a surface can print it as a
+        command. A sentence with each command in backticks for a shared role.
+    """
+    cmd = k8s_deferred_deploy_cmd([subject])
+    if subject in RENDER_PROOF_SHARED_ROLES:
+        return (
+            f"nothing to deploy: `{subject}` is a shared role, and a later tick discharges "
+            f"this line once each caller's render matches what it applied. Clear the line "
+            f"by hand if no caller can be proven. The alternative, `{cmd}`, redeploys every "
+            f"service that runs the role"
+        )
+    if subject in SHARED_K8S_ROLES:
+        return (
+            f"`{cmd}`, which redeploys every service that runs the shared role "
+            f"`{subject}`: the line drops only once each of them has deployed the change"
+        )
+    return cmd
+
+
 def owed_clear_cmd(cls: str, subject: str, tags=()) -> str:
     """The `clear-owed` command for `subject`'s `cls` line, printed beside what discharges it.
 

@@ -41,7 +41,13 @@ from deployer_lib.deploy_state import (
     DeployerState,
 )
 from deployer_lib.deploy_toolbox import DeployTools
-from gitops_markers import k8s_deferred_deploy_cmd, owed_clear_cmd
+from gitops_markers import (
+    RENDER_PROOF_SHARED_ROLES,
+    SHARED_K8S_ROLES,
+    k8s_deferred_deploy_cmd,
+    k8s_unapplied_remedy,
+    owed_clear_cmd,
+)
 
 
 def reconcile(tools: DeployTools, state: DeployerState, config: Config) -> None:
@@ -263,7 +269,7 @@ def discharge_k8s_unapplied(
 # writes an app's database over its API, and `cronjob-gate`, `longhorn-api`,
 # `volume-snapshot` and `volume-revert` render nothing at all, so they keep the record-only
 # rule.
-DIGEST_PROVABLE_ROLES = frozenset({"manifests"})
+DIGEST_PROVABLE_ROLES = RENDER_PROOF_SHARED_ROLES
 
 
 def _record_carries(
@@ -323,13 +329,23 @@ def log_k8s_unapplied(state: DeployerState) -> None:
     tick that recorded the change fast-forwarded, so no later tick's range carries it and a
     line written only where the marker is written would appear once. Nothing pages on this,
     so the journal and the SessionStart banner are the whole of its reach.
+
+    The ordinary services share one deploy command. Each shared role gets its own sentence
+    instead, because folding it into that command would redeploy every caller (#4373).
     """
     services = sorted({e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)})
     if not services:
         return
+    remedies = []
+    ordinary = [s for s in services if s not in SHARED_K8S_ROLES]
+    if ordinary:
+        remedies.append(f"Deploy: {k8s_deferred_deploy_cmd(ordinary)}")
+    remedies += [
+        f"{s}: {k8s_unapplied_remedy(s)}" for s in services if s in SHARED_K8S_ROLES
+    ]
     log(
         f"k8s_unapplied pending: {', '.join(services)} — merged, not applied, and this "
-        f"deployer never applies them. Deploy: {k8s_deferred_deploy_cmd(services)}"
+        f"deployer never applies them. {'. '.join(remedies)}"
     )
 
 

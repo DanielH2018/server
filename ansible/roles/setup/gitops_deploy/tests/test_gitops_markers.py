@@ -10,6 +10,7 @@ import pytest
 
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
+    SHARED_K8S_ROLES,
     ContentionEntry,
     owed_clear_cmd,
     parse_behind,
@@ -65,3 +66,13 @@ def test_an_owed_clear_names_applied_tags_only_where_the_cli_takes_them():
     )
     with pytest.raises(ValueError, match="manual_plane only"):
         owed_clear_cmd("k8s_unapplied", "authelia", {"authelia"})
+
+
+# ── the shared k8s roles ──────────────────────────────────────────────────────────────────
+def test_the_shared_k8s_roles_are_the_roles_with_no_containers_list_entry():
+    """The literal the banner reads, against the derivation it stands in for (#4373)."""
+    from lib.k8s_roles import k8s_entries, role_dirs
+
+    derived = {p.name for p in role_dirs()} - set(k8s_entries())
+    assert "manifests" in derived
+    assert SHARED_K8S_ROLES == derived
