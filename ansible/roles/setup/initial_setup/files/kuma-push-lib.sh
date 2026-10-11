@@ -54,13 +54,23 @@
 # which (#1803): Kuma's push route answers `{"ok":false,"msg":"Monitor not found or not
 # active."}` as `application/json`, while Traefik's no-router 404 is Go's `404 page not found`
 # as `text/plain` (both measured 2026-09-17 against the live VIP). The content type travels
-# out through `-w` beside the code — the body itself stays discarded — and a JSON answer adds
-# `by=kuma` to the failure line. That field is what separates a token the cron holds that
-# Kuma has no live monitor for (a deploy that re-minted the static monitors ahead of the cron,
-# a paused tile) from an edge with no route: the first is Kuma answering, so the edge and
-# Kuma are both fine and the verdict is lost for as long as the two stay apart, with no tile
-# to go red at its deadline. monitor-bridge's swallowed-verdicts check reads the field out of
-# Loki and pages on it (`verdicts/logs.py`); the retry classification is unchanged.
+# out through `-w` beside the code, and a JSON answer adds `by=kuma` to the failure line. That
+# field is what separates Kuma answering from an edge with no route: when Kuma answers, the edge
+# and Kuma are both fine and the verdict is lost with no tile to go red at its deadline.
+# monitor-bridge's swallowed-verdicts check reads the field out of Loki and pages on it
+# (`verdicts/logs.py`); the retry classification is unchanged.
+#
+# `by=kuma` does NOT mean a token mismatch (#4481). Kuma 2.5.5's push handler
+# (`server/routers/api-router.js`) answers 404 for ANY exception it catches, and puts the
+# exception's text in the JSON `msg`. On 2026-10-11 release-staleness-check lost every push to
+# `SQLITE_CONSTRAINT: UNIQUE constraint failed: stat_hourly.monitor_id, stat_hourly.timestamp`
+# while its token matched, and the code alone read as `Monitor not found or not active.`. So on a
+# final `by=kuma` failure the library logs Kuma's `msg` on its own line, `push rejected by kuma
+# (http=<code>): <msg>`. It is a separate line because the swallowed-verdicts parser accepts only
+# `k=v` words inside the http/rc parens, and it never echoes the cron's `status=` so
+# `probe.py alerts` cannot read it as a DOWN episode. The token is redacted from it: a DB error
+# can print its SQL with the bound values inlined, as the one above did, and the token lookup
+# is one of those statements.
 #
 # Issue #994 measured 49 dropped pushes across 11 crons clustered at three uptime-kuma rollouts,
 # with every one of them computed as `status=up` and thrown away — the static monitors run
@@ -84,7 +94,7 @@
 kuma_push() {
   local status="$1" msg="$2" push_url="$3" kuma_host="$4" resolve_ip="$5" tag="$6"
   local -r retry_delay_s=30
-  local attempt http_code curl_rc reply ctype by
+  local attempt http_code curl_rc reply meta body ctype by kuma_msg
   # Kuma puts the msg into the Discord DOWN embed as a field value, whose cap is 1024 chars,
   # and never truncates: an oversized msg makes Discord reject the whole alert with HTTP 400
   # and Kuma does not retry, so the transition reaches nobody. release-staleness-check's
@@ -114,9 +124,9 @@ kuma_push() {
   # Status and msg stay as --data-urlencode: they carry no secret, and -G appends them to the
   # config-supplied URL exactly as before. No caller reads stdin, so `-K -` conflicts with
   # nothing. No `-f`: it collapses every HTTP >=400 to one exit code, which is exactly the
-  # distinction the retry needs to make. `-w '%{http_code}'` reports the status directly instead,
-  # and `-o /dev/null` discards the body Kuma's push endpoint returns; `%{content_type}` rides
-  # beside the code so the log line can name who answered without carrying the body (header
+  # distinction the retry needs to make. `-w '\n%{http_code} %{content_type}'` reports the status
+  # directly instead, on a last line after the body; `%{content_type}` rides beside the code so
+  # the log line can name who answered, and the body is read only for Kuma's `msg` (header
   # above). The `curl_rc=$? ||` guard on the assignment (rather than reading $? on the next
   # line) keeps this safe under a future `set -e` caller — every current caller runs
   # `set -uo pipefail`, not `-e`, but the function has no way to know what a caller five years
@@ -128,8 +138,8 @@ kuma_push() {
   # curl version's transport message is not worth depending on, so the redirect is the
   # guarantee. Nothing is lost: the `logger` calls below report each failed attempt with its
   # HTTP code and curl's own exit status, which names the transport class. The redirect must
-  # not be `2>&1` — stdout here is parsed as `%{http_code} %{content_type}`, and a merged error
-  # message would corrupt that reading.
+  # not be `2>&1` — stdout's last line is parsed as `%{http_code} %{content_type}`, and a merged
+  # error message would corrupt that reading.
   for attempt in 1 2 3; do
     reply=$(
       printf 'url = "%s"\n' "$push_url" |
@@ -137,13 +147,17 @@ kuma_push() {
           --resolve "${kuma_host}:443:${resolve_ip}" \
           --data-urlencode "status=${status}" \
           --data-urlencode "msg=${msg}" \
-          -o /dev/null -w '%{http_code} %{content_type}' 2>/dev/null
+          -w '\n%{http_code} %{content_type}' 2>/dev/null
     ) && curl_rc=0 || curl_rc=$?
-    # A curl that dies before any response still prints `000 ` through -w; a stub or an older
-    # curl may print the code alone, so the split tolerates a missing second field.
-    http_code=${reply%% *}
+    # The -w line is the last one; anything before it is the body. A curl that dies before any
+    # response still prints `000 ` through -w; a stub or an older curl may print the code alone
+    # with no body, so both splits tolerate a missing part.
+    meta=${reply##*$'\n'}
+    body=""
+    case "$reply" in *$'\n'*) body=${reply%$'\n'*} ;; esac
+    http_code=${meta%% *}
     ctype=""
-    case "$reply" in *" "*) ctype=${reply#* } ;; esac
+    case "$meta" in *" "*) ctype=${meta#* } ;; esac
     by=""
     case "$ctype" in application/json*) by=" by=kuma" ;; esac
     if [ "$curl_rc" -eq 0 ]; then
@@ -169,9 +183,29 @@ kuma_push() {
   # 100 non-200 responses) — logging the code lets the next rollout's journal settle the class
   # directly instead of by inference. `journalctl --since ... | grep "push failed"` then reads
   # the actual class. Neither value can carry the push token; both are numbers, and `by=kuma`
-  # is a fixed word derived from the content type, never from the body.
+  # is a fixed word derived from the content type. Kuma's own reason goes on the line before it
+  # (header above).
+  if [ -n "$by" ]; then
+    kuma_msg=$(_kuma_reply_msg "$body" "${push_url##*/}")
+    [ -z "$kuma_msg" ] || logger -t "$tag" "push rejected by kuma (http=${http_code}): ${kuma_msg}"
+  fi
   logger -t "$tag" "push failed (http=${http_code} rc=${curl_rc}${by}) (status=${status}: ${msg})"
   return 0
+}
+
+# _kuma_reply_msg BODY TOKEN
+#
+# Prints the `msg` string of Kuma's JSON push reply, `{"ok":false,"msg":"..."}`, with TOKEN
+# replaced by `<token>`, on one line of at most 300 characters. Prints nothing when BODY has no
+# `msg`. A regex rather than `jq`, which the Pi does not carry; JSON escapes stay as written,
+# which keeps the value on one line. 300 bounds what one syslog line spends on a SQL error.
+_kuma_reply_msg() {
+  local body="$1" token="$2" out
+  local -r re='"msg"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)"'
+  [[ $body =~ $re ]] || return 0
+  out=${BASH_REMATCH[1]}
+  [ -z "$token" ] || out=${out//"$token"/<token>}
+  printf '%s' "${out:0:300}"
 }
 
 # boot_grace_active GRACE_S TAG

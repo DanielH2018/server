@@ -20,8 +20,9 @@ any OTHER 4xx, in particular the 404 above. A no-router 404 and a bad-token 404 
 code, so a genuinely bad token burns the retry budget before its log line appears — the
 same trade the sibling cron `crowdsec-update-home-allowlist.sh.j2` accepts. The final line
 says which of the two it was: Kuma's own rejection is `application/json`, Traefik's
-no-router page is `text/plain`, and the library appends `by=kuma` from the content type (the
-body stays discarded). The retry budget is three attempts: a single 30s backoff is under the
+no-router page is `text/plain`, and the library appends `by=kuma` from the content type. Kuma
+answers 404 for any exception, so on a final `by=kuma` failure the library also logs Kuma's own
+`msg`, token redacted, on the line before (#4481). The retry budget is three attempts: a single 30s backoff is under the
 31s longest endpoint-less window measured, so a lone retry could still land inside the
 outage; three attempts at a fixed 30s backoff put the second retry at t=60s, ~2x that
 window. Each behaviour below is therefore guarded by an accept/reject pair.
@@ -43,9 +44,10 @@ _CURL_STUB_STDERR = '[[ "${RCS[$idx]}" == 0 ]] || echo "curl: (${RCS[$idx]}) stu
 def _run_push(tmp_path, responses, extra_prelude=""):
     """Run kuma_push with `curl` stubbed to return `responses` in sequence, one per call.
 
-    Each response is an (http_code, curl_rc) pair: http_code is what `-w '%{http_code}
-    %{content_type}'` would have printed to stdout — the bare code, or the code, a space and a
-    content type — and curl_rc is curl's own exit status. curl sits as the last stage of
+    Each response is an (http_code, curl_rc) pair: http_code is what curl would have printed to
+    stdout — the bare code, or the code, a space and a content type, optionally preceded by a
+    body and a newline as `-w '\n%{http_code} %{content_type}'` writes it — and curl_rc is
+    curl's own exit status. curl sits as the last stage of
     `printf ... | curl ...` inside a `$(...)` command substitution, which runs in a subshell, so
     the stub can't set a variable back into the caller — it records each call as a line in a
     file instead, the same way the production pipeline's own side effect (the HTTP request)
@@ -57,17 +59,18 @@ def _run_push(tmp_path, responses, extra_prelude=""):
     sleeps_file.write_text("")
     logs_file = tmp_path / "logs"
     logs_file.write_text("")
-    codes = " ".join('"%s"' % code for code, _ in responses)
+    # One file per response, so a body's quotes and newlines reach the stub byte for byte.
+    for i, (code, _) in enumerate(responses):
+        (tmp_path / f"resp{i}").write_text(code)
     rcs = " ".join(str(rc) for _, rc in responses)
     script = f"""
     {extra_prelude}
     source {LIB}
-    CODES=({codes})
     RCS=({rcs})
     curl() {{
       idx=$(wc -l < "{calls_file}")
       echo x >> "{calls_file}"
-      printf '%s' "${{CODES[$idx]}}"
+      cat "{tmp_path}/resp$idx"
       {_CURL_STUB_STDERR}
       exit "${{RCS[$idx]}}"
     }}
@@ -174,8 +177,41 @@ def test_a_kuma_json_404_is_logged_as_answered_by_kuma(tmp_path):
     assert final == [
         "test-tag push failed (http=404 rc=0 by=kuma) (status=up: test-msg)"
     ]
-    # Never the body: the field is a fixed word, so a Kuma message can't reach syslog through it.
-    assert not any("Monitor not found" in line for line in logs)
+    # No body, no reason line: the stub printed the -w line alone.
+    assert not any("push rejected by kuma" in line for line in logs)
+
+
+# Kuma 2.5.5 answers 404 for any exception in its push handler, not only an unknown token. The
+# 2026-10-11 reply, shortened, with the push token planted in the SQL the way a failed
+# `push_token = ?` lookup would inline it.
+_KUMA_DB_ERROR = (
+    '{"ok":false,"msg":"insert into `stat_hourly` values (4, \'secret-token\') - '
+    'SQLITE_CONSTRAINT: UNIQUE constraint failed: stat_hourly.monitor_id"}'
+    "\n404 application/json; charset=utf-8"
+)
+
+
+def test_kuma_reason_is_logged_on_its_own_line_with_the_token_redacted(tmp_path):
+    # ACCEPT (#4481): `by=kuma` alone read a DB error as a token mismatch. The reason line comes
+    # before the final line, which stays byte-identical for the swallowed-verdicts parser.
+    _result, _calls, _sleeps, logs = _run_push(tmp_path, [(_KUMA_DB_ERROR, 0)] * 3)
+    assert logs[-2:] == [
+        "test-tag push rejected by kuma (http=404): insert into `stat_hourly` values "
+        "(4, '<token>') - SQLITE_CONSTRAINT: UNIQUE constraint failed: stat_hourly.monitor_id",
+        "test-tag push failed (http=404 rc=0 by=kuma) (status=up: test-msg)",
+    ]
+    assert not any("secret-token" in line for line in logs)
+    # `probe.py alerts` counts `status=down` lines as episodes; the reason line carries none.
+    assert "status=" not in logs[-2]
+
+
+def test_a_traefik_body_is_never_logged_as_a_kuma_reason(tmp_path):
+    # REJECT (the pair): Traefik's no-router page has a body too, but it is not Kuma answering.
+    _result, _calls, _sleeps, logs = _run_push(
+        tmp_path, [('{"msg":"not kuma"}\n404 text/plain; charset=utf-8', 0)] * 3
+    )
+    assert logs[-1] == "test-tag push failed (http=404 rc=0) (status=up: test-msg)"
+    assert not any("not kuma" in line for line in logs)
 
 
 def test_a_traefik_text_404_is_not_attributed_to_kuma(tmp_path):
