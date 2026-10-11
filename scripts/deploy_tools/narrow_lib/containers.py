@@ -28,7 +28,9 @@ _FILTER = re.compile(r"\s*\|\s*(\w+)")
 # here reads every field: `filter_by_platform` and `selectattr` return whole entries, and the
 # template then reads whatever it likes from them. `name` is in every row because each filter
 # finds its entry by name. `test_narrow_containers_fields.py` derives each row from the filter's
-# own source and fails when a row omits a key the filter reads.
+# own source. It fails when a row omits a key the filter reads, and when the filter reads an
+# entry by any route other than a literal key (a computed key, a loop over the entry, handing
+# it to a call), unless that test vets the route.
 FILTER_FIELDS: dict[str, frozenset[str]] = {
     "authelia_service_rules": frozenset(
         {"auth_tier", "hostname", "name", "networks", "use_authelia"}
