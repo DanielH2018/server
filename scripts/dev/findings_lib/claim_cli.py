@@ -244,7 +244,7 @@ def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Prints every open claim: issue, worktree, live or stale, and why.
 
     `--worktree` narrows the rows to one orchestrator's own: the claims its branch holds, and
-    those held by the batch branches its `fanout_place.py launch` runs started. A batch in
+    those held by the batch branches its `fanout.py place launch` runs started. A batch in
     this repo is claimed under the orchestrator's branch, so the branch alone covers it; a
     batch in another register is claimed under its own branch, which only the run manifest
     ties back to the orchestrator. The rows it drops are counted, never hidden silently:

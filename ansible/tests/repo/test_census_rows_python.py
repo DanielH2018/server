@@ -428,7 +428,7 @@ ROWS = (
             f"scripts/{rel}"
             for rel in (
                 "dev/prune_worktrees.py",
-                "dev/fanout_place.py",
+                "dev/fanout_lib/place.py",
                 "dev/pytest_shard.py",
                 "dev/fanout_lib/clean.py",
                 "dev/fanout_lib/transport.py",

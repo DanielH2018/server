@@ -1,7 +1,7 @@
 """The claims a fan-out takes under the orchestrator's own branch, and the batch specs they cover.
 
-`fanout_place.py launch` claims this repo's issues itself, batch by batch, immediately before
-each batch's agent starts; `fanout_place.py claim` takes the same claims for an orchestrator
+`fanout.py place launch` claims this repo's issues itself, batch by batch, immediately before
+each batch's agent starts; `fanout.py place claim` takes the same claims for an orchestrator
 that spawns its own subagents (#3695). Another repo's batches are claimed under their own
 branch instead, by `fanout_lib.launch`.
 """
@@ -179,7 +179,7 @@ def release_for_orchestrator(tools: Tools, issues: list[int], holder: str) -> st
 
 
 def claim_all(tools: Tools, batches: dict[str, list[int]], target: Target) -> int:
-    """Claim every batch's issues under HEAD, launching nothing; `fanout_place.py claim`.
+    """Claim every batch's issues under HEAD, launching nothing; `fanout.py place claim`.
 
     Returns:
         The exit code: 0 when every issue was claimed, 3 when any was refused, 1 when HEAD

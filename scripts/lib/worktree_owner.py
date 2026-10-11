@@ -6,7 +6,7 @@ still says whose it is. The agent user's login profile sets `CLAUDE_WORKTREE_PRE
 EnterWorktree then names its branches `worktree-<prefix>+<slug>`; the operator's environment
 leaves it unset, and its branches carry no `+` prefix.
 
-`findings.py` reads this before judging a claim (#4103), and `fanout_place.py` reads the
+`findings.py` reads this before judging a claim (#4103), and `fanout.py place` reads the
 same variable to name a batch branch, so the two cannot disagree on whose branch is whose.
 """
 

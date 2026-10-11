@@ -141,7 +141,7 @@ def test_a_planted_gitattributes_cannot_change_what_the_reset_writes(
 
 
 def test_a_replaced_report_file_still_gets_the_final_report(tmp_path):
-    from fanout_review import write_report
+    from fanout_lib.review_unit import write_report
 
     report = tmp_path / "report.json"
     report.write_text("")

@@ -4,7 +4,7 @@
 `roles/setup/claude_code/tasks/agent_peers.yml` gives the key host's agent the key and the ssh
 config, and `agent_ssh_login.yml` authorizes that key on each peer that switches the login on.
 Each test pins one leg. A leg that slips fails no deploy: the login either stops working,
-which `fanout_place.py read` reports, or works with more reach than the design gives it.
+which `fanout.py place read` reports, or works with more reach than the design gives it.
 
 Run: uv run pytest ansible/tests/setup/test_claude_agent_ssh_login.py
 """
