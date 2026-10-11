@@ -95,7 +95,10 @@ REFUSALS = {
     "a path that needs approval": (
         {
             "pr_files": [
-                {"filename": "ansible/roles/setup/claude_code/defaults/main.yml"}
+                {
+                    "status": "modified",
+                    "filename": "ansible/roles/setup/claude_code/defaults/main.yml",
+                }
             ]
         },
         "need the operator's approval: ansible/roles/setup/claude_code/defaults/main.yml",
@@ -104,6 +107,7 @@ REFUSALS = {
         {
             "pr_files": [
                 {
+                    "status": "renamed",
                     "filename": "docs/s.yml",
                     "previous_filename": "ansible/vars/secrets.yml",
                 }
@@ -113,7 +117,7 @@ REFUSALS = {
     ),
     # Not on the approval list: the landing process imported it, which is what refuses it.
     "a module the landing imports": (
-        {"pr_files": [{"filename": "scripts/lib/gh.py"}]},
+        {"pr_files": [{"status": "modified", "filename": "scripts/lib/gh.py"}]},
         "need the operator's approval: scripts/lib/gh.py",
     ),
     "a held deployer": ({"state": {"hold_sha": "deadbeef"}}, "holding deadbeef"),
@@ -127,11 +131,15 @@ REFUSALS = {
         "head moved during the checks",
     ),
     "a file entry of the wrong shape": (
-        {"pr_files": [{"filename": 7}]},
+        {"pr_files": [{"status": "modified", "filename": 7}]},
         "could not list the PR's files: unparseable gh output",
     ),
     "a file list at GitHub's cap": (
-        {"pr_files": [{"filename": f"docs/{i}.md"} for i in range(3000)]},
+        {
+            "pr_files": [
+                {"status": "modified", "filename": f"docs/{i}.md"} for i in range(3000)
+            ]
+        },
         "listing cap",
     ),
 }
@@ -247,7 +255,10 @@ def test_the_verdict_file_reads_pending_until_the_landing_ends(monkeypatch, tmp_
 
 APPROVER = "operator-login"
 _CHANGES_AN_APPROVAL_PATH = [
-    {"filename": "ansible/roles/setup/claude_code/defaults/main.yml"}
+    {
+        "status": "modified",
+        "filename": "ansible/roles/setup/claude_code/defaults/main.yml",
+    }
 ]
 
 
@@ -356,9 +367,15 @@ def _gate_hits(*paths, previous=None):
         "lib.gh": _module("lib.gh", str(checkout / "scripts/lib/gh.py")),
         "json": _module("json", "/usr/lib/python3.14/json/__init__.py"),
     }
-    entries = [{"filename": p} for p in paths]
+    entries = [{"status": "modified", "filename": p} for p in paths]
     if previous:
-        entries.append({"filename": "docs/moved.py", "previous_filename": previous})
+        entries.append(
+            {
+                "status": "renamed",
+                "filename": "docs/moved.py",
+                "previous_filename": previous,
+            }
+        )
     files = [parse_file(e) for e in entries]
     return policy.gate_hits(files, checkout, modules, [str(checkout / "scripts")])
 
@@ -420,5 +437,5 @@ def test_the_real_landing_process_counts_its_shared_modules():
         "scripts/deploy_tools/narrow_lib/paths.py",
         "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
     ]
-    files = [parse_file({"filename": p}) for p in members]
+    files = [parse_file({"status": "modified", "filename": p}) for p in members]
     assert policy.gate_hits(files, policy.CHECKOUT, sys.modules, sys.path) == members
