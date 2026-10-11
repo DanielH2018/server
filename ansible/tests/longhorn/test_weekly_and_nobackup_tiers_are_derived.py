@@ -14,6 +14,8 @@ import pytest
 
 from _helpers import load_defaults
 from lib.repo_paths import K3S_ROLE
+import longhorn_groups
+from ansible.errors import AnsibleFilterError
 from lib.service_tiers import resolved_tier_lists
 
 # Each volume of the replaced weekly list, with its index mod 7 in that list.
@@ -77,3 +79,42 @@ def test_the_nobackup_set_is_the_list_it_replaced():
     ]
     assert len(derived) == len(set(derived)), derived
     assert set(derived) == _REPLACED_NOBACKUP
+
+
+# ── error shape (#4505) ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("name", "args"),
+    [
+        ("backup_group_label", ("no-such-group",)),
+        ("weekly_backup_group", (9,)),
+        ("weekly_backup_shard", ("ns/absent", {})),
+        ("longhorn_weekly_claims", ([{"weekly_backup_claims": {"data": 9}}], "ns")),
+        (
+            "longhorn_weekly_claims",
+            (
+                [
+                    {"weekly_backup_claims": {"data": 1}},
+                    {"weekly_backup_claims": {"data": 2}},
+                ],
+                "ns",
+            ),
+        ),
+        ("longhorn_backup_name", ("no_such_key",)),
+    ],
+    ids=[
+        "unknown-group",
+        "shard-out-of-range",
+        "not-weekly",
+        "claim-shard-out-of-range",
+        "claim-declared-twice",
+        "unknown-name",
+    ],
+)
+def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter(name, args):
+    """A render failure names the filter that refused, through the filter Ansible calls."""
+    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+        longhorn_groups.FilterModule().filters()[name](*args)
+    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
+    assert str(caught.value).startswith(f"{name}: "), str(caught.value)

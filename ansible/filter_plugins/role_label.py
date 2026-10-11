@@ -18,10 +18,13 @@ the prune deleting every live object that file used to declare.
 Only `metadata.labels` changes. A Deployment's `spec.selector` and pod-template labels stay as
 rendered, so labelling a workload rolls no pods and touches no Service selector.
 
-No Ansible import, so the tests call the same function the playbook runs. Ansible wraps a
-filter's `ValueError` in its own error, which fails the render task before any apply.
+No Ansible import at load time, so the tests call the same function the playbook runs.
+`FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
+`AnsibleFilterError("homelab_role_label: ...")` and fails the render task before any apply
+(#4505).
 """
 
+import functools
 import re
 
 import yaml
@@ -104,7 +107,7 @@ def homelab_role_label(text: str, role: str) -> str:
     hand that object to another role's prune.
     """
     if not role:
-        raise ValueError("homelab_role_label needs the role name to stamp")
+        raise ValueError("needs the role name to stamp")
     # ansible-core passes a templated value as a tagged `str` subclass, which SafeDumper
     # refuses to represent ("cannot represent an object").
     role = str(role)
@@ -140,6 +143,27 @@ def homelab_role_label(text: str, role: str) -> str:
     )
 
 
+def _as_filter(func):
+    """`func` as Ansible calls it: a ValueError re-raised as `AnsibleFilterError`.
+
+    The message opens with `<func's name>: `, which is the name the filter registers under.
+    The prefix names the filter that refused, since a render failure otherwise reaches the
+    operator as a bare message under the task's template path (#4480). The import is deferred
+    so the module still loads where Ansible is not installed.
+    """
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except ValueError as exc:
+            from ansible.errors import AnsibleFilterError
+
+            raise AnsibleFilterError(f"{func.__name__}: {exc}") from exc
+
+    return wrapped
+
+
 class FilterModule:
     def filters(self):
-        return {"homelab_role_label": homelab_role_label}
+        return {"homelab_role_label": _as_filter(homelab_role_label)}

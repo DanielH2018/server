@@ -27,9 +27,11 @@ monitor (#3985). The pusher then gets HTTP 404 and nothing pages. uptime-kuma's 
 over it so the deploy fails instead.
 
 No Ansible import, so `probe_lib/kuma_table_loop.py` and the status-page census read the same
-function the playbook runs. Ansible wraps a filter's `ValueError` in its own error.
+function the playbook runs. `FilterModule` registers each filter through `_as_filter`, so a
+refusal reaches the operator as `AnsibleFilterError("<filter>: ...")` (#4505).
 """
 
+import functools
 import re
 
 # The keys a `kuma:` mapping may carry. A misspelt one would otherwise be ignored and the
@@ -101,9 +103,30 @@ def kuma_malformed_push_tokens(declarations):
     )
 
 
+def _as_filter(func):
+    """`func` as Ansible calls it: a ValueError re-raised as `AnsibleFilterError`.
+
+    The message opens with `<func's name>: `, which is the name the filter registers under.
+    The prefix names the filter that refused, since a render failure otherwise reaches the
+    operator as a bare message under the task's template path (#4480). The import is deferred
+    so the module still loads where Ansible is not installed.
+    """
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except ValueError as exc:
+            from ansible.errors import AnsibleFilterError
+
+            raise AnsibleFilterError(f"{func.__name__}: {exc}") from exc
+
+    return wrapped
+
+
 class FilterModule:
     def filters(self):
         return {
-            "kuma_ingress_monitors": kuma_ingress_monitors,
-            "kuma_malformed_push_tokens": kuma_malformed_push_tokens,
+            "kuma_ingress_monitors": _as_filter(kuma_ingress_monitors),
+            "kuma_malformed_push_tokens": _as_filter(kuma_malformed_push_tokens),
         }
