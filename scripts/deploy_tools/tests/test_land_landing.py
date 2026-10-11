@@ -196,3 +196,13 @@ def test_an_in_flock_wait_never_overwrites_a_holder_already_named(landing):
     ln.note_in_flock_wait(9, "somebody else")
     assert ln.ledger.lock_waited == 69
     assert ln.ledger.lock_holder == "42 flock deploy"
+
+
+def test_die_takes_no_default_exit_code():
+    """A default of 2 collided with three other meanings of 2 (#4451): every caller names one."""
+    import inspect
+
+    from deploy_tools.land_lib.landing import Landing
+
+    rc = inspect.signature(Landing.die).parameters["rc"]
+    assert rc.default is inspect.Parameter.empty

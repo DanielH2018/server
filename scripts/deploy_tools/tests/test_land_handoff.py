@@ -7,6 +7,7 @@ the fake did not write during the start stands for an earlier landing's.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_handoff.py
 """
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import pytest
 import land
 from deploy_tools.land_lib import handoff
 from deploy_tools.land_lib.options import HANDOFF_ENV, PRIMARY_ENV
+from deploy_tools.land_lib.outcome import VERDICTS
 from deploy_tools.land_lib.tools import Tools
 from lib.exit_codes import LAND_BAD_ARGS, LAND_GAVE_UP
 
@@ -174,3 +176,38 @@ def test_land_sh_hands_off_rather_than_landing(monkeypatch, tmp_path):
     tools = Tools(systemctl=systemctl, gh_json=no_gh, gh=no_gh)
     assert land.main(["--pr", PR, "--arm-merge", "--await-merge"], tools=tools) == 1
     assert systemctl.calls[0] == ("start", INSTANCE)
+
+
+_VERDICT_LINE = re.compile(r"^VERDICT: (\S+) \(", re.MULTILINE)
+
+
+def _printed_verdicts(out: str) -> list[str]:
+    return _VERDICT_LINE.findall(out)
+
+
+def test_a_start_that_outlasts_the_wait_prints_a_verdict_line(tmp_path, capsys):
+    """An exit-75 outcome must name a verdict, or the board reads it as lock contention."""
+    rc, _ = _hand_off(tmp_path, raises=subprocess.TimeoutExpired("systemctl", 1))
+    assert rc == LAND_GAVE_UP
+    printed = _printed_verdicts(capsys.readouterr().out)
+    assert len(printed) == 1 and printed[0] in VERDICTS, printed
+
+
+def test_a_unit_that_ends_without_a_verdict_still_prints_one(tmp_path, capsys):
+    rc, _ = _hand_off(
+        tmp_path,
+        stderr="Failed to start claude-land@3633.service: Access denied",
+    )
+    assert rc == 1
+    printed = _printed_verdicts(capsys.readouterr().out)
+    assert len(printed) == 1 and printed[0] in VERDICTS, printed
+
+
+def test_a_stopped_line_from_the_unit_still_prints_a_verdict(tmp_path, capsys):
+    line = "STOPPED: rc=1 PR #3633 — the landing raised before it reached a verdict"
+    rc, _ = _hand_off(
+        tmp_path, line=line, status={"Result": "exit-code", "ExecMainStatus": "1"}
+    )
+    assert rc == 1
+    printed = _printed_verdicts(capsys.readouterr().out)
+    assert len(printed) == 1 and printed[0] in VERDICTS, printed
