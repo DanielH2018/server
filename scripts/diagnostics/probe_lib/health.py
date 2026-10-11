@@ -447,8 +447,10 @@ def run_health(
     served_name = served_cluster() if served is _UNSET else cast("str | None", served)
     refusal = cluster_refusal(cluster, served_name)
     if refusal:
-        print(f"{container}: {refusal}")
-        return 1
+        # No workload was looked at, so this is a read that did not happen, not a verdict
+        # about the container (#4468).
+        print(f"{container}: {refusal}", file=_sys.stderr)
+        return PROBE_UNREADABLE
 
     ns = core.k8s_namespace()
     try:

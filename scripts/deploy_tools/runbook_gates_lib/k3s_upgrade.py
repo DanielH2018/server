@@ -25,7 +25,8 @@ Exit codes:
   0      every gate passed
   1..4   the first gate that failed, by its number above
   69     the cluster could not be asked (no kubectl, no readable kubeconfig, wrong cluster,
-         or a list that returned nothing parseable)
+         or a list that returned nothing parseable), or a deployer marker exists and could
+         not be read
 
 Usage:
     uv run python scripts/deploy_tools/runbook_gates.py k3s-upgrade
@@ -106,8 +107,11 @@ def held_sha(state_dir: str | os.PathLike) -> list[str]:
     An absent or empty `hold_sha` is a cleared hold — that is how the deployer clears it. An
     absent state DIRECTORY is not: it means this is not the deploy host, and reading that as
     "no hold" is exactly the vacuous pass the gate exists to refuse. A marker that exists and
-    cannot be read refuses too, the `owed` ledger included, because the snapshot reads them
-    together.
+    cannot be read, the `owed` ledger included, raises `Unreadable`: the runner then exits
+    `EX_UNAVAILABLE` rather than this gate's number, which would claim a hold is set (#4468).
+
+    Raises:
+        Unreadable: a marker under `state_dir` exists and could not be read.
     """
     state_dir = _Path(state_dir)
     if not state_dir.is_dir():
@@ -117,7 +121,9 @@ def held_sha(state_dir: str | os.PathLike) -> list[str]:
     try:
         snap = DeployerSnapshot.load(state_dir)
     except (OSError, UnicodeDecodeError) as exc:
-        return [f"<cannot read the deployer's state under {state_dir}: {exc}>"]
+        raise Unreadable(
+            f"cannot read the deployer's state under {state_dir}: {exc}"
+        ) from exc
     if not snap.hold:
         return []
     plane = "; ".join(snap.held_planes)
