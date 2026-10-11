@@ -242,3 +242,67 @@ def test_a_module_from_another_checkout_is_reported(scratch):
     assert any(
         p.startswith("lib.worktrees loaded from ") for p in problems(result, scratch)
     )
+
+
+# A review pipeline runs every phase after the implementer with each hook pointed at a held
+# copy outside the worktree (`fanout_lib.review.held_hooks`). A hook that finds `scripts/`
+# through its own `__file__` finds the held copy's, so the copy must carry it (#4420).
+@pytest.fixture(scope="module")
+def held(tmp_path_factory) -> Path:
+    from fanout_lib.review.held_hooks import read_hooks, write_hooks
+
+    root = tmp_path_factory.mktemp("held")
+    write_hooks(read_hooks(REPO), root)
+    return root
+
+
+@pytest.mark.parametrize(
+    ("hook", "mode"),
+    sorted(
+        (hook, mode)
+        for hook, modes in CENSUS.items()
+        if hook != "session-health.py"
+        for mode in modes
+    ),
+)
+def test_a_held_hook_imports_its_first_party_modules_from_the_held_copy(
+    held, hook, mode
+):
+    found = problems(probe(held, hook, mode), held)
+    assert not found, f"{hook} cannot import from the held copy:\n" + "\n".join(found)
+
+
+def _held_ssh_hosts(root: Path) -> str:
+    """What block-footguns' `_ssh_hosts` returns when run from the copy at `root`."""
+    hooks = root / ".claude/hooks"
+    code = (
+        f"import runpy, sys; sys.path[0] = {str(hooks)!r}; "
+        f"print(runpy.run_path({str(hooks / 'block-footguns.py')!r})['_ssh_hosts']())"
+    )
+    env = {
+        k: v for k, v in os.environ.items() if k not in {"PYTHONPATH", "VIRTUAL_ENV"}
+    }
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env=env,
+        cwd=REPO,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    return proc.stdout
+
+
+def test_the_held_ssh_guard_reads_the_inventory_hosts(held):
+    assert "daniel-box" in _held_ssh_hosts(held)
+
+
+def test_a_held_copy_of_the_hooks_alone_leaves_the_ssh_guard_with_no_hosts(tmp_path):
+    shutil.copytree(
+        REPO / ".claude/hooks",
+        tmp_path / ".claude/hooks",
+        ignore=shutil.ignore_patterns("tests"),
+    )
+    assert _held_ssh_hosts(tmp_path).strip() == "()"

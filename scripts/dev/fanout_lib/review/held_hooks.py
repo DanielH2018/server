@@ -58,23 +58,30 @@ HELD_SECRET_PATHS = "secret_bearing_host_paths.json"
 # still gets the banner from its own project settings; a resumed phase already holds it in
 # its transcript.
 UNHELD_EVENTS = ("SessionStart",)
+# The trees beside `HOOKS_DIR` that a hook reaches through its own `__file__`, with the files
+# held from each: `block-footguns.py` and `_facts_line.py` import from `scripts/`, and the
+# inventory is data `lib.ansible_inventory` reads (#4420).
+HELD_TREES = ((Path("scripts"), "*.py"), (Path("ansible") / "inventory", "*"))
 
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 
 def read_hooks(root: Path) -> dict[str, bytes]:
-    """Every file a hook under `root` can run or import, by path relative to `HOOKS_DIR`."""
-    hooks = root / HOOKS_DIR
-    return {
-        path.relative_to(hooks).as_posix(): path.read_bytes()
-        for path in sorted(hooks.rglob("*"))
-        if path.is_file()
-        and not UNSNAPSHOTTED & set(path.relative_to(hooks).parts[:-1])
-    }
+    """Every file a held hook can run, import or read, by path relative to `root`.
+
+    That is `HOOKS_DIR`, plus the `HELD_TREES` a hook finds through its own `__file__`.
+    """
+    held = {}
+    for top, pattern in ((HOOKS_DIR, "*"), *HELD_TREES):
+        for path in sorted((root / top).rglob(pattern)):
+            parts = path.relative_to(root / top).parts[:-1]
+            if path.is_file() and not UNSNAPSHOTTED & set(parts):
+                held[path.relative_to(root).as_posix()] = path.read_bytes()
+    return held
 
 
 def write_hooks(hooks: dict[str, bytes], root: Path) -> Path:
-    """Replace `root`'s hooks directory with `hooks` and return its `fanout-stop.py`.
+    """Replace `root`'s held directories with `hooks` and return its `fanout-stop.py`.
 
     Every process here runs as one user, so no directory is out of the agent's reach.
     Rewriting the bytes before each phase is what makes the copy the pipeline's: an edit the
@@ -82,15 +89,15 @@ def write_hooks(hooks: dict[str, bytes], root: Path) -> Path:
     removed first because it is each hook's `sys.path[0]`, so a planted `json.py` would
     shadow the stdlib module for every hook that imports it.
     """
-    target = root / HOOKS_DIR
-    if target.exists():
-        shutil.rmtree(target)
+    for top in (HOOKS_DIR, *(tree for tree, _ in HELD_TREES)):
+        if (root / top).exists():
+            shutil.rmtree(root / top)
     for name, data in hooks.items():
-        path = target / name
+        path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         path.chmod(0o555 if name.endswith(".sh") else 0o444)
-    return target / "fanout-stop.py"
+    return root / HOOKS_DIR / "fanout-stop.py"
 
 
 def pointed_settings(settings: str, root: Path) -> dict:
@@ -127,4 +134,4 @@ def held_secret_paths(run: Runner, root: Path) -> dict[str, bytes]:
         dest, sep, names = line.partition("\t")
         if sep:
             paths[dest] = names.split(",")
-    return {HELD_SECRET_PATHS: json.dumps(paths).encode()}
+    return {(HOOKS_DIR / HELD_SECRET_PATHS).as_posix(): json.dumps(paths).encode()}

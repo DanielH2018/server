@@ -327,9 +327,11 @@ def test_every_phase_runs_the_prompt_and_hooks_read_at_start(tmp_path):
     ]
     pipeline, run = _pipeline(tmp_path, reports)
     pipeline.headless_prompt = "PROMPT AT START"
-    pipeline.hooks = dict(pipeline.hooks, **{"fanout-stop.py": b"HOOK AT START"})
-    assert "hooklib/worktree_lines.py" in pipeline.hooks
-    assert not [name for name in pipeline.hooks if name.startswith("tests/")]
+    pipeline.hooks = dict(
+        pipeline.hooks, **{".claude/hooks/fanout-stop.py": b"HOOK AT START"}
+    )
+    assert ".claude/hooks/hooklib/worktree_lines.py" in pipeline.hooks
+    assert not [name for name in pipeline.hooks if "/tests/" in name]
 
     hooks = pipeline.hook_root / ".claude" / "hooks"
     hook = hooks / "fanout-stop.py"
