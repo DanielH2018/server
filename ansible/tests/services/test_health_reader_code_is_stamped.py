@@ -194,10 +194,26 @@ def test_a_loopless_copy_and_a_lib_copy_with_no_pair_are_flagged(tmp_path):
         "    src: reader.py\n"
         "    dest: /opt/synthetic-health/reader.py\n"
     )
-    assert copied_into(tasks.parent, "/opt/synthetic-health", tmp_path) == {
-        "/opt/synthetic-health/reader_lib/reader_logic.py": (
-            "k8s/synthetic/files/reader_lib/reader_logic.py"
-        ),
-        "/opt/synthetic-health/reader.py": "k8s/synthetic/files/reader.py",
-    }
-    assert not stamped_in(tasks.parent)
+    copied = copied_into(tasks.parent, "/opt/synthetic-health", tmp_path)
+    assert sorted(set(copied) - set(stamped_in(tasks.parent))) == [
+        "/opt/synthetic-health/reader.py",
+        "/opt/synthetic-health/reader_lib/reader_logic.py",
+    ]
+
+    # The accepting half: once both are stamped at the paths the copies write, nothing is
+    # missing, so a scan that flagged every subdirectory copy fails here.
+    (tasks / "main.yml").write_text(
+        (tasks / "main.yml").read_text()
+        + "- name: Record the deployed code\n"
+        + '  ansible.builtin.import_tasks: "stamp_deployed.yml"\n'
+        + "  vars:\n"
+        + "    stamp_deployed_pairs:\n"
+        + "      - live: /opt/synthetic-health/reader.py\n"
+        + "        src: k8s/synthetic/files/reader.py\n"
+        + "      - live: /opt/synthetic-health/reader_lib/reader_logic.py\n"
+        + "        src: k8s/synthetic/files/reader_lib/reader_logic.py\n"
+    )
+    stamped = stamped_in(tasks.parent)
+    copied = copied_into(tasks.parent, "/opt/synthetic-health", tmp_path)
+    assert not set(copied) - set(stamped)
+    assert all(stamped[live] == src for live, src in copied.items())
