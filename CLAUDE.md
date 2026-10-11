@@ -126,7 +126,12 @@ a fan-out batch with a review phase, is an instruction from the user and wins ov
 
 Hand the merge and the follow-through to `land.sh`. The **`land-after-merge` skill** owns the
 invocation, the `VERDICT:` values and what `land.sh` does with the tick, so take the command
-from there. **Do not hand-poll CI and do not hand-merge.**
+from there. **Do not hand-poll CI.**
+
+**You may arm GitHub's auto-merge on your own PR** with `gh pr merge --auto --squash <n>`, from
+the operator's account or the agent's. It merges the PR once CI is green, even after your
+session ends. It does not deploy, so still run the `land.sh` command afterwards; on a merged PR
+its arm is a no-op and it goes on to deploy. Arm it only on a PR you were asked to ship.
 
 A `cancelled` CI run means *no verdict for this SHA*, never *this SHA is bad*.
 `docs/landing.md` owns the rule, and

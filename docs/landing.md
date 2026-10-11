@@ -57,10 +57,11 @@ added there appears here without an edit.
 
 ## Arming the merge, and the two command shapes the classifier refuses
 
-**`--arm-merge` readies the merge inside the script.** A bare `gh pr merge` sits on the
-ask list (`Bash(gh pr merge:*)`), and auto mode suspends the allow list — an unattended session
-has nobody to answer that prompt, and it times out as a denial. Three attempts, three denials,
-on 2026-09-03 (issue #979). `land.sh --arm-merge` is not that command: its own text never
+**`--arm-merge` readies the merge inside the script.** A bare `gh pr merge` once sat on the
+ask list (`Bash(gh pr merge:*)`), and an unattended session has nobody to answer that prompt, so
+it timed out as a denial. Three attempts, three denials, on 2026-09-03 (issue #979). Since
+2026-10-11 `gh pr merge --auto` is allowed, so a session may arm GitHub's auto-merge; a plain
+`gh pr merge` still asks. `land.sh --arm-merge` is not that command: its own text never
 contains `gh pr merge`, so it reaches the classifier as the single script invocation the
 worktree-containment check already accepts.
 
@@ -75,13 +76,16 @@ agent branch fence still covered master and an armed PR sat `BLOCKED` because au
 applies a bypass (#3911). Since 2026-10-11 the fence excludes master and no rule needs a
 review, so a PR armed for auto-merge by hand, from either account, merges once CI is green.
 
-`--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because the direct merge
-would apply the operator's bypass to it. `--await-merge` merges the PR through the REST merge
-endpoint on the first poll where `await_ci` reads its head green, pinned to that head SHA. The
-REST endpoint applies the bypass, and a ruleset with no bypass actor, such as the master CI gate,
-still refuses the call until its checks pass. A refused merge is printed once and the wait
-continues, so a caller who cannot bypass ends at `merge-timeout`. The direct merge needs both
-flags in one run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
+**A PR armed for auto-merge still needs a landing.** Auto-merge merges the PR and nothing
+more. Run the usual `land.sh --pr <n> --arm-merge --await-merge` afterwards: the arm is a no-op
+on a merged PR, and a PR still open is left for whichever merge fires first.
+
+`--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because someone asked for
+it to change. `--await-merge` merges the PR through the REST merge endpoint on the first poll
+where `await_ci` reads its head green, pinned to that head SHA. The master CI gate still refuses
+the call until its checks pass. A refused merge is printed once and the wait continues, so a
+merge GitHub keeps refusing ends at `merge-timeout`. The direct merge needs both flags in one
+run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge

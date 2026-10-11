@@ -12,7 +12,7 @@ reasoning behind every rule below, and the incident that put it there, is
 
 ## The invocation
 
-One command. Do not write the redirect, do not poll CI, do not run `gh pr merge` yourself.
+One command. Do not write the redirect and do not poll CI.
 
 ```bash
 ./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>
@@ -24,6 +24,11 @@ commit, deploys that commit, kicks the tick, gates the health, and prints the la
 is the wait: it prints the landing's `VERDICT:` line and exits with the landing's own code.
 `land.sh` arms no PR for GitHub's auto-merge. Its direct merge is pinned to the head SHA it
 checked, which auto-merge cannot do (`docs/landing.md` has the detail).
+
+**Auto-merge is allowed, and it is not a landing.** `gh pr merge --auto --squash <n>` merges the
+PR once CI is green, from the operator's account or the agent's, with no review and no bypass.
+Use it when the merge should not wait on your session. Then run the command above as usual:
+`--arm-merge` on a merged PR is a no-op, and the landing deploys the merge commit.
 
 **A stale base costs one branch update first.** Before the merge, `land.sh` asks whether master
 changed any path since the PR's merge base. When it did, it merges master into the PR branch

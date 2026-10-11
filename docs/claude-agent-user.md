@@ -164,12 +164,13 @@ the hook-install task does not remove the hook. A broken hook refuses every agen
 - **`land.sh` merges every PR directly.** `land.sh --arm-merge` waits for CI, then merges
   through the REST endpoint, pinned to the head SHA it checked. It arms no auto-merge, because
   auto-merge merges whatever head is green when CI finishes, not the head the policy checked.
-- **Renovate's `platformAutomerge` is off,** for the same reason. Renovate's own direct merge
-  uses its bypass. Automerges therefore land on Renovate's next run rather than the moment CI
-  passes.
+- **Renovate's `platformAutomerge` is off.** It went off while the fence covered master, when
+  GitHub's auto-merge could not merge any PR. Renovate's own merge call lands an automerge on
+  its next run rather than the moment CI passes.
 - **The "agent branch fence" ruleset restricts branch writes.** It restricts creating, updating
-  and deleting every branch except `refs/heads/worktree-claude+**`. The admin role and Renovate
-  bypass it. The "Default" ruleset excludes that prefix too, so the agent can force-push and
+  and deleting every branch except `refs/heads/master` and `refs/heads/worktree-claude+**`. The
+  admin role and Renovate bypass it. The master CI gate's `pull_request` rule keeps master to
+  merged PRs. The "Default" ruleset excludes that prefix too, so the agent can force-push and
   delete its own branches. `EnterWorktree` turns `/` in a worktree name into `+`, so a
   `claude/<slug>` worktree gets the branch `worktree-claude+<slug>`.
 - **`github-ruleset-drift.sh` covers the branch fence,** including its bypass list.
@@ -577,7 +578,7 @@ operator can log in as `claude`, so only the operator can run the checks that st
 |---|---|---|
 | 1 | As `claude`, `id` lists none of the denied groups, `ls /home/ubuntu` is refused, `sudo -n true` fails, `kubectl get pods -A` works and `uv run pytest` passes. `prek --version` runs, and `~/server/.git/hooks/pre-commit` names `/var/lib/claude/.local/bin/prek`. | Turn `claude_code_agent_user_enabled` off. That locks the account and stops its units. It keeps the home, which holds the agent's clone and any unpushed work. |
 | 2 | As `claude`, a commit shows a good signature locally and `verified: true` on GitHub. A push to a `worktree-claude+` branch is accepted, and the PR is authored by `DanielClaudeBot`. The merge is refused at once by the CI gate, the branch fence and, until its deletion on 2026-10-11, the review gate. A push to a branch outside the prefix is refused with `Cannot create ref due to creations being restricted`. | Delete the branch fence, and revoke the token. |
-| 3 | A session as `claude` runs `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>` on three PRs. A deployable change ends in `VERDICT: settled` and the verdict file in `/var/lib/claude-land/<n>.verdict` ends with the same line. An approval-list path, a gate-imported module or an import shape such as a symlink refuses with `need the operator's approval: <path>`. After the operator approves the head, the lander logs `merged directly through the ruleset bypass`. | `claude_code_lander_enabled: false` removes the polkit rule and the unit. `claude` still opens PRs, and the operator lands them. |
+| 3 | A session as `claude` runs `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>` on three PRs. A deployable change ends in `VERDICT: settled` and the verdict file in `/var/lib/claude-land/<n>.verdict` ends with the same line. An approval-list path, a gate-imported module or an import shape such as a symlink refuses with `need the operator's approval: <path>`. After the operator approves the head, the lander logs `merged directly at the checked head`. | `claude_code_lander_enabled: false` removes the polkit rule and the unit. `claude` still opens PRs, and the operator lands them. |
 | 4 | From the phone, a session prints `id` (it must show `claude`), names the entries in the copied `MEMORY.md`, and writes an artifact and a new memory file. The artifact renders under `/a/daniel-box-claude/`, which proves the artifacts pod can traverse to the file. As `ubuntu`, `cat` of both new files succeeds. A permission error on the memory file means Claude Code created it `0600`, which `UMask=0027` cannot widen, so file a finding with `findings.py open`. `journalctl -u claude-memory-sync` shows a run that copied the file to daniel-server. | `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live sessions. |
 | 5 | As `claude` on daniel-box, `uv run python scripts/dev/fanout.py place read` prints a reading for both hosts, each with `signing=ok`. For the login alone, `uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage` succeeds, and homelab-ui renders a service page. | `claude_agent_ssh_login_enabled: false` in daniel-server's host_vars removes the key and the group. `claude_code_agent_user_enabled: false` there also expires the account and stops its linger. `claude_code_agent_homelab_ui_enabled: false` removes the browser, and deleting the `claude-agent` block from the authelia role revokes the login. |
 | 6 | Starting `claude` as `ubuntu` shows up as `claude_uid_processes{uid="1000"}` within one 30-second timer interval. | Delete the two lines in daniel-box's host_vars. `claude_code_login_uids` returns to uid 1000, and an empty `claude_code_watch_uids` stops the series and the page with it. |

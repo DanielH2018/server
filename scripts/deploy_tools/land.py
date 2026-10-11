@@ -36,7 +36,7 @@ does the same, but ``> "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1`` is still the who
 exit -- see ``_prepare_stdio``.
 
 WITH ``LAND_HANDOFF_UNIT`` SET, THIS SCRIPT LANDS NOTHING ITSELF. The ``claude`` agent user's
-profile sets it: that user cannot merge or deploy, so land.sh starts ``<unit>@<pr>.service``,
+profile sets it: that user cannot deploy, so land.sh starts ``<unit>@<pr>.service``,
 which lands the PR as the operator under the landing policy, and reports that landing's verdict
 and exit code as its own. ``--detach && cc-wait land <pr>`` works unchanged; ``--tags``,
 ``--since`` and ``--subject`` are refused. The mechanics are ``land_lib/handoff.py``.

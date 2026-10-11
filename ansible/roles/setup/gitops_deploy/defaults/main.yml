@@ -70,8 +70,8 @@ gitops_deploy_expected_ruleset_contexts:
   - prek (lint + validate + tests + secrets)
   - pull + boot changed images
   - renovate config validator
-# Nobody merges past the CI gate. land.sh's direct merge relies on that: the REST merge endpoint
-# applies a bypass, so an actor added here could merge an un-CI'd PR. Each entry is
+# Nobody merges past the CI gate. A bypass actor added here could merge an un-CI'd PR, through
+# land.sh's REST merge or any other merge call it makes. Each entry is
 # `<actor_type>:<actor_id>:<bypass_mode>`, as the rulesets API names them.
 gitops_deploy_ruleset_bypass_actors: []
 # The CI gate's pull_request rule: every change to master arrives as a PR, and none needs an
@@ -91,7 +91,7 @@ gitops_deploy_branch_ruleset_renovate_exclude: refs/heads/renovate/**
 # The fence ruleset ("agent branch fence", created 2026-10-05): creating, updating and deleting
 # a branch is restricted everywhere except the exclusions below. The agent's GitHub account is
 # not a bypass actor, so it cannot push onto a branch an operator session or Renovate opened,
-# where land.sh's admin merge would carry its commit to master unreviewed. An exclusion added to
+# where the next landing of that branch would carry its commit to master. An exclusion added to
 # the live ruleset is a branch the agent can push to, so the drift check compares the list
 # exactly. Master is excluded so that the agent's account can merge a PR, by auto-merge or
 # otherwise. The CI gate's pull_request rule still stops it pushing to master without a PR.

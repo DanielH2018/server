@@ -11,6 +11,7 @@ sessions do not.
 GitHub lets `{{ claude_code_agent_github_login }}` create, update and delete only branches whose
 name starts with `worktree-{{ claude_code_agent_worktree_prefix }}+`. The "agent branch fence"
 ruleset refuses every other push with a generic ruleset error that does not name the fence.
+Master is open to you only through a merged PR.
 
 `EnterWorktree` names a worktree's branch `worktree-<name>` and replaces each `/` in the name
 with `+`. So a worktree named `{{ claude_code_agent_worktree_prefix }}/<slug>` gets the branch
@@ -33,12 +34,13 @@ GitHub compares a pushed branch with the default branch. A branch based behind m
 
 ## Land a PR with the repo's own command
 
-You cannot merge your own PR: the review rule wants an approval from someone other than the
-last pusher, and you have no sudo to deploy. Land it anyway with the command the repo's
-`land-after-merge` skill gives, `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait
-land <n>`. As this user, `land.sh` hands the PR to `claude-land@<n>.service`, which lands it as
-the operator and reports that landing's verdict and exit code as its own. It refuses `--tags`,
-`--since` and `--subject`, because the unit decides what deploys.
+You can merge your own PR, and you may arm GitHub's auto-merge on it with
+`gh pr merge --auto --squash <n>`: no ruleset requires a review. You have no sudo, so you
+cannot deploy it. Land it with the command the repo's `land-after-merge` skill gives,
+`land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>`, whether or not you
+armed auto-merge. As this user, `land.sh` hands the PR to `claude-land@<n>.service`, which lands
+it as the operator and reports that landing's verdict and exit code as its own. It refuses
+`--tags`, `--since` and `--subject`, because the unit decides what deploys.
 
 The lander refuses a PR that changes a path on its approval list,
 `/etc/claude-land/approval-paths`. Those paths widen your own authority. It also refuses a PR
@@ -46,7 +48,8 @@ that changes a module the landing code imports, such as one under `scripts/lib/`
 code decides whether the next PR lands. When it refuses one,
 leave the PR open, tell the operator it needs their review, and stop. Once they approve the PR's
 head commit on GitHub, run the same command again. A push after their approval needs a new
-approval.
+approval. Do not arm auto-merge on a PR the lander refused: the operator allows it, but the
+refusal is the operator asking to see that change first.
 {% endif %}
 {% if claude_code_agent_operator_config or claude_code_agent_dotfiles %}
 
