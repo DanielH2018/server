@@ -11,8 +11,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_landing_hosts_at.py
 
 from pathlib import Path
 
-import land_platform
-import land_tags
+from deploy_tools.land_lib import land_platform
+from deploy_tools.land_lib import land_tags
 from lib.git_testing import git_out, init_repo
 from lib.render_guard import HOST_VARS_IN_TREE
 

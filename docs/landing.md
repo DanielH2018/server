@@ -13,7 +13,7 @@ decoder. This page carries the reasoning behind each rule, and the incident that
 **`--detach` and `cc-wait land` replace three hand-written steps.** `land_lib/detach.py`
 resolves `--since` and redirects the log, and its docstring explains why the child's exit code
 is the authority rather than a grep for `VERDICT:`. `cc-wait`'s `land` source
-(`scripts/deploy_tools/land_probe.py`) does the waiting.
+(`scripts/deploy_tools/land_lib/land_probe.py`) does the waiting.
 
 **`cc-wait` waits at most 570s, which fits a foreground Bash call.** It then exits 75 with the
 command that resumes the wait. Re-run that command, never `land.sh`, which would start a second

@@ -15,7 +15,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_doc_change_reaches_a_ver
 import pytest
 
 
-import land_tags
+from deploy_tools.land_lib import land_tags
 from _land_fakes import MERGE_SHA
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome

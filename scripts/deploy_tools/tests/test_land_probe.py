@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from deploy_tools import land_probe
+from deploy_tools.land_lib import land_probe
 from deploy_tools.land_lib.outcome import ABANDONED_WATCH_NOTE
 
 _SHIM = Path(__file__).resolve().parents[3] / ".claude" / "wait-sources" / "land"

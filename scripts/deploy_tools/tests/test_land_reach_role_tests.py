@@ -15,8 +15,8 @@ the answer, so a later narrowing of `tasks/` cannot silence it.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_role_tests.py
 """
 
-import land_reach
-import land_tags
+from deploy_tools.land_lib import land_reach
+from deploy_tools.land_lib import land_tags
 
 from lib.repo_paths import REPO as REPO_ROOT
 

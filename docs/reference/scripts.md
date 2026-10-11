@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-11 01:01 UTC
-generated_sha: b0c3303dc
+generated_at: 2026-10-11 01:12 UTC
+generated_sha: 0248ce38c
 ---
 
 !!! warning "Generated file — do not edit"
@@ -193,11 +193,11 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/kubectl.py` | lib | One way to run kubectl from a script, and every call names the cluster it must reach. | imported by _gates_fakes.py, arr.py, b2_ledger.py, cli_parser.py, export_grafana_dashboards.py, gen_infra_map.py, health.py, health_docker.py, k3s_etcd_restore_gates.py, k3s_upgrade_gates.py, kuma_live.py, live.py, longhorn.py, longhorn_cluster.py, longhorn_dr_gates.py, longhorn_upgrade_gates.py, monitors.py, pinned_rotation_gates.py, postflight.py, probe.py, readonly_rbac.py, runbook_gates.py, vip_placement.py | `test_kubectl.py` | — |
 | `scripts/diagnostics/probe_lib/kuma_live.py` | diagnostics | What the live Kuma says about itself: its pod's age and the monitors it holds. | imported by monitors.py, postflight.py | — | — |
 | `scripts/diagnostics/probe_lib/kuma_table_loop.py` | diagnostics | The two table loops in the static-monitors template, as `parse_declared_monitors` reads them. | imported by monitors.py | — | — |
-| `scripts/deploy_tools/land_platform.py` | deploy_tools | Which of a PR's derived tags its own changed paths PROVE are a k3s change. | imported by deploy.py, tools.py | `test_land_platform.py` | — |
-| `scripts/deploy_tools/land_reach.py` | deploy_tools | Which hosts a self-applied setup-role change still owes a hand, beyond the tick's own host. | imported by land_tags.py, tools.py | `test_land_reach.py` | — |
-| `scripts/deploy_tools/land_rerolls.py` | deploy_tools | Whether a later deploy re-rolled a landing's workloads under its health gate (#3812). | imported by tools.py | `test_land_rerolls.py` | — |
-| `scripts/deploy_tools/land_shared.py` | deploy_tools | The shared-role expansion a landing makes, and the #3124 narrowing. | imported by land_tags.py, tools.py | — | — |
-| `scripts/deploy_tools/land_tags.py` | deploy_tools | Derive deploy tags from a merged PR's own file list. | imported by _land_fakes.py, classify.py, land_platform.py, landing.py, shared_role_reach.py, tools.py | `test_land_tags.py` | — |
+| `scripts/deploy_tools/land_lib/land_platform.py` | deploy_tools | Which of a PR's derived tags its own changed paths PROVE are a k3s change. | imported by deploy.py, tools.py | — | — |
+| `scripts/deploy_tools/land_lib/land_reach.py` | deploy_tools | Which hosts a self-applied setup-role change still owes a hand, beyond the tick's own host. | imported by land_tags.py, tools.py | — | — |
+| `scripts/deploy_tools/land_lib/land_rerolls.py` | deploy_tools | Whether a later deploy re-rolled a landing's workloads under its health gate (#3812). | imported by tools.py | — | — |
+| `scripts/deploy_tools/land_lib/land_shared.py` | deploy_tools | The shared-role expansion a landing makes, and the #3124 narrowing. | imported by land_tags.py, precomputed.py, tools.py | — | — |
+| `scripts/deploy_tools/land_lib/land_tags.py` | deploy_tools | Derive deploy tags from a merged PR's own file list. | imported by _land_fakes.py, classify.py, land_platform.py, landing.py, precomputed.py, shared_role_reach.py, tools.py | — | — |
 | `scripts/deploy_tools/land_lib/landing.py` | deploy_tools | One PR's landing: the state every phase reads and writes, and the ways it ends. | imported by _land_fakes.py, ci.py, classify.py, deploy.py, health_verdict.py, land.py, merge.py, pipeline.py, policy.py, tick.py | — | — |
 | `scripts/diagnostics/probe_lib/landing_blockers.py` | diagnostics | `probe.py landing` — what would stop a landing now, and who else is working the repo. | imported by subcommands.py | — | — |
 | `scripts/dev/fanout_lib/launch.py` | dev | Create the worktree, write the brief, start the transient service — spec §3. | imported by place.py, review.py | — | — |
@@ -317,7 +317,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/gitops_tick.sh` | deploy_tools | trigger a GitOps deploy tick by hand and report what it did. | exit_codes.py (a person runs it) | — | [0, 1, 2, 3, 4, 64, 75](#scriptsdeploytoolsgitopsticksh) |
 | `scripts/deploy_tools/k3s_etcd_restore_gates.py` | deploy_tools | Run the stop conditions of `docs/k3s-etcd-restore.md` in order, exit code naming the first failure. | no automated caller in the tree | `test_k3s_etcd_restore_gates.py` | — |
 | `scripts/deploy_tools/k3s_upgrade_gates.py` | deploy_tools | Run the four stop conditions of `docs/k3s-upgrade.md` in order, exit code naming the first failure. | no automated caller in the tree | `test_k3s_upgrade_gates.py` | — |
-| `scripts/deploy_tools/land_probe.py` | deploy_tools | The `land` source for cc-wait: one detached landing's state, read from its log. | no automated caller in the tree | `test_land_probe.py` | — |
+| `scripts/deploy_tools/land_lib/land_probe.py` | deploy_tools | The `land` source for cc-wait: one detached landing's state, read from its log. | no automated caller in the tree | — | — |
 | `scripts/deploy_tools/longhorn_dr_gates.py` | deploy_tools | Run the stop conditions of `docs/longhorn-disaster-recovery.md` in order, exit code naming the first failure. | no automated caller in the tree | `test_longhorn_dr_gates.py` | — |
 | `scripts/backup/longhorn_reap.py` | backup | Delete Longhorn Backup and Snapshot objects that no RecurringJob will ever prune. | backups.py (a person runs it) | — | — |
 | `scripts/deploy_tools/longhorn_upgrade_gates.py` | deploy_tools | Run the stop conditions of `docs/longhorn-upgrade.md` in order, exit code naming the first failure. | no automated caller in the tree | `test_longhorn_upgrade_gates.py` | — |

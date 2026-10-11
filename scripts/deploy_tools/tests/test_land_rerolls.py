@@ -12,7 +12,7 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
-from deploy_tools import land_rerolls
+from deploy_tools.land_lib import land_rerolls
 
 
 def _hold_then_release(path: Path, mode: int, after_s: float) -> threading.Thread:

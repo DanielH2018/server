@@ -24,7 +24,7 @@ from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import landing as landing_mod
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
-from deploy_tools.land_tags import Derivation, DeriveSource
+from deploy_tools.land_lib.land_tags import Derivation, DeriveSource
 from gitops_markers import MARKERS
 
 MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"

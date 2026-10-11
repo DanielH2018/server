@@ -22,12 +22,10 @@ from collections.abc import Iterable
 from pathlib import Path as _Path
 
 _SCRIPTS = _Path(__file__).resolve().parents[2]
-# `land_tags` imports its siblings by bare name, as land.sh runs it.
-_sys.path.insert(0, str(_SCRIPTS / "deploy_tools"))
 _sys.path.insert(0, str(_SCRIPTS))
 
-import land_shared  # noqa: E402
-import land_tags  # noqa: E402
+from deploy_tools.land_lib import land_shared  # noqa: E402
+from deploy_tools.land_lib import land_tags  # noqa: E402
 
 REPO = _SCRIPTS.parent
 

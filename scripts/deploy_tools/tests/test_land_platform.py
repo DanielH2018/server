@@ -13,9 +13,9 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_platform.py
 """
 
 import deploy_tags
-import land_platform
+from deploy_tools.land_lib import land_platform
 from lib.git_testing import commit, git_out, init_repo
-import land_tags
+from deploy_tools.land_lib import land_tags
 from deploy_tags import service_records
 from lib.render_guard import HOST_VARS
 from lib.repo_paths import REPO

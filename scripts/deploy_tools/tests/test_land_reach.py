@@ -17,8 +17,8 @@ import yaml
 
 from lib import yaml_fast
 
-import land_reach
-import land_tags
+from deploy_tools.land_lib import land_reach
+from deploy_tools.land_lib import land_tags
 
 
 @pytest.fixture

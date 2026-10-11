@@ -20,7 +20,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_manual_plane_is_not_gate
 import pytest
 
 
-import land_tags
+from deploy_tools.land_lib import land_tags
 from _land_fakes import MERGE_SHA, RECEIPTS
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome

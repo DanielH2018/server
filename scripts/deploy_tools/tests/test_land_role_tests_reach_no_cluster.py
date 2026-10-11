@@ -26,7 +26,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_role_tests_reach_no_clus
 import pytest
 
 
-import land_tags
+from deploy_tools.land_lib import land_tags
 import reach
 from _land_fakes import MERGE_SHA
 from deploy_tools.land_lib import deploy

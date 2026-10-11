@@ -21,7 +21,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_handlers.py
 import pytest
 import yaml
 
-import land_reach
+from deploy_tools.land_lib import land_reach
 
 from lib.repo_paths import REPO as REPO_ROOT
 

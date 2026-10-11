@@ -13,7 +13,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 import pytest
 
 
-import land_tags
+from deploy_tools.land_lib import land_tags
 
 # A fixture, not live inventory. These tests pin the DERIVATION, and reading containers_list
 # would make them fail whenever a service is retired. The live set is checked once,

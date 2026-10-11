@@ -16,7 +16,7 @@ import json
 
 import pytest
 
-import land_tags
+from deploy_tools.land_lib import land_tags
 from _land_fakes import RECEIPTS, Fakes, build_classifier
 from _narrow_fixtures import Tree, _refs
 
