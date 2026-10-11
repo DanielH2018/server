@@ -118,7 +118,9 @@ def test_the_branch_prefix_is_the_one_the_fence_lets_the_agent_push(
 ) -> None:
     prefix = environment(unit())[options.REQUIRE_BRANCH_PREFIX_ENV]
     fence = defaults("gitops_deploy")["gitops_deploy_fence_ruleset_exclude"]
-    assert fence == [f"refs/heads/{prefix}**"]
+    # Master is excluded too, so the agent's account can merge a PR; the lander still lands
+    # only the agent's own branches.
+    assert fence == ["refs/heads/master", f"refs/heads/{prefix}**"]
     monkeypatch.setenv(
         WORKTREE_PREFIX_ENV, defaults()["claude_code_agent_worktree_prefix"]
     )

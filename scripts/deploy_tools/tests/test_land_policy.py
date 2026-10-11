@@ -171,7 +171,7 @@ def test_an_unusable_approval_list_refuses_rather_than_approving_everything(
 
 @pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED", "APPROVED"])
 def test_every_pr_merges_directly_at_the_checked_head(landing, tmp_path, review):
-    """Every PR into master needs a ruleset bypass, so none is armed for auto-merge.
+    """No PR is armed for auto-merge; each merges directly at the head the policy checked.
 
     Auto-merge never applies a bypass: armed, an approved agent PR sat BLOCKED until a hand
     merge (#3911). An empty decision meets the agent branch fence all the same (#4001).

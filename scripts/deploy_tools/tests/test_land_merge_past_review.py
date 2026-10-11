@@ -1,9 +1,7 @@
-"""--arm-merge and --await-merge on a PR that can merge only through a ruleset bypass.
+"""--arm-merge and --await-merge on a PR that land.sh merges directly.
 
-GitHub's auto-merge does not apply a ruleset bypass (github/docs#45265), and every PR into
-master needs one, so an armed PR sits BLOCKED until merge-timeout. arm_merge therefore never
-arms one, and await_merge merges it through the REST endpoint once await_ci reads its head
-green. Each behaviour is tested against its counterpart: a PR left for a direct merge against
+arm_merge never arms GitHub's auto-merge, and await_merge merges the PR through the REST
+endpoint once await_ci reads its head green, pinned to that head. Each behaviour is tested against its counterpart: a PR left for a direct merge against
 one only polled, a green head against a pending one, and a merge GitHub accepts against one
 it refuses.
 
@@ -31,10 +29,10 @@ def _wait(states: list[str]):
     ]
 
 
-# Every decision meets the agent branch fence, which restricts updates to master itself: armed,
-# an approved agent PR sat BLOCKED until a hand merge (#3911). An empty decision, which is every
-# PR since the master review gate was retired on 2026-10-11, takes the same path rather than the
-# auto-merge it once did (#4001). REVIEW_REQUIRED stays covered for a review rule added back.
+# Every decision takes the direct merge. Armed for auto-merge, an approved agent PR once sat
+# BLOCKED until a hand merge (#3911). An empty decision, which is every PR since the master
+# review gate was retired on 2026-10-11, takes the same path rather than the auto-merge it once
+# did (#4001). REVIEW_REQUIRED stays covered for a review rule added back.
 BYPASS_ONLY = pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED", "APPROVED"])
 
 

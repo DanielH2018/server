@@ -22,8 +22,8 @@ It merges the PR directly once its CI is green, waits for master CI on the merge
 commit, deploys that commit, kicks the tick, gates the health, and prints the landing's
 `VERDICT:` line. `--detach` names its own logfile, forks into it and returns. `cc-wait land <n>`
 is the wait: it prints the landing's `VERDICT:` line and exits with the landing's own code.
-No PR is armed for GitHub's auto-merge, because every PR into master needs a ruleset bypass
-and auto-merge ignores one (`docs/landing.md` has the detail).
+`land.sh` arms no PR for GitHub's auto-merge. Its direct merge is pinned to the head SHA it
+checked, which auto-merge cannot do (`docs/landing.md` has the detail).
 
 **A stale base costs one branch update first.** Before the merge, `land.sh` asks whether master
 changed any path since the PR's merge base. When it did, it merges master into the PR branch

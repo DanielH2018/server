@@ -38,7 +38,25 @@ def test_matching_ruleset_is_clean(tmp_path):
     assert status == "up"
     assert "matches the declared set" in msg
     assert msg.startswith("repo public; ")
-    assert f"ruleset {FENCE_RULESET_ID} fences the agent to {FENCE_EXCLUDE[0]}" in msg
+    assert "ruleset 20912512 requires a PR with 0 approving reviews" in msg
+    assert (
+        f"ruleset {FENCE_RULESET_ID} restricts every branch except "
+        f"{', '.join(FENCE_EXCLUDE)}" in msg
+    )
+
+
+def test_a_missing_pull_request_rule_is_flagged(tmp_path):
+    """Without it, a token that can update master pushes to it with no PR at all."""
+    rc, status, msg = run(tmp_path, curl_body=ruleset_body(DECLARED, approvals=None))
+    assert (rc, status) == (1, "down")
+    assert "ruleset 20912512 has no pull_request rule" in msg
+
+
+def test_a_required_review_is_flagged(tmp_path):
+    """Auto-merge never applies a bypass, so one required review blocks every armed PR."""
+    rc, status, msg = run(tmp_path, curl_body=ruleset_body(DECLARED, approvals=1))
+    assert (rc, status) == (1, "down")
+    assert "requires 1 approving reviews (declared 0)" in msg
 
 
 def test_a_removed_context_is_flagged(tmp_path):
@@ -239,7 +257,7 @@ FENCE_DRIFT = {
     ),
     "the agent's own prefix dropped": (
         {"conditions": _fence_conditions(exclude=[])},
-        [f"no-longer-excluded:[{FENCE_EXCLUDE[0]} ]"],
+        [f"no-longer-excluded:[{' '.join(FENCE_EXCLUDE)} ]"],
     ),
     "updates no longer restricted": (
         {"rules": [{"type": "creation"}, {"type": "deletion"}]},
@@ -299,6 +317,7 @@ def _defaults():
 def test_the_fence_ruleset_fixture_matches_the_role_defaults(tmp_path):
     defaults = _defaults()
     assert defaults["gitops_deploy_ruleset_bypass_actors"] == []
+    assert defaults["gitops_deploy_ruleset_required_approvals"] == 0
     assert defaults["gitops_deploy_fence_ruleset_id"] == FENCE_RULESET_ID
     assert defaults["gitops_deploy_fence_ruleset_exclude"] == FENCE_EXCLUDE
     assert sorted(defaults["gitops_deploy_fence_ruleset_bypass_actors"]) == FENCE_BYPASS

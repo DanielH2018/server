@@ -68,12 +68,12 @@ The arm is idempotent, so re-running after a `merge-conflict` or `merge-timeout`
 cleanly. `--subject` overrides the squash commit's subject; the PR's own title is used
 otherwise.
 
-**Every PR is merged directly, never armed for GitHub's auto-merge.** Every PR into master
-needs a ruleset bypass, and auto-merge never applies one (github/docs#45265). The agent branch
-fence (ruleset 24517167) restricts updates to every branch except `worktree-claude+**`, master
-included. An armed approved agent PR sat `BLOCKED` until a hand merge (#3911), so the arm path
-was removed (#4001). No ruleset requires a review since the master review gate was deleted on
-2026-10-11.
+**`land.sh` merges every PR directly, never arming GitHub's auto-merge.** The direct merge is
+pinned to the head SHA that `await_ci` read green and the landing policy checked. Auto-merge
+merges whatever head is green when CI finishes. The arm path was removed in #4001, when the
+agent branch fence still covered master and an armed PR sat `BLOCKED` because auto-merge never
+applies a bypass (#3911). Since 2026-10-11 the fence excludes master and no rule needs a
+review, so a PR armed for auto-merge by hand, from either account, merges once CI is green.
 
 `--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because the direct merge
 would apply the operator's bypass to it. `--await-merge` merges the PR through the REST merge
@@ -156,8 +156,8 @@ base moving under a PR flips it for one poll.
 
 **A PR whose own CI is red ends the wait too**, exit `LAND_FAILED` with `VERDICT: pr-ci-red`, quoting what
 `await_ci.py` said. GitHub reports it only as `mergeStateStatus: BLOCKED`, the same word it
-uses while the checks are still running. The agent branch fence blocks every PR until the
-direct merge applies the bypass, so the wait treats `BLOCKED` as a question about checks. The wait keeps going
+uses while the checks are still running. No other rule blocks a PR into master, so the wait
+treats `BLOCKED` as a question about checks. The wait keeps going
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
 
