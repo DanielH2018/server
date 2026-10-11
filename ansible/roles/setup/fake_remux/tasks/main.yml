@@ -77,21 +77,6 @@
     - fake_remux_replace_logic.py
   become: true
 
-- name: Remove the fake-remux scripts that moved into fake_remux_lib
-  tags: [fake_remux]
-  # Until #4353 these four sat flat in the install dir, two of them run directly by the crons.
-  # A copy loop removes nothing it stops naming, so without this the old entrypoints stay
-  # runnable and the drift check no longer watches them.
-  ansible.builtin.file:
-    path: "{{ fake_remux_opt_dir }}/{{ item }}"
-    state: absent
-  loop:
-    - fake_remux_scan.py
-    - fake_remux_logic.py
-    - fake_remux_replace.py
-    - fake_remux_replace_logic.py
-  become: true
-
 - name: Resolve Sonarr's ClusterIP
   tags: [fake_remux]
   # Resolved every deploy rather than pinned: a ClusterIP is stable for the Service's life but not
@@ -172,6 +157,23 @@
       /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} {{ fake_remux_opt_dir }}/fake_remux.py replace
       >/dev/null 2>&1 || logger -t fake-remux-reconcile 'reconcile wrapper failed'
     cron_file: fake-remux-reconcile
+  become: true
+
+- name: Remove the fake-remux scripts that moved into fake_remux_lib
+  tags: [fake_remux]
+  # Until #4353 these four sat flat in the install dir, two of them run directly by the crons.
+  # A copy loop removes nothing it stops naming, so without this the old entrypoints stay
+  # runnable and the drift check no longer watches them. After both cron rewrites, not beside
+  # the copies: the Sonarr resolve and assert above exist to fail the play, and a failure there
+  # must leave the old cron lines pointing at files that still exist.
+  ansible.builtin.file:
+    path: "{{ fake_remux_opt_dir }}/{{ item }}"
+    state: absent
+  loop:
+    - fake_remux_scan.py
+    - fake_remux_logic.py
+    - fake_remux_replace.py
+    - fake_remux_replace_logic.py
   become: true
 
 - name: Schedule the mkv attachment-name repair
