@@ -34,6 +34,12 @@ weight, and `scripts/tests/test_test_module_bootstraps_present.py` refuses it.
 The subdirectories have **no `__init__.py`** on purpose: they resolve as PEP 420 namespace
 packages, and adding one would change how pytest names the test modules under them.
 
+Three or more flat siblings whose filenames share a first or last `_`-word, one of them an
+entrypoint, go in a `<prefix>_lib/` package beside that entrypoint, as `land_lib/` does.
+`docs/python-code-organization.md` has the rule and its exemptions. The
+`module-families-live-in-a-package` row of `ansible/tests/repo/test_census_rows_layout.py`
+enforces it.
+
 Verify a moved or new entry point by RUNNING it (`uv run python scripts/<dir>/<name>.py
 --help`), not by running the suite — the suite is exactly the thing that cannot see this.
 
@@ -82,10 +88,12 @@ or `_edge_property_rows.py` beside it.
 A textual census of the tracked tree follows the same rule. It is one `git ls-files` selector
 and one per-file predicate, and it goes in as a `Census` row of
 `ansible/tests/repo/test_census_rows_python.py` or `test_census_rows_text.py`, of
-`test_census_rows_roles.py` when it reads a role's tasks or templates, or of
+`test_census_rows_roles.py` when it reads a role's tasks or templates, of
+`test_census_rows_layout.py` when it judges which siblings a module sits beside, or of
 `test_census_rows_suite.py` when it polices the suite's own guards. A rule over the test
 modules themselves goes in `scripts/tests/test_census_rows_test_modules.py` or
 `test_census_rows_test_renders.py`. A row whose subject is a match inside a file sets `count`.
+A row whose subject is a group of files has its selector return `Subject`s rather than paths.
 `ansible/tests/_row_table.py` is the harness both tables share.
 
 ## No tests under `ansible/filter_plugins/`
