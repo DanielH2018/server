@@ -21,6 +21,7 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `uptime-kuma-alive` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | that script's Kuma push returned non-zero — see *Watching the spine itself* below |
 | `weekly-reboot-<host>` | the `Weekly system restart` cron in `roles/setup/initial_setup/tasks/crons.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
 | `<host>-docker-prune` | the `Clean unused Docker images` cron in the same file, on each `has_docker` host (`daniel-pi`) | never: it pings only after the prune succeeds, and silence is the failure |
+| `daniel-box-worktree-sweep` | the `Weekly git object-store repair` cron in the same file, on `ops_cron_host` | `prune_worktrees.py --prune` exits non-zero: it pings the exit-status endpoint `/<rc>`, so a failed removal or branch deletion fails the check |
 
 The cron behind each slug, read from the variables that set it:
 

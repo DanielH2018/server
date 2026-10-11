@@ -36,6 +36,7 @@ WIRED_SLUGS = frozenset(
         "weekly-reboot-daniel-server",
         "weekly-reboot-daniel-pi",
         "daniel-pi-docker-prune",
+        "daniel-box-worktree-sweep",
     }
 )
 
