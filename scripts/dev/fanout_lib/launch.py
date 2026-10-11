@@ -65,10 +65,10 @@ RUNTIME_MAX_S = 5 * 3600
 # shorter than the implementer, so three hours on top of its five covers them.
 # `review.LAND_MARGIN_S` skips the landing rather than start it too close to this cap.
 REVIEW_RUNTIME_MAX_S = 8 * 3600
-# The interpreter a unit runs repo Python with; `fanout_place.HEALTH_CMD` pins the same one.
+# The interpreter a unit runs repo Python with; `fanout_lib.place.HEALTH_CMD` pins the same one.
 HEADLESS_PYTHON = "3.14.6"
-# The script a `--review` unit runs, relative to a checkout of this repo; see `review_script`.
-REVIEW_SCRIPT = "scripts/dev/fanout_review.py"
+# The script a `--review` unit runs as `<it> review`, relative to a checkout; see `review_script`.
+REVIEW_SCRIPT = "scripts/dev/fanout.py"
 # Another repo's batch runs this repo's code from a snapshot of `origin/master` inside its own
 # worktree, never from the host's primary checkout, which can lag it (#3684, #3762). The
 # snapshot holds what such a batch reads: the review pipeline and everything it imports under
@@ -251,7 +251,7 @@ def claude_args(target: Target, worktree: str) -> str:
 
 
 def review_script(batch: str, target: Target = SERVER_TARGET) -> str:
-    """The `fanout_review.py` path a `--review` unit in `target` runs.
+    """The `fanout.py` path a `--review` unit in `target` runs `review` through.
 
     This repo's batch runs the worktree's copy, relative to the unit's WorkingDirectory.
     `worktree add` checks that tree out at `origin/master`, so the script is there and
@@ -269,10 +269,10 @@ def review_script(batch: str, target: Target = SERVER_TARGET) -> str:
 def review_command(
     batch: str, target: Target = SERVER_TARGET, red_green: bool = False
 ) -> str:
-    """The unit's command for a `--review` batch: `fanout_review.py` in place of `claude -p`."""
+    """The unit's command for a `--review` batch: `fanout.py review` in place of `claude -p`."""
     return (
         f"uv run --no-project --no-python-downloads --python {HEADLESS_PYTHON} "
-        f"{review_script(batch, target)} --batch {batch} --repo {target.repo}"
+        f"{review_script(batch, target)} review --batch {batch} --repo {target.repo}"
         + (" --red-green" if red_green else "")
     )
 

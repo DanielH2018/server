@@ -13,7 +13,7 @@ from fanout_lib.clean import clean_one, remote_clean_command
 from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
 from fanout_lib.target import Target
 from fanout_lib.transport import Tools
-from fanout_place import cmd_clean_one, main
+from fanout_lib.place import cmd_clean_one, main
 from lib.worktrees import Worktree
 from _fanout_fakes import as_operator, fake_tools, ok
 

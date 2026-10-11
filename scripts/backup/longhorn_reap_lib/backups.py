@@ -1,15 +1,14 @@
-#!/usr/bin/env python3
 """Delete Longhorn Backup objects that no RecurringJob will ever prune.
 
 DRY RUN BY DEFAULT, in every mode. Pass --apply to delete, and --apply-deleted-volumes to
 delete backups whose volume no longer exists (the strays mode only). There is deliberately no
 cron for this: it is an operator-invoked tool, because the safe-to-delete set depends on live
 state this script can check but cannot guarantee will still hold a week from now. See
-longhorn_reap_logic.py for FLOOR 1 (never delete a volume's last recovery point) and why it
+logic.py beside it for FLOOR 1 (never delete a volume's last recovery point) and why it
 shipped inoperative the first time.
 
 THREE MODES, ONE SELECTION LAYER. Every Backup CR deletion in this repo selects in
-longhorn_reap_logic.py (the strays mode) or longhorn_reap_selectors.py (the other two), where
+longhorn_reap_lib/logic.py (the strays mode) or longhorn_reap_lib/selection.py (the other two), where
 each selection is a plain function over parsed JSON and each floor is provable against a
 fixture. The two operator-driven modes selected in kubectl and Jinja under
 `ansible/prune_backups.yml` until #3279; that playbook now carries only its b2-drain mode, which
@@ -88,11 +87,11 @@ silently reclassifying every backup as belonging to a deleted volume.
 
 Run from the repo root on a k3s host. The dry run reads through the read-only kubeconfig:
     LONGHORN_REAP_READONLY_KUBECONFIG=~/.kube/config \
-        uv run python scripts/backup/longhorn_reap_orphan_backups.py
+        uv run python scripts/backup/longhorn_reap.py backups
         [--mode migrated-chain --claim sonarr-config]
         [--mode seeds [--claim valheim-config] [--seed-floor 2]]
 Deleting needs the root-only admin kubeconfig, so run the same interpreter under sudo:
-    sudo .venv/bin/python -B scripts/backup/longhorn_reap_orphan_backups.py --apply
+    sudo .venv/bin/python -B scripts/backup/longhorn_reap.py backups --apply
         [--mode seeds] [--apply-deleted-volumes] [--max-deletions N]
 
 Read the dry run, then re-run the same command with --apply.
@@ -104,16 +103,16 @@ from dataclasses import dataclass
 from pathlib import Path as _Path
 
 # host_lib.py is the setup roles' shared host module and stays in ansible/roles/setup/common/files/.
-# A directly-invoked script gets only its own directory on sys.path, so both inserts are needed.
-sys.path.insert(0, str(_Path(__file__).resolve().parent))
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+# The entry point puts only its own directory on sys.path, so both inserts are needed: the
+# package's parent for `longhorn_reap_lib`, and scripts/ for `lib`.
+sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/backup/
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.repo_paths import HOST_LIB_FILES
 
 sys.path.insert(0, str(HOST_LIB_FILES))
 import host_lib
 from lib.cli_help import answer_help
-import longhorn_reap_logic as logic
-import longhorn_reap_selectors as selectors
+from longhorn_reap_lib import logic, selection
 
 NAMESPACE = "longhorn-system"
 KUBECTL_BIN = os.environ.get("LONGHORN_REAP_KUBECTL", "k3s kubectl")
@@ -146,7 +145,7 @@ ADMIN_KUBECONFIG = os.environ.get(
 # No fallback default. Left unset, a dry run must refuse rather than let KUBECONFIG stay whatever
 # the caller's shell happens to have -- which, run as root, is the admin one. See main().
 READONLY_KUBECONFIG = os.environ.get("LONGHORN_REAP_READONLY_KUBECONFIG", "")
-SUDO_HINT = logic.sudo_hint(__file__)
+SUDO_HINT = logic.sudo_hint(logic.ENTRY_POINT, "backups")
 
 _MAX_DELETIONS_FLAG = "--max-deletions"
 _MODE_FLAG = "--mode"
@@ -472,12 +471,12 @@ def main(argv: list[str]) -> int:
         if err:
             print("ABORT: %s" % err, file=sys.stderr)
             return 1
-        current_volume, err = selectors.claim_volume(pvcs, args.claim, CLAIM_NAMESPACE)
+        current_volume, err = selection.claim_volume(pvcs, args.claim, CLAIM_NAMESPACE)
         if err:
             print(err, file=sys.stderr)
             return 1
 
-        chain = selectors.select_migrated_chain(
+        chain = selection.select_migrated_chain(
             backups, existing, claim=args.claim, current_volume=current_volume
         )
         logic.print_bucket(
@@ -491,9 +490,9 @@ def main(argv: list[str]) -> int:
 
     else:
         floor = (
-            selectors.SEED_FLOOR_DEFAULT if args.seed_floor is None else args.seed_floor
+            selection.SEED_FLOOR_DEFAULT if args.seed_floor is None else args.seed_floor
         )
-        seeds = selectors.select_seeds(backups, existing, claim=args.claim, floor=floor)
+        seeds = selection.select_seeds(backups, existing, claim=args.claim, floor=floor)
         logic.print_bucket("kept by the rotation floor", seeds.kept)
         logic.print_bucket(
             "superseded by %d rotation backup(s)" % floor, seeds.superseded
@@ -536,7 +535,3 @@ def main(argv: list[str]) -> int:
         if rc != 0:
             return rc
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))

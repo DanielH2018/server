@@ -8,7 +8,7 @@ allowed-tools: Bash, Read, Grep, Glob, Agent
 
 Five steps, in order: triage, claim, spawn, land, report. Every issue is claimed **before**
 its agent starts, under the orchestrator's own worktree name. That ordering makes the fan-out
-race-free, and `fanout_place.py launch` takes the claims itself, so steps 2 and 3 are one
+race-free, and `fanout.py place launch` takes the claims itself, so steps 2 and 3 are one
 command.
 
 ## 1. Triage
@@ -120,8 +120,12 @@ One batch per `--batch`, every batch in ONE call so the placement can spend a re
 batch across both hosts:
 
 ```bash
-uv run python scripts/dev/fanout_place.py launch --batch 1345,1386 --batch 1288
+uv run python scripts/dev/fanout.py place launch --batch 1345,1386 --batch 1288
 ```
+
+`scripts/dev/fanout.py` is the fan-out tooling's one entry point: `place`, `probe`, `review`
+and `stats`. The paths `fanout_place.py`, `fanout_probe.py`, `fanout_review.py` and
+`fanout_review_stats.py` beside it are shims that forward to it (#4346).
 
 The dispatcher claims each batch (step 2), writes the brief (issue bodies verbatim, the claim
 note, the landing path or the stop-at-PR rule, and the session-health lines of the placed host
@@ -140,7 +144,7 @@ uncleaned worktree counts against its host. `--host daniel-box` pins a batch tha
 the same run or that only daniel-box can verify.
 
 **`--review` adds a separate review to every batch in the run.** The unit runs
-`scripts/dev/fanout_review.py` in place of one `claude -p`, the batch worktree's copy, so a host
+`scripts/dev/fanout.py review` in place of one `claude -p`, the batch worktree's copy, so a host
 whose primary checkout lags `origin/master` still runs the current one. Another repo's batch
 runs the copy in its own snapshot of this repo's `origin/master`, which `launch` archives into
 the batch's `.fanout/server`. The snapshot also supplies that batch's system prompt and
@@ -176,7 +180,7 @@ dropped and the batch runs as usual. A PR that still fails the green gate after 
 is not landed. Once it passes, each hunk of the fix is reverted on its own under the red tests,
 and the record names the hunks no red test noticed (`scripts/dev/fanout_lib/review/hunk_check.py`).
 To see whether the red phase earns its cost, run `uv run python
-scripts/dev/fanout_review_stats.py --dir <state dir> ...`, once per user whose records count. The PR comment and the local record carry both gates' results.
+scripts/dev/fanout.py stats --dir <state dir> ...`, once per user whose records count. The PR comment and the local record carry both gates' results.
 
 Each batch's branch is `worktree-fanout-<batch>`, the name used throughout this skill. Run as
 the `claude` agent user, the dispatcher names it `worktree-claude+fanout-<batch>` instead.
@@ -189,14 +193,14 @@ Watch the run with a Monitor (`timeout_ms` 1800000) running `cc-wait fanout <run
 sleep` loop by hand. The Monitor prints a line each time a batch finishes, and nothing in
 between. Its last line ends the run: `finished` (exit 0), `needs-attention` (1) or `failed` (5).
 That line names every batch that is not plain success. The source is
-`scripts/dev/fanout_probe.py`, which reads the `status` command below and shares one read per
+`scripts/dev/fanout.py probe`, which reads the `status` command below and shares one read per
 90s among every watcher on the host.
 
-To recover a run-id lost to compaction or a resumed session, run `fanout_place.py runs
+To recover a run-id lost to compaction or a resumed session, run `fanout.py place runs
 --orchestrator <branch>`. It lists every run manifest on the host with its batches, hosts,
 branches, issues and whether each was cleaned; `--json` prints the manifests themselves.
 
-For a batch's detail, run `uv run python scripts/dev/fanout_place.py status <run-id>`. It prints
+For a batch's detail, run `uv run python scripts/dev/fanout.py place status <run-id>`. It prints
 one line per batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, `landed
 <PR URL>`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
 (`permission_denials=N` is
@@ -239,7 +243,7 @@ get past it. A failed batch is cleaned, never re-placed elsewhere.
 tree by design and records no removal, so the refusal above stands until the branch is gone.
 
 ```bash
-uv run python scripts/dev/fanout_place.py abandon <run-id> <batch>
+uv run python scripts/dev/fanout.py place abandon <run-id> <batch>
 ```
 
 It runs on the batch's host from the checkout the batch was launched from. It stops the
@@ -266,7 +270,7 @@ the list itself could not be read. The second case is a `gh` failure rather than
 problem, and it is what `read` shows as `signing=unknown`, so run `read` first — its
 `signing=` field gives the gate's verdict per host before a launch spends an agent on it.
 
-When every PR has merged: `uv run python scripts/dev/fanout_place.py clean <run-id>`. It
+When every PR has merged: `uv run python scripts/dev/fanout.py place clean <run-id>`. It
 removes each worktree once its branch is merged into `origin/master` and the tree is clean,
 then deletes that `worktree-fanout-<batch>` branch, and reports a kept tree with its reason. A
 branch that refuses to delete reads `kept`, naming it. `clean` records each removal in the run's manifest, so a
@@ -327,7 +331,7 @@ No `launch` runs on this path, so take the claims before spawning anything, from
 orchestrator's worktree:
 
 ```bash
-uv run python scripts/dev/fanout_place.py claim --batch 1345,1386 --batch 1288
+uv run python scripts/dev/fanout.py place claim --batch 1345,1386 --batch 1288
 ```
 
 It claims under HEAD as `launch` does, prints `#<n> claimed by <branch>` per issue, and exits
@@ -349,7 +353,7 @@ Each agent starts with none of this conversation's context, so its brief must ca
   the issue. Leave out the bookkeeping records `findings.py` and this skill post (claim,
   release, `Worked by`, `Re-observed`, defer and manual). An operator decision posted as a
   comment otherwise never reaches the agent: #3382's agent shipped the value the decision
-  had replaced. `transport.operator_comments` selects them for `fanout_place.py launch`.
+  had replaced. `transport.operator_comments` selects them for `fanout.py place launch`.
 - That the issues are **already claimed** under the orchestrator's worktree, and it must not
   claim them again.
 - That its **first act** is to post a plain comment naming its own branch, so the thread
@@ -442,7 +446,7 @@ Before this report goes out, give back every batch no agent finished. A batch th
 `failed`, `no-pr` or `needs-input`, and that you are not finishing by hand, is abandoned:
 
 ```bash
-uv run python scripts/dev/fanout_place.py abandon <run-id> <batch>
+uv run python scripts/dev/fanout.py place abandon <run-id> <batch>
 ```
 
 `abandon` removes the batch's tree and branch and releases its claims, and `stop` releases the
@@ -462,7 +466,7 @@ carried into it.
 ## Fanning out on the dotfiles register
 
 Every step works on the dotfiles register (`DanielH2018/dotfiles`) once each `findings.py` and
-`fanout_place.py launch` call carries `--repo DanielH2018/dotfiles`. The flag sends each gh read
+`fanout.py place launch` call carries `--repo DanielH2018/dotfiles`. The flag sends each gh read
 and write there. It also makes `claim`, `claims`, `reap` and `next` judge claims against the
 chezmoi checkout and its `origin/main` (`REGISTER_CHECKOUTS` in
 `scripts/dev/findings_lib/boundaries.py`). `launch --repo` accepts exactly the repos that table
@@ -472,7 +476,7 @@ a. **Triage** with `next --json --repo DanielH2018/dotfiles`; `launch --repo` ru
    The grouping rules are section 1's. The dotfiles repo has no Ansible roles, so group by cited
    file alone.
 b. **Skip section 2: `launch` takes the claim itself.** Run
-   `fanout_place.py launch --repo DanielH2018/dotfiles --batch <n>,<n> …`.
+   `fanout.py place launch --repo DanielH2018/dotfiles --batch <n>,<n> …`.
    For each batch it creates and locks `.claude/worktrees/fanout-<batch>` in the chezmoi
    checkout from `origin/main`, claims the batch under `worktree-fanout-<batch>`, and only then
    starts the agent. A claim under the orchestrator's branch would be stale at birth, because

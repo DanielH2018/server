@@ -1,4 +1,4 @@
-"""`fanout_place.py runs`: every run manifest on the host, so a lost run-id is recoverable.
+"""`fanout.py place runs`: every run manifest on the host, so a lost run-id is recoverable.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_runs.py
 """
@@ -6,7 +6,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_runs.py
 import json
 
 from fanout_lib.manifest import Batch, Manifest, save
-from fanout_place import main
+from fanout_lib.place import main
 from _fanout_fakes import fake_tools
 
 

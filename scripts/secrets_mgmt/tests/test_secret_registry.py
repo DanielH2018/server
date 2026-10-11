@@ -1,4 +1,4 @@
-"""Tests for the registry logic in scripts/secrets_mgmt/secret_registry.py.
+"""Tests for the registry logic in scripts/secrets_mgmt/secrets_lib/secret_registry.py.
 
 Seeding, reconciliation, due dates and drift — all of it pure over a dict, so every test
 builds its own registry rather than reading the committed one. The cadence table comes from
@@ -14,7 +14,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 
-from secrets_mgmt.secret_registry import (
+from secrets_mgmt.secrets_lib.secret_registry import (
     audit,
     due_date,
     is_record,

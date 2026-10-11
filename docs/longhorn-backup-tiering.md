@@ -154,13 +154,13 @@ Two consequences that are easy to get backwards:
   `default` group to a weekday shard, `daily-backup` stopped selecting it and can never prune
   those backups again. No `retain` value governs them — `retain: 14` on the daily job is
   irrelevant, because the job never runs against that volume.
-  `scripts/backup/longhorn_reap_orphan_backups.py` is their only owner, and its safety floor means it can only clear them once the volume has
+  `scripts/backup/longhorn_reap.py backups` is their only owner, and its safety floor means it can only clear them once the volume has
   weekly backups of its own.
 - **A seed made before 2026-09-03 is unowned in a way the reaper cannot see.** Until then
   `seed_volume_backup.yml` made a backup carrying no `RecurringJob` label at all, so no job's
   `retain` ever counted or pruned it, and the reaper reads an unlabelled backup as the current
   tier's own — on 2026-09-02 it listed zero reapable against eleven live seeds.
-  `longhorn_reap_orphan_backups.py --mode seeds` is their owner. It retires a seed once its
+  `longhorn_reap.py backups --mode seeds` is their owner. It retires a seed once its
   volume holds `--seed-floor` (default 2, the shards' retain) Completed backups that do carry a
   job label, dry-runs by default, and takes `--claim` to pace the Class C spend one volume at a
   time. The seed's *snapshot* was unowned the same way and outlived the backup: dropping the

@@ -12,8 +12,9 @@ was the obvious alternative and is a bad test — the rendered page legitimately
 operator to run `sops`, so the scan fails on correct output while proving nothing about
 what the code reads.
 
-WHY IT IMPORTS THE ROTATION TOOL'S OWN MODULES. Due dates come from `secrets_mgmt.secret_registry`'s
-`due_date()` and the cadence table behind it, rather than a second implementation here. Two
+WHY IT IMPORTS THE ROTATION TOOL'S OWN MODULES. Due dates come from
+`secrets_mgmt.secrets_lib.secret_registry`'s `due_date()` and the cadence table behind it,
+rather than a second implementation here. Two
 implementations of a due date drift, and the page would then disagree with the audit cron that
 actually pages. `secrets_mgmt.rotation_tools` supplies the clock and the registry read for the
 same reason.
@@ -35,7 +36,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.repo_paths import ANSIBLE
-from secrets_mgmt import secret_registry as rotation_registry
+from secrets_mgmt.secrets_lib import secret_registry as rotation_registry
 from secrets_mgmt import rotation_tools
 
 REGISTRY = ANSIBLE / "secret_rotation.yml"

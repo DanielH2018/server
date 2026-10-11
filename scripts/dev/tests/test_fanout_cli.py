@@ -12,7 +12,7 @@ from fanout_lib import launch as launch_mod
 from fanout_lib.brief import Issue
 from fanout_lib.manifest import Batch, Manifest, save
 from fanout_lib.target import Target
-from fanout_place import main
+from fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 # Fleet current, fleet cap, login-plane current, login-plane cap, live agents, signing key.

@@ -33,10 +33,12 @@ Five subcommands:
            touches an existing row's date and `audit` advances dates in memory only, so
            without this the registry could be moved only by hand.
 
-This file is the CLI. The logic each subcommand runs on lives beside it, in modules that
-import nothing from here: `secret_classify` (tier by name), `secret_registry` (seeding, sync, due dates,
-drift), `consumers` (who holds a copy), `git_dates` (when a ciphertext last changed),
-`sops_io` (push-token shape) and `rotation_tools` (every process boundary, injectable).
+This file is the CLI. The logic each subcommand runs on lives in modules that import nothing
+from here. `secrets_lib/` holds the two libraries only this tool and its generated page use:
+`secret_classify` (tier by name) and `secret_registry` (seeding, sync, due dates, drift).
+Beside this file are `consumers` (who holds a copy), `git_dates` (when a ciphertext last
+changed), `sops_io` (push-token shape) and `rotation_tools` (every process boundary,
+injectable).
 
 Secret NAMES are read straight from the encrypted secrets.yml — SOPS encrypts values but
 leaves keys in plaintext — so `sync`, and every arm of `audit` that `--check` gates on, run
@@ -77,7 +79,7 @@ from secrets_mgmt.git_dates import (
     advance_last_rotated,
     derived_rotation_dates,
 )
-from secrets_mgmt.secret_registry import (
+from secrets_mgmt.secrets_lib.secret_registry import (
     audit,
     is_record,
     record_refusal,

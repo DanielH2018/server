@@ -320,7 +320,7 @@ def collect(
     """One row per batch in `run`, and the worst exit tier among them; `status`'s whole read.
 
     Each row carries `batch`, `host`, `branch`, `state`, `pr_url` and `line`, the text line
-    `status` prints. `status --json` prints the rows themselves, so `fanout_probe.py` reads the
+    `status` prints. `status --json` prints the rows themselves, so `fanout.py probe` reads the
     state field instead of a regex over the line (#3926). Two states come from here rather
     than from a host: `cleaned` for a batch `clean` removed, and `unread` for a host whose
     read timed out, which still counts as running.

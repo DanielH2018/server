@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for longhorn_reap_selectors.py, the migrated-chain and seeds selections.
+"""Tests for longhorn_reap_lib/selection.py, the migrated-chain and seeds selections.
 
 Each floor gets an `..._is_clean` / `..._is_flagged` pair per CLAUDE.md's red-proof rule: one
 input it must keep, one it must delete. The population these two selectors read is the one
@@ -9,8 +9,8 @@ of these cases is reachable through `test_longhorn_reap_logic.py`'s fixtures.
 Run: uv run pytest scripts/backup/tests/test_longhorn_reap_selectors.py
 """
 
-import longhorn_reap_logic as logic
-import longhorn_reap_selectors as selectors
+from longhorn_reap_lib import logic
+from longhorn_reap_lib import selection as selectors
 from _reap_entrypoint_harness import _backup, _volume
 
 
