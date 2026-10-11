@@ -20,6 +20,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import vip_placement as ph
+from lib.exit_codes import PROBE_UNREADABLE
 
 
 def _svc(name, etp="Local", ip="10.0.0.240", type_="LoadBalancer", selector=None):
@@ -93,7 +94,7 @@ def test_an_unready_endpoint_is_not_a_local_endpoint():
 def test_an_empty_read_is_inconclusive_not_a_pass():
     """No Services read: the check has nothing to assert and must not report OK."""
     text, code = ph.format_vip_placement([], [_slice("traefik", "daniel-box")], _BOX)
-    assert code == 2 and "INCONCLUSIVE" in text
+    assert code == PROBE_UNREADABLE and "INCONCLUSIVE" in text
 
 
 def test_no_announcer_resolved_is_inconclusive_not_a_pass():
@@ -101,7 +102,7 @@ def test_no_announcer_resolved_is_inconclusive_not_a_pass():
     text, code = ph.format_vip_placement(
         [_svc("traefik")], [_slice("traefik", "daniel-box")], set()
     )
-    assert code == 2 and "INCONCLUSIVE" in text
+    assert code == PROBE_UNREADABLE and "INCONCLUSIVE" in text
 
 
 def test_a_cluster_policy_service_is_not_checked():
@@ -109,7 +110,7 @@ def test_a_cluster_policy_service_is_not_checked():
     text, code = ph.format_vip_placement(
         [_svc("traefik", etp="Cluster")], [_slice("traefik", "daniel-server")], _BOX
     )
-    assert code == 2, "nothing in scope, so nothing to assert"
+    assert code == PROBE_UNREADABLE, "nothing in scope, so nothing to assert"
     assert "INCONCLUSIVE" in text
 
 
@@ -117,7 +118,7 @@ def test_a_clusterip_service_is_not_checked():
     _text, code = ph.format_vip_placement(
         [_svc("api", type_="ClusterIP")], [_slice("api", "daniel-server")], _BOX
     )
-    assert code == 2
+    assert code == PROBE_UNREADABLE
 
 
 def test_an_unpinned_advertisement_announces_from_every_node():

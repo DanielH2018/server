@@ -20,8 +20,43 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.arr import ARR_PORTS
 from diagnostics.probe_lib.core import LOKI_STORE_HELP, LOKI_STORES
+from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE, contract
 from lib.kubectl import CLUSTER_NODES, DEFAULT_CLUSTER
 from diagnostics.probe_lib.longhorn import LONGHORN_PREFIX
+
+# The key of probe.py's row in `lib.exit_codes.CONTRACTS`.
+ENTRY_POINT = "scripts/diagnostics/probe.py"
+
+
+def exits(ok, fail):
+    """The exit clause every verdict subcommand's help carries, so all of them read alike (#4454).
+
+    Args:
+        ok: what exit 0 means for this subcommand.
+        fail: what exit 1 means for it.
+    """
+    return (
+        f"exit {PROBE_OK} = {ok}, {PROBE_FAILED} = {fail}, "
+        f"{PROBE_UNREADABLE} = the probe could not read its source"
+    )
+
+
+def _verdict_parser(sub, name, summary, ok, fail):
+    """Add a verdict subcommand whose `help` and `--help` both end with its `exits` clause."""
+    text = f"{summary} ({exits(ok, fail)})"
+    return sub.add_parser(name, help=text, description=text)
+
+
+def _epilog():
+    """Every code in probe.py's exit contract, rendered from `CONTRACTS` rather than restated."""
+    codes = "; ".join(
+        f"{c.value} = {c.meaning.rstrip('.')}" for c in contract(ENTRY_POINT)
+    )
+    return (
+        f"Exit codes of every verdict subcommand: {codes}. A verdict subcommand's last line "
+        "is `PROBE-VERDICT: <ok|fail|unreadable> (<detail>)`, except under --json or "
+        "--dry-run."
+    )
 
 
 def cert_stages(host, port, sni):
@@ -62,7 +97,7 @@ def cert_stages(host, port, sni):
 
 def _build_parser():
     p = argparse.ArgumentParser(
-        prog="probe.py", description="read-only homelab diagnostics"
+        prog="probe.py", description="read-only homelab diagnostics", epilog=_epilog()
     )
     p.add_argument(
         "--dry-run", action="store_true", help="print the command(s) instead of running"
@@ -96,13 +131,21 @@ def _build_parser():
         action="store_true",
         help="scope to daniel-pi's own scrape jobs (derived from the k8s_pi_client_ip static "
         "targets in observability's prometheus.yaml.j2), formatted rather than raw JSON, and "
-        "exits 1 if a declared job has gone missing, not just down",
+        "judged: "
+        + exits(
+            "every declared job is up", "a declared job is down or has gone missing"
+        ),
     )
-    sub.add_parser("monitors", help="Kuma down-monitors rollup (exit 0 = all up)")
-    kd = sub.add_parser(
+    _verdict_parser(
+        sub, "monitors", "Kuma down-monitors rollup", "all up", "a monitor is not up"
+    )
+    kd = _verdict_parser(
+        sub,
         "kuma-drift",
-        help="declared monitors vs live ones — catches a tile that is gone rather "
-        "than down, which `monitors` counts as green (exit 0 = no drift)",
+        "declared monitors vs live ones — catches a tile that is gone rather "
+        "than down, which `monitors` counts as green",
+        "no drift",
+        "drift",
     )
     kd.add_argument(
         "--no-secrets",
@@ -147,8 +190,12 @@ def _build_parser():
     lq.add_argument(
         "--json", action="store_true", help="print raw JSON instead of the log lines"
     )
-    al = sub.add_parser(
-        "alerts", help="monitor-bridge DOWN alert history, collapsed to episodes (Loki)"
+    al = _verdict_parser(
+        sub,
+        "alerts",
+        "monitor-bridge DOWN alert history, collapsed to episodes (Loki)",
+        "the history was read, whatever it holds",
+        "never, because a DOWN episode is history rather than a failure",
     )
     al.add_argument(
         "--days", type=float, default=7, help="lookback window in days (default 7)"
@@ -175,10 +222,13 @@ def _build_parser():
         "--json", action="store_true", help="print episodes as JSON (epoch-ns times)"
     )
     sub.add_parser("scrutiny", help="disk SMART summary")
-    b2l = sub.add_parser(
+    b2l = _verdict_parser(
+        sub,
         "b2-longhorn",
-        help="Longhorn backup objects in B2, per volume — proves DATA blocks landed, "
-        "not just metadata (exit 1 if any volume has none)",
+        "Longhorn backup objects in B2, per volume — proves DATA blocks landed, "
+        "not just metadata",
+        "every volume has data blocks",
+        "a volume has none",
     )
     b2l.add_argument(
         "--bucket", help="override the bucket read from the longhorn_b2_bucket secret"
@@ -186,10 +236,12 @@ def _build_parser():
     b2l.add_argument(
         "--prefix", default=LONGHORN_PREFIX, help="B2 prefix Longhorn writes under"
     )
-    b2b = sub.add_parser(
+    b2b = _verdict_parser(
+        sub,
         "b2-budget",
-        help="per-shard Class C projection against B2's free-tier daily cap "
-        "(exit 1 if a weekly shard is over budget)",
+        "per-shard Class C projection against B2's free-tier daily cap",
+        "every weekly shard is within budget",
+        "a weekly shard is over budget",
     )
     b2b.add_argument(
         "--bucket", help="override the bucket read from the longhorn_b2_bucket secret"
@@ -210,11 +262,14 @@ def _build_parser():
     )
     b2s.add_argument("--since", default="24h", help="window, e.g. 30m/6h/2d/1w")
     b2s.add_argument("--limit", type=int, default=1000)
-    b2d = sub.add_parser(
+    b2d = _verdict_parser(
+        sub,
         "b2-deletions",
-        help="charge completed Longhorn backup deletions to today's ledger, priced from the "
+        "charge completed Longhorn backup deletions to today's ledger, priced from the "
         "block-tree counts the last b2-budget listing wrote. Reads Loki and the Kubernetes "
         "API; spends nothing on B2.",
+        "every deletion was priced",
+        "a deletion could not be priced",
     )
     b2d.add_argument("--since", default="26h", help="window, e.g. 30m/6h/2d/1w")
     b2d.add_argument("--limit", type=int, default=1000)
@@ -231,11 +286,13 @@ def _build_parser():
         dest="no_record",
         help="report what would be charged without writing the ledger",
     )
-    rb = sub.add_parser(
+    rb = _verdict_parser(
+        sub,
         "readonly-rbac",
-        help="assert plain kubectl is still read-only — exit 1 on privilege creep, 2 when the "
-        "control verbs are refused and nothing can be concluded. Uses `auth can-i`, writes "
-        "nothing.",
+        "assert plain kubectl is still read-only. A refused control verb means nothing can "
+        "be concluded, which is the unreadable exit. Uses `auth can-i`, writes nothing.",
+        "still read-only",
+        "privilege creep",
     )
     rb.add_argument(
         "--namespace", help="namespace to ask about (default: the workload one)"
@@ -245,12 +302,15 @@ def _build_parser():
         action="store_true",
         help="print the can-i calls without making them",
     )
-    vp = sub.add_parser(
+    vp = _verdict_parser(
+        sub,
         "vip-placement",
-        help="assert every ETP=Local MetalLB VIP has a Ready endpoint on the node that "
-        "announces it — exit 1 when one is stranded (the announcer DROPs its traffic while "
-        "the Service reads healthy), 2 when the read came back empty. A VIP whose workloads "
-        "all declare zero replicas is reported scaled-to-zero, not stranded.",
+        "assert every ETP=Local MetalLB VIP has a Ready endpoint on the node that "
+        "announces it. A stranded VIP's announcer DROPs its traffic while the Service reads "
+        "healthy, and a read that came back empty is the unreadable exit. A VIP whose "
+        "workloads all declare zero replicas is reported scaled-to-zero, not stranded.",
+        "every VIP is backed",
+        "a VIP is stranded",
     )
     vp.add_argument(
         "--dry-run",
@@ -263,7 +323,13 @@ def _build_parser():
         "the containers_list `tier` field (inventory only, no kubectl). Exit 2 when the set "
         "comes back empty.",
     )
-    pi = sub.add_parser("pi", help="daniel-pi container view over one ssh")
+    pi = _verdict_parser(
+        sub,
+        "pi",
+        "daniel-pi container view over one ssh",
+        "every container is clean",
+        "a container is detached or unhealthy",
+    )
     pi.add_argument(
         "subpath",
         choices=["containers"],
@@ -277,8 +343,8 @@ def _build_parser():
     )
     ct.add_argument("target", help="host or host:port")
     ct.add_argument("--sni", help="SNI servername (defaults to host)")
-    hl = sub.add_parser(
-        "health", help="k8s rollout + restart rollup (exit 0 = healthy)"
+    hl = _verdict_parser(
+        sub, "health", "k8s rollout + restart rollup", "healthy", "unhealthy or missing"
     )
     hl.add_argument("container", help="service name, e.g. jellyfin")
     hl.add_argument(
@@ -334,13 +400,19 @@ def _build_parser():
     htr.add_argument(
         "query", help="automation id, alias-slug, or full automation.<slug>"
     )
-    hasub.add_parser(
+    _verdict_parser(
+        hasub,
         "verify-automations",
-        help="assert every automation in files/automations/ loaded (exit 0 = all loaded)",
+        "assert every automation in files/automations/ loaded",
+        "all loaded",
+        "an automation failed to load",
     )
-    hasub.add_parser(
+    _verdict_parser(
+        hasub,
         "verify-entities",
-        help="assert every entity in state/external_entities.yml still exists live",
+        "assert every entity in state/external_entities.yml still exists live",
+        "every entity exists",
+        "an entity has vanished",
     )
     hst = sub.add_parser("ha-state", help="live view of the derived state model")
     hst.add_argument(
@@ -398,20 +470,26 @@ def _build_parser():
             "line, to PATH; release-staleness-check.sh re-alerts when that set changes (#2378)"
         ),
     )
-    landing = sub.add_parser(
+    landing = _verdict_parser(
+        sub,
         "landing",
-        help="what would stop a landing now (hold, red master CI, owed manual planes), the "
-        "runs in flight and the worktrees with their claims (exit 1 when something blocks)",
+        "what would stop a landing now (hold, red master CI, owed manual planes), the "
+        "runs in flight and the worktrees with their claims",
+        "nothing blocks",
+        "something blocks",
     )
     landing.add_argument(
         "--json",
         action="store_true",
         help="one JSON document, the shape the deck mod in .claude/plugins/deck/ reads",
     )
-    gitops_state = sub.add_parser(
+    gitops_state = _verdict_parser(
+        sub,
         "gitops-state",
-        help="every GitOps deployer marker and owed-ledger line with its clear command, "
-        "read-only (exit 1 when one is unreadable)",
+        "every GitOps deployer marker and owed-ledger line with its clear command, "
+        "read-only",
+        "every marker was read",
+        "a marker is unreadable or the state directory is absent",
     )
     gitops_state.add_argument(
         "--json", action="store_true", help="one JSON document instead of the text view"

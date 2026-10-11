@@ -30,6 +30,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST, prom_endpoint, prom_targets_url
 
+from lib.exit_codes import PROBE_UNREADABLE
 from lib.repo_paths import REPO
 
 PROMETHEUS_TEMPLATE_PATH = (
@@ -201,16 +202,25 @@ def run_pi_containers(ns):
             argv, capture_output=True, text=True, timeout=PI_CONTAINERS_TIMEOUT
         )
     except subprocess.TimeoutExpired:
-        print(f"ssh {PI_HOST} docker inspect timed out after {PI_CONTAINERS_TIMEOUT}s")
-        return 1
+        print(
+            f"ssh {PI_HOST} docker inspect timed out after {PI_CONTAINERS_TIMEOUT}s",
+            file=_sys.stderr,
+        )
+        return PROBE_UNREADABLE
     if out.returncode != 0:
-        print(f"ssh {PI_HOST} docker inspect failed: {out.stderr.strip()}")
-        return 1
+        print(
+            f"ssh {PI_HOST} docker inspect failed: {out.stderr.strip()}",
+            file=_sys.stderr,
+        )
+        return PROBE_UNREADABLE
     try:
         containers = json.loads(out.stdout)
     except json.JSONDecodeError:
-        print(f"ssh {PI_HOST} docker inspect returned unparseable output")
-        return 1
+        print(
+            f"ssh {PI_HOST} docker inspect returned unparseable output",
+            file=_sys.stderr,
+        )
+        return PROBE_UNREADABLE
     text, code = format_pi_containers(containers)
     print(text)
     return code

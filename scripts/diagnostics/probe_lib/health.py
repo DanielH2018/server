@@ -65,6 +65,7 @@ from diagnostics.probe_lib.health_kubectl import (
 )
 from diagnostics.probe_lib.health_rollout import format_k8s_health, unrolled_reason
 
+from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import DEFAULT_CLUSTER, cluster_refusal, kubectl_json, served_cluster
 from lib.repo_paths import K8S_ROLES, REPO
 
@@ -378,12 +379,25 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
         # daniel-pi is the only Docker host left, and probe.py runs on daniel-box, so this is
         # necessarily remote. The ssh is internal to the script, so it is covered by probe.py's
         # own allow-list entry and never reaches the Bash classifier.
+        # A failed ssh or an unparseable inspect is a read that did not happen, not an absent
+        # container: reporting it as `[]` printed "MISSING — the deploy did not create it"
+        # for a Pi that was only unreachable (#4444).
         argv = ["ssh", PI_HOST] + inspect_argv(container)
         out = subprocess.run(argv, capture_output=True, text=True)
+        if out.returncode != 0:
+            print(
+                f"ssh {PI_HOST} docker inspect {container} failed: {out.stderr.strip()}",
+                file=_sys.stderr,
+            )
+            return PROBE_UNREADABLE
         try:
-            data = json.loads(out.stdout) if out.returncode == 0 else []
+            data = json.loads(out.stdout)
         except json.JSONDecodeError:
-            data = []
+            print(
+                f"ssh {PI_HOST} docker inspect {container} returned unparseable output",
+                file=_sys.stderr,
+            )
+            return PROBE_UNREADABLE
         text, code = format_health(data, container, declared=declared_on_pi(container))
         print(text)
         return code

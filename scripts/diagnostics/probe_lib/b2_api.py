@@ -18,7 +18,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from diagnostics.probe_lib.core import DEFAULT_TIMEOUT
+from diagnostics.probe_lib.core import DEFAULT_TIMEOUT, Unreadable
 
 # Re-exported only: longhorn.py prints it in the `--dry-run` description of both subcommands.
 from lib.b2 import AUTHORIZE_URL as B2_AUTHORIZE_URL  # noqa: F401
@@ -59,7 +59,7 @@ def b2_longhorn_lines(
             session.lookup_bucket(bucket)
         files = session.list_files(strip)
     except B2Error as exc:
-        raise SystemExit(f"B2 request failed: {exc}") from None
+        raise Unreadable(f"B2 request failed: {exc}") from None
 
     lines = []
     for entry in files:

@@ -192,3 +192,15 @@ def test_verdict_subcommand_help_names_the_unreadable_exit(path):
     assert re.search(rf"\b{TEMP_FAIL} = ", text), (
         f"`probe.py {' '.join(path)}` help has no `{TEMP_FAIL} = ...` exit clause"
     )
+
+
+def test_a_json_view_prints_no_verdict_line_after_its_document(capsys):
+    """`--json` stdout is one document, and the deck mod parses `landing --json` as one.
+
+    `gitops-state` reads the deployer's state directory and nothing over a network, so the run
+    is real; whatever the directory holds, stdout must still parse as JSON.
+    """
+    probe.main(["gitops-state", "--json"])
+    out = capsys.readouterr().out
+    assert "PROBE-VERDICT" not in out
+    json.loads(out)
