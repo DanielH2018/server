@@ -8,7 +8,7 @@ subprocess runs in `test_longhorn_backup_health_reader.py`.
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_restore_drill_checks.py
 """
 
-import longhorn_backup_health_logic as logic
+from longhorn_lib import longhorn_backup_health_logic as logic
 
 HOUR = 3600.0
 DAY = 86400.0

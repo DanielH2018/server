@@ -18,7 +18,7 @@ Each condition is a stop, not a checklist item. They run as one script, in order
 code names the first gate that refused (#2216, the shape `docs/k3s-upgrade.md` set):
 
 ```bash
-uv run python scripts/deploy_tools/longhorn_upgrade_gates.py
+uv run python scripts/deploy_tools/runbook_gates.py longhorn-upgrade
 ```
 
 Exit 0 means all four passed. Exit 1–4 is the gate that failed, and the script prints what it

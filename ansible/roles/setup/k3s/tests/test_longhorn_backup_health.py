@@ -13,7 +13,7 @@ The I/O layer is pinned by real subprocess runs in `test_longhorn_backup_health_
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_backup_health.py
 """
 
-import longhorn_backup_health_logic as logic
+from longhorn_lib import longhorn_backup_health_logic as logic
 
 HOUR = 3600.0
 DAY = 86400.0

@@ -1,4 +1,4 @@
-"""`k3s_etcd_restore_gates.py` against stamps in `tmp_path` and a fake kubectl: each gate's
+"""`runbook_gates.py etcd-restore` against stamps in `tmp_path` and a fake kubectl: each gate's
 clean/flagged pair, the stop order, and the exit code naming the gate.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_k3s_etcd_restore_gates.py
@@ -8,7 +8,7 @@ import io
 
 import pytest
 from _gates_fakes import failing_read, fake_tools
-from deploy_tools import k3s_etcd_restore_gates as gates
+from deploy_tools.runbook_gates_lib import etcd_restore as gates
 
 from lib.repo_paths import REPO as _REPO
 from lib.proc_testing import run
@@ -224,7 +224,7 @@ def test_a_forbidden_snapshot_read_is_not_a_verdict(drill_dir, homelab_dir, tool
     code, out = _run(
         drill_dir, homelab_dir, failing_read(tools, "etcdsnapshotfiles.k3s.cattle.io")
     )
-    assert code == gates.runbook_gates.EX_UNAVAILABLE
+    assert code == gates.gate_runner.EX_UNAVAILABLE
     assert "cannot ask the cluster" in out
 
 
@@ -280,7 +280,7 @@ def test_a_gate_number_this_runbook_does_not_have_is_usage(
     """Rather than a vacuous pass over an empty gate tuple, which is how a renumbering would
     read green while drilling nothing."""
     code, out = _run_only(4, drill_dir, homelab_dir, tools)
-    assert code == gates.runbook_gates.EX_USAGE
+    assert code == gates.gate_runner.EX_USAGE
     assert "no gate numbered 4" in out
 
 
@@ -294,29 +294,29 @@ def test_the_gate_flag_reaches_run_gates_and_a_bad_one_is_usage():
     `test_a_gate_number_this_runbook_does_not_have_is_usage`, which can hand `run_gates` a
     buffer — `out=sys.stdout` is bound as a default argument, so `capsys` cannot see it here.
     """
-    assert gates.main(["--gate", "4", SNAPSHOT]) == gates.runbook_gates.EX_USAGE
+    assert gates.main(["--gate", "4", SNAPSHOT]) == gates.gate_runner.EX_USAGE
     # `--gate` with nothing usable after it, and the flag with no positional left, are usage.
-    assert gates.main(["--gate"]) == gates.runbook_gates.EX_USAGE
-    assert gates.main(["--gate", "three", SNAPSHOT]) == gates.runbook_gates.EX_USAGE
-    assert gates.main(["--gate", "3"]) == gates.runbook_gates.EX_USAGE
+    assert gates.main(["--gate"]) == gates.gate_runner.EX_USAGE
+    assert gates.main(["--gate", "three", SNAPSHOT]) == gates.gate_runner.EX_USAGE
+    assert gates.main(["--gate", "3"]) == gates.gate_runner.EX_USAGE
 
 
 def test_the_snapshot_name_is_required():
     # `cli(takes=1)`: no name, a flag, and a second positional are each usage — none of them
     # runs a gate, so neither the stamps nor the cluster are read.
-    assert gates.main([]) == gates.runbook_gates.EX_USAGE
-    assert gates.main(["--bogus"]) == gates.runbook_gates.EX_USAGE
-    assert gates.main([SNAPSHOT, "extra"]) == gates.runbook_gates.EX_USAGE
+    assert gates.main([]) == gates.gate_runner.EX_USAGE
+    assert gates.main(["--bogus"]) == gates.gate_runner.EX_USAGE
+    assert gates.main([SNAPSHOT, "extra"]) == gates.gate_runner.EX_USAGE
 
 
 # ── the runbook names the script ────────────────────────────────────────────────────────────
 
 
 def test_the_runbook_calls_the_script_and_it_runs():
-    script = "scripts/deploy_tools/k3s_etcd_restore_gates.py"
-    assert script in _RUNBOOK.read_text()
+    script = "scripts/deploy_tools/runbook_gates.py"
+    assert f"{script} etcd-restore" in _RUNBOOK.read_text()
     proc = run(
-        ["uv", "run", "python", str(_REPO / script), "--bogus"],
+        ["uv", "run", "python", str(_REPO / script), "etcd-restore", "--bogus"],
         cwd=_REPO,
         # A nested `uv run` resolves the dev group before the child starts, which a cold
         # cache makes minutes rather than seconds — longer than `DEFAULT_TIMEOUT` allows.

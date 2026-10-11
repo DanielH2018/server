@@ -16,7 +16,7 @@ import re
 from typing import NamedTuple
 
 # Resolves via longhorn_backup_health.py's own sys.path.insert, exactly as the sibling logic
-# module's does.
+# module's does: host_lib.py sits beside this package, not inside it.
 import host_lib
 
 # ── check 9: do the trim and B2-accounting crons have a reader? ─────────────────────────────

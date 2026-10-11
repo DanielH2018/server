@@ -42,7 +42,7 @@ DRILL = ("setup", "k3s", "longhorn-restore-drill.sh.j2")
 CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
 
 sys.path.insert(0, str(K3S_FILES))
-import longhorn_backup_health_logic as logic  # noqa: E402
+from longhorn_lib import longhorn_backup_health_logic as logic  # noqa: E402
 
 NOW = 1_800_000_000.0  # 2027-01-15T08:00:00Z
 

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Run the four stop conditions of `docs/k3s-upgrade.md` in order, exit code naming the first failure.
 
 The runbook listed the gates as four shell blocks the operator ran by hand, each "a stop
@@ -29,19 +28,19 @@ Exit codes:
          or a list that returned nothing parseable)
 
 Usage:
-    uv run python scripts/deploy_tools/k3s_upgrade_gates.py
+    uv run python scripts/deploy_tools/runbook_gates.py k3s-upgrade
 """
 
 import os
 import sys
 from pathlib import Path as _Path
 
-# Reach `lib`: a directly-invoked script gets only its own directory on sys.path, and
-# pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+# Reach `scripts/`, for `lib` and `deploy_tools`: the entrypoint puts only its own directory on
+# sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from deploy_tools import runbook_gates
-from deploy_tools.runbook_gates import (
+from deploy_tools.runbook_gates_lib import gate_runner
+from deploy_tools.runbook_gates_lib.gate_runner import (
     EX_UNAVAILABLE,
     LONGHORN_NS,
     VOLUMES_ARGS,
@@ -63,7 +62,7 @@ from gitops_markers import STATE_DIR
 # The Backup CR reader the backup-health cron ships (#3735); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
 sys.path.insert(0, str(K3S_FILES))
-import longhorn_backups
+from longhorn_lib import longhorn_backups
 
 CLUSTER = "prod"
 RUNBOOK = "docs/k3s-upgrade.md"
@@ -84,7 +83,7 @@ __all__ = ["EX_UNAVAILABLE", "Unreadable", "unsafe_volumes"]
 # Each returns the list of offenders — empty means the gate passes. `None` from kubectl_json
 # (a failed read) is an offender too, so a direct call can never pass on a read that failed;
 # the runner maps that case to `EX_UNAVAILABLE` before it gets here. Gate 1's verdict,
-# `unsafe_volumes`, is the shared one in `runbook_gates`.
+# `unsafe_volumes`, is the shared one in `gate_runner`.
 
 
 def in_flight_backups(doc) -> list[str]:
@@ -183,12 +182,8 @@ def run_gates(
 ) -> int:
     """Run every gate in order, print one line per gate, and return the exit code."""
     state_dir = state_dir or os.environ.get("GITOPS_STATE_DIR") or STATE_DIR
-    return runbook_gates.run_gates(GATES, RUNBOOK, tools, state_dir, out=out)
+    return gate_runner.run_gates(GATES, RUNBOOK, tools, state_dir, out=out)
 
 
 def main(argv: list[str] | None = None) -> int:
-    return runbook_gates.cli(__doc__, argv, run_gates)
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    return gate_runner.cli(__doc__, argv, run_gates)

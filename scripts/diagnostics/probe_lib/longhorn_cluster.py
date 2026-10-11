@@ -28,7 +28,7 @@ from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
 # cron (#3735, #3737); it imports host_lib, so both directories go on sys.path.
 _sys.path.insert(0, str(HOST_LIB_FILES))
 _sys.path.insert(0, str(K3S_FILES))
-import longhorn_backups
+from longhorn_lib import longhorn_backups
 
 
 def volume_shard_labels(cluster=DEFAULT_CLUSTER, _run=None):

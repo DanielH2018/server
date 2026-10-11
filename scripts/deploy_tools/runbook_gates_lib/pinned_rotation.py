@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Run the stop conditions of the pinned-secret procedure in `docs/secret-rotation.md`, exit code naming the first failure.
 
 A pinned secret anchors existing data: `authelia_storage` encrypts the TOTP secrets and WebAuthn credentials in Authelia's
@@ -6,7 +5,7 @@ SQLite database, and `change-key` re-encrypts that database IN PLACE, so the ins
 and the pre-rotation snapshot is the only way back. The runbook's discipline is a staged cutover whose safety is the order
 of its steps; here the conditions that must hold before `change-key` are verdicts over what the registry, the cluster and
 this shell answered, the runner stops at the first failure, and the exit code is the gate number (the shape
-`k3s_upgrade_gates.py` sets).
+`k3s_upgrade.py` sets).
 
 This script checks the preconditions and nothing more. It never generates, prints or handles
 a key, and it is safe to run from anywhere — the `change-key` commands are not, which is what
@@ -37,7 +36,7 @@ Exit codes:
          or a list that returned nothing parseable)
 
 Usage:
-    uv run python scripts/deploy_tools/pinned_rotation_gates.py
+    uv run python scripts/deploy_tools/runbook_gates.py pinned-rotation
 """
 
 import os
@@ -48,12 +47,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path as _Path
 
-# Reach `lib`: a directly-invoked script gets only its own directory on sys.path, and
-# pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+# Reach `scripts/`, for `lib` and `deploy_tools`: the entrypoint puts only its own directory on
+# sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from deploy_tools import runbook_gates
-from deploy_tools.runbook_gates import (
+from deploy_tools.runbook_gates_lib import gate_runner
+from deploy_tools.runbook_gates_lib.gate_runner import (
     LONGHORN_NS,
     VOLUMES_ARGS,
     Gate,
@@ -257,12 +256,8 @@ def run_gates(
         server_kubeconfig=server_kubeconfig,
         now=time.time() if now is None else now,
     )
-    return runbook_gates.run_gates(GATES, RUNBOOK, env, out=out)
+    return gate_runner.run_gates(GATES, RUNBOOK, env, out=out)
 
 
 def main(argv: list[str] | None = None) -> int:
-    return runbook_gates.cli(__doc__, argv, run_gates)
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    return gate_runner.cli(__doc__, argv, run_gates)

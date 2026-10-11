@@ -822,7 +822,7 @@ checks each gate suppresses.
   volume is down to one copy and a `faulted` one has no healthy replica. The decision is
   `longhorn_robustness.SAFE_ROBUSTNESS` (`healthy`, `unknown`): any other state pages, so a state
   Longhorn adds later pages instead of passing a `degraded|faulted` selector. The runbook gates in
-  `scripts/deploy_tools/runbook_gates.py` call the same allow-list on the volume CRs (#3668).
+  `scripts/deploy_tools/runbook_gates_lib/gate_runner.py` call the same allow-list on the volume CRs (#3668).
   `unknown` is a detached volume and is not a fault (6 of 43 volumes read it on 2026-08-17,
   including game servers scaled to zero on purpose). The two longhorn-manager pods report disjoint
   volume subsets, so offenders are deduped by name. **An absent metric is a breach**, not health:

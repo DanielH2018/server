@@ -1,4 +1,4 @@
-"""`longhorn_dr_gates.py` against a fake kubectl: each gate's clean/flagged pair, the stop
+"""`runbook_gates.py longhorn-dr` against a fake kubectl: each gate's clean/flagged pair, the stop
 order, and the exit code naming the gate.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_longhorn_dr_gates.py
@@ -9,7 +9,7 @@ import json
 
 import pytest
 from _gates_fakes import fake_tools
-from deploy_tools import longhorn_dr_gates as gates
+from deploy_tools.runbook_gates_lib import longhorn_dr as gates
 
 from lib.repo_paths import REPO as _REPO
 from lib.proc_testing import run
@@ -212,10 +212,10 @@ def test_the_exit_codes_are_the_gate_positions():
 
 
 def test_the_runbook_calls_the_script_and_it_runs():
-    script = "scripts/deploy_tools/longhorn_dr_gates.py"
-    assert script in _RUNBOOK.read_text()
+    script = "scripts/deploy_tools/runbook_gates.py"
+    assert f"{script} longhorn-dr" in _RUNBOOK.read_text()
     proc = run(
-        ["uv", "run", "python", str(_REPO / script), "--bogus"],
+        ["uv", "run", "python", str(_REPO / script), "longhorn-dr", "--bogus"],
         cwd=_REPO,
         # A nested `uv run` resolves the dev group before the child starts, which a cold
         # cache makes minutes rather than seconds — longer than `DEFAULT_TIMEOUT` allows.

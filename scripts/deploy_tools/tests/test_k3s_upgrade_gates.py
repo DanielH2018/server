@@ -1,4 +1,4 @@
-"""`k3s_upgrade_gates.py` against a fake kubectl: each gate's clean/flagged pair, the stop order,
+"""`runbook_gates.py k3s-upgrade` against a fake kubectl: each gate's clean/flagged pair, the stop order,
 and the exit code naming the gate.
 
 The runner takes a `lib.kubectl.Tools`, so the cluster reads are answered from canned JSON
@@ -13,7 +13,7 @@ import subprocess
 
 import pytest
 from _gates_fakes import fake_tools
-from deploy_tools import k3s_upgrade_gates as gates
+from deploy_tools.runbook_gates_lib import k3s_upgrade as gates
 from lib import kubectl
 from gitops_markers import MARKERS
 from lib.proc_testing import run
@@ -243,10 +243,10 @@ def test_the_runbook_calls_the_script_and_it_runs():
     runbook is invisible to it. Running the script with a bad flag exercises its own
     `sys.path` bootstrap, which the in-process import above cannot.
     """
-    script = "scripts/deploy_tools/k3s_upgrade_gates.py"
-    assert script in _RUNBOOK.read_text()
+    script = "scripts/deploy_tools/runbook_gates.py"
+    assert f"{script} k3s-upgrade" in _RUNBOOK.read_text()
     proc = run(
-        ["uv", "run", "python", str(_REPO / script), "--bogus"],
+        ["uv", "run", "python", str(_REPO / script), "k3s-upgrade", "--bogus"],
         cwd=_REPO,
         # A cold `uv` cache resolves the whole dev group before the script runs.
         timeout=300,

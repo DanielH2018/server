@@ -20,7 +20,7 @@ from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
 
 _sys.path.insert(0, str(HOST_LIB_FILES))
 _sys.path.insert(0, str(K3S_FILES))
-import longhorn_backups
+from longhorn_lib import longhorn_backups
 
 # B2's free tier allows 2,500 Class C transactions a day. Longhorn's retention delete is the
 # thing that spends them: DeleteDeltaBlockBackup walks the volume's whole block tree with one

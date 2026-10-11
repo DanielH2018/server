@@ -965,7 +965,7 @@ reaps their basenames. Every reader goes through one function per class:
   as one bump, dated and attributed from the older line.
 - `gitops_ledger.held_planes` returns each `hold_plane` subject once, oldest first. Its readers are
   monitor-bridge's Status check, the `deploy_ui` panel, `renovate_agent`'s skip reason,
-  `k3s_upgrade_gates.held_sha` and the scheduled-jobs page. Each reaches it through
+  `runbook_gates_lib/k3s_upgrade.held_sha` and the scheduled-jobs page. Each reaches it through
   `gitops_hold.DeployerSnapshot`, which reads `hold_sha` and the ledger together and raises on a
   marker it cannot read, and each keeps its own failure rule. `land_lib.tools.read_state` answers
   None, so `land.sh` fails closed. `deployer_park` answers None, which the SessionStart banner
