@@ -362,3 +362,23 @@ def test_a_port_edit_to_daniel_box_skips_monitor_bridge(tree: Tree):
     sonarr = "    image: sonarr:1\n"
     tree.write(BOX, HOST_VARS.replace(sonarr, sonarr + "    port: 8989\n"))
     assert "monitor-bridge" not in _narrow(tree)
+
+
+def test_an_added_daniel_box_entry_skips_a_reader_of_the_pis_list(tree: Tree):
+    """An added entry changes every field, and still only daniel-box's list (#4422)."""
+    _host_keyed_readers(tree)
+    added = "  - name: whisparr\n    image: whisparr:1\n"
+    tree.write(BOX, HOST_VARS + added)
+    assert "bazarr" not in _narrow(tree)
+
+
+@pytest.mark.parametrize(
+    "path, host",
+    [
+        ("ansible/inventory/host_vars/daniel-pi.yml", "daniel-pi"),
+        ("ansible/inventory/host_vars/daniel-box/containers.yml", "daniel-box"),
+        ("ansible/inventory/group_vars/all.yml", None),
+    ],
+)
+def test_edited_host_names_the_host_vars_owner_only(path: str, host: str | None):
+    assert containers.edited_host(path) == host

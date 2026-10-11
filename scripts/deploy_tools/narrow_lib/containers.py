@@ -8,7 +8,9 @@ changed where a reader names one (#4388). `changed_fields` names each edited ent
 `reader_reads` the fields a template reads, keyed by the entry its filter looks up, or by the
 job a `metrics_port` read names, which `reads_changed` resolves to the entry declaring it
 (#4396). Either side answers None for "every field" when it cannot name them, and None on
-either side keeps the reader, as before #4340.
+either side keeps the reader, as before #4340. A read through `hostvars['<host>']` with a
+literal host reads that host's list alone, so an edit to another host's `host_vars` skips it
+(#4422).
 """
 
 import sys as _sys
@@ -27,6 +29,11 @@ _MENTION = re.compile(r"(?<!\w)containers_list(?!\w)")
 _JINJA_CODE = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
 _JINJA_COMMENT = re.compile(r"\{#.*?#\}", re.DOTALL)
 _FILTER = re.compile(r"\s*\|\s*(\w+)")
+# `hostvars['daniel-pi'].` ending right before a mention: the host whose list it reads.
+_HOSTVARS_LITERAL = re.compile(
+    r"(?<!\w)hostvars\s*\[\s*(?:'([^'\\]*)'|\"([^\"\\]*)\")\s*\]\s*\.\s*$"
+)
+_HOST_VARS_PATH = re.compile(r"(?:^|/)host_vars/([^/]+?)(?:\.ya?ml)?(?:/|$)")
 
 # The entry fields each filter reads when a template hands it `containers_list`. A filter absent
 # here reads every field: `filter_by_platform` and `selectattr` return whole entries, and the
@@ -124,15 +131,38 @@ class Edit(NamedTuple):
     Attributes:
         changed: the fields the edit changed, by entry, as `changed_fields` returns them.
         owners: each `metrics` job's entry after the edit, as `job_owners` returns them.
+        host: the host whose list the edit changed, as `edited_host` returns it; None when
+          the file is not one host's, so every host's list counts as edited.
     """
 
     changed: dict[str, frozenset[str]] | None
     owners: dict[str, str | None]
+    host: str | None = None
 
 
-def edit(before: dict, after: dict) -> Edit:
-    """The `Edit` that turns the host_vars document `before` into `after`."""
-    return Edit(changed_fields(before, after), job_owners(after))
+def edit(before: dict, after: dict, path: str = "") -> Edit:
+    """The `Edit` that turns the inventory document `before` at `path` into `after`."""
+    return Edit(changed_fields(before, after), job_owners(after), edited_host(path))
+
+
+def edited_host(path: str) -> str | None:
+    """The host a `host_vars/<host>.yml` or `host_vars/<host>/...` file belongs to, else None."""
+    match = _HOST_VARS_PATH.search(path)
+    return match.group(1) if match else None
+
+
+def _other_hosts_list(code: str, start: int, host: str | None) -> bool:
+    """Whether the mention at `start` reads a literal host's list, and not `host`'s.
+
+    A bare mention, or one through `hostvars[<variable>]`, names no host and reads any list.
+    With `host` None the edited host is unknown, so no mention is another host's.
+    """
+    if host is None:
+        return False
+    match = _HOSTVARS_LITERAL.search(code, 0, start)
+    if not match:
+        return False
+    return (match.group(1) if match.group(1) is not None else match.group(2)) != host
 
 
 def changed_fields(before: dict, after: dict) -> dict[str, frozenset[str]] | None:
@@ -164,8 +194,13 @@ def changed_fields(before: dict, after: dict) -> dict[str, frozenset[str]] | Non
     return changed
 
 
-def reader_reads(text: str) -> dict[str | Job | None, frozenset[str]] | None:
+def reader_reads(
+    text: str, host: str | None = None
+) -> dict[str | Job | None, frozenset[str]] | None:
     """The entry fields a template reads through `containers_list`, by entry; None for all.
+
+    A mention through `hostvars['<other>']`, where `<other>` is a literal host other than
+    `host`, reads a list the edit did not change and contributes nothing, whatever its shape.
 
     The key is the entry a `NAMED_ENTRY` filter looks up by a literal name, the `Job` a
     `NAMED_JOB` filter looks up by a literal job, or None for a read that may land on any
@@ -177,6 +212,8 @@ def reader_reads(text: str) -> dict[str | Job | None, frozenset[str]] | None:
     reads: dict[str | Job | None, frozenset[str]] = {}
     for chunk in _JINJA_CODE.findall(_JINJA_COMMENT.sub("", text)):
         for mention in _MENTION.finditer(chunk):
+            if _other_hosts_list(chunk, mention.start(), host):
+                continue
             name, pos = _filter_after(chunk, mention.end())
             if name not in FILTER_FIELDS:
                 return None
@@ -290,8 +327,10 @@ def entry_change_tags(
     return tags
 
 
-def renders_containers_list(text: str) -> bool:
+def renders_containers_list(text: str, host: str | None = None) -> bool:
     """True when a template mentions `containers_list` inside `{{ }}` or `{% %}`.
+
+    A mention of another literal host's list does not count, as `reader_reads` skips it.
 
     A mention anywhere else is prose: a `{# #}` header, a `k8s_autodeploy_reason` string, a
     YAML comment. Counting those reached 59 of 62 services on the real tree,
@@ -300,7 +339,11 @@ def renders_containers_list(text: str) -> bool:
     quotes code.
     """
     code = _JINJA_CODE.findall(_JINJA_COMMENT.sub("", text))
-    return any(_MENTION.search(chunk) for chunk in code)
+    return any(
+        not _other_hosts_list(chunk, mention.start(), host)
+        for chunk in code
+        for mention in _MENTION.finditer(chunk)
+    )
 
 
 def reader_paths(
@@ -325,12 +368,13 @@ def reader_paths(
         ):
             continue
         text = read(hit) or ""
-        if not renders_containers_list(text):
+        host = edit.host if edit is not None else None
+        if not renders_containers_list(text, host):
             continue
         if edit is None or edit.changed is None:
             kept.append(hit)
             continue
-        reads = reader_reads(text)
+        reads = reader_reads(text, host)
         if reads is None or reads_changed(reads, edit.changed, edit.owners):
             kept.append(hit)
     return kept
