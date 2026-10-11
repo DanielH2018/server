@@ -21,7 +21,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 <!-- /generated_from -->
 
 - **Host: daniel-box (k8s CronJob).** This role renders `templates/config/config.yml.j2` and
-  copies `files/configarr_status.py`. Edit the config HERE; deploy with `--tags configarr`
+  copies `files/configarr_lib/configarr_status.py`. Edit the config HERE; deploy with `--tags configarr`
   from daniel-box.
 - **No web UI** or Authelia; it targets the cluster sonarr/radarr
 - **One-shot (ephemeral):** a nightly k8s CronJob, plus a `configarr-deploy-gate` Job the
@@ -30,7 +30,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   runs and fails is reported and the deploy continues, deliberately: a transient *arr outage
   must not fail the deploy. No healthcheck / AutoKuma — a batch
   job, not a service; its health signal is a daniel-box host cron (`/opt/configarr-health`)
-  that reads the last Job's outcome via `configarr_status.py` and pushes the "Configarr Sync"
+  that reads the last Job's outcome via `configarr_lib/configarr_status.py` and pushes the "Configarr Sync"
   Kuma monitor. The health reader counts the gate's own Job like any other finished run,
   because that run genuinely performs the reconcile — `pi-peer-backup`'s gate run does not
   count toward its dead-man monitor, and that role's CLAUDE.md has the other side of the choice.
@@ -89,8 +89,9 @@ the bespoke scheme first.
   uv run python scripts/diagnostics/probe.py arr sonarr "/api/v3/qualityprofile" --json \
     | jq '.[]|select(.name=="Anime")' > ansible/roles/k8s/configarr/files/baseline/anime-profile.json
   ```
-- Health evaluator: `files/configarr_status.py` (exit-code/output verdict logic, tested in
-  `tests/test_configarr_status.py`) — copied into `/opt/configarr-health` on
+- Health evaluator: `files/configarr_lib/configarr_status.py` (exit-code/output verdict logic, tested in
+  `tests/test_configarr_status.py`) — copied into `/opt/configarr-health/configarr_lib/`, beside
+  `configarr_lib/configarr_health_logic.py`, under the `configarr_health.py` reader on
   daniel-box, where a cron reads the last Job and pushes Kuma.
 - Deploy (from daniel-box): `./scripts/deploy.sh --tags "configarr"` —
   the k8s role also runs a one-off `configarr-deploy-gate` Job so the edit syncs immediately.

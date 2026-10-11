@@ -1,4 +1,26 @@
 ---
+- name: Create the deploy-ui library directory
+  tags: [deploy-ui-code]
+  ansible.builtin.file:
+    path: "{{ deploy_ui_dir }}/deploy_ui_lib"
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: Install the deploy-ui library
+  tags: [deploy-ui-code]
+  # One file at a time rather than the directory: a directory copy also ships whatever
+  # __pycache__ the controller's checkout holds.
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/deploy_ui_lib/{{ item }}"
+    dest: "{{ deploy_ui_dir }}/deploy_ui_lib/{{ item }}"
+    mode: "0644"
+  loop:
+    - deploy_ui_reads.py
+    - deploy_ui_writes.py
+  become: true
+  notify: Restart deploy-ui
+
 - name: Install the deploy-ui files
   tags: [deploy-ui-code]
   ansible.builtin.copy:
@@ -7,8 +29,6 @@
     mode: "0644"
   loop:
     - deploy_ui.py
-    - deploy_ui_reads.py
-    - deploy_ui_writes.py
     # The deployer's own modules, shipped from its `files/` rather than a copy here.
     # `deploy_changes.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes a change to it to
     # this role as well (#3306).
@@ -19,6 +39,20 @@
   become: true
   notify: Restart deploy-ui
 
+- name: Remove the deploy-ui modules that moved into deploy_ui_lib
+  tags: [deploy-ui-code]
+  # Until #4417 these two sat flat beside deploy_ui.py. A copy loop removes nothing it stops
+  # naming, so without this the stale copies stay on the host and the drift check no longer
+  # watches them. The running daemon already holds them in memory, and the restart this file
+  # notifies loads deploy_ui.py, which imports the deploy_ui_lib copies.
+  ansible.builtin.file:
+    path: "{{ deploy_ui_dir }}/{{ item }}"
+    state: absent
+  loop:
+    - deploy_ui_reads.py
+    - deploy_ui_writes.py
+  become: true
+
 - name: Record the deployed deploy-ui code
   tags: [deploy-ui-code]
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
@@ -27,10 +61,10 @@
     stamp_deployed_pairs:
       - live: "{{ deploy_ui_dir }}/deploy_ui.py"
         src: ansible/roles/setup/deploy_ui/files/deploy_ui.py
-      - live: "{{ deploy_ui_dir }}/deploy_ui_reads.py"
-        src: ansible/roles/setup/deploy_ui/files/deploy_ui_reads.py
-      - live: "{{ deploy_ui_dir }}/deploy_ui_writes.py"
-        src: ansible/roles/setup/deploy_ui/files/deploy_ui_writes.py
+      - live: "{{ deploy_ui_dir }}/deploy_ui_lib/deploy_ui_reads.py"
+        src: ansible/roles/setup/deploy_ui/files/deploy_ui_lib/deploy_ui_reads.py
+      - live: "{{ deploy_ui_dir }}/deploy_ui_lib/deploy_ui_writes.py"
+        src: ansible/roles/setup/deploy_ui/files/deploy_ui_lib/deploy_ui_writes.py
       - live: "{{ deploy_ui_dir }}/gitops_markers.py"
         src: ansible/roles/setup/gitops_deploy/files/gitops_markers.py
       - live: "{{ deploy_ui_dir }}/gitops_ledger.py"
