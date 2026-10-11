@@ -85,7 +85,7 @@ def test_remote_fanout_lines_name_each_batch_on_another_host(tmp_path):
     lines = _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box")
     assert lines == [
         "🛰 fan-out worktrees on other hosts "
-        "(uv run python scripts/dev/fanout_place.py status <run-id>):",
+        "(uv run python scripts/dev/fanout.py place status <run-id>):",
         "  • daniel-server worktree-fanout-1345 — #1345 (run 20260909T203000Z)",
     ]
 
@@ -153,7 +153,7 @@ def test_remote_fanout_lines_skips_a_malformed_manifest_but_keeps_the_rest(tmp_p
     lines = _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box")
     assert lines == [
         "🛰 fan-out worktrees on other hosts "
-        "(uv run python scripts/dev/fanout_place.py status <run-id>):",
+        "(uv run python scripts/dev/fanout.py place status <run-id>):",
         "  • daniel-server b — #2 (run r2)",
     ]
 
@@ -175,7 +175,7 @@ def test_remote_fanout_lines_skips_a_malformed_batch_but_keeps_its_sibling(tmp_p
     lines = _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box")
     assert lines == [
         "🛰 fan-out worktrees on other hosts "
-        "(uv run python scripts/dev/fanout_place.py status <run-id>):",
+        "(uv run python scripts/dev/fanout.py place status <run-id>):",
         "  • daniel-server b — #2 (run r3)",
     ]
 
@@ -208,6 +208,6 @@ def test_a_cleaned_batch_leaves_the_banner_once_its_worktree_is_gone(tmp_path):
     lines = _mod.remote_fanout_lines(manifest_dir=tmp_path, local_host="daniel-box")
     assert lines == [
         "🛰 fan-out worktrees on other hosts "
-        "(uv run python scripts/dev/fanout_place.py status <run-id>):",
+        "(uv run python scripts/dev/fanout.py place status <run-id>):",
         "  • daniel-server worktree-fanout-2 — #2 (run r4)",
     ]

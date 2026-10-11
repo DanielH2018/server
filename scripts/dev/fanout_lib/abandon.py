@@ -1,4 +1,4 @@
-"""Stop or abandon fan-out batches: `fanout_place.py stop` and `fanout_place.py abandon`.
+"""Stop or abandon fan-out batches: `fanout.py place stop` and `fanout.py place abandon`.
 
 `clean` keeps an unmerged tree by design, so giving up on a batch took a hand-run teardown on
 its host: unlock, force-remove, `branch -D`, a second `clean`, then one `findings.py release`

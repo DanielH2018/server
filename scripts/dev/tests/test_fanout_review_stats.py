@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict
 
 from fanout_lib.review.review_record import Record
-from fanout_review_stats import load, main, summarize
+from fanout_lib.review_stats import load, main, summarize
 
 
 def _test_finding(subkind, confidence=0.8):

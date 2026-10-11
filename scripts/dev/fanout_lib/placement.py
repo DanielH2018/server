@@ -62,7 +62,7 @@ class HostReading:
             on headroom alone (spec §2), because a host's agents are already priced into
             the memory the reading measures.
         signing_key: what the host's signing-key read printed, carried for the launch gate
-            in fanout_place (fanout_lib.signing) and, like live_agents, never scored here.
+            in fanout_lib.place (fanout_lib.signing) and, like live_agents, never scored here.
     """
 
     host: str

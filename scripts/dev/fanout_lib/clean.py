@@ -399,6 +399,10 @@ def remote_clean_command(
     """
     wt, branch = b.worktree, b.branch
     repo = repo or target.checkout
+    # DECIDED: both legs run the `fanout_place.py` shim, not `fanout.py place`. The server leg
+    # runs the batch worktree's own copy, and a batch launched before #4346 has no `fanout.py`;
+    # the other leg runs the primary checkout, which can lag by design. The shim exists in old
+    # and new checkouts alike. Repoint these once no live batch predates #4346.
     if target.is_server:
         clean_one_leg = (
             f"python {wt}/scripts/dev/fanout_place.py clean-one {wt} {branch}"

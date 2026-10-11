@@ -193,18 +193,18 @@ def test_a_review_unit_runs_the_pipeline_under_the_longer_cap_and_a_plain_one_do
     review = systemd_run_command("b", review=True)
     plain = systemd_run_command("b")
     assert f"-p RuntimeMaxSec={REVIEW_RUNTIME_MAX_S} " in review
-    assert "fanout_review.py --batch b --repo DanielH2018/server" in review
+    assert "fanout.py review --batch b --repo DanielH2018/server" in review
     assert " claude -p" not in review
-    assert "fanout_review.py" not in plain and " claude -p" in plain
-    assert (REPO_ROOT / "scripts/dev/fanout_review.py").is_file()
+    assert "fanout.py review" not in plain and " claude -p" in plain
+    assert (REPO_ROOT / "scripts/dev/fanout.py").is_file()
 
 
 def test_a_server_review_unit_runs_the_worktrees_script_not_the_primary_checkouts():
     """The primary checkout can predate the script while the worktree is at origin/master;
     every review unit on such a host failed to spawn (#3684)."""
     cmd = systemd_run_command("b", review=True)
-    assert f"{REPO}/scripts/dev/fanout_review.py" not in cmd
-    assert " scripts/dev/fanout_review.py --batch b " in cmd
+    assert f"{REPO}/scripts/dev/fanout.py" not in cmd
+    assert " scripts/dev/fanout.py review --batch b " in cmd
 
 
 def test_the_appended_system_prompt_file_exists_where_the_unit_resolves_it():
