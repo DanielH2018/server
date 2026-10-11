@@ -45,6 +45,8 @@ LOCAL_ONLY = frozenset(
         "site",
         # The issue-fanout harness's per-batch brief and landing logs (`fanout.py place`).
         ".fanout",
+        # A worktree's own label, from `scripts/dev/label_worktree.py`.
+        ".claim",
     }
 )
 
