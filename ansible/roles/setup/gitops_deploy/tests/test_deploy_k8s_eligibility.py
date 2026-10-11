@@ -330,6 +330,9 @@ jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.0
 jellyfin_k8s_init_script: |
   set -eu
   # not a comment: part of the script
+jellyfin_k8s_init_args:
+  - |
+    # not a comment either: a list item's block scalar
 """
 _COMMENT_EDIT = _DEFAULTS_TEXT.replace(
     "docs/anilist-integration.md", "docs/archive/anilist-integration.md"
@@ -360,8 +363,14 @@ def test_a_comment_only_edit_to_k8s_defaults_is_no_change():
         _DEFAULTS_TEXT.replace("10.11.0", "10.11.1"),
         _DEFAULTS_TEXT.replace("part of the script", "part of the script, reworded"),
         _DEFAULTS_TEXT.replace("10.11.0\n", "10.11.0  # pinned\n"),
+        _DEFAULTS_TEXT.replace("comment either", "comment, either"),
     ],
-    ids=["value-edit", "hash-line-inside-a-block-scalar", "trailing-comment"],
+    ids=[
+        "value-edit",
+        "hash-line-inside-a-block-scalar",
+        "trailing-comment",
+        "hash-line-inside-a-list-item-block-scalar",
+    ],
 )
 def test_a_content_edit_to_k8s_defaults_still_counts(after):
     assert _quiet_defaults(_DEFAULTS_TEXT, after) == set()

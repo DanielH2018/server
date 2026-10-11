@@ -185,7 +185,8 @@ _BROAD_MANUAL_PREFIXES = (
 _SECRETS_FILE = "ansible/vars/secrets.yml"
 
 # `key: |` / `key: >-` and their chomping/indent modifiers, with or without a trailing comment.
-_BLOCK_SCALAR_HEAD = re.compile(r":\s*[|>][-+0-9]*\s*(?:#.*)?$")
+# A bare list item `- |` opens one too; missing it read the scalar's `#` lines as comments.
+_BLOCK_SCALAR_HEAD = re.compile(r"(?::|^\s*-)\s*[|>][-+0-9]*\s*(?:#.*)?$")
 
 
 def _content_lines(text: str) -> list[str]:
