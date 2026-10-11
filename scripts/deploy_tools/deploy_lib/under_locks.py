@@ -464,7 +464,7 @@ def take_service_locks(
             f"deploy: deploy_locks.plan {failure}, so this run has no lock list and",
             "  nothing was deployed. The wrapper takes only the locks that helper names --",
             "  never a list of its own. Run 'uv run python",
-            f"  {GITOPS_DEPLOY_FILES / 'deploy_locks.py'} plan <tag>' by hand to see why.",
+            f"  {GITOPS_DEPLOY_FILES / 'deployer_lib' / 'deploy_locks.py'} plan <tag>' by hand to see why.",
         )
         raise Refused(DEPLOY_LOCK_PLAN_FAILED)
     run.lock_dir = os.path.dirname(planned[0].path)
