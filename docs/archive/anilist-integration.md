@@ -49,7 +49,7 @@ That is the property that makes rating on AniList and syncing from Jellyfin safe
 The plugin release declares a `targetAbi`, which the loader rejects on an older server. The
 Jellyfin image and the Ani-Sync version are pinned together in the jellyfin role's
 `defaults/main.yml`; the `jellyfin-plugin-pins` table in
-[Jellyfin plugins](jellyfin-plugins.md) lists the pins as they stand. Until 2026-09-02 the
+[Jellyfin plugins](../jellyfin-plugins.md) lists the pins as they stand. Until 2026-09-02 the
 server was 10.11.10 and the plugin pin was held at 4.1.0.0 (`targetAbi` 10.11.6.0) for that
 reason; the two were raised together, and every future bump has to move them together too.
 
