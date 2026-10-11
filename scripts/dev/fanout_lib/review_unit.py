@@ -9,7 +9,6 @@ Usage::
     fanout.py review --batch 1345-1386 --repo DanielH2018/server [--red-green] < .fanout/brief.md
 """
 
-import argparse
 import json
 import os
 import stat
@@ -25,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from fanout_lib.review.api import Pipeline
 from fanout_lib.target import resolve
 from fanout_lib.transport import this_host
+from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
 
 
@@ -34,7 +34,7 @@ def main(argv=None) -> int:
     Exits 1 when that report carries `is_error`, so the unit's own result agrees with the
     report `status` reads instead of recording a failed batch as a clean exit.
     """
-    p = argparse.ArgumentParser(
+    p = ArgumentParser(
         prog="fanout.py review", description=__doc__.splitlines()[0], allow_abbrev=False
     )
     p.add_argument("--batch", required=True)

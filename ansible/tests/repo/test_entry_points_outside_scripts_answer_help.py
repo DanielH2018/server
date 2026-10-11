@@ -163,3 +163,43 @@ def test_a_script_that_checks_argv_first_is_clean(tmp_path):
         "    sys.exit(0 if sys.stdin.read() else 1)\n"
     )
     assert _help_failure(script) is None
+
+
+# The role scripts #4487 moved off argparse's 2 for a usage error. A role ships only its own
+# `files/`, so none can import `scripts/lib/cli_help.ArgumentParser`, and each holds a local
+# `USAGE_ERROR = 64` instead. `prune_releases.py` is here for the same reason: release_bin.yml
+# copies it onto a host alone. Named rather than derived, because a script that takes no
+# flags at all has no usage error to report.
+EXIT_64_ON_A_BAD_FLAG = (
+    "ansible/roles/k8s/monitor-bridge/files/check.py",
+    "ansible/roles/k8s/monitor-bridge/files/cli.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py",
+    "ansible/roles/setup/initial_setup/files/loki_route_health.py",
+    "ansible/roles/setup/initial_setup/files/worktree_holders.py",
+    "ansible/roles/setup/renovate_agent/files/land_renovate_pr.py",
+    "scripts/deploy_tools/prune_releases.py",
+)
+
+
+def _bad_flag_exit(path: Path) -> int:
+    pythonpath = os.pathsep.join(str(p) for p in (path.parent, *SHIPPED_BESIDE))
+    return subprocess.run(
+        [sys.executable, str(path), "--bogus"],
+        cwd=REPO,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=HELP_TIMEOUT_S,
+        env={**os.environ, "PYTHONPATH": pythonpath},
+    ).returncode
+
+
+@pytest.mark.parametrize("rel", EXIT_64_ON_A_BAD_FLAG, ids=str)
+def test_the_role_script_exits_64_on_a_bad_flag(rel):
+    assert _bad_flag_exit(REPO / rel) == 64
+
+
+def test_a_script_that_keeps_argparse_s_exit_2_is_flagged(tmp_path):
+    script = tmp_path / "argparse_default.py"
+    script.write_text("import argparse\n\nargparse.ArgumentParser().parse_args()\n")
+    assert _bad_flag_exit(script) != 64
