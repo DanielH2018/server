@@ -164,6 +164,11 @@ def test_due_date_pinned_uses_long_cadence():
     )
 
 
+def test_due_date_is_none_for_a_tier_without_a_cadence():
+    entry = {"tier": "ignore", "last_rotated": "2026-01-01"}
+    assert due_date("authelia_user", entry) is None
+
+
 # ── sync ────────────────────────────────────────────────────────────────────
 def test_sync_adds_missing_and_preserves_existing():
     today = dt.date(2026, 6, 11)

@@ -13,8 +13,6 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_secrets_lib_layout.py
 """
 
 import ast
-import datetime as dt
-import importlib
 import os
 import subprocess
 import sys
@@ -52,13 +50,6 @@ def _lib_file_defining(func: str):
         if any(isinstance(n, ast.FunctionDef) and n.name == func for n in tree.body):
             return path
     return None
-
-
-def _import_lib_defining(func: str):
-    path = _lib_file_defining(func)
-    if path is None:
-        pytest.fail(f"no module under {SECRETS_LIB.relative_to(REPO)} defines {func}()")
-    return importlib.import_module(f"secrets_mgmt.secrets_lib.{path.stem}")
 
 
 def _env_without_pythonpath() -> dict:
@@ -135,27 +126,6 @@ def test_no_hand_written_file_names_an_old_library_path():
             continue
         offenders += [f"{rel}: {old}" for old in OLD_PATHS if old in text]
     assert offenders == []
-
-
-def test_classify_tiers_names_from_its_new_home():
-    classify = _import_lib_defining("classify").classify
-    assert classify("monitor_bridge_cpu_push_token") == "auto"
-    assert classify("authelia_user") == "ignore"
-    assert classify("some_new_app_password") == "assisted"
-
-
-def test_registry_due_dates_come_from_its_new_home():
-    registry = _import_lib_defining("due_date")
-    lr = dt.date(2026, 1, 1)
-    due = registry.due_date(
-        "authelia_storage_key", {"tier": "pinned", "last_rotated": str(lr)}
-    )
-    assert due is not None
-    assert lr + dt.timedelta(days=730 - 61) <= due <= lr + dt.timedelta(days=730)
-    assert (
-        registry.due_date("authelia_user", {"tier": "ignore", "last_rotated": str(lr)})
-        is None
-    )
 
 
 @pytest.mark.parametrize("func", ["classify", "due_date"])

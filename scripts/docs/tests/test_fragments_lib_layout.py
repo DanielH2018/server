@@ -1,9 +1,12 @@
 """The fragment libraries live in `scripts/docs/fragments_lib/`, behind `gen_doc_fragments.py` (#4351).
 
-The move is navigation only, so the oracle for "no behaviour change" is the committed output:
-the generator, run at its unchanged path, must reproduce `docs/assets/generated/fragments/`
-byte for byte while the fragments it builds come from the package. The tests find the
-package's modules by globbing it, so they hold whatever basenames the modules take inside it.
+The move is navigation only. Its "no behaviour change" oracle is
+`test_gen_doc_fragments.py::test_every_committed_fragment_matches_what_the_generator_writes_now`,
+which regenerates every fragment and compares it with the committed copy, so this file does
+not run the generator again (#4371). It checks the layout: the libraries sit in the package,
+the entrypoint takes their fragments from it, and both resolve their imports when run directly
+from outside the repo. The tests find the package's modules by globbing it, so they hold
+whatever basenames the modules take inside it.
 
 Run: uv run pytest scripts/docs/tests/test_fragments_lib_layout.py
 """
@@ -14,13 +17,12 @@ import re
 import subprocess
 import sys
 
-import pytest
+import gen_doc_fragments as g
 from lib.repo_paths import REPO
 
 DOCS = REPO / "scripts" / "docs"
 LIB = DOCS / "fragments_lib"
 ENTRYPOINT = DOCS / "gen_doc_fragments.py"
-COMMITTED = REPO / "docs" / "assets" / "generated" / "fragments"
 DOMAINS = ("bridge", "deploy", "hosts", "storage")
 FLAT = tuple(f"fragments_{d}" for d in DOMAINS)
 
@@ -72,46 +74,28 @@ def test_each_library_resolves_its_imports_when_run_directly(tmp_path):
         assert run.returncode == 0, f"{stem}: {run.stderr[-2000:]}"
 
 
-@pytest.mark.parametrize("where", ["repo-root", "elsewhere"])
-def test_the_entrypoint_regenerates_the_committed_fragments_from_the_package(
-    tmp_path, where
-):
+def test_the_entrypoint_takes_each_library_fragment_from_the_package():
     modules = _lib_modules()
     assert len(modules) == len(DOMAINS), modules
-    from_lib = set()
     for stem in modules:
-        names = set(importlib.import_module(f"fragments_lib.{stem}").FRAGMENTS)
-        assert names, f"fragments_lib.{stem} builds no fragment"
-        from_lib |= names
+        built = importlib.import_module(f"fragments_lib.{stem}").FRAGMENTS
+        assert built, f"fragments_lib.{stem} builds no fragment"
+        for name, build in built.items():
+            assert g.FRAGMENTS.get(name) is build, (
+                f"{name}: the entrypoint does not build it with fragments_lib.{stem}"
+            )
 
-    cwd = REPO if where == "repo-root" else tmp_path
+
+def test_the_entrypoint_answers_help_from_outside_the_repo(tmp_path):
     helped = subprocess.run(
         [sys.executable, str(ENTRYPOINT), "--help"],
-        cwd=cwd,
+        cwd=tmp_path,
         env=_clean_env(),
         capture_output=True,
         timeout=120,
         text=True,
     )
     assert helped.returncode == 0, helped.stderr[-2000:]
-
-    out = tmp_path / "out"
-    run = subprocess.run(
-        [sys.executable, str(ENTRYPOINT), "--out-dir", str(out)],
-        cwd=cwd,
-        env=_clean_env(),
-        capture_output=True,
-        timeout=120,
-        text=True,
-    )
-    assert run.returncode == 0, run.stderr[-2000:]
-    written = {p.stem for p in out.glob("*.md")}
-    assert from_lib <= written, sorted(from_lib - written)
-    committed = {p.name: p.read_bytes() for p in COMMITTED.glob("*.md")}
-    regenerated = {p.name: p.read_bytes() for p in out.glob("*.md")}
-    assert sorted(regenerated) == sorted(committed)
-    differ = sorted(n for n in committed if committed[n] != regenerated[n])
-    assert differ == [], f"regeneration changed: {differ}"
 
 
 def test_no_tracked_module_imports_the_flat_names():

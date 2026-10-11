@@ -19,7 +19,6 @@ Run: uv run pytest ansible/roles/setup/fake_remux/tests/test_fake_remux_entrypoi
 
 import ast
 import glob
-import importlib
 import json
 import os
 import re
@@ -289,13 +288,6 @@ def _lib_file_defining(func: str):
     return None
 
 
-def _import_lib_defining(func: str):
-    path = _lib_file_defining(func)
-    if path is None:
-        pytest.fail(f"no module under {LIB.relative_to(REPO)} defines {func}()")
-    return importlib.import_module(f"fake_remux_lib.{path.stem}")
-
-
 def test_libraries_are_tracked_in_fake_remux_lib_without_an_init_file():
     lib = set(_tracked(str(LIB.relative_to(REPO))))
     for func in ("encoder_is_reencoder", "adopt_in_flight"):
@@ -370,20 +362,6 @@ def test_no_hand_written_file_names_an_old_files_path():
         "docs/autofix-bridge-actuators.md",
     } <= scanned
     assert offenders == []
-
-
-def test_detection_logic_flags_a_reencode_from_its_new_home():
-    frl = _import_lib_defining("encoder_is_reencoder")
-    markers = frl.DEFAULT_RE_ENCODER_MARKERS
-    assert frl.encoder_is_reencoder("Lavc61.19.101 hevc_qsv", markers) is True
-    assert frl.encoder_is_reencoder("Sony BVE HDCAM", markers) is False
-
-
-def test_replacement_logic_applies_the_size_band_from_its_new_home():
-    rl = _import_lib_defining("adopt_in_flight")
-    policy = {"min_size_gb": 0.4, "max_size_gb": 4.0}
-    assert rl.in_size_band({"size": 2e9}, policy) is True
-    assert rl.in_size_band({"size": 5e9}, policy) is False
 
 
 def test_replacement_library_imports_when_run_directly_from_another_directory(tmp_path):

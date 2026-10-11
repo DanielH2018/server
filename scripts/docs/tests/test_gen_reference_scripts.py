@@ -90,6 +90,23 @@ def test_a_script_with_a_test_file_names_it(tmp_path):
     assert rows["probe.py"]["tests"] == "test_probe.py"
 
 
+def test_a_package_module_names_the_test_beside_its_entrypoint(tmp_path):
+    """A `*_lib` module's test sits in the entrypoint's `tests/`, a level above the package."""
+    _write(
+        tmp_path / "docs" / "fragments_lib" / "fragments_hosts.py", '"""Summary."""\n'
+    )
+    _write(tmp_path / "docs" / "tests" / "test_fragments_hosts.py", '"""x"""\n')
+    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    assert rows["fragments_hosts.py"]["tests"] == "test_fragments_hosts.py"
+
+
+def test_only_a_lib_package_reaches_into_the_parents_tests(tmp_path):
+    _write(tmp_path / "docs" / "reference" / "backlog.py", '"""Summary."""\n')
+    _write(tmp_path / "docs" / "tests" / "test_backlog.py", '"""x"""\n')
+    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    assert rows["backlog.py"]["tests"] == ""
+
+
 def test_a_script_with_no_test_file_is_reported_as_such(tmp_path):
     """An untested script is a fact worth surfacing, not an omission to hide."""
     _write(tmp_path / "probe.py", '"""Summary."""\n')
