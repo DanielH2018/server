@@ -40,7 +40,7 @@ from lib.repo_paths import HOST_VARS, REPO
 
 # `tag_platforms` is the reader of containers_list that says which probe can see a tag's workload.
 from deploy_tools.deploy_lib import tags as deploy_tags
-from lib.exit_codes import DEPLOY_NO_HOSTS
+from lib.exit_codes import DEPLOY_NO_HOSTS, PROBE_UNREADABLE
 
 # The inventory directory as a path relative to a checkout root. `check_one` reads the
 # inventory from whichever tree the probe renders the manifests from, which is not always this
@@ -161,6 +161,10 @@ def check_one(
             )
         except subprocess.TimeoutExpired:
             return 1, f"{tag}: probe.py health timed out after {PROBE_TIMEOUT_S}s"
+        if res.returncode == PROBE_UNREADABLE and (res.stderr or "").strip():
+            # stdout holds only the PROBE-VERDICT line here, and the failed read is on stderr.
+            # Its LAST line, because `uv run` can print its own warnings ahead of it.
+            return res.returncode, res.stderr.strip().splitlines()[-1]
         out = (res.stdout or res.stderr or "").strip()
         return res.returncode, out.splitlines()[0] if out else ""
 

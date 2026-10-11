@@ -41,6 +41,12 @@ from bridge.sources import Sink, Sources
 from bridge.types import Check
 from gates import Gates
 
+# Checks whose `up` line is logged every cycle, because something reads it as data. The
+# Longhorn Storage dashboard's four B2 panels regex the used/cap/pct/versions figures out of
+# b2_storage's "B2 storage ..." message in this container's log; quiet that line and they go
+# blank. ENFORCED: tests/test_check.py::test_every_dashboard_parsed_check_is_logged_when_up.
+LOGGED_WHEN_UP = frozenset({"b2_storage"})
+
 
 def run_once(
     cfg: Config,
@@ -152,34 +158,56 @@ def run_once(
         cfg, src, "wan_reachable", gates.probe_wan, sink, dry_run, only
     )
 
+    # A routine verdict is logged only on a narrowed or dry run, where someone reads the
+    # output for it. The pod logged ~50 OK lines every 300 s cycle, burying the DOWN ones;
+    # it now logs each DOWN line, each `up` that is holding a down streak (a page on its
+    # way), the LOGGED_WHEN_UP lines, and one CYCLE count (#4448). A SKIP line repeats what
+    # its gate's DOWN line already says, so it is counted rather than logged.
+    log_all = bool(only) or dry_run
+    counts = {"up": 0, "down": 0, "skipped": 0}
+
+    def log_skip(name: str, msg: str) -> None:
+        if log_all:
+            bridge.common.log("SKIP", name, "-", msg)
+
     for entry in checks:
         name, token, fn = entry.name, entry.token, entry.fn
         if not gate_lib.check_enabled(name, only, skip):
             continue
         if not prom_ok and name in gates.prom_dependent:
             ok, msg = True, "skipped — Prometheus unreachable (see Prometheus monitor)"
-            bridge.common.log("SKIP", name, "-", msg)
+            log_skip(name, msg)
         elif not loki_ok and name in gates.loki_dependent:
             ok, msg = True, "skipped — Loki unreachable (see Loki Reachable monitor)"
-            bridge.common.log("SKIP", name, "-", msg)
+            log_skip(name, msg)
         elif not b2_ok and name in gates.b2_dependent:
             ok, msg = True, "skipped — B2 unreachable (see B2 Reachable monitor)"
-            bridge.common.log("SKIP", name, "-", msg)
+            log_skip(name, msg)
         elif not wan_ok and name in gates.wan_dependent:
             ok, msg = True, "skipped — WAN unreachable (see WAN Reachable monitor)"
-            bridge.common.log("SKIP", name, "-", msg)
+            log_skip(name, msg)
         elif name in suppressed:
             ok, msg = True, "skipped — exporter down (see Scrape Targets)"
-            bridge.common.log("SKIP", name, "-", msg)
+            log_skip(name, msg)
         else:
             ok, msg = gate_lib._evaluate(cfg, src, name, fn)
             if name in gates.startup_grace:
                 ok, msg = bridge.streaks.apply_startup_grace(
                     name, ok, msg, cfg.GRACE_CYCLES, src.state.grace_streaks
                 )
-            bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
+            if log_all or not ok or "streak" in msg or name in LOGGED_WHEN_UP:
+                bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
+        if msg.startswith("skipped"):
+            counts["skipped"] += 1
+        else:
+            counts["up" if ok else "down"] += 1
         if not dry_run:
             sink.push(token, ok, msg)
+    bridge.common.log(
+        "CYCLE",
+        "%(up)d up, %(down)d down, %(skipped)d skipped" % counts,
+        "- run with --dry-run or --check <name> to log every verdict",
+    )
 
 
 if __name__ == "__main__":

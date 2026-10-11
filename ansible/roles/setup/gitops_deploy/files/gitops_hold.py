@@ -43,7 +43,7 @@ from gitops_ledger import (
     parse_owed,
     rewrite_owed,
 )
-from gitops_markers import MARKERS
+from gitops_markers import DEPLOY_PLAYBOOK, MARKERS
 
 # Between the held planes on one line. Not a newline: every reader prints them on one line.
 HOLD_PLANE_SEP = "; "
@@ -325,7 +325,7 @@ class Hold:
             held = self.held_subjects()
             if held:
                 return held
-        return self.cover("ansible/deploy.yml", sorted(services))
+        return self.cover(DEPLOY_PLAYBOOK, sorted(services))
 
     # ── the operator's clear ──────────────────────────────────────────────────────────────
 

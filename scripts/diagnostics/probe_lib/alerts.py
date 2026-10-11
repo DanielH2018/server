@@ -381,36 +381,37 @@ def fetch_alert_streams(base, pin, days, limit, notice_file=None, now=None):
     fetch at the cap so every later read of the limit (the truncation test, its notice) sees
     the value the server actually applied; clamping the URL alone would fetch 5000 rows,
     compare them against 20000, and print an all-clear. Any other non-JSON body propagates as
-    the SystemExit it is. The clamp notice goes to `notice_file` (stdout by default; stderr
-    under `--json`, like the truncation notice, so stdout stays parseable).
+    the `core.NonJsonResponse` it is, which exits 75. The clamp notice goes to `notice_file`
+    (stdout by default; stderr under `--json`, like the truncation notice, so stdout stays
+    parseable).
     """
     while True:
         urls = alert_source_urls(base, days, limit, now)
         streams = []
-        try:
-            # strict=True holds alert_source_urls to its docstring ("one per stream in
-            # ALERT_SOURCES"). A short list would otherwise drop a stream's alerts and still
-            # report success.
-            for url, (logql, parser) in zip(urls, ALERT_SOURCES, strict=True):
-                streams.append(
-                    (
-                        logql,
-                        parser,
-                        _rows_from_loki(core.fetch_parsed(url, resolve=pin)),
-                    )
-                )
-        except core.NonJsonResponse as exc:
-            cap = loki_entries_cap(exc.body)
-            if cap is None or cap >= limit:
-                raise
-            print(
-                f"(--limit {limit} is above Loki's max_entries_limit_per_query of {cap}; "
-                f"using {cap}. Narrow --days to see further back.)\n",
-                file=notice_file or _sys.stdout,
-            )
-            limit = cap
-            continue
-        return limit, streams
+        # strict=True holds alert_source_urls to its docstring ("one per stream in
+        # ALERT_SOURCES"). A short list would otherwise drop a stream's alerts and still
+        # report success.
+        for url, (logql, parser) in zip(urls, ALERT_SOURCES, strict=True):
+            body = core.fetch(url, resolve=pin)
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError:
+                # Read the cap off the raw body rather than catching `core.NonJsonResponse`:
+                # that is an `Unreadable`, which prints the whole error body to stderr when it
+                # is built, and a rejection the clamp handles is not a failed read (#4471).
+                cap = loki_entries_cap(body)
+                if cap is not None and cap < limit:
+                    break
+                data = core.parse_json(url, body)  # raises NonJsonResponse
+            streams.append((logql, parser, _rows_from_loki(data)))
+        else:
+            return limit, streams
+        print(
+            f"(--limit {limit} is above Loki's max_entries_limit_per_query of {cap}; "
+            f"using {cap}. Narrow --days to see further back.)\n",
+            file=notice_file or _sys.stdout,
+        )
+        limit = cap
 
 
 def run_alerts(ns, now=None):

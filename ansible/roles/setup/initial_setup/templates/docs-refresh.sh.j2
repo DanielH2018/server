@@ -120,6 +120,8 @@ PUSH_MSG="docs-refresh exited without setting a status"
 # built and the surviving pages are still worth committing (see below). Without this flag the
 # successful publish at the end would overwrite the degradation and report a clean up.
 GENERATORS_OK=1
+# What degraded the run, for the terminal PUSH_MSG. Each `GENERATORS_OK=0` sets it.
+DEGRADED_MSG=""
 
 # ONE trap doing both jobs. The temp-file cleanup used to be its own `trap ... EXIT` further
 # down, and a second trap on the same signal REPLACES the first -- so adding this one later in
@@ -140,6 +142,19 @@ trap on_exit EXIT
 # Records the message as well as logging it, so every existing call site feeds the push without
 # needing its own push call -- there are eleven exit paths and one of them is a bare crash.
 alert() { logger -t docs-refresh "$1"; PUSH_MSG="$1"; }
+
+# build_docs.py's exit code says WHICH half failed (its main() docstring), and the two need
+# opposite responses: a generator failure publishes stale pages behind a fresh site, a site-build
+# failure leaves the docs pod serving the previous build. 2 is also argparse's usage-error code,
+# which this script's fixed arguments only reach after a flag is renamed, and it wins over 3 when
+# both halves fail. 1 is a crash.
+build_docs_failure() {
+  case "$1" in
+    2) echo "one or more generators failed, or build_docs rejected its arguments (exit 2); the published set is incomplete" ;;
+    3) echo "the site build failed (exit 3); every generator ran, and the docs site still serves its previous build" ;;
+    *) echo "build_docs crashed (exit $1); see the cron log" ;;
+  esac
+}
 
 # reachout_down MSG -- report a failure whose cause was reaching origin (github.com).
 #
@@ -349,10 +364,14 @@ fi
 
 # --frozen: install from the committed uv.lock, never rewrite it on the host. A lock
 # rewrite here would show up as an unrelated dirty file on the next run.
-if ! "$UV" run --frozen python scripts/docs/build_docs.py --site-dir "$SITE_DIR"; then
-  alert "docs-refresh: one or more generators failed (site was still built)"
-  # Deliberately NOT an exit. build_docs already skipped the failing generator and built
-  # the site from what succeeded, so the pages that did regenerate are worth committing.
+"$UV" run --frozen python scripts/docs/build_docs.py --site-dir "$SITE_DIR"
+BUILD_DOCS_RC=$?
+if [ "$BUILD_DOCS_RC" -ne 0 ]; then
+  DEGRADED_MSG="$(build_docs_failure "$BUILD_DOCS_RC")"
+  alert "docs-refresh: $DEGRADED_MSG"
+  # Deliberately NOT an exit, whichever half failed. On a generator failure build_docs skipped
+  # that generator and kept the rest; on a site-build failure every page regenerated. Either
+  # way the pages that did regenerate are worth committing.
   # It IS a down, though: a page silently generated from a failing generator is the class of
   # fault this whole script exists to keep out of the published docs.
   GENERATORS_OK=0
@@ -394,6 +413,7 @@ if [ "$WEIGHTS_RC" -ne 0 ]; then
   # failure's first few hundred characters carry the reason.
   alert "docs-refresh: recording shard weights failed (exit ${WEIGHTS_RC}); $(printf '%s' \
     "$WEIGHTS_MSG" | tr '\n' ' ' | tail -c 300)"
+  DEGRADED_MSG="recording shard weights failed (exit ${WEIGHTS_RC})"
   GENERATORS_OK=0
 fi
 
@@ -538,5 +558,5 @@ else
   # $PUB_MSG, not a re-derived branch name: the publisher already names the branch it opened,
   # and the BRANCH variable this line used to read was deleted when that logic moved into
   # publish_pr.py -- leaving a `set -u` abort on exactly the path that reports a degraded run.
-  PUSH_MSG="$PUB_MSG, but one or more generators had failed — the published set is incomplete"
+  PUSH_MSG="$PUB_MSG, but $DEGRADED_MSG"
 fi

@@ -274,7 +274,10 @@ def test_a_narrowed_row_pages_the_clear_that_names_what_it_applied(cfg):
     assert not ok
     assert "apply the role by hand, then `" in msg  # `common` has no playbook
     assert "clear-owed manual_plane common`" in msg
-    assert "apply `ansible/k3s-bringup.yml --tags kubeconfig` by hand" in msg
+    assert (
+        "apply `uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig` by hand"
+        in msg
+    )
     assert msg.endswith("clear-owed manual_plane k3s --applied kubeconfig`")
     assert "<role>" not in msg
 
@@ -417,7 +420,10 @@ def test_the_page_names_the_apply_the_clear_belongs_to(cfg):
         owed=_K3S_PENDING,
     )
     assert not ok
-    assert "apply `ansible/k3s-bringup.yml --tags k3s` by hand" in msg
+    assert (
+        "apply `uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s` by hand"
+        in msg
+    )
     assert "rotate-keys" in msg, "the whole-role tag arms the gated tasks"
 
 
@@ -430,7 +436,10 @@ def test_a_narrowed_apply_off_the_gated_tags_carries_no_warning(cfg):
         owed=_k3s("kubeconfig"),
     )
     assert not ok
-    assert "apply `ansible/k3s-bringup.yml --tags kubeconfig` by hand" in msg
+    assert (
+        "apply `uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig` by hand"
+        in msg
+    )
     assert "rotate-keys" not in msg
 
 

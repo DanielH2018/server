@@ -64,11 +64,11 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.exit_codes import CI_GREEN, CI_RED
+from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_RED
 from lib.json_types import as_list, as_object
 from deploy_tools.land_lib import policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import Verdict, say
+from deploy_tools.land_lib.outcome import Verdict, disarmed, say
 
 
 # GitHub's closing keywords, all three tenses of all three verbs. A keyword anywhere in the
@@ -440,6 +440,10 @@ def await_merge(ln: Landing) -> None:
                     1,
                     Verdict.PR_CI_RED,
                 )
+            # Only this landing's direct merge waits on await_ci's green, so only it can
+            # never fire on a disarmed gate; a merge made some other way keeps the wait.
+            if rc == CI_DISARMED and ln.direct_merge_subject:
+                ln.die(disarmed(f" at {head[:8]}", f"PR #{o.pr} not merged"), 1)
             if rc == CI_GREEN and ln.direct_merge_subject:
                 moved = [] if updated_from else _stale_paths(ln, head)
                 if moved:

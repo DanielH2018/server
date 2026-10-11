@@ -396,16 +396,19 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     if args.deploy and tags:
         if tools.deploy(sorted(tags)) != 0:
             print(
-                "DEPLOY FAILED — new tokens written to secrets.yml but consumers NOT updated; "
-                "the caller should revert the working tree",
+                "DEPLOY FAILED for tags %s — new tokens written to secrets.yml but consumers "
+                "NOT updated. Revert the working tree (`git checkout -- "
+                "ansible/vars/secrets.yml ansible/secret_rotation.yml`) or finish by hand."
+                % ",".join(sorted(tags)),
                 file=sys.stderr,
             )
             return 1
     elif not args.deploy:
+        # deploy.sh deploys HEAD, not the working tree, so the rotated values reach no
+        # consumer until they are committed.
         print(
-            "\nNext: redeploy the consumer(s): "
-            "uv run ansible-playbook ansible/deploy.yml --tags %s"
-            % ",".join(sorted(tags))
+            "\nNext: commit secrets.yml and secret_rotation.yml, then redeploy the "
+            "consumer(s): `./scripts/deploy.sh --tags %s`" % ",".join(sorted(tags))
         )
     return 0
 

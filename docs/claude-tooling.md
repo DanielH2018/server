@@ -22,6 +22,22 @@ flagged `"handler"`. Four subcommands with a callable (`health`, `targets`, `met
 (`subcommands.ROUTED_IN_MAIN`). A subcommand with no callable streams through `plan()` in
 `probe_lib/curl_pipeline.py`. The argument parsing stays in `probe_lib/cli_parser.py`, because each
 subcommand's arguments differ too much for a registry row to describe.
+
+### Exit codes and the verdict line
+
+Every verdict subcommand exits by one contract, `CONTRACTS["scripts/diagnostics/probe.py"]` in
+`scripts/lib/exit_codes.py`. Exit 0 and 1 are what the probe observed. Exit 75 means the probe
+could not read its source, such as a failed curl, an ssh that never reached daniel-pi, or a
+Prometheus query that returned no series. On 75 the failed read is on stderr, and the right
+response is to retry rather than to investigate the thing probed (#4444). Each verdict
+subcommand's `--help` states what 0 and 1 mean for it.
+
+A verdict subcommand's last stdout line is `PROBE-VERDICT: <ok|fail|unreadable> (<detail>)`.
+`main()` prints it from the exit code through `lib.exit_codes.verdict_line`, so every subcommand
+shares one vocabulary (#4454). `--json` and `--dry-run` print no verdict line, because a trailing
+line would break a JSON document or a command list. The prefix is not bare `VERDICT:`, because a
+landing's log carries `probe.py health` output and is grepped for `^VERDICT:`.
+`subcommands.VERDICT_SUBCOMMANDS` lists the verdict subcommands.
 `scripts/diagnostics/tests/test_probe_registry.py` checks that the subcommands `cli_parser.py`
 accepts equal the registry's names, and that every `probe_lib` module with a `run_*`/`main` entry point is
 registered.
@@ -41,10 +57,11 @@ has its own test under `scripts/diagnostics/tests/`.
 - **`vip-placement`** reads the Services, EndpointSlices, L2Advertisements and Nodes, and exits
   1 naming any `externalTrafficPolicy: Local` MetalLB VIP with no Ready endpoint on the node
   that announces it (`probe_lib/vip_placement.py`). Host probes stay green through that
-  blackout, which is why it exists.
+  blackout, which is why it exists. A read that came back empty exits 75.
 - **`readonly-rbac`** asks live RBAC whether the SA plain `kubectl` runs as still refuses
   `get`/`list` on Secrets and `create`/`delete` on pods, and exits 1 naming any verb it gained
-  (`probe_lib/readonly_rbac.py`).
+  (`probe_lib/readonly_rbac.py`). A refused control verb exits 75, because then the denials
+  prove nothing.
 - **`shed-set`** prints the Deployments and StatefulSets to scale to zero when one node is
   lost, so the tiered services fit on the survivor (`probe_lib/shed_set.py`). The set is every
   k8s entry with no `tier:`, derived by `shed_entries` in `filter_plugins/service_tier.py`, and

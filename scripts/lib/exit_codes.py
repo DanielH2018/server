@@ -146,6 +146,28 @@ UNLANDED_ORIGIN_UNREADABLE = FAILED
 UNLANDED_PR_OPEN = 2
 UNLANDED_NO_PR = 3
 
+# -- scripts/deploy_tools/narrow_setup.py -----------------------------------------------
+# Which `--tags` value a setup-role range needs. 0 prints the tags; 1 is a refusal, after which
+# the caller keeps the whole-role tag. `NARROW_SETUP_NOTHING` says the role needs no tag at all,
+# printed beside `narrowed-to-nothing` on stdout. It is 5, not 3, because `narrow_cmd` exits
+# `DEPLOY_BROAD` (3) for the opposite answer, "cannot narrow" (#4453), and not 2, because
+# argparse exits 2 on a bad command line. The deployer's copy of the value is
+# `deployer_lib/deploy_narrow.py:NARROW_SETUP_NOTHING_EXIT`, which cannot import this module.
+NARROW_SETUP_NARROWED = OK
+NARROW_SETUP_REFUSED = FAILED
+NARROW_SETUP_NOTHING = 5
+
+# -- scripts/diagnostics/probe.py -------------------------------------------------------
+# Every verdict subcommand: 0 and 1 are what the probe observed, and 75 means it observed
+# nothing because it could not read its source (a curl, an ssh or a kubectl read that failed,
+# or a read that came back empty). A caller retries on 75 and investigates on 1 (#4444). 64 is
+# an argument the probe cannot act on, such as `--since 3x`: no retry can succeed, and nothing
+# was observed, so it names no verdict (#4471).
+PROBE_OK = OK
+PROBE_FAILED = FAILED
+PROBE_USAGE_ERROR = USAGE_ERROR
+PROBE_UNREADABLE = TEMP_FAIL
+
 
 # -- the renderable copy ----------------------------------------------------------------
 
@@ -384,6 +406,55 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "`unlanded`: the branch is on origin with no PR.",
         ),
     ),
+    "scripts/deploy_tools/narrow_setup.py": (
+        _c(
+            NARROW_SETUP_NARROWED,
+            "NARROW_SETUP_NARROWED",
+            "printed the comma-separated tags the range needs from the role.",
+        ),
+        _c(
+            NARROW_SETUP_REFUSED,
+            "NARROW_SETUP_REFUSED",
+            "refused to narrow, so the caller applies the whole role tag.",
+            "stderr names the path or tag that made the derivation uncertain.",
+        ),
+        _c(
+            NARROW_SETUP_NOTHING,
+            "NARROW_SETUP_NOTHING",
+            "the range reaches no host through the role, so the role needs no tag at all; "
+            "stdout is `narrowed-to-nothing`.",
+        ),
+    ),
+    "scripts/diagnostics/probe.py": (
+        _c(
+            PROBE_OK,
+            "PROBE_OK",
+            "the probe read its source and observed nothing wrong.",
+            verdict="ok",
+        ),
+        _c(
+            PROBE_FAILED,
+            "PROBE_FAILED",
+            "the probe read its source and observed a bad verdict.",
+            "The lines above the verdict name what failed.",
+            verdict="fail",
+        ),
+        _c(
+            PROBE_USAGE_ERROR,
+            "PROBE_USAGE_ERROR",
+            "an argument the probe cannot act on, so it read nothing.",
+            "stderr names the argument and the forms it accepts. Fix the invocation; a retry "
+            "of the same one never succeeds.",
+        ),
+        _c(
+            PROBE_UNREADABLE,
+            "PROBE_UNREADABLE",
+            "the probe could not read its source, so it observed nothing.",
+            "stderr carries the failed read. Retry once the source answers; this is not a "
+            "verdict about the thing probed.",
+            verdict="unreadable",
+        ),
+    ),
 }
 
 
@@ -403,6 +474,9 @@ VERDICT_PREFIXES = {
     "scripts/deploy.sh": "DEPLOY-VERDICT",
     "scripts/deploy_tools/gitops_tick.sh": "TICK-VERDICT",
     "scripts/deploy_tools/land.sh": "VERDICT",
+    # A landing runs `probe.py health` and its stdout can reach the landing's log, so the probe
+    # takes its own prefix for the reason the DECIDED note above gives.
+    "scripts/diagnostics/probe.py": "PROBE-VERDICT",
 }
 
 

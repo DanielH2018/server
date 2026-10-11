@@ -59,6 +59,22 @@ def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch
     )
 
 
+def test_an_unexpected_exception_still_prints_and_records_a_verdict(tmp_path, capsys):
+    """Direct, it reads as it does through the handoff unit: `refused`, naming the raise."""
+    import land
+    from deploy_tools.land_lib.options import Options
+
+    verdict_file = tmp_path / "7.verdict"
+    opts = Options(pr="7", primary=PRIMARY, verdict_file=str(verdict_file))
+    tools, _ = build_tools(Fakes())
+    tools.gh_json = lambda *a, **k: 1 / 0
+    with pytest.raises(ZeroDivisionError):
+        land._land(opts, tools, None)
+    expected = "VERDICT: refused (PR #7 — the landing raised ZeroDivisionError: division by zero)"
+    assert capsys.readouterr().out.splitlines()[-1] == expected
+    assert verdict_file.read_text() == expected + "\n"
+
+
 @pytest.mark.parametrize("argv", [["--bogus"], []])
 def test_a_usage_error_does_not_annotate(argv):
     """The rejecting half: a bad flag and a missing `--pr` are usage errors, not landings,
@@ -197,8 +213,8 @@ def test_the_diff_fallback_reaches_the_tick_before_deriving(land_run):
 def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):
     """Every phase runs git and deploy.sh there, so it is checked first and named plainly.
 
-    No verdict: bash annotated this as `aborted` too, and it is a broken invocation rather
-    than a landing outcome.
+    It ends `refused`, as every exit-1 stop does (#4451), rather than the `aborted` the
+    board reserves for a path that named no verdict.
     """
     from pathlib import Path
 
@@ -206,7 +222,7 @@ def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):
     assert rc == 1
     assert "cannot cd to /nonexistent" in err
     assert "gh" not in _names(calls)
-    assert "verdict=aborted cause= exit=1" in logline
+    assert "verdict=refused cause= exit=1" in logline
 
 
 def test_land_never_bypasses_the_staleness_guard():
@@ -227,7 +243,7 @@ def test_land_never_bypasses_the_staleness_guard():
 
 
 def test_every_verdict_is_produced_by_a_running_test():
-    """The census: thirteen verdicts, each asserted by name in a land test."""
+    """The census: every verdict asserted by name in a land test."""
     import re
     from pathlib import Path
 

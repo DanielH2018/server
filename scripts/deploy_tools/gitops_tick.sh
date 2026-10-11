@@ -260,9 +260,8 @@ if [[ "$joined" == 1 && "$WAIT_S" -gt 0 ]]; then
 fi
 
 echo
-echo "── journal ──────────────────────────────────────────────────────────────────"
+echo "gitops_tick: journal of $UNIT since $since:"
 journalctl -u "$UNIT" --since "$since" --no-pager
-echo "─────────────────────────────────────────────────────────────────────────────"
 
 # An uneventful tick logs NOTHING — the deployer prints only on a deferral, an alert or a
 # real deploy — so the journal alone renders a healthy run as "-- No entries --", which
@@ -276,12 +275,11 @@ echo "────────────────────────�
 # `uv run` resolves the project from its caller's working directory, so the call is anchored
 # to this checkout's root, the way land.sh anchors its own.
 echo
-echo "── deployer state ───────────────────────────────────────────────────────────"
+echo "gitops_tick: deployer state:"
 repo_root="$(dirname "$(readlink -f "$0")")/../.."
 uv run --quiet --project "$repo_root" python "$repo_root/scripts/diagnostics/probe.py" \
   gitops-state ||
   echo "(probe.py gitops-state could not read every marker; the run's verdict is below)"
-echo "─────────────────────────────────────────────────────────────────────────────"
 
 state="$(show ActiveState)"
 # The fresh run's start is asynchronous (`--no-block`), so at the deadline it may not have

@@ -27,6 +27,7 @@ from deployer_lib.deploy_git import behind_marker
 from gitops_hold import HOLD_PLANE_SEP, Hold, hold_plane_marker
 from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are re-exported
     ALERT_SLOTS,
+    DEPLOY_PLAYBOOK,
     MARKERS,
     NO_PLAYBOOK,
     STATE_DIR,
@@ -207,16 +208,15 @@ class DeployerState:
     def clear_service_hold(self, services: set[str]) -> None:
         """Clear a hold after a successful service deploy, unless it leaves a plane unapplied.
 
-        A k8s deploy is `ansible/deploy.yml --tags <services>`, so it drops a held
-        entry naming that playbook at a subset of those tags — a failed bump on a broad tick
-        writes exactly that, and the fix-forward deploy of the same service is its way out.
-        Any other entry stays held: without this, an unrelated service deploy clears
-        `hold_sha` and orphans the held planes, which `gitops_status` never reads on its own.
+        A k8s deploy is `ansible/deploy.yml --tags <services>`, so it drops a held entry naming that
+        playbook at a subset of those tags. A failed bump on a broad tick writes that entry, and a
+        fix-forward deploy of the service clears it. Any other entry stays held, or an unrelated
+        deploy would clear `hold_sha` and orphan planes `gitops_status` never reads on its own.
         """
         left = self._hold.cover_services(services)
         if not left:
             return
-        applied = hold_plane_marker("ansible/deploy.yml", sorted(services))
+        applied = hold_plane_marker(DEPLOY_PLAYBOOK, sorted(services))
         suffix = f" (this tick applied {applied})" if services else ""
         log(f"hold kept: {HOLD_PLANE_SEP.join(left)} is still unapplied{suffix}")
 

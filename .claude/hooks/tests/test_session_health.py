@@ -37,7 +37,7 @@ def test_banner_empty_when_no_problems():
 
 def test_banner_lists_problems_and_triage():
     out = _mod.format_banner(["  ✗ jellyfin — unhealthy (x)"])
-    assert "issues detected" in out
+    assert out.startswith("WARN: homelab health check found issues:")
     assert "jellyfin" in out
     assert "triage" in out  # always points the reader at the probe commands
 
@@ -218,7 +218,7 @@ def test_main_prints_the_removable_worktree_lines(monkeypatch, capsys):
         monkeypatch,
         '{"source":"startup"}',
         worktrees=[
-            "\U0001f9f9 1 merged worktree(s) can be removed:",
+            "WARN: 1 merged worktree(s) can be removed:",
             "  old-thing — x",
         ],
     )
@@ -238,7 +238,7 @@ def test_main_prints_remote_fanout_lines(monkeypatch, capsys):
 
 def test_stale_worktree_lines_reports_removable():
     brief = (
-        "\U0001f9f9 1 merged worktree(s) can be removed:\n"
+        "WARN: 1 merged worktree(s) can be removed:\n"
         "  old-thing — worktree-old-thing merged, clean, unlocked\n"
         "  → uv run python scripts/dev/prune_worktrees.py --prune\n"
     )

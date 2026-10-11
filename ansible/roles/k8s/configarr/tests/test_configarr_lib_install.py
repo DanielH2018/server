@@ -25,6 +25,10 @@ INSTALL_DIR = "/opt/configarr-health"
 _LIB_COPY = "Install the configarr health reader library"
 _READER_COPY = "Install the configarr health reader script"
 _REMOVAL = "Remove the configarr health modules that moved into configarr_lib"
+# The flat files the layout before #4416 left in INSTALL_DIR. A literal, not the removal
+# task's loop: seeded from that loop, a name dropped from it is neither seeded nor removed,
+# and the closing glob passes on a stale copy (#4441).
+_PRE_4416_FLAT = ("configarr_health_logic.py", "configarr_status.py")
 
 
 def _tasks() -> list[dict]:
@@ -79,7 +83,7 @@ def test_the_removed_flat_files_are_the_ones_that_moved():
 def test_the_reader_imports_from_the_installed_layout(tmp_path):
     # The old flat layout first, then the role's copies and its removal, re-rooted at tmp_path,
     # with host_lib and kuma_push beside the reader as install_host_lib.yml puts them.
-    for name in _task(_REMOVAL)["loop"]:
+    for name in _PRE_4416_FLAT:
         (tmp_path / name).write_text("raise ImportError('stale flat copy')\n")
     for name, live in _installed_libs().items():
         target = tmp_path / live.removeprefix(f"{INSTALL_DIR}/")

@@ -337,7 +337,9 @@ matched no task, exited 0 and recorded an apply the Pi never received.
 `scripts/deploy_tools/setup_routing.py` reads the role's `when:` against each host's vars and
 finds the one host it admits. The deployer writes that host into the role's `manual_plane` line
 as its `host` key, and every surface that prints the remediation appends `-e target=<host>`
-from it: `ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`.
+from it: `uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e
+target=daniel-pi`. Each prints `gitops_markers.PLAYBOOK_CMD` as the prefix, because a bare `ansible-playbook`
+is the uv-tool shim without the collection deps (#4413).
 A second role gated off the tick's host is derived the same way, with no table to update
 (#3734).
 
@@ -919,6 +921,12 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   **A k8s change that is not an eligible bump defers.** A path under `roles/k8s/**` that is not an
   eligible image-pin bump lands in `ChangeSet.k8s` (`deploy_logic.role_of` matches the whole role
   directory). The tick still `--ff-only` merges it and does not deploy it.
+  A role `defaults/` edit that moves no content line is not a change at all
+  (`deploy_k8s.comment_only_k8s_defaults`, #4460): the tick drops the path before it
+  classifies, so it neither defers nor pages. The release-staleness census drops the same
+  path with the same reader, so the role does not read stale either, and land.sh derives no
+  deploy tag for it (`deploy_tags.comment_only_paths`). `templates/` and
+  `tasks/` are outside that read.
   `alert_deferred` posts once per SHA on the `k8s` alert slot. Deploy the change with
   `./scripts/deploy.sh --tags <svc>`, even where the post prints the bare `ansible-playbook`
   form. The compose mechanisms in this page (`containers_for()`, the

@@ -25,10 +25,11 @@ def test_blocked_when_an_incoming_change_needs_a_hand(landing):
 
 
 def test_a_broken_preflight_is_a_plain_failure(landing):
+    """Not `blocked`: nothing in the range was judged, so it takes the exit-1 catch-all."""
     ln, _ = landing(Fakes(blockers=[1]))
     with pytest.raises(Outcome) as exc:
         ci.preflight(ln)
-    assert exc.value.rc == 1 and exc.value.verdict is None
+    assert exc.value.rc == 1 and exc.value.verdict == "refused"
 
 
 @pytest.mark.parametrize(
@@ -99,3 +100,36 @@ def test_green_returns_and_prints_the_line(landing, capsys):
     ln, _ = landing(Fakes(await_ci=[(0, "0123456: CI green")]))
     ci.wait_master_ci(ln, "abc", "abc")
     assert "0123456: CI green" in capsys.readouterr().out
+
+
+# await_ci's own line for a disarmed gate, as land_lib.tools.await_ci_verdict builds it.
+_DISARMED_LINE = "await_ci: no required CI contexts -- refusing to report a verdict"
+
+
+def _disarmed_output(landing, capsys, label: str | None = None) -> str:
+    """Everything land.sh prints when await_ci exits CI_DISARMED, stdout and stderr."""
+    from lib.exit_codes import CI_DISARMED
+
+    ln, _ = landing(Fakes(await_ci=[(CI_DISARMED, _DISARMED_LINE)]))
+    with pytest.raises(Outcome) as exc:
+        ci.wait_master_ci(ln, "abc123", label)
+    exc.value.emit()
+    out = capsys.readouterr()
+    return out.out + out.err
+
+
+@pytest.mark.parametrize("label", [None, "the tip def456"])
+def test_a_disarmed_gate_is_named_as_disarmed(landing, capsys, label):
+    """Exit 2 is CI_DISARMED, not a failed CI run: the output says so (#4464)."""
+    out = _disarmed_output(landing, capsys, label)
+    assert "disarmed" in out.lower(), out
+    assert "(exit 2)" not in out, out
+
+
+def test_a_disarmed_gate_names_where_to_re_arm_it(landing, capsys):
+    """The next step: land.sh's arm state is await_ci.REQUIRED_CONTEXTS (#4464)."""
+    from deploy_tools import await_ci
+
+    assert await_ci.REQUIRED_CONTEXTS, "the gate is armed at HEAD"
+    out = _disarmed_output(landing, capsys)
+    assert "REQUIRED_CONTEXTS" in out or "await_ci.py" in out, out

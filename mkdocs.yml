@@ -248,7 +248,6 @@ nav:
               - headlamp plugins and OIDC record: headlamp-oidc-and-plugins.md
               - homepage widgets and layout: homepage-widgets-and-layout.md
               - Jellyfin plugins: jellyfin-plugins.md
-              - AniList integration: anilist-integration.md
               - qbittorrent VPN and prefs: qbittorrent-vpn-and-prefs.md
               - n8n community node packages: n8n-community-packages.md
               - game-stats internals: game-stats-internals.md

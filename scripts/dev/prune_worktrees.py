@@ -324,12 +324,12 @@ def brief(prune: bool = False) -> int:
     # pruning path reads its own list below, AFTER the removals.
     stale = [] if prune else landed_orphan_branches(repo, deep=False)
     if removable:
-        print(f"\U0001f9f9 {len(removable)} merged worktree(s) can be removed:")
+        print(f"WARN: {len(removable)} merged worktree(s) can be removed:")
         for tree, reason in removable:
             print(f"  {with_label(Path(tree.path).name, tree.path)} — {reason}")
     if stale and not prune:
         print(
-            f"\U0001f9f9 {len(stale)} orphan {BRANCH_PREFIX}* branch(es) already on "
+            f"WARN: {len(stale)} orphan {BRANCH_PREFIX}* branch(es) already on "
             "origin/master"
         )
     if prune:

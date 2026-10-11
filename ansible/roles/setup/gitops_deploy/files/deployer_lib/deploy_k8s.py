@@ -2,7 +2,8 @@
 """k8s auto-deploy eligibility, the denylist, and the rollback's revert note.
 
 `split_k8s_auto_deploy` is the gate: diff-shape first (`is_image_only_diff`), identity second
-(`declared_denylist`, the pilot scope, the per-tick cap). `declares_snapshot_claims` and
+(`declared_denylist`, the pilot scope, the per-tick cap). `comment_only_k8s_defaults` runs
+before either and drops a role's comment-only defaults edit as no change. `declares_snapshot_claims` and
 `rollback_volume_revert_note` decide the one revert-status line a rollback alert carries.
 """
 
@@ -12,7 +13,7 @@ import re
 from collections.abc import Callable, Mapping, Set as AbstractSet
 from dataclasses import replace
 
-from deployer_lib.deploy_changes import ChangeSet
+from deployer_lib.deploy_changes import ChangeSet, _content_unchanged
 
 # A changed line in a unified diff that assigns a container image var, e.g.
 #   +speedtest_k8s_image: openspeedtest/latest:v2.0.5
@@ -46,6 +47,33 @@ def is_image_only_diff(diff_text: str) -> bool:
         if not _DIFF_IMAGE_LINE.match(line):
             return False
     return seen_change
+
+
+# A k8s role's `defaults/` file. Ansible reads it only through its values, so an edit that
+# moves no content line renders the same manifests. `manifests` is left out: it is the renderer
+# every service includes, and `probe_lib/releases_diff.py` skips it for the same reason.
+_K8S_DEFAULTS_FILE = re.compile(
+    r"^ansible/roles/k8s/(?!manifests/)[^/]+/defaults/[^/]+\.ya?ml$"
+)
+
+
+def comment_only_k8s_defaults(paths, old_ref: str, new_ref: str, show) -> set[str]:
+    """The k8s role `defaults/` files whose change between two refs is comments only (#4460).
+
+    A k8s role auto-deploys only for an image-pin bump, so a comment repointed in
+    `roles/k8s/jellyfin/defaults/main.yml` (PR #4459) deferred, paged, and owed a no-op deploy
+    to clear. A caller drops the paths returned here before classifying, as it drops
+    `comment_only_broad_changes`'s.
+
+    Kept apart from that function rather than widening `_COMMENT_ONLY_PREFIXES`: land.sh's
+    plane note and the `blockers` verdict read that one, and neither asks about a service role.
+    `templates/` and `tasks/` stay out too -- a `#` line in a `.j2` is usually rendered
+    content, and a task file has its own defer channel. The same read runs in the
+    release-staleness census (`probe_lib/releases_diff.py:drop_comment_only_defaults`), so a
+    path the tick drops does not read stale there either.
+    """
+    candidates = [p for p in paths if _K8S_DEFAULTS_FILE.match(p)]
+    return _content_unchanged(candidates, old_ref, new_ref, show)
 
 
 # Roles under roles/k8s/ that deploy no service of their own — they are included by other roles

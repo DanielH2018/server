@@ -140,3 +140,22 @@ def test_reading_writes_nothing(tmp_path):
     view.collect(tmp_path, NOW)
     after = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in tmp_path.iterdir()}
     assert after == before
+
+
+def test_the_manual_plane_apply_names_the_pinned_playbook_command(tmp_path):
+    """The `do:` line printed `<playbook> --tags <tags>`, naming no program (#4413)."""
+    _state(
+        tmp_path,
+        owed=_owed(
+            "manual_plane",
+            "optimize_pi",
+            playbook="ansible/initial_setup.yml",
+            tags=[],
+            host="daniel-pi",
+        ),
+    )
+    out = view.format_text(view.collect(tmp_path, NOW))
+    assert (
+        "do:   uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi"
+        " -e target=daniel-pi" in out
+    ), out

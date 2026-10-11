@@ -321,4 +321,4 @@ def test_commons_consumers_come_from_the_adopted_cross_role_table():
         cmd = broad_remediation(False, True, {"common"})
     finally:
         deploy_cross_role.use_tables(saved)
-    assert "`ansible-playbook ansible/initial_setup.yml --tags chezmoi`" in cmd
+    assert "`uv run ansible-playbook ansible/initial_setup.yml --tags chezmoi`" in cmd

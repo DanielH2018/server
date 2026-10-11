@@ -46,9 +46,8 @@ QUALIFIED = {"deploy_io", "deploy_alerts", "deploy_alert_text"}
 # literal), a module that ships alone (`gitops_markers`, `gitops_hold`), host_lib purity
 # (`deploy_remediation.BRANCH_DEFAULT`), or a source outside files/ under `--no-project`
 # (`deploy_release`'s dirs and verdicts, `deploy_k8s.SHARED_K8S_ROLES`, each with its own sync
-# test), so the narrower rule would fold none of them. Two uncommented copies sit behind
-# edges that are not cycles, the "ansible/deploy.yml" hold-plane string and `deploy_narrow`'s bare
-# "drifted"/"current"; folding them means adding the edge here, which this rule permits.
+# test), so the narrower rule would fold none of them. A copy behind a non-cycle edge folds
+# by adding the edge here, as `DEPLOY_PLAYBOOK` and the `deploy_release` verdicts did (#4428).
 ALLOWED: dict[str, set[str] | None] = {
     # The cross-role tables, a leaf of their own because the tick and land.sh parse another
     # commit's copy of that file by path.
@@ -59,9 +58,16 @@ ALLOWED: dict[str, set[str] | None] = {
     "deploy_setup_roles": set(),
     # The narrowing subprocess and the plan it returns: `deploy_config` for `log`, and
     # `gitops_hold` for `held_tag`, the hold-marker format `broad_hold_cleared_by` reads back
-    # (#3138) — a stdlib leaf, so no cycle. It must NOT import `deploy_toolbox`, which
-    # imports IT for the `narrow_deploy_plane` default.
-    "deploy_narrow": {"deploy_config", "deploy_setup_roles", "gitops_hold"},
+    # (#3138) — a stdlib leaf, so no cycle. `gitops_markers` for the playbook its deploy plane
+    # names, and `deploy_release` (import-free) for the verdict keys its shadow log reads. It
+    # must NOT import `deploy_toolbox`, which imports IT for the `narrow_deploy_plane` default.
+    "deploy_narrow": {
+        "deploy_config",
+        "deploy_release",
+        "deploy_setup_roles",
+        "gitops_hold",
+        "gitops_markers",
+    },
     # The state directory, the marker table and the line parsers. Import-free by construction:
     # a copy of it ships into every other tree that reads the markers (its header says how),
     # so an import here would have to be satisfiable in a monitor-bridge pod.
@@ -133,6 +139,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_state",
         "deploy_tick_types",
         "deploy_toolbox",
+        "gitops_markers",
     },
     # The marker files, plus `behind_marker` from `deploy_git`, the hold's owner
     # `gitops_hold`, and `deploy_config` for `log`.
@@ -151,6 +158,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_k8s",
         "deploy_locks",
         "deploy_state",
+        "gitops_markers",
     },
     # The boundaries object: `deploy_io` for the transport, `deploy_git` for the CI verdict,
     # `deploy_config` for the Config it binds. It holds `post`, the webhook itself, so that

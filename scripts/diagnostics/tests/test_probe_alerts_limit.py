@@ -98,3 +98,16 @@ def test_loki_entries_cap_reads_the_cap_and_ignores_other_bodies():
     )
     assert alerts.loki_entries_cap("too many outstanding requests") is None
     assert alerts.loki_entries_cap("") is None
+
+
+def test_a_clamped_fetch_prints_no_error_body_to_stderr(monkeypatch, capsys):
+    # A rejection the clamp handles is not a failed read. `core.NonJsonResponse` prints the
+    # body when it is built, so the clamp must read the cap before one exists (#4471).
+    _route_alert_fetch(
+        monkeypatch, {alerts.ALERT_LOGQL: _two_day_log()}, respect_limit=True, cap=10
+    )
+    ns = cli_parser._build_parser().parse_args(
+        ["alerts", "--days", "2", "--limit", "20000"]
+    )
+    assert alerts.run_alerts(ns, now=NOW) == 0
+    assert capsys.readouterr().err == ""

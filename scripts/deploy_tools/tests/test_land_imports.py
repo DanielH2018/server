@@ -62,8 +62,9 @@ ALLOWED = {
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
     # callable and it never knows what a landing is.
     "detach": set(),
-    # The handoff to a lander unit reads the Options it refuses flags from, and nothing else.
-    "handoff": {"options"},
+    # The handoff to a lander unit reads the Options it refuses flags from, and prints its own
+    # stops through Outcome so they carry the verdict a landing's would.
+    "handoff": {"options", "outcome"},
     # The tag derivation and what it reads. None of them knows what a landing is.
     "land_tags": {"land_reach", "land_shared"},
     "land_platform": {"land_tags"},

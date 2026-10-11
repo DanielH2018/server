@@ -13,6 +13,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Classification, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
 from deploy_tools.land_lib.land_tags import DeriveSource
+from lib.exit_codes import LAND_BAD_ARGS
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -227,7 +228,13 @@ def classify(ln: Landing) -> None:
     # -1 rather than 0: `gh` omitting the field must not read as agreement with an empty
     # file list, which would silently license a zero-tag deploy.
     tags, source = _classified(
-        ln, "tag derivation", c.derive, paths, view.get("changedFiles", -1), declared
+        ln,
+        "tag derivation",
+        c.derive,
+        paths,
+        view.get("changedFiles", -1),
+        declared,
+        quiet=quiet,
     )
     ln.resolved_tags = list(tags)
     if source == DeriveSource.PR:
@@ -279,7 +286,8 @@ def classify(ln: Landing) -> None:
     if source == DeriveSource.FALLBACK:
         if not ln.opts.since:
             ln.die(
-                "PR file list was truncated and no --since was given — rerun with --since <pre-merge-sha>"
+                "PR file list was truncated and no --since was given — rerun with --since <pre-merge-sha>",
+                LAND_BAD_ARGS,
             )
         # The diff derivation reads `<since>...HEAD` in the primary checkout, which the tick
         # has not fast-forwarded yet. Derived in step 5, after the tick.

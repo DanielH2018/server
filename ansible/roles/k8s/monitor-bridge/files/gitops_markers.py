@@ -135,6 +135,12 @@ ALERT_SLOTS: frozenset[str] = frozenset(
     {"broad", "secrets", "tasks", "k8s", "stale_denylist", "ci"}
 )
 
+# The deploy-plane playbook. A k8s deploy runs it with `--tags <services>`, and a failed one
+# writes it into the hold's `hold_plane` entry. `gitops_hold.Hold.cover_services` clears an entry
+# only when it names this same string, so the writer and the clear take it from here: two
+# spellings that drifted apart would leave a hold no deploy clears (#4428).
+DEPLOY_PLAYBOOK = "ansible/deploy.yml"
+
 # What the `playbook` key of a `manual_plane` ledger line holds for a role no playbook applies
 # (`common`).
 NO_PLAYBOOK = "none"
@@ -167,6 +173,14 @@ def target_arg(host: str | None) -> str:
     """
     return f" -e target={host}" if host else ""
 
+
+# The prefix of every playbook command a surface prints for an operator to paste. A bare
+# `ansible-playbook` resolves to the uv-tool shim, which lacks the `community.docker` deps, so
+# the pasted command would fail (#4413). The deployer's journal line and Discord alerts,
+# `land.sh`, monitor-bridge's page and the SessionStart banner all print this one string. The
+# playbook path that follows is relative, so the command runs from a checkout's root, where
+# `ansible.cfg` names the inventory.
+PLAYBOOK_CMD = "uv run ansible-playbook"
 
 # What an operator runs to clear one owed-ledger line after applying, deploying or reverting
 # what it names, and to end a contention streak once the lock's holder is gone. The deployer's

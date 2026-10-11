@@ -32,6 +32,7 @@ from deployer_lib.deploy_config import Config, log
 from deployer_lib.deploy_git import ci_walk_candidates, is_diverged, next_action
 from deployer_lib.deploy_inventory import declared_k8s_services, declares_no_gitops
 from deployer_lib.deploy_k8s import (
+    comment_only_k8s_defaults,
     declared_denylist,
     declares_snapshot_claims,
     is_image_only_diff,
@@ -224,20 +225,29 @@ def plan_tick(
         ["git", "diff", "--name-only", f"{target.local}..{target.origin}"],
         cwd=config.repo,
     ).splitlines()
+
     # A comment-only edit to a bring-up playbook is not a change the deployer must park on;
     # it parked three sessions' landings on 2026-09-02 (PR #746) until an operator ff-merged
     # by hand. The paths dropped here would have set broad_manual by prefix alone.
-    quiet = comment_only_broad_changes(
-        paths,
-        target.local,
-        target.origin,
-        lambda ref, p: tools.run(["git", "show", f"{ref}:{p}"], cwd=config.repo),
-    )
+    def show(ref: str, p: str) -> str:
+        return tools.run(["git", "show", f"{ref}:{p}"], cwd=config.repo)
+
+    quiet = comment_only_broad_changes(paths, target.local, target.origin, show)
     if quiet:
         log(
             f"comment-only change in {', '.join(sorted(quiet))} — "
             "not parking; the tick treats it as no change"
         )
+    # The same read for a k8s role's defaults, which would otherwise defer, page and owe a
+    # no-op deploy (#4460).
+    quiet_k8s = comment_only_k8s_defaults(paths, target.local, target.origin, show)
+    if quiet_k8s:
+        log(
+            f"comment-only change in {', '.join(sorted(quiet_k8s))} — "
+            "not deferring; the tick treats it as no change"
+        )
+        quiet |= quiet_k8s
+    if quiet:
         paths = [p for p in paths if p not in quiet]
     if deploy_cross_role.CROSS_ROLE_FILE in paths:
         _adopt_incoming_cross_role_tables(tools, config, target.origin)

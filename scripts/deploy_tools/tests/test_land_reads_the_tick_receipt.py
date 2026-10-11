@@ -100,7 +100,7 @@ def test_the_plane_cli_names_a_changed_bringup_playbook_over_a_range(tmp_path, c
     argv = ["--json", payload, "--plane", "--range", f"{old}..{new}"]
     assert land_tags.main(argv, repo=tree.root) == 0
     out = capsys.readouterr().out
-    assert "`ansible-playbook ansible/k3s-bringup.yml --tags k3s`" in out
+    assert "`uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s`" in out
     assert "<role>" not in out
 
 
