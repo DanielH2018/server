@@ -13,9 +13,11 @@ from pathlib import Path
 import pytest
 
 from _review_fakes import ISSUES, PR, _finding, _pipeline, _report, unprefixed
+from _scratch_pytest import run as scratch_run
 from fanout_lib.brief import ISSUES_HEADING, render_brief
+from fanout_lib.review.base_check import BaseCheck
 from fanout_lib.review.hunk_check import HunkCheck
-from fanout_lib.review.red_gate import Gate, Gates
+from fanout_lib.review.red_gate import Gate, Gates, green_gate
 from fanout_lib.review.review import Pipeline
 from fanout_lib.target import SERVER_TARGET
 from lib.proc_testing import DEFAULT_TIMEOUT
@@ -314,6 +316,74 @@ def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
         {**clean, "head": "red"},
         {**clean, "head": "red" if passed else "base"},
     ]
+
+
+# What a red test can run to leave a process behind: `nohup` and a parent that exits at once.
+NOHUP = "nohup sleep 600 >/dev/null 2>&1 </dev/null & echo $! > {pidfile}"
+
+
+def _kill(pidfile):
+    """Kill the process `pidfile` names, if it is still alive."""
+    pid = int(pidfile.read_text()) if pidfile.exists() else 0
+    if pid and _alive(pid):
+        os.kill(pid, 9)
+
+
+def test_a_process_a_red_test_starts_does_not_outlive_the_green_gate(tmp_path):
+    """#4508: the gate runs the red author's tests, the real gate and pytest here."""
+    pidfile = tmp_path / "pid"
+    red_test = (
+        "def test_orphan():\n    import subprocess\n\n    from mod import double\n\n"
+        f"    subprocess.run(['sh', '-c', {NOHUP.format(pidfile=pidfile)!r}], check=True)\n"
+        "    assert double(2) == 4\n"
+    )
+    repo = init_repo(tmp_path / "repo")
+    config = "[tool.pytest.ini_options]\n"
+    code = "def double(x):\n    return x\n"
+    base = commit(repo, "base", **{"mod.py": code, "pyproject.toml": config})
+    red = commit(repo, "red", **{"tests/test_new.py": red_test})
+    commit(repo, "fix", **{"mod.py": code.replace("return x", "return 2 * x")})
+    node = "tests/test_new.py::test_orphan"
+    gate = Gate(files=["tests/test_new.py"], nodes=[node], base=base)
+    pipeline = Pipeline(
+        repo, "4508", "daniel-server", SERVER_TARGET, "", run=scratch_run,
+        clock=lambda: 0.0, state_dir=tmp_path / "state", gates=Gates(green=green_gate),
+    )  # fmt: skip
+    try:
+        assert pipeline._green((red, gate)) == ""
+        assert not _alive(int(pidfile.read_text()))
+    finally:
+        _kill(pidfile)
+
+
+@pytest.mark.parametrize("check", ["base", "hunk"])
+def test_a_process_the_base_or_hunk_check_starts_does_not_outlive_it(tmp_path, check):
+    """Both run the red author's code as well: the base check collects every changed test
+    file, and the hunk check runs the red nodes once per fix hunk (#4508)."""
+    pidfile = tmp_path / "pid"
+
+    def leaves_a_process(*_):
+        subprocess.run(
+            ["sh", "-c", NOHUP.format(pidfile=pidfile)],
+            check=True,
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return BaseCheck() if check == "base" else HunkCheck()
+
+    pipeline = Pipeline(
+        tmp_path, "4508", "daniel-server", SERVER_TARGET, "",
+        run=lambda argv, stdin: subprocess.CompletedProcess(argv, 0, "base0", ""),
+        clock=lambda: 0.0, state_dir=tmp_path / "state",
+        base_check=leaves_a_process, hunk_check=leaves_a_process,
+    )  # fmt: skip
+    try:
+        if check == "base":
+            pipeline._unproven("base0", "head", None)
+        else:
+            pipeline._detection(("red1", Gate(files=["t.py"], nodes=["t.py::a"])))
+        assert not _alive(int(pidfile.read_text()))
+    finally:
+        _kill(pidfile)
 
 
 def test_a_failed_reset_fails_the_batch_before_the_implementer_runs(tmp_path):

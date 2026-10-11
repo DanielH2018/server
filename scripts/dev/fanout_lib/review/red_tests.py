@@ -22,22 +22,42 @@ exists. It counts a suppression that names no rule, in either the `ty:` or the `
 spelling, and one naming a rule in `ABSENCE_RULES`, the rules a fix resolves by adding a name.
 `red_prompt` says how to reach a missing name without one.
 
-WHAT A FIX MAY CHANGE (#4214). `append_only` lets the implementer append tests to a red test
-file, and nothing else. The green gate used to refuse any change to a red file. In #4213 the fix round appended
-the test a reviewer had asked for, changed no red node, and the batch ended unlanded. Hashing
-each red node instead would have let #4183's first fix through: it edited a pre-existing
-function in the red file, which changes what a red node checks without touching the node.
+WHAT A FIX MAY CHANGE (#4214, #4517). `forbidden_change` says what the fix changed in a red
+test file that it may not. The green gate used to refuse any change to a red file. In #4213 the
+fix round appended the test a reviewer had asked for, changed no red node, and the batch ended
+unlanded. Hashing each red node instead would have let #4183's first fix through: it edited a
+pre-existing function the red node calls, which changes what the node checks without touching
+it.
 
-THE RULE. Every top-level statement of the red version stays as it was, in order, compared by
-`ast.dump`, so formatting and comments may change and the module docstring may be rewritten.
-Anything new must be a test function, a helper function, a fixture or an import, and it may not
-bind a name the red version binds or reads, or uses as a parameter: a second `def test_two`
-replaces the red node pytest collects, a new import can shadow the code under test, and a new
-fixture can override one a red node requests. A fixture may not be `autouse` or take `name=`,
-and an xunit or `pytest_*` hook is refused, since each runs around every test in the module.
+THE RULE. A top-level statement is locked when the red commits wrote it, when a red node is
+collected from it, or when a fix could not append it under the rule below, such as an
+assignment, a class, an autouse fixture or a hook. A statement that a locked one names is locked
+too, and so on transitively. A name counts when the locked statement reads it, binds it, takes
+it as a parameter, which is how a test requests a fixture, or spells it in a string. Every
+locked statement stays as it was, in order, compared by `ast.dump`, so formatting and comments
+may change and the module docstring may be rewritten.
+
+Every other statement in the fix's version must be a test function, a helper function, a
+fixture or an import, and it may not bind a name a locked statement names: a second
+`def test_two` replaces the red node pytest collects, a new import can shadow the code under
+test, and a new fixture can override one a red node requests. A fixture may not be `autouse`
+or take `name=`, and an xunit or `pytest_*` hook is refused, since each runs around every test
+in the module.
+
+DECIDED: a function or import that was in the file before the red commits, and that no red node
+reaches, is the fix's to change or delete. The same test in a file the red commits never touched
+was always the fix's, so the lock on it was an accident of where the red author appended. In
+#3675's judged records the append-only rule refused two edits the fix itself forced, which this
+rule lets through: the callers of a parameter the fix dropped (#4338), and a pre-existing test
+the red tests contradicted, whose restore left CI red (#4470). The reviewer and CI check such a
+test, as they check every test outside a red file. The rule still refuses #4372's and #4359's
+edits. There the red test's subject is test-side code, a guard's constant and a `conftest.py`
+fixture, and no rule on the diff can tell that fix from tampering.
 
 WHAT IT DOES NOT SEE. Code that runs at import time inside an allowed statement: a decorator
-argument, a default value, an annotation, or an import of a new module with side effects. The
+argument, a default value, an annotation, or an import of a new module with side effects. A
+fixture in the file that only a `conftest.py` fixture requests: pytest resolves that request
+from the test module, so the fix can append or change it without a red node naming it. The
 green gate still runs every red node, and CI runs the whole suite on the pushed head.
 """
 
@@ -46,6 +66,7 @@ import io
 import re
 import tokenize
 from collections import Counter
+from collections.abc import Iterable
 
 _FAILED = re.compile(r"^FAILED (\S+) - (.*)$", re.M)
 # A test that fails because the code under test is missing, before any assertion runs.
@@ -140,19 +161,23 @@ XUNIT_HOOKS = frozenset(
 _FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 
-def append_only(red_src: str, head_src: str) -> str:
-    """Why `head_src` is more than `red_src` with tests appended, or "" when it is not.
+def forbidden_change(
+    base_src: str, red_src: str, head_src: str, red_names: Iterable[str] = ()
+) -> str:
+    """Why `head_src` changes what a red test stands on, or "" when it does not.
 
     Args:
-        red_src: the file as the red commit left it.
+        base_src: the file before the red commits, "" when they created it or it is unknown.
+            With "", every statement counts as the red commits', so only appending is allowed.
+        red_src: the file as the red commits left it.
         head_src: the same file at the implementer's HEAD.
+        red_names: the top-level names the file's red nodes are collected from.
     """
     try:
         head = ast.parse(head_src)
     except SyntaxError as exc:
         return f"does not parse: {exc.msg} at line {exc.lineno}"
-    red = ast.parse(red_src)
-    kept = _body(red)
+    kept = _locked(base_src, red_src, set(red_names))
     matched = 0
     added = []
     for stmt in _body(head):
@@ -162,12 +187,91 @@ def append_only(red_src: str, head_src: str) -> str:
             added.append(stmt)
     if matched < len(kept):
         return f"changes or removes `{_label(kept[matched])}`"
-    used = _names(red)
+    used = _names(kept) | _spelled(kept)
+    hoisted = _hoistable(kept)
     for stmt in added:
-        problem = _addition_problem(stmt, used)
+        problem = _addition_problem(stmt, used, hoisted)
         if problem:
             return f"adds `{_label(stmt)}`, which {problem}"
     return ""
+
+
+def _locked(base_src: str, red_src: str, red_names: set[str]) -> list[ast.stmt]:
+    """The red version's locked statements, in order; the module docstring says which."""
+    red = _body(ast.parse(red_src))
+    try:
+        before = Counter(ast.dump(s) for s in _body(ast.parse(base_src)))
+    except SyntaxError:
+        before = Counter()
+    locked, inherited = [], []
+    for stmt in red:
+        dump = ast.dump(stmt)
+        if before[dump]:
+            before[dump] -= 1
+            if not _addition_problem(stmt, set()):
+                inherited.append(stmt)
+                continue
+        locked.append(stmt)
+    names = _names(locked) | _spelled(locked) | red_names
+    while reached := [s for s in inherited if _binds(s) & names]:
+        for stmt in reached:
+            inherited.remove(stmt)
+            locked.append(stmt)
+        names |= _names(reached) | _spelled(reached)
+    ids = {id(s) for s in locked}
+    return [s for s in red if id(s) in ids]
+
+
+def _hoistable(kept: list[ast.stmt]) -> frozenset[tuple]:
+    """The imports a locked function makes in its body, which the fix may repeat at the top.
+
+    #4470's fix moved a red test's own `from lib.exit_codes import LAND_BAD_ARGS` to module
+    level for the pre-existing test it updated. Inside the red test the local import still
+    wins, so the copy changes nothing there. A name a locked statement binds at module level is
+    left out, since the copy would rebind it.
+    """
+    top = set()
+    for stmt in kept:
+        if isinstance(stmt, (*_FUNCTIONS, ast.ClassDef)):
+            top.add(stmt.name)
+        elif isinstance(stmt, (ast.Import, ast.ImportFrom)):
+            top |= _binds(stmt)
+        else:
+            top |= _names([stmt])
+    return frozenset(
+        _import_key(node, alias)
+        for stmt in kept
+        if isinstance(stmt, _FUNCTIONS)
+        for node in ast.walk(stmt)
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+        if _bound(alias) not in top
+    )
+
+
+def _import_key(stmt: ast.Import | ast.ImportFrom, alias: ast.alias) -> tuple:
+    """What one name of an import binds, as `_hoistable` compares it."""
+    module = (stmt.module, stmt.level) if isinstance(stmt, ast.ImportFrom) else None
+    return module, alias.name, alias.asname
+
+
+def _binds(stmt: ast.stmt) -> set[str]:
+    """The names a function or import statement binds at module level."""
+    if isinstance(stmt, (ast.Import, ast.ImportFrom)):
+        return {_bound(alias) for alias in stmt.names}
+    return {stmt.name} if isinstance(stmt, _FUNCTIONS) else set()
+
+
+def _spelled(stmts: list[ast.stmt]) -> set[str]:
+    """Every string constant in `stmts` that could be a name, as `getfixturevalue` takes."""
+    return {
+        node.value
+        for stmt in stmts
+        for node in ast.walk(stmt)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value.isidentifier()
+    }
 
 
 def _body(module: ast.Module) -> list[ast.stmt]:
@@ -190,10 +294,10 @@ def _label(stmt: ast.stmt) -> str:
     return f"{type(stmt).__name__.lower()} at line {stmt.lineno}"
 
 
-def _names(module: ast.Module) -> set[str]:
-    """Every name the module binds, reads or takes as a parameter, at any depth."""
+def _names(stmts: list[ast.stmt]) -> set[str]:
+    """Every name `stmts` bind, read or take as a parameter, at any depth."""
     names = set()
-    for node in ast.walk(module):
+    for node in (n for stmt in stmts for n in ast.walk(stmt)):
         if isinstance(node, ast.Name):
             names.add(node.id)
         elif isinstance(node, ast.arg):
@@ -210,13 +314,21 @@ def _bound(alias: ast.alias) -> str:
     return alias.asname or alias.name.split(".")[0]
 
 
-def _addition_problem(stmt: ast.stmt, used: set[str]) -> str:
-    """Why a statement the red version lacks could change how a red test runs, or ""."""
+def _addition_problem(
+    stmt: ast.stmt, used: set[str], hoisted: frozenset[tuple] = frozenset()
+) -> str:
+    """Why a statement the red version lacks could change how a red test runs, or "".
+
+    Args:
+        stmt: the statement.
+        used: the names it may not bind.
+        hoisted: the `_import_key`s of imports it may repeat at module level.
+    """
     if isinstance(stmt, (ast.Import, ast.ImportFrom)):
         for alias in stmt.names:
             if alias.name == "*":
                 return "is a star import"
-            if _bound(alias) in used:
+            if _bound(alias) in used and _import_key(stmt, alias) not in hoisted:
                 return f"rebinds `{_bound(alias)}`"
         return ""
     if not isinstance(stmt, _FUNCTIONS):

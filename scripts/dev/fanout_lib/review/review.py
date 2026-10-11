@@ -49,7 +49,8 @@ implementer also loads no settings file from the worktree, and the reviewer gets
 `CLAUDE.md` as text; `held_hooks` says why. A red batch's implement phase runs the same way,
 because the red author had the worktree before it (#3846). Both before and after the red
 gate, the pipeline kills whatever the red phase left running (`processes.reaping`) and runs
-`worktree_reset.reset_worktree` (#3852, #3871); `Pipeline._red` says why.
+`worktree_reset.reset_worktree` (#3852, #3871); `Pipeline._red` says why. Every later test run
+the pipeline starts, which can run the red tests, is reaped the same way (#4508).
 
 DISCLOSURE. The repo is public. A finding in category `security` reaches the PR comment as a
 count only, is never filed with `findings.py open`, and is kept in full only in the local
@@ -428,9 +429,12 @@ class Pipeline:
         if not self.target.is_server:
             return []
         try:
-            check = self.base_check(
-                self.run, self.worktree, base, head, red[1].nodes if red else ()
-            )
+            # It collects every test file the PR changed, the red ones too, and runs whole any
+            # file that holds a new test, so it can run the red author's code (#4508).
+            with reaping():
+                check = self.base_check(
+                    self.run, self.worktree, base, head, red[1].nodes if red else ()
+                )
         # A measure never stops the batch, so this catches what the check did not expect.
         except Exception as exc:
             check = BaseCheck(error=f"{type(exc).__name__}: {exc}")
@@ -450,7 +454,8 @@ class Pipeline:
         """
         start = self._git("merge-base", "HEAD", self.target.base)
         try:
-            check = self.hunk_check(self.run, self.worktree, start, red[1])
+            with reaping():
+                check = self.hunk_check(self.run, self.worktree, start, red[1])
         # A measure never stops the batch, so this catches what the check did not expect.
         except Exception as exc:
             check = HunkCheck(error=f"{type(exc).__name__}: {exc}")
@@ -463,7 +468,8 @@ class Pipeline:
         """Run the green gate on HEAD and record it; "" when it passed or there is no red."""
         if red is None:
             return ""
-        reason = self.gates.green(self.run, self.worktree, *red)
+        with reaping():
+            reason = self.gates.green(self.run, self.worktree, *red)
         self.record.green_gate = reason or "passed"
         self.record.green_first = self.record.green_first or green_cause(reason)
         return reason
