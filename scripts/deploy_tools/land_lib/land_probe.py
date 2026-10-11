@@ -28,7 +28,6 @@ it from a resume point without reading the verdict text. A `deferred` whose log 
 hold cannot be ruled out, and the remedy is to re-run land.sh.
 """
 
-import argparse
 import json
 import re
 import sys
@@ -37,7 +36,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import detach
 from deploy_tools.land_lib.outcome import ABANDONED_WATCH_NOTE, Verdict
-from lib.cli_help import refuse_help_under_describe
+from lib.cli_help import ArgumentParser, refuse_help_under_describe
 
 # land.sh's exit code -> the state that ends the wait. Every code land.sh documents is here.
 _STATE_BY_RC = {0: "landed", 1: "failed", 64: "bad-arguments", 75: "gave-up"}
@@ -132,9 +131,7 @@ def _is_plain_deferral(log: Path, verdict: str) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="land_probe.py", description=__doc__.splitlines()[0]
-    )
+    parser = ArgumentParser(prog="land_probe.py", description=__doc__.splitlines()[0])
     parser.add_argument("--describe", action="store_true")
     parser.add_argument("pr")
     where = parser.add_mutually_exclusive_group()

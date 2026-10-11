@@ -178,7 +178,7 @@ def test_defer_cli_rejects_a_date_that_is_not_a_date(make_tools):
     tools, _ = make_tools(Fakes(view=make_issue(1288)))
     with pytest.raises(SystemExit) as exc:
         findings.main(["defer", "1288", "--until", "tomorrow"], tools)
-    assert exc.value.code == 2
+    assert exc.value.code == 64
 
 
 def test_open_cli_with_not_before_creates_the_label_before_the_issue(

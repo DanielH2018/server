@@ -256,7 +256,7 @@ def test_no_mode_names_every_mode(capsys):
     """The usage error lists all six modes, not the three it named before #4448."""
     with pytest.raises(SystemExit) as exc:
         pytest_shard.main([])
-    assert exc.value.code == 2
+    assert exc.value.code == 64
     err = capsys.readouterr().err
     for mode in (
         "--shard",

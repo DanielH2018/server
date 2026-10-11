@@ -23,7 +23,6 @@ detached deploy, so it has no next run of its own to retry from.
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_detach_notify.py
 """
 
-import argparse
 import contextlib
 import subprocess
 import sys
@@ -35,6 +34,8 @@ from typing import NamedTuple
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+
+from lib.cli_help import ArgumentParser
 
 from lib.repo_paths import HOST_VARS, REPO
 
@@ -288,7 +289,7 @@ def notify(content: str) -> None:
 
 def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int:
     """Gate the deploy's health, post the verdict to Discord, and exit 0 if settled else 1."""
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--status", type=int, required=True, help="ansible-playbook's exit status"
     )

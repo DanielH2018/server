@@ -23,12 +23,18 @@ Usage::
 before each batch's agent starts; `claim` takes the same claims and launches nothing.
 `fanout_lib/claims.py` has the rules.
 
-Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host, or a refusal from
-`fanout_lib.launch_gates` — too many batches on one remote host for its ssh budget, or too
-many live batches on one host across runs for its memory cap — or at least one issue whose
-claim was refused (`launch` still starts every batch that kept an issue) · 4 no host readable
-· 5 a batch reports failed (`status` only) · 6 no candidate host signs commits GitHub
-verifies, or the account's registered signing keys could not be read.
+Exit codes (`lib.exit_codes`'s `FANOUT_PLACE_*`); `status` ranks its batches' tiers 5, 1, 75, 0:
+- 0: every batch launched with every issue claimed; `status`: none needs a hand.
+- 1: `launch` refused before placing, or a batch failed to launch. `status`: a batch reads
+  `needs-input`, `no-pr`, `no-verdict` (land.sh printed no VERDICT) or `no-report`.
+- 3: `launch` placed nothing: no host had headroom, a `fanout_lib.launch_gates` cap refused
+  (the per-host ssh budget, or the live-batch memory cap across runs), or every claim was.
+- 4: no host readable.
+- 5: `status` only: a batch's unit exited non-zero or its session set `is_error`.
+- 6: no candidate host signs commits GitHub verifies, or the signing keys were unreadable.
+- 7: `launch` started batches but dropped at least one refused claim.
+- 64: a malformed `--batch`, an unregistered `--repo`, or a run-id with no manifest.
+- 75: `status` only: a host's read timed out and no batch reported 1 or 5.
 
 A launch costs one remote ssh connection per host it reads for headroom, a second only for
 a host a batch is actually placed on (its session-health read), plus one
@@ -83,6 +89,16 @@ from fanout_lib.launch_gates import (
     refuse_shared_files,
     refuse_solo_only,
 )
+from lib.cli_help import ArgumentParser
+from lib.exit_codes import (
+    FANOUT_PLACE_BAD_ARGS,
+    FANOUT_PLACE_FAILED,
+    FANOUT_PLACE_NO_HOST_READABLE,
+    FANOUT_PLACE_NO_SIGNING_HOST,
+    FANOUT_PLACE_NOTHING_PLACED,
+    FANOUT_PLACE_OK,
+    FANOUT_PLACE_PARTLY_LAUNCHED,
+)
 from lib.git import git
 from fanout_lib.placement import NoHeadroom, place
 from fanout_lib.target import SERVER, for_launch, registered_repos, resolve
@@ -132,7 +148,7 @@ def cmd_read(args, tools: Tools) -> int:
         print(registered, file=sys.stderr)
     for msg in bad:
         print(msg, file=sys.stderr)
-    return 0 if good else 4
+    return FANOUT_PLACE_OK if good else FANOUT_PLACE_NO_HOST_READABLE
 
 
 def _fetch_issues(
@@ -170,46 +186,46 @@ def cmd_claim(args, tools: Tools) -> int:
     """Claim every batch's issues under the orchestrator's branch, launching nothing."""
     batches = claims_mod.parse_batches(args.batch)
     if batches is None:
-        return 1
+        return FANOUT_PLACE_BAD_ARGS
     return claims_mod.claim_all(tools, batches, resolve(SERVER, tools.default_ref))
 
 
 def cmd_launch(args, tools: Tools) -> int:
     batches = claims_mod.parse_batches(args.batch)
     if batches is None:
-        return 1
+        return FANOUT_PLACE_BAD_ARGS
     try:
         target, args.host = for_launch(
             args.repo, args.host, this_host(), tools.default_ref
         )
     except ValueError as exc:
         print(f"launch: {exc}", file=sys.stderr)
-        return 1
+        return FANOUT_PLACE_BAD_ARGS
     holder = claims_mod.orchestrator_branch(tools, target, "launch")
     if holder is None:
-        return 1
+        return FANOUT_PLACE_FAILED
     if live_elsewhere(batches, args.manifest_root, target.repo):
-        return 1
+        return FANOUT_PLACE_FAILED
     fetched = _fetch_issues(tools, batches, target.repo)
     if fetched is None:
-        return 1
+        return FANOUT_PLACE_FAILED
     if refuse_solo_only(batches, fetched):
-        return 1
+        return FANOUT_PLACE_FAILED
     tracked = tracked_files() if target.is_server else ()
     if refuse_shared_files(batches, fetched, args.allow_shared_file, tracked):
-        return 1
+        return FANOUT_PLACE_FAILED
     # Read the registered keys before the first ssh: a gh outage then refuses having spent no
     # connection against the per-host ssh limit.
     registered = registered_keys(tools)
     if isinstance(registered, str):
         print(f"launch: {registered} — refusing to launch", file=sys.stderr)
-        return 6
+        return FANOUT_PLACE_NO_SIGNING_HOST
     hosts = [args.host] if args.host else list(HOSTS)
     good, bad = _readings(tools, hosts)
     for msg in bad:
         print(f"placing without {msg}", file=sys.stderr)
     if not good:
-        return 4
+        return FANOUT_PLACE_NO_HOST_READABLE
     good, refusals = verified_hosts(good, registered)
     for reason in refusals:
         print(f"launch: not placing on {reason}", file=sys.stderr)
@@ -219,14 +235,14 @@ def cmd_launch(args, tools: Tools) -> int:
             "opens a PR that cannot merge",
             file=sys.stderr,
         )
-        return 6
+        return FANOUT_PLACE_NO_SIGNING_HOST
     try:
         placed = place(list(batches), good, pin=args.host)
     except NoHeadroom as exc:
         print(str(exc), file=sys.stderr)
-        return 3
+        return FANOUT_PLACE_NOTHING_PLACED
     if over_ssh_budget(placed) or over_live_batch_cap(placed, args.manifest_root):
-        return 3
+        return FANOUT_PLACE_NOTHING_PLACED
     # Only the hosts a batch landed on. Reading every host placement looked at spends an ssh
     # connection (`ufw limit ssh` allows 5 per 30s) on a host the signing gate or a failed
     # headroom read dropped, and puts its banner state into briefs for agents that never run
@@ -273,25 +289,26 @@ def cmd_launch(args, tools: Tools) -> int:
             # and `launch` reads every manifest under the root before it places.
             if not run.batches:
                 print("launched before this failure: none", file=sys.stderr)
-                return 1
+                return FANOUT_PLACE_FAILED
             manifest_mod.save(run, root=args.manifest_root)
             launched = ", ".join(b.batch for b in run.batches)
             print(
                 f"launched before this failure: {launched} (run {run.run_id})",
                 file=sys.stderr,
             )
-            return 1
+            return FANOUT_PLACE_FAILED
         print(f"{batch} -> {host} ({launch_mod.unit_name(batch, target)})")
         claims_mod.post_worked_by(tools, numbers, launched.branch, target)
     if not run.batches:
         print("launched nothing: every issue's claim was refused", file=sys.stderr)
-        return 3
+        return FANOUT_PLACE_NOTHING_PLACED
     path = manifest_mod.save(run, root=args.manifest_root)
     print(f"run {run.run_id} recorded at {path}")
     if target.is_server:
         # `findings.py release` names the holder, so print it where the orchestrator reads.
         print(f"claims held under `{holder}`")
-    return 3 if refused else 0
+    # Not 3, which says nothing was placed: these batches are running (#4452).
+    return FANOUT_PLACE_PARTLY_LAUNCHED if refused else FANOUT_PLACE_OK
 
 
 def _health_lines(tools: Tools, host: str) -> list[str]:
@@ -484,7 +501,7 @@ def _add_manifest_root(parser: argparse.ArgumentParser) -> None:
 
 
 def main(argv=None, tools: Tools | None = None) -> int:
-    p = argparse.ArgumentParser(
+    p = ArgumentParser(
         prog="fanout.py place", description=__doc__.splitlines()[0], allow_abbrev=False
     )
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -579,5 +596,5 @@ def main(argv=None, tools: Tools | None = None) -> int:
                 f"no manifest for run {args.run_id} under {args.manifest_root}",
                 file=sys.stderr,
             )
-            return 1
+            return FANOUT_PLACE_BAD_ARGS
     return args.fn(args, tools or Tools())

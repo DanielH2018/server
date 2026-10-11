@@ -33,7 +33,6 @@ declares `remote` and a 90s interval. cc-wait then shares one read per interval 
 watcher of the same runs, and the reads stay inside `ufw limit ssh` (6 per 30s).
 """
 
-import argparse
 import contextlib
 import io
 import json
@@ -48,8 +47,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import place
-from fanout_lib.status import UNREAD
-from lib.cli_help import refuse_help_under_describe
+from fanout_lib.status import UNREAD, exit_tier
+from lib.cli_help import ArgumentParser, refuse_help_under_describe
+from lib.exit_codes import FANOUT_PLACE_BATCH_FAILED, FANOUT_PLACE_OK
 
 TERMINAL = {"finished": 0, "needs-attention": 1, "failed": 5}
 
@@ -96,12 +96,12 @@ def describe() -> dict:
 
 def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
     """The runs' state: `running` until no batch runs, then the worst tier's state."""
-    worst = 0
+    tiers: list[int] = []
     running: list[str] = []
     finished: list[tuple[str, str, str]] = []
     for run_id in run_ids:
         rc, rows = status(run_id)
-        worst = max(worst, rc)
+        tiers.append(rc)
         for row in rows:
             if row["state"] in _OPEN:
                 running.append(row["batch"])
@@ -120,15 +120,22 @@ def read(run_ids: list[str], status: StatusReader = read_status) -> dict:
             "detail": f"{len(running)} running; finished: {done}",
         }
     attention = [line for _batch, state, line in finished if state not in _SUCCESS]
-    state = "failed" if worst >= 5 else "needs-attention" if worst >= 1 else "finished"
+    # By name, not by `>=`: `status` exits 75 for a timed-out read, a larger number than 5.
+    # An unread batch counts as running and returns above, so 75 does not reach this line.
+    worst = exit_tier(tiers)
+    state = (
+        "failed"
+        if worst == FANOUT_PLACE_BATCH_FAILED
+        else "finished"
+        if worst == FANOUT_PLACE_OK
+        else "needs-attention"
+    )
     detail = " | ".join(attention) or f"{len(finished)} batches finished"
     return {"state": state, "detail": detail[:600]}
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="fanout.py probe", description=__doc__.splitlines()[0]
-    )
+    parser = ArgumentParser(prog="fanout.py probe", description=__doc__.splitlines()[0])
     parser.add_argument("--describe", action="store_true")
     parser.add_argument("run_ids", nargs="+", metavar="run-id")
     refuse_help_under_describe(parser, argv)

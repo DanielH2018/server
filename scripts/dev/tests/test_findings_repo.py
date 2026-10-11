@@ -81,7 +81,7 @@ def test_a_worktree_reading_subcommand_refuses_a_repo_with_no_known_checkout(cap
     stale, and `reap` would release all of them."""
     for argv in (["reap"], ["claims"], ["next"], ["claim", "1", "--worktree", WT]):
         tools, calls = build_tools(Fakes(worktree_facts=live_worktree(WT)))
-        assert main([*argv, "--repo", "someone/else"], tools) == 2, argv
+        assert main([*argv, "--repo", "someone/else"], tools) == 64, argv
         assert calls.none() and not calls.checkouts
     assert "no local checkout" in capsys.readouterr().err
 

@@ -47,7 +47,6 @@ Usage::
     uv run python scripts/docs/reference/decisions.py --out docs/reference/decisions.md
 """
 
-import argparse
 import datetime as dt
 import difflib
 import os
@@ -60,6 +59,8 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from lib.cli_help import ArgumentParser
 
 from lib.git import git
 from lib.repo_paths import REPO
@@ -481,7 +482,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         The exit code from `finish_generator` (0 on success, non-zero on a write failure).
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     parser.add_argument("--root", type=Path, default=REPO)
     args = parser.parse_args(argv)

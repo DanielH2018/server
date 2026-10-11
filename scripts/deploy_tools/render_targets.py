@@ -20,7 +20,6 @@ Run: uv run python scripts/deploy_tools/render_targets.py daniel-box
      uv run pytest scripts/deploy_tools/tests/test_render_targets.py
 """
 
-import argparse
 import re
 import sys
 from pathlib import Path
@@ -29,6 +28,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from lib.cli_help import ArgumentParser
 from lib.render_guard import containers_entries, entry_platform, entry_tags
 from lib.repo_paths import HOST_VARS, K8S_ROLES
 
@@ -71,7 +71,7 @@ def render_targets(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("host", help="the inventory hostname whose services to list")
     args = parser.parse_args(argv)
     tags = render_targets(args.host)

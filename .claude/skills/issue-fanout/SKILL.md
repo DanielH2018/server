@@ -108,8 +108,8 @@ claim under it stays live for the whole fan-out.
 A refused claim — the issue is closed, `manual`, deferred, held by another worktree, or lost a
 race — drops that issue from its batch, and `launch` prints `<batch>: dropped #<n>: claim
 refused …`. The batch is renamed from the issues it kept, and a batch that kept none is not
-launched. `launch` then exits 3 even though the other batches started; name every dropped
-issue out loud. A batch whose launch fails releases the claims it took.
+launched. `launch` then exits 7, because the other batches started; it exits 3 only when every
+claim was refused and nothing launched. Name every dropped issue out loud. A batch whose launch fails releases the claims it took.
 
 Done when: `launch` printed `claims held under <branch>`, and every `dropped` line is named
 in the report.
@@ -133,8 +133,10 @@ that name a role or host the batch's issues cite, the rest as a count, and, for 
 deploy tag and the test files the cited paths imply, which `findings.py show <n> --brief`
 prints for a solo session) and starts a headless
 Opus agent as a transient user service in a fresh worktree on whichever host has the
-most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means a dropped
-claim (step 2) or one of three placement refusals, which claim nothing: neither host has a
+most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means nothing
+was placed: every claim was refused (step 2), or one of three placement refusals fired, which
+claim nothing. Exit 7 is a launch that started batches but dropped a refused claim. The
+placement refusals: neither host has a
 reservation's worth of headroom; the placement would put more
 than three batches on one remote host in this run (the ssh budget); or it would leave a host
 holding more than three LIVE batches counting every earlier run not yet cleaned (the memory
@@ -208,7 +210,8 @@ appended when the agent hit classifier denials). `done` requires a PR URL in the
 text. A clean finish without one reads `needs-input` when the text names a blocker line
 (`needs input:` or `failed:`) and `no-pr` otherwise. `no-pr` means the agent stopped on a
 progress report and the Stop hook's three continuations ran out. Both print the final text
-and exit 1, because no PR exists to land. A daniel-server batch reports `done <PR URL>` and stops there: land that
+and exit 1, because no PR exists to land. A host whose read timed out reads `unread` and exits 75
+unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` and stops there: land that
 PR from this session with `land.sh`.
 
 **`no-verdict` is a daniel-box batch that opened its PR and never finished landing it.** On

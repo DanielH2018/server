@@ -146,7 +146,7 @@ def test_history_does_not_warn_below_its_limit(capsys):
 
 def test_history_with_nothing_to_search_for_is_a_usage_error(capsys):
     tools, calls = build_tools()
-    assert main(["history"], tools) == 2
+    assert main(["history"], tools) == 64
     assert calls.none()
 
 

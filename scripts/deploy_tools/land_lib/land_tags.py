@@ -21,7 +21,6 @@ with the PR's own `changedFiles`, this reports `fallback` and the caller widens 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 """
 
-import argparse
 import json
 import subprocess
 import sys
@@ -37,6 +36,7 @@ sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_t
 
 # `service_tags_at` is re-exported rather than defined here: `narrow_broad` needs it too,
 # and importing this module for it would put a cycle through `deploy_tags`.
+from lib.cli_help import ArgumentParser
 from lib.render_guard import (  # noqa: F401
     containers_entries_in,
     landing_hosts_for_tags,
@@ -436,7 +436,7 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     derives this PR's own narrowing over `--range`, a seam for the tests. The CLI has no merge
     commit to find a receipt by, so it narrows the way a fast-path landing does.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--json", required=True, help="`gh pr view --json files,changedFiles` output"
     )

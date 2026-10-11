@@ -47,6 +47,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
+from lib.cli_help import ArgumentParser
 from lib.git import git, git_stdout
 
 from lib.render_guard import (
@@ -60,7 +61,7 @@ from lib.render_guard import (
     landing_hosts_for_tags,
     service_tags_at_or_none,
 )
-from lib.exit_codes import DEPLOY_BROAD
+from lib.exit_codes import DEPLOY_BROAD, DEPLOY_TAG_MISS
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 
@@ -243,7 +244,7 @@ def validate(tags: list[str], at: str = "", host_vars: Path = HOST_VARS) -> int:
         "--skip-tag-check bypasses this.",
         file=sys.stderr,
     )
-    return 2
+    return DEPLOY_TAG_MISS
 
 
 def _cmd_list(_args: argparse.Namespace) -> int:
@@ -522,7 +523,7 @@ def main(
 
     `git_diff` replaces the diff `changed` reads; None keeps `_git_diff_paths`.
     """
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         prog="deploy_cli.py tags", description=__doc__.splitlines()[0]
     )
     sub = parser.add_subparsers(dest="command", required=True)

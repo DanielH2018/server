@@ -20,7 +20,6 @@ Run directly or via the ``validate-root-ignored-files`` prek hook. Exits non-zer
 root entry is hidden by `/*` alone.
 """
 
-import argparse
 import sys
 from pathlib import Path
 
@@ -28,6 +27,8 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 from lib.git import git
 from lib.repo_paths import REPO
@@ -99,7 +100,7 @@ def problems(repo: Path) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    argparse.ArgumentParser(description=__doc__.split("\n\n")[0]).parse_args(argv)
+    ArgumentParser(description=__doc__.split("\n\n")[0]).parse_args(argv)
     found = problems(REPO)
     for name in found:
         print(

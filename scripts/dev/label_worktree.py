@@ -12,7 +12,7 @@ Issue numbers are read from this repo's register with `gh`; `--text` reads nothi
 to write outside `.claude/worktrees/`, because a stray file in the primary checkout parks the
 GitOps deployer.
 
-Exit codes: 0 written or cleared, 1 the `gh` read failed, 2 bad arguments or not in a
+Exit codes: 0 written or cleared, 1 the `gh` read failed, 64 bad arguments or not in a
 worktree under `.claude/worktrees/`.
 """
 
@@ -25,6 +25,10 @@ from pathlib import Path
 # `lib` is a sibling directory under `scripts/`; a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
+
+from lib.exit_codes import USAGE_ERROR
 
 from lib.gh import gh_json
 from lib.git import git_stdout
@@ -59,7 +63,7 @@ def main(
     cwd: Path | None = None,
     read: Callable[..., JsonValue] = gh_json,
 ) -> int:
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     what = parser.add_mutually_exclusive_group(required=True)
@@ -73,14 +77,14 @@ def main(
         sys.stderr.write(
             f"label_worktree: not inside a worktree under {WORKTREES_DIR}/; writing nothing\n"
         )
-        return 2
+        return USAGE_ERROR
     if args.clear:
         print("cleared" if clear_label(root) else "no label to clear")
         return 0
     if args.text is not None:
         if not args.text.strip():
             sys.stderr.write("label_worktree: --text is empty\n")
-            return 2
+            return USAGE_ERROR
         label = args.text
     else:
         try:

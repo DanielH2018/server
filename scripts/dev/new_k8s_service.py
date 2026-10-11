@@ -42,7 +42,6 @@ The output is meant to pass `prek run --all-files` and `./scripts/deploy.sh --ta
 the repo's own manifest validator to hold that.
 """
 
-import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -50,6 +49,8 @@ from pathlib import Path
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 from lib.ansible_inventory import K8S_HOST_VARS as BOX_VARS
 from lib.repo_paths import K8S_ROLES, REPO
@@ -287,7 +288,7 @@ def write_role(args, roles_dir: Path | None = None) -> list[Path]:
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         description="Scaffold a k3s service role and its containers_list entry.",
         epilog="Review the TODOs in the generated CLAUDE.md, then commit and deploy with "
         "./scripts/deploy.sh --tags <name>.",

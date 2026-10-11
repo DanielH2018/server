@@ -54,7 +54,11 @@ from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import answer_help
-from lib.exit_codes import USAGE_ERROR
+from lib.exit_codes import (
+    RENOVATE_REBASE_GH_FAILED,
+    RENOVATE_REBASE_SOAKING,
+    USAGE_ERROR,
+)
 from lib.gh import gh as _gh
 
 UNTICKED = "- [ ] <!-- rebase-check -->"
@@ -143,7 +147,7 @@ def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
         )
     except subprocess.CalledProcessError as exc:
         print(f"gh pr view {number} failed: {exc.stderr.strip()}", file=out)
-        return 2
+        return RENOVATE_REBASE_GH_FAILED
     body = view.get("body") or ""
     rollup = view.get("statusCheckRollup") or []
     soak = soaking(rollup)
@@ -162,7 +166,7 @@ def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
             "`unpend-branch` checkbox on the Dependency Dashboard (which bypasses the soak).",
             file=out,
         )
-        return 3
+        return RENOVATE_REBASE_SOAKING
     if soak:
         print(
             f"PR #{number}: `{SOAK_CONTEXT}` is pending — the update is still inside its "
@@ -171,7 +175,7 @@ def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
             "it with the branch's `unpend-branch` checkbox on the Dependency Dashboard.",
             file=out,
         )
-        return 3
+        return RENOVATE_REBASE_SOAKING
     if retick and outcome == "already-ticked":
         if not soak_cleared(rollup):
             print(
@@ -180,17 +184,17 @@ def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
                 "status updates only when Renovate processes the branch, at most once a day.",
                 file=out,
             )
-            return 3
+            return RENOVATE_REBASE_SOAKING
         if err := _edit_body(gh, number, body.replace(TICKED, UNTICKED, 1)):
             print(f"gh pr edit {number} failed: {err}", file=out)
-            return 2
+            return RENOVATE_REBASE_GH_FAILED
         if err := _edit_body(gh, number, body):
             print(
                 f"gh pr edit {number} failed: {err} — the rebase box is now UNTICKED; "
                 "re-run without --retick to tick it",
                 file=out,
             )
-            return 2
+            return RENOVATE_REBASE_GH_FAILED
         print(
             f"PR #{number}: rebase box unticked and ticked again; Renovate reads the fresh "
             "request on its next run",
@@ -206,7 +210,7 @@ def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
         return 0
     if err := _edit_body(gh, number, new_body):
         print(f"gh pr edit {number} failed: {err}", file=out)
-        return 2
+        return RENOVATE_REBASE_GH_FAILED
     print(
         f"PR #{number}: rebase box ticked; Renovate refreshes the branch within a cycle",
         file=out,

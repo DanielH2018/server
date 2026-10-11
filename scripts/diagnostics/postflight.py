@@ -32,6 +32,7 @@ from diagnostics.probe_lib import health_docker
 from diagnostics.probe_lib import ha
 from diagnostics.probe_lib import kuma_live
 from diagnostics.probe_lib import monitors
+from lib.cli_help import ArgumentParser
 from lib import k8s_roles
 from lib.kubectl import cluster_for_host
 
@@ -396,7 +397,7 @@ def build_parser():
     point, and without it that check would run the LIVE sweep — several SOPS decrypts and
     ~15 authenticated requests to production services — while reading as a passing `--help`.
     """
-    return argparse.ArgumentParser(
+    return ArgumentParser(
         prog="postflight.py",
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,

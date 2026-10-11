@@ -18,6 +18,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.issue_model import DOMAINS, KINDS, SEVERITIES
+from lib.cli_help import ArgumentParser
 
 # How many search hits `history` reads back unless `--limit` says otherwise. A topic search
 # that needs more than this is too broad to read, and `cmd_history` warns when it fills.
@@ -65,7 +66,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
         description: the top-level ``--help`` banner. Passed in rather than restated here
             so `findings.py`'s own docstring stays the one place that text is written.
     """
-    p = argparse.ArgumentParser(description=description)
+    p = ArgumentParser(description=description)
     _add_dry_run(p, suppress=False)
     p.add_argument("--repo", metavar="OWNER/NAME", help="see any subcommand's --help")
     sub = p.add_subparsers(dest="cmd", required=True)
