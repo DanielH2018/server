@@ -297,7 +297,8 @@ def _host_keyed_readers(tree: Tree, quote: str = "'") -> None:
     """Commit a Pi list, one reader keyed on each host and one keyed on a variable host.
 
     bazarr reads the Pi's list as monitor-bridge does, jellyfin reads daniel-box's, and
-    radarr reads `hostvars[peer]`, whose host no literal names (#4422).
+    radarr reads `hostvars[peer]`, whose host no literal names, and readarr reads the list
+    bare, which names no host either (#4422).
     """
     tree.write(PI, _PI_VARS)
     for role, host in (("bazarr", "daniel-pi"), ("jellyfin", "daniel-box")):
@@ -310,13 +311,17 @@ def _host_keyed_readers(tree: Tree, quote: str = "'") -> None:
         "ansible/roles/k8s/radarr/templates/secret.yaml.j2",
         "p: {{ hostvars[peer].containers_list | published_ports | join(',') }}\n",
     )
+    tree.write(
+        "ansible/roles/k8s/readarr/templates/secret.yaml.j2",
+        "p: {{ containers_list | published_ports | join(',') }}\n",
+    )
     tree.commit("readers keyed on a host")
 
 
 def _narrow(tree: Tree) -> set[str]:
-    """`Tree.narrow` over a fleet wide enough that six tags stay under its ceiling."""
+    """`Tree.narrow` over a fleet wide enough that seven tags stay under its ceiling."""
     old, new = _refs(tree)
-    spare = {"monitor-bridge"} | {f"spare-{n}" for n in range(6)}
+    spare = {"monitor-bridge", "readarr"} | {f"spare-{n}" for n in range(6)}
     return narrow_broad.narrow(
         old, new, cwd=tree.root, declared=DECLARED | spare, callers={}
     )
@@ -330,12 +335,13 @@ def test_a_port_edit_to_daniel_box_skips_a_reader_of_the_pis_list(
     _host_keyed_readers(tree, quote)
     sonarr = "    image: sonarr:1\n"
     tree.write(BOX, HOST_VARS.replace(sonarr, sonarr + "    port: 8989\n"))
-    # radarr's host is a variable and lidarr's loop is bare, so both stay unkeyed.
+    # radarr's host is a variable and readarr's and lidarr's reads are bare: all unkeyed.
     assert _narrow(tree) == {
         "sonarr",
         "prowlarr",
         "jellyfin",
         "radarr",
+        "readarr",
         "lidarr",
     }
 
@@ -344,7 +350,7 @@ def test_a_port_edit_to_daniel_pi_skips_a_reader_of_daniel_boxs_list(tree: Tree)
     _host_keyed_readers(tree)
     tree.write(PI, _PI_VARS.replace("12345", "12346"))
     # prowlarr reads sonarr's port by name, which daniel-pi's list does not declare.
-    assert _narrow(tree) == {"alloy", "bazarr", "radarr", "lidarr"}
+    assert _narrow(tree) == {"alloy", "bazarr", "radarr", "readarr", "lidarr"}
 
 
 def test_a_port_edit_to_daniel_box_skips_monitor_bridge(tree: Tree):
