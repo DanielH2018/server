@@ -1,11 +1,11 @@
-"""Tests for the host, network and per-service pin fragments in `fragments_hosts.py`.
+"""Tests for the host, network and per-service pin fragments in `fragments_lib/fragments_hosts.py`.
 
 Each renderer is pinned against literals it is handed. Each reader that finds its subject by
 pattern is run twice: against crafted text it must accept or reject, and against the real
 tree, where it must name a member it is known to find.
 """
 
-import fragments_hosts as h
+from fragments_lib import fragments_hosts as h
 from lib.estate import Estate
 
 # --- renderers, against literals -------------------------------------------------------------

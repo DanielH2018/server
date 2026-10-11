@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-11 00:04 UTC
-generated_sha: c42b4d50a
+generated_at: 2026-10-11 00:25 UTC
+generated_sha: 8f2895cb2
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: c42b4d50a
 
 # Decisions
 
-657 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+659 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -21,8 +21,8 @@ generated_sha: c42b4d50a
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `ansible/roles/setup/gitops_deploy/CLAUDE.md:77`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/post-merge-automation.md:268`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:506`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1385`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:517`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1396`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `.claude/rules/facts.md:30` and `scripts/lib/tests/test_facts_citations.py:86`
@@ -38,7 +38,7 @@ generated_sha: c42b4d50a
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `docs/gitops-pipeline.md:1025`
+    * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `docs/gitops-pipeline.md:1036`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15`
@@ -47,7 +47,7 @@ generated_sha: c42b4d50a
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `docs/gitops-pipeline.md:1025`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `docs/gitops-pipeline.md:1036`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/authelia/tasks/main.yml:238` and `ansible/roles/k8s/nut/tasks/main.yml:22`
     * `ansible/roles/k8s/configarr/tasks/main.yml:123` and `ansible/roles/k8s/observability/tasks/main.yml:283`
@@ -88,7 +88,7 @@ generated_sha: c42b4d50a
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `docs/gitops-pipeline.md:1025`
+    * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `docs/gitops-pipeline.md:1036`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `ansible/roles/setup/common/CLAUDE.md:26`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `docs/monitor-bridge-checks.md:994`
@@ -97,29 +97,29 @@ generated_sha: c42b4d50a
     * `ansible/roles/setup/common/CLAUDE.md:26` and `prek.toml:443`
     * `ansible/roles/setup/docker_install/tasks/go-runtime.yml:13` and `ansible/roles/setup/optimize_pi/CLAUDE.md:88`
     * `ansible/roles/setup/gitops_deploy/CLAUDE.md:77` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
-    * `ansible/roles/setup/gitops_deploy/CLAUDE.md:77` and `docs/gitops-pipeline.md:506`
+    * `ansible/roles/setup/gitops_deploy/CLAUDE.md:77` and `docs/gitops-pipeline.md:517`
     * `ansible/roles/setup/gitops_deploy/files/deploy_broad_k8s.py:185` and `scripts/lib/tests/test_ansible_jinja_env.py:168`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `docs/gitops-pipeline.md:1025`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `docs/gitops-pipeline.md:1036`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `docs/gitops-pipeline.md:1025`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `docs/gitops-pipeline.md:1036`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `docs/gitops-pipeline.md:1025`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `docs/gitops-pipeline.md:1036`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `docs/gitops-pipeline.md:1025`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `docs/gitops-pipeline.md:1036`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/initial_setup/tasks/crons.yml:900` and `ansible/roles/setup/initial_setup/tasks/crons.yml:980`
     * `ansible/roles/setup/initial_setup/tasks/network.yml:201` and `ansible/roles/setup/initial_setup/tasks/system-tuning.yml:197`
@@ -128,7 +128,7 @@ generated_sha: c42b4d50a
     * `ansible/tests/_shell_render.py:11` and `ansible/tests/services/test_alloy_pi_http_surface.py:67`
     * `ansible/tests/repo/test_adr_links.py:1` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:170`
     * `ansible/tests/repo/test_adr_links.py:12` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/tests/repo/test_adr_links.py:12` and `docs/gitops-pipeline.md:1025`
+    * `ansible/tests/repo/test_adr_links.py:12` and `docs/gitops-pipeline.md:1036`
     * `ansible/tests/repo/test_adr_links.py:12` and `scripts/lib/b2.py:21`
     * `ansible/tests/repo/test_adr_links.py:33` and `ansible/tests/repo/test_census_rows_roles.py:270`
     * `docs/adr/index.md:9` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:100`
@@ -136,30 +136,30 @@ generated_sha: c42b4d50a
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:162` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:344`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:7`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:137`
-    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:506`
+    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:517`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/docs-ui-and-adrs/design.md:137`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1385`
+    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1396`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/archive/docs-ui-and-adrs/design.md:27` and `docs/gitops-pipeline.md:1025`
+    * `docs/archive/docs-ui-and-adrs/design.md:27` and `docs/gitops-pipeline.md:1036`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/lib/b2.py:21`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1385`
+    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1396`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:506`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1385`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:517`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1396`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `docs/break-glass.md:130` and `scripts/deploy_tools/shared_role_reach.py:22`
-    * `docs/gitops-pipeline.md:506` and `docs/gitops-pipeline.md:1385`
-    * `docs/gitops-pipeline.md:506` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:506` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/gitops-pipeline.md:822` and `scripts/deploy_tools/shared_role_callers.py:21`
-    * `docs/gitops-pipeline.md:1025` and `scripts/lib/b2.py:21`
-    * `docs/gitops-pipeline.md:1385` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:1385` and `scripts/diagnostics/tests/test_probe_health.py:323`
+    * `docs/gitops-pipeline.md:517` and `docs/gitops-pipeline.md:1396`
+    * `docs/gitops-pipeline.md:517` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:517` and `scripts/diagnostics/tests/test_probe_health.py:323`
+    * `docs/gitops-pipeline.md:833` and `scripts/deploy_tools/shared_role_callers.py:21`
+    * `docs/gitops-pipeline.md:1036` and `scripts/lib/b2.py:21`
+    * `docs/gitops-pipeline.md:1396` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:1396` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `docs/monitor-bridge-checks.md:994` and `prek.toml:443`
     * `scripts/deploy_tools/tests/test_shared_role_reach.py:111` and `scripts/deploy_tools/tests/test_shared_role_reach.py:125`
     * `scripts/dev/fanout_lib/brief.py:268` and `scripts/dev/findings_lib/history_cli.py:199`
@@ -411,8 +411,8 @@ generated_sha: c42b4d50a
 | every `.md` in this repo is prose no playbook applies, with no carve-out for one under a role's `files/` or `templates/` directory (issue #2810). There were two answers before: this function's rule, and `scripts/deploy_tools/narrow_paths.is_prose`, which read a `.md` under those two directories as shippable because a task CAN copy or render one. Nothing does — the three that exist (`configarr/files/baseline/README.md` and two under `home-assistant/files/`) are named by no task, no template and no file list, because the roles that own them ship a NAMED list rather than a directory (issue #1715). So the carve-out cost a whole `ansible/deploy.yml` for a README nobody deploys, and bought nothing. the `no-role-ships-a-markdown-file` row of `ansible/tests/repo/test_census_rows_roles.py` is what makes it safe to assert rather than derive: a task that starts shipping a `.md` fails that guard instead of silently landing a file the deployer skipped. `narrow_paths.is_prose` now calls this, so there is one definition; the reach across the role boundary is the one `narrow_broad` already makes. | `ansible/roles/setup/gitops_deploy/files/deploy_changes.py:427` | 2026-09-30 |
 | `common` is not named beside its file's shippers (#3312); see its CLAUDE.md. | `ansible/roles/setup/gitops_deploy/files/deploy_changes.py:554` | 2026-10-03 |
 | ` | `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` | 2026-10-03 |
-| `common/templates/resolv.conf.j2` stays out of the table above and records `common` (#3319). `k3s` and `optimize_pi` render it directly, and neither is the tick's to apply: `k3s` runs only from `k3s-bringup.yml`, and `optimize_pi` only on daniel-pi, by its gate in `initial_setup.yml` (#3933). Recording `common` prints the two-host remediation in `deploy_remediation._setup_commands` as one line. The value names the roles that render the file. `_setup_commands` builds `common`'s command from them and the routing (#4316), so neither a host nor a playbook is written down twice. | `ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py:60` | 2026-10-03 |
-| parse the copy rather than exec it. BEFORE it waits on master CI, so running it would execute code no gate has passed. The tables use set unions, `frozenset()` and f-strings, which `ast.literal_eval` refuses, so `_value` evaluates exactly those node types and none that can call out. | `ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py:124` | 2026-10-09 |
+| `common/templates/resolv.conf.j2` stays out of the table above and records `common` (#3319). `k3s` and `optimize_pi` render it directly, and neither is the tick's to apply: `k3s` runs only from `k3s-bringup.yml`, and `optimize_pi` only on daniel-pi, by its gate in `initial_setup.yml` (#3933). Recording `common` prints the two-host remediation in `deploy_remediation._setup_commands` as one line. The value names the roles that render the file. `_setup_commands` builds `common`'s command from them and the routing (#4316), so neither a host nor a playbook is written down twice. | `ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py:66` | 2026-10-03 |
+| parse the copy rather than exec it. BEFORE it waits on master CI, so running it would execute code no gate has passed. The tables use set unions, `frozenset()` and f-strings, which `ast.literal_eval` refuses, so `_value` evaluates exactly those node types and none that can call out. | `ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py:130` | 2026-10-09 |
 | an unapplyable setup ROLE no longer parks the tick, with one exception: a | `ansible/roles/setup/gitops_deploy/files/deploy_defer.py:23` | 2026-10-10 |
 | ` | `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` | 2026-10-03 |
 | the gate chooses the NEWEST GREEN ANCESTOR, the walk is bounded, and a red | `ansible/roles/setup/gitops_deploy/files/deploy_git.py:68` | 2026-09-11 |
@@ -555,7 +555,7 @@ generated_sha: c42b4d50a
 | fire on ANY change to secrets.yml, and never try to name which keys moved. Naming them means decrypting both revisions, and no plaintext may reach a terminal, a transcript or a log. `.gitattributes` sets `diff=sops`, so even `git diff ansible/vars/secrets.yml` renders the values, which is why a hook denies that form. Over-firing on a key that needed no redeploy costs one exit code; under-firing leaves a rotated credential stale in a consumer this file list cannot show. | `scripts/deploy_tools/land_tags.py:240` | 2026-09-01 |
 | fire on the tag-carrying path too, which is the opposite of what deploy_logic.alert_secrets_deferred does for the deployer. Not a contradiction, a different reader: that alert is unattended, so a false fire on the /add-secret happy path is noise nobody can act on. Here an operator is reading land.sh's output, and a PR shipping secrets.yml WITH one consuming template still cannot show the OTHER consumers -- PR #695's token had two, in two planes, and the landing got neither. | `scripts/deploy_tools/land_tags.py:247` | 2026-09-01 |
 | ` on `is_doc` says why that | `scripts/deploy_tools/narrow_paths.py:38` | 2026-09-30 |
-| a shipped file this role renders only through another role's task file refuses here; it is not resolved through that task file's readers (#3322). The kuma-check templates reach gitops_deploy, render_records and k3s only through `common/tasks/kuma_check_timer.yml`, so a change to them falls back to the whole-role tag. That costs a longer apply and never misses one. Those templates changed twice in the repo's history, and each routing layer added from 2026-10-01 on found the next indirection, so one more layer was not worth its code. Reopen it if the trigger recurs or the fallback grows costlier than a longer apply; #3322's close reason is the long form. | `scripts/deploy_tools/narrow_setup.py:284` | 2026-10-03 |
+| a shipped file this role renders only through another role's task file refuses here; it is not resolved through that task file's readers (#3322). The kuma-check templates reach gitops_deploy, render_records and k3s only through `common/tasks/kuma_check_timer.yml`, so a change to them falls back to the whole-role tag. That costs a longer apply and never misses one. Those templates changed twice in the repo's history, and each routing layer added from 2026-10-01 on found the next indirection, so one more layer was not worth its code. Reopen it if the trigger recurs or the fallback grows costlier than a longer apply; #3322's close reason is the long form. | `scripts/deploy_tools/narrow_setup.py:316` | 2026-10-03 |
 | ` comment says why), and refusing on them made the role's most-edited task file narrow nothing. A file whose ONLY tag is `always` still refuses, since no tag is left to name its work. | `scripts/deploy_tools/narrow_setup_index.py:51` | 2026-10-01 |
 | the tag is dropped, not only the shared-role note. current manifests on its next image bump anyway, and a pytest guard reaches no cluster. | `scripts/deploy_tools/reach.py:127` | 2026-10-10 |
 | ` at | `scripts/deploy_tools/shared_role_callers.py:21` | 2026-10-01 |
@@ -721,15 +721,15 @@ generated_sha: c42b4d50a
 | ` comment on | `docs/break-glass.md:130` | 2026-10-04 |
 | no | `docs/crowdsec-waf-record.md:32` | 2026-09-29 |
 | ` marker on that tolerance in | `docs/crowdsec-waf-record.md:162` | 2026-10-10 |
-| ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:154` | 2026-10-10 |
-| ` marker. | `docs/gitops-pipeline.md:506` | 2026-10-10 |
-| ` on | `docs/gitops-pipeline.md:608` | 2026-10-10 |
-| ` at the fallback in `deploy_narrow.py` says why doubt | `docs/gitops-pipeline.md:610` | 2026-10-10 |
-| ` marker and the measurement. | `docs/gitops-pipeline.md:652` | 2026-10-10 |
-| ` at | `docs/gitops-pipeline.md:822` | 2026-10-10 |
-| ` | `docs/gitops-pipeline.md:1025` | 2026-10-10 |
-| ` at that task says why the | `docs/gitops-pipeline.md:1057` | 2026-10-10 |
-| ` marker | `docs/gitops-pipeline.md:1385` | 2026-10-10 |
+| ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:165` | 2026-10-10 |
+| ` marker. | `docs/gitops-pipeline.md:517` | 2026-10-10 |
+| ` on | `docs/gitops-pipeline.md:619` | 2026-10-10 |
+| ` at the fallback in `deploy_narrow.py` says why doubt | `docs/gitops-pipeline.md:621` | 2026-10-10 |
+| ` marker and the measurement. | `docs/gitops-pipeline.md:663` | 2026-10-10 |
+| ` at | `docs/gitops-pipeline.md:833` | 2026-10-10 |
+| ` | `docs/gitops-pipeline.md:1036` | 2026-10-10 |
+| ` at that task says why the | `docs/gitops-pipeline.md:1068` | 2026-10-10 |
+| ` marker | `docs/gitops-pipeline.md:1396` | 2026-10-10 |
 | ` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean | `docs/homepage-widgets-and-layout.md:148` | 2026-09-29 |
 | HMAC-SHA256 under a host-local key` | `docs/k8s-manifest-cycle-record.md:372` | 2026-10-02 |
 | this digest names the bytes` | `docs/k8s-manifest-cycle-record.md:421` | 2026-10-02 |
@@ -744,6 +744,8 @@ generated_sha: c42b4d50a
 | ` marker with the byte | `docs/pi-host-tuning-record.md:63` | 2026-10-10 |
 | ` marker carries the | `docs/pi-host-tuning-record.md:242` | 2026-09-30 |
 | ` marker at the top of `module_length_allowlist.txt` is the ruling. | `docs/python-code-organization.md:245` | 2026-10-10 |
+| ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
+| ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
 | ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
 | ` comment beside it accepts a grouped VERSION bump paging four days early as the cost. | `docs/renovate-notify-internals.md:81` | 2026-10-02 |
 | no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` has the | `docs/traefik-plugins-and-startup.md:54` | 2026-09-29 |

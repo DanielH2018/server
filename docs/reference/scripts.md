@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-11 00:04 UTC
-generated_sha: c42b4d50a
+generated_at: 2026-10-11 00:25 UTC
+generated_sha: 8f2895cb2
 ---
 
 !!! warning "Generated file — do not edit"
@@ -149,10 +149,10 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/foreign_owned.py` | dev | Find the paths under a directory that another uid owns, and say how to clear them. | imported by prune_worktrees.py | `test_foreign_owned.py` | — |
 | `scripts/docs/fragment_readers.py` | docs | The readers behind the doc fragments: the tree, parsed, never imported. | imported by gen_doc_fragments.py | — | — |
 | `scripts/docs/fragment_renderers.py` | docs | The renderers behind the doc fragments: pure functions from plain values to markdown. | imported by gen_doc_fragments.py | — | — |
-| `scripts/docs/fragments_bridge.py` | docs | Doc fragments for the monitor-bridge pages (docs/monitor-bridge-checks.md, docs/monitor-bridge-internals.md). | imported by gen_doc_fragments.py | `test_fragments_bridge.py` | — |
-| `scripts/docs/fragments_deploy.py` | docs | Doc fragments for the deploy, landing and issue-claiming pages. | imported by gen_doc_fragments.py | `test_fragments_deploy.py` | — |
-| `scripts/docs/fragments_hosts.py` | docs | Doc fragments for the host, network and per-service pin pages. | imported by gen_doc_fragments.py | `test_fragments_hosts.py` | — |
-| `scripts/docs/fragments_storage.py` | docs | Doc fragments for the Longhorn, snapshot and deadman pages. | imported by gen_doc_fragments.py | `test_fragments_storage.py` | — |
+| `scripts/docs/fragments_lib/fragments_bridge.py` | docs | Doc fragments for the monitor-bridge pages (docs/monitor-bridge-checks.md, docs/monitor-bridge-internals.md). | imported by gen_doc_fragments.py | — | — |
+| `scripts/docs/fragments_lib/fragments_deploy.py` | docs | Doc fragments for the deploy, landing and issue-claiming pages. | imported by gen_doc_fragments.py | — | — |
+| `scripts/docs/fragments_lib/fragments_hosts.py` | docs | Doc fragments for the host, network and per-service pin pages. | imported by gen_doc_fragments.py | — | — |
+| `scripts/docs/fragments_lib/fragments_storage.py` | docs | Doc fragments for the Longhorn, snapshot and deadman pages. | imported by gen_doc_fragments.py | — | — |
 | `scripts/lib/gh.py` | lib | One way to run the GitHub CLI from a script, with no prompt and no notifier. | imported by boundaries.py, publish_pr.py, renovate_branch_sweep.py, renovate_rebase.py, signing.py, tools.py, transport.py | `test_gh.py` | — |
 | `scripts/dev/findings_lib/gh_calls.py` | dev | The gh reads and writes `findings.py` makes, and the one place a plan is executed. | imported by backlog.py, claim_cli.py, export_cli.py, findings.py, history_cli.py | — | — |
 | `scripts/lib/git.py` | lib | One way to run git from a script, with the repository chosen by ``cwd`` alone. | imported by await_ci.py, citations.py, clean.py, decisions.py, deploy_run.py, deploy_staleness.py, deploy_tags.py, deploy_under_locks.py, doc_freshness.py, docs_provenance.py, evidence.py, fact_status.py, land.py, lint.py, narrow_broad.py, narrow_filters.py, narrow_git.py, narrow_paths.py, narrow_setup.py, narrow_setup_index.py, narrow_templates.py, place.py, prune_worktrees.py, publish_pr.py, pytest_shard.py, releases.py, releases_diff.py, releases_render.py, removed.py, render_guard.py, renovate_branch_sweep.py, report.py, root_ignored_files.py, rotation_tools.py, setup_role_chains.py, shared_role_reach.py, state.py, tools.py, tracked_paths.py, transport.py, worktrees.py | `test_git.py` | — |
