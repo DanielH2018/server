@@ -133,13 +133,13 @@ def test_a_failed_release_prints_the_command_to_retry(tmp_path, capsys):
         answers={"daniel-box": ok("removed: /w3 (abandoned)")}, findings_exit=1
     )
     assert _abandon(tools, tmp_path, "3") == 1
-    out = capsys.readouterr().out
+    out = capsys.readouterr().err
     assert "run: findings.py release 3 --worktree worktree-orch --reason" in out
 
 
-def _findings_answering(tools, returncode, stdout):
+def _findings_answering(tools, returncode, stderr):
     def findings(argv):
-        return subprocess.CompletedProcess(argv, returncode, stdout=stdout, stderr="")
+        return subprocess.CompletedProcess(argv, returncode, stdout="", stderr=stderr)
 
     return dataclasses.replace(tools, findings=findings)
 
@@ -157,7 +157,7 @@ def test_a_release_refused_for_another_holder_is_a_failure(tmp_path, capsys):
     refusal = "#3 refused: claimed by `worktree-other`, not by `worktree-orch`\n"
     tools = _findings_answering(tools, 3, refusal)
     assert _abandon(tools, tmp_path, "3") == 1
-    assert "release failed (3)" in capsys.readouterr().out
+    assert "release failed (3)" in capsys.readouterr().err
 
 
 def test_abandon_names_the_batches_when_the_batch_is_unknown(tmp_path, capsys):

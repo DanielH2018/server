@@ -153,7 +153,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
                 today=today_utc(),
             )
         except ClaimRefused as exc:
-            print(f"#{number} refused: {exc.reason}")
+            print(f"#{number} refused: {exc.reason}", file=sys.stderr)
             refused = True
             continue
         already_mine = current_claim(issue) == args.worktree
@@ -232,7 +232,7 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
                 issue, worktree=args.worktree, when=now_iso(), reason=args.reason
             )
         except ClaimRefused as exc:
-            print(f"#{number} refused: {exc.reason}")
+            print(f"#{number} refused: {exc.reason}", file=sys.stderr)
             refused = True
             continue
         run(plans, args.dry_run, tools)
@@ -297,7 +297,7 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
     trees, dirty, merged, ok = tools.worktree_facts()
     if not ok:
         # Must not read a git failure as "every worktree is gone" and release everything.
-        print("reap: could not read git; refusing to release anything")
+        print("reap: could not read git; refusing to release anything", file=sys.stderr)
         return 1
     # Same reason as `cmd_release`: a `--remove-label` on a label the repo lacks fails after
     # the release comment is already posted, leaving the reap half-applied.

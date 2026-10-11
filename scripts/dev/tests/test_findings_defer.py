@@ -171,7 +171,7 @@ def test_defer_cli_clear_exits_3_when_nothing_is_deferred(capsys, make_tools):
     tools, calls = make_tools(Fakes(view=make_issue(1288)))
     assert findings.main(["defer", "1288", "--clear"], tools) == 3
     assert not calls.gh
-    assert "not deferred" in capsys.readouterr().out
+    assert "not deferred" in capsys.readouterr().err
 
 
 def test_defer_cli_rejects_a_date_that_is_not_a_date(make_tools):

@@ -51,6 +51,12 @@ is what stops a tick and an operator's deploy driving the same rollout. See
 
 ## Reading the deployer's state
 
+To list only a failed deploy's lines, run `journalctl -u gitops-deploy -p err`. A failure that
+leaves a hold or a rollback logs at `err`, and a failed read or gate the tick worked around
+logs at `warning`, so `-p warning` lists both. Every other line stays at the unit's
+`SyslogLevel=notice`. `deploy_config.log` sets the priority with an sd-daemon `<3>` or `<4>`
+prefix, which journald strips (#4446).
+
 `./scripts/deploy_tools/gitops_tick.sh` prints three values after it runs. Read them before concluding
 anything.
 

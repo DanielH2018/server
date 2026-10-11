@@ -91,17 +91,17 @@ def test_main_is_idempotent_on_a_ticked_box():
 
 def test_main_refuses_a_body_with_no_box_without_editing():
     gh, calls = _gh("hand-written PR body")
-    out = io.StringIO()
-    assert main(["123"], gh=gh, out=out) == 1
+    err = io.StringIO()
+    assert main(["123"], gh=gh, stderr=err) == 1
     assert calls == []
-    assert UNTICKED in out.getvalue()
+    assert UNTICKED in err.getvalue()
 
 
 def test_a_failed_edit_is_reported_with_gh_stderr():
     gh, _ = _gh(BODY, edit_fails=True)
-    out = io.StringIO()
-    assert main(["123"], gh=gh, out=out) == 2
-    assert "HTTP 403" in out.getvalue()
+    err = io.StringIO()
+    assert main(["123"], gh=gh, stderr=err) == 2
+    assert "HTTP 403" in err.getvalue()
 
 
 @pytest.mark.parametrize(
@@ -232,8 +232,8 @@ def test_retick_names_the_unticked_box_when_the_second_edit_fails():
             raise subprocess.CalledProcessError(1, args, "", "HTTP 502")
         return subprocess.CompletedProcess(args, 0, "", "")
 
-    out = io.StringIO()
-    assert main(["--retick", "123"], gh=gh, out=out) == 2
+    err = io.StringIO()
+    assert main(["--retick", "123"], gh=gh, stderr=err) == 2
     assert edits == [BODY, ticked]
-    assert "UNTICKED" in out.getvalue()
-    assert "HTTP 502" in out.getvalue()
+    assert "UNTICKED" in err.getvalue()
+    assert "HTTP 502" in err.getvalue()

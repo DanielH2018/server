@@ -511,12 +511,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "unlanded":
         outcome = unlanded(args.prefix, tools)
-        if outcome.message:
-            print(outcome.message)
-        return outcome.rc
-    body = args.body if args.body is not None else args.body_file.read_text()
-    outcome = publish(args.prefix, args.title, body, tools)
-    print(outcome.message)
+    else:
+        body = args.body if args.body is not None else args.body_file.read_text()
+        outcome = publish(args.prefix, args.title, body, tools)
+    # The cron callers capture both streams with 2>&1, so a failure's line still reaches
+    # their alert; a reader of stdout alone gets only a success's.
+    if outcome.message:
+        print(outcome.message, file=sys.stdout if outcome.rc == 0 else sys.stderr)
     return outcome.rc
 
 
