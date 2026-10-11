@@ -180,3 +180,20 @@ def test_a_long_plane_list_cannot_cut_the_clear_command(cfg):
     capped = cap_push_msg(msg)
     assert len(msg) > len(capped), "the list must be long enough to be cut"
     assert f"`{HOLD_CLEAR_CMD} {sha}`" in capped
+
+
+def test_the_manual_plane_apply_names_the_pinned_playbook_command(cfg):
+    """The page printed the apply as `<playbook> --tags <tags>`, naming no program (#4413)."""
+    owed = _owed(
+        subject="optimize_pi",
+        at=1000,
+        playbook="ansible/initial_setup.yml",
+        tags=[],
+        host="daniel-pi",
+    )
+    ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
+    assert not ok
+    assert (
+        "apply `uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi"
+        " -e target=daniel-pi` by hand" in msg
+    )

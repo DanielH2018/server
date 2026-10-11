@@ -76,3 +76,11 @@ def test_the_shared_k8s_roles_are_the_roles_with_no_containers_list_entry():
     derived = {p.name for p in role_dirs()} - set(k8s_entries())
     assert "manifests" in derived
     assert SHARED_K8S_ROLES == derived
+
+
+# ── the printed apply ─────────────────────────────────────────────────────────────────────
+def test_the_playbook_command_runs_through_the_pinned_env():
+    """Every surface prints one prefix; a bare `ansible-playbook` is the uv-tool shim (#4413)."""
+    import gitops_markers
+
+    assert getattr(gitops_markers, "PLAYBOOK_CMD", None) == "uv run ansible-playbook"

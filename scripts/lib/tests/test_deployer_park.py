@@ -188,3 +188,27 @@ def test_k8s_deferred_on_two_lines_is_one_line_from_the_older(tmp_path):
 
 def test_k8s_deferred_with_no_ledger_reads_as_nothing_pending(tmp_path):
     assert read_k8s_deferred_marker(str(tmp_path)) is None
+
+
+def test_the_playbook_prefix_is_defined_only_in_gitops_markers():
+    """`deployer_park` prints the prefix the deployer and monitor-bridge print, not its own (#4413)."""
+    import re
+    import subprocess
+
+    from lib.repo_paths import REPO
+
+    listed = subprocess.run(
+        ["git", "ls-files", "--", "*.py"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    ).stdout.split()
+    assert "scripts/lib/deployer_park.py" in listed
+    assignment = re.compile(r"^PLAYBOOK_CMD\s*=", re.MULTILINE)
+    defining = {rel for rel in listed if assignment.search((REPO / rel).read_text())}
+    assert defining == {
+        "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
+        "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",
+    }
