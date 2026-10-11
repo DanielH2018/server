@@ -114,7 +114,12 @@ from diagnostics.probe_lib.health import (
 # `subcommands.ROUTED_IN_MAIN` ones by name.
 from diagnostics.probe_lib.subcommands import REGISTRY, VERDICT_HA_SUBCOMMANDS
 
-from lib.exit_codes import PROBE_UNREADABLE, verdict_line
+from lib.exit_codes import (
+    PROBE_FAILED,
+    PROBE_UNREADABLE,
+    PROBE_USAGE_ERROR,
+    verdict_line,
+)
 from lib.kubectl import WrongCluster, kubectl_argv, nodes_args
 
 
@@ -143,6 +148,8 @@ def main(argv=None, *, plan=plan):
     line, rendered from the exit code by `lib.exit_codes.verdict_line` so every subcommand
     shares one vocabulary (#4454). A source the subcommand could not read raises
     `core.Unreadable`, which exits `PROBE_UNREADABLE` (75) with the failure on stderr (#4444).
+    An argument it cannot act on raises `core.UsageError`, which exits 64 with no verdict
+    line, and any other message-carrying exit is the `fail` verdict (#4471).
     The line is printed after the subcommand returns, so `verdict_line` is the only place a
     code becomes a verdict word.
     """
@@ -160,15 +167,19 @@ def main(argv=None, *, plan=plan):
     except core.Unreadable:
         # The exception printed its message to stderr when it was built.
         rc = PROBE_UNREADABLE
+    except core.UsageError:
+        # Printed on build, like Unreadable. 64 names no verdict, so no line follows it.
+        rc = PROBE_USAGE_ERROR
     except SystemExit as exc:
-        # A message-carrying SystemExit (an HA token refused, a group_vars key missing, a
-        # server's error page) stopped the subcommand before it observed anything, so a
-        # verdict subcommand reports it as unreadable rather than letting it exit 1, the
-        # `fail` verdict, with no verdict line.
+        # A message-carrying SystemExit -- a group_vars key missing, an automation not found
+        # -- is not a failed read: retrying it never helps, so it must not exit 75 (#4471).
+        # A failed read raises `core.Unreadable` at its own site instead. A verdict subcommand
+        # reports the rest as the `fail` verdict, still with its line, rather than exiting 1
+        # with none.
         if path is None or isinstance(exc.code, int) or exc.code is None:
             raise
         print(exc.code, file=sys.stderr)
-        rc = PROBE_UNREADABLE
+        rc = PROBE_FAILED
     if path:
         # The detail never repeats the failure: stderr carries it, and stdout stays the
         # verdict alone for a caller that reads only the last line.

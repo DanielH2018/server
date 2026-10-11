@@ -160,9 +160,12 @@ NARROW_SETUP_NOTHING = 5
 # -- scripts/diagnostics/probe.py -------------------------------------------------------
 # Every verdict subcommand: 0 and 1 are what the probe observed, and 75 means it observed
 # nothing because it could not read its source (a curl, an ssh or a kubectl read that failed,
-# or a read that came back empty). A caller retries on 75 and investigates on 1 (#4444).
+# or a read that came back empty). A caller retries on 75 and investigates on 1 (#4444). 64 is
+# an argument the probe cannot act on, such as `--since 3x`: no retry can succeed, and nothing
+# was observed, so it names no verdict (#4471).
 PROBE_OK = OK
 PROBE_FAILED = FAILED
+PROBE_USAGE_ERROR = USAGE_ERROR
 PROBE_UNREADABLE = TEMP_FAIL
 
 
@@ -435,6 +438,13 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "the probe read its source and observed a bad verdict.",
             "The lines above the verdict name what failed.",
             verdict="fail",
+        ),
+        _c(
+            PROBE_USAGE_ERROR,
+            "PROBE_USAGE_ERROR",
+            "an argument the probe cannot act on, so it read nothing.",
+            "stderr names the argument and the forms it accepts. Fix the invocation; a retry "
+            "of the same one never succeeds.",
         ),
         _c(
             PROBE_UNREADABLE,
