@@ -36,6 +36,7 @@ from deployer_lib.deploy_logic import (
     setup_role_tag,
     tick_applies_setup_role,
 )
+from gitops_markers import PLAYBOOK_CMD
 
 import narrow_setup
 from deploy_tools.narrow_lib.setup_index import RoleIndex
@@ -363,14 +364,14 @@ def _setup_apply_command(role: str, host: str, local_host: str = "") -> str:
     """
     tag = setup_role_tag(role)
     if host == local_host:
-        return f"`ansible-playbook ansible/initial_setup.yml --tags {tag}`"
+        return f"`{PLAYBOOK_CMD} ansible/initial_setup.yml --tags {tag}`"
     if host in _LOCAL_CONNECTION_HOSTS:
         return (
             # The remote host's operator checkout, not this host's: the path is daniel-server's.
             f'`ssh {host} "cd /home/ubuntu/server && git pull --ff-only && '
-            f'ansible-playbook ansible/initial_setup.yml --tags {tag}"`'
+            f'{PLAYBOOK_CMD} ansible/initial_setup.yml --tags {tag}"`'
         )
-    return f"`ansible-playbook ansible/initial_setup.yml --tags {tag} -e target={host}`"
+    return f"`{PLAYBOOK_CMD} ansible/initial_setup.yml --tags {tag} -e target={host}`"
 
 
 def remaining_setup_hosts_note(
