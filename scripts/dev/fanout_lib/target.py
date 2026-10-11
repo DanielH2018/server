@@ -1,6 +1,6 @@
 """Which repo a batch works: its register, its primary checkout and the branch it merges to.
 
-`fanout_place.py launch --repo` picks one. Every repo except this one is read from
+`fanout.py place launch --repo` picks one. Every repo except this one is read from
 `REGISTER_CHECKOUTS` in `scripts/dev/findings_lib/boundaries.py`, the table `findings.py --repo`
 already judges claims against, so a repo the dispatcher can launch in is exactly a repo whose
 claims `reap` can judge. There is no second list to keep in step.

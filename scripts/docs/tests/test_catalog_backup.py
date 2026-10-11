@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the Longhorn backup-tier half of scripts/docs/catalog_backup.py.
+"""Tests for the Longhorn backup-tier half of scripts/docs/catalog_lib/catalog_backup.py.
 
 Fixture-driven like test_service_catalog.py (the synthetic repo is `_catalog_fixtures`),
 with one deliberate exception at the end that reads the real roles. Split out of
@@ -9,15 +9,15 @@ Run: uv run pytest scripts/docs/tests/test_catalog_backup.py
 
 import service_catalog
 from _catalog_fixtures import make_repo, write
-import catalog_backup
-from catalog_backup import (
+from docs.catalog_lib import catalog_backup
+from docs.catalog_lib.catalog_backup import (
     LonghornTiers,
     backup_tier,
     claim_index,
     claim_names,
     claim_tiers,
 )
-from catalog_model import K8S_ROLES
+from docs.catalog_lib.catalog_model import K8S_ROLES
 
 
 def test_backup_tier_literal_pvc_name_in_r2_list(tmp_path):

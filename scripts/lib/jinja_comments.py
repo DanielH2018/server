@@ -2,7 +2,7 @@
 """Blank a template's `{# … #}` comments so a text reader cannot match inside one.
 
 WHY. The docs generators read `.j2` templates as text and match macro calls and their
-arguments with regexes (`lib.k8s_roles`, `docs/route_facts.py`, `docs/catalog_backup.py`).
+arguments with regexes (`lib.k8s_roles`, `docs/catalog_lib/route_facts.py`, `docs/catalog_lib/catalog_backup.py`).
 A regex sees no difference between an argument a call passes and the same text quoted in a
 Jinja comment above it, so a comment that mentions `public=false` makes a public route read
 as LAN-only — which is what `ansible/roles/k8s/docs/CLAUDE.md` said while its

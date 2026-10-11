@@ -27,7 +27,7 @@ from findings_lib.solo_only import fanout_tooling_paths
 from findings_lib.tracked_paths import resolve_fragments
 from lib.ansible_inventory import GITOPS_HOST
 
-# The host `fanout_place` normally runs on; its launches go over `bash -c`, never ssh, so the
+# The host `fanout.py place` normally runs on; its launches go over `bash -c`, never ssh, so the
 # per-host ssh budget below doesn't apply to it. The orchestrator runs on the deploy host, which
 # is a coupling of convention: move one and this names the wrong host.
 LOCAL_HOST = GITOPS_HOST

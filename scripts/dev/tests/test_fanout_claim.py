@@ -10,7 +10,7 @@ import subprocess
 import pytest
 
 from fanout_lib.brief import Issue
-from fanout_place import main
+from fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"

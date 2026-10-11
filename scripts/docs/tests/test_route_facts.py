@@ -1,9 +1,9 @@
-"""Tests for scripts/docs/route_facts.py.
+"""Tests for scripts/docs/catalog_lib/route_facts.py.
 
 Run: uv run pytest scripts/docs/tests/test_route_facts.py
 """
 
-import route_facts as rf
+from docs.catalog_lib import route_facts as rf
 
 
 def _role(tmp_path, name, body=None):

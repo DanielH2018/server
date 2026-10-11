@@ -99,16 +99,16 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from pathlib import Path
 from typing import Any
 
-from catalog_backup import (
+from docs.catalog_lib.catalog_backup import (
     LonghornTiers,
     autodeploy_stance,
     claim_index,
     claim_tiers,
     load_longhorn_tier_lists,
 )
-from catalog_facts import auth_tier, k8s_route
-from catalog_model import K3S_DEFAULTS, K8S_ROLES
-from glance_facts import (
+from docs.catalog_lib.catalog_facts import auth_tier, k8s_route
+from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES
+from docs.catalog_lib.glance_facts import (
     CONTAINERS_ROLES,
     SETUP_ROLES,
     image_repository,

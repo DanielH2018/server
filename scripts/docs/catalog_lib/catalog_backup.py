@@ -10,7 +10,7 @@ record which cases those are and why.
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 import re
 from dataclasses import dataclass, field
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 
-from catalog_model import K3S_DEFAULTS, K8S_ROLES, UNKNOWN
+from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES, UNKNOWN
 from lib.jinja_comments import strip_jinja_comments
 from lib.k8s_roles import role_dirs
 from lib.estate import Estate, inventory_layers, role_defaults

@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 import gen_role_glance as g
-import glance_facts as f
+from docs.catalog_lib import glance_facts as f
 from lib.estate import Inventory
 
 KNOWN_SERVICES = frozenset(

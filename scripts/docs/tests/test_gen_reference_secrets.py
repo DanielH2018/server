@@ -84,7 +84,7 @@ def test_due_dates_come_from_secret_rotation(tmp_path):
     Two implementations would drift, and the page would then disagree with the audit cron that
     actually pages.
     """
-    from secrets_mgmt.secret_registry import due_date
+    from secrets_mgmt.secrets_lib.secret_registry import due_date
 
     rows = {r["name"]: r for r in g.build_rows(_registry(tmp_path), TODAY)}
     expected = due_date(

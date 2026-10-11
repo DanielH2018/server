@@ -99,7 +99,7 @@ def format_backup_budget(vols, shards, names=None, retain=2, owners=None):
         # counts only ITS OWN backups — so the daily-era backups on a volume that moved to a
         # weekday shard are pruned by nothing, ever. For example radarr-config can sit at 4
         # daily-backup + 1 weekly-backup-d2 against retain 4 and delete none, because the weekly
-        # job sees 1 of its own. `scripts/backup/longhorn_reap_orphan_backups.py` is what clears these.
+        # job sees 1 of its own. `scripts/backup/longhorn_reap.py backups` is what clears these.
         #
         # The consequence for this projection: a shard's prune cost does not begin until that job
         # has more than `retain` of its own backups, and until then its blocks only grow.

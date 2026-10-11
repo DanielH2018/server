@@ -12,7 +12,7 @@ Jinja and watches it refuse.
 
   WHAT IS NO LONGER HERE. The migrated-chain and seeds modes deleted Longhorn Backup CRs by
   selecting in kubectl and Jinja; #3279 made them selectors in
-  scripts/backup/longhorn_reap_orphan_backups.py, where each floor is provable against a
+  `scripts/backup/longhorn_reap.py backups`, where each floor is provable against a
   fixture. Their tests moved with them, to `scripts/backup/tests/test_longhorn_reap_logic.py`
   and `scripts/backup/tests/test_longhorn_reap_backups_cli.py`. Two things stay here: the
   redirect, because an operator typing the old command must get the new command rather than a
@@ -32,7 +32,7 @@ from lib.ansible_jinja_env import make_ansible_env
 PLAY = ANSIBLE / "prune_backups.yml"
 MODES = frozenset({"b2-drain"})
 RETIRED_MODES = ("migrated-chain", "seeds")
-REAPER = "longhorn_reap_orphan_backups.py"
+REAPER = "longhorn_reap.py backups"
 # The Backup CR as kubectl takes it, anchored on the separator that follows the resource name —
 # a `/` before the object name, or the `,` or whitespace that ends an argv element. A bare `in`
 # over the dotted name reads to CodeQL as an unanchored hostname check
@@ -100,12 +100,12 @@ def test_a_retired_mode_is_redirected_to_the_reaper_not_left_to_fail() -> None:
     assert REAPER in fail_msg
     for mode in RETIRED_MODES:
         assert not _mode_file(mode).exists(), (
-            f"{mode}.yml is back; its selection belongs in longhorn_reap_logic.py"
+            f"{mode}.yml is back; its selection belongs in longhorn_reap_lib/logic.py"
         )
 
 
 def test_this_playbook_deletes_no_longhorn_backup_crs() -> None:
-    """Every Backup CR deletion selects in longhorn_reap_logic.py, where the floors are tested.
+    """Every Backup CR deletion selects in longhorn_reap_lib/logic.py, where the floors are tested.
 
     The retired modes deleted `backups.longhorn.io/<name>` from a Jinja-built list. A new mode
     reintroducing that here would reintroduce the untested selection with it, which is the whole

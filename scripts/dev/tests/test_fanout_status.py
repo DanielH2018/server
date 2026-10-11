@@ -14,7 +14,7 @@ from fanout_lib.status import (
     status_line,
     stop_command,
 )
-from fanout_place import main
+from fanout_lib.place import main
 from _fanout_fakes import HOST_KEY, fake_tools, ok
 
 B = Batch(

@@ -90,7 +90,7 @@ disappears with no trace.
 
 **Why no compare-and-swap.** GitHub offers none, and the fan-out does not need one: the
 orchestrator claims every issue of a batch *before* that batch's agent starts, so a fan-out has
-no internal race. `fanout_place.py launch` takes those claims itself. The only residual race is between independent ad-hoc sessions, where the
+no internal race. `fanout.py place launch` takes those claims itself. The only residual race is between independent ad-hoc sessions, where the
 cost of losing is a duplicated triage rather than corruption. The read-back handles it —
 the session whose claim comment sorts first holds the issue, and the loser releases.
 
@@ -203,7 +203,7 @@ claim comment records whatever worktree name the agent reports, auto-generated o
 the `session-health.py` banner keeps printing `worktree-agent-a0291ece…`.
 
 **An orchestrator reads its own claims with `claims --worktree <its branch>`.** The filter keeps
-the claims that branch holds and adds the branch of every standing batch a `fanout_place.py
+the claims that branch holds and adds the branch of every standing batch a `fanout.py place
 launch` run under it started in the same register, read from the run manifests. A batch in this
 repo is claimed under the orchestrator's branch, so the branch alone covers it. A dotfiles batch
 is claimed under its own branch, and only the manifest ties it back. The filter counts the claims
@@ -218,7 +218,7 @@ scope here.
 
 ## Placement across hosts
 
-`scripts/dev/fanout_place.py` names each worktree `fanout-<batch>` because it creates the
+`scripts/dev/fanout.py place` names each worktree `fanout-<batch>` because it creates the
 worktree itself rather than going through the Agent tool, which only ever produces the
 `agent-<hash>` name above. Claims stay under the orchestrator's own worktree because
 `findings.py` reads `git worktree list` on daniel-box only, so it cannot see a claim naming a
@@ -291,7 +291,7 @@ Three facts from that protocol shape the skill:
   ([ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md)), so two agents landing
   disjoint services proceed together. A `deploy.sh` exit 75 is a resume point to retry, not a
   failure to report.
-- **Width follows memory headroom, not a count.** `scripts/dev/fanout_place.py` reads the
+- **Width follows memory headroom, not a count.** `scripts/dev/fanout.py place` reads the
   `user.slice` and `user-1000.slice` caps and places each batch on the host with the most left.
   `MemoryHigh` throttles rather than kills, so an over-wide fan-out stalls the host, as it did
   on 2026-09-05 (issue #1264).

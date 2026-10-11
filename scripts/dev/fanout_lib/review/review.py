@@ -56,7 +56,7 @@ count only, is never filed with `findings.py open`, and is kept in full only in 
 record under `STATE_DIR`.
 
 The local record also carries each phase's cost, the finding counts and the red/green
-measures, and it outlives the worktree that `clean` removes. `scripts/dev/fanout_review_stats.py`
+measures, and it outlives the worktree that `clean` removes. `scripts/dev/fanout.py stats`
 sums the records into the measures that decide whether the red phase stays.
 """
 

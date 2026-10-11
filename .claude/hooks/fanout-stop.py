@@ -13,7 +13,7 @@ THE PROBLEM. A fan-out batch is one `claude -p` process under a transient system
 (`scripts/dev/fanout_lib/launch.py`). When the model ends a turn with text and no tool call,
 the process exits there, whatever that text says. On long tasks Opus writes progress reports
 as it goes ("Next I will open the PR"), and some of those end the turn. Nothing resumed the
-session, so the batch stopped mid-task. `fanout_place.py status` then reported it `done`,
+session, so the batch stopped mid-task. `fanout.py place status` then reported it `done`,
 because `done` required only a non-empty final text (issue #2816). Two earlier incidents of the
 same shape, #1291 and #2683, were closed with brief text only.
 

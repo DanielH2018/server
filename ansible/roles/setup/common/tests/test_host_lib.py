@@ -420,7 +420,7 @@ def test_the_rest_of_the_environment_survives(monkeypatch):
     assert seen["env"]["KUBECONFIG"] == "/home/ubuntu/.kube/config"
 
 
-# ── rfc3339_to_epoch: shared with longhorn_backup_health_logic.py and longhorn_reap_logic.py ──
+# ── rfc3339_to_epoch: shared with longhorn_backup_health_logic.py and longhorn_reap_lib/logic.py ──
 #
 # The parser is shared because separate copies diverge: a copy that does not strip fractional
 # seconds returns None for a Longhorn `snapshotCreatedAt` that another copy parses.
