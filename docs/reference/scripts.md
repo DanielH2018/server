@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-11 01:50 UTC
-generated_sha: 8d1a6cd30
+generated_at: 2026-10-11 02:32 UTC
+generated_sha: 2a8b3f507
 ---
 
 !!! warning "Generated file — do not edit"
@@ -110,7 +110,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/fanout_lib/review/base_check.py` | dev | Which of a PR's new tests still pass with its code changes taken out. | imported by _review_fakes.py, hunk_check.py, review.py | — | — |
 | `scripts/dev/findings_lib/boundaries.py` | dev | Every process boundary `findings.py` crosses, as one injectable object. | imported by _findings_fakes.py, claim_cli.py, export_cli.py, findings.py, gh_calls.py, history_cli.py, target.py | — | — |
 | `scripts/dev/fanout_lib/brief.py` | dev | The brief a headless fan-out agent reads on stdin. | imported by _review_fakes.py, claims.py, launch_gates.py, place.py, red_gate.py, review.py, review_prompts.py, review_record.py, status.py, transport.py | — | — |
-| `scripts/docs/catalog_lib/catalog_backup.py` | docs | Longhorn backup tier and GitOps auto-deploy eligibility for one ``containers_list`` entry. | imported by gen_role_glance.py, service_catalog.py | — | — |
+| `scripts/docs/catalog_lib/catalog_backup.py` | docs | Longhorn backup tier and GitOps auto-deploy eligibility for one ``containers_list`` entry. | imported by gen_role_glance.py, service_catalog.py | `test_catalog_backup.py` | — |
 | `scripts/docs/catalog_lib/catalog_facts.py` | docs | Route and auth-tier derivations for one ``containers_list`` entry. | imported by gen_role_glance.py, service_catalog.py | — | — |
 | `scripts/docs/catalog_lib/catalog_model.py` | docs | The service catalogue's row type, its "cannot be derived" marker, and its path anchors. | imported by catalog_backup.py, catalog_facts.py, catalog_render.py, gen_role_glance.py, service_catalog.py | — | — |
 | `scripts/docs/catalog_lib/catalog_render.py` | docs | The two renderings of the service catalogue: the MkDocs page and the standalone HTML. | imported by service_catalog.py | — | — |
@@ -151,10 +151,10 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/foreign_owned.py` | dev | Find the paths under a directory that another uid owns, and say how to clear them. | imported by prune_worktrees.py | `test_foreign_owned.py` | — |
 | `scripts/docs/fragment_readers.py` | docs | The readers behind the doc fragments: the tree, parsed, never imported. | imported by gen_doc_fragments.py | — | — |
 | `scripts/docs/fragment_renderers.py` | docs | The renderers behind the doc fragments: pure functions from plain values to markdown. | imported by gen_doc_fragments.py | — | — |
-| `scripts/docs/fragments_lib/fragments_bridge.py` | docs | Doc fragments for the monitor-bridge pages (docs/monitor-bridge-checks.md, docs/monitor-bridge-internals.md). | imported by gen_doc_fragments.py | — | — |
-| `scripts/docs/fragments_lib/fragments_deploy.py` | docs | Doc fragments for the deploy, landing and issue-claiming pages. | imported by gen_doc_fragments.py | — | — |
-| `scripts/docs/fragments_lib/fragments_hosts.py` | docs | Doc fragments for the host, network and per-service pin pages. | imported by gen_doc_fragments.py | — | — |
-| `scripts/docs/fragments_lib/fragments_storage.py` | docs | Doc fragments for the Longhorn, snapshot and deadman pages. | imported by gen_doc_fragments.py | — | — |
+| `scripts/docs/fragments_lib/fragments_bridge.py` | docs | Doc fragments for the monitor-bridge pages (docs/monitor-bridge-checks.md, docs/monitor-bridge-internals.md). | imported by gen_doc_fragments.py | `test_fragments_bridge.py` | — |
+| `scripts/docs/fragments_lib/fragments_deploy.py` | docs | Doc fragments for the deploy, landing and issue-claiming pages. | imported by gen_doc_fragments.py | `test_fragments_deploy.py` | — |
+| `scripts/docs/fragments_lib/fragments_hosts.py` | docs | Doc fragments for the host, network and per-service pin pages. | imported by gen_doc_fragments.py | `test_fragments_hosts.py` | — |
+| `scripts/docs/fragments_lib/fragments_storage.py` | docs | Doc fragments for the Longhorn, snapshot and deadman pages. | imported by gen_doc_fragments.py | `test_fragments_storage.py` | — |
 | `scripts/deploy_tools/runbook_gates_lib/gate_runner.py` | deploy_tools | The runner and the shared verdicts behind every runbook `scripts/deploy_tools/runbook_gates.py` runs. | imported by etcd_restore.py, k3s_upgrade.py, longhorn_dr.py, longhorn_upgrade.py, pinned_rotation.py | — | — |
 | `scripts/lib/gh.py` | lib | One way to run the GitHub CLI from a script, with no prompt and no notifier. | imported by boundaries.py, publish_pr.py, renovate_branch_sweep.py, renovate_rebase.py, signing.py, tools.py, transport.py | `test_gh.py` | — |
 | `scripts/dev/findings_lib/gh_calls.py` | dev | The gh reads and writes `findings.py` makes, and the one place a plan is executed. | imported by backlog.py, claim_cli.py, export_cli.py, findings.py, history_cli.py | — | — |
@@ -189,18 +189,18 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/json_types.py` | lib | The type of a parsed JSON document, and the narrowing helpers that go with it. | imported by boundaries.py, export_cli.py, gh.py, gh_calls.py, glance_facts.py, history_cli.py, kubectl.py, kuma_live.py, landing.py, merge.py, policy.py, pr_json.py, tools.py | `test_json_types.py` | — |
 | `scripts/deploy_tools/runbook_gates_lib/k3s_upgrade.py` | deploy_tools | Run the four stop conditions of `docs/k3s-upgrade.md` in order, exit code naming the first failure. | no `__main__` guard; imported by test_k3s_upgrade_gates.py | — | — |
 | `scripts/lib/k8s_context.py` | lib | Ansible's variable semantics, reproduced for the k8s manifest render guard. | imported by k8s_manifests.py, render_context.py | `test_k8s_context.py` | — |
-| `scripts/validate/validate_lib/k8s_net_rules.py` | validate | The two semantic rules on rendered manifests that no schema can make. | imported by k8s_manifests.py | — | — |
+| `scripts/validate/validate_lib/k8s_net_rules.py` | validate | The two semantic rules on rendered manifests that no schema can make. | imported by k8s_manifests.py | `test_k8s_net_rules.py` | — |
 | `scripts/lib/k8s_roles.py` | lib | Which roles exist under ``ansible/roles/k8s/``, and which of them each reader skips. | imported by catalog_backup.py, catalog_facts.py, deploy_run.py, glance_facts.py, k8s_autodeploy_counts.py, k8s_manifests.py, kuma_live.py, land_shared.py, monitors.py, narrow_broad.py, postflight.py, releases_consumers.py, releases_retired.py, route_facts.py, service_tiers.py, setup_routing.py | — | — |
-| `scripts/validate/validate_lib/k8s_schema.py` | validate | Schema validation for a rendered k8s object: the core OpenAPI check and the vendored CRDs. | imported by k8s_manifests.py | — | — |
+| `scripts/validate/validate_lib/k8s_schema.py` | validate | Schema validation for a rendered k8s object: the core OpenAPI check and the vendored CRDs. | imported by k8s_manifests.py | `test_k8s_schema.py` | — |
 | `scripts/lib/k8s_yaml.py` | lib | YAML parsing for rendered k8s manifests, and the PVC names they declare and reference. | imported by ansible_jinja_env.py, k8s_manifests.py | `test_k8s_yaml.py` | — |
 | `scripts/lib/kubectl.py` | lib | One way to run kubectl from a script, and every call names the cluster it must reach. | imported by _gates_fakes.py, arr.py, b2_ledger.py, cli_parser.py, etcd_restore.py, export_grafana_dashboards.py, gate_runner.py, gen_infra_map.py, health.py, health_docker.py, k3s_upgrade.py, kuma_live.py, live.py, longhorn.py, longhorn_cluster.py, longhorn_dr.py, longhorn_upgrade.py, monitors.py, pinned_rotation.py, postflight.py, probe.py, readonly_rbac.py, vip_placement.py | `test_kubectl.py` | — |
-| `scripts/diagnostics/probe_lib/kuma_live.py` | diagnostics | What the live Kuma says about itself: its pod's age and the monitors it holds. | imported by monitors.py, postflight.py | — | — |
+| `scripts/diagnostics/probe_lib/kuma_live.py` | diagnostics | What the live Kuma says about itself: its pod's age and the monitors it holds. | imported by monitors.py, postflight.py | `test_kuma_live.py` | — |
 | `scripts/diagnostics/probe_lib/kuma_table_loop.py` | diagnostics | The two table loops in the static-monitors template, as `parse_declared_monitors` reads them. | imported by monitors.py | — | — |
-| `scripts/deploy_tools/land_lib/land_platform.py` | deploy_tools | Which of a PR's derived tags its own changed paths PROVE are a k3s change. | imported by deploy.py, tools.py | — | — |
-| `scripts/deploy_tools/land_lib/land_reach.py` | deploy_tools | Which hosts a self-applied setup-role change still owes a hand, beyond the tick's own host. | imported by land_tags.py, tools.py | — | — |
-| `scripts/deploy_tools/land_lib/land_rerolls.py` | deploy_tools | Whether a later deploy re-rolled a landing's workloads under its health gate (#3812). | imported by tools.py | — | — |
+| `scripts/deploy_tools/land_lib/land_platform.py` | deploy_tools | Which of a PR's derived tags its own changed paths PROVE are a k3s change. | imported by deploy.py, tools.py | `test_land_platform.py` | — |
+| `scripts/deploy_tools/land_lib/land_reach.py` | deploy_tools | Which hosts a self-applied setup-role change still owes a hand, beyond the tick's own host. | imported by land_tags.py, tools.py | `test_land_reach.py` | — |
+| `scripts/deploy_tools/land_lib/land_rerolls.py` | deploy_tools | Whether a later deploy re-rolled a landing's workloads under its health gate (#3812). | imported by tools.py | `test_land_rerolls.py` | — |
 | `scripts/deploy_tools/land_lib/land_shared.py` | deploy_tools | The shared-role expansion a landing makes, and the #3124 narrowing. | imported by land_tags.py, precomputed.py, tools.py | — | — |
-| `scripts/deploy_tools/land_lib/land_tags.py` | deploy_tools | Derive deploy tags from a merged PR's own file list. | imported by _land_fakes.py, classify.py, land_platform.py, landing.py, precomputed.py, shared_role_reach.py, tools.py | — | — |
+| `scripts/deploy_tools/land_lib/land_tags.py` | deploy_tools | Derive deploy tags from a merged PR's own file list. | imported by _land_fakes.py, classify.py, land_platform.py, landing.py, precomputed.py, shared_role_reach.py, tools.py | `test_land_tags.py` | — |
 | `scripts/deploy_tools/land_lib/landing.py` | deploy_tools | One PR's landing: the state every phase reads and writes, and the ways it ends. | imported by _land_fakes.py, ci.py, classify.py, deploy.py, health_verdict.py, land.py, merge.py, pipeline.py, policy.py, tick.py | — | — |
 | `scripts/diagnostics/probe_lib/landing_blockers.py` | diagnostics | `probe.py landing` — what would stop a landing now, and who else is working the repo. | imported by subcommands.py | — | — |
 | `scripts/dev/fanout_lib/launch.py` | dev | Create the worktree, write the brief, start the transient service — spec §3. | imported by place.py, review.py | — | — |
@@ -228,7 +228,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/narrow_setup_index.py` | deploy_tools | One setup role's task files, templates and vars, read at a single git ref. | imported by narrow_setup.py | — | — |
 | `scripts/deploy_tools/narrow_setup_playbook.py` | deploy_tools | What a playbook and a task list say about tags, without touching git. | imported by narrow_setup.py, narrow_setup_index.py | — | — |
 | `scripts/deploy_tools/narrow_templates.py` | deploy_tools | Two importer edges `narrow_broad.template_importers` must not take at face value. | imported by narrow_broad.py, narrow_filters.py | — | — |
-| `scripts/diagnostics/probe_lib/obs_api.py` | diagnostics | The Prometheus and Loki query client every caller shares: URL builders, window, transport. | no `__main__` guard; carried by deploy: ansible/roles/k8s/homelab-mcp/tasks/main.yml | — | — |
+| `scripts/diagnostics/probe_lib/obs_api.py` | diagnostics | The Prometheus and Loki query client every caller shares: URL builders, window, transport. | no `__main__` guard; carried by deploy: ansible/roles/k8s/homelab-mcp/tasks/main.yml | `test_obs_api.py` | — |
 | `scripts/deploy_tools/land_lib/options.py` | deploy_tools | Everything the command line sets, plus the budgets a test shortens. | imported by _land_fakes.py, handoff.py, land.py, landing.py | — | — |
 | `scripts/deploy_tools/land_lib/outcome.py` | deploy_tools | The words a landing ends with: the verdict set, the cause set, the Outcome, and say(). | imported by ci.py, classify.py, deploy.py, health_verdict.py, land.py, land_probe.py, landing.py, ledger.py, merge.py, pipeline.py, policy.py, tick.py | — | — |
 | `scripts/diagnostics/probe_lib/pi_plane.py` | diagnostics | `probe.py targets --pi` and `probe.py pi containers` — first-command triage for daniel-pi. | imported by subcommands.py | — | — |
@@ -270,11 +270,11 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/fanout_lib/review_stats.py` | dev | Sum the fan-out review records into the measures that decide whether the red phase stays. | no `__main__` guard; imported by test_fanout_review_stats.py | — | — |
 | `scripts/dev/fanout_lib/review_unit.py` | dev | Run a `launch --review` fan-out batch: implement, review, fix, then land. | no `__main__` guard; imported by test_fanout_git_state.py, test_fanout_review.py | — | — |
 | `scripts/secrets_mgmt/rotation_tools.py` | secrets_mgmt | Every process boundary `secret_rotation.py` crosses, as one injectable object. | imported by _rotation_fakes.py, consumers.py, git_dates.py, secret_registry.py, secret_rotation.py, secrets.py | `test_rotation_tools.py` | — |
-| `scripts/docs/catalog_lib/route_facts.py` | docs | Shared route facts for the reference generators. | imported by catalog_facts.py, catalog_render.py, networking.py | — | — |
+| `scripts/docs/catalog_lib/route_facts.py` | docs | Shared route facts for the reference generators. | imported by catalog_facts.py, catalog_render.py, networking.py | `test_route_facts.py` | — |
 | `scripts/lib/script_classify.py` | lib | How every first-party script under ``scripts/`` is run, derived from the tree. | imported by scripts.py | — | — |
 | `scripts/lib/script_imports.py` | lib | Which scripts under ``scripts/`` import which, read from the source without running it. | imported by script_classify.py | `test_script_imports.py` | — |
-| `scripts/secrets_mgmt/secrets_lib/secret_classify.py` | secrets_mgmt | Which rotation tier a secret's NAME puts it in. | imported by secret_registry.py | — | — |
-| `scripts/secrets_mgmt/secrets_lib/secret_registry.py` | secrets_mgmt | Pure logic over the rotation registry: seeding, reconciliation, due dates and drift. | imported by secret_rotation.py, secrets.py | — | — |
+| `scripts/secrets_mgmt/secrets_lib/secret_classify.py` | secrets_mgmt | Which rotation tier a secret's NAME puts it in. | imported by secret_registry.py | `test_secret_classify.py` | — |
+| `scripts/secrets_mgmt/secrets_lib/secret_registry.py` | secrets_mgmt | Pure logic over the rotation registry: seeding, reconciliation, due dates and drift. | imported by secret_rotation.py, secrets.py | `test_secret_registry.py` | — |
 | `scripts/backup/longhorn_reap_lib/selection.py` | backup | The two operator-selected Backup CR sets: a migrated volume's old chain, and retired seeds. | imported by backups.py | — | — |
 | `scripts/lib/service_tiers.py` | lib | The sets derived from containers_list ``tier``, for readers outside Ansible. | imported by catalog_backup.py, fragments_storage.py, gen_doc_fragments.py, shed_set.py | — | — |
 | `scripts/deploy_tools/setup_gates.py` | deploy_tools | Read a playbook entry's `when:` for one host, the way Ansible would. | imported by land_reach.py, setup_routing.py | — | — |
@@ -321,7 +321,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/gen_gitops_markers.py` | dev | Copy the deployer's marker modules into monitor-bridge, the one tree that cannot ship them. | no automated caller in the tree | — | — |
 | `scripts/deploy_tools/gitops_tick.sh` | deploy_tools | trigger a GitOps deploy tick by hand and report what it did. | exit_codes.py (a person runs it) | — | [0, 1, 2, 3, 4, 64, 75](#scriptsdeploytoolsgitopsticksh) |
 | `scripts/deploy_tools/k3s_etcd_restore_gates.py` | deploy_tools | Forwarding shim: `runbook_gates.py etcd-restore`, under the path it had before #4344. | no automated caller in the tree | `test_k3s_etcd_restore_gates.py` | — |
-| `scripts/deploy_tools/land_lib/land_probe.py` | deploy_tools | The `land` source for cc-wait: one detached landing's state, read from its log. | no automated caller in the tree | — | — |
+| `scripts/deploy_tools/land_lib/land_probe.py` | deploy_tools | The `land` source for cc-wait: one detached landing's state, read from its log. | no automated caller in the tree | `test_land_probe.py` | — |
 | `scripts/backup/longhorn_reap.py` | backup | Delete Longhorn Backup and Snapshot objects that no RecurringJob will ever prune. | backups.py (a person runs it) | — | — |
 | `scripts/dev/new_k8s_service.py` | dev | Scaffold a k3s service role from its name, image and port, instead of copying a sibling. | no automated caller in the tree | `test_new_k8s_service.py` | — |
 | `scripts/diagnostics/postflight.py` | diagnostics | Verify the post-deploy setup that Ansible can't do (ansible/README.md §9). | playbook: ansible/bring-up.sh | `test_postflight.py` | — |
