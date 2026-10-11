@@ -39,7 +39,7 @@ import host_lib
 
 # The Backup CR reader and the group names, shared with the backup-health cron (#3735, #3737).
 sys.path.insert(0, str(K3S_FILES))
-import longhorn_backups
+from longhorn_lib import longhorn_backups
 
 RECURRING_JOB_GROUP_PREFIX = longhorn_backups.GROUP_LABEL_PREFIX
 

@@ -298,7 +298,7 @@ def deletions_summary_line(charged, skipped, unpriced):
     """The one line a completed `b2-deletions` run always prints, of a fixed shape.
 
     Check 10 of the Longhorn backup heartbeat reads it to decide whether this cron is still
-    alive (`ansible/roles/setup/k3s/files/longhorn_cron_evidence_logic.py`), the way it reads
+    alive (`ansible/roles/setup/k3s/files/longhorn_lib/longhorn_cron_evidence_logic.py`), the way it reads
     `trimmed N volume(s), N skipped, N failed` for the trim. The shape is the interface, so a
     reword here blinds that check and its tests match this text as written.
     """

@@ -16,6 +16,7 @@ import datetime as _dt
 import re
 
 # Resolves via longhorn_backup_health.py's own sys.path.insert, as the sibling logic modules do.
+# host_lib.py sits beside this package, not inside it.
 from host_lib import rfc3339_to_epoch
 
 # One line of `kubectl logs --prefix`: `[pod/<pod>/<container>] time="..." level=warning

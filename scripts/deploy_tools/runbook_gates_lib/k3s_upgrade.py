@@ -62,7 +62,7 @@ from gitops_markers import STATE_DIR
 # The Backup CR reader the backup-health cron ships (#3735); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
 sys.path.insert(0, str(K3S_FILES))
-import longhorn_backups
+from longhorn_lib import longhorn_backups
 
 CLUSTER = "prod"
 RUNBOOK = "docs/k3s-upgrade.md"

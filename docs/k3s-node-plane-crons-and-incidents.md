@@ -76,7 +76,7 @@ was the first kind: `b2-deletions` fired every day and logged only its refusal.
 
 Every matched line is matched as written, so rewording one means changing `_TRIM_SUMMARY_RE` /
 `_TRIM_ABORT_RE` / `_DELETIONS_SUMMARY_RE` / `_DELETIONS_DECLINED_RE` in
-`ansible/roles/setup/k3s/files/longhorn_cron_evidence_logic.py` in the same edit. The b2 shapes
+`ansible/roles/setup/k3s/files/longhorn_lib/longhorn_cron_evidence_logic.py` in the same edit. The b2 shapes
 come from `deletions_summary_line` / `deletions_declined_line` in
 `scripts/diagnostics/probe_lib/b2_ledger.py`, which
 `test_cron_liveness_accepts_the_summary_line_the_probe_writes` holds to the regexes.

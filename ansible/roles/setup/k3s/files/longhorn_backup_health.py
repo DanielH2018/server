@@ -40,12 +40,12 @@ if __name__ == "__main__":
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import host_lib
-import longhorn_backup_health_logic as logic
-import longhorn_backups as backups
-import longhorn_cron_evidence_logic as cron_evidence
-import longhorn_restore_drill_stamps as drill_stamps
-import longhorn_skipped_volumes_logic as skipped
-from longhorn_restore_drill_stamps import read_stamp as _read_stamp
+from longhorn_lib import longhorn_backup_health_logic as logic
+from longhorn_lib import longhorn_backups as backups
+from longhorn_lib import longhorn_cron_evidence_logic as cron_evidence
+from longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
+from longhorn_lib import longhorn_skipped_volumes_logic as skipped
+from longhorn_lib.longhorn_restore_drill_stamps import read_stamp as _read_stamp
 
 
 def _require_env(name: str) -> str:

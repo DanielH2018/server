@@ -1,6 +1,6 @@
 """Tests for the shared Backup CR reader and the backup group names (#3735, #3737)."""
 
-import longhorn_backups as backups
+from longhorn_lib import longhorn_backups as backups
 from _shell_render import rendered_shell_text
 from lib.repo_paths import K3S_FILES
 

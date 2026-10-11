@@ -1,7 +1,7 @@
 """The label tasks render the same group labels the live cluster carries (#3946).
 
 `tasks/longhorn.yml` and `tasks/longhorn-weekly-shard.yml` take every group label from the
-`longhorn_groups` filters, which take them from `files/longhorn_backups.py`. A one-byte change
+`longhorn_groups` filters, which take them from `files/longhorn_lib/longhorn_backups.py`. A one-byte change
 in a rendered label renames a live group: the volume drops out of its RecurringJob and nothing
 fails. So this renders each label task for every volume in the tier lists and every shard, and
 compares the labels against strings typed out here. They are deliberately NOT built from the

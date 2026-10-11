@@ -67,7 +67,7 @@ from lib.repo_paths import HOST_LIB_FILES, K3S_DEFAULTS, K3S_FILES
 # The backup target names, shared with the backup-health cron (#3737); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
 sys.path.insert(0, str(K3S_FILES))
-import longhorn_backups
+from longhorn_lib import longhorn_backups
 
 CLUSTER = "prod"
 RUNBOOK = "docs/longhorn-upgrade.md"
