@@ -10,7 +10,7 @@ module can import.
 WHY `deploy_toolbox` AND NOT `deploy_tools`. `scripts/deploy_tools/` is a namespace package on
 pytest's `pythonpath`, and a regular module always beats a namespace portion whatever the path
 order — so a `deploy_tools.py` in this directory shadows it and `land_lib/tools.py`'s
-`from deploy_tools.deploy_detach_notify import ...` raises ModuleNotFoundError for the whole suite. The
+`from deploy_tools.deploy_lib.detach_notify import ...` raises ModuleNotFoundError for the whole suite. The
 class keeps the name the other seams use (`RotationTools`, `FindingsTools`).
 
 WHY `fetch_ci_verdict` LIVES HERE AND TAKES ITS CONFIG AS KEYWORDS. It is the one boundary

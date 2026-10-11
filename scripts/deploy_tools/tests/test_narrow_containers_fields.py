@@ -15,6 +15,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_containers_fields.py
 """
 
 import ast
+import builtins
 from pathlib import Path
 
 import pytest
@@ -104,11 +105,29 @@ def test_a_removed_entry_changes_every_field():
 # ── FILTER_FIELDS against the filter plugins' source ────────────────────────────────────
 
 
-def _filter_reads(source: str) -> dict[str, set[str]]:
-    """Each registered filter's string keys, through the module functions it calls.
+_BUILTINS = frozenset(dir(builtins)) - {"getattr", "vars"}
+_ITERATES = frozenset({"items", "keys", "values"})
+
+# A use the key scan cannot follow, vetted as reading no entry field the row omits.
+VETTED_OPAQUE = {
+    (
+        "metrics_port",
+        ".values()",
+    ): "iterates a `metrics` item's `params`, under `metrics`",
+    (
+        "scrape_jobs",
+        ".values()",
+    ): "iterates a `metrics` item's `params`, under `metrics`",
+}
+
+
+def _filter_reads(source: str) -> dict[str, tuple[set[str], set[str]]]:
+    """Each registered filter's string keys and its opaque uses, through the functions it calls.
 
     A key is a constant in `x.get("k")`, `x["k"]` or `"k" in x`. That is a superset of the
-    entry fields (a nested dict's keys come along), which errs toward more readers.
+    entry fields (a nested dict's keys come along), which errs toward more readers. An opaque
+    use is one that could read a field no constant names: iterating a mapping, `**`,
+    `getattr`, a `.get` with a computed key, or a call to a function outside the module.
     """
     tree = ast.parse(source)
     funcs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
@@ -120,47 +139,83 @@ def _filter_reads(source: str) -> dict[str, set[str]]:
         if isinstance(key, ast.Constant)
         and isinstance(key.value, str)
         and isinstance(value, ast.Name)
+        and value.id in funcs
     }
-    reads: dict[str, set[str]] = {}
+    reads: dict[str, tuple[set[str], set[str]]] = {}
     for name, func in registered.items():
         keys: set[object] = set()
+        opaque: set[str] = set()
         seen: set[str] = set()
         todo = [func]
         while todo:
             fn = todo.pop()
-            if fn in seen or fn not in funcs:
+            if fn in seen:
                 continue
             seen.add(fn)
             for node in ast.walk(funcs[fn]):
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                    todo.append(node.func.id)
-                elif (
+                keys |= _constant_keys(node)
+                opaque |= _opaque_uses(node, funcs)
+                if (
                     isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "get"
-                    and node.args
-                    and isinstance(node.args[0], ast.Constant)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id in funcs
                 ):
-                    keys.add(node.args[0].value)
-                elif isinstance(node, ast.Subscript) and isinstance(
-                    node.slice, ast.Constant
-                ):
-                    keys.add(node.slice.value)
-                elif (
-                    isinstance(node, ast.Compare)
-                    and isinstance(node.left, ast.Constant)
-                    and any(isinstance(op, (ast.In, ast.NotIn)) for op in node.ops)
-                ):
-                    keys.add(node.left.value)
-        reads[name] = {k for k in keys if isinstance(k, str)}
+                    todo.append(node.func.id)
+        reads[name] = ({k for k in keys if isinstance(k, str)}, opaque)
     return reads
 
 
-def _plugin_reads() -> dict[str, set[str]]:
-    reads: dict[str, set[str]] = {}
+def _constant_keys(node: ast.AST) -> set[object]:
+    if (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "get"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+    ):
+        return {node.args[0].value}
+    if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
+        return {node.slice.value}
+    if (
+        isinstance(node, ast.Compare)
+        and isinstance(node.left, ast.Constant)
+        and any(isinstance(op, (ast.In, ast.NotIn)) for op in node.ops)
+    ):
+        return {node.left.value}
+    return set()
+
+
+def _opaque_uses(node: ast.AST, funcs: dict[str, ast.FunctionDef]) -> set[str]:
+    if isinstance(node, ast.Dict) and None in node.keys:
+        return {"**"}
+    if not isinstance(node, ast.Call):
+        return set()
+    if any(kw.arg is None for kw in node.keywords):
+        return {"**"}
+    if isinstance(node.func, ast.Name):
+        callee = node.func.id
+        if callee in funcs or callee in _BUILTINS or callee.endswith("Error"):
+            return set()
+        return {f"{callee}()"}
+    if isinstance(node.func, ast.Attribute):
+        if node.func.attr in _ITERATES:
+            return {f".{node.func.attr}()"}
+        if node.func.attr == "get" and not (
+            node.args and isinstance(node.args[0], ast.Constant)
+        ):
+            return {".get(<computed>)"}
+    return set()
+
+
+def _plugin_reads() -> dict[str, tuple[set[str], set[str]]]:
+    reads: dict[str, tuple[set[str], set[str]]] = {}
     for path in sorted((REPO / "ansible" / "filter_plugins").glob("*.py")):
         reads.update(_filter_reads(path.read_text()))
     return reads
+
+
+def _unvetted(name: str, opaque: set[str]) -> set[str]:
+    return {use for use in opaque if (name, use) not in VETTED_OPAQUE}
 
 
 def test_filter_fields_cover_every_key_each_filter_reads():
@@ -168,25 +223,57 @@ def test_filter_fields_cover_every_key_each_filter_reads():
     # Non-vacuity: the scan must find the filters the table names, entry_port among them.
     assert "entry_port" in reads and set(containers.FILTER_FIELDS) <= set(reads)
     missing = {
-        name: sorted(reads[name] - fields)
+        name: sorted(reads[name][0] - fields)
         for name, fields in containers.FILTER_FIELDS.items()
-        if reads[name] - fields
+        if reads[name][0] - fields
     }
     assert not missing, f"FILTER_FIELDS omits keys these filters read: {missing}"
 
 
-def test_the_scan_flags_a_filter_reading_a_key_the_table_omits():
-    source = (
-        "def entry_port(containers_list, name):\n"
-        "    return _lookup(containers_list, name)['port']\n"
-        "def _lookup(containers_list, name):\n"
-        "    return [e for e in containers_list if e.get('hostname')][0]\n"
-        "class FilterModule:\n"
-        "    def filters(self):\n"
-        "        return {'entry_port': entry_port}\n"
+def test_no_filter_in_the_table_reads_a_field_the_scan_cannot_name():
+    """A row whose filter iterates or forwards the entry would narrow past a moved render."""
+    reads = _plugin_reads()
+    opaque = {
+        name: sorted(_unvetted(name, reads[name][1]))
+        for name in containers.FILTER_FIELDS
+        if _unvetted(name, reads[name][1])
+    }
+    assert not opaque, (
+        "these filters read fields no constant names; drop their FILTER_FIELDS row so their "
+        f"readers read every field, or vet the use in VETTED_OPAQUE: {opaque}"
     )
-    reads = _filter_reads(source)["entry_port"]
-    assert reads - containers.FILTER_FIELDS["entry_port"] == {"hostname"}
+    # The vetted uses must still exist, or the exemption outlived its subject.
+    assert all(use in reads[name][1] for name, use in VETTED_OPAQUE)
+
+
+_ENTRY_PORT = (
+    "def entry_port(containers_list, name):\n"
+    "    return _lookup(containers_list, name)['port']\n"
+    "def _lookup(containers_list, name):\n"
+    "    return [e for e in containers_list if {probe}][0]\n"
+    "class FilterModule:\n"
+    "    def filters(self):\n"
+    "        return {{'entry_port': entry_port}}\n"
+)
+
+
+def test_the_scan_flags_a_filter_reading_a_key_the_table_omits():
+    keys, _ = _filter_reads(_ENTRY_PORT.format(probe="e.get('hostname')"))["entry_port"]
+    assert keys - containers.FILTER_FIELDS["entry_port"] == {"hostname"}
+
+
+@pytest.mark.parametrize(
+    ("probe", "use"),
+    [
+        ("any(e.values())", ".values()"),
+        ("e.get(name)", ".get(<computed>)"),
+        ("render(**e)", "**"),
+        ("getattr(e, name)", "getattr()"),
+    ],
+)
+def test_the_scan_flags_a_filter_that_iterates_or_forwards_the_entry(probe, use):
+    _, opaque = _filter_reads(_ENTRY_PORT.format(probe=probe))["entry_port"]
+    assert use in opaque
 
 
 def test_the_real_tree_names_filter_readers():

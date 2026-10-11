@@ -368,7 +368,7 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
     """Record a successful auto-deploy where Grafana can draw it as a dashboard annotation.
 
     A LOG LINE, not a POST to Grafana's /api/annotations, and the peer of `annotate` in
-    scripts/deploy_tools/deploy_playbook.py (bash's for `--detach`) — the deploy paths must
+    scripts/deploy_tools/deploy_lib/playbook.py (bash's for `--detach`) — the deploy paths must
     annotate the same way or the dashboards show only half the deploys. Grafana has no hostPort
     and no pinned ClusterIP, and this runs on the HOST, so calling in would mean pinning a fourth
     address or routing through Traefik with a standing write credential. Neither is needed: the
