@@ -13,6 +13,7 @@ shell crons. Must import on the host Python floor (``test_host_python_pin.py``).
 
 from __future__ import annotations
 
+import json
 import time
 import urllib.error
 import urllib.parse
@@ -44,6 +45,22 @@ def cap_kuma_msg(msg: str, limit: int = KUMA_PUSH_MSG_MAX) -> str:
         keep = max(0, limit - len(" …(+%d chars)" % dropped))
         dropped = len(msg) - keep
     return msg[:keep] + " …(+%d chars)" % dropped
+
+
+def _kuma_reply_msg(body: bytes, token: str) -> str:
+    """Kuma's ``msg`` from its JSON push reply, the token redacted, cut to 300 characters.
+
+    kuma-push-lib.sh's ``_kuma_reply_msg`` twin; that file's header has why (#4481). Empty when
+    the body is not JSON or carries no string ``msg``.
+    """
+    try:
+        reply = json.loads(body)
+    except ValueError:
+        return ""
+    msg = reply.get("msg") if isinstance(reply, dict) else None
+    if not isinstance(msg, str):
+        return ""
+    return " ".join(msg.replace(token, "<token>").split())[:300]
 
 
 def kuma_push(
@@ -96,7 +113,7 @@ def kuma_push(
     query = urllib.parse.urlencode({"status": status, "msg": msg, "ping": ""})
     base = host.rstrip("/") if "://" in host else "https://" + host
     url = "%s/api/push/%s?%s" % (base, token, query)
-    reason = ""
+    reason = kuma_msg = ""
     for attempt in range(1, KUMA_PUSH_ATTEMPTS + 1):
         try:
             with (opener or urllib.request.urlopen)(
@@ -105,12 +122,17 @@ def kuma_push(
                 resp.read()
             return True
         except urllib.error.HTTPError as e:
-            # A JSON body means Kuma answered: the edge routed the push and the token has no
-            # live monitor. Traefik's no-router 404 is text/plain. The shell twin logs the same
-            # `by=kuma` field (#1803).
+            # A JSON body means Kuma answered: the edge routed the push. Traefik's no-router
+            # 404 is text/plain. The shell twin logs the same `by=kuma` field (#1803). Kuma
+            # answers 404 for any exception, a DB error as well as an unknown token, so its own
+            # `msg` is kept for the log (#4481).
             ctype = e.headers.get_content_type() if e.headers else ""
             by = " by=kuma" if ctype == "application/json" else ""
             reason = "http=%s%s" % (e.code, by)
+            try:
+                kuma_msg = _kuma_reply_msg(e.read(), token) if by else ""
+            except Exception:  # a body that will not read leaves only the code
+                kuma_msg = ""
             e.close()
             if e.code in (401, 403):
                 break
@@ -126,5 +148,9 @@ def kuma_push(
                 )
             sleep(KUMA_PUSH_RETRY_DELAY_S)
     if log:
+        # Its own line, never carrying `status=`: the swallowed-verdicts parser reads only
+        # `k=v` words inside the http/rc parens, and `probe.py alerts` counts `status=down`.
+        if kuma_msg:
+            log("push rejected by kuma (%s): %s" % (reason.split()[0], kuma_msg))
         log("push failed (%s) (status=%s: %s)" % (reason, status, msg))
     return False

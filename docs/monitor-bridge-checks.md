@@ -1071,10 +1071,14 @@ checks each gate suppresses.
   `BOOT_SETTLE_S=0` restores the plain window.
   One push is counted whatever its status and company: one Kuma REJECTED, marked `by=kuma` in the
   http/rc pair, which the library appends when the 404 came back as Kuma's own
-  `application/json` rather than Traefik's `text/plain` page (#1803). That is a token no live
-  monitor holds. The edge and Kuma are both up so no other tile pages, and no tile reaches a
-  deadline, so the verdicts are lost for as long as the cron and the static monitors carry
-  different tokens. A burst of `http=404` lines from Traefik rejecting every router belongs to
+  `application/json` rather than Traefik's `text/plain` page (#1803). The edge and Kuma are both
+  up, so no other tile pages. Kuma answers 404 for any exception in its push handler, so the
+  rejection is either a token no live monitor holds or a Kuma-side error, such as the 2026-10-11
+  `SQLITE_CONSTRAINT` on `stat_hourly` that a redeploy did not clear (#4481). The library logs
+  Kuma's own `msg` on a `push rejected by kuma (http=<code>): <msg>` line just before the
+  failure line, with the push token redacted, and the page names that line. A token mismatch
+  reads `Monitor not found or not active.`, and its verdicts are lost for as long as the cron
+  and the static monitors carry different tokens. A burst of `http=404` lines from Traefik rejecting every router belongs to
   Traefik 404 Flood (#1322).
   In `LOKI_DEPENDENT`. A fetch that hits the 5000-line cap says so in the message. Two pushers
   bypass the library's shape and are read by a second selector (#1943): the CrowdSec
