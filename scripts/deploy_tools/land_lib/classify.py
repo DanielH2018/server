@@ -17,6 +17,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib import deploy_cross_role
+from deployer_lib.deploy_narrow import NARROWED_TO_NOTHING
 
 
 def _classified[**P, R](
@@ -315,8 +316,12 @@ def narrow_plane(ln: Landing, awaited: bool = True) -> None:
     try:
         if awaited:
             receipt = ln.receipt_for(ln.merge_sha)
+            # `narrowed-to-nothing` is the tick's answer that the range needs nothing from
+            # the role, and it recorded no `manual_plane` line for it (#4408). The empty set
+            # is how `plane_note` takes that answer. An empty row is a refusal and is dropped,
+            # so the note keeps the whole-role tag.
             narrow = {
-                t: tags
+                t: frozenset() if tags == {NARROWED_TO_NOTHING} else tags
                 for t, tags in (receipt.manual if receipt else {}).items()
                 if tags
             }

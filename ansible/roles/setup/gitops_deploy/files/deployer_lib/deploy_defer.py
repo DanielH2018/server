@@ -264,6 +264,11 @@ def narrow_tags_for(
 ) -> frozenset[str] | None:
     """The narrowest tags `role`'s own change needs, or None when nothing could narrow it.
 
+    An EMPTY set is the derivation's answer that the range reaches no host through `role`
+    (#4361), and `record` writes no line for it (#4408). It takes both halves of the answer,
+    exit `NARROW_SETUP_NOTHING_EXIT` and stdout `NARROWED_TO_NOTHING`, for the reason
+    `deploy_narrow._one_setup_role` gives: the script and this copy can be different ages.
+
     The role tag applies far more than any one change to it needs: `--tags k3s` reapplies
     MetalLB, Longhorn, the crons, CoreDNS and the node config and arms three gated
     control-plane tasks, where a `templates/readonly-rbac.yaml.j2` edit needs `--tags
@@ -297,6 +302,11 @@ def narrow_tags_for(
     except Exception as exc:
         log(f"narrow-setup: {role} not narrowed ({type(exc).__name__}: {exc})")
         return None
+    if (
+        rc == deploy_narrow.NARROW_SETUP_NOTHING_EXIT
+        and out == deploy_narrow.NARROWED_TO_NOTHING
+    ):
+        return frozenset()
     if rc != 0:
         return None
     return frozenset(tag for tag in out.split(",") if tag) or None
@@ -348,6 +358,13 @@ def record(
 
     The journal line names only what this tick ADDED: `main()` logs the whole pending set.
 
+    A role the range reaches no host through (`narrow_tags_for` answers an empty set) gets no
+    line, no tags and no page, so no marker asks a human to apply nothing (#4408). The
+    derivation therefore runs before anything is written. Its receipt row is
+    `NARROWED_TO_NOTHING`, the token the `applied` half already uses for "no play ran": an
+    empty row there means "no derivation could narrow it", so `land.sh` would print the
+    whole-role tag and a clear command for a line that does not exist.
+
     Returns:
         A `Recorded` carrying each half of what this tick did, because they need different
         reverses (#2320). The lines it appended are dropped outright. The rows it WIDENED
@@ -357,6 +374,28 @@ def record(
     """
     now = time.time()
     origin = target.origin
+    narrowed = {
+        setup_role_tag(role): narrow_tags_for(tools, config, target, role)
+        for role in roles
+    }
+    idle = [role for role in roles if narrowed[setup_role_tag(role)] == frozenset()]
+    if idle:
+        log(
+            f"manual_plane: {', '.join(idle)} needs no tag over this range, so not recording it"
+        )
+    state.record_receipt(
+        origin,
+        target.local,
+        manual={
+            tag: tags
+            if tags != frozenset()
+            else frozenset({deploy_narrow.NARROWED_TO_NOTHING})
+            for tag, tags in narrowed.items()
+        },
+    )
+    roles = [role for role in roles if role not in idle]
+    if not roles:
+        return nothing_recorded()
     before = state.manual_plane_tags_pending()
     tags_before = {
         setup_role_tag(role): before.get(setup_role_tag(role)) for role in roles
@@ -372,12 +411,9 @@ def record(
             setup_role_host(role),
         )
     ]
-    narrowed = {}
     for role in roles:
         tag = setup_role_tag(role)
-        narrowed[tag] = narrow_tags_for(tools, config, target, role)
         state.record_manual_plane_tags(tag, narrowed[tag], role not in recorded)
-    state.record_receipt(origin, target.local, manual=narrowed)
     narrow = state.manual_plane_tags_pending()
     if recorded:
         log(

@@ -389,7 +389,10 @@ Refusing on those would leave the narrowing almost never firing, because most ra
 touching `setup/k3s` carry the role's own `CLAUDE.md`. A range of nothing but such paths is an
 answer rather than a narrowing: `narrow_setup.py` exits 3 printing `narrowed-to-nothing`, since
 an empty `--tags` value runs the whole playbook (#4361). The tick drops the role from its run.
-The remediation keeps the role tag, because it reads exit 3 as a refusal like any non-zero exit.
+`deploy_defer.record` writes no `manual_plane` line and sends no page for such a role. It
+records `narrowed-to-nothing` as the role's row in the tick's receipt instead, because an
+empty row there reads as a refusal. `land.sh`'s plane note leaves the role out, from that
+receipt row after the tick or from the PR's own derivation on the fast path (#4408).
 
 **Any other doubt refuses**, and a refusal prints the role tag with
 `deploy_remediation.maximal_tag_warning` beside it. Refusing is the safe direction, because a
