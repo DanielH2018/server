@@ -538,7 +538,8 @@
   # Several Claude sessions branch, commit and retire worktrees in this checkout every day, and
   # each removal leaves that branch's objects unreachable. `prune_worktrees.py --prune --brief`
   # removes the merged worktrees, deletes the orphan `worktree-*` branches whose content is on
-  # origin/master, then drops the unreachable objects older than a day and clears a stale
+  # origin/master, deletes the unregistered directories under .claude/worktrees/ whose every
+  # file a ref already reaches (dev/worktree_orphans.py, #4425), then drops the unreachable objects older than a day and clears a stale
   # gc.log — see repair_object_store for why the grace period is not `now`.
   #
   # THIS IS THE ARM THAT REMOVES; the SessionStart banner only reports. The reasoning is the

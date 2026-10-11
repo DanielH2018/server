@@ -272,12 +272,12 @@ def test_a_held_hook_imports_its_first_party_modules_from_the_held_copy(
     assert not found, f"{hook} cannot import from the held copy:\n" + "\n".join(found)
 
 
-def _held_ssh_hosts(root: Path) -> str:
-    """What block-footguns' `_ssh_hosts` returns when run from the copy at `root`."""
+def _held_footguns(root: Path, expr: str) -> str:
+    """`expr`, evaluated over block-footguns' globals as the copy at `root` loads them."""
     hooks = root / ".claude/hooks"
     code = (
         f"import runpy, sys; sys.path[0] = {str(hooks)!r}; "
-        f"print(runpy.run_path({str(hooks / 'block-footguns.py')!r})['_ssh_hosts']())"
+        f"print(eval({expr!r}, runpy.run_path({str(hooks / 'block-footguns.py')!r})))"
     )
     env = {
         k: v for k, v in os.environ.items() if k not in {"PYTHONPATH", "VIRTUAL_ENV"}
@@ -292,17 +292,39 @@ def _held_ssh_hosts(root: Path) -> str:
         check=False,
     )
     assert proc.returncode == 0, proc.stderr[-2000:]
-    return proc.stdout
+    return proc.stdout.strip()
 
 
 def test_the_held_ssh_guard_reads_the_inventory_hosts(held):
-    assert "daniel-box" in _held_ssh_hosts(held)
+    assert "daniel-box" in _held_footguns(held, "_ssh_hosts()")
 
 
-def test_a_held_copy_of_the_hooks_alone_leaves_the_ssh_guard_with_no_hosts(tmp_path):
+@pytest.fixture
+def hooks_alone(tmp_path) -> Path:
+    """A copy of the hooks with no `scripts/` or `ansible/` beside it."""
     shutil.copytree(
         REPO / ".claude/hooks",
         tmp_path / ".claude/hooks",
         ignore=shutil.ignore_patterns("tests"),
     )
-    assert _held_ssh_hosts(tmp_path).strip() == "()"
+    return tmp_path
+
+
+def test_a_held_copy_of_the_hooks_alone_cannot_read_the_inventory(hooks_alone):
+    assert _held_footguns(hooks_alone, "_ssh_hosts()") == "None"
+
+
+# With no inventory the guard cannot tell a homelab host from any other, so it matches a
+# remote git on every host rather than on none (#4420). A cd into the repo still passes.
+def test_the_remote_git_rule_fails_closed_when_the_inventory_is_unreadable(
+    hooks_alone,
+):
+    denied = _held_footguns(
+        hooks_alone, "remote_git_problem(['ssh', 'daniel-box', 'git status'])"
+    )
+    assert "could not read the inventory" in denied
+    allowed = _held_footguns(
+        hooks_alone,
+        "remote_git_problem(['ssh', 'daniel-box', 'cd /home/ubuntu/server; git status'])",
+    )
+    assert allowed == "None"
