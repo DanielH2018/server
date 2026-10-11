@@ -1,7 +1,7 @@
 """`runbook_gates.py longhorn-upgrade` against a fake kubectl: each gate's clean/flagged pair, the stop
 order, and the exit code naming the gate.
 
-Run: uv run pytest scripts/deploy_tools/tests/test_longhorn_upgrade_gates.py
+Run: uv run pytest scripts/deploy_tools/tests/test_runbook_gates_longhorn_upgrade.py
 """
 
 import io
