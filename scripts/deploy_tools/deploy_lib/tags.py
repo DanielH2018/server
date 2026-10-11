@@ -308,9 +308,9 @@ def range_paths(old_ref: str, new_ref: str, cwd: Path = REPO) -> list[str]:
 
 # The parser's prog, named once so a failure line can carry it without the parser in hand.
 _TAGS_PROG = "deploy_cli.py tags"
-# DECIDED: the four `blockers` report lines are status, not complaints, so they carry this bare
+# DECIDED: the four `blockers` report lines are status, not complaints, so they open with this bare
 # prefix rather than `error:`/`warning:`. land.sh reads only the exit code (#4498).
-_BLOCKERS_PROG = f"{_TAGS_PROG} blockers"
+_BLOCKERS_STATUS = f"{_TAGS_PROG} blockers"
 
 
 def _cmd_blockers(args: argparse.Namespace) -> int:
@@ -335,7 +335,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
         return 1
 
     if not paths:
-        print(f"{_BLOCKERS_PROG}: nothing incoming from {args.ref}.", file=sys.stderr)
+        print(f"{_BLOCKERS_STATUS}: nothing incoming from {args.ref}.", file=sys.stderr)
         return 0
 
     # Same read the tick makes, so a comment-only edit to a bring-up playbook that the tick
@@ -343,7 +343,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     quiet = comment_only_paths(paths, "HEAD", args.ref)
     if quiet:
         print(
-            f"{_BLOCKERS_PROG}: comment-only change in {', '.join(sorted(quiet))} — the "
+            f"{_BLOCKERS_STATUS}: comment-only change in {', '.join(sorted(quiet))} — the "
             "tick crosses it.",
             file=sys.stderr,
         )
@@ -351,14 +351,14 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     cs = loud.changes
     if not loud.manual:
         print(
-            f"{_BLOCKERS_PROG}: {len(loud.loud)} incoming file(s) from {args.ref}, none "
+            f"{_BLOCKERS_STATUS}: {len(loud.loud)} incoming file(s) from {args.ref}, none "
             "needing a hand — the tick can fast-forward.",
             file=sys.stderr,
         )
         return 0
 
     print(
-        f"{_BLOCKERS_PROG}: {args.ref} carries a change the deployer will never apply itself, "
+        f"{_BLOCKERS_STATUS}: {args.ref} carries a change the deployer will never apply itself, "
         "so the tick cannot fast-forward past it and any deploy after it is refused as stale:",
         file=sys.stderr,
     )
