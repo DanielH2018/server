@@ -191,6 +191,11 @@ uv run pytest evals/tests/test_review_outcomes.py    # schema guard over the com
 Each `/homelab-review` case pins one contract paragraph the skill grew after a real misfire, so a
 paragraph and its case move together: `001` dedup vs `004` anti-merge are deliberately a matched
 pair — `001` alone rewards collapsing findings, and only `004` measures the counter-force.
+So `001`'s duplicate pair must be ONE defect by the anti-merge rule's own test: the same
+`file:line`, the same mechanism and the same fix, in different words. The 2026-10-09 rewrite
+had one reviewer name a second fix site (a `containers_list` entry's `kuma: false`), which made
+splitting the pair the correct answer. The agent split it every time, and the 2026-10-11 sweep
+scored the case 0/3.
 
 **Four case-authoring rules.** The first three were learned on 2026-08-17. In a non-hermetic run the
 agent still has tools, so anything that invites it to go *check* something ends the run with a tool
