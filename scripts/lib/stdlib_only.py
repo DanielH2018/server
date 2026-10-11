@@ -467,26 +467,38 @@ def _role_module(top: str, dirs: list[Path]) -> bool:
 _IMPORT_ERRORS = {"ImportError", "ModuleNotFoundError"}
 
 
+def _ends_the_run(node: ast.AST) -> bool:
+    """Whether `node` is a `raise` or a call to `sys.exit`, `exit` or `SystemExit`."""
+    if isinstance(node, ast.Raise):
+        return True
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+    return name in {"exit", "SystemExit", "_exit"}
+
+
 # DECIDED: an import inside a `try` whose handler names ImportError or ModuleNotFoundError
 # cannot kill the caller at import, which is the failure this module exists to catch. The
 # deployer's `deploy_setup_roles.routing` imports `setup_routing` that way, and its install
-# directory deliberately ships none. A handler for any other exception guards nothing.
+# directory deliberately ships none. A handler for any other exception guards nothing, and
+# neither does one that raises or exits: `except ImportError: raise SystemExit(...)` still dies.
 def _guarded(tree: ast.Module) -> set[int]:
     """The ids of the import nodes a `try ... except ImportError` guards."""
     found = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Try):
             continue
-        caught = set()
+        guards = []
         for handler in node.handlers:
-            for kind in (
+            kinds = (
                 handler.type.elts
                 if isinstance(handler.type, ast.Tuple)
                 else [handler.type]
-            ):
-                if isinstance(kind, ast.Name):
-                    caught.add(kind.id)
-        if caught & _IMPORT_ERRORS:
+            )
+            if any(isinstance(k, ast.Name) and k.id in _IMPORT_ERRORS for k in kinds):
+                guards.append(not any(map(_ends_the_run, ast.walk(handler))))
+        if guards and all(guards):
             for statement in node.body:
                 found |= {
                     id(sub)
@@ -558,10 +570,16 @@ def runtime_import(path: Path, dirs: list[Path]) -> tuple[bool, str]:
     path = path.resolve()
     dirs = [Path(d).resolve() for d in dirs]
     name = _module_name(path, dirs)
-    # DECIDED: a module that raises SystemExit at import counts as imported. Every import it
-    # ran before the exit resolved, and `walk` reads the rest. `longhorn_backup_health.py`
-    # exits on an env var its cron wrapper exports, after all of its imports.
-    code = f"try:\n    {f'import {name}' if name else _BY_PATH}\nexcept SystemExit:\n    pass"
+    # DECIDED: a module that raises SystemExit at import counts as imported, unless the exit
+    # came from a failed import. Every import it ran before the exit resolved, and `walk` reads
+    # the rest. `longhorn_backup_health.py` exits on an env var its cron wrapper exports, after
+    # all of its imports.
+    code = (
+        f"try:\n    {f'import {name}' if name else _BY_PATH}\n"
+        "except SystemExit as e:\n"
+        "    if isinstance(e.__context__, ImportError):\n"
+        "        raise"
+    )
     env = {
         k: v for k, v in os.environ.items() if k not in {"VIRTUAL_ENV", "PYTHONPATH"}
     }

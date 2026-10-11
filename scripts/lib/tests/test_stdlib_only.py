@@ -451,3 +451,21 @@ def test_runtime_import_passes_a_module_that_exits_after_its_imports(tmp_path):
     module.write_text("import json\nraise SystemExit('LONGHORN_X is not set')\n")
     ok, stderr = _checker().runtime_import(module, [tmp_path])
     assert ok, stderr
+
+
+EXITS_ON_IMPORT_ERROR = "try:\n    import yaml\nexcept ImportError:\n    raise SystemExit('install PyYAML')\n"
+
+
+def test_an_import_whose_handler_exits_is_flagged(tmp_path):
+    checker = _checker()
+    module = tmp_path / "exits_on_import_error.py"
+    module.write_text(EXITS_ON_IMPORT_ERROR, encoding="utf-8")
+    assert checker.walk(module, [tmp_path]) == ["yaml"]
+
+
+def test_runtime_import_fails_a_module_that_exits_on_a_failed_import(tmp_path):
+    module = tmp_path / "exits_on_import_error.py"
+    module.write_text(EXITS_ON_IMPORT_ERROR, encoding="utf-8")
+    ok, stderr = _checker().runtime_import(module, [tmp_path])
+    assert not ok
+    assert "PyYAML" in stderr
