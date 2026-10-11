@@ -1076,7 +1076,8 @@ checks each gate suppresses.
   rejection is either a token no live monitor holds or a Kuma-side error, such as the 2026-10-11
   `SQLITE_CONSTRAINT` on `stat_hourly` that a redeploy did not clear (#4481). The library logs
   Kuma's own `msg` on a `push rejected by kuma (http=<code>): <msg>` line just before the
-  failure line, with the push token redacted, and the page names that line. A token mismatch
+  failure line, with the push token redacted, and the page names that line. The CrowdSec
+  home-allowlist cron writes it to the journal too, and pi-peer-backup to its pod log. A token mismatch
   reads `Monitor not found or not active.`, and its verdicts are lost for as long as the cron
   and the static monitors carry different tokens. A burst of `http=404` lines from Traefik rejecting every router belongs to
   Traefik 404 Flood (#1322).

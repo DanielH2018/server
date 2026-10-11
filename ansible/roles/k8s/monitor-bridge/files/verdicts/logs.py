@@ -263,7 +263,8 @@ def swallowed_verdicts(
         )
         return False, (
             "Kuma rejected the push for %s in %s, so its verdicts reach nobody. Kuma answers "
-            "404 for any error, so read its reason with `journalctl -t <tag> | grep '%s'`: "
+            "404 for any error, so read its reason on the '%s' line before the failure "
+            "(`journalctl -t <tag>` on a host, the pod log for pi-peer-backup): "
             "`Monitor not found or not active.` means the cron and uptime-kuma's static "
             "monitors carry different tokens (redeploy whichever is behind); anything else "
             "is Kuma failing on its own side" % (named, window, KUMA_REASON_PREFIX)

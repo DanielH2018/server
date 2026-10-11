@@ -115,6 +115,9 @@ def kuma_push(
     url = "%s/api/push/%s?%s" % (base, token, query)
     reason = kuma_msg = ""
     for attempt in range(1, KUMA_PUSH_ATTEMPTS + 1):
+        # Per attempt: the reason line describes the LAST attempt, as `reason` does, so a
+        # transport failure after a Kuma 404 must not log the earlier Kuma reason.
+        kuma_msg = ""
         try:
             with (opener or urllib.request.urlopen)(
                 url, timeout=KUMA_PUSH_TIMEOUT_S

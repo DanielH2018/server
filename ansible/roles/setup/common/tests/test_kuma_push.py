@@ -103,6 +103,23 @@ def test_kuma_push_logs_kumas_own_reason_with_the_token_redacted():
     assert not any("SECRET" in line for line in logs)
 
 
+def test_kuma_push_drops_an_earlier_kuma_reason_when_the_last_attempt_is_transport():
+    # The reason line describes the last attempt only: a DNS failure after two Kuma 404s is
+    # not Kuma's fault, and `(error=URLError)` is not the line's `(http=<code>)` shape.
+    body = b'{"ok":false,"msg":"SQLITE_BUSY"}'
+    opener, _seen = _opener(
+        _http_error(404, "application/json", body),
+        _http_error(404, "application/json", body),
+        urllib.error.URLError("dns"),
+    )
+    logs = []
+    kuma_push.kuma_push(
+        "up", "m", "k", "T", log=logs.append, opener=opener, sleep=lambda _s: None
+    )
+    assert logs[-1] == "push failed (error=URLError) (status=up: m)"
+    assert not any("push rejected by kuma" in line for line in logs)
+
+
 def test_kuma_push_logs_no_reason_for_a_non_kuma_body():
     # The pair: Traefik's text/plain page is not Kuma answering, whatever its body says.
     body = b'{"msg":"not kuma"}'
