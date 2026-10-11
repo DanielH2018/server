@@ -33,6 +33,13 @@ initial_setup_uv_installer_sha256: 58488ae8dbd0773134c92c85e901430e33f99d975bd7f
 initial_setup_docker_prune_cron_minute: 30
 initial_setup_docker_prune_cron_hour: 6
 
+# When the weekly worktree sweep runs on `ops_cron_host`, in UTC, for the same reason: it pings
+# the `<host>-worktree-sweep` Healthchecks.io check, whose console schedule monitor-bridge holds
+# to these values (#4482).
+initial_setup_worktree_sweep_cron_minute: 20
+initial_setup_worktree_sweep_cron_hour: 4
+initial_setup_worktree_sweep_cron_weekday: 0  # Sunday
+
 # The group whose members may connect to the worktree holder scan's socket,
 # /run/worktree-holders.sock (tasks/crons.yml, #4297). initial_setup adds sys_user to it, and
 # claude_code's agent_access.yml adds each present agent user, because that task's group list

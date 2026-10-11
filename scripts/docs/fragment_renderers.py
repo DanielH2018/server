@@ -178,6 +178,7 @@ def deadman_crons(
 
     `has_docker` is `{host: bool}` over every host initial_setup runs on. The weekly reboot
     pings a slug per host, and the Docker prune pings one per host that installs it (#2806).
+    The worktree sweep runs on `ops_cron_host` alone, so it pings one slug (#4482).
     """
     every_10 = f"{k3s['k3s_longhorn_backup_health_cron_minute']} * * * *"
     rows = [
@@ -243,6 +244,16 @@ def deadman_crons(
         for host, docker in has_docker.items()
         if docker
     ]
+    rows.append(
+        (
+            f"{group_vars['ops_cron_host']}-worktree-sweep",
+            f"{initial_setup['initial_setup_worktree_sweep_cron_minute']} "
+            f"{initial_setup['initial_setup_worktree_sweep_cron_hour']} * * "
+            f"{initial_setup['initial_setup_worktree_sweep_cron_weekday']}",
+            "`initial_setup_worktree_sweep_cron_weekday` / `_hour` / `_minute`, on "
+            f"{group_vars['ops_cron_host']}",
+        )
+    )
     return rows
 
 
