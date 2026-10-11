@@ -83,7 +83,7 @@ Each arm is a rule and the function that holds it; the record page has its incid
   role; `deploy_phases.reconcile_denylist` re-renders `config.env`.
 - **Pi Docker changes are never auto-deployed**, and an encrypted-vars-only push merges without
   redeploying, alerting once per SHA.
-- **A new module in `files/` goes in the copy `loop:` and `stamp_deployed_pairs` in
+- **A new module under `files/` goes in the copy `loop:` and `stamp_deployed_pairs` in
   `tasks/code.yml`**. ENFORCED: `ansible/tests/deploy/test_gitops_deploy_ship_list.py`.
 
 ## Which apply clears a hold
