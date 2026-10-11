@@ -32,12 +32,13 @@ schedule, the lock, and the contract below.
 ## Autonomous-role contract (it deletes media files with no human in the loop)
 
 - **Scope / exclusions:**
-  - **fake-remux scan** (`files/fake_remux_scan.py`, daily `fake_remux_scan_cron_hour`):
+  - **fake-remux scan** (`fake_remux.py scan`, shell in `files/fake_remux_lib/fake_remux_scan.py`, daily `fake_remux_scan_cron_hour`):
     ffprobes the library for files whose encoder tag or keyframe interval contradicts a
     "remux" filename, and seeds
     the ledger (`replacements.json` under `fake_remux_state_dir`). It writes the ledger and
     nothing else.
-  - **fake-remux reconcile** (`files/fake_remux_replace.py`, every
+  - **fake-remux reconcile** (`fake_remux.py replace`, shell in
+    `files/fake_remux_lib/fake_remux_replace.py`, every
     `fake_remux_replace_cron_minute`): for each ledger entry, asks Sonarr for a replacement,
     ffprobe-verifies the grab is genuine on this host, then deletes the fake. **Never** a
     delete before the replacement is verified; **never** an unmonitored episode; the
@@ -71,6 +72,10 @@ schedule, the lock, and the contract below.
 
 ## Notable
 
+- **One entrypoint, two subcommands.** `files/fake_remux.py` dispatches to the two shells in
+  `files/fake_remux_lib/`, a namespace package with no `__init__.py`, which also holds their
+  pure cores. The role installs the package as `fake_remux_lib/` beside the entrypoint and
+  removes the four flat files the layout before #4353 left in the install dir.
 - **The two crons move together.** Scan and reconcile share one ledger; repointing one half
   without the other leaves entries nobody acts on, or actions with no seed.
 - **Config paths are the ones autofix-bridge used**, on purpose: both scripts fall back to

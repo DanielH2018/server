@@ -27,7 +27,7 @@
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 515
 ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 585
 ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 585
-ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 581
+ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 567
 ansible/roles/setup/gitops_deploy/files/deploy_state.py 646  # conjoined: the hold, alert-slot and k8s-owed methods read and write only through read/write, which this class alone defines (three mixins until #3661)
 ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py 533
 ansible/roles/setup/renovate_notify/tests/test_notify_logic.py 552

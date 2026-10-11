@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """fake-remux host scan — the ffprobe-backed twin of autofix.py's queue remediation.
 
 The autofix-bridge sidecar is deliberately zero-privilege (stdlib only, cap_drop ALL, no docker), so
@@ -18,7 +17,7 @@ ansible/inventory/group_vars/all.yml). Config comes from /etc/autofix-fake-remux
 read-only at /data/media, so Sonarr's absolute path resolves unchanged (no translation) and a probe
 can't write.
 
-Usage: fake_remux_scan.py   (takes no arguments; -h/--help prints this text)
+Usage: fake_remux.py scan   (takes no arguments; -h/--help prints its help)
 
 Run by the fake-remux-scan cron (daily, under fake_remux_lock). Reads the file named by
 FAKE_REMUX_CONFIG (default: autofix-fake-remux/config.env under /etc), writes the ledger
@@ -35,8 +34,9 @@ import sys
 import time
 import urllib.request
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fake_remux_logic as frl
+# files/ (the install dir on the host): fake_remux_lib's parent, and where host_lib.py sits.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from fake_remux_lib import fake_remux_logic as frl
 from host_lib import atomic_write, discord_post, flush_discord_spool, parse_env_file
 
 CONFIG_PATH = os.environ.get("FAKE_REMUX_CONFIG", "/etc/autofix-fake-remux/config.env")
@@ -382,10 +382,3 @@ def main() -> int:
     write_state(state_file, ok, msg)
     flush_queued_posts(cfg)
     return 0
-
-
-if __name__ == "__main__":
-    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
-        print(__doc__.strip())
-        sys.exit(0)
-    sys.exit(main())
