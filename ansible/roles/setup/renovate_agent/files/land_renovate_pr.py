@@ -30,7 +30,7 @@ Started as `renovate-agent-land@<pr-number>.service`, never by hand. Reads the P
 `gh`, the deployer's config at /etc/gitops-deploy/config.env, and the environment
 RENOVATE_AGENT_REPO (default DanielH2018/server) and RENOVATE_AGENT_REPO_DIR (default
 /home/ubuntu/server). Writes the outcome to /var/lib/renovate-agent-land/<pr-number>.verdict.
-Exit codes: land.sh's own on a landing, 2 for an argument that is not a PR number, 3 for a
+Exit codes: land.sh's own on a landing, 64 for an argument that is not a PR number, 3 for a
 refusal.
 """
 
@@ -62,6 +62,8 @@ PR_FIELDS = (
 )
 SOAK_CONTEXT = "renovate/stability-days"
 INVENTORY = "ansible/inventory/"
+# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import (#4487).
+USAGE_ERROR = 64
 _PR_NUMBER = re.compile(r"[1-9][0-9]{0,6}")
 _K8S_ROLE = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 _VERDICT = re.compile(r"^VERDICT: .*$", re.MULTILINE)
@@ -133,14 +135,17 @@ def main(
 ) -> int:
     """Check PR `argv[1]`, land it if every check passes, and record the outcome.
 
-    Returns land.sh's exit code, 2 for a malformed argument and 3 for a refusal. The result
+    Returns land.sh's exit code, 64 for a malformed argument and 3 for a refusal. The result
     file is overwritten before anything else runs, so the session never reads an earlier
     landing's verdict as this one's.
     """
     number = pr_number(argv[1]) if len(argv) == 2 else None
     if number is None:
-        log(f"refused: {argv[1:]!r} is not a PR number")
-        return 2
+        print(
+            f"land_renovate_pr.py: error: {argv[1:]!r} is not a PR number",
+            file=sys.stderr,
+        )
+        return USAGE_ERROR
     result = os.path.join(results_dir, f"{number}.verdict")
     atomic_write(result, "PENDING\n")
     repo = os.environ.get("RENOVATE_AGENT_REPO", "DanielH2018/server")

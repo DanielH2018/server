@@ -19,7 +19,8 @@ Deployed by roles/setup/initial_setup to /opt/loki-route-health/ and run by
 dependencies of its own.
 
 Usage: <probe.py stdout on stdin> | loki_route_health.py <probe.py exit code>
-Exits 0 for up, 1 for down, and prints the message the Kuma push carries.
+Exits 0 for up, 1 for down, and prints the message the Kuma push carries. Exits 64 when the
+argument is missing or not an integer.
 """
 
 import json
@@ -28,6 +29,9 @@ import sys
 # The message goes into a Kuma push (a URL query parameter) and a syslog line, so a whole 404
 # page or a Python traceback is trimmed rather than carried.
 _MAX_DETAIL = 160
+
+# `lib/exit_codes.py:USAGE_ERROR`, which this host-shipped script cannot import (#4487).
+USAGE_ERROR = 64
 
 
 def _detail(body: str) -> str:
@@ -54,12 +58,12 @@ def verdict(rc: int, body: str) -> tuple[str, str]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
+    if len(argv) != 2 or not argv[1].removeprefix("-").isdigit():
         print(
             "usage: loki_route_health.py <probe-exit-code> (body on stdin)",
             file=sys.stderr,
         )
-        return 2
+        return USAGE_ERROR
     status, msg = verdict(int(argv[1]), sys.stdin.read())
     print(msg)
     return 0 if status == "up" else 1

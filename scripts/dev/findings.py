@@ -279,7 +279,7 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
     if issue.get("state") == "CLOSED":
         terminal = sorted(NO_REOPEN & label_names(issue))
         why = terminal[0] if terminal else "fixed"
-        print(f"#{args.number} is closed ({why}); use open to re-file")
+        print(f"#{args.number} is closed ({why}); use open to re-file", file=sys.stderr)
         return 3
     plans = plan_touch(issue, args.source)
     run(plans, args.dry_run, tools)
@@ -300,7 +300,7 @@ def cmd_defer(args: argparse.Namespace, tools: FindingsTools) -> int:
             issue, until=args.until, existing_labels=_existing_labels(tools)
         )
     except ClaimRefused as exc:
-        print(f"#{args.number} refused: {exc.reason}")
+        print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
         return 3
     run(plans, args.dry_run, tools)
     what = (
@@ -326,7 +326,7 @@ def cmd_manual(args: argparse.Namespace, tools: FindingsTools) -> int:
     try:
         plans = plan_manual(issue, clear=args.clear)
     except ClaimRefused as exc:
-        print(f"#{args.number} refused: {exc.reason}")
+        print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
         return 3
     if not args.clear:
         plans += _release_for_manual(issue)

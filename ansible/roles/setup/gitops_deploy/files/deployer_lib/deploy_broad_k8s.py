@@ -25,7 +25,7 @@ from deployer_lib import deploy_io
 from deployer_lib import deploy_k8s_owed
 from deployer_lib import deploy_locks
 from deployer_lib.deploy_changes import ChangeSet
-from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_config import ERR, Config, log
 from deployer_lib.deploy_state import DeployerState
 from deployer_lib.deploy_tick_types import TickPlan, TickTarget
 from deployer_lib.deploy_toolbox import DeployTools
@@ -173,7 +173,10 @@ def apply_broad_k8s(
             deploy_defer.unrecord(state, origin, recorded)
             return deploy_defer.for_contention(tools, state, config, target, exc)
         except Exception as exc:
-            log(f"k8s deploy failed for {sorted(bumps)} on a broad tick: {exc}")
+            log(
+                f"k8s deploy failed for {sorted(bumps)} on a broad tick: {exc}",
+                level=ERR,
+            )
             # The plane is the run that failed, `deploy.yml --tags <bumps>`, ADDED to any plane
             # already held. Without it any later service deploy cleared the hold
             # (`clear_service_hold`); written over an earlier entry, the bump's fix-forward

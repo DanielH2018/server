@@ -57,7 +57,7 @@ from deployer_lib.deploy_changes import (
     tag_selects_an_off_host_role,
     tick_applies_setup_role,
 )
-from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_config import WARNING, Config, log
 from deployer_lib.deploy_remediation import (
     broad_park_reason,
     broad_remediation,
@@ -153,7 +153,10 @@ def drop_deleted_setup_roles(
             cwd=config.repo,
         )
     except Exception as exc:
-        log(f"could not list the setup roles at {origin[:8]} ({exc}) — dropping none")
+        log(
+            f"could not list the setup roles at {origin[:8]} ({exc}) — dropping none",
+            level=WARNING,
+        )
         return cs
     present = setup_roles_listed(listing)
     deleted = cs.setup_roles - present if present else set()
@@ -192,7 +195,10 @@ def drop_deleted_manual_plane(
             cwd=config.repo,
         )
     except Exception as exc:
-        log(f"could not list the setup roles at HEAD ({exc}) — dropping none")
+        log(
+            f"could not list the setup roles at HEAD ({exc}) — dropping none",
+            level=WARNING,
+        )
         return set()
     gone = keys_naming_no_role(keys, setup_roles_listed(listing))
     for key in sorted(gone):
@@ -300,7 +306,10 @@ def narrow_tags_for(
             deploy_narrow.NARROW_SETUP_TIMEOUT_S,
         )
     except Exception as exc:
-        log(f"narrow-setup: {role} not narrowed ({type(exc).__name__}: {exc})")
+        log(
+            f"narrow-setup: {role} not narrowed ({type(exc).__name__}: {exc})",
+            level=WARNING,
+        )
         return None
     if (
         rc == deploy_narrow.NARROW_SETUP_NOTHING_EXIT

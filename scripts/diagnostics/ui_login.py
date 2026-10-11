@@ -441,7 +441,7 @@ def check(two_factor=False):
     path = state_path(two_factor)
     hint = mint_hint(two_factor)
     if not os.path.exists(path):
-        print(f"no state file at {path} — mint one by running with {hint}")
+        sys.stderr.write(f"no state file at {path} — mint one by running with {hint}\n")
         return 1
     with open(path) as f:
         state = json.load(f)

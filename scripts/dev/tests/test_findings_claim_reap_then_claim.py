@@ -79,7 +79,7 @@ def test_claim_still_refuses_a_live_claim(capsys):
         Fakes(issues=[issue], view=issue, worktree_facts=_facts(_tree(), dirty=True))
     )
     assert main(["claim", "1132", "--worktree", MINE], tools) == 3
-    assert f"already claimed by `{OTHER}`" in capsys.readouterr().out
+    assert f"already claimed by `{OTHER}`" in capsys.readouterr().err
     assert not any("Released: `" in a for c in calls.gh for a in c)
     assert not any(f"Claim: `{MINE}`" in a for c in calls.gh for a in c)
 
@@ -96,7 +96,7 @@ def test_claim_does_not_reap_when_the_git_read_fails(capsys):
     )
     assert main(["claim", "1132", "--worktree", MINE], tools) == 3
     captured = capsys.readouterr()
-    assert f"already claimed by `{OTHER}`" in captured.out
+    assert f"already claimed by `{OTHER}`" in captured.err
     assert "read failed" in captured.err
     assert not any("Released: `" in a for c in calls.gh for a in c)
 
@@ -111,7 +111,7 @@ def test_claim_does_not_reap_a_manual_issue(capsys):
     )
     tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=STALE))
     assert main(["claim", "1132", "--worktree", MINE], tools) == 3
-    assert "manual" in capsys.readouterr().out
+    assert "manual" in capsys.readouterr().err
     assert not any("Released: `" in a for c in calls.gh for a in c)
 
 
@@ -129,7 +129,7 @@ def test_claim_does_not_reap_an_issue_outside_the_register(capsys):
         Fakes(issues=[outsider], view=outsider, worktree_facts=STALE)
     )
     assert main(["claim", "1132", "--worktree", MINE], tools) == 3
-    assert "claude" in capsys.readouterr().out
+    assert "claude" in capsys.readouterr().err
     assert not any("Released: `" in a for c in calls.gh for a in c)
 
 
@@ -137,7 +137,7 @@ def test_claim_does_not_reap_a_closed_issue(capsys):
     issue = make_issue(1132, state="CLOSED", comments=[claim_comment(OTHER, None, "t")])
     tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=STALE))
     assert main(["claim", "1132", "--worktree", MINE], tools) == 3
-    assert "closed" in capsys.readouterr().out
+    assert "closed" in capsys.readouterr().err
     assert not any("Released: `" in a for c in calls.gh for a in c)
 
 

@@ -303,4 +303,4 @@ def test_main_reports_config_problems_and_exits_two(capsys):
     wired = _silence(pushes, ran, DISK_MAX_PCT="ninety")
     assert cli.main(["--once"], **wired) == 2
     assert ran == []
-    assert "DISK_MAX_PCT" in capsys.readouterr().out
+    assert "DISK_MAX_PCT" in capsys.readouterr().err

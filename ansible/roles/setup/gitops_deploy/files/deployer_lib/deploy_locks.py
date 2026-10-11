@@ -24,7 +24,7 @@ Usage: deploy_locks.py plan [--exclusive-all] TAG [TAG ...]
        deploy_locks.py -h | --help
 
 `plan` prints one NAME<TAB>shared|exclusive<TAB>PATH line per lock, in the order to take
-them. `--exclusive-all` is a full run. Exit 2 on a usage error. Reads no config or env.
+them. `--exclusive-all` is a full run. Exit 64 on a usage error. Reads no config or env.
 
 Typical usage example:
 
@@ -271,6 +271,9 @@ def locked_budget(services: Iterable[str], timeout: float, exclusive_all: bool =
 
 # -- the CLI, for reading a plan by hand ---------------------------------------------------
 
+# `lib/exit_codes.py:USAGE_ERROR`, which a module shipped to the deployer host cannot import.
+USAGE_ERROR = 64
+
 USAGE = """usage: deploy_locks.py plan [--exclusive-all] TAG [TAG ...]
 
 Print every lock a deploy of the named tags takes, one per line, in the order to take them:
@@ -280,7 +283,7 @@ list is every declared service and which must exclude every scoped run through `
 
 
 def main(argv: list[str]) -> int:
-    """`plan` for the shell. Exit 2 on a usage error, printing nothing a caller could act on.
+    """`plan` for the shell. Exit 64 on a usage error, printing nothing a caller could act on.
 
     A run with no tags is refused rather than planned as a scoped run over nothing: the
     wrapper enumerates a full run's tags itself and hands them over, so an empty argv here is
@@ -288,7 +291,7 @@ def main(argv: list[str]) -> int:
     """
     if not argv or argv[0] != "plan":
         sys.stderr.write(USAGE)
-        return 2
+        return USAGE_ERROR
     exclusive_all = False
     tags = []
     for arg in argv[1:]:
@@ -296,12 +299,12 @@ def main(argv: list[str]) -> int:
             exclusive_all = True
         elif arg.startswith("-"):
             sys.stderr.write(f"deploy_locks.py: unknown option {arg}\n{USAGE}")
-            return 2
+            return USAGE_ERROR
         elif arg:
             tags.append(arg)
     if not tags:
         sys.stderr.write(f"deploy_locks.py: plan needs at least one tag\n{USAGE}")
-        return 2
+        return USAGE_ERROR
     for planned in plan(tags, exclusive_all):
         mode = "exclusive" if planned.exclusive else "shared"
         sys.stdout.write(f"{planned.name}\t{mode}\t{planned.path}\n")

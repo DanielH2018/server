@@ -53,7 +53,7 @@ def test_claim_refuses_a_manual_issue_and_exits_3(capsys):
     tools, calls = build_tools(Fakes(issues=[issue], view=issue, worktree_facts=LIVE))
     assert main(["claim", "1132", "--worktree", WT], tools) == 3
     assert not any(c[:2] == ["issue", "comment"] for c in calls.gh)
-    assert "manual" in capsys.readouterr().out
+    assert "manual" in capsys.readouterr().err
 
 
 def test_claim_takes_every_issue_it_can_and_still_exits_3_on_a_refusal():
@@ -102,14 +102,14 @@ def test_release_refuses_another_worktrees_claim_and_exits_3(capsys):
     )
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
     assert main(["release", "1132", "--worktree", WT], tools) == 3
-    assert "claimed by `worktree-someone-else`" in capsys.readouterr().out
+    assert "claimed by `worktree-someone-else`" in capsys.readouterr().err
     assert not any(c[:2] == ["issue", "comment"] for c in calls.gh)
 
 
 def test_release_refuses_an_unclaimed_issue_and_exits_3(capsys):
     tools, calls = build_tools(Fakes(issues=[make_issue(1132)], view=make_issue(1132)))
     assert main(["release", "1132", "--worktree", WT], tools) == 3
-    assert "not claimed" in capsys.readouterr().out
+    assert "not claimed" in capsys.readouterr().err
     assert calls.gh == []
 
 

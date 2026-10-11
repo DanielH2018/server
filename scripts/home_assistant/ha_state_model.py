@@ -524,9 +524,9 @@ def main(argv=None) -> int:
 
     errs = check_errors()
     if errs:
-        print("HA state-model checks FAILED:")
+        print("HA state-model checks FAILED:", file=sys.stderr)
         for e in errs:
-            print(f"  - {e}")
+            print(f"  - {e}", file=sys.stderr)
         return 1
     print("HA state-model OK")
     return 0

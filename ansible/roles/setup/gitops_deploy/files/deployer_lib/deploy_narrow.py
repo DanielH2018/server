@@ -20,7 +20,7 @@ import subprocess
 import time
 from typing import Callable, NamedTuple
 
-from deployer_lib.deploy_config import log
+from deployer_lib.deploy_config import WARNING, log
 from deployer_lib.deploy_release import CURRENT, DRIFTED
 
 # The playbook the setup arm runs, and the one `narrow_setup.py` derives reachability against.
@@ -468,7 +468,10 @@ def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
     try:
         verdicts = digest_diff(origin)
     except Exception as exc:
-        log(f"narrow shadow: no digest diff ({type(exc).__name__}: {exc})")
+        log(
+            f"narrow shadow: no digest diff ({type(exc).__name__}: {exc})",
+            level=WARNING,
+        )
         return
     drifted = verdicts.get(DRIFTED, [])
     unknown = ", ".join(
