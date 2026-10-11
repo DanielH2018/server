@@ -559,7 +559,7 @@ k3s_readonly_crd_api_groups:
   - traefik.io
   - metallb.io
   - longhorn.io
-  # k3s's own CRDs. `scripts/deploy_tools/k3s_etcd_restore_gates.py` gate 3 reads
+  # k3s's own CRDs. `scripts/deploy_tools/runbook_gates.py etcd-restore` gate 3 reads
   # ETCDSnapshotFile to check that the snapshot an operator is about to restore exists and
   # reports `status.readyToUse` — the one cluster-side answer to that question. The template
   # grants `resources: ["*"]` per group, so this also grants read on `Addon`, the group's only
@@ -638,7 +638,7 @@ k3s_longhorn_backup_retain: 14
 # Note retention is enforced PER RECURRING JOB, over that job's own backups only, and only while
 # the job still selects the volume — so this number does not govern the daily-era backups left
 # behind when a volume moved into a weekday shard. Nothing prunes those;
-# scripts/backup/longhorn_reap_orphan_backups.py is their only owner.
+# `scripts/backup/longhorn_reap.py backups` is their only owner.
 k3s_longhorn_weekly_backup_minute_hour: "30 4"
 k3s_longhorn_weekly_backup_retain: 2
 # ── Cloudflare R2: the second backup target ──────────────────────────────────────────────

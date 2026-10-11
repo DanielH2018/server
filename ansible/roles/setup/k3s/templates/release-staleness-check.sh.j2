@@ -24,7 +24,7 @@
 # `manifest_affecting_shared_roles()` derives the set, and the
 # deploy-time roles beside them are deliberately out of it, #1636) against origin/master, and
 # since #1993 also the inventory keys and shared macros that service's render reads --
-# derived per changed path by `scripts/deploy_tools/narrow_broad.py`, the same rules the
+# derived per changed path by `scripts/deploy_tools/narrow_lib/broad.py`, the same rules the
 # deployer's tick narrows a broad range with, so a merged `group_vars` or `ansible/templates/`
 # change reads stale for exactly the services the tick would apply it to. A service whose
 # role paths or read keys moved past its applied commit, or with no record at all, is stale.

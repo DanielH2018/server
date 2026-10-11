@@ -139,7 +139,7 @@ def _walk(rel: str, tasks, inherited: frozenset[str]) -> list[Task]:
 
 
 # The spellings of a STATIC task import, matching
-# `scripts/deploy_tools/narrow_lib/setup_index.py:_STATIC_IMPORTS`. An `include_tasks` is absent
+# `scripts/deploy_tools/narrow_lib/task_walk.py:_STATIC_IMPORTS`. An `include_tasks` is absent
 # for the reason stated there: a dynamic include's tasks are selected by the include task, not
 # by their own tags, so no tag of the included file selects them.
 _STATIC_IMPORTS = (

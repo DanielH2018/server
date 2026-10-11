@@ -38,7 +38,8 @@ against — so a derivation that is not certain must widen rather than narrow. A
 no `tags:` of its own is the sharpest case: its tasks inherit from wherever it is imported,
 so a hit there says nothing about which tag selects it. A tag must also be REACHABLE in the
 playbook the remediation prints: the role has to sit in that playbook's `roles:`, and the task
-file has to be statically imported from the role's `tasks/main`.
+file has to be statically imported from the role's `tasks/main`, or included from a file that
+is with an `apply:` tag the include itself carries (#4384).
 `tasks/storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, and `k3s-bringup.yml --tags
 storage_smoke` selects only `always` tasks.
 
@@ -162,10 +163,11 @@ def path_tags(
                     f"{key} reaches no task file, only vars keys naming each other"
                 )
             tags |= got
-        if not tags:
-            raise CannotNarrow(
-                f"{rel} changed no key, so nothing says which tag to run"
-            )
+        # No changed key means a comment or layout edit. Ansible reads a vars file only
+        # through its parsed values, so the edit reaches no host and adds no tag, the way
+        # `_reaches_no_host` skips prose. A range where every path is like this still refuses
+        # in `role_tags`. Refusing here instead turned a comment edit to `k3s/defaults/main.yml`
+        # into the whole-role `--tags k3s` (#4384).
         return frozenset(tags)
     raise CannotNarrow(f"{rel} is not in a directory this can narrow from")
 
@@ -327,7 +329,8 @@ def role_tags(
             got = index.readers_of(path.rsplit("/", 1)[-1])
             if not got:
                 raise CannotNarrow(f"{path} reaches no task file of {role}")
-        print(f"narrow-setup: {rel} -> {','.join(sorted(got))}", file=sys.stderr)
+        shown = ",".join(sorted(got)) or "(no tag: no value a task reads changed)"
+        print(f"narrow-setup: {rel} -> {shown}", file=sys.stderr)
         tags |= got
     if not tags:
         # Every changed path reaches no host. The deployer should not have deferred this range

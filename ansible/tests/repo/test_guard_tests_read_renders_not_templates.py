@@ -174,7 +174,7 @@ TEMPLATE_SOURCE_READERS = {
         "role reads its render, and `test_the_render_reaches_every_role_rendering_a_secret` "
         "holds that nothing in the corpus falls back"
     ),
-    "longhorn/test_longhorn_reap_orphan_never_scheduled.py": (
+    "longhorn/test_longhorn_reap_never_scheduled.py": (
         "the fallback for a unit template no render reaches: the synthetic `.service.j2` and "
         "`.timer.j2` under `tmp_path` the red proofs write. Every real setup unit reads its "
         "render, and `test_the_render_reaches_every_setup_unit_template` holds that"
@@ -243,7 +243,7 @@ KNOWN_MEMBERS = frozenset(
         "services/test_strangler_bridge.py",
         "longhorn/_restore_drill.py",
         "longhorn/test_daily_group_membership_is_the_r2_list.py",
-        "longhorn/test_longhorn_reap_orphan_never_scheduled.py",
+        "longhorn/test_longhorn_reap_never_scheduled.py",
         "longhorn/test_longhorn_restore_drill_byte_floor.py",
         "longhorn/test_prune_backups.py",
         "repo/_render_gate.py",

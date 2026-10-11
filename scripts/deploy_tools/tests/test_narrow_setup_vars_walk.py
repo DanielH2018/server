@@ -244,3 +244,29 @@ def test_a_range_changing_only_an_unread_foreign_key_is_flagged(reads):
     reads.write(FOREIGN, FOREIGN_DEFAULTS.replace("unread", "changed"))
     with pytest.raises(narrow_setup.CannotNarrow, match="reaches no host"):
         narrow(reads, *_refs(reads))
+
+
+# ── a vars edit that changes no parsed value (#4384) ────────────────────────────────────
+
+
+def test_a_comment_edit_to_defaults_beside_a_template_edit_narrows_to_the_template(
+    tree,
+):
+    """A comment in `defaults/main.yml` reaches no host, so it adds no tag and refuses nothing."""
+    tree.write(
+        f"{ROLE}/defaults/main.yml", DEFAULTS + "# a comment an operator reads\n"
+    )
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "mode = {{ demo_alpha_mode }} # v2\n")
+    old = tree.commit("base")
+    tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS + "# the comment, reworded\n")
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "mode = {{ demo_alpha_mode }} # v3\n")
+    assert narrow(tree, old, tree.commit("comment and template")) == frozenset(
+        {"alpha"}
+    )
+
+
+def test_a_comment_edit_to_defaults_alone_is_flagged(tree):
+    """An empty `--tags` runs the whole playbook, so a range applying nothing still refuses."""
+    tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS + "# the comment, reworded\n")
+    with pytest.raises(narrow_setup.CannotNarrow, match="reaches no host"):
+        narrow(tree, *_refs(tree))

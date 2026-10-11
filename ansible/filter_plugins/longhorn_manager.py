@@ -5,7 +5,7 @@ longhorn-manager pod; the `longhorn-backend` ClusterIP load-balances across node
 whenever it picks the other one. Three callers resolve the local pod: `k8s/longhorn-api`'s
 `resolve.yml` (attach, revert, detach), the trim cron (`setup/k3s/templates/
 longhorn-trim-volumes.sh.j2`) and the snapshot reaper (`scripts/backup/
-longhorn_reap_orphan_snapshots.py`). The rule is written once here (#3736). The reaper and
+longhorn_reap.py snapshots`). The rule is written once here (#3736). The reaper and
 `resolve.yml` call this function; the trim cron runs on the host with no repo checkout, so it
 keeps a jq spelling of the same rule, and a parity test runs both over the same pods.
 

@@ -11,7 +11,8 @@ the YAML parses, and `RoleIndex`, which walks the role's own name and variable e
 The two modules are one derivation, split by the kind of work. `narrow_setup` owns the rules
 `role_tags` states in its docstring, and everything here is the reading those rules do (#2371).
 The split holds because this half imports nothing from `narrow_setup` and reads none of its
-private names.
+private names. The walks over one parsed task list (its imports, includes, facts and tags) are
+in `task_walk` beside this, since they read nothing but the YAML handed to them.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_edges.py
 """
@@ -30,6 +31,14 @@ from lib import yaml_fast
 from lib.git import git
 from lib.narrow_git import CannotNarrow, mapping_at, show_at
 from deploy_tools.narrow_lib.setup_playbook import declared_tags, playbook_roles
+from deploy_tools.narrow_lib.task_walk import (
+    _SPECIAL_TAGS,
+    _dynamic_includes,
+    _set_facts,
+    _static_imports,
+    _task_tags,
+    file_tags,
+)
 
 SETUP_TREE = "ansible/roles/setup"
 
@@ -38,82 +47,6 @@ SETUP_TREE = "ansible/roles/setup"
 # task that renders an outer one, so the scan follows that edge instead of stopping at the
 # first file.
 _TEMPLATE_EDGE = re.compile(r"{%-?\s*(?:import|include|from)\s")
-
-
-# Ansible's two tags that do not select a subset. `--tags never` selects exactly the tasks
-# opted out of every ordinary run, and `--tags always` selects the tasks that run whatever is
-# asked for — so neither describes "the work this change needs". `docker_install`'s
-# `tasks/install.yml` carries both `never` and `docker-engine-upgrade`, and printing that pair
-# would tell an operator to run the engine upgrade a config edit never asked for (#2350).
-#
-# The two refuse differently. `never` beside a subject tag refuses the whole file. `always` is
-# DROPPED from the answer instead (#3134), because an `always` task runs under every `--tags`
-# value: the file's subject tags select its other tasks, and the `always` ones come along.
-# `initial_setup/tasks/crons.yml` opens with two `always` tasks (its `DECIDED:` comment says
-# why), and refusing on them made the role's most-edited task file narrow nothing. A file
-# whose ONLY tag is `always` still refuses, since no tag is left to name its work.
-_SPECIAL_TAGS = frozenset({"never", "always"})
-
-
-# The spellings of a STATIC task import. `include_tasks` is deliberately absent: a dynamic
-# include's tasks run only when the include task itself is selected, and the tags on the
-# included file's own tasks do not select the include — so a hit in such a file names a tag
-# that may run nothing.
-_STATIC_IMPORTS = (
-    "import_tasks",
-    "ansible.builtin.import_tasks",
-    "ansible.legacy.import_tasks",
-)
-
-
-def _static_imports(tasks) -> list[str]:
-    """The literal file names a task list imports statically, blocks walked through.
-
-    A templated name (`{{ role_path }}/...`) is left out: which file it names is only known at
-    run time, so a file reached only that way is not provably reachable.
-    """
-    out: list[str] = []
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            continue
-        for key in ("block", "rescue", "always"):
-            if isinstance(task.get(key), list):
-                out += _static_imports(task[key])
-        for key in _STATIC_IMPORTS:
-            value = task.get(key)
-            if isinstance(value, dict):
-                value = value.get("file")
-            if isinstance(value, str) and "{{" not in value:
-                out.append(value)
-    return out
-
-
-# The spellings of `set_fact`. Its mapping keys become host variables that survive the task
-# file that set them, so a task file elsewhere in the role can read one under a different tag.
-_SET_FACTS = (
-    "set_fact",
-    "ansible.builtin.set_fact",
-    "ansible.legacy.set_fact",
-)
-
-# `set_fact`'s own option, not a fact it sets.
-_SET_FACT_OPTIONS = frozenset({"cacheable"})
-
-
-def _set_facts(tasks) -> set[str]:
-    """Every variable name a task list derives with `set_fact`, blocks walked through."""
-    out: set[str] = set()
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            continue
-        for key in ("block", "rescue", "always"):
-            if isinstance(task.get(key), list):
-                out |= _set_facts(task[key])
-        for key in _SET_FACTS:
-            value = task.get(key)
-            if isinstance(value, dict):
-                out |= {str(k) for k in value} - _SET_FACT_OPTIONS
-    return out
 
 
 def foreign_tags(role: str, playbook_text: str | None, ref: str, repo: str) -> set[str]:
@@ -164,50 +97,6 @@ def foreign_tags(role: str, playbook_text: str | None, ref: str, repo: str) -> s
                 raise CannotNarrow(f"{path} is not a list of tasks")
             out |= declared_tags(doc)
     return out
-
-
-def _task_tags(tasks, inherited: frozenset[str]) -> list[frozenset[str]]:
-    """The effective tag set of every task in a task list, blocks walked through.
-
-    A `block`/`rescue`/`always` mapping is not a task: its own `tags:` apply to the tasks
-    inside it, which is why the walk carries `inherited` down rather than counting the block
-    itself. An empty frozenset in the result means a task no tag of this file selects.
-    """
-    out: list[frozenset[str]] = []
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            raise CannotNarrow("a task list holds something that is not a mapping")
-        own = task.get("tags") or []
-        own = [own] if isinstance(own, str) else own
-        effective = inherited | frozenset(str(t) for t in own)
-        nested = [
-            task.get(key) for key in ("block", "rescue", "always") if task.get(key)
-        ]
-        if nested:
-            for inner in nested:
-                out += _task_tags(inner, effective)
-        else:
-            out.append(effective)
-    return out
-
-
-def file_tags(text: str) -> frozenset[str] | None:
-    """The tags that select every task in one task file, or None when one is untagged.
-
-    None is a refusal, and it is the common case for a file nobody tagged: `main.yml`'s
-    imports, `unit-logging.yml`, `longhorn-weekly-shard.yml`. Those inherit their tags from
-    the import site, so a hit in one says nothing about which tag applies it.
-    """
-    try:
-        doc = yaml_fast.safe_load(text)
-    except yaml.YAMLError as exc:
-        raise CannotNarrow(f"a task file does not parse: {exc}") from exc
-    if not isinstance(doc, list):
-        raise CannotNarrow("a task file is not a list of tasks")
-    per_task = _task_tags(doc, frozenset())
-    if not per_task or any(not tags for tags in per_task):
-        return None
-    return frozenset().union(*per_task)
 
 
 def _scalars(value, seen: set[int]):
@@ -310,6 +199,9 @@ class RoleIndex:
             only ones the role's entry in its playbook runs. A tag read off any other file (one
             a separate playbook imports, one only a play-level `include_role` with
             `tasks_from:` reaches) can select nothing under the printed command.
+        included: task file -> the tags selecting it, for a file a reachable one pulls in
+            with `include_tasks`, or the reason no tag provably does (`_dynamic_includes`).
+            Several include sites union, each refusal refusing the file.
     """
 
     def __init__(self, role: str, ref: str, repo: str) -> None:
@@ -342,6 +234,7 @@ class RoleIndex:
         if not self.tags:
             raise CannotNarrow(f"{self.prefix}tasks/ holds no task file at {ref}")
         self.reachable = self._reachable_from(self._main_task_file(ref))
+        self.included = self._included_from(self.reachable)
 
     def _facts_set_by(self, rel: str) -> frozenset[str]:
         """The facts one task file derives, read off its parsed tasks."""
@@ -383,6 +276,21 @@ class RoleIndex:
                 todo.append(posixpath.normpath(f"tasks/{name}"))
         return frozenset(seen)
 
+    def _included_from(self, files: frozenset[str]) -> dict[str, frozenset[str] | str]:
+        """Every task file `files` include dynamically, and the tags selecting it."""
+        out: dict[str, frozenset[str] | str] = {}
+        for rel in sorted(files):
+            doc = yaml_fast.safe_load(self.task_text[rel])
+            for name, answer in _dynamic_includes(doc if isinstance(doc, list) else []):
+                target = posixpath.normpath(f"tasks/{name}")
+                if target in files:
+                    continue
+                before = out.get(target, frozenset())
+                if isinstance(before, str):
+                    continue
+                out[target] = answer if isinstance(answer, str) else before | answer
+        return out
+
     def tags_of(self, rel: str, seen: frozenset[str] = frozenset()) -> frozenset[str]:
         """The tags selecting one task file; refuses one untagged, unknown or unreached.
 
@@ -402,12 +310,28 @@ class RoleIndex:
         """
         if rel not in self.tags:
             raise CannotNarrow(f"{rel} is not a task file of this role")
-        if rel not in self.reachable:
+        if rel in self.reachable:
+            tags = self.tags[rel]
+        elif rel in self.included:
+            tags = self.included[rel]
+            if isinstance(tags, str):
+                raise CannotNarrow(tags)
+            # Per task, not `self.tags[rel]`: that is None for a file with any untagged task,
+            # which is the shape an include exists for. `apply` adds the include's tag to a
+            # `never` task in it, so that tag would run the opt-in work.
+            doc = yaml_fast.safe_load(self.task_text[rel])
+            per_task = _task_tags(doc if isinstance(doc, list) else [], frozenset())
+            if any("never" in t for t in per_task):
+                raise CannotNarrow(
+                    f"{rel} carries the special tag never, which selects opt-in tasks "
+                    "rather than this change's work"
+                )
+        else:
             raise CannotNarrow(
-                f"{rel} is not statically imported from the role's tasks/main file, so the "
-                "role's entry in its playbook never runs it under its own tags"
+                f"{rel} is neither statically imported from the role's tasks/main file nor "
+                "included with tags that select it, so the role's entry in its playbook "
+                "never runs it under its own tags"
             )
-        tags = self.tags[rel]
         if tags is None:
             raise CannotNarrow(
                 f"{rel} carries no tags of its own, so its tasks inherit them from wherever "

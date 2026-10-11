@@ -12,7 +12,7 @@ comments, in the scripts' own docstrings and in the role docs, so "the name appe
 `roles/setup/`" would fail on prose. What is forbidden is a SCHEDULE: a `cron:` task's fields, a
 `kuma_check_timer.yml` import's vars, and a systemd `.service.j2`/`.timer.j2` template.
 
-Run: uv run pytest ansible/tests/longhorn/test_longhorn_reap_orphan_never_scheduled.py
+Run: uv run pytest ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py
 """
 
 from pathlib import Path

@@ -8,7 +8,10 @@ one of the skipped extensions was worse still — `reachable` came back empty an
 the role refused.
 
 No setup role carries such a file, so the demo tree is the only subject these have; the
-`_LOADED_EXTENSIONS` census at the end is what ties the predicate back to Ansible's own list.
+`_LOADED_EXTENSIONS` census is what ties the predicate back to Ansible's own list.
+
+The last group covers a task file reached only through `include_tasks`, which narrows when the
+include applies a tag it also carries (#4384).
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_task_file_kinds.py
 """
@@ -20,6 +23,7 @@ import pytest
 
 import narrow_setup
 from deploy_tools.narrow_lib import setup_index as narrow_setup_index
+from lib.repo_paths import REPO
 
 from _setup_role_fixtures import MAIN, ROLE, Tree, build, narrow
 
@@ -170,3 +174,78 @@ def test_the_loaded_extensions_match_ansibles_own_default():
 )
 def test_the_predicate_accepts_what_ansible_loads(rel, loaded):
     assert narrow_setup_index._is_role_yaml(rel) is loaded
+
+
+# ── a file reached only through `include_tasks` (#4384) ─────────────────────────────────
+
+# Untagged, like `k3s/tasks/longhorn-weekly-shard.yml`: the include site supplies its tags.
+SHARD = """\
+---
+- name: Reconcile shard {{ shard }}
+  ansible.builtin.debug:
+    msg: "{{ shard }}"
+"""
+
+
+def _touch_the_included_file(
+    tree: Tree, include: str, shard: str = SHARD
+) -> frozenset[str]:
+    """Commit `include` as a looped include from `main.yml`, edit `shard.yml`, narrow it."""
+    tree.write(f"{ROLE}/tasks/shard.yml", shard)
+    tree.write(
+        f"{ROLE}/tasks/main.yml",
+        MAIN
+        + "- name: Reconcile each shard\n"
+        + include
+        + "  loop: [0, 1]\n  loop_control:\n    loop_var: shard\n",
+    )
+    old = tree.commit("include the shard file")
+    tree.write(f"{ROLE}/tasks/shard.yml", shard + "# touched\n")
+    return narrow(tree, old, tree.commit("touch the shard file"))
+
+
+def test_an_include_applying_its_own_tag_narrows_to_that_tag(tree):
+    """The k3s shape: the include carries `alpha` and applies `alpha` to what it pulls in."""
+    include = (
+        "  tags: [alpha]\n  ansible.builtin.include_tasks:\n    file: shard.yml\n"
+        "    apply:\n      tags: [alpha]\n"
+    )
+    assert _touch_the_included_file(tree, include) == frozenset({"alpha"})
+
+
+def test_an_include_applying_a_tag_it_does_not_carry_is_flagged(tree):
+    """`--tags beta` skips the include and `--tags alpha` leaves its tasks untagged."""
+    include = (
+        "  tags: [alpha]\n  ansible.builtin.include_tasks:\n    file: shard.yml\n"
+        "    apply:\n      tags: [beta]\n"
+    )
+    with pytest.raises(narrow_setup.CannotNarrow, match="do not repeat"):
+        _touch_the_included_file(tree, include)
+
+
+def test_an_include_under_never_is_flagged(tree):
+    """`docker_install`'s engine upgrade: a `never` include is opt-in work, not this change's."""
+    include = (
+        "  tags: [never, alpha]\n  ansible.builtin.include_tasks:\n    file: shard.yml\n"
+        "    apply:\n      tags: [alpha]\n"
+    )
+    with pytest.raises(narrow_setup.CannotNarrow, match="special tag"):
+        _touch_the_included_file(tree, include)
+
+
+def test_the_real_k3s_weekly_shard_file_narrows_to_longhorn():
+    """Named member: the file whose refusal turned every `longhorn_groups.py` edit into `--tags k3s`."""
+    index = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO))
+    assert index.tags_of("tasks/longhorn-weekly-shard.yml") == frozenset({"longhorn"})
+    assert "longhorn" in index.key_readers("weekly_backup_group")
+
+
+def test_an_included_file_holding_a_never_task_is_flagged(tree):
+    """`apply` adds `alpha` to the `never` task, so `--tags alpha` would run the opt-in work."""
+    include = (
+        "  tags: [alpha]\n  ansible.builtin.include_tasks:\n    file: shard.yml\n"
+        "    apply:\n      tags: [alpha]\n"
+    )
+    opt_in = "- name: Opt-in work\n  ansible.builtin.debug: {}\n  tags: [never]\n"
+    with pytest.raises(narrow_setup.CannotNarrow, match="special tag never"):
+        _touch_the_included_file(tree, include, SHARD + opt_in)

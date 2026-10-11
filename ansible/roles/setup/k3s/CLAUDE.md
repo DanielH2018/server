@@ -71,7 +71,7 @@ authority of those four actuators is written here so a later edit cannot quietly
   default; scheduling either is out of contract. They are the `backups` and `snapshots`
   subcommands of `scripts/backup/longhorn_reap.py` and run from the repo checkout, so this role
   installs nothing of theirs. ENFORCED:
-  `ansible/tests/longhorn/test_longhorn_reap_orphan_never_scheduled.py::test_no_setup_role_schedules_a_reaper`.
+  `ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py::test_no_setup_role_schedules_a_reaper`.
 - **Mode / arming:** `k3s_manage_health_crons` withholds the whole set,
   `k3s_manage_backup_targets` the R2/B2 targets and the RecurringJobs, and
   `k3s_etcd_restore_drill_armed` the weekly etcd drill, which runs `--list-only` here. Both

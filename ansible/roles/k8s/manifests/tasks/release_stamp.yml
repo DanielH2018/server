@@ -5,7 +5,7 @@
 # live for sonarr". The rendered manifests persist at /etc/rancher/k3s/manifests/<service>/, but
 # they are overwritten in place on every deploy and carry no identity, so the tree is a mutable
 # working copy rather than a release. `deploy.sh` renders from whatever git tree it runs in
-# (scripts/deploy_tools/deploy_staleness.py states the problem in full), which makes the
+# (scripts/deploy_tools/deploy_lib/staleness.py states the problem in full), which makes the
 # question genuinely open rather than merely unrecorded: a worktree far behind master reverts
 # a service, and nothing on the node says which tree the live manifests came from.
 #

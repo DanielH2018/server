@@ -338,7 +338,7 @@ def test_a_task_file_main_yml_never_imports_is_flagged(tree):
     `k3s-bringup.yml --tags storage_smoke` therefore selects only `always` tasks and exits 0.
     """
     tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA)
-    with pytest.raises(narrow_setup.CannotNarrow, match="not statically imported"):
+    with pytest.raises(narrow_setup.CannotNarrow, match="neither statically imported"):
         narrow(tree, *_refs(tree))
 
 
@@ -351,7 +351,7 @@ def test_a_task_file_reached_only_by_include_tasks_is_flagged(tree):
     tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA)
     old = tree.commit("include gamma")
     tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA + "# touched\n")
-    with pytest.raises(narrow_setup.CannotNarrow, match="not statically imported"):
+    with pytest.raises(narrow_setup.CannotNarrow, match=r"without apply\.tags"):
         narrow(tree, old, tree.commit("touch gamma"))
 
 
