@@ -373,7 +373,9 @@ the tags of the tasks that read it:
 
 A path that reaches no host is SKIPPED, not refused: a `.md` outside `files/` and `templates/`
 (one inside them can be copied or rendered onto a host, so it narrows), and a role-local `tests/`
-directory. Refusing on those would leave the narrowing almost never firing, because most ranges
+directory. A `defaults/` or `vars/` edit that moves no parsed key's value, which is every
+comment-only edit, is skipped the same way (#4384): Ansible reads the file only through its values.
+Refusing on those would leave the narrowing almost never firing, because most ranges
 touching `setup/k3s` carry the role's own `CLAUDE.md`. A range of nothing but such paths refuses
 instead, since an empty `--tags` value runs the whole playbook.
 
@@ -382,14 +384,16 @@ instead, since an empty `--tags` value runs the whole playbook.
 `--tags` value matching nothing makes Ansible exit 0 having applied nothing. The refusals that
 fire in practice:
 
-- a task file with no `tags:` of its own (`main.yml`, `unit-logging.yml`,
-  `longhorn-weekly-shard.yml`), whose tasks inherit from the import site;
-- a `defaults/` change that moved no key's value, which is every comment-only edit;
+- a task file with no `tags:` of its own (`main.yml`, `unit-logging.yml`), whose tasks inherit
+  from the import site;
 - a key nothing in the role reads, a change under `handlers/` or `meta/`, or a `defaults/` file
   either ref does not carry;
 - a derived tag the remediation's playbook cannot reach. The role must sit in that playbook's
-  `roles:`, and the task file must be statically imported (`import_tasks`, not `include_tasks`)
-  from `tasks/main.yml`. `tasks/storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, so
+  `roles:`, and the task file must be statically imported from `tasks/main.yml`, or included
+  from a file that is with an `apply.tags` value the `include_tasks` task itself carries. Such
+  an include narrows to the shared tags: `longhorn-weekly-shard.yml`, included in a loop from
+  `longhorn.yml`, narrows to `longhorn` (#4384). An include without `apply.tags`, with disjoint
+  tags, or with `never` on the include or on a task inside the file still refuses. `tasks/storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, so
   `k3s-bringup.yml --tags storage_smoke` selects only `always` tasks;
 - a template cycle that reaches no task file, or a template that is not UTF-8 text.
 
