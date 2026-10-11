@@ -5,6 +5,7 @@ holding each file's content (#4425). `prune_worktrees.py --prune` removes those 
 keeps the rest, naming each file git never stored. The CLI there is the only caller.
 """
 
+import re
 import shutil
 import stat
 import sys
@@ -49,6 +50,20 @@ def _git_batch(repo: str, args: list[str], lines: list[str]) -> list[str] | None
     return out if result.returncode == 0 and len(out) == len(lines) else None
 
 
+# A worktree's `.git` file holds only this line. Its blob is never committed, so no ref reaches
+# it, and it names an administrative directory git has already pruned.
+GITDIR_POINTER = re.compile(rb"gitdir: [^\n]+\n?")
+
+
+def _is_gitdir_pointer(file: Path) -> bool:
+    """Whether `file` is a worktree's `.git` file holding nothing but its gitdir line."""
+    if file.name != ".git":
+        return False
+    with file.open("rb") as handle:
+        head = handle.read(4097)
+    return len(head) <= 4096 and GITDIR_POINTER.fullmatch(head) is not None
+
+
 def unstored_files(repo: str, path: str) -> list[str] | None:
     """Each regular file under `path` whose content git's object store lacks, relative to it.
 
@@ -58,7 +73,7 @@ def unstored_files(repo: str, path: str) -> list[str] | None:
 
     `git hash-object --no-filters --stdin-paths` hashes the content without `-w`, so nothing
     is written to the store. Symlinks and other non-regular entries are skipped, because
-    removing one loses no file content.
+    removing one loses no file content. So is the orphan's own `.git` gitdir pointer (#4511).
 
     # DECIDED: "stored" means reachable from a ref (`git rev-list --objects --all`), not
     # present in the store, the check #4425 proposed. A blob staged in a worktree and never
@@ -75,7 +90,9 @@ def unstored_files(repo: str, path: str) -> list[str] | None:
     for top, _, names in Path(path).walk(on_error=failed.append):
         for name in names:
             try:
-                if stat.S_ISREG((top / name).lstat().st_mode):
+                if stat.S_ISREG((top / name).lstat().st_mode) and not (
+                    top == Path(path) and _is_gitdir_pointer(top / name)
+                ):
                     files.append(top / name)
             except OSError as exc:
                 failed.append(exc)

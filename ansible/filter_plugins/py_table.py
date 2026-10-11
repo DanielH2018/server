@@ -15,11 +15,13 @@ data. A positional argument raises, as does a missing table or an element that i
 either would otherwise drop a row, and a dropped row is a check pushing nowhere or a Kuma tile
 AutoKuma deletes.
 
-No Ansible import, so the tests call the same function the playbook runs. Ansible wraps a
-filter's `ValueError` in its own error, which fails the render before anything applies.
+No Ansible import at load time, so the tests call the same function the playbook runs.
+`FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
+`AnsibleFilterError("py_table: ...")` and fails the render before anything applies (#4505).
 """
 
 import ast
+import functools
 
 
 def _literal(node: ast.expr) -> tuple[bool, object]:
@@ -56,13 +58,13 @@ def py_table(source: str, name: str) -> list[dict]:
         ):
             table = node.value
     if not isinstance(table, ast.Tuple | ast.List):
-        raise ValueError(f"py_table: no tuple or list is assigned to {name}")
+        raise ValueError(f"no tuple or list is assigned to {name}")
     rows = []
     for i, call in enumerate(table.elts):
         if not isinstance(call, ast.Call):
-            raise ValueError(f"py_table: {name}[{i}] is not a call")
+            raise ValueError(f"{name}[{i}] is not a call")
         if call.args:
-            raise ValueError(f"py_table: {name}[{i}] passes a positional argument")
+            raise ValueError(f"{name}[{i}] passes a positional argument")
         row = {}
         for kw in call.keywords:
             ok, value = _literal(kw.value)
@@ -72,6 +74,27 @@ def py_table(source: str, name: str) -> list[dict]:
     return rows
 
 
+def _as_filter(func):
+    """`func` as Ansible calls it: a ValueError re-raised as `AnsibleFilterError`.
+
+    The message opens with `<func's name>: `, which is the name the filter registers under.
+    The prefix names the filter that refused, since a render failure otherwise reaches the
+    operator as a bare message under the task's template path (#4480). The import is deferred
+    so the module still loads where Ansible is not installed.
+    """
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except ValueError as exc:
+            from ansible.errors import AnsibleFilterError
+
+            raise AnsibleFilterError(f"{func.__name__}: {exc}") from exc
+
+    return wrapped
+
+
 class FilterModule:
     def filters(self):
-        return {"py_table": py_table}
+        return {"py_table": _as_filter(py_table)}

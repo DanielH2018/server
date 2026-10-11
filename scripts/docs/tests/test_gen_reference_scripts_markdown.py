@@ -2,7 +2,7 @@
 
 Split from test_gen_reference_scripts.py, which holds the row-building and classification
 tests, when that file reached its line cap. Fixture-driven: a synthetic scripts/ directory
-under tmp_path.
+under tmp_path, except the `live_page` tests, which render the real tree.
 
 Run: uv run pytest scripts/docs/tests/test_gen_reference_scripts_markdown.py
 """
@@ -10,12 +10,34 @@ Run: uv run pytest scripts/docs/tests/test_gen_reference_scripts_markdown.py
 import re
 import textwrap
 
+import pytest
+
 from docs.reference import scripts as g
 
 
 def _write(path, body):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(textwrap.dedent(body))
+
+
+@pytest.fixture(scope="module")
+def live_page():
+    """The page as the docs-refresh cron would write it from the tree at HEAD."""
+    return g.render_markdown(g.build_rows())
+
+
+@pytest.mark.parametrize(
+    ("path", "test"),
+    [
+        ("scripts/deploy_tools/land_lib/ci.py", "test_land_ci.py"),
+        ("scripts/diagnostics/probe_lib/health.py", "test_probe_health.py"),
+    ],
+)
+def test_the_live_page_names_a_lib_modules_family_named_test(live_page, path, test):
+    """A `*_lib` module's test is named after its family, not its stem alone (#4515)."""
+    rows = [line for line in live_page.splitlines() if line.startswith(f"| `{path}` |")]
+    assert rows, f"{path} has no row on the page; was it moved or renamed?"
+    assert f"| `{test}` |" in rows[0]
 
 
 def test_markdown_opens_with_the_provenance_banner(tmp_path):

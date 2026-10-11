@@ -144,14 +144,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     from authelia_access import authelia_service_rules
     from entry_fields import entry_names, lan_hostnames, published_ports
     import homepage_tiles
-    from kuma_monitors import kuma_ingress_monitors
-    from longhorn_groups import (
-        backup_group_label,
-        longhorn_backup_name,
-        weekly_backup_group,
-        weekly_backup_shard,
-    )
-    from py_table import py_table
+    import kuma_monitors
+    import longhorn_groups
+    import py_table
     import scrape_jobs
     import service_tier
     from toposort import filter_by_platform
@@ -183,8 +178,10 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["scrape_jobs"] = scrape_filters["scrape_jobs"]
     env.filters["metrics_port"] = scrape_filters["metrics_port"]
     env.filters["entry_port"] = scrape_filters["entry_port"]
-    env.filters["py_table"] = py_table
-    env.filters["kuma_ingress_monitors"] = kuma_ingress_monitors
+    env.filters["py_table"] = py_table.FilterModule().filters()["py_table"]
+    env.filters["kuma_ingress_monitors"] = kuma_monitors.FilterModule().filters()[
+        "kuma_ingress_monitors"
+    ]
     homepage_filters = homepage_tiles.FilterModule().filters()
     env.filters["netpol_callers"] = homepage_filters["netpol_callers"]
     env.filters["netpol_caller_fences"] = homepage_filters["netpol_caller_fences"]
@@ -193,10 +190,14 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["lan_hostnames"] = lan_hostnames
     env.filters["homepage_widget_url"] = homepage_filters["homepage_widget_url"]
     env.filters["homepage_href"] = homepage_filters["homepage_href"]
-    env.filters["backup_group_label"] = backup_group_label
-    env.filters["weekly_backup_group"] = weekly_backup_group
-    env.filters["weekly_backup_shard"] = weekly_backup_shard
-    env.filters["longhorn_backup_name"] = longhorn_backup_name
+    longhorn_filters = longhorn_groups.FilterModule().filters()
+    for name in (
+        "backup_group_label",
+        "weekly_backup_group",
+        "weekly_backup_shard",
+        "longhorn_backup_name",
+    ):
+        env.filters[name] = longhorn_filters[name]
     env.tests["search"] = search
     return env
 
