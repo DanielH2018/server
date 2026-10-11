@@ -87,6 +87,18 @@ def test_a_module_level_import_of_a_missing_module_is_refused(tmp_path):
     assert gate.reason.startswith("pytest exited 2: a collection")
 
 
+def test_a_red_commit_adding_an_ignore_the_fix_leaves_unused_is_refused(tmp_path):
+    """#4403: once the fix existed, ty failed the fix's commit on the red file's ignores."""
+    ignored = NEW_TEST.replace(
+        "from mod import double",
+        "from mod import triple  # ty: ignore[unresolved-import]",
+    )
+    repo, base, red = _repo(tmp_path, **{"tests/test_mod.py": OLD_TEST + ignored})
+    gate = red_gate(run, repo, base, red)
+    assert gate.reason.startswith("the red commits add a type-checker suppression")
+    assert "tests/test_mod.py line 9: `# ty: ignore[unresolved-import]`" in gate.reason
+
+
 def test_a_new_test_that_already_passes_is_refused(tmp_path):
     passes = "def test_vacuous():\n    assert True\n"
     repo, base, red = _repo(tmp_path, **{"tests/test_new.py": passes})

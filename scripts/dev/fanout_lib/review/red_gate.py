@@ -11,6 +11,9 @@ THE RED GATE reads the test author's commit range `base..red`. It refuses the ra
 - it changes a file that is not a test: code, a `conftest.py`, a pytest config file at any
   depth or the `leakguard` plugin could make the tests fail for a reason the fix never
   touches. An untracked or ignored config file, which no diff shows, is refused too;
+- it adds a type-checker suppression that a fix leaves unused, such as a `# ty: ignore` on
+  the import of a module the fix creates. The `ty` hook then fails the fix's commit on a file
+  the fix may not edit (#4439); `red_tests.stale_suppressions` says which comments count;
 - it adds no test node, collected at `red` but not at `base`;
 - running only the new nodes does not exit 1 with every node reported `FAILED`. Exit 2 is a
   collection error, such as a module-level ImportError of a module the fix will create, and a
@@ -63,7 +66,7 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib.brief import fence_for
-from fanout_lib.review.red_tests import append_only, red_by_absence
+from fanout_lib.review.red_tests import append_only, red_by_absence, stale_suppressions
 
 from fanout_lib.review.hardened_runs import (
     ORIGIN_MASTER,
@@ -266,6 +269,21 @@ def _red_file_change(
     return f"{path} {problem}" if problem else ""
 
 
+def _stale_suppressions(
+    run: Runner, worktree: Path, base: str, red: str, paths: list[str]
+) -> list[str]:
+    """Each suppression `base..red` adds to `paths` that a fix would leave unused (#4439)."""
+    found = []
+    for path in paths:
+        before, after = (
+            worktree_git(run, worktree, "cat-file", "blob", f"{rev}:{path}")
+            for rev in (base, red)
+        )
+        old = "" if before.returncode else before.stdout
+        found += [f"{path} {s}" for s in stale_suppressions(old, after.stdout)]
+    return found
+
+
 def stray_config(run: Runner, worktree: Path) -> list[str]:
     """Untracked files pytest would read as configuration, ignored ones included.
 
@@ -311,6 +329,14 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str, runs: int = 1) ->
             f"the red commits change files that are not tests: {', '.join(others)}"
         )
     test_py = [f for f in files if f.endswith(".py") and (worktree / f).is_file()]
+    stale = _stale_suppressions(run, worktree, base, red, test_py)
+    if stale:
+        return Gate(
+            "the red commits add a type-checker suppression that the fix would leave "
+            f"unused, in a file the fix may not edit: {', '.join(stale)}. Reach a module "
+            "or name the fix adds through `importlib.import_module` instead",
+            files,
+        )
     existed = worktree_git(
         run, worktree, "ls-tree", "--name-only", base, "--", *test_py
     )
@@ -412,7 +438,15 @@ tracked files with `git ls-files` and assert on what they contain.
 A gate then runs your new tests on the unchanged code and refuses them unless every one
 reports FAILED. A test that errors, skips or xfails proves nothing, and neither does a
 collection error. Where the fix will add a module or a function that does not exist yet,
-import it inside the test body, never at module level.
+reach it inside the test body, never at module level, and with no `# ty: ignore` or
+`# type: ignore` comment. The `ty` hook that runs at `git commit` refuses an import it cannot
+resolve. A suppression comment passes it today, but once the fix adds the name the same hook
+fails on the comment as unused, and the fix may not edit your file, so the gate refuses a
+commit that adds one. Reach a new module as `importlib.import_module("<module>")` and use its
+attributes: ty checks nothing on a module that does not exist, and checks it fully once it
+does. Reach a new name in a module that exists already as
+`getattr(importlib.import_module("<module>"), name)`, with `name` held in a variable: ruff
+rewrites a `getattr` with a literal name into the attribute access ty refuses.
 
 A test that asserts on a stub, on source text or on a mock's calls says nothing about the
 behaviour. {anti or "Load the `test-scenario-hygiene` skill and read its Anti-patterns first."}
