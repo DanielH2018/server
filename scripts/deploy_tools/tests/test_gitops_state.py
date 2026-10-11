@@ -128,11 +128,11 @@ def test_a_narrowed_clear_on_a_row_a_later_refusal_collapsed_keeps_the_line(
     (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
     assert (
         run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "kubeconfig")
-        == 0
+        == 1
     )
     assert pending(tmp_path) == {"k3s": frozenset()}
-    out = capsys.readouterr().out
-    assert "kept k3s" in out and "clear-owed manual_plane k3s`" in out
+    err = capsys.readouterr().err
+    assert "kept k3s" in err and "clear-owed manual_plane k3s`" in err
     ((_role, dropped, remaining),) = journal
     assert dropped is None and remaining == frozenset({"k3s"})
 
@@ -142,7 +142,7 @@ def test_a_narrowed_clear_on_a_line_with_no_row_keeps_it(tmp_path, run):
     (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
     assert (
         run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "kubeconfig")
-        == 0
+        == 1
     )
     assert pending(tmp_path) == {"k3s": frozenset()}
 
@@ -407,9 +407,9 @@ def test_the_kept_message_warns_about_the_whole_role_apply_it_prescribes(
     (tmp_path / "owed.jsonl").write_text(f"{K3S}\n")
     assert (
         run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "kubeconfig")
-        == 0
+        == 1
     )
-    assert "rotate-keys" in capsys.readouterr().out
+    assert "rotate-keys" in capsys.readouterr().err
 
 
 def test_the_kept_message_for_a_role_with_no_gated_tasks_carries_no_warning(
@@ -419,7 +419,7 @@ def test_the_kept_message_for_a_role_with_no_gated_tasks_carries_no_warning(
     (tmp_path / "owed.jsonl").write_text(f"{COMMON}\n")
     assert (
         run(tmp_path, "clear-owed", "manual_plane", "common", "--applied", "something")
-        == 0
+        == 1
     )
-    out = capsys.readouterr().out
-    assert "kept common" in out and "WARNING" not in out
+    err = capsys.readouterr().err
+    assert "kept common" in err and "WARNING" not in err

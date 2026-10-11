@@ -318,7 +318,7 @@ uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s -
 The clear then keeps the line and prints what is still pending. Every surface that prints a
 narrowed apply prints the matching `--applied` beside it, so following the printed pair is enough.
 A clear whose `--applied` covers the whole row takes the line. A clear with `--applied` against an
-EMPTY or missing row keeps the line and says so: an empty row means the whole role is pending,
+EMPTY or missing row keeps the line, says so on stderr and exits 1: an empty row means the whole role is pending,
 because a later range's derivation refused after your command was printed. Apply the whole role,
 then clear without `--applied`. `common`'s row is always empty, so a remediation naming several
 roles prints one clear per role, and only the narrowed ones carry `--applied`.
@@ -1142,16 +1142,13 @@ units on a non-deployer host. One alerts and the other reconciles:
       `refs/heads/renovate/**`. Without that exclusion GitHub refuses Renovate's post-merge
       branch delete and its rebase force-push, and a merged branch's stale green automerges the
       next PR empty.
-    - The review ruleset (`gitops_deploy_review_ruleset_id`) must stay active on master and
-      require `gitops_deploy_review_ruleset_approvals` approving reviews. Stale approvals must be
-      dismissed on push, and the last push must be approved by someone other than its pusher.
     - The fence ruleset (`gitops_deploy_fence_ruleset_id`) must restrict creating, updating and
       deleting every branch except exactly `gitops_deploy_fence_ruleset_exclude`. Without it, the
       agent's account could push onto a branch an operator session opened, and `land.sh`'s admin
       merge would carry that commit to master.
     - Each bypass list must equal its declaration: none on the CI gate, the admin role and the
-      Renovate app on the review ruleset and the fence. The agent's GitHub account is in no list,
-      so its PRs reach master only through the lander.
+      Renovate app on the fence. The agent's GitHub account is in no list, so its PRs reach
+      master only through the lander.
 - **`github-interaction-limit.sh`** re-applies `gitops_deploy_interaction_limit` every day.
   GitHub grants an interaction limit for six months at most and lets it lapse silently, so
   re-applying it restores the declared state rather than overriding a decision. The limit keeps

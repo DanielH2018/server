@@ -1,5 +1,5 @@
 """publish_pr.py `unlanded`: the guard the three crons run before they commit, and the
-backstop merge of a PR that waits only on the review gate.
+backstop merge of a green PR whose landing died.
 """
 
 import subprocess
@@ -63,12 +63,12 @@ def _view(review: str, *conclusions: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_a_green_pr_waiting_only_on_review_is_merged_at_its_head():
+def test_a_green_pr_with_no_landing_is_merged_at_its_head():
     rec = Recorder(
         {
             "git ls-remote": cp(0, out=_HEAD),
             "gh pr list": cp(0, out=_OPEN_PR),
-            "gh pr view": _view("REVIEW_REQUIRED", "SUCCESS", "SKIPPED"),
+            "gh pr view": _view("", "SUCCESS", "SKIPPED"),
         }
     )
     out = _unlanded(rec)
@@ -93,17 +93,17 @@ def test_a_green_pr_waiting_only_on_review_is_merged_at_its_head():
 @pytest.mark.parametrize(
     "view",
     [
-        _view("REVIEW_REQUIRED", "SUCCESS", ""),
-        _view("REVIEW_REQUIRED", "SUCCESS", "FAILURE"),
-        _view("REVIEW_REQUIRED"),
-        _view("APPROVED", "SUCCESS"),
+        _view("", "SUCCESS", ""),
+        _view("", "SUCCESS", "FAILURE"),
+        _view(""),
+        _view("CHANGES_REQUESTED", "SUCCESS"),
         cp(1, err="HTTP 502"),
     ],
     ids=[
         "check-pending",
         "check-failed",
         "no-checks-yet",
-        "not-review-gated",
+        "changes-requested",
         "view-failed",
     ],
 )
@@ -129,7 +129,7 @@ def test_a_refused_backstop_merge_is_reported():
         {
             "git ls-remote": cp(0, out=_HEAD),
             "gh pr list": cp(0, out=_OPEN_PR),
-            "gh pr view": _view("REVIEW_REQUIRED", "SUCCESS"),
+            "gh pr view": _view("", "SUCCESS"),
             "gh api -X": cp(1, err="Head branch was modified"),
         }
     )

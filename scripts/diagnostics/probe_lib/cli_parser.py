@@ -508,7 +508,8 @@ def _build_parser():
             "every GitOps deployer marker and owed-ledger line with its clear command, "
             "read-only",
             "every marker was read",
-            "a marker is unreadable or the state directory is absent",
+            "never: the view reports the markers and judges none; an unreadable marker or "
+            "an absent state directory is 75",
         ),
     )
     gitops_state.add_argument(

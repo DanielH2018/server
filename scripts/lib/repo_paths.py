@@ -83,3 +83,15 @@ K3S_DEFAULTS = K3S_ROLE / "defaults" / "main.yml"
 # reapers, probe.py and the runbook gates, which run from the checkout, put this directory on
 # sys.path to import it as `longhorn_lib.longhorn_backups`.
 K3S_FILES = K3S_ROLE / "files"
+# The suite's shared guard modules (`_ratchet.py`, `_helpers.py`), for a script that reuses one.
+ANSIBLE_TESTS = ANSIBLE / "tests"
+
+# The bare module names a script outside the roles imports from each role directory, by the
+# directory constant. A bare name is not decidable from `sys.path` alone: `gitops_hold`,
+# `gitops_markers` and `gitops_ledger` ship in both GITOPS_DEPLOY_FILES and
+# MONITOR_BRIDGE_FILES with different content. `lib/stdlib_only.py`'s walk refuses an import
+# from a role directory, or of a basename two of them share, that this map does not list.
+ROLE_MODULES = {
+    GITOPS_DEPLOY_FILES: ["gitops_hold", "gitops_ledger", "gitops_markers"],
+    MONITOR_BRIDGE_FILES: ["longhorn_robustness"],
+}

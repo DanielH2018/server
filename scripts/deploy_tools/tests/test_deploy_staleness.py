@@ -249,13 +249,17 @@ def test_exit_four_says_nothing_extra_when_the_deployer_is_converged(
     assert "primary checkout" not in err
 
 
-def test_an_unresolvable_ref_does_not_refuse(repos):
+def test_an_unresolvable_ref_does_not_refuse(repos, capsys):
     """A tree with no origin/master (a fresh init, a detached CI checkout) must not be
-    blocked from deploying. The guard is a staleness check, not a git-topology check."""
+    blocked from deploying. The guard is a staleness check, not a git-topology check.
+
+    It still says the check was skipped, so the deploy that follows does not read as checked.
+    """
     _origin, clone = repos
     assert (
         main(["--repo", str(clone), "--no-fetch", "--ref", "origin/nonexistent"]) == 0
     )
+    assert "staleness check was skipped" in capsys.readouterr().err
 
 
 # -- --sha: the commit being deployed is not always HEAD --------------------------------

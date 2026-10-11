@@ -29,7 +29,9 @@ from pathlib import Path as _Path
 # `_ratchet_census` and `_ratchet` themselves. Both are pytest `pythonpath` entries, which a
 # direct invocation never reads.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2] / "ansible" / "tests"))
+from lib.repo_paths import ANSIBLE_TESTS
+
+_sys.path.insert(0, str(ANSIBLE_TESTS))
 
 
 from _helpers import REPO

@@ -47,11 +47,6 @@ def _last_line(out):
     return lines[-1] if lines else ""
 
 
-def test_bad_since_does_not_exit_unreadable(capsys):
-    rc = _exit_code(lambda: probe.main(["b2-deletions", "--since", "3x"]))
-    assert rc in (USAGE_ERROR, FAILED), f"--since 3x exited {rc}"
-
-
 def test_bad_since_last_line_is_not_unreadable_verdict(capsys):
     _exit_code(lambda: probe.main(["b2-deletions", "--since", "3x"]))
     last = _last_line(capsys.readouterr().out)

@@ -301,7 +301,14 @@ def main(argv: list[str] | None = None) -> int:
         behind, ahead = behind_ahead(args.repo, args.ref, base)
     except LookupError:
         # No such ref: a fresh init, a detached CI checkout, a fork with another remote.
-        # This is a staleness check, not a git-topology check — do not block the deploy.
+        # This is a staleness check, not a git-topology check — do not block the deploy, but
+        # say the check was skipped, so a deploy that went ahead unchecked does not read as
+        # one that passed it.
+        print(
+            f"deploy: {args.ref} or {base} does not resolve here; the staleness check was "
+            "skipped.",
+            file=sys.stderr,
+        )
         return 0
 
     declared = service_tags_or_none() if behind and tags else None

@@ -32,6 +32,12 @@ flag read as a real result. `ArgumentParser` below is argparse's with `error()` 
 `parser_class` to the parent's class. `scripts/lib/tests/test_exit_codes.py`'s census refuses a
 bare `argparse.ArgumentParser(` in an entry point.
 
+MESSAGES carry argparse's prefix. `warn` and `error` print `<prog>: warning: ...` and
+`<prog>: error: ...` on stderr, the shape `parser.error` already gives a bad argument, so one
+grep pattern finds every complaint a script makes and the line names the script it came from.
+A helper module in `lib/` uses them too: it has no name of its own worth printing, and the
+running script's name is the one an operator can act on (#4447).
+
 Typical usage example:
 
     from lib.cli_help import ArgumentParser, answer_help
@@ -42,6 +48,7 @@ Typical usage example:
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path as _Path
 from typing import NoReturn
@@ -95,3 +102,25 @@ def refuse_help_under_describe(
             f"{parser.prog}: error: --describe answers cc-wait in JSON, so it takes no "
             "--help; run without --describe\n",
         )
+
+
+def prog() -> str:
+    """The running script's name, derived as argparse derives its default `prog`.
+
+    Read at call time, so a test that sets `sys.argv` sees its own value.
+    """
+    return os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else "python"
+
+
+def warn(message: str) -> None:
+    """Print `<prog>: warning: <message>` on stderr."""
+    print(f"{prog()}: warning: {message}", file=sys.stderr)
+
+
+def error(message: str) -> None:
+    """Print `<prog>: error: <message>` on stderr, and return.
+
+    Unlike `parser.error`, this does not exit: the caller returns its own exit code, which is
+    how a script keeps distinct codes for distinct failures.
+    """
+    print(f"{prog()}: error: {message}", file=sys.stderr)
