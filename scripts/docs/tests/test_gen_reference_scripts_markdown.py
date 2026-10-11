@@ -2,7 +2,7 @@
 
 Split from test_gen_reference_scripts.py, which holds the row-building and classification
 tests, when that file reached its line cap. Fixture-driven: a synthetic scripts/ directory
-under tmp_path.
+under tmp_path, except the `live_page` tests, which render the real tree.
 
 Run: uv run pytest scripts/docs/tests/test_gen_reference_scripts_markdown.py
 """

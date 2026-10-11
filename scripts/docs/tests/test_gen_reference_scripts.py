@@ -106,6 +106,7 @@ def test_a_package_module_names_a_test_named_after_its_family(tmp_path):
     The decoy is named after the entrypoint's directory and sorts first, so a lookup that
     globs `test_*_ci.py` or takes the family from the wrong directory picks it instead.
     """
+    _write(tmp_path / "deploy_tools" / "land.py", '"""Summary."""\n')
     _write(tmp_path / "deploy_tools" / "land_lib" / "ci.py", '"""Summary."""\n')
     _write(tmp_path / "deploy_tools" / "tests" / "test_deploy_tools_ci.py", '"""x"""\n')
     _write(tmp_path / "deploy_tools" / "tests" / "test_land_ci.py", '"""x"""\n')
