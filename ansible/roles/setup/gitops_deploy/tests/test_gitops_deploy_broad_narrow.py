@@ -102,13 +102,19 @@ def test_a_range_that_moves_no_rendered_output_applies_nothing(
 def test_a_failed_narrowed_apply_holds_the_tags_it_tried(
     gitops_deploy, tick, state_dir, state
 ):
-    """The hold names the narrowed plane, so only an apply covering those tags clears it."""
+    """The hold names the narrowed plane, so only an apply covering those tags clears it.
+
+    The fix-forward deploy of those tags is that apply. It guards the plane's playbook against
+    drifting from the one `Hold.cover_services` clears by, which would leave the hold forever.
+    """
     tick.paths = [GROUP_VARS]
     tick.narrow = (0, "sonarr")
     tick.playbook_outcomes = [RuntimeError("boom")]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert (state_dir / "hold_sha").read_text() == ORIGIN
     assert state.hold_plane == "ansible/deploy.yml sonarr"
+    state.clear_service_hold({"sonarr"})
+    assert not (state_dir / "hold_sha").exists()
 
 
 def test_the_setup_plane_never_consults_the_deploy_plane_narrowing(

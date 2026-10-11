@@ -56,6 +56,7 @@ from deployer_lib.deploy_failtext import (  # noqa: F401 — re-exported for `de
 from deployer_lib.deploy_k8s import k8s_role_paths
 from deployer_lib.deploy_locks import locked_budget
 from deployer_lib.deploy_state import STATE_DIR, DeployerState  # noqa: F401 — re-exported
+from gitops_markers import DEPLOY_PLAYBOOK
 
 
 # ── subprocess ────────────────────────────────────────────────────────────────────────────────
@@ -330,7 +331,7 @@ def deploy_k8s(
     """
     tags = ",".join(sorted(services))
     log(f"deploying k8s services: {tags} (timeout {timeout:.0f}s)")
-    argv = [*PLAYBOOK_ARGV, "ansible/deploy.yml", "--tags", tags]
+    argv = [*PLAYBOOK_ARGV, DEPLOY_PLAYBOOK, "--tags", tags]
     if restore_sha is not None and restore_sha.strip():
         argv += ["-e", f"k8s_restore_snapshot_sha={restore_sha}"]
     with locked_budget(services, timeout) as budget:
