@@ -187,7 +187,7 @@ record of the snapshot you name. They run as one script, in order, and the exit 
 first gate that refused (#2216, the shape `docs/k3s-upgrade.md` set):
 
 ```bash
-uv run python scripts/deploy_tools/k3s_etcd_restore_gates.py <snapshot-name>
+uv run python scripts/deploy_tools/runbook_gates.py etcd-restore <snapshot-name>
 ```
 
 The snapshot name is the one from *Listing what is available* above — the same value
@@ -218,7 +218,7 @@ gate 3 needs the API server up.
    `k3s_readonly_crd_api_groups` (#2243); without it the gate exits 69 on a Forbidden.
 
    **This gate is drilled weekly, unlike gates 1 and 2.** Since 2026-09-24 the `--list-only`
-   drill on daniel-box runs `k3s_etcd_restore_gates.py --gate 3` against the snapshot it just
+   drill on daniel-box runs `runbook_gates.py etcd-restore --gate 3` against the snapshot it just
    listed, and treats any non-zero exit — 69 included — as a drill failure (#2420). So a k3s
    change to the `ETCDSnapshotFile` CR, or a loss of the read-only ServiceAccount's access to
    it, shows up on the **etcd Restore Drill** tile within a week rather than on the day you

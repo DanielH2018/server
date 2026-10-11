@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
 """Run the stop conditions of `docs/longhorn-disaster-recovery.md` in order, exit code naming the first failure.
 
 The recovery procedure's one ordering rule with teeth is step 4: restore the volumes BEFORE any `deploy.yml`,
 because a deploy first provisions fresh, empty PVCs under the very names the backups would have restored into.
 Steps 2 and 3 are what make step 4 possible at all. Each is a verdict over what the rebuilt cluster answered,
-the runner stops at the first failure, and the exit code is the gate number (the shape `k3s_upgrade_gates.py`
+the runner stops at the first failure, and the exit code is the gate number (the shape `k3s_upgrade.py`
 sets). Run it on the rebuilt cluster after bring-up and before the first restore.
 
 The gates, in the order the runbook gives them:
@@ -38,19 +37,19 @@ Exit codes:
          or a list that returned nothing parseable)
 
 Usage:
-    uv run python scripts/deploy_tools/longhorn_dr_gates.py
+    uv run python scripts/deploy_tools/runbook_gates.py longhorn-dr
 """
 
 import json
 import sys
 from pathlib import Path as _Path
 
-# Reach `lib`: a directly-invoked script gets only its own directory on sys.path, and
-# pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+# Reach `scripts/`, for `lib` and `deploy_tools`: the entrypoint puts only its own directory on
+# sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from deploy_tools import runbook_gates
-from deploy_tools.runbook_gates import (
+from deploy_tools.runbook_gates_lib import gate_runner
+from deploy_tools.runbook_gates_lib.gate_runner import (
     LONGHORN_NS,
     TARGETS_ARGS,
     VOLUMES_ARGS,
@@ -66,7 +65,7 @@ from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
 # The backup target names, shared with the backup-health cron (#3737); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
 sys.path.insert(0, str(K3S_FILES))
-import longhorn_backups
+from longhorn_lib import longhorn_backups
 
 CLUSTER = "prod"
 RUNBOOK = "docs/longhorn-disaster-recovery.md"
@@ -196,12 +195,8 @@ GATES = (
 
 def run_gates(tools: Tools = DEFAULT_TOOLS, out=sys.stdout) -> int:
     """Run every gate in order, print one line per gate, and return the exit code."""
-    return runbook_gates.run_gates(GATES, RUNBOOK, tools, out=out)
+    return gate_runner.run_gates(GATES, RUNBOOK, tools, out=out)
 
 
 def main(argv: list[str] | None = None) -> int:
-    return runbook_gates.cli(__doc__, argv, run_gates)
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    return gate_runner.cli(__doc__, argv, run_gates)

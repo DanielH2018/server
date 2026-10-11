@@ -43,12 +43,13 @@ from __future__ import annotations
 import datetime as _dt
 import re
 
-# Resolves via longhorn_backup_health.py's own sys.path.insert(0, <own dir>), which runs before
-# it imports this module — host_lib.py is copied alongside as a sibling both at release time
-# (/opt/longhorn-backup-health/, health-crons.yml) and, for the test suite, via the
-# `ansible/roles/setup/common/files` pythonpath entry in pyproject.toml.
+# Both resolve via longhorn_backup_health.py's own sys.path.insert(0, <own dir>), which runs
+# before it imports this module. That directory holds this package and host_lib.py, which is
+# copied there as a sibling at release time (/opt/longhorn-backup-health/, health-crons.yml).
+# The test suite reaches host_lib through the `ansible/roles/setup/common/files` pythonpath
+# entry in pyproject.toml.
 import host_lib
-import longhorn_backups
+from longhorn_lib import longhorn_backups
 
 # 6h slack after a volume's first scheduled run before it is called uncovered. Hardcoded in the
 # original script too (`GRACE_SLACK_S=$(( 6 * 3600 ))`), not templated.

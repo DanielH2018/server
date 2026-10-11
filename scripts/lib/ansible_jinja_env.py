@@ -154,6 +154,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     from toposort import filter_by_platform
 
     from ansible.plugins.filter.core import (
+        b64encode,
         comment,
         get_hash,
         mandatory,
@@ -162,6 +163,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     )
     from ansible.plugins.test.core import search
 
+    env.filters["b64encode"] = b64encode
     env.filters["bool"] = to_bool
     env.filters["comment"] = comment
     env.filters["hash"] = get_hash

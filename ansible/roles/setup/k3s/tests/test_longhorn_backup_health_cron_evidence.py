@@ -20,7 +20,7 @@ The transport that produces these lines is pinned separately by a real subproces
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py
 """
 
-import longhorn_cron_evidence_logic as logic
+from longhorn_lib import longhorn_cron_evidence_logic as logic
 from _shell_render import rendered_shell_text
 from lib import yaml_fast
 from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE

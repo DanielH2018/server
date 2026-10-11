@@ -7,7 +7,7 @@ homepage Kubernetes widget carry their own cluster identities and are held to th
 
 import copy
 
-from deploy_tools import k3s_etcd_restore_gates
+from deploy_tools.runbook_gates_lib import etcd_restore
 from lib import yaml_fast
 from _k8s_render import rendered_docs
 from _manifest_guards import (
@@ -361,12 +361,12 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     # Both sides, so dropping the group OR dropping the gate that needs it breaks this. The
     # group is derived from the gate script's own resource argument rather than restated
     # here, and the argument is pinned: a rename has to move the defaults with it.
-    dotted = [a for a in k3s_etcd_restore_gates.SNAPSHOT_FILES_ARGS if "." in a]
+    dotted = [a for a in etcd_restore.SNAPSHOT_FILES_ARGS if "." in a]
     assert dotted == ["etcdsnapshotfiles.k3s.cattle.io"], (
         "the etcd restore gate no longer reads one fully-qualified CRD — re-derive its group"
     )
     gate_group = dotted[0].split(".", 1)[1]
     assert any(g == gate_group for g in groups), (
-        "ETCDSnapshotFile unreadable without sudo, so k3s_etcd_restore_gates.py gate 3 "
+        "ETCDSnapshotFile unreadable without sudo, so `runbook_gates.py etcd-restore` gate 3 "
         "cannot check the snapshot it is about to restore (#2243)"
     )

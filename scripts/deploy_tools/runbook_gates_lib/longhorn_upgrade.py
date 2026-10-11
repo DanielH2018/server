@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
 """Run the stop conditions of `docs/longhorn-upgrade.md` in order, exit code naming the first failure.
 
 Longhorn supports no downgrade, so the backup is the whole safety net and the runbook's gate section
 is what proves the net is there. Each is a verdict over what the cluster or the drill answered, the
 runner stops at the first failure, and the exit code is the gate number (the shape
-`k3s_upgrade_gates.py` sets).
+`k3s_upgrade.py` sets).
 
 The gates, in the order the runbook gives them:
 
@@ -35,7 +34,7 @@ Exit codes:
          or a list that returned nothing parseable)
 
 Usage:
-    uv run python scripts/deploy_tools/longhorn_upgrade_gates.py
+    uv run python scripts/deploy_tools/runbook_gates.py longhorn-upgrade
 """
 
 import os
@@ -44,12 +43,12 @@ import time
 from dataclasses import dataclass
 from pathlib import Path as _Path
 
-# Reach `lib`: a directly-invoked script gets only its own directory on sys.path, and
-# pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+# Reach `scripts/`, for `lib` and `deploy_tools`: the entrypoint puts only its own directory on
+# sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from deploy_tools import runbook_gates
-from deploy_tools.runbook_gates import (
+from deploy_tools.runbook_gates_lib import gate_runner
+from deploy_tools.runbook_gates_lib.gate_runner import (
     LONGHORN_NS,
     TARGETS_ARGS,
     VOLUMES_ARGS,
@@ -68,7 +67,7 @@ from lib.repo_paths import HOST_LIB_FILES, K3S_DEFAULTS, K3S_FILES
 # The backup target names, shared with the backup-health cron (#3737); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
 sys.path.insert(0, str(K3S_FILES))
-import longhorn_backups
+from longhorn_lib import longhorn_backups
 
 CLUSTER = "prod"
 RUNBOOK = "docs/longhorn-upgrade.md"
@@ -227,12 +226,8 @@ def run_gates(
         max_age_s=restore_drill_max_age_s() if max_age_s is None else max_age_s,
         now=time.time() if now is None else now,
     )
-    return runbook_gates.run_gates(GATES, RUNBOOK, env, out=out)
+    return gate_runner.run_gates(GATES, RUNBOOK, env, out=out)
 
 
 def main(argv: list[str] | None = None) -> int:
-    return runbook_gates.cli(__doc__, argv, run_gates)
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    return gate_runner.cli(__doc__, argv, run_gates)

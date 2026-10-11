@@ -253,7 +253,7 @@ instance of this discipline, and the history entry shows the retirement variant:
   the three state gates still print their verdicts before it:
 
   ```bash
-  uv run python scripts/deploy_tools/pinned_rotation_gates.py
+  uv run python scripts/deploy_tools/runbook_gates.py pinned-rotation
   ```
 
   ```bash

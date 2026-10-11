@@ -76,7 +76,7 @@ was the first kind: `b2-deletions` fired every day and logged only its refusal.
 
 Every matched line is matched as written, so rewording one means changing `_TRIM_SUMMARY_RE` /
 `_TRIM_ABORT_RE` / `_DELETIONS_SUMMARY_RE` / `_DELETIONS_DECLINED_RE` in
-`ansible/roles/setup/k3s/files/longhorn_cron_evidence_logic.py` in the same edit. The b2 shapes
+`ansible/roles/setup/k3s/files/longhorn_lib/longhorn_cron_evidence_logic.py` in the same edit. The b2 shapes
 come from `deletions_summary_line` / `deletions_declined_line` in
 `scripts/diagnostics/probe_lib/b2_ledger.py`, which
 `test_cron_liveness_accepts_the_summary_line_the_probe_writes` holds to the regexes.
@@ -230,6 +230,6 @@ wants `--tags longhorn_backup`; the read-only identity wants `--tags kubeconfig`
 
 The weekly `etcd restore drill` cron is gated on `k3s_etcd_restore_drill_armed` and runs
 `--list-only` on this host, because a full etcd restore cannot pass beside a live k3s. Its
-`--list-only` leg also runs restore gate 3 (`k3s_etcd_restore_gates.py --gate 3`) against the
+`--list-only` leg also runs restore gate 3 (`runbook_gates.py etcd-restore --gate 3`) against the
 snapshot it listed, so the `ETCDSnapshotFile` read the runbook depends on is exercised weekly
 rather than on the day of an outage (#2420); any non-zero exit fails the drill.
