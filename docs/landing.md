@@ -125,19 +125,22 @@ The refusal prints the offending line: `gh pr edit <n> --body-file` with the ref
 body another session wrote, since the fan-out agent opens the PR and a daniel-box session lands
 it.
 
-**Open the PR with `--fill`, then replace the body — the same evasion, one command earlier.**
+**Open the PR with `--fill` and a body file — the same evasion, one command earlier.**
 The worktree-containment check judges a command on its TEXT, so `gh pr create --title "…"` is
 refused whenever the title carries `git`, `cd`, `worktree`, `write` or a construct the check
 cannot parse — and a title here routinely names one, since it becomes the squash commit subject
 and has to name the outcome. Rewording the title does not reliably help.
 
 ```
-gh pr create --fill                 # title + body from the commit; no prose in the command text
-gh pr edit <n> --body-file <path>   # then replace the body
+gh pr create --fill --body-file <path>   # title from the commit, body from the file
 ```
 
 `--fill` takes the title from the commit subject, so the command line carries no title text to
-judge, and `--body-file` carries no body text either. The class of false refusals narrowed after
+judge, and `--body-file` carries no body text either. gh lets `--body-file` override the body
+`--fill` would take from the commits. The file has to carry every `## ` heading of
+`.github/pull_request_template.md`. The `block-footguns` hook denies a create or edit whose body
+skips one, and a bare `--fill`, because rewriting the body after the PR opened was the
+avoidable PR body rewrite in #3963. The class of false refusals narrowed after
 Claude Code 2.1.257 (it fixed loops and heredocs that never touch git) and is not gone: a
 `for … do gh issue comment …; done` was refused on its comment text on 2026-09-10 (issue #1431).
 The rule generalises: keep the prose out of the command string and inside a file or a script.
@@ -297,9 +300,12 @@ one exception being a primary that already contains the commit.
 A failed gate is asked once more whether a later deploy re-rolled the workload. The landing's
 deploy releases the service lock before the gate runs, so another landing or a tick can deploy
 the same service under the gate's one sample. A `Recreate` workload then reads `0/1 ready`
-mid-roll (#3812). `land.sh` counts a tag as re-rolled when its service lock (or `all`) is held,
-or its release record was stamped after step 5 ended. It waits for that deploy to finish and
-gates again. The verdict line then reads `re-gated after a later deploy of <tags>`, and a change
+mid-roll (#3812). `land.sh` counts a tag as re-rolled on one of two signals, and neither counts
+on its own (#4514). A held service lock (or `all`) counts only when one of the tag's workloads
+changed `metadata.generation` while the lock was held. A release record stamped after step 5
+ended counts only when it queued a restart or names manifests that differ from the record
+before it. A deploy that rolled nothing leaves the failed gate standing. On a re-roll, `land.sh`
+waits for that deploy to finish and gates again. The verdict line then reads `re-gated after a later deploy of <tags>`, and a change
 that is still broken fails the second gate as well. A healthy second gate settles only when the
 commit in that deploy's release record contains the merge commit. The tick's rollback
 redeploys an older pin, and its healthy pods say nothing about this change.
