@@ -104,7 +104,7 @@ jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"
 # AniList client calls SaveMediaListEntry(mediaId, status, progress, ...) and the word `score`
 # appears nowhere in it — so it cannot overwrite a rating set by hand on AniList. That is what
 # makes "rate on AniList, sync from Jellyfin" safe to run together, and it is the reason this
-# role installs the plugin at all rather than a rating bridge. docs/anilist-integration.md.
+# role installs the plugin at all rather than a rating bridge. docs/archive/anilist-integration.md.
 #
 # The plugin declares a targetAbi, and Jellyfin's loader rejects one NEWER than the server —
 # silently, behind a green rollout. 4.4.0.0 declares 10.11.11.0; jellyfin_k8s_image above is

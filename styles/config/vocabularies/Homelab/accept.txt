@@ -298,7 +298,7 @@ Docker's
 HA's
 VM's
 
-# AniList integration (docs/anilist-integration.md)
+# AniList integration (docs/archive/anilist-integration.md)
 APIs
 OAuth
 uid
