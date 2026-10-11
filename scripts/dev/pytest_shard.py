@@ -407,7 +407,10 @@ def main(argv=None) -> int:
         print(_summary(args.of))
         return 0
     if args.shard is None:
-        parser.error("one of --shard, --summary or --record is required")
+        parser.error(
+            "one of --shard, --summary, --record, --record-missing, --record-files or "
+            "--check-durations is required"
+        )
 
     files = shard_files(args.shard, args.of)
     # An empty list is not a fast green: pytest exits 5 ("no tests collected") on one, and a

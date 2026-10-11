@@ -250,3 +250,20 @@ def test_the_stale_repair_refuses_a_path_no_shard_runs():
     with pytest.raises(SystemExit) as caught:
         pytest_shard.record_named_weights(["nope/test_not_a_file.py"])
     assert "nope/test_not_a_file.py" in str(caught.value)
+
+
+def test_no_mode_names_every_mode(capsys):
+    """The usage error lists all six modes, not the three it named before #4448."""
+    with pytest.raises(SystemExit) as exc:
+        pytest_shard.main([])
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    for mode in (
+        "--shard",
+        "--summary",
+        "--record,",
+        "--record-missing",
+        "--record-files",
+        "--check-durations",
+    ):
+        assert mode in err.splitlines()[-1], mode

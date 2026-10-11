@@ -468,7 +468,7 @@ def unlabelled_worktree_lines(cwd, *, run=None):
     if not top or not has_generated_name(top) or read_label(top):
         return []
     return [
-        f"\U0001f3f7 This worktree's name ({os.path.basename(top)}) was generated. Once you "
+        f"WARN: this worktree's name ({os.path.basename(top)}) was generated. Once you "
         "know the task, label it: `uv run python scripts/dev/label_worktree.py <issue>...` "
         'or `--text "<what you are doing>"`.'
     ]
@@ -498,7 +498,7 @@ def format_banner(problems, landing=False):
     """
     if not problems:
         return ""
-    out = ["\U0001f3e0 Homelab health check — issues detected:"]
+    out = ["WARN: homelab health check found issues:"]
     out.extend(problems)
     commands = [f"{PROBE} targets", f"{PROBE} health <svc>"]
     if landing:
@@ -547,7 +547,7 @@ def main(
     if banner:
         print(banner)
     elif os.environ.get("SESSION_HEALTH_VERBOSE"):
-        print("\U0001f3e0 Homelab health: all scrape targets up.")
+        print("Homelab health: all scrape targets up.")
 
     # Printed independently of health: another session's open work is information this
     # session needs even when everything is green.
@@ -556,7 +556,7 @@ def main(
     except Exception:
         sessions = []
     if sessions:
-        print("\U0001f500 Other Claude sessions in this repo:")
+        print("Other Claude sessions in this repo:")
         for line in sessions:
             print(line)
     try:
