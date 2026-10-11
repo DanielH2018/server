@@ -4,7 +4,7 @@
 Several modules under ``scripts/`` were split out of a larger one, and each records the same
 invariant in its own docstring — ``rotation_tools.py`` says it "names ``secret_rotation``
 nowhere, at import time or later", ``lib/script_classify.py`` says "a leaf never imports the
-facade it was split out of", and ``docs/catalog_model.py`` says it again in its own words. A docstring is not a check. The deployer's own split is guarded by
+facade it was split out of", and ``docs/catalog_lib/catalog_model.py`` says it again in its own words. A docstring is not a check. The deployer's own split is guarded by
 ``ansible/tests/deploy/test_gitops_deploy_imports.py`` and monitor-bridge's by
 ``ansible/tests/services/test_bridge_patch_boundary.py``, but nothing walked ``scripts/``, so a
 late ``import secret_rotation`` inside a leaf function would have landed green.
@@ -62,12 +62,12 @@ FACADE_EDGES = frozenset(
         ("validate.validate_lib.cron_checks", "validate.validate_lib.cron_targets"),
         # scripts/docs/service_catalog.py over the four catalogue modules; catalog_model is the
         # one leaf with no first-party dependency beyond lib.repo_paths.
-        ("docs.service_catalog", "docs.catalog_backup"),
-        ("docs.service_catalog", "docs.catalog_facts"),
-        ("docs.service_catalog", "docs.catalog_model"),
-        ("docs.service_catalog", "docs.catalog_render"),
-        ("docs.catalog_facts", "docs.catalog_model"),
-        ("docs.catalog_render", "docs.catalog_model"),
+        ("docs.service_catalog", "docs.catalog_lib.catalog_backup"),
+        ("docs.service_catalog", "docs.catalog_lib.catalog_facts"),
+        ("docs.service_catalog", "docs.catalog_lib.catalog_model"),
+        ("docs.service_catalog", "docs.catalog_lib.catalog_render"),
+        ("docs.catalog_lib.catalog_facts", "docs.catalog_lib.catalog_model"),
+        ("docs.catalog_lib.catalog_render", "docs.catalog_lib.catalog_model"),
         # scripts/docs/gen_doc_fragments.py over the fragment reader/renderer pair.
         ("docs.gen_doc_fragments", "docs.fragment_readers"),
         ("docs.gen_doc_fragments", "docs.fragment_renderers"),

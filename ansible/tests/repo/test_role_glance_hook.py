@@ -57,7 +57,7 @@ def test_the_hook_runs_the_generator_in_fix_mode():
         "ansible/inventory/group_vars/all.yml",
         "ansible/initial_setup.yml",
         "ansible/filter_plugins/k8s_autodeploy.py",
-        "scripts/docs/glance_facts.py",
+        "scripts/docs/catalog_lib/glance_facts.py",
         "scripts/lib/render_guard.py",
     ],
 )

@@ -151,7 +151,7 @@ The harness and the probe leave two differences unmeasured, and neither applies 
     - `scripts/docs/tests/`: `test_gen_role_glance` (1).
 
   Behind those tests sit the production readers `narrow_setup_playbook.playbook_roles`,
-  `narrow_setup_index.foreign_tags`, `land_reach` and `scripts/docs/glance_facts.py`. Under a
+  `narrow_setup_index.foreign_tags`, `land_reach` and `scripts/docs/catalog_lib/glance_facts.py`. Under a
   loop, `playbook_roles` returns the empty set, so `narrow_setup.role_tags` refuses every
   narrowing until it reads `setup_roles:` instead. `test_nut_host_secondary` asserts the gate's
   text, so it passes again only if the new encoding keeps that text.

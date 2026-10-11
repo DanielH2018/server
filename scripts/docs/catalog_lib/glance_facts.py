@@ -19,7 +19,7 @@ from pathlib import Path as _Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 from pathlib import Path
 from typing import Any
@@ -32,7 +32,7 @@ from lib.jinja_comments import strip_jinja_comments
 from lib.jinja_defaults import resolve
 from lib.k8s_roles import role_dirs
 from lib.repo_paths import ANSIBLE, ROLES
-from reference.crons import schedule_text
+from docs.reference.crons import schedule_text
 
 SETUP_ROLES = ROLES / "setup"
 CONTAINERS_ROLES = ROLES / "containers"

@@ -28,7 +28,7 @@ FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
     does not pass public=false, also the bare domain). `domain` is SOPS-sourced with no
     static default, so the catalog writes the suffix as the literal "<domain>". On the
     docs site those placeholders become links, resolved in the browser against the URL
-    the reader is on — see scripts/docs/route_facts.py. WHICH names a service answers on is
+    the reader is on — see scripts/docs/catalog_lib/route_facts.py. WHICH names a service answers on is
     derivable and is stated outright; only the suffix is not.
   - Docker (Pi) routes. daniel-pi is the only Docker host and is LAN-only — its services
     are bound to the LAN IP directly by their own compose `ports:` list rather than routed
@@ -64,15 +64,15 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from catalog_backup import (
+from docs.catalog_lib.catalog_backup import (
     autodeploy_eligibility,
     backup_tier,
     claim_index,
     load_longhorn_tier_lists,
 )
-from catalog_facts import auth_tier, route_for
-from catalog_model import K3S_DEFAULTS, K8S_ROLES, ServiceRow
-from catalog_render import render_html, render_markdown
+from docs.catalog_lib.catalog_facts import auth_tier, route_for
+from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES, ServiceRow
+from docs.catalog_lib.catalog_render import render_html, render_markdown
 from lib.estate import Estate, Inventory
 from lib.repo_paths import ALL_VARS, HOST_VARS
 
