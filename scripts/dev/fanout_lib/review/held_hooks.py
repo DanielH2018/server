@@ -48,6 +48,15 @@ PROJECT_HOOKS = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
 # in its place. `.claude/hooks/block-protected-bash.py` mirrors the file name.
 SECRET_PATHS_SCRIPT = "scripts/secrets_mgmt/secret_bearing_host_paths.py"
 HELD_SECRET_PATHS = "secret_bearing_host_paths.json"
+# Hook events a held phase does not register. `session-health` reports on the checkout its own
+# file sits in: it imports `lib` from that tree's `scripts/` and runs git and `probe.py` there.
+# The held copy is a hooks directory with no tree around it, so every held phase's banner read
+# "detection is broken: No module named 'lib'" three times (#4393; 164 sessions carried that
+# banner by 2026-10-11). Pointing it at the worktree instead would import code the
+# implementer can write, which is what holding the hooks prevents. The implementer phase
+# still gets the banner from its own project settings; a resumed phase already holds it in
+# its transcript.
+UNHELD_EVENTS = ("SessionStart",)
 
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
@@ -87,8 +96,11 @@ def pointed_settings(settings: str, root: Path) -> dict:
     """The project settings text `settings`, with every hook command run from `root`'s copy.
 
     The set already registers `fanout-stop`, so a phase given it needs no separate Stop hook.
+    It drops the `UNHELD_EVENTS` hooks.
     """
     held = json.loads(settings)
+    for event in UNHELD_EVENTS:
+        held.get("hooks", {}).pop(event, None)
     hooks = shlex.quote(str(root / HOOKS_DIR)) + "/"
     for groups in held.get("hooks", {}).values():
         for group in groups:

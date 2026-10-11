@@ -384,8 +384,18 @@ def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
             for group in groups
             for h in group["hooks"]
         ]
+        # session-health reads the tree around its own file, and the held copy has none
+        # (#4393), so a held phase registers every project hook but the SessionStart one.
+        assert "SessionStart" in held["hooks"]
+        assert "SessionStart" not in settings["hooks"]
         assert len(commands) == len(
-            [h for groups in held["hooks"].values() for g in groups for h in g["hooks"]]
+            [
+                h
+                for event, groups in held["hooks"].items()
+                if event != "SessionStart"
+                for g in groups
+                for h in g["hooks"]
+            ]
         )
         assert all(c.startswith(f"{hooks}/run-hook.sh ") for c in commands)
         assert settings["permissions"] == held["permissions"]
