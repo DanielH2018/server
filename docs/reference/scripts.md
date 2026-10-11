@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-11 03:04 UTC
-generated_sha: 739341b86
+generated_at: 2026-10-11 03:47 UTC
+generated_sha: 44fa8cfde
 ---
 
 !!! warning "Generated file — do not edit"
@@ -59,9 +59,9 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/validate/compose_templates.py` | validate | Render every configured container's docker-compose.yml.j2 and assert it parses as YAML. | prek hook (every commit) | — | — |
 | `scripts/deploy.sh` | (top level) | the entry point every doc, skill, hook and consumer names; it execs deploy_cli.py. | deploy: ansible/roles/k8s/monitor-bridge/files/gitops_markers.py | — | [0, 2, 3, 4, 20, 64, 75, 76, 77, 78, 79](#scriptsdeploysh) |
 | `scripts/deploy_tools/deploy_cli.py` | deploy_tools | The interactive deploy and its two helpers: run a deploy, map tags, read a detached run. | every deploy (deploy.sh) | — | — |
-| `scripts/deploy_tools/deploy_tags.py` | deploy_tools | Forwarding shim: `deploy_tags.py <args>` runs `deploy_cli.py tags <args>` (#4347). | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_deploy_tags.py` | — |
+| `scripts/deploy_tools/deploy_tags.py` | deploy_tools | Forwarding shim: `deploy_tags.py <args>` runs `deploy_cli.py tags <args>` (#4347). | deploy: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py | `test_deploy_tags.py` | — |
 | `scripts/deploy_tools/deploy_lib/detach_notify.py` | deploy_tools | Post-deploy notifier for `scripts/deploy.sh --detach`. | deploy_cli.py (every commit, CI run, deploy or Claude session runs it) | — | — |
-| `scripts/deploy_tools/digest_provable.py` | deploy_tools | Which k8s roles act ONLY through the bytes their render digest covers. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_digest_provable.py` | — |
+| `scripts/deploy_tools/digest_provable.py` | deploy_tools | Which k8s roles act ONLY through the bytes their render digest covers. | deploy: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py | `test_digest_provable.py` | — |
 | `scripts/backup/etcd_restore_drill.sh` | backup | prove an off-box etcd snapshot actually restores, without an outage. | deploy: ansible/roles/setup/hypervisor/tasks/etcd_drill.yml | — | — |
 | `scripts/dev/fact_status.py` | dev | Status, verification and lint for the fact stores — the one entry point. | prek hook (every commit) | — | — |
 | `scripts/dev/gen_hook_settings.py` | dev | Render the `hooks` key of `.claude/settings.json` from the hook files' own declarations. | prek hook (every commit) | `test_gen_hook_settings.py` | — |
@@ -73,13 +73,13 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/validate/k8s_manifests.py` | validate | Render every k8s manifest template with stubbed vars and assert each parses as valid YAML. | prek hook (every commit) | — | — |
 | `scripts/deploy_tools/land.py` | deploy_tools | Follow a merged PR through to a verified deploy, in one invocation. | land.sh (every commit, CI run, deploy or Claude session runs it) | — | — |
 | `scripts/deploy_tools/land.sh` | deploy_tools | the entry point every doc, skill and hook names; it execs land.py beside it. | Claude hook: fanout-stop.py | — | [0, 1, 64, 75](#scriptsdeploytoolslandsh) |
-| `scripts/deploy_tools/narrow_setup.py` | deploy_tools | Which narrow `--tags` value a setup-role change needs, or a refusal to guess. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_narrow_setup.py` | — |
+| `scripts/deploy_tools/narrow_setup.py` | deploy_tools | Which narrow `--tags` value a setup-role change needs, or a refusal to guess. | deploy: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py | `test_narrow_setup.py` | — |
 | `scripts/deploy_tools/prune_releases.py` | deploy_tools | Remove old host-script release directories, never the one in use. | deploy: ansible/roles/setup/common/tasks/release_bin.yml | `test_prune_releases.py` | — |
 | `scripts/deploy_tools/render_targets.py` | deploy_tools | The k8s services a render-record run renders on one host, derived from the tree. | deploy: ansible/roles/setup/render_records/files/render_records.py | `test_render_targets.py` | — |
 | `scripts/validate/root_ignored_files.py` | validate | Flag a root-level file that `.gitignore`'s `/*` rule hides from git. | prek hook (every commit) | — | — |
-| `scripts/deploy_tools/setup_routing.py` | deploy_tools | Which playbook and `--tags` value apply each setup role, and whether the tick's host runs it. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_setup_roles.py | `test_setup_routing.py` | — |
+| `scripts/deploy_tools/setup_routing.py` | deploy_tools | Which playbook and `--tags` value apply each setup role, and whether the tick's host runs it. | deploy: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_setup_roles.py | `test_setup_routing.py` | — |
 | `scripts/validate/setup_templates.py` | validate | Render every setup-plane Jinja template and fail on a variable nothing defines. | prek hook (every commit) | — | — |
-| `scripts/deploy_tools/shared_role_callers.py` | deploy_tools | Which deploy tags run a shared k8s role, record or no record. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_shared_role_callers.py` | — |
+| `scripts/deploy_tools/shared_role_callers.py` | deploy_tools | Which deploy tags run a shared k8s role, record or no record. | deploy: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py | `test_shared_role_callers.py` | — |
 | `scripts/validate/shell_templates.py` | validate | Render every Jinja-templated shell script under ansible/roles/ and lint the output. | prek hook (every commit) | — | — |
 | `scripts/dev/smoke_extract.py` | dev | Extract newly-added container image references from a unified git diff. | CI: image-smoke.yml | `test_smoke_extract.py` | — |
 | `scripts/deploy_tools/deploy_lib/staleness.py` | deploy_tools | Refuse a deploy from a git tree that is behind origin/master. | deploy_cli.py (every commit, CI run, deploy or Claude session runs it) | — | — |
@@ -360,7 +360,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | 76 | `DEPLOY_LOCK_UNAVAILABLE` | flock failed on the lock file ITSELF, so NOTHING was deployed. This is not contention — no deploy holds the lock. | Check that the git-tree lock file (deploy_locks.TREE_LOCK) exists and is writable by this user; retrying alone changes nothing. |
 | 77 | `DEPLOY_SNAPSHOT_FAILED` | the snapshot worktree could not be created, so NOTHING was deployed. | The playbook renders from a detached worktree of HEAD under /tmp/homelab-deploy-snapshots; the message above carries the failing command's own stderr (the `fatal:` line), so fix what it names — retrying changes nothing. |
 | 78 | `DEPLOY_NO_HOSTS` | the playbook matched NO host, so NOTHING was deployed. | ansible exits 0 for a run where no play matched, so the wrapper reads the PLAY RECAP itself. Read the [WARNING] lines above — an inventory that failed to parse, or a host pattern that matched nothing — fix that, then re-run. |
-| 79 | `DEPLOY_LOCK_PLAN_FAILED` | `deploy_locks.py plan` did not print this run's service locks, so the wrapper had nothing to take and NOTHING was deployed. | It never falls back to a lock order of its own. Run `uv run python ansible/roles/setup/gitops_deploy/files/deploy_locks.py plan <tag>` by hand to see why, fix that, then re-run; nothing was held while it ran. |
+| 79 | `DEPLOY_LOCK_PLAN_FAILED` | `deploy_locks.py plan` did not print this run's service locks, so the wrapper had nothing to take and NOTHING was deployed. | It never falls back to a lock order of its own. Run `uv run python ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py plan <tag>` by hand to see why, fix that, then re-run; nothing was held while it ran. |
 
 ### `scripts/deploy_tools/land.sh`
 
