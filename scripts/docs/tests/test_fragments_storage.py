@@ -7,7 +7,7 @@ the members it must. The include wiring is `test_gen_doc_fragments.py`'s job.
 
 import pytest
 
-import fragments_storage as s
+from fragments_lib import fragments_storage as s
 from gen_doc_fragments import FRAGMENTS
 
 

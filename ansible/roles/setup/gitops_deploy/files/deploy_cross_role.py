@@ -17,8 +17,8 @@ import ast
 import re
 from pathlib import Path
 
-# A file one setup role installs from another's `files/`, or imports from another's `tasks/`,
-# mapped to those roles, so a change to it re-applies them beside the owner (#3306, #3317).
+# A file one setup role installs from another's `files/`, imports from another's `tasks/`, or
+# reads a variable of from another's `defaults/`, mapped to those roles, so a change to it re-applies them beside the owner (#3306, #3317).
 # A template a shared task file renders inherits that task file's importers (#3319): the
 # kuma-check pair reaches a host only through `kuma_check_timer.yml`.
 # `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
@@ -54,6 +54,12 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     "ansible/roles/setup/gitops_deploy/files/gitops_hold.py": frozenset(
         {"deploy_ui", "renovate_agent"}
     ),
+    # A `defaults/` file whose variable another role reads (#4303). claude_code puts each agent
+    # in `initial_setup_worktree_holders_group`, so a rename re-applied only initial_setup and
+    # moved the socket away from every agent. The tick applies the whole claude_code tag for
+    # any change here: `narrow_setup.role_tags` refuses, because claude_code's agent tasks are
+    # an include, not a static import. The other cross-role defaults reads are #4357's.
+    "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset({"claude_code"}),
 }
 
 

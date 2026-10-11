@@ -1,7 +1,7 @@
 ---
 # Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
-homepage_k8s_image: ghcr.io/gethomepage/homepage:latest@sha256:643bd0be730d40f69d58028a55d1a896739333e8815786df42bc97f109ecbe61
+homepage_k8s_image: ghcr.io/gethomepage/homepage:latest@sha256:57c4a0531937889c0b968b120fe9c2560bbe036b5c9e18c49a9e2479de9975d1
 # The seed-config initContainer just needs `cp`; alpine is the smallest image that has it.
 homepage_k8s_init_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
