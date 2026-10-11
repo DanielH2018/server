@@ -8,6 +8,7 @@ transport (`subprocess.run`, which also carries the SOPS domain read) and drives
 Run: uv run pytest scripts/diagnostics/tests/test_probe_unreadable_source.py
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -19,7 +20,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import probe
-from diagnostics.probe_lib import core, health_docker, monitors
+from diagnostics.probe_lib import core, health_docker, readonly_rbac, vip_placement
 from lib.exit_codes import TEMP_FAIL, contract
 
 PROBE = "scripts/diagnostics/probe.py"
@@ -72,11 +73,19 @@ def test_a_failed_config_get_exits_temp_fail_with_the_failure_on_stderr(
     assert "Could not resolve host" in captured.err
 
 
-def test_an_empty_monitor_status_result_is_unreadable_not_monitors_down():
-    _, code = monitors.format_monitor_status(
-        {"status": "success", "data": {"result": []}}
-    )
-    assert code == TEMP_FAIL
+def test_an_empty_monitor_status_result_is_unreadable_not_monitors_down(
+    monkeypatch, capsys
+):
+    def run(argv, *args, **kwargs):
+        if argv[0] == "sops":
+            return subprocess.CompletedProcess(argv, 0, "example.test\n", "")
+        body = json.dumps({"status": "success", "data": {"result": []}})
+        return subprocess.CompletedProcess(argv, 0, body, "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    rc = _exit_code(lambda: probe.main(["monitors"]))
+    assert rc == TEMP_FAIL
+    assert "monitor_status" in capsys.readouterr().err
 
 
 def test_an_ssh_failure_under_health_docker_is_not_reported_missing(
@@ -103,6 +112,20 @@ def test_unparseable_inspect_output_under_health_docker_is_not_reported_missing(
     rc = _exit_code(lambda: probe.main(["health", PI_SERVICE, "--docker"]))
     assert "MISSING" not in capsys.readouterr().out
     assert rc == TEMP_FAIL
+
+
+# `readonly-rbac` is the model the issue names, apart from its exit code: refused control verbs
+# mean the probe could not look, and so does a placement read that came back empty.
+def test_readonly_rbac_with_its_control_verbs_refused_is_unreadable():
+    allowed = dict.fromkeys(readonly_rbac.READONLY_ALLOWED, False)
+    denied = dict.fromkeys(readonly_rbac.READONLY_DENIED, False)
+    _, code = readonly_rbac.format_readonly_rbac(denied, allowed)
+    assert code == TEMP_FAIL
+
+
+def test_vip_placement_with_nothing_read_is_unreadable():
+    _, code = vip_placement.format_vip_placement([], [], set())
+    assert code == TEMP_FAIL
 
 
 def test_the_probe_contract_declares_the_unreadable_code():

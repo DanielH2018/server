@@ -33,6 +33,7 @@ PI_SERVICE = "wg-easy"
 # code. `ha` reaches its verdict through the `verify-automations` subcommand.
 VERDICT_SUBCOMMANDS = (
     ("monitors",),
+    ("targets",),
     ("kuma-drift",),
     ("health",),
     ("pi",),
@@ -45,6 +46,7 @@ VERDICT_SUBCOMMANDS = (
     ("landing",),
     ("gitops-state",),
     ("ha", "verify-automations"),
+    ("ha", "verify-entities"),
 )
 
 
@@ -143,6 +145,21 @@ def test_health_docker_ends_with_its_verdict(monkeypatch, capsys):
     )
     rc = _exit_code(lambda: probe.main(["health", PI_SERVICE, "--docker"]))
     assert rc == OK
+    _assert_ends_with_verdict(capsys.readouterr().out, rc)
+
+
+def test_health_docker_that_cannot_reach_the_pi_ends_with_the_unreadable_verdict(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda argv, *a, **k: subprocess.CompletedProcess(
+            argv, 255, "", "ssh: connect to host daniel-pi port 22: Connection refused"
+        ),
+    )
+    rc = _exit_code(lambda: probe.main(["health", PI_SERVICE, "--docker"]))
+    assert rc == TEMP_FAIL
     _assert_ends_with_verdict(capsys.readouterr().out, rc)
 
 
