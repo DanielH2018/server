@@ -35,7 +35,10 @@ def test_a_ledger_line_with_an_unknown_key_pages_with_its_tags(cfg):
     )
     ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
     assert not ok
-    assert "apply `ansible/k3s-bringup.yml --tags kubeconfig` by hand" in msg
+    assert (
+        "apply `uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig` by hand"
+        in msg
+    )
     assert msg.endswith("clear-owed manual_plane k3s --applied kubeconfig`")
 
 
