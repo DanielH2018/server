@@ -103,8 +103,8 @@ def read(log: Path) -> dict:
                     f"read {log}",
                 }
     if code is not None:
-        # A refusal that names no verdict (`Landing.die` from the landing policy) leaves its
-        # reason only on the `land:` line, so that line is the detail before the bare fallback.
+        # A stop that names no verdict (bad arguments, 64) leaves its reason only on the
+        # `land:` line, so that line is the detail before the bare fallback.
         error = detach.error_in(log)
         verdict = (
             detach.verdict_in(log)
