@@ -122,7 +122,7 @@ def held_sha(state_dir: str | os.PathLike) -> list[str]:
         snap = DeployerSnapshot.load(state_dir)
     except (OSError, UnicodeDecodeError) as exc:
         raise Unreadable(
-            f"cannot read the deployer's state under {state_dir}: {exc}"
+            f"cannot read the deployer's state under {state_dir}: {exc}", cluster=False
         ) from exc
     if not snap.hold:
         return []
