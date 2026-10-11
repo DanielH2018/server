@@ -144,9 +144,10 @@ the role from its run and from the hold, and a range in which no role needs a ta
 playbook and records `narrowed-to-nothing` as the setup plane's tags. `land.sh`'s note on the
 hosts the tick does not reach asks the same question over the PR's own range, so it names no
 hand-run of such a role (`land_reach._reads_no_changed_key`). A change to the key
-`claude_code` does read still applies the whole `claude_code` tag, because every task the agent
-include runs carries only that tag. The same test file derives these rows from the tree, and the
-table must equal them (#4357).
+`claude_code` does read still applies the whole `claude_code` tag. Its reader,
+`tasks/agent_access.yml`, runs only inside the agent include, whose tasks all carry that one
+tag. The same test file derives these rows from the tree, and the table must equal them
+(#4357).
 `initial_setup` reads `claude_code`'s agent defaults, and `deploy_ui` reads `k3s_agent_node_ips`.
 A k3s defaults change therefore records `k3s` in `manual_plane` and applies `deploy_ui`.
 A word match that is not a read, such as a bash local in a template, is exempted in that test
