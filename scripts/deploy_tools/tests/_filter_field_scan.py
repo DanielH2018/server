@@ -18,6 +18,8 @@ _BOTH = frozenset({_ENTRY, _LIST})
 # Methods that store their argument in the receiver, which then holds a list of entries. Any
 # other method handed an entry may have copied its fields, so its receiver may hold either.
 _COLLECTS = frozenset({"append", "add", "insert"})
+# The one wrapper a plugin's FilterModule may register a filter through (#4480).
+_WRAPPER = "_as_filter"
 
 
 def filter_reads(source: str) -> dict[str, tuple[set[str], set[str]]]:
@@ -59,11 +61,13 @@ def _unwrapped(value: ast.expr | None) -> ast.expr | None:
 
     `"in_service_tier": _as_filter(in_service_tier)` registers `in_service_tier` with its
     ValueError re-raised as AnsibleFilterError (#4480). The wrapper passes every argument
-    through, so the fields the filter reads are the wrapped function's.
+    through, so the fields the filter reads are the wrapped function's. Any other call is
+    left as it is, so the filter it registers goes unscanned and the table test fails on it.
     """
     if (
         isinstance(value, ast.Call)
         and isinstance(value.func, ast.Name)
+        and value.func.id == _WRAPPER
         and len(value.args) == 1
         and not value.keywords
         and isinstance(value.args[0], ast.Name)
