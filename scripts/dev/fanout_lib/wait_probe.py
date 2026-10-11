@@ -41,13 +41,15 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-# Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+# Reach `fanout_lib` (scripts/dev) and `lib` (scripts/): a directly-invoked script gets only
+# its own directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import place
 from fanout_lib.status import UNREAD
+from lib.cli_help import refuse_help_under_describe
 
 TERMINAL = {"finished": 0, "needs-attention": 1, "failed": 5}
 
@@ -129,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--describe", action="store_true")
     parser.add_argument("run_ids", nargs="+", metavar="run-id")
+    refuse_help_under_describe(parser, argv)
     ns = parser.parse_args(argv)
     for run_id in ns.run_ids:
         try:
