@@ -212,7 +212,8 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     )
     parts.append(
         '!!! note "Where the Tests column looks"\n'
-        "    Only for a `test_<name>.py` in the script's `tests/` sibling or beside it. A script "
+        "    Only for a `test_<name>.py` in the script's `tests/` sibling or beside it, or, for a "
+        "module inside a `*_lib` package, in the `tests/` beside that package. A script "
         "with an empty cell may still be exercised elsewhere: `gitops_tick.sh` has five tests "
         "in `test_gitops_manual_trigger.py`, and a module split out of a facade is run by the "
         "facade's suite. The column says where a script's own suite lives, not whether "

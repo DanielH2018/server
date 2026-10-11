@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-11 02:32 UTC
-generated_sha: 2a8b3f507
+generated_at: 2026-10-11 02:44 UTC
+generated_sha: 86c4d86ac
 ---
 
 !!! warning "Generated file — do not edit"
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 !!! note "Where the Tests column looks"
-    Only for a `test_<name>.py` in the script's `tests/` sibling or beside it. A script with an empty cell may still be exercised elsewhere: `gitops_tick.sh` has five tests in `test_gitops_manual_trigger.py`, and a module split out of a facade is run by the facade's suite. The column says where a script's own suite lives, not whether anything reaches it.
+    Only for a `test_<name>.py` in the script's `tests/` sibling or beside it, or, for a module inside a `*_lib` package, in the `tests/` beside that package. A script with an empty cell may still be exercised elsewhere: `gitops_tick.sh` has five tests in `test_gitops_manual_trigger.py`, and a module split out of a facade is run by the facade's suite. The column says where a script's own suite lives, not whether anything reaches it.
 
 
 ## Run automatically, on a schedule
