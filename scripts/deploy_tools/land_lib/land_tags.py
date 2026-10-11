@@ -129,6 +129,11 @@ def own_narrow_tags(files, pr_range: str, repo) -> dict[str, frozenset[str]]:
     range yet, and the narrowed clear drops only these tags, so a wider row recorded later
     keeps the rest. A role whose derivation refuses or raises is left out and keeps its role
     tag.
+
+    A role the range reaches no host through maps to an EMPTY set (#4408), which
+    `plane_note` reads as "leave the role out", the way the tick drops it from its run. No
+    other caller of `plane_note` passes an empty set: `classify.narrow_plane` filters the
+    receipt's empty rows out before rendering, because a receipt stores a refusal that way.
     """
     if ".." not in pr_range:
         return {}
@@ -143,9 +148,24 @@ def own_narrow_tags(files, pr_range: str, repo) -> dict[str, frozenset[str]]:
         # that has already merged, over a note the whole-role tag answers correctly.
         try:
             out[tag] = narrow_setup.role_tags(role, tag, old, new, str(repo), playbook)
+        except narrow_setup.NothingToApply as exc:
+            # Before the generic arm, which would read it as a refusal: it subclasses
+            # `CannotNarrow` so that a caller knowing only the refusal keeps the role tag.
+            print(f"narrow-setup: {role} needs no tag ({exc})", file=sys.stderr)
+            out[tag] = frozenset()
         except Exception as exc:
             print(f"narrow-setup: {role} keeps its role tag ({exc})", file=sys.stderr)
     return out
+
+
+def _needs_nothing(role: str, narrow_tags: dict[str, frozenset[str]] | None) -> bool:
+    """Whether `own_narrow_tags` answered that this PR's range reaches no host through `role`.
+
+    The key must be PRESENT with an empty set. An absent key is a refusal, and a refusal
+    keeps the whole-role tag.
+    """
+    tag = setup_role_tag(role)
+    return narrow_tags is not None and tag in narrow_tags and not narrow_tags[tag]
 
 
 def plane_note(
@@ -182,6 +202,10 @@ def plane_note(
     list -- `comment_only_broad_changes` cannot return `ansible/vars/secrets.yml`, and
     keeping the reads separate means a later widening there cannot silently mute a rotation.
 
+    `narrow_tags` is role tag -> the tags that role's change needs. A role mapped to an
+    empty set needs none over this range (`own_narrow_tags`), so the note leaves it out,
+    clear command included: `deploy_defer.record` writes no `manual_plane` line for it.
+
     `roles_root` is the role tree `land_shared.shared_roles` checks for a deleted role, for a
     test that needs one present; `None` reads the repo's own.
     """
@@ -215,7 +239,11 @@ def plane_note(
     # applying exactly those roles. land.sh reads the deployer's own state for
     # that case instead.
     loud = reach.reach(files, quiet)
-    unroutable = {r for r in loud.changes.setup_roles if not tick_applies_setup_role(r)}
+    unroutable = {
+        r
+        for r in loud.changes.setup_roles
+        if not tick_applies_setup_role(r) and not _needs_nothing(r, narrow_tags)
+    }
     if loud.manual or unroutable:
         notes.append(
             broad_remediation(
