@@ -158,6 +158,8 @@ def test_a_setup_plane_pr_is_not_nothing_to_deploy():
     tags, _ = land_tags.derive(files, changed_files=3)
     assert tags == [], "no service tag should be derived from these paths"
     assert "k3s-bringup.yml" in land_tags.plane_note(files)
+    # deploy_ui reads k3s_agent_node_ips, so the tick applies it beside the k3s hand apply (#4357).
+    assert "--tags deploy_ui" in land_tags.self_applied_command(files)
 
 
 def test_a_self_applied_setup_role_is_not_owed_to_a_hand():

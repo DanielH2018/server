@@ -1,4 +1,16 @@
 ---
+# Here rather than in install.yml's directory task, so a change to this layout narrows to this
+# file's tag alone. The parent comes from install.yml, which runs first.
+- name: Create the deployer_lib package directory
+  tags: [gitops-deploy-code]
+  ansible.builtin.file:
+    path: /opt/gitops-deploy/deployer_lib
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0750"
+  become: true
+
 - name: Install deployer Python files
   tags: [gitops-deploy-code]
   # The libraries come before the entry point, which imports them from deployer_lib/. One file
