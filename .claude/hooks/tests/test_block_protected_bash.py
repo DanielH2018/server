@@ -342,3 +342,10 @@ def test_a_payload_cwd_in_a_subdirectory_of_the_hooks_checkout_still_derives_a_s
     out = _run_hook_process(f"cat {INCIDENT}", os.path.join(_REPO, "ansible", "roles"))
     assert out and out["permissionDecision"] == "deny", out
     assert INCIDENT in out["permissionDecisionReason"]
+
+
+def test_a_payload_cwd_in_no_checkout_derives_from_the_hooks_own_tree(tmp_path):
+    """A cwd with no Ansible tree above it walks the hook's own tree, not an empty one."""
+    out = _run_hook_process(f"cat {INCIDENT}", tmp_path)
+    assert out and out["permissionDecision"] == "deny", out
+    assert INCIDENT in out["permissionDecisionReason"]
