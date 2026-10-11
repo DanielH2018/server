@@ -33,6 +33,7 @@ import subprocess
 from collections.abc import Callable
 
 from deployer_lib.deploy_config import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
+    WARNING,
     Config,
     ConfigError,
     load_config,
@@ -394,4 +395,4 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
             timeout=10,
         )
     except Exception as exc:
-        log(f"deploy annotation failed (deploy itself succeeded): {exc}")
+        log(f"deploy annotation failed (deploy itself succeeded): {exc}", level=WARNING)

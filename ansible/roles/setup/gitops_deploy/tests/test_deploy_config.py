@@ -176,6 +176,49 @@ def test_an_absent_config_file_is_an_empty_mapping(tmp_path):
     assert deploy_io.read_config_file(str(tmp_path / "absent.env")) == {}
 
 
+# ── log levels reach journald ─────────────────────────────────────────────────────────────
+def _log_to(path, monkeypatch, journal_stream):
+    """Run two `log` calls with stdout on `path`, and return what they wrote."""
+    from deployer_lib import deploy_config
+
+    if journal_stream is None:
+        monkeypatch.delenv("JOURNAL_STREAM", raising=False)
+    else:
+        monkeypatch.setenv("JOURNAL_STREAM", journal_stream)
+    with open(path, "w") as out:
+        monkeypatch.setattr("sys.stdout", out)
+        deploy_config.log("deploy failed:\nTraceback", level=deploy_config.ERR)
+        deploy_config.log("deploying k8s services: sonarr")
+    return path.read_text()
+
+
+def _stream_of(path):
+    st = path.stat()
+    return f"{st.st_dev}:{st.st_ino}"
+
+
+def test_a_leveled_line_carries_its_priority_on_every_line_when_stdout_is_the_journal(
+    tmp_path, monkeypatch
+):
+    out = tmp_path / "journal"
+    out.touch()
+    assert _log_to(out, monkeypatch, _stream_of(out)) == (
+        "<3>deploy failed:\n<3>Traceback\ndeploying k8s services: sonarr\n"
+    )
+
+
+def test_a_leveled_line_is_plain_when_stdout_is_not_the_journal_stream(
+    tmp_path, monkeypatch
+):
+    """A child of a systemd unit inherits JOURNAL_STREAM with its stdout redirected elsewhere,
+    which is how a test run under a service would otherwise capture `<3>` prefixes."""
+    other = tmp_path / "other"
+    other.touch()
+    plain = "deploy failed:\nTraceback\ndeploying k8s services: sonarr\n"
+    assert _log_to(tmp_path / "file", monkeypatch, _stream_of(other)) == plain
+    assert _log_to(tmp_path / "unset", monkeypatch, None) == plain
+
+
 def test_the_reader_parses_key_value_pairs(tmp_path):
     path = tmp_path / "deployer.env"
     path.write_text("REPO_DIR=/srv/repo\nBRANCH=master\n")
