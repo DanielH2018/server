@@ -40,6 +40,25 @@ def test_snapshots_entrypoint_resolves_its_sibling_imports_when_run_directly(tmp
     assert "ModuleNotFoundError" not in proc.stderr, proc.stderr
 
 
+# ── the dispatcher refuses before either reaper runs ─────────────────────────────────────
+
+
+def test_no_subcommand_exits_2_with_usage_and_no_kubectl_call(tmp_path):
+    proc, calls = _run(BACKUPS_ENTRY[0], [], {"volumes": []}, tmp_path)
+    assert proc.returncode == 2, proc.stderr
+    assert "backups" in proc.stderr and "snapshots" in proc.stderr
+    assert calls == []
+
+
+def test_an_unknown_subcommand_exits_2_and_names_both_reapers(tmp_path):
+    proc, calls = _run(BACKUPS_ENTRY[0], ["--apply"], {"volumes": []}, tmp_path)
+    assert proc.returncode == 2, proc.stderr
+    assert "unknown subcommand: --apply (expected one of: backups, snapshots)" in (
+        proc.stderr
+    )
+    assert calls == []
+
+
 def test_the_apply_refusal_names_the_dry_runs_own_interpreter(tmp_path):
     # Root's `python3` is the distro interpreter, not the pinned one this run uses, so the
     # re-run hint names the interpreter and the script by absolute path rather than leaving
