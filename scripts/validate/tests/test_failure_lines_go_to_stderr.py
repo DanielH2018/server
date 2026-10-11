@@ -1,16 +1,19 @@
 """grafana_dashboards.py and asset_pins.py print nothing on stdout when they exit non-zero.
 
-Each script runs as a subprocess against a scratch tree holding a copy of `scripts/lib` and
-the script. Both scripts read their repo from their own location, so the copy runs unpatched.
-A subprocess also sidesteps `asset_pins.main`'s `out=sys.stdout` default, which is bound at
-import, where `capsys` cannot see it.
+Most tests run a script as a subprocess against a scratch tree holding a copy of `scripts/lib`
+and the script. Both scripts read their repo from their own location, so the copy runs
+unpatched. A subprocess also sidesteps `asset_pins.main`'s `out=sys.stdout` default, which is
+bound at import, where `capsys` cannot see it. Every pin in the asset_pins tree has a URL that
+does not render, so each check and refresh fails on `Pin.error` before it fetches anything.
+The suite runs under `-p leakguard`.
 
-Every pin in the asset_pins tree has a URL that does not render, so each check and refresh
-fails on `Pin.error` before it fetches anything. The suite runs under `-p leakguard`.
+A run where some pins pass before the run fails needs a successful fetch, which a subprocess
+cannot fake. Those runs call `asset_pins.main` in-process with a fake fetcher instead.
 
 Run: uv run pytest scripts/validate/tests/test_failure_lines_go_to_stderr.py
 """
 
+import hashlib
 import json
 import re
 import shutil
@@ -174,3 +177,66 @@ def test_asset_pins_prints_its_refusal_on_stderr(asset_pins_refusal):
         assert _lines_beyond_fail_lines(run.stderr), run.stdout + run.stderr
     else:
         assert refusal.names in run.stderr, run.stdout + run.stderr
+
+
+# ── asset_pins.py: lines printed before the run knows it fails ──────────────────────────────
+
+SERVED_URL = "https://example.invalid/served"
+MISSING_URL = "https://example.invalid/missing"
+PAYLOAD = b"asset bytes"
+PAYLOAD_SHA256 = hashlib.sha256(PAYLOAD).hexdigest()
+OLD_DIGEST = "0" * 64
+
+
+def _serve(url: str):
+    """200 and PAYLOAD for SERVED_URL, 404 for any other URL."""
+    return (200, iter([PAYLOAD])) if url == SERVED_URL else (404, iter(()))
+
+
+def _pin(name: str, url: str, digest: str) -> asset_pins.Pin:
+    return asset_pins.Pin(name, url, "sha256", digest, "defaults.yml")
+
+
+MIXED_RUNS = [
+    pytest.param(
+        ["-v"],
+        [
+            _pin("fresh", SERVED_URL, PAYLOAD_SHA256),
+            _pin("stale", SERVED_URL, OLD_DIGEST),
+        ],
+        1,
+        id="a-verbose-check-with-one-stale-pin",
+    ),
+    pytest.param(
+        ["--refresh", "fresh,gone"],
+        [_pin("fresh", SERVED_URL, OLD_DIGEST), _pin("gone", MISSING_URL, "1" * 64)],
+        1,
+        id="a-refresh-with-one-unreadable-pin",
+    ),
+    pytest.param(
+        ["--refresh", "vendor/digestless,vendor/nope"],
+        [_pin("fresh", SERVED_URL, PAYLOAD_SHA256)],
+        64,
+        id="a-refresh-naming-a-digestless-and-an-unknown-dep",
+    ),
+]
+
+
+@pytest.mark.parametrize(("argv", "pins", "exit_code"), MIXED_RUNS)
+def test_asset_pins_keeps_lines_printed_before_the_failure_off_stdout(
+    argv, pins, exit_code, tmp_path, capsys
+):
+    """The `ok` and `nothing to refresh` lines a run prints before it fails stay off stdout."""
+    (tmp_path / "defaults.yml").write_text(f"fresh_sha256: {OLD_DIGEST}\n")
+    code = asset_pins.main(
+        argv,
+        fetcher=_serve,
+        # Passed explicitly: capsys replaced sys.stdout after the default was bound at import.
+        out=sys.stdout,
+        discover=lambda: (pins, []),
+        known=frozenset(pin.name for pin in pins),
+        root=tmp_path,
+        annotated=lambda: {"vendor/digestless"},
+    )
+    assert code == exit_code, capsys.readouterr()
+    assert capsys.readouterr().out == ""
