@@ -234,11 +234,13 @@ def test_explicit_tags_skip_derivation_but_not_the_self_applied_half(landing):
 
 
 def test_a_truncated_file_list_without_since_is_a_usage_error(landing):
+    from lib.exit_codes import LAND_BAD_ARGS
+
     ln, _ = landing(Fakes(derived=([], "fallback")))
     ln.merge_sha = MERGE_SHA
     with pytest.raises(Outcome) as exc:
         classify.classify(ln)
-    assert exc.value.rc == 2 and "--since" in exc.value.error
+    assert exc.value.rc == LAND_BAD_ARGS and "--since" in exc.value.error
 
 
 def test_a_truncated_file_list_with_since_defers_derivation(landing, capsys):
