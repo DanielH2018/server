@@ -114,6 +114,53 @@ def test_the_entry_point_answers_help_with_exit_zero(name):
     assert r.stdout.strip(), f"{name} --help exited 0 and printed nothing to stdout"
 
 
+# -- cc-wait's repo probes: the one exit that is not 0 ------------------------------------
+
+WAIT_SOURCES = REPO / ".claude" / "wait-sources"
+PROBES = sorted(path.name for path in WAIT_SOURCES.iterdir() if path.is_file())
+MUST_FIND_PROBES = frozenset({"land", "deploy", "fanout"})
+
+# cc-wait reports a refused `--describe` with only the last 400 characters of its stderr
+# (dotfiles `cc_wait/repo.py`, `ProbeWait.describe`), so the usage has to land inside them.
+CC_WAIT_STDERR_TAIL = 400
+
+
+def _probe(name: str, *argv: str) -> subprocess.CompletedProcess:
+    """Run a probe the way cc-wait does: its tracked shim, from the repo root."""
+    env = {**os.environ, "PYTHONPATH": _pythonpath_without_scripts()}
+    return subprocess.run(
+        [str(WAIT_SOURCES / name), *argv],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        timeout=HELP_TIMEOUT_S,
+        env=env,
+    )
+
+
+def test_the_census_still_finds_every_cc_wait_probe():
+    missing = MUST_FIND_PROBES - set(PROBES)
+    assert not missing, f"the probe census lost {sorted(missing)}"
+
+
+@pytest.mark.parametrize("name", PROBES, ids=str)
+def test_a_probe_refuses_help_under_describe_with_its_usage_on_stderr(name):
+    """`cc-wait land --help` runs `land --describe --help` and parses its stdout as JSON (#4376)."""
+    r = _probe(name, "--describe", "--help")
+    assert (r.returncode, r.stdout) == (2, ""), (
+        f"{name} --describe --help exited {r.returncode}; cc-wait reads exit 0 as a "
+        f"description.\nstdout: {r.stdout[-400:]}\nstderr: {r.stderr[-400:]}"
+    )
+    assert "usage:" in r.stderr.strip()[-CC_WAIT_STDERR_TAIL:], r.stderr
+
+
+@pytest.mark.parametrize("name", PROBES, ids=str)
+def test_a_probe_still_answers_help_without_describe(name):
+    r = _probe(name, "--help")
+    assert r.returncode == 0, r.stderr[-400:]
+    assert r.stdout.startswith("usage:"), r.stdout[:400]
+
+
 # -- the helper's own rules ----------------------------------------------------------------
 
 

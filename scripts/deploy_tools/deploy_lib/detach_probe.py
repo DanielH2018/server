@@ -35,6 +35,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from lib.cli_help import refuse_help_under_describe
 from lib.detach_fork import alive, recorded_code, recorded_pid
 
 # `deploy_detach.LOG_DIR`, restated: that module imports the deploy machinery, and this probe
@@ -139,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     where = parser.add_mutually_exclusive_group()
     where.add_argument("--log", default="")
     where.add_argument("--log-dir", default="")
+    refuse_help_under_describe(parser, argv)
     ns = parser.parse_args(argv)
     try:
         log = find_log(ns.tags, ns.log, ns.log_dir)
