@@ -132,7 +132,7 @@ REFUSALS = {
     ),
     "a file entry of the wrong shape": (
         {"pr_files": [{"status": "modified", "filename": 7}]},
-        "could not list the PR's files: unparseable gh output",
+        "could not list the PR's files: unparseable gh output: filename: expected a string",
     ),
     "a file list at GitHub's cap": (
         {
@@ -327,7 +327,10 @@ def test_a_review_of_the_wrong_shape_refuses_as_unparseable(landing, tmp_path):
     reviews = [{**_review("APPROVED"), "user": APPROVER}]
     with pytest.raises(Outcome) as exc:
         _arm_approval_path(landing, tmp_path, reviews, approver=APPROVER)
-    assert "could not list the PR's reviews: unparseable gh output" in exc.value.error
+    assert (
+        "could not list the PR's reviews: unparseable gh output: user: expected a JSON object"
+        in exc.value.error
+    )
 
 
 @pytest.mark.parametrize("case", sorted(UNAPPROVED))

@@ -8,7 +8,8 @@ nothing about a `.get` chain on it (#3704). Each reader here narrows one shape a
   listings, which the landing policy reads.
 
 Every key is optional, because a `gh pr view` answer carries only the fields asked for. A field
-of the wrong type raises `ValueError`, which `Landing.view` reports as unparseable gh output. A
+of the wrong type raises `ValueError` naming the field, which `Landing.view` reports as
+unparseable gh output followed by that text. A
 string field that is JSON `null` reads as `""`: every caller already treats the two alike.
 A top-level view field `PrView` does not declare raises `KeyError`, because ty reports
 `view["x"]` for an undeclared key but not `view.get("x")`, which would read `None` forever. A
