@@ -12,6 +12,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_blockers.py
 """
 
 import argparse
+import re
 
 
 from deploy_tools.deploy_lib import tags as deploy_tags
@@ -105,3 +106,23 @@ def test_the_culprit_is_named(monkeypatch, capsys):
     err = capsys.readouterr().err
     assert "ansible/bootstrap.yml" in err
     assert "ansible/roles/k8s/sonarr" not in err, "named a path that is not a blocker"
+
+
+def test_a_failed_git_diff_reads_as_an_error_under_the_parsers_prog(capsys):
+    """#4498: the failure is a complaint, so it carries `<prog>: error:` like every other
+    deploy-family failure, where a grep for `: error:` finds it. The prog is the parser's,
+    `deploy_cli.py tags`, not a hand-written `deploy blockers:` label.
+
+    A ref that names no commit makes the real `git diff HEAD..<ref>` fail, so nothing is stubbed.
+    """
+    ref = "refs/heads/no-such-branch-4498"
+
+    rc = deploy_tags.main(["blockers", ref])
+
+    assert rc == 1
+    err_lines = capsys.readouterr().err.splitlines()
+    failure = [line for line in err_lines if f"git diff HEAD..{ref}" in line]
+    assert len(failure) == 1, err_lines
+    assert re.match(r"^deploy_cli\.py tags( blockers)?: error: ", failure[0]), failure[
+        0
+    ]
