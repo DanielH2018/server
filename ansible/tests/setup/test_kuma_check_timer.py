@@ -5,7 +5,7 @@ soon the fault is fixed. `roles/setup/common/tasks/kuma_check_timer.yml` replace
 with a systemd timer and oneshot service whose contract is the exit code: the script exits 1
 after it pushes `down`, and `Restart=on-failure` reruns it every `RestartSec` until it exits 0.
 
-Four properties, each invisible at deploy time because Ansible reports the units as applied
+Five properties, each invisible at deploy time because Ansible reports the units as applied
 either way:
 
 1. The service restarts on failure and only on failure. `Restart=always` is refused for a
@@ -18,6 +18,9 @@ either way:
 4. Both directions are wired: `kuma_check_state: absent` stops and disables the timer and
    removes the units and the legacy cron. A one-way door is the reverse-state bug this repo
    keeps paying for.
+5. A reboot does not end a red check's reruns (#4495). The restart loop lives in memory, and
+   `Persistent=true` catches up only a slot that never fired. The service keeps a down marker,
+   and a boot unit conditioned on that marker starts the service once at boot.
 
 Run: uv run pytest ansible/tests/setup/test_kuma_check_timer.py
 """
@@ -34,6 +37,7 @@ from _role_census import task_files
 COMMON = SETUP_ROLES / "common"
 SERVICE = COMMON / "templates" / "kuma-check.service.j2"
 TIMER = COMMON / "templates" / "kuma-check.timer.j2"
+BOOT = COMMON / "templates" / "kuma-check-boot.service.j2"
 TASKS = COMMON / "tasks" / "kuma_check_timer.yml"
 
 # Every check wired through the task file, by `kuma_check_name`. A census read by glob returns
@@ -137,6 +141,53 @@ def test_timer_is_persistent_and_names_its_service(timer: str) -> None:
     assert directive(timer, "WantedBy") == ["timers.target"]
 
 
+@pytest.fixture(scope="module")
+def boot() -> str:
+    return _render(BOOT)
+
+
+def _marker_from_stop_post(service: str) -> tuple[str, str]:
+    """The (removed, created) marker paths of the service's ExecStopPost= shell line."""
+    [stop_post] = directive(service, "ExecStopPost")
+    removed = re.search(r"then rm -f (\S+);", stop_post)
+    created = re.search(r"touch (\S+); fi", stop_post)
+    assert removed and created, f"unexpected ExecStopPost= shape: {stop_post}"
+    return removed.group(1), created.group(1)
+
+
+def test_service_keeps_a_down_marker_that_survives_a_reboot(service: str) -> None:
+    [stop_post] = directive(service, "ExecStopPost")
+    assert stop_post.startswith("+"), (
+        "the marker lives under /var/lib, so the line runs as root whatever User= is"
+    )
+    assert '"$$SERVICE_RESULT" = success' in stop_post, (
+        "a single `$` is systemd's own substitution, which leaves the shell an empty test"
+    )
+    removed, created = _marker_from_stop_post(service)
+    assert removed == created == "/var/lib/kuma-check/widget.down", (
+        "the marker must survive the reboot, so not /run, and be the one path both arms touch"
+    )
+
+
+def test_boot_unit_reruns_the_service_only_while_the_marker_exists(
+    service: str, boot: str
+) -> None:
+    _, created = _marker_from_stop_post(service)
+    assert directive(boot, "ConditionPathExists") == [created], (
+        "the boot unit gates on a different path than the service writes, so it never reruns"
+    )
+    assert directive(boot, "Type") == ["oneshot"]
+    assert directive(boot, "ExecStart") == [
+        "/usr/bin/systemctl start --no-block kuma-check-widget.service"
+    ]
+    for key in ("Wants", "Requires", "BindsTo"):
+        assert not directive(boot, key), (
+            f"{key}= pulls the service in even when the condition fails, so every check "
+            "would run at every boot"
+        )
+    assert directive(boot, "WantedBy") == ["multi-user.target"]
+
+
 def _systemd_tasks() -> list[dict]:
     return [
         t
@@ -168,6 +219,26 @@ def test_task_file_wires_both_directions() -> None:
         if (t.get("ansible.builtin.file") or {}).get("state") == "absent"
     ]
     assert files_absent, "the absent arm leaves the unit files on the host"
+    removed = {p for t in files_absent for p in t.get("loop") or []}
+    for path in (
+        "/etc/systemd/system/kuma-check-{{ kuma_check_name }}-boot.service",
+        "/var/lib/kuma-check/{{ kuma_check_name }}.down",
+    ):
+        assert path in removed, f"the absent arm leaves {path} on the host"
+    assert any(
+        s.get("name") == "kuma-check-{{ kuma_check_name }}-boot.service"
+        and s.get("enabled") is False
+        for s in specs
+    ), "the absent arm never disables the boot-rerun unit"
+    assert any(
+        s.get("name") == "kuma-check-{{ kuma_check_name }}-boot.service"
+        and s.get("enabled") is True
+        and "state" not in s
+        for s in specs
+    ), (
+        "the present arm must enable the boot-rerun unit without starting it, or a deploy "
+        "reruns every red check"
+    )
     crons_absent = [
         t
         for t in leaf_tasks(load_tasks(TASKS))

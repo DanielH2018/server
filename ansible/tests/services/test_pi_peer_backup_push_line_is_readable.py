@@ -81,6 +81,21 @@ def test_a_kuma_json_404_is_read_as_rejected(tmp_path):
     assert _parsed(err[0]) == (TAG, POD, "rejected", "up", "http=404 rc=0 by=kuma")
 
 
+def test_kumas_own_reason_precedes_the_failure_line_with_the_token_redacted(tmp_path):
+    # ACCEPT (#4481): the pod has no journal, so Kuma's `msg` goes to the same stderr log.
+    reply = (
+        '{"ok":false,"msg":"SQLITE_BUSY near \'secret-token\'"}'
+        "\n404 application/json; charset=utf-8"
+    )
+    _out, err = _run_push(tmp_path, reply, 0, "up")
+    assert len(err) == 2, err
+    assert err[0].endswith(
+        "pi-peer-backup: push rejected by kuma (http=404): SQLITE_BUSY near '<token>'"
+    )
+    assert parse_push_line(err[0]) is None
+    assert _parsed(err[1]) == (TAG, POD, "rejected", "up", "http=404 rc=0 by=kuma")
+
+
 def test_a_transport_failure_is_read_as_swallowed_not_rejected(tmp_path):
     # REJECT (the pair): curl dying before a response prints `000 ` and a non-zero rc, and
     # no `by=kuma` — Kuma did not answer.

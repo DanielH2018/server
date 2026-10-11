@@ -143,6 +143,10 @@ def test_a_push_kuma_rejected_is_flagged_whatever_its_status_and_company():
     assert not ok
     assert "Kuma rejected the push for release-staleness-check on daniel-box" in msg
     assert "http=404 rc=0 by=kuma, status=up" in msg
+    # Kuma answers 404 for any exception, so the page points at Kuma's own reason rather than
+    # asserting a token mismatch: a DB error matched the token on 2026-10-11 (#4481).
+    assert "push rejected by kuma" in msg
+    assert "no live monitor holds the token" not in msg
 
 
 def test_a_rejected_push_that_the_next_run_landed_is_clean():

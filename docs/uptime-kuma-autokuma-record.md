@@ -242,7 +242,9 @@ shapes:
   bug that test's `EXIT_CONTRACT` half catches. On the host,
   `systemctl status kuma-check-<name>` reads `auto-restart` while the tile is red, and
   `journalctl -u kuma-check-<name>` holds every rerun. The timers are `Persistent=true`, so a slot
-  missed inside an outage runs at boot; the checks that judge the cluster (Loki read route, manifest
+  missed inside an outage runs at boot. A reboot ends the restart loop of a check that was red, so
+  `kuma-check-<name>-boot.service` reruns it once at boot while `/var/lib/kuma-check/<name>.down`
+  exists (#4495). The service writes that marker after any run that did not exit 0. The checks that judge the cluster (Loki read route, manifest
   prune, live drift) carry a boot-grace arm that exits 1 without a push there, and the restart
   carries the real verdict.
 - **A check that reads no host state lives in monitor-bridge**, which caches a success for the probe
