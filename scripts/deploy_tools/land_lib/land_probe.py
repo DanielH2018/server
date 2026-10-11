@@ -37,6 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import detach
 from deploy_tools.land_lib.outcome import ABANDONED_WATCH_NOTE, Verdict
+from lib.cli_help import refuse_help_under_describe
 
 # land.sh's exit code -> the state that ends the wait. Every code land.sh documents is here.
 _STATE_BY_RC = {0: "landed", 1: "failed", 64: "bad-arguments", 75: "gave-up"}
@@ -139,6 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     where = parser.add_mutually_exclusive_group()
     where.add_argument("--log", default="")
     where.add_argument("--log-dir", default="")
+    refuse_help_under_describe(parser, argv)
     ns = parser.parse_args(argv)
     try:
         log = find_log(ns.pr, ns.log, ns.log_dir)

@@ -18,6 +18,13 @@ The shell scripts do the same thing with four lines of `case` rather than by sou
 `land.sh` and `deploy.sh` are `exec` shims whose whole body is two statements, and a `source`
 in front of that is more machinery than the check is worth.
 
+THE ONE EXCEPTION is a cc-wait repo probe asked for `--describe` (`.claude/wait-sources/`).
+cc-wait runs `<probe> --describe <args>` and parses its stdout as JSON, and `<args>` is
+whatever followed the source name, so `cc-wait land --help` runs `land --describe --help`.
+Help on stdout with exit 0 reached cc-wait as a malformed description (#4376).
+`refuse_help_under_describe` makes that a usage error instead, which cc-wait prints. A probe
+asked for `--help` alone still answers with exit 0.
+
 Typical usage example:
 
     from lib.cli_help import answer_help
@@ -27,6 +34,7 @@ Typical usage example:
         ...
 """
 
+import argparse
 import sys
 
 HELP_FLAGS = ("-h", "--help")
@@ -47,3 +55,18 @@ def answer_help(doc: str | None, argv: list[str] | None = None) -> None:
     if wants_help(argv):
         print((doc or "").strip())
         raise SystemExit(0)
+
+
+def refuse_help_under_describe(
+    parser: argparse.ArgumentParser, argv: list[str] | None = None
+) -> None:
+    """Exit 2 with `parser`'s usage on stderr when `argv` asks for help beside `--describe`.
+
+    A cc-wait probe calls this ahead of `parser.parse_args`. cc-wait keeps only the last 400
+    characters of a refused probe's stderr, so this prints the usage line, not the full help.
+    """
+    argv = sys.argv[1:] if argv is None else argv
+    if "--describe" in argv and wants_help(argv):
+        parser.error(
+            "--describe answers cc-wait in JSON, so it takes no --help; run without --describe"
+        )
