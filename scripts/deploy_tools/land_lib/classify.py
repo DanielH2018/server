@@ -227,7 +227,13 @@ def classify(ln: Landing) -> None:
     # -1 rather than 0: `gh` omitting the field must not read as agreement with an empty
     # file list, which would silently license a zero-tag deploy.
     tags, source = _classified(
-        ln, "tag derivation", c.derive, paths, view.get("changedFiles", -1), declared
+        ln,
+        "tag derivation",
+        c.derive,
+        paths,
+        view.get("changedFiles", -1),
+        declared,
+        quiet=quiet,
     )
     ln.resolved_tags = list(tags)
     if source == DeriveSource.PR:

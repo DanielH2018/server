@@ -9,8 +9,16 @@ and one timeout, and a rollback resets the whole merged range.
 
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_k8s_eligibility.py
 
+import pytest
+
+from deployer_lib import deploy_phases, deploy_tick_types
 from deployer_lib.deploy_changes import services_from_changed_paths
-from deployer_lib.deploy_k8s import is_image_only_diff, split_k8s_auto_deploy
+from deployer_lib.deploy_k8s import (
+    comment_only_k8s_defaults,
+    is_image_only_diff,
+    split_k8s_auto_deploy,
+)
+from _deploy_fakes import LOCAL, ORIGIN
 
 
 # ── k8s auto-deploy: the diff-shape predicate ───────────────────────────────────────────────
@@ -307,3 +315,101 @@ def test_split_k8s_claim_cap_of_zero_leaves_the_old_behaviour():
         paths, claim_services=("radarr", "sonarr"), max_claim_services_per_tick=0
     )
     assert cs.k8s_deploy == {"radarr", "sonarr"}
+
+
+# ── a comment-only edit to a k8s role's defaults is no change (#4460) ───────────────────────
+#
+# PR #4459 repointed one comment in jellyfin's defaults; the tick deferred it, paged, and owed
+# a no-op deploy to clear. The read is the deployer's YAML one, so each reject case below is a
+# line that LOOKS like a comment to a line matcher but is content to Ansible.
+
+_JELLYFIN_DEFAULTS = "ansible/roles/k8s/jellyfin/defaults/main.yml"
+_DEFAULTS_TEXT = """\
+# The plugin's design record: docs/anilist-integration.md.
+jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.0
+jellyfin_k8s_init_script: |
+  set -eu
+  # not a comment: part of the script
+jellyfin_k8s_init_args:
+  - |
+    # not a comment either: a list item's block scalar
+"""
+_COMMENT_EDIT = _DEFAULTS_TEXT.replace(
+    "docs/anilist-integration.md", "docs/archive/anilist-integration.md"
+)
+
+
+def _quiet_defaults(
+    before: str, after: str, path: str = _JELLYFIN_DEFAULTS
+) -> set[str]:
+    texts = {("old", path): before, ("new", path): after}
+
+    def show(ref: str, p: str) -> str:
+        try:
+            return texts[(ref, p)]
+        except KeyError as exc:
+            raise RuntimeError(f"git show {ref}:{p} -> 128") from exc
+
+    return comment_only_k8s_defaults([path], "old", "new", show)
+
+
+def test_a_comment_only_edit_to_k8s_defaults_is_no_change():
+    assert _quiet_defaults(_DEFAULTS_TEXT, _COMMENT_EDIT) == {_JELLYFIN_DEFAULTS}
+
+
+@pytest.mark.parametrize(
+    "after",
+    [
+        _DEFAULTS_TEXT.replace("10.11.0", "10.11.1"),
+        _DEFAULTS_TEXT.replace("part of the script", "part of the script, reworded"),
+        _DEFAULTS_TEXT.replace("10.11.0\n", "10.11.0  # pinned\n"),
+        _DEFAULTS_TEXT.replace("comment either", "comment, either"),
+    ],
+    ids=[
+        "value-edit",
+        "hash-line-inside-a-block-scalar",
+        "trailing-comment",
+        "hash-line-inside-a-list-item-block-scalar",
+    ],
+)
+def test_a_content_edit_to_k8s_defaults_still_counts(after):
+    assert _quiet_defaults(_DEFAULTS_TEXT, after) == set()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2",
+        "ansible/roles/k8s/jellyfin/tasks/main.yml",
+        "ansible/roles/k8s/manifests/defaults/main.yml",
+    ],
+)
+def test_the_read_covers_only_a_service_roles_defaults(path):
+    """A `#` line in a `.j2` is rendered content, `tasks/` keeps its own defer channel, and
+    `manifests` is the renderer every service includes."""
+    assert _quiet_defaults(_DEFAULTS_TEXT, _COMMENT_EDIT, path=path) == set()
+
+
+@pytest.mark.parametrize(
+    "after, deferred",
+    [
+        (_COMMENT_EDIT, set()),
+        (_DEFAULTS_TEXT.replace("set -eu", "set -euo"), {"jellyfin"}),
+    ],
+    ids=["comment-only", "value-edit"],
+)
+def test_plan_tick_defers_a_k8s_defaults_edit_only_when_content_moved(
+    gitops_deploy, tick, capsys, settings, state, after, deferred
+):
+    tick.paths = [_JELLYFIN_DEFAULTS]
+    tick.files = {
+        f"{LOCAL}:{_JELLYFIN_DEFAULTS}": _DEFAULTS_TEXT,
+        f"{ORIGIN}:{_JELLYFIN_DEFAULTS}": after,
+    }
+    target = deploy_tick_types.TickTarget(
+        local=LOCAL, origin=ORIGIN, hold=None, dirty=False, status="", action="deploy"
+    )
+    plan = deploy_phases.plan_tick(tick.tools, state, settings, target)
+    assert plan.cs.k8s == deferred
+    assert plan.cs.k8s_deploy == set()
+    assert ("not deferring" in capsys.readouterr().out) == (not deferred)

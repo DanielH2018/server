@@ -372,8 +372,14 @@ def _cmd_narrow(args: argparse.Namespace) -> int:
     return narrow_cmd(args.old, args.new)
 
 
-def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]:
-    """The broad-plane paths whose diff between two refs carries no content change.
+def comment_only_paths(
+    paths: list[str], old_ref: str, new_ref: str, show=None
+) -> set[str]:
+    """The broad-plane and k8s `defaults/` paths whose diff between two refs carries no content change.
+
+    The k8s half is the read the tick makes before it would defer a role (#4460), so a
+    landing does not run a no-op deploy for an edit the tick treats as no change. `show`
+    replaces `_git_show`, for a test.
 
     Public because `land_tags` asks the same question for its plane note, and two
     derivations that disagree about one commit is the defect this module's shared imports
@@ -385,9 +391,13 @@ def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]
     explicit refs. Worktrees share the object store with the checkout they were made from,
     so a ref fetched in the primary is readable from a worktree that never fetched it.
     """
+    from deployer_lib.deploy_k8s import comment_only_k8s_defaults
     from deployer_lib.deploy_logic import comment_only_broad_changes
 
-    return comment_only_broad_changes(paths, old_ref, new_ref, _git_show)
+    show = show or _git_show
+    return comment_only_broad_changes(
+        paths, old_ref, new_ref, show
+    ) | comment_only_k8s_defaults(paths, old_ref, new_ref, show)
 
 
 def changed(

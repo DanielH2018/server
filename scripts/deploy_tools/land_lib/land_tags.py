@@ -197,7 +197,7 @@ def plane_note(
     would report `nothing-to-deploy`.
 
     `quiet` is the broad-plane paths whose diff carries no content change, from
-    `deploy_tags.comment_only_paths`. They are dropped from the BROAD half only: a playbook
+    `deploy_tags.comment_only_paths`. Here they are dropped from the BROAD half only: a playbook
     named for three edited comments has nothing to apply. The secrets half reads the unfiltered
     list -- `comment_only_broad_changes` cannot return `ansible/vars/secrets.yml`, and
     keeping the reads separate means a later widening there cannot silently mute a rotation.
@@ -356,7 +356,9 @@ class Derivation(NamedTuple):
     source: DeriveSource
 
 
-def derive(files, changed_files: int, declared: set[str] | None = None) -> Derivation:
+def derive(
+    files, changed_files: int, declared: set[str] | None = None, quiet=()
+) -> Derivation:
     """(sorted tags, 'pr'|'fallback').
 
     'fallback' means the file list could not be trusted and the caller must widen to a SHA
@@ -366,6 +368,9 @@ def derive(files, changed_files: int, declared: set[str] | None = None) -> Deriv
     A changed role with no `containers_list` entry yields no tag. It is not dropped silently
     -- `plane_note` names it and what applies it -- because dropping it from BOTH would let the
     setup plane read as `nothing-to-deploy`.
+
+    `quiet` is `quiet_paths`'s set. Of what it holds, only a comment-only k8s `defaults/` file
+    maps to a tag, and the tick treats that edit as no change (#4460), so it deploys nothing.
     """
     files = list(files)
     if len(files) != changed_files:
@@ -373,7 +378,9 @@ def derive(files, changed_files: int, declared: set[str] | None = None) -> Deriv
     declared = declared_tags() if declared is None else declared
     # A build role whose workload lives in a different role must not deploy alone: the build
     # would push a new image that nothing rolls onto, and report green doing it.
-    return Derivation(sorted(reach.reach(files).tags(declared, REPO)), DeriveSource.PR)
+    return Derivation(
+        sorted(reach.reach(files, quiet).tags(declared, REPO)), DeriveSource.PR
+    )
 
 
 def doc_paths(paths) -> set[str]:
@@ -481,6 +488,7 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
         # -1 rather than 0: `gh` omitting the field must not be read as agreement with an
         # empty file list, which would silently license a zero-tag deploy.
         payload.get("changedFiles", -1),
+        quiet=quiet,
     )
     # The callers of what `--plane` stopped naming, as `classify` adds them.
     if source == DeriveSource.PR:

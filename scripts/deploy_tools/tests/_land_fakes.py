@@ -217,7 +217,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         self_applied=lambda paths, quiet=(): f.self_applied,
         self_applied_command=lambda paths, quiet=(): f.self_applied_command,
         remaining_setup_hosts=remaining_setup_hosts,
-        derive=lambda paths, changed, declared=None: Derivation(
+        derive=lambda files, changed_files, declared=None, quiet=(): Derivation(
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
         quiet_paths=lambda paths, range_: set(),
