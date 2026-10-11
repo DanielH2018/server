@@ -35,9 +35,16 @@ TEMPLATE = ("k8s", "artifacts", "sync-artifacts.sh.j2")
 DEFAULTS = load_defaults(ARTIFACTS)
 THRESHOLD = DEFAULTS["artifacts_sync_alert_after_failures"]
 PEER = DEFAULTS["artifacts_peer_sources"][0]["name"]
+PEER_SSH = DEFAULTS["artifacts_peer_sources"][0]["ssh_target"]
+PEER_STARS = DEFAULTS["artifacts_peer_sources"][0]["stars_path"]
 
-# `rsync` fails when the stub file says `fail`, so one rendered script drives both paths.
-RSYNC_STUB = '[[ "$(cat "$SYNC_ARTIFACTS_STUB")" == fail ]] && return 1; return 0'
+# Every `rsync` call is recorded. It fails when the stub file says `fail`, and only the star
+# push fails when it says `push-fail`, so one rendered script drives every path.
+RSYNC_STUB = (
+    'printf "%s\\n" "$*" >>"$SYNC_ARTIFACTS_CALLS"; '
+    'case "$(cat "$SYNC_ARTIFACTS_STUB")" in fail) return 1 ;; '
+    'push-fail) [[ "$*" == *"$SYNC_ARTIFACTS_STARS"* ]] && return 1 ;; esac; return 0'
+)
 LOGGER_STUB = 'printf "%s\\n" "$*" >>"$SYNC_ARTIFACTS_JOURNAL"'
 
 
@@ -48,6 +55,8 @@ class _Runner:
     execute: Callable[[str], subprocess.CompletedProcess]
     journal: Path
     pushes: Path
+    calls: Path
+    stars: Path
 
     def __call__(self, outcome: str) -> subprocess.CompletedProcess:
         return self.execute(outcome)
@@ -58,6 +67,9 @@ class _Runner:
     def last_push(self) -> str:
         return self.pushes.read_text().splitlines()[-1]
 
+    def rsync_calls(self) -> list[str]:
+        return self.calls.read_text().splitlines()
+
 
 def _runner(tmp_path: Path) -> _Runner:
     """A rendered sync script plus `run(outcome)` -> CompletedProcess."""
@@ -65,9 +77,14 @@ def _runner(tmp_path: Path) -> _Runner:
     # The shared accessor renders what the gate lints, with one override: the peer tree has to
     # be a tmp_path, because the run is real. Role defaults come from the accessor's own
     # context rather than being passed in here (#3178).
+    stars = tmp_path / "stars.txt"
     script.write_text(
         render_shell_script(
-            *TEMPLATE, overrides={"artifacts_peer_dir": str(tmp_path / "peer")}
+            *TEMPLATE,
+            overrides={
+                "artifacts_peer_dir": str(tmp_path / "peer"),
+                "artifacts_stars_file": str(stars),
+            },
         )
     )
     (tmp_path / "peer" / PEER).mkdir(parents=True)
@@ -76,6 +93,8 @@ def _runner(tmp_path: Path) -> _Runner:
     journal.touch()
     pushes = tmp_path / "pushes"
     pushes.touch()
+    calls = tmp_path / "rsync-calls"
+    calls.touch()
     kuma_lib = tmp_path / "kuma-push-lib.sh"
     kuma_lib.write_text(
         'kuma_push() { printf "%s|%s\\n" "$1" "$2" >>"$SYNC_ARTIFACTS_PUSHES"; }\n'
@@ -92,12 +111,14 @@ def _runner(tmp_path: Path) -> _Runner:
                 "SYNC_ARTIFACTS_JOURNAL": str(journal),
                 "SYNC_ARTIFACTS_KUMA_LIB": str(kuma_lib),
                 "SYNC_ARTIFACTS_PUSHES": str(pushes),
+                "SYNC_ARTIFACTS_CALLS": str(calls),
+                "SYNC_ARTIFACTS_STARS": str(stars),
                 "BASH_FUNC_rsync%%": f"() {{ {RSYNC_STUB}; }}",
                 "BASH_FUNC_logger%%": f"() {{ {LOGGER_STUB}; }}",
             },
         )
 
-    return _Runner(run, journal, pushes)
+    return _Runner(run, journal, pushes, calls, stars)
 
 
 def test_a_sustained_outage_mails_on_the_threshold_run_alone(tmp_path):
@@ -166,6 +187,30 @@ def test_a_recovery_pushes_up_again(tmp_path):
         run("fail")
     run("ok")
     assert run.verdicts()[-2:] == ["down", "up"]
+
+
+def test_the_star_list_is_pushed_to_the_peer_after_the_pull(tmp_path):
+    """The peer prunes its own tree, so it keeps a starred artifact only once the list lands."""
+    run = _runner(tmp_path)
+    run.stars.write_text(f"{PEER}/plan.html\n")
+    assert run("ok").returncode == 0
+    pull, push = run.rsync_calls()
+    assert f"{PEER_SSH}:" in pull and "--delete" in pull, pull
+    assert push.endswith(f"{run.stars} {PEER_SSH}:{PEER_STARS}"), push
+
+
+def test_no_star_list_means_no_push(tmp_path):
+    run = _runner(tmp_path)
+    assert run("ok").returncode == 0
+    assert len(run.rsync_calls()) == 1, run.rsync_calls()
+
+
+def test_a_failed_star_push_counts_toward_the_streak(tmp_path):
+    """Until the push lands, the peer's prune can delete what was starred, so it is not a success."""
+    run = _runner(tmp_path)
+    run.stars.write_text(f"{PEER}/plan.html\n")
+    assert run("push-fail").returncode == 1
+    assert f"{PEER} failed (consecutive run 1)" in run.journal.read_text()
 
 
 def test_the_ssh_transport_drops_inherited_local_forwards():

@@ -118,6 +118,18 @@ def test_brief_without_prune_removes_nothing(monkeypatch, tmp_path):
     assert removed == []
 
 
+def test_brief_shows_a_removable_trees_label_beside_its_name(
+    capsys, monkeypatch, tmp_path
+):
+    labelled = tmp_path / ".claude" / "worktrees" / "w0"
+    labelled.mkdir(parents=True)
+    (labelled / ".claim").write_text("#1345 Fix the cert watcher\n")
+    _main_recording_removals(monkeypatch, tmp_path, ["--brief"])
+    out = capsys.readouterr().out
+    assert "  w0 [#1345 Fix the cert watcher] — merged" in out
+    assert "  w1 — merged" in out
+
+
 def test_prune_with_brief_does_not_tell_the_caller_to_re_run_prune(
     capsys, monkeypatch, tmp_path
 ):

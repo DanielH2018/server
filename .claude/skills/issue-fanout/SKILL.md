@@ -362,6 +362,9 @@ Each agent starts with none of this conversation's context, so its brief must ca
   `gh issue comment <n> --body 'Worked by \`<its own branch>\`'`, in single quotes so the
   shell does not run the backticks. Only this path needs it: `launch` posts the comment
   itself once a batch is running.
+- That it then labels its worktree with its issues, so the session banner and
+  `prune_worktrees.py` print what the `agent-<hash>` tree works on:
+  `uv run python scripts/dev/label_worktree.py <n>...`.
 
 - That `land.sh` (the `land-after-merge` skill) is the landing path, and that hand-polling CI
   is not.

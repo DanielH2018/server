@@ -254,6 +254,7 @@ nav:
               - game-stats internals: game-stats-internals.md
               - Valheim modding: valheim-modding.md
               - Email to RSS: email-to-rss.md
+              - artifacts star list: artifacts-star-list.md
       - Recovery and upgrades:
           - k3s control-plane upgrade: k3s-upgrade.md
           - Longhorn upgrade: longhorn-upgrade.md

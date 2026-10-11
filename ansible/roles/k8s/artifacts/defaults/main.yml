@@ -46,14 +46,25 @@ artifacts_agent_dir: "{{ '/var/lib/claude/.claude/artifacts' if (claude_code_age
 # the /a/<host>/ path segment the index and the GUI filter on.
 artifacts_peer_dir: /home/ubuntu/.claude/artifacts-peer
 
-# Hosts whose artifacts are PULLED onto daniel-box, because push is not available: the
-# `daniel-box` name does not resolve from daniel-server and pushing
-# would need an ssh key in the cluster either way. daniel-box already reaches daniel-server
-# over ssh, so the sync runs there, in the direction that works.
+# The star list the GUI writes: one `<host>/<relpath>` line per starred artifact, which
+# prune-artifacts.sh (dotfiles) on each host skips. It is the pod's only writable mount.
+# Outside /home/ubuntu because the agent user's prune reads it too, and `claude` cannot
+# traverse /home/ubuntu (0750). The dotfiles point daniel-box's CLAUDE_ARTIFACT_STARS_FILE at
+# this path, so a change here needs the same change in settings.base.json there.
+artifacts_stars_dir: /var/lib/artifact-stars
+artifacts_stars_name: stars.txt
+artifacts_stars_file: "{{ artifacts_stars_dir }}/{{ artifacts_stars_name }}"
+
+# Hosts whose artifacts are PULLED onto daniel-box, because daniel-box is the only side that
+# can open the connection: the `daniel-box` name does not resolve from daniel-server, and the
+# pod holds no ssh key. daniel-box already reaches daniel-server over ssh, so the sync runs
+# there. The same connection carries the star list the other way, to `stars_path`, which is
+# where that host's prune-artifacts.sh reads it (the dotfiles default).
 artifacts_peer_sources:
   - name: daniel-server
     ssh_target: daniel-server
     path: /home/ubuntu/.claude/artifacts
+    stars_path: /home/ubuntu/.claude/artifact-stars.txt
 
 # Every 5 minutes: an artifact written on daniel-server is browsable within one interval. It
 # cannot be instant — daniel-server holds no key to daniel-box, so the sync only runs in the
