@@ -8,7 +8,7 @@ down leaves the ratio at N/N up.
 from pathlib import Path
 
 from check_table import CHECKS
-from diagnostics.probe_lib import kuma_live, monitors
+from diagnostics.probe_lib import kuma_live, kuma_pi, monitors
 
 TEMPLATE_SAMPLE = """\
 stringData:
@@ -257,7 +257,7 @@ def test_every_interval_in_the_real_template_resolves_through_the_real_variables
 
 
 def test_pi_monitor_names_finds_at_least_the_known_daniel_pi_monitors():
-    names = monitors.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
+    names = kuma_pi.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
     # A frozenset a caller can name, not just a count — see CLAUDE.md's non-vacuity rule.
     assert {"Daniel Pi Host", "Daniel Pi WG Easy", "Daniel Pi Recovery"} <= names
     assert len(names) >= 3
@@ -266,14 +266,14 @@ def test_pi_monitor_names_finds_at_least_the_known_daniel_pi_monitors():
 def test_pi_monitor_names_excludes_a_k8s_monitor_that_merely_contains_pi():
     # "Pi-hole k8s DNS" is declared under the "pihole-k8s-dns" key — "pi" is a substring of
     # "pihole", not a hyphen-delimited token, and it runs on k3s, not daniel-pi.
-    names = monitors.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
+    names = kuma_pi.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
     assert "Pi-hole k8s DNS" not in names
 
 
 def test_is_pi_monitor_key_requires_pi_as_its_own_token():
-    assert monitors.is_pi_monitor_key("daniel-pi-host")
-    assert monitors.is_pi_monitor_key("monitor-bridge-pi")
-    assert not monitors.is_pi_monitor_key("pihole-k8s-dns")
+    assert kuma_pi.is_pi_monitor_key("daniel-pi-host")
+    assert kuma_pi.is_pi_monitor_key("monitor-bridge-pi")
+    assert not kuma_pi.is_pi_monitor_key("pihole-k8s-dns")
 
 
 def test_kuma_drift_pi_reports_a_missing_pi_monitor_without_cluster_noise():
@@ -317,7 +317,7 @@ def test_run_kuma_drift_pi_end_to_end_reports_a_missing_pi_monitor(monkeypatch, 
 
     from diagnostics.probe_lib import cli_parser, core
 
-    pi_names = monitors.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
+    pi_names = kuma_pi.pi_monitor_names(REAL_STATIC_MONITORS_TEXT)
     live = (pi_names | {"k3s Grafana", "Root Disk"}) - {"Daniel Pi Recovery"}
 
     def fake_fetch(url, resolve=None):

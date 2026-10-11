@@ -206,3 +206,29 @@ def test_kuma_drift_names_the_stored_down_of_a_not_yet_due_tile(
     monitors.run_kuma_drift(ns)
     lines = _line_naming(capsys.readouterr().out, tile)
     assert any("DOWN" in line for line in lines), lines
+
+
+def _one_series(name, status):
+    return {
+        "data": {"result": [{"metric": {"monitor_name": name}, "value": [0, status]}]}
+    }
+
+
+def test_a_live_series_outranks_a_stored_down():
+    # The tile's beat after the restart is newer than anything stored.
+    stored = {"Homelab Evals": {"status": 0, "time": STORED_DOWN_TIME}}
+    text, code = monitors.format_monitor_status(
+        _one_series("Homelab Evals", "1"), stored=stored
+    )
+    assert (text, code) == ("1/1 monitors up", 0)
+
+
+def test_an_unreadable_stored_read_is_named_and_leaves_the_exit_code_alone():
+    text, code = monitors.format_monitor_status(
+        _one_series("Jellyfin", "1"), stored="status page returned 502"
+    )
+    assert code == 0
+    assert (
+        "stored beats of monitors with no series unread: status page returned 502"
+        in text
+    )

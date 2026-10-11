@@ -82,9 +82,18 @@ def status_page_url():
     The slug comes from the role default the sync reads, so a renamed page cannot leave this
     reading a 404 as "every pending tile never created".
     """
+    return _status_page_api("")
+
+
+def heartbeat_url():
+    """(url, curl --resolve pin) for the same page's stored heartbeats, keyed by monitor id."""
+    return _status_page_api("heartbeat/")
+
+
+def _status_page_api(prefix):
     base, pin = core.k8s_endpoint("uptime-kuma")
     slug = _role_defaults()["uptime_kuma_k8s_status_page_slug"]
-    return f"{base}/api/status-page/{slug}", pin
+    return f"{base}/api/status-page/{prefix}{slug}", pin
 
 
 def parse_status_page(body):
@@ -114,6 +123,78 @@ def created_monitors():
     if names is None:
         return f"status page {url} returned a body with no group list"
     return names
+
+
+def parse_last_beats(page_body, heartbeat_body):
+    """{monitor name: its newest stored beat} from the page and heartbeat bodies, or None.
+
+    The page maps each name to its id and the heartbeat body maps each id to its beats, so
+    both are needed. A beat is Kuma's own dict: `status` (0 DOWN, 1 UP, 2 PENDING,
+    3 MAINTENANCE), `time` (UTC, `YYYY-MM-DD HH:MM:SS.mmm`) and `msg`. The newest is picked by
+    `time` rather than by list position, so the order Kuma returns them in does not matter.
+    A monitor with no stored beat is left out. Either body unreadable gives None.
+    """
+    try:
+        ids = {
+            str(monitor["id"]): monitor["name"]
+            for group in json.loads(page_body)["publicGroupList"]
+            for monitor in group["monitorList"]
+            if monitor.get("name")
+        }
+        beats = json.loads(heartbeat_body)["heartbeatList"]
+        return {
+            ids[mid]: max(listed, key=lambda beat: beat["time"])
+            for mid, listed in beats.items()
+            if mid in ids and listed
+        }
+    except json.JSONDecodeError, KeyError, AttributeError, TypeError:
+        return None
+
+
+def last_stored_beats():
+    """{name: newest stored beat} for every monitor on the page, or a string saying why not.
+
+    Kuma's exporter holds only beats since the process started. Kuma's database holds the
+    rest, and the status page's heartbeat endpoint serves them without a credential. A weekly
+    tile whose last push was DOWN, followed by the weekly reboot, has no series for a week;
+    this is the only place its DOWN is still readable (#4541).
+    """
+    bodies = []
+    for url, pin in (status_page_url(), heartbeat_url()):
+        status, body = core.get_status(url, resolve=pin)
+        if status != 200:
+            return f"{url} returned {status or body}"
+        bodies.append(body)
+    beats = parse_last_beats(*bodies)
+    if beats is None:
+        return "the status page or its heartbeat endpoint returned an unreadable body"
+    return beats
+
+
+def stored_down(beats, live):
+    """{name: beat} for each monitor with no series whose newest stored beat is DOWN.
+
+    `beats` is `kuma_live.last_stored_beats()`, or its string when that read failed, which
+    gives an empty result. A monitor that has a series is left out: its live state is newer
+    than anything stored.
+    """
+    if isinstance(beats, str):
+        return {}
+    return {
+        name: beat
+        for name, beat in beats.items()
+        if name not in live and beat.get("status") == 0
+    }
+
+
+def stored_down_label(beat):
+    """How a stored DOWN reads, so it cannot be taken for a live series' DOWN."""
+    msg = str(beat.get("msg") or "").strip()
+    return (
+        f"DOWN (last stored beat, {beat.get('time')} UTC, from before Kuma's restart"
+        + (f": {msg[:80]}" if msg else "")
+        + ")"
+    )
 
 
 def pod_age_seconds(cluster=DEFAULT_CLUSTER, tools=DEFAULT_TOOLS):

@@ -5,6 +5,10 @@ Split out of probe.py, which had grown to 1349 lines across thirteen subcommands
 The two answer different questions. `monitors` counts the exporter's own set, so a monitor
 that is GONE rather than down leaves the ratio at N/N up; `kuma-drift` diffs that set against
 the declared one, which is the only way a missing monitor surfaces at all.
+
+Both also read each monitor's newest stored beat from Kuma's status page. The exporter holds
+only beats since Kuma started, so a weekly tile whose last push was DOWN has no series for a
+week after a restart; the stored beat is where that DOWN is still readable (#4541).
 """
 
 import functools
@@ -38,6 +42,7 @@ from lib.render_context import render_context
 from lib.render_guard import make_env
 from lib.repo_paths import ANSIBLE, REPO
 from diagnostics.probe_lib import kuma_live
+from diagnostics.probe_lib import kuma_pi
 from diagnostics.probe_lib.kuma_table_loop import TableLoop
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
@@ -45,7 +50,7 @@ _MONITOR_STATUS_LABELS = {"0": "DOWN", "1": "UP", "2": "PENDING", "3": "MAINTENA
 _NO_SERIES = "no monitor_status series returned (uptime-kuma scrape target down?)"
 
 
-def format_monitor_status(data, declared_total=None):
+def format_monitor_status(data, declared_total=None, stored=None):
     """Format Kuma's monitor_status vector (Prometheus job=uptime-kuma) into a down-monitors rollup.
 
     Pure: takes the parsed instant-query response, returns (text, exit_code). `declared_total`
@@ -67,25 +72,36 @@ def format_monitor_status(data, declared_total=None):
     unreported. The coverage line names the shortfall so the ratio cannot be read that
     way; it does not change the exit code, because absence is `kuma-drift`'s verdict — that
     command knows which absences are pending, gated or real drift, and this one does not.
+
+    `stored` is `kuma_live.last_stored_beats()`, or None to skip it. A tile with no series whose
+    stored beat is DOWN is listed, labelled, counted and failed like a live DOWN (#4541).
+    A failed stored read adds a line saying so.
     """
     result = data.get("data", {}).get("result", [])
     if not result:
         # No series at all is a scrape that failed, not monitors that are down (#4444).
         return _NO_SERIES, PROBE_UNREADABLE
-    problems, up = [], 0
+    problems, up, live = [], 0, set()
     for series in result:
         name = (series.get("metric") or {}).get("monitor_name", "?")
+        live.add(name)
         status = (series.get("value") or [None, None])[1]
         if status == "1":
             up += 1
         else:
             problems.append(f"  {name}: {_MONITOR_STATUS_LABELS.get(status, status)}")
-    lines = [f"{up}/{len(result)} monitors up"] + sorted(problems)
+    downs = kuma_live.stored_down(stored or {}, live)
+    problems.extend(
+        f"  {name}: {kuma_live.stored_down_label(b)}" for name, b in downs.items()
+    )
+    lines = [f"{up}/{len(result) + len(downs)} monitors up"] + sorted(problems)
     if declared_total is not None and declared_total > len(result):
         lines.append(
             f"  {declared_total - len(result)} of {declared_total} declared monitors have no "
             "monitor_status series — `probe.py kuma-drift` says which and why"
         )
+    if isinstance(stored, str):
+        lines.append(f"  stored beats of monitors with no series unread: {stored}")
     return "\n".join(lines), 1 if problems else 0
 
 
@@ -401,7 +417,9 @@ def judge_gate(gate, gate_states):
     return True
 
 
-def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None, *, created):
+def format_kuma_drift(
+    declared, live, kuma_age_seconds, gate_states=None, *, created, stored=None
+):
     """Compare declared monitor names against the live exporter's. Pure.
 
     `live` is the set of monitor_name labels; `kuma_age_seconds` is how long the Kuma pod has
@@ -428,12 +446,17 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None, *, cre
     is missing once Kuma has been up past `kuma_live.census_settle_seconds()`; before that a
     new tile is legitimately absent. An unreadable `created` keeps a tile pending and adds a
     line saying its existence went unverified.
+
+    `stored` is `kuma_live.last_stored_beats()`, or None to skip it. A pending tile whose
+    newest stored beat is DOWN says so on its line (#4541). The exit code ignores it, because
+    it is not drift; `probe.py monitors` fails on it.
     """
     gate_states = gate_states or {}
     unreadable = created if isinstance(created, str) else None
     settled = kuma_age_seconds is None or (
         kuma_age_seconds >= kuma_live.census_settle_seconds()
     )
+    downs = kuma_live.stored_down(stored or {}, live)
     missing, pending, gated, unverified = [], [], [], []
     for name, spec in sorted(declared.items()):
         if name in live:
@@ -457,7 +480,14 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None, *, cre
             and spec["interval"] is not None
             and kuma_age_seconds < spec["interval"] + KUMA_EXPORT_SLACK
         ):
-            pending.append(f"  {name}: no beat due yet ({spec['interval']}s interval)")
+            pending.append(
+                f"  {name}: no beat due yet ({spec['interval']}s interval)"
+                + (
+                    f"; {kuma_live.stored_down_label(downs[name])}"
+                    if name in downs
+                    else ""
+                )
+            )
         else:
             missing.append(f"  {name}: declared, not live")
     orphans = [f"  {n}: live, not declared" for n in sorted(live - set(declared))]
@@ -480,45 +510,6 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None, *, cre
     return "\n".join(lines), 0
 
 
-_MONITOR_KEY_RE = re.compile(r"^\s*([a-z0-9_-]+)\.json:\s*\|\s*$")
-
-
-def monitor_keys(text):
-    """Map each declared monitor's display name to its YAML `stringData` key.
-
-    The key is the file-like name Ansible templates ("daniel-pi-host.json"), which encodes
-    which host/role owns the monitor even though the JSON body doesn't carry that. Used to
-    scope `kuma-drift --pi` to daniel-pi's own monitors without hand-listing their display
-    names. It reads literal keys only, so the table loops' tiles are absent; neither loop
-    renders a Pi tile.
-    """
-    keys, pending = {}, None
-    for line in text.splitlines():
-        km = _MONITOR_KEY_RE.match(line)
-        if km:
-            pending = km.group(1)
-            continue
-        name = _ENTITY_NAME_RE.search(line)
-        if name and pending:
-            keys[name.group(1)] = pending
-            pending = None
-    return keys
-
-
-def is_pi_monitor_key(key):
-    """Whether a monitor's YAML key names it as daniel-pi's, not a k8s workload's.
-
-    `pi` must be its own hyphen-delimited token — the k8s Pi-hole role's key has `pi` only
-    as a substring of `pihole`, so it is correctly excluded even though it also runs a Pi.
-    """
-    return "pi" in key.split("-")
-
-
-def pi_monitor_names(text):
-    """Declared monitor display names whose YAML key marks them as daniel-pi's."""
-    return {name for name, key in monitor_keys(text).items() if is_pi_monitor_key(key)}
-
-
 def run_kuma_drift(ns):
     """Reconcile the declared monitor set against the live one (exit 0 = no drift).
 
@@ -530,12 +521,13 @@ def run_kuma_drift(ns):
     url = prom_query_url(base, 'monitor_status{job="uptime-kuma"}')
     if ns.dry_run:
         core.print_dry_run(url, resolve=pin)
-        return core.print_dry_run(*kuma_live.status_page_url())
+        core.print_dry_run(*kuma_live.status_page_url())
+        return core.print_dry_run(*kuma_live.heartbeat_url())
     with open(STATIC_MONITORS_PATH) as f:
         text = f.read()
     declared = parse_declared_monitors(text)
     if ns.pi:
-        pi_names = pi_monitor_names(text)
+        pi_names = kuma_pi.pi_monitor_names(text)
         declared = {name: spec for name, spec in declared.items() if name in pi_names}
     try:
         data = json.loads(core.fetch(url, resolve=pin))
@@ -556,6 +548,7 @@ def run_kuma_drift(ns):
         kuma_live.pod_age_seconds(getattr(ns, "cluster", DEFAULT_CLUSTER)),
         gate_states=gate_states,
         created=kuma_live.created_monitors(),
+        stored=kuma_live.last_stored_beats(),
     )
     print(text)
     if ns.no_secrets and None in gate_states.values():
@@ -567,15 +560,21 @@ def run_kuma_drift(ns):
 
 
 def run_monitors(ns):
-    """Print Kuma's live down-monitors rollup (exit 0 = all up)."""
+    """Print Kuma's down-monitors rollup, stored DOWNs included (exit 0 = all up)."""
     base, pin = prom_endpoint()
     url = prom_query_url(base, "monitor_status")
     if ns.dry_run:
-        return core.print_dry_run(url, resolve=pin)
+        core.print_dry_run(url, resolve=pin)
+        core.print_dry_run(*kuma_live.status_page_url())
+        return core.print_dry_run(*kuma_live.heartbeat_url())
     data, err = core.fetch_json(url, resolve=pin)
     if err:
         return err
-    text, code = format_monitor_status(data, declared_monitor_count())
+    text, code = format_monitor_status(
+        data,
+        declared_monitor_count(),
+        kuma_live.last_stored_beats() if data.get("data", {}).get("result") else None,
+    )
     print(text, file=_sys.stderr if code == PROBE_UNREADABLE else _sys.stdout)
     return code
 

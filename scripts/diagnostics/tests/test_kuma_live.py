@@ -88,3 +88,25 @@ def test_pod_age_reads_a_host_without_a_kubeconfig_as_unknown():
         find_kubeconfig=lambda: None,
     )
     assert kuma_live.pod_age_seconds(tools=tools) is None
+
+
+def test_parse_last_beats_takes_the_newest_beat_by_time_and_maps_id_to_name():
+    page = json.dumps(
+        {"publicGroupList": [{"monitorList": [{"id": 489, "name": "Homelab Evals"}]}]}
+    )
+    beats = json.dumps(
+        {
+            "heartbeatList": {
+                "489": [
+                    {"status": 0, "time": "2026-10-11 02:23:45.734"},
+                    {"status": 1, "time": "2026-10-04 02:20:00.000"},
+                ],
+                "999": [{"status": 0, "time": "2026-10-11 00:00:00.000"}],
+            }
+        }
+    )
+    assert kuma_live.parse_last_beats(page, beats) == {
+        "Homelab Evals": {"status": 0, "time": "2026-10-11 02:23:45.734"}
+    }
+    # An error body is unreadable, not "no stored beats".
+    assert kuma_live.parse_last_beats(page, '{"ok": false}') is None
