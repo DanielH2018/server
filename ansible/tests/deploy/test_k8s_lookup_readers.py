@@ -9,7 +9,7 @@ this derivation.
 Run: uv run pytest ansible/tests/deploy/test_k8s_lookup_readers.py
 """
 
-import land_tags
+from deploy_tools.land_lib import land_tags
 from deploy_cross_role import k8s_lookup_map, k8s_lookup_readers
 from lib.repo_paths import REPO
 

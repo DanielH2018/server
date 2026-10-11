@@ -11,8 +11,8 @@ paths.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_nut_host_reaches_both_hosts.py
 """
 
-import land_reach
-import land_tags
+from deploy_tools.land_lib import land_reach
+from deploy_tools.land_lib import land_tags
 
 PR_1915_ROLE_FILE = "ansible/roles/setup/nut_host/tasks/main.yml"
 

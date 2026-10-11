@@ -25,7 +25,7 @@ from pathlib import Path
 from _helpers import ANSIBLE
 import yaml
 
-import land_reach
+from deploy_tools.land_lib import land_reach
 import setup_routing
 from deploy_changes import (
     services_from_changed_paths,

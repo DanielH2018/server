@@ -15,8 +15,8 @@ asserted against a synthetic tree, where the costs are the fixture.
 Run: uv run pytest scripts/deploy_tools/tests/test_shared_role_smoke_caller.py
 """
 
-import land_shared
-import land_tags
+from deploy_tools.land_lib import land_shared
+from deploy_tools.land_lib import land_tags
 import shared_role_callers
 import shared_role_reach
 from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, smoke_caller

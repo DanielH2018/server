@@ -22,7 +22,8 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 
 from lib import yaml_fast
 from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS, REPO

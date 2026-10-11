@@ -239,7 +239,7 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     The deploy-coverage question a helper role poses: it has no `containers_list` entry and so
     no deploy tag of its own, but `deploy.yml` runs it under every caller's tag. A change to it
     is therefore applied by deploying its callers — which is what
-    `scripts/deploy_tools/land_tags.py` asks this to decide, so that landing a helper-role
+    `scripts/deploy_tools/land_lib/land_tags.py` asks this to decide, so that landing a helper-role
     change alongside all of its callers stops reading as `needs-manual-apply`.
 
     Only ``roles/k8s`` is walked. The Pi's Compose roles include `containers/common`, not a k8s

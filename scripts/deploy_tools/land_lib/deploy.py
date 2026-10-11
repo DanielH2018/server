@@ -23,7 +23,7 @@ from lib.exit_codes import (
     DEPLOY_STALE,
     DEPLOY_TAG_MISS,
 )
-from deploy_tools import land_platform
+from deploy_tools.land_lib import land_platform
 from deploy_tools.land_lib import ci, tick
 from deploy_tools.land_lib.landing import Landing, TickState, retry_while_locked
 from deploy_tools.land_lib.outcome import (

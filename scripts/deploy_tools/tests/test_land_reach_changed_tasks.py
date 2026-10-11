@@ -12,7 +12,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_changed_tasks.py
 import pytest
 import yaml
 
-import land_reach
+from deploy_tools.land_lib import land_reach
 from lib.proc_testing import run
 from lib.repo_paths import REPO
 from setup_role_chains import changed_task_texts

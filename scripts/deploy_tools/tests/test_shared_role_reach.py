@@ -14,7 +14,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_shared_role_reach.py
 import pytest
 
 import shared_role_reach
-from deploy_tools import land_tags
+from deploy_tools.land_lib import land_tags
 
 from _narrow_fixtures import Tree, _refs
 

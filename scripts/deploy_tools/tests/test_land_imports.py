@@ -25,6 +25,12 @@ MODULES = frozenset(
         "detach",
         "handoff",
         "pr_json",
+        "land_platform",
+        "land_probe",
+        "land_reach",
+        "land_rerolls",
+        "land_shared",
+        "land_tags",
     }
 )
 ALLOWED = {
@@ -32,17 +38,24 @@ ALLOWED = {
     "options": set(),
     # `cause`'s vocabulary lives beside `verdict`'s, and the Ledger validates against it.
     "ledger": {"outcome"},
-    "tools": set(),
+    # The classifier libraries the Tools defaults wrap (#4349 moved them in from beside land.py).
+    "tools": {
+        "land_platform",
+        "land_reach",
+        "land_rerolls",
+        "land_shared",
+        "land_tags",
+    },
     # The PR JSON types are a leaf: `Landing.view` returns them and the policy reads them.
     "pr_json": set(),
-    "landing": {"outcome", "options", "tools", "ledger", "pr_json"},
+    "landing": {"outcome", "options", "tools", "ledger", "pr_json", "land_tags"},
     # The landing policy's checks run inside --arm-merge, before any merge call.
     "merge": {"landing", "outcome", "policy"},
     "policy": {"landing", "outcome", "pr_json"},
-    "classify": {"landing", "outcome"},
+    "classify": {"landing", "outcome", "land_tags"},
     "ci": {"landing", "outcome"},
     "tick": {"landing", "outcome"},
-    "deploy": {"landing", "outcome", "ci", "tick"},
+    "deploy": {"landing", "outcome", "ci", "tick", "land_platform"},
     # `tick.rearm_tick`: the second kick request, after the gate, for a first one that joined
     # a run in flight. The kick's states live in tick.py, in one place.
     "health_verdict": {"landing", "outcome", "tick"},
@@ -51,6 +64,15 @@ ALLOWED = {
     "detach": set(),
     # The handoff to a lander unit reads the Options it refuses flags from, and nothing else.
     "handoff": {"options"},
+    # The tag derivation and what it reads. None of them knows what a landing is.
+    "land_tags": {"land_reach", "land_shared"},
+    "land_platform": {"land_tags"},
+    "land_reach": set(),
+    "land_rerolls": set(),
+    "land_shared": set(),
+    # cc-wait's `land` source runs under `uv run --no-project`, so it reads only the
+    # stdlib-only fork record and the verdict words.
+    "land_probe": {"detach", "outcome"},
     "pipeline": {
         "landing",
         "outcome",

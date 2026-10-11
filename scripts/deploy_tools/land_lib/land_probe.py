@@ -34,8 +34,9 @@ import re
 import sys
 from pathlib import Path
 
-from land_lib import detach
-from land_lib.outcome import ABANDONED_WATCH_NOTE, Verdict
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.land_lib import detach
+from deploy_tools.land_lib.outcome import ABANDONED_WATCH_NOTE, Verdict
 
 # land.sh's exit code -> the state that ends the wait. Every code land.sh documents is here.
 _STATE_BY_RC = {0: "landed", 1: "failed", 64: "bad-arguments", 75: "gave-up"}

@@ -21,8 +21,8 @@ to catch.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_shared_mapper_agreement.py
 """
 
-import land_shared
-import land_tags
+from deploy_tools.land_lib import land_shared
+from deploy_tools.land_lib import land_tags
 import reach
 from deploy_k8s import k8s_roles_listed
 from deploy_logic import services_from_changed_paths

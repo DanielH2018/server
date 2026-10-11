@@ -21,7 +21,7 @@ import pytest
 
 
 import deploy_tags
-import land_tags
+from deploy_tools.land_lib import land_tags
 from lib.git_testing import git_out, init_repo
 from deploy_tools.land_lib import tools
 

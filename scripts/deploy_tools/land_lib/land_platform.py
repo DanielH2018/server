@@ -28,13 +28,13 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_platform.py
 import sys
 from pathlib import Path
 
-# This module's own directory, because `sys.path[0]` is the ENTRY script's directory rather
-# than this one: under the land.py shim that is scripts/deploy_tools, but under any other
-# invoker it is not, and `land_tags` sits beside this file.
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# scripts/ for `land_tags`, and scripts/deploy_tools for `reach`: `sys.path[0]` is the ENTRY
+# script's directory rather than this one, so no invoker can be relied on to supply either.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 
-import land_tags
 import reach
+from deploy_tools.land_lib import land_tags
 
 # The role tree a k3s workload's files sit in. `land_tags._K8S` anchors its own match to this
 # same prefix, and `test_land_platform.py` holds the two against each other: a tree that moved

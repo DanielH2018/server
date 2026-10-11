@@ -28,7 +28,7 @@ from pathlib import Path
 
 import pytest
 
-from deploy_tools import land_probe
+from deploy_tools.land_lib import land_probe
 from deploy_tools.land_lib import detach
 from _deploy_sh_fakes import BUSCTL_REFUSED
 

@@ -12,7 +12,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Classification, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-from deploy_tools.land_tags import DeriveSource
+from deploy_tools.land_lib.land_tags import DeriveSource
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))

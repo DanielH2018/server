@@ -32,7 +32,8 @@ from typing import NamedTuple
 
 # The build/roll couplings live in deploy_logic so this and `deploy_tags.py changed` widen
 # identically -- two derivations that disagree is the defect this import exists to prevent.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 
 # `service_tags_at` is re-exported rather than defined here: `narrow_broad` needs it too,
 # and importing this module for it would put a cycle through `deploy_tags`.
@@ -55,18 +56,18 @@ from deploy_logic import (
     tick_applies_setup_role,
 )
 
-# Same directory, so a direct invocation already has it on sys.path. `service_tags` is the
+# Bare, from scripts/deploy_tools, inserted above. `service_tags` is the
 # one reader of containers_list, and sharing it is what keeps "is this name a deploy tag?"
 # answered identically here and in deploy.sh's own validation.
 import deploy_tags
 import narrow_setup
 import reach
-from land_reach import remaining_setup_hosts_note
+from deploy_tools.land_lib.land_reach import remaining_setup_hosts_note
 
 # Re-exported, not defined here: the path-to-role mappers live in `reach` and the shared-role
 # expansion built on them in `land_shared`. Every reader keeps its old name, and
 # `test_land_tags_shared_mapper_agreement.py` keeps pinning `land_tags.role_for`.
-from land_shared import (  # noqa: F401  (`role_of` has an out-of-module reader)
+from deploy_tools.land_lib.land_shared import (  # noqa: F401  (`role_of` has an out-of-module reader)
     declared_tags,
     is_role_test_path,
     role_for,

@@ -21,8 +21,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_repo_shipped_files
 
 import pytest
 
-import land_reach
-import land_tags
+from deploy_tools.land_lib import land_reach
+from deploy_tools.land_lib import land_tags
 from _land_fakes import MERGE_SHA
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome

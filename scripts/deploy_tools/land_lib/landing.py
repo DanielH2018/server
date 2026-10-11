@@ -31,7 +31,7 @@ from deploy_tools.land_lib.outcome import (
     unrecorded_apply_note,
 )
 from deploy_tools.land_lib.pr_json import PrView, parse_view
-from deploy_tools import land_tags
+from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib.tools import Classifier, Tools
 from lib.json_types import as_object
 from lib.repo_paths import GITOPS_DEPLOY_FILES

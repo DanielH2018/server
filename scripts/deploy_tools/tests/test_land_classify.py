@@ -13,7 +13,7 @@ import deploy_cross_role
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes
 from deploy_changes import setup_roles_for
 from lib.repo_paths import REPO
-from deploy_tools import land_tags
+from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib import classify
 from deploy_tools.land_lib.landing import Classification
 from deploy_tools.land_lib.outcome import Outcome

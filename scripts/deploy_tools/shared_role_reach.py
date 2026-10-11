@@ -47,7 +47,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import re
 from pathlib import Path
 
-from deploy_tools import land_tags
+from deploy_tools.land_lib import land_tags
 from lib.git import git
 from lib.narrow_git import CannotNarrow
 from lib.repo_paths import GITOPS_DEPLOY_FILES

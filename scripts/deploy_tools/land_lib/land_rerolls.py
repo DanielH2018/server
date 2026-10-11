@@ -20,7 +20,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 # The deployer's modules import each other bare, so its directory goes on the path for

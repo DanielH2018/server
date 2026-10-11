@@ -4,7 +4,7 @@ A test replaces one field of `Tools` and never a PATH entry. The defaults are th
 implementations, defined here so the phase modules never import subprocess.
 
 WHICH CHECKOUT EACH HELPER COMES FROM. await_ci, land_tags and deploy_detach_notify are
-imported from beside land.py, so they are always the same release as it -- a PR adding a flag
+imported from land.py's checkout, so they are always the same release as it -- a PR adding a flag
 to one and its call site must pass its own landing, though the primary checkout still holds
 the previous release. gitops_tick.sh is run from beside land.py for the same reason.
 deploy_tags.py and deploy.sh are run as subprocesses with the PRIMARY checkout as cwd,
@@ -37,9 +37,8 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# land_tags and deploy_detach_notify `import deploy_tags` bare, so their own directory has
-# to be reachable too. It is under the shim (land.py's dir is sys.path[0]) and under pytest
-# (pythonpath lists it); this insert makes an interpreter-only import work as well.
+# deploy_detach_notify `import deploy_tags` bare, so its directory must be reachable. The shim
+# puts it at sys.path[0] and pytest's pythonpath lists it; this covers an interpreter import.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
@@ -49,11 +48,12 @@ _sys.path.insert(2, str(GITOPS_DEPLOY_FILES))
 from deploy_locks import TREE_LOCK as LOCK
 from gitops_hold import DeployerSnapshot, read_field
 from gitops_markers import MARKERS
-from deploy_tools import await_ci, land_platform, land_reach, land_rerolls
-from deploy_tools import land_shared, land_tags, shared_role_reach
+from deploy_tools import await_ci, shared_role_reach
+from deploy_tools.land_lib import land_platform, land_reach, land_rerolls
+from deploy_tools.land_lib import land_shared, land_tags
 from deploy_tools.deploy_detach_notify import GateResult, gate as health_gate
 from lib.exit_codes import CI_DISARMED
-from deploy_tools.land_tags import Derivation
+from deploy_tools.land_lib.land_tags import Derivation
 from lib.gh import gh, gh_json
 from lib.json_types import JsonValue
 from lib.git import git
