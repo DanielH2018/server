@@ -31,10 +31,10 @@ def _wait(states: list[str]):
     ]
 
 
-# REVIEW_REQUIRED needs the bypass for the review gate. APPROVED needs it for the agent branch
-# fence, which restricts updates to master itself: armed, an approved agent PR sat BLOCKED
-# until a hand merge (#3911). An empty decision, a PR into a master with no review gate, still
-# meets the fence, so it takes the same path rather than the auto-merge it once did (#4001).
+# Every decision meets the agent branch fence, which restricts updates to master itself: armed,
+# an approved agent PR sat BLOCKED until a hand merge (#3911). An empty decision, which is every
+# PR since the master review gate was retired on 2026-10-11, takes the same path rather than the
+# auto-merge it once did (#4001). REVIEW_REQUIRED stays covered for a review rule added back.
 BYPASS_ONLY = pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED", "APPROVED"])
 
 
