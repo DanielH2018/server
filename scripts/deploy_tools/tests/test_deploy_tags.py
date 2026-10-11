@@ -242,7 +242,7 @@ def test_changed_refuses_a_broad_change(capsys, monkeypatch):
     # Nothing but the tag list belongs on stdout — a refusal must not leak a stray tag line
     # a caller might mistake for one.
     assert captured.out == ""
-    assert "refusing" in captured.err
+    assert "deploy.sh: error: --changed: refusing" in captured.err
     assert "`uv run ansible-playbook ansible/deploy.yml" in captured.err
 
 

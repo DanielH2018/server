@@ -208,13 +208,17 @@ def test_the_note_reads_the_merge_commits_tree_not_a_pre_merge_checkout(tmp_path
 
 @pytest.mark.parametrize("ref", ["", "0" * 40], ids=["no-ref", "unarchivable-ref"])
 def test_a_tree_without_the_changed_tasks_says_the_note_stays_wide(
-    tmp_path, capsys, ref
+    tmp_path, capsys, monkeypatch, ref
 ):
     """A checkout that predates the merge holds none of the changed tasks, so the note keeps
-    the whole file's reach. It must say so, not print the wide note as if it were narrowed."""
+    the whole file's reach. It must say so, not print the wide note as if it were narrowed.
+
+    The line names the script running, as a warning, not a borrowed `land_reach:` (#4478)."""
+    monkeypatch.setattr("sys.argv", ["/repo/scripts/deploy_tools/land.py"])
     repo, old, new = _pre_merge_checkout(tmp_path)
     note = _note(repo, old, new, ref=ref)
     assert "daniel-pi" in note and "daniel-server" in note, note
     err = capsys.readouterr().err
     assert f"reach 0 of the 1 tasks {old[:8]}..{new[:8]} changed in {_TASKS}" in err
+    assert "land.py: warning: the task chains read from" in err, err
     assert ("could not read" in err) == bool(ref), err

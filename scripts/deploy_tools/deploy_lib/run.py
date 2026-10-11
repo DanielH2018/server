@@ -46,7 +46,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.deploy_lib.flags import Refused, check_passthrough
-from deploy_tools.deploy_lib.under_locks import say
+from deploy_tools.deploy_lib.messages import PROG, say, say_error, say_warning
 from lib.cli_help import answer_help
 from lib.exit_codes import (
     DEPLOY_BAD_FLAGS,
@@ -189,7 +189,7 @@ def expand_shared_roles(plan: Plan) -> None:
         return
     for role, reached in replaced.items():
         say(
-            f"deploy: `{role}` is a shared role with no containers_list entry; deploying the "
+            f"deploy.sh: `{role}` is a shared role with no containers_list entry; deploying the "
             f"{len(reached)} service(s) that run it: {', '.join(reached)}"
         )
     if replaced:
@@ -306,15 +306,15 @@ def check_at(plan: Plan) -> None:
     if not plan.at_given:
         return
     if not plan.at_ref:
-        say(
-            "deploy: --at needs a commit -- nothing was deployed.",
+        say_error(
+            "--at needs a commit -- nothing was deployed.",
             "  It was given none (or an empty one), and a run that asked for another",
             "  commit must not fall back to deploying this checkout's HEAD in silence.",
         )
         raise Refused(DEPLOY_BAD_FLAGS)
     if plan.changed:
-        say(
-            "deploy: --at <sha> with --changed is contradictory -- nothing was deployed.",
+        say_error(
+            "--at <sha> with --changed is contradictory -- nothing was deployed.",
             "  --changed derives its tags from the WORKING TREE's diff, while --at renders",
             "  a snapshot of another commit, so the derived tags would describe a tree this",
             "  run never deploys. Pass --tags explicitly with --at.",
@@ -329,8 +329,8 @@ def check_at(plan: Plan) -> None:
         check=False,
     )
     if resolved.returncode != 0:
-        say(
-            f"deploy: --at '{plan.at_ref}' does not resolve to a commit here -- nothing was",
+        say_error(
+            f"--at '{plan.at_ref}' does not resolve to a commit here -- nothing was",
             "  deployed. The snapshot is cut from this checkout's object store, so the",
             "  commit has to be in it: 'git fetch origin' first if it was merged elsewhere.",
         )
@@ -423,8 +423,8 @@ def check_mode_conflicts(plan: Plan) -> None:
     tree is reported first, at exit 4.
     """
     if plan.detach and (plan.check or plan.dry_run):
-        say(
-            "deploy: --detach with --check or --dry-run is meaningless -- both already return",
+        say_error(
+            "--detach with --check or --dry-run is meaningless -- both already return",
             "  immediately without touching the lock, so there is nothing to background.",
         )
         raise Refused(DEPLOY_BAD_FLAGS)
@@ -432,8 +432,8 @@ def check_mode_conflicts(plan: Plan) -> None:
     # loud rather than refused: rehearsing a landing's `--at <sha>` with --check is a
     # reasonable thing to type, and rendering a different tree in silence is the surprise.
     if plan.at_sha and (plan.check or plan.dry_run):
-        say(
-            f"deploy: --check/--dry-run render THIS working tree; --at {plan.at_sha[:12]} scoped the",
+        say_warning(
+            f"--check/--dry-run render THIS working tree; --at {plan.at_sha[:12]} scoped the",
             "  staleness and tag checks to that commit and nothing else.",
         )
 
@@ -547,7 +547,7 @@ def report(rc: int, argv: list[str], out=None) -> None:
     # meaning is "it worked".
     note = describe_exit(ENTRY_POINT, rc) if rc else None
     if note:
-        print(f"deploy.sh: {note}", file=out)
+        print(f"{PROG}: error: {note}", file=out)
     verdict = verdict_line(ENTRY_POINT, rc, " ".join(argv) or "no arguments")
     if verdict:
         print(verdict, file=out)

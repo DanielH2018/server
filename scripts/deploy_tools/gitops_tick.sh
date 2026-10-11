@@ -102,7 +102,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo "gitops_tick.sh: unknown argument '$1'" >&2
+      echo "gitops_tick.sh: error: unknown argument '$1'" >&2
       tick_verdict 64 bad-args "unknown argument '$1'"
       ;;
   esac
@@ -129,7 +129,7 @@ in_flight_seconds() {
 }
 
 if ! systemctl cat "$UNIT" >/dev/null 2>&1; then
-  echo "gitops_tick.sh: $UNIT is not installed on $(hostname) — the GitOps deployer" >&2
+  echo "gitops_tick.sh: error: $UNIT is not installed on $(hostname) — the GitOps deployer" >&2
   echo "runs only on hosts with has_gitops: true (daniel-box)." >&2
   tick_verdict 2 not-installed "$UNIT not installed on $(hostname)"
 fi
@@ -161,7 +161,7 @@ else
   echo "Triggering $UNIT on $(hostname)..."
   if ! systemctl start --no-block "$UNIT"; then
     echo >&2
-    echo "gitops_tick.sh: could not start $UNIT. If that failed with 'Interactive" >&2
+    echo "gitops_tick.sh: error: could not start $UNIT. If that failed with 'Interactive" >&2
     echo "authentication required', the polkit rule is missing — apply it with:" >&2
     echo "  uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy" >&2
     tick_verdict 1 failed "could not start $UNIT"
@@ -220,9 +220,9 @@ waited=$((SECONDS - wait_started))
 # seconds are the tick's own work, and the path that makes them long ends at exit 3, which
 # the landing already books. 60s because a healthy tick takes about five.
 if [[ "$joined" == 1 ]]; then
-  echo "gitops_tick: joined a tick already ${joined_after}s in flight; waited ${waited}s for it" >&2
+  echo "gitops_tick.sh: joined a tick already ${joined_after}s in flight; waited ${waited}s for it" >&2
 elif [[ "$waited" -ge 60 ]]; then
-  echo "gitops_tick: waited ${waited}s" >&2
+  echo "gitops_tick.sh: waited ${waited}s" >&2
 fi
 
 # A joined run that ENDED is not this request's tick. It fetched origin before the request
@@ -250,17 +250,17 @@ if [[ "$joined" == 1 && "$WAIT_S" -gt 0 ]]; then
     since="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
     started_before="$(show ExecMainStartTimestampMonotonic)"
     if ! systemctl start --no-block "$UNIT"; then
-      echo "gitops_tick.sh: could not start $UNIT for the fresh run." >&2
+      echo "gitops_tick.sh: error: could not start $UNIT for the fresh run." >&2
       tick_verdict 1 failed "could not start $UNIT for the fresh run"
     fi
     fresh=1
     watch_run "$deadline"
-    echo "gitops_tick: joined run ended; started a fresh run and waited $((SECONDS - wait_started - waited))s for it" >&2
+    echo "gitops_tick.sh: joined run ended; started a fresh run and waited $((SECONDS - wait_started - waited))s for it" >&2
   fi
 fi
 
 echo
-echo "gitops_tick: journal of $UNIT since $since:"
+echo "gitops_tick.sh: journal of $UNIT since $since:"
 journalctl -u "$UNIT" --since "$since" --no-pager
 
 # An uneventful tick logs NOTHING — the deployer prints only on a deferral, an alert or a
@@ -275,7 +275,7 @@ journalctl -u "$UNIT" --since "$since" --no-pager
 # `uv run` resolves the project from its caller's working directory, so the call is anchored
 # to this checkout's root, the way land.sh anchors its own.
 echo
-echo "gitops_tick: deployer state:"
+echo "gitops_tick.sh: deployer state:"
 repo_root="$(dirname "$(readlink -f "$0")")/../.."
 uv run --quiet --project "$repo_root" python "$repo_root/scripts/diagnostics/probe.py" \
   gitops-state ||
@@ -322,6 +322,6 @@ if [[ "$result" == "success" && "$status" == "0" ]]; then
   tick_verdict 0 ticked "Result=$result, exit=$status"
 fi
 
-echo "Tick FAILED (Result=$result, exit=$status). gitops-deploy-alert.service has already" >&2
-echo "posted to Discord via OnFailure." >&2
+echo "gitops_tick.sh: error: tick FAILED (Result=$result, exit=$status)." >&2
+echo "gitops-deploy-alert.service has already posted to Discord via OnFailure." >&2
 tick_verdict 1 failed "Result=$result, exit=$status"

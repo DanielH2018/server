@@ -213,7 +213,7 @@ def test_every_failing_exit_prints_its_name_meaning_and_verdict(rc, capsys):
     deploy_run.report(rc, ["--tags", "sonarr"])
     err = capsys.readouterr().err
     row = next(c for c in ec.contract("scripts/deploy.sh") if c.value == rc)
-    assert f"deploy.sh: {row.const} ({rc}):" in err
+    assert f"deploy.sh: error: {row.const} ({rc}):" in err
     assert row.remedy.split(".")[0] in err
     assert f"DEPLOY-VERDICT: {row.verdict} (--tags sonarr)" in err
 

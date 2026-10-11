@@ -29,6 +29,7 @@ from typing import Protocol
 # Reach the sibling package directories: an importer that did not bootstrap them itself (a
 # test, a REPL) finds only this module's own directory, and `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.deploy_lib.messages import say_warning
 from lib.exit_codes import DEPLOY_NO_HOSTS
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
@@ -178,10 +179,6 @@ RELEASE_DIR_ENV = "HOMELAB_DEPLOY_RELEASE_DIR"
 TREE_LOCK_ENV = "HOMELAB_DEPLOY_TREE_LOCK"
 
 
-def say(line: str) -> None:
-    print(line, file=sys.stderr, flush=True)
-
-
 def _take_lock(fd: int, wait_s: float) -> bool:
     """Poll for the tree lock for up to `wait_s`; whether it was taken."""
     deadline = time.monotonic() + wait_s
@@ -230,8 +227,8 @@ def discharge_owed_k8s(
         fd = os.open(lock, os.O_RDONLY | os.O_CREAT, 0o666)
         try:
             if not _take_lock(fd, lock_wait_s):
-                say(
-                    f"deploy: a gitops tick held the tree lock past {lock_wait_s}s, so the "
+                say_warning(
+                    f"a gitops tick held the tree lock past {lock_wait_s}s, so the "
                     "k8s_unapplied ledger was not checked; the next tick discharges what "
                     "this deploy carried"
                 )
@@ -245,7 +242,7 @@ def discharge_owed_k8s(
             os.close(fd)
     # Broad on purpose: the deploy already succeeded, and nothing here may change that.
     except Exception as exc:
-        say(
-            f"deploy: did not check the k8s_unapplied ledger ({type(exc).__name__}: {exc}); "
+        say_warning(
+            f"did not check the k8s_unapplied ledger ({type(exc).__name__}: {exc}); "
             "the next gitops tick discharges what this deploy carried"
         )

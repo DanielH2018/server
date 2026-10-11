@@ -46,6 +46,7 @@ from lib.exit_codes import (
     DEPLOY_PLAYBOOK_FAILED,
     DEPLOY_SNAPSHOT_FAILED,
 )
+from deploy_tools.deploy_lib.messages import say, say_error
 from deploy_tools.deploy_lib.playbook import annotate, discharge_owed_k8s, run_playbook
 from lib.git import git, git_stdout
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -84,11 +85,6 @@ TREE_LOCK_HOLDERS = (
     "  docs-refresh cron, the weekly eval-run cron, or another deploy.sh from a Claude",
     "  session (uv run python scripts/dev/prune_worktrees.py).",
 )
-
-
-def say(*lines: str) -> None:
-    for line in lines:
-        print(line, file=sys.stderr, flush=True)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -149,8 +145,8 @@ def _open_lock(path: str) -> int:
 def say_lock_unavailable(path: str, exc: OSError) -> None:
     """A lock that failed for a reason that is NOT contention (exit 76)."""
     what = "directory" if os.path.isdir(path) else "file"
-    say(
-        f"deploy: could not take {path} ({exc.strerror or exc}) -- nothing was deployed.",
+    say_error(
+        f"could not take {path} ({exc.strerror or exc}) -- nothing was deployed.",
         "  This is NOT contention: no deploy is holding the lock, the lock itself failed.",
         f"  Check the lock {what} {path} exists and is writable by this user",
         f"  (ls -ld {path}). Retrying changes nothing until it is; nothing ran, so a",
@@ -287,7 +283,7 @@ def reap_dead_snapshots(repo_root: Path) -> None:
             os.close(fd)
         if reaped >= cap:
             say(
-                f"deploy: reaped {reaped} dead snapshots under {root} and stopped at the",
+                f"deploy.sh: reaped {reaped} dead snapshots under {root} and stopped at the",
                 "  per-run cap; the rest go on the next locked run (REAP_MAX_PER_RUN).",
             )
             break
@@ -341,8 +337,8 @@ def make_snapshot(run: Run) -> None:
             error = f"could not take the owner lock {directory / OWNER_LOCK}"
             remove_snapshot(run)
     if error:
-        say(
-            f"deploy: could not snapshot {run.at_sha or 'HEAD'} into {root} -- nothing was deployed.",
+        say_error(
+            f"could not snapshot {run.at_sha or 'HEAD'} into {root} -- nothing was deployed.",
             "  " + error.replace("\n", "\n  "),
             "  The playbook renders from a detached worktree of that commit, so without one",
             "  there is nothing to deploy from; retrying alone will not fix the cause above.",
@@ -371,8 +367,8 @@ def enumerate_full_run_tags(run: Run) -> list[str]:
             check=False,
         ).stdout
     except subprocess.TimeoutExpired:
-        say(
-            f"deploy: listing the deploy tags took longer than {timeout}s under the",
+        say_error(
+            f"listing the deploy tags took longer than {timeout}s under the",
             "  tree lock, so the run was abandoned -- nothing was deployed. That hold is meant",
             "  to be seconds (ADR-0017); a cold 'uv sync' is the usual cause. Run",
             "  'uv run python scripts/deploy_tools/deploy_tags.py list' once by hand, then retry.",
@@ -380,8 +376,8 @@ def enumerate_full_run_tags(run: Run) -> list[str]:
         raise Refused(DEPLOY_SNAPSHOT_FAILED) from None
     tags = [line.strip() for line in listed.splitlines() if line.strip()]
     if not tags:
-        say(
-            "deploy: could not list the deploy tags from the snapshot -- nothing was deployed.",
+        say_error(
+            "could not list the deploy tags from the snapshot -- nothing was deployed.",
             "  A run with no --tags locks one lock per declared service, so an unreadable list",
             "  means it would deploy everything holding nothing. Check that",
             "  'uv run python scripts/deploy_tools/deploy_tags.py list' works in this checkout.",
@@ -416,14 +412,14 @@ def tree_lock() -> Generator[None]:
             try:
                 _flock_timed(fd, fcntl.LOCK_EX, lock_wait())
             except _LockTimeout:
-                say(
-                    f"deploy: could not take {path} after {lock_wait()}s -- nothing was deployed.",
+                say_error(
+                    f"could not take {path} after {lock_wait()}s -- nothing was deployed.",
                     *TREE_LOCK_HOLDERS,
                 )
                 raise Refused(DEPLOY_LOCK_BUSY) from None
             waited = int(time.monotonic() - started)
             if waited > 0:
-                line = f"deploy: lock acquired after {waited}s"
+                line = f"deploy.sh: lock acquired after {waited}s"
                 say(f"{line} (holder was: {holder})" if holder else line)
         except OSError as exc:
             say_lock_unavailable(path, exc)
@@ -460,8 +456,8 @@ def take_service_locks(
     else:
         failure = "" if planned else "named no locks"
     if failure:
-        say(
-            f"deploy: deploy_locks.plan {failure}, so this run has no lock list and",
+        say_error(
+            f"deploy_locks.plan {failure}, so this run has no lock list and",
             "  nothing was deployed. The wrapper takes only the locks that helper names --",
             "  never a list of its own. Run 'uv run python",
             f"  {GITOPS_DEPLOY_FILES / 'deployer_lib' / 'deploy_locks.py'} plan <tag>' by hand to see why.",
@@ -472,8 +468,8 @@ def take_service_locks(
         try:
             fd = _open_lock(lock.path)
         except OSError:
-            say(
-                f"deploy: could not open the service lock file {lock.path} -- nothing was deployed.",
+            say_error(
+                f"could not open the service lock file {lock.path} -- nothing was deployed.",
                 f"  {run.lock_dir} must exist and be writable by this user",
                 f"  (ls -ld {run.lock_dir}); retrying changes nothing until it is.",
             )
@@ -484,8 +480,8 @@ def take_service_locks(
         try:
             _flock_timed(fd, mode, lock_wait())
         except _LockTimeout:
-            say(
-                f"deploy: a service lock under {run.lock_dir} stayed busy for {lock_wait()}s -- nothing",
+            say_error(
+                f"a service lock under {run.lock_dir} stayed busy for {lock_wait()}s -- nothing",
                 "  was deployed. Another deploy of one of these services is in progress:",
                 "  gitops-deploy.service, or another Claude session. Retry.",
             )
@@ -497,7 +493,7 @@ def take_service_locks(
         # into the landing's `lock=` field (land_lib/tools.py:in_flock_wait).
         waited = int(time.monotonic() - started)
         if waited > 0:
-            say(f"deploy: service lock {lock.name} acquired after {waited}s")
+            say(f"deploy.sh: service lock {lock.name} acquired after {waited}s")
 
 
 def run(repo_root: Path, tags: list[str], at_sha: str, args: list[str]) -> int:
@@ -523,8 +519,8 @@ def run(repo_root: Path, tags: list[str], at_sha: str, args: list[str]) -> int:
         discharge_owed_k8s(repo_root)
         return 0
     if status == DEPLOY_NO_HOSTS:
-        say(
-            "deploy: the playbook matched NO host, so nothing was deployed -- the PLAY RECAP",
+        say_error(
+            "the playbook matched NO host, so nothing was deployed -- the PLAY RECAP",
             "  names none. ansible exits 0 for this, which is why the wrapper checks the recap.",
             "  Read the [WARNING] lines above: an inventory that failed to parse, or a host",
             "  pattern that matched nothing. Fix that, then retry; no task ran.",
@@ -532,8 +528,8 @@ def run(repo_root: Path, tags: list[str], at_sha: str, args: list[str]) -> int:
         return DEPLOY_NO_HOSTS
     # ansible's own 2/3/4 collide with the wrapper's tag-miss, broad and stale codes, so its
     # number is reported and 20 returned.
-    say(
-        f"deploy: the playbook ran and failed (ansible-playbook exit {status}) -- changes that",
+    say_error(
+        f"the playbook ran and failed (ansible-playbook exit {status}) -- changes that",
         "  applied before the failing task ARE live. Read the PLAY RECAP and the failing",
         "  TASK above; this is not a tag, staleness or lock refusal.",
     )

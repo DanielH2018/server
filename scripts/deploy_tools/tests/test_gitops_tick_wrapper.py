@@ -6,7 +6,7 @@ The wrapper is a shell script, so the pytest suite cannot see it except by runni
 journal, or /var/lock. The only live reads are the wrapper's own `/var/lib/gitops-deploy`
 markers, which it prints and never grades.
 
-The lines the wrapper prints for a landing to book -- `gitops_tick: joined ...` -- are
+The lines the wrapper prints for a landing to book -- `gitops_tick.sh: joined ...` -- are
 asserted together with the parser that reads them (`land_lib/tools.py:in_flock_wait`), so a
 wording change on either side that the other does not follow is caught here.
 
@@ -118,7 +118,7 @@ def test_joining_a_tick_in_flight_reports_how_long_it_ran_and_how_long_we_waited
         check=False,
     )
     line = next(
-        (x for x in result.stderr.splitlines() if "gitops_tick: joined" in x), ""
+        (x for x in result.stderr.splitlines() if "gitops_tick.sh: joined" in x), ""
     )
     assert line, f"stdout={result.stdout!r} stderr={result.stderr!r}"
     in_flight = re.search(r"already (\d+)s in flight", line)
@@ -237,7 +237,7 @@ def test_a_joined_run_that_ends_cleanly_is_followed_by_a_fresh_run(tmp_path):
     )
     assert "started and graded instead" in proc.stdout
     stderr = proc.stderr.splitlines()
-    joined = next((x for x in stderr if "gitops_tick: joined a tick" in x), "")
+    joined = next((x for x in stderr if "gitops_tick.sh: joined a tick" in x), "")
     assert tools.in_flock_wait(joined), "the joined line the landing books must survive"
     assert any("started a fresh run" in x for x in stderr), stderr
 
@@ -250,6 +250,7 @@ def test_a_joined_run_that_failed_is_graded_as_itself(tmp_path):
     """
     proc, starts = _wait_on_joined(tmp_path, result="failed", status="1")
     assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "gitops_tick.sh: error: tick FAILED" in proc.stderr
     assert starts == 0, "a failed joined run must not be followed by a fresh one"
 
 
