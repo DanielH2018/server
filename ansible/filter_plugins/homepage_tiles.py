@@ -41,6 +41,35 @@ def netpol_callers(entry):
     return callers
 
 
+def netpol_caller_fences(containers_list):
+    """The caller fences netpol-baseline renders, each `{app, port, callers}`, in list order.
+
+    First one fence per entry with any `netpol_callers`, unless the entry sets
+    `netpol_role_owned` because its own role renders that fence. The fence takes the entry's
+    `netpol_app`, or its `name`, and its `port`. Then one per `netpol_fences` item of each
+    entry, unless the item sets `role_owned`. Returning the fences rather than the entries
+    lets the deploy narrowing name the fields the template reads (#4395).
+    """
+    entries = [e for e in containers_list or [] if isinstance(e, dict)]
+    fences = []
+    for entry in entries:
+        callers = netpol_callers(entry)
+        if callers and not entry.get("netpol_role_owned", False):
+            app = entry.get("netpol_app", entry["name"])
+            fences.append({"app": app, "port": entry["port"], "callers": callers})
+    for entry in entries:
+        for fence in entry.get("netpol_fences", []):
+            if not fence.get("role_owned", False):
+                fences.append(
+                    {
+                        "app": fence["app"],
+                        "port": fence["port"],
+                        "callers": fence["from"],
+                    }
+                )
+    return fences
+
+
 def homepage_widget_url(containers_list, name, namespace):
     """`http://<name>.<namespace>.svc.cluster.local:<port>` for entry `name`'s Service.
 
@@ -79,6 +108,7 @@ class FilterModule:
     def filters(self):
         return {
             "netpol_callers": netpol_callers,
+            "netpol_caller_fences": netpol_caller_fences,
             "homepage_widget_url": homepage_widget_url,
             "homepage_href": homepage_href,
         }
