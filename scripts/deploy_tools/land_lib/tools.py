@@ -74,8 +74,8 @@ GATE_TMP_ROOT_ENV = "LAND_GATE_TMPDIR"
 # 75 and both of these exit 0. deploy.sh waits inside `flock -w`; gitops_tick.sh watches a
 # tick another actor already started. `gitops_tick.sh: waited <M>s` (a tick this landing
 # started) is absent: those seconds are the tick's own work, and the path that makes them
-# long ends at exit 3, which `retry_while_locked` books. Each also matches its pre-#4478
-# name (`deploy:`, `gitops_tick:`): land deploys from PRIMARY, which can predate this file.
+# long ends at exit 3, which `retry_while_locked` books. The deploy patterns also take the
+# pre-#4478 `deploy:`, as PRIMARY can predate this file; `run_tick` runs the tick beside it.
 _ACQUIRED = re.compile(
     r"deploy(?:\.sh)?: lock acquired after (\d+)s(?: \(holder was: (.*)\))?\s*$"
 )
@@ -84,7 +84,7 @@ _ACQUIRED = re.compile(
 # which `\d+` would refuse, silently restoring `lock=0` -- the failure this parser exists to
 # end. Bounded at the `;` so it cannot run into the seconds that ARE booked.
 _JOINED = re.compile(
-    r"gitops_tick(?:\.sh)?: joined a tick already [^;]*in flight; waited (\d+)s for it\s*$"
+    r"gitops_tick\.sh: joined a tick already [^;]*in flight; waited (\d+)s for it\s*$"
 )
 # deploy.sh holds the tree lock only for its snapshot, then queues on one lock per service
 # (ADR-0017), so most of a landing's wait arrives on THIS line. It names no holder: nothing

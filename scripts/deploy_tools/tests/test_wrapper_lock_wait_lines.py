@@ -357,6 +357,7 @@ def test_detach_reports_a_busy_service_lock_as_contention(tmp_path):
     with _held(tmp_path / "locks" / "server-deploy-uptime-kuma.lock"):
         result = _run_detach(tmp_path, HOMELAB_DEPLOY_LOCK_WAIT="1")
     assert result.returncode == ec.DEPLOY_LOCK_BUSY, result.stderr
-    assert "deploy --detach: a deploy of one of these services held its lock" in (
-        result.stderr
+    assert (
+        "deploy.sh: error: --detach: a deploy of one of these services held its lock"
+        in (result.stderr)
     )

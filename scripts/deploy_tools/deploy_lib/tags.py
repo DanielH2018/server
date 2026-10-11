@@ -48,7 +48,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 from deploy_tools.deploy_lib.messages import PROG
-from lib.cli_help import ArgumentParser, error
+from lib.cli_help import ArgumentParser, error, warn
 from lib.git import git, git_stdout
 
 from lib.render_guard import (
@@ -421,25 +421,25 @@ def changed(
     try:
         paths = (git_diff or _git_diff_paths)(ref, cwd)
     except subprocess.CalledProcessError as exc:
-        print(
-            f"deploy --changed: `git diff {ref}...HEAD` failed: {exc.stderr.strip()}",
-            file=sys.stderr,
+        error(
+            f"--changed: `git diff {ref}...HEAD` failed: {exc.stderr.strip()}",
+            prog=PROG,
         )
         return 1
 
     if not paths:
-        print(f"deploy --changed: no files differ from {ref}.", file=sys.stderr)
+        print(f"{PROG}: --changed: no files differ from {ref}.", file=sys.stderr)
         return 0
 
     cs = reach(paths).changes
 
     if cs.broad:
-        print(
-            f"deploy --changed: refusing. {len(paths)} file(s) changed vs {ref} include "
+        error(
+            f"--changed: refusing. {len(paths)} file(s) changed vs {ref} include "
             "a broad path (shared template, inventory, or setup-plane) --changed cannot scope "
             "to a service list — guessing which services that touches would be worse than "
             "asking.",
-            file=sys.stderr,
+            prog=PROG,
         )
         print(
             f"  Run manually instead: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks)}",
@@ -448,18 +448,18 @@ def changed(
         return DEPLOY_BROAD
 
     if cs.tasks:
-        print(
-            "deploy --changed: structural change (tasks/defaults/vars/handlers) in "
+        warn(
+            "--changed: structural change (tasks/defaults/vars/handlers) in "
             f"{sorted(cs.tasks)} — not auto-deployed and not captured by a tag; review and "
             "deploy by hand if it needs to go out.",
-            file=sys.stderr,
+            prog=PROG,
         )
     if cs.secrets:
-        print(
-            "deploy --changed: ansible/vars/secrets.yml changed — a new value only reaches a "
+        warn(
+            "--changed: ansible/vars/secrets.yml changed — a new value only reaches a "
             "service on THAT service's own deploy, so confirm the consuming service's tag is "
             "in the list below.",
-            file=sys.stderr,
+            prog=PROG,
         )
 
     tags, shared = split_shared_roles(cs.k8s | cs.services)
@@ -467,11 +467,11 @@ def changed(
         # Emitting these as tags makes deploy.sh refuse the whole list (exit 2), so the
         # shared roles leave the tag list and become an instruction that can actually
         # apply them.
-        print(
-            f"deploy --changed: {', '.join(shared)} "
+        warn(
+            f"--changed: {', '.join(shared)} "
             f"{'is a shared role' if len(shared) == 1 else 'are shared roles'} with no "
             f"containers_list entry. {k8s_remediation(set(shared), service_tags())}",
-            file=sys.stderr,
+            prog=PROG,
         )
         if not tags:
             # Exit 3, the documented "broad, maps to no single service" refusal. Returning 0
@@ -480,13 +480,13 @@ def changed(
             return DEPLOY_BROAD
     if not tags:
         print(
-            f"deploy --changed: no deployable service changed vs {ref}.",
+            f"{PROG}: --changed: no deployable service changed vs {ref}.",
             file=sys.stderr,
         )
         return 0
 
     print(
-        f"deploy --changed: {len(tags)} service(s) changed vs {ref}: {', '.join(tags)}",
+        f"{PROG}: --changed: {len(tags)} service(s) changed vs {ref}: {', '.join(tags)}",
         file=sys.stderr,
     )
     print(",".join(tags))

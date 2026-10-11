@@ -169,7 +169,7 @@ def test_the_joined_tick_line_books_the_wait_and_not_the_run_before_it():
     docstring states.
     """
     assert tools.in_flock_wait(
-        "gitops_tick: joined a tick already 300s in flight; waited 47s for it\n"
+        "gitops_tick.sh: joined a tick already 300s in flight; waited 47s for it\n"
     ) == (47, "")
 
 
@@ -177,21 +177,16 @@ def test_the_joined_tick_line_books_the_wait_and_not_the_run_before_it():
     "line,booked",
     [
         ("deploy.sh: lock acquired after 5s\n", (5, "")),
-        ("deploy: lock acquired after 5s\n", (5, "")),
         ("deploy.sh: service lock sonarr acquired after 4s\n", (4, "")),
         ("deploy: service lock sonarr acquired after 4s\n", (4, "")),
-        (
-            "gitops_tick.sh: joined a tick already 3s in flight; waited 7s for it\n",
-            (7, ""),
-        ),
-        (
-            "gitops_tick: joined a tick already 3s in flight; waited 7s for it\n",
-            (7, ""),
-        ),
     ],
 )
-def test_a_wait_line_books_under_its_script_name_and_its_pre_4478_name(line, booked):
-    """The deploy runs from PRIMARY, which can predate this parser, so both names book."""
+def test_a_deploy_wait_line_books_under_its_script_name_and_its_pre_4478_name(
+    line, booked
+):
+    """The deploy runs from PRIMARY, which can predate this parser, so both names book.
+
+    The old tree-lock form is pinned by the tests above."""
     assert tools.in_flock_wait(line) == booked
 
 
@@ -201,7 +196,7 @@ def test_a_self_started_tick_wait_line_books_nothing():
     When the unit's own `flock -w` gives up, gitops_tick.sh exits 3 and
     `retry_while_locked` books the wait already. Booking this line too would double it.
     """
-    assert tools.in_flock_wait("gitops_tick: waited 240s\n") is None
+    assert tools.in_flock_wait("gitops_tick.sh: waited 240s\n") is None
 
 
 def test_an_ordinary_stderr_line_books_nothing():
@@ -261,7 +256,7 @@ def test_a_joined_line_books_its_wait_even_when_the_in_flight_seconds_are_missin
     silently restored `lock=0`.
     """
     assert tools.in_flock_wait(
-        "gitops_tick: joined a tick already s in flight; waited 47s for it\n"
+        "gitops_tick.sh: joined a tick already s in flight; waited 47s for it\n"
     ) == (47, "")
 
 
