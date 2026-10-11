@@ -35,8 +35,11 @@ key raises rather than being ignored, so a `basic_auth:` written here fails the 
 rendering a job without it.
 
 No Ansible import, so the render harnesses register the same function the playbook runs.
-Ansible wraps a filter's `ValueError` in its own error.
+`FilterModule` re-raises a function's `ValueError` as `AnsibleFilterError` prefixed with the
+filter's name.
 """
+
+import functools
 
 _REQUIRED = ("job",)
 _OPTIONAL = ("port", "service", "path", "interval", "params", "replicas_var")
@@ -154,10 +157,31 @@ def entry_port(containers_list, name):
     raise ValueError(f"no containers_list entry is named {name!r}")
 
 
+def _as_filter(func):
+    """`func` as Ansible calls it: a ValueError re-raised as `AnsibleFilterError`.
+
+    The message opens with `<func's name>: `, which is the name the filter registers under.
+    The prefix names the filter that refused, since a render failure otherwise reaches the
+    operator as a bare message under the task's template path (#4480). The import is deferred
+    so the module still loads where Ansible is not installed.
+    """
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except ValueError as exc:
+            from ansible.errors import AnsibleFilterError
+
+            raise AnsibleFilterError(f"{func.__name__}: {exc}") from exc
+
+    return wrapped
+
+
 class FilterModule:
     def filters(self):
         return {
-            "scrape_jobs": scrape_jobs,
-            "metrics_port": metrics_port,
-            "entry_port": entry_port,
+            "scrape_jobs": _as_filter(scrape_jobs),
+            "metrics_port": _as_filter(metrics_port),
+            "entry_port": _as_filter(entry_port),
         }

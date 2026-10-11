@@ -12,10 +12,11 @@ Run: uv run pytest ansible/tests/k8s/test_scrape_jobs_derive_from_containers_lis
 import copy
 
 import pytest
+from ansible.errors import AnsibleFilterError
 
 from _k8s_render import host_context, render_role_template
 from lib import yaml_fast
-from scrape_jobs import entry_port, metrics_port, scrape_jobs
+from scrape_jobs import FilterModule, entry_port, metrics_port, scrape_jobs
 
 # Every job derived from a `metrics` item: the seven from #3743, and `nut` from #3816. Each must
 # still render from an entry, so a `metrics` item dropped from the inventory fails here rather
@@ -247,3 +248,19 @@ def test_entry_port_is_flagged_on_an_unknown_entry_or_one_with_no_port():
         entry_port(entries, "b")
     with pytest.raises(ValueError, match="no containers_list entry"):
         entry_port(entries, "c")
+
+
+@pytest.mark.parametrize(
+    ("name", "args"),
+    [
+        ("entry_port", ([{"name": "a", "port": 1}], "b")),
+        ("metrics_port", ([{"name": "a", "port": 1}], "no-such-job")),
+        ("scrape_jobs", ([{"name": "a", "metrics": "bogus"}], "ns")),
+    ],
+    ids=["entry-missing", "job-missing", "metrics-malformed"],
+)
+def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter(name, args):
+    """A render failure names the filter that refused, through the filter Ansible calls (#4480)."""
+    with pytest.raises(AnsibleFilterError) as caught:
+        FilterModule().filters()[name](*args)
+    assert str(caught.value).startswith(f"{name}: "), str(caught.value)
