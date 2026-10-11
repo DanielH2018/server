@@ -54,7 +54,6 @@ MUST_EXCLUDE = frozenset(
         "scripts/secrets_mgmt/secret_bearing_host_paths.py",
     }
 )
-GITOPS_COLLIDING = ("gitops_hold", "gitops_markers", "gitops_ledger")
 
 
 def _checker():
@@ -71,24 +70,32 @@ def _rel_set(checker) -> dict[str, list[Path]]:
     }
 
 
-def _role_map() -> dict[str, list[str]]:
-    """The `{constant name: [module names]}` dict in repo_paths, found by shape, not by name."""
+def _role_dir(key) -> Path | None:
+    """The role directory a map key names: the `Path` constant itself, or its name."""
+    value = key if isinstance(key, Path) else getattr(repo_paths, str(key), None)
+    if isinstance(value, Path) and value.resolve().is_relative_to(repo_paths.ROLES):
+        return value.resolve()
+    return None
+
+
+def _role_map() -> dict[Path, list[str]]:
+    """The `{constant: [module names]}` dict in repo_paths, found by shape, not by name.
+
+    A key may be the `Path` constant or the constant's name; both normalise to the directory.
+    """
     found = [
         value
         for name, value in vars(repo_paths).items()
         if name.isupper()
         and isinstance(value, dict)
         and value
-        and all(
-            isinstance(k, str) and isinstance(getattr(repo_paths, k, None), Path)
-            for k in value
-        )
+        and all(_role_dir(k) is not None for k in value)
     ]
     if len(found) != 1:
         pytest.fail(
             f"repo_paths holds {len(found)} {{constant: [module names]}} maps, want exactly 1"
         )
-    return found[0]
+    return {d: list(v) for k, v in found[0].items() if (d := _role_dir(k)) is not None}
 
 
 def test_the_set_holds_every_kind_of_no_venv_caller():
@@ -128,29 +135,21 @@ def test_yaml_added_to_the_fanout_review_path_turns_the_walk_red(tmp_path):
 
 
 def test_a_colliding_gitops_basename_outside_the_map_turns_the_walk_red(tmp_path):
+    # The import resolves, to a module beside the importer, but a basename two roles share is
+    # accepted only through the map, so resolving is not enough.
     checker = _checker()
-    role_map = _role_map()
-    unmapped = [
-        (const, name)
-        for const in ("GITOPS_DEPLOY_FILES", "MONITOR_BRIDGE_FILES")
-        for name in GITOPS_COLLIDING
-        if name not in role_map.get(const, [])
-    ]
-    assert unmapped, (
-        "the map sanctions every gitops basename under both roles; nothing is decidable"
-    )
-    const, name = unmapped[0]
+    (tmp_path / "gitops_hold.py").write_text("HOLD = 1\n", encoding="utf-8")
     module = tmp_path / "importer.py"
-    module.write_text(f"import {name}\n", encoding="utf-8")
-    assert name in checker.walk(module, [tmp_path, getattr(repo_paths, const)])
+    module.write_text("import gitops_hold\n", encoding="utf-8")
+    assert "gitops_hold" in checker.walk(module, [tmp_path])
 
 
 def test_a_role_module_the_map_lists_is_accepted(tmp_path):
     checker = _checker()
-    const, names = next(iter(_role_map().items()))
+    directory, names = next(iter(_role_map().items()))
     module = tmp_path / "importer.py"
-    module.write_text(f"import {names[0]}\n", encoding="utf-8")
-    assert checker.walk(module, [tmp_path, getattr(repo_paths, const)]) == []
+    module.write_text(f"import {next(iter(names))}\n", encoding="utf-8")
+    assert checker.walk(module, [tmp_path, directory]) == []
 
 
 def test_stdlib_and_the_named_out_of_tree_modules_are_accepted(tmp_path):
@@ -162,15 +161,12 @@ def test_stdlib_and_the_named_out_of_tree_modules_are_accepted(tmp_path):
     assert checker.walk(module, [tmp_path]) == []
 
 
-def test_the_role_map_names_role_directories_and_modules_that_exist():
-    role_map = _role_map()
-    for const, names in role_map.items():
-        directory = getattr(repo_paths, const)
-        assert directory.is_relative_to(repo_paths.ROLES), const
+def test_the_role_map_names_role_modules_that_exist():
+    for directory, names in _role_map().items():
         for name in names:
             assert (directory / f"{name}.py").is_file() or (
                 directory / name
-            ).is_dir(), (const, name)
+            ).is_dir(), (directory, name)
 
 
 def test_every_member_of_the_set_passes_the_static_walk():
@@ -214,32 +210,41 @@ def test_ansible_tests_is_a_repo_paths_constant():
     assert repo_paths.ANSIBLE / "tests" in values
 
 
-def _insert_args_built_from_ansible_literals(path: Path) -> list[str]:
-    """Each `sys.path.insert` argument in `path` that joins an `ansible` path to a string literal.
-
-    Such an argument builds the directory by hand where a `repo_paths` constant should name it.
-    """
-    found = []
-    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
-            continue
-        if node.func.attr != "insert" or len(node.args) != 2:
-            continue
-        arg = ast.unparse(node.args[1])
-        if any(
-            isinstance(sub, ast.BinOp)
-            and isinstance(sub.op, ast.Div)
-            and isinstance(sub.right, ast.Constant)
-            for sub in ast.walk(node.args[1])
-        ) and ("ansible" in arg.lower()):
-            found.append(arg)
-    return found
+def _path_inserts(path: Path) -> list[ast.expr]:
+    """The path argument of every `sys.path.insert(<index>, <path>)` call in `path`."""
+    return [
+        node.args[1]
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "insert"
+        and len(node.args) == 2
+    ]
 
 
 @pytest.mark.parametrize(
-    "rel",
-    ["scripts/lib/ansible_jinja_env.py", "scripts/dev/tighten_ratchets.py"],
+    ("rel", "directory"),
+    [
+        ("scripts/lib/ansible_jinja_env.py", repo_paths.ANSIBLE / "filter_plugins"),
+        ("scripts/dev/tighten_ratchets.py", repo_paths.ANSIBLE / "tests"),
+    ],
     ids=["ansible_jinja_env-filter_plugins", "tighten_ratchets-ansible_tests"],
 )
-def test_the_two_hand_built_inserts_use_repo_paths_constants(rel):
-    assert _insert_args_built_from_ansible_literals(REPO / rel) == []
+def test_the_two_hand_built_inserts_use_repo_paths_constants(rel, directory):
+    inserts = _path_inserts(REPO / rel)
+    hand_built = [
+        ast.unparse(arg)
+        for arg in inserts
+        if "ansible" in ast.unparse(arg).lower()
+        and any(
+            isinstance(sub, ast.BinOp) and isinstance(sub.right, ast.Constant)
+            for sub in ast.walk(arg)
+        )
+    ]
+    assert hand_built == []
+    named = {
+        sub.id for arg in inserts for sub in ast.walk(arg) if isinstance(sub, ast.Name)
+    }
+    assert any(getattr(repo_paths, name, None) == directory for name in named), (
+        f"no sys.path insert in {rel} names the repo_paths constant for {directory}"
+    )
