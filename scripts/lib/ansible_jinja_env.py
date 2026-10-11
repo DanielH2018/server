@@ -143,12 +143,7 @@ def register_ansible_filters(env: Environment) -> Environment:
         _sys.path.insert(0, str(FILTER_PLUGINS))
     from authelia_access import authelia_service_rules
     from entry_fields import entry_names, lan_hostnames, published_ports
-    from homepage_tiles import (
-        homepage_href,
-        homepage_widget_url,
-        netpol_caller_fences,
-        netpol_callers,
-    )
+    import homepage_tiles
     from kuma_monitors import kuma_ingress_monitors
     from longhorn_groups import (
         backup_group_label,
@@ -157,8 +152,8 @@ def register_ansible_filters(env: Environment) -> Environment:
         weekly_backup_shard,
     )
     from py_table import py_table
-    from scrape_jobs import entry_port, metrics_port, scrape_jobs
-    from service_tier import in_service_tier, tier_priority_class
+    import scrape_jobs
+    import service_tier
     from toposort import filter_by_platform
 
     from ansible.plugins.filter.core import (
@@ -180,20 +175,24 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["to_json"] = to_json_stub
     env.filters["filter_by_platform"] = filter_by_platform
     env.filters["authelia_service_rules"] = authelia_service_rules
-    env.filters["tier_priority_class"] = tier_priority_class
-    env.filters["in_service_tier"] = in_service_tier
-    env.filters["scrape_jobs"] = scrape_jobs
-    env.filters["metrics_port"] = metrics_port
-    env.filters["entry_port"] = entry_port
+    # Through FilterModule, as Ansible loads them, so a refusal carries the filter's name.
+    service_tier_filters = service_tier.FilterModule().filters()
+    env.filters["tier_priority_class"] = service_tier_filters["tier_priority_class"]
+    env.filters["in_service_tier"] = service_tier_filters["in_service_tier"]
+    scrape_filters = scrape_jobs.FilterModule().filters()
+    env.filters["scrape_jobs"] = scrape_filters["scrape_jobs"]
+    env.filters["metrics_port"] = scrape_filters["metrics_port"]
+    env.filters["entry_port"] = scrape_filters["entry_port"]
     env.filters["py_table"] = py_table
     env.filters["kuma_ingress_monitors"] = kuma_ingress_monitors
-    env.filters["netpol_callers"] = netpol_callers
-    env.filters["netpol_caller_fences"] = netpol_caller_fences
+    homepage_filters = homepage_tiles.FilterModule().filters()
+    env.filters["netpol_callers"] = homepage_filters["netpol_callers"]
+    env.filters["netpol_caller_fences"] = homepage_filters["netpol_caller_fences"]
     env.filters["entry_names"] = entry_names
     env.filters["published_ports"] = published_ports
     env.filters["lan_hostnames"] = lan_hostnames
-    env.filters["homepage_widget_url"] = homepage_widget_url
-    env.filters["homepage_href"] = homepage_href
+    env.filters["homepage_widget_url"] = homepage_filters["homepage_widget_url"]
+    env.filters["homepage_href"] = homepage_filters["homepage_href"]
     env.filters["backup_group_label"] = backup_group_label
     env.filters["weekly_backup_group"] = weekly_backup_group
     env.filters["weekly_backup_shard"] = weekly_backup_shard

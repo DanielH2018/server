@@ -14,9 +14,12 @@ without the key, so a widget URL and its edge cannot disagree.
 `homepage_href` builds a tile's link from the entry's `hostname`, so a renamed route moves the
 tile with it.
 
-No Ansible import, so the tests call the same functions the playbook runs. Ansible wraps a
-filter's `ValueError` in its own error, which fails the render task before any apply.
+No Ansible import, so the tests call the same functions the playbook runs. `FilterModule`
+re-raises a function's `ValueError` as `AnsibleFilterError` prefixed with the filter's name,
+which fails the render task before any apply.
 """
+
+import functools
 
 HOMEPAGE_APP = "homepage"
 
@@ -104,11 +107,32 @@ def homepage_href(containers_list, name, domain, path="/", lan=False):
     return f"https://{host}.{domain}{path}"
 
 
+def _as_filter(func):
+    """`func` as Ansible calls it: a ValueError re-raised as `AnsibleFilterError`.
+
+    The message opens with `<func's name>: `, which is the name the filter registers under.
+    The prefix names the filter that refused, since a render failure otherwise reaches the
+    operator as a bare message under the task's template path (#4480). The import is deferred
+    so the module still loads where Ansible is not installed.
+    """
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except ValueError as exc:
+            from ansible.errors import AnsibleFilterError
+
+            raise AnsibleFilterError(f"{func.__name__}: {exc}") from exc
+
+    return wrapped
+
+
 class FilterModule:
     def filters(self):
         return {
-            "netpol_callers": netpol_callers,
-            "netpol_caller_fences": netpol_caller_fences,
-            "homepage_widget_url": homepage_widget_url,
-            "homepage_href": homepage_href,
+            "netpol_callers": _as_filter(netpol_callers),
+            "netpol_caller_fences": _as_filter(netpol_caller_fences),
+            "homepage_widget_url": _as_filter(homepage_widget_url),
+            "homepage_href": _as_filter(homepage_href),
         }

@@ -153,7 +153,8 @@ def duplicate_dashboard_uids(boards: dict[str, list[str]]) -> list[str]:
     for uid, paths in sorted(boards.items()):
         if len(paths) > 1:
             errors.append(
-                f"dashboard uid {uid!r} is claimed by {len(paths)} files ({', '.join(paths)}) "
+                f"{paths[0]}: dashboard uid {uid!r} is claimed by {len(paths)} files "
+                f"({', '.join(paths)}) "
                 f"— Grafana disables provisioning writes for EVERY board when it sees a "
                 f"duplicate uid, so this freezes the whole estate. Delete all but one."
             )
@@ -197,9 +198,10 @@ def main() -> int:
     """
     errors = validate()
     if errors:
-        print("Grafana dashboard datasource validation FAILED:")
+        # Each error opens with the dashboard's path, so this is `[FAIL] <path>: <reason>`.
         for error in errors:
-            print(f"  - {error}")
+            print(f"  [FAIL] {error}", file=sys.stderr)
+        print(f"Grafana dashboard datasource validation FAILED: {len(errors)} error(s)")
         return 1
     print("Grafana dashboard datasources OK")
     return 0

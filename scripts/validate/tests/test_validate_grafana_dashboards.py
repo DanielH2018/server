@@ -10,7 +10,12 @@ Run: uv run pytest scripts/validate/tests/test_validate_grafana_dashboards.py
 """
 
 import json
+import re
+import shutil
+import sys
+from pathlib import Path
 
+from lib import proc_testing
 from validate import grafana_dashboards as vgd
 
 
@@ -128,3 +133,45 @@ def test_validate_passes_two_boards_with_distinct_uids(tmp_path):
             )
         )
     assert [e for e in vgd.validate(dashboards_dir=tmp_path) if "claimed by" in e] == []
+
+
+# ── the failure marker (#4480) ──────────────────────────────────────────────────────────────
+
+
+def test_main_prints_each_error_as_a_fail_line_on_stderr(tmp_path):
+    """`[FAIL] <path>: <reason>` on stderr, the shape every validator shares.
+
+    The script finds its repo from its own location, so a copy of `scripts/lib` and
+    `scripts/validate` runs
+    unpatched against a scratch tree holding one board with an unprovisioned uid.
+    """
+    scripts = Path(vgd.__file__).resolve().parents[1]
+    for package in ("lib", "validate"):
+        shutil.copytree(
+            scripts / package,
+            tmp_path / "scripts" / package,
+            ignore=shutil.ignore_patterns("tests", "__pycache__"),
+        )
+    role = tmp_path / "ansible/roles/k8s/observability"
+    (role / "templates").mkdir(parents=True)
+    (role / "templates/grafana.yaml.j2").write_text(
+        "datasources:\n  - name: Prometheus\n    uid: prometheus\n"
+    )
+    (role / "files/dashboards").mkdir(parents=True)
+    board = {
+        "uid": "u",
+        "title": "Board",
+        "panels": [{"title": "P", "datasource": {"uid": "not-provisioned"}}],
+    }
+    (role / "files/dashboards/board.json").write_text(json.dumps(board))
+
+    run = proc_testing.run(
+        [sys.executable, str(tmp_path / "scripts/validate/grafana_dashboards.py")]
+    )
+    assert run.returncode == 1, run.stdout + run.stderr
+    path = "ansible/roles/k8s/observability/files/dashboards/board.json"
+    assert re.search(
+        rf"^\s*\[FAIL\] {re.escape(path)}: datasource uid 'not-provisioned'",
+        run.stderr,
+        re.M,
+    ), run.stdout + run.stderr

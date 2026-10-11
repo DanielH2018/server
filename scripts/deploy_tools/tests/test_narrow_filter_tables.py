@@ -21,6 +21,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_filter_tables.py
 import importlib
 
 import pytest
+from ansible.errors import AnsibleFilterError
 
 from deploy_tools.narrow_lib import containers
 from lib.repo_paths import REPO
@@ -96,6 +97,18 @@ _ENTRY_PORT = (
 def test_the_scan_flags_a_filter_reading_a_key_the_table_omits():
     keys, _ = filter_reads(_ENTRY_PORT.format(probe="e.get('hostname')"))["entry_port"]
     assert keys - containers.FILTER_FIELDS["entry_port"] == {"hostname"}
+
+
+@pytest.mark.parametrize(
+    ("wrapper", "scanned"),
+    [("_as_filter", {"entry_port"}), ("_memoised", set())],
+)
+def test_the_scan_reads_through_only_the_as_filter_wrapper(wrapper, scanned):
+    """`_as_filter` passes its arguments through; another wrapper may not, so it stays unread."""
+    source = _ENTRY_PORT.format(probe="e.get('hostname')").replace(
+        "'entry_port': entry_port", f"'entry_port': {wrapper}(entry_port)"
+    )
+    assert set(filter_reads(source)) == scanned
 
 
 @pytest.mark.parametrize(
@@ -228,7 +241,8 @@ def _filters() -> dict:
 def _outcome(filter_, containers_list: list, args: tuple) -> tuple:
     try:
         return ("returned", filter_(containers_list, "target", *args))
-    except (KeyError, TypeError, ValueError) as exc:
+    # A FilterModule refusal is an AnsibleFilterError, which no ValueError subclasses (#4480).
+    except (KeyError, TypeError, ValueError, AnsibleFilterError) as exc:
         return ("raised", type(exc).__name__, str(exc))
 
 

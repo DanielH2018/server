@@ -388,6 +388,9 @@ def check_pins(
 ) -> int:
     """Check each pin, print a line per failure, and return the count that failed.
 
+    A failing pin prints a `FAIL` status line on `out` and the `[FAIL] <source>: <name>:
+    <reason>` line every validator shares on stderr (#4480).
+
     A pin that matches prints an `ok` line only when `verbose` is set, matching the template
     validators' `-v` (#4448).
     """
@@ -399,9 +402,8 @@ def check_pins(
                 print(f"ok    {pin.name}  {pin.url}", file=out)
         else:
             failures += 1
-            print(
-                f"FAIL  {pin.name}  {pin.url}\n      {reason}  ({pin.source})", file=out
-            )
+            print(f"FAIL  {pin.name}  {pin.url}", file=out)
+            print(f"[FAIL] {pin.source}: {pin.name}: {reason}", file=sys.stderr)
     return failures
 
 
@@ -436,7 +438,11 @@ def _build_parser() -> argparse.ArgumentParser:
 def refresh_pins(
     pins: Iterable[Pin], fetcher: Fetcher = fetch, root: _Path = REPO, out=sys.stdout
 ) -> int:
-    """Refresh each pin, print one line per pin, and return the count that failed."""
+    """Refresh each pin, print one line per pin, and return the count that failed.
+
+    A failed refresh also prints `[FAIL] <source>: <name>: <reason>` on stderr, as
+    `check_pins` does.
+    """
     failures = 0
     for pin in pins:
         ok, message = refresh_pin(pin, fetcher, root)
@@ -444,7 +450,8 @@ def refresh_pins(
             print(f"ok    {pin.name}  {message}  ({pin.source})", file=out)
         else:
             failures += 1
-            print(f"FAIL  {pin.name}  {pin.url}\n      {message}", file=out)
+            print(f"FAIL  {pin.name}  {pin.url}", file=out)
+            print(f"[FAIL] {pin.source}: {pin.name}: {message}", file=sys.stderr)
     return failures
 
 

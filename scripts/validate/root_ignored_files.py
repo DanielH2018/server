@@ -104,9 +104,10 @@ def main(argv: list[str] | None = None) -> int:
     found = problems(REPO)
     for name in found:
         print(
-            f"{name}: hidden by .gitignore's `/*`, so git will never commit it. "
+            f"[FAIL] {name}: hidden by .gitignore's `/*`, so git will never commit it. "
             f"To track it, add `!/{name}` to .gitignore. If it is local-only, add it to "
-            f"LOCAL_ONLY in scripts/validate/root_ignored_files.py."
+            f"LOCAL_ONLY in scripts/validate/root_ignored_files.py.",
+            file=sys.stderr,
         )
     return 1 if found else 0
 
