@@ -25,7 +25,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_cross_role import k8s_lookup_map
+from deployer_lib.deploy_cross_role import k8s_lookup_map
 
 # Push tokens whose pusher and AutoKuma `push_token` label live on DIFFERENT hosts, or which
 # reference the rotation tool itself — one redeploy cannot update both halves atomically, so these

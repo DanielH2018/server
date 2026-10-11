@@ -20,7 +20,7 @@ from collections.abc import Callable
 import pytest
 
 from _deploy_fakes import checkout_routing
-from deploy_toolbox import DeployTools
+from deployer_lib.deploy_toolbox import DeployTools
 
 # The SHAs _tick's `run` answers rev-parse with; `from _deploy_fakes import` is avoided for two
 # constants that would otherwise pull the whole scripted tick into a module that scripts none.
@@ -155,7 +155,7 @@ def test_an_unusable_config_is_one_line_and_exit_0_on_a_delivered_post(
     detailed post — same convention as every other `0 if posted else 1` branch — so OnFailure's
     generic curl doesn't double-page; see the failure-path test below for the exit-1 half.
     """
-    import deploy_io
+    from deployer_lib import deploy_io
 
     run_tick, seen = _tick(
         gitops_deploy,
@@ -184,7 +184,7 @@ def test_an_unusable_config_exits_1_when_the_alert_itself_cant_be_delivered(
     gitops_deploy, state_dir, state
 ):
     # Red proof for the branch above: when the detailed post fails, OnFailure is the backstop.
-    import deploy_io
+    from deployer_lib import deploy_io
 
     run_tick, _seen = _tick(
         gitops_deploy,

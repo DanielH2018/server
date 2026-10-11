@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_health.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_health.py
 """The Discord delivery queue's pure half.
 
 `apply_send_result` / `cap_pending` / `apply_drain_result` keep the pending-alert file bounded

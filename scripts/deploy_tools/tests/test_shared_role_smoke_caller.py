@@ -117,7 +117,7 @@ def test_the_smoke_set_cannot_widen_past_the_digest_provable_roles():
     not there would be smoke-tested on one caller while the deployer still demands a record
     from all of them.
     """
-    from deploy_k8s_owed import DIGEST_PROVABLE_ROLES
+    from deployer_lib.deploy_k8s_owed import DIGEST_PROVABLE_ROLES
 
     assert SMOKE_TESTABLE_SHARED_ROLES <= DIGEST_PROVABLE_ROLES
 

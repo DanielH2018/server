@@ -1398,7 +1398,7 @@ whole run and takes the per-service locks inside that hold, which keeps a tick a
 deploy off the same rollout. The lock order is `all` first, then each service in sorted order.
 `deploy.sh` runs `deploy_locks.py plan <tag>...`, takes the locks it prints top to bottom, and
 exits 79 rather than order them itself when the plan does not arrive. The `# DECIDED:` marker
-in `files/deploy_locks.py` says why the two orders cannot deadlock.
+in `files/deployer_lib/deploy_locks.py` says why the two orders cannot deadlock.
 
 **A busy service lock is contention, not a failed deploy.** `deploy_locks` raises
 `ServiceLockBusy`, each of the three deploy handlers catches it ahead of its failure arm, and
@@ -1439,6 +1439,15 @@ a failed deploy and rolls back.
 
 Moved out of the role's `CLAUDE.md` by #2999. Three layers, and which one a function belongs in
 is decided by what it touches.
+
+On disk, `files/` holds the entry point `gitops_deploy.py` and the three `gitops_*` modules, and
+every `deploy_*` module sits in the `files/deployer_lib/` namespace package (#4355). The
+`gitops_*` modules stay flat because `ansible/tests/deploy/test_gitops_markers_copies.py` keeps
+them identical to monitor-bridge's copies, and the deploy UI installs them flat too. A
+`deploy_*` module is imported as `from deployer_lib import deploy_io`. The entry point puts its
+own directory on `sys.path`, which is what resolves `deployer_lib` on the host. The package is
+not named `deploy_lib`, because `scripts/deploy_tools/deploy_lib/` sits on the same pytest path
+and two same-named PEP 420 portions merge into one package.
 
 | layer | modules | holds |
 |---|---|---|

@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_changes.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py
 """Which services a pushed change reaches, and which plane it lands on.
 
 `services_from_changed_paths` maps a git-diff file list to a `ChangeSet`: the active container
@@ -18,9 +18,9 @@ from typing import NamedTuple
 # Every reader looks a table up as `deploy_cross_role.<TABLE>` at call time, so a tick or a
 # landing that swaps the tables with `deploy_cross_role.use_tables` reaches it (#3512). A
 # `from deploy_cross_role import <TABLE>` binding keeps the old table (#4077).
-import deploy_cross_role
+from deployer_lib import deploy_cross_role
 
-from deploy_setup_roles import (  # noqa: F401  (re-exported for this module's readers)
+from deployer_lib.deploy_setup_roles import (  # noqa: F401  (re-exported for this module's readers)
     INITIAL_SETUP,
     is_routed,
     keys_naming_no_role,

@@ -83,7 +83,7 @@ def test_test_node_is_clean():
 
 def test_marker_is_clean():
     c = _one(
-        "`ansible/roles/setup/gitops_deploy/files/deploy_logic.py:DECIDED: a fixed slice while`"
+        "`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py:DECIDED: a fixed slice while`"
     )
     assert c.form == "marker"
     assert c.selector == "a fixed slice while"

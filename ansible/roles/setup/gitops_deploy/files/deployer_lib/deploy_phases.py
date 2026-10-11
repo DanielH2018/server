@@ -16,36 +16,36 @@ Each takes the tick's `tools`, `state` and `config` — the `deploy_config.Confi
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
 
-import deploy_alert_text
-import deploy_alerts
-import deploy_io
-import deploy_cross_role
-import deploy_defer
-import deploy_setup_roles
-from deploy_changes import (
+from deployer_lib import deploy_alert_text
+from deployer_lib import deploy_alerts
+from deployer_lib import deploy_io
+from deployer_lib import deploy_cross_role
+from deployer_lib import deploy_defer
+from deployer_lib import deploy_setup_roles
+from deployer_lib.deploy_changes import (
     ChangeSet,
     comment_only_broad_changes,
     services_from_changed_paths,
     shared_module_consumers,
 )
-from deploy_config import Config, log
-from deploy_git import ci_walk_candidates, is_diverged, next_action
-from deploy_inventory import declared_k8s_services, declares_no_gitops
-from deploy_k8s import (
+from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_git import ci_walk_candidates, is_diverged, next_action
+from deployer_lib.deploy_inventory import declared_k8s_services, declares_no_gitops
+from deployer_lib.deploy_k8s import (
     declared_denylist,
     declares_snapshot_claims,
     is_image_only_diff,
     split_k8s_auto_deploy,
 )
-from deploy_state import DeployerState
-from deploy_k8s_owed import k8s_roles_deleted_at
-from deploy_tick_types import (
+from deployer_lib.deploy_state import DeployerState
+from deployer_lib.deploy_k8s_owed import k8s_roles_deleted_at
+from deployer_lib.deploy_tick_types import (
     NotTheDeployerHost,
     RetryableFetchError,
     TickPlan,
     TickTarget,
 )
-from deploy_toolbox import DeployTools
+from deployer_lib.deploy_toolbox import DeployTools
 
 
 def refuse_unless_deployer(config: Config) -> None:

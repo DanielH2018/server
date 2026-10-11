@@ -12,8 +12,8 @@ import pathlib
 
 import pytest
 
-import deploy_io
-import deploy_setup_roles
+from deployer_lib import deploy_io
+from deployer_lib import deploy_setup_roles
 
 SHA = "c0ffee12" * 5
 
@@ -228,7 +228,7 @@ def test_the_marker_key_is_the_role_name_for_every_pending_role():
     one that is not (the `chezmoi_setup` / `chezmoi` shape) would make `clear-owed
     manual_plane <role>` miss its line, so it fails here rather than on a host.
     """
-    import deploy_changes
+    from deployer_lib import deploy_changes
 
     roles = {
         role

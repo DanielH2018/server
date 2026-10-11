@@ -69,8 +69,8 @@ _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 # Both halves of the deploy plane come from the deployer, where `_BROAD_PLAY_PREFIXES` is
 # derived as `_BROAD_DEPLOY_PREFIXES` minus the census two. Imported at module level because
 # `deploy_changes` is stdlib-only and imports nothing from this tree, so no cycle opens.
-from deploy_changes import _BROAD_CENSUS_PREFIXES, _BROAD_PLAY_PREFIXES, role_of
-from deploy_changes import _is_test_only_path
+from deployer_lib.deploy_changes import _BROAD_CENSUS_PREFIXES, _BROAD_PLAY_PREFIXES
+from deployer_lib.deploy_changes import _is_test_only_path, role_of
 
 # Paths whose content every play reads, so no `--tags` value scopes a change to them: the play
 # itself, the task directories it imports, the toposort, and ansible.cfg. The Pi's shared

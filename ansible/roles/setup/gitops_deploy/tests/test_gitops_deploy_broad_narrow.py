@@ -14,8 +14,8 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_br
 
 import dataclasses
 
-import deploy_narrow
-import deploy_tick_types
+from deployer_lib import deploy_narrow
+from deployer_lib import deploy_tick_types
 from _deploy_fakes import receipt_applied
 from gitops_ledger import OWED_K8S_UNAPPLIED
 
@@ -270,7 +270,7 @@ def test_the_denylist_decision_is_recorded_where_the_narrowing_reads_it(gitops_s
     Asserts the identifier and the marker, never the paragraph: a reword must not fail this,
     and a marker moved out of the module that decides must.
     """
-    text = (gitops_src.parent / "deploy_narrow.py").read_text()
+    text = (gitops_src.parent / "deployer_lib" / "deploy_narrow.py").read_text()
     assert "K8S_AUTODEPLOY_DENYLIST" in text
     assert "# DECIDED: the broad plane ignores `K8S_AUTODEPLOY_DENYLIST`" in text
 

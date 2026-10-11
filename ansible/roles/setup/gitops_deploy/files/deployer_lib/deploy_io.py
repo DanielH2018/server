@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_io.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py
 """The boundaries the deployer crosses to act: git, the repo's files, the deploys.
 
 `deploy_logic.py` and the `deploy_*` modules behind it hold the decisions, which are pure.
@@ -32,14 +32,14 @@ import signal
 import subprocess
 from collections.abc import Callable
 
-from deploy_config import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
+from deployer_lib.deploy_config import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
     Config,
     ConfigError,
     load_config,
     log,
     read_config_file,
 )
-from deploy_failtext import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
+from deployer_lib.deploy_failtext import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
     RUN_ERROR_STDERR_TAIL,
     RUN_ERROR_STDOUT_CHARS,
     TRUNCATED,
@@ -53,9 +53,9 @@ from deploy_failtext import (  # noqa: F401 — re-exported for `deploy_io.<name
     tail,
     timeout_detail,
 )
-from deploy_k8s import k8s_role_paths
-from deploy_locks import locked_budget
-from deploy_state import STATE_DIR, DeployerState  # noqa: F401 — re-exported
+from deployer_lib.deploy_k8s import k8s_role_paths
+from deployer_lib.deploy_locks import locked_budget
+from deployer_lib.deploy_state import STATE_DIR, DeployerState  # noqa: F401 — re-exported
 
 
 # ── subprocess ────────────────────────────────────────────────────────────────────────────────

@@ -26,13 +26,15 @@ from pathlib import Path, PurePath
 from lib.proc_testing import fake_bin, path_with
 from lib.git_testing import git, init_repo, scrub_process_git_env
 
-from deploy_locks import TREE_LOCK
+from deployer_lib.deploy_locks import TREE_LOCK
 from lib.repo_paths import REPO as _REPO
 
 # The module `deploy.sh` reads its service locks from, at the path the wrapper runs it by.
 # `make_snapshot_repo` copies it into every throwaway repo, so the wrapper's `uv run python
 # ansible/.../deploy_locks.py plan` resolves there the way it does in a real checkout.
-DEPLOY_LOCKS_REL = Path("ansible/roles/setup/gitops_deploy/files/deploy_locks.py")
+DEPLOY_LOCKS_REL = Path(
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py"
+)
 
 # The shared `flock` stub: drop flock's own options and its lock-file argument, then run
 # whatever is left. No real lock is taken, so no test can interleave with a live deploy.

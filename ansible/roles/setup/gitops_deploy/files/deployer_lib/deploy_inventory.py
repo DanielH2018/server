@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_inventory.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_inventory.py
 """What this host declares, read from host_vars text.
 
 `declared_k8s_services` parses `containers_list` without yaml (the unit runs under

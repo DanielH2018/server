@@ -12,7 +12,7 @@ import dataclasses
 
 import pytest
 
-import deploy_io
+from deployer_lib import deploy_io
 
 
 def test_an_empty_environment_is_a_usable_default_config():

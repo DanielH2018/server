@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py
 """The files other roles ship, import or read by path, and the roles a change to one reaches.
 
 `deploy_changes.services_from_changed_paths` and `setup_roles_for` read the setup tables below to
@@ -115,7 +115,9 @@ SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
 
 
 # This module, by its repo path, and the names of the tables above.
-CROSS_ROLE_FILE = "ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py"
+CROSS_ROLE_FILE = (
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py"
+)
 TABLE_NAMES = (
     "K8S_ROLES_IMPORTING_SETUP_FILES",
     "SETUP_FILES_ROUTED_TO_OWNER",

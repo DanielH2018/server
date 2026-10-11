@@ -52,7 +52,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 # deploy_locks.py ships to the deployer host as a role file, so it sits on no import path.
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-import deploy_locks
+from deployer_lib import deploy_locks
 
 # Covers gitops-deploy's worst-case hold of 3780s (STAGING_GATE_TIMEOUT_S 600 +
 # STAGING_EXPECT_TIMEOUT_S 120 + K8S_DEPLOY_TIMEOUT_S 1440 + K8S_ROLLBACK_TIMEOUT_S 1620), not its

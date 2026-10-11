@@ -15,7 +15,7 @@ import yaml
 
 from lib.repo_paths import REPO as _REPO_ROOT
 
-from deploy_changes import (
+from deployer_lib.deploy_changes import (
     ChangeSet,
     _content_lines,
     comment_only_broad_changes,
@@ -165,7 +165,7 @@ def test_setup_roles_are_recorded_for_both_broad_setup_arms():
     both remediations still need the role name."""
     cs = services_from_changed_paths(
         [
-            "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+            "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
             "ansible/roles/setup/k3s/tasks/node.yml",
         ]
     )

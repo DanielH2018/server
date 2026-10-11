@@ -165,7 +165,7 @@ def test_a_self_applied_setup_role_is_not_owed_to_a_hand():
     exit 1 with `needs-manual-apply` naming the two playbook runs the next tick is about
     to perform itself."""
     files = [
-        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
         "ansible/roles/setup/renovate_notify/files/renovate_notify.py",
     ]
     assert land_tags.plane_note(files) == ""

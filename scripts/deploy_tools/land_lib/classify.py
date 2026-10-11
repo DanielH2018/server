@@ -16,7 +16,7 @@ from deploy_tools.land_lib.land_tags import DeriveSource
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-import deploy_cross_role
+from deployer_lib import deploy_cross_role
 
 
 def _classified[**P, R](

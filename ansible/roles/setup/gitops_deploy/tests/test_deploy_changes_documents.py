@@ -15,7 +15,7 @@ import yaml
 
 from lib.repo_paths import REPO as _REPO_ROOT
 
-from deploy_changes import ChangeSet, services_from_changed_paths
+from deployer_lib.deploy_changes import ChangeSet, services_from_changed_paths
 
 
 def test_a_setup_roles_document_is_clean():

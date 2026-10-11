@@ -275,9 +275,17 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
         sites.append((deploy, "gate", "every deploy (deploy.sh)"))
 
     ansible = repo / "ansible"
-    for pattern in ("roles/**/tasks/*.yml", "roles/**/templates/*", "roles/**/files/*"):
+    # `files/*/*` reaches a package a role ships from a subdirectory, such as gitops_deploy's
+    # `files/deployer_lib/` (#4355).
+    patterns = (
+        "roles/**/tasks/*.yml",
+        "roles/**/templates/*",
+        "roles/**/files/*",
+        "roles/**/files/*/*",
+    )
+    for pattern in patterns:
         for path in sorted(ansible.glob(pattern)):
-            if not path.is_file():
+            if not path.is_file() or "__pycache__" in path.parts:
                 continue
             if path.name.startswith("test_"):
                 continue

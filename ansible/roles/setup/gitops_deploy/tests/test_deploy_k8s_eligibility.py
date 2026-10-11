@@ -9,8 +9,8 @@ and one timeout, and a rollback resets the whole merged range.
 
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_k8s_eligibility.py
 
-from deploy_changes import services_from_changed_paths
-from deploy_k8s import is_image_only_diff, split_k8s_auto_deploy
+from deployer_lib.deploy_changes import services_from_changed_paths
+from deployer_lib.deploy_k8s import is_image_only_diff, split_k8s_auto_deploy
 
 
 # ── k8s auto-deploy: the diff-shape predicate ───────────────────────────────────────────────

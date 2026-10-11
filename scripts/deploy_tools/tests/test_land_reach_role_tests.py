@@ -21,7 +21,7 @@ from deploy_tools.land_lib import land_tags
 from lib.repo_paths import REPO as REPO_ROOT
 
 _ROLE = "gitops_deploy"
-_FILES = "ansible/roles/setup/gitops_deploy/files/deploy_state.py"
+_FILES = "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py"
 _TESTS = "ansible/roles/setup/gitops_deploy/tests/test_deployer_state.py"
 _TEARDOWN = "ansible/roles/setup/gitops_deploy/tasks/teardown.yml"
 _INSTALL = "ansible/roles/setup/gitops_deploy/tasks/install.yml"
@@ -29,12 +29,12 @@ _INSTALL = "ansible/roles/setup/gitops_deploy/tasks/install.yml"
 # setup plane -- those derive tags or nothing and never reach this note.
 _PR_1884_SETUP_PATHS = [
     "ansible/roles/setup/gitops_deploy/CLAUDE.md",
-    "ansible/roles/setup/gitops_deploy/files/deploy_defer.py",
-    "ansible/roles/setup/gitops_deploy/files/deploy_git.py",
-    "ansible/roles/setup/gitops_deploy/files/deploy_handlers.py",
-    "ansible/roles/setup/gitops_deploy/files/deploy_locks.py",
-    "ansible/roles/setup/gitops_deploy/files/deploy_remediation.py",
-    "ansible/roles/setup/gitops_deploy/files/deploy_state.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_defer.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_handlers.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py",
     "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
     "ansible/roles/setup/gitops_deploy/tests/test_deployer_state.py",
     "ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_alert_channels.py",

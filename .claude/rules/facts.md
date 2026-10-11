@@ -27,7 +27,7 @@ ansible/roles/k8s/traefik/defaults/main.yml:traefik_k8s_https_port
 # a test node
 scripts/lib/tests/test_kubectl.py::test_asking_for_staging_against_a_prod_kubectl_is_flagged
 # a DECIDED: marker, cited by text prefix
-ansible/roles/setup/gitops_deploy/files/deploy_logic.py:DECIDED: a fixed slice while
+ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py:DECIDED: a fixed slice while
 ```
 
 A test node must carry `# fact: <doc>#<heading>` in its body, or the lint warns that the

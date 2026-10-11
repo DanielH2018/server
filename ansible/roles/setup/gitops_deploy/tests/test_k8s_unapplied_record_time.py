@@ -7,9 +7,9 @@ and the next tick is ten minutes away.
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_k8s_unapplied_record_time.py
 """
 
-import deploy_k8s_owed
-from deploy_changes import ChangeSet
-from deploy_toolbox import DeployTools
+from deployer_lib import deploy_k8s_owed
+from deployer_lib.deploy_changes import ChangeSet
+from deployer_lib.deploy_toolbox import DeployTools
 from gitops_ledger import OWED_K8S_UNAPPLIED
 
 ORIGIN = "a" * 40

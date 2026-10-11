@@ -10,8 +10,8 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_deploy_toolbox.p
 
 import functools
 
-import deploy_toolbox
-from deploy_config import Config
+from deployer_lib import deploy_toolbox
+from deployer_lib.deploy_config import Config
 
 CONTEXTS = frozenset({"lint", "test"})
 

@@ -16,7 +16,7 @@ import pytest
 
 from lib.proc_testing import write_exec
 
-import deploy_io
+from deployer_lib import deploy_io
 from _process_waits import wait_for_exit
 
 # The checkout the play would run from; every argv assertion below is about --tags, not cwd.

@@ -18,7 +18,7 @@ import json
 
 import pytest
 
-import deploy_locks
+from deployer_lib import deploy_locks
 from _broad_k8s_range import (
     alerted,
     APPLY_GITOPS_DEPLOY,

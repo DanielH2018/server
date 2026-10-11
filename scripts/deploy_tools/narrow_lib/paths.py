@@ -37,7 +37,7 @@ def is_prose(path: str) -> bool:
     a `.md` under `files/` or `templates/` as shippable; the `DECIDED:` on `is_doc` says why that
     carve-out went, and which guard replaced it. `narrow_setup._reaches_no_host` calls this too.
     """
-    from deploy_logic import is_doc
+    from deployer_lib.deploy_logic import is_doc
 
     return is_doc(path)
 

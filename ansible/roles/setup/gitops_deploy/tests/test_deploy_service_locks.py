@@ -19,7 +19,7 @@ import os
 import threading
 import time
 
-import deploy_locks
+from deployer_lib import deploy_locks
 import pytest
 from _deploy_fakes import locks_taken
 

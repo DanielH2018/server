@@ -24,8 +24,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_shared_mapper_agree
 from deploy_tools.land_lib import land_shared
 from deploy_tools.land_lib import land_tags
 import reach
-from deploy_k8s import k8s_roles_listed
-from deploy_logic import services_from_changed_paths
+from deployer_lib.deploy_k8s import k8s_roles_listed
+from deployer_lib.deploy_logic import services_from_changed_paths
 
 # One real path per shape the two mappers have to agree about. Real, because a made-up path
 # under `ansible/roles/k8s/` would agree trivially -- these are the shapes the repo actually

@@ -100,7 +100,9 @@ SELF = "scripts/docs/gen_doc_fragments.py"
 DEFAULT_OUT_DIR = "docs/assets/generated/fragments"
 
 GITOPS_DEFAULTS = REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
-DEPLOY_CHANGES = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_changes.py"
+DEPLOY_CHANGES = (
+    REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py"
+)
 GITOPS_DEPLOY = REPO / "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
 SECRET_ROTATION = REPO / "scripts/secrets_mgmt/secret_rotation.py"
 SECRET_REGISTRY = REPO / "ansible/secret_rotation.yml"
@@ -133,7 +135,7 @@ def _gitops() -> tuple[str, list[str]]:
         module_constant(DEPLOY_CHANGES, "_BROAD_SETUP_PREFIXES"),
         module_constant(DEPLOY_CHANGES, "_BROAD_DEPLOY_PREFIXES"),
         module_constant(DEPLOY_CHANGES, "_BROAD_MANUAL_PREFIXES"),
-    ), ["ansible/roles/setup/gitops_deploy/files/deploy_changes.py"]
+    ), ["ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py"]
 
 
 def _autodeploy_coverage() -> tuple[str, list[str]]:

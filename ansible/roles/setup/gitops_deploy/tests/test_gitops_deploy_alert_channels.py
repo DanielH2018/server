@@ -19,11 +19,11 @@ import pathlib
 
 import pytest
 
-import deploy_alerts
-import deploy_state
-from deploy_changes import ChangeSet
-from deploy_remediation import k8s_remediation
-from deploy_toolbox import DeployTools
+from deployer_lib import deploy_alerts
+from deployer_lib import deploy_state
+from deployer_lib.deploy_changes import ChangeSet
+from deployer_lib.deploy_remediation import k8s_remediation
+from deployer_lib.deploy_toolbox import DeployTools
 from gitops_markers import parse_alerted
 
 ORIGIN = "a" * 40

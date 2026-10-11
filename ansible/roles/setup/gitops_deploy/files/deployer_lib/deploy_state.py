@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_state.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py
 """The deployer's state directory: the marker files under /var/lib/gitops-deploy.
 
 Each marker is a file recording what this host believes. `gitops_markers.MARKERS` is that
@@ -22,8 +22,8 @@ import pathlib
 from collections.abc import Callable
 from typing import Any, ClassVar, NamedTuple
 
-from deploy_config import log
-from deploy_git import behind_marker
+from deployer_lib.deploy_config import log
+from deployer_lib.deploy_git import behind_marker
 from gitops_hold import HOLD_PLANE_SEP, Hold, hold_plane_marker
 from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are re-exported
     ALERT_SLOTS,

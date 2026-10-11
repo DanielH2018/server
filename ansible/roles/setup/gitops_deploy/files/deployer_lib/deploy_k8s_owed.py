@@ -32,11 +32,15 @@ Reach `deploy_alerts` qualified, never by from-import.
 
 import time
 
-import deploy_alerts
-from deploy_config import Config, log
-from deploy_k8s import k8s_roles_listed
-from deploy_state import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, DeployerState
-from deploy_toolbox import DeployTools
+from deployer_lib import deploy_alerts
+from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_k8s import k8s_roles_listed
+from deployer_lib.deploy_state import (
+    OWED_K8S_DEFERRED,
+    OWED_K8S_UNAPPLIED,
+    DeployerState,
+)
+from deployer_lib.deploy_toolbox import DeployTools
 from gitops_markers import k8s_deferred_deploy_cmd, owed_clear_cmd
 
 

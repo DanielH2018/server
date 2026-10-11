@@ -9,7 +9,7 @@ TRACKED = {
     "docs/adr/0011-x.md",
     "scripts/deploy.sh",
     "ansible/roles/setup/k3s/defaults/main.yml",
-    "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
     "ansible/roles/setup/gitops_deploy/tests/test_deploy_logic.py",
     "scripts/x/dup.py",
     "scripts/y/dup.py",
@@ -87,7 +87,7 @@ def test_an_ambiguous_suffix_resolves_to_nothing():
 
 def test_a_basename_alone_is_a_suffix_only_when_unique():
     assert f.resolve("deploy_logic.py", "docs/deploying.md", TRACKED) == (
-        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py"
+        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py"
     )
 
 

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-import deploy_narrow
+from deployer_lib import deploy_narrow
 import digest_provable
 
 _MANIFESTS = """\

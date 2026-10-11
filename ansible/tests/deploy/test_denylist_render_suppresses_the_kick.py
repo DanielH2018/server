@@ -31,7 +31,7 @@ from _helpers import REPO as _REPO
 
 
 _ROLE = _REPO / "ansible/roles/setup/gitops_deploy"
-_PHASES = _ROLE / "files/deploy_phases.py"
+_PHASES = _ROLE / "files/deployer_lib/deploy_phases.py"
 _HANDLERS = _ROLE / "handlers/main.yml"
 _DEFAULTS = _ROLE / "defaults/main.yml"
 

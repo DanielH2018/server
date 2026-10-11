@@ -14,7 +14,7 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_denylist_reconci
 
 import dataclasses
 
-import deploy_phases
+from deployer_lib import deploy_phases
 
 LOCAL = "1" * 40
 K8S_DEFAULTS = "ansible/roles/k8s/sonarr/defaults/main.yml"

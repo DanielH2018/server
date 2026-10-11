@@ -31,8 +31,8 @@ from types import ModuleType
 
 import pytest
 
-import deploy_io
-import deploy_setup_roles
+from deployer_lib import deploy_io
+from deployer_lib import deploy_setup_roles
 from _deploy_fakes import ScriptedTick, build_tools
 
 
@@ -50,8 +50,8 @@ def _restore_setup_routing():
 
 FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 GITOPS_SRC = FILES / "gitops_deploy.py"
-IO_SRC = FILES / "deploy_io.py"
-HANDLERS_SRC = FILES / "deploy_handlers.py"
+IO_SRC = FILES / "deployer_lib" / "deploy_io.py"
+HANDLERS_SRC = FILES / "deployer_lib" / "deploy_handlers.py"
 
 # At import, not in a fixture: a test module's own `import gitops_deploy` runs at collection,
 # before any fixture. pytest imports a directory's conftest.py ahead of its test modules.

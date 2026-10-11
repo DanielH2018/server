@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_release.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_release.py
 """Reading the k8s release and render records this deployer did not write.
 
 `roles/k8s/manifests/tasks/release_stamp.yml` records, per service, the commit that produced

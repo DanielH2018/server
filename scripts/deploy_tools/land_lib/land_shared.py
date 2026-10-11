@@ -36,7 +36,7 @@ from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, caller_tags, smoke_
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import role_of
+from deployer_lib.deploy_logic import role_of
 
 # The path-to-role mapper and the test-path rule live in `reach`, the module that answers
 # which services a path list reaches. `land_tags` re-exports both under their old names.

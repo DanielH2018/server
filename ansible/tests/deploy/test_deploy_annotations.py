@@ -29,7 +29,7 @@ _DEPLOY_UNDER_LOCKS = _REPO / "scripts/deploy_tools/deploy_lib/under_locks.py"
 _DEPLOY_PLAYBOOK = _REPO / "scripts/deploy_tools/deploy_lib/playbook.py"
 _DEPLOY_DETACH = _REPO / "scripts/deploy_tools/deploy_lib/detach_run.py"
 # emit_deploy_annotation lives in the deployer's I/O module, not in its entry point.
-_GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
+_GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py"
 
 
 def test_the_query_matches_what_the_deployers_actually_log():

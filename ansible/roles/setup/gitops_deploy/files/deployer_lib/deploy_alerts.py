@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_alerts.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_alerts.py
 """The deployer's notify subsystem: when to send, the queue's file, and the send itself.
 
 **When to say it** is this module: `alert_once` owns the per-SHA dedupe marker, `deliver` owns
@@ -22,18 +22,18 @@ see `deploy_io.py`'s docstring for why.
 import json
 import os
 
-import deploy_alert_text
-from deploy_changes import ChangeSet
-from deploy_config import Config, log
-from deploy_health import (
+from deployer_lib import deploy_alert_text
+from deployer_lib.deploy_changes import ChangeSet
+from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_health import (
     PENDING_ALERTS_MAX,
     apply_drain_result,
     apply_send_result,
     cap_pending,
 )
-from deploy_remediation import deferred_service_alerts
-from deploy_state import DeployerState
-from deploy_toolbox import DeployTools
+from deployer_lib.deploy_remediation import deferred_service_alerts
+from deployer_lib.deploy_state import DeployerState
+from deployer_lib.deploy_toolbox import DeployTools
 from host_lib import atomic_write
 
 

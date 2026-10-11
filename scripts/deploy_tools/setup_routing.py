@@ -48,7 +48,7 @@ from setup_role_chains import tree_at
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-import deploy_setup_roles
+from deployer_lib import deploy_setup_roles
 
 INITIAL_SETUP = "ansible/initial_setup.yml"
 # In precedence order: `sops_setup` is in `bootstrap.yml` for a host that cannot decrypt yet

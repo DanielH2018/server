@@ -83,9 +83,9 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 _sys.path.insert(0, str(HOST_LIB_FILES))
 
-from deploy_changes import setup_role_tag
-from deploy_locks import TREE_LOCK, take
-from deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
+from deployer_lib.deploy_changes import setup_role_tag
+from deployer_lib.deploy_locks import TREE_LOCK, take
+from deployer_lib.deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
 from gitops_hold import HOLD_PLANE_SEP, Hold
 from gitops_ledger import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, OWED_MANUAL_PLANE
 from gitops_markers import MARKERS, maximal_apply_warning, owed_clear_cmd

@@ -22,10 +22,10 @@ import pathlib
 
 import pytest
 
-import deploy_k8s_owed
-import deploy_release
-from deploy_changes import ChangeSet
-from deploy_toolbox import DeployTools
+from deployer_lib import deploy_k8s_owed
+from deployer_lib import deploy_release
+from deployer_lib.deploy_changes import ChangeSet
+from deployer_lib.deploy_toolbox import DeployTools
 from gitops_ledger import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED
 
 ORIGIN = "a" * 40
@@ -472,8 +472,9 @@ def test_a_call_through_the_owner_is_clean():
 
 
 def test_only_deploy_k8s_owed_touches_the_k8s_ledger_classes():
-    files = pathlib.Path(deploy_k8s_owed.__file__).parent
-    calls = {p.name: _direct_ledger_calls(p.read_text()) for p in files.glob("*.py")}
+    # The flat entry and gitops_* modules as well as the package deploy_k8s_owed sits in.
+    files = pathlib.Path(deploy_k8s_owed.__file__).parents[1]
+    calls = {p.name: _direct_ledger_calls(p.read_text()) for p in files.rglob("*.py")}
     # The owner's own calls, so a renamed method cannot leave every count at zero.
     assert calls.pop("deploy_k8s_owed.py") >= 6
     assert {name for name, n in calls.items() if n} == set()

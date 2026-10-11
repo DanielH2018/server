@@ -14,7 +14,7 @@ import yaml
 
 from lib.repo_paths import REPO as _REPO_ROOT
 
-from deploy_git import ci_verdict, ci_walk_candidates, next_action
+from deployer_lib.deploy_git import ci_verdict, ci_walk_candidates, next_action
 
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────

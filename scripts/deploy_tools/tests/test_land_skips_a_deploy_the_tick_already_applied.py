@@ -19,7 +19,9 @@ from deploy_tools.land_lib import deploy
 from lib.repo_paths import REPO as _REPO
 from deploy_tools.land_lib.landing import Classification
 
-_DEPLOY_NARROW = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_narrow.py"
+_DEPLOY_NARROW = (
+    _REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py"
+)
 
 WHOLE_PLAY = {"ansible/deploy.yml": []}
 # What `deploy_tags.py hosts` answers; the fake returns it whatever the tags asked about.

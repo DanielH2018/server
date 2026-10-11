@@ -27,9 +27,9 @@ from lib.repo_paths import REPO as REPO_ROOT
 _PR_2553_PATHS = [
     "ansible/roles/setup/gitops_deploy/CLAUDE.md",
     "ansible/roles/setup/gitops_deploy/defaults/main.yml",
-    "ansible/roles/setup/gitops_deploy/files/deploy_config.py",
-    "ansible/roles/setup/gitops_deploy/files/deploy_k8s.py",
-    "ansible/roles/setup/gitops_deploy/files/deploy_remediation.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_k8s.py",
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py",
     "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
     "ansible/roles/setup/gitops_deploy/tests/test_deploy_config.py",
 ]

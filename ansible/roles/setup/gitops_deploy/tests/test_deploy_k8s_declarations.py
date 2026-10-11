@@ -14,7 +14,7 @@ import pathlib
 
 import yaml
 
-from deploy_k8s import (
+from deployer_lib.deploy_k8s import (
     SHARED_K8S_ROLES,
     declared_denylist,
     declares_snapshot_claims,

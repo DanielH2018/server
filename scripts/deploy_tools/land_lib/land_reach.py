@@ -30,8 +30,8 @@ from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS, RE
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-import deploy_cross_role
-from deploy_logic import (
+from deployer_lib import deploy_cross_role
+from deployer_lib.deploy_logic import (
     _is_test_only_path,
     setup_role_tag,
     tick_applies_setup_role,

@@ -17,7 +17,7 @@ uv run ansible-playbook ansible/initial_setup.yml --tags renovate_notify
 ```
 
 The GitOps deployer runs that command itself — `ansible/roles/setup/` is in
-`_BROAD_SETUP_PREFIXES` (`roles/setup/gitops_deploy/files/deploy_changes.py`) — so a merged
+`_BROAD_SETUP_PREFIXES` (`roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py`) — so a merged
 change here applies on the next tick without a hand deploy.
 
 **Every task notifies `Run renovate-notify once`,** so a deploy of this role is never silent:

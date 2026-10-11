@@ -17,7 +17,7 @@ import json
 from collections.abc import Sequence
 
 
-import deploy_alerts
+from deployer_lib import deploy_alerts
 from _deploy_fakes import fits_budget
 from gitops_ledger import OWED_HOLD_PLANE, owed_line
 from gitops_markers import parse_alerted

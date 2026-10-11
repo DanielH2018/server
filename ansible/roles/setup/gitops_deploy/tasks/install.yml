@@ -15,6 +15,7 @@
     mode: "0750"
   loop:
     - /opt/gitops-deploy      # deployer scripts
+    - /opt/gitops-deploy/deployer_lib  # the deploy_* libraries, a namespace package (#4355)
     - /var/lib/gitops-deploy  # state (hold_sha, last_run, per-SHA alert markers, pending_alerts.json)
     - /etc/gitops-deploy      # config.env (0600 secrets) — template won't mkdir its parent
     # deploy --detach verdicts its notifier could not post; the tick re-sends them (#3987).

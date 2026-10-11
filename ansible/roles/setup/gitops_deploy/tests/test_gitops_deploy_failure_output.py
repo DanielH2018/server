@@ -10,8 +10,8 @@ import subprocess
 
 import pytest
 
-import deploy_alert_text
-import deploy_io
+from deployer_lib import deploy_alert_text
+from deployer_lib import deploy_io
 from gitops_markers import HOLD_CLEAR_CMD
 
 FATAL = 'fatal: [daniel-box]: FAILED! => {"msg": "the task that broke"}'

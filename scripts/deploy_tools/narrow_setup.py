@@ -86,7 +86,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-import deploy_cross_role
+from deployer_lib import deploy_cross_role
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
 from deploy_tools.narrow_lib.setup_index import SETUP_TREE, RoleIndex, foreign_tags
 from deploy_tools.narrow_lib.setup_playbook import playbook_applies_role

@@ -10,7 +10,7 @@ Each Docker role has separate channels (the compose or a config template deploys
 
 import pytest
 
-from deploy_changes import (
+from deployer_lib.deploy_changes import (
     role_of,
     services_from_changed_paths,
     setup_roles_for,
@@ -293,7 +293,7 @@ def test_a_file_other_roles_ship_reaches_every_role_shipping_it():
     roles = {"gitops_deploy", "deploy_ui", "renovate_agent"}
     assert services_from_changed_paths(markers).setup_roles == roles
     assert setup_tags_for(markers) == roles
-    other = ["ansible/roles/setup/gitops_deploy/files/deploy_logic.py"]
+    other = ["ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py"]
     assert services_from_changed_paths(other).setup_roles == {"gitops_deploy"}
     assert setup_tags_for(other) == {"gitops_deploy"}
 

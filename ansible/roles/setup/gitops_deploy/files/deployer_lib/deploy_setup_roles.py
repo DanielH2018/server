@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_setup_roles.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_setup_roles.py
 """Which playbook and `--tags` value apply a setup role, and whether the tick's run applies it.
 
 The playbooks are the one list (#3734). `scripts/deploy_tools/setup_routing.py` derives the

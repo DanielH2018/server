@@ -19,11 +19,11 @@ import json
 import pathlib
 import urllib.request
 
-import deploy_health
+from deployer_lib import deploy_health
 import pytest
 
-import deploy_alerts
-from deploy_toolbox import DeployTools
+from deployer_lib import deploy_alerts
+from deployer_lib.deploy_toolbox import DeployTools
 
 
 def _pending(state_dir: pathlib.Path) -> dict[str, str]:

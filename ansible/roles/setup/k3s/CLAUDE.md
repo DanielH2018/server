@@ -15,7 +15,7 @@ three gated tasks that touch the control plane become reachable. `docs/k3s-node-
 names each gate and what trips it. Every task file carries its own tag, so most changes want one
 of those, such as `--tags kubeconfig` (`ansible/roles/setup/k3s/tasks/kubeconfig.yml`). The
 deployer prints this warning beside the command it suggests, from
-`ansible/roles/setup/gitops_deploy/files/deploy_remediation.py:maximal_tag_warning`.
+`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:maximal_tag_warning`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->

@@ -51,7 +51,7 @@ from _role_census import role_dirs, role_task_files
 from deploy_tools.narrow_lib import filters as narrow_filters
 from lib import yaml_fast
 
-from deploy_cross_role import (
+from deployer_lib.deploy_cross_role import (
     K8S_ROLES_IMPORTING_SETUP_FILES,
     SETUP_FILES_ROUTED_TO_OWNER,
     SETUP_FILES_SHIPPED_BY_OTHER_ROLES,

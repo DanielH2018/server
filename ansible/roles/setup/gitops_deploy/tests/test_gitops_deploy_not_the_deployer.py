@@ -17,8 +17,8 @@ import json
 
 import pytest
 
-import deploy_alerts
-from deploy_inventory import declares_no_gitops
+from deployer_lib import deploy_alerts
+from deployer_lib.deploy_inventory import declares_no_gitops
 from lib.repo_paths import HOST_VARS
 
 ORIGIN = "2" * 40

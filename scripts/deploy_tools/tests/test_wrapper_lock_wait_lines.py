@@ -34,7 +34,7 @@ from _deploy_sh_fakes import (
 from lib import exit_codes as ec
 from deploy_tools.land_lib import tools
 
-from deploy_locks import TREE_LOCK
+from deployer_lib.deploy_locks import TREE_LOCK
 from lib.repo_paths import REPO as _REPO
 
 _TREE_LOCK_NAME = PurePath(TREE_LOCK).name

@@ -27,7 +27,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 # The deployer's modules import each other bare, so its directory goes on the path for
 # `deploy_locks`, the one naming site for the service lock files.
 sys.path.insert(1, str(GITOPS_DEPLOY_FILES))
-import deploy_locks
+from deployer_lib import deploy_locks
 from diagnostics.probe_lib.releases import RELEASE_DIR
 
 
