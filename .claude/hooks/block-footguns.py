@@ -129,13 +129,17 @@ def rollout_restart_problem(stage: list[str]) -> str | None:
 
 
 @functools.cache
-def _ssh_hosts() -> tuple[str, ...]:
+def _ssh_hosts() -> tuple[str, ...] | None:
     """Every host `hosts.ini` declares, read through the one parser `scripts/lib` shares.
 
     Derived rather than listed: a hand-kept tuple here still named daniel-stage weeks after its
     retirement (#3705). Deferred to the first `ssh` stage so the hot path never pays for the
-    import, and fail-open like every guard in front of Bash: no hosts means the rule is inert,
-    never that a session cannot run anything.
+    import.
+
+    Returns:
+        The host names, or None when `scripts/lib` or the inventory cannot be read beside this
+        file. None is distinct from an empty inventory: `remote_git_problem` then matches every
+        ssh host rather than none.
     """
     if str(_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(_SCRIPTS))
@@ -144,26 +148,53 @@ def _ssh_hosts() -> tuple[str, ...]:
 
         return host_names()
     except Exception:
-        return ()
+        return None
+
+
+def _remote_command(stage: list[str], hosts: tuple[str, ...] | None) -> str | None:
+    """The command an `ssh` stage runs on the far side, or None when it names no known host.
+
+    The remote command is one argument after the host, so the git call is inside a single
+    token rather than split across the stage. With no inventory (`hosts` None) the host cannot
+    be picked out, so the command starts at the first word that is a git call.
+    """
+    words = stage[1:]
+    if hosts is not None:
+        if not any(host in words for host in hosts):
+            return None
+        return " ".join(word for word in words if word not in hosts)
+    starts = (i for i, w in enumerate(words) if w.lstrip().startswith("git "))
+    start = next(starts, None)
+    return None if start is None else " ".join(words[start:])
 
 
 def remote_git_problem(stage: list[str]) -> str | None:
-    """`ssh daniel-<host> '<git ...>'` with no cd into the repo."""
+    """`ssh daniel-<host> '<git ...>'` with no cd into the repo.
+
+    With no inventory the rule fails closed for this one shape (#4420). A review pipeline's held
+    hook copy once had no `scripts/` beside it, so the inventory import failed, and the rule
+    went inert without a word. Matching every host instead keeps the rule live. Nothing becomes
+    unrunnable, because a remote git that cds into the repo still passes.
+    """
     if not stage or stage[0] != "ssh":
         return None
     hosts = _ssh_hosts()
-    if not any(host in stage for host in hosts):
-        return None
-    # The remote command is one argument after the host, so the git call is inside a single
-    # token rather than split across the stage.
-    remote = " ".join(word for word in stage[1:] if word not in hosts)
-    if not remote.lstrip().startswith("git "):
+    remote = _remote_command(stage, hosts)
+    if remote is None or not remote.lstrip().startswith("git "):
         return None
     if _REPO_PATH in remote or remote.lstrip().startswith("cd "):
         return None
+    unread = (
+        ""
+        if hosts is not None
+        else (
+            f" This guard could not read the inventory through {_SCRIPTS}/lib, so it "
+            "matched this git command on any ssh host rather than only the homelab's."
+        )
+    )
     return (
         "A non-interactive ssh starts in $HOME, not the repo, so this git command runs "
-        f"somewhere else. Prefix it: `cd {_REPO_PATH}; <git ...>`."
+        f"somewhere else. Prefix it: `cd {_REPO_PATH}; <git ...>`." + unread
     )
 
 

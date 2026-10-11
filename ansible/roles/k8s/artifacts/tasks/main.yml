@@ -1,6 +1,6 @@
 ---
 # ── host side: the trees the pod mounts ────────────────────────────────────────────────
-# Both directories must exist before the Deployment starts: the hostPath volumes are
+# Every directory below must exist before the Deployment starts: the hostPath volumes are
 # `type: Directory`, so a missing path leaves the pod stuck in ContainerCreating rather
 # than serving an empty index.
 - name: Ensure the local artifacts directory exists
@@ -26,6 +26,19 @@
     label: "{{ item.name }}"
   when: not k8s_dry_run | bool
 
+# 0755, not 0750: the agent user's prune reads the star list as `claude`. The pod writes it as
+# puid:pgid, which is sys_user, so sys_user owns the directory.
+- name: Ensure the star list directory exists
+  tags: [config]
+  ansible.builtin.file:
+    path: "{{ artifacts_stars_dir }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+  when: not k8s_dry_run | bool
+
 - name: Install the peer artifact sync script
   tags: [config]
   ansible.builtin.template:
@@ -41,10 +54,11 @@
   no_log: true  # renders the Kuma push token
   when: not k8s_dry_run | bool
 
-# Pull, not push: `daniel-box` does not resolve from daniel-server, and a push would need an
-# ssh key inside the cluster. daniel-box already reaches daniel-server, so the sync runs from
-# the side that works. Cron rather than a sidecar for the same reason — the credential stays
-# on the host and never enters a pod.
+# Runs on daniel-box because only daniel-box can open the connection: `daniel-box` does not
+# resolve from daniel-server, and a peer-side job would need an ssh key inside the cluster.
+# It pulls the peer's artifacts and pushes the star list back over the same connection.
+# Cron rather than a sidecar for the same reason — the credential stays on the host and
+# never enters a pod.
 - name: Schedule the peer artifact sync
   tags: [cron]
   ansible.builtin.cron:

@@ -42,6 +42,10 @@ report of what it removed.
 
 A prune also repairs the shared object store the removed worktrees leave litter in, and
 `--gc` runs that repair alone. See repair_object_store.
+
+An orphan directory, one under .claude/worktrees/ that git no longer registers, is removed
+too when it holds nothing git lacks. One that holds content git never stored is kept, and the
+report names each such file. See dev.worktree_orphans.
 """
 
 import argparse
@@ -55,8 +59,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from dev.foreign_owned import foreign_owned_advice
+from dev.worktree_orphans import (
+    find_orphan_dirs,
+    orphan_report,
+    prune_orphans,
+    unstored_files,
+)
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 from lib.git import git, git_stdout, repair_object_store
+from lib.worktree_label import with_label
 
 # The worktree library: the readers, `is_merged` and `classify`. This file is only the CLI
 # over it, and nothing else imports this file -- every other consumer imports `lib.worktrees`.
@@ -73,23 +84,22 @@ from lib.worktrees import (
     remove,
 )
 
-ORPHAN = "orphan"
 STALE = "stale"
 VANISHED = "vanished"
 
 
-def find_orphan_dirs(worktrees_dir: str, registered: set[str]) -> list[str]:
-    """Directories under .claude/worktrees/ that git no longer tracks as worktrees.
-
-    `git worktree prune` deregisters a tree whose administrative data is gone but leaves
-    the directory behind, so these are invisible to `git worktree list` and to the removal
-    path below — they have to be reported separately and deleted by hand.
-    """
-    try:
-        entries = sorted(Path(worktrees_dir).iterdir())
-    except OSError:
-        return []
-    return [str(e) for e in entries if e.is_dir() and str(e) not in registered]
+def orphan_verdicts(repo: str) -> list[tuple[str, list[str] | None]]:
+    """(path, unstored_files) for every orphan directory under the checkout's worktrees dir."""
+    tracked = {
+        t.path
+        for t in parse_worktree_list(
+            git_stdout("worktree", "list", "--porcelain", cwd=repo, check=False)
+        )
+    }
+    return [
+        (path, unstored_files(repo, path))
+        for path in find_orphan_dirs(str(Path(repo) / ".claude" / "worktrees"), tracked)
+    ]
 
 
 BRANCH_PREFIX = "worktree-"
@@ -316,7 +326,7 @@ def brief(prune: bool = False) -> int:
     if removable:
         print(f"\U0001f9f9 {len(removable)} merged worktree(s) can be removed:")
         for tree, reason in removable:
-            print(f"  {Path(tree.path).name} — {reason}")
+            print(f"  {with_label(Path(tree.path).name, tree.path)} — {reason}")
     if stale and not prune:
         print(
             f"\U0001f9f9 {len(stale)} orphan {BRANCH_PREFIX}* branch(es) already on "
@@ -327,6 +337,12 @@ def brief(prune: bool = False) -> int:
         # object-store repair at prune_all's tail, which must still happen on a week with
         # nothing to remove.
         prune_all(repo, [tree for tree, _ in removable])
+        # Only this path hashes orphans: the banner's 5s budget cannot pay for it.
+        orphans = orphan_verdicts(repo)
+        for path, unstored in orphans:
+            if unstored:
+                print(f"kept orphan {path}: {len(unstored)} file(s) git never stored")
+        prune_orphans([path for path, unstored in orphans if unstored == []])
         # Read AFTER the removals, because each one frees a branch: a list taken before them
         # names none of those, and the sweep would leave its own leavings for next week
         # instead of converging in one pass.
@@ -428,20 +444,12 @@ def main(argv: list[str] | None = None) -> int:
         print("not inside a git repository", file=sys.stderr)
         return 1
 
-    tracked = {
-        t.path
-        for t in parse_worktree_list(
-            git_stdout("worktree", "list", "--porcelain", cwd=repo, check=False)
-        )
-    }
-    for path in find_orphan_dirs(str(Path(repo) / ".claude" / "worktrees"), tracked):
-        print(
-            f"[{ORPHAN:9}] {path}\n            git does not track this — remove by hand"
-        )
-        # A removal that failed on a foreign-owned path leaves exactly this: git unregisters
-        # the tree after the delete fails, so the remnant surfaces here on the next run.
-        for line in foreign_owned_advice(path):
+    orphans = []
+    for path, unstored in orphan_verdicts(repo):
+        for line in orphan_report(path, unstored):
             print(line)
+        if unstored == []:
+            orphans.append(path)
 
     # The long report names each branch, so it pays the deep containment check whether or not
     # it is about to delete anything — a report that disagreed with what `--prune` then removed
@@ -455,24 +463,26 @@ def main(argv: list[str] | None = None) -> int:
     removable = []
     vanished = 0
     for verdict, tree, reason in survey(repo):
-        print(f"[{verdict:9}] {tree.path}\n            {reason}")
+        print(f"[{verdict:9}] {with_label(tree.path, tree.path)}\n            {reason}")
         if verdict == REMOVABLE:
             removable.append(tree)
         vanished += verdict == VANISHED
 
     # A vanished registration alone is still work: prune_all's repair_object_store runs the
     # `git worktree prune` that drops it, which VANISHED's reason promises `--prune` does.
-    if not removable and not stale and not vanished:
+    if not removable and not stale and not vanished and not orphans:
         print("\nnothing to remove")
         return 0
 
     if not args.prune:
         print(
-            f"\n{len(removable)} worktree(s), {len(stale)} branch(es) and {vanished} "
-            "vanished registration(s) removable — re-run with --prune to remove"
+            f"\n{len(removable)} worktree(s), {len(orphans)} orphan dir(s), {len(stale)} "
+            f"branch(es) and {vanished} vanished registration(s) removable — re-run with "
+            "--prune to remove"
         )
         return 0
 
+    prune_orphans(orphans)
     prune_all(repo, removable)
     # Re-read for brief()'s reason: the removals above just freed a branch each.
     sweep_branches(repo, landed_orphan_branches(repo, deep=True))
