@@ -21,6 +21,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_filter_tables.py
 import importlib
 
 import pytest
+from ansible.errors import AnsibleFilterError
 
 from deploy_tools.narrow_lib import containers
 from lib.repo_paths import REPO
@@ -228,7 +229,8 @@ def _filters() -> dict:
 def _outcome(filter_, containers_list: list, args: tuple) -> tuple:
     try:
         return ("returned", filter_(containers_list, "target", *args))
-    except (KeyError, TypeError, ValueError) as exc:
+    # A FilterModule refusal is an AnsibleFilterError, which no ValueError subclasses (#4480).
+    except (KeyError, TypeError, ValueError, AnsibleFilterError) as exc:
         return ("raised", type(exc).__name__, str(exc))
 
 

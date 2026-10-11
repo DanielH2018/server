@@ -35,7 +35,7 @@ def filter_reads(source: str) -> dict[str, tuple[set[str], set[str]]]:
         key.value: value.id
         for node in ast.walk(tree)
         if isinstance(node, ast.Dict)
-        for key, value in zip(node.keys, node.values, strict=True)
+        for key, value in zip(node.keys, map(_unwrapped, node.values), strict=True)
         if isinstance(key, ast.Constant)
         and isinstance(key.value, str)
         and isinstance(value, ast.Name)
@@ -52,6 +52,24 @@ def filter_reads(source: str) -> dict[str, tuple[set[str], set[str]]]:
         keys, opaque, _ = scan.function(func, kinds, is_filter=True)
         reads[name] = ({k for k in keys if isinstance(k, str)}, opaque)
     return reads
+
+
+def _unwrapped(value: ast.expr | None) -> ast.expr | None:
+    """The function a registered value names, seen through a one-argument wrapper.
+
+    `"in_service_tier": _as_filter(in_service_tier)` registers `in_service_tier` with its
+    ValueError re-raised as AnsibleFilterError (#4480). The wrapper passes every argument
+    through, so the fields the filter reads are the wrapped function's.
+    """
+    if (
+        isinstance(value, ast.Call)
+        and isinstance(value.func, ast.Name)
+        and len(value.args) == 1
+        and not value.keywords
+        and isinstance(value.args[0], ast.Name)
+    ):
+        return value.args[0]
+    return value
 
 
 def _params(fn: ast.FunctionDef) -> tuple[list[str], list[str]]:
