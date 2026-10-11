@@ -18,7 +18,8 @@ it with the reason it reads no field the row omits.
 
 `test_every_named_entry_filter_reads_only_the_entry_it_names` holds `NAMED_ENTRY` against the
 filters' behaviour: it sets entries beside the target, one valid with other values and one whose
-every field is invalid, and asserts the named filter's answer stays put.
+every field is invalid, and asserts the named filter's answer stays put. The valid one, read in
+the target's place, must return an answer that differs from the target's, never a raise.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_containers_fields.py
 """
@@ -385,7 +386,7 @@ _NEIGHBOURS = (
         "name": "junk",
         "port": "x",
         "hostname": None,
-        "homepage_widget": "no",
+        "homepage_widget": False,
         "tier": "bogus",
         "metrics": "bogus",
     },
@@ -407,13 +408,12 @@ def _outcome(filter_, containers_list: list, args: tuple) -> tuple:
         return ("raised", type(exc).__name__, str(exc))
 
 
-def _reads_only_the_named_entry(name: str) -> bool:
-    """Whether the `_NEIGHBOURS` beside `target` leave what filter `name` answers unchanged.
+def _reads_only_the_named_entry(filter_, args: tuple) -> bool:
+    """Whether the `_NEIGHBOURS` beside `target` leave what `filter_` answers unchanged.
 
     The target is tried whole and without each field, so a filter that falls back to another
     entry when its own lacks a field is caught too.
     """
-    filter_, args = _filters()[name], _NAMED_ARGS[name]
     variants = [_TARGET] + [
         {k: v for k, v in _TARGET.items() if k != key}
         for key in _TARGET
@@ -431,23 +431,35 @@ def test_every_named_entry_filter_reads_only_the_entry_it_names():
     # Non-vacuity: the table must name the lookups the real templates call most.
     assert {"entry_port", "tier_priority_class"} <= containers.NAMED_ENTRY
     assert containers.NAMED_ENTRY <= set(containers.FILTER_FIELDS)
-    # The target must be one each filter answers, or every comparison is raise against raise.
+    # The target and the valid neighbour, each read as the entry the filter names, must both
+    # be answered, and answered differently. Otherwise a filter that read the neighbour would
+    # pass: a `tier` sharing the target's PriorityClass hid exactly that from
+    # `tier_priority_class`. A raise is no answer here, so it cannot count as a different one:
+    # a filter that skips entries it cannot read, as it skips `junk`, would then skip this
+    # neighbour too, and nothing beside the target would tell it apart.
     filters = _filters()
-    assert all(
-        _outcome(filters[n], [_TARGET], _NAMED_ARGS[n])[0] == "returned"
-        for n in containers.NAMED_ENTRY
-    )
-    # The valid neighbour, read in the target's place, must change each answer. Otherwise a
-    # filter that read it would pass: a `tier` sharing the target's PriorityClass hid exactly
-    # that from `tier_priority_class`.
     as_target = {**_NEIGHBOURS[0], "name": "target"}
-    assert all(
-        _outcome(filters[n], [as_target], _NAMED_ARGS[n])
-        != _outcome(filters[n], [_TARGET], _NAMED_ARGS[n])
+    answers = {
+        n: (
+            _outcome(filters[n], [_TARGET], _NAMED_ARGS[n]),
+            _outcome(filters[n], [as_target], _NAMED_ARGS[n]),
+        )
         for n in containers.NAMED_ENTRY
+    }
+    unanswered = {
+        n: (target, other)
+        for n, (target, other) in answers.items()
+        if "raised" in (target[0], other[0])
+    }
+    assert not unanswered, (
+        f"target or valid neighbour raised, so nothing compares: {unanswered}"
     )
+    alike = sorted(n for n, (target, other) in answers.items() if target == other)
+    assert not alike, f"the valid neighbour answers as the target does for: {alike}"
     walkers = sorted(
-        n for n in containers.NAMED_ENTRY if not _reads_only_the_named_entry(n)
+        n
+        for n in containers.NAMED_ENTRY
+        if not _reads_only_the_named_entry(filters[n], _NAMED_ARGS[n])
     )
     assert not walkers, (
         f"these NAMED_ENTRY filters read entries other than the one they name: {walkers}; "
@@ -459,4 +471,27 @@ def test_every_named_entry_filter_reads_only_the_entry_it_names():
 def test_a_filter_that_reads_entries_beside_the_one_it_names_is_flagged(name: str):
     """The two `NAMED_ENTRY` leaves out: a job any entry may declare, a tier check over all."""
     assert name not in containers.NAMED_ENTRY
-    assert not _reads_only_the_named_entry(name)
+    assert not _reads_only_the_named_entry(_filters()[name], _NAMED_ARGS[name])
+
+
+def test_a_filter_answering_from_a_valid_neighbour_is_flagged():
+    """Only the valid neighbour can catch this one, so the guard must keep consulting it.
+
+    It raises wherever `tier_priority_class` raises, so the target-without-a-field variants
+    match, and it skips `junk` and the non-entry, so they match too. Both flagged filters above
+    also fail through `junk`, which would hide the walk dropping the valid neighbour.
+    """
+    service_tier = importlib.import_module("service_tier")
+
+    def from_a_neighbour(containers_list, name):
+        answer = service_tier.tier_priority_class(containers_list, name)
+        for entry in containers_list:
+            if (
+                isinstance(entry, dict)
+                and entry.get("name") != name
+                and entry.get("tier") in service_tier.SERVICE_TIERS
+            ):
+                return service_tier.SERVICE_TIERS[entry["tier"]]
+        return answer
+
+    assert not _reads_only_the_named_entry(from_a_neighbour, ())
