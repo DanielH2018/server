@@ -2,7 +2,7 @@
 """Shared I/O-shell helpers for the host-run scripts.
 
 Used by gitops_deploy.py, renovate_notify.py, janitorr_health.py, configarr_health.py,
-longhorn_backup_health_logic.py, longhorn_reap_logic.py, render_records.py, live_drift_check.py
+longhorn_backup_health_logic.py, longhorn_reap_lib/logic.py, render_records.py, live_drift_check.py
 and secret rotation's rotation_tools.py. Each runs via
 ``uv run --no-project --python <pin>`` (host_python_version in
 ansible/inventory/group_vars/all.yml) or directly under cron, and is deployed into its own
@@ -71,7 +71,7 @@ _FRACTIONAL_SECONDS_RE = re.compile(r"\.\d+")
 def rfc3339_to_epoch(ts: str) -> float | None:
     """Seconds since the epoch for an RFC3339 timestamp, or None if unparseable.
 
-    Was duplicated between longhorn_backup_health_logic.py and longhorn_reap_logic.py, and
+    Was duplicated between longhorn_backup_health_logic.py and longhorn_reap_lib/logic.py, and
     already diverged once: only the backup-health copy stripped fractional seconds, so the same
     Longhorn `snapshotCreatedAt` parsed in one module and returned None in the other (2026-09-04
     review). This is the single copy both now call.

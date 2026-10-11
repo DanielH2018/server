@@ -7,7 +7,7 @@ Two operator-invoked reapers behind one entry point, each DRY RUN BY DEFAULT:
              and retired seeds (`--mode strays|migrated-chain|seeds`).
   snapshots  Snapshot CRs a tier move stranded on their volume.
 
-Nothing may schedule either one; ansible/tests/longhorn/test_longhorn_reap_orphan_never_scheduled.py
+Nothing may schedule either one; ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py
 holds every setup role to that. `longhorn_reap.py <subcommand> --help` prints that reaper's
 flags, floors and run commands. The code is in longhorn_reap_lib/ beside this file.
 

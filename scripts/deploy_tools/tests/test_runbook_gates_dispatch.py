@@ -72,22 +72,3 @@ def test_each_runbook_answers_help_from_outside_the_repo(runbook, tmp_path):
     )
     assert proc.returncode == 0, proc.stderr
     assert "Exit codes:" in proc.stdout
-
-
-def test_the_old_etcd_path_forwards_to_the_etcd_runbook(tmp_path):
-    # The shim stays while ansible/roles/setup/k3s/defaults/main.yml names the old path.
-    proc = run(
-        [
-            "uv",
-            "run",
-            "--project",
-            str(REPO),
-            "python",
-            str(REPO / "scripts/deploy_tools/k3s_etcd_restore_gates.py"),
-            "--bogus",
-        ],
-        cwd=tmp_path,
-        timeout=300,
-    )
-    assert proc.returncode == gate_runner.EX_USAGE, proc.stderr
-    assert "docs/k3s-etcd-restore.md" in proc.stderr

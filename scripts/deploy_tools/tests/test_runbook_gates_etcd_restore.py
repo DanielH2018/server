@@ -1,7 +1,7 @@
 """`runbook_gates.py etcd-restore` against stamps in `tmp_path` and a fake kubectl: each gate's
 clean/flagged pair, the stop order, and the exit code naming the gate.
 
-Run: uv run pytest scripts/deploy_tools/tests/test_k3s_etcd_restore_gates.py
+Run: uv run pytest scripts/deploy_tools/tests/test_runbook_gates_etcd_restore.py
 """
 
 import io

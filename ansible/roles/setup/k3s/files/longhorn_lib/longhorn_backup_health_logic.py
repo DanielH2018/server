@@ -57,7 +57,7 @@ GRACE_SLACK_S = 6 * 3600
 
 _STAMP_RE = re.compile(r"[0-9]+")
 
-# Shared with longhorn_reap_logic.py in host_lib.py (2026-09-04 review finding #7): the two had
+# Shared with scripts/backup/longhorn_reap_lib/logic.py in host_lib.py (2026-09-04 review finding #7): the two had
 # already diverged, with only this module's copy tolerant of fractional seconds.
 rfc3339_to_epoch = host_lib.rfc3339_to_epoch
 
