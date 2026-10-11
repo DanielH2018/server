@@ -3,9 +3,9 @@
 
 Invoke it as ``./scripts/deploy_tools/land.sh``, which execs this file; every doc, skill
 and hook names the shim. The implementation is the ``land_lib`` package beside it, one
-module per phase; this file is ``main`` and the docstring ``--help`` prints from. ``--help``
-prints the summary line above and everything from ``Usage::`` on; the sections between are
-rationale for whoever edits this file, and read them here (#4448).
+module per phase; this file holds ``main`` and the docstring ``--help`` prints from.
+``--help`` prints the summary line above and everything from ``Usage::`` on. The sections
+between are rationale for whoever edits this file, so they print nowhere (#4448).
 
 WHY ONE INVOCATION RATHER THAN A CHAIN. A session cannot write this sequence inline: shell
 control flow and command substitution defeat the worktree containment check, which refuses with

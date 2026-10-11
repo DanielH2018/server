@@ -93,6 +93,14 @@ def real_tree_stdout(real_tree):
 _UNCOVERED = "matched neither the v"
 
 
+def test_a_clean_run_lists_no_template_without_v(real_tree_stdout):
+    """About 150 `[ok]` lines buried the `[FAIL]` ones; they print only under `-v` (#4448)."""
+    rc, out = real_tree_stdout
+    assert rc == 0
+    assert "[ok]" not in out
+    assert "k8s manifest template(s) checked, 0 failure(s)." in out
+
+
 def test_the_real_tree_leaves_no_object_unchecked(real_tree_stdout):
     """Coverage, enforced rather than observed.
 

@@ -192,6 +192,13 @@ def test_main_refuses_when_the_census_lost_a_known_pin():
     assert "renamed_away" in out
 
 
+def test_a_matching_pin_prints_only_the_summary_unless_verbose():
+    code, out = _main([], [_pin()])
+    assert code == 0
+    assert "ok    x" not in out and "1/1 pin(s) match" in out
+    assert "ok    x" in _main(["-v"], [_pin()])[1]
+
+
 @pytest.mark.parametrize("argv", [["--only", "nope"], ["--only", "x,nope"]])
 def test_an_unknown_only_name_is_a_usage_error(argv):
     assert _main(argv, [_pin()])[0] == 64

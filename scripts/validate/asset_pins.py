@@ -381,13 +381,20 @@ def refresh_pin(
     return True, f"{pin.algorithm} {pin.digest} -> {actual}"
 
 
-def check_pins(pins: Iterable[Pin], fetcher: Fetcher = fetch, out=sys.stdout) -> int:
-    """Check each pin, print one line per pin, and return the count that failed."""
+def check_pins(
+    pins: Iterable[Pin], fetcher: Fetcher = fetch, out=sys.stdout, verbose: bool = False
+) -> int:
+    """Check each pin, print a line per failure, and return the count that failed.
+
+    A pin that matches prints an `ok` line only when `verbose` is set, matching the template
+    validators' `-v` (#4448).
+    """
     failures = 0
     for pin in pins:
         reason = check_pin(pin, fetcher)
         if reason is None:
-            print(f"ok    {pin.name}  {pin.url}", file=out)
+            if verbose:
+                print(f"ok    {pin.name}  {pin.url}", file=out)
         else:
             failures += 1
             print(
@@ -410,6 +417,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--only", help="comma-separated pin names to check (default: all)"
     )
     parser.add_argument("--skip", help="comma-separated pin names to leave out")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="also print a line per matching pin",
+    )
     parser.add_argument(
         "--refresh",
         help="comma-separated Renovate depNames or pin names: fetch each pin and rewrite "
@@ -499,7 +512,7 @@ def main(
         for key in unpaired:
             print(f"unpaired digest (URL not in defaults): {key}", file=out)
         return 0
-    failures = check_pins(chosen, fetcher, out)
+    failures = check_pins(chosen, fetcher, out, verbose=args.verbose)
     for key in unpaired:
         print(f"unpaired digest (URL not in defaults): {key}", file=out)
     print(f"{len(chosen) - failures}/{len(chosen)} pin(s) match", file=out)
