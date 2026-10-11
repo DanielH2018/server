@@ -70,7 +70,7 @@ Exit codes:
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 blocked | needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
-ci-red | ci-timeout | lock-busy | tip-outran-retries.
+ci-red | ci-timeout | lock-busy | tip-outran-retries | refused | handoff-timeout.
 
 `blocked` is not a failure of this PR -- something else in the incoming range needs an
 operator, and nothing was deployed. `needs-manual-apply` means this PR reaches something
@@ -80,6 +80,11 @@ beyond the one the tick just ran on, so it is landed but not live everywhere.
 tick does it -- UNLESS the verdict says this run stopped watching a tick that was still
 applying, in which case the deployer's markers were read mid-apply and a hold cannot be
 ruled out. Re-run land.sh then; no later tick crosses a hold.
+`refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
+changes requested, a read or a fetch that failed. The `land:` line on stderr, repeated in the
+verdict's detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
+still running (`LAND_HANDOFF_UNIT` below); a re-run waits on it again. Bad arguments (64) print
+no verdict.
 `merge-conflict` and `pr-ci-red` are the merge wait ending early on the two states an armed
 auto-merge never recovers from. `pr-ci-red` is the PR's CI before the merge; `ci-red` is
 master's after it.
@@ -106,7 +111,7 @@ from deploy_tools.land_lib import detach, handoff, pipeline
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.ledger import annotation_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
-from deploy_tools.land_lib.outcome import write_verdict_file
+from deploy_tools.land_lib.outcome import Outcome, write_verdict_file
 from deploy_tools.land_lib.tools import Classifier, Tools
 
 
@@ -244,6 +249,16 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
         rc = outcome.rc
         outcome.emit()
         line = outcome.file_line()
+    except Exception as exc:
+        # Still one VERDICT line, as every exit-1 end prints (#4451), and the same verdict a
+        # crash reaches through the handoff unit's STOPPED line. The traceback follows, and
+        # the annotation below stays `aborted`, so the board keeps a crash apart from a
+        # refusal.
+        reason = " ".join(f"{type(exc).__name__}: {exc}".split())
+        crashed = Outcome(1, f"PR #{opts.pr} — the landing raised {reason}")
+        crashed.emit()
+        line = crashed.file_line()
+        raise
     finally:
         if opts.verdict_file:
             with contextlib.suppress(OSError):

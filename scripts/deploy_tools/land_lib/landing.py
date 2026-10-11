@@ -192,8 +192,13 @@ class Landing:
 
     # -- ending the landing -------------------------------------------------------------
 
-    def die(self, msg: str, rc: int = 2, verdict: str | None = None) -> NoReturn:
-        """Stop with `land: <msg>` on stderr, and a VERDICT line when one is named."""
+    def die(self, msg: str, rc: int, verdict: str | None = None) -> NoReturn:
+        """Stop with `land: <msg>` on stderr, and a VERDICT line on stdout.
+
+        `rc` has no default: one of 2 collided with three other meanings of 2 (#4451), so
+        every caller names a code land.sh documents. An exit-1 stop with no `verdict` prints
+        `refused` (`Outcome`); exit 64 prints no VERDICT line.
+        """
         raise Outcome(rc, f"PR #{self.opts.pr} — {msg}", verdict, error=msg)
 
     def finish(self, verdict: str, rc: int, detail: str) -> NoReturn:
