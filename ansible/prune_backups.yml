@@ -6,12 +6,12 @@
 #
 # BACKUP CRs ARE DELETED ELSEWHERE. This playbook deletes B2 OBJECTS. Deleting Longhorn Backup
 # CRs — a migrated volume's old chain, or a retired seed — is
-# scripts/backup/longhorn_reap_orphan_backups.py, whose selection and safety floors are unit
+# `scripts/backup/longhorn_reap.py backups`, whose selection and safety floors are unit
 # tested rather than written in Jinja. Those two modes lived here until #3279:
 #
-#   sudo .venv/bin/python -B scripts/backup/longhorn_reap_orphan_backups.py \
+#   sudo .venv/bin/python -B scripts/backup/longhorn_reap.py backups \
 #     --mode migrated-chain --claim sonarr-config [--apply]
-#   sudo .venv/bin/python -B scripts/backup/longhorn_reap_orphan_backups.py \
+#   sudo .venv/bin/python -B scripts/backup/longhorn_reap.py backups \
 #     --mode seeds [--claim valheim-config] [--seed-floor 2] [--apply]
 #
 # WHICH PATH TO USE. The reaper deletes through Longhorn, which reaches both backup targets, R2
@@ -78,7 +78,7 @@
         fail_msg: >-
           pass -e prune_mode=b2-drain, the only mode this playbook carries.
           Got {{ prune_mode | default('nothing') }}. The migrated-chain and seeds modes are
-          scripts/backup/longhorn_reap_orphan_backups.py --mode migrated-chain --claim <pvc>
+          scripts/backup/longhorn_reap.py backups --mode migrated-chain --claim <pvc>
           and --mode seeds since #3279: they delete Longhorn Backup CRs, and their selection
           and floors are unit tested there.
 

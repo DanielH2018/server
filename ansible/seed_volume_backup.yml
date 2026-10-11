@@ -33,7 +33,7 @@
 #
 # The seed is labelled as the owning recurring job's own, so that job's retain prunes the backup
 # and the snapshot on its normal cadence. Older seeds carry no such label: their
-# backups are the reaper's (`longhorn_reap_orphan_backups.py --mode seeds`), and their snapshots
+# backups are the reaper's (`longhorn_reap.py backups --mode seeds`), and their snapshots
 # have to be deleted by hand.
 - name: Give a Longhorn volume its first backup now
   hosts: daniel-box

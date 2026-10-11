@@ -1,4 +1,4 @@
-"""Pure decision core shared by the two Longhorn reap-orphan entry points.
+"""Pure decision core shared by the two Longhorn reapers behind `longhorn_reap.py`.
 
 Ported from the k3s role's longhorn-reap-orphan-backups.sh.j2 and
 longhorn-reap-orphan-snapshots.sh.j2 templates (retired in #2978), which carried this same logic as bash string
@@ -18,8 +18,8 @@ Both entry points now read Longhorn objects with `kubectl get ... -o json` and h
 subprocess, no kubectl, no jsonpath. That is what makes FLOOR 1 (and every other floor here)
 provable with a fixture instead of read off a dry-run line.
 
-Stdlib only. Imported by longhorn_reap_orphan_backups.py and longhorn_reap_orphan_snapshots.py,
-which do the kubectl reads/writes and printing.
+Stdlib only. Imported by backups.py and snapshots.py beside it, the `longhorn_reap.py backups`
+and `snapshots` subcommands, which do the kubectl reads/writes and printing.
 """
 
 import json
@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 # host_lib.py is the setup roles' shared host module and stays in
 # ansible/roles/setup/common/files/. Each importer carries its own insert rather than relying on
 # the entry point's having run first.
-sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
 
 sys.path.insert(0, str(HOST_LIB_FILES))
@@ -42,6 +42,9 @@ sys.path.insert(0, str(K3S_FILES))
 import longhorn_backups
 
 RECURRING_JOB_GROUP_PREFIX = longhorn_backups.GROUP_LABEL_PREFIX
+
+# The one file an operator runs; both reapers name it in their `--apply` re-run hint.
+ENTRY_POINT = _Path(__file__).resolve().parents[1] / "longhorn_reap.py"
 
 # Groups that name no RecurringJob CR by design, hardcoded because this module reads no file.
 # The sentinel's angle brackets cannot collide with a DNS-1123 RecurringJob name, nor
@@ -133,15 +136,17 @@ def readonly_kubeconfig_refusal(
     )
 
 
-def sudo_hint(entry_point: str, executable: str | None = None) -> str:
-    """The command that re-runs `entry_point` with --apply under sudo, on this same interpreter.
+def sudo_hint(
+    entry_point: str | os.PathLike[str], subcommand: str, executable: str | None = None
+) -> str:
+    """The command that re-runs `entry_point subcommand` with --apply under sudo, on this interpreter.
 
     The interpreter is the one running now, not `python3` on root's PATH: under `uv run` it is
     the repo venv's pinned Python, while root's `python3` is the distro one. `-B` keeps a root
     run from writing root-owned `__pycache__` files into the checkout.
     """
-    executable = executable or sys.executable
-    return "sudo %s -B %s --apply" % (executable, os.path.abspath(entry_point))
+    python = executable or sys.executable
+    return f"sudo {python} -B {os.path.abspath(entry_point)} {subcommand} --apply"
 
 
 class ReapAbort(RuntimeError):
