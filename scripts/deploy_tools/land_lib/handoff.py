@@ -1,8 +1,7 @@
 """Hand a landing to a lander unit, for a user who cannot land a PR itself.
 
-The `claude` agent user's login profile sets `LAND_HANDOFF_UNIT=claude-land`. That user's
-GitHub token cannot merge and the user has no sudo, so a landing it ran itself would fail at the
-merge or the deploy. Instead `land.sh` starts `<unit>@<pr>.service`, which runs land.sh as the
+The `claude` agent user's login profile sets `LAND_HANDOFF_UNIT=claude-land`. That user has no
+sudo, so a landing it ran itself would fail at the deploy. Instead `land.sh` starts `<unit>@<pr>.service`, which runs land.sh as the
 operator under the landing policy (`policy.py`), and reports that landing's result as its own:
 the line the unit wrote to its `--verdict-file`, and land.sh's exit code as the unit recorded it.
 `land.py` runs the handoff inside the same `--detach` fork as a landing, so

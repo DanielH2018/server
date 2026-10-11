@@ -33,12 +33,12 @@ def _wait(states: list[str]):
 # BLOCKED until a hand merge (#3911). An empty decision, which is every PR since the master
 # review gate was retired on 2026-10-11, takes the same path rather than the auto-merge it once
 # did (#4001). REVIEW_REQUIRED stays covered for a review rule added back.
-BYPASS_ONLY = pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED", "APPROVED"])
+EVERY_DECISION = pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED", "APPROVED"])
 
 
-@BYPASS_ONLY
-def test_a_pr_only_a_bypass_merges_is_left_for_a_direct_merge(landing, review):
-    """Armed, it would sit BLOCKED: GitHub's auto-merge never applies a ruleset bypass."""
+@EVERY_DECISION
+def test_every_pr_is_left_for_a_direct_merge(landing, review):
+    """No PR is armed for auto-merge, which would merge whatever head is green, not the checked one."""
     ln, calls = landing(
         Fakes(
             gh_views={
@@ -56,8 +56,8 @@ def test_a_pr_only_a_bypass_merges_is_left_for_a_direct_merge(landing, review):
     assert ln.direct_merge_subject == "Bump vale to 3.19.0"
 
 
-@BYPASS_ONLY
-def test_a_pr_only_a_bypass_merges_dies_without_await_merge(landing, review):
+@EVERY_DECISION
+def test_a_direct_merge_dies_without_await_merge(landing, review):
     """Nothing else in the run would merge it, so leaving it unarmed would end silently."""
     ln, calls = landing(
         Fakes(
@@ -79,7 +79,7 @@ def test_a_pr_only_a_bypass_merges_dies_without_await_merge(landing, review):
 
 
 def test_a_pr_with_changes_requested_is_refused_before_any_merge(landing):
-    """A direct merge would apply the operator's bypass to a PR someone asked to change."""
+    """Someone asked for this PR to change, so no merge call is made."""
     ln, calls = landing(
         Fakes(
             gh_views={

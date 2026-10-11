@@ -139,10 +139,9 @@ class Landing:
         # racing that apply, so `behind_since` set with `hold_sha` empty is the state of a run
         # in flight rather than a settled deferral.
         self.tick_watch_abandoned = False
-        # Set by `merge.arm_merge` to the squash subject when the PR can merge only through a
-        # ruleset bypass. `merge.await_merge` then merges it directly once CI is
-        # green, because GitHub's auto-merge never applies a bypass. Empty means auto-merge
-        # (or nothing) does the merge.
+        # Set by `merge.arm_merge` to the squash subject. `merge.await_merge` then merges the
+        # PR directly once CI is green, at the head CI checked. Empty means something else
+        # does the merge, such as an auto-merge a session armed, and this landing only polls.
         self.direct_merge_subject = ""
         # The head SHA the landing policy checked (`policy.check`), which every merge path is
         # then pinned to. Empty when no policy is set, and the merge takes whatever head it finds.

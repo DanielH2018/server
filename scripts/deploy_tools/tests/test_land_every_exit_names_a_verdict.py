@@ -136,9 +136,9 @@ REFUSALS = {
     "closed before the arm": (_closed_before_the_arm, "closed without merging"),
     "closed during the merge wait": (_closed_during_the_wait, "closed without merging"),
     "changes requested": (_changes_requested, "has changes requested"),
-    "bypass-only merge without --await-merge": (
+    "direct merge without --await-merge": (
         _bypass_without_await,
-        "only through a ruleset bypass",
+        "only by --await-merge",
     ),
     "head moved after the policy checked it": (
         _head_moved_after_the_policy,

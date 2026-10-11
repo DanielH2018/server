@@ -173,8 +173,8 @@ def test_an_unusable_approval_list_refuses_rather_than_approving_everything(
 def test_every_pr_merges_directly_at_the_checked_head(landing, tmp_path, review):
     """No PR is armed for auto-merge; each merges directly at the head the policy checked.
 
-    Auto-merge never applies a bypass: armed, an approved agent PR sat BLOCKED until a hand
-    merge (#3911). An empty decision meets the agent branch fence all the same (#4001).
+    Auto-merge would merge whatever head is green when CI finishes. Armed, an approved agent
+    PR once sat BLOCKED behind the fence until a hand merge (#3911, #4001).
     """
     fakes = _fakes(arm={**_ARM, "reviewDecision": review})
     fakes.gh_views["state,mergeable,headRefOid"] = [

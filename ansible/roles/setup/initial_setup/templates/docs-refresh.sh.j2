@@ -38,9 +38,9 @@
 # push discarded their output to /dev/null.
 #
 # A PR satisfies the ruleset (the check runs on the PR), and the landing publish_pr.py starts
-# merges it through the ruleset bypass once CI is green, so the cron stays unattended. Auto-merge
-# cannot: it never applies a ruleset bypass (#3609). Nobody reviews the PR, which is acceptable
-# because every byte it commits was produced by a generator whose output is itself tested.
+# merges it once CI is green, so the cron stays unattended. Nobody reviews the PR, which is
+# acceptable because every byte it commits was produced by a generator whose output is itself
+# tested.
 #
 # secret-rotate.sh had the same bug and got its own change (#427), for the reason noted here:
 # it rotates live credentials, so its failure mode and its remedy are different. It publishes

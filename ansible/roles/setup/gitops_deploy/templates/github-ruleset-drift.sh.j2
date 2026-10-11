@@ -303,8 +303,8 @@ fi
 #
 # "agent branch fence" restricts creating, updating and deleting every branch outside the
 # declared exclusions, and the agent's account is no bypass actor. Without it, the agent could
-# push onto a branch an operator session opened, and land.sh's admin merge, pinned to whatever
-# head GitHub reports, would carry its commit to master. An added exclusion is a branch the agent
+# push onto a branch an operator session opened, and the next landing of that branch, pinned to
+# whatever head GitHub reports, would carry its commit to master. An added exclusion is a branch the agent
 # can push to, so the list is compared exactly rather than for one member.
 FENCE_RULESET_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/rulesets/{{ gitops_deploy_fence_ruleset_id }}"
 if ! FENCE_BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \

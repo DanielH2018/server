@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-# The operator's user, because land.sh merges past the review rule and deploys: it uses the
-# operator's gh token, decrypts secrets and runs Ansible with become. The agent's sessions run
+# The operator's user, because land.sh deploys what it merges: it uses the operator's gh
+# token, decrypts secrets and runs Ansible with become. The agent's sessions run
 # as {{ claude_code_lander_agent_user }} and can only START this unit, through the polkit rule
 # 50-claude-land.rules. The instance name is the only input they give: land.sh reads the PR
 # from GitHub, and the policy below decides whether it lands.
