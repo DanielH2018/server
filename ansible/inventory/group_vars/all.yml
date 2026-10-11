@@ -703,9 +703,9 @@ optimize_pi_host: daniel-pi
 # and a local kubectl, which daniel-box is the only host to carry together.
 #
 # Here rather than in the role's defaults for the reason fake_remux_host gives above, plus one
-# the reader in scripts/deploy_tools/land_reach.py adds: `_eval_when` resolves a gate against
-# group_vars + host_vars only, and a name it cannot resolve reads as "every host", which is an
-# over-broad verdict.
+# the reader in scripts/deploy_tools/land_lib/land_reach.py adds: `_eval_when` resolves a gate
+# against group_vars + host_vars only, and a name it cannot resolve reads as "every host", which
+# is an over-broad verdict.
 ops_cron_host: daniel-box
 # The one host that writes k8s render records (roles/setup/render_records). It must be
 # the host the release records name, because the staleness reader refuses a render record
