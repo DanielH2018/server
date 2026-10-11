@@ -49,11 +49,16 @@ Usage:
 Exit codes: 0 every checked pin matched, or every refreshed pin was rewritten or already
 current; 1 at least one pin failed (the report names each); 64 a `--only` or `--refresh` name
 the census does not carry.
+
+A run that exits 0 prints its report on stdout. Any other run prints it on stderr and prints
+nothing on stdout, so the report arrives when the run ends rather than pin by pin. Each
+`[FAIL]` line reaches stderr as its pin fails.
 """
 
 import argparse
 import dataclasses
 import hashlib
+import io
 import json
 import re
 import sys
@@ -466,12 +471,35 @@ def main(
 ) -> int:
     """The CLI.
 
+    The report goes to `out` when the run exits 0 and to stderr when it does not, so a run
+    that fails prints nothing on `out`. A pin's `ok` line is printed before the run knows
+    whether a later pin fails, so the report is held until the run ends. The `[FAIL]` lines
+    `check_pins` and `refresh_pins` print reach stderr as each pin fails.
+
     `fetcher`, `discover`, `known`, `root` and `annotated` are the seams a test hands fakes to.
     """
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.refresh and (args.only or args.skip or args.list):
         parser.error("--refresh takes its own names; drop --only, --skip and --list")
+    report = io.StringIO()
+    code = _run(args, report, fetcher, discover, known, root, annotated)
+    # sys.stderr is read here, not bound as a default like `out`, so a test that swaps it
+    # for capsys's stream receives the report.
+    (out if code == 0 else sys.stderr).write(report.getvalue())
+    return code
+
+
+def _run(
+    args: argparse.Namespace,
+    out,
+    fetcher: Fetcher,
+    discover: Callable[[], tuple[list[Pin], list[str]]],
+    known: frozenset[str],
+    root: _Path,
+    annotated: Callable[[], set[str]],
+) -> int:
+    """Run the parsed command, print its report on `out`, and return the exit code."""
     pins, unpaired = discover()
     names = {pin.name for pin in pins}
     missing_known = known - names

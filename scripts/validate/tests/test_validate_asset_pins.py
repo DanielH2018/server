@@ -181,16 +181,16 @@ def _main(argv, pins, known=frozenset({"x"})):
     return code, out.getvalue()
 
 
-def test_main_exits_one_and_names_the_failing_pin():
-    code, out = _main([], [_pin(digest="0" * 64)])
+def test_main_exits_one_and_names_the_failing_pin(capsys):
+    code, _ = _main([], [_pin(digest="0" * 64)])
     assert code == 1
-    assert "FAIL  x" in out
+    assert "FAIL  x" in capsys.readouterr().err
 
 
-def test_main_refuses_when_the_census_lost_a_known_pin():
-    code, out = _main(["--list"], [_pin()], known=frozenset({"x", "renamed_away"}))
+def test_main_refuses_when_the_census_lost_a_known_pin(capsys):
+    code, _ = _main(["--list"], [_pin()], known=frozenset({"x", "renamed_away"}))
     assert code == 1
-    assert "renamed_away" in out
+    assert "renamed_away" in capsys.readouterr().err
 
 
 def test_a_matching_pin_prints_only_the_summary_unless_verbose():
