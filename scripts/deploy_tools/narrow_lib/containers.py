@@ -52,13 +52,14 @@ def entries(doc: dict) -> dict[str, dict]:
 
 
 def changed_fields(before: dict, after: dict) -> frozenset[str] | None:
-    """The entry fields a `containers_list` edit changed; None when it added or removed an entry.
+    """The entry fields a `containers_list` edit changed; None for an edit that moves every reader.
 
     An added or removed entry moves every reader that iterates the list, whatever it reads,
-    and a renamed entry is one of each.
+    and a renamed entry is one of each. A reorder moves them too, with no field changed:
+    `scrape_jobs` and `kuma_ingress_monitors` emit in list order.
     """
     old, new = entries(before), entries(after)
-    if set(old) != set(new):
+    if list(old) != list(new):
         return None
     return frozenset(
         key

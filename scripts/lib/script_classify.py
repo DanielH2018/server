@@ -132,8 +132,8 @@ def _argv_references(text: str) -> set[str]:
     itself, and a `See scripts/diagnostics/probe.py` in a docstring is a mention.
 
     The string must be a bare path and nothing else. `session-health.py` carries the
-    sentence "…the staleness gate (scripts/deploy_tools/deploy_staleness.py, exit 4)…" in a string it
-    prints, and reading that as an invocation would put a deploy gate behind a session hook.
+    sentence "…the staleness gate (scripts/deploy_tools/deploy_lib/staleness.py, exit 4)…" in a
+    string it prints, and reading that as an invocation would put a deploy gate behind a session hook.
     """
     try:
         tree = ast.parse(text)
@@ -325,6 +325,17 @@ def _has_main_guard(text: str) -> bool:
     )
 
 
+def _is_dispatch_target(text: str) -> bool:
+    """Whether Python source defines a module-level `main` with no `__main__` guard."""
+    if _has_main_guard(text):
+        return False
+    try:
+        tree = ast.parse(text)
+    except SyntaxError, ValueError:
+        return False
+    return any(isinstance(n, ast.FunctionDef) and n.name == "main" for n in tree.body)
+
+
 def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str, str]]:
     """Script filename -> (how it runs, the evidence for saying so)."""
     verdicts: dict[str, tuple[str, str]] = {}
@@ -360,8 +371,8 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     for stem, callers in imported.items():
         record(f"{stem}.py", "library", f"imported by {', '.join(sorted(callers))}")
 
-    # A SCRIPT another one imports and calls in process -- `deploy_run.py` running
-    # `deploy_staleness.main` on every deploy -- runs as often as that caller does, exactly as
+    # A SCRIPT another one imports and calls in process -- `deploy_lib/run.py` running
+    # `staleness.main` on every deploy -- runs as often as that caller does, exactly as
     # it did when the caller spawned it. Only a module with its own `__main__` guard counts:
     # a plain library module has no run of its own to inherit.
     entry_points = {
@@ -373,6 +384,18 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
     for stem in entry_points:
         for caller in imported[stem]:
             runs_in_process.setdefault(caller, set()).add(f"{stem}.py")
+
+    # A dispatcher's target -- `deploy_cli.py` calling `deploy_lib/run.py`'s `main` -- has a
+    # module-level `main` and no guard. It stays a library itself, since no person runs it,
+    # but what it runs is credited to its importer, so `staleness.py` and the
+    # `detach_notify.py` it spawns still run on every deploy (#4347).
+    for stem, stem_callers in imported.items():
+        path = by_path.get(f"{stem}.py")
+        if path is None or not _is_dispatch_target(file_text(path)):
+            continue
+        runs = runs_in_process.get(f"{stem}.py", set()) | _invoked_by(path, scripts)
+        for caller in stem_callers:
+            runs_in_process.setdefault(caller, set()).update(runs)
 
     # One script running another inherits the caller's kind, so the six reference
     # generators are scheduled by way of `build_docs.py` and its cron rather than reading

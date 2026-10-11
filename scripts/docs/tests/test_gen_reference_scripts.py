@@ -262,6 +262,8 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         "grafana_dashboards.py": "gate",
         "deploy_tags.py": "gate",
         "deploy_cli.py": "gate",
+        "staleness.py": "gate",
+        "detach_notify.py": "gate",
         "smoke_extract.py": "gate",
         # "scheduled" rather than "gate": release-staleness-check.sh.j2 (a daniel-box cron,
         # roles/setup/k3s) invokes `probe.py releases --stale-only`, and "scheduled" outranks

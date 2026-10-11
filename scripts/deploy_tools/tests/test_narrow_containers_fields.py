@@ -95,6 +95,24 @@ def test_changed_fields_names_the_keys_an_edit_moved():
     assert containers.changed_fields(before, after) == {"port", "tier"}
 
 
+def test_a_reorder_reaches_every_reader(tree: Tree):
+    """No field moves, but `scrape_jobs` and `kuma_ingress_monitors` render in list order."""
+    radarr = "  - name: radarr\n    platform: k8s\n"
+    tree.write(
+        BOX,
+        HOST_VARS.replace(radarr, "").replace(
+            "containers_list:\n", "containers_list:\n" + radarr
+        ),
+    )
+    assert tree.narrow(*_refs(tree)) == {"lidarr", "prowlarr"}
+
+
+def test_a_reorder_changes_every_field():
+    before = {"containers_list": [{"name": "a"}, {"name": "b"}]}
+    after = {"containers_list": [{"name": "b"}, {"name": "a"}]}
+    assert containers.changed_fields(before, after) is None
+
+
 def test_a_removed_entry_changes_every_field():
     before = {"containers_list": [{"name": "a"}, {"name": "b"}]}
     assert (
@@ -107,17 +125,37 @@ def test_a_removed_entry_changes_every_field():
 
 _BUILTINS = frozenset(dir(builtins)) - {"getattr", "vars"}
 _ITERATES = frozenset({"items", "keys", "values"})
+# Builtins that walk their argument, so handed an entry they read every field.
+_WALKS = frozenset(
+    {"dict", "list", "set", "frozenset", "tuple", "sorted", "iter", "enumerate", "zip"}
+    | {"map", "filter", "reversed", "any", "all", "sum", "min", "max"}
+)
 
 # A use the key scan cannot follow, vetted as reading no entry field the row omits.
+_UNDER_METRICS = "walks a `metrics` item or its `params`, both under `metrics`"
 VETTED_OPAQUE = {
     (
-        "metrics_port",
-        ".values()",
-    ): "iterates a `metrics` item's `params`, under `metrics`",
+        "authelia_service_rules",
+        "by_tier[tier]",
+    ): "a local dict keyed by AUTH_TIERS values",
+    (
+        "kuma_ingress_monitors",
+        "set()",
+    ): "`set(kuma)` walks the `kuma` value, under `kuma`",
+    (
+        "kuma_ingress_monitors",
+        "sorted()",
+    ): "sorts the unknown `kuma` keys, under `kuma`",
+    **{
+        (name, use): _UNDER_METRICS
+        for name in ("metrics_port", "scrape_jobs")
+        for use in (".values()", "for over items", "for over values", "set()")
+    },
     (
         "scrape_jobs",
-        ".values()",
-    ): "iterates a `metrics` item's `params`, under `metrics`",
+        "item[key]",
+    ): "copies named keys of a `metrics` item, under `metrics`",
+    ("scrape_jobs", "seen[name]"): "a local dict keyed by job name",
 }
 
 
@@ -131,6 +169,14 @@ def _filter_reads(source: str) -> dict[str, tuple[set[str], set[str]]]:
     """
     tree = ast.parse(source)
     funcs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    # Module-level tables (`AUTH_TIERS`, `SERVICE_TIERS`) hold constants, never an entry.
+    tables = {
+        target.id
+        for n in tree.body
+        if isinstance(n, ast.Assign)
+        for target in n.targets
+        if isinstance(target, ast.Name)
+    }
     registered = {
         key.value: value.id
         for node in ast.walk(tree)
@@ -152,9 +198,15 @@ def _filter_reads(source: str) -> dict[str, tuple[set[str], set[str]]]:
             if fn in seen:
                 continue
             seen.add(fn)
+            params = {arg.arg for arg in funcs[fn].args.args} | tables
+            local = params | {
+                n.id
+                for n in ast.walk(funcs[fn])
+                if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+            }
             for node in ast.walk(funcs[fn]):
                 keys |= _constant_keys(node)
-                opaque |= _opaque_uses(node, funcs)
+                opaque |= _opaque_uses(node, funcs, params, local)
                 if (
                     isinstance(node, ast.Call)
                     and isinstance(node.func, ast.Name)
@@ -185,15 +237,39 @@ def _constant_keys(node: ast.AST) -> set[object]:
     return set()
 
 
-def _opaque_uses(node: ast.AST, funcs: dict[str, ast.FunctionDef]) -> set[str]:
+def _opaque_uses(
+    node: ast.AST, funcs: dict[str, ast.FunctionDef], params: set[str], local: set[str]
+) -> set[str]:
+    """The uses in `node` that could read a field no constant key names.
+
+    `params` are the function's parameters and the module's tables, which may be iterated
+    freely: a filter's first parameter is the list itself. Any other name may hold an entry, so iterating it, indexing it with a
+    computed key or handing it to a builtin that walks it is opaque. So is any call through a
+    name the function does not bind, such as `json.dumps(e)`.
+    """
     if isinstance(node, ast.Dict) and None in node.keys:
         return {"**"}
+    if (
+        isinstance(node, ast.Subscript)
+        and isinstance(node.ctx, ast.Load)
+        and not isinstance(node.slice, ast.Constant)
+        and not (isinstance(node.value, ast.Name) and node.value.id in params)
+    ):
+        return {f"{ast.unparse(node.value)}[{ast.unparse(node.slice)}]"}
+    if isinstance(node, (ast.For, ast.comprehension)) and not _free_to_iterate(
+        node.iter, params
+    ):
+        return {f"for over {ast.unparse(node.iter)}"}
     if not isinstance(node, ast.Call):
         return set()
     if any(kw.arg is None for kw in node.keywords):
         return {"**"}
     if isinstance(node.func, ast.Name):
         callee = node.func.id
+        if callee in _WALKS and any(
+            isinstance(arg, ast.Name) and arg.id not in params for arg in node.args
+        ):
+            return {f"{callee}()"}
         if callee in funcs or callee in _BUILTINS or callee.endswith("Error"):
             return set()
         return {f"{callee}()"}
@@ -204,7 +280,21 @@ def _opaque_uses(node: ast.AST, funcs: dict[str, ast.FunctionDef]) -> set[str]:
             node.args and isinstance(node.args[0], ast.Constant)
         ):
             return {".get(<computed>)"}
+        receiver = node.func.value
+        if isinstance(receiver, ast.Name) and receiver.id not in local and node.args:
+            return {f"{receiver.id}.{node.func.attr}()"}
     return set()
+
+
+def _free_to_iterate(it: ast.expr, params: set[str]) -> bool:
+    """Whether a loop over `it` walks a parameter, a literal or a call's result."""
+    if isinstance(it, ast.Name):
+        return it.id in params
+    if isinstance(it, ast.BoolOp):
+        return all(_free_to_iterate(v, params) for v in it.values)
+    if isinstance(it, (ast.Tuple, ast.List)):
+        return all(isinstance(e, ast.Constant) for e in it.elts)
+    return isinstance(it, (ast.Call, ast.Constant))
 
 
 def _plugin_reads() -> dict[str, tuple[set[str], set[str]]]:
@@ -269,6 +359,10 @@ def test_the_scan_flags_a_filter_reading_a_key_the_table_omits():
         ("e.get(name)", ".get(<computed>)"),
         ("render(**e)", "**"),
         ("getattr(e, name)", "getattr()"),
+        ("e[name]", "e[name]"),
+        ("any(k for k in e)", "for over e"),
+        ("json.dumps(e)", "json.dumps()"),
+        ("dict(e)", "dict()"),
     ],
 )
 def test_the_scan_flags_a_filter_that_iterates_or_forwards_the_entry(probe, use):

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-11 02:01 UTC
-generated_sha: 414c73d62
+generated_at: 2026-10-11 02:28 UTC
+generated_sha: 9f194abd4
 ---
 
 !!! warning "Generated file — do not edit"
@@ -52,7 +52,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run automatically, on a commit, CI run, deploy or session
 
-29 script(s) — every commit, CI run, deploy or Claude session runs it.
+31 script(s) — every commit, CI run, deploy or Claude session runs it.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -60,6 +60,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy.sh` | (top level) | the entry point every doc, skill, hook and consumer names; it execs deploy_cli.py. | deploy: ansible/roles/k8s/monitor-bridge/files/gitops_markers.py | — | [0, 2, 3, 4, 20, 64, 75, 76, 77, 78, 79](#scriptsdeploysh) |
 | `scripts/deploy_tools/deploy_cli.py` | deploy_tools | The interactive deploy and its two helpers: run a deploy, map tags, read a detached run. | every deploy (deploy.sh) | — | — |
 | `scripts/deploy_tools/deploy_tags.py` | deploy_tools | Forwarding shim: `deploy_tags.py <args>` runs `deploy_cli.py tags <args>` (#4347). | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_deploy_tags.py` | — |
+| `scripts/deploy_tools/deploy_lib/detach_notify.py` | deploy_tools | Post-deploy notifier for `scripts/deploy.sh --detach`. | deploy_cli.py (every commit, CI run, deploy or Claude session runs it) | — | — |
 | `scripts/deploy_tools/digest_provable.py` | deploy_tools | Which k8s roles act ONLY through the bytes their render digest covers. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_digest_provable.py` | — |
 | `scripts/backup/etcd_restore_drill.sh` | backup | prove an off-box etcd snapshot actually restores, without an outage. | deploy: ansible/roles/setup/hypervisor/tasks/etcd_drill.yml | — | — |
 | `scripts/dev/fact_status.py` | dev | Status, verification and lint for the fact stores — the one entry point. | prek hook (every commit) | — | — |
@@ -81,6 +82,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/shared_role_callers.py` | deploy_tools | Which deploy tags run a shared k8s role, record or no record. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_shared_role_callers.py` | — |
 | `scripts/validate/shell_templates.py` | validate | Render every Jinja-templated shell script under ansible/roles/ and lint the output. | prek hook (every commit) | — | — |
 | `scripts/dev/smoke_extract.py` | dev | Extract newly-added container image references from a unified git diff. | CI: image-smoke.yml | `test_smoke_extract.py` | — |
+| `scripts/deploy_tools/deploy_lib/staleness.py` | deploy_tools | Refuse a deploy from a git tree that is behind origin/master. | deploy_cli.py (every commit, CI run, deploy or Claude session runs it) | — | — |
 | `scripts/dev/tighten_ratchets.py` | dev | Lower every ratchet allowlist entry to what its file is today. | prek hook (every commit) | — | — |
 | `scripts/validate/unit_templates.py` | validate | Render every systemd unit template under ansible/roles/ and verify the output. | prek hook (every commit) | — | — |
 | `scripts/validate/vale.sh` | validate | Provision the pinned Google style package, then run Vale over the files prek hands us. | prek hook (every commit) | — | — |
@@ -88,7 +90,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-208 script(s) — imported by another script — not an entry point.
+206 script(s) — imported by another script — not an entry point.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -135,7 +137,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/deployer_park.py` | lib | What the GitOps deployer's own markers say it has deferred: a park, or a pending role. | imported by gitops_view.py, landing_blockers.py, staleness.py | `test_deployer_park.py` | — |
 | `scripts/deploy_tools/land_lib/detach.py` | deploy_tools | `land.sh --detach`: fork the landing into a logged child, and record where to find it. | imported by land.py, land_probe.py, landing_blockers.py | — | — |
 | `scripts/lib/detach_fork.py` | lib | Run work that outlives its caller: `land.sh --detach` and `deploy.sh --detach` share this. | imported by detach.py, detach_probe.py, detach_run.py | `test_detach_fork.py` | — |
-| `scripts/deploy_tools/deploy_lib/detach_notify.py` | deploy_tools | Post-deploy notifier for `scripts/deploy.sh --detach`. | imported by _land_fakes.py, tools.py | — | — |
 | `scripts/deploy_tools/deploy_lib/detach_probe.py` | deploy_tools | The `deploy` source for cc-wait: one `deploy.sh --detach` run's state, read from its log. | imported by deploy_cli.py | — | — |
 | `scripts/deploy_tools/deploy_lib/detach_run.py` | deploy_tools | `deploy.sh --detach`: take the locks here, then run the playbook in a forked child. | imported by run.py | — | — |
 | `scripts/infra_map/diagram.py` | infra_map | The architecture figure: how a request reaches a workload, and on what it runs. | imported by render.py | — | — |
@@ -281,7 +282,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/backup/longhorn_reap_lib/snapshots.py` | backup | Reap Longhorn Snapshots left stranded by a tier move. | imported by longhorn_reap.py | — | — |
 | `scripts/dev/findings_lib/solo_only.py` | dev | Which issues are solo-only: they cite the fan-out tooling, so no fan-out batch takes them. | imported by findings.py, launch_gates.py | — | — |
 | `scripts/secrets_mgmt/sops_io.py` | secrets_mgmt | The push-token shape check, over an already-decrypted mapping. | imported by secret_rotation.py | — | — |
-| `scripts/deploy_tools/deploy_lib/staleness.py` | deploy_tools | Refuse a deploy from a git tree that is behind origin/master. | imported by run.py | — | — |
 | `scripts/dev/fanout_lib/status.py` | dev | Read every batch on one host in one call, and stop one. | imported by abandon.py, place.py, review.py, review_record.py, wait_probe.py | — | — |
 | `scripts/infra_map/style.py` | infra_map | The page's stylesheet, its status vocabulary, and the escape every view calls. | imported by diagram.py, html_views.py, render.py | — | — |
 | `scripts/diagnostics/probe_lib/subcommands.py` | diagnostics | The `SUBCOMMANDS` table and the `REGISTRY` built from it: probe.py's dispatch and `--list`. | imported by probe.py | — | — |
