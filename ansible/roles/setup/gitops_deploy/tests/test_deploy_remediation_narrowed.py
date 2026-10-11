@@ -16,7 +16,7 @@ import yaml
 
 import deploy_remediation
 import gitops_markers
-import narrow_setup_index
+from deploy_tools.narrow_lib import setup_index as narrow_setup_index
 
 from deploy_remediation import broad_remediation, manual_plane_remediation
 from lib.repo_paths import K3S_ROLE

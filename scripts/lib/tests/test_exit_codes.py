@@ -120,7 +120,7 @@ def test_no_contract_reuses_a_value_within_itself(group):
 def test_the_importers_take_their_values_from_here():
     """Non-vacuity: the module is pointless if a consumer still carries its own copy."""
     from deploy_tools.deploy_lib import tags as deploy_tags
-    from deploy_tools import narrow_broad
+    from deploy_tools.narrow_lib import broad as narrow_broad
 
     assert deploy_tags.DEPLOY_BROAD is ec.DEPLOY_BROAD
     assert narrow_broad.DEPLOY_OK is ec.DEPLOY_OK

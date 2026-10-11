@@ -12,7 +12,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_reads_the_deployers_sp
 
 import pytest
 
-import narrow_broad
+from deploy_tools.narrow_lib import broad as narrow_broad
 
 from _narrow_fixtures import Tree, _refs, build_tree
 

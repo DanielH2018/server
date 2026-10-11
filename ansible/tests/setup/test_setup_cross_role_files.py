@@ -47,7 +47,7 @@ import re
 
 from _helpers import ROLES
 from _role_census import role_dirs, role_task_files
-from deploy_tools import narrow_filters
+from deploy_tools.narrow_lib import filters as narrow_filters
 from lib import yaml_fast
 
 from deploy_cross_role import (

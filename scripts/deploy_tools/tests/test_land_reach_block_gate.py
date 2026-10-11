@@ -54,7 +54,7 @@ _PR_1901_PATHS = [
     "ansible/roles/setup/deploy_ui/tests/test_deploy_ui_writes.py",
     "ansible/tests/deploy/test_inventory_block_scalars_have_no_comment_shaped_lines.py",
     "docs/deploying.md",
-    "scripts/deploy_tools/narrow_broad.py",
+    "scripts/deploy_tools/narrow_lib/broad.py",
 ]
 
 

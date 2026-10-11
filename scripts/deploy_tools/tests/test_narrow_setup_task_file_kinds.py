@@ -19,7 +19,7 @@ import json
 import pytest
 
 import narrow_setup
-import narrow_setup_index
+from deploy_tools.narrow_lib import setup_index as narrow_setup_index
 
 from _setup_role_fixtures import MAIN, ROLE, Tree, build, narrow
 

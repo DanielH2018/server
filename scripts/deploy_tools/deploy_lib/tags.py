@@ -365,9 +365,9 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
 
 
 def _cmd_narrow(args: argparse.Namespace) -> int:
-    """Print the tags a deploy-plane range reaches. See narrow_broad.py for the rules."""
+    """Print the tags a deploy-plane range reaches. See narrow_lib/broad.py for the rules."""
     # Lazy for the reason `_load_deploy_logic` is: `validate` must not pay for a yaml parse.
-    from narrow_broad import narrow_cmd
+    from deploy_tools.narrow_lib.broad import narrow_cmd
 
     return narrow_cmd(args.old, args.new)
 

@@ -336,7 +336,7 @@ def _narrow_broad():
     For the reason `_deploy_tags` gives: it parses host_vars YAML and walks the role tree
     on import, which only `releases` needs.
     """
-    from deploy_tools import narrow_broad
+    from deploy_tools.narrow_lib import broad as narrow_broad
 
     return narrow_broad
 

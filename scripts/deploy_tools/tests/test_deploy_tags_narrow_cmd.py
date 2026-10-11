@@ -12,7 +12,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_narrow_cmd.py
 import pytest
 
 
-import narrow_broad
+from deploy_tools.narrow_lib import broad as narrow_broad
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 
 from _narrow_fixtures import DECLARED, GROUP_VARS, Tree, _refs, build_tree

@@ -19,7 +19,7 @@ can move because of it:
     Jinja comment, maps the claim template to its `k8s_claims` declarers, and a comment-only
     edit to no tags.
   - `ansible/filter_plugins/<x>.py`: every role whose files name one of the filters its
-    `FilterModule.filters()` registers (`narrow_filters`, #3843). A caller under the play's
+    `FilterModule.filters()` registers (`filters.py`, #3843). A caller under the play's
     own trees refuses, as `toposort.py`'s in `deploy.yml` does.
 
 ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` defers a refused plane to
@@ -31,7 +31,7 @@ ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` defers a refused plan
 `narrow` agrees with `deploy_tags.py changed` wherever both answer: one `reach.reach(...)`
 splits the range, so the paths it reads per rule are the deployer's own deploy-plane paths,
 and the rest go through the same `.changes` mapper, less the roles the range DELETED
-(`narrow_paths.role_is_gone`). Where `changed` prints a tag list PLUS a note about a
+(`paths.role_is_gone`). Where `changed` prints a tag list PLUS a note about a
 shared role a human must still apply, `narrow` refuses: the tick has no human to read it.
 
 `Release Staleness Drift` (`probe_lib/releases.py`) asks `broad_path_tags` the same per-path
@@ -45,7 +45,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_narrow.py
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 import re
 import subprocess
@@ -53,8 +53,8 @@ import sys
 from pathlib import Path
 from typing import Callable, NamedTuple
 
-from deploy_tools import narrow_containers, narrow_paths, narrow_templates
-from deploy_tools import narrow_filters
+from deploy_tools.narrow_lib import containers, filters, paths
+from deploy_tools.narrow_lib import templates as narrow_templates
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib.git import git, git_stdout
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
@@ -199,7 +199,7 @@ def _sort_hits(
     for path in hits:
         if path.endswith(".md") or _is_test_only_path(path):
             continue
-        if key is None and narrow_filters.is_plugin(path):
+        if key is None and filters.is_plugin(path):
             continue
         if path.startswith(INVENTORY):
             if path.split("/")[-1].startswith("_"):
@@ -282,23 +282,24 @@ def _containers_list_tags(
 
     The readers are counted for every host's list at once: which host a bare read means
     depends on the play that renders it, and one redundant redeploy is the safe direction.
-    `narrow_containers.entry_change_tags` carries why a removed entry maps to nothing.
+    `containers.entry_change_tags` carries why a removed entry maps to nothing.
     """
-    own = narrow_containers.entry_change_tags(before, after, ctx.explain, path)
-    return own | _list_reader_tags(ctx, path)
+    own = containers.entry_change_tags(before, after, ctx.explain, path)
+    return own | _list_reader_tags(ctx, path, containers.changed_fields(before, after))
 
 
-def _list_reader_tags(ctx: Context, path: str) -> set[str]:
-    """The tags of every role whose templates render `containers_list` as a whole.
+def _list_reader_tags(ctx: Context, path: str, changed: frozenset | None) -> set[str]:
+    """The tags of every role whose templates read the `changed` fields of `containers_list`.
 
     A grep over the role trees and the shared templates, keeping a hit only where the name
-    sits inside Jinja code (`narrow_containers.reader_paths` says which hits are prose and
+    sits inside Jinja code (`containers.reader_paths` says which hits are prose and
     which are the play's own iteration, and drops both rather than refusing).
     """
-    hits = narrow_containers.reader_paths(
+    hits = containers.reader_paths(
         _grep(ctx, "containers_list", word=True),
         PLAY_PREFIXES,
         lambda hit: show_at(ctx.ref, hit, ctx.cwd),
+        changed,
     )
     found = _sort_hits(hits, "containers_list", ctx, "containers_list")
     roles = set(found.roles)
@@ -306,8 +307,8 @@ def _list_reader_tags(ctx: Context, path: str) -> set[str]:
         roles |= template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
     tags = _role_tags(roles, ctx)
     ctx.explain(
-        f"narrow: containers_list readers -> {','.join(sorted(tags)) or '(nothing)'}"
-        f" via {path}"
+        f"narrow: containers_list readers of {containers.describe(changed)} ->"
+        f" {','.join(sorted(tags)) or '(nothing)'} via {path}"
     )
     return tags
 
@@ -376,9 +377,9 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     rule can say. The tick then defers the plane to `k8s_unapplied` (#4333), and the census
     marks every service sharing the record stale: the set a full deploy would re-stamp.
     """
-    if narrow_paths.is_prose(path):  # a doc no playbook applies
+    if paths.is_prose(path):  # a doc no playbook applies
         return set()
-    if narrow_filters.is_plugin(path):
+    if filters.is_plugin(path):
         return _filter_tags(path, old_ref, ctx)
     if any(path.startswith(p) for p in PLAY_PREFIXES):
         raise CannotNarrow(f"{path} is read by every deploy")
@@ -428,9 +429,9 @@ def _filter_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     shared-template hit follows that template's importers.
     """
     roles: set[str] = set()
-    for name in sorted(narrow_filters.plugin_names(path, old_ref, ctx.ref, ctx.cwd)):
+    for name in sorted(filters.plugin_names(path, old_ref, ctx.ref, ctx.cwd)):
         hits = _grep(ctx, name, word=True, inventory=True)
-        found = narrow_filters.callers(hits, name, ctx.ref, ctx.cwd)
+        found = filters.callers(hits, name, ctx.ref, ctx.cwd)
         sorted_hits = _sort_hits(found, f"the filter {name}", ctx, name)
         roles |= sorted_hits.roles
         for macro in sorted(sorted_hits.templates):
@@ -471,7 +472,7 @@ def _changed_half(cs, ctx: Context) -> set[str]:
     # A range that RETIRES a role still lists every path it owned as changed, and a retired
     # role has no entry and no caller — the shape `_role_tags` refuses.
     for role in sorted(roles):
-        if narrow_paths.role_is_gone(role, ctx.ref, ctx.cwd, ROLE_TREES):
+        if paths.role_is_gone(role, ctx.ref, ctx.cwd, ROLE_TREES):
             ctx.explain(f"narrow: the role {role} is deleted -> (nothing)")
             roles.discard(role)
     return _role_tags(roles, ctx)
@@ -503,7 +504,7 @@ def narrow(
     cwd = Path(cwd)
     ctx = context_for(new_ref, cwd, declared=declared, callers=callers, explain=explain)
     # Lazy because `reach` imports `deploy_logic` at module scope.
-    from reach import reach
+    from deploy_tools.reach import reach
 
     diff = git_stdout("diff", "--name-only", f"{old_ref}..{new_ref}", cwd=cwd)
     one = reach([p for p in diff.splitlines() if p])

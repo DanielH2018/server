@@ -15,7 +15,7 @@ Run: uv run pytest ansible/tests/deploy/test_broad_deploy_prefixes_partition.py
 """
 
 from deploy_logic import _BROAD_DEPLOY_PREFIXES
-from deploy_tools import narrow_broad
+from deploy_tools.narrow_lib import broad as narrow_broad
 
 
 def test_the_two_halves_partition_the_deploy_plane_exactly():

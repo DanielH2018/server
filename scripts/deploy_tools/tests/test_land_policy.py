@@ -417,7 +417,7 @@ def test_the_real_landing_process_counts_its_shared_modules():
         "scripts/lib/gh.py",
         "scripts/lib/repo_paths.py",
         "scripts/deploy_tools/land_lib/policy.py",
-        "scripts/deploy_tools/narrow_paths.py",
+        "scripts/deploy_tools/narrow_lib/paths.py",
         "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
     ]
     files = [parse_file({"filename": p}) for p in members]
