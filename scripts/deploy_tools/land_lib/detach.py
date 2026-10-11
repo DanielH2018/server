@@ -59,10 +59,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.detach_fork import (  # noqa: F401 -- the record readers are this module's API too
+    START_GRACE_S,
     alive,
     close_inherited,
     fork_detached,
     leave_unit_cgroup,
+    never_started,
     pid_path,
     rc_path,
     record_code,
