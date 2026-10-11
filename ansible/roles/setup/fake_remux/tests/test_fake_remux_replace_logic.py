@@ -106,10 +106,10 @@ def test_av1_higher_tier_still_beats_lower_tier_non_av1():
     assert rel["quality"]["quality"]["name"] == "WEBDL-2160p"
 
 
-def test_size_zero_unknown_passes():
-    cands = [_rel("Show S02E13 unknown size", "WEBDL-1080p", 15, 400, 200, size=0)]
-    rel, _ = rl.select_replacement(cands, POLICY)
-    assert rel is not None
+def test_size_band_passes_an_unknown_size_and_rejects_one_above_the_max():
+    unknown = _rel("Show S02E13 unknown size", "WEBDL-1080p", 15, 400, 200, size=0)
+    assert rl.select_replacement([unknown], POLICY)[0] is not None
+    assert rl.in_size_band({"size": 5e9}, POLICY) is False
 
 
 def test_authentic_remux_reencode_fails_regardless_of_codec():
