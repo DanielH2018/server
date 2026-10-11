@@ -19,8 +19,8 @@ can move because of it:
     Jinja comment, maps the claim template to its `k8s_claims` declarers, and a comment-only
     edit to no tags.
   - `ansible/filter_plugins/<x>.py`: every role whose files name one of the filters its
-    `FilterModule.filters()` registers (`filters.py`, #3843). A caller under the play's
-    own trees refuses, as `toposort.py`'s in `deploy.yml` does.
+    `FilterModule.filters()` registers (`filters.py`, #3843); a comment or docstring edit
+    reaches none (#4412). A play-tree caller refuses, as `toposort.py`'s in `deploy.yml` does.
 
 ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` defers a refused plane to
 `k8s_unapplied`, naming every candidate, rather than running the whole play (#4333).
@@ -280,12 +280,12 @@ def _containers_list_tags(
 ) -> set[str]:
     """The tags a `containers_list` change reaches: its entries' own, and the list's readers.
 
-    The readers are counted for every host's list at once: which host a bare read means
-    depends on the play that renders it, and one redundant redeploy is the safe direction.
+    A bare read counts against every host's list, since the rendering play picks its host;
+    a `hostvars['<host>']` read names its host, so another host's edit skips it (#4422).
     `containers.entry_change_tags` carries why a removed entry maps to nothing.
     """
     own = containers.entry_change_tags(before, after, ctx.explain, path)
-    return own | _list_reader_tags(ctx, path, containers.edit(before, after))
+    return own | _list_reader_tags(ctx, path, containers.edit(before, after, path))
 
 
 def _list_reader_tags(ctx: Context, path: str, edit: containers.Edit) -> set[str]:
@@ -429,7 +429,7 @@ def _filter_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     shared-template hit follows that template's importers.
     """
     roles: set[str] = set()
-    for name in sorted(filters.plugin_names(path, old_ref, ctx.ref, ctx.cwd)):
+    for name in sorted(filters.changed_names(path, old_ref, ctx.ref, ctx.cwd)):
         hits = _grep(ctx, name, word=True, inventory=True)
         found = filters.callers(hits, name, ctx.ref, ctx.cwd)
         sorted_hits = _sort_hits(found, f"the filter {name}", ctx, name)

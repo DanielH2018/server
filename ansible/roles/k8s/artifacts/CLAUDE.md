@@ -31,15 +31,14 @@ else in the tree documents.
   (`2750 claude:ubuntu`, default ACL `g:ubuntu:rX`). The pod runs as `puid:pgid`, not root, so
   it reads that tree through the `ubuntu` group grant.
 
-## The peer sync is a pull, and the direction is not arbitrary
+## The peer sync runs from daniel-box, and the direction is not arbitrary
 `tasks/main.yml` installs `/usr/local/bin/sync-artifacts.sh` and a cron
 (`artifacts_sync_minute`, every 5 minutes) that rsyncs each entry in `artifacts_peer_sources`
-onto daniel-box.
+onto daniel-box, then pushes the star list to the peer's `stars_path`.
 
-**It pulls; it never pushes.** The reason is written at the task and is worth repeating because
-it looks backwards at first glance: the name `daniel-box` does not resolve from daniel-server
-(measured), and pushing would need an ssh key inside the cluster either way.
-daniel-box already reaches daniel-server over ssh, so the sync runs from the side that works.
+**daniel-box opens every connection.** The reason is written at the task and is worth repeating
+because it looks backwards at first glance: the name `daniel-box` does not resolve from
+daniel-server (measured), and a peer-side job would need an ssh key inside the cluster.
 It is a host cron rather than a sidecar for the same reason — **the ssh credential stays on the
 host and never enters a pod.**
 
@@ -53,9 +52,7 @@ Consequences worth knowing before debugging a missing artifact:
   `journalctl -t sync-artifacts` on daniel-box — every failed run logs there, with the
   consecutive-failure count, and a recovery logs the streak it ended. cron mail carries one
   message per outage: the run that reaches `artifacts_sync_alert_after_failures` consecutive
-  failures is the only one that writes to stderr. Before #2467 every failure mailed, which put 145
-  messages in `/var/mail/ubuntu` over five weeks — daniel-server being powered off is the ordinary
-  case, so per-run mail was a log, not an alert.
+  failures is the only one that writes to stderr. The script's `DECIDED:` comment has why (#2467).
 - **The ssh transport passes `ClearAllForwardings=yes`.** `ssh` reads `~/.ssh/config` for every
   connection, so a `LocalForward` on the peer's host entry applies to this one too, and a bind
   collision on its local port fails the whole connection. rsync needs no forward, so the sync
@@ -80,12 +77,8 @@ and `templates/configmap.yaml.j2` builds one key per entry in `artifacts_modules
 `ansible/tests/services/test_artifacts_configmap.py` compares the list against `files/` in
 both directions.
 
-**Edit the list, not the template.** That ConfigMap has crash-looped the pod twice, both times
-from a comment rather than from a key: once from a comment closing tag written inside a
-comment, which ended the comment early and rendered the remaining prose into the document as
-YAML, and once from an indented comment above `known_services.json`, which pushed that key
-inside the block scalar above it. The template's own header records both in full, and is the
-thing to read before editing it.
+**Edit the list, not the template.** A comment in that template has crash-looped the pod twice.
+The template's own header records both cases, and is the thing to read before editing it.
 
 ## Retiring a service does not remove it from the index
 `artifacts_retired_services` exists so an artifact *about* a retired service stays findable by
@@ -99,3 +92,7 @@ Artifacts age out after 30 days without an update, so a doc that keeps being ref
 lands stays put and an abandoned one clears itself. **Executable files are never pruned** — a
 generated script is a tool, not a report. If a session writes one here it must be `chmod +x` or
 it ages out with the docs.
+
+**Starred artifacts are never pruned either.** The GUI's star writes `artifacts_stars_file`,
+the pod's only writable mount, and each host's prune reads its own copy.
+`docs/artifacts-star-list.md` covers how the list reaches each host, and the window before it does.
