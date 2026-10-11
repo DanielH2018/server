@@ -8,7 +8,6 @@ guardrail checks consumed by the validate-ha-config prek/CI hook live in the sib
 any of that — `refresh` (snapshot integration entities) is the only live path.
 """
 
-import argparse
 import re
 import sys
 import tempfile
@@ -28,6 +27,8 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 from lib import yaml_fast
 
@@ -500,7 +501,7 @@ def main(argv=None) -> int:
     Exits 1 when `check` finds a hard error; each subcommand otherwise returns its own
     exit code.
     """
-    p = argparse.ArgumentParser(prog="ha_state_model.py", description=__doc__)
+    p = ArgumentParser(prog="ha_state_model.py", description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("generate", help="regenerate derived_state.yml + STATE.md")
     sub.add_parser(

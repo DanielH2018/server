@@ -62,7 +62,7 @@ def test_moved_atom_fails_status_naming_the_section(tmp_path, capsys):
 
 def test_verify_unknown_unit_is_usage_error(tmp_path, capsys):
     repo = _repo(tmp_path)
-    assert main(["verify", "--repo", str(repo), "CLAUDE.md#Nope"]) == 2
+    assert main(["verify", "--repo", str(repo), "CLAUDE.md#Nope"]) == 64
     assert "no section" in capsys.readouterr().err
 
 
@@ -156,7 +156,7 @@ def test_verify_unverified_leaves_a_moved_atom_out(tmp_path, capsys):
 
 def test_verify_with_no_unit_and_no_flag_is_usage_error(tmp_path, capsys):
     repo = _repo(tmp_path)
-    assert main(["verify", "--repo", str(repo)]) == 2
+    assert main(["verify", "--repo", str(repo)]) == 64
     assert "--unverified" in capsys.readouterr().err
 
 
@@ -201,7 +201,7 @@ def test_reverify_is_quiet_when_nothing_changed(tmp_path, capsys):
 
 def test_reverify_with_unresolvable_ref_is_usage_error(tmp_path, capsys):
     repo = _repo(tmp_path)
-    assert main(["reverify", "--repo", str(repo), "--changed-since", "nope"]) == 2
+    assert main(["reverify", "--repo", str(repo), "--changed-since", "nope"]) == 64
     assert "cannot resolve" in capsys.readouterr().err
 
 

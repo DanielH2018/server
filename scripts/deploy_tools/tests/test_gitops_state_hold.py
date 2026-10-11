@@ -133,4 +133,4 @@ def test_clear_hold_takes_a_sha_or_orphaned_not_both(tmp_path, run):
     for argv in (("clear-hold",), ("clear-hold", SHA, "--orphaned")):
         with pytest.raises(SystemExit) as exc:
             run(tmp_path, *argv)
-        assert exc.value.code == 2
+        assert exc.value.code == 64

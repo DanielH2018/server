@@ -36,7 +36,6 @@ Usage::
     uv run python scripts/infra_map/gen_infra_map.py --no-live           # declared state only
 """
 
-import argparse
 import json
 import os
 import socket
@@ -90,6 +89,10 @@ from infra_map.model import (
     services_on_host,
 )
 from infra_map.render import group_services, render_html, render_svg
+
+from lib.cli_help import ArgumentParser
+
+from lib.exit_codes import INFRA_MAP_LIVE_UNREADABLE
 
 from lib.kubectl import find_kubeconfig, find_tool
 
@@ -181,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     with a declared-only render would replace real data with a page that looks healthy
     and reports nothing wrong.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "-o", "--output", type=Path, default=DEFAULT_OUTPUT, help="output HTML path"
     )
@@ -213,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
         # declared-only render would replace real data with a page that looks
         # healthy and reports nothing wrong.
         print(f"error: {exc}; leaving the previous map in place", file=sys.stderr)
-        return 2
+        return INFRA_MAP_LIVE_UNREADABLE
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     model = build_model(
         global_vars, host_vars, live, generated_at, load_roles(), cluster

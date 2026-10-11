@@ -34,7 +34,6 @@ Usage::
     uv run python scripts/docs/build_docs.py --skip-generators        # rebuild only
 """
 
-import argparse
 import contextlib
 import datetime as dt
 import importlib
@@ -49,6 +48,14 @@ from pathlib import Path
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
+
+from lib.exit_codes import (
+    BUILD_DOCS_GENERATOR_FAILED,
+    BUILD_DOCS_OK,
+    BUILD_DOCS_SITE_FAILED,
+)
 
 from lib.repo_paths import REPO
 
@@ -385,9 +392,10 @@ def main(argv: list[str] | None = None) -> int:
     so the caller can tell stale pages from a stale site.
 
     Returns:
-        0 on success, 2 if one or more generators failed, 3 if the site build failed.
+        0 on success, 2 if one or more generators failed, 3 if the site build failed,
+        64 for a bad command line.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--site-dir",
         default=str(Path.home() / "docs-site"),
@@ -420,8 +428,8 @@ def main(argv: list[str] | None = None) -> int:
     # tree keeps its previous contents (build_site swaps in only on success) -- right content,
     # visibly old. Collapsing both into 1 left docs-refresh.sh unable to say which it hit.
     if failed:
-        return 2
-    return 0 if built else 3
+        return BUILD_DOCS_GENERATOR_FAILED
+    return BUILD_DOCS_OK if built else BUILD_DOCS_SITE_FAILED
 
 
 if __name__ == "__main__":

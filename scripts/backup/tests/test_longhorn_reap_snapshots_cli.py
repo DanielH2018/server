@@ -232,5 +232,5 @@ def test_snapshots_unknown_flag_is_rejected(tmp_path):
     proc, calls = _run(
         SNAPSHOTS_ENTRY, ["--bogus"], {"recurringjobs": [], "volumes": []}, tmp_path
     )
-    assert proc.returncode == 2
+    assert proc.returncode == 64
     assert calls == []

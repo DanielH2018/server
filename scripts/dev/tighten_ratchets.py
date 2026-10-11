@@ -33,9 +33,9 @@ from lib.repo_paths import ANSIBLE_TESTS
 
 _sys.path.insert(0, str(ANSIBLE_TESTS))
 
-import argparse
 
 from _helpers import REPO
+from lib.cli_help import ArgumentParser
 from _ratchet import Ratchet, parse_allowlist, tighten
 from _ratchet_census import LENGTHS, PATCHES, line_counts, monkeypatch_counts
 
@@ -64,7 +64,7 @@ def tighten_list(ratchet: Ratchet, counts: dict[str, int], *, write: bool) -> li
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--tighten",
         action="store_true",

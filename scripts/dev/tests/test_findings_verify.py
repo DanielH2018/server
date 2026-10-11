@@ -165,13 +165,13 @@ def test_report_keeps_the_break_between_two_paragraphs(issue):
 
 def test_verify_rejects_neither_all_nor_numbers(make_tools):
     tools, calls = make_tools()
-    assert findings.main(["verify"], tools) == 2
+    assert findings.main(["verify"], tools) == 64
     assert calls.none()
 
 
 def test_verify_rejects_both_all_and_numbers(make_tools):
     tools, calls = make_tools()
-    assert findings.main(["verify", "--all", "12"], tools) == 2
+    assert findings.main(["verify", "--all", "12"], tools) == 64
     assert calls.none()
 
 

@@ -56,7 +56,6 @@ begin/end marker comment, so there is nothing to splice between. A sibling
 `settings.local.json`, not an arbitrary third file.
 """
 
-import argparse
 import json
 import re
 import sys
@@ -64,6 +63,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 from lib.repo_paths import REPO
 
@@ -387,7 +388,7 @@ def main(
     `hooks_dir` and `settings` are overridable so a test can run the whole path against a
     scratch tree; the defaults are the repo's own.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--check",

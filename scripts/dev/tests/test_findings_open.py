@@ -366,9 +366,11 @@ def test_open_with_every_label_present_creates_none(tmp_path, make_tools):
 # --- documented exits instead of tracebacks ----------------------------------------------------
 
 
-def test_open_with_a_missing_body_file_exits_2_without_calling_gh(tmp_path, make_tools):
+def test_open_with_a_missing_body_file_exits_64_without_calling_gh(
+    tmp_path, make_tools
+):
     tools, calls = make_tools()
-    assert findings.main(_open_argv(tmp_path / "absent.md"), tools) == 2
+    assert findings.main(_open_argv(tmp_path / "absent.md"), tools) == 64
     # Both boundaries: the label sync `cmd_open` runs first is a gh_json call.
     assert calls.none()
 

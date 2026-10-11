@@ -20,13 +20,14 @@ a rate that depends on a `null` input is itself `null` — never silently comput
 partial row.
 """
 
-import argparse
 import json
 import sys as _sys
 from pathlib import Path
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+
+from lib.cli_help import ArgumentParser
 
 from lib.repo_paths import REPO
 
@@ -234,7 +235,7 @@ def format_table(table: list[dict]) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = ArgumentParser(description=__doc__)
     parser.add_argument(
         "--json", action="store_true", help="emit the table as JSON instead of text"
     )

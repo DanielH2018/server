@@ -161,7 +161,7 @@ def test_the_census_still_finds_every_cc_wait_probe():
 def test_a_probe_refuses_help_under_describe_with_its_usage_on_stderr(name):
     """`cc-wait land --help` runs `land --describe --help` and parses its stdout as JSON (#4376)."""
     r = _probe(name, "--describe", "--help")
-    assert (r.returncode, r.stdout) == (2, ""), (
+    assert (r.returncode, r.stdout) == (64, ""), (
         f"{name} --describe --help exited {r.returncode}; cc-wait reads exit 0 as a "
         f"description.\nstdout: {r.stdout[-400:]}\nstderr: {r.stderr[-400:]}"
     )

@@ -121,7 +121,7 @@ def test_snapshots_subcommand_keeps_the_non_integral_env_abort(tmp_path):
         tmp_path,
         extra_env={"LONGHORN_REAP_MIN_AGE_DAYS": "3.5"},
     )
-    assert proc.returncode == 2, proc.stderr
+    assert proc.returncode == 64, proc.stderr
     assert "LONGHORN_REAP_MIN_AGE_DAYS expects an integer, got: 3.5" in proc.stderr
     assert calls == []
 

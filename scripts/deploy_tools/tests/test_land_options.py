@@ -12,7 +12,7 @@ from lib import exit_codes
 def test_pr_is_required():
     with pytest.raises(SystemExit) as exc:
         options.parse_args(["--arm-merge"], "desc")
-    assert exc.value.code == 2
+    assert exc.value.code == 64
 
 
 def test_flags_land_on_the_options():
@@ -88,7 +88,7 @@ def test_an_abbreviated_flag_is_rejected_rather_than_silently_resolved():
     resolve `--su` to `--subject` and `--sin` to `--since`."""
     with pytest.raises(SystemExit) as exc:
         options.parse_args(["--pr", "7", "--su", "text"], "d")
-    assert exc.value.code == 2
+    assert exc.value.code == 64
 
 
 def test_the_full_flag_still_works():

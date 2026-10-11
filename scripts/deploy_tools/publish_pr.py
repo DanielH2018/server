@@ -74,6 +74,8 @@ from typing import Callable
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib.cli_help import ArgumentParser
+
 from lib.exit_codes import (
     PUBLISH_PUBLISHED,
     PUBLISH_PUSHED_NO_PR,
@@ -463,7 +465,7 @@ def unlanded(prefix: str, tools: PublishTools) -> PublishOutcome:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
+    parser = ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument(
         "--repo",
         type=Path,

@@ -30,11 +30,12 @@ what this script writes now, and when monitor-bridge's module list does not carr
 census, then run this.
 """
 
-import argparse
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 from lib.repo_paths import REPO
 
@@ -72,7 +73,7 @@ def render(target: str, source_text: str, source: str = SOURCE) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--check",
         action="store_true",

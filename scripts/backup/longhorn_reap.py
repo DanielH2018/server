@@ -25,6 +25,7 @@ from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).resolve().parent))
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib.cli_help import HELP_FLAGS
+from lib.exit_codes import USAGE_ERROR
 
 SUBCOMMANDS = ("backups", "snapshots")
 
@@ -38,14 +39,14 @@ def main(argv: list[str], now: float | None = None) -> int:
             The backups reaper reads no clock.
 
     Returns:
-        The reaper's exit code, or 2 when no known subcommand comes first.
+        The reaper's exit code, or 64 when no known subcommand comes first.
     """
     if argv and argv[0] in HELP_FLAGS:
         print(__doc__.strip())
         return 0
     if not argv:
         print(__doc__.strip(), file=sys.stderr)
-        return 2
+        return USAGE_ERROR
     subcommand, rest = argv[0], argv[1:]
     # Imported only once chosen: the backups reaper int()s its timeout env at import, so a
     # malformed value there must not traceback a `snapshots` run.
@@ -62,7 +63,7 @@ def main(argv: list[str], now: float | None = None) -> int:
         % (subcommand, ", ".join(SUBCOMMANDS)),
         file=sys.stderr,
     )
-    return 2
+    return USAGE_ERROR
 
 
 if __name__ == "__main__":
