@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-import fragments_deploy as fd
+from fragments_lib import fragments_deploy as fd
 from fragment_readers import module_constant
 from dev.findings_lib import cli as findings_cli
 from dev.findings_lib import issue_model

@@ -7,7 +7,7 @@ synthetic text and a run on the real page with a non-vacuity floor.
 
 import re
 
-import fragments_bridge as fb
+from fragments_lib import fragments_bridge as fb
 from lib.repo_paths import REPO
 
 CHECKS_PAGE = REPO / "docs" / "monitor-bridge-checks.md"

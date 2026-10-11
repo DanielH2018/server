@@ -129,6 +129,17 @@ file. The table is static because every caller passes paths alone, and
 `ansible/tests/setup/test_setup_cross_role_files.py` fails when it differs from the cross-role
 `files/` and `tasks/` references in the setup roles' tasks.
 
+The table also records a `defaults/` file whose variable another setup role reads.
+`claude_code` puts each agent in `initial_setup_worktree_holders_group`, so a change to
+`initial_setup/defaults/main.yml` re-applies `claude_code` as well (#4303). The row is per file,
+so any change to that file names `claude_code`, including a change to a key it never reads.
+`narrow_setup.role_tags` refuses to narrow `claude_code` for this row, because its agent tasks
+are an include rather than a static import. The tick therefore applies the whole `claude_code`
+tag for every edit to that file. In a role whose readers do narrow, `role_tags` maps such a row
+to the readers of the changed keys the consumer names. A key the consumer never names adds no
+tag. The same test file derives these rows from the tree
+and keeps the reads not recorded yet in a pending set (#4357).
+
 - A `common/tasks/` file is in the table too. An `import_tasks` is static, so its tasks run under
   each importer's tags, and `narrow_setup` resolves the basename through the importing task.
   `setup_roles_for` drops `common` itself for a file with consumers, so the importers apply

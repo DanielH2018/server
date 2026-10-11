@@ -448,6 +448,34 @@
     - not claude_code_agent_user_enabled
     - ansible_facts.getent_passwd[claude_code_agent_user] is not none
 
+# The way out of the worktree holder scan's socket group, which agent_access.yml gives every
+# enabled agent (#4304). initial_setup's root map refuses a switched-off agent already, so the
+# membership grants nothing; this keeps the group's member list equal to the enabled agents.
+# Read first, so a host without the group or the member changes nothing.
+- name: Look up the worktree holder scan's socket group for a switched-off agent user
+  tags: [claude_code]
+  ansible.builtin.getent:
+    database: group
+    key: "{{ initial_setup_worktree_holders_group }}"
+    fail_key: false
+  when: not claude_code_agent_user_enabled
+
+- name: Take the switched-off agent user out of the worktree holder scan's socket group
+  tags: [claude_code]
+  ansible.builtin.command:
+    argv:
+      - gpasswd
+      - --delete
+      - "{{ claude_code_agent_user }}"
+      - "{{ initial_setup_worktree_holders_group }}"
+  become: true
+  when:
+    - not claude_code_agent_user_enabled
+    - ansible_facts.getent_group[initial_setup_worktree_holders_group] is not none
+    - >-
+      claude_code_agent_user in
+      ansible_facts.getent_group[initial_setup_worktree_holders_group][2].split(',')
+
 - name: Stop the switched-off agent user's manager lingering
   tags: [claude_code]
   ansible.builtin.command: "loginctl disable-linger {{ claude_code_agent_user }}"
