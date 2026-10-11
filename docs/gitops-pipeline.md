@@ -57,7 +57,7 @@ log at `warning`, so `-p warning` lists both, but not every one does. Every othe
 `SyslogLevel=notice`. `deploy_config.log` sets the priority with an sd-daemon `<3>` or `<4>`
 prefix, which journald strips (#4446).
 
-Every deployer line opens with one lowercase subject token and a colon: the phase or marker the
+Every deployer `log()` line opens with one lowercase subject token and a colon: the phase or marker the
 line is about, such as `ci:`, `hold:`, `narrow:`, `denylist:`, `manual_plane:` or
 `k8s_unapplied:`. To list every line about one subject, run `journalctl -u gitops-deploy | grep
 'manual_plane: '`. A relayed child-process line gets the subject of the call that ran it.
