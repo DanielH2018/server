@@ -72,13 +72,15 @@ landing.
 
 Both are about the command's TEXT, not what it does. Keep prose out of the command string.
 
-**Open the PR with `--fill`, then replace the body.** `gh pr create --title "…"` is refused
+**Open the PR with `--fill` and a body file.** `gh pr create --title "…"` is refused
 whenever the title carries `git`, `cd`, `worktree`, `write` or a construct the containment check
-cannot parse, and a title here routinely names one.
+cannot parse, and a title here routinely names one. `--fill` takes the title from the commit, and
+gh lets `--body-file` override the body it would fill. Write the file to
+`.github/pull_request_template.md`'s sections first: `block-footguns` denies a create or edit
+whose body skips one of its `## ` headings, and a bare `--fill` with it.
 
 ```bash
-gh pr create --fill                 # title + body from the commit
-gh pr edit <n> --body-file <path>   # then replace the body
+gh pr create --fill --body-file <path>   # title from the commit, body from the file
 ```
 
 **A body's only closing keyword must be its own `Closes #N` line.** `--arm-merge` refuses
