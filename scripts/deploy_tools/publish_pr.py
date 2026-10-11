@@ -8,12 +8,11 @@ lands anything is: put the commit on a fresh branch, push that, take the commit 
 the local master so gitops-deploy's ``--ff-only`` still succeeds when the squash lands
 under a new SHA, open the PR, and hand it to a detached ``land.py`` that merges it.
 
-WHY A LANDING AND NOT GITHUB'S AUTO-MERGE. The master review gate ruleset requires an
-approving review, and GitHub's auto-merge never applies a ruleset bypass, so an armed cron PR
-waits for an approval nobody is asked to give (#3609). ``gh pr merge`` also refuses such a PR at
-its own pre-flight. ``land.py --arm-merge --await-merge`` is the path that merges past the
-review gate: it waits for CI and merges through the REST endpoint, pinned to the head SHA it
-read green. ``--detach`` matters as much as the merge. The callers hold the git-tree lock on
+WHY A LANDING AND NOT GITHUB'S AUTO-MERGE. The agent branch fence ruleset restricts updates to
+master, so every merge needs a ruleset bypass, and GitHub's auto-merge never applies one: an
+armed PR sits BLOCKED with green checks (#3609, #3911). ``land.py --arm-merge --await-merge`` is
+the path that applies the bypass: it waits for CI and merges through the REST endpoint, pinned
+to the head SHA it read green. ``--detach`` matters as much as the merge. The callers hold the git-tree lock on
 fd 9 and read this script's output through a pipe, so a landing that inherited either would
 keep the lock for the whole CI wait. The detached landing closes every inherited descriptor
 from 3 up and rebinds its stdio to its own log (``land_lib/detach.py``).
@@ -53,8 +52,7 @@ passes cleanly in exactly that state. Merged branches are deleted on this repo
   1  origin could not be read -- fail closed, because ``|| true`` on an unreachable origin
      reads as "no stale branch" and publishes straight into the state this refuses
   2  a branch is on origin and its PR is open -- benign, its landing is waiting on CI. A PR
-     whose checks are already green and which waits only on the review gate is merged here,
-     the backstop for a landing that died or never started (see ``merge_if_stalled``)
+     whose checks are already green is merged here, the backstop for a landing that died or never started (see ``merge_if_stalled``)
   3  a branch is on origin with NO open PR -- the state a create failure leaves behind, and
      the one a human has to clear
 
@@ -317,16 +315,16 @@ def publish(
 
 
 def merge_if_stalled(number: str, tools: PublishTools) -> str:
-    """Merge an open PR that waits only on the review gate, at the head its green checks ran on.
+    """Merge an open PR whose checks are green, at the head those checks ran on.
 
     The backstop for a landing that died or never started. ``publish`` starts one per PR, so in
     the normal case this finds checks still running and does nothing. A PR whose checks are
-    green but whose review is still required would otherwise stay open, and every later run of
+    green but whose landing is gone would otherwise stay open, and every later run of
     its cron would skip on it. The merge is the same REST call ``land_lib/merge.py`` makes,
     pinned with ``sha`` so GitHub refuses it if the head moved after the checks were read.
 
     Returns:
-      ``""`` when the PR is not stalled: checks pending or failing, no review required, or a
+      ``""`` when the PR is not stalled: checks pending or failing, changes requested, or a
       lookup that failed. Otherwise a clause for the caller's message saying the PR was merged
       or why the merge was refused.
     """
@@ -350,7 +348,8 @@ def merge_if_stalled(number: str, tools: PublishTools) -> str:
         (c.get("conclusion") or c.get("state") or "") in PASSING for c in checks
     )
     head = str(view.get("headRefOid") or "")
-    if view.get("reviewDecision") != "REVIEW_REQUIRED" or not green or not head:
+    # A requested change is a human asking for this PR not to merge as it stands.
+    if view.get("reviewDecision") == "CHANGES_REQUESTED" or not green or not head:
         return ""
     proc = run_gh(
         tools,
@@ -365,7 +364,7 @@ def merge_if_stalled(number: str, tools: PublishTools) -> str:
     )
     if proc.returncode != 0:
         return f"its checks are green but the merge was refused: {failure_tail(proc)}"
-    return f"its checks were green and it waited only on review, so it was merged at {head[:8]}"
+    return f"its checks were green and no landing had merged it, so it was merged at {head[:8]}"
 
 
 def open_pr(prefix: str, tools: PublishTools, branch: str = "") -> str:

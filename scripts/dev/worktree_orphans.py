@@ -125,23 +125,34 @@ def orphan_report(path: str, unstored: list[str] | None) -> list[str]:
     return lines
 
 
-def prune_orphans(paths: list[str]) -> None:
+def prune_orphans(paths: list[str]) -> int:
     """Delete each orphan directory unless a live process still uses it, one line per outcome.
 
     The caller passes only orphans unstored_files found empty. The in-use check is the one
     `lib.worktrees.remove` applies to a registered tree, run just before the delete.
+
+    Returns:
+      How many of `paths` were left in place, each named on stderr. The caller exits non-zero
+      on any, so the weekly cron cannot read a failed removal as a clean sweep.
     """
+    failed = 0
     for path in paths:
         users = processes_using(path)
         if users:
             named = "; ".join(f"pid {pid} ({how})" for pid, how in users)
-            print(f"could not remove {path}: in use by a live process: {named}")
+            print(
+                f"could not remove {path}: in use by a live process: {named}",
+                file=sys.stderr,
+            )
+            failed += 1
             continue
         try:
             shutil.rmtree(path)
         except OSError as exc:
-            print(f"could not remove {path}: {exc}")
+            print(f"could not remove {path}: {exc}", file=sys.stderr)
             for line in foreign_owned_advice(path):
-                print(line)
+                print(line, file=sys.stderr)
+            failed += 1
         else:
             print(f"removed {path}")
+    return failed

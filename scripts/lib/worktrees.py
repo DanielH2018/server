@@ -33,6 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import _claude_worktree  # noqa: F401
+from lib.cli_help import warn
 from lib.git import git, git_dirty, git_stdout
 from lib.repo_paths import REPO
 from claude_worktree import (
@@ -419,12 +420,11 @@ def _unescape(value: str) -> str:
 
 @functools.cache
 def _warn_scan_unreachable(sock: str, why: str) -> None:
-    print(
-        f"warning: cannot connect to {sock} ({why}), so a process of another uid outside "
+    warn(
+        f"cannot connect to {sock} ({why}), so a process of another uid outside "
         "this login slice is invisible to the in-use check (#4170). initial_setup installs "
         "the socket on every has_claude_code host with `--tags worktree-sweep`, and a "
-        "session started before its user joined the socket's group must restart first.",
-        file=sys.stderr,
+        "session started before its user joined the socket's group must restart first."
     )
 
 

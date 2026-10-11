@@ -190,15 +190,24 @@ def delete_branch(repo: str, branch: str) -> tuple[bool, str]:
     return forced.returncode == 0, forced.stderr.strip()
 
 
-def sweep_branches(repo: str, branches: list[str]) -> None:
+def sweep_branches(repo: str, branches: list[str]) -> int:
     """Delete each already-settled orphan branch, printing one line per outcome.
 
     Takes the list rather than deriving it, so the caller's report and its removals cannot
     name different branches.
+
+    Returns:
+      How many branches were refused deletion, each named on stderr.
     """
+    failed = 0
     for branch in branches:
         ok, error = delete_branch(repo, branch)
-        print(f"deleted {branch}" if ok else f"could not delete {branch}: {error}")
+        if ok:
+            print(f"deleted {branch}")
+        else:
+            print(f"could not delete {branch}: {error}", file=sys.stderr)
+            failed += 1
+    return failed
 
 
 def survey(repo: str) -> list[tuple[str, Worktree, str]]:
@@ -265,36 +274,44 @@ def prune_all(
     advise: Callable[[str], list[str]] = foreign_owned_advice,
     remover: Callable[[str, Worktree], tuple[bool, str]] | None = None,
     reaper: Callable[[str], list[str]] = reap_claims,
-) -> None:
+) -> int:
     """Remove each tree, printing one line per outcome.
 
     Shared by both report shapes so that `--prune` cannot mean one thing with `--brief` and
-    another without it. A failed removal is followed by `advise`'s lines, which name any
-    path git could not delete because another uid owns it.
+    another without it. A failed removal goes to stderr, followed by `advise`'s lines, which
+    name any path the removal could not delete because another uid owns it.
 
     `remover` is `lib.worktrees.remove` unless a test hands it another, read at call time so
     a test of `main` that replaces this module's `remove` still reaches it.
+
+    Returns:
+      How many of `trees` were left in place. A tree a live process still uses counts too:
+      the survey called it removable, so keeping it is a removal that did not happen.
     """
     remover = remove if remover is None else remover
-    removed = 0
+    removed = failed = 0
     for tree in trees:
         ok, error = remover(repo, tree)
         if ok:
             removed += 1
             print(f"removed {tree.path}")
         else:
-            print(f"could not remove {tree.path}: {error}")
+            failed += 1
+            print(f"could not remove {tree.path}: {error}", file=sys.stderr)
             for line in advise(tree.path):
-                print(line)
+                print(line, file=sys.stderr)
     for line in repair_object_store(repo):
         print(line)
     if removed:
         for line in reaper(repo):
             print(line)
+    return failed
 
 
 def brief(prune: bool = False) -> int:
     """One line per removable worktree; silent when there is nothing to remove.
+
+    Returns 0, or with `prune` 1 when any removal or branch deletion failed.
 
     This exists for the SessionStart banner, which prints nothing on a healthy day and has to
     stay cheap to read. Claude Code's own worktree keeper already lists every branch whose
@@ -336,20 +353,21 @@ def brief(prune: bool = False) -> int:
         # Unconditional, unlike the report above: the weekly cron runs this path for the
         # object-store repair at prune_all's tail, which must still happen on a week with
         # nothing to remove.
-        prune_all(repo, [tree for tree, _ in removable])
+        failed = prune_all(repo, [tree for tree, _ in removable])
         # Only this path hashes orphans: the banner's 5s budget cannot pay for it.
         orphans = orphan_verdicts(repo)
         for path, unstored in orphans:
             if unstored:
                 print(f"kept orphan {path}: {len(unstored)} file(s) git never stored")
-        prune_orphans([path for path, unstored in orphans if unstored == []])
+        failed += prune_orphans([path for path, unstored in orphans if unstored == []])
         # Read AFTER the removals, because each one frees a branch: a list taken before them
         # names none of those, and the sweep would leave its own leavings for next week
         # instead of converging in one pass.
-        sweep_branches(repo, landed_orphan_branches(repo, deep=True))
-    elif removable or stale:
+        failed += sweep_branches(repo, landed_orphan_branches(repo, deep=True))
+        return FAILED if failed else OK
+    if removable or stale:
         print("  → uv run python scripts/dev/prune_worktrees.py --prune")
-    return 0
+    return OK
 
 
 def check(branch: str) -> int:
@@ -386,7 +404,8 @@ def check(branch: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     """Report each session worktree's removable/keep/orphan verdict, and prune with `--prune`.
 
-    Exits 1 when not inside a git repository, 0 otherwise.
+    Exits 1 when not inside a git repository, or when `--prune` left a removable worktree,
+    orphan directory or branch in place; 0 otherwise.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -482,11 +501,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    prune_orphans(orphans)
-    prune_all(repo, removable)
+    failed = prune_orphans(orphans)
+    failed += prune_all(repo, removable)
     # Re-read for brief()'s reason: the removals above just freed a branch each.
-    sweep_branches(repo, landed_orphan_branches(repo, deep=True))
-    return 0
+    failed += sweep_branches(repo, landed_orphan_branches(repo, deep=True))
+    return FAILED if failed else OK
 
 
 if __name__ == "__main__":

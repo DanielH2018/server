@@ -37,6 +37,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from lib import yaml_fast
+from lib.cli_help import warn
 from lib.git import git
 from lib.repo_paths import HOST_LIB_FILES
 from lib.repo_paths import REPO as _REPO_PATH
@@ -175,7 +176,7 @@ def kuma_push(url: str, ok: bool, msg: str) -> None:
         msg,
         parts.netloc,
         parts.path.rsplit("/", 1)[-1],
-        log=lambda line: print(f"secret-rotation: {line}", file=_sys.stderr),
+        log=warn,
     )
 
 

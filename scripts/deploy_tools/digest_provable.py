@@ -130,6 +130,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     k8s = Path(args.repo) / "ansible" / "roles" / "k8s"
+    # A role with no directory still reads `false` and exits 0: a pending `k8s_unapplied` line
+    # can name a role a later range deleted, and a non-zero exit makes the deployer read every
+    # role in the call as not provable (`deploy_k8s_owed._digest_provable`).
+    # The stderr line is what tells a typo apart from a role that acts outside its digest.
+    for role in args.roles:
+        if not (k8s / role).is_dir():
+            print(
+                f"digest_provable: no role directory at {k8s / role}", file=sys.stderr
+            )
     print(json.dumps({r: digest_provable(k8s / r) for r in args.roles}, sort_keys=True))
     return 0
 
