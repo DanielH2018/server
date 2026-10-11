@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for longhorn_reap_logic.py, the pure classifier both reap-orphan entry points share.
+"""Tests for longhorn_reap_lib/logic.py, the pure classifier both reapers share.
 
 Every floor gets an `..._is_clean` / `..._is_flagged` pair per CLAUDE.md's red-proof rule: one
 input the floor must keep, one it must reap. The FLOOR 1 case additionally covers a FLOOR 1 that is
@@ -11,7 +11,7 @@ Run: uv run pytest scripts/backup/tests/test_longhorn_reap_logic.py
 
 import pytest
 
-import longhorn_reap_logic as logic
+from longhorn_reap_lib import logic
 from _reap_entrypoint_harness import _backup, _snapshot, _volume
 
 

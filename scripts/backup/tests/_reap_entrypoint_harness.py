@@ -2,13 +2,18 @@
 """The subprocess harness the reap-orphan entry-point suites share.
 
 Not a test module — a helper the entry-point suites import. It puts a stub `k3s` on PATH in place of
-the real binary and runs an entry point from scripts/backup/ against fixture JSON while
+the real binary and runs `longhorn_reap.py` from scripts/backup/ against fixture JSON while
 recording every `kubectl delete` argv the stub receives.
 
 The entry point runs as a bare subprocess, not an import, because that is how an operator runs
-it (`uv run python scripts/backup/longhorn_reap_orphan_backups.py`). A subprocess does not
-inherit pytest's pythonpath, so the entry point's own sys.path bootstrap is the only thing that
-makes `host_lib` (ansible/roles/setup/common/files/) and `longhorn_reap_logic` importable.
+it (`uv run python scripts/backup/longhorn_reap.py backups`). A subprocess does not inherit
+pytest's pythonpath, so the sys.path bootstraps in the entry point and in longhorn_reap_lib/ are
+the only thing that makes `host_lib` (ansible/roles/setup/common/files/) and
+`longhorn_reap_lib` importable.
+
+`BACKUPS_ENTRY` and `SNAPSHOTS_ENTRY` are `(entry point, subcommand)` pairs: `_run` puts the
+subcommand ahead of the test's own arguments, so a suite names the reaper once rather than in
+every argv.
 
 Consumers: `test_longhorn_reap_entrypoints.py`, `test_longhorn_reap_backups_cli.py`,
 `test_longhorn_reap_backups_modes_cli.py`, `test_longhorn_reap_snapshots_cli.py`. The `_volume`,
@@ -27,8 +32,9 @@ import sys
 from lib.proc_testing import fake_bin, path_with
 
 BACKUP_DIR = pathlib.Path(__file__).resolve().parents[1]
-BACKUPS_ENTRY = BACKUP_DIR / "longhorn_reap_orphan_backups.py"
-SNAPSHOTS_ENTRY = BACKUP_DIR / "longhorn_reap_orphan_snapshots.py"
+REAP_ENTRY = BACKUP_DIR / "longhorn_reap.py"
+BACKUPS_ENTRY = (REAP_ENTRY, "backups")
+SNAPSHOTS_ENTRY = (REAP_ENTRY, "snapshots")
 
 # The epoch a dated fixture is measured from when a test passes `now=` to `_run`. Same value as
 # the reader suites' `_longhorn_reader_stubs.NOW`.
@@ -160,6 +166,10 @@ def _run(
         env["LONGHORN_REAP_ADMIN_KUBECONFIG"] = str(tmp_path / "no-such-admin.yaml")
     if extra_env:
         env.update(extra_env)
+
+    if isinstance(entry, tuple):
+        entry, subcommand = entry
+        args = [subcommand, *args]
 
     if now is None:
         argv = [sys.executable, str(entry), *args]
