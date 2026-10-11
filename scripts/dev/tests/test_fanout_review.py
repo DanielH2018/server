@@ -171,7 +171,7 @@ def test_the_pr_comment_lists_only_actionable_findings_and_counts_the_rest(tmp_p
 
 
 def test_a_security_finding_stays_off_the_public_comment_and_the_tracker(tmp_path):
-    # Actionable (0.6+) but under the 0.8 hold bar, so the batch still reaches the landing.
+    # Actionable (0.5+) but under the 0.8 hold bar, so the batch still reaches the landing.
     held = _finding("token leaks to the log", confidence=0.7, category="security")
     reports = [
         _report(f"Opened {PR}"),
@@ -224,20 +224,25 @@ def test_the_landing_is_skipped_when_too_little_run_time_is_left(tmp_path):
 
 
 def test_actionable_keeps_medium_at_the_confidence_floor_and_drops_the_rest():
-    kept = _finding("kept", "medium", 0.6)
+    kept = _finding("kept", "medium", 0.5)
     assert actionable(
-        [kept, _finding("unsure", "medium", 0.59), _finding("nit", "low")]
+        [kept, _finding("unsure", "medium", 0.49), _finding("nit", "low")]
     ) == [kept]
 
 
-def _test_finding(subkind, confidence=0.6):
+def _test_finding(subkind, confidence=0.5):
     return dict(_finding(subkind, "low", confidence, "test"), subkind=subkind)
 
 
-def test_a_low_vacuous_or_scaffold_test_finding_reaches_the_fix_round():
+def test_a_low_vacuous_test_finding_reaches_the_fix_round():
     # The severity floor dropped these anti-patterns unfiled (#4023).
-    vacuous, scaffold = _test_finding("vacuous"), _test_finding("scaffold")
-    assert actionable([vacuous, scaffold]) == [vacuous, scaffold]
+    vacuous = _test_finding("vacuous")
+    assert actionable([vacuous]) == [vacuous]
+
+
+def test_a_low_scaffold_test_finding_stays_below_the_bar():
+    # 1 of 7 actionable scaffold findings was real when #3675 judged them.
+    assert actionable([_test_finding("scaffold")]) == []
 
 
 def test_a_low_missing_coverage_or_unsure_vacuous_finding_stays_below_the_bar():
@@ -245,7 +250,7 @@ def test_a_low_missing_coverage_or_unsure_vacuous_finding_stays_below_the_bar():
         actionable(
             [
                 _test_finding("missing-coverage"),
-                _test_finding("vacuous", confidence=0.59),
+                _test_finding("vacuous", confidence=0.49),
             ]
         )
         == []
