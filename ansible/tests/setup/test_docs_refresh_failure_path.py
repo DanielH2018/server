@@ -7,7 +7,7 @@ path, still writing `last_run`. Only a human cleaning the tree ends it.
 
 The functions below are executed, not pattern-matched. Each one is lifted out of the RENDERED
 template by name and sourced into a scratch git repository, so what these tests exercise is the
-production code rather than a copy of its logic. Three behaviours, each with the half that proves
+production code rather than a copy of its logic. Four behaviours, each with the half that proves
 the test can go red:
 
 - **restore_generated_tree leaves the checkout clean**, for a modified page and for a newly
@@ -17,6 +17,8 @@ the test can go red:
   the repo. Path-based attribution cannot: a human running build_docs.py by hand dirties the
   same files.
 - **say_failure names the failing hook**, and still says something when no hook token matches.
+- **build_docs_failure tells a generator failure from a site-build failure**, which
+  build_docs.py reports as exit 2 and exit 3.
 """
 
 import re
@@ -41,6 +43,7 @@ SOURCED = (
     "mark_commit_failed",
     "clear_commit_failed",
     "dirty_tree_status",
+    "build_docs_failure",
 )
 
 STAMP_DIR = "/var/lib/homelab/docs-refresh.d"
@@ -394,3 +397,13 @@ def test_the_stamp_directory_is_created_and_writable_by_the_cron_user():
     assert STAMP_DIR in SCRIPT, (
         "the script and the task no longer agree on the stamp path"
     )
+
+
+def test_build_docs_failure_names_which_half_failed(tmp_path):
+    def message(rc: int) -> str:
+        return _bash(f"build_docs_failure {rc}", tmp_path, tmp_path / "stamp").stdout
+
+    generators, site, crash = message(2), message(3), message(1)
+    assert "generators failed" in generators and "site build failed" not in generators
+    assert "site build failed" in site and "generators failed" not in site
+    assert "crashed (exit 1)" in crash

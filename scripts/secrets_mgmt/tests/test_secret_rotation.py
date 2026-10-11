@@ -254,6 +254,37 @@ def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
     )
 
 
+# ── what `cmd_rotate` tells the operator to do next ─────────────────────────
+def test_rotate_without_deploy_says_commit_then_deploy_sh(capsys):
+    """deploy.sh deploys HEAD, so the Next: line must say to commit before it deploys."""
+    name = "monitor_bridge_test_token"
+    tools, _ = build_tools(Fakes(registry=_reg((name, "auto", "2026-01-01"))))
+    args = SimpleNamespace(
+        name=name, all=False, commit=True, deploy=False, no_derive=False
+    )
+    assert sr.cmd_rotate(args, tools) == 0
+    out = capsys.readouterr().out
+    assert "Next: commit " in out and "./scripts/deploy.sh --tags " in out, out
+    assert "ansible-playbook" not in out, out
+
+
+def test_rotate_deploy_failure_names_the_revert_command_and_tags(capsys):
+    name = "monitor_bridge_test_token"
+    tools, _ = build_tools(Fakes(registry=_reg((name, "auto", "2026-01-01")), run_rc=1))
+    # `run_rc` would also fail the `sops set`, which passes `check=True`; only the deploy
+    # should fail here.
+    tools = replace(tools, sops_set=lambda _name, _value: None)
+    args = SimpleNamespace(
+        name=name, all=False, commit=True, deploy=True, no_derive=False
+    )
+    assert sr.cmd_rotate(args, tools) == 1
+    err = capsys.readouterr().err
+    assert "DEPLOY FAILED for tags " in err, err
+    assert (
+        "git checkout -- ansible/vars/secrets.yml ansible/secret_rotation.yml" in err
+    ), err
+
+
 # ── `source: record` keys ─────────────────────────────────────
 #
 # For authelia_password, healthchecks_password and bazarr_api_key, SOPS holds a copy of a

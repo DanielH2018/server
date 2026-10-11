@@ -421,11 +421,9 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
     failure here leaves a stale external_entities.yml in place.
     """
     if get_states is None or get_services is None:
-        import json
-
         # DECIDED: deferred, the reverse edge of probe_lib/ha.py:581's `run_ha_state`. That
         # function needs build_model() to render `ha state`; `refresh` here needs core/ha's
-        # live-HTTP helpers (ha_base/ha_resolve/ha_token/ha_get) to snapshot external entities.
+        # live-HTTP helpers (ha_base/ha_resolve/ha_token/ha_get_json) to snapshot external entities.
         # Both edges stay inside the one function that needs them, so neither runs at import
         # time. Fixing it means carving the HA HTTP client out of probe_lib.ha into a module
         # neither side owns — real restructuring, so it is pinned in ALLOWED_CYCLES instead.
@@ -438,17 +436,15 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
     if get_states is None:
         live = [
             s["entity_id"]
-            for s in json.loads(
-                ha.ha_get(ha.ha_get_url(base, "states"), token, resolve=resolve)
+            for s in ha.ha_get_json(
+                ha.ha_get_url(base, "states"), token, resolve=resolve
             )
         ]
     else:
         live = list(get_states())
     if get_services is None:
         services = parse_services(
-            json.loads(
-                ha.ha_get(ha.ha_get_url(base, "services"), token, resolve=resolve)
-            )
+            ha.ha_get_json(ha.ha_get_url(base, "services"), token, resolve=resolve)
         )
     else:
         services = set(get_services())
