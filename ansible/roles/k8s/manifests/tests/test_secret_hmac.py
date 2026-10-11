@@ -59,4 +59,18 @@ def test_a_missing_key_and_a_missing_file_exit_differently(tmp_path, capsys):
     key = _key(tmp_path)
     assert secret_hmac.main([str(tmp_path / "nokey"), str(key)]) == 2
     assert secret_hmac.main([str(key), str(tmp_path / "nofile")]) == 1
-    assert capsys.readouterr().out == ""
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    # Each non-zero exit says why on stderr, naming the path at fault (#4448).
+    missing_key, missing_file = captured.err.splitlines()
+    assert "nokey is missing or unreadable" in missing_key
+    assert "cannot read" in missing_file and "nofile" in missing_file
+
+
+def test_a_short_key_says_so(tmp_path, capsys):
+    key = tmp_path / "key"
+    key.write_bytes(b"short")
+    manifest = tmp_path / "secret.yaml"
+    manifest.write_bytes(MONITORS)
+    assert secret_hmac.main([str(key), str(manifest)]) == 2
+    assert "fewer than 32 bytes" in capsys.readouterr().err

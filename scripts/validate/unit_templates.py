@@ -56,6 +56,7 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 import tempfile
 from pathlib import Path
 
@@ -66,6 +67,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from validate.validate_lib.ok_lines import ok_printer
 from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
 from lib.render_guard import (
@@ -228,18 +230,23 @@ def check_polkit_rule(template: Path, out_dir: Path, node_bin: str) -> str | Non
     return None
 
 
-def main() -> int:
+def main(argv: Sequence[str] = ()) -> int:
     """Render every discovered unit template, then `systemd-analyze verify` the output.
 
     Also renders and `node --check`s every polkit rule (`discover_rules`) — a missing `node`
     skips those checks with a message rather than failing the whole run closed (see module
     docstring for why the two missing-tool cases are handled differently).
 
+    Args:
+        argv: The command-line arguments. `-v` or `--verbose` also lists each clean
+            template as an `[ok]` line; by default only failures and the summary print.
+
     Returns:
         0 if every unit rendered clean and verified clean, and every polkit rule either rendered
         clean or was skipped, 1 otherwise (including when systemd-analyze is missing from PATH
         or no unit templates were found).
     """
+    ok = ok_printer(argv)
     systemd_analyze_bin = shutil.which("systemd-analyze")
     if not systemd_analyze_bin:
         print(
@@ -269,7 +276,7 @@ def main() -> int:
                 failures += 1
                 print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
             else:
-                print(f"  [ok]   {rel}")
+                ok(f"  [ok]   {rel}")
 
         rules = discover_rules()
         node_bin = shutil.which("node")
@@ -289,7 +296,7 @@ def main() -> int:
                 failures += 1
                 print(f"  [FAIL] {rules_rel}: {err}", file=sys.stderr)
             else:
-                print(f"  [ok]   {rules_rel}")
+                ok(f"  [ok]   {rules_rel}")
 
     rules_checked = len(rules) if node_bin else 0
     print(
@@ -300,4 +307,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))
