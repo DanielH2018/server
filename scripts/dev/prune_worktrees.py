@@ -57,6 +57,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from dev.foreign_owned import foreign_owned_advice
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 from lib.git import git, git_stdout, repair_object_store
+from lib.worktree_label import with_label
 
 # The worktree library: the readers, `is_merged` and `classify`. This file is only the CLI
 # over it, and nothing else imports this file -- every other consumer imports `lib.worktrees`.
@@ -316,7 +317,7 @@ def brief(prune: bool = False) -> int:
     if removable:
         print(f"\U0001f9f9 {len(removable)} merged worktree(s) can be removed:")
         for tree, reason in removable:
-            print(f"  {Path(tree.path).name} — {reason}")
+            print(f"  {with_label(Path(tree.path).name, tree.path)} — {reason}")
     if stale and not prune:
         print(
             f"\U0001f9f9 {len(stale)} orphan {BRANCH_PREFIX}* branch(es) already on "
@@ -455,7 +456,7 @@ def main(argv: list[str] | None = None) -> int:
     removable = []
     vanished = 0
     for verdict, tree, reason in survey(repo):
-        print(f"[{verdict:9}] {tree.path}\n            {reason}")
+        print(f"[{verdict:9}] {with_label(tree.path, tree.path)}\n            {reason}")
         if verdict == REMOVABLE:
             removable.append(tree)
         vanished += verdict == VANISHED
