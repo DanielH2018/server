@@ -228,9 +228,11 @@ class Landing:
             self.die(f"could not read PR #{self.opts.pr}: {exc.stderr.strip()}", 1)
         except subprocess.TimeoutExpired:
             self.die(f"could not read PR #{self.opts.pr}: gh timed out", 1)
-        except ValueError:
+        except ValueError as exc:
             # json.JSONDecodeError is a ValueError subclass.
-            self.die(f"could not read PR #{self.opts.pr}: unparseable gh output", 1)
+            self.die(
+                f"could not read PR #{self.opts.pr}: unparseable gh output: {exc}", 1
+            )
 
     def git(self, *args: str) -> subprocess.CompletedProcess[str]:
         """git in the PRIMARY checkout, never raising; callers read returncode."""
