@@ -10,6 +10,7 @@ import dataclasses
 import gzip
 import hashlib
 import io
+import re
 
 import pytest
 from validate import asset_pins
@@ -294,3 +295,36 @@ def test_an_annotated_depname_with_no_digest_has_nothing_to_refresh():
     )
     assert code == 0
     assert "nothing to refresh: vendor/digestless pins no digest" in out.getvalue()
+
+
+# ── the failure marker (#4480) ──────────────────────────────────────────────────────────────
+
+
+def _fail_lines(err: str) -> list[str]:
+    """Stderr lines in the validators' `[FAIL] <path>: <reason>` shape, indent allowed."""
+    return [
+        line for line in err.splitlines() if re.match(r"\s*\[FAIL\] \S[^:]*: \S", line)
+    ]
+
+
+def test_a_mismatched_pin_prints_one_fail_line_on_stderr(capsys):
+    """Path and reason share the line, so one grep for `[FAIL]` yields the whole failure."""
+    code, _ = _main([], [_pin(digest="0" * 64)])
+    lines = _fail_lines(capsys.readouterr().err)
+    assert code == 1
+    assert lines, "no `[FAIL] <path>: <reason>` line reached stderr"
+    assert any("x" in line for line in lines)
+
+
+def test_a_failed_refresh_prints_one_fail_line_on_stderr(tmp_path, capsys):
+    pin = _refreshable(tmp_path)
+    code = asset_pins.main(
+        ["--refresh", "tool"],
+        fetcher=_fetcher(status=404),
+        out=io.StringIO(),
+        discover=lambda: ([pin], []),
+        known=frozenset({"tool"}),
+    )
+    lines = _fail_lines(capsys.readouterr().err)
+    assert code == 1
+    assert any("HTTP 404" in line for line in lines), lines
