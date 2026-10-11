@@ -55,6 +55,8 @@ MUST_INCLUDE = frozenset(
         "ansible/roles/setup/fake_remux/files/mkv_attachment_repair.py",
         "ansible/roles/setup/fake_remux/files/state_push.py",
         "ansible/roles/k8s/manifests/files/secret_hmac.py",
+        # Run by path through its shebang until #4489, so the census missed it.
+        "ansible/roles/setup/k3s/files/manifest_declares.py",
         "scripts/deploy_tools/prune_releases.py",
         # Reached only through render_records' insert of the deployer's install directory.
         "ansible/roles/setup/render_records/files/render_records.py",

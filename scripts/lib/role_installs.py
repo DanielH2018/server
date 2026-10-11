@@ -209,16 +209,33 @@ def role_entries() -> list[tuple[Path, tuple[str, ...]]]:
             or not path.is_file()
         ):
             continue
-        # A comment line drops out rather than going blank: release_bin.yml comments inside
-        # its argv list, and a blank line ends a command.
-        text = "\n".join(
-            line
-            for line in path.read_text(encoding="utf-8").splitlines()
-            if not line.lstrip().startswith(("#", "{#"))
-        )
         found += [
-            (role_entry(spelled, path), ()) for spelled in _scripts_run(text, path)
+            (role_entry(spelled, path), ())
+            for spelled in _scripts_run(command_text(path), path)
         ]
+    return found
+
+
+def command_text(path: Path) -> str:
+    """`path`'s text with its comment lines dropped.
+
+    A comment line drops out rather than going blank: release_bin.yml comments inside its argv
+    list, and a blank line ends a command.
+    """
+    return "\n".join(
+        line
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if not line.lstrip().startswith(("#", "{#"))
+    )
+
+
+def no_project_spans(text: str) -> list[tuple[int, int]]:
+    """The span of each script path a `--no-project` command in `text` runs, as spelled."""
+    found = []
+    for flag in _NO_PROJECT.finditer(text):
+        match = _ROLE_RUN.match(text, flag.start())
+        if match is not None:
+            found.append(match.span(1))
     return found
 
 
