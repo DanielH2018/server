@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-11 01:21 UTC
-generated_sha: 40086d6a7
+generated_at: 2026-10-11 02:02 UTC
+generated_sha: 414c73d62
 ---
 
 !!! warning "Generated file — do not edit"
@@ -22,7 +22,7 @@ generated_sha: 40086d6a7
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/post-merge-automation.md:268`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:517`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1396`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1397`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `.claude/rules/facts.md:30` and `scripts/lib/tests/test_facts_citations.py:86`
@@ -38,7 +38,7 @@ generated_sha: 40086d6a7
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `docs/gitops-pipeline.md:1036`
+    * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `docs/gitops-pipeline.md:1037`
     * `ansible/roles/containers/autoheal/CLAUDE.md:49` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15`
@@ -47,7 +47,7 @@ generated_sha: 40086d6a7
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `docs/gitops-pipeline.md:1036`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `docs/gitops-pipeline.md:1037`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:72` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/authelia/tasks/main.yml:238` and `ansible/roles/k8s/nut/tasks/main.yml:22`
     * `ansible/roles/k8s/configarr/tasks/main.yml:123` and `ansible/roles/k8s/observability/tasks/main.yml:283`
@@ -88,7 +88,7 @@ generated_sha: 40086d6a7
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `docs/gitops-pipeline.md:1036`
+    * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `docs/gitops-pipeline.md:1037`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:287` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `ansible/roles/setup/common/CLAUDE.md:26`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `docs/monitor-bridge-checks.md:994`
@@ -104,22 +104,22 @@ generated_sha: 40086d6a7
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `docs/gitops-pipeline.md:1036`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `docs/gitops-pipeline.md:1037`
     * `ansible/roles/setup/gitops_deploy/files/deploy_config.py:15` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `docs/gitops-pipeline.md:1036`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `docs/gitops-pipeline.md:1037`
     * `ansible/roles/setup/gitops_deploy/files/deploy_failtext.py:13` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `docs/gitops-pipeline.md:1036`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `docs/gitops-pipeline.md:1037`
     * `ansible/roles/setup/gitops_deploy/files/deploy_io.py:25` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `docs/gitops-pipeline.md:1036`
+    * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `docs/gitops-pipeline.md:1037`
     * `ansible/roles/setup/gitops_deploy/files/deploy_state.py:15` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/initial_setup/tasks/crons.yml:900` and `ansible/roles/setup/initial_setup/tasks/crons.yml:980`
     * `ansible/roles/setup/initial_setup/tasks/network.yml:201` and `ansible/roles/setup/initial_setup/tasks/system-tuning.yml:197`
@@ -128,7 +128,7 @@ generated_sha: 40086d6a7
     * `ansible/tests/_shell_render.py:11` and `ansible/tests/services/test_alloy_pi_http_surface.py:67`
     * `ansible/tests/repo/test_adr_links.py:1` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:170`
     * `ansible/tests/repo/test_adr_links.py:12` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/tests/repo/test_adr_links.py:12` and `docs/gitops-pipeline.md:1036`
+    * `ansible/tests/repo/test_adr_links.py:12` and `docs/gitops-pipeline.md:1037`
     * `ansible/tests/repo/test_adr_links.py:12` and `scripts/lib/b2.py:21`
     * `ansible/tests/repo/test_adr_links.py:33` and `ansible/tests/repo/test_census_rows_roles.py:270`
     * `docs/adr/index.md:9` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:100`
@@ -139,27 +139,27 @@ generated_sha: 40086d6a7
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:517`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/docs-ui-and-adrs/design.md:137`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1396`
+    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1397`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/tests/test_probe_health.py:323`
-    * `docs/archive/docs-ui-and-adrs/design.md:27` and `docs/gitops-pipeline.md:1036`
+    * `docs/archive/docs-ui-and-adrs/design.md:27` and `docs/gitops-pipeline.md:1037`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/lib/b2.py:21`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1396`
+    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1397`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:517`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1396`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1397`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `docs/break-glass.md:130` and `scripts/deploy_tools/shared_role_reach.py:22`
-    * `docs/gitops-pipeline.md:517` and `docs/gitops-pipeline.md:1396`
+    * `docs/gitops-pipeline.md:517` and `docs/gitops-pipeline.md:1397`
     * `docs/gitops-pipeline.md:517` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/gitops-pipeline.md:517` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `docs/gitops-pipeline.md:833` and `scripts/deploy_tools/shared_role_callers.py:21`
-    * `docs/gitops-pipeline.md:1036` and `scripts/lib/b2.py:21`
-    * `docs/gitops-pipeline.md:1396` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:1396` and `scripts/diagnostics/tests/test_probe_health.py:323`
+    * `docs/gitops-pipeline.md:1037` and `scripts/lib/b2.py:21`
+    * `docs/gitops-pipeline.md:1397` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:1397` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `docs/monitor-bridge-checks.md:994` and `prek.toml:443`
     * `scripts/deploy_tools/tests/test_shared_role_reach.py:111` and `scripts/deploy_tools/tests/test_shared_role_reach.py:125`
     * `scripts/dev/fanout_lib/brief.py:268` and `scripts/dev/findings_lib/history_cli.py:199`
@@ -168,6 +168,11 @@ generated_sha: 40086d6a7
     * `scripts/dev/findings_lib/export_cli.py:37` and `scripts/dev/findings_lib/history_cli.py:32`
     * `scripts/diagnostics/probe_lib/health_kubectl.py:12` and `scripts/diagnostics/tests/test_probe_health.py:323`
     * `scripts/lib/tests/test_facts_atoms.py:208` and `scripts/lib/tests/test_facts_atoms.py:215`
+
+!!! warning "Unresolved pointers"
+    A marker below points at a file, a role's CLAUDE.md or an ADR that does not exist in the tree. The marker's reasoning is still there; the long form it sends a reader to is not.
+
+    * `ansible/roles/setup/gitops_deploy/files/deploy_narrow.py:470` → `scripts/deploy_tools/narrow_broad.py`
 
 ## roles/k8s
 
@@ -525,21 +530,21 @@ generated_sha: 40086d6a7
 | Marker | File | Decided |
 |---|---|---|
 | the stamp is read, and both halves are shipped. `--list-only` weekly under the `etcd-snapshot` tag (k3s_etcd_restore_drill_cron, Monday 10:20), run in place from the primary checkout, since 2026-08-28 (PR #531). The fail-closed staleness reader is `check_etcd_restore_drill` in monitor-bridge/check.py, since PR #535: it reads `last-success-list-only` from this STAMP_DIR and pushes the `etcd Restore Drill` Kuma monitor. | `scripts/backup/etcd_restore_drill.sh:158` | 2026-09-02 |
-| the two halves of this gate come from different trees, and that is accepted. | `scripts/deploy_tools/deploy_detach.py:117` | 2026-09-24 |
-| this gate fails OPEN on anything but a usage error, as `expand_shared_roles` does. Ansible's CLI classes are not a published API, so a moved import or a changed exit code leaves the deploy running exactly as it did before this gate existed. Refusing every deploy over a renamed ansible module would be a worse failure than the one being fixed. | `scripts/deploy_tools/deploy_flags.py:70` | 2026-10-03 |
-| the `k8s_deferred` marker is NOT printed here, unlike on the SessionStart banner (#2470). This addendum exists to correct one wrong repair — exit 4 points at a rebase of this tree when the primary checkout is what has to converge. A deferred image bump is not a park: the tree converged, and the reader's own `--tags` are unaffected by a bump to some other service. Printing it here would attach an unrelated to-do to a refusal, which is how an addendum stops being read. | `scripts/deploy_tools/deploy_staleness.py:361` | 2026-09-25 |
-| ownership is this lock, never the pid in the directory name. playbook in a process whose pid is not the one in the name, and the name's pid is dead for the whole life of a detached deploy -- a pid-based reaper deleted the worktree out from under the running playbook. A process cannot lie about holding a flock. (ADR-0017) | `scripts/deploy_tools/deploy_under_locks.py:232` | 2026-09-24 |
-| the lock order is whatever `deploy_locks.plan` returns, taken top to bottom, and this module neither names a lock nor sorts a tag. The deployer walks the same `plan()` for its own locks, so the two orders are one function rather than two agreeing ones. This run takes the tree lock, snapshots, RELEASES the tree lock and only then takes service locks, while the GitOps deployer holds the tree lock across its service locks; there is no cycle because this run never re-takes the tree lock after releasing it. (ADR-0017) | `scripts/deploy_tools/deploy_under_locks.py:438` | 2026-09-24 |
+| the two halves of this gate come from different trees, and that is accepted. | `scripts/deploy_tools/deploy_lib/detach_run.py:117` | 2026-09-24 |
+| this gate fails OPEN on anything but a usage error, as `expand_shared_roles` does. Ansible's CLI classes are not a published API, so a moved import or a changed exit code leaves the deploy running exactly as it did before this gate existed. Refusing every deploy over a renamed ansible module would be a worse failure than the one being fixed. | `scripts/deploy_tools/deploy_lib/flags.py:70` | 2026-10-03 |
+| the `k8s_deferred` marker is NOT printed here, unlike on the SessionStart banner (#2470). This addendum exists to correct one wrong repair — exit 4 points at a rebase of this tree when the primary checkout is what has to converge. A deferred image bump is not a park: the tree converged, and the reader's own `--tags` are unaffected by a bump to some other service. Printing it here would attach an unrelated to-do to a refusal, which is how an addendum stops being read. | `scripts/deploy_tools/deploy_lib/staleness.py:362` | 2026-09-25 |
+| ownership is this lock, never the pid in the directory name. playbook in a process whose pid is not the one in the name, and the name's pid is dead for the whole life of a detached deploy -- a pid-based reaper deleted the worktree out from under the running playbook. A process cannot lie about holding a flock. (ADR-0017) | `scripts/deploy_tools/deploy_lib/under_locks.py:232` | 2026-09-24 |
+| the lock order is whatever `deploy_locks.plan` returns, taken top to bottom, and this module neither names a lock nor sorts a tag. The deployer walks the same `plan()` for its own locks, so the two orders are one function rather than two agreeing ones. This run takes the tree lock, snapshots, RELEASES the tree lock and only then takes service locks, while the GitOps deployer holds the tree lock across its service locks; there is no cycle because this run never re-takes the tree lock after releasing it. (ADR-0017) | `scripts/deploy_tools/deploy_lib/under_locks.py:438` | 2026-09-24 |
 | a usage error is not a landing, so it annotates nothing. SystemExit(2) before a Landing or a Ledger exists, so the only line this could write is `pr=unknown verdict=aborted` -- a row meaning "you typed the command wrong" in the same stream the Landings board counts. The bash original annotated it because its EXIT trap was installed before the arg loop, and this port reproduced that until issue #1304 measured 592 such rows in Loki's 744h window. The wrapper below still annotates nothing: it only renumbers the code, and `--help` (exit 0) passes through untouched. | `scripts/deploy_tools/land.py:139` | 2026-09-06 |
 | `--tags` leaves `k8s_only` empty, so a two-platform tag such as `wg-easy` routes to every declaring host (#2748). The operator's list carries no provenance, and narrowing it from the PR's paths would second-guess an explicit "deploy exactly these services". Staying wide costs one Pi Compose deploy that recreates nothing. Narrowing is the direction of issue #929: a tag that reached no host while the landing printed `settled` over a Pi still running the old container. | `scripts/deploy_tools/land_lib/classify.py:219` | 2026-09-27 |
 | exit 4 under `--at` means a commit MERGED AFTER this one reaches the same tags, and that newer landing owns the service. Deploying the merge commit anyway would revert their change; deploying the primary's HEAD would deploy a tree this landing never CI-gated. So this one falls back to the path it had before `--at` existed -- wait for the tick to fast-forward the primary onto the newest green commit, then deploy from there -- and the retry loop below is that path, unchanged. | `scripts/deploy_tools/land_lib/deploy.py:462` | 2026-09-16 |
 | the tick is kicked HERE, after deploy.sh has returned, not in step 4. `gitops-deploy.service` wraps its whole unit run in the tree lock, so a tick kicked before the deploy is one deploy.sh then queues behind inside its own `flock -w 3840` -- the same wait, moved out of `tick=` and into `lock=`. Kicked after, it converges the primary while this landing gates, and the gate's own snapshot needs no lock. Not on the fallback arm: the retry loop runs a tick WITH its wait, and two requests for the same work is one more than the path had before `--at`. | `scripts/deploy_tools/land_lib/deploy.py:479` | 2026-09-16 |
 | a failing retick here ENDS the landing (deploy-failed, cause=tick-failed) rather than carrying on to deploy_by_host the way bash's stale-retry loop did -- bash discarded the tick's own exit code and kept going regardless. Deliberate per tick.py's module docstring and #1013: this shares tick.py's one retry implementation with step 4 rather than land.sh's un-retried, un-accounted copy, and that implementation's failure mode is to raise. Listed as #1085 item 8 so it is not re-derived as a parity bug. | `scripts/deploy_tools/land_lib/deploy.py:530` | 2026-09-04 |
 | ` holding the operator's ruling and the gap it accepts. | `scripts/deploy_tools/land_lib/land_shared.py:15` | 2026-10-01 |
-| `except Exception`, because any failure here must print the role tag. derivation shells out to git and decodes the output. An escape would kill a landing that has already merged, over a note the whole-role tag answers correctly. | `scripts/deploy_tools/land_lib/land_tags.py:140` | 2026-09-24 |
-| fan a shared role out to its callers, reversing the "report, do not fan out" this held until #2704. The operator asked for every piece of the deploy to be selectable, and a report left PR #2701 for the next full deploy. A change to `manifests` or `volume-snapshot` therefore deploys ~58 services — about a full deploy, unmeasured as a tag list. A change reaching no rendered manifest never gets here: `shared_role_reach` drops its paths first. The deployer's `k8s_remediation` keeps the report, because an unattended tick parking a range is a different cost. | `scripts/deploy_tools/land_lib/land_tags.py:191` | 2026-09-27 |
-| fire on ANY change to secrets.yml, and never try to name which keys moved. Naming them means decrypting both revisions, and no plaintext may reach a terminal, a transcript or a log. `.gitattributes` sets `diff=sops`, so even `git diff ansible/vars/secrets.yml` renders the values, which is why a hook denies that form. Over-firing on a key that needed no redeploy costs one exit code; under-firing leaves a rotated credential stale in a consumer this file list cannot show. | `scripts/deploy_tools/land_lib/land_tags.py:241` | 2026-09-01 |
-| fire on the tag-carrying path too, which is the opposite of what deploy_logic.alert_secrets_deferred does for the deployer. Not a contradiction, a different reader: that alert is unattended, so a false fire on the /add-secret happy path is noise nobody can act on. Here an operator is reading land.sh's output, and a PR shipping secrets.yml WITH one consuming template still cannot show the OTHER consumers -- PR #695's token had two, in two planes, and the landing got neither. | `scripts/deploy_tools/land_lib/land_tags.py:248` | 2026-09-01 |
+| `except Exception`, because any failure here must print the role tag. derivation shells out to git and decodes the output. An escape would kill a landing that has already merged, over a note the whole-role tag answers correctly. | `scripts/deploy_tools/land_lib/land_tags.py:141` | 2026-09-24 |
+| fan a shared role out to its callers, reversing the "report, do not fan out" this held until #2704. The operator asked for every piece of the deploy to be selectable, and a report left PR #2701 for the next full deploy. A change to `manifests` or `volume-snapshot` therefore deploys ~58 services — about a full deploy, unmeasured as a tag list. A change reaching no rendered manifest never gets here: `shared_role_reach` drops its paths first. The deployer's `k8s_remediation` keeps the report, because an unattended tick parking a range is a different cost. | `scripts/deploy_tools/land_lib/land_tags.py:192` | 2026-09-27 |
+| fire on ANY change to secrets.yml, and never try to name which keys moved. Naming them means decrypting both revisions, and no plaintext may reach a terminal, a transcript or a log. `.gitattributes` sets `diff=sops`, so even `git diff ansible/vars/secrets.yml` renders the values, which is why a hook denies that form. Over-firing on a key that needed no redeploy costs one exit code; under-firing leaves a rotated credential stale in a consumer this file list cannot show. | `scripts/deploy_tools/land_lib/land_tags.py:242` | 2026-09-01 |
+| fire on the tag-carrying path too, which is the opposite of what deploy_logic.alert_secrets_deferred does for the deployer. Not a contradiction, a different reader: that alert is unattended, so a false fire on the /add-secret happy path is noise nobody can act on. Here an operator is reading land.sh's output, and a PR shipping secrets.yml WITH one consuming template still cannot show the OTHER consumers -- PR #695's token had two, in two planes, and the landing got neither. | `scripts/deploy_tools/land_lib/land_tags.py:249` | 2026-09-01 |
 | this REPORTS the tick's state, it does not re-verdict the landing. | `scripts/deploy_tools/land_lib/landing.py:421` | 2026-09-25 |
 | this reads the applied tags, which | `scripts/deploy_tools/land_lib/landing.py:498` | 2026-10-04 |
 | this samples on every attempt, including an uncontended first one, where bash's `note_lock_contention` only ran fuser+ps after an attempt had already lost the lock. That is a real parity delta (#1085 item 4) and it stays: reverting to bash's post-failure sample reintroduces the #1031 race this pre-sample exists to close, and `test_the_lock_holder_is_sampled_before_the_attempt` (tests/test_land_tick.py) plus its deploy.py sibling would go red on the revert. The cost is two short-lived processes per attempt against a 10-15 minute landing. | `scripts/deploy_tools/land_lib/landing.py:543` | 2026-09-04 |
@@ -554,9 +559,9 @@ generated_sha: 40086d6a7
 | NO tree lock is taken. | `scripts/deploy_tools/land_lib/tools.py:274` | 2026-09-16 |
 | under `tempfile.mkdtemp`, NOT under HOMELAB_DEPLOY_SNAPSHOT_ROOT. | `scripts/deploy_tools/land_lib/tools.py:282` | 2026-09-24 |
 | the parent directory is PINNED to GATE_TMP_ROOT rather than left to `mkdtemp`'s | `scripts/deploy_tools/land_lib/tools.py:292` | 2026-09-16 |
-| ` on `is_doc` says why that | `scripts/deploy_tools/narrow_paths.py:38` | 2026-09-30 |
-| a shipped file this role renders only through another role's task file refuses here; it is not resolved through that task file's readers (#3322). The kuma-check templates reach gitops_deploy, render_records and k3s only through `common/tasks/kuma_check_timer.yml`, so a change to them falls back to the whole-role tag. That costs a longer apply and never misses one. Those templates changed twice in the repo's history, and each routing layer added from 2026-10-01 on found the next indirection, so one more layer was not worth its code. Reopen it if the trigger recurs or the fallback grows costlier than a longer apply; #3322's close reason is the long form. | `scripts/deploy_tools/narrow_setup.py:316` | 2026-10-03 |
-| ` comment says why), and refusing on them made the role's most-edited task file narrow nothing. A file whose ONLY tag is `always` still refuses, since no tag is left to name its work. | `scripts/deploy_tools/narrow_setup_index.py:51` | 2026-10-01 |
+| ` on `is_doc` says why that | `scripts/deploy_tools/narrow_lib/paths.py:38` | 2026-09-30 |
+| ` comment says why), and refusing on them made the role's most-edited task file narrow nothing. A file whose ONLY tag is `always` still refuses, since no tag is left to name its work. | `scripts/deploy_tools/narrow_lib/setup_index.py:51` | 2026-10-01 |
+| a shipped file this role renders only through another role's task file refuses here; it is not resolved through that task file's readers (#3322). The kuma-check templates reach gitops_deploy, render_records and k3s only through `common/tasks/kuma_check_timer.yml`, so a change to them falls back to the whole-role tag. That costs a longer apply and never misses one. Those templates changed twice in the repo's history, and each routing layer added from 2026-10-01 on found the next indirection, so one more layer was not worth its code. Reopen it if the trigger recurs or the fallback grows costlier than a longer apply; #3322's close reason is the long form. | `scripts/deploy_tools/narrow_setup.py:317` | 2026-10-03 |
 | the tag is dropped, not only the shared-role note. current manifests on its next image bump anyway, and a pytest guard reaches no cluster. | `scripts/deploy_tools/reach.py:127` | 2026-10-10 |
 | ` at | `scripts/deploy_tools/shared_role_callers.py:21` | 2026-10-01 |
 | transitive. walk that stopped at the first hop would name no tag for them and their `k8s_unapplied` lines would need a hand to clear. #2704 replaced the land side's first-hop `covered_roles` with this for the same reason. | `scripts/deploy_tools/shared_role_callers.py:42` | 2026-10-01 |
@@ -727,9 +732,9 @@ generated_sha: 40086d6a7
 | ` at the fallback in `deploy_narrow.py` says why doubt | `docs/gitops-pipeline.md:621` | 2026-10-10 |
 | ` marker and the measurement. | `docs/gitops-pipeline.md:663` | 2026-10-10 |
 | ` at | `docs/gitops-pipeline.md:833` | 2026-10-10 |
-| ` | `docs/gitops-pipeline.md:1036` | 2026-10-10 |
-| ` at that task says why the | `docs/gitops-pipeline.md:1068` | 2026-10-10 |
-| ` marker | `docs/gitops-pipeline.md:1396` | 2026-10-10 |
+| ` | `docs/gitops-pipeline.md:1037` | 2026-10-10 |
+| ` at that task says why the | `docs/gitops-pipeline.md:1069` | 2026-10-10 |
+| ` marker | `docs/gitops-pipeline.md:1397` | 2026-10-10 |
 | ` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean | `docs/homepage-widgets-and-layout.md:148` | 2026-09-29 |
 | HMAC-SHA256 under a host-local key` | `docs/k8s-manifest-cycle-record.md:372` | 2026-10-02 |
 | this digest names the bytes` | `docs/k8s-manifest-cycle-record.md:421` | 2026-10-02 |
