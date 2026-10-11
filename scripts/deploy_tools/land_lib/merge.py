@@ -6,11 +6,9 @@ prompt times out as a denial.
 Idempotent: a MERGED PR is left alone, a CLOSED one dies.
 
 --arm-merge never arms GitHub's auto-merge. Auto-merge does not apply a ruleset bypass, and
-every PR into master needs one (github/docs#45265, open since 2026-07-23). The "master review
-gate" (ruleset 24514824) requires an approving review, so a PR reads REVIEW_REQUIRED until it
-is approved. An approved PR still needs the bypass for "agent branch fence" (ruleset 24517167),
-which restricts updates to every branch but the agent's own, master included: an approved
-agent PR armed for auto-merge sat BLOCKED until a hand merge (#3911). A CHANGES_REQUESTED PR is refused outright, because the direct merge would apply
+every PR into master needs one (github/docs#45265, open since 2026-07-23). The "agent branch
+fence" (ruleset 24517167) restricts updates to every branch but the agent's own, master
+included: an approved agent PR armed for auto-merge sat BLOCKED until a hand merge (#3911). A CHANGES_REQUESTED PR is refused outright, because the direct merge would apply
 the operator's bypass to a PR someone asked to change. `gh pr merge` refuses it at its own
 pre-flight as well (cli/cli#13388).
 

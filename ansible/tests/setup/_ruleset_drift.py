@@ -93,54 +93,6 @@ def branch_ruleset_body(exclude=(RENOVATE_EXCLUDE,), enforcement="active"):
     )
 
 
-REVIEW_RULESET_ID = 24514824
-REVIEW_BYPASS = ["Integration:2740:pull_request", "RepositoryRole:5:pull_request"]
-
-
-def review_ruleset(**overrides):
-    """The review ruleset as the live endpoint returned it on 2026-10-05, after the operator set
-    require_last_push_approval. Returned as a dict for a case to edit."""
-    body = {
-        "id": REVIEW_RULESET_ID,
-        "name": "master review gate",
-        "target": "branch",
-        "source_type": "Repository",
-        "source": "DanielH2018/server",
-        "enforcement": "active",
-        "conditions": {"ref_name": {"exclude": [], "include": ["refs/heads/master"]}},
-        "rules": [
-            {
-                "type": "pull_request",
-                "parameters": {
-                    "required_approving_review_count": 1,
-                    "dismiss_stale_reviews_on_push": True,
-                    "required_reviewers": [],
-                    "require_code_owner_review": False,
-                    "require_last_push_approval": True,
-                    "required_review_thread_resolution": False,
-                    "require_extra_approval_for_unattributed_changes": True,
-                    "allowed_merge_methods": ["merge", "squash", "rebase"],
-                },
-            }
-        ],
-        "bypass_actors": [
-            {
-                "actor_id": 5,
-                "actor_type": "RepositoryRole",
-                "bypass_mode": "pull_request",
-            },
-            {
-                "actor_id": 2740,
-                "actor_type": "Integration",
-                "bypass_mode": "pull_request",
-            },
-        ],
-        "current_user_can_bypass": "pull_requests_only",
-    }
-    body.update(overrides)
-    return body
-
-
 FENCE_RULESET_ID = 24517167
 FENCE_EXCLUDE = ["refs/heads/worktree-claude+**"]
 FENCE_BYPASS = ["Integration:2740:always", "RepositoryRole:5:always"]
@@ -172,14 +124,13 @@ def run(
     curl_body=None,
     curl_rc=0,
     branch_body=None,
-    review_body=None,
     fence_body=None,
     repo_body=PUBLIC_REPO,
 ):
     """Render the script, stub curl + the push lib, run it. Returns (exit_code, status, message).
 
-    `curl_body` answers the merge-gate ruleset fetch, and `branch_body`, `review_body` and
-    `fence_body` the other three. `repo_body` answers the repo read that precedes them all. Those three default to a clean body, so each case reads the
+    `curl_body` answers the merge-gate ruleset fetch, and `branch_body` and `fence_body` the other
+    two. `repo_body` answers the repo read that precedes them all. Those three default to a clean body, so each case reads the
     verdict of the arm it is about. Every value the template reads comes from the inventory and
     the role's own defaults, which the shared accessor resolves. The `..._matches_the_role_defaults`
     tests in test_github_ruleset_drift.py keep this module's constants honest against them
@@ -187,8 +138,6 @@ def run(
     """
     if branch_body is None:
         branch_body = branch_ruleset_body()
-    if review_body is None:
-        review_body = json.dumps(review_ruleset())
     if fence_body is None:
         fence_body = json.dumps(fence_ruleset())
     body = render_shell_script(*TEMPLATE)
@@ -227,7 +176,6 @@ def run(
             "#!/usr/bin/env bash\n"
             f'case "${{@: -1}}" in\n'
             f"  */rulesets/{BRANCH_RULESET_ID}) printf '%s' {json.dumps(branch_body)} ;;\n"
-            f"  */rulesets/{REVIEW_RULESET_ID}) printf '%s' {json.dumps(review_body)} ;;\n"
             f"  */rulesets/{FENCE_RULESET_ID}) printf '%s' {json.dumps(fence_body)} ;;\n"
             f"  */repos/{REPO}) printf '%s' {json.dumps(repo_body)} ;;\n"
             f"  *) printf '%s' {json.dumps(curl_body or '')} ;;\n"
