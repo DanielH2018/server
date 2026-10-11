@@ -11,7 +11,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED, DEPLOY_BROAD
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import Verdict, say
+from deploy_tools.land_lib.outcome import Verdict, disarmed, say
 
 
 def blockers(ln: Landing) -> int:
@@ -66,12 +66,5 @@ def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
             Verdict.CI_TIMEOUT,
         )
     if rc == CI_DISARMED:
-        # Not a CI result: await_ci refused to report one because its required-context set
-        # is empty. Waiting or re-running changes nothing; re-arming the gate does (#4464).
-        ln.die(
-            f"the CI gate is disarmed{where} — await_ci requires no CI contexts, so it "
-            "reports no verdict; nothing deployed. To re-arm it, set REQUIRED_CONTEXTS in "
-            "scripts/deploy_tools/await_ci.py to the deployer's gitops_deploy_ci_contexts",
-            1,
-        )
+        ln.die(disarmed(where, "nothing deployed"), 1)
     ln.die(f"await_ci failed{where} (exit {rc}) — nothing deployed", 1)

@@ -161,3 +161,15 @@ def test_a_refused_direct_merge_keeps_the_wait_going(landing):
     )
     merge.await_merge(ln)
     assert len([c for c in calls if c[0] == "gh"]) == 2
+
+
+def test_a_disarmed_gate_ends_a_direct_merge_wait_naming_it(landing):
+    """A direct merge fires only on await_ci's green, which a disarmed gate never gives (#4464)."""
+    ln, calls = _left_for_a_direct_merge(
+        landing, ["OPEN MERGEABLE aaaa"], [(2, "await_ci: no required CI contexts")]
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert exc.value.rc == 1 and exc.value.verdict == "refused"
+    assert "disarmed" in exc.value.error and "REQUIRED_CONTEXTS" in exc.value.error
+    assert not [c for c in calls if c[0] == "gh"]
