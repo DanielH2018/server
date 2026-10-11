@@ -314,13 +314,17 @@ class NonJsonResponse(SystemExit):
         super().__init__(f"{url} returned a non-JSON body:\n{body.strip()}")
 
 
-def fetch_parsed(url, resolve=None):
-    """fetch(url) parsed as JSON, raising NonJsonResponse on a body that is not JSON."""
-    body = fetch(url, resolve=resolve)
+def parse_json(url, body):
+    """`body`, fetched from `url`, parsed as JSON; raises NonJsonResponse when it is not JSON."""
     try:
         return json.loads(body)
     except json.JSONDecodeError:
         raise NonJsonResponse(url, body) from None
+
+
+def fetch_parsed(url, resolve=None):
+    """fetch(url) parsed as JSON, raising NonJsonResponse on a body that is not JSON."""
+    return parse_json(url, fetch(url, resolve=resolve))
 
 
 def fetch_json(url, resolve=None):

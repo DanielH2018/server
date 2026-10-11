@@ -379,3 +379,18 @@ def test_tls_context_states_the_protocol_floor():
     import ssl
 
     assert ha.tls_context().minimum_version == ssl.TLSVersion.TLSv1_2
+
+
+# `ha_curl_argv` has no `--fail`, so a rejected token reaches every HA read as a 200 body.
+def test_ha_json_reads_exit_with_the_server_s_words_on_a_401():
+    # NonJsonResponse is a SystemExit, so uncaught it prints its message, not a traceback.
+    with pytest.raises(core.NonJsonResponse) as exc:
+        core.parse_json("https://h/api/states", "401: Unauthorized")
+    assert "401: Unauthorized" in str(exc.value)
+
+
+def test_ha_json_reads_still_parse_a_json_body():
+    body = '[{"entity_id": "automation.x"}]'
+    assert core.parse_json("https://h/api/states", body) == [
+        {"entity_id": "automation.x"}
+    ]
