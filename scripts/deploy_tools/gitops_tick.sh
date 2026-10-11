@@ -289,7 +289,7 @@ state="$(show ActiveState)"
 if [[ "$state" == "activating" || "$state" == "deactivating" ]] ||
    [[ "$fresh" == 1 && "$(show ExecMainStartTimestampMonotonic)" == "$started_before" ]]; then
   echo
-  echo "Still running after ${WAIT_S}s — the run is fine, this script stopped watching."
+  echo "Still running after ${WAIT_S}s — its outcome is unknown, this script stopped watching."
   echo "Follow it with: journalctl -u $UNIT --since '$since' --no-pager"
   tick_verdict 75 still-running "stopped watching after ${WAIT_S}s"
 fi

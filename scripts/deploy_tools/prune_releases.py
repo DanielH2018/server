@@ -27,7 +27,8 @@ Usage:
     prune_releases.py <group-dir> --current <path> [--keep N] [--apply]
 
 Prints what it would remove and exits 0. Without --apply it removes nothing, which is the
-default deliberately: the caller that wants a mutation says so.
+default deliberately: the caller that wants a mutation says so. It exits 1 when `--current`
+does not resolve to a directory, because the group is then in an unknown state.
 """
 
 import argparse
@@ -79,8 +80,10 @@ def resolve_current(pointer):
 def main(argv=None):
     """Report, or with `--apply` remove, the prunable release dirs under `group_dir`.
 
-    Always exits 0 — a missing release directory or an unresolvable `current` pointer is
-    reported and treated as nothing to prune, not an error.
+    Exits 0 when it pruned, or had nothing to prune because the release directory is missing.
+    Exits 1 when `current` does not resolve to a directory: the task that runs this swung
+    that pointer just before, so a dangling one means every /usr/local/bin link through it
+    dangles too, and the play has to stop there rather than report a clean prune.
     """
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument(
@@ -101,9 +104,10 @@ def main(argv=None):
     current = resolve_current(ns.current)
     if current is None:
         print(
-            f"{ns.current} does not resolve to a directory; refusing to prune anything"
+            f"{ns.current} does not resolve to a directory; refusing to prune anything",
+            file=sys.stderr,
         )
-        return 0
+        return 1
 
     victims = select_prunable(group.iterdir(), current, keep=ns.keep)
     if not victims:

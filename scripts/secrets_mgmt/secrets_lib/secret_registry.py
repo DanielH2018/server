@@ -154,7 +154,7 @@ def record_names(reg: dict) -> list[str]:
 def record_refusal(name: str) -> str:
     """The one-line reason `rotate` prints when refusing a record key."""
     return (
-        "refusing: %s is `source: record` — SOPS holds a copy of a credential the app owns, and "
+        "%s is `source: record` — SOPS holds a copy of a credential the app owns, and "
         "nothing in the tree writes it there. Rotate it in the app, then `sops set` the new "
         "value here by hand (docs/secret-rotation.md, 'Record keys')." % name
     )

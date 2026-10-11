@@ -318,7 +318,7 @@ uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s -
 The clear then keeps the line and prints what is still pending. Every surface that prints a
 narrowed apply prints the matching `--applied` beside it, so following the printed pair is enough.
 A clear whose `--applied` covers the whole row takes the line. A clear with `--applied` against an
-EMPTY or missing row keeps the line and says so: an empty row means the whole role is pending,
+EMPTY or missing row keeps the line, says so on stderr and exits 1: an empty row means the whole role is pending,
 because a later range's derivation refused after your command was printed. Apply the whole role,
 then clear without `--applied`. `common`'s row is always empty, so a remediation naming several
 roles prints one clear per role, and only the narrowed ones carry `--applied`.
