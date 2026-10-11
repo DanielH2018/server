@@ -32,12 +32,16 @@ def _declared():
         return monitors.parse_declared_monitors(f.read())
 
 
-def _stub_kuma(monkeypatch, tmp_path, silent_tile, stored_status):
+def _stub_kuma(monkeypatch, tmp_path, silent_tile, stored_status, live_status=None):
     """Prometheus exports every declared tile but `silent_tile`, all UP.
 
-    Kuma's status page holds every declared tile with an id. Its heartbeat endpoint holds one
-    beat per tile: UP for all of them, and `stored_status` for `silent_tile`.
+    `live_status` instead exports `silent_tile` too, with that status: a beat that landed
+    after the restart. Kuma's status page holds every declared tile with an id. Its heartbeat
+    endpoint holds one beat per tile: UP for all of them, and `stored_status` for `silent_tile`.
     """
+    exported = {name: "1" for name in _declared() if name != silent_tile}
+    if live_status is not None:
+        exported[silent_tile] = live_status
     names = sorted(_declared())
     ids = {name: 100 + i for i, name in enumerate(names)}
     prom = json.dumps(
@@ -52,10 +56,9 @@ def _stub_kuma(monkeypatch, tmp_path, silent_tile, stored_status):
                             "job": "uptime-kuma",
                             "monitor_name": name,
                         },
-                        "value": [1760170000, "1"],
+                        "value": [1760170000, status],
                     }
-                    for name in names
-                    if name != silent_tile
+                    for name, status in sorted(exported.items())
                 ],
             },
         }
@@ -157,22 +160,39 @@ def test_monitors_lists_a_long_interval_tiles_stored_down_after_a_restart(
     # The fixture puts the tile inside its not-yet-due window.
     assert _declared()[tile]["interval"] > KUMA_AGE
     _stub_kuma(monkeypatch, tmp_path, tile, stored_status=0)
-    code = monitors.run_monitors(cli_parser._build_parser().parse_args(["monitors"]))
+    monitors.run_monitors(cli_parser._build_parser().parse_args(["monitors"]))
     out = capsys.readouterr().out
     assert any("DOWN" in line for line in _line_naming(out, tile)), out
-    assert code == 1
+
+
+def test_monitors_exits_nonzero_on_a_stored_down(monkeypatch, capsys, tmp_path):
+    # `format_monitor_status` exits 0 only when every monitor reports UP. A tile whose last
+    # known state is DOWN is not confirmed healthy, whether that state is live or stored.
+    _stub_kuma(monkeypatch, tmp_path, "Homelab Evals", stored_status=0)
+    code = monitors.run_monitors(cli_parser._build_parser().parse_args(["monitors"]))
+    assert code == 1, capsys.readouterr().out
+
+
+def _monitors_lines(monkeypatch, capsys, tmp_path, tile, **stub):
+    with monkeypatch.context() as m:
+        _stub_kuma(m, tmp_path, tile, **stub)
+        monitors.run_monitors(cli_parser._build_parser().parse_args(["monitors"]))
+    return _line_naming(capsys.readouterr().out, tile)
 
 
 def test_monitors_labels_a_stored_down_apart_from_a_live_one(
     monkeypatch, capsys, tmp_path
 ):
     # A stored beat predates the restart, so its line must not read like a live series' DOWN.
+    # The oracle is the probe's own rendering of the same tile DOWN on a live series.
     tile = "Homelab Evals"
-    _stub_kuma(monkeypatch, tmp_path, tile, stored_status=0)
-    monitors.run_monitors(cli_parser._build_parser().parse_args(["monitors"]))
-    lines = _line_naming(capsys.readouterr().out, tile)
-    assert any("DOWN" in line for line in lines), lines
-    assert f"  {tile}: DOWN" not in lines
+    live = _monitors_lines(
+        monkeypatch, capsys, tmp_path, tile, stored_status=0, live_status="0"
+    )
+    stored = _monitors_lines(monkeypatch, capsys, tmp_path, tile, stored_status=0)
+    assert any("DOWN" in line for line in live), live
+    assert any("DOWN" in line for line in stored), stored
+    assert not set(stored) & set(live), (stored, live)
 
 
 def test_kuma_drift_names_the_stored_down_of_a_not_yet_due_tile(
