@@ -37,8 +37,18 @@ ENTRY = "gitops_deploy"
 QUALIFIED = {"deploy_io", "deploy_alerts", "deploy_alert_text"}
 
 # Every module in files/, and which siblings each may import. `None` means no restriction, and
-# only the entry module gets it. Checked with `==` against what is on disk, not `<=`: a new
-# module with no entry here would otherwise be governed by nothing.
+# only the entry module gets it. The module SET is checked with `==` against what is on disk, so
+# a new module with no entry here fails; each module's imports are checked with `<=`.
+#
+# DECIDED: keep the per-module allowlist rather than narrow it to "no cycles, nothing imports the
+# entry module" (#4398). No commented copy between deployer modules exists because ALLOWED lacks
+# an edge. Each comes from a real cycle (`gitops_markers.owed_clear_cmd`'s "manual_plane"
+# literal), a module that ships alone (`gitops_markers`, `gitops_hold`), host_lib purity
+# (`deploy_remediation.BRANCH_DEFAULT`), or a source outside files/ under `--no-project`
+# (`deploy_release`'s dirs and verdicts, `deploy_k8s.SHARED_K8S_ROLES`, each with its own sync
+# test), so the narrower rule would fold none of them. Two uncommented copies sit behind
+# edges that are not cycles, the "ansible/deploy.yml" hold-plane string and `deploy_narrow`'s bare
+# "drifted"/"current"; folding them means adding the edge here, which this rule permits.
 ALLOWED: dict[str, set[str] | None] = {
     # The cross-role tables, a leaf of their own because the tick and land.sh parse another
     # commit's copy of that file by path.
@@ -62,9 +72,10 @@ ALLOWED: dict[str, set[str] | None] = {
     # The hold and the rule that clears it (#3658). The deploy UI installs it beside the two
     # modules above, so it may import nothing else.
     "gitops_hold": {"gitops_ledger", "gitops_markers"},
-    # The k8s release records, read to discharge a `k8s_unapplied` line. Stdlib only, for the
-    # reason `gitops_markers` is: `deploy_toolbox` imports it for the `release_commit`
-    # default, so an import back would be a cycle.
+    # The k8s release records, read to discharge a `k8s_unapplied` line. Stdlib only because
+    # the unit runs under `uv run --no-project`, its header says. `deploy_toolbox` imports it for
+    # the `release_commit` default, so an import of `deploy_toolbox` or anything reaching it
+    # would also be a cycle.
     "deploy_release": set(),
     "deploy_config": set(),
     "deploy_failtext": set(),
