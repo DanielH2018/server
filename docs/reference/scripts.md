@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-11 00:44 UTC
-generated_sha: 4e91feab0
+generated_at: 2026-10-11 01:01 UTC
+generated_sha: b0c3303dc
 ---
 
 !!! warning "Generated file — do not edit"
@@ -110,10 +110,10 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/fanout_lib/review/base_check.py` | dev | Which of a PR's new tests still pass with its code changes taken out. | imported by _review_fakes.py, hunk_check.py, review.py | — | — |
 | `scripts/dev/findings_lib/boundaries.py` | dev | Every process boundary `findings.py` crosses, as one injectable object. | imported by _findings_fakes.py, claim_cli.py, export_cli.py, findings.py, gh_calls.py, history_cli.py, target.py | — | — |
 | `scripts/dev/fanout_lib/brief.py` | dev | The brief a headless fan-out agent reads on stdin. | imported by _review_fakes.py, claims.py, launch_gates.py, place.py, red_gate.py, review.py, review_prompts.py, review_record.py, status.py, transport.py | — | — |
-| `scripts/docs/catalog_backup.py` | docs | Longhorn backup tier and GitOps auto-deploy eligibility for one ``containers_list`` entry. | imported by gen_role_glance.py, service_catalog.py | `test_catalog_backup.py` | — |
-| `scripts/docs/catalog_facts.py` | docs | Route and auth-tier derivations for one ``containers_list`` entry. | imported by gen_role_glance.py, service_catalog.py | — | — |
-| `scripts/docs/catalog_model.py` | docs | The service catalogue's row type, its "cannot be derived" marker, and its path anchors. | imported by catalog_backup.py, catalog_facts.py, catalog_render.py, gen_role_glance.py, service_catalog.py | — | — |
-| `scripts/docs/catalog_render.py` | docs | The two renderings of the service catalogue: the MkDocs page and the standalone HTML. | imported by service_catalog.py | — | — |
+| `scripts/docs/catalog_lib/catalog_backup.py` | docs | Longhorn backup tier and GitOps auto-deploy eligibility for one ``containers_list`` entry. | imported by gen_role_glance.py, service_catalog.py | — | — |
+| `scripts/docs/catalog_lib/catalog_facts.py` | docs | Route and auth-tier derivations for one ``containers_list`` entry. | imported by gen_role_glance.py, service_catalog.py | — | — |
+| `scripts/docs/catalog_lib/catalog_model.py` | docs | The service catalogue's row type, its "cannot be derived" marker, and its path anchors. | imported by catalog_backup.py, catalog_facts.py, catalog_render.py, gen_role_glance.py, service_catalog.py | — | — |
+| `scripts/docs/catalog_lib/catalog_render.py` | docs | The two renderings of the service catalogue: the MkDocs page and the standalone HTML. | imported by service_catalog.py | — | — |
 | `scripts/deploy_tools/land_lib/ci.py` | deploy_tools | Step 2, pre-flight, and step 3, the master CI wait -- in that order, on purpose. | imported by deploy.py, pipeline.py | — | — |
 | `scripts/lib/facts/citations.py` | lib | The closed citation grammar for the two fact stores. | imported by atoms.py, evidence.py, lint.py, lock.py, report.py | — | — |
 | `scripts/dev/findings_lib/claim.py` | dev | Whether a claim on an issue is still live, decided from the worktree that holds it. | imported by claim_cli.py, findings.py | — | — |
@@ -161,7 +161,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/fanout_lib/review/git_state.py` | dev | The git state outside a red batch's worktree that the red author could write (#3864, #3879). | imported by review.py | — | — |
 | `scripts/lib/git_testing.py` | lib | Build a throwaway git repository for a test, with the inherited `GIT_*` environment gone. | imported by _deploy_sh_fakes.py, _narrow_fixtures.py, _release_fixtures.py, _scratch_pytest.py | `test_git_testing.py` | — |
 | `scripts/diagnostics/probe_lib/gitops_view.py` | diagnostics | `probe.py gitops-state` — every marker the GitOps deployer keeps, read-only, with its way out. | imported by subcommands.py | — | — |
-| `scripts/docs/glance_facts.py` | docs | The setup-plane and Pi-plane fact readers behind `gen_role_glance.py`, and what every plane shares. | imported by gen_role_glance.py | — | — |
+| `scripts/docs/catalog_lib/glance_facts.py` | docs | The setup-plane and Pi-plane fact readers behind `gen_role_glance.py`, and what every plane shares. | imported by gen_role_glance.py | — | — |
 | `scripts/diagnostics/grafana_panel_report.py` | diagnostics | Classify what a Grafana dashboard page actually rendered. | no `__main__` guard; imported by test_grafana_panel_report.py, test_ui_smoke_grafana.py | `test_grafana_panel_report.py` | — |
 | `scripts/infra_map/groups.py` | infra_map | The functional grouping behind the workload strip under the diagram. | imported by render.py | — | — |
 | `scripts/diagnostics/probe_lib/ha.py` | diagnostics | Home Assistant: live state, automations, and the read-only WebSocket trace client. | imported by ha_state_model.py, postflight.py, subcommands.py | — | — |
@@ -264,7 +264,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/fanout_lib/review_stats.py` | dev | Sum the fan-out review records into the measures that decide whether the red phase stays. | no `__main__` guard; imported by test_fanout_review_stats.py | — | — |
 | `scripts/dev/fanout_lib/review_unit.py` | dev | Run a `launch --review` fan-out batch: implement, review, fix, then land. | no `__main__` guard; imported by test_fanout_git_state.py, test_fanout_review.py | — | — |
 | `scripts/secrets_mgmt/rotation_tools.py` | secrets_mgmt | Every process boundary `secret_rotation.py` crosses, as one injectable object. | imported by _rotation_fakes.py, consumers.py, git_dates.py, secret_registry.py, secret_rotation.py, secrets.py | `test_rotation_tools.py` | — |
-| `scripts/docs/route_facts.py` | docs | Shared route facts for the reference generators. | imported by catalog_facts.py, catalog_render.py, networking.py | `test_route_facts.py` | — |
+| `scripts/docs/catalog_lib/route_facts.py` | docs | Shared route facts for the reference generators. | imported by catalog_facts.py, catalog_render.py, networking.py | — | — |
 | `scripts/deploy_tools/runbook_gates.py` | deploy_tools | The runner and the shared verdicts behind every `scripts/deploy_tools/*_gates.py`. | imported by k3s_etcd_restore_gates.py, k3s_upgrade_gates.py, longhorn_dr_gates.py, longhorn_upgrade_gates.py, pinned_rotation_gates.py | — | — |
 | `scripts/lib/script_classify.py` | lib | How every first-party script under ``scripts/`` is run, derived from the tree. | imported by scripts.py | — | — |
 | `scripts/lib/script_imports.py` | lib | Which scripts under ``scripts/`` import which, read from the source without running it. | imported by script_classify.py | `test_script_imports.py` | — |

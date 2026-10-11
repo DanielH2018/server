@@ -26,12 +26,12 @@ from pathlib import Path as _Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting. This has to sit
-# ABOVE every import below, `docs.route_facts` included — that one lived in this file's own
+# ABOVE every import below, `docs.catalog_lib.route_facts` included — that one lived in this file's own
 # directory until the reference generators moved down a level, so it resolved from
 # sys.path[0] with no bootstrap at all and broke the moment the directory changed.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from docs.route_facts import (
+from docs.catalog_lib.route_facts import (
     GROUP_VARS,
     LAN,
     ingressroute_templates,
