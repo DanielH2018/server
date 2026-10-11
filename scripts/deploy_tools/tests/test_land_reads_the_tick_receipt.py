@@ -137,6 +137,18 @@ def test_the_receipts_narrowing_reaches_the_verdict_after_the_tick(land_run):
     assert "--tags k3s`" not in out
 
 
+def test_a_receipt_row_needing_nothing_leaves_the_role_out_after_the_tick(land_run):
+    """The tick wrote no `manual_plane` line, so neither apply nor clear is owed (#4408).
+
+    `role-not-narrowed` below, an empty row, is the rejecting half.
+    """
+    _rc, out, _err, _calls, _ = _landing(
+        land_run, _receipt({"k3s": ["narrowed-to-nothing"]})
+    )
+    assert "k3s-bringup.yml" not in out
+    assert "clear-owed manual_plane k3s" not in out
+
+
 @pytest.mark.parametrize(
     ("receipts", "is_ancestor_rc"),
     [
@@ -227,6 +239,23 @@ def test_own_narrowing_with_no_range_is_flagged(pr):
     assert land_tags.own_narrow_tags([RBAC], "", tree.root) == {}
 
 
+def test_own_narrowing_answers_nothing_for_a_range_no_task_reads(pr):
+    """A defaults edit that changes no key reaches no host through k3s (#4408).
+
+    The derivation's `NothingToApply` subclasses its refusal, and before this the generic
+    arm read it as one, so the note kept `--tags k3s` for a change nobody has to apply.
+    """
+    tree, _ = pr
+    defaults = f"{ROLE}/defaults/main.yml"
+    tree.write(defaults, "---\nk3s_channel: stable\n")
+    tree.commit("defaults")
+    tree.write(defaults, "---\n# The upstream channel.\nk3s_channel: stable\n")
+    old, new = _refs(tree)
+    assert land_tags.own_narrow_tags([defaults], f"{old}..{new}", tree.root) == {
+        "k3s": frozenset()
+    }
+
+
 _MIXED_PR = {
     "files": [{"path": RBAC}, {"path": "ansible/roles/k8s/obs/x.j2"}],
     "changedFiles": 2,
@@ -259,3 +288,10 @@ def test_the_fast_path_prints_this_prs_narrow_tag(land_run):
 def test_the_fast_path_keeps_the_role_tag_when_its_derivation_refuses(land_run):
     _rc, out, _err, _calls, _ = _fast_landing(land_run, {})
     assert "ansible/k3s-bringup.yml --tags k3s`" in out
+
+
+def test_the_fast_path_leaves_out_a_role_the_range_needs_nothing_from(land_run):
+    """The tick writes no `manual_plane` line for it, so neither apply nor clear is owed."""
+    _rc, out, _err, _calls, _ = _fast_landing(land_run, {"k3s": frozenset()})
+    assert "k3s-bringup.yml" not in out
+    assert "clear-owed manual_plane k3s" not in out
