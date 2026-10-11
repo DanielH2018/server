@@ -160,3 +160,19 @@ def test_prune_keeps_an_orphan_whose_blob_is_stored_but_unreachable(
     assert done.returncode == 0, done.stderr
     assert orphan.is_dir()
     assert "staged-only.txt" in done.stdout, done.stdout
+
+
+def test_report_without_prune_names_a_removable_orphan_and_deletes_nothing(
+    tmp_path, monkeypatch
+):
+    # The report is a dry run: it must say the orphan is removable and leave it in place.
+    repo = _repo(tmp_path, monkeypatch)
+    orphan = _orphan(repo, "bridge-empty")
+    (orphan / "docs").mkdir()
+
+    done = run([sys.executable, str(PRUNER)], cwd=repo, env=scrubbed_env())
+
+    assert done.returncode == 0, done.stderr
+    assert orphan.is_dir(), done.stdout
+    assert "holds nothing git lacks" in done.stdout, done.stdout
+    assert "1 orphan dir(s)" in done.stdout, done.stdout
