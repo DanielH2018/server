@@ -79,7 +79,7 @@ LOG_DIR_ENV = "CLAUDE_JOB_DIR"
 FALLBACK_LOG_DIR = Path("/tmp/homelab-landings")
 
 _VERDICT_LINE = re.compile(r"^VERDICT:.*$", re.MULTILINE)
-# `Landing.die` without a verdict (a landing-policy refusal) writes only this stderr message.
+# `Landing.die` without a verdict (bad arguments, 64) writes only this stderr message.
 _ERROR_LINE = re.compile(r"^land: ", re.MULTILINE)
 # A line that cannot belong to a `land:` message: the next phase header or a verdict.
 _NOT_A_CONTINUATION = re.compile(r"^(== |VERDICT:)", re.MULTILINE)
