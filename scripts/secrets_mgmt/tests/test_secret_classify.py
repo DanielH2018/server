@@ -1,4 +1,4 @@
-"""Tests for the name-to-tier classification in scripts/secrets_mgmt/secret_classify.py.
+"""Tests for the name-to-tier classification in scripts/secrets_mgmt/secrets_lib/secret_classify.py.
 
 One test per suffix rule, plus the default. The default is the interesting one: an unrecognised
 secret must land in `assisted` (reminds, never touches) rather than in a tier the tool would
@@ -7,7 +7,7 @@ rotate unattended.
 Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_classify.py
 """
 
-from secrets_mgmt.secret_classify import classify
+from secrets_mgmt.secrets_lib.secret_classify import classify
 
 
 def test_push_tokens_are_auto():

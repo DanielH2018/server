@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 def fanout_manifest_dir() -> Path:
-    """Where fanout_place.py writes its run manifests.
+    """Where fanout.py place writes its run manifests.
 
     A function, not a module constant: `Path.home()` raises `RuntimeError` when there is no
     `HOME` and no passwd entry for the uid, and at module scope that fires during the
@@ -52,7 +52,7 @@ def _batch_line(batch, run_id, me):
 def remote_fanout_lines(manifest_dir: Path | None = None, local_host=None):
     """Fan-out worktrees on the OTHER host: git worktree list here cannot see them.
 
-    Reads scripts/dev/fanout_place.py's run manifests under ~/.claude/fanout/ instead of
+    Reads the run manifests `fanout.py place` writes under ~/.claude/fanout/ instead of
     git metadata. Isolation is two levels deep: a manifest that fails to read, parse, or
     match the expected schema is skipped on its own, and within a manifest that parses, a
     malformed batch is skipped on its own -- neither discards lines already found
@@ -89,7 +89,7 @@ def remote_fanout_lines(manifest_dir: Path | None = None, local_host=None):
         return []
     return [
         "\U0001f6f0 fan-out worktrees on other hosts "
-        "(uv run python scripts/dev/fanout_place.py status <run-id>):",
+        "(uv run python scripts/dev/fanout.py place status <run-id>):",
         *found,
     ]
 

@@ -19,9 +19,9 @@ from collections.abc import Mapping
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
-from secrets_mgmt.secret_classify import classify
+from secrets_mgmt.secrets_lib.secret_classify import classify
 from secrets_mgmt.rotation_tools import DEFAULT_TIER_DAYS
 
 

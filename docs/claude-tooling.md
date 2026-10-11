@@ -689,7 +689,7 @@ in `.fanout/stop-blocks` caps it at three blocks per batch.
 The cause is how `claude -p` ends: a turn that ends in text with no tool call ends the process,
 and Opus progress reports (for example, one announcing that the PR comes next) sometimes end
 the turn (issue #2816). Under `claude -p` the Stop hook fires, and a `block` continues the session.
-`fanout_place.py status` reads the same two patterns from the
+`fanout.py place status` reads the same two patterns from the
 same final text. A batch reads `done` only with a PR URL, `needs-input` with a blocker line and
 `no-pr` otherwise.
 

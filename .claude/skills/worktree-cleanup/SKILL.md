@@ -62,7 +62,7 @@ step — without it the command reports success having removed nothing.
 
 **Live processes.** A lock is not the only sign of use: a session can run from a tree whose
 lock names a dead pid, and deleting its `$CLAUDE_PROJECT_DIR` breaks every repo hook it runs
-(#3887). `lib.worktrees.remove`, which both the pruner and `fanout_place.py clean` call,
+(#3887). `lib.worktrees.remove`, which both the pruner and `fanout.py place clean` call,
 refuses a tree that any live process has as its cwd or its `CLAUDE_PROJECT_DIR`. The refusal
 reads `could not remove <tree>: in use by a live process: pid N (...)`. Find that session and
 end it rather than deleting the directory by hand. The check sees only processes of the uid

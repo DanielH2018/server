@@ -1,7 +1,8 @@
 #!/bin/sh
 # cc-wait's `fanout` source: `cc-wait fanout <run-id>...` waits on a fan-out run's batches.
-# The logic and its contract are scripts/dev/fanout_probe.py; this only finds it.
+# The logic and its contract are scripts/dev/fanout_lib/wait_probe.py, run as
+# `scripts/dev/fanout.py probe`; this only finds it.
 # The repo is 3.14-only and the probe needs nothing outside it and the stdlib, so it runs
 # under uv's 3.14 with no project environment, which a fresh worktree would otherwise build.
 root=$(cd "$(dirname "$0")/../.." && pwd)
-exec uv run --no-project --quiet --python 3.14 python "$root/scripts/dev/fanout_probe.py" "$@"
+exec uv run --no-project --quiet --python 3.14 python "$root/scripts/dev/fanout.py" probe "$@"

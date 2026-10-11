@@ -46,7 +46,7 @@ FACADE_EDGES = frozenset(
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.consumers"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.git_dates"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.rotation_tools"),
-        ("secrets_mgmt.secret_rotation", "secrets_mgmt.secret_registry"),
+        ("secrets_mgmt.secret_rotation", "secrets_mgmt.secrets_lib.secret_registry"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.sops_io"),
         # scripts/docs/reference/scripts.py renders the page; the census was split into lib/
         # so the `--help` test could reach it without importing the generator.
@@ -378,7 +378,13 @@ def test_the_cycle_detector_clears_a_diamond():
 PACKAGE_APIS = {
     "dev.fanout_lib.review": (
         "dev.fanout_lib.review.api",
-        frozenset({"dev.fanout_place", "dev.fanout_review", "dev.fanout_review_stats"}),
+        frozenset(
+            {
+                "dev.fanout_lib.place",
+                "dev.fanout_lib.review_unit",
+                "dev.fanout_lib.review_stats",
+            }
+        ),
     ),
 }
 
@@ -405,15 +411,15 @@ def test_outside_code_imports_a_package_only_through_its_api():
 
 
 def test_an_import_past_the_api_is_flagged():
-    graph = {"dev.fanout_place": {"dev.fanout_lib.review.red_gate"}}
+    graph = {"dev.fanout_lib.place": {"dev.fanout_lib.review.red_gate"}}
     assert _past_the_api(
         graph, "dev.fanout_lib.review", "dev.fanout_lib.review.api"
-    ) == ["dev.fanout_place imports dev.fanout_lib.review.red_gate"]
+    ) == ["dev.fanout_lib.place imports dev.fanout_lib.review.red_gate"]
 
 
 def test_the_api_itself_and_imports_inside_the_package_are_clean():
     graph = {
-        "dev.fanout_place": {"dev.fanout_lib.review.api"},
+        "dev.fanout_lib.place": {"dev.fanout_lib.review.api"},
         "dev.fanout_lib.review.review": {"dev.fanout_lib.review.red_gate"},
     }
     assert (

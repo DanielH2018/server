@@ -13,7 +13,7 @@ overrides that path. Import this module before anything from `claude_worktree`;
 # serving a verdict that looks current but was pinned at whatever the copy last held,
 # and nobody sees it fall behind. Here the verdicts decide what to DELETE, and every
 # importer's dangerous action — `prune_worktrees.py --prune`, `findings.py reap`,
-# `fanout_place.py clean` — is a removal, so an ImportError is the KEEP direction: with
+# `fanout.py place clean` — is a removal, so an ImportError is the KEEP direction: with
 # the package absent nothing is reported and nothing is removed. The SessionStart banner
 # is the one importer that must not crash, and `session-health.py` already catches the
 # ImportError and prints it. CI gets the real module the way a host does: the `pytest`

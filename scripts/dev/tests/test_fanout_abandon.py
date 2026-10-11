@@ -1,4 +1,4 @@
-"""`fanout_place.py abandon`: one unmerged batch's tree, branch and claims, gone in one call.
+"""`fanout.py place abandon`: one unmerged batch's tree, branch and claims, gone in one call.
 
 The chain tests EXECUTE `remote_abandon_command` against a scratch repo, the way
 test_fanout_clean_chain.py does, because the order of `unlock`, `remove` and `branch -D` is
@@ -14,7 +14,7 @@ import subprocess
 
 from fanout_lib.abandon import remote_abandon_command
 from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
-from fanout_place import main
+from fanout_lib.place import main
 from lib.git_testing import git, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, path_with, run
 from _fanout_fakes import fake_tools, ok
@@ -172,7 +172,7 @@ def test_the_skill_has_no_hand_run_abandon_teardown():
 
     skill = Path(__file__).resolve().parents[3] / ".claude/skills/issue-fanout/SKILL.md"
     text = skill.read_text()
-    assert "fanout_place.py abandon" in text
+    assert "fanout.py place abandon" in text
     assert "git branch -D worktree-fanout" not in text
 
 
