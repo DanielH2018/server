@@ -191,11 +191,17 @@ add_orphan() { ORPHANS="${ORPHANS:+$ORPHANS; }$1"; }
 #
 # Namespace is deliberately not part of the key — see that script's header. `kind/name` is
 # strictly tighter than the match it replaces and never invents a namespace it would get wrong.
+#
+# Run through uv on the pinned interpreter, never by its shebang: `#!/usr/bin/env python3` is the
+# host's system 3.12, where 3.13+ syntax SyntaxErrors behind the `2>/dev/null` below and the
+# orphan arm reads as skipped rather than red (#4489). This runs as root, and the pinned
+# interpreter lives under {{ sys_user }}'s HOME, hence the export.
+export UV_PYTHON_INSTALL_DIR="/home/{{ sys_user }}/.local/share/uv/python"
 declare -A DECLARED=()
 DECLARED_ERR=""
 while IFS= read -r entry; do
   [[ -n "$entry" ]] && DECLARED["$entry"]=1
-done < <(/usr/local/bin/manifest-declares.py "$MANIFEST_ROOT" 2>/dev/null)
+done < <(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /usr/local/bin/manifest-declares.py "$MANIFEST_ROOT" 2>/dev/null)
 
 # An empty set would mark every live object an orphan and push a spectacular false red. Report
 # the read failure itself instead: it is one line, and it is the actual fault.

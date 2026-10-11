@@ -8,7 +8,6 @@ branch instead, by `fanout_lib.launch`.
 
 import re
 import subprocess
-import sys
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
 # sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -196,7 +195,7 @@ def claim_batch(
     """
     claimed, refusals = claim_for_orchestrator(tools, issues, holder)
     for reason in refusals:
-        print(f"{batch}: dropped {reason}", file=sys.stderr)
+        warn(f"{batch}: dropped {reason}")
     if not claimed:
-        print(f"{batch}: no issue claimed; not launching it", file=sys.stderr)
+        warn(f"{batch}: no issue claimed; not launching it")
     return "-".join(str(n) for n in claimed), claimed, bool(refusals)
