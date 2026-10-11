@@ -8,11 +8,16 @@ suppress an ordinary hour and page through the restart.
 """
 
 import json
+import re
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path as _Path
 
+import jinja2
 import yaml
+from _helpers import SETUP_ROLES, leaf_tasks, load_tasks
+from _role_census import task_files
+from lib.ansible_jinja_env import make_ansible_env
 from validate.k8s_manifests import make_env, make_lookup, register_ansible_filters
 
 from lib.repo_paths import ALL_VARS, REPO
@@ -133,6 +138,78 @@ def test_a_sync_schedule_inside_the_window_is_caught():
     """The rejecting half of the check above."""
     cron, duration = window()
     assert week_minutes("30 7 * * *") & week_minutes(cron, duration)
+
+
+def calendar_as_cron(on_calendar):
+    """A daily or hourly systemd `OnCalendar=` as the five-field cron `week_minutes` reads.
+
+    Any other shape raises, for the same reason `week_minutes` does: a calendar this cannot
+    expand is one the collision check below cannot vouch for.
+    """
+    match = re.fullmatch(r"\*-\*-\* (\*|\d{1,2}):(\d{1,2}):00", on_calendar)
+    if not match:
+        raise AssertionError(f"unsupported OnCalendar for this check: {on_calendar}")
+    hour, minute = match.groups()
+    return f"{int(minute)} {hour if hour == '*' else int(hour)} * * *"
+
+
+def kuma_check_calendars():
+    """`kuma_check_name` -> rendered `kuma_check_on_calendar`, for every setup-role import of
+    the shared kuma-check timer. A literal `absent` arm is a teardown, not a schedule."""
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+    found = {}
+    for tasks_file in task_files(SETUP_ROLES):
+        defaults_file = tasks_file.parents[1] / "defaults" / "main.yml"
+        defaults = (
+            yaml.safe_load(defaults_file.read_text()) or {}
+            if defaults_file.exists()
+            else {}
+        )
+        for task in leaf_tasks(load_tasks(tasks_file)):
+            target = task.get("ansible.builtin.import_tasks") or task.get(
+                "ansible.builtin.include_tasks"
+            )
+            if not isinstance(target, str) or not target.endswith(
+                "common/tasks/kuma_check_timer.yml"
+            ):
+                continue
+            variables = task.get("vars") or {}
+            if variables.get("kuma_check_state") == "absent":
+                continue
+            found[variables["kuma_check_name"]] = env.from_string(
+                variables["kuma_check_on_calendar"]
+            ).render({**GROUP_VARS, **defaults})
+    return found
+
+
+def calendar_opens_inside_the_window(on_calendar):
+    cron, duration = window()
+    return week_minutes(calendar_as_cron(on_calendar)) & week_minutes(cron, duration)
+
+
+def test_no_kuma_check_timer_fires_inside_the_window():
+    """#4540. Kuma records a push that lands inside the window as MAINTENANCE and discards the
+    verdict, so a daily check firing there leaves its tile MAINTENANCE until the next day's run.
+    """
+    calendars = kuma_check_calendars()
+    # The two that fired inside it before #4540; a census that lost them proves nothing.
+    assert {"secret-rotation-audit", "setup-drift"} <= calendars.keys(), sorted(
+        calendars
+    )
+    inside = {
+        name: on_calendar
+        for name, on_calendar in calendars.items()
+        if calendar_opens_inside_the_window(on_calendar)
+    }
+    assert not inside, inside
+
+
+def test_a_kuma_check_timer_inside_the_window_is_caught():
+    """The rejecting half: the two slots #4540 moved out of the window."""
+    assert calendar_opens_inside_the_window("*-*-* 08:00:00")
+    assert calendar_opens_inside_the_window("*-*-* 07:50:00")
+    assert calendar_opens_inside_the_window("*-*-* *:30:00")
+    assert not calendar_opens_inside_the_window("*-*-* 08:20:00")
 
 
 def sync_runs_leaving_down_monitors_out(**overrides):
