@@ -11,8 +11,8 @@ governs: []
 ## Status
 
 Proposed. It answers [#3865](https://github.com/DanielH2018/server/issues/3865) and
-[#4508](https://github.com/DanielH2018/server/issues/4508), and it replaces the third-UNIX-user
-plan the operator accepted on 2026-10-10. Nothing in it is built yet.
+[#4508](https://github.com/DanielH2018/server/issues/4508), and if accepted it would replace the
+third-UNIX-user plan the operator accepted on 2026-10-10. Nothing in it is built yet.
 
 ## Context
 
@@ -52,7 +52,7 @@ The red author's tests execute in three more places, all as the pipeline user an
 reap:
 
 - **The implementer runs them**, because it has to make them pass.
-- **The reviewers run them.** `review/review_system_prompt.md:7` tells each reviewer to "run the
+- **The reviewers run them.** `review/review_system_prompt.md` tells each reviewer to "run the
   tests that cover the change".
 - **The green gate runs them** (`review/review.py`, the `self.gates.green` call). #4508 records
   this.
