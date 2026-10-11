@@ -31,6 +31,15 @@ tags already apply, so the edge widens no answer this tree can produce today.
 `test_the_fact_edge_widens_no_real_setup_role_today` is the census that measures it, and
 `MEASURED_SETTERS` beside it names the five files it covers.
 
+A RANGE THAT REACHES NO HOST THROUGH THE ROLE IS AN ANSWER, not a refusal (#4361). Every changed
+path was prose, a role-local test, or another role's vars key the role never reads, so the
+role needs no tag at all. `role_tags` raises `NothingToApply` for it, a subclass of the
+refusal so a caller that knows only `CannotNarrow` keeps the role tag, and `main` exits
+`NOTHING_EXIT` printing `NOTHING_OUT`. An empty line cannot carry that answer: an empty
+`--tags` value runs the whole playbook. `initial_setup/defaults/main.yml` is the case it was
+built for. Its row in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` names `claude_code` for every edit
+to the file, and `claude_code` reads one of its keys.
+
 ANY DOUBT IS A REFUSAL, and the caller falls back to the role tag. A tag that matches nothing
 makes Ansible exit 0 having applied nothing — the silent-success failure
 `deploy_changes.setup_tags_for` and `deploy_remediation.k8s_remediation` both already guard
@@ -55,7 +64,8 @@ the SessionStart banner and `land.sh` all quote ONE derivation rather than each 
 landing that never awaits the tick and so has no receipt to read.
 
 `deploy_narrow.narrowed_setup_tags` asks for a role the deployer DOES apply, and the answer
-is the `--tags` value of the `initial_setup.yml` run (#3120). That makes the refusals above
+is the `--tags` value of the `initial_setup.yml` run (#3120). It is the one caller that reads
+`NOTHING_EXIT`, and it drops such a role from the run. That makes the refusals above
 load-bearing on production rather than on a suggestion: `--tags initial_setup` selects about
 440 tasks, and a run scoped to the diff's own block tags is both a smaller blast radius and a
 shorter tick. The answer needs no `register:` edge beside the `set_fact` one, because
@@ -89,6 +99,7 @@ sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deployer_lib import deploy_cross_role
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
+from deploy_tools.narrow_lib.foreign_keys import keys_reaching
 from deploy_tools.narrow_lib.setup_index import SETUP_TREE, RoleIndex, foreign_tags
 from deploy_tools.narrow_lib.setup_playbook import playbook_applies_role
 
@@ -97,6 +108,23 @@ from deploy_tools.narrow_lib.setup_playbook import playbook_applies_role
 # a `CLAUDE.md` — refuses, so the caller prints the role tag.
 NARROWABLE = ("tasks/", "templates/", "files/", "defaults/", "vars/")
 INVENTORY = "ansible/inventory/"
+
+# How `main` says the role needs no tag. Both halves, because the tick runs this script from
+# the pre-merge checkout while its own code is the copy shipped under /opt, so either side
+# can be the older one. A non-zero exit sends a deployer that predates the answer to its
+# whole-role fallback, and the exact stdout keeps any other exit 3 from reading as one.
+# `deploy_narrow` holds the same pair, which it cannot import from here, and
+# `test_the_deployers_argv_for_a_range_needing_nothing_exits_with_the_deployers_pair` pins them.
+NOTHING_EXIT = 3
+NOTHING_OUT = "narrowed-to-nothing"
+
+
+class NothingToApply(CannotNarrow):
+    """The range reaches no host through the role, so the role needs no tag at all.
+
+    A subclass of the refusal, so a caller that catches only `CannotNarrow` keeps its
+    whole-role fallback. Only a caller that catches this first may drop the role.
+    """
 
 
 # Paths inside a role that reach no host, so they add no tag requirement: prose Ansible never
@@ -165,8 +193,8 @@ def path_tags(
             tags |= got
         # No changed key means a comment or layout edit. Ansible reads a vars file only
         # through its parsed values, so the edit reaches no host and adds no tag, the way
-        # `_reaches_no_host` skips prose. A range where every path is like this still refuses
-        # in `role_tags`. Refusing here instead turned a comment edit to `k3s/defaults/main.yml`
+        # `_reaches_no_host` skips prose. A range where every path is like this answers
+        # `NothingToApply` in `role_tags` (#4361). Refusing here instead turned a comment edit to `k3s/defaults/main.yml`
         # into the whole-role `--tags k3s` (#4384).
         return frozenset(tags)
     raise CannotNarrow(f"{rel} is not in a directory this can narrow from")
@@ -177,10 +205,13 @@ def foreign_key_tags(
 ) -> frozenset[str]:
     """The tags of the role's readers of the keys another role's vars file changed.
 
-    A changed key the role never names is skipped, as `plugin_tags` skips a filter: the
-    owner's `defaults/main.yml` holds many keys and the reader names few. A range changing
-    none of them returns an empty set, as `_reaches_no_host` skips a path, so the role's
-    own changed paths decide. `role_tags` still refuses when every path is empty.
+    The changed keys are widened first to every name built from one of them
+    (`foreign_keys.keys_reaching`), since the reader may name only the key that
+    interpolates the changed one. A name the role never mentions is then skipped, as
+    `plugin_tags` skips a filter: the owner's `defaults/main.yml` holds many keys and the
+    reader names few. A range changing none of them returns an empty set, as
+    `_reaches_no_host` skips a path, so the role's own changed paths decide. When no path
+    decides anything, `role_tags` raises `NothingToApply`.
 
     Args:
         path: the other role's `defaults/` or `vars/` file, as the table records it.
@@ -190,10 +221,11 @@ def foreign_key_tags(
         repo: the checkout to read.
 
     Raises:
-        CannotNarrow: every refusal `changed_keys` and `key_readers` make.
+        CannotNarrow: every refusal `changed_keys`, `keys_reaching` and `key_readers` make.
     """
     tags: set[str] = set()
-    for key in sorted(changed_keys(path, old, new, repo)):
+    changed = changed_keys(path, old, new, repo)
+    for key in sorted(keys_reaching(path, changed, new, repo)):
         if index.mentions(key):
             tags |= index.key_readers(key)
     return frozenset(tags)
@@ -257,6 +289,7 @@ def role_tags(
             it, and `RoleIndex.reachable` assumes that entry is the path the tags take.
 
     Raises:
+        NothingToApply: every changed path reaches no host through the role.
         CannotNarrow: any doubt at all. The caller prints the role tag instead.
     """
     prefix = f"{SETUP_TREE}/{role}/"
@@ -333,10 +366,10 @@ def role_tags(
         print(f"narrow-setup: {rel} -> {shown}", file=sys.stderr)
         tags |= got
     if not tags:
-        # Every changed path reaches no host. The deployer should not have deferred this range
-        # at all, so there is no narrowing to offer — and an empty `--tags` value runs the
-        # whole playbook, which is the opposite of what an empty answer means here.
-        raise CannotNarrow("every changed path reaches no host, so no tag applies")
+        # Every changed path was skipped as reaching no host, so the role needs nothing. Not
+        # an empty set: an empty `--tags` value runs the whole playbook, and a caller that
+        # cannot tell the two apart must keep falling back to the role tag.
+        raise NothingToApply("every changed path reaches no host, so no tag applies")
     if role_tag in tags:
         raise CannotNarrow(f"the derivation lands on {role_tag}, the whole-role tag")
     # Read the other roles only once a tag is in hand: `initial_setup.yml` lists fifteen roles
@@ -378,6 +411,10 @@ def main(argv: list[str] | None = None) -> int:
             args.repo,
             args.playbook,
         )
+    except NothingToApply as exc:
+        print(f"narrow-setup: {args.role} needs no tag ({exc})", file=sys.stderr)
+        print(NOTHING_OUT)
+        return NOTHING_EXIT
     except CannotNarrow as exc:
         print(f"narrow-setup: cannot narrow {args.role} ({exc})", file=sys.stderr)
         return 1

@@ -10,10 +10,11 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_vars_walk.py
 
 import pytest
 
+from deployer_lib import deploy_narrow
 import narrow_setup
 
 from _narrow_fixtures import _refs
-from _setup_role_fixtures import BETA, DEFAULTS, ROLE, Tree, build, narrow
+from _setup_role_fixtures import BETA, DEFAULTS, PLAYBOOK, ROLE, Tree, build, narrow
 
 
 @pytest.fixture
@@ -239,10 +240,82 @@ def test_a_foreign_defaults_key_the_role_never_reads_adds_no_tag(reads):
     assert narrow(reads, *_refs(reads)) == frozenset({"beta"})
 
 
-def test_a_range_changing_only_an_unread_foreign_key_is_flagged(reads):
-    """No tag at all is doubt, never "apply nothing": an empty `--tags` runs everything."""
+def test_a_range_changing_only_an_unread_foreign_key_exits_with_the_deployers_nothing_pair(
+    reads, capsys
+):
+    """The role needs no tag, said as an exit code and a line, never as nothing (#4361).
+
+    An empty `--tags` value runs the whole playbook. Driven through the deployer's own argv,
+    so `narrow_setup.NOTHING_EXIT` drifting from `deploy_narrow.NARROW_SETUP_NOTHING_EXIT`,
+    which cannot import each other, fails here.
+    """
     reads.write(FOREIGN, FOREIGN_DEFAULTS.replace("unread", "changed"))
-    with pytest.raises(narrow_setup.CannotNarrow, match="reaches no host"):
+    old, new = _refs(reads)
+    argv = deploy_narrow.narrow_setup_argv("demo", "demo", PLAYBOOK, old, new)
+    rc = narrow_setup.main([*argv[5:], "--repo", str(reads.root)])
+    assert (rc, capsys.readouterr().out.strip()) == (
+        deploy_narrow.NARROW_SETUP_NOTHING_EXIT,
+        deploy_narrow.NARROWED_TO_NOTHING,
+    )
+
+
+# A name built from `owner_other`, in each place a value can be carried onward from.
+LABEL = 'owner_label: "{{ owner_other }}-x"\n'
+INVENTORY_ALL = "ansible/inventory/group_vars/all.yml"
+
+
+@pytest.mark.parametrize(
+    ("carriers", "name"),
+    [
+        ({FOREIGN: FOREIGN_DEFAULTS + LABEL}, "owner_label"),
+        ({INVENTORY_ALL: "---\n" + LABEL}, "owner_label"),
+        (
+            {
+                "ansible/roles/setup/owner/tasks/main.yml": "---\n- name: Derive the label\n"
+                "  ansible.builtin.set_fact:\n    " + LABEL
+            },
+            "owner_label",
+        ),
+        # Two hops across two carriers, the shape daniel-box's `claude_code_user` override
+        # puts between `claude_code_agent_user` and `claude_code_rc_workdir`.
+        (
+            {
+                INVENTORY_ALL: "---\n" + LABEL,
+                FOREIGN: FOREIGN_DEFAULTS + 'owner_path: "{{ owner_label }}/y"\n',
+            },
+            "owner_path",
+        ),
+    ],
+    ids=["owner-key", "inventory-value", "owner-fact", "two-hops"],
+)
+def test_a_foreign_key_the_role_reads_through_another_name_narrows_to_its_readers(
+    reads, carriers, name
+):
+    """The role names only `name`, which is built from the changed `owner_other`.
+
+    Skipping `owner_other` as unread would answer that the role needs nothing, and nothing
+    would apply the new value of `name`.
+    """
+    for carrier, text in carriers.items():
+        reads.write(carrier, text)
+    reads.write(
+        f"{ROLE}/templates/beta.conf.j2",
+        f"mode = {{{{ demo_beta_mode }}}}\nlabel = {{{{ {name} }}}}\n",
+    )
+    reads.commit(f"demo reads {name}, built from owner_other")
+    foreign = (reads.root / FOREIGN).read_text()
+    reads.write(FOREIGN, foreign.replace("unread", "changed"))
+    assert narrow(reads, *_refs(reads)) == frozenset({"beta"})
+
+
+def test_a_foreign_key_hosts_ini_names_is_flagged(reads):
+    """`hosts.ini` can set a host variable inline, which the walk cannot follow."""
+    reads.write(
+        "ansible/inventory/hosts.ini", "[all]\nlocalhost label={{ owner_other }}\n"
+    )
+    reads.commit("hosts.ini carries owner_other")
+    reads.write(FOREIGN, FOREIGN_DEFAULTS.replace("unread", "changed"))
+    with pytest.raises(narrow_setup.CannotNarrow, match="not a YAML mapping"):
         narrow(reads, *_refs(reads))
 
 
@@ -265,8 +338,8 @@ def test_a_comment_edit_to_defaults_beside_a_template_edit_narrows_to_the_templa
     )
 
 
-def test_a_comment_edit_to_defaults_alone_is_flagged(tree):
-    """An empty `--tags` runs the whole playbook, so a range applying nothing still refuses."""
+def test_a_comment_edit_to_defaults_alone_needs_nothing(tree):
+    """An empty `--tags` runs the whole playbook, so the answer is `NothingToApply` (#4361)."""
     tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS + "# the comment, reworded\n")
-    with pytest.raises(narrow_setup.CannotNarrow, match="reaches no host"):
+    with pytest.raises(narrow_setup.NothingToApply, match="reaches no host"):
         narrow(tree, *_refs(tree))

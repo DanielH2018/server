@@ -133,11 +133,21 @@ The table also records a `defaults/` file whose variable another setup role read
 `claude_code` puts each agent in `initial_setup_worktree_holders_group`, so a change to
 `initial_setup/defaults/main.yml` re-applies `claude_code` as well (#4303). The row is per file,
 so any change to that file names `claude_code`, including a change to a key it never reads.
-`narrow_setup.role_tags` refuses to narrow `claude_code` for this row, because its agent tasks
-are an include rather than a static import. The tick therefore applies the whole `claude_code`
-tag for every edit to that file. In a role whose readers do narrow, `role_tags` maps such a row
-to the readers of the changed keys the consumer names. A key the consumer never names adds no
-tag. The same test file derives these rows from the tree, and the table must equal them (#4357).
+`narrow_setup.role_tags` maps such a row to the readers of the changed keys the consumer names.
+It first widens the changed keys to every name built from one of them: another key of the
+owner's `defaults/` or `vars/`, an inventory YAML value, or a fact the owner sets. The reader
+may name only the wider key. `initial_setup` names `claude_code_agent_primary_profile`, which
+interpolates thirteen other `claude_code` defaults. A key `hosts.ini` names refuses, because
+the walk cannot follow it as a mapping. A key the consumer never names adds no tag. A range in
+which no path reaches the consumer answers that it needs nothing (#4361). The tick then drops
+the role from its run and from the hold, and a range in which no role needs a tag runs no
+playbook and records `narrowed-to-nothing` as the setup plane's tags. `land.sh`'s note on the
+hosts the tick does not reach asks the same question over the PR's own range, so it names no
+hand-run of such a role (`land_reach._reads_no_changed_key`). A change to the key
+`claude_code` does read still applies the whole `claude_code` tag. Its reader,
+`tasks/agent_access.yml`, runs only inside the agent include, whose tasks all carry that one
+tag. The same test file derives these rows from the tree, and the table must equal them
+(#4357).
 `initial_setup` reads `claude_code`'s agent defaults, and `deploy_ui` reads `k3s_agent_node_ips`.
 A k3s defaults change therefore records `k3s` in `manual_plane` and applies `deploy_ui`.
 A word match that is not a read, such as a bash local in a template, is exempted in that test
@@ -376,8 +386,10 @@ A path that reaches no host is SKIPPED, not refused: a `.md` outside `files/` an
 directory. A `defaults/` or `vars/` edit that moves no parsed key's value, which is every
 comment-only edit, is skipped the same way (#4384): Ansible reads the file only through its values.
 Refusing on those would leave the narrowing almost never firing, because most ranges
-touching `setup/k3s` carry the role's own `CLAUDE.md`. A range of nothing but such paths refuses
-instead, since an empty `--tags` value runs the whole playbook.
+touching `setup/k3s` carry the role's own `CLAUDE.md`. A range of nothing but such paths is an
+answer rather than a narrowing: `narrow_setup.py` exits 3 printing `narrowed-to-nothing`, since
+an empty `--tags` value runs the whole playbook (#4361). The tick drops the role from its run.
+The remediation keeps the role tag, because it reads exit 3 as a refusal like any non-zero exit.
 
 **Any other doubt refuses**, and a refusal prints the role tag with
 `deploy_remediation.maximal_tag_warning` beside it. Refusing is the safe direction, because a

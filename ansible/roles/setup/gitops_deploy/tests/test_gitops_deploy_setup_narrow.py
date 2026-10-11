@@ -17,7 +17,10 @@ which is the refusal every test written before this slice relies on.
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_setup_narrow.py
 """
 
+from deployer_lib import deploy_narrow
 from gitops_ledger import OWED_HOLD_PLANE, owed_line
+
+from _deploy_fakes import receipt_applied
 
 ORIGIN = "2" * 40
 
@@ -29,6 +32,12 @@ RENOVATE_TEMPLATE = "ansible/roles/setup/renovate_notify/templates/notify.sh.j2"
 # `ansible/requirements.yml` is the setup-plane path that maps to no role directory at all —
 # `sops_setup` installs the collections, and the tag is `collections`.
 REQUIREMENTS = "ansible/requirements.yml"
+# Another role's defaults file a setup role reads one key of, so every edit to it names that
+# role beside the owner (#4303): claude_code here, and deploy_ui for k3s's.
+INITIAL_SETUP_DEFAULTS = "ansible/roles/setup/initial_setup/defaults/main.yml"
+K3S_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
+# What `narrow_setup.py` answers for a role the range reaches no host through (#4361).
+NOTHING = (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, deploy_narrow.NARROWED_TO_NOTHING)
 
 
 def _playbook_argv(tick):
@@ -226,7 +235,6 @@ def test_the_narrowing_loop_stops_asking_once_its_budget_is_spent():
     carries, so without a shared deadline a wide range spends the per-role budget once per
     role before anything is applied.
     """
-    from deployer_lib import deploy_narrow
 
     asked = []
     # The deadline, then one reading per role: the second is past the budget.
@@ -277,3 +285,52 @@ def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
         "gitops_deploy:gitops-deploy-code,renovate_agent:renovate-agent-code"
     )
     assert state.manual_plane_pending() == []
+
+
+def test_a_role_needing_no_tag_is_left_out_of_the_apply_and_the_hold(
+    gitops_deploy, tick, state
+):
+    """An initial_setup default claude_code never reads plans no claude_code tag (#4361).
+
+    The row names claude_code for every edit to the file. Before this answer the tick applied
+    the whole `claude_code` tag, and a failure there held the deployer over a change
+    claude_code never read.
+    """
+    tick.paths = [INITIAL_SETUP_DEFAULTS]
+    tick.narrow_setup = {"claude_code": NOTHING, "initial_setup": (0, "prune")}
+    tick.playbook_outcomes = [RuntimeError("boom")]
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert _playbook_argv(tick)[-1] == "prune"
+    assert state.hold_plane == "ansible/initial_setup.yml initial_setup:prune"
+
+
+def test_exit_three_without_the_nothing_line_applies_the_whole_role_tag(
+    gitops_deploy, tick, state
+):
+    """The rejecting half: the exit code alone is not the answer, so it stays doubt."""
+    tick.paths = [INITIAL_SETUP_DEFAULTS]
+    tick.narrow_setup = {
+        "claude_code": (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, ""),
+        "initial_setup": (0, "prune"),
+    }
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert _playbook_argv(tick)[-1] == "claude_code,prune"
+
+
+def test_a_range_no_setup_role_needs_a_tag_for_runs_no_playbook(
+    gitops_deploy, tick, state
+):
+    """An empty `--tags` value runs the whole playbook, so nothing runs and the receipt says so.
+
+    A k3s default deploy_ui never reads: k3s is recorded for a hand, and deploy_ui, the one
+    role the tick would apply, needs nothing.
+    """
+    tick.paths = [K3S_DEFAULTS]
+    tick.narrow_setup = {"deploy_ui": NOTHING}
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.playbooks == []
+    assert tick.merges == [ORIGIN]
+    assert receipt_applied(state) == {
+        "ansible/initial_setup.yml": (deploy_narrow.NARROWED_TO_NOTHING,)
+    }
+    assert [e.role for e in state.manual_plane_pending()] == ["k3s"]

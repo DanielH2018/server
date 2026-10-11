@@ -60,9 +60,10 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     ),
     # A `defaults/` file whose variable another role reads (#4303). claude_code puts each agent
     # in `initial_setup_worktree_holders_group`, so a rename re-applied only initial_setup and
-    # moved the socket away from every agent. The tick applies the whole claude_code tag for
-    # any change here: `narrow_setup.role_tags` refuses, because claude_code's agent tasks are
-    # an include, not a static import.
+    # moved the socket away from every agent. A change to that key applies the whole
+    # claude_code tag: its reader, `tasks/agent_access.yml`, runs only inside the agent
+    # include, whose tasks all carry that one tag. A change to keys claude_code never reads
+    # drops claude_code from the tick's run (#4361).
     "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset({"claude_code"}),
     # initial_setup's worktree-holder crons read the agent list, the agent user, its primary
     # profile and the operator checkout from claude_code's defaults (#4357).

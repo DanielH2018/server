@@ -44,6 +44,11 @@ NARROW_SCRIPT = "scripts/deploy_tools/deploy_tags.py"
 # still going at thirty seconds has wedged.
 NARROW_SETUP_TIMEOUT_S = 30.0
 NARROW_SETUP_SCRIPT = "scripts/deploy_tools/narrow_setup.py"
+# The exit code `narrow_setup.py` answers "this role needs no tag" with, beside
+# `NARROWED_TO_NOTHING` on stdout (#4361). The script cannot be imported here, so it holds
+# the same pair as `NOTHING_EXIT` and `NOTHING_OUT`; `scripts/deploy_tools/tests/
+# test_narrow_setup.py` drives its CLI with this module's argv and pins the two together.
+NARROW_SETUP_NOTHING_EXIT = 3
 
 # What the whole setup-narrowing LOOP gets, across every role one range touches. The per-role
 # budget bounds one child; nothing bounds how many roles a range carries, and `plan` runs
@@ -184,8 +189,10 @@ def narrow_setup_role(
         timeout: seconds before the child is killed.
 
     Returns:
-        (exit code, stdout). Exit 0 with a comma-joined tag list narrows; anything else is a
-        refusal, and the caller records no narrowing so every surface prints the role tag.
+        (exit code, stdout). Exit 0 with a comma-joined tag list narrows. Exit
+        `NARROW_SETUP_NOTHING_EXIT` with `NARROWED_TO_NOTHING` says the role needs no tag,
+        which only `narrowed_setup_tags` acts on. Anything else is a refusal, and the caller
+        records no narrowing so every surface prints the role tag.
 
     A subprocess for the reason `narrow_deploy_plane` is one: the derivation parses YAML and
     this unit runs under `uv run --no-project`. Every stderr line is logged, so the journal
@@ -280,8 +287,10 @@ def narrowed_setup_tags(
             test can spend the budget without sleeping.
 
     Returns:
-        Each tag of `setup_tags`, mapped to the sorted tags that role needs. The apply runs
-        their union; a failed apply holds each one qualified by the key it came from. `--tags initial_setup` selects about 440
+        Each tag of `setup_tags`, mapped to the sorted tags that role needs. An empty list is
+        a role the derivation answered needs no tag (#4361), which the apply leaves out and
+        a failed apply does not hold. The apply runs their union; a failed apply holds each
+        one qualified by the key it came from. `--tags initial_setup` selects about 440
         tasks; since #3116 every one of them carries a tag narrower than `crons`, so the tags
         a changed file maps to can be derived — and a run that applies only those is a
         smaller blast radius for a bad template and a shorter setup-plane tick.
@@ -338,6 +347,14 @@ def _one_setup_role(
     `plan` runs BEFORE the ff-merge, where an escape parks every session's landing. A tag list
     that is too wide is only slow; one that is too narrow leaves the change unapplied behind a
     run that exited 0.
+
+    One answer is not doubt, and it narrows this marker (#4361): exit
+    `NARROW_SETUP_NOTHING_EXIT` with stdout `NARROWED_TO_NOTHING` says every changed path
+    reaches no host through the role, so the role is dropped from the run. It takes both
+    halves because the script runs from the pre-merge checkout while this code is the copy
+    under /opt, so either can be the older one: a deployer that predates the answer reads the
+    non-zero exit as a refusal, and an exit 3 from anything else lacks the stdout. Exit 0 with
+    empty output stays doubt.
     """
     try:
         rc, out = narrow_setup(
@@ -351,6 +368,9 @@ def _one_setup_role(
         )
     except Exception as exc:
         return _whole_role(role, role_tag, f"{type(exc).__name__}: {exc}")
+    if rc == NARROW_SETUP_NOTHING_EXIT and out == NARROWED_TO_NOTHING:
+        log(f"narrow-setup: {role} needs no tag over this range, so not applying it")
+        return set()
     if rc != 0:
         return _whole_role(role, role_tag, f"exit {rc}")
     tags = {tag for tag in out.split(",") if tag}
@@ -411,7 +431,16 @@ def plan(
         held = sorted(
             held_tag(r, t) for r, role_tags in by_role.items() for t in role_tags
         )
-        plans.append(BroadPlan(INITIAL_SETUP, tags, True, held))
+        if tags:
+            plans.append(BroadPlan(INITIAL_SETUP, tags, True, held))
+        else:
+            # Every role answered that it needs no tag (#4361). An empty `--tags` value runs
+            # the whole playbook, so this applies nothing and the receipt says so, as the
+            # deploy plane's does for a range that moves no rendered output.
+            log(
+                "narrow-setup: no setup role needs a tag, so merging and applying nothing"
+            )
+            plans.append(BroadPlan(INITIAL_SETUP, [NARROWED_TO_NOTHING], False))
     if deploy_plane:
         deploy = _deploy_plane(narrow, config, target)
         if digest_diff is not None:

@@ -37,6 +37,8 @@ from deployer_lib.deploy_logic import (
     tick_applies_setup_role,
 )
 
+import narrow_setup
+from deploy_tools.narrow_lib.setup_index import RoleIndex
 from reach import reach
 from setup_gates import (  # noqa: F401  (`_eval_when` and `_HOSTS` are read as land_reach's)
     HOMESERVERS as _HOMESERVERS,
@@ -476,6 +478,7 @@ def _remaining_note(
                     role, p, playbook, all_vars, host_vars_dir, roles_dir
                 )
                 for p in shipped[role]
+                if not _reads_no_changed_key(role, p, pr_range, repo)
             ),
             *(
                 setup_repo_file_hosts(
@@ -519,6 +522,28 @@ def _remaining_note(
             for host in sorted(unapplied[role])
         ]
     )
+
+
+def _reads_no_changed_key(role: str, path: str, pr_range: str, repo: Path) -> bool:
+    """Whether `path` is another role's vars file whose changed keys `role` never reads.
+
+    The table names `role` for every edit to such a file, but the tick asks per key
+    (`narrow_setup.foreign_key_tags`) and drops a role that reads none of them (#4361). This
+    asks the same question over the PR's own range, so the note does not send a hand to run a
+    role on a host that needs nothing from it.
+
+    No range, or any failure, answers False and keeps the per-file reach. `except Exception`
+    for the reason `land_tags.own_narrow_tags` gives: the derivation shells out to git and
+    decodes the output, and a raise here would end a merged landing in a traceback.
+    """
+    if ".." not in pr_range or not ("/defaults/" in path or "/vars/" in path):
+        return False
+    old, new = pr_range.split("..", 1)
+    try:
+        index = RoleIndex(role, new, str(repo))
+        return not narrow_setup.foreign_key_tags(path, index, old, new, str(repo))
+    except Exception:
+        return False
 
 
 def _repo_file_only_roles(changed_roles, roles_dir: Path) -> list[str]:

@@ -296,14 +296,14 @@ def test_a_role_claude_md_does_not_block_the_narrowing(tree):
     assert narrow(tree, *_refs(tree)) == frozenset({"alpha"})
 
 
-def test_a_range_of_nothing_but_prose_is_flagged(tree):
-    """The rejecting half: skipping is not the same as narrowing to an empty `--tags`.
+def test_a_range_of_nothing_but_prose_needs_nothing(tree):
+    """The other half: skipping every path is not narrowing to an empty `--tags`.
 
-    An empty `--tags` value runs the whole playbook, so a range the deployer should not have
-    deferred at all must refuse rather than answer nothing.
+    An empty `--tags` value runs the whole playbook, so the role's answer is `NothingToApply`
+    rather than an empty set (#4361). Only a caller that catches it first drops the role.
     """
     tree.write(f"{ROLE}/CLAUDE.md", "# Demo\n")
-    with pytest.raises(narrow_setup.CannotNarrow, match="reaches no host"):
+    with pytest.raises(narrow_setup.NothingToApply, match="reaches no host"):
         narrow(tree, *_refs(tree))
 
 
@@ -423,9 +423,9 @@ def test_a_markdown_file_under_templates_is_prose_and_reaches_no_tag(tree):
     the `no-role-ships-a-markdown-file` row of `ansible/tests/repo/test_census_rows_roles.py`
     is what holds that — so the
     carve-out only cost the deploy-plane tick a full play for a README nobody deploys. A range
-    of nothing but prose reaches no host, which is the refusal below rather than a tag; the
-    tick never gets here for one, because `deploy_logic.is_doc` drops it before the plane
-    branches.
+    of nothing but prose reaches no host, which is the `NothingToApply` answer below rather
+    than a tag; the tick never gets here for one, because `deploy_logic.is_doc` drops it
+    before the plane branches.
     """
     tree.write(
         f"{ROLE}/tasks/alpha.yml",
@@ -436,7 +436,7 @@ def test_a_markdown_file_under_templates_is_prose_and_reaches_no_tag(tree):
     tree.write(f"{ROLE}/templates/alpha-notes.md", "# notes\n")
     old = tree.commit("notes")
     tree.write(f"{ROLE}/templates/alpha-notes.md", "# notes, edited\n")
-    with pytest.raises(narrow_setup.CannotNarrow, match="reaches no host"):
+    with pytest.raises(narrow_setup.NothingToApply, match="reaches no host"):
         narrow(tree, old, tree.commit("edit notes"))
 
 
