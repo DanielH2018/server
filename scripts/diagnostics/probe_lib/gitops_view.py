@@ -55,6 +55,7 @@ from gitops_markers import (
     by_hand,
     STATE_DIR,
     k8s_deferred_deploy_cmd,
+    k8s_unapplied_remedy,
     maximal_apply_warning,
     owed_clear_cmd,
     parse_behind,
@@ -111,7 +112,11 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
                     "subject": e.subject,
                     "origin": e.origin,
                     "age_s": int(now - e.at),
-                    "do": k8s_deferred_deploy_cmd([e.subject]),
+                    "do": (
+                        k8s_unapplied_remedy(e.subject)
+                        if cls == OWED_K8S_UNAPPLIED
+                        else k8s_deferred_deploy_cmd([e.subject])
+                    ),
                     "clear": owed_clear_cmd(cls, e.subject),
                 }
             )

@@ -1059,6 +1059,11 @@ untouched.
 - `gitops_state.py clear-owed k8s_unapplied <svc>` is the hand clear for `k8s_unapplied`. It is
   needed for a change that was reverted rather than applied, or for a shared role with a caller
   nothing can prove applied: no tag runs the role, or a caller writes no release record.
+- The banner, the journal and `probe.py gitops-state` print one remedy per line, from
+  `gitops_markers.k8s_unapplied_remedy`. A shared role never gets a bare `deploy.sh --tags
+  <role>`, because that command redeploys every service that runs the role (#4373). For
+  `manifests` the remedy is to wait for the render proof, or to run `clear-owed`, and the full
+  redeploy is named only as the alternative.
 
 
 ### The `has_gitops` gate, the GitHub crons and the marker module: history
