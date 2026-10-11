@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_config.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py
 """The deployer's configuration: how the env file is read, the frozen `Config`, and `log`.
 
 `/etc/gitops-deploy/config.env` is parsed once, when `gitops_deploy` imports, and parsing

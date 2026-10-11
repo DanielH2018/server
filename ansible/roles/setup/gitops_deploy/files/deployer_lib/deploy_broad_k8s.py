@@ -8,8 +8,9 @@ of them, and named none of them either, because `alert_deferred` fires its k8s c
 `ChangeSet.k8s` alone. These functions are that half of the broad arm: `apply_broad_k8s`
 deploys it, and `covered_by_plane` says which bumps the deploy plane applies on its own.
 
-A module of its own rather than more functions on `deploy_handlers.py`, which is at its
-length cap. `handle_broad` is the only production caller of these.
+A module of its own because it answers one question from its arguments and the toolbox: which
+image-pin bumps in a broad range deploy. It reads nothing private to `deploy_handlers.py`, and
+`handle_broad` there is the only production caller of these.
 
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
@@ -17,17 +18,17 @@ Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 import time
 from dataclasses import replace
 
-import deploy_alert_text
-import deploy_alerts
-import deploy_defer
-import deploy_io
-import deploy_k8s_owed
-import deploy_locks
-from deploy_changes import ChangeSet
-from deploy_config import Config, log
-from deploy_state import DeployerState
-from deploy_tick_types import TickPlan, TickTarget
-from deploy_toolbox import DeployTools
+from deployer_lib import deploy_alert_text
+from deployer_lib import deploy_alerts
+from deployer_lib import deploy_defer
+from deployer_lib import deploy_io
+from deployer_lib import deploy_k8s_owed
+from deployer_lib import deploy_locks
+from deployer_lib.deploy_changes import ChangeSet
+from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_state import DeployerState
+from deployer_lib.deploy_tick_types import TickPlan, TickTarget
+from deployer_lib.deploy_toolbox import DeployTools
 
 # The playbook a promoted bump is deployed through, and the one the deploy plane runs.
 DEPLOY_PLAYBOOK = "ansible/deploy.yml"

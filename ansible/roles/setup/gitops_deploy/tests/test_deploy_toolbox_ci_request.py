@@ -26,7 +26,7 @@ from email.message import Message
 
 import pytest
 
-import deploy_toolbox
+from deployer_lib import deploy_toolbox
 
 SHA = "a" * 40
 REPO = "DanielH2018/server"

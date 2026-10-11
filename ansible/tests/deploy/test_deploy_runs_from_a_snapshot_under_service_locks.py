@@ -32,8 +32,10 @@ _DEPLOY_FLAGS = REPO / "scripts/deploy_tools/deploy_lib/flags.py"
 _DEPLOY_UNDER_LOCKS = REPO / "scripts/deploy_tools/deploy_lib/under_locks.py"
 _DEPLOY_PLAYBOOK = REPO / "scripts/deploy_tools/deploy_lib/playbook.py"
 _DEPLOY_DETACH = REPO / "scripts/deploy_tools/deploy_lib/detach_run.py"
-_DEPLOY_IO = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
-_DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
+_DEPLOY_IO = REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py"
+_DEPLOY_LOCKS = (
+    REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py"
+)
 
 # The deployer's playbook call sites. Named rather than discovered so that a third one added
 # without a lock fails this file instead of joining a vacuously-true census.

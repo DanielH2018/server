@@ -5,8 +5,7 @@ apply — a role no play lists under `roles:` has no tag that reaches a host thr
 which tags do the OTHER roles it applies declare — a tag two roles declare selects both, so
 `initial_setup.yml --tags firewall` would apply a role the change never touched (#2350).
 
-Split out of `narrow_setup.py` for its module-length cap, and it is the natural half: nothing
-here reads the repository. Every function takes text a caller already fetched, which is also
+It reads alone because nothing here reads the repository. Every function takes text a caller already fetched, which is also
 why `narrow_setup.foreign_tags` — the one that walks a tree through `git show` — stays over
 there beside the other git readers.
 """

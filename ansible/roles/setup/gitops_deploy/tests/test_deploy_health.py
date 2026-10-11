@@ -5,7 +5,7 @@ An alert that fails to send has to survive to the next tick, and the queue has t
 
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_health.py
 
-from deploy_health import (
+from deployer_lib.deploy_health import (
     PENDING_ALERTS_MAX,
     apply_drain_result,
     apply_send_result,

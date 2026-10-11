@@ -65,7 +65,7 @@ def test_a_role_test_file_is_clean():
 def test_a_test_module_beside_a_roles_code_maps_to_no_tag_on_either_side():
     """The landing calls the deployer's test-path rule instead of copying it (#3660), so a
     `test_*.py` outside the role's `tests/` drops on both sides; the copy deployed it."""
-    from deploy_logic import services_from_changed_paths
+    from deployer_lib.deploy_logic import services_from_changed_paths
 
     test_module = "ansible/roles/k8s/sonarr/files/test_probe.py"
     assert reach.tag_for(test_module, {"sonarr"}) is None

@@ -156,8 +156,8 @@ def test_an_unreadable_ref_exits_1(capsys):
 
 def test_routed_by_places_roles_for_the_has_gitops_host_and_restores(tmp_path):
     """A landing on daniel-server must still see a box-only role as the tick's to apply."""
-    from deploy_changes import tick_applies_setup_role
-    import deploy_setup_roles
+    from deployer_lib.deploy_changes import tick_applies_setup_role
+    from deployer_lib import deploy_setup_roles
 
     tree = _tree(
         tmp_path,

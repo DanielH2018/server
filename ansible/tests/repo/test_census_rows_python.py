@@ -376,7 +376,7 @@ ROWS = (
             {
                 "ansible/filter_plugins/toposort.py",
                 "ansible/roles/setup/common/files/host_lib.py",
-                "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+                "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
                 "ansible/roles/k8s/monitor-bridge/files/registry.py",
                 "ansible/roles/k8s/homelab-mcp/files/safe_reads.py",
                 "scripts/lib/cli_registry.py",
@@ -469,5 +469,5 @@ def test_the_future_annotations_exemption_finds_the_host_shipped_modules():
     assert len(exempt) >= 20
     assert {
         "ansible/roles/setup/common/files/host_lib.py",
-        "ansible/roles/setup/gitops_deploy/files/deploy_changes.py",
+        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py",
     } <= exempt

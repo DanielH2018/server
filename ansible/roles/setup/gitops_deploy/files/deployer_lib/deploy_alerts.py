@@ -1,11 +1,11 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_alerts.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_alerts.py
 """The deployer's notify subsystem: when to send, the queue's file, and the send itself.
 
 **When to say it** is this module: `alert_once` owns the per-SHA dedupe marker, `deliver` owns
 the retry queue, `drain_pending` empties it, and `alert_deferred` fires the tasks/meta/k8s
 channels. **What to say** is `deploy_alert_text.py`, one pure function per alert — the seam
-this module's docstring named before #2600 split it, so that neither half sits at the
-600-line module cap.
+this module's docstring named before #2600 split it. This module decides delivery and never
+composes a message, so each half reads without the other.
 
 `deploy_health.py` holds the queue's pure half (`apply_send_result`, `cap_pending`,
 `apply_drain_result`); this module is its I/O counterpart.
@@ -22,18 +22,18 @@ see `deploy_io.py`'s docstring for why.
 import json
 import os
 
-import deploy_alert_text
-from deploy_changes import ChangeSet
-from deploy_config import Config, log
-from deploy_health import (
+from deployer_lib import deploy_alert_text
+from deployer_lib.deploy_changes import ChangeSet
+from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_health import (
     PENDING_ALERTS_MAX,
     apply_drain_result,
     apply_send_result,
     cap_pending,
 )
-from deploy_remediation import deferred_service_alerts
-from deploy_state import DeployerState
-from deploy_toolbox import DeployTools
+from deployer_lib.deploy_remediation import deferred_service_alerts
+from deployer_lib.deploy_state import DeployerState
+from deployer_lib.deploy_toolbox import DeployTools
 from host_lib import atomic_write
 
 

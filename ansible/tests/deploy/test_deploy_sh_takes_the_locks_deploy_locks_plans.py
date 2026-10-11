@@ -28,10 +28,12 @@ Run: uv run pytest ansible/tests/deploy/test_deploy_sh_takes_the_locks_deploy_lo
 import ast
 import fcntl
 import os
+import re
 import subprocess
 import sys
+from pathlib import Path
 
-import deploy_locks
+from deployer_lib import deploy_locks
 from deploy_tools.deploy_lib import under_locks as deploy_under_locks
 import pytest
 from _helpers import REPO
@@ -42,7 +44,9 @@ from lib.exit_codes import (
 )
 from lib.proc_testing import run
 
-_DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
+_DEPLOY_LOCKS = (
+    REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py"
+)
 _DEPLOY_UNDER_LOCKS = (
     REPO / "scripts" / "deploy_tools" / "deploy_lib" / "under_locks.py"
 )
@@ -310,6 +314,9 @@ def test_the_foreground_refuses_with_79_and_takes_nothing_when_plan_fails(plan, 
     err = capsys.readouterr().err
     assert "nothing was deployed" in err
     assert "deploy_locks.plan" in err
+    # The command the hint tells an operator to run must name a file that exists (#4355).
+    hint = re.search(r"python\s+(\S+deploy_locks\.py) plan", err)
+    assert hint and Path(hint[1]).is_file(), err
 
 
 # -- what the wrapper does not carry -------------------------------------------------

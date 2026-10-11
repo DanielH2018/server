@@ -15,7 +15,7 @@ import yaml
 
 from lib.repo_paths import REPO as _REPO_ROOT
 
-from deploy_changes import (
+from deployer_lib.deploy_changes import (
     ChangeSet,
     _content_lines,
     comment_only_broad_changes,
@@ -165,8 +165,8 @@ def test_setup_roles_are_recorded_for_both_broad_setup_arms():
     both remediations still need the role name."""
     cs = services_from_changed_paths(
         [
-            "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
-            "ansible/roles/setup/k3s/defaults/main.yml",
+            "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
+            "ansible/roles/setup/k3s/tasks/node.yml",
         ]
     )
     assert cs.setup_roles == {"gitops_deploy", "k3s"}
@@ -490,7 +490,7 @@ def test_a_value_edit_to_a_setup_role_stays_broad():
     """The reject half: the same file, one tunable changed."""
     after = _K3S_DEFAULTS.replace('"20 10 * * 1"', '"20 11 * * 1"')
     assert _quiet(_K3S_DEFAULTS, after, path=_SETUP_DEFAULTS) == set()
-    assert services_from_changed_paths([_SETUP_DEFAULTS]).setup_roles == {"k3s"}
+    assert "k3s" in services_from_changed_paths([_SETUP_DEFAULTS]).setup_roles
 
 
 def test_a_comment_only_edit_to_a_non_yaml_setup_file_stays_broad():

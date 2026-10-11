@@ -146,7 +146,7 @@ def _comment_only(path: str, old: str, new: str, repo: Path) -> bool:
     is script content and not a comment. A side this cannot read raises, which keeps the role
     loud.
     """
-    from deploy_logic import _content_lines
+    from deployer_lib.deploy_logic import _content_lines
 
     if not path.endswith(_YAML_SUFFIXES):
         return False

@@ -17,7 +17,8 @@ Every entry point here returns None when it finds no evidence, so `land_reach` k
 role-level answer rather than narrowing. Narrower than the truth hides an unconverged host,
 where wider costs an operator one no-op command.
 
-Split out of `land_reach.py` at the module-length cap.
+It reads alone. It imports nothing from `land_reach`, which passes in the vars and evaluates
+the chains this returns.
 """
 
 import contextlib
@@ -202,11 +203,15 @@ def _leaf_chains_with_text(role_dir: Path) -> list[tuple[str, tuple]] | None:
 
 
 def _shipped_texts(role_dir: Path) -> dict[str, str]:
-    """{basename: text} for each readable file under the role's `templates/` and `files/`."""
+    """{basename: text} for each readable file under the role's `templates/` and `files/`.
+
+    Recursive, because a role ships a package from a subdirectory: gitops_deploy's
+    `files/deployer_lib/` (#4355).
+    """
     texts: dict[str, str] = {}
     for sub in SHIPPED_DIRS:
-        for path in sorted((role_dir / sub).glob("*")):
-            if not path.is_file():
+        for path in sorted((role_dir / sub).rglob("*")):
+            if not path.is_file() or "__pycache__" in path.parts:
                 continue
             try:
                 texts[path.name] = path.read_text()

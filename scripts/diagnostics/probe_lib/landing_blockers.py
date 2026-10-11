@@ -73,7 +73,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO, ROLES
 
 # The deployer's own modules, so the CI and ledger rules are its rules and not a copy.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from deploy_git import _CI_NO_VERDICT_CONCLUSIONS
+from deployer_lib.deploy_git import _CI_NO_VERDICT_CONCLUSIONS
 from gitops_hold import DeployerSnapshot
 from gitops_ledger import held_planes, manual_plane_entries
 

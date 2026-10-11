@@ -158,6 +158,8 @@ def test_a_setup_plane_pr_is_not_nothing_to_deploy():
     tags, _ = land_tags.derive(files, changed_files=3)
     assert tags == [], "no service tag should be derived from these paths"
     assert "k3s-bringup.yml" in land_tags.plane_note(files)
+    # deploy_ui reads k3s_agent_node_ips, so the tick applies it beside the k3s hand apply (#4357).
+    assert "--tags deploy_ui" in land_tags.self_applied_command(files)
 
 
 def test_a_self_applied_setup_role_is_not_owed_to_a_hand():
@@ -165,7 +167,7 @@ def test_a_self_applied_setup_role_is_not_owed_to_a_hand():
     exit 1 with `needs-manual-apply` naming the two playbook runs the next tick is about
     to perform itself."""
     files = [
-        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
         "ansible/roles/setup/renovate_notify/files/renovate_notify.py",
     ]
     assert land_tags.plane_note(files) == ""
@@ -192,7 +194,7 @@ def test_docs_and_ordinary_services_are_not_self_applied():
     for files in (
         ["docs/gitops-pipeline.md"],
         ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"],
-        ["ansible/roles/setup/k3s/defaults/main.yml"],
+        ["ansible/roles/setup/k3s/tasks/node.yml"],
     ):
         assert land_tags.self_applied(files) is False, files
 

@@ -9,9 +9,9 @@ import subprocess
 import pytest
 import yaml
 
-import deploy_cross_role
+from deployer_lib import deploy_cross_role
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes
-from deploy_changes import setup_roles_for
+from deployer_lib.deploy_changes import setup_roles_for
 from lib.repo_paths import REPO
 from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib import classify

@@ -15,7 +15,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup.py
 
 import pytest
 
-import deploy_narrow
+from deployer_lib import deploy_narrow
 import narrow_setup
 from lib.repo_paths import REPO
 

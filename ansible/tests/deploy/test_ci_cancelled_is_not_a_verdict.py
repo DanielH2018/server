@@ -9,7 +9,7 @@ documented gate waits on a run that can never go green.
 and that the doc keeps naming the constant an operator would go read.
 """
 
-from deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
+from deployer_lib.deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
 from _helpers import REPO
 
 REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})

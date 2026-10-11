@@ -6,7 +6,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_detach_notify.py
 
 import types
 
-import deploy_alerts  # the deployer's half; pyproject's `pythonpath` lists it
+from deployer_lib import deploy_alerts  # the deployer's half, on `pythonpath`
 from deploy_tools.deploy_lib import detach_notify as notify_mod
 from gitops_markers import STATE_DIR
 

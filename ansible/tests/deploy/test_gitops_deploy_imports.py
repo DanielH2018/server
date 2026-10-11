@@ -11,7 +11,7 @@ Everything else is a leaf. Two rules keep that shape, and both fail silently wit
 2. **`deploy_logic.py` defines nothing.** A `def` added to the index is a def the layer map
    cannot place, and the first step back toward one 1.4k-line module.
 
-`DeployTools` (in `ansible/roles/setup/gitops_deploy/files/deploy_toolbox.py`, with
+`DeployTools` (in `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_toolbox.py`, with
 `tests/_deploy_fakes.py`) injects the deployer's I/O boundaries, so tests do not patch module
 attributes and the direction of the imports is what needs holding.
 
@@ -22,24 +22,29 @@ import ast
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from _helpers import REPO
 from lib.proc_testing import run
 
 FILES = REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files"
+# The `deploy_*` modules live in this namespace package beside the entry point (#4355). ALLOWED
+# keys every module by its stem, wherever it sits.
+PACKAGE = "deployer_lib"
 ENTRY = "gitops_deploy"
-# The three modules every caller reaches QUALIFIED — `deploy_io.deploy_k8s(...)`, never
-# `from deploy_io import deploy_k8s`. The role's CLAUDE.md states the rule; this is its guard.
+# The three modules every caller reaches QUALIFIED — `deploy_io.deploy_k8s(...)` after
+# `from deployer_lib import deploy_io`, never `from deployer_lib.deploy_io import deploy_k8s`. The role's CLAUDE.md states the rule; this is its guard.
 QUALIFIED = {"deploy_io", "deploy_alerts", "deploy_alert_text"}
 
 # Every module in files/, and which siblings each may import. `None` means no restriction, and
 # only the entry module gets it. Checked with `==` against what is on disk, not `<=`: a new
 # module with no entry here would otherwise be governed by nothing.
 ALLOWED: dict[str, set[str] | None] = {
-    # The cross-role tables, a leaf of their own so the classifier stays under its line cap.
+    # The cross-role tables, a leaf of their own because the tick and land.sh parse another
+    # commit's copy of that file by path.
     "deploy_changes": {"deploy_cross_role", "deploy_setup_roles"},
     "deploy_cross_role": set(),
-    # Which playbook and tag apply a setup role, split from the classifier at its line cap.
+    # Which playbook and tag apply a setup role, answered for a role name rather than a path.
     # Stdlib only: it runs the derivation as a subprocess (#3734).
     "deploy_setup_roles": set(),
     # The narrowing subprocess and the plan it returns: `deploy_config` for `log`, and
@@ -218,58 +223,73 @@ ALLOWED: dict[str, set[str] | None] = {
 }
 
 
+def _sources() -> dict[str, Path]:
+    """Every module's stem mapped to its file: flat in files/, or in the `deployer_lib` package."""
+    found = list(FILES.glob("*.py")) + list((FILES / PACKAGE).glob("*.py"))
+    return {p.stem: p for p in found}
+
+
 def _modules_on_disk() -> set[str]:
-    return {p.stem for p in FILES.glob("*.py")}
+    return set(_sources())
+
+
+def _source(name: str) -> str:
+    return _sources()[name].read_text()
+
+
+def _edges(source: str) -> list[tuple[str, str, bool]]:
+    """Each import in `source` as (module stem, form, aliased).
+
+    The form is `plain` when the statement binds the module itself (`import gitops_markers`,
+    `from deployer_lib import deploy_io`) and `from` when it binds names out of it
+    (`from deployer_lib.deploy_io import run`). A package module's stem is its name inside
+    `deployer_lib`, so the rules below read the same for both layouts.
+    """
+    out = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Import):
+            for a in node.names:
+                stem = a.name.removeprefix(f"{PACKAGE}.")
+                out.append((stem, "plain", a.asname is not None))
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            if node.module == PACKAGE:
+                out += [(a.name, "plain", a.asname is not None) for a in node.names]
+            else:
+                out.append((node.module.removeprefix(f"{PACKAGE}."), "from", False))
+    return out
 
 
 def _from_imports(source: str, names: set[str]) -> set[str]:
-    """Every module in `names` that `source` reaches by `from <module> import ...`."""
-    return {
-        node.module
-        for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.ImportFrom) and node.module in names
-    }
+    """Every module in `names` that `source` binds names out of, `from <module> import ...`."""
+    return {m for m, form, _ in _edges(source) if form == "from" and m in names}
 
 
 def _plain_imports(source: str, names: set[str]) -> set[str]:
-    """Every module in `names` that `source` reaches by an unaliased `import <module>`.
+    """Every module in `names` that `source` binds by its own name, unaliased.
 
-    `import deploy_io as dio` is excluded on purpose: an alias is a second name for the module,
-    the same thing the qualified-access rule exists to forbid, so `_aliased_imports` reports it.
+    `from deployer_lib import deploy_io as dio` is excluded on purpose: an alias is a second
+    name for the module, the same thing the qualified-access rule exists to forbid, so
+    `_aliased_imports` reports it.
     """
     return {
-        alias.name
-        for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.Import)
-        for alias in node.names
-        if alias.name in names and alias.asname is None
+        m
+        for m, form, aliased in _edges(source)
+        if form == "plain" and not aliased and m in names
     }
 
 
 def _aliased_imports(source: str, names: set[str]) -> set[str]:
     """Every module in `names` that `source` imports under another name."""
-    return {
-        alias.name
-        for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.Import)
-        for alias in node.names
-        if alias.name in names and alias.asname is not None
-    }
+    return {m for m, form, aliased in _edges(source) if aliased and m in names}
 
 
 def _sibling_imports(source: str, siblings: set[str]) -> set[str]:
     """Every sibling module `source` imports, by either form.
 
-    `import deploy_io` and `from deploy_io import run` both count: which form a module uses
-    changes nothing about the direction of the edge.
+    `from deployer_lib import deploy_io` and `from deployer_lib.deploy_io import run` both
+    count: which form a module uses changes nothing about the direction of the edge.
     """
-    found = set()
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Import):
-            found |= {a.name for a in node.names if a.name in siblings}
-        elif isinstance(node, ast.ImportFrom) and node.module in siblings:
-            found.add(node.module)
-    return found
+    return {m for m, _, _ in _edges(source) if m in siblings}
 
 
 def _defined_names(source: str) -> set[str]:
@@ -301,15 +321,16 @@ def test_the_module_set_is_exactly_what_is_on_disk():
 def test_no_module_imports_outside_its_allowed_set():
     """Iterates what is ON DISK, so a new module with no ALLOWED entry fails here."""
     siblings = _modules_on_disk()
-    assert len(siblings) >= 18, (
-        f"the glob matched {len(siblings)} modules — FILES is wrong"
+    # Named members from both halves of the layout, so a move that empties either glob fails.
+    assert {ENTRY, "gitops_markers", "deploy_logic", "deploy_io"} <= siblings, (
+        f"the globs matched {sorted(siblings)} — FILES or PACKAGE is wrong"
     )
     for name in sorted(siblings):
         assert name in ALLOWED, f"{name} has no ALLOWED entry"
         allowed = ALLOWED[name]
         if allowed is None:
             continue
-        got = _sibling_imports((FILES / f"{name}.py").read_text(), siblings)
+        got = _sibling_imports(_source(name), siblings)
         assert got <= allowed, f"{name} imports {sorted(got - allowed)}"
 
 
@@ -323,7 +344,7 @@ def test_no_leaf_imports_the_entry_module():
     importers = sorted(
         name
         for name in siblings - {ENTRY}
-        if ENTRY in _sibling_imports((FILES / f"{name}.py").read_text(), siblings)
+        if ENTRY in _sibling_imports(_source(name), siblings)
     )
     assert not importers, f"{importers} import the entry module — that is a cycle"
 
@@ -338,7 +359,7 @@ def test_deploy_io_and_deploy_alerts_are_reached_qualified():
     """
     plain = set()
     for name in sorted(_modules_on_disk()):
-        source = (FILES / f"{name}.py").read_text()
+        source = _source(name)
         assert _from_imports(source, QUALIFIED) == set(), (
             f"{name} from-imports {sorted(_from_imports(source, QUALIFIED))} — "
             f"reach them qualified instead"
@@ -359,7 +380,9 @@ def test_deploy_io_and_deploy_alerts_are_reached_qualified():
 def test_a_from_import_of_the_io_surface_is_flagged():
     """The reject half. The plain form beside it must NOT count as a from-import."""
     source = (
-        "import deploy_io\nfrom deploy_alerts import post\nimport deploy_alerts as da\n"
+        "from deployer_lib import deploy_io\n"
+        "from deployer_lib.deploy_alerts import post\n"
+        "from deployer_lib import deploy_alerts as da\n"
     )
     assert _from_imports(source, QUALIFIED) == {"deploy_alerts"}
     assert _plain_imports(source, QUALIFIED) == {"deploy_io"}
@@ -385,12 +408,13 @@ def test_deploy_logic_imports_without_the_common_files_path():
     def _import(module: str) -> subprocess.CompletedProcess:
         return run([sys.executable, "-c", f"import {module}"], env=env)
 
-    assert _import("deploy_logic").returncode == 0, _import("deploy_logic").stderr
+    pure = _import(f"{PACKAGE}.deploy_logic")
+    assert pure.returncode == 0, pure.stderr
     # The reject half, through the identical env: `deploy_config` is the module the chain ended
     # at, and it MUST fail here. Without this, the test above passes just as happily when the
     # subprocess can no longer see the difference at all — an inherited path entry, a stray
     # PYTHONPATH, or `host_lib` landing in files/ one day.
-    impure = _import("deploy_config")
+    impure = _import(f"{PACKAGE}.deploy_config")
     assert impure.returncode != 0, (
         "deploy_config imported with only files/ on the path — this test can no longer tell "
         "a pure import chain from an impure one"
@@ -415,7 +439,7 @@ def test_the_pure_modules_the_index_re_exports_are_import_pure():
     indexed = ALLOWED["deploy_logic"]
     assert indexed, "deploy_logic re-exports nothing — ALLOWED is wrong"
     for name in sorted(indexed):
-        got = _sibling_imports((FILES / f"{name}.py").read_text(), siblings)
+        got = _sibling_imports(_source(name), siblings)
         assert not (got & impure), (
             f"{name} imports {sorted(got & impure)} — the index re-exports it, so that "
             f"reaches host_lib from every scripts/deploy_tools/ caller"
@@ -424,7 +448,7 @@ def test_the_pure_modules_the_index_re_exports_are_import_pure():
 
 def test_the_index_defines_nothing():
     """deploy_logic.py is an index over the decision modules, not a home for code."""
-    assert _defined_names((FILES / "deploy_logic.py").read_text()) == set()
+    assert _defined_names(_source("deploy_logic")) == set()
 
 
 # --- Proof the guard can go red ---------------------------------------------------------------
@@ -432,7 +456,10 @@ def test_the_index_defines_nothing():
 
 def test_both_import_forms_are_seen():
     """The reject half for the reader: a plain import and a from-import weigh the same."""
-    source = "import deploy_io\nfrom deploy_alerts import post\nimport json\n"
+    source = (
+        "from deployer_lib import deploy_io\n"
+        "from deployer_lib.deploy_alerts import post\nimport json\n"
+    )
     assert _sibling_imports(source, {"deploy_io", "deploy_alerts"}) == {
         "deploy_io",
         "deploy_alerts",
@@ -451,4 +478,4 @@ def test_a_def_on_the_index_is_flagged():
 
 def test_a_re_export_is_not_a_definition():
     """A facade BINDS every name it re-exports; only a def/class/assignment defines one."""
-    assert _defined_names("from deploy_git import ci_verdict\n") == set()
+    assert _defined_names("from deployer_lib.deploy_git import ci_verdict\n") == set()

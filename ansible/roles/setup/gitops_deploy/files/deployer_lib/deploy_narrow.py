@@ -20,10 +20,10 @@ import subprocess
 import time
 from typing import Callable, NamedTuple
 
-from deploy_config import log
+from deployer_lib.deploy_config import log
 
 # The playbook the setup arm runs, and the one `narrow_setup.py` derives reachability against.
-from deploy_setup_roles import INITIAL_SETUP
+from deployer_lib.deploy_setup_roles import INITIAL_SETUP
 from gitops_hold import held_tag
 
 # What the tick's receipt records as a plane's tags when a deploy-plane range moves no

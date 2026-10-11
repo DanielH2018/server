@@ -35,12 +35,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
 
-import deploy_io
-import deploy_narrow
-import deploy_release
-import deploy_setup_roles
-from deploy_config import Config, log
-from deploy_git import ci_verdict
+from deployer_lib import deploy_io
+from deployer_lib import deploy_narrow
+from deployer_lib import deploy_release
+from deployer_lib import deploy_setup_roles
+from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_git import ci_verdict
 from host_lib import discord_post, flush_discord_spool, github_get, github_token
 
 

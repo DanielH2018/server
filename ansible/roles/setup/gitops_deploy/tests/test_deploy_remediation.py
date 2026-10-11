@@ -13,17 +13,17 @@ import pathlib
 
 import pytest
 
-import deploy_remediation
+from deployer_lib import deploy_remediation
 
 from lib.repo_paths import K3S_ROLE, REPO
 
-import deploy_defer
-from deploy_changes import (
+from deployer_lib import deploy_defer
+from deployer_lib.deploy_changes import (
     services_from_changed_paths,
     setup_tags_for,
     shared_module_consumers,
 )
-from deploy_remediation import (
+from deployer_lib.deploy_remediation import (
     broad_budget_ok,
     broad_remediation,
     deferred_service_alerts,

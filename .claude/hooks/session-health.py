@@ -167,7 +167,7 @@ def dirty_primary_lines(porcelain, path):
     tree can be dirty with nothing modified.
 
     The parse is a deliberate COPY of `dirty_summary` in
-    `ansible/roles/setup/gitops_deploy/files/deploy_git.py`, not an import of it — importing
+    `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py`, not an import of it — importing
     would drag the whole `deploy_git` module into a hook that must never fail to load. The cost
     is that the two can drift apart silently if the deployer ever changes what counts as dirty,
     so change them together.

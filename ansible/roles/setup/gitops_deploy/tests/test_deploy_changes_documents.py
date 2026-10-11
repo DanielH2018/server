@@ -15,7 +15,7 @@ import yaml
 
 from lib.repo_paths import REPO as _REPO_ROOT
 
-from deploy_changes import ChangeSet, services_from_changed_paths
+from deployer_lib.deploy_changes import ChangeSet, services_from_changed_paths
 
 
 def test_a_setup_roles_document_is_clean():
@@ -44,7 +44,7 @@ def test_a_setup_roles_config_is_still_broad():
     Same directory as the CLAUDE.md above, so the two differ only in suffix — which is what
     makes this the proof that the docs test is a suffix test and not a prefix one.
     """
-    cs = services_from_changed_paths(["ansible/roles/setup/k3s/defaults/main.yml"])
+    cs = services_from_changed_paths(["ansible/roles/setup/k3s/tasks/node.yml"])
     assert cs.broad is True
     assert cs.broad_setup is True
     assert cs.setup_roles == {"k3s"}

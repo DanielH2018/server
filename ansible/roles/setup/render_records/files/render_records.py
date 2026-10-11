@@ -62,9 +62,9 @@ DEPLOYER_DIR = os.environ.get("DEPLOYER_DIR", "/opt/gitops-deploy")
 if DEPLOYER_DIR not in sys.path:
     sys.path.insert(0, DEPLOYER_DIR)
 
-from deploy_config import load_config, read_config_file  # noqa: E402
-from deploy_git import ci_walk_candidates  # noqa: E402
-from deploy_toolbox import fetch_ci_verdict, github_authenticated  # noqa: E402
+from deployer_lib.deploy_config import load_config, read_config_file  # noqa: E402
+from deployer_lib.deploy_git import ci_walk_candidates  # noqa: E402
+from deployer_lib.deploy_toolbox import fetch_ci_verdict, github_authenticated  # noqa: E402
 from host_lib import kuma_push  # noqa: E402
 
 TIMESTAMP = "%Y-%m-%dT%H:%M:%SZ"

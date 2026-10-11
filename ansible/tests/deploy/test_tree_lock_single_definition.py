@@ -9,7 +9,7 @@ Run: uv run pytest ansible/tests/deploy/test_tree_lock_single_definition.py
 """
 
 from _helpers import load_yaml
-from deploy_locks import TREE_LOCK
+from deployer_lib.deploy_locks import TREE_LOCK
 
 from lib.repo_paths import ALL_VARS, REPO
 

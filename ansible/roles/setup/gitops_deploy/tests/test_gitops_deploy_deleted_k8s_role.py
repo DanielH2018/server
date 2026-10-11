@@ -16,8 +16,8 @@ import dataclasses
 
 import pytest
 
-import deploy_phases
-import deploy_tick_types
+from deployer_lib import deploy_phases
+from deployer_lib import deploy_tick_types
 from gitops_ledger import OWED_K8S_UNAPPLIED
 
 LOCAL = "1" * 40

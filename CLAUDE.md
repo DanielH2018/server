@@ -130,7 +130,7 @@ from there. **Do not hand-poll CI and do not hand-merge.**
 
 A `cancelled` CI run means *no verdict for this SHA*, never *this SHA is bad*.
 `docs/landing.md` owns the rule, and
-`ansible/roles/setup/gitops_deploy/files/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS` is the full
+`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS` is the full
 list of conclusions it covers (ENFORCED:
 `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
 
@@ -154,7 +154,7 @@ Say which of these applies, then stop:
   broad apply failed. `hold_plane` names each failed playbook when it was the latter.
 - A change in one of the bring-up playbooks — `bootstrap.yml`, `k3s-bringup.yml`,
   `initial_setup.yml`, the list
-  `ansible/roles/setup/gitops_deploy/files/deploy_changes.py:_BROAD_MANUAL_PREFIXES` holds —
+  `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES` holds —
   sits in the `local..origin` range. The deployer applies every other broad
   change itself, but not the bring-up playbooks: those run by hand by construction. If it is
   another session's, clearing it means applying their change; name it and stop.

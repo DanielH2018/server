@@ -11,14 +11,14 @@ import subprocess
 
 import pytest
 
-import deploy_cross_role
-import deploy_defer
-import deploy_phases
-import deploy_setup_roles
+from deployer_lib import deploy_cross_role
+from deployer_lib import deploy_defer
+from deployer_lib import deploy_phases
+from deployer_lib import deploy_setup_roles
 import setup_routing
 from _deploy_fakes import checkout_routing
-from deploy_changes import setup_tags_for, tick_applies_setup_role
-from deploy_remediation import broad_remediation
+from deployer_lib.deploy_changes import setup_tags_for, tick_applies_setup_role
+from deployer_lib.deploy_remediation import broad_remediation
 from gitops_markers import NO_PLAYBOOK, UNROUTED_PLAYBOOK, by_hand
 
 GITOPS_TASKS = "ansible/roles/setup/gitops_deploy/tasks/main.yml"
@@ -145,7 +145,7 @@ def test_an_idle_tick_routes_before_it_names_a_pending_role(
 
 def test_an_unrouted_role_is_named_as_unrouted_not_as_playbookless():
     """`common` is applied by no playbook; a role the routing lost is not `common`."""
-    import deploy_remediation
+    from deployer_lib import deploy_remediation
 
     deploy_setup_roles.use_routing({})
     (cmd,) = deploy_remediation._setup_commands({"gitops_deploy"})

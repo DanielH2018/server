@@ -226,7 +226,7 @@ def test_the_narrowing_loop_stops_asking_once_its_budget_is_spent():
     carries, so without a shared deadline a wide range spends the per-role budget once per
     role before anything is applied.
     """
-    import deploy_narrow
+    from deployer_lib import deploy_narrow
 
     asked = []
     # The deadline, then one reading per role: the second is past the budget.

@@ -41,10 +41,10 @@ Reach `deploy_alerts` qualified, never by from-import.
 import time
 from typing import NamedTuple
 
-import deploy_alert_text
-import deploy_alerts
-import deploy_narrow
-from deploy_changes import (
+from deployer_lib import deploy_alert_text
+from deployer_lib import deploy_alerts
+from deployer_lib import deploy_narrow
+from deployer_lib.deploy_changes import (
     ChangeSet,
     is_routed,
     keys_naming_no_role,
@@ -57,19 +57,19 @@ from deploy_changes import (
     tag_selects_an_off_host_role,
     tick_applies_setup_role,
 )
-from deploy_config import Config, log
-from deploy_remediation import (
+from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_remediation import (
     broad_park_reason,
     broad_remediation,
     manual_plane_remediation,
 )
-from deploy_state import (
+from deployer_lib.deploy_state import (
     NO_PLAYBOOK,
     DeployerState,
 )
 from gitops_markers import UNROUTED_PLAYBOOK
-from deploy_tick_types import TickTarget
-from deploy_toolbox import DeployTools
+from deployer_lib.deploy_tick_types import TickTarget
+from deployer_lib.deploy_toolbox import DeployTools
 
 
 def for_contention(

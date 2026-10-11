@@ -162,7 +162,7 @@ def test_the_printed_clear_for_k3s_and_common_leaves_no_line_behind(tmp_path, ru
     `--applied` for `common` too, which keeps that line by design.
     """
     # Importable only once `gitops_state` has put the deployer's `files/` on sys.path.
-    import deploy_remediation
+    from deployer_lib import deploy_remediation
 
     (tmp_path / "owed.jsonl").write_text(f"{_k3s('kubeconfig')}\n{COMMON}\n")
     text = deploy_remediation.manual_plane_remediation(

@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_locks.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py
 """The per-service locks a deploy holds across its playbook.
 
 `/var/lock/server-git-tree.lock` guards the git tree and nothing else (ADR-0011). What guards

@@ -53,22 +53,22 @@ if __name__ == "__main__":
         sys.exit(0)
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import deploy_alert_text
-import deploy_alerts
-import deploy_defer
-import deploy_handlers
-import deploy_k8s_owed
-import deploy_phases
-import deploy_state
-import deploy_tick_types
-from deploy_config import (
+from deployer_lib import deploy_alert_text
+from deployer_lib import deploy_alerts
+from deployer_lib import deploy_defer
+from deployer_lib import deploy_handlers
+from deployer_lib import deploy_k8s_owed
+from deployer_lib import deploy_phases
+from deployer_lib import deploy_state
+from deployer_lib import deploy_tick_types
+from deployer_lib.deploy_config import (
     Config,
     ConfigError,
     load_config,
     log,
     read_config_file,
 )
-from deploy_toolbox import DeployTools, default_tools
+from deployer_lib.deploy_toolbox import DeployTools, default_tools
 
 # The transient-fetch failure `deploy_phases.assess` raises and `entrypoint()` below catches.
 # The class is DEFINED in deploy_tick_types.py because `assess` moved there and a leaf may not

@@ -2,7 +2,7 @@
 
 import json
 
-import deploy_narrow
+from deployer_lib import deploy_narrow
 import shared_role_callers
 from lib.repo_paths import REPO
 

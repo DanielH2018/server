@@ -13,7 +13,7 @@ import pathlib
 
 import pytest
 
-import deploy_release
+from deployer_lib import deploy_release
 from diagnostics.probe_lib import releases_render
 
 REF = "a" * 40

@@ -27,7 +27,7 @@ import yaml
 
 from deploy_tools.land_lib import land_reach
 import setup_routing
-from deploy_changes import (
+from deployer_lib.deploy_changes import (
     services_from_changed_paths,
     setup_role_host,
     setup_tags_for,

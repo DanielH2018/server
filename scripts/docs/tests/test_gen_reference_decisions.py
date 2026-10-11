@@ -256,7 +256,8 @@ def test_live_tree_includes_the_gitops_deploy_origin_slice_marker():
     matches = [
         r
         for r in rows
-        if r["path"] == "ansible/roles/setup/gitops_deploy/files/deploy_handlers.py"
+        if r["path"]
+        == "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_handlers.py"
         and "origin[:8]" in r["text"]
     ]
     assert matches, "expected the origin[:8] marker in deploy_handlers.py"

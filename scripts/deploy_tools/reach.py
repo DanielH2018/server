@@ -49,8 +49,8 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-import deploy_cross_role
-from deploy_logic import (
+from deployer_lib import deploy_cross_role
+from deployer_lib.deploy_logic import (
     ChangeSet,
     _BROAD_MANUAL_PREFIXES,
     _is_test_only_path,

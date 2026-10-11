@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_logic.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py
 """Pure decision logic for the GitOps deployer (no I/O — unit-tested).
 
 This module is the index: every decision the deployer makes is defined in one of the
@@ -36,7 +36,7 @@ definitions, and holds every module's sibling imports to its declared set.
 # the injected `DeployTools` the only seam. Contradict this with a measurement that the index
 # cost something, not with a line count.
 
-from deploy_changes import (  # noqa: F401
+from deployer_lib.deploy_changes import (  # noqa: F401
     _BROAD_CENSUS_PREFIXES,
     _BROAD_DEPLOY_PREFIXES,
     _BROAD_MANUAL_PREFIXES,
@@ -59,7 +59,7 @@ from deploy_changes import (  # noqa: F401
     _content_lines,
     shared_module_consumers,
 )
-from deploy_git import (  # noqa: F401
+from deployer_lib.deploy_git import (  # noqa: F401
     _CI_NO_VERDICT_CONCLUSIONS,
     _CI_PASS_CONCLUSIONS,
     behind_marker,
@@ -71,19 +71,19 @@ from deploy_git import (  # noqa: F401
     next_action,
     should_alert_dirty,
 )
-from deploy_health import (  # noqa: F401
+from deployer_lib.deploy_health import (  # noqa: F401
     PENDING_ALERTS_MAX,
     apply_drain_result,
     apply_send_result,
     cap_pending,
 )
-from deploy_inventory import (  # noqa: F401
+from deployer_lib.deploy_inventory import (  # noqa: F401
     _DECLARED_ENTRY,
     _ENTRY_PLATFORM,
     declared_k8s_services,
     declares_no_gitops,
 )
-from deploy_k8s import (  # noqa: F401
+from deployer_lib.deploy_k8s import (  # noqa: F401
     _DECLARATION_RE,
     _DIFF_HEADER,
     _DIFF_IMAGE_LINE,
@@ -98,7 +98,7 @@ from deploy_k8s import (  # noqa: F401
     rollback_volume_revert_note,
     split_k8s_auto_deploy,
 )
-from deploy_remediation import (  # noqa: F401
+from deployer_lib.deploy_remediation import (  # noqa: F401
     BRANCH_DEFAULT,
     BROAD_BUDGET_MARGIN_S,
     _narrowed_tags,

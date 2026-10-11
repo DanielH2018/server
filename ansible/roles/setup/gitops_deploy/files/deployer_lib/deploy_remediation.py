@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_remediation.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py
 """The text a deferred change's alert prescribes, and the budget check behind it.
 
 Every message that tells an operator what to run by hand is built here — the broad-change
@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-import deploy_cross_role
-from deploy_changes import (
+from deployer_lib import deploy_cross_role
+from deployer_lib.deploy_changes import (
     ChangeSet,
     is_routed,
     roles_outside_initial_setup_in,

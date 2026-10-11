@@ -19,7 +19,7 @@ This is a leaf: `deploy_changes` for the `ChangeSet` type, the standard library,
 
 from dataclasses import dataclass
 
-from deploy_changes import ChangeSet
+from deployer_lib.deploy_changes import ChangeSet
 
 
 class RetryableFetchError(Exception):

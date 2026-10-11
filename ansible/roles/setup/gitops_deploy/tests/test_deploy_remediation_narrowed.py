@@ -14,11 +14,11 @@ import pathlib
 
 import yaml
 
-import deploy_remediation
+from deployer_lib import deploy_remediation
 import gitops_markers
 from deploy_tools.narrow_lib import setup_index as narrow_setup_index
 
-from deploy_remediation import broad_remediation, manual_plane_remediation
+from deployer_lib.deploy_remediation import broad_remediation, manual_plane_remediation
 from lib.repo_paths import K3S_ROLE
 
 _K3S_TASKS = K3S_ROLE / "tasks"

@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_failtext.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py
 """Bounding a failed run's output: what a deploy failure's alert quotes, and how much.
 
 A failed `ansible-playbook` run can print megabytes into the journal, so both halves of its

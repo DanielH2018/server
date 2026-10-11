@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_setup_roles.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_setup_roles.py
 """Which playbook and `--tags` value apply a setup role, and whether the tick's run applies it.
 
 The playbooks are the one list (#3734). `scripts/deploy_tools/setup_routing.py` derives the
@@ -19,8 +19,9 @@ changes*). So a role the routing does not place is never guessed at, and
   answer. A role whose directory the range deletes is dropped (`deploy_defer.drop_deleted_setup_roles`),
   and an unplaced one is recorded in `manual_plane` as `UNROUTED_PLAYBOOK`.
 
-Split out of `deploy_changes` at the module-length cap. `deploy_changes` re-exports every
-name, so its readers keep their imports.
+It reads alone. It imports no sibling module, it takes the routing from a subprocess, and it
+answers for a role name, where `deploy_changes` answers for a changed path. `deploy_changes`
+re-exports every name, so its readers keep their imports.
 """
 
 from __future__ import annotations

@@ -17,11 +17,11 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_lo
 import dataclasses
 import json
 
-import deploy_handlers
-import deploy_io
-import deploy_locks
-import deploy_tick_types
-from deploy_changes import ChangeSet
+from deployer_lib import deploy_handlers
+from deployer_lib import deploy_io
+from deployer_lib import deploy_locks
+from deployer_lib import deploy_tick_types
+from deployer_lib.deploy_changes import ChangeSet
 
 LOCAL = "1" * 40
 ORIGIN = "2" * 40

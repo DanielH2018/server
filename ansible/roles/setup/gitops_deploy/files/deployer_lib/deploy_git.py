@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_git.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py
 """What a tick should do given the two HEADs, the hold, and the CI verdict.
 
 `next_action` is the decision; `ci_verdict` feeds it the gate, reducing the check-runs that

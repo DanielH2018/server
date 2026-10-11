@@ -56,7 +56,7 @@ from lib.repo_paths import K8S_ROLES, REPO as REPO_ROOT  # noqa: E402
 
 # The deployer's test-path rule, called rather than restated (#3660). Stdlib-only, so cheap.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from deploy_changes import _is_test_only_path  # noqa: E402
+from deployer_lib.deploy_changes import _is_test_only_path  # noqa: E402
 
 # The renderers live in releases_format.py (this module hit the 600-line cap); re-exported so
 # `run_releases`, probe.py and the tests keep one name for each.
@@ -163,7 +163,7 @@ def _deploy_tags():
 # Roles under ansible/roles/k8s/ with no containers_list entry -- manifests, image-builder and
 # the rest render or gate the applied bytes for EVERY k8s service, not just their own. Read at
 # call time rather than pinned as a frozenset here: split_shared_roles derives it from the tree
-# rather than repeating the SHARED_K8S_ROLES list gitops_deploy/files/deploy_k8s.py already
+# rather than repeating the SHARED_K8S_ROLES list gitops_deploy/files/deployer_lib/deploy_k8s.py already
 # maintains, so the two can't drift the way ansible/filter_plugins/k8s_autodeploy.py's own copy
 # is pinned to stay in step with (test_denylist_parsers_agree.py).
 def shared_k8s_roles(k8s_roles_dir=None, host_vars=None):

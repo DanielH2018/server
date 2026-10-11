@@ -418,7 +418,7 @@ def test_the_real_landing_process_counts_its_shared_modules():
         "scripts/lib/repo_paths.py",
         "scripts/deploy_tools/land_lib/policy.py",
         "scripts/deploy_tools/narrow_lib/paths.py",
-        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
     ]
     files = [parse_file({"filename": p}) for p in members]
     assert policy.gate_hits(files, policy.CHECKOUT, sys.modules, sys.path) == members

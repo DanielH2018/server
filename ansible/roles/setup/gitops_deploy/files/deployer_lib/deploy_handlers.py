@@ -17,25 +17,28 @@ Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 
 import time
 
-import deploy_alert_text
-import deploy_alerts
-import deploy_broad_k8s
-import deploy_defer
-import deploy_io
-import deploy_k8s_owed
-import deploy_locks
-import deploy_narrow
-from deploy_changes import setup_tags_for, setup_role_tag
-from deploy_config import CHICAGO, Config, log
-from deploy_git import (
+from deployer_lib import deploy_alert_text
+from deployer_lib import deploy_alerts
+from deployer_lib import deploy_broad_k8s
+from deployer_lib import deploy_defer
+from deployer_lib import deploy_io
+from deployer_lib import deploy_k8s_owed
+from deployer_lib import deploy_locks
+from deployer_lib import deploy_narrow
+from deployer_lib.deploy_changes import setup_tags_for, setup_role_tag
+from deployer_lib.deploy_config import CHICAGO, Config, log
+from deployer_lib.deploy_git import (
     dirty_alert_slot,
     dirty_summary,
     should_alert_dirty,
 )
-from deploy_k8s import declares_snapshot_claims, rollback_volume_revert_note
-from deploy_state import DeployerState
-from deploy_tick_types import TickPlan, TickTarget
-from deploy_toolbox import DeployTools
+from deployer_lib.deploy_k8s import (
+    declares_snapshot_claims,
+    rollback_volume_revert_note,
+)
+from deployer_lib.deploy_state import DeployerState
+from deployer_lib.deploy_tick_types import TickPlan, TickTarget
+from deployer_lib.deploy_toolbox import DeployTools
 
 # The two local-time slots a dirty working tree pages in, at ~08:00 and ~20:00 CT. They are
 # constants here rather than settings on `Config`: no config.env key sets them, and

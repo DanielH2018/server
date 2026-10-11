@@ -6,7 +6,7 @@ date: 2026-09-11
 governs:
   - "scripts/deploy_tools/deploy_lib/under_locks.py#the lock order is"
   - "scripts/deploy_tools/deploy_lib/under_locks.py#ownership is this lock"
-  - "ansible/roles/setup/gitops_deploy/files/deploy_locks.py#the lock order is"
+  - "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py#the lock order is"
 ---
 
 # ADR-0017: The tree lock guards the tree, and per-service locks guard the cluster
@@ -131,7 +131,7 @@ full of dead directories cannot turn "seconds" into the deployer's whole `Timeou
 ## Governs
 
 The `# DECIDED:` marker recording the lock order in
-`ansible/roles/setup/gitops_deploy/files/deploy_locks.py`, the one in
+`ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py`, the one in
 `scripts/deploy_tools/deploy_lib/under_locks.py` recording that the wrapper takes that order off
 `deploy_locks.plan` rather than carry a copy of it (issue #2054 — the shell's own copy agreed
 with the deployer's only through a test, and a disagreement is a deadlock), and the one in

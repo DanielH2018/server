@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_k8s.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_k8s.py
 """k8s auto-deploy eligibility, the denylist, and the rollback's revert note.
 
 `split_k8s_auto_deploy` is the gate: diff-shape first (`is_image_only_diff`), identity second
@@ -12,7 +12,7 @@ import re
 from collections.abc import Callable, Mapping, Set as AbstractSet
 from dataclasses import replace
 
-from deploy_changes import ChangeSet
+from deployer_lib.deploy_changes import ChangeSet
 
 # A changed line in a unified diff that assigns a container image var, e.g.
 #   +speedtest_k8s_image: openspeedtest/latest:v2.0.5

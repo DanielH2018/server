@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_alert_text.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_alert_text.py
 """Every message body the deployer posts: one pure function per alert.
 
 The seam `deploy_alerts.py`'s docstring already named. **What to say** is here — no I/O, no
@@ -7,16 +7,15 @@ post stays inside host_lib.discord_post's 1900-character cut with its remediatio
 intact, without driving a tick. **When to say it** stayed in `deploy_alerts.py`: `alert_once`,
 `deliver`, `drain_pending` and `alert_deferred`.
 
-The split is also what keeps either half under the 600-line module cap
-(`ansible/tests/repo/test_module_length_ratchet.py`). `deploy_alerts.py` sat exactly at it, so
-every note a reader needed at one of its lines had to displace an existing one (#2600).
+It reads alone. Every function here takes the facts of one alert and returns its text, and
+nothing here reads `DeployerState`, the retry queue or the webhook (#2600).
 
 Reach these functions qualified (`deploy_alert_text.crash_alert(...)`), never by from-import —
 see `deploy_io.py`'s docstring for why.
 """
 
-from deploy_failtext import TimedOutWithOutput, failing_task, head, tail
-from deploy_remediation import k8s_remediation
+from deployer_lib.deploy_failtext import TimedOutWithOutput, failing_task, head, tail
+from deployer_lib.deploy_remediation import k8s_remediation
 from gitops_markers import HOLD_CLEAR_CMD
 
 # Per-alert budget for an embedded error string. host_lib.discord_post cuts a post at

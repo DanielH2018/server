@@ -13,7 +13,7 @@ catching up. The CI gate has its own file, test_deploy_git_ci.py.
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from deploy_git import (
+from deployer_lib.deploy_git import (
     behind_marker,
     dirty_alert_slot,
     dirty_summary,

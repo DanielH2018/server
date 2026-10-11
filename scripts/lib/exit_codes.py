@@ -270,7 +270,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "`deploy_locks.py plan` did not print this run's service locks, so the wrapper had "
             "nothing to take and NOTHING was deployed.",
             "It never falls back to a lock order of its own. Run `uv run python "
-            "ansible/roles/setup/gitops_deploy/files/deploy_locks.py plan <tag>` by hand to "
+            "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_locks.py plan <tag>` by hand to "
             "see why, fix that, then re-run; nothing was held while it ran.",
             verdict="lock-plan-failed",
         ),

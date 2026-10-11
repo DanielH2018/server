@@ -137,8 +137,11 @@ so any change to that file names `claude_code`, including a change to a key it n
 are an include rather than a static import. The tick therefore applies the whole `claude_code`
 tag for every edit to that file. In a role whose readers do narrow, `role_tags` maps such a row
 to the readers of the changed keys the consumer names. A key the consumer never names adds no
-tag. The same test file derives these rows from the tree
-and keeps the reads not recorded yet in a pending set (#4357).
+tag. The same test file derives these rows from the tree, and the table must equal them (#4357).
+`initial_setup` reads `claude_code`'s agent defaults, and `deploy_ui` reads `k3s_agent_node_ips`.
+A k3s defaults change therefore records `k3s` in `manual_plane` and applies `deploy_ui`.
+A word match that is not a read, such as a bash local in a template, is exempted in that test
+with the reason.
 
 - A `common/tasks/` file is in the table too. An `import_tasks` is static, so its tasks run under
   each importer's tags, and `narrow_setup` resolves the basename through the importing task.
@@ -1395,7 +1398,7 @@ whole run and takes the per-service locks inside that hold, which keeps a tick a
 deploy off the same rollout. The lock order is `all` first, then each service in sorted order.
 `deploy.sh` runs `deploy_locks.py plan <tag>...`, takes the locks it prints top to bottom, and
 exits 79 rather than order them itself when the plan does not arrive. The `# DECIDED:` marker
-in `files/deploy_locks.py` says why the two orders cannot deadlock.
+in `files/deployer_lib/deploy_locks.py` says why the two orders cannot deadlock.
 
 **A busy service lock is contention, not a failed deploy.** `deploy_locks` raises
 `ServiceLockBusy`, each of the three deploy handlers catches it ahead of its failure arm, and
@@ -1436,6 +1439,15 @@ a failed deploy and rolls back.
 
 Moved out of the role's `CLAUDE.md` by #2999. Three layers, and which one a function belongs in
 is decided by what it touches.
+
+On disk, `files/` holds the entry point `gitops_deploy.py` and the three `gitops_*` modules, and
+every `deploy_*` module sits in the `files/deployer_lib/` namespace package (#4355). The
+`gitops_*` modules stay flat because `ansible/tests/deploy/test_gitops_markers_copies.py` keeps
+them identical to monitor-bridge's copies, and the deploy UI installs them flat too. A
+`deploy_*` module is imported as `from deployer_lib import deploy_io`. The entry point puts its
+own directory on `sys.path`, which is what resolves `deployer_lib` on the host. The package is
+not named `deploy_lib`, because `scripts/deploy_tools/deploy_lib/` sits on the same pytest path
+and two same-named PEP 420 portions merge into one package.
 
 | layer | modules | holds |
 |---|---|---|

@@ -14,9 +14,10 @@ deliberately, and the expansion was overriding that. Such a landing now deploys 
 representative caller as a smoke test, and `shared_role_callers.smoke_caller` carries the
 `# DECIDED:` holding the operator's ruling and the gap it accepts.
 
-WHY IT IS NOT IN `land_tags`. That module is at its 600-line cap, and
-`scripts/tests/test_scripts_import_direction.py` refuses a cycle — so this reads the path mappers
-from `reach`, which sits below both, rather than from `land_tags`. `land_tags` re-exports every
+WHY IT IS NOT IN `land_tags`. The expansion and its one exception read alone: they need
+`reach`'s path mappers and `shared_role_callers`, and nothing private to `land_tags`.
+`scripts/tests/test_scripts_import_direction.py` refuses a cycle, so this reads the mappers from
+`reach`, which sits below both, rather than from `land_tags`. `land_tags` re-exports every
 name below, so each existing reader keeps reading it there.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_shared_role_smoke_caller.py
@@ -35,7 +36,7 @@ from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, caller_tags, smoke_
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import role_of
+from deployer_lib.deploy_logic import role_of
 
 # The path-to-role mapper and the test-path rule live in `reach`, the module that answers
 # which services a path list reaches. `land_tags` re-exports both under their old names.

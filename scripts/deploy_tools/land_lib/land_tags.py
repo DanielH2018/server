@@ -47,7 +47,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import (
+from deployer_lib.deploy_logic import (
     broad_remediation,
     k8s_remediation,
     setup_role_playbook,

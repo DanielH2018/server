@@ -2,9 +2,8 @@
 
 `deploy_run` calls `check_passthrough` once, before the tree lock. `Refused` lives here rather
 than in `deploy_lib/run.py` because this module raises it and that one only catches it, and both
-are here rather than in `deploy_lib/run.py` because that file sits at its length cap
-(`ansible/tests/repo/test_module_length_ratchet.py`); this is also the only piece of the
-wrapper that imports ansible itself.
+are here rather than in `deploy_lib/run.py` because this is the only piece of the wrapper that
+imports ansible itself.
 
 It PARSES and never runs. Nothing here starts a playbook, which
 `ansible/tests/deploy/test_deploy_runs_from_a_snapshot_under_service_locks.py` asserts by name

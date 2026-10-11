@@ -36,7 +36,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 sys.path.insert(0, str(HOST_LIB_FILES))
 
-from deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
+from deployer_lib.deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
 from host_lib import github_get, github_token
 
 CI_REPO = "DanielH2018/server"

@@ -6,7 +6,7 @@ Docker, and `declared_k8s_services` must not return it.
 
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_inventory.py
 
-from deploy_inventory import declared_k8s_services
+from deployer_lib.deploy_inventory import declared_k8s_services
 
 
 def test_declared_k8s_services_parses_platform_k8s_entries():

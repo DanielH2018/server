@@ -16,10 +16,10 @@ import dataclasses
 from pathlib import Path
 
 import pytest
-import deploy_handlers
-import deploy_phases
-import deploy_tick_types
-from deploy_changes import ChangeSet
+from deployer_lib import deploy_handlers
+from deployer_lib import deploy_phases
+from deployer_lib import deploy_tick_types
+from deployer_lib.deploy_changes import ChangeSet
 from _deploy_fakes import receipt_applied
 
 LOCAL = "1" * 40
@@ -252,7 +252,7 @@ def test_plan_tick_attributes_each_k8s_role_to_the_newest_commit_touching_it(
 @pytest.fixture
 def installed_tables():
     """The cross-role tables a tick starts from, put back after the test swaps them."""
-    import deploy_cross_role
+    from deployer_lib import deploy_cross_role
 
     saved = deploy_cross_role.current_tables()
     deploy_cross_role.use_tables({**saved, "SETUP_FILES_SHIPPED_BY_OTHER_ROLES": {}})
@@ -287,7 +287,7 @@ def test_plan_tick_routes_a_new_shared_file_with_the_tables_its_own_range_adds(
 
 def test_tables_in_reads_the_live_module_as_it_imports():
     """The parser must rebuild every table the real file defines, f-strings and unions included."""
-    import deploy_cross_role
+    from deployer_lib import deploy_cross_role
 
     source = Path(deploy_cross_role.__file__).read_text()
     assert deploy_cross_role.tables_in(source) == deploy_cross_role.current_tables()

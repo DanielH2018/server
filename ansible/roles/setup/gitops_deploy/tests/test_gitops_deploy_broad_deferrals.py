@@ -16,7 +16,7 @@ import dataclasses
 
 import pytest
 
-import deploy_locks
+from deployer_lib import deploy_locks
 from gitops_ledger import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, parse_owed
 from _broad_k8s_range import (
     alerted,

@@ -189,7 +189,7 @@ def test_remaining_setup_hosts_note_stays_empty_for_pr_723():
     flagging them here would make land.sh exit 1 with `needs-manual-apply` for work the very
     next tick applies (see `plane_note`'s docstring)."""
     files = [
-        "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
         "ansible/roles/setup/renovate_notify/files/renovate_notify.py",
     ]
     assert land_reach.remaining_setup_hosts_note(files, "daniel-box") == ""

@@ -17,7 +17,7 @@ import pathlib
 
 import gitops_markers
 
-_FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
+_FILES = pathlib.Path(__file__).resolve().parents[1] / "files" / "deployer_lib"
 # Every module that calls `alert_once`, named rather than globbed: a glob over files/ would
 # keep passing if the call sites all moved to a module the glob stopped matching.
 _SOURCES = (

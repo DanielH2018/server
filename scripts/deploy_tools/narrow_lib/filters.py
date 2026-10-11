@@ -14,8 +14,8 @@ caller under the play's own trees still refuses there.
 
 ANY DOUBT IS A REFUSAL: a `filters()` that is not a literal dict of string keys, a deleted
 plugin, a plugin a sibling plugin imports, and a mention in an inventory value all raise
-`CannotNarrow`. Lives beside `narrow_broad` because that module sits at its 600-line cap; it
-imports nothing from it, so the two cannot cycle.
+`CannotNarrow`. A module of its own because what a plugin defines reads alone. It imports
+nothing from `narrow_broad`, so the two cannot cycle.
 """
 
 import sys as _sys

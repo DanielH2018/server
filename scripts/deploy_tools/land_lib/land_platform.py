@@ -18,9 +18,11 @@ A TAG NO PATH NAMES IS NEVER IN HERE, because this reads paths rather than `Reac
 output. Nothing proves which platform such a tag belongs to, so it keeps reaching every host
 that declares it.
 
-Its own module beside `land_tags`, which was AT the 600-line cap when this was written. The
-import goes one way -- this reads `land_tags` and `reach`, and neither reads anything here -- so
-no cycle.
+Its own module because it answers one question, which platform a derived tag belongs to, from
+the public functions of `land_tags` and `reach`. The import goes one way -- neither reads
+anything here -- so no cycle. `diff_range` restates the range `deploy_tags._git_diff_paths`
+reads, and a test compares the two. That copy is of `deploy_lib/tags.py`, not of `land_tags`,
+so folding this module into `land_tags` would not remove it.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_platform.py
 """

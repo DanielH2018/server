@@ -36,7 +36,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 # `deploy_state` reaches `host_lib` for its atomic write, as in `gitops_state.py`.
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 sys.path.insert(0, str(HOST_LIB_FILES))
-import deploy_locks
+from deployer_lib import deploy_locks
 
 
 class Run(Protocol):
@@ -207,11 +207,11 @@ def discharge_owed_k8s(
       lock_wait_s: how long to wait for the tree lock.
     """
     try:
-        import deploy_k8s_owed
-        import deploy_release
-        from deploy_config import Config
-        from deploy_state import STATE_DIR, DeployerState
-        from deploy_toolbox import DeployTools
+        from deployer_lib import deploy_k8s_owed
+        from deployer_lib import deploy_release
+        from deployer_lib.deploy_config import Config
+        from deployer_lib.deploy_state import STATE_DIR, DeployerState
+        from deployer_lib.deploy_toolbox import DeployTools
 
         if tools is None:
             release_dir = (

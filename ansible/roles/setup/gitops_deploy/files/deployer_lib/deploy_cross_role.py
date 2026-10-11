@@ -1,4 +1,4 @@
-# ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py
+# ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py
 """The files other roles ship, import or read by path, and the roles a change to one reaches.
 
 `deploy_changes.services_from_changed_paths` and `setup_roles_for` read the setup tables below to
@@ -9,6 +9,10 @@ tree.
 
 The k8s plane needs no table: `k8s_lookup_readers` derives its readers from the templates and
 tasks that name another role's file in a `lookup()`.
+
+A module of its own, not part of `deploy_changes`, because the tick and `land.sh` parse
+another commit's copy of THIS file by path (`tables_in`, `CROSS_ROLE_FILE`). Nothing else may
+share the file that parse reads.
 """
 
 from __future__ import annotations
@@ -58,8 +62,14 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     # in `initial_setup_worktree_holders_group`, so a rename re-applied only initial_setup and
     # moved the socket away from every agent. The tick applies the whole claude_code tag for
     # any change here: `narrow_setup.role_tags` refuses, because claude_code's agent tasks are
-    # an include, not a static import. The other cross-role defaults reads are #4357's.
+    # an include, not a static import.
     "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset({"claude_code"}),
+    # initial_setup's worktree-holder crons read the agent list, the agent user, its primary
+    # profile and the operator checkout from claude_code's defaults (#4357).
+    "ansible/roles/setup/claude_code/defaults/main.yml": frozenset({"initial_setup"}),
+    # deploy_ui's firewall sources include `k3s_agent_node_ips` (#4357). Only `k3s-bringup.yml`
+    # runs k3s, so a change here records k3s in `manual_plane` and the tick applies deploy_ui.
+    "ansible/roles/setup/k3s/defaults/main.yml": frozenset({"deploy_ui"}),
 }
 
 
@@ -105,7 +115,9 @@ SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
 
 
 # This module, by its repo path, and the names of the tables above.
-CROSS_ROLE_FILE = "ansible/roles/setup/gitops_deploy/files/deploy_cross_role.py"
+CROSS_ROLE_FILE = (
+    "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py"
+)
 TABLE_NAMES = (
     "K8S_ROLES_IMPORTING_SETUP_FILES",
     "SETUP_FILES_ROUTED_TO_OWNER",

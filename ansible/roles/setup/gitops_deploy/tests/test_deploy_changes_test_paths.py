@@ -9,7 +9,7 @@ path that merely contains `test` is not a test.
 
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_test_paths.py
 
-from deploy_changes import services_from_changed_paths
+from deployer_lib.deploy_changes import services_from_changed_paths
 
 
 # ── test-suite paths reach no host, so they drive no deploy decision ────────────────────
@@ -56,7 +56,7 @@ def test_the_deployers_own_module_is_still_flagged():
     which would ff-merge it and leave the host on the old code.
     """
     cs = services_from_changed_paths(
-        ["ansible/roles/setup/gitops_deploy/files/deploy_logic.py"]
+        ["ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py"]
     )
     assert cs.broad is True and cs.broad_setup is True
     assert cs.setup_roles == {"gitops_deploy"}
@@ -71,7 +71,7 @@ def test_a_test_file_does_not_disarm_a_real_change_beside_it():
     cs = services_from_changed_paths(
         [
             "ansible/roles/setup/gitops_deploy/tests/test_deploy_health.py",
-            "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
+            "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py",
         ]
     )
     assert cs.broad_setup is True

@@ -14,9 +14,9 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_br
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_park.py
 
-import deploy_defer
-import deploy_locks
-from deploy_tick_types import TickTarget
+from deployer_lib import deploy_defer
+from deployer_lib import deploy_locks
+from deployer_lib.deploy_tick_types import TickTarget
 from _deploy_fakes import receipt_applied
 from gitops_ledger import parse_receipts
 

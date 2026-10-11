@@ -281,7 +281,7 @@ def _load_deploy_logic():
     function rather than at module import time, so `validate`/`list`/`describe` never pay
     for or depend on this cross-directory import succeeding — only `changed` needs it.
     """
-    from deploy_logic import broad_remediation, k8s_remediation
+    from deployer_lib.deploy_logic import broad_remediation, k8s_remediation
 
     return broad_remediation, k8s_remediation
 
@@ -385,7 +385,7 @@ def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]
     explicit refs. Worktrees share the object store with the checkout they were made from,
     so a ref fetched in the primary is readable from a worktree that never fetched it.
     """
-    from deploy_logic import comment_only_broad_changes
+    from deployer_lib.deploy_logic import comment_only_broad_changes
 
     return comment_only_broad_changes(paths, old_ref, new_ref, _git_show)
 

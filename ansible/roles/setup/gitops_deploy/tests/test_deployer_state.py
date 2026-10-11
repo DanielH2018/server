@@ -22,7 +22,7 @@ import pathlib
 import pytest
 import yaml
 
-import deploy_io
+from deployer_lib import deploy_io
 from gitops_ledger import (
     OWED_HOLD_PLANE,
     OWED_K8S_DEFERRED,

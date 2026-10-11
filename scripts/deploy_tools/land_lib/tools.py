@@ -45,7 +45,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 # The deployer's own modules import each other bare (`import deploy_locks`), so the directory
 # has to be on the path for the names this module reads from it.
 _sys.path.insert(2, str(GITOPS_DEPLOY_FILES))
-from deploy_locks import TREE_LOCK as LOCK
+from deployer_lib.deploy_locks import TREE_LOCK as LOCK
 from gitops_hold import DeployerSnapshot, read_field
 from gitops_markers import MARKERS
 from deploy_tools import await_ci, shared_role_reach
