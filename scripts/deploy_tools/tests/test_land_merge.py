@@ -196,6 +196,22 @@ def test_arm_merge_accepts_a_public_repo_after_reading_its_visibility(landing):
     assert ln.direct_merge_subject
 
 
+def test_arm_merge_names_the_field_when_the_visibility_read_is_the_wrong_shape(landing):
+    ln, _ = landing(
+        Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}),
+        arm_merge=True,
+        await_merge=True,
+    )
+    read = ln.tools.gh_json
+    ln.tools.gh_json = lambda *a, **k: (
+        ["public"] if a[:2] == ("api", "repos/{owner}/{repo}") else read(*a, **k)
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.arm_merge(ln)
+    assert exc.value.rc == 1
+    assert "gh api repos: expected a JSON object, got list" in exc.value.error
+
+
 def test_arm_merge_reads_no_author_when_none_is_required(landing):
     """An interactive landing makes exactly the calls it made before the check existed."""
     ln, calls = landing(

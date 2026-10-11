@@ -356,8 +356,8 @@ def _list[T](ln: Landing, what: str, parse: Callable[[JsonObject], T]) -> list[T
         _refuse(ln, f"could not list the PR's {what}: {exc.stderr.strip()}")
     except subprocess.TimeoutExpired:
         _refuse(ln, f"could not list the PR's {what}: gh timed out")
-    except ValueError:
-        _refuse(ln, f"could not list the PR's {what}: unparseable gh output")
+    except ValueError as exc:
+        _refuse(ln, f"could not list the PR's {what}: unparseable gh output: {exc}")
 
 
 def check(ln: Landing) -> str:
