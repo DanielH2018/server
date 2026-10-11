@@ -152,6 +152,24 @@ not call `sys.exit` itself, so a test can call it. Reference:
 `ansible/roles/k8s/uptime-kuma/files/render_status_page.py`. Google's style guide gives the
 same shape ([Google Python style, main][google]).
 
+**A module family lives in a package behind one entrypoint.** A family is three or more
+sibling modules whose filenames share a first or last `_`-word, such as `land_*.py` or
+`*_gates.py`, where at least one module is an entrypoint. The entrypoint stays where it is,
+and the other modules move into a `<prefix>_lib/` namespace package beside it. A reader
+listing the directory then sees one program rather than several. The operator ruled on
+2026-10-10 that this navigation gain is reason enough on its own. References:
+`scripts/deploy_tools/land.py` with `land_lib/`, `scripts/diagnostics/probe.py` with
+`probe_lib/`, and `ansible/roles/setup/fake_remux/files/fake_remux.py` with
+`fake_remux_lib/`. A forwarding shim at an old path does not count. A shim holds only
+imports and a `__main__` guard whose one statement calls the entrypoint of its own family. Shipped code
+or an older checkout still runs such a path, so the consolidation leaves a shim there
+(`scripts/dev/fanout_place.py`). The
+`module-families-live-in-a-package` row of `ansible/tests/repo/test_census_rows_layout.py`
+enforces the rule for a `scripts/` subdirectory and a role's `files/`. Its `allow` names each
+family that stays flat, with the reason. Two stay flat by design: the
+`scripts/validate/*_templates.py` checks, each its own prek hook, and the deployer's
+`gitops_*` modules, which other roles copy by path.
+
 **I/O behind one injectable object.** Every subprocess, HTTP, git and filesystem boundary a
 program crosses lives in one frozen dataclass whose fields default to the real implementation.
 A test replaces one field and never a `PATH` entry or a module attribute. Reference:

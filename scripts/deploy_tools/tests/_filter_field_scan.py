@@ -1,6 +1,6 @@
 """An AST scan of a filter plugin: which entry fields each registered filter reads.
 
-`test_narrow_containers_fields.py` holds `FILTER_FIELDS` in `narrow_lib/containers.py` against
+`test_narrow_filter_tables.py` holds `FILTER_FIELDS` in `narrow_lib/containers.py` against
 it. A row that omits a field its filter reads narrows a `containers_list` edit past a role
 whose render that field moves, which is an under-deploy, so the scan errs toward reading more:
 any use of an entry it cannot resolve to a literal key is reported as opaque, and an opaque

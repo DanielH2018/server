@@ -61,8 +61,8 @@ needs, decides which one.
   row of `ansible/tests/repo/test_census_rows_roles.py` fails on one that does not.
 - **As data on the `containers_list` entry**, when the fence is one port and a list of caller
   pods: `netpol_from: [apps]`, rendered through the `networkpolicy` macro in
-  `ansible/templates/networkpolicy.yml.j2`. `templates/networkpolicy-callers.yaml.j2` loops
-  over every entry carrying the key, behind the `netpol_baseline_enforced` lever. An entry
+  `ansible/templates/networkpolicy.yml.j2`. `templates/networkpolicy-callers.yaml.j2` renders
+  the `netpol_caller_fences` filter's fence for every entry carrying the key, behind the `netpol_baseline_enforced` lever. An entry
   whose pod label is not its own name sets `netpol_app:` to the label (scrutiny's
   `scrutiny-web`). A sub-workload with no entry of its own is a `netpol_fences: [{app, port,
   from}]` item on its role's entry, carrying its own label and port (freshrss's feed cache).

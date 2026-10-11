@@ -8,6 +8,18 @@ export type DeckRun = {
   verdict: string | null
 }
 
+// One owed `manual_plane` role. `line` is the SessionStart banner's sentence; the rest are its
+// parts. `apply` is "" for a role no printed playbook applies, and `by_hand` says what to do.
+export type DeckManualPlane = {
+  role: string
+  line: string
+  age: string
+  apply: string
+  by_hand: string
+  warning: string
+  clear: string
+}
+
 export type DeckWorktree = { path: string; branch: string; claims: number[] }
 
 // One row of `findings.py claims --json`.
@@ -23,7 +35,7 @@ export type DeckSnapshot = {
   host: string
   read_at: number
   hold: { sha: string; planes: string[] } | null
-  manual_planes: { role: string; line: string }[] | null
+  manual_planes: DeckManualPlane[] | null
   ci: { state: string; sha: string; url: string } | null
   runs: DeckRun[] | null
   last_verdict: { log: string; verdict: string | null } | null

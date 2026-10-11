@@ -21,7 +21,12 @@ import pytest
 
 from _homepage_config import config_urls, namespace
 from _k8s_render import host_context, rendered_docs
-from homepage_tiles import homepage_href, homepage_widget_url, netpol_callers
+from homepage_tiles import (
+    homepage_href,
+    homepage_widget_url,
+    netpol_caller_fences,
+    netpol_callers,
+)
 from lib.ansible_inventory import containers_entries_in
 
 ENTRIES = [
@@ -146,3 +151,33 @@ def test_each_bespoke_fence_admits_homepage():
             for peer in rule.get("from") or []
         ]
         assert "homepage" in peers, f"{template} no longer admits homepage"
+
+
+def test_caller_fences_skip_what_a_role_renders_itself():
+    """netpol-baseline renders these; a `role_owned` entry or item is its own role's."""
+    entries = [
+        {
+            "name": "scrutiny",
+            "netpol_app": "scrutiny-web",
+            "port": 8080,
+            "homepage_widget": True,
+        },
+        {
+            "name": "sonarr",
+            "port": 8989,
+            "netpol_from": ["bazarr"],
+            "netpol_role_owned": True,
+        },
+        {"name": "plain", "port": 1},
+        {
+            "name": "obs",
+            "netpol_fences": [
+                {"app": "loki", "port": 3100, "from": ["alloy"]},
+                {"app": "tempo", "port": 4317, "from": ["alloy"], "role_owned": True},
+            ],
+        },
+    ]
+    assert netpol_caller_fences(entries) == [
+        {"app": "scrutiny-web", "port": 8080, "callers": ["homepage"]},
+        {"app": "loki", "port": 3100, "callers": ["alloy"]},
+    ]
