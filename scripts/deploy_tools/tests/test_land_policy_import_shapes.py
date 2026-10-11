@@ -195,9 +195,7 @@ ADMITTED = {
     "a package gaining an empty __init__.py": (
         [
             _added(f"{V}/__init__.py", EMPTY),
-            _renamed(
-                "scripts/validate/validate_lib/k8s_schema.py", f"{V}/k8s_schema.py"
-            ),
+            _renamed("src/homelab/legacy/k8s_schema.py", f"{V}/k8s_schema.py"),
         ],
         {f"{V}/__init__.py": F, f"{V}/k8s_schema.py": F},
     ),
