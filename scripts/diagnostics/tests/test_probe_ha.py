@@ -415,3 +415,24 @@ def test_ha_reads_exit_with_the_server_s_words_on_a_401(monkeypatch, argv):
     with pytest.raises(core.NonJsonResponse) as exc:
         call()
     assert "401: Unauthorized" in str(exc.value)
+
+
+@pytest.mark.parametrize("extra", [[], ["--json"]])
+def test_ha_state_error_page_is_unreadable_with_or_without_json(
+    monkeypatch, capsys, extra
+):
+    """`--json` used to print the error page as the document and exit 0 (#4468)."""
+    from diagnostics.probe_lib.cli_parser import _build_parser
+
+    page = "<html>502 Bad Gateway</html>"
+
+    def run(argv, **_):
+        reply = "example.test\n" if core.SECRETS_PATH in argv else page
+        return subprocess.CompletedProcess(argv, 0, reply, "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    ns = _build_parser().parse_args(["ha", "state", "fan.tower_fan", *extra])
+    with pytest.raises(core.Unreadable):
+        ha.run_ha(ns)
+    out, err = capsys.readouterr()
+    assert page in err and page not in out

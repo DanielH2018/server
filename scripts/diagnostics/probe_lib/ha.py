@@ -549,14 +549,14 @@ def run_ha(ns):
         print(core.redact_log_secrets(body), end="")  # #3015: see redact_log_secrets
         return 0
     if ns.ha_cmd == "state":
-        if ns.json:
-            print(body)
-            return 0
-        try:
+        try:  # parsed even for --json, which would otherwise pass an error page as 0
             obj = json.loads(body)
         except json.JSONDecodeError:  # an error page: the entity was never read (#4468)
             body = core.redact_log_secrets(body.strip())
             raise core.Unreadable(f"HA answered {url} with non-JSON:\n{body}") from None
+        if ns.json:
+            print(body)
+            return 0
         # A missing entity returns {"message": "Entity not found."}.
         if not isinstance(obj, dict) or "entity_id" not in obj:
             msg = obj.get("message") if isinstance(obj, dict) else body.strip()
