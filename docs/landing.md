@@ -297,9 +297,12 @@ one exception being a primary that already contains the commit.
 A failed gate is asked once more whether a later deploy re-rolled the workload. The landing's
 deploy releases the service lock before the gate runs, so another landing or a tick can deploy
 the same service under the gate's one sample. A `Recreate` workload then reads `0/1 ready`
-mid-roll (#3812). `land.sh` counts a tag as re-rolled when its service lock (or `all`) is held,
-or its release record was stamped after step 5 ended. It waits for that deploy to finish and
-gates again. The verdict line then reads `re-gated after a later deploy of <tags>`, and a change
+mid-roll (#3812). `land.sh` counts a tag as re-rolled on one of two signals, and neither counts
+on its own (#4514). A held service lock (or `all`) counts only when one of the tag's workloads
+changed `metadata.generation` while the lock was held. A release record stamped after step 5
+ended counts only when it queued a restart or names manifests that differ from the record
+before it. A deploy that rolled nothing leaves the failed gate standing. On a re-roll, `land.sh`
+waits for that deploy to finish and gates again. The verdict line then reads `re-gated after a later deploy of <tags>`, and a change
 that is still broken fails the second gate as well. A healthy second gate settles only when the
 commit in that deploy's release record contains the merge commit. The tick's rollback
 redeploys an older pin, and its healthy pods say nothing about this change.
