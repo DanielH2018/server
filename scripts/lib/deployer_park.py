@@ -68,6 +68,7 @@ from gitops_hold import read_field
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     CONTENTION_PAGE_SECONDS,
+    PLAYBOOK_CMD,
     SHARED_K8S_ROLES,
     STATE_DIR,
     k8s_deferred_deploy_cmd,
@@ -194,13 +195,6 @@ def _age_phrase(seconds):
     if seconds < 2 * 3600:
         return f"{int(seconds // 60)} min"
     return f"{int(seconds // 3600)}h"
-
-
-# The printed apply runs through the repo's pinned env. The uv-tool shim's bare
-# `ansible-playbook` lacks the collection deps, so a pasted command would fail. The playbook
-# path is relative, so the command runs from a checkout's root, where `ansible.cfg` names the
-# inventory.
-PLAYBOOK_CMD = "uv run ansible-playbook"
 
 
 @dataclass(frozen=True)

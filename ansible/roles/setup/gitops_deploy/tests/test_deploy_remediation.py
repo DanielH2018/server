@@ -72,9 +72,11 @@ def test_broad_remediation_for_a_role_no_playbook_includes_names_its_consumers()
     """setup/common is read by two roles on two hosts and applied by no playbook of its own."""
     cmd = broad_remediation(False, True, {"common"})
     assert "applied by no playbook of its own" in cmd
-    assert "`ansible-playbook ansible/k3s-bringup.yml --tags k3s` (WARNING:" in cmd
     assert (
-        "`ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`"
+        "`uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s` (WARNING:" in cmd
+    )
+    assert (
+        "`uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`"
         in cmd
     )
 
@@ -88,7 +90,7 @@ def test_a_role_gated_off_the_tick_host_goes_to_manual_plane_with_its_target():
     assert deploy_defer.unapplyable_setup_roles(cs) == ["optimize_pi"]
     cmd = manual_plane_remediation({"optimize_pi"})
     assert (
-        "`ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`"
+        "`uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`"
         in cmd
     )
     assert "clear-owed manual_plane optimize_pi" in cmd
@@ -106,10 +108,13 @@ def test_broad_remediation_without_roles_keeps_the_generic_placeholder():
     [
         (
             "ansible/k3s-bringup.yml",
-            "`ansible-playbook ansible/k3s-bringup.yml --tags k3s`",
+            "`uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s`",
         ),
-        ("ansible/bootstrap.yml", "`ansible-playbook ansible/bootstrap.yml`"),
-        ("ansible/initial_setup.yml", "`ansible-playbook ansible/initial_setup.yml`"),
+        ("ansible/bootstrap.yml", "`uv run ansible-playbook ansible/bootstrap.yml`"),
+        (
+            "ansible/initial_setup.yml",
+            "`uv run ansible-playbook ansible/initial_setup.yml`",
+        ),
     ],
 )
 def test_broad_remediation_names_a_changed_bringup_playbook(path, expected):
@@ -211,7 +216,7 @@ def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
         "k8s_remediation prescribed a --tags redeploy for roles with no containers_list "
         "entry: %s" % sorted(shared)
     )
-    assert "`ansible-playbook ansible/deploy.yml`" in msg
+    assert "`uv run ansible-playbook ansible/deploy.yml`" in msg
 
     # A declared role still gets the cheap scoped form.
     one = sorted(roles & declared)[:1]
@@ -226,7 +231,7 @@ def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
         "the mixed form prescribed undeployable tags: %s"
         % sorted(_prescribed_tags(mixed) - declared)
     )
-    assert "`ansible-playbook ansible/deploy.yml`" in mixed
+    assert "`uv run ansible-playbook ansible/deploy.yml`" in mixed
 
 
 def test_a_shared_module_edit_names_every_consumer_role():
@@ -260,7 +265,7 @@ def test_a_consumer_this_host_does_not_declare_is_not_escalated():
     declared = {"monitor-bridge"}
     msg = k8s_remediation({"monitor-bridge"}, declared, {"autofix-bridge"})
     assert _prescribed_tags(msg) == {"monitor-bridge"}
-    assert "`ansible-playbook ansible/deploy.yml`" not in msg, (
+    assert "`uv run ansible-playbook ansible/deploy.yml`" not in msg, (
         "an undeclared consumer escalated the instruction to a full deploy: %s" % msg
     )
 

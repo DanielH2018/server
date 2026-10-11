@@ -16,7 +16,7 @@ see `deploy_io.py`'s docstring for why.
 
 from deployer_lib.deploy_failtext import TimedOutWithOutput, failing_task, head, tail
 from deployer_lib.deploy_remediation import k8s_remediation
-from gitops_markers import HOLD_CLEAR_CMD
+from gitops_markers import HOLD_CLEAR_CMD, PLAYBOOK_CMD
 
 # Per-alert budget for an embedded error string. host_lib.discord_post cuts a post at
 # `message[:1900]`, keeping the HEAD — so an unbounded error string does not truncate itself, it
@@ -70,7 +70,7 @@ def bad_config_alert(hostname: str, config_path: str, exc: BaseException) -> str
     """
     return (
         f"🚨 gitops-deploy: **bad config** on {hostname}. `{config_path}` — {exc}.\n"
-        f"No tick ran. Re-render it with `uv run ansible-playbook "
+        f"No tick ran. Re-render it with `{PLAYBOOK_CMD} "
         f"ansible/initial_setup.yml --tags gitops_deploy`."
     )
 
@@ -150,7 +150,7 @@ def secrets_deferred_alert(origin: str) -> str:
         f"⚠️ gitops-deploy: `secrets.yml` changed in `{origin[:8]}` with no "
         f"service template — fast-forwarded but **nothing was redeployed**. The "
         f"rotated secret won't reach its container(s) until you redeploy them "
-        f"(`ansible-playbook ansible/deploy.yml --tags <svc>`)."
+        f"(`{PLAYBOOK_CMD} ansible/deploy.yml --tags <svc>`)."
     )
 
 
@@ -160,7 +160,7 @@ def tasks_deferred_alert(origin: str, services: set[str]) -> str:
         f"⚠️ gitops-deploy: a structural dir (`tasks/`/`defaults/`/`vars/`/`handlers/`) changed "
         f"for `{', '.join(sorted(services))}` in `{origin[:8]}` with no redeploy of those "
         f"service(s) — fast-forwarded but **not applied** (those dirs aren't auto-deployed). "
-        f"Redeploy by hand: `ansible-playbook ansible/deploy.yml --tags <svc>`."
+        f"Redeploy by hand: `{PLAYBOOK_CMD} ansible/deploy.yml --tags <svc>`."
     )
 
 
