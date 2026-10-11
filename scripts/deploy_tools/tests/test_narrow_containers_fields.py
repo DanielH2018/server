@@ -268,3 +268,20 @@ def test_the_real_tree_names_filter_readers():
     assert containers.reader_reads(Path(reader).read_text()) == {
         "uptime-kuma": {"name", "port"}
     }
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "artifacts/templates/configmap.yaml.j2",
+        "monitor-bridge/templates/env-secret.yaml.j2",
+        "netpol-baseline/templates/networkpolicy-callers.yaml.j2",
+        "pihole/templates/config/pihole-dnsmasq.conf.j2",
+        "uptime-kuma/templates/deployment.yaml.j2",
+    ],
+)
+def test_a_former_list_loop_reads_named_fields_is_clean(template: str):
+    """These five looped the list, so every entry edit reached their roles (#4395)."""
+    reads = containers.reader_reads((REPO / "ansible/roles/k8s" / template).read_text())
+    assert reads is not None
+    assert not any("depends_on" in fields for fields in reads.values())

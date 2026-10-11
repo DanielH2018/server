@@ -41,11 +41,8 @@ spec:
             # existing *.local wildcard SAN, so it adds no ACME order.
             # test_the_all_clear_probe_host_fronts_no_route keeps it unrouted.
             - "edge-selfcheck.local.{{ domain }}"
-{% for entry in hostvars[k8s_primary_node].containers_list | selectattr('hostname', 'defined') %}
-            - "{{ entry.hostname }}.local.{{ domain }}"
-{% for extra in entry.extra_hostnames | default([]) %}
-            - "{{ extra }}.local.{{ domain }}"
-{% endfor %}
+{% for name in hostvars[k8s_primary_node].containers_list | lan_hostnames %}
+            - "{{ name }}.local.{{ domain }}"
 {% endfor %}
 {{ node_affinity_preference('daniel-server') }}
       containers:

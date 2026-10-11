@@ -30,8 +30,8 @@ _FILTER = re.compile(r"\s*\|\s*(\w+)")
 
 # The entry fields each filter reads when a template hands it `containers_list`. A filter absent
 # here reads every field: `filter_by_platform` and `selectattr` return whole entries, and the
-# template then reads whatever it likes from them. `name` is in every row because each filter
-# finds its entry by name. `test_narrow_filter_tables.py` derives each row from the filter's
+# template then reads whatever it likes from them. A filter that looks an entry up by name has
+# `name` in its row. `test_narrow_filter_tables.py` derives each row from the filter's
 # own source. It fails when a row omits a key the filter reads, and when the filter reads an
 # entry by any route other than a literal key (a computed key, a loop over the entry, handing
 # it to a call), unless that test vets the route.
@@ -39,12 +39,30 @@ FILTER_FIELDS: dict[str, frozenset[str]] = {
     "authelia_service_rules": frozenset(
         {"auth_tier", "hostname", "name", "networks", "use_authelia"}
     ),
+    "entry_names": frozenset({"name"}),
     "entry_port": frozenset({"name", "port"}),
     "homepage_href": frozenset({"hostname", "name"}),
     "homepage_widget_url": frozenset({"homepage_widget", "name", "port"}),
     "in_service_tier": frozenset({"name", "tier"}),
     "kuma_ingress_monitors": frozenset({"auth_tier", "hostname", "id", "kuma", "name"}),
+    "lan_hostnames": frozenset({"extra_hostnames", "hostname", "platform"}),
     "metrics_port": frozenset({"job", "metrics", "name", "params", "port"}),
+    # `app`, `from`, `port` and `role_owned` are a `netpol_fences` item's keys too.
+    "netpol_caller_fences": frozenset(
+        {
+            "app",
+            "from",
+            "homepage_widget",
+            "name",
+            "netpol_app",
+            "netpol_fences",
+            "netpol_from",
+            "netpol_role_owned",
+            "port",
+            "role_owned",
+        }
+    ),
+    "published_ports": frozenset({"name", "port"}),
     "scrape_jobs": frozenset({"job", "metrics", "name", "params", "port", "service"}),
     "tier_priority_class": frozenset({"name", "tier"}),
 }
