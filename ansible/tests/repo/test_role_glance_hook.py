@@ -22,6 +22,7 @@ import yaml
 from _helpers import REPO
 
 import gen_role_glance as g
+from docs.catalog_lib import catalog_backup, catalog_facts, catalog_model, glance_facts
 from lib.estate import Inventory
 
 HOOK_ID = "regen-role-glance"
@@ -57,7 +58,12 @@ def test_the_hook_runs_the_generator_in_fix_mode():
         "ansible/inventory/group_vars/all.yml",
         "ansible/initial_setup.yml",
         "ansible/filter_plugins/k8s_autodeploy.py",
-        "scripts/docs/catalog_lib/glance_facts.py",
+        # Where the libraries the generator imports live now, read from the modules
+        # themselves, so a move to a directory outside the gate goes red here.
+        *(
+            Path(m.__file__).resolve().relative_to(REPO).as_posix()
+            for m in (catalog_backup, catalog_facts, catalog_model, glance_facts)
+        ),
         "scripts/lib/render_guard.py",
     ],
 )
