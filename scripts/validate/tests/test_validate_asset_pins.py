@@ -181,16 +181,16 @@ def _main(argv, pins, known=frozenset({"x"})):
     return code, out.getvalue()
 
 
-def test_main_exits_one_and_names_the_failing_pin():
-    code, out = _main([], [_pin(digest="0" * 64)])
+def test_main_exits_one_and_names_the_failing_pin(capsys):
+    code, _ = _main([], [_pin(digest="0" * 64)])
     assert code == 1
-    assert "FAIL  x" in out
+    assert "FAIL  x" in capsys.readouterr().err
 
 
-def test_main_refuses_when_the_census_lost_a_known_pin():
-    code, out = _main(["--list"], [_pin()], known=frozenset({"x", "renamed_away"}))
+def test_main_refuses_when_the_census_lost_a_known_pin(capsys):
+    code, _ = _main(["--list"], [_pin()], known=frozenset({"x", "renamed_away"}))
     assert code == 1
-    assert "renamed_away" in out
+    assert "renamed_away" in capsys.readouterr().err
 
 
 def test_a_matching_pin_prints_only_the_summary_unless_verbose():
@@ -326,3 +326,27 @@ def test_a_failed_refresh_prints_one_fail_line_on_stderr(tmp_path, capsys):
     lines = _fail_lines(capsys.readouterr().err)
     assert code == 1
     assert any("HTTP 404" in line for line in lines), lines
+
+
+def test_a_refresh_that_raises_still_reports_the_digest_it_rewrote(tmp_path, capsys):
+    """A download that dies mid-body raises out of main after an earlier pin was rewritten."""
+    rewritten = _refreshable(tmp_path)
+    broken = dataclasses.replace(_pin(), name="broken", url="https://example.invalid/b")
+
+    def body_times_out():
+        yield PAYLOAD[:5]
+        raise TimeoutError("read timed out")
+
+    def fetcher(url):
+        return (200, body_times_out()) if url == broken.url else _fetcher()(url)
+
+    with pytest.raises(TimeoutError):
+        asset_pins.main(
+            ["--refresh", "tool,broken"],
+            fetcher=fetcher,
+            out=io.StringIO(),
+            discover=lambda: ([rewritten, broken], []),
+            known=frozenset({"tool"}),
+            root=tmp_path,
+        )
+    assert f"ok    tool  sha256 {OLD} -> {SHA256}" in capsys.readouterr().err
