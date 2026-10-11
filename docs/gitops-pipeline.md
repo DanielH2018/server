@@ -924,7 +924,8 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   A role `defaults/` edit that moves no content line is not a change at all
   (`deploy_k8s.comment_only_k8s_defaults`, #4460): the tick drops the path before it
   classifies, so it neither defers nor pages. The release-staleness census drops the same
-  path with the same reader, so the role does not read stale either. `templates/` and
+  path with the same reader, so the role does not read stale either, and land.sh derives no
+  deploy tag for it (`deploy_tags.comment_only_paths`). `templates/` and
   `tasks/` are outside that read.
   `alert_deferred` posts once per SHA on the `k8s` alert slot. Deploy the change with
   `./scripts/deploy.sh --tags <svc>`, even where the post prints the bare `ansible-playbook`

@@ -502,14 +502,14 @@ class RemainingSetupHosts(Protocol):
 
 
 class Derive(Protocol):
-    """`land_tags.derive`: the deploy tags a PR's own file list maps to.
-
-    `declared` pins the set of tags that exist, for a test; production passes none and
-    `land_tags` reads the inventory.
-    """
+    """`land_tags.derive`: a PR's deploy tags. `declared` pins the tag set, for a test."""
 
     def __call__(
-        self, files: list[str], changed_files: int, /, declared: set[str] | None = None
+        self,
+        files: list[str],
+        changed_files: int,
+        declared: set[str] | None = None,
+        quiet: Iterable[str] = (),
     ) -> Derivation: ...
 
 

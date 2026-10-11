@@ -412,4 +412,4 @@ def test_plan_tick_defers_a_k8s_defaults_edit_only_when_content_moved(
     plan = deploy_phases.plan_tick(tick.tools, state, settings, target)
     assert plan.cs.k8s == deferred
     assert plan.cs.k8s_deploy == set()
-    assert ("not deferring" in capsys.readouterr().out) is not deferred
+    assert ("not deferring" in capsys.readouterr().out) == (not deferred)

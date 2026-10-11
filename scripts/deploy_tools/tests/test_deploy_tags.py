@@ -404,6 +404,39 @@ def test_deploy_logic_importers_do_not_grow_sys_path_per_call():
     assert sys.path.count(entry) == before
 
 
+# -- a comment-only k8s defaults edit derives no landing tag (#4460) ----------------------
+#
+# The tick drops this edit as no change, so a landing that still derived `--tags jellyfin`
+# ran a no-op deploy for it. `comment_only_paths` is the quiet set land.sh hands `derive`.
+
+_JELLYFIN_DEFAULTS = "ansible/roles/k8s/jellyfin/defaults/main.yml"
+
+
+@pytest.mark.parametrize(
+    "after, quiet, tags",
+    [
+        ("# repointed\njellyfin_k8s_size: 8Gi\n", {_JELLYFIN_DEFAULTS}, []),
+        ("# design record\njellyfin_k8s_size: 16Gi\n", set(), ["jellyfin"]),
+    ],
+    ids=["comment-only", "value-edit"],
+)
+def test_a_landing_derives_no_tag_for_a_comment_only_k8s_defaults_edit(
+    after, quiet, tags
+):
+    from deploy_tools.land_lib import land_tags
+
+    texts = {
+        ("old", _JELLYFIN_DEFAULTS): "# design record\njellyfin_k8s_size: 8Gi\n",
+        ("new", _JELLYFIN_DEFAULTS): after,
+    }
+    found = deploy_tags.comment_only_paths(
+        [_JELLYFIN_DEFAULTS], "old", "new", lambda ref, path: texts[(ref, path)]
+    )
+    assert found == quiet
+    derived = land_tags.derive([_JELLYFIN_DEFAULTS], 1, {"jellyfin"}, quiet=found)
+    assert derived.tags == tags
+
+
 # -- validate --at: containers_list as a git ref declares it ----------------------------
 #
 # `deploy.sh --at <sha>` renders a snapshot of <sha>, so the tags it deploys are the ones
