@@ -79,7 +79,14 @@ def test_an_edit_that_leaves_the_body_alone_is_clean(repo):
 
 
 def test_fill_with_no_body_is_denied(repo):
-    assert _verdict("gh pr create --fill", repo)
+    reason = _verdict("gh pr create --fill", repo)
+    assert reason is not None
+    assert "--fill --body-file" in reason
+
+
+def test_fill_with_a_fitted_body_file_is_clean(repo):
+    assert _verdict("gh pr create --fill --body-file full.md", repo) is None
+    assert _verdict("gh pr create --fill --body-file partial.md", repo)
 
 
 def test_a_create_passing_no_body_is_left_to_gh(repo):

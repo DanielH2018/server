@@ -125,19 +125,22 @@ The refusal prints the offending line: `gh pr edit <n> --body-file` with the ref
 body another session wrote, since the fan-out agent opens the PR and a daniel-box session lands
 it.
 
-**Open the PR with `--fill`, then replace the body — the same evasion, one command earlier.**
+**Open the PR with `--fill` and a body file — the same evasion, one command earlier.**
 The worktree-containment check judges a command on its TEXT, so `gh pr create --title "…"` is
 refused whenever the title carries `git`, `cd`, `worktree`, `write` or a construct the check
 cannot parse — and a title here routinely names one, since it becomes the squash commit subject
 and has to name the outcome. Rewording the title does not reliably help.
 
 ```
-gh pr create --fill                 # title + body from the commit; no prose in the command text
-gh pr edit <n> --body-file <path>   # then replace the body
+gh pr create --fill --body-file <path>   # title from the commit, body from the file
 ```
 
 `--fill` takes the title from the commit subject, so the command line carries no title text to
-judge, and `--body-file` carries no body text either. The class of false refusals narrowed after
+judge, and `--body-file` carries no body text either. gh lets `--body-file` override the body
+`--fill` would take from the commits. The file has to carry every `## ` heading of
+`.github/pull_request_template.md`. The `block-footguns` hook denies a create or edit whose body
+skips one, and a bare `--fill`, because rewriting the body after the PR opened was the
+avoidable PR body rewrite in #3963. The class of false refusals narrowed after
 Claude Code 2.1.257 (it fixed loops and heredocs that never touch git) and is not gone: a
 `for … do gh issue comment …; done` was refused on its comment text on 2026-09-10 (issue #1431).
 The rule generalises: keep the prose out of the command string and inside a file or a script.

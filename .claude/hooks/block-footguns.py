@@ -431,7 +431,13 @@ def pr_body_problem(stage: list[str], cwd: Path, command: str) -> str | None:
     if body is None:
         if not (create and any(word in _FILL_FLAGS for word in stage)):
             return None
-        body = ""
+        return (
+            "`gh pr create --fill` with no body takes the body from the commits and skips "
+            f"{root / _PR_TEMPLATE}, so the body gets rewritten after the PR opens (#3963). "
+            "Write the template's sections to a file and pass it as well: "
+            "`gh pr create --fill --body-file <path>`. gh keeps the commit title and uses the "
+            "file for the body."
+        )
     present = {heading.strip() for heading in _HEADING_RE.findall(body)}
     missing = [heading for heading in headings if heading not in present]
     if not missing:
