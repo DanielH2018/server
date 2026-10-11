@@ -31,6 +31,10 @@ def live_page():
     [
         ("scripts/deploy_tools/land_lib/ci.py", "test_land_ci.py"),
         ("scripts/diagnostics/probe_lib/health.py", "test_probe_health.py"),
+        (
+            "scripts/deploy_tools/runbook_gates_lib/k3s_upgrade.py",
+            "test_runbook_gates_k3s_upgrade.py",
+        ),
     ],
 )
 def test_the_live_page_names_a_lib_modules_family_named_test(live_page, path, test):
