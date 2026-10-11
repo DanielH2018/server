@@ -238,9 +238,10 @@ def _dispatch(ns, argv, plan):
         except WrongCluster as exc:
             # Every kubectl read names the cluster it is about (`--cluster`, default prod) and
             # lib.kubectl refuses before running when the local kubectl serves another one.
-            # One line, not a traceback: the refusal IS the answer.
-            print(f"{ns.cmd}: {exc}")
-            return 1
+            # One line, not a traceback. Nothing about the subject was read, so this is 75
+            # with the refusal on stderr, never the `fail` verdict (#4468).
+            print(f"{ns.cmd}: {exc}", file=sys.stderr)
+            return PROBE_UNREADABLE
     # metric / loki-query default to a formatted view; --json and --dry-run fall
     # through to the raw streaming path below.
     if ns.cmd in ("metric", "loki-query") and not ns.json and not ns.dry_run:

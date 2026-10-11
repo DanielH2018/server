@@ -24,11 +24,8 @@ from _ruleset_drift import (
     FENCE_RULESET_ID,
     RENOVATE_EXCLUDE,
     REPO,
-    REVIEW_BYPASS,
-    REVIEW_RULESET_ID,
     branch_ruleset_body,
     fence_ruleset,
-    review_ruleset,
     ruleset_body,
     run,
 )
@@ -41,7 +38,6 @@ def test_matching_ruleset_is_clean(tmp_path):
     assert status == "up"
     assert "matches the declared set" in msg
     assert msg.startswith("repo public; ")
-    assert f"ruleset {REVIEW_RULESET_ID} requires 1 approving review" in msg
     assert f"ruleset {FENCE_RULESET_ID} fences the agent to {FENCE_EXCLUDE[0]}" in msg
 
 
@@ -214,77 +210,11 @@ def test_an_unreachable_branch_ruleset_reports_unverified_not_clean(tmp_path):
     assert "UNVERIFIED" in msg
 
 
-def _review_rule(**params):
-    rule = review_ruleset()["rules"][0]
-    return [{**rule, "parameters": {**rule["parameters"], **params}}]
-
-
 def _actor(actor_type, actor_id, mode="pull_request"):
     return {"actor_id": actor_id, "actor_type": actor_type, "bypass_mode": mode}
 
 
-ADMIN, RENOVATE = _actor("RepositoryRole", 5), _actor("Integration", 2740)
-
-# Each way the review ruleset can stop requiring a review, and what the DOWN must name.
-REVIEW_DRIFT = {
-    "switched to evaluate": (
-        {"enforcement": "evaluate"},
-        ["enforcement is 'evaluate'"],
-    ),
-    "aimed at another branch": (
-        {"conditions": {"ref_name": {"exclude": [], "include": ["refs/heads/main"]}}},
-        ["no longer targets refs/heads/master"],
-    ),
-    "review rule removed": ({"rules": []}, ["has no pull_request rule"]),
-    "no approval required": (
-        {"rules": _review_rule(required_approving_review_count=0)},
-        ["required_approving_review_count=0 (declared 1)"],
-    ),
-    "stale approvals kept": (
-        {"rules": _review_rule(dismiss_stale_reviews_on_push=False)},
-        ["dismiss_stale_reviews_on_push=false"],
-    ),
-    "a pusher may approve its own push": (
-        {"rules": _review_rule(require_last_push_approval=False)},
-        ["require_last_push_approval=false (declared true)"],
-    ),
-    "the agent's account added": (
-        {"bypass_actors": [ADMIN, RENOVATE, _actor("User", 123, "always")]},
-        ["bypass actors DRIFTED", "newly-allowed:[User:123:always ]"],
-    ),
-    "the admin bypass widened to always": (
-        {"bypass_actors": [_actor("RepositoryRole", 5, "always"), RENOVATE]},
-        [
-            "newly-allowed:[RepositoryRole:5:always ]",
-            "no-longer-allowed:[RepositoryRole:5:pull_request ]",
-        ],
-    ),
-    "every bypass actor removed": (
-        {"bypass_actors": []},
-        ["newly-allowed:[]", f"no-longer-allowed:[{' '.join(REVIEW_BYPASS)} ]"],
-    ),
-    "a body that is not a ruleset": (
-        {"enforcement": None},
-        ["response had no .enforcement", "UNVERIFIED"],
-    ),
-    "an anonymous read": (
-        {"bypass_actors": None},
-        ["no bypass_actors list (null)", "UNVERIFIED"],
-    ),
-}
-
-
-@pytest.mark.parametrize("case", sorted(REVIEW_DRIFT))
-def test_a_weakened_review_ruleset_is_flagged(tmp_path, case):
-    overrides, expected = REVIEW_DRIFT[case]
-    review = json.dumps(review_ruleset(**overrides))
-    rc, status, msg = run(
-        tmp_path, curl_body=ruleset_body(DECLARED), review_body=review
-    )
-    assert (rc, status) == (1, "down")
-    assert f"ruleset {REVIEW_RULESET_ID}" in msg
-    for fragment in expected:
-        assert fragment in msg
+ADMIN = _actor("RepositoryRole", 5)
 
 
 def _fence_conditions(include=("~ALL",), exclude=tuple(FENCE_EXCLUDE)):
@@ -366,14 +296,8 @@ def _defaults():
     )
 
 
-def test_the_review_ruleset_fixture_matches_the_role_defaults(tmp_path):
+def test_the_fence_ruleset_fixture_matches_the_role_defaults(tmp_path):
     defaults = _defaults()
-    assert defaults["gitops_deploy_review_ruleset_id"] == REVIEW_RULESET_ID
-    assert defaults["gitops_deploy_review_ruleset_ref"] == "refs/heads/master"
-    assert defaults["gitops_deploy_review_ruleset_approvals"] == 1
-    assert (
-        sorted(defaults["gitops_deploy_review_ruleset_bypass_actors"]) == REVIEW_BYPASS
-    )
     assert defaults["gitops_deploy_ruleset_bypass_actors"] == []
     assert defaults["gitops_deploy_fence_ruleset_id"] == FENCE_RULESET_ID
     assert defaults["gitops_deploy_fence_ruleset_exclude"] == FENCE_EXCLUDE

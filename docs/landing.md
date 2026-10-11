@@ -69,12 +69,11 @@ cleanly. `--subject` overrides the squash commit's subject; the PR's own title i
 otherwise.
 
 **Every PR is merged directly, never armed for GitHub's auto-merge.** Every PR into master
-needs a ruleset bypass, and auto-merge never applies one (github/docs#45265). A PR reads
-`REVIEW_REQUIRED` until it is approved, and approving needs the bypass for the master review
-gate (ruleset 24514824). An `APPROVED` PR still needs the bypass for the agent branch fence
-(ruleset 24517167), which restricts updates to every branch except `worktree-claude+**`, master
+needs a ruleset bypass, and auto-merge never applies one (github/docs#45265). The agent branch
+fence (ruleset 24517167) restricts updates to every branch except `worktree-claude+**`, master
 included. An armed approved agent PR sat `BLOCKED` until a hand merge (#3911), so the arm path
-was removed (#4001).
+was removed (#4001). No ruleset requires a review since the master review gate was deleted on
+2026-10-11.
 
 `--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because the direct merge
 would apply the operator's bypass to it. `--await-merge` merges the PR through the REST merge
@@ -157,9 +156,8 @@ base moving under a PR flips it for one poll.
 
 **A PR whose own CI is red ends the wait too**, exit `LAND_FAILED` with `VERDICT: pr-ci-red`, quoting what
 `await_ci.py` said. GitHub reports it only as `mergeStateStatus: BLOCKED`, the same word it
-uses while the checks are still running. The master review gate also holds a PR until it is
-approved, but that state reads `REVIEW_REQUIRED` and the direct merge applies the bypass, so
-the wait treats `BLOCKED` as a question about checks. The wait keeps going
+uses while the checks are still running. The agent branch fence blocks every PR until the
+direct merge applies the bypass, so the wait treats `BLOCKED` as a question about checks. The wait keeps going
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
 
