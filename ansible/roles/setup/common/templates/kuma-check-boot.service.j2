@@ -1,0 +1,23 @@
+# {{ kuma_check_description }} (boot rerun) — managed by Ansible
+# (roles/setup/common/tasks/kuma_check_timer.yml); edits overwritten.
+#
+# Reruns kuma-check-{{ kuma_check_name }}.service once at boot, only when its last verdict was
+# not up (#4495). The service's ExecStopPost= writes the marker below after any run that did not
+# exit 0, and removes it after one that did. Without this, a reboot kills the pending
+# Restart=on-failure rerun, and the timer's Persistent=true catch-up does not replace it: the
+# slot that pushed `down` already fired. The tile then holds a stale DOWN until the next slot.
+#
+# The condition gates this unit, and the start is an ExecStart= rather than a Wants=: systemd
+# pulls in a Wants= dependency even when this unit's own condition fails, so every check would
+# run at every boot. `--no-block` keeps the check out of the boot transaction; the service's own
+# After=network-online.target still orders it.
+[Unit]
+Description={{ kuma_check_description }} (boot rerun while red)
+ConditionPathExists=/var/lib/kuma-check/{{ kuma_check_name }}.down
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl start --no-block kuma-check-{{ kuma_check_name }}.service
+
+[Install]
+WantedBy=multi-user.target

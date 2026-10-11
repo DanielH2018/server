@@ -145,9 +145,9 @@ def cmd_read(args, tools: Tools) -> int:
             f"signing={signing_mod.read_verdict(r.host, r.signing_key, registered)}"
         )
     if isinstance(registered, str):
-        print(registered, file=sys.stderr)
+        warn(registered)
     for msg in bad:
-        print(msg, file=sys.stderr)
+        warn(msg)
     return FANOUT_PLACE_OK if good else FANOUT_PLACE_NO_HOST_READABLE
 
 
@@ -219,7 +219,7 @@ def cmd_launch(args, tools: Tools) -> int:
     hosts = [args.host] if args.host else list(HOSTS)
     good, bad = _readings(tools, hosts)
     for msg in bad:
-        print(f"placing without {msg}", file=sys.stderr)
+        warn(f"placing without {msg}")
     if not good:
         return FANOUT_PLACE_NO_HOST_READABLE
     good, refusals = verified_hosts(good, registered)
@@ -234,7 +234,7 @@ def cmd_launch(args, tools: Tools) -> int:
     try:
         placed = place(list(batches), good, pin=args.host)
     except NoHeadroom as exc:
-        print(str(exc), file=sys.stderr)
+        error(str(exc))
         return FANOUT_PLACE_NOTHING_PLACED
     if over_ssh_budget(placed) or over_live_batch_cap(placed, args.manifest_root):
         return FANOUT_PLACE_NOTHING_PLACED
@@ -276,26 +276,25 @@ def cmd_launch(args, tools: Tools) -> int:
                 if target.is_server
                 else ""
             )
-            print(f"{batch} on {host}: {exc}{released}", file=sys.stderr)
+            # The remote stderr a LaunchError carries spans lines, and the prefix has to
+            # lead every line a grep for it should find.
+            error(" ".join(f"{batch} on {host}: {exc}{released}".split()))
             # The refusal is per batch, after placement, so earlier batches are already
             # running. Name them and the run-id: the manifest is what `status` and `clean`
             # read, and the `clean <run-id>` an `exists` refusal asks for needs the id. A
             # run that launched nothing gets no manifest — an empty one records no work,
             # and `launch` reads every manifest under the root before it places.
             if not run.batches:
-                print("launched before this failure: none", file=sys.stderr)
+                error("launched before this failure: none")
                 return FANOUT_PLACE_FAILED
             manifest_mod.save(run, root=args.manifest_root)
             launched = ", ".join(b.batch for b in run.batches)
-            print(
-                f"launched before this failure: {launched} (run {run.run_id})",
-                file=sys.stderr,
-            )
+            error(f"launched before this failure: {launched} (run {run.run_id})")
             return FANOUT_PLACE_FAILED
         print(f"{batch} -> {host} ({launch_mod.unit_name(batch, target)})")
         claims_mod.post_worked_by(tools, numbers, launched.branch, target)
     if not run.batches:
-        print("launched nothing: every issue's claim was refused", file=sys.stderr)
+        error("launched nothing: every issue's claim was refused")
         return FANOUT_PLACE_NOTHING_PLACED
     path = manifest_mod.save(run, root=args.manifest_root)
     print(f"run {run.run_id} recorded at {path}")
@@ -591,9 +590,6 @@ def main(argv=None, tools: Tools | None = None) -> int:
     # mistyped id at that prompt is the likely way in.
     if args.cmd in run_parsers:
         if not manifest_mod.path(args.run_id, args.manifest_root).exists():
-            print(
-                f"no manifest for run {args.run_id} under {args.manifest_root}",
-                file=sys.stderr,
-            )
+            error(f"no manifest for run {args.run_id} under {args.manifest_root}")
             return FANOUT_PLACE_BAD_ARGS
     return args.fn(args, tools or Tools())

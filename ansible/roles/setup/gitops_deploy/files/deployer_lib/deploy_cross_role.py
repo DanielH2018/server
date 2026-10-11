@@ -46,6 +46,7 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/tasks/kuma_check_timer.yml": _KUMA_CHECK,
     f"{_COMMON}/templates/kuma-check.service.j2": _KUMA_CHECK,
     f"{_COMMON}/templates/kuma-check.timer.j2": _KUMA_CHECK,
+    f"{_COMMON}/templates/kuma-check-boot.service.j2": _KUMA_CHECK,
     f"{_COMMON}/tasks/release_bin.yml": frozenset({"k3s"}),
     f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
     f"{_COMMON}/tasks/stamp_render.yml": _STAMPED | {"nut_host"},

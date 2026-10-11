@@ -5,7 +5,7 @@ The runner takes a `lib.kubectl.Tools`, so the cluster reads are answered from c
 keyed on the kubectl arguments and nothing touches a live API server. The hold marker is
 read from a `tmp_path` state directory through `GITOPS_STATE_DIR`'s override.
 
-Run: uv run pytest scripts/deploy_tools/tests/test_k3s_upgrade_gates.py
+Run: uv run pytest scripts/deploy_tools/tests/test_runbook_gates_k3s_upgrade.py
 """
 
 import io
