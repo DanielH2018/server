@@ -47,8 +47,8 @@ def main(argv: list[str], now: float | None = None) -> int:
         print(__doc__.strip(), file=sys.stderr)
         return 2
     subcommand, rest = argv[0], argv[1:]
-    # Imported only once chosen: each reaper reads its env at import, and the snapshots
-    # reaper's env abort must not fire on a `backups` run.
+    # Imported only once chosen: the backups reaper int()s its timeout env at import, so a
+    # malformed value there must not traceback a `snapshots` run.
     if subcommand == "backups":
         from longhorn_reap_lib import backups
 
