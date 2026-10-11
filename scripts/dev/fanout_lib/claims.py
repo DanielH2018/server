@@ -18,6 +18,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from fanout_lib.brief import WORKED_BY
+from lib.cli_help import error, warn
 from fanout_lib.target import Target
 from fanout_lib.transport import Tools, error_text
 
@@ -35,30 +36,21 @@ def parse_batches(specs: list[str]) -> dict[str, list[int]] | None:
     seen: dict[int, str] = {}
     for spec in specs:
         if not BATCH_RE.match(spec):
-            print(
-                f"launch: --batch takes issue numbers joined by commas, got {spec!r}",
-                file=sys.stderr,
-            )
+            error(f"--batch takes issue numbers joined by commas, got {spec!r}")
             return None
         key = spec.replace(",", "-")
         if key in batches:
-            print(
-                f"launch: --batch {spec} given twice; placing it once", file=sys.stderr
-            )
+            warn(f"--batch {spec} given twice; placing it once")
             continue
         numbers = [int(n) for n in spec.split(",")]
         for n in numbers:
             if n in seen and seen[n] == spec:
-                print(
-                    f"launch: issue {n} is listed twice in --batch {spec}",
-                    file=sys.stderr,
-                )
+                error(f"issue {n} is listed twice in --batch {spec}")
                 return None
             if n in seen:
-                print(
-                    f"launch: issue {n} appears in more than one --batch "
-                    f"({seen[n]}, {spec}); refusing to launch it twice",
-                    file=sys.stderr,
+                error(
+                    f"issue {n} appears in more than one --batch "
+                    f"({seen[n]}, {spec}); refusing to launch it twice"
                 )
                 return None
             seen[n] = spec
