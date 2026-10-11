@@ -30,7 +30,6 @@ Prints `{"routes": {role: {...}}, "unplaced": {role: reason}}` as JSON. Exit 1 w
 tree at REF cannot be read.
 """
 
-import argparse
 import contextlib
 import json
 import sys
@@ -38,6 +37,8 @@ from collections.abc import Generator
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 from lib import yaml_fast
 from lib.k8s_roles import role_dirs
@@ -186,7 +187,7 @@ def routed_by(root: Path, host: str | None = None) -> Generator[None]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap = ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--ref", default="", help="read the ansible/ tree at this commit")
     ap.add_argument(
         "--host", default=None, help="the tick's host (default: has_gitops)"

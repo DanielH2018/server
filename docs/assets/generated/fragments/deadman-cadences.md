@@ -12,3 +12,4 @@
 | `weekly-reboot-daniel-pi` | `30 7 * * 0` | `weekly_reboot_weekday` / `_hour` / `_minute`, on daniel-pi |
 | `weekly-reboot-daniel-box` | `30 7 * * 0` | `weekly_reboot_weekday` / `_hour` / `_minute`, on daniel-box |
 | `daniel-pi-docker-prune` | `30 6 * * *` | `initial_setup_docker_prune_cron_hour` / `_minute`, on daniel-pi |
+| `daniel-box-worktree-sweep` | `20 4 * * 0` | `initial_setup_worktree_sweep_cron_weekday` / `_hour` / `_minute`, on daniel-box |

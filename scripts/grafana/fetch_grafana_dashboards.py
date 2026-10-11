@@ -40,7 +40,6 @@ Reaches Prometheus through its cluster IngressRoute for the ``label_values`` loo
 same endpoint and DNS pin ``probe.py metric`` uses.
 """
 
-import argparse
 import json
 import re
 import urllib.request
@@ -54,6 +53,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from diagnostics.probe_lib import core
+from lib.cli_help import ArgumentParser
 from diagnostics.probe_lib.core import prom_endpoint, prom_query_url
 
 # Datasource uids we provision (adopted from the pre-existing hand-made datasources).
@@ -252,7 +252,7 @@ def main(argv=None, fetch=fetch, outdir=OUTDIR, boards=DASHBOARDS):
     Returns:
         0 when every board was written or already matched, 1 when it refused.
     """
-    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
+    parser = ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument(
         "--overwrite",
         action="store_true",

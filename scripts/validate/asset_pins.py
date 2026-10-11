@@ -71,6 +71,8 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import jinja2
 
+from lib.cli_help import ArgumentParser
+
 from lib import yaml_fast
 from lib.renovate_annotations import annotations_in, is_annotation_manager
 from lib.repo_paths import REPO, ROLES
@@ -411,7 +413,7 @@ def _name_set(value: str | None) -> set[str]:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--list", action="store_true", help="print the census and exit")
     parser.add_argument(
         "--only", help="comma-separated pin names to check (default: all)"

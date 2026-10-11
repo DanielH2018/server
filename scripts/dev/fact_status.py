@@ -23,6 +23,10 @@ import argparse
 import json
 from pathlib import Path
 
+from lib.cli_help import ArgumentParser
+
+from lib.exit_codes import FACT_STATUS_BAD_ARGS
+
 from lib.facts.lint import changed_units, first_cited_units, lint_sections
 from lib.facts.lock import (
     LOCK_REL,
@@ -39,7 +43,7 @@ from lib.facts.report import build, default_log, render
 from lib.git import git_stdout
 from lib.repo_paths import REPO
 
-_USAGE = 2
+_USAGE = FACT_STATUS_BAD_ARGS
 
 # The next step each command prints after its findings, so a red run ends on what to do (#4448).
 FIX_ATOMS = (
@@ -221,7 +225,7 @@ def _add_common(sp: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p = ArgumentParser(description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
     st = sub.add_parser("status")
     _add_common(st)

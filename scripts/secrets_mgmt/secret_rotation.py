@@ -73,7 +73,8 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.cli_help import error
+from lib.cli_help import ArgumentParser, error
+from lib.exit_codes import SECRET_ROTATION_BAD_ARGS
 from secrets_mgmt.consumers import consumer_commands, consumer_tags, tree_consumers
 from secrets_mgmt.git_dates import (
     RENAMED_FROM,
@@ -184,7 +185,7 @@ def audit_summary(res: dict, missing: list, stale: list) -> str:
 def cmd_audit(args, tools: RotationTools) -> int:
     """Print each secret's rotation status, push the summary to Kuma, and gate on drift.
 
-    Exits 2 when `--push` is given without SECRET_ROTATION_KUMA set, 1 when `--check` is
+    Exits 64 when `--push` is given without SECRET_ROTATION_KUMA set, 1 when `--check` is
     given and the registry is out of sync with secrets.yml, and 1 when `--push` pushed
     `down` — the daily audit runs under a systemd timer whose `Restart=on-failure` reruns it
     every 30 min until it exits 0 (roles/setup/common/tasks/kuma_check_timer.yml). Without
@@ -247,7 +248,7 @@ def cmd_audit(args, tools: RotationTools) -> int:
         url = os.environ.get("SECRET_ROTATION_KUMA")
         if not url:
             error("--push set but SECRET_ROTATION_KUMA env missing")
-            return 2
+            return SECRET_ROTATION_BAD_ARGS
         # `stale` too (a registry row for a since-removed secret), so the daily Kuma push and
         # the CI `--check` gate below agree on registry drift — otherwise a `stale`-only drift
         # fails CI while the monitor stays green.
@@ -289,7 +290,7 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     """Rotate `args.name`, or every coming-due auto-tier secret, and optionally redeploy.
 
     Dry-run by default; `--commit` writes new values via `sops set`. Due-ness is judged from
-    the registry dates advanced to git's (skipped with `--no-derive`). Exits 2 when
+    the registry dates advanced to git's (skipped with `--no-derive`). Exits 64 when
     `args.name` names a non-auto-tier secret, 3 when a `sops set` fails or times out partway
     through the batch, 1 when `--deploy` is given and the redeploy fails (the new tokens are written but
     their consumers are not), 0 otherwise.
@@ -312,11 +313,11 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     if args.name:
         if is_record(reg, args.name):
             error(record_refusal(args.name))
-            return 2
+            return SECRET_ROTATION_BAD_ARGS
         targets = [r for r in res["all"] if r[0] == args.name]
         if targets and targets[0][1] != "auto":
             error("%s is tier '%s', not auto-rotatable" % (args.name, targets[0][1]))
-            return 2
+            return SECRET_ROTATION_BAD_ARGS
     else:
         # Unattended path: auto-tier, coming due (unless --all), AND with a single-redeploy
         # consumer. Tokens with no consumer_tag (cross-host / self-referential) are reported
@@ -425,7 +426,7 @@ def cmd_record(args, tools: RotationTools) -> int:
     entries = reg.setdefault("entries", {})
     if args.last_rotated > tools.today():
         error("%s is after today (%s)" % (args.last_rotated, tools.today()))
-        return 2
+        return SECRET_ROTATION_BAD_ARGS
     moved_from = None
     was = RENAMED_FROM.get(args.key)
     if was is not None and was in entries:
@@ -439,7 +440,7 @@ def cmd_record(args, tools: RotationTools) -> int:
             "add it to RENAMED_FROM (scripts/secrets_mgmt/git_dates.py) if this is a rename"
             % args.key
         )
-        return 2
+        return SECRET_ROTATION_BAD_ARGS
     old = entries[args.key].get("last_rotated")
     entries[args.key]["last_rotated"] = args.last_rotated.isoformat()
     tools.save_registry(reg)
@@ -457,7 +458,7 @@ def cmd_record(args, tools: RotationTools) -> int:
 
 def main(argv=None) -> int:
     """Dispatch to the `sync`/`consumers`/`audit`/`rotate`/`record` subcommand and return its exit code."""
-    p = argparse.ArgumentParser(
+    p = ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     sub = p.add_subparsers(dest="cmd", required=True)

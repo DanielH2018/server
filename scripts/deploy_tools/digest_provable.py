@@ -28,7 +28,6 @@ WHO CALLS IT. `deploy_narrow.digest_provable`, as a subprocess for the reason
 Usage: digest_provable.py [--repo PATH] ROLE [ROLE ...]
 """
 
-import argparse
 import json
 import sys
 from pathlib import Path
@@ -36,6 +35,8 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 from lib import yaml_fast
 
@@ -123,7 +124,7 @@ def digest_provable(role: Path) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("roles", nargs="+", help="role directories under roles/k8s/")
     parser.add_argument(
         "--repo", default=".", help="the checkout to read (default: the cwd)"

@@ -310,7 +310,7 @@ def test_rotate_refuses_a_record_key_by_name_with_the_reason(capsys):
     args = SimpleNamespace(
         name=name, all=False, commit=True, deploy=False, no_derive=False
     )
-    assert sr.cmd_rotate(args, tools) == 2
+    assert sr.cmd_rotate(args, tools) == 64
     err = capsys.readouterr().err
     assert name in err and "source: record" in err and "Rotate it in the app" in err
     assert process_calls(recorded) == [], "a record key must never reach `sops set`"
@@ -477,13 +477,13 @@ def test_record_moves_a_renamed_row_to_its_new_name(capsys):
 
 def test_record_refuses_a_key_the_registry_lacks(capsys):
     tools, recorded = build_tools(Fakes(registry=_reg(("tok", "auto", "2026-08-01"))))
-    assert sr.cmd_record(_record_args("other", "2026-01-15"), tools) == 2
+    assert sr.cmd_record(_record_args("other", "2026-01-15"), tools) == 64
     assert "save_registry" not in named_calls(recorded)
     assert "other is not in the registry" in capsys.readouterr().err
 
 
 def test_record_refuses_a_date_after_today(capsys):
     tools, recorded = build_tools(Fakes(registry=_reg(("tok", "auto", "2026-08-01"))))
-    assert sr.cmd_record(_record_args("tok", "2026-09-02"), tools) == 2
+    assert sr.cmd_record(_record_args("tok", "2026-09-02"), tools) == 64
     assert "save_registry" not in named_calls(recorded)
     assert "after today" in capsys.readouterr().err

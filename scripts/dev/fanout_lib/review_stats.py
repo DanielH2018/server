@@ -25,7 +25,6 @@ Usage::
     fanout.py stats [--dir DIR ...] [--since YYYY-MM-DD] [--json]
 """
 
-import argparse
 import json
 import re
 import sys
@@ -35,8 +34,10 @@ from pathlib import Path
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib.review.api import CONFIDENCE_FLOOR, STATE_DIR
+from lib.cli_help import ArgumentParser
 
 # `<batch>-<YYYYMMDDTHHMMSSZ>.json`, as `Pipeline._save` names a record.
 _STAMP = re.compile(r"-(\d{8})T\d{6}Z\.json$")
@@ -131,7 +132,7 @@ def _counts(counts: dict) -> str:
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(
+    p = ArgumentParser(
         prog="fanout.py stats", description=__doc__.splitlines()[0], allow_abbrev=False
     )
     p.add_argument(

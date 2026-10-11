@@ -398,7 +398,7 @@ def test_claim_refuses_a_worktree_name_the_trailer_cannot_carry(capsys):
     """
     issue = make_issue(1132)
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
-    assert main(["claim", "1132", "--worktree", "worktree-`bad"], tools) == 2
+    assert main(["claim", "1132", "--worktree", "worktree-`bad"], tools) == 64
     assert calls.none()
     assert "backtick" in capsys.readouterr().err
 
@@ -407,7 +407,7 @@ def test_release_refuses_the_same_name(capsys):
     """The same trailer, so the same refusal — a release must name a parseable worktree."""
     issue = make_issue(1132)
     tools, calls = build_tools(Fakes(issues=[issue], view=issue))
-    assert main(["release", "1132", "--worktree", "worktree-`bad"], tools) == 2
+    assert main(["release", "1132", "--worktree", "worktree-`bad"], tools) == 64
     assert calls.none()
 
 
@@ -492,6 +492,6 @@ def test_release_all_with_nothing_held_says_so_and_writes_nothing(capsys):
 
 def test_release_refuses_numbers_and_all_together(capsys):
     tools, calls = build_tools(Fakes(issues=[make_issue(1132)]))
-    assert main(["release", "1132", "--all", "--worktree", WT], tools) == 2
+    assert main(["release", "1132", "--all", "--worktree", WT], tools) == 64
     assert "not both or neither" in capsys.readouterr().err
     assert calls.gh == []

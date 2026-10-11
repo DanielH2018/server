@@ -150,7 +150,7 @@
   become: true
 
 - name: Create the Healthchecks.io credential directory
-  tags: [crons, prune, weekly-restart]
+  tags: [crons, prune, weekly-restart, worktree-sweep]
   # The same path, mode and owner as the k3s role's task, so the two writers agree on
   # daniel-box. This role writes it too because its two pinging crons run on every host, and
   # the k3s role reaches neither daniel-pi nor, for this file, daniel-server.
@@ -163,12 +163,12 @@
   become: true
 
 - name: Deploy the Healthchecks.io ping key
-  tags: [crons, prune, weekly-restart]
+  tags: [crons, prune, weekly-restart, worktree-sweep]
   # Byte-identical to the k3s role's `Deploy the Healthchecks.io ping key`, which carries the
   # reasoning: the project ping key can hold every check green, so it lives in a 0640 file the
   # crons source at run time, never in a crontab line. cron logs each command it runs to the
   # journal, and the journal ships to Loki. root owns it for the reboot cron, and the group is
-  # {{ sys_user }} for the prune cron.
+  # {{ sys_user }} for the prune and worktree-sweep crons.
   ansible.builtin.copy:
     content: "HC_PING_KEY='{{ healthchecks_ping_key | default('') }}'\n"
     dest: /etc/healthchecks/ping.env
@@ -554,14 +554,21 @@
   #
   # daniel-box only: the primary checkout and every worktree under it live there.
   #
+  # IT PINGS HEALTHCHECKS.IO WITH ITS EXIT CODE (#4482). `prune_worktrees.py` exits 1 when a
+  # removal or a branch deletion failed (#4445), but the pipe into `logger` makes the job's
+  # exit status logger's, so nothing read it. `$rc` on the ping URL is Healthchecks.io's
+  # exit-status endpoint: 0 is a success ping and anything else is a failure, so a failed
+  # sweep pages at once and a cron that never ran pages on silence. The key is sourced as the
+  # reboot's is, `[ -r ] &&` guarding the `.`.
+  #
   # Keep the cron `name:`: `cron_file` entries are tracked by that comment, so renaming one
   # adds a second entry beside the first rather than replacing it.
   when: inventory_hostname == ops_cron_host
   ansible.builtin.cron:
     name: "Weekly git object-store repair"
-    minute: "20"
-    hour: "4"
-    weekday: "0" # 0 is Sunday
+    minute: "{{ initial_setup_worktree_sweep_cron_minute }}"
+    hour: "{{ initial_setup_worktree_sweep_cron_hour }}"
+    weekday: "{{ initial_setup_worktree_sweep_cron_weekday }}"
     # PATH explicitly: cron inherits neither /usr/local/bin nor the user's ~/.local/bin, so a
     # bare `uv` is not found and the job fails silently on stderr nothing reads.
     #
@@ -569,7 +576,7 @@
     # above: a week that removes anything prints a line per removal, and mailing those
     # is the spool problem. Braced, because `|` binds
     # tighter than the `&&` before it.
-    job: "{ cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --prune --brief; } 2>&1 | logger -t worktree-sweep"
+    job: "{ cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --prune --brief; rc=$?; [ -r /etc/healthchecks/ping.env ] && . /etc/healthchecks/ping.env; [ -n \"$HC_PING_KEY\" ] && curl -fs -m 10 --retry 3 \"https://hc-ping.com/$HC_PING_KEY/{{ inventory_hostname }}-worktree-sweep/$rc\" >/dev/null 2>&1; } 2>&1 | logger -t worktree-sweep"
     user: "{{ sys_user }}"
     cron_file: git-object-store-repair
   become: true

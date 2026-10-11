@@ -26,14 +26,15 @@ from pathlib import Path
 
 import pytest
 
-from lib import repo_paths
+from lib import repo_paths, role_installs
 from lib.repo_paths import REPO, SCRIPTS
 
 FANOUT_REVIEW_UNIT = SCRIPTS / "dev" / "fanout_lib" / "review_unit.py"
 SESSION_HEALTH = REPO / ".claude" / "hooks" / "session-health.py"
+DEPLOY_IO = repo_paths.GITOPS_DEPLOY_FILES / "deployer_lib" / "deploy_io.py"
 # One member per kind of no-venv caller: the three `--no-project` hooks, a module reached only
-# through session-health's `REPO/scripts` insert, fan-out's dynamic review path, and the land
-# and fanout cc-wait sources.
+# through session-health's `REPO/scripts` insert, fan-out's dynamic review path, the land
+# and fanout cc-wait sources, and the role scripts a host runs from its install directory.
 MUST_INCLUDE = frozenset(
     {
         ".claude/hooks/session-health.py",
@@ -43,6 +44,21 @@ MUST_INCLUDE = frozenset(
         "scripts/dev/fanout.py",
         "scripts/dev/fanout_lib/review_unit.py",
         "scripts/deploy_tools/land_lib/land_probe.py",
+        "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
+        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py",
+        "ansible/roles/setup/deploy_ui/files/deploy_ui.py",
+        "ansible/roles/k8s/configarr/files/configarr_health.py",
+        "ansible/roles/k8s/janitorr/files/janitorr_health.py",
+        "ansible/roles/k8s/crowdsec/files/bouncer_prune.py",
+        "ansible/roles/k8s/crowdsec/files/remote_allowlist.py",
+        "ansible/roles/setup/fake_remux/files/fake_remux.py",
+        "ansible/roles/setup/fake_remux/files/mkv_attachment_repair.py",
+        "ansible/roles/setup/fake_remux/files/state_push.py",
+        "ansible/roles/k8s/manifests/files/secret_hmac.py",
+        "scripts/deploy_tools/prune_releases.py",
+        # Reached only through render_records' insert of the deployer's install directory.
+        "ansible/roles/setup/render_records/files/render_records.py",
+        "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_toolbox.py",
     }
 )
 # The `--project` hooks run in the venv; secret_bearing_host_paths.py imports `yaml` legitimately.
@@ -170,10 +186,11 @@ def test_the_role_map_names_role_modules_that_exist():
 
 
 def test_every_member_of_the_set_passes_the_static_walk():
+    # members(), not stdlib_only_set(): each staged copy against its own install's dirs only.
     checker = _checker()
     found = {
-        path.relative_to(REPO).as_posix(): bad
-        for path, dirs in checker.stdlib_only_set().items()
+        str(path): bad
+        for path, dirs in checker.members()
         if (bad := checker.walk(path, dirs))
     }
     assert found == {}
@@ -196,10 +213,10 @@ def test_runtime_import_resolves_a_module_through_its_callers_dirs():
 def test_every_member_of_the_set_imports_outside_the_venv():
     checker = _checker()
     failed = {}
-    for path, dirs in checker.stdlib_only_set().items():
+    for path, dirs in checker.members():
         ok, stderr = checker.runtime_import(path, dirs)
         if not ok:
-            failed[path.relative_to(REPO).as_posix()] = stderr[-500:]
+            failed[str(path)] = stderr[-500:]
     assert failed == {}
 
 
@@ -316,3 +333,159 @@ def test_a_uv_leg_without_the_subcommand_fails_even_when_the_venv_leg_has_it():
     )
     assert '"$GATE_SCRIPT" etcd-restore ' in broken  # the .venv leg still carries it
     assert '"$GATE_SCRIPT" etcd-restore ' not in _uv_gate_leg(broken)
+
+
+def _install(live_dir: str) -> Path:
+    return role_installs.stage() / live_dir.lstrip("/")
+
+
+def test_yaml_added_to_the_deployers_io_module_turns_the_walk_red(tmp_path):
+    checker = _checker()
+    dirs = checker.stdlib_only_set()[DEPLOY_IO]
+    assert _install("/opt/gitops-deploy") in dirs
+    assert checker.walk(DEPLOY_IO, dirs) == []
+    injected = tmp_path / "deploy_io.py"
+    injected.write_text(
+        DEPLOY_IO.read_text(encoding="utf-8") + "\nimport yaml\n", encoding="utf-8"
+    )
+    assert "yaml" in checker.walk(injected, [tmp_path, *dirs])
+
+
+def test_an_install_directory_resolves_only_what_its_role_ships(tmp_path):
+    # configarr_status sits in the tree's role files, but janitorr's install does not ship it.
+    checker = _checker()
+    module = tmp_path / "importer.py"
+    module.write_text(
+        "import janitorr_health_logic\nimport host_lib\n", encoding="utf-8"
+    )
+    assert checker.walk(module, [_install("/opt/janitorr-health")]) == []
+    unshipped = tmp_path / "unshipped.py"
+    unshipped.write_text(
+        "from configarr_lib import configarr_status\n", encoding="utf-8"
+    )
+    assert checker.walk(unshipped, [_install("/opt/janitorr-health")]) == [
+        "configarr_lib"
+    ]
+
+
+def test_a_staged_copy_is_checked_against_its_own_install_only():
+    # host_lib.py ships to a dozen install directories; a union would resolve through siblings.
+    checker = _checker()
+    staged = _install("/opt/janitorr-health") / "host_lib.py"
+    dirs = dict(checker.members())[staged]
+    assert dirs == [_install("/opt/janitorr-health")]
+
+
+def test_an_installed_insert_and_its_env_override_point_at_the_stage():
+    checker = _checker()
+    dirs = dict(checker.members())[
+        _install("/opt/render-records") / "render_records.py"
+    ]
+    assert _install("/opt/gitops-deploy") in dirs
+    overrides = role_installs.staged_overrides()
+    assert overrides["DEPLOYER_DIR"] == str(_install("/opt/gitops-deploy"))
+    assert overrides["HOST_LIB_DIR"] == str(_install("/opt/live-drift-check"))
+
+
+GITOPS_UNIT = (
+    repo_paths.GITOPS_DEPLOY_FILES.parent / "templates" / "gitops-deploy.service.j2"
+)
+
+
+def test_a_role_command_maps_to_its_installed_copy_is_clean():
+    staged = role_installs.role_entry(
+        "/opt/gitops-deploy/gitops_deploy.py", GITOPS_UNIT
+    )
+    assert staged == _install("/opt/gitops-deploy") / "gitops_deploy.py"
+
+
+def test_a_role_command_no_copy_installs_is_flagged():
+    template = GITOPS_UNIT
+    with pytest.raises(ValueError, match="no copy task"):
+        role_installs.role_entry("/opt/gitops-deploy/never_shipped.py", template)
+
+
+def test_an_import_guarded_by_import_error_is_clean(tmp_path):
+    checker = _checker()
+    module = tmp_path / "importer.py"
+    module.write_text(
+        "try:\n    import yaml\nexcept (ImportError, OSError):\n    yaml = None\n",
+        encoding="utf-8",
+    )
+    assert checker.walk(module, [tmp_path]) == []
+
+
+def test_an_import_guarded_by_another_exception_is_flagged(tmp_path):
+    checker = _checker()
+    module = tmp_path / "importer.py"
+    module.write_text(
+        "try:\n    import yaml\nexcept ValueError:\n    yaml = None\n",
+        encoding="utf-8",
+    )
+    assert checker.walk(module, [tmp_path]) == ["yaml"]
+
+
+def test_the_deployers_subprocess_helpers_run_in_the_venv(monkeypatch):
+    # #4455 listed these as --no-project callers; they run `uv run --frozen`, in the venv, so
+    # they import yaml legitimately and are not in the set. A switch to --no-project must
+    # add them to lib.stdlib_only's callers.
+    monkeypatch.syspath_prepend(str(repo_paths.GITOPS_DEPLOY_FILES))
+    narrow = importlib.import_module("deployer_lib.deploy_narrow")
+    setup_roles = importlib.import_module("deployer_lib.deploy_setup_roles")
+    argvs = [
+        narrow.narrow_setup_argv("r", "t", "p", "a", "b"),
+        narrow.shared_callers_argv(["r"]),
+        narrow.digest_provable_argv(["r"]),
+        setup_roles.routing_argv("HEAD", "h"),
+    ]
+    for argv in argvs:
+        assert argv[:3] == ["uv", "run", "--frozen"], argv
+        assert "--no-project" not in argv, (
+            f"{argv}: add it to lib.stdlib_only's callers"
+        )
+
+
+def test_runtime_import_passes_a_module_that_exits_after_its_imports(tmp_path):
+    # longhorn_backup_health.py exits at import on an env var only its cron wrapper sets.
+    module = tmp_path / "exits.py"
+    module.write_text("import json\nraise SystemExit('LONGHORN_X is not set')\n")
+    ok, stderr = _checker().runtime_import(module, [tmp_path])
+    assert ok, stderr
+
+
+EXITS_ON_IMPORT_ERROR = "try:\n    import yaml\nexcept ImportError:\n    raise SystemExit('install PyYAML')\n"
+
+
+def test_an_import_whose_handler_exits_is_flagged(tmp_path):
+    checker = _checker()
+    module = tmp_path / "exits_on_import_error.py"
+    module.write_text(EXITS_ON_IMPORT_ERROR, encoding="utf-8")
+    assert checker.walk(module, [tmp_path]) == ["yaml"]
+
+
+def test_runtime_import_fails_a_module_that_exits_on_a_failed_import(tmp_path):
+    module = tmp_path / "exits_on_import_error.py"
+    module.write_text(EXITS_ON_IMPORT_ERROR, encoding="utf-8")
+    ok, stderr = _checker().runtime_import(module, [tmp_path])
+    assert not ok
+    assert "PyYAML" in stderr
+
+
+def test_a_no_project_command_with_a_script_path_is_read_is_clean():
+    text = "uv run --no-project --python 3.14 \\\n  /opt/x/run.py --dry-run\n"
+    assert role_installs._scripts_run(text, GITOPS_UNIT) == ["/opt/x/run.py"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "uv run --no-project --python 3.14 -m pkg.mod\n",
+        # A module run must not borrow the next command's script.
+        "uv run --no-project -m pkg.mod\nuv run --frozen python /opt/x/run.py\n",
+        "uv run --no-project " + "--flag " * 80 + "/opt/x/run.py\n",
+    ],
+    ids=["module-run", "next-commands-script", "past-the-scan"],
+)
+def test_a_no_project_command_with_no_readable_script_is_flagged(text):
+    with pytest.raises(ValueError, match=r"runs no \.py path"):
+        role_installs._scripts_run(text, GITOPS_UNIT)

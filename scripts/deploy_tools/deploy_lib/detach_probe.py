@@ -26,7 +26,6 @@ failed. The notifier's `deploy --detach settled|FAILED (...)` headline is the de
 that died without recording a code is `died`, through the pid the parent recorded.
 """
 
-import argparse
 import json
 import os
 import pwd
@@ -35,7 +34,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
-from lib.cli_help import refuse_help_under_describe
+from lib.cli_help import ArgumentParser, refuse_help_under_describe
 from lib.detach_fork import alive, recorded_code, recorded_pid
 
 # `deploy_detach.LOG_DIR`, restated: that module imports the deploy machinery, and this probe
@@ -132,7 +131,7 @@ def read(log: Path) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         prog="deploy_cli.py probe", description=__doc__.splitlines()[0]
     )
     parser.add_argument("--describe", action="store_true")
