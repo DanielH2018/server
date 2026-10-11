@@ -326,3 +326,27 @@ def test_a_failed_refresh_prints_one_fail_line_on_stderr(tmp_path, capsys):
     lines = _fail_lines(capsys.readouterr().err)
     assert code == 1
     assert any("HTTP 404" in line for line in lines), lines
+
+
+def test_a_refresh_that_raises_still_reports_the_digest_it_rewrote(tmp_path, capsys):
+    """A download that dies mid-body raises out of main after an earlier pin was rewritten."""
+    rewritten = _refreshable(tmp_path)
+    broken = dataclasses.replace(_pin(), name="broken", url="https://example.invalid/b")
+
+    def body_times_out():
+        yield PAYLOAD[:5]
+        raise TimeoutError("read timed out")
+
+    def fetcher(url):
+        return (200, body_times_out()) if url == broken.url else _fetcher()(url)
+
+    with pytest.raises(TimeoutError):
+        asset_pins.main(
+            ["--refresh", "tool,broken"],
+            fetcher=fetcher,
+            out=io.StringIO(),
+            discover=lambda: ([rewritten, broken], []),
+            known=frozenset({"tool"}),
+            root=tmp_path,
+        )
+    assert f"ok    tool  sha256 {OLD} -> {SHA256}" in capsys.readouterr().err

@@ -471,10 +471,10 @@ def main(
 ) -> int:
     """The CLI.
 
-    The report goes to `out` when the run exits 0 and to stderr when it does not, so a run
-    that fails prints nothing on `out`. A pin's `ok` line is printed before the run knows
-    whether a later pin fails, so the report is held until the run ends. The `[FAIL]` lines
-    `check_pins` and `refresh_pins` print reach stderr as each pin fails.
+    The report goes to `out` when the run exits 0, and to stderr when it exits non-zero or
+    raises, so a run that fails prints nothing on `out`. A pin's `ok` line is printed before
+    the run knows whether a later pin fails, so the report is held until the run ends. The
+    `[FAIL]` lines `check_pins` and `refresh_pins` print reach stderr as each pin fails.
 
     `fetcher`, `discover`, `known`, `root` and `annotated` are the seams a test hands fakes to.
     """
@@ -483,9 +483,15 @@ def main(
     if args.refresh and (args.only or args.skip or args.list):
         parser.error("--refresh takes its own names; drop --only, --skip and --list")
     report = io.StringIO()
-    code = _run(args, report, fetcher, discover, known, root, annotated)
     # sys.stderr is read here, not bound as a default like `out`, so a test that swaps it
     # for capsys's stream receives the report.
+    try:
+        code = _run(args, report, fetcher, discover, known, root, annotated)
+    except BaseException:
+        # A download that dies mid-body raises out of the run. The report still names
+        # every digest `--refresh` rewrote before it.
+        sys.stderr.write(report.getvalue())
+        raise
     (out if code == 0 else sys.stderr).write(report.getvalue())
     return code
 
