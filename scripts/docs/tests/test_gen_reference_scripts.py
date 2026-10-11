@@ -423,3 +423,19 @@ def test_the_basename_guard_flags_a_real_clash():
     assert clashes == [
         "scripts/availability_bots/common.py and scripts/infra_map/common.py"
     ]
+
+
+def test_a_subpackage_module_names_a_test_named_after_its_family(tmp_path):
+    """`fanout_lib/review/red_gate.py` is tested by `test_fanout_red_gate.py` (#4529).
+
+    The family and the `tests/` both come from the nearest `*_lib` ancestor. The decoy is
+    named after the module's direct parent, which a lookup that stops there would pick.
+    """
+    _write(tmp_path / "dev" / "fanout.py", '"""Summary."""\n')
+    _write(
+        tmp_path / "dev" / "fanout_lib" / "review" / "red_gate.py", '"""Summary."""\n'
+    )
+    _write(tmp_path / "dev" / "tests" / "test_fanout_red_gate.py", '"""x"""\n')
+    _write(tmp_path / "dev" / "tests" / "test_review_red_gate.py", '"""x"""\n')
+    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    assert rows["red_gate.py"]["tests"] == "test_fanout_red_gate.py"

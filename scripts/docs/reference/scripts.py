@@ -26,12 +26,13 @@ assembles its answers into the page.
 
 THE TESTS COLUMN NAMES ONLY A DIRECT TEST. A `test_<name>.py` in the script's `tests/` sibling
 or beside it counts, and so does one in the entrypoint's `tests/` for a module inside a `*_lib`
-package, where those packages keep their tests (#4365). There the family-prefixed
-`test_<family>_<name>.py` also counts, the family being the package name less `_lib`, because
-`land_lib/ci.py` is tested by `test_land_ci.py` (#4515). Nothing else does. An earlier
-version also credited any test that imported the script or named its path, and keeping that
-judgement honest took a module and a suite of its own for a column nobody acted on (#3283).
-An empty cell therefore means "no test named after it", not "nothing exercises it".
+package or one of its subpackages, where those packages keep their tests (#4365, #4529). There
+the family-prefixed `test_<family>_<name>.py` also counts, the family being the package name
+less `_lib`, because `land_lib/ci.py` is tested by `test_land_ci.py` (#4515). Nothing else
+does. An earlier version also credited any test that imported the script or named its path,
+and keeping that judgement honest took a module and a suite of its own for a column nobody
+acted on (#3283). An empty cell therefore means "no test named after it", not "nothing
+exercises it".
 
 WHAT IT CANNOT DECIDE. Whether a script is safe to run. The summary is whatever its author
 wrote, and nothing here judges blast radius — `docs/reference/crons.md` does that for the
@@ -148,16 +149,26 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
             usage = _usage(doc)
 
         # The split layout keeps a script's test in a sibling `tests/`; the flat one beside it.
-        # A module inside a `*_lib` package keeps its test in the entrypoint's `tests/`, one
-        # level up, as land_lib, probe_lib and fragments_lib do. That test may carry the
+        # A module inside a `*_lib` package keeps its test in the entrypoint's `tests/`, beside
+        # the package, as land_lib, probe_lib and fragments_lib do. That test may carry the
         # family's prefix, which is the package name less `_lib`: land_lib/ci.py is tested by
-        # test_land_ci.py (#4515). The bare name is tried first, so fragments_lib's
+        # test_land_ci.py (#4515). The nearest `*_lib` ancestor decides both, so a module in a
+        # subpackage counts too: fanout_lib/review/red_gate.py is tested by
+        # test_fanout_red_gate.py (#4529). The bare name is tried first, so fragments_lib's
         # fragments_hosts.py keeps test_fragments_hosts.py.
         places = [path.parent / "tests", path.parent]
         names = [f"test_{path.stem}.py"]
-        if path.parent.name.endswith("_lib"):
-            places.append(path.parent.parent / "tests")
-            names.append(f"test_{path.parent.name.removesuffix('_lib')}_{path.stem}.py")
+        lib = next(
+            (
+                scripts / d
+                for d in path.relative_to(scripts).parents
+                if d.name.endswith("_lib")
+            ),
+            None,
+        )
+        if lib is not None:
+            places.append(lib.parent / "tests")
+            names.append(f"test_{lib.name.removesuffix('_lib')}_{path.stem}.py")
         test = next((n for n in names if any((p / n).is_file() for p in places)), "")
         run, evidence = verdicts.get(
             path.name, ("adhoc", "no automated caller in the tree")
@@ -220,7 +231,8 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     parts.append(
         '!!! note "Where the Tests column looks"\n'
         "    Only for a `test_<name>.py` in the script's `tests/` sibling or beside it, or, for a "
-        "module inside a `*_lib` package, in the `tests/` beside that package, where "
+        "module inside a `*_lib` package or one of its subpackages, in the `tests/` beside "
+        "that package, where "
         "`test_<family>_<name>.py` also counts: `land_lib/ci.py` is tested by "
         "`test_land_ci.py`. A script "
         "with an empty cell may still be exercised elsewhere: `gitops_tick.sh` has five tests "
