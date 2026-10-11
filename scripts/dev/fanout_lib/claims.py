@@ -60,7 +60,7 @@ def parse_batches(specs: list[str]) -> dict[str, list[int]] | None:
     return batches
 
 
-def orchestrator_branch(tools: Tools, target: Target, verb: str) -> str | None:
+def orchestrator_branch(tools: Tools, target: Target) -> str | None:
     """The branch this repo's claims go under, or None having said why it refused.
 
     The branch is HEAD of the cwd, the orchestrator's own worktree. A detached HEAD reads
@@ -76,13 +76,12 @@ def orchestrator_branch(tools: Tools, target: Target, verb: str) -> str | None:
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         if not target.is_server:
             return "HEAD"
-        print(f"{verb}: could not read HEAD: {error_text(exc)}", file=sys.stderr)
+        error(f"could not read HEAD: {error_text(exc)}")
         return None
     if target.is_server and branch in ("HEAD", target.base_branch):
-        print(
-            f"{verb}: HEAD is {branch!r}; run this from the orchestrator's own worktree, "
-            "whose branch holds the claims",
-            file=sys.stderr,
+        error(
+            f"HEAD is {branch!r}; run this from the orchestrator's own worktree, "
+            "whose branch holds the claims"
         )
         return None
     return branch
@@ -100,16 +99,14 @@ def reap_register(tools: Tools, target: Target) -> None:
     try:
         proc = tools.findings(argv)
     except subprocess.TimeoutExpired:
-        print("launch: reap timed out; claiming without it", file=sys.stderr)
+        warn("reap timed out; claiming without it")
         return
+    # Relayed as `reap` printed them: its summary line carries its own `reap:` label.
     for line in proc.stdout.splitlines():
-        print(f"launch: {line}")
+        print(line)
     if proc.returncode != 0:
         detail = " ".join(proc.stderr.split())
-        print(
-            f"launch: reap failed ({proc.returncode}): {detail}; claiming without it",
-            file=sys.stderr,
-        )
+        warn(f"reap failed ({proc.returncode}): {detail}; claiming without it")
 
 
 def post_worked_by(
@@ -124,10 +121,7 @@ def post_worked_by(
     """
     for number in issues:
         if not tools.comment(number, f"{WORKED_BY}{branch}`", target.repo):
-            print(
-                f"launch: #{number}: could not post the Worked-by comment",
-                file=sys.stderr,
-            )
+            warn(f"#{number}: could not post the Worked-by comment")
 
 
 def claim_for_orchestrator(
@@ -179,7 +173,7 @@ def claim_all(tools: Tools, batches: dict[str, list[int]], target: Target) -> in
         The exit code: 0 when every issue was claimed, 3 when any was refused, 1 when HEAD
         names no branch a claim can live under.
     """
-    holder = orchestrator_branch(tools, target, "claim")
+    holder = orchestrator_branch(tools, target)
     if holder is None:
         return 1
     numbers = [n for issues in batches.values() for n in issues]
@@ -187,7 +181,7 @@ def claim_all(tools: Tools, batches: dict[str, list[int]], target: Target) -> in
     for number in claimed:
         print(f"#{number} claimed by `{holder}`")
     for reason in refusals:
-        print(f"claim: {reason}", file=sys.stderr)
+        error(reason)
     return 3 if refusals else 0
 
 

@@ -75,9 +75,10 @@ def test_launch_proceeds_when_the_shared_script_is_grouped_into_one_batch(tmp_pa
     assert [c for c in run.calls if "worktree add" in c[1]]
 
 
-def test_allow_shared_file_excuses_the_named_file_only(tmp_path, capsys):
+def test_allow_shared_file_excuses_the_named_file_only(tmp_path, capsys, monkeypatch):
     # A doc path is context for both batches; the override names it and nothing else, so the
     # script collision beside it still refuses.
+    monkeypatch.setattr("sys.argv", ["fanout.py"])
     doc = "docs/claude-tooling.md"
     issues = [
         Issue(1780, "bridge", f"`{ALERTS}` and `{doc}`", ("claude",)),
@@ -98,8 +99,9 @@ def test_allow_shared_file_excuses_the_named_file_only(tmp_path, capsys):
         == 1
     )
     err = capsys.readouterr().err
-    assert f"all cite {doc} — allowed by --allow-shared-file" in err
-    assert f"all cite {ALERTS} — two agents editing one file" in err
+    # One run prints both, under argparse's prefix rather than a hand-written `launch:` (#4479).
+    assert f"fanout.py: warning: batches 1780, 1782 all cite {doc} — allowed by" in err
+    assert f"fanout.py: error: batches 1780, 1782 all cite {ALERTS} — two agents" in err
     assert not run.calls
 
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=issues)
