@@ -555,7 +555,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     every reader's next call would read `HTTP Error 403`, which this gate maps to `pending`. The
     rule is `deploy_git.ci_walk_candidates`, which carries the `DECIDED:` marker. The property the
     gate keeps is that **the tree the host runs always has its own green CI verdict.** One line
-    names the choice: `origin <tip8>: CI <pending|fail>; fast-forwarding to the newest green
+    names the choice: `ci: origin <tip8> is <pending|fail>; fast-forwarding to the newest green
     ancestor <sha8> (<n> behind the tip)`.
   - `fail` on the tip with no green ancestor makes `next_action` return **`ci_failed`**: no
     ff-merge, no deploy, and a Discord alert throttled once per SHA (the `ci` slot of the
