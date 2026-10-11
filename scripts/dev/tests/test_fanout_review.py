@@ -288,6 +288,16 @@ def test_another_repos_batch_runs_no_base_check(tmp_path):
     assert _record(tmp_path)["base_tests"] == 0
 
 
+def test_the_reviewer_runs_at_the_effort_its_record_names(tmp_path):
+    reports = [_report(f"Opened {PR}"), _report(structured={"findings": []})]
+    pipeline, _ = _pipeline(tmp_path, reports)
+    reviewer = pipeline._reviewer()
+    effort = reviewer[reviewer.index("--effort") + 1]
+    assert effort == "medium"
+    pipeline.run_all()
+    assert _record(tmp_path)["review_effort"] == effort
+
+
 def test_the_reviewer_reads_the_anti_patterns_read_at_start(tmp_path):
     pipeline, _ = _pipeline(tmp_path, [])
     pipeline.anti_patterns = "ANTI-PATTERNS AT START"
