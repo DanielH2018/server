@@ -41,11 +41,14 @@ spec:
               value: "{{ container_item.port }}"
             - name: ARTIFACTS_SERVICES_FILE
               value: /app/known_services.json
+            - name: ARTIFACTS_STARS_FILE
+              value: /srv/stars/{{ artifacts_stars_name }}
             - name: PYTHONUNBUFFERED
               value: "1"
             - name: TZ
               value: {{ tz }}
-          # The server writes nothing: the index is in memory and every mount is read-only.
+          # The server writes only the star list, into the one writable mount below. The index
+          # is in memory and every artifact tree is mounted read-only.
 {{ hardened_security_context(read_only=true) }}
           ports:
             - containerPort: {{ container_item.port }}
@@ -79,6 +82,11 @@ spec:
               mountPath: /srv/artifacts/{{ peer.name }}
               readOnly: true
 {% endfor %}
+            # A directory, not the file: StarStore replaces the list by renaming a temp file
+            # over it, and a rename onto a single-file bind mount fails with EBUSY. Outside
+            # /srv/artifacts, or the index would list it as a host.
+            - name: artifacts-stars
+              mountPath: /srv/stars
 {{ container_resources(cpu_limit=artifacts_k8s_cpu_limit, mem_limit=artifacts_k8s_mem_limit, cpu_request=artifacts_k8s_cpu_request, mem_request=artifacts_k8s_mem_request) }}
       volumes:
         - name: artifacts-script
@@ -109,3 +117,8 @@ spec:
             path: {{ artifacts_peer_dir }}/{{ peer.name }}
             type: Directory
 {% endfor %}
+        # type: Directory for the same reason as the trees above; tasks/main.yml creates it.
+        - name: artifacts-stars
+          hostPath:
+            path: {{ artifacts_stars_dir }}
+            type: Directory
