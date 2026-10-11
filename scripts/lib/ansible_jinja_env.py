@@ -110,8 +110,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     Undefined passes through it and is judged by name as usual.
 
     ``filter_by_platform``, ``authelia_service_rules`` and ``tier_priority_class`` are this
-    repo's own filter plugins: pihole's ConfigMap derives its dnsmasq override records through
-    the first, and authelia's config Secret derives its per-service access_control rules
+    repo's own filter plugins: ``deploy.yml`` splits each host's entries by platform through the
+    first, and authelia's config Secret derives its per-service access_control rules
     through the second, which raises on a ``use_authelia: true`` entry with no ``auth_tier``.
     A tiered role's pods take their PriorityClass from the third, which raises on an entry
     with no ``tier``. uptime-kuma's static monitors ask ``in_service_tier`` whether a service's
@@ -121,7 +121,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     ``metrics`` item. Its hand-written jobs read their entry's own port through ``entry_port``,
     which raises on an entry name it cannot find. uptime-kuma's ingress tiles derive from
     ``kuma_ingress_monitors``, which raises on a malformed ``kuma`` key. Every caller fence
-    reads its callers through ``netpol_callers``. homepage's tiles build their links and
+    reads its callers through ``netpol_callers``, and netpol-baseline's fences come from
+    ``netpol_caller_fences``. artifacts, monitor-bridge, pihole and uptime-kuma collect names,
+    ports and hostnames through ``entry_fields``' filters. homepage's tiles build their links and
     ClusterIP widget URLs through ``homepage_href`` and ``homepage_widget_url``, which raise on
     an entry that lacks the route or the ``homepage_widget`` key.
     ``py_table`` reads monitor-bridge's check table out of its Python source, for the
@@ -140,7 +142,13 @@ def register_ansible_filters(env: Environment) -> Environment:
     if str(ANSIBLE / "filter_plugins") not in _sys.path:
         _sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
     from authelia_access import authelia_service_rules
-    from homepage_tiles import homepage_href, homepage_widget_url, netpol_callers
+    from entry_fields import entry_names, lan_hostnames, published_ports
+    from homepage_tiles import (
+        homepage_href,
+        homepage_widget_url,
+        netpol_caller_fences,
+        netpol_callers,
+    )
     from kuma_monitors import kuma_ingress_monitors
     from longhorn_groups import (
         backup_group_label,
@@ -180,6 +188,10 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["py_table"] = py_table
     env.filters["kuma_ingress_monitors"] = kuma_ingress_monitors
     env.filters["netpol_callers"] = netpol_callers
+    env.filters["netpol_caller_fences"] = netpol_caller_fences
+    env.filters["entry_names"] = entry_names
+    env.filters["published_ports"] = published_ports
+    env.filters["lan_hostnames"] = lan_hostnames
     env.filters["homepage_widget_url"] = homepage_widget_url
     env.filters["homepage_href"] = homepage_href
     env.filters["backup_group_label"] = backup_group_label

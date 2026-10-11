@@ -24,6 +24,8 @@ EXPECTED_FILTERS = {
     "to_uuid": "ansible.plugins.filter.core.to_uuid",
     "filter_by_platform": "toposort.filter_by_platform",
     "authelia_service_rules": "authelia_access.authelia_service_rules",
+    "lan_hostnames": "entry_fields.lan_hostnames",
+    "netpol_caller_fences": "homepage_tiles.netpol_caller_fences",
 }
 
 
