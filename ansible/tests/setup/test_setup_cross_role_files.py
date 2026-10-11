@@ -35,6 +35,10 @@ The setup roles calling a filter plugin's filters are a third, `SETUP_ROLES_CALL
 beside the deploy plane. `_FILTER_CALLERS_EXEMPT` names each call that leaves nothing rendered
 for a plugin change to stale, with the reason.
 
+A setup role reading another's `defaults/` variable is a row of the first table too (#4303),
+held by its own census: the scan matches a defaults key as a word, the way the filter-plugin
+census matches a filter name. `_DEFAULTS_READS_PENDING` holds the reads #4357 has yet to record.
+
 Run: uv run pytest ansible/tests/setup/test_setup_cross_role_files.py
 """
 
@@ -44,6 +48,7 @@ import re
 from _helpers import ROLES
 from _role_census import role_dirs, role_task_files
 from deploy_tools import narrow_filters
+from lib import yaml_fast
 
 from deploy_cross_role import (
     K8S_ROLES_IMPORTING_SETUP_FILES,
@@ -214,7 +219,13 @@ def _setup_task_texts() -> dict[str, str]:
 
 
 def test_the_deployers_table_equals_the_trees_cross_role_files():
-    assert _tree_edges() == SETUP_FILES_SHIPPED_BY_OTHER_ROLES
+    # The `defaults/` rows are a variable read, not a path, so their own census holds them.
+    shipped = {
+        path: roles
+        for path, roles in SETUP_FILES_SHIPPED_BY_OTHER_ROLES.items()
+        if "/defaults/" not in path
+    }
+    assert _tree_edges() == shipped
 
 
 def test_the_scan_finds_the_known_edges():
@@ -372,3 +383,80 @@ def test_a_setup_role_calling_a_filter_is_flagged():
 def test_a_setup_role_naming_a_filter_only_in_a_comment_or_a_longer_word_is_clean():
     texts = {"k3s": {"a.yml": "# tier_claims is read here\ny: my_tier_claims_x\n"}}
     assert filter_callers({"p.py": {"tier_claims"}}, texts) == {}
+
+
+# The cross-role `defaults/` reads #4357 tracks, which the table does not record yet. A pair
+# leaves this set in the PR that records it or removes the read, and one the scan no longer
+# finds fails below, so the set only shrinks.
+_DEFAULTS_READS_PENDING = {
+    ("ansible/roles/setup/claude_code/defaults/main.yml", "initial_setup"),
+    ("ansible/roles/setup/k3s/defaults/main.yml", "deploy_ui"),
+    ("ansible/roles/setup/k3s/defaults/main.yml", "hypervisor"),
+}
+
+
+def defaults_readers(
+    keys: dict[str, set[str]], texts: dict[str, dict[str, str]]
+) -> dict[str, frozenset[str]]:
+    """Each `defaults/` file mapped to the OTHER setup roles naming one of its keys (#4303).
+
+    Args:
+        keys: a defaults path -> the top-level keys it defines.
+        texts: as `filter_callers` takes them.
+    """
+    found = filter_callers(keys, texts)
+    out = {path: roles - {path.split("/")[3]} for path, roles in found.items()}
+    return {path: roles for path, roles in out.items() if roles}
+
+
+def _defaults_keys() -> dict[str, set[str]]:
+    repo = ROLES.parent.parent
+    return {
+        str(p.relative_to(repo)): set(yaml_fast.safe_load(p.read_text()) or {})
+        for role_dir in role_dirs(ROLES / "setup")
+        for p in sorted((role_dir / "defaults").glob("*.yml"))
+    }
+
+
+def _tree_defaults_readers() -> dict[str, frozenset[str]]:
+    return defaults_readers(_defaults_keys(), _setup_role_texts())
+
+
+def test_the_defaults_rows_equal_the_trees_cross_role_reads():
+    found = _tree_defaults_readers()
+    kept = {
+        path: frozenset(r for r in roles if (path, r) not in _DEFAULTS_READS_PENDING)
+        for path, roles in found.items()
+    }
+    recorded = {
+        path: roles
+        for path, roles in SETUP_FILES_SHIPPED_BY_OTHER_ROLES.items()
+        if "/defaults/" in path
+    }
+    assert {path: roles for path, roles in kept.items() if roles} == recorded
+    assert recorded.get("ansible/roles/setup/initial_setup/defaults/main.yml") == {
+        "claude_code"
+    }
+
+
+def test_every_pending_defaults_read_is_still_a_read():
+    found = _tree_defaults_readers()
+    for path, role in _DEFAULTS_READS_PENDING:
+        assert role in found.get(path, ()), (path, role)
+
+
+def test_a_role_reading_another_roles_default_is_flagged():
+    owner = "ansible/roles/setup/initial_setup/defaults/main.yml"
+    texts = {
+        "initial_setup": {"tasks/crons.yml": "name: '{{ initial_setup_group }}'\n"},
+        "claude_code": {"tasks/a.yml": "groups: '{{ [initial_setup_group] }}'\n"},
+    }
+    assert defaults_readers({owner: {"initial_setup_group"}}, texts) == {
+        owner: frozenset({"claude_code"})
+    }
+
+
+def test_a_role_reading_only_its_own_default_is_clean():
+    owner = "ansible/roles/setup/initial_setup/defaults/main.yml"
+    texts = {"initial_setup": {"tasks/crons.yml": "x: '{{ initial_setup_group }}'\n"}}
+    assert defaults_readers({owner: {"initial_setup_group"}}, texts) == {}

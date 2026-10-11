@@ -169,6 +169,33 @@ def path_tags(
     raise CannotNarrow(f"{rel} is not in a directory this can narrow from")
 
 
+def foreign_key_tags(
+    path: str, index: RoleIndex, old: str, new: str, repo: str
+) -> frozenset[str]:
+    """The tags of the role's readers of the keys another role's vars file changed.
+
+    A changed key the role never names is skipped, as `plugin_tags` skips a filter: the
+    owner's `defaults/main.yml` holds many keys and the reader names few. A range changing
+    none of them returns an empty set, as `_reaches_no_host` skips a path, so the role's
+    own changed paths decide. `role_tags` still refuses when every path is empty.
+
+    Args:
+        path: the other role's `defaults/` or `vars/` file, as the table records it.
+        index: the reading role, read at `new`.
+        old: the commit the checkout was on.
+        new: the commit carrying the change.
+        repo: the checkout to read.
+
+    Raises:
+        CannotNarrow: every refusal `changed_keys` and `key_readers` make.
+    """
+    tags: set[str] = set()
+    for key in sorted(changed_keys(path, old, new, repo)):
+        if index.mentions(key):
+            tags |= index.key_readers(key)
+    return frozenset(tags)
+
+
 def plugin_tags(
     path: str, index: RoleIndex, old: str, new: str, repo: str
 ) -> frozenset[str]:
@@ -277,6 +304,11 @@ def role_tags(
         elif path in plugins:
             rel = path
             got = plugin_tags(path, index, old, new, repo)
+        elif "/defaults/" in path or "/vars/" in path:
+            # Another role's variable this role reads (#4303). `readers_of` would match the
+            # bare `main.yml` against every task file naming it, so the changed keys decide.
+            rel = path
+            got = foreign_key_tags(path, index, old, new, repo)
         else:
             # A shipped file is named by this role's tasks the way its own `files/` are, and
             # `readers_of` refuses one that none of them names.

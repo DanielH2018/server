@@ -22,7 +22,7 @@ from pathlib import Path as _Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.repo_paths import FILTER_PLUGINS, MONITOR_BRIDGE_FILES, REPO, K8S_ROLES
 
