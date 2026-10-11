@@ -11,6 +11,7 @@ restates those two rules here so a drift fails in this repo rather than at a ses
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -120,6 +121,14 @@ def test_a_landing_whose_pid_died_without_a_code_died(tmp_path, dead_pid):
 def test_a_live_landing_without_a_code_is_still_running(tmp_path):
     log = landing(tmp_path, "== 4/6  deploying\n", pid=os.getpid())
     assert land_probe.read(log)["state"] == "running"
+
+
+def test_a_landing_with_neither_pid_nor_code_past_the_grace_died(tmp_path):
+    """No pid and no code means no landing to wait on: the wait must end (#4513)."""
+    log = landing(tmp_path, "")
+    stale = time.time() - land_probe.detach.START_GRACE_S - 1
+    os.utime(log, (stale, stale))
+    assert land_probe.read(log)["state"] == "died"
 
 
 def test_the_newest_log_for_the_pr_is_the_landing(tmp_path):

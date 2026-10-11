@@ -101,6 +101,13 @@ def read(log: Path) -> dict:
                     "detail": f"the landing (pid {pid}) died without recording an exit code; "
                     f"read {log}",
                 }
+        # No pid and no code past the start grace: nothing will ever write the code (#4513).
+        if pid is None and detach.never_started(log):
+            return {
+                "state": "died",
+                "detail": f"the landing recorded neither a pid nor an exit code and its log has "
+                f"not changed for {detach.START_GRACE_S}s: it never started; read {log}",
+            }
     if code is not None:
         # A stop that names no verdict (bad arguments, 64) leaves its reason only on the
         # `land:` line, so that line is the detail before the bare fallback.
