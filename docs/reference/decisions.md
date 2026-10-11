@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-11 01:12 UTC
-generated_sha: 0248ce38c
+generated_at: 2026-10-11 01:21 UTC
+generated_sha: 40086d6a7
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 0248ce38c
 
 # Decisions
 
-659 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+657 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -400,8 +400,8 @@ generated_sha: 0248ce38c
 | the Debian revision is a GLOB, never a literal `-1` (#2357). UPSTREAM version -- Renovate strips the revision from the version space it reads (renovate.json), so it cannot propose one, nor prove that `-1` exists for what it proposes. Docker publishes several revisions of one upstream version: the noble/arm64 index carries `containerd.io 2.3.4-1~ubuntu.24.04~noble` and `2.3.4-2~ubuntu.24.04~noble` side by side. A hardcoded `-1` therefore asserted a revision nothing verifies, and a repackage superseding a withdrawn `-1` rendered a spec apt cannot resolve -- `no available installation candidate` from the fresh install and from the deliberate upgrade's pending check. ansible.builtin.apt fnmatches the version in a `name=version` spec (its own `package_best_match` pins the pattern at priority 1001) and hands apt-get the concrete newest match, so apt chooses the revision. Measured on daniel-pi 2026-09-24 in check mode: `containerd.io=2.3.4-*~ubuntu.24.04~noble` built `apt-get --simulate install 'containerd.io=2.3.4-2~ubuntu.24.04~noble'`, the newer revision of the two. Long form in this role's CLAUDE.md. | `ansible/roles/setup/docker_install/defaults/main.yml:49` | 2026-09-24 |
 | ` marker at the GOGC line of roles/containers/alloy/templates/docker-compose.yml.j2; the sizing for these two daemons is at `docker_install_gomemlimit_<daemon>` in defaults/main.yml. | `ansible/roles/setup/docker_install/tasks/go-runtime.yml:13` | 2026-09-18 |
 | renaming the attachment is safe, and this is the load-bearing correctness claim. subtitle script references a font by its INTERNAL family name (the `Style:` line's fontname), never by the attachment's filename, so libass still matches the font after the header rewrite. mkvpropedit rewrites the header in place without touching or re-encoding any track. | `ansible/roles/setup/fake_remux/files/mkv_attachment_repair.py:9` | 2026-08-29 |
-| takes fake_remux_lock, though it shares no ledger with the other two crons. reconciler deletes and swaps the same mkv files this rewrites the header of, and mkvpropedit rewriting a header mid-swap corrupts the file it was called to fix. The lock costs a wait. | `ansible/roles/setup/fake_remux/tasks/main.yml:149` | 2026-08-29 |
-| rendered here rather than reusing the k3s role's /etc/rancher/k3s/kuma-push.env. role is host-conditional and tag-scoped, so `initial_setup.yml --tags fake_remux` would render the script without ever writing that file — and the script then exits 0 without pushing, which is silence rather than an error. Same file, same tag, same run. | `ansible/roles/setup/fake_remux/tasks/main.yml:163` | 2026-08-27 |
+| takes fake_remux_lock, though it shares no ledger with the other two crons. reconciler deletes and swaps the same mkv files this rewrites the header of, and mkvpropedit rewriting a header mid-swap corrupts the file it was called to fix. The lock costs a wait. | `ansible/roles/setup/fake_remux/tasks/main.yml:181` | 2026-08-29 |
+| rendered here rather than reusing the k3s role's /etc/rancher/k3s/kuma-push.env. role is host-conditional and tag-scoped, so `initial_setup.yml --tags fake_remux` would render the script without ever writing that file — and the script then exits 0 without pushing, which is silence rather than an error. Same file, same tag, same run. | `ansible/roles/setup/fake_remux/tasks/main.yml:195` | 2026-08-27 |
 | rendered by THIS role, not reused from /etc/rancher/k3s/kuma-push.env. host-conditional and tag-scoped (`initial_setup.yml --tags fake_remux`), and the k3s role's env file is written under other tags entirely — so a tag-scoped run of this role would render a script whose env file the same run never wrote. The script then exits 0 without pushing, which is the silent failure this split exists to avoid. | `ansible/roles/setup/fake_remux/templates/fake-remux-push.env.j2:8` | 2026-08-27 |
 | ` marker). | `ansible/roles/setup/gitops_deploy/CLAUDE.md:77` | 2026-10-10 |
 | queue BEFORE the send, not after. alert_once has already advanced its per-SHA marker by the time we get here — so a process death inside that window (a reboot, a `systemctl stop`, the UPS shutdown chain) used to leave a durable "already alerted" marker with nothing delivered and nothing queued, and the ff-merged channels never re-reach their alert code on a later tick. Queue-first trades lost-on-crash for duplicate-on-crash: a death after the 2xx but before the removal write below makes drain_pending() repost once. At-least-once is the right side for an alert. | `ansible/roles/setup/gitops_deploy/files/deploy_alerts.py:81` | 2026-09-05 |
@@ -744,8 +744,6 @@ generated_sha: 0248ce38c
 | ` marker with the byte | `docs/pi-host-tuning-record.md:63` | 2026-10-10 |
 | ` marker carries the | `docs/pi-host-tuning-record.md:242` | 2026-09-30 |
 | ` marker at the top of `module_length_allowlist.txt` is the ruling. | `docs/python-code-organization.md:245` | 2026-10-10 |
-| ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
-| ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
 | ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
 | ` comment beside it accepts a grouped VERSION bump paging four days early as the cost. | `docs/renovate-notify-internals.md:81` | 2026-10-02 |
 | no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` has the | `docs/traefik-plugins-and-startup.md:54` | 2026-09-29 |

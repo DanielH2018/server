@@ -34,7 +34,12 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mkv_attachment_logic as mal
-from fake_remux_scan import DISCORD_SPOOL_DIR, flush_queued_posts, load_config, log
+from fake_remux_lib.fake_remux_scan import (
+    DISCORD_SPOOL_DIR,
+    flush_queued_posts,
+    load_config,
+    log,
+)
 from host_lib import atomic_write, discord_post
 
 USER_AGENT = "autofix-mkv-attachments"

@@ -35,8 +35,9 @@ The two fake-remux crons run on daniel-box from `ansible/roles/setup/fake_remux`
 
 ## fake-remux scan: what counts as fake
 
-`ansible/roles/setup/fake_remux/files/fake_remux_scan.py` plus the pure `fake_remux_logic.py`, deployed
-to `/opt/autofix-fake-remux/`, daily at `04:45`, configured from
+`fake_remux.py scan`, whose shell is `ansible/roles/setup/fake_remux/files/fake_remux_lib/fake_remux_scan.py`
+and whose pure core is `fake_remux_logic.py` beside it, deployed to
+`/opt/autofix-fake-remux/`, daily at `04:45`, configured from
 `/etc/autofix-fake-remux/config.env` (0600). It is ffprobe-backed detection of files whose
 quality claims a **Remux** but whose video stream is a re-encode, by either of two tells:
 
@@ -61,7 +62,8 @@ pure core is unit-tested in `test_fake_remux_logic.py`.
 
 ## fake-remux reconcile: search first, delete last
 
-`files/fake_remux_replace.py` plus the pure `fake_remux_replace_logic.py`, every 20 minutes,
+`fake_remux.py replace`, whose shell is `files/fake_remux_lib/fake_remux_replace.py` and whose pure
+core is `fake_remux_replace_logic.py` beside it, every 20 minutes,
 same config.env. It reads the ledger the scan seeded, interactive-searches Sonarr for a clean
 replacement, grabs it, waits for the download, ffprobes it the same way the scan does, and
 only deletes the fake and lets Sonarr import **once the replacement is verified genuine**.
@@ -100,7 +102,7 @@ Scan, live but report-only:
 ```bash
 SONARR_API_KEY=… ARR_DISCORD_WEBHOOK_URL= STATE_FILE=/tmp/x.json \
   PYTHONPATH=ansible/roles/setup/common/files \
-  /usr/local/bin/uv run --no-project --python 3.14.6 files/fake_remux_scan.py
+  /usr/local/bin/uv run --no-project --python 3.14.6 files/fake_remux.py scan
 ```
 
 Reconcile, in shadow so it has no side effects:
@@ -109,7 +111,7 @@ Reconcile, in shadow so it has no side effects:
 FAKE_REMUX_REPLACE_MODE=shadow SONARR_API_KEY=… LEDGER_FILE=/tmp/l.json \
   REPLACE_STATE_FILE=/tmp/rs.json OUTCOMES_FILE=/tmp/o.jsonl \
   PYTHONPATH=ansible/roles/setup/common/files \
-  /usr/local/bin/uv run --no-project --python 3.14.6 files/fake_remux_replace.py
+  /usr/local/bin/uv run --no-project --python 3.14.6 files/fake_remux.py replace
 ```
 
 Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` for the sidecar, and `uv run
