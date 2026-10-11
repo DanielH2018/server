@@ -24,9 +24,13 @@ from lib import yaml_fast
 from lib.repo_paths import ANSIBLE, REPO, ROLES
 
 # A role command running a script `--no-project`: the first `.py` path after the flag, in one
-# command (no blank line between). A path may hold `{{ var }}`, as in `{{ deploy_ui_dir }}/x.py`.
+# command. The scan stops at a blank line, a `-m` (a module run names no path) or the next
+# `--no-project`, so it never takes another command's script. A path may hold `{{ var }}`, as
+# in `{{ deploy_ui_dir }}/x.py`.
+_NO_PROJECT = re.compile(r"--no-project\b")
 _ROLE_RUN = re.compile(
-    r"--no-project\b(?:(?!\n\s*\n)[\s\S]){0,400}?((?:\{\{[^}]*\}\}|[^\s\"'{}])+\.py)\b"
+    r"--no-project\b(?:(?!\n\s*\n|\s-m\s|--no-project\b)[\s\S]){0,400}?"
+    r"((?:\{\{[^}]*\}\}|[^\s\"'{}])+\.py)\b"
 )
 _JINJA = re.compile(r"\{\{\s*([\w|. ]+?)\s*\}\}")
 
@@ -212,8 +216,30 @@ def role_entries() -> list[tuple[Path, tuple[str, ...]]]:
             for line in path.read_text(encoding="utf-8").splitlines()
             if not line.lstrip().startswith(("#", "{#"))
         )
-        for match in _ROLE_RUN.finditer(text):
-            found.append((role_entry(match.group(1), path), ()))
+        found += [
+            (role_entry(spelled, path), ()) for spelled in _scripts_run(text, path)
+        ]
+    return found
+
+
+def _scripts_run(text: str, holder: Path) -> list[str]:
+    """The script path each `--no-project` in `text` runs, as spelled.
+
+    Raises:
+        ValueError: a `--no-project` names no `.py` path the scan can read, such as a `-m`
+            module run or a path further than the scan reaches. Discovery fails closed like
+            the mapping does, so a command this cannot read never drops out of the set.
+    """
+    found = []
+    for flag in _NO_PROJECT.finditer(text):
+        match = _ROLE_RUN.match(text, flag.start())
+        if match is None:
+            line = text.count("\n", 0, flag.start()) + 1
+            raise ValueError(
+                f"{holder.relative_to(REPO)}: the --no-project command on non-comment "
+                f"line {line} runs no .py path lib.role_installs can read"
+            )
+        found.append(match.group(1))
     return found
 
 

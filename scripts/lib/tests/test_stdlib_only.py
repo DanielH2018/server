@@ -469,3 +469,23 @@ def test_runtime_import_fails_a_module_that_exits_on_a_failed_import(tmp_path):
     ok, stderr = _checker().runtime_import(module, [tmp_path])
     assert not ok
     assert "PyYAML" in stderr
+
+
+def test_a_no_project_command_with_a_script_path_is_read_is_clean():
+    text = "uv run --no-project --python 3.14 \\\n  /opt/x/run.py --dry-run\n"
+    assert role_installs._scripts_run(text, GITOPS_UNIT) == ["/opt/x/run.py"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "uv run --no-project --python 3.14 -m pkg.mod\n",
+        # A module run must not borrow the next command's script.
+        "uv run --no-project -m pkg.mod\nuv run --frozen python /opt/x/run.py\n",
+        "uv run --no-project " + "--flag " * 80 + "/opt/x/run.py\n",
+    ],
+    ids=["module-run", "next-commands-script", "past-the-scan"],
+)
+def test_a_no_project_command_with_no_readable_script_is_flagged(text):
+    with pytest.raises(ValueError, match=r"runs no \.py path"):
+        role_installs._scripts_run(text, GITOPS_UNIT)
