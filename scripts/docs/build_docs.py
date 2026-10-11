@@ -255,9 +255,25 @@ def run_generators() -> list[str]:
         if code != 0:
             failed.append(script)
             print(f"build_docs: {script} FAILED rc={code}", file=sys.stderr)
-        else:
-            print(f"build_docs: {script} ok -> {out}")
+    # One line for the whole pass: each generator already reports its own page, so a
+    # per-generator "ok" here only doubled the log (#4448).
+    print(
+        f"build_docs: {len(GENERATORS) - len(failed)}/{len(GENERATORS)} generator(s) ok"
+    )
     return failed
+
+
+def stderr_tail(text: str, limit: int) -> str:
+    """The last `limit` characters of `text`, cut at a line start.
+
+    mkdocs and rsync print the error that decides a failure last, so a cap keeps the tail.
+    The head that it replaced dropped exactly that line on a long log (#4448).
+    """
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    tail = text[-limit:]
+    return tail[tail.find("\n") + 1 :] if "\n" in tail else tail
 
 
 def _write_build_stamp(site: Path, generators: str = "ok") -> None:
@@ -318,11 +334,13 @@ def build_site(site_dir: str, generators: str = "ok") -> bool:
         check=False,
     )
     if result.returncode != 0:
+        print(stderr_tail(result.stderr, 4000), file=sys.stderr)
         print(
-            "build_docs: mkdocs build FAILED (previous site left serving)",
+            f"build_docs: mkdocs build FAILED rc={result.returncode}; the previous site is "
+            "left serving. The last line above is the deciding error; reproduce it with "
+            "`uv run mkdocs build --strict`.",
             file=sys.stderr,
         )
-        print(result.stderr.strip()[:4000], file=sys.stderr)
         shutil.rmtree(staging, ignore_errors=True)
         return False
 
@@ -347,8 +365,12 @@ def build_site(site_dir: str, generators: str = "ok") -> bool:
     )
     shutil.rmtree(staging, ignore_errors=True)
     if synced.returncode != 0:
-        print("build_docs: rsync into the served directory FAILED", file=sys.stderr)
-        print(synced.stderr.strip()[:2000], file=sys.stderr)
+        print(stderr_tail(synced.stderr, 2000), file=sys.stderr)
+        print(
+            f"build_docs: rsync into {final} FAILED rc={synced.returncode}; the served "
+            "site may be partly updated. Re-run build_docs.py once the error above is fixed.",
+            file=sys.stderr,
+        )
         return False
 
     print(f"build_docs: site built -> {final}")

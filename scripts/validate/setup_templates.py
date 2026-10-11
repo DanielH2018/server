@@ -42,6 +42,7 @@ failure, unresolved variable, or invalid YAML.
 """
 
 import sys
+from collections.abc import Sequence
 from collections import defaultdict
 from pathlib import Path
 
@@ -55,6 +56,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from validate.validate_lib.ok_lines import ok_printer
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
@@ -258,12 +260,17 @@ def check_role_template(tpl: Path, known: frozenset[str]) -> list[str]:
     return check_template(tpl, ctx, known | defaults)
 
 
-def main() -> int:
+def main(argv: Sequence[str] = ()) -> int:
     """Render every setup-plane template and report unresolved variables and bad YAML.
+
+    Args:
+        argv: The command-line arguments. `-v` or `--verbose` also lists each clean
+            template as an `[ok]` line; by default only failures and the summary print.
 
     Returns:
         0 if every template rendered clean, 1 if any failed.
     """
+    ok = ok_printer(argv)
     known = secret_names() | runtime_vars() | inventory_names()
     templates = discover_templates()
     failures = 0
@@ -275,10 +282,10 @@ def main() -> int:
             for problem in problems:
                 print(f"  [FAIL] {rel}: {problem}", file=sys.stderr)
         else:
-            print(f"  [ok]   {rel}")
+            ok(f"  [ok]   {rel}")
     print(f"\n{len(templates)} setup template(s) checked, {failures} failure(s).")
     return 1 if failures else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

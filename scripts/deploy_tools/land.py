@@ -3,7 +3,9 @@
 
 Invoke it as ``./scripts/deploy_tools/land.sh``, which execs this file; every doc, skill
 and hook names the shim. The implementation is the ``land_lib`` package beside it, one
-module per phase; this file is the docstring ``--help`` prints and ``main``.
+module per phase; this file holds ``main`` and the docstring ``--help`` prints from.
+``--help`` prints the summary line above and everything from ``Usage::`` on. The sections
+between are rationale for whoever edits this file, so they print nowhere (#4448).
 
 WHY ONE INVOCATION RATHER THAN A CHAIN. A session cannot write this sequence inline: shell
 control flow and command substitution defeat the worktree containment check, which refuses with
@@ -129,6 +131,17 @@ def _prepare_stdio() -> None:
             sys.stdout.reconfigure(line_buffering=True)
 
 
+def help_text(doc: str) -> str:
+    """The part of `doc` that `--help` prints: its summary line, then the `Usage::` line onward.
+
+    A docstring without a line starting `Usage::` comes back whole.
+    """
+    start = doc.find("\nUsage::")
+    if start < 0:
+        return doc
+    return f"{doc.splitlines()[0]}\n{doc[start:]}"
+
+
 def main(
     argv: list[str] | None = None,
     tools: Tools | None = None,
@@ -149,7 +162,7 @@ def main(
     # -- so `land.sh` alone answered a bad command line with a different number from every
     # other entry point here. `LAND_BAD_ARGS` is the shared 64.
     try:
-        opts = parse_args(argv, __doc__ or "")
+        opts = parse_args(argv, help_text(__doc__ or ""))
     except SystemExit as exc:
         raise SystemExit(LAND_BAD_ARGS if exc.code == 2 else exc.code) from None
     unit = os.environ.get(HANDOFF_ENV)

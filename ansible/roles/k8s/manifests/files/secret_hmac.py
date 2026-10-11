@@ -18,7 +18,8 @@ WHY KEYED. A plain sha256 of a manifest rendered from a known template lets anyo
 comparable only between records written on the host that holds it.
 
 Exit codes: 0 digest or key printed; 1 FILE unreadable (the caller records ABSENT); 2 KEYFILE
-missing or unreadable (the caller omits the secret digest entirely). 64 wrong argument count.
+missing, unreadable or short (the caller omits the secret digest entirely). 64 wrong argument
+count. Every non-zero exit prints its reason and the next step on stderr, never on stdout.
 `-h` and `--help` print this text and exit 0.
 """
 
@@ -67,12 +68,27 @@ def main(argv):
         return 64
     key_path, file_path = argv
     if not os.access(key_path, os.R_OK):
+        print(
+            f"secret_hmac.py: key {key_path} is missing or unreadable; create it with "
+            f"`secret_hmac.py --ensure-key {key_path}` as root",
+            file=sys.stderr,
+        )
         return 2
     try:
         print(digest(key_path, file_path))
     except KeyError:
+        print(
+            f"secret_hmac.py: key {key_path} holds fewer than {KEY_BYTES} bytes; move it "
+            f"aside and run `secret_hmac.py --ensure-key {key_path}` to create a new one",
+            file=sys.stderr,
+        )
         return 2
-    except OSError:
+    except OSError as exc:
+        print(
+            f"secret_hmac.py: cannot read {file_path} ({exc.strerror}); check that the "
+            "manifest rendered and that this process can read it",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

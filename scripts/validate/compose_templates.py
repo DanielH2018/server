@@ -19,6 +19,7 @@ render or produces invalid YAML.
 """
 
 import sys
+from collections.abc import Sequence
 
 import yaml
 
@@ -29,6 +30,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from validate.validate_lib.ok_lines import ok_printer
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
 from lib.ansible_inventory import containers_entries_in
@@ -304,13 +306,18 @@ def check_container(host: str, ci: dict) -> str | None:
     return None
 
 
-def main() -> int:
+def main(argv: Sequence[str] = ()) -> int:
     """Render every host's Docker `containers_list` entries and report render/parse failures.
+
+    Args:
+        argv: The command-line arguments. `-v` or `--verbose` also lists each clean
+            template as an `[ok]` line; by default only failures and the summary print.
 
     Returns:
         0 if every template rendered and parsed as YAML, 1 if any failed or no host_vars
         were found.
     """
+    ok = ok_printer(argv)
     host_files = sorted(HOST_VARS.glob("*.yml"))
     if not host_files:
         print(f"No host_vars found under {HOST_VARS}", file=sys.stderr)
@@ -335,11 +342,11 @@ def main() -> int:
                 failures += 1
                 print(f"  [FAIL] {name}: {err}", file=sys.stderr)
             else:
-                print(f"  [ok]   {name}")
+                ok(f"  [ok]   {name}")
 
     print(f"\n{checked} template(s) checked, {failures} failure(s).")
     return 1 if failures else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))
