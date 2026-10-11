@@ -84,7 +84,7 @@ def test_the_note_for_pr_2792_names_both_owed_hosts():
     assert "daniel-pi" in note, note
     assert (
         'ssh daniel-server "cd /home/ubuntu/server && git pull --ff-only && '
-        'ansible-playbook ansible/initial_setup.yml --tags hypervisor"' in note
+        'uv run ansible-playbook ansible/initial_setup.yml --tags hypervisor"' in note
     ), note
 
 
@@ -140,9 +140,9 @@ def test_the_ticks_own_host_is_owed_when_the_role_entered_by_the_file_alone():
     note = land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-server")
     assert "daniel-server" in note, note
     assert "ssh daniel-server" not in note, note
-    assert "`ansible-playbook ansible/initial_setup.yml --tags hypervisor`" in note, (
-        note
-    )
+    assert (
+        "`uv run ansible-playbook ansible/initial_setup.yml --tags hypervisor`" in note
+    ), note
 
 
 def test_a_repo_file_only_pr_ends_needs_manual_apply(landing):

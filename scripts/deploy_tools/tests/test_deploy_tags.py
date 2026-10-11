@@ -211,7 +211,7 @@ def test_changed_drops_a_shared_role_and_deploys_the_rest(capsys, monkeypatch):
     captured = capsys.readouterr()
     assert captured.out.strip() == "jellyfin"
     assert "manifests" in captured.err
-    assert "ansible-playbook ansible/deploy.yml" in captured.err
+    assert "`uv run ansible-playbook ansible/deploy.yml" in captured.err
 
 
 def test_changed_refuses_when_only_shared_roles_changed(capsys, monkeypatch):
@@ -243,7 +243,7 @@ def test_changed_refuses_a_broad_change(capsys, monkeypatch):
     # a caller might mistake for one.
     assert captured.out == ""
     assert "refusing" in captured.err
-    assert "ansible-playbook ansible/deploy.yml" in captured.err
+    assert "`uv run ansible-playbook ansible/deploy.yml" in captured.err
 
 
 def test_changed_reports_no_files_differ(capsys, monkeypatch):

@@ -157,10 +157,29 @@ _HELD_PATHS = os.path.join(
 )
 
 
+_OWN_CHECKOUT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
+_OWN_SECRETS_MGMT = os.path.join(_OWN_CHECKOUT, "scripts", "secrets_mgmt")
+
+
+def _data_checkout(repo_root):
+    """The checkout whose Ansible tree the derivation walks.
+
+    The checkout that owns `repo_root`, so a cwd in a subdirectory still finds its tree. A
+    cwd in no checkout with an Ansible tree falls back to this hook's own, rather than to a
+    derivation over nothing that would deny nothing.
+    """
+    root = find_repo_root(os.path.join(repo_root, "_"), repo_root)
+    if os.path.isdir(os.path.join(root, "ansible")):
+        return root
+    return _OWN_CHECKOUT
+
+
 def _secret_bearing_paths(repo_root, held=_HELD_PATHS):
     """The derived host-path set, or {} if it cannot be computed.
 
-    The set in `held`, beside this file by default, wins over a derivation from `repo_root`. Import is deferred
+    The set in `held`, beside this file by default, wins over a derivation over `repo_root`'s checkout. Import is deferred
     so the hot path never pays for it — see the cheap gate above.
     """
     try:
@@ -170,13 +189,21 @@ def _secret_bearing_paths(repo_root, held=_HELD_PATHS):
         pass
     except Exception:
         return {}
-    scripts = os.path.join(repo_root, "scripts", "secrets_mgmt")
-    if scripts not in sys.path:
-        sys.path.insert(0, scripts)
+    # The code comes from this hook's own checkout, like every other bash-pretool arm, so a
+    # session whose cwd is another worktree or a subdirectory never runs that tree's module
+    # or misses it. The cwd's checkout is only data: its Ansible tree and rotation registry
+    # (#4431).
+    if _OWN_SECRETS_MGMT not in sys.path:
+        sys.path.insert(0, _OWN_SECRETS_MGMT)
+    ansible = os.path.join(_data_checkout(repo_root), "ansible")
     try:
+        from pathlib import Path
+
         from secret_bearing_host_paths import secret_bearing_host_paths
 
-        return secret_bearing_host_paths()
+        return secret_bearing_host_paths(
+            ansible=Path(ansible), registry=Path(ansible, "secret_rotation.yml")
+        )
     except Exception:
         # A guard in front of every Bash call must fail open when it cannot compute its answer.
         # The alternative is a session where nothing runs because a YAML file moved.
@@ -240,7 +267,7 @@ def decision(payload):
         return None
     # DECIDED: the process cwd, not `claude_guard.hook.read_cwd`'s `""`, when the payload
     # carries no `cwd`. Every arm joins `repo_root` as a path prefix — `os.path.join` for
-    # a relative write target and for `scripts/secrets_mgmt`, and as `find_repo_root`'s
+    # a relative write target and for the derivation's `ansible/` tree, and as `find_repo_root`'s
     # fallback for a target in no checkout — and an empty prefix resolves against the
     # process cwd implicitly, the same silent probe `read_cwd`'s docstring refuses for
     # `git -C ""`. Naming the directory says which

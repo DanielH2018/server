@@ -337,7 +337,9 @@ matched no task, exited 0 and recorded an apply the Pi never received.
 `scripts/deploy_tools/setup_routing.py` reads the role's `when:` against each host's vars and
 finds the one host it admits. The deployer writes that host into the role's `manual_plane` line
 as its `host` key, and every surface that prints the remediation appends `-e target=<host>`
-from it: `ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`.
+from it: `uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e
+target=daniel-pi`. Each prints `gitops_markers.PLAYBOOK_CMD` as the prefix, because a bare `ansible-playbook`
+is the uv-tool shim without the collection deps (#4413).
 A second role gated off the tick's host is derived the same way, with no table to update
 (#3734).
 

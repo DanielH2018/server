@@ -37,8 +37,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import ClassVar
 
-import deploy_ui_reads as reads
-import deploy_ui_writes as writes
+from deploy_ui_lib import deploy_ui_reads as reads
+from deploy_ui_lib import deploy_ui_writes as writes
 from gitops_markers import STATE_DIR
 
 # The locks the in-flight panel reads. The tree lock is held for the snapshot only (ADR-0017),

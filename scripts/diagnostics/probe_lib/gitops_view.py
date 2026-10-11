@@ -52,6 +52,7 @@ from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     HOLD_CLEAR_CMD,
     MARKERS,
+    PLAYBOOK_CMD,
     by_hand,
     STATE_DIR,
     k8s_deferred_deploy_cmd,
@@ -93,7 +94,7 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
         selected = narrow.get(e.role) or frozenset({e.role})
         apply = (
             by_hand(e.playbook)
-            or f"{e.playbook} --tags {','.join(sorted(selected))}{target_arg(e.host)}"
+            or f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(selected))}{target_arg(e.host)}"
         )
         warning = maximal_apply_warning(e.role, selected)
         rows[OWED_MANUAL_PLANE].append(

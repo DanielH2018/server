@@ -22,7 +22,12 @@ from deployer_lib.deploy_changes import (
     setup_role_tag,
 )
 from gitops_ledger import OWED_MANUAL_PLANE
-from gitops_markers import MAXIMAL_ROLE_GATED_TAGS, owed_clear_cmd, target_arg
+from gitops_markers import (
+    MAXIMAL_ROLE_GATED_TAGS,
+    PLAYBOOK_CMD,
+    owed_clear_cmd,
+    target_arg,
+)
 
 # The branch `broad_remediation` names when a caller does not say. gitops_deploy.py reads the
 # real one from config.env and passes it; the repo-side callers (deploy_lib/tags.py, land_tags) run
@@ -142,7 +147,7 @@ def broad_remediation(
     """
     cmds: list[str] = []
     if broad_deploy:
-        cmds.append("`ansible-playbook ansible/deploy.yml`")
+        cmds.append(f"`{PLAYBOOK_CMD} ansible/deploy.yml`")
     if broad_setup:
         cmds.extend(_setup_commands(setup_roles, narrow_tags, playbooks))
     return f"`git merge --ff-only origin/{branch}` FIRST, then " + " and ".join(cmds)
@@ -312,9 +317,9 @@ def _setup_commands(
         if owners:
             roles |= owners
         else:
-            cmds.append(f"`ansible-playbook {playbook}`")
+            cmds.append(f"`{PLAYBOOK_CMD} {playbook}`")
     if not roles and not cmds:
-        return ["`ansible-playbook ansible/initial_setup.yml --tags <role>`"]
+        return [f"`{PLAYBOOK_CMD} ansible/initial_setup.yml --tags <role>`"]
     narrow_tags = narrow_tags or {}
     for role in sorted(roles):
         if not is_routed(role):
@@ -339,7 +344,7 @@ def _role_command(
     narrowed = _narrowed_tags(role, narrow_tags)
     tags = ",".join(sorted(narrowed)) or role_tag
     target = target_arg(setup_role_host(role))
-    cmd = f"`ansible-playbook {playbook} --tags {tags}{target}`"
+    cmd = f"`{PLAYBOOK_CMD} {playbook} --tags {tags}{target}`"
     if not narrowed:
         warning = maximal_tag_warning(role)
     elif narrowed & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
@@ -414,18 +419,18 @@ def k8s_remediation(
     deployable = sorted(roles & declared)
     if not shared:
         return (
-            "Redeploy by hand: `ansible-playbook ansible/deploy.yml --tags "
+            f"Redeploy by hand: `{PLAYBOOK_CMD} ansible/deploy.yml --tags "
             f"{','.join(deployable)}`."
         )
     lead = (
         f"`{', '.join(shared)}` " + ("has" if len(shared) == 1 else "have") + " no "
         "`containers_list` entry, so **`--tags` matches nothing and Ansible exits 0** — a "
         "tag-scoped redeploy would report success having applied nothing. Run a full deploy: "
-        "`ansible-playbook ansible/deploy.yml`."
+        f"`{PLAYBOOK_CMD} ansible/deploy.yml`."
     )
     if deployable:
         lead += (
-            " The rest can be scoped: `ansible-playbook ansible/deploy.yml --tags "
+            f" The rest can be scoped: `{PLAYBOOK_CMD} ansible/deploy.yml --tags "
             f"{','.join(deployable)}`."
         )
     return lead

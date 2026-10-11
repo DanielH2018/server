@@ -168,6 +168,14 @@ def target_arg(host: str | None) -> str:
     return f" -e target={host}" if host else ""
 
 
+# The prefix of every playbook command a surface prints for an operator to paste. A bare
+# `ansible-playbook` resolves to the uv-tool shim, which lacks the `community.docker` deps, so
+# the pasted command would fail (#4413). The deployer's journal line and Discord alerts,
+# `land.sh`, monitor-bridge's page and the SessionStart banner all print this one string. The
+# playbook path that follows is relative, so the command runs from a checkout's root, where
+# `ansible.cfg` names the inventory.
+PLAYBOOK_CMD = "uv run ansible-playbook"
+
 # What an operator runs to clear one owed-ledger line after applying, deploying or reverting
 # what it names, and to end a contention streak once the lock's holder is gone. The deployer's
 # alert, `land.sh`, monitor-bridge's page, deploy-ui and the SessionStart banner all print

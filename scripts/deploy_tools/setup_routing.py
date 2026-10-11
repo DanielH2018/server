@@ -43,8 +43,8 @@ from lib import yaml_fast
 from lib.k8s_roles import role_dirs
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
-import setup_gates
-from setup_role_chains import tree_at
+from deploy_tools.setup_lib import setup_gates
+from deploy_tools.setup_lib.setup_role_chains import tree_at
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
