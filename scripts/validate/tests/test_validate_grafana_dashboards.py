@@ -141,17 +141,17 @@ def test_validate_passes_two_boards_with_distinct_uids(tmp_path):
 def test_main_prints_each_error_as_a_fail_line_on_stderr(tmp_path):
     """`[FAIL] <path>: <reason>` on stderr, the shape every validator shares.
 
-    The script finds its repo from its own location, so a copy of it and `scripts/lib` runs
+    The script finds its repo from its own location, so a copy of `scripts/lib` and
+    `scripts/validate` runs
     unpatched against a scratch tree holding one board with an unprovisioned uid.
     """
     scripts = Path(vgd.__file__).resolve().parents[1]
-    shutil.copytree(
-        scripts / "lib",
-        tmp_path / "scripts/lib",
-        ignore=shutil.ignore_patterns("tests", "__pycache__"),
-    )
-    (tmp_path / "scripts/validate").mkdir()
-    shutil.copy(vgd.__file__, tmp_path / "scripts/validate/grafana_dashboards.py")
+    for package in ("lib", "validate"):
+        shutil.copytree(
+            scripts / package,
+            tmp_path / "scripts" / package,
+            ignore=shutil.ignore_patterns("tests", "__pycache__"),
+        )
     role = tmp_path / "ansible/roles/k8s/observability"
     (role / "templates").mkdir(parents=True)
     (role / "templates/grafana.yaml.j2").write_text(

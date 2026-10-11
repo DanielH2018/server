@@ -54,20 +54,20 @@ def test_the_real_gitignore_still_opens_with_the_deny_all():
 def test_main_prints_each_hidden_entry_as_a_fail_line_on_stderr(tmp_path):
     """`[FAIL] <path>: <reason>` on stderr, the shape every validator shares (#4480).
 
-    The script finds its repo from its own location, so a copy of it and `scripts/lib` runs
+    The script finds its repo from its own location, so a copy of `scripts/lib` and
+    `scripts/validate` runs
     unpatched in a scratch repository holding one hidden root file.
     """
     repo = _repo(tmp_path, "stray.txt")
     (repo / ".gitignore").write_text(GITIGNORE + "!/scripts/\n", encoding="utf-8")
     scripts = Path(root_ignored_files.__file__).resolve().parents[1]
-    shutil.copytree(
-        scripts / "lib",
-        repo / "scripts/lib",
-        ignore=shutil.ignore_patterns("tests", "__pycache__"),
-    )
-    (repo / "scripts/validate").mkdir()
+    for package in ("lib", "validate"):
+        shutil.copytree(
+            scripts / package,
+            repo / "scripts" / package,
+            ignore=shutil.ignore_patterns("tests", "__pycache__"),
+        )
     script = repo / "scripts/validate/root_ignored_files.py"
-    shutil.copy(root_ignored_files.__file__, script)
 
     run = proc_testing.run([sys.executable, str(script)])
     assert run.returncode == 1, run.stdout + run.stderr

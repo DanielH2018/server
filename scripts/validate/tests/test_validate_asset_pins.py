@@ -302,18 +302,16 @@ def test_an_annotated_depname_with_no_digest_has_nothing_to_refresh():
 
 def _fail_lines(err: str) -> list[str]:
     """Stderr lines in the validators' `[FAIL] <path>: <reason>` shape, indent allowed."""
-    return [
-        line for line in err.splitlines() if re.match(r"\s*\[FAIL\] \S[^:]*: \S", line)
-    ]
+    return [line for line in err.splitlines() if re.match(r"\s*\[FAIL\] \S+: \S", line)]
 
 
 def test_a_mismatched_pin_prints_one_fail_line_on_stderr(capsys):
     """Path and reason share the line, so one grep for `[FAIL]` yields the whole failure."""
-    code, _ = _main([], [_pin(digest="0" * 64)])
+    pin = dataclasses.replace(_pin(digest="0" * 64), name="mismatched_pin")
+    code, _ = _main([], [pin], known=frozenset({"mismatched_pin"}))
     lines = _fail_lines(capsys.readouterr().err)
     assert code == 1
-    assert lines, "no `[FAIL] <path>: <reason>` line reached stderr"
-    assert any("x" in line for line in lines)
+    assert any("mismatched_pin" in line for line in lines), lines
 
 
 def test_a_failed_refresh_prints_one_fail_line_on_stderr(tmp_path, capsys):
