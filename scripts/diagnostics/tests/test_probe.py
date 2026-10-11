@@ -17,6 +17,7 @@ from diagnostics.probe_lib import metrics
 from diagnostics.probe_lib import monitors
 from diagnostics.probe_lib import cli_parser
 from diagnostics.probe_lib import core
+from lib.exit_codes import PROBE_UNREADABLE
 
 
 def test_prom_query_url_encodes_promql():
@@ -191,9 +192,9 @@ def test_format_monitor_status_labels_pending_and_maintenance_as_not_up():
     assert code == 1
 
 
-def test_format_monitor_status_empty_result_fails():
+def test_format_monitor_status_empty_result_is_unreadable():
     text, code = monitors.format_monitor_status({"data": {"result": []}})
-    assert code == 1
+    assert code == PROBE_UNREADABLE
     assert "no monitor_status series" in text
 
 

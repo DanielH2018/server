@@ -157,7 +157,7 @@ def _recv_exact_from(sock):
         while len(buf) < n:
             chunk = sock.recv(4096)
             if not chunk:
-                raise SystemExit("HA websocket closed unexpectedly")
+                raise core.Unreadable("HA websocket closed unexpectedly")
             buf.extend(chunk)
         out = bytes(buf[:n])
         del buf[:n]

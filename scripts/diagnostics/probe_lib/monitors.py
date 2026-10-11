@@ -31,6 +31,7 @@ import yaml
 from jinja2 import StrictUndefined, TemplateError
 
 from lib import yaml_fast
+from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import DEFAULT_CLUSTER
 from lib.k8s_roles import K8S_ROLES
 from lib.render_context import render_context
@@ -41,6 +42,7 @@ from diagnostics.probe_lib.kuma_table_loop import TableLoop
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
 _MONITOR_STATUS_LABELS = {"0": "DOWN", "1": "UP", "2": "PENDING", "3": "MAINTENANCE"}
+_NO_SERIES = "no monitor_status series returned (uptime-kuma scrape target down?)"
 
 
 def format_monitor_status(data, declared_total=None):
@@ -68,7 +70,8 @@ def format_monitor_status(data, declared_total=None):
     """
     result = data.get("data", {}).get("result", [])
     if not result:
-        return "no monitor_status series returned (uptime-kuma scrape target down?)", 1
+        # No series at all is a scrape that failed, not monitors that are down (#4444).
+        return _NO_SERIES, PROBE_UNREADABLE
     problems, up = [], 0
     for series in result:
         name = (series.get("metric") or {}).get("monitor_name", "?")
@@ -537,8 +540,8 @@ def run_kuma_drift(ns):
     try:
         data = json.loads(core.fetch(url, resolve=pin))
     except json.JSONDecodeError:
-        print("prometheus returned non-JSON (query endpoint down?)")
-        return 1
+        print("prometheus returned non-JSON (query endpoint down?)", file=_sys.stderr)
+        return PROBE_UNREADABLE
     live = {
         (s.get("metric") or {}).get("monitor_name")
         for s in data.get("data", {}).get("result", [])
@@ -573,7 +576,7 @@ def run_monitors(ns):
     if err:
         return err
     text, code = format_monitor_status(data, declared_monitor_count())
-    print(text)
+    print(text, file=_sys.stderr if code == PROBE_UNREADABLE else _sys.stdout)
     return code
 
 

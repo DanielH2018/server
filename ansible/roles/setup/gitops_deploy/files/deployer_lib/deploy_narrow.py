@@ -49,8 +49,10 @@ NARROW_SETUP_SCRIPT = "scripts/deploy_tools/narrow_setup.py"
 # The exit code `narrow_setup.py` answers "this role needs no tag" with, beside
 # `NARROWED_TO_NOTHING` on stdout (#4361). The script cannot be imported here, so it holds
 # the same pair as `NOTHING_EXIT` and `NOTHING_OUT`; `scripts/deploy_tools/tests/
-# test_narrow_setup.py` drives its CLI with this module's argv and pins the two together.
-NARROW_SETUP_NOTHING_EXIT = 3
+# test_narrow_setup.py` drives its CLI with this module's argv and pins the two together. The
+# value is `lib/exit_codes.py:NARROW_SETUP_NOTHING`, which the deployer cannot import. It is 5
+# rather than 3 because `narrow_cmd` exits 3 for "cannot narrow" (#4453).
+NARROW_SETUP_NOTHING_EXIT = 5
 
 # What the whole setup-narrowing LOOP gets, across every role one range touches. The per-role
 # budget bounds one child; nothing bounds how many roles a range carries, and `plan` runs
@@ -355,8 +357,8 @@ def _one_setup_role(
     reaches no host through the role, so the role is dropped from the run. It takes both
     halves because the script runs from the pre-merge checkout while this code is the copy
     under /opt, so either can be the older one: a deployer that predates the answer reads the
-    non-zero exit as a refusal, and an exit 3 from anything else lacks the stdout. Exit 0 with
-    empty output stays doubt.
+    non-zero exit as a refusal, and the same exit code from anything else lacks the stdout.
+    Exit 0 with empty output stays doubt.
     """
     try:
         rc, out = narrow_setup(

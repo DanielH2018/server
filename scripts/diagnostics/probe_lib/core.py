@@ -23,6 +23,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.ansible_inventory import PI_HOST  # noqa: F401  (re-exported as core.PI_HOST)
+from lib.exit_codes import PROBE_UNREADABLE
 from lib.repo_paths import REPO
 
 # The URL builders live in obs_api, which homelab-mcp's image also carries. Re-exported
@@ -256,13 +257,41 @@ def print_dry_run(url, resolve=None):
     return 0
 
 
+class Unreadable(SystemExit):
+    """The probe could not read its source, so it observed nothing (#4444).
+
+    A failed curl, ssh or kubectl read, or a read that came back empty. It exits
+    `PROBE_UNREADABLE` (75) rather than 1, because 1 is the verdict "the probe looked and saw
+    something bad", and a caller has to be able to tell "retry" from "broken".
+
+    The message goes to stderr when the exception is built, because an uncaught SystemExit
+    with an integer code prints nothing. `str()` still returns the message, so a caller that
+    catches it can quote it.
+
+    Attributes:
+        message: what could not be read, and the transport's own error.
+    """
+
+    def __init__(self, message):
+        self.message = message
+        print(message, file=_sys.stderr)
+        super().__init__(PROBE_UNREADABLE)
+
+    def __str__(self):
+        return self.message
+
+
 def fetch(url, resolve=None):
-    """Run the read-only curl GET and return its body (raise on failure)."""
+    """Run the read-only curl GET and return its body.
+
+    Raises:
+        Unreadable: curl exited non-zero.
+    """
     out = subprocess.run(
         curl_argv(url, resolve=resolve), capture_output=True, text=True
     )
     if out.returncode != 0:
-        raise SystemExit(f"curl {url} failed: {out.stderr.strip()}")
+        raise Unreadable(f"curl {url} failed: {out.stderr.strip()}")
     return out.stdout
 
 
@@ -330,15 +359,16 @@ def fetch_parsed(url, resolve=None):
 def fetch_json(url, resolve=None):
     """fetch(url) parsed as JSON.
 
-    Returns (data, None) on success, or (None, 1) after printing the raw body — the JSONDecodeError
-    guard a plain `core.fetch()` call needs before its response can be trusted as JSON.
+    Returns (data, None) on success, or (None, PROBE_UNREADABLE) after printing the raw body
+    to stderr — the JSONDecodeError guard a plain `core.fetch()` call needs before its response
+    can be trusted as JSON. A body that is not JSON is a source the probe could not read.
     """
     body = fetch(url, resolve=resolve)
     try:
         return json.loads(body), None
     except json.JSONDecodeError:
-        print(body.strip())
-        return None, 1
+        print(body.strip(), file=_sys.stderr)
+        return None, PROBE_UNREADABLE
 
 
 def k8s_namespace():
@@ -361,7 +391,7 @@ def sops_extract(key_name):
         text=True,
     )
     if out.returncode != 0:
-        raise SystemExit(
+        raise Unreadable(
             f"could not decrypt {key_name} from {SECRETS_PATH}: {out.stderr.strip()}"
         )
     return out.stdout.strip()
@@ -428,6 +458,9 @@ def config_get(url, config_body, resolve=None):
     """Authenticated GET whose auth header is fed via curl `--config -` stdin (never argv).
 
     Returns the response body.
+
+    Raises:
+        Unreadable: curl exited non-zero.
     """
     out = subprocess.run(
         ha_curl_argv(url, resolve=resolve),
@@ -436,5 +469,5 @@ def config_get(url, config_body, resolve=None):
         text=True,
     )
     if out.returncode != 0:
-        raise SystemExit(f"curl {url} failed: {out.stderr.strip()}")
+        raise Unreadable(f"curl {url} failed: {out.stderr.strip()}")
     return out.stdout

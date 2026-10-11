@@ -172,6 +172,8 @@ def _declared_values(prefix):
         ("scripts/deploy_tools/land.sh", "LAND_"),
         ("scripts/deploy_tools/gitops_tick.sh", "TICK_"),
         ("scripts/deploy_tools/await_ci.py", "CI_"),
+        ("scripts/deploy_tools/narrow_setup.py", "NARROW_SETUP_"),
+        ("scripts/diagnostics/probe.py", "PROBE_"),
     ],
 )
 def test_every_declared_code_has_a_contract_row(entry_point, prefix):
@@ -181,6 +183,8 @@ def test_every_declared_code_has_a_contract_row(entry_point, prefix):
     bare integer while every prose copy of the table still listed seven.
     """
     rows = {code.value for code in ec.contract(entry_point)}
+    # Non-vacuity: a family with neither constants nor a row would compare two empty sets.
+    assert rows, f"{entry_point} has no contract row"
     assert _declared_values(prefix) == rows
 
 

@@ -98,6 +98,11 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deployer_lib import deploy_cross_role
+from lib.exit_codes import (
+    NARROW_SETUP_NARROWED,
+    NARROW_SETUP_NOTHING,
+    NARROW_SETUP_REFUSED,
+)
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
 from deploy_tools.narrow_lib.foreign_keys import keys_reaching
 from deploy_tools.narrow_lib.setup_index import SETUP_TREE, RoleIndex, foreign_tags
@@ -112,10 +117,10 @@ INVENTORY = "ansible/inventory/"
 # How `main` says the role needs no tag. Both halves, because the tick runs this script from
 # the pre-merge checkout while its own code is the copy shipped under /opt, so either side
 # can be the older one. A non-zero exit sends a deployer that predates the answer to its
-# whole-role fallback, and the exact stdout keeps any other exit 3 from reading as one.
-# `deploy_narrow` holds the same pair, which it cannot import from here, and
+# whole-role fallback, and the exact stdout keeps any other exit with the same code from
+# reading as one. `deploy_narrow` holds the same pair, which it cannot import from here, and
 # `test_the_deployers_argv_for_a_range_needing_nothing_exits_with_the_deployers_pair` pins them.
-NOTHING_EXIT = 3
+NOTHING_EXIT = NARROW_SETUP_NOTHING
 NOTHING_OUT = "narrowed-to-nothing"
 
 
@@ -421,9 +426,9 @@ def main(argv: list[str] | None = None) -> int:
         return NOTHING_EXIT
     except CannotNarrow as exc:
         print(f"narrow-setup: cannot narrow {args.role} ({exc})", file=sys.stderr)
-        return 1
+        return NARROW_SETUP_REFUSED
     print(",".join(sorted(tags)))
-    return 0
+    return NARROW_SETUP_NARROWED
 
 
 if __name__ == "__main__":

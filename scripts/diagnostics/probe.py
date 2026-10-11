@@ -60,6 +60,11 @@ Subcommands:
     landing [--json]         What would stop a landing now, runs in flight, worktrees + claims
     gitops-state [--json]    Every deployer marker + owed-ledger line with its clear command
 
+Exit codes: every verdict subcommand exits 0 or 1 for what it observed, and 75 when it could
+not read its source, with the failed read on stderr. Its last stdout line is
+`PROBE-VERDICT: <ok|fail|unreadable> (<detail>)`, except under `--json` or `--dry-run`.
+`lib/exit_codes.py`'s `CONTRACTS` holds the codes, and `--help` renders them.
+
 `metric` and `loki-query` print a formatted view by default (one `<labels> = <value>`
 line per series; log lines oldest→newest) so you don't need to pipe into `python3 -c`
 to reshape the JSON — pass `--json` for the raw response.
@@ -96,7 +101,7 @@ sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.core import PI_HOST
 
-from diagnostics.probe_lib.cli_parser import _build_parser
+from diagnostics.probe_lib.cli_parser import ENTRY_POINT, _build_parser
 from diagnostics.probe_lib.curl_pipeline import plan, stream_pipeline
 from diagnostics.probe_lib.health import (
     inspect_argv,
@@ -107,13 +112,74 @@ from diagnostics.probe_lib.health import (
 # Every subcommand's `run_*` callable comes from here rather than from its module: `main()`
 # builds its `handlers` table from the entries flagged "handler", and reaches the four
 # `subcommands.ROUTED_IN_MAIN` ones by name.
-from diagnostics.probe_lib.subcommands import REGISTRY
+from diagnostics.probe_lib.subcommands import REGISTRY, VERDICT_HA_SUBCOMMANDS
 
+from lib.exit_codes import PROBE_UNREADABLE, verdict_line
 from lib.kubectl import WrongCluster, kubectl_argv, nodes_args
 
 
+def verdict_path(ns):
+    """The subcommand path a `PROBE-VERDICT:` line names for `ns`, or None for no line.
+
+    None for a subcommand that judges nothing, and for `--dry-run` and `--json`, whose stdout
+    is a command list or one JSON document that a trailing line would break (the deck mod
+    parses `landing --json`).
+    """
+    if getattr(ns, "dry_run", False) or getattr(ns, "json", False):
+        return None
+    if "verdict" not in REGISTRY.get(ns.cmd).flags:
+        return None
+    if ns.cmd == "targets":
+        return "targets --pi" if ns.pi else None
+    if ns.cmd == "ha":
+        return f"ha {ns.ha_cmd}" if ns.ha_cmd in VERDICT_HA_SUBCOMMANDS else None
+    return ns.cmd
+
+
 def main(argv=None, *, plan=plan):
-    """Parse argv, dispatch to the matching subcommand, and return its exit code.
+    """Parse argv, run the matching subcommand, and return its exit code.
+
+    A verdict subcommand's output ends with one `PROBE-VERDICT: <ok|fail|unreadable> (...)`
+    line, rendered from the exit code by `lib.exit_codes.verdict_line` so every subcommand
+    shares one vocabulary (#4454). A source the subcommand could not read raises
+    `core.Unreadable`, which exits `PROBE_UNREADABLE` (75) with the failure on stderr (#4444).
+    The line is printed after the subcommand returns, so `verdict_line` is the only place a
+    code becomes a verdict word.
+    """
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # Handled on raw argv, ahead of `_build_parser().parse_args`: the subparsers below are
+    # `required=True`, so `probe.py --list` alone would otherwise fail argparse's "cmd is
+    # required" check before `ns.list` was ever read.
+    if "--list" in argv:
+        print("\n".join(REGISTRY.render_list()))
+        return 0
+    ns = _build_parser().parse_args(argv)
+    path = verdict_path(ns)
+    try:
+        rc = _dispatch(ns, argv, plan)
+    except core.Unreadable:
+        # The exception printed its message to stderr when it was built.
+        rc = PROBE_UNREADABLE
+    except SystemExit as exc:
+        # A message-carrying SystemExit (an HA token refused, a group_vars key missing, a
+        # server's error page) stopped the subcommand before it observed anything, so a
+        # verdict subcommand reports it as unreadable rather than letting it exit 1, the
+        # `fail` verdict, with no verdict line.
+        if path is None or isinstance(exc.code, int) or exc.code is None:
+            raise
+        print(exc.code, file=sys.stderr)
+        rc = PROBE_UNREADABLE
+    if path:
+        # The detail never repeats the failure: stderr carries it, and stdout stays the
+        # verdict alone for a caller that reads only the last line.
+        line = verdict_line(ENTRY_POINT, rc, f"probe.py {path}, exit {rc}")
+        if line:
+            print(line)
+    return rc
+
+
+def _dispatch(ns, argv, plan):
+    """Run the subcommand `ns` names and return its exit code.
 
     `health` and the handler-table subcommands answer directly from an API or from
     `docker inspect`/kubectl. `metric`/`loki-query` without `--json`/`--dry-run` use the
@@ -124,14 +190,6 @@ def main(argv=None, *, plan=plan):
     `plan` is injectable so a test can see which invocations reach the streaming path without
     SOPS or the network.
     """
-    argv = list(sys.argv[1:] if argv is None else argv)
-    # Handled on raw argv, ahead of `_build_parser().parse_args`: the subparsers below are
-    # `required=True`, so `probe.py --list` alone would otherwise fail argparse's "cmd is
-    # required" check before `ns.list` was ever read.
-    if "--list" in argv:
-        print("\n".join(REGISTRY.render_list()))
-        return 0
-    ns = _build_parser().parse_args(argv)
     # `health` parses/formats docker inspect rather than streaming a pipeline.
     if ns.cmd == "health":
         if ns.dry_run:

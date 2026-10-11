@@ -27,6 +27,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import DEFAULT_CLUSTER, kubectl_argv, kubectl_json
 
 
@@ -140,7 +141,7 @@ def is_scaled_to_zero(workloads, namespace, selector):
 def format_vip_placement(services, slices, announcers, workloads=()):
     """Render the placement verdict.
 
-    Exit 2 INCONCLUSIVE when there is nothing to check — no ETP=Local Service, or no announcing
+    Exit PROBE_UNREADABLE (75) INCONCLUSIVE when there is nothing to check — no ETP=Local Service, or no announcing
     node resolved. Either means the read came back empty, and an empty read must never pass:
     the same green-while-blind shape a denial-only RBAC probe has.
 
@@ -161,7 +162,7 @@ def format_vip_placement(services, slices, announcers, workloads=()):
             f"INCONCLUSIVE: {missing} was read, so there is nothing to assert. An empty "
             "read is not a pass — check RBAC and the namespace before believing this."
         )
-        return "\n".join(lines), 2
+        return "\n".join(lines), PROBE_UNREADABLE
 
     stranded = []
     parked = []

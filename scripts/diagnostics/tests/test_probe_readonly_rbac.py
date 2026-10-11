@@ -16,6 +16,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import readonly_rbac as ph
+from lib.exit_codes import PROBE_UNREADABLE
 
 _CONTROLS_OK = {("get", "pods"): True, ("list", "deployments"): True}
 _CONTROLS_REFUSED = {("get", "pods"): False, ("list", "deployments"): True}
@@ -45,7 +46,7 @@ def test_a_refused_control_is_inconclusive_not_a_pass():
     Exit 2, distinct from both the pass and the creep.
     """
     text, code = ph.format_readonly_rbac(_ALL_FORBIDDEN, _CONTROLS_REFUSED)
-    assert code == 2
+    assert code == PROBE_UNREADABLE
     assert "INCONCLUSIVE" in text
     assert "get pods" in text
 
@@ -54,7 +55,7 @@ def test_an_inconclusive_run_outranks_creep():
     """If the tool cannot be trusted, a `PERMITTED` reading cannot be trusted either."""
     denied = {("get", "secrets"): True}
     _text, code = ph.format_readonly_rbac(denied, _CONTROLS_REFUSED)
-    assert code == 2
+    assert code == PROBE_UNREADABLE
 
 
 def test_the_denied_set_covers_secrets_and_pod_writes():

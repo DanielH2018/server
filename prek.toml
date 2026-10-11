@@ -170,7 +170,7 @@ name = "Validate Home Assistant config"
 entry = "uv run --frozen python scripts/home_assistant/validate_ha_config.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/home-assistant/(templates/config|files)/.*|scripts/home_assistant/validate_ha_config\\.py|scripts/diagnostics/probe_lib/(core|ha|obs_api)\\.py|scripts/home_assistant/(ha_state_checks|ha_state_model)\\.py|scripts/lib/(ansible_inventory|repo_paths|yaml_fast)\\.py)$"
+files = "^(ansible/roles/k8s/home-assistant/(templates/config|files)/.*|scripts/home_assistant/validate_ha_config\\.py|scripts/diagnostics/probe_lib/(core|ha|obs_api)\\.py|scripts/home_assistant/(ha_state_checks|ha_state_model)\\.py|scripts/lib/(ansible_inventory|exit_codes|repo_paths|yaml_fast)\\.py)$"
 
 # Validate that every provisioned Grafana dashboard's datasource references resolve to a
 # datasource declared in datasources.yml.j2 (uid or name) or a Grafana built-in. Catches the
