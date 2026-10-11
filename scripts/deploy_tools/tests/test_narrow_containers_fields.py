@@ -5,7 +5,8 @@ PR #4310 six entry edits reached 23 readers that way, though most of them read o
 edits never touched. `narrow_lib/containers.py` now maps an edit to its changed fields and a
 reader to the fields its filters read, and keeps a reader only where the two meet. A reader it
 cannot name the fields of (a loop, `selectattr`, a filter missing from `FILTER_FIELDS`) still
-counts as reading every field.
+counts as reading every field. A filter that looks up one entry by a literal name keys its read on
+that entry too (#4388), so an edit to radarr's `port` skips a reader of sonarr's.
 
 `test_filter_fields_cover_every_key_each_filter_reads` holds `FILTER_FIELDS` against the filter
 plugins' own source, so a filter that starts reading a new key fails here rather than
@@ -15,9 +16,13 @@ entry, handing it to a call or a method, returning it from the filter. An opaque
 `test_no_filter_in_the_table_reads_a_field_the_scan_cannot_name` unless `VETTED_OPAQUE` names
 it with the reason it reads no field the row omits.
 
+`test_every_named_entry_filter_reads_only_the_entry_it_names` holds `NAMED_ENTRY` against the
+filters' behaviour: it edits every other entry and asserts the named filter's answer stays put.
+
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_containers_fields.py
 """
 
+import importlib
 from pathlib import Path
 
 import pytest
@@ -60,6 +65,24 @@ def test_an_edit_to_a_field_the_filter_reads_reaches_the_filter_reader(tree: Tre
     assert tree.narrow(*_refs(tree)) == {"sonarr", "lidarr", "prowlarr"}
 
 
+def test_an_edit_to_another_entrys_field_skips_a_reader_of_one_entry(tree: Tree):
+    """prowlarr reads only sonarr's `port`, so a `port` edit to radarr cannot move it."""
+    radarr = "  - name: radarr\n    platform: k8s\n"
+    tree.write(BOX, HOST_VARS.replace(radarr, radarr + "    port: 7878\n"))
+    assert tree.narrow(*_refs(tree)) == {"radarr", "lidarr"}
+
+
+def test_a_lookup_by_a_variable_name_reaches_every_entrys_edit(tree: Tree):
+    tree.write(
+        "ansible/roles/k8s/bazarr/templates/configmap.yaml.j2",
+        "port: {{ containers_list | entry_port(peer) }}\n",
+    )
+    tree.commit("a reader whose entry is a variable")
+    radarr = "  - name: radarr\n    platform: k8s\n"
+    tree.write(BOX, HOST_VARS.replace(radarr, radarr + "    port: 7878\n"))
+    assert tree.narrow(*_refs(tree)) == {"radarr", "lidarr", "bazarr"}
+
+
 def test_an_added_entry_reaches_every_reader(tree: Tree):
     tree.write(BOX, HOST_VARS + "  - name: readarr\n    platform: k8s\n")
     assert tree.narrow(*_refs(tree)) == {"readarr", "lidarr", "prowlarr"}
@@ -74,7 +97,7 @@ def test_an_added_entry_reaches_every_reader(tree: Tree):
     ],
 )
 def test_a_filter_reader_has_the_filters_fields_is_clean(line: str):
-    assert containers.reader_fields(line) is not None
+    assert containers.reader_reads(line) is not None
 
 
 @pytest.mark.parametrize(
@@ -89,13 +112,58 @@ def test_a_filter_reader_has_the_filters_fields_is_clean(line: str):
     ids=["loop", "selectattr", "entries-returned", "bare", "one-bare-use-among-two"],
 )
 def test_a_reader_whose_fields_cannot_be_named_reads_every_field_is_flagged(line: str):
-    assert containers.reader_fields(line) is None
+    assert containers.reader_reads(line) is None
 
 
-def test_changed_fields_names_the_keys_an_edit_moved():
-    before = {"containers_list": [{"name": "a", "port": 1, "image": "x"}]}
-    after = {"containers_list": [{"name": "a", "port": 2, "image": "x", "tier": "t"}]}
-    assert containers.changed_fields(before, after) == {"port", "tier"}
+@pytest.mark.parametrize(
+    ("line", "entry"),
+    [
+        ("{{ containers_list | entry_port('uptime-kuma') }}", "uptime-kuma"),
+        ('{{ containers_list | homepage_href( "docs", domain) }}', "docs"),
+        (
+            "{{ containers_list | default([]) | tier_priority_class('pihole') }}",
+            "pihole",
+        ),
+    ],
+)
+def test_a_named_lookup_by_a_literal_is_keyed_by_that_entry_is_clean(line, entry):
+    reads = containers.reader_reads(line)
+    assert reads is not None and set(reads) == {entry}
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "{{ containers_list | entry_port(t.service) }}",
+        "{{ containers_list | entry_port('uptime-' ~ suffix) }}",
+        "{{ containers_list | entry_port('a' | lower) }}",
+        "{{ containers_list | metrics_port('crowdsec') }}",
+    ],
+    ids=["variable", "concatenated", "filtered", "job-not-entry"],
+)
+def test_a_lookup_by_anything_but_a_literal_entry_name_is_keyed_by_no_entry_is_flagged(
+    line,
+):
+    reads = containers.reader_reads(line)
+    assert reads is not None and set(reads) == {None}
+
+
+def test_changed_fields_names_the_keys_an_edit_moved_by_entry():
+    before = {"containers_list": [{"name": "a", "port": 1}, {"name": "b", "port": 1}]}
+    after = {
+        "containers_list": [
+            {"name": "a", "port": 2, "tier": "t"},
+            {"name": "b", "port": 1},
+        ]
+    }
+    assert containers.changed_fields(before, after) == {"a": {"port", "tier"}}
+
+
+def test_a_repeated_name_changes_every_field():
+    """`entries` keeps the second `a`, and a named filter reads the first, which moved."""
+    before = {"containers_list": [{"name": "a", "port": 1}, {"name": "a", "port": 1}]}
+    after = {"containers_list": [{"name": "a", "port": 2}, {"name": "a", "port": 1}]}
+    assert containers.changed_fields(before, after) is None
 
 
 def test_a_reorder_reaches_every_reader(tree: Tree):
@@ -217,7 +285,9 @@ def test_the_real_tree_names_filter_readers():
         REPO
         / "ansible/roles/k8s/uptime-kuma/templates/maintenance-sync-cronjob.yaml.j2"
     )
-    assert containers.reader_fields(Path(reader).read_text()) == {"name", "port"}
+    assert containers.reader_reads(Path(reader).read_text()) == {
+        "uptime-kuma": {"name", "port"}
+    }
 
 
 # The entry reaches a helper as a parameter here, and the helper has a local of its own. That is
@@ -277,3 +347,106 @@ def test_a_filter_returning_a_whole_entry_is_flagged():
     source = _HELPER.replace("return _read(e, name)", "return e")
     _, opaque = filter_reads(source.format(probe="pass"))["entry_port"]
     assert "return e" in opaque
+
+
+# ── NAMED_ENTRY against the filters' behaviour ─────────────────────────────────────────
+
+
+# Each named filter's arguments after the list and the name.
+_NAMED_ARGS = {
+    "entry_port": (),
+    "homepage_href": ("example.com",),
+    "homepage_widget_url": ("media",),
+    "in_service_tier": ("home-critical",),
+    "metrics_port": (),
+    "tier_priority_class": (),
+}
+_TARGET = {
+    "name": "target",
+    "port": 8080,
+    "hostname": "target",
+    "homepage_widget": True,
+    "tier": "home-edge",
+    "metrics": [{"job": "target", "port": 9100}],
+}
+# Entries beside the target: one valid entry that answers differently from it, one whose
+# every field would fail a filter that read it, and one that is no entry at all.
+_NEIGHBOURS = (
+    {
+        "name": "other",
+        "port": 1,
+        "hostname": "other",
+        "homepage_widget": True,
+        "tier": "platform",
+        "metrics": [{"job": "target", "port": 1}],
+    },
+    {
+        "name": "junk",
+        "port": "x",
+        "hostname": None,
+        "homepage_widget": "no",
+        "tier": "bogus",
+        "metrics": "bogus",
+    },
+    "not-an-entry",
+)
+
+
+def _filters() -> dict:
+    found = {}
+    for path in sorted((REPO / "ansible" / "filter_plugins").glob("*.py")):
+        found.update(importlib.import_module(path.stem).FilterModule().filters())
+    return found
+
+
+def _outcome(filter_, containers_list: list, args: tuple) -> tuple:
+    try:
+        return ("returned", filter_(containers_list, "target", *args))
+    except (KeyError, TypeError, ValueError) as exc:
+        return ("raised", type(exc).__name__, str(exc))
+
+
+def _reads_only_the_named_entry(name: str) -> bool:
+    """Whether no edit to another entry changes what filter `name` answers for `target`.
+
+    The target is tried whole and without each field, so a filter that falls back to another
+    entry when its own lacks a field is caught too.
+    """
+    filter_, args = _filters()[name], _NAMED_ARGS[name]
+    variants = [_TARGET] + [
+        {k: v for k, v in _TARGET.items() if k != key}
+        for key in _TARGET
+        if key != "name"
+    ]
+    return all(
+        _outcome(filter_, [neighbour, target, neighbour], args)
+        == _outcome(filter_, [target], args)
+        for target in variants
+        for neighbour in _NEIGHBOURS
+    )
+
+
+def test_every_named_entry_filter_reads_only_the_entry_it_names():
+    # Non-vacuity: the table must name the lookups the real templates call most.
+    assert {"entry_port", "tier_priority_class"} <= containers.NAMED_ENTRY
+    assert containers.NAMED_ENTRY <= set(containers.FILTER_FIELDS)
+    # The target must be one each filter answers, or every comparison is raise against raise.
+    filters = _filters()
+    assert all(
+        _outcome(filters[n], [_TARGET], _NAMED_ARGS[n])[0] == "returned"
+        for n in containers.NAMED_ENTRY
+    )
+    walkers = sorted(
+        n for n in containers.NAMED_ENTRY if not _reads_only_the_named_entry(n)
+    )
+    assert not walkers, (
+        f"these NAMED_ENTRY filters read entries other than the one they name: {walkers}; "
+        "drop them from NAMED_ENTRY so their readers stay keyed by no entry"
+    )
+
+
+@pytest.mark.parametrize("name", ["metrics_port", "in_service_tier"])
+def test_a_filter_that_reads_entries_beside_the_one_it_names_is_flagged(name: str):
+    """The two `NAMED_ENTRY` leaves out: a job any entry may declare, a tier check over all."""
+    assert name not in containers.NAMED_ENTRY
+    assert not _reads_only_the_named_entry(name)

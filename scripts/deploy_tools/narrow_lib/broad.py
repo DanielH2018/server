@@ -288,7 +288,7 @@ def _containers_list_tags(
     return own | _list_reader_tags(ctx, path, containers.changed_fields(before, after))
 
 
-def _list_reader_tags(ctx: Context, path: str, changed: frozenset | None) -> set[str]:
+def _list_reader_tags(ctx: Context, path: str, changed: dict | None) -> set[str]:
     """The tags of every role whose templates read the `changed` fields of `containers_list`.
 
     A grep over the role trees and the shared templates, keeping a hit only where the name
