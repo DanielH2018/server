@@ -16,6 +16,7 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_br
 
 from deployer_lib import deploy_defer
 from deployer_lib import deploy_locks
+from deployer_lib import deploy_narrow
 from deployer_lib.deploy_tick_types import TickTarget
 from _deploy_fakes import receipt_applied
 from gitops_ledger import parse_receipts
@@ -166,6 +167,33 @@ def test_a_refused_narrowing_records_nothing_and_keeps_the_role_tag(
     assert "ansible/k3s-bringup.yml --tags k3s" in out
     assert "WARNING" in out, (
         "and the warning about what that tag does comes back with it"
+    )
+
+
+def test_a_role_the_range_needs_nothing_from_is_not_recorded(
+    gitops_deploy, tick, capsys, state
+):
+    """No `manual_plane` line asks a hand to apply nothing (#4408).
+
+    The derivation's nothing answer: every changed path reaches no host through k3s. The
+    refused narrowing above is the rejecting half, and still records the role tag.
+    """
+    tick.paths = [K3S_SETUP]
+    tick.narrow_setup["k3s"] = (
+        deploy_narrow.NARROW_SETUP_NOTHING_EXIT,
+        deploy_narrow.NARROWED_TO_NOTHING,
+    )
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    out = capsys.readouterr().out
+    assert tick.merges == [ORIGIN]
+    assert state.manual_plane_pending() == []
+    assert state.manual_plane_tags_pending() == {}
+    assert "manual_plane: k3s needs no tag over this range" in out
+    assert "--tags k3s" not in out
+    assert tick.posts == [], "no page for a role nobody has to apply"
+    (receipt,) = parse_receipts(state.read("receipts"))
+    assert receipt.manual == {"k3s": frozenset({deploy_narrow.NARROWED_TO_NOTHING})}, (
+        "land.sh reads an empty row as a refusal and would print the role tag"
     )
 
 
