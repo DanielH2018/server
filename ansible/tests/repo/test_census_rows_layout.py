@@ -64,39 +64,76 @@ def _families() -> tuple[Family, ...]:
     )
 
 
-def _is_forwarding_shim(member: Subject) -> bool:
-    """Whether the module only runs a function it imported, under its `__main__` guard.
+def _is_main_guard(node: ast.stmt) -> bool:
+    return (
+        isinstance(node, ast.If)
+        and isinstance(node.test, ast.Compare)
+        and isinstance(node.test.left, ast.Name)
+        and node.test.left.id == "__name__"
+    )
 
-    A consolidation leaves one at an old path that shipped code or an older checkout still runs
-    (#4346, #4347). It defines no function or class, so it holds nothing to navigate to.
+
+def _forwarded_module(member: Subject) -> str | None:
+    """The module a forwarding shim hands its argv to, or None when `member` is not a shim.
+
+    A consolidation leaves a shim at an old path that shipped code or an older checkout still
+    runs (#4346, #4347). Its whole body is a docstring, imports and a `__main__` guard holding
+    one statement: a call, optionally wrapped in `sys.exit`, of a name imported with `from`,
+    whose arguments call nothing. Anything more is program logic.
     """
-    if not _has_main_guard(member.text):
-        return False
-    tree = ast.parse(member.text)
-    if any(
-        isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
-        for node in tree.body
+    try:
+        tree = ast.parse(member.text)
+    except SyntaxError:
+        return None
+    sources: dict[str, str | None] = {}
+    guards: list[ast.If] = []
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom):
+            sources |= {alias.asname or alias.name: node.module for alias in node.names}
+        elif isinstance(node, ast.If) and _is_main_guard(node):
+            guards.append(node)
+        elif not isinstance(node, ast.Import) and not (
+            node is tree.body[0] and isinstance(node, ast.Expr)
+        ):
+            return None
+    if len(guards) != 1 or guards[0].orelse or len(guards[0].body) != 1:
+        return None
+    stmt = guards[0].body[0]
+    call = stmt.value if isinstance(stmt, ast.Expr) else None
+    if (
+        isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and ast.unparse(call.func) == "sys.exit"
+        and len(call.args) == 1
     ):
-        return False
-    imported = {
-        alias.asname or alias.name
-        for node in tree.body
-        if isinstance(node, ast.ImportFrom)
-        for alias in node.names
-    }
-    return any(
+        call = call.args[0]
+    if not (
         isinstance(call, ast.Call)
         and isinstance(call.func, ast.Name)
-        and call.func.id in imported
-        for guard in tree.body
-        if isinstance(guard, ast.If)
-        for call in ast.walk(guard)
-    )
+        and call.func.id in sources
+    ):
+        return None
+    if any(
+        isinstance(inner, ast.Call)
+        for arg in [*call.args, *call.keywords]
+        for inner in ast.walk(arg)
+    ):
+        return None
+    return sources[call.func.id]
 
 
 def _family_offence(subject: Subject) -> list[str]:
     assert isinstance(subject, Family), subject.rel
-    counted = [m for m in subject.members if not _is_forwarding_shim(m)]
+    stems = {PurePosixPath(m.rel).stem: m for m in subject.members}
+    targets = {m.rel: _forwarded_module(m) for m in subject.members}
+    # A shim counts out only when it forwards to a real entrypoint in its own family. One that
+    # forwards to a guard-less sibling is the family's entrypoint, however thin.
+    real = {
+        stem
+        for stem, m in stems.items()
+        if _has_main_guard(m.text) and targets[m.rel] is None
+    }
+    counted = [m for m in subject.members if targets[m.rel] not in real]
     entrypoints = [m for m in counted if _has_main_guard(m.text)]
     if len(counted) < FAMILY_SIZE or not entrypoints:
         return []
@@ -108,6 +145,15 @@ def _family_offence(subject: Subject) -> list[str]:
 _MAIN = 'def main():\n    return 0\n\n\nif __name__ == "__main__":\n    main()\n'
 _SHIM = 'import sys\n\nfrom foo import main\n\nif __name__ == "__main__":\n    sys.exit(main(["a"]))\n'
 _INLINE = 'import sys\n\nif __name__ == "__main__":\n    print(sys.argv)\n'
+_THIN = 'import sys\n\nfrom foo_cli import main\n\nif __name__ == "__main__":\n    sys.exit(main())\n'
+_IMPORTED_LOGIC = (
+    'import json\nfrom pathlib import Path\n\nif __name__ == "__main__":\n'
+    '    print(json.loads(Path("x").read_text()))\n'
+)
+_TYPE_CHECKING = (
+    "from typing import TYPE_CHECKING\nfrom foo import main\n\nif TYPE_CHECKING:\n"
+    '    main()\n\nif __name__ == "__main__":\n    main(sum([1]))\n'
+)
 
 
 def _fixture(key: str, **members: str) -> Family:
@@ -145,6 +191,17 @@ ROWS = (
             _fixture("scripts/x/*_gates.py", a_gates=_MAIN, b_gates=_MAIN, c_gates=""),
             # Logic inline under the guard calls nothing imported, so it is no shim.
             _fixture("scripts/x/foo_*.py", foo=_INLINE, foo_a="", foo_b=""),
+            # A thin entrypoint over guard-less flat libraries is the layout itself.
+            _fixture(
+                "scripts/x/foo_*.py",
+                foo=_THIN,
+                foo_cli="def main():\n    return 0\n",
+                foo_util="X = 1\n",
+            ),
+            # Logic under the guard that calls an imported name, or a second top-level `if`,
+            # is not forwarding.
+            _fixture("scripts/x/foo_*.py", foo=_MAIN, foo_a=_IMPORTED_LOGIC, foo_b=""),
+            _fixture("scripts/x/foo_*.py", foo=_MAIN, foo_a=_TYPE_CHECKING, foo_b=""),
         ),
         green=(
             _fixture("scripts/x/foo_*.py", foo_a="X = 1\n", foo_b="", foo_c=""),
