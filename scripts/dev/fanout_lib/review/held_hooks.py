@@ -5,7 +5,8 @@ this repo's `.claude/settings.json` registers every project hook from that tree.
 loaded both after the implementer ran would run whatever it left there (#3794, #3810). The
 pipeline reads the files once at start with `read_hooks`, rewrites a copy outside the worktree
 before every phase with `write_hooks`, and hands a resumed phase the start-time settings with
-every hook command pointed at that copy (`pointed_settings`).
+every hook command pointed at that copy (`pointed_settings`). The SessionStart hook is the
+exception: a held phase does not register it (`UNHELD_EVENTS` says why).
 
 DECIDED: in this repo's batch, every phase that starts after the implementer ran (review, fix,
 review-delta, land, file) runs with `--setting-sources user`. Another repo's batch keeps its
@@ -48,23 +49,39 @@ PROJECT_HOOKS = '"$CLAUDE_PROJECT_DIR"/.claude/hooks/'
 # in its place. `.claude/hooks/block-protected-bash.py` mirrors the file name.
 SECRET_PATHS_SCRIPT = "scripts/secrets_mgmt/secret_bearing_host_paths.py"
 HELD_SECRET_PATHS = "secret_bearing_host_paths.json"
+# Hook events a held phase does not register. `session-health` reports on the checkout its own
+# file sits in: it imports `lib` from that tree's `scripts/` and runs git and `probe.py` there.
+# The held copy is a hooks directory with no tree around it, so every held phase's banner read
+# "detection is broken: No module named 'lib'" three times (#4393; 164 sessions carried that
+# banner by 2026-10-11). Pointing it at the worktree instead would import code the
+# implementer can write, which is what holding the hooks prevents. The implementer phase
+# still gets the banner from its own project settings; a resumed phase already holds it in
+# its transcript.
+UNHELD_EVENTS = ("SessionStart",)
+# The trees beside `HOOKS_DIR` that a hook reaches through its own `__file__`, with the files
+# held from each: `block-footguns.py` and `_facts_line.py` import from `scripts/`, and the
+# inventory is data `lib.ansible_inventory` reads (#4420).
+HELD_TREES = ((Path("scripts"), "*.py"), (Path("ansible") / "inventory", "*"))
 
 Runner = Callable[[list[str], str | None], subprocess.CompletedProcess]
 
 
 def read_hooks(root: Path) -> dict[str, bytes]:
-    """Every file a hook under `root` can run or import, by path relative to `HOOKS_DIR`."""
-    hooks = root / HOOKS_DIR
-    return {
-        path.relative_to(hooks).as_posix(): path.read_bytes()
-        for path in sorted(hooks.rglob("*"))
-        if path.is_file()
-        and not UNSNAPSHOTTED & set(path.relative_to(hooks).parts[:-1])
-    }
+    """Every file a held hook can run, import or read, by path relative to `root`.
+
+    That is `HOOKS_DIR`, plus the `HELD_TREES` a hook finds through its own `__file__`.
+    """
+    held = {}
+    for top, pattern in ((HOOKS_DIR, "*"), *HELD_TREES):
+        for path in sorted((root / top).rglob(pattern)):
+            parts = path.relative_to(root / top).parts[:-1]
+            if path.is_file() and not UNSNAPSHOTTED & set(parts):
+                held[path.relative_to(root).as_posix()] = path.read_bytes()
+    return held
 
 
 def write_hooks(hooks: dict[str, bytes], root: Path) -> Path:
-    """Replace `root`'s hooks directory with `hooks` and return its `fanout-stop.py`.
+    """Replace `root`'s held directories with `hooks` and return its `fanout-stop.py`.
 
     Every process here runs as one user, so no directory is out of the agent's reach.
     Rewriting the bytes before each phase is what makes the copy the pipeline's: an edit the
@@ -72,23 +89,26 @@ def write_hooks(hooks: dict[str, bytes], root: Path) -> Path:
     removed first because it is each hook's `sys.path[0]`, so a planted `json.py` would
     shadow the stdlib module for every hook that imports it.
     """
-    target = root / HOOKS_DIR
-    if target.exists():
-        shutil.rmtree(target)
+    for top in (HOOKS_DIR, *(tree for tree, _ in HELD_TREES)):
+        if (root / top).exists():
+            shutil.rmtree(root / top)
     for name, data in hooks.items():
-        path = target / name
+        path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         path.chmod(0o555 if name.endswith(".sh") else 0o444)
-    return target / "fanout-stop.py"
+    return root / HOOKS_DIR / "fanout-stop.py"
 
 
 def pointed_settings(settings: str, root: Path) -> dict:
     """The project settings text `settings`, with every hook command run from `root`'s copy.
 
     The set already registers `fanout-stop`, so a phase given it needs no separate Stop hook.
+    It drops the `UNHELD_EVENTS` hooks.
     """
     held = json.loads(settings)
+    for event in UNHELD_EVENTS:
+        held.get("hooks", {}).pop(event, None)
     hooks = shlex.quote(str(root / HOOKS_DIR)) + "/"
     for groups in held.get("hooks", {}).values():
         for group in groups:
@@ -114,4 +134,4 @@ def held_secret_paths(run: Runner, root: Path) -> dict[str, bytes]:
         dest, sep, names = line.partition("\t")
         if sep:
             paths[dest] = names.split(",")
-    return {HELD_SECRET_PATHS: json.dumps(paths).encode()}
+    return {(HOOKS_DIR / HELD_SECRET_PATHS).as_posix(): json.dumps(paths).encode()}

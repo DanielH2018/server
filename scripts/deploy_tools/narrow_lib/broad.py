@@ -19,8 +19,8 @@ can move because of it:
     Jinja comment, maps the claim template to its `k8s_claims` declarers, and a comment-only
     edit to no tags.
   - `ansible/filter_plugins/<x>.py`: every role whose files name one of the filters its
-    `FilterModule.filters()` registers (`filters.py`, #3843). A caller under the play's
-    own trees refuses, as `toposort.py`'s in `deploy.yml` does.
+    `FilterModule.filters()` registers (`filters.py`, #3843); a comment or docstring edit
+    reaches none (#4412). A play-tree caller refuses, as `toposort.py`'s in `deploy.yml` does.
 
 ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` defers a refused plane to
 `k8s_unapplied`, naming every candidate, rather than running the whole play (#4333).
@@ -429,7 +429,7 @@ def _filter_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     shared-template hit follows that template's importers.
     """
     roles: set[str] = set()
-    for name in sorted(filters.plugin_names(path, old_ref, ctx.ref, ctx.cwd)):
+    for name in sorted(filters.changed_names(path, old_ref, ctx.ref, ctx.cwd)):
         hits = _grep(ctx, name, word=True, inventory=True)
         found = filters.callers(hits, name, ctx.ref, ctx.cwd)
         sorted_hits = _sort_hits(found, f"the filter {name}", ctx, name)
