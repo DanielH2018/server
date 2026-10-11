@@ -6,7 +6,7 @@ from pathlib import PurePath
 
 import pytest
 
-import deploy_ui_reads as reads
+from deploy_ui_lib import deploy_ui_reads as reads
 from deployer_lib.deploy_locks import TREE_LOCK
 
 PS = """\

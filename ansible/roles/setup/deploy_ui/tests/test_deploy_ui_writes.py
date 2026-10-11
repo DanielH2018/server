@@ -4,9 +4,9 @@ import fcntl
 import json
 import time
 
-import deploy_ui_writes as w
+from deploy_ui_lib import deploy_ui_writes as w
 from _process_waits import wait_for_exit
-from deploy_ui_reads import Run
+from deploy_ui_lib.deploy_ui_reads import Run
 
 L = Run(4321, 10, "land", "1543", "", "land.py --pr 1543", (), ())
 

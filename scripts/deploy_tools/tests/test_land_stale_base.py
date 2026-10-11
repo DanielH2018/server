@@ -159,7 +159,12 @@ def _approved_landing(landing, tmp_path, compare):
                 "headRefOid": {"headRefOid": OLD},
                 "state,mergeable,headRefOid": _polls(OLD),
             },
-            pr_files=[{"filename": "scripts/deploy_tools/land_lib/merge.py"}],
+            pr_files=[
+                {
+                    "status": "modified",
+                    "filename": "scripts/deploy_tools/land_lib/merge.py",
+                }
+            ],
             pr_reviews=[
                 {
                     "user": {"login": "operator-login"},

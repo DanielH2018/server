@@ -17,7 +17,7 @@ import time
 from collections.abc import Generator, Mapping
 from pathlib import Path
 
-from deploy_ui_reads import Run
+from deploy_ui_lib.deploy_ui_reads import Run
 from gitops_hold import HOLD_PLANE_SEP, Hold
 
 # Seconds a Clear waits for the git-tree lock before it refuses. `gitops_state.py` waits as

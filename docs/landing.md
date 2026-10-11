@@ -95,7 +95,15 @@ variable unset and never sees this.
 `land_lib/policy.py` owns the rules, and two settings switch them on.
 `LAND_REQUIRE_BRANCH_PREFIX` requires a head branch in this repo, under the prefix, targeting
 `master`. `LAND_APPROVAL_PATHS` names a file of path prefixes, and a PR changing a path under
-one is refused, renamed files included. `LAND_APPROVER` names a GitHub login whose latest
+one is refused, renamed files included. The same setting refuses a PR that changes a module the
+landing process has imported. It also refuses a change that can run code on import with no import
+line of its own: a non-empty `__init__.py`, an `__init__.py` leaving a directory that still holds
+Python files, a symlink, an added `__main__.py`, a module beside a directory of the same name, and
+a module at the top of one `sys.path` root that `land.py` inserts when it shadows a name in
+another root.
+Such code can enter `land.py`'s imports through a later approved PR whose diff never shows it.
+`land_lib/policy.py:shape_hits` reads these from the file listing and from the tree at the pinned
+head. `LAND_APPROVER` names a GitHub login whose latest
 review, if it approves the head SHA, lifts that refusal. With either of the first two set, a non-empty `hold_sha` also refuses,
 and every merge path is pinned to the head SHA the checks read. A push after the checks fails
 the landing, and a re-run checks the new head. `--verdict-file <path>` writes `PENDING`, then
