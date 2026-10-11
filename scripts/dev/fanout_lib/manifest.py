@@ -120,7 +120,7 @@ def all_runs(root: Path = MANIFEST_DIR) -> list[Manifest]:
     """Every run manifest under `root`, oldest run-id first.
 
     A manifest that cannot be read is skipped on its own rather than raising: every caller is
-    a read view or a launch gate, and one bad file must fail neither. `fanout_place.py runs`
+    a read view or a launch gate, and one bad file must fail neither. `fanout.py place runs`
     lists these, so a run-id lost to compaction or a resumed session is recoverable (#3923).
     """
     if not root.is_dir():

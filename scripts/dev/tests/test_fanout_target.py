@@ -182,10 +182,10 @@ def test_a_refused_dotfiles_claim_releases_removes_the_tree_and_starts_nothing()
 
 
 def test_a_dotfiles_review_unit_runs_its_snapshots_script():
-    """The dotfiles worktree carries no `fanout_review.py`; the server batch's own test is
+    """The dotfiles worktree carries no `fanout.py`; the server batch's own test is
     `test_a_server_review_unit_runs_the_worktrees_script_not_the_primary_checkouts`."""
     cmd = systemd_run_command("763", DOTFILES, review=True)
-    assert f" {SNAPSHOT}/scripts/dev/fanout_review.py --batch 763 " in cmd
+    assert f" {SNAPSHOT}/scripts/dev/fanout.py review --batch 763 " in cmd
     assert "/home/ubuntu/server/" not in cmd
 
 
@@ -197,7 +197,7 @@ def test_the_snapshot_holds_origin_master_while_the_primary_checkout_lags(
     origin = init_repo(tmp_path / "origin.git", bare=True)
     server = tmp_path / "server"
     git(tmp_path, "clone", "-q", str(origin), str(server))
-    script = "scripts/dev/fanout_review.py"
+    script = "scripts/dev/fanout.py"
     files = {script: "old\n", ".claude/hooks/fanout-stop.py": "hook\n", "README": "x"}
     files |= {"pyproject.toml": "p\n", "uv.lock": "l\n", ".python-version": "3.14\n"}
     commit(server, "old", **files)

@@ -258,7 +258,7 @@ def _finishing(host: str, target: Target = SERVER_TARGET, review: bool = False) 
 The batch is finished when your final message ends with the PR URL, {after}. If you cannot
 get there, end with one line starting `needs input:` or `failed:` that names the blocker. Any
 other final message is a progress report: a Stop hook sends you back to work, and
-`fanout_place.py status` reports the batch `no-pr` rather than `done`.
+`fanout.py place status` reports the batch `no-pr` rather than `done`.
 """
 
 
@@ -266,7 +266,7 @@ def _precomputed(cited: list[str]) -> str:
     """`findings_lib.precomputed`'s block, imported only here, where a brief is rendered.
 
     DECIDED: a call-time import. That module reaches `land.sh`'s classifier, which imports
-    PyYAML. `fanout_review.py` and `clean`'s remote leg import this module under
+    PyYAML. `fanout.py review` and `clean`'s remote leg import this module under
     `uv run --no-project`, which has no PyYAML. A module-level import killed every review
     unit and every remote clean at import (#4167). Only `launch` renders a brief, and it runs
     in the project env.

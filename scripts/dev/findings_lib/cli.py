@@ -180,7 +180,7 @@ def _parser(description: str) -> argparse.ArgumentParser:
     cs.add_argument(
         "--worktree",
         help="only the claims this branch holds, plus those held by the batch branches "
-        "its `fanout_place.py launch` runs started in this register",
+        "its `fanout.py place launch` runs started in this register",
     )
 
     rp = sub.add_parser("reap", help="release every stale claim")

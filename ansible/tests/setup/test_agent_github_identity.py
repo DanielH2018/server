@@ -193,7 +193,7 @@ def test_a_prefix_outside_the_fence_is_flagged() -> None:
 def test_a_fanout_the_agent_launches_names_batch_branches_the_fence_lets_it_push(
     monkeypatch,
 ) -> None:
-    """fanout_place.py names its branches itself, so the profile's prefix must reach it."""
+    """`fanout.py place` names its branches itself, so the profile's prefix must reach it."""
     profile = render_setup_text("claude_code", "agent-user-profile.j2")
     found = re.findall(rf"^export {WORKTREE_PREFIX_ENV}=(\S+)$", profile, re.M)
     assert found == ["claude"], f"no single {WORKTREE_PREFIX_ENV} export in:\n{profile}"
