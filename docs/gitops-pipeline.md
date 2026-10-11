@@ -141,7 +141,9 @@ interpolates thirteen other `claude_code` defaults. A key `hosts.ini` names refu
 the walk cannot follow it as a mapping. A key the consumer never names adds no tag. A range in
 which no path reaches the consumer answers that it needs nothing (#4361). The tick then drops
 the role from its run and from the hold, and a range in which no role needs a tag runs no
-playbook and records `narrowed-to-nothing` as the setup plane's tags. A change to the key
+playbook and records `narrowed-to-nothing` as the setup plane's tags. `land.sh`'s note on the
+hosts the tick does not reach asks the same question over the PR's own range, so it names no
+hand-run of such a role (`land_reach._reads_no_changed_key`). A change to the key
 `claude_code` does read still applies the whole `claude_code` tag, because every task the agent
 include runs carries only that tag. The same test file derives these rows from the tree, and the
 table must equal them (#4357).

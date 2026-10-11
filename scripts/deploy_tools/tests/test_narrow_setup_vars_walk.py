@@ -261,34 +261,48 @@ def test_a_range_changing_only_an_unread_foreign_key_exits_with_the_deployers_no
 
 # A name built from `owner_other`, in each place a value can be carried onward from.
 LABEL = 'owner_label: "{{ owner_other }}-x"\n'
+INVENTORY_ALL = "ansible/inventory/group_vars/all.yml"
 
 
 @pytest.mark.parametrize(
-    ("carrier", "text"),
+    ("carriers", "name"),
     [
-        (FOREIGN, FOREIGN_DEFAULTS + LABEL),
-        ("ansible/inventory/group_vars/all.yml", "---\n" + LABEL),
+        ({FOREIGN: FOREIGN_DEFAULTS + LABEL}, "owner_label"),
+        ({INVENTORY_ALL: "---\n" + LABEL}, "owner_label"),
         (
-            "ansible/roles/setup/owner/tasks/main.yml",
-            "---\n- name: Derive the label\n  ansible.builtin.set_fact:\n    " + LABEL,
+            {
+                "ansible/roles/setup/owner/tasks/main.yml": "---\n- name: Derive the label\n"
+                "  ansible.builtin.set_fact:\n    " + LABEL
+            },
+            "owner_label",
+        ),
+        # Two hops across two carriers, the shape daniel-box's `claude_code_user` override
+        # puts between `claude_code_agent_user` and `claude_code_rc_workdir`.
+        (
+            {
+                INVENTORY_ALL: "---\n" + LABEL,
+                FOREIGN: FOREIGN_DEFAULTS + 'owner_path: "{{ owner_label }}/y"\n',
+            },
+            "owner_path",
         ),
     ],
-    ids=["owner-key", "inventory-value", "owner-fact"],
+    ids=["owner-key", "inventory-value", "owner-fact", "two-hops"],
 )
 def test_a_foreign_key_the_role_reads_through_another_name_narrows_to_its_readers(
-    reads, carrier, text
+    reads, carriers, name
 ):
-    """The role names only `owner_label`, which is built from the changed `owner_other`.
+    """The role names only `name`, which is built from the changed `owner_other`.
 
     Skipping `owner_other` as unread would answer that the role needs nothing, and nothing
-    would apply the label's new value.
+    would apply the new value of `name`.
     """
-    reads.write(carrier, text)
+    for carrier, text in carriers.items():
+        reads.write(carrier, text)
     reads.write(
         f"{ROLE}/templates/beta.conf.j2",
-        "mode = {{ demo_beta_mode }}\nlabel = {{ owner_label }}\n",
+        f"mode = {{{{ demo_beta_mode }}}}\nlabel = {{{{ {name} }}}}\n",
     )
-    reads.commit("demo reads a label built from owner_other")
+    reads.commit(f"demo reads {name}, built from owner_other")
     foreign = (reads.root / FOREIGN).read_text()
     reads.write(FOREIGN, foreign.replace("unread", "changed"))
     assert narrow(reads, *_refs(reads)) == frozenset({"beta"})
