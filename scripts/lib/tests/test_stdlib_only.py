@@ -280,11 +280,21 @@ def test_a_mapped_basename_two_dirs_on_the_path_hold_turns_the_walk_red(tmp_path
     assert checker.walk(module, [tmp_path, repo_paths.GITOPS_DEPLOY_FILES]) == []
 
 
+def _uv_gate_leg(drill: str) -> str:
+    """Return the drill's `uv run --no-project` GATE_CMD array, without the `.venv` leg.
+
+    A slice from the first `--no-project` would start at the comment above the `if`, so it
+    would also hold the `.venv` leg, whose argv then satisfies an assertion meant for this one.
+    """
+    leg = drill[drill.index("/usr/local/bin/uv run --no-project") :]
+    return leg[: leg.index("\n  )")]
+
+
 def test_the_etcd_drill_gate_and_what_its_runbook_imports_are_in_the_set():
     from lib.stdlib_only import RUNBOOK_UNITS
 
     drill = (REPO / "scripts/backup/etcd_restore_drill.sh").read_text(encoding="utf-8")
-    no_project = drill[drill.index("--no-project") :]
+    no_project = _uv_gate_leg(drill)
     for entry, argv in RUNBOOK_UNITS:
         assert f'GATE_SCRIPT="$REPO_ROOT/{entry.relative_to(REPO).as_posix()}"' in drill
         assert f'"$GATE_SCRIPT" {" ".join(argv)} ' in no_project
@@ -295,3 +305,14 @@ def test_the_etcd_drill_gate_and_what_its_runbook_imports_are_in_the_set():
     } <= set(members)
     # The lazy registry keeps the yaml-importing runbooks off the drill's path.
     assert "scripts/deploy_tools/runbook_gates_lib/longhorn_upgrade.py" not in members
+
+
+def test_a_uv_leg_without_the_subcommand_fails_even_when_the_venv_leg_has_it():
+    drill = (REPO / "scripts/backup/etcd_restore_drill.sh").read_text(encoding="utf-8")
+    uv_leg = _uv_gate_leg(drill)
+    assert '"$GATE_SCRIPT" etcd-restore ' in uv_leg
+    broken = drill.replace(
+        uv_leg, uv_leg.replace('"$GATE_SCRIPT" etcd-restore', '"$GATE_SCRIPT"')
+    )
+    assert '"$GATE_SCRIPT" etcd-restore ' in broken  # the .venv leg still carries it
+    assert '"$GATE_SCRIPT" etcd-restore ' not in _uv_gate_leg(broken)
