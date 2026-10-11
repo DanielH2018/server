@@ -306,6 +306,13 @@ def range_paths(old_ref: str, new_ref: str, cwd: Path = REPO) -> list[str]:
     return _git_diff_names(f"{old_ref}..{new_ref}", cwd=cwd)
 
 
+# The parser's prog, named once so a failure line can carry it without the parser in hand.
+_TAGS_PROG = "deploy_cli.py tags"
+# DECIDED: the four `blockers` report lines are status, not complaints, so they carry this bare
+# prefix rather than `error:`/`warning:`. land.sh reads only the exit code (#4498).
+_BLOCKERS_PROG = f"{_TAGS_PROG} blockers"
+
+
 def _cmd_blockers(args: argparse.Namespace) -> int:
     """Exit 3 if a `_BROAD_MANUAL_PREFIXES` path sits between HEAD and `ref`.
 
@@ -322,14 +329,13 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     try:
         paths = _incoming_paths(args.ref)
     except subprocess.CalledProcessError as exc:
-        print(
-            f"deploy blockers: `git diff HEAD..{args.ref}` failed: {exc.stderr.strip()}",
-            file=sys.stderr,
+        error(
+            f"`git diff HEAD..{args.ref}` failed: {exc.stderr.strip()}", prog=_TAGS_PROG
         )
         return 1
 
     if not paths:
-        print(f"deploy blockers: nothing incoming from {args.ref}.", file=sys.stderr)
+        print(f"{_BLOCKERS_PROG}: nothing incoming from {args.ref}.", file=sys.stderr)
         return 0
 
     # Same read the tick makes, so a comment-only edit to a bring-up playbook that the tick
@@ -337,7 +343,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     quiet = comment_only_paths(paths, "HEAD", args.ref)
     if quiet:
         print(
-            f"deploy blockers: comment-only change in {', '.join(sorted(quiet))} — the "
+            f"{_BLOCKERS_PROG}: comment-only change in {', '.join(sorted(quiet))} — the "
             "tick crosses it.",
             file=sys.stderr,
         )
@@ -345,14 +351,14 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     cs = loud.changes
     if not loud.manual:
         print(
-            f"deploy blockers: {len(loud.loud)} incoming file(s) from {args.ref}, none "
+            f"{_BLOCKERS_PROG}: {len(loud.loud)} incoming file(s) from {args.ref}, none "
             "needing a hand — the tick can fast-forward.",
             file=sys.stderr,
         )
         return 0
 
     print(
-        f"deploy blockers: {args.ref} carries a change the deployer will never apply itself, "
+        f"{_BLOCKERS_PROG}: {args.ref} carries a change the deployer will never apply itself, "
         "so the tick cannot fast-forward past it and any deploy after it is refused as stale:",
         file=sys.stderr,
     )
@@ -524,9 +530,7 @@ def main(
 
     `git_diff` replaces the diff `changed` reads; None keeps `_git_diff_paths`.
     """
-    parser = ArgumentParser(
-        prog="deploy_cli.py tags", description=__doc__.splitlines()[0]
-    )
+    parser = ArgumentParser(prog=_TAGS_PROG, description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
 
     v = sub.add_parser("validate", help="exit 2 if any tag matches no service")
