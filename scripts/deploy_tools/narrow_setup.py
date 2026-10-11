@@ -38,7 +38,8 @@ against — so a derivation that is not certain must widen rather than narrow. A
 no `tags:` of its own is the sharpest case: its tasks inherit from wherever it is imported,
 so a hit there says nothing about which tag selects it. A tag must also be REACHABLE in the
 playbook the remediation prints: the role has to sit in that playbook's `roles:`, and the task
-file has to be statically imported from the role's `tasks/main`.
+file has to be statically imported from the role's `tasks/main`, or included from a file that
+is with an `apply:` tag the include itself carries (#4384).
 `tasks/storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, and `k3s-bringup.yml --tags
 storage_smoke` selects only `always` tasks.
 

@@ -55,8 +55,9 @@ def _reachable_task_files() -> list[pathlib.Path]:
 
     The scope the warning has to cover, and no wider. `tasks/agent.yml` notifies a restart of
     its own and carries `k3s_agent`, but no `--tags` this derivation prints can ever select it
-    — `main.yml` does not import it, and `narrow_setup_index.RoleIndex.reachable` refuses a tag
-    read off such a file. `_static_imports` is shared with that module so the two walks agree.
+    — `main.yml` does not import it, and `narrow_setup_index.RoleIndex` refuses a tag read off
+    such a file. A file included with tags that select it is followed too (#4384).
+    `_static_imports` and `_dynamic_includes` are shared with that module so the two walks agree.
     """
     seen: list[pathlib.Path] = []
     todo = [_K3S_TASKS / "main.yml"]
@@ -66,10 +67,12 @@ def _reachable_task_files() -> list[pathlib.Path]:
             continue
         seen.append(path)
         doc = yaml.safe_load(path.read_text())
-        for name in narrow_setup_index._static_imports(
-            doc if isinstance(doc, list) else []
-        ):
+        tasks = doc if isinstance(doc, list) else []
+        for name in narrow_setup_index._static_imports(tasks):
             todo.append(_K3S_TASKS / name)
+        for name, tags in narrow_setup_index._dynamic_includes(tasks):
+            if not isinstance(tags, str):
+                todo.append(_K3S_TASKS / name)
     return sorted(seen)
 
 
