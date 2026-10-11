@@ -173,6 +173,28 @@ def test_the_joined_tick_line_books_the_wait_and_not_the_run_before_it():
     ) == (47, "")
 
 
+@pytest.mark.parametrize(
+    "line,booked",
+    [
+        ("deploy.sh: lock acquired after 5s\n", (5, "")),
+        ("deploy: lock acquired after 5s\n", (5, "")),
+        ("deploy.sh: service lock sonarr acquired after 4s\n", (4, "")),
+        ("deploy: service lock sonarr acquired after 4s\n", (4, "")),
+        (
+            "gitops_tick.sh: joined a tick already 3s in flight; waited 7s for it\n",
+            (7, ""),
+        ),
+        (
+            "gitops_tick: joined a tick already 3s in flight; waited 7s for it\n",
+            (7, ""),
+        ),
+    ],
+)
+def test_a_wait_line_books_under_its_script_name_and_its_pre_4478_name(line, booked):
+    """The deploy runs from PRIMARY, which can predate this parser, so both names book."""
+    assert tools.in_flock_wait(line) == booked
+
+
 def test_a_self_started_tick_wait_line_books_nothing():
     """The half that must NOT book: those seconds are the tick's own work.
 

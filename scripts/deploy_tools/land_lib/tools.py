@@ -72,27 +72,27 @@ GATE_TMP_ROOT_ENV = "LAND_GATE_TMPDIR"
 # The two wrapper lines that report a wait ending in an ACQUIRE or a JOIN -- the waits
 # `retry_while_locked` structurally cannot see, because it books only an attempt that exits
 # 75 and both of these exit 0. deploy.sh waits inside `flock -w`; gitops_tick.sh watches a
-# tick another actor already started. `gitops_tick: waited <M>s` (the tick this landing
-# started itself) is deliberately absent: those seconds are the tick's own work, and the
-# path that makes them long ends at exit 3, which `retry_while_locked` already books.
+# tick another actor already started. `gitops_tick.sh: waited <M>s` (a tick this landing
+# started) is absent: those seconds are the tick's own work, and the path that makes them
+# long ends at exit 3, which `retry_while_locked` books. Each also matches its pre-#4478
+# name (`deploy:`, `gitops_tick:`): land deploys from PRIMARY, which can predate this file.
 _ACQUIRED = re.compile(
-    r"deploy: lock acquired after (\d+)s(?: \(holder was: (.*)\))?\s*$"
+    r"deploy(?:\.sh)?: lock acquired after (\d+)s(?: \(holder was: (.*)\))?\s*$"
 )
-# `[^;]*` rather than `\d+` for the in-flight seconds: that number is NOT booked, so requiring
-# it to parse would throw away the one that is. gitops_tick.sh derives it from /proc/uptime and
-# renders `already s in flight` if that read ever comes back empty, which under `\d+` would
-# stop the line matching at all and silently restore `lock=0` -- the exact failure this parser
-# exists to end. Bounded at the `;` so it cannot run into the seconds that ARE booked.
+# `[^;]*` rather than `\d+` for the in-flight seconds: that number is NOT booked, and
+# gitops_tick.sh renders `already s in flight` when its /proc/uptime read comes back empty,
+# which `\d+` would refuse, silently restoring `lock=0` -- the failure this parser exists to
+# end. Bounded at the `;` so it cannot run into the seconds that ARE booked.
 _JOINED = re.compile(
-    r"gitops_tick: joined a tick already [^;]*in flight; waited (\d+)s for it\s*$"
+    r"gitops_tick(?:\.sh)?: joined a tick already [^;]*in flight; waited (\d+)s for it\s*$"
 )
-# deploy.sh holds the tree lock only for its snapshot and then queues on one lock per service
-# (ADR-0017), so most of what a landing waits for arrives on THIS line rather than the one
-# above. It names no holder: a service lock is taken on a descriptor the way the tree lock is,
-# but nothing samples `fuser` for it — the holder is by construction another deploy of the same
-# service, which the line's own tag already says. A run can print several of these and
-# `note_in_flock_wait` sums them, which is the right total: they are taken in sequence.
-_SERVICE_ACQUIRED = re.compile(r"deploy: service lock \S+ acquired after (\d+)s\s*$")
+# deploy.sh holds the tree lock only for its snapshot, then queues on one lock per service
+# (ADR-0017), so most of a landing's wait arrives on THIS line. It names no holder: nothing
+# samples `fuser` for a service lock, and the holder is by construction another deploy of the
+# same service. A run can print several, taken in sequence, and `note_in_flock_wait` sums them.
+_SERVICE_ACQUIRED = re.compile(
+    r"deploy(?:\.sh)?: service lock \S+ acquired after (\d+)s\s*$"
+)
 # `annotation_line` writes the holder as `holder="..."`, so an unstripped quote splits one
 # Loki row into fields the board reads as something else. `lock_holder` sanitises its own
 # return the same way; this is the choke point for the wrapper-reported source.

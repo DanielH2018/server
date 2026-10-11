@@ -37,6 +37,7 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib import yaml_fast
+from lib.cli_help import warn
 from lib.git import git
 
 # include_tasks and import_tasks read alike here: the only place they diverge is a
@@ -362,17 +363,12 @@ def task_file_chains(role_dir: Path, path: str, pr_range: str, repo: Path):
     if matched == changed:
         return chains
     old, _, new = pr_range.partition("..")
-    _warn(
+    warn(
         f"the task chains read from {role_dir} reach {len(matched)} of the "
         f"{len(changed)} tasks {old[:8]}..{new[:8]} changed in {path}, so its owed-host "
         "note keeps the whole file's reach"
     )
     return every
-
-
-def _warn(message: str) -> None:
-    """One line on stderr, where `land.sh`'s operator and journal both see it."""
-    print(f"land_reach: {message}", file=sys.stderr)
 
 
 def deleted_in(path: str, pr_range: str, repo: Path) -> bool:
@@ -489,7 +485,7 @@ def tree_at(ref: str, repo: Path) -> Generator[Path | None]:
             with tarfile.open(archive) as tar:
                 tar.extractall(root, filter="data")
         except (OSError, subprocess.SubprocessError, tarfile.TarError) as exc:
-            _warn(
+            warn(
                 f"could not read {ref[:8]}'s ansible/ tree ({type(exc).__name__}), so the "
                 f"owed-host note reads {repo}'s checkout, which can predate it"
             )

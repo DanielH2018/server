@@ -47,7 +47,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 
-from lib.cli_help import ArgumentParser
+from deploy_tools.deploy_lib.messages import PROG
+from lib.cli_help import ArgumentParser, error, warn
 
 from lib.deployer_park import (
     GITOPS_STATE_DIR,
@@ -99,7 +100,7 @@ def format_refusal(behind: int, ahead: int, ref: str, base: str = "HEAD") -> str
     """The stderr message printed when `base` is behind `ref`, with the fixes to try."""
     ahead_note = f" (and {ahead} ahead)" if ahead else ""
     return (
-        f"deploy: {what_is_behind(base)} {behind} commit(s) behind {ref}{ahead_note} "
+        f"{what_is_behind(base)} {behind} commit(s) behind {ref}{ahead_note} "
         f"-- nothing was deployed.\n"
         f"  Deploying now would render stale templates and revert live config for the\n"
         f"  roles you target, while every repo-side check still reads green.\n"
@@ -229,7 +230,7 @@ def format_tag_refusal(
     if len(commits) > 10:
         log += f"\n    +{len(commits) - 10} more"
     return (
-        f"deploy: {what_is_behind(base)} {behind} commit(s) behind {ref}, and {len(paths)} "
+        f"{what_is_behind(base)} {behind} commit(s) behind {ref}, and {len(paths)} "
         f"of the path(s) in that range reach what a deploy of {', '.join(tags)} renders "
         f"-- nothing was deployed.\n"
         f"  Deploying now would render stale templates and revert live config for those\n"
@@ -291,10 +292,10 @@ def main(argv: list[str] | None = None) -> int:
         except subprocess.TimeoutExpired:
             failed = True
         if failed:
-            print(
-                f"deploy: could not fetch origin; comparing against the local "
+            warn(
+                f"could not fetch origin; comparing against the local "
                 f"{args.ref}, which may itself be stale.",
-                file=sys.stderr,
+                prog=PROG,
             )
 
     try:
@@ -304,19 +305,16 @@ def main(argv: list[str] | None = None) -> int:
         # This is a staleness check, not a git-topology check — do not block the deploy, but
         # say the check was skipped, so a deploy that went ahead unchecked does not read as
         # one that passed it.
-        print(
-            f"deploy: {args.ref} or {base} does not resolve here; the staleness check was "
-            "skipped.",
-            file=sys.stderr,
+        warn(
+            f"{args.ref} or {base} does not resolve here; the staleness check was skipped.",
+            prog=PROG,
         )
         return 0
 
     declared = service_tags_or_none() if behind and tags else None
     blocked = unscoped_reason(tags, declared) if behind and tags else ""
     if blocked:
-        print(
-            f"deploy: not narrowing the staleness check -- {blocked}.", file=sys.stderr
-        )
+        warn(f"not narrowing the staleness check -- {blocked}.", prog=PROG)
     paths = (
         incoming(args.repo, args.ref, "diff", "--name-only", base=base)
         if behind and tags and not blocked
@@ -331,13 +329,13 @@ def main(argv: list[str] | None = None) -> int:
         if not flagged:
             # Not silent: the tree IS behind, and an operator reading a deploy log has to be
             # able to tell this from a tree that was current.
-            print(
-                f"deploy: {what_is_behind(base)} {behind} commit(s) behind {args.ref}, but "
+            warn(
+                f"{what_is_behind(base)} {behind} commit(s) behind {args.ref}, but "
                 f"none of those commits reach {', '.join(sorted(tags))} -- deploying anyway.",
-                file=sys.stderr,
+                prog=PROG,
             )
             return 0
-        print(
+        error(
             format_tag_refusal(
                 behind,
                 args.ref,
@@ -351,7 +349,7 @@ def main(argv: list[str] | None = None) -> int:
                 or [],
                 base,
             ),
-            file=sys.stderr,
+            prog=PROG,
         )
         note = park_note(read_behind_marker(args.state_dir))
         if note:
@@ -359,7 +357,7 @@ def main(argv: list[str] | None = None) -> int:
         return DEPLOY_STALE
 
     if behind:
-        print(format_refusal(behind, ahead, args.ref, base), file=sys.stderr)
+        error(format_refusal(behind, ahead, args.ref, base), prog=PROG)
         # Exit 4 names a rebase of THIS tree, which is the wrong repair when the deployer is
         # parked: the primary checkout is what has to converge, and rebasing a worktree onto an
         # origin the fleet is not running deploys nothing. The SessionStart banner already says

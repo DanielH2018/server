@@ -47,7 +47,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
-from lib.cli_help import ArgumentParser
+from deploy_tools.deploy_lib.messages import PROG
+from lib.cli_help import ArgumentParser, error
 from lib.git import git, git_stdout
 
 from lib.render_guard import (
@@ -234,7 +235,7 @@ def validate(tags: list[str], at: str = "", host_vars: Path = HOST_VARS) -> int:
     if not bad:
         return 0
     for tag in bad:
-        print(f"deploy: no service or block tag named '{tag}'.", file=sys.stderr)
+        error(f"no service or block tag named '{tag}'.", prog=PROG)
         matches = suggest(tag, host_vars, at)
         if matches:
             print(f"  Did you mean: {', '.join(matches)}?", file=sys.stderr)

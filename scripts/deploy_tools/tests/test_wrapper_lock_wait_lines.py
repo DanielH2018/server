@@ -233,7 +233,7 @@ def test_a_contended_service_lock_reports_its_tag_and_its_seconds(tmp_path):
     assert booked is not None, f"land.py no longer parses deploy.sh's line: {line!r}"
     assert booked[0] >= 1
     # The tree lock was free, so nothing may be booked against it.
-    assert "deploy: lock acquired after" not in result.stderr
+    assert ": lock acquired after" not in result.stderr
 
 
 def test_the_service_lock_refusal_is_not_booked_as_a_wait():
@@ -243,10 +243,11 @@ def test_the_service_lock_refusal_is_not_booked_as_a_wait():
     the whole budget onto a landing that deployed nothing, which is the opposite of what
     `lock=` means.
     """
-    refusal = "deploy: a service lock under /var/lock stayed busy for 3000s -- nothing"
+    refusal = "deploy.sh: error: a service lock under /var/lock stayed busy for 3000s -- nothing"
     assert tools.in_flock_wait(refusal) is None
     assert (
-        tools.in_flock_wait("deploy: service lock sonarr acquired after 4s ok") is None
+        tools.in_flock_wait("deploy.sh: service lock sonarr acquired after 4s ok")
+        is None
     )
 
 
@@ -255,6 +256,7 @@ def test_a_lock_timeout_is_still_reported_as_contention(tmp_path):
     with _held(tmp_path / "locks" / _TREE_LOCK_NAME):
         result = _run_deploy(tmp_path, HOMELAB_DEPLOY_LOCK_WAIT="1")
     assert result.returncode == 75, result.stderr
+    assert "deploy.sh: error: could not take " in result.stderr
     assert "nothing was deployed" in result.stderr
     assert "A deploy is already running" in result.stderr
     assert "docs-refresh cron" in result.stderr

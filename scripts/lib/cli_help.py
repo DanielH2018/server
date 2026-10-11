@@ -112,15 +112,24 @@ def prog() -> str:
     return os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else "python"
 
 
-def warn(message: str) -> None:
-    """Print `<prog>: warning: <message>` on stderr."""
-    print(f"{prog()}: warning: {message}", file=sys.stderr)
+# `warn` and `error` take a `prog` keyword that shadows the function.
+_derived_prog = prog
 
 
-def error(message: str) -> None:
+def warn(message: str, *, prog: str | None = None) -> None:
+    """Print `<prog>: warning: <message>` on stderr.
+
+    `prog` overrides the derived name for a script reached through a wrapper: `deploy.sh`
+    execs `deploy_cli.py`, and the operator typed the first.
+    """
+    print(f"{prog or _derived_prog()}: warning: {message}", file=sys.stderr, flush=True)
+
+
+def error(message: str, *, prog: str | None = None) -> None:
     """Print `<prog>: error: <message>` on stderr, and return.
 
     Unlike `parser.error`, this does not exit: the caller returns its own exit code, which is
-    how a script keeps distinct codes for distinct failures.
+    how a script keeps distinct codes for distinct failures. `prog` overrides the derived name,
+    as for `warn`.
     """
-    print(f"{prog()}: error: {message}", file=sys.stderr)
+    print(f"{prog or _derived_prog()}: error: {message}", file=sys.stderr, flush=True)

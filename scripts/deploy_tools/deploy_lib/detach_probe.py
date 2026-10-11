@@ -34,7 +34,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
-from lib.cli_help import ArgumentParser, refuse_help_under_describe
+from lib.cli_help import ArgumentParser, error, refuse_help_under_describe
 from lib.detach_fork import alive, recorded_code, recorded_pid
 
 # `deploy_detach.LOG_DIR`, restated: that module imports the deploy machinery, and this probe
@@ -144,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         log = find_log(ns.tags, ns.log, ns.log_dir)
     except NoDeploy as exc:
-        print(f"deploy_probe: {exc}", file=sys.stderr)
+        error(str(exc), prog=parser.prog)
         return 1
     print(json.dumps(describe(log) if ns.describe else read(log)))
     return 0
