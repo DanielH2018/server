@@ -127,7 +127,7 @@ def pick_loki_store(logql, requested):
     with a note; every other query keeps the homelab default with no note.
 
     Raises:
-        SystemExit: `--loki homelab` was asked for explicitly with the claude-code selector.
+        UsageError: `--loki homelab` was asked for explicitly with the claude-code selector.
     """
     claude_code = bool(_CLAUDE_CODE_SELECTOR_RE.search(logql))
     if requested is None:
@@ -138,7 +138,7 @@ def pick_loki_store(logql, requested):
             )
         return "homelab", None
     if requested == "homelab" and claude_code:
-        raise SystemExit(
+        raise UsageError(
             'loki-query: `service_name="claude-code"` is observability\'s stream, and '
             "--loki homelab names the store that never holds it. An empty answer here "
             "means nothing. Re-run with --loki observability, or use `otelq logs '<logql>'`."
