@@ -10,13 +10,14 @@ Usage:
     uv run python scripts/deploy_tools/k3s_etcd_restore_gates.py [--gate N] <snapshot-name>
 """
 
+import runpy
 import sys
 from pathlib import Path as _Path
 
-# Reach this directory's runbook_gates.py when the shim is run from anywhere.
-sys.path.insert(0, str(_Path(__file__).resolve().parent))
-
-import runbook_gates
-
 if __name__ == "__main__":
-    sys.exit(runbook_gates.main(["etcd-restore", *sys.argv[1:]]))
+    # Run as a script rather than imported, so runbook_gates.py keeps its own entry-point
+    # bootstrap and the scripts reference page still lists it as one a person runs.
+    sys.argv[1:1] = ["etcd-restore"]
+    runpy.run_path(
+        str(_Path(__file__).resolve().parent / "runbook_gates.py"), run_name="__main__"
+    )
