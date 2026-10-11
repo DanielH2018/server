@@ -24,7 +24,7 @@ waits for its own deploys. A login session's scope is left alone too.
 THE RUN RECORDS ITS OWN PID AND EXIT CODE BESIDE ITS LOG. A grandchild cannot be reaped by
 whoever waits on it, so the caller writes `<log stem>.pid` and the run writes `<log stem>.rc`
 after flushing its last line (`record_code`). A cc-wait probe (`land_probe.py`,
-`deploy_probe.py`) reads the code first and the log second, and reads a dead pid with no code
+`deploy_lib/detach_probe.py`) reads the code first and the log second, and reads a dead pid with no code
 as a run that was killed.
 """
 

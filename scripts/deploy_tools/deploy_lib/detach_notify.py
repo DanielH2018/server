@@ -34,13 +34,12 @@ from typing import NamedTuple
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib.repo_paths import HOST_VARS, REPO
 
-# Same directory, so a direct invocation already has it on sys.path. `tag_platforms` is the
-# reader of containers_list that says which probe can see a tag's workload.
-import deploy_tags
+# `tag_platforms` is the reader of containers_list that says which probe can see a tag's workload.
+from deploy_tools.deploy_lib import tags as deploy_tags
 from lib.exit_codes import DEPLOY_NO_HOSTS
 
 # The inventory directory as a path relative to a checkout root. `check_one` reads the
@@ -299,7 +298,7 @@ def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int
         "--cwd",
         default="",
         help=(
-            "the checkout to render the deployed role's manifests from; deploy_detach.py passes "
+            "the checkout to render the deployed role's manifests from; deploy_lib/detach_run.py passes "
             "its snapshot, so the gate enumerates the workloads of the commit that was "
             "deployed rather than of whatever this working tree holds"
         ),

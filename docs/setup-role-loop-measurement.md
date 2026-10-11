@@ -150,8 +150,8 @@ The harness and the probe leave two differences unmeasured, and neither applies 
       `test_land_reach_vars_files` (3), `test_narrow_setup` (1), `test_narrow_setup_edges` (1).
     - `scripts/docs/tests/`: `test_gen_role_glance` (1).
 
-  Behind those tests sit the production readers `narrow_setup_playbook.playbook_roles`,
-  `narrow_setup_index.foreign_tags`, `land_reach` and `scripts/docs/catalog_lib/glance_facts.py`. Under a
+  Behind those tests sit the production readers `narrow_lib/setup_playbook.py:playbook_roles`,
+  `narrow_lib/setup_index.py:foreign_tags`, `land_reach` and `scripts/docs/catalog_lib/glance_facts.py`. Under a
   loop, `playbook_roles` returns the empty set, so `narrow_setup.role_tags` refuses every
   narrowing until it reads `setup_roles:` instead. `test_nut_host_secondary` asserts the gate's
   text, so it passes again only if the new encoding keeps that text.
@@ -173,7 +173,7 @@ shapes:
 
 From the tree the tick just fetched, through the subprocess the deployer already uses for
 YAML. The deployer runs under `uv run --no-project` and cannot import `yaml` (see
-`deploy_narrow.py`'s docstring), so `narrow_setup.py` and `narrow_broad.py` already parse the
+`deploy_narrow.py`'s docstring), so `narrow_setup.py` and `narrow_lib/broad.py` already parse the
 fetched tree from `scripts/deploy_tools/`. A `setup_roles:` list in the inventory is read the
 same way, and the tick that routes a newly added role sees that role. A copy rendered by the
 `gitops_deploy` role would be one apply behind, which is the staleness #4265 names. A committed,

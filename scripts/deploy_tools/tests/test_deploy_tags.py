@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 
-import deploy_tags
+from deploy_tools.deploy_lib import tags as deploy_tags
 from lib import render_guard
 
 

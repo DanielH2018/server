@@ -25,9 +25,9 @@ _ROLE = _REPO / "ansible/roles/k8s/observability"
 _GRAFANA = "grafana.yaml.j2"
 _DASHBOARDS_TASKS = _ROLE / "tasks/dashboards.yml"
 # deploy.sh's locked halves: the foreground's and --detach's both call `annotate`.
-_DEPLOY_UNDER_LOCKS = _REPO / "scripts/deploy_tools/deploy_under_locks.py"
-_DEPLOY_PLAYBOOK = _REPO / "scripts/deploy_tools/deploy_playbook.py"
-_DEPLOY_DETACH = _REPO / "scripts/deploy_tools/deploy_detach.py"
+_DEPLOY_UNDER_LOCKS = _REPO / "scripts/deploy_tools/deploy_lib/under_locks.py"
+_DEPLOY_PLAYBOOK = _REPO / "scripts/deploy_tools/deploy_lib/playbook.py"
+_DEPLOY_DETACH = _REPO / "scripts/deploy_tools/deploy_lib/detach_run.py"
 # emit_deploy_annotation lives in the deployer's I/O module, not in its entry point.
 _GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
 

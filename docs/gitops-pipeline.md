@@ -193,7 +193,7 @@ under `uv run --no-project`. The journal names the outcome on every tick:
   reading it as applied.
 
 `narrow` is read-only and can be run by hand against any range. The rules it applies, and what
-each one refuses, are in `scripts/deploy_tools/narrow_broad.py`.
+each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
 
 - **A shared template maps to the roles that import it.** A name inside a Jinja `{# #}` comment is
   not an import. `claim-default.yaml.j2` maps to the roles whose `defaults/main.yml` declares
@@ -201,14 +201,14 @@ each one refuses, are in `scripts/deploy_tools/narrow_broad.py`.
   `k8s_claims` is set anywhere but a role's defaults. An edit that changes only a shared
   template's Jinja comments maps to no tags: the rule compares the template's `jinja2` lexer
   token streams without comments, under both `trim_blocks` settings.
-  `scripts/deploy_tools/narrow_templates.py` holds the rules.
+  `scripts/deploy_tools/narrow_lib/templates.py` holds the rules.
 - **A filter plugin maps to the roles that call its filters.** `ansible/filter_plugins/` is a
   play-level prefix, so without this rule every change under it refuses. The rule reads the names the
   plugin's `FilterModule.filters()` returns, at both refs, and greps the role trees, the shared
   templates and the play's own trees for each one. A call from `deploy.yml`, `pre_tasks/`,
   `tasks/` or `post_tasks/` still refuses, as do an inventory value that calls the filter, a
   `filters()` that is not a literal dict, a deleted plugin and a plugin another plugin imports.
-  `scripts/deploy_tools/narrow_filters.py` holds the rule.
+  `scripts/deploy_tools/narrow_lib/filters.py` holds the rule.
 - **A setup role that calls a filter is outside both runs**, because `deploy.yml` applies no
   setup role. The deployer reads those callers from
   `deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS`, a static table that
@@ -581,7 +581,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
       resets, so `broad_failure_alert` names every promoted bump with the `deploy.sh --tags` line
       that deploys it, and the deferred-change pages (`alert_deferred`) go out on that path too.
     - **A bump the deploy plane covers is deployed once, by the plane, ungated.**
-      `narrow_broad._changed_half` builds its ChangeSet from the raw paths, so a range that also
+      `narrow_lib/broad.py:_changed_half` builds its ChangeSet from the raw paths, so a range that also
       moves a deploy-plane path puts the bump's tag in the narrowed list. A refused narrowing
       runs nothing, so it covers no bump. `deploy_broad_k8s.covered_by_plane` takes those bumps out of both the
       gate and the separate deploy. A second `--tags sonarr` would re-take the Longhorn snapshot
@@ -626,7 +626,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   - The inventory scan skips a whole-line comment, so a key consumed only on a `#` line inside a
     block scalar (`key: |`) would narrow rather than refuse, which is the unsafe direction. No
     inventory block scalar carries such a line. One appearing is the reason to parse instead of
-    matching lines (`_defines_only` in `narrow_broad.py`).
+    matching lines (`_defines_only` in `narrow_lib/broad.py`).
   - **`roles/setup/<name>/` is not `initial_setup.yml --tags <name>`.** The playbook may not
     include the role (`k3s` is in `k3s-bringup.yml`, and `common` is in no playbook and is read by
     two roles on two hosts), and the tag may not be the directory name (`chezmoi_setup` is tagged
@@ -851,7 +851,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
       deploy runs, never what it applies, so no stamp goes stale. Sweeping them in would mark every
       service stale for a change that renders no manifest.
     - The deploy plane is in the census too. For each changed path under `ansible/inventory/` or
-      `ansible/templates/` since the record, `releases.py` asks `narrow_broad.broad_path_tags`,
+      `ansible/templates/` since the record, `releases.py` asks `narrow_lib/broad.py:broad_path_tags`,
       the per-path rule the tick narrows a broad range with, which services the change reaches. A
       path the rules refuse marks every service sharing that record stale, which is the set a
       full deploy re-stamps. The tick defers such a range rather than running that deploy
@@ -902,7 +902,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `containers/<svc>/docker-compose.yml`, which no k8s role renders.
 
   **A broad tick subtracts the roles its own deploy plane applied before it posts this**
-  (`deploy_broad_k8s.apply_broad_k8s`). `narrow_broad` maps a role's changed path to its tag, so a
+  (`deploy_broad_k8s.apply_broad_k8s`). `narrow_lib/broad.py` maps a role's changed path to its tag, so a
   range carrying a deploy-plane path narrows to a list that names the role. A refused narrowing
   applies nothing, so it subtracts nothing. Without the subtraction the tick would run
   `deploy.yml --tags radarr,sonarr` and then post "fast-forwarded but **not applied**" for the
@@ -1022,9 +1022,10 @@ untouched.
   runs it carries the change, as `scripts/deploy_tools/shared_role_callers.py:caller_tags`
   derives them.
 - Two more callers run the same discharge, so a deployed change does not wait ten minutes for the
-  next tick. A successful `deploy.sh` runs it last (`deploy_playbook.discharge_owed_k8s`), and a
-  `--detach` run runs it before its health gate (`deploy_detach.deploy_and_gate`). It waits 5 s
-  for the tree lock and otherwise leaves the line to the next tick. The tick that records a line
+  next tick. A successful `deploy.sh` runs it last
+  (`deploy_lib/playbook.py:discharge_owed_k8s`), and a `--detach` run runs it before its health
+  gate (`deploy_lib/detach_run.py:deploy_and_gate`). It waits 5 s for the tree lock and otherwise
+  leaves the line to the next tick. The tick that records a line
   also drops it at once when the service's own release record already carries it
   (`deploy_k8s_owed.alert_and_record_deferred`), because a fast-path landing deploys at its merge
   commit before the tick it kicks records the change. That check reads only the own record, since
@@ -1261,7 +1262,7 @@ therefore shows that nothing needed re-rendering, not that the run was incomplet
 **The ff-merge comes before the playbook.** Ansible renders from the working tree, so a playbook
 run on the pre-merge tree copies the OLD files and recaps `changed=0`, which looks like a clean
 idempotent run. `broad_remediation()` emits the pair in that order, so the deployer's Discord
-alert, `deploy_tags.py` and `land_tags.py` all prescribe the working sequence.
+alert, `deploy_cli.py tags` and `land_tags.py` all prescribe the working sequence.
 `test_broad_remediation_puts_the_ff_merge_before_the_playbook` pins the order.
 
 ### Trap: moving a config source changes which remediation the alert prescribes

@@ -28,7 +28,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 
-import deploy_tags
+from deploy_tools.deploy_lib import tags as deploy_tags
 from lib.k8s_roles import role_callers
 from lib.repo_paths import GITOPS_DEPLOY_FILES, ROLES
 from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, caller_tags, smoke_caller

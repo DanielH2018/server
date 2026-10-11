@@ -15,7 +15,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_gate_render_source.py
 
 import types
 
-import deploy_detach_notify as notify_mod
+from deploy_tools.deploy_lib import detach_notify as notify_mod
 
 
 def _result(returncode, stdout="", stderr=""):

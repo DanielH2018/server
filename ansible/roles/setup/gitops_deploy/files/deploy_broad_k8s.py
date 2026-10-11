@@ -36,7 +36,7 @@ DEPLOY_PLAYBOOK = "ansible/deploy.yml"
 def covered_by_plane(plans, bumps: set[str]) -> set[str]:
     """The bumps a deploy-plane plan in `plans` applies on its own.
 
-    `narrow_broad._changed_half` builds its ChangeSet from the raw paths, so a bump's tag
+    `narrow_lib/broad.py:_changed_half` builds its ChangeSet from the raw paths, so a bump's tag
     lands in the narrowed list whenever the range also carries a deploy-plane path.
     Deploying those bumps again re-took the Longhorn snapshot of every claim they declare
     and spent the shared budget twice. A plan that applies nothing (`narrowed-to-nothing`, or
@@ -113,7 +113,7 @@ def apply_broad_k8s(
     cs = fold_deferred(cs, plans, plan.k8s_services)
     bumps = cs.k8s_deploy - covered_by_plane(plans, cs.k8s_deploy)
     # A k8s role the deploy plane APPLIED is not a deferred change, whatever the post would
-    # otherwise say (#2453). `narrow_broad` maps a role's own changed path to its tag, so the
+    # otherwise say (#2453). `narrow_lib/broad.py` maps a role's own changed path to its tag, so the
     # narrowed list names it whenever the range also carries a deploy-plane path — the probe
     # that measured this ran `deploy.yml --tags radarr,sonarr` and then posted
     # "fast-forwarded but not applied" for the same roles, printing that same command as the

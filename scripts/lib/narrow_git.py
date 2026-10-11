@@ -1,6 +1,6 @@
 """The reads the two narrowing derivations share: a refusal, a `git show`, and a key diff.
 
-`scripts/deploy_tools/narrow_broad.py` asks which service tags a deploy-plane change reaches.
+`scripts/deploy_tools/narrow_lib/broad.py` asks which service tags a deploy-plane change reaches.
 `scripts/deploy_tools/narrow_setup.py` asks which `--tags` value a setup-role change needs.
 Different questions over different trees, and both answer them by reading a file at a git ref,
 parsing it as a YAML mapping, and refusing whenever a rule cannot say.

@@ -10,6 +10,7 @@ import importlib.util
 import os
 import sys
 
+import pytest
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "block-footguns.py"
@@ -42,18 +43,18 @@ def test_the_rule_ignores_the_flag_behind_another_binary():
     )
 
 
-def test_the_rule_denies_the_python_module_the_shim_execs():
-    """`deploy.sh` execs `deploy_run.py`; running it directly is the same deploy."""
+@pytest.mark.parametrize(
+    "module",
+    [
+        "scripts/deploy_tools/deploy_cli.py",
+        # What the shim execed before #4347, still present in an older checkout.
+        "scripts/deploy_tools/deploy_run.py",
+    ],
+)
+def test_the_rule_denies_the_python_module_the_shim_execs(module):
+    """`deploy.sh` execs `deploy_cli.py`; running it directly is the same deploy."""
     assert _mod.skip_staleness_problem(
-        [
-            "uv",
-            "run",
-            "python",
-            "scripts/deploy_tools/deploy_run.py",
-            "--tags",
-            "sonarr",
-            "--skip-staleness-check",
-        ]
+        ["uv", "run", "python", module, "--tags", "sonarr", "--skip-staleness-check"]
     )
 
 
@@ -64,7 +65,7 @@ def test_the_rule_ignores_a_grep_naming_the_module_and_the_flag():
                 "grep",
                 "--",
                 "--skip-staleness-check",
-                "scripts/deploy_tools/deploy_run.py",
+                "scripts/deploy_tools/deploy_cli.py",
             ]
         )
         is None

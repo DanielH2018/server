@@ -54,7 +54,7 @@ exec "$@"
 # The `case` arms every `uv` stub carries for the wrapper's own two `uv run` calls, both run
 # for REAL under the interpreter running the tests (`deploy_sh_env` sets DEPLOY_TEST_PYTHON):
 #
-# - `deploy.sh` is a shim that execs `uv run --project <dir> python <deploy_run.py> ...`, so
+# - `deploy.sh` is a shim that execs `uv run --project <dir> python <deploy_cli.py> ...`, so
 #   without this arm a stub's `*) exit 0` would swallow the whole run and report success.
 #   `shift 4` drops `run --project <dir> python`, the shim's exact prefix.
 # - `deploy_locks.py plan` is not scripted either: a stub that printed its own lock order
@@ -63,13 +63,13 @@ exec "$@"
 #
 # A test that wants a BROKEN plan writes its own `deploy_locks.py` arm and carries
 # UV_DEPLOY_RUN_ARM alone.
-UV_DEPLOY_RUN_ARM = '  *deploy_run.py*) shift 4; exec "$DEPLOY_TEST_PYTHON" "$@" ;;'
+UV_DEPLOY_RUN_ARM = '  *deploy_cli.py*) shift 4; exec "$DEPLOY_TEST_PYTHON" "$@" ;;'
 UV_WRAPPER_ARMS = (
     UV_DEPLOY_RUN_ARM
     + '\n  *deploy_locks.py*) shift 2; exec "$DEPLOY_TEST_PYTHON" "$@" ;;'
 )
 
-# The tags the throwaway repo's `containers_list` declares. `deploy_run.py` validates
+# The tags the throwaway repo's `containers_list` declares. `deploy_lib/run.py` validates
 # `--tags` IN PROCESS against the caller's own host_vars, so a stubbed `uv` no longer answers
 # for it: a tag a test passes must be declared here, or the run refuses with exit 2.
 TEST_SERVICE_TAGS = (
@@ -152,7 +152,7 @@ def make_snapshot_repo(path: Path) -> Path:
     at a checkout-relative path and the stubbed `uv` (UV_WRAPPER_ARMS) runs it for real.
 
     A host_vars declaring TEST_SERVICE_TAGS exists for the tag validation, which
-    `deploy_run.py` calls in process against this checkout.
+    `deploy_lib/run.py` calls in process against this checkout.
     """
     # `lib.git_testing.init_repo` carries the identity and the signing-off config in the
     # environment, so none of it has to be written into the scratch repository's own config.
@@ -245,7 +245,7 @@ def run_front_half(
     and, once the run reaches its deploy, `("deploy", what)`: the
     argv an exec'd mode became, or `["in-process", tags_csv]` for the locked half.
     """
-    import deploy_run
+    from deploy_tools.deploy_lib import run as deploy_run
 
     # Under a prek hook GIT_DIR points at the REAL repository and beats the working directory.
     scrub_process_git_env(monkeypatch)

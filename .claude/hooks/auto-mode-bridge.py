@@ -26,7 +26,7 @@ reissued, and the classifier judges the reissue exactly as it judged the first. 
 session cap it, so a command the classifier means to refuse still stops.
 
 `PostToolUseFailure` — names the deploy wrapper's non-zero exit as a refusal rather than a playbook
-failure, and points at the wrapper's own output for what it was. `deploy_run.py:report` prints the
+failure, and points at the wrapper's own output for what it was. `deploy_lib/run.py:report` prints the
 name, the meaning and the remedy from `scripts/lib/exit_codes.py` on every non-zero exit, so this
 hook has nothing to decode. What it still adds is the framing: a `DEPLOY_SH_NO_VERDICT` code is a
 resume point, and 20 is the one where changes ARE live.

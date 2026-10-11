@@ -20,7 +20,7 @@ import sys
 
 import pytest
 
-from deploy_tools import deploy_flags
+from deploy_tools.deploy_lib import flags as deploy_flags
 from lib import exit_codes as ec
 
 from _deploy_sh_fakes import make_snapshot_repo, run_front_half

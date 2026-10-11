@@ -4,6 +4,8 @@ import json
 import os
 from pathlib import PurePath
 
+import pytest
+
 import deploy_ui_reads as reads
 from deploy_locks import TREE_LOCK
 
@@ -91,15 +93,15 @@ def test_runs_ignore_grep_shells_and_list_services_is_flagged():
     assert not {412, 5200, 7000} & set(_rows())
 
 
-# The same queued deploy once the shim has exec'd `uv run … deploy_run.py`, which
+# The same queued deploy once the shim has exec'd `uv run … deploy_cli.py`, which
 # stays the family root (measured: `uv run` spawns, it does not exec), and its
 # python child blocks in flock(2) itself. A `--detach` run's forked child calls setsid, so
 # it is reparented to 1 and is its own family root, holding the service lock alone.
 PORTED_PS = """\
- 8000     1    30 uv run --project /s/scripts/.. python /s/scripts/deploy_tools/deploy_run.py --tags n8n
- 8001  8000    29 /s/.venv/bin/python /s/scripts/deploy_tools/deploy_run.py --tags n8n
- 8200     1   300 /s/.venv/bin/python /s/scripts/deploy_tools/deploy_run.py --detach --tags sonarr
- 8100     1     2 grep deploy_run.py
+ 8000     1    30 uv run --project /s/scripts/.. python /s/scripts/deploy_tools/deploy_cli.py --tags n8n
+ 8001  8000    29 /s/.venv/bin/python /s/scripts/deploy_tools/deploy_cli.py --tags n8n
+ 8200     1   300 /s/.venv/bin/python /s/scripts/deploy_tools/deploy_cli.py --detach --tags sonarr
+ 8100     1     2 grep deploy_cli.py
 """
 PORTED_N8N = "/var/lock/server-deploy-n8n.lock"
 PORTED_SONARR = "/var/lock/server-deploy-sonarr.lock"
@@ -319,3 +321,17 @@ def test_read_state_serves_only_the_manual_plane_ledger_lines_is_clean(state_dir
 def test_read_state_with_no_manual_plane_serves_empty_is_flagged(state_dir):
     (state_dir / "owed.jsonl").write_text(_held("ansible/deploy.yml sonarr", 2000))
     assert reads.read_state(state_dir)["manual_plane_owed"] == ""
+
+
+@pytest.mark.parametrize("module", ["deploy_cli.py", "deploy_run.py"])
+def test_a_deploy_from_either_shim_target_is_a_run_is_clean(module):
+    """`deploy.sh` execs `deploy_cli.py`; an older checkout's shim still execs `deploy_run.py`."""
+    assert reads._is_run(
+        f"/s/.venv/bin/python /s/scripts/deploy_tools/{module} --tags n8n"
+    )
+
+
+def test_a_deploy_lib_module_alone_is_not_a_run_is_flagged():
+    assert not reads._is_run(
+        "/s/.venv/bin/python /s/scripts/deploy_tools/deploy_lib/run.py"
+    )

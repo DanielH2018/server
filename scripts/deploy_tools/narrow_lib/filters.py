@@ -21,14 +21,14 @@ imports nothing from it, so the two cannot cycle.
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 import ast
 import re
 from collections.abc import Iterable
 from pathlib import Path
 
-from deploy_tools import narrow_templates
+from deploy_tools.narrow_lib import templates as narrow_templates
 from lib.git import git
 from lib.narrow_git import CannotNarrow, show_at
 

@@ -120,7 +120,7 @@ _SHARED_ROLE_CALLERS: list[str] = list(
 def _label(tags: list[str]) -> str:
     # Imported here rather than at the top: the end-to-end tests above drive deploy.sh as a
     # subprocess and need nothing from the module itself.
-    import deploy_under_locks
+    from deploy_tools.deploy_lib import under_locks as deploy_under_locks
 
     return deploy_under_locks.Run(
         repo_root=Path("."), tags=tags, at_sha="", args=[]

@@ -47,7 +47,7 @@ Type=oneshot
 #
 # The lock this unit's ExecStart holds (`{{ server_git_tree_lock }}`, below) is now held for
 # up to this same pathological duration, which EXCEEDS the 30-min timer interval — a concurrent
-# `./scripts/deploy.sh` waits its own `deploy_under_locks.LOCK_WAIT` (not this `-w 180`, which
+# `./scripts/deploy.sh` waits its own `deploy_lib/under_locks.py:LOCK_WAIT` (not this `-w 180`, which
 # governs only this unit), then returns exit 75 (nothing deployed) if the lock stays busy past
 # it — so it normally OUTLASTS this hold and deploys. The weekly secret-rotate cron waits on the same lock, with the
 # same wait, derived from the same budgets. See

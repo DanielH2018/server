@@ -23,7 +23,9 @@ from _deploy_sh_fakes import (
     make_snapshot_repo,
     stub_bin,
 )
-from deploy_tools import deploy_detach, deploy_playbook, deploy_under_locks
+from deploy_tools.deploy_lib import detach_run as deploy_detach
+from deploy_tools.deploy_lib import playbook as deploy_playbook
+from deploy_tools.deploy_lib import under_locks as deploy_under_locks
 from deploy_toolbox import DeployTools
 from lib.git_testing import git_out
 from lib.repo_paths import REPO

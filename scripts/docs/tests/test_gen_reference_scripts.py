@@ -215,7 +215,7 @@ def test_a_printed_message_naming_a_script_is_not_an_invocation(tmp_path):
 
 
 def test_a_sentence_in_a_python_string_is_not_an_invocation(tmp_path):
-    """session-health.py prints "(scripts/deploy_tools/deploy_staleness.py, exit 4)" as prose."""
+    """session-health.py prints "(scripts/deploy_tools/deploy_lib/staleness.py, exit 4)" as prose."""
     repo, scripts = _repo(tmp_path)
     _write(
         tmp_path / ".claude" / "hooks" / "h.py",
@@ -261,7 +261,7 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         "validate_ha_config.py": "gate",
         "grafana_dashboards.py": "gate",
         "deploy_tags.py": "gate",
-        "deploy_staleness.py": "gate",
+        "deploy_cli.py": "gate",
         "smoke_extract.py": "gate",
         # "scheduled" rather than "gate": release-staleness-check.sh.j2 (a daniel-box cron,
         # roles/setup/k3s) invokes `probe.py releases --stale-only`, and "scheduled" outranks

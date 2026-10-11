@@ -1,6 +1,6 @@
 """What `deploy_tags.py narrow` maps a deploy-plane range to, and what it refuses.
 
-Every rule in `narrow_broad.py` is a PAIR here: one range it narrows to a tag list (or to
+Every rule in `narrow_lib/broad.py` is a PAIR here: one range it narrows to a tag list (or to
 nothing, on purpose) and one it refuses with `DEPLOY_BROAD`. A narrowing that fired on
 everything and one that fired on nothing read identically from the passing side alone, and
 this module is the only place that tells them apart.
@@ -18,7 +18,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_narrow.py
 import pytest
 
 
-import narrow_broad
+from deploy_tools.narrow_lib import broad as narrow_broad
 from lib.repo_paths import REPO
 
 from _narrow_fixtures import (

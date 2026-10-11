@@ -169,7 +169,7 @@ def test_every_consumer_tag_is_a_real_deploy_tag():
     reads as deployed. Three mis-routed tokens are pushed by SETUP roles with no `containers_list`
     entry, which is why they decline in CROSS_HOST_PUSH_TOKENS instead of naming their role.
     """
-    import deploy_tags
+    from deploy_tools.deploy_lib import tags as deploy_tags
 
     valid = deploy_tags.known_tags()
     assert valid, "could not read the deploy tag list"

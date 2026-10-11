@@ -193,7 +193,7 @@ def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
     validates against, so the alert and the wrapper cannot drift apart.
     """
 
-    import deploy_tags
+    from deploy_tools.deploy_lib import tags as deploy_tags
 
     declared = deploy_tags.known_tags()
     roles = {p.name for p in _K8S_ROLES_DIR.iterdir() if p.is_dir()}

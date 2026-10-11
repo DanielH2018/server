@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`deploy_detach_notify.py` names a no-host run as deploy.sh's own exit, not ansible's.
+"""`deploy_lib/detach_notify.py` names a no-host run as deploy.sh's own exit, not ansible's.
 
 deploy.sh exit 78 means the playbook reached PLAY RECAP naming no host; ansible itself exited
 0 for that, and the wrapper read the recap. A generic "ansible-playbook exited non-zero -- see
@@ -12,7 +12,7 @@ runs, so nothing here needs patching.
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_detach_notify_no_hosts.py
 """
 
-import deploy_detach_notify as notify_mod
+from deploy_tools.deploy_lib import detach_notify as notify_mod
 
 
 def test_main_names_a_no_host_run_as_the_wrappers_own_exit(capsys):

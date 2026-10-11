@@ -22,7 +22,7 @@ tick. The prefixes are what let a reader tell which contract a value belongs to,
 not decoration: `publish_pr.py` in particular defines two groups of its own that both reuse 0
 to 3 with different meanings, and they are `PUBLISH_*` and `UNLANDED_*` here for that reason.
 
-`CONTRACTS` AT THE BOTTOM IS THE ONE RENDERABLE COPY. `deploy_run.py` prints a failing code's
+`CONTRACTS` AT THE BOTTOM IS THE ONE RENDERABLE COPY. `deploy_lib/run.py` prints a failing code's
 name and meaning from it, `docs/reference/scripts.md` renders its Exit-codes column from it,
 and `test_exit_codes.py` asserts it covers every constant defined above. A table in a skill,
 a hook or a CLAUDE.md paragraph is a copy nothing reads; this one is read by the thing that
@@ -47,8 +47,8 @@ USAGE_ERROR = 64
 TEMP_FAIL = 75
 
 # -- scripts/deploy.sh ------------------------------------------------------------------ The
-# wrapper's own contract: 2, 3, 4 and 64 are refused by its front half `deploy_run.py`, 20 and
-# 75-79 by its locked half `deploy_under_locks.py` (and `deploy_detach.py`).
+# wrapper's own contract: 2, 3, 4 and 64 are refused by its front half `deploy_lib/run.py`, 20 and
+# 75-79 by its locked half `deploy_lib/under_locks.py` (and `deploy_lib/detach_run.py`).
 # `DEPLOY_SH_NO_VERDICT` below is the set that means NOTHING was deployed, and every member is a
 # resume point. Read the frozenset rather than a list in prose. 20 is the inverse -- the
 # playbook RAN and a task failed, so whatever applied before it is live. ansible-playbook's own

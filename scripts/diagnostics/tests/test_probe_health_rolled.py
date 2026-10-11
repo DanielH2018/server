@@ -25,7 +25,7 @@ from datetime import datetime, timedelta, timezone
 from _probe_health_fixtures import NOW, pods
 from diagnostics.probe_lib import health, health_rollout
 
-import deploy_detach_notify as notify_mod
+from deploy_tools.deploy_lib import detach_notify as notify_mod
 
 APPLIED = NOW - timedelta(minutes=5)
 APPLIED_STR = APPLIED.strftime("%Y-%m-%dT%H:%M:%SZ")

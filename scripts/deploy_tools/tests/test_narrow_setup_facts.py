@@ -17,7 +17,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_facts.py
 import pytest
 
 import narrow_setup
-import narrow_setup_index
+from deploy_tools.narrow_lib import setup_index as narrow_setup_index
 from lib import yaml_fast
 from lib.git import git_stdout
 from lib.repo_paths import K3S_ROLE, REPO

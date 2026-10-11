@@ -225,13 +225,14 @@ def skip_staleness_problem(stage: list[str]) -> str | None:
     """
     words = strip_shell_keywords(stage)
     names = [word.rsplit("/", 1)[-1] for word in words]
-    # The shim execs `deploy_run.py`, so an interpreter handed that module is the same
-    # deploy by another door. Keyed on the interpreter as the command word, so a `grep` that
-    # names the module and the flag as arguments stays clean.
+    # The shim execs `deploy_cli.py`, so an interpreter handed that module is the same
+    # deploy by another door. `deploy_run.py` is what the shim execed before #4347, and an
+    # older checkout still carries it. Keyed on the interpreter as the command word, so a
+    # `grep` that names the module and the flag as arguments stays clean.
     runs_the_module = (
         names[:1]
         and names[0] in ("uv", "python", "python3")
-        and ("deploy_run.py" in names)
+        and ("deploy_cli.py" in names or "deploy_run.py" in names)
     )
     if not names or (names[0] != "deploy.sh" and not runs_the_module):
         return None
