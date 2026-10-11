@@ -48,8 +48,8 @@ metadata:
 data:
   known_services.json: |
     {{ (
-         (containers_list | map(attribute='name') | list)
-         + (hostvars['daniel-pi'].containers_list | default([]) | map(attribute='name') | list)
+         (containers_list | entry_names)
+         + (hostvars['daniel-pi'].containers_list | default([]) | entry_names)
          + artifacts_platform_services
          + artifacts_retired_services
        ) | unique | sort | tojson }}

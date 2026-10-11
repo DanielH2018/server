@@ -14,7 +14,8 @@ caller under the play's own trees still refuses there.
 
 ANY DOUBT IS A REFUSAL: a `filters()` that is not a literal dict of string keys, a deleted
 plugin, a plugin a sibling plugin imports, and a mention in an inventory value all raise
-`CannotNarrow`. A module of its own because what a plugin defines reads alone. It imports
+`CannotNarrow`. One rule needs no caller: `comment_only` reads an edit to comments or
+docstrings alone as reaching nothing (#4412). A module of its own because what a plugin defines reads alone. It imports
 nothing from `narrow_broad`, so the two cannot cycle.
 """
 
@@ -73,6 +74,48 @@ def filter_names(text: str, path: str) -> set[str]:
     raise CannotNarrow(f"{path} returns no literal dict of filter names from filters()")
 
 
+def _without_docstrings(text: str) -> str | None:
+    """`text`'s parse tree less every docstring, dumped, or None when it does not parse.
+
+    `ast.dump` leaves out line numbers and the parse leaves out comments, so two modules
+    that differ only in comments, docstrings or layout dump the same.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return None
+    for node in ast.walk(tree):
+        if not isinstance(
+            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            continue
+        body = node.body
+        if (
+            body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            node.body = body[1:]
+    return ast.dump(tree)
+
+
+def comment_only(path: str, old_ref: str, new_ref: str, cwd: Path) -> bool:
+    """Whether the plugin at `path` changed only in comments, docstrings or layout (#4412).
+
+    Compared between `old_ref` and `new_ref`. Such an edit leaves every filter it registers doing what it did, so it reaches no caller.
+    False on any doubt: a plugin missing at either ref, or one that does not parse there,
+    keeps the caller mapping and its refusals. False for identical text too, as
+    `templates.comment_only` is: no edit is not a comment edit, and a caller asking what the
+    plugin reaches at one ref wants its callers.
+    """
+    before, after = show_at(old_ref, path, cwd), show_at(new_ref, path, cwd)
+    if before is None or after is None or before == after:
+        return False
+    shape = _without_docstrings(after)
+    return shape is not None and shape == _without_docstrings(before)
+
+
 def plugin_names(path: str, old_ref: str, new_ref: str, cwd: Path) -> set[str]:
     """Every filter name `path` registers at either ref, after the two plugin-level refusals.
 
@@ -110,6 +153,16 @@ def plugin_names(path: str, old_ref: str, new_ref: str, cwd: Path) -> set[str]:
     if importers:
         raise CannotNarrow(f"{path} is imported by {', '.join(sorted(importers))}")
     return names
+
+
+def changed_names(path: str, old_ref: str, new_ref: str, cwd: Path) -> set[str]:
+    """The filter names whose behaviour the range can have changed.
+
+    None when `comment_only` holds, else every name `plugin_names` reads, with its refusals.
+    """
+    if comment_only(path, old_ref, new_ref, cwd):
+        return set()
+    return plugin_names(path, old_ref, new_ref, cwd)
 
 
 def callers(hits: Iterable[str], name: str, ref: str, cwd: Path) -> list[str]:

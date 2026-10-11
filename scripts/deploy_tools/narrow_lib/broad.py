@@ -19,8 +19,8 @@ can move because of it:
     Jinja comment, maps the claim template to its `k8s_claims` declarers, and a comment-only
     edit to no tags.
   - `ansible/filter_plugins/<x>.py`: every role whose files name one of the filters its
-    `FilterModule.filters()` registers (`filters.py`, #3843). A caller under the play's
-    own trees refuses, as `toposort.py`'s in `deploy.yml` does.
+    `FilterModule.filters()` registers (`filters.py`, #3843); a comment or docstring edit
+    reaches none (#4412). A play-tree caller refuses, as `toposort.py`'s in `deploy.yml` does.
 
 ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` defers a refused plane to
 `k8s_unapplied`, naming every candidate, rather than running the whole play (#4333).
@@ -285,11 +285,11 @@ def _containers_list_tags(
     `containers.entry_change_tags` carries why a removed entry maps to nothing.
     """
     own = containers.entry_change_tags(before, after, ctx.explain, path)
-    return own | _list_reader_tags(ctx, path, containers.changed_fields(before, after))
+    return own | _list_reader_tags(ctx, path, containers.edit(before, after))
 
 
-def _list_reader_tags(ctx: Context, path: str, changed: dict | None) -> set[str]:
-    """The tags of every role whose templates read the `changed` fields of `containers_list`.
+def _list_reader_tags(ctx: Context, path: str, edit: containers.Edit) -> set[str]:
+    """The tags of every role whose templates read the fields `edit` changed.
 
     A grep over the role trees and the shared templates, keeping a hit only where the name
     sits inside Jinja code (`containers.reader_paths` says which hits are prose and
@@ -299,7 +299,7 @@ def _list_reader_tags(ctx: Context, path: str, changed: dict | None) -> set[str]
         _grep(ctx, "containers_list", word=True),
         PLAY_PREFIXES,
         lambda hit: show_at(ctx.ref, hit, ctx.cwd),
-        changed,
+        edit,
     )
     found = _sort_hits(hits, "containers_list", ctx, "containers_list")
     roles = set(found.roles)
@@ -307,7 +307,7 @@ def _list_reader_tags(ctx: Context, path: str, changed: dict | None) -> set[str]
         roles |= template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
     tags = _role_tags(roles, ctx)
     ctx.explain(
-        f"narrow: containers_list readers of {containers.describe(changed)} ->"
+        f"narrow: containers_list readers of {containers.describe(edit.changed)} ->"
         f" {','.join(sorted(tags)) or '(nothing)'} via {path}"
     )
     return tags
@@ -429,7 +429,7 @@ def _filter_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     shared-template hit follows that template's importers.
     """
     roles: set[str] = set()
-    for name in sorted(filters.plugin_names(path, old_ref, ctx.ref, ctx.cwd)):
+    for name in sorted(filters.changed_names(path, old_ref, ctx.ref, ctx.cwd)):
         hits = _grep(ctx, name, word=True, inventory=True)
         found = filters.callers(hits, name, ctx.ref, ctx.cwd)
         sorted_hits = _sort_hits(found, f"the filter {name}", ctx, name)
