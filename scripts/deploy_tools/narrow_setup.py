@@ -175,7 +175,9 @@ def foreign_key_tags(
     """The tags of the role's readers of the keys another role's vars file changed.
 
     A changed key the role never names is skipped, as `plugin_tags` skips a filter: the
-    owner's `defaults/main.yml` holds many keys and the reader names few.
+    owner's `defaults/main.yml` holds many keys and the reader names few. A range changing
+    none of them returns an empty set, as `_reaches_no_host` skips a path, so the role's
+    own changed paths decide. `role_tags` still refuses when every path is empty.
 
     Args:
         path: the other role's `defaults/` or `vars/` file, as the table records it.
@@ -185,16 +187,12 @@ def foreign_key_tags(
         repo: the checkout to read.
 
     Raises:
-        CannotNarrow: every refusal `changed_keys` and `key_readers` make, or a range that
-            changed no key the role names, which means the table calling it a reader and this
-            walk disagree about this range.
+        CannotNarrow: every refusal `changed_keys` and `key_readers` make.
     """
     tags: set[str] = set()
     for key in sorted(changed_keys(path, old, new, repo)):
         if index.mentions(key):
             tags |= index.key_readers(key)
-    if not tags:
-        raise CannotNarrow(f"{index.prefix} reads no key {path} changed")
     return frozenset(tags)
 
 

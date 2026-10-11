@@ -13,7 +13,7 @@ import pytest
 import narrow_setup
 
 from _narrow_fixtures import _refs
-from _setup_role_fixtures import DEFAULTS, ROLE, Tree, build, narrow
+from _setup_role_fixtures import BETA, DEFAULTS, ROLE, Tree, build, narrow
 
 
 @pytest.fixture
@@ -233,7 +233,14 @@ def test_a_foreign_defaults_key_the_role_reads_narrows_to_its_readers(reads):
     assert narrow(reads, *_refs(reads)) == frozenset({"alpha"})
 
 
-def test_a_foreign_defaults_key_the_role_never_reads_is_flagged(reads):
+def test_a_foreign_defaults_key_the_role_never_reads_adds_no_tag(reads):
     reads.write(FOREIGN, FOREIGN_DEFAULTS.replace("unread", "changed"))
-    with pytest.raises(narrow_setup.CannotNarrow, match="reads no key"):
+    reads.write(f"{ROLE}/tasks/beta.yml", BETA + "  # touched\n")
+    assert narrow(reads, *_refs(reads)) == frozenset({"beta"})
+
+
+def test_a_range_changing_only_an_unread_foreign_key_is_flagged(reads):
+    """No tag at all is doubt, never "apply nothing": an empty `--tags` runs everything."""
+    reads.write(FOREIGN, FOREIGN_DEFAULTS.replace("unread", "changed"))
+    with pytest.raises(narrow_setup.CannotNarrow, match="reaches no host"):
         narrow(reads, *_refs(reads))
