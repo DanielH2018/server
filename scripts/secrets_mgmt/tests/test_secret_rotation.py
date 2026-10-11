@@ -18,7 +18,7 @@ from types import SimpleNamespace
 
 from secrets_mgmt import secret_rotation as sr
 from _rotation_fakes import Fakes, build_tools, named_calls, process_calls
-from secrets_mgmt.secret_registry import audit
+from secrets_mgmt.secrets_lib.secret_registry import audit
 from secrets_mgmt.rotation_tools import SECRETS_FILE
 
 

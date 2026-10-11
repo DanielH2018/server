@@ -202,3 +202,11 @@ def test_secret_rotation_sync_help_runs_on_the_moved_registry(where, tmp_path):
     assert any(
         ".secrets_lib." in m or m.startswith("secrets_lib.") for m in imported
     ), sorted(m for m in imported if "secret" in m)
+
+
+def test_the_scans_above_reach_their_subjects():
+    # Each scan above passes vacuously on an empty set: a glob over a renamed directory, or a
+    # `git ls-files` run that matched nothing. Floor them so a move cannot empty them silently.
+    assert len(sorted(SECRETS_LIB.glob("*.py"))) >= 2
+    assert "scripts/secrets_mgmt/secret_rotation.py" in _tracked("*.py")
+    assert len(_tracked()) >= 1000
