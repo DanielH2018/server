@@ -142,3 +142,21 @@ def test_prune_brief_removes_an_empty_orphan_and_keeps_one_with_unstored_content
     assert not empty.exists(), done.stdout
     assert work.is_dir()
     assert f"kept orphan {work}: 1 file(s)" in done.stdout, done.stdout
+
+
+def test_prune_keeps_an_orphan_whose_blob_is_stored_but_unreachable(
+    tmp_path, monkeypatch
+):
+    # A staged-then-abandoned file leaves a loose blob no ref reaches, and the gc at the
+    # prune's tail deletes it after a day, so the orphan may hold the last copy.
+    repo = _repo(tmp_path, monkeypatch)
+    orphan = _orphan(repo, "bridge-staged")
+    staged = orphan / "staged-only.txt"
+    staged.write_text("staged in a worktree, never committed\n")
+    git(repo, "hash-object", "-w", str(staged))
+
+    done = _prune(repo)
+
+    assert done.returncode == 0, done.stderr
+    assert orphan.is_dir()
+    assert "staged-only.txt" in done.stdout, done.stdout

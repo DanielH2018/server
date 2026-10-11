@@ -1,7 +1,7 @@
 """Judge the directories under .claude/worktrees/ that git no longer registers.
 
-An orphan holds nothing git lacks when it has no regular files, or when git's object store
-already holds every file's content (#4425). `prune_worktrees.py --prune` removes those and
+An orphan holds nothing git lacks when it has no regular files, or when a ref reaches a blob
+holding each file's content (#4425). `prune_worktrees.py --prune` removes those and
 keeps the rest, naming each file git never stored. The CLI there is the only caller.
 """
 
@@ -53,13 +53,18 @@ def unstored_files(repo: str, path: str) -> list[str] | None:
     """Each regular file under `path` whose content git's object store lacks, relative to it.
 
     An empty list means the orphan holds nothing git lacks, so removing it loses nothing:
-    it has no regular files, or every one's content is a blob git already stores, under any
+    it has no regular files, or every one's content is a blob some ref reaches, under any
     path (#4425). None means a walk or a git call failed, so nothing is known about it.
 
-    `git hash-object --no-filters --stdin-paths` hashes the content without `-w`, and
-    `git cat-file --batch-check` answers `missing` for a blob the store lacks; neither writes
-    to the store. Symlinks and other non-regular entries are skipped, because removing one
-    loses no file content.
+    `git hash-object --no-filters --stdin-paths` hashes the content without `-w`, so nothing
+    is written to the store. Symlinks and other non-regular entries are skipped, because
+    removing one loses no file content.
+
+    # DECIDED: "stored" means reachable from a ref (`git rev-list --objects --all`), not
+    # present in the store, the check #4425 proposed. A blob staged in a worktree and never
+    # committed is present but unreachable, and `repair_object_store` at the same `--prune`'s
+    # tail prunes unreachable objects after a day; the orphan would have been its last copy.
+    # The walk costs 0.12s for 89k objects on daniel-box.
 
     # DECIDED: a gitignored file counts like any other, so a virtualenv or a cache keeps its
     # orphan. Exempting ignored paths would also delete an untracked credentials file or a
@@ -84,13 +89,14 @@ def unstored_files(repo: str, path: str) -> list[str] | None:
         shas = _git_batch(
             repo, ["hash-object", "--no-filters", "--stdin-paths"], hashable
         )
-        found = shas and _git_batch(repo, ["cat-file", "--batch-check"], shas)
-        if not found:
+        listed = git("rev-list", "--objects", "--all", cwd=repo, check=False)
+        if not shas or listed.returncode != 0:
             return None
+        reachable = {line.split(" ", 1)[0] for line in listed.stdout.splitlines()}
         unstored += [
             Path(f)
-            for f, line in zip(hashable, found, strict=True)
-            if line.endswith(" missing")
+            for f, sha in zip(hashable, shas, strict=True)
+            if sha not in reachable
         ]
     return sorted(str(f.relative_to(path)) for f in unstored)
 
