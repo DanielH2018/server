@@ -9,9 +9,9 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.exit_codes import CI_GREEN, CI_PENDING, CI_RED, DEPLOY_BROAD
+from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED, DEPLOY_BROAD
 from deploy_tools.land_lib.landing import BRANCH, Landing
-from deploy_tools.land_lib.outcome import Verdict, say
+from deploy_tools.land_lib.outcome import Verdict, disarmed, say
 
 
 def blockers(ln: Landing) -> int:
@@ -65,4 +65,6 @@ def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
             75,
             Verdict.CI_TIMEOUT,
         )
+    if rc == CI_DISARMED:
+        ln.die(disarmed(where, "nothing deployed"), 1)
     ln.die(f"await_ci failed{where} (exit {rc}) — nothing deployed", 1)

@@ -244,3 +244,16 @@ def remaining_hosts_note(remaining: str) -> str:
     role either way. One string, printed by both verdict sites, so the two cannot drift.
     """
     return f"  STILL UNAPPLIED on the hosts this tick never touched: {remaining}"
+
+
+def disarmed(where: str, consequence: str) -> str:
+    """The message for await_ci's CI_DISARMED, shared by ci.py's step 3 and merge.py's direct merge.
+
+    Not a CI result: await_ci refused to report one because its required-context set is
+    empty. Waiting or re-running changes nothing; re-arming the gate does (#4464).
+    """
+    return (
+        f"the CI gate is disarmed{where} — await_ci requires no CI contexts, so it "
+        f"reports no verdict; {consequence}. To re-arm it, set REQUIRED_CONTEXTS in "
+        "scripts/deploy_tools/await_ci.py to the deployer's gitops_deploy_ci_contexts"
+    )
