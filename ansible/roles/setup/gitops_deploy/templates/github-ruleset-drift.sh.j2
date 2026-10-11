@@ -40,7 +40,7 @@
 # The contexts, enforcement and the Renovate exclusion are checked either way. The bypass lists
 # are checked only on an authenticated read, and an anonymous one reports them UNVERIFIED and
 # pushes down (check_bypass below), because the fence's bypass list is the whole of what keeps
-# the agent off master. github-interaction-limit.sh already pushes down without a token.
+# the agent off branches outside its own prefix. github-interaction-limit.sh already pushes down without a token.
 #
 # Rate limit: anonymous GitHub allows 60 req/hr per source IP, shared by EVERY caller on this
 # host (the deployer's gate, a landing's await_ci.py poll, renovate_notify). Authenticated it is
@@ -252,6 +252,24 @@ if [ "$LIVE" != "$EXPECTED" ]; then
   exit 1
 fi
 
+# The same ruleset requires every change to master to arrive as a PR, with no approving review.
+# The PR requirement is what stops a token pushing to master directly, the agent's account
+# included, since the fence no longer covers master. Zero approvals is what lets GitHub's
+# auto-merge merge a PR: auto-merge never applies a bypass, so a required review would leave
+# every armed PR BLOCKED.
+PR_RULE=$(printf '%s' "$BODY" \
+  | jq -c 'first(.rules[]? | select(.type == "pull_request") | .parameters) // empty')
+if [ -z "$PR_RULE" ]; then
+  push down "ruleset {{ gitops_deploy_ruleset_id }} has no pull_request rule — a token that can update master pushes to it without a PR"
+  exit 1
+fi
+# `tostring`, not `// empty`: jq's `//` treats a missing value and false alike.
+APPROVALS=$(printf '%s' "$PR_RULE" | jq -r '.required_approving_review_count | tostring')
+if [ "$APPROVALS" != "{{ gitops_deploy_ruleset_required_approvals }}" ]; then
+  push down "ruleset {{ gitops_deploy_ruleset_id }} requires ${APPROVALS} approving reviews (declared {{ gitops_deploy_ruleset_required_approvals }}) — an auto-merged PR waits for a review nobody is asked to give; reconcile gitops_deploy_ruleset_required_approvals only if the change was deliberate"
+  exit 1
+fi
+
 # --- Second ruleset: the branch-protection one must leave Renovate's branches alone ---
 #
 # "Default" applies `deletion` and `non_fast_forward` to every ref with an admin-only bypass.
@@ -341,5 +359,5 @@ fi
 check_bypass {{ gitops_deploy_ruleset_id }} "$BODY" "$EXPECTED_CI_BYPASS"
 check_bypass {{ gitops_deploy_fence_ruleset_id }} "$FENCE_BODY" "$EXPECTED_FENCE_BYPASS"
 
-push up "repo public; ruleset {{ gitops_deploy_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ gitops_deploy_branch_ruleset_id }} excludes {{ gitops_deploy_branch_ruleset_renovate_exclude }}; ruleset {{ gitops_deploy_fence_ruleset_id }} fences the agent to {{ gitops_deploy_fence_ruleset_exclude | join(', ') }}; all bypass lists as declared"
+push up "repo public; ruleset {{ gitops_deploy_ruleset_id }} active, ${LIVE_COUNT} required contexts, matches the declared set; ruleset {{ gitops_deploy_branch_ruleset_id }} excludes {{ gitops_deploy_branch_ruleset_renovate_exclude }}; ruleset {{ gitops_deploy_ruleset_id }} requires a PR with {{ gitops_deploy_ruleset_required_approvals }} approving reviews; ruleset {{ gitops_deploy_fence_ruleset_id }} restricts every branch except {{ gitops_deploy_fence_ruleset_exclude | join(', ') }}; all bypass lists as declared"
 exit 0

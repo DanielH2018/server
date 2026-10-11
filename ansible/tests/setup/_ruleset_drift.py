@@ -39,27 +39,43 @@ reachout_verdict() { REACHOUT_STATUS=down; REACHOUT_NOTE=""; }
 """
 
 
-def ruleset_body(contexts, enforcement="active", bypass_actors=()):
+def ruleset_body(contexts, enforcement="active", bypass_actors=(), approvals=0):
     """A ruleset payload in the shape the live endpoint returns to an admin token.
 
     `bypass_actors=None` is the anonymous shape, where GitHub returns null for the list.
+    `approvals=None` leaves out the pull_request rule.
     """
+    rules = [
+        {"type": "deletion"},
+        {
+            "type": "required_status_checks",
+            "parameters": {
+                "required_status_checks": [
+                    {"context": c, "integration_id": 15368} for c in contexts
+                ]
+            },
+        },
+    ]
+    if approvals is not None:
+        rules.append(
+            {
+                "type": "pull_request",
+                "parameters": {
+                    "required_approving_review_count": approvals,
+                    "dismiss_stale_reviews_on_push": False,
+                    "require_code_owner_review": False,
+                    "require_last_push_approval": False,
+                    "required_review_thread_resolution": False,
+                    "allowed_merge_methods": ["merge", "squash", "rebase"],
+                },
+            }
+        )
     return json.dumps(
         {
             "id": 20912512,
             "enforcement": enforcement,
             "bypass_actors": None if bypass_actors is None else list(bypass_actors),
-            "rules": [
-                {"type": "deletion"},
-                {
-                    "type": "required_status_checks",
-                    "parameters": {
-                        "required_status_checks": [
-                            {"context": c, "integration_id": 15368} for c in contexts
-                        ]
-                    },
-                },
-            ],
+            "rules": rules,
         }
     )
 
@@ -94,12 +110,15 @@ def branch_ruleset_body(exclude=(RENOVATE_EXCLUDE,), enforcement="active"):
 
 
 FENCE_RULESET_ID = 24517167
-FENCE_EXCLUDE = ["refs/heads/worktree-claude+**"]
+FENCE_EXCLUDE = ["refs/heads/master", "refs/heads/worktree-claude+**"]
 FENCE_BYPASS = ["Integration:2740:always", "RepositoryRole:5:always"]
 
 
 def fence_ruleset(**overrides):
-    """The agent branch fence as the live endpoint returned it on 2026-10-05, as a dict."""
+    """The agent branch fence as the live endpoint returned it on 2026-10-05, as a dict.
+
+    Master joined the exclusions on 2026-10-11, so that the agent's account can merge a PR.
+    """
     body = {
         "id": FENCE_RULESET_ID,
         "name": "agent branch fence",

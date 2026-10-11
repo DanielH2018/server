@@ -144,23 +144,26 @@ the hook-install task does not remove the hook. A broken hook refuses every agen
 - **Its token is a classic `public_repo` token.** GitHub does not support fine-grained tokens
   for a collaborator on another personal account's repo. The token is stored in SOPS as
   `claude_code_agent_gh_token`, so `ansible/secret_rotation.yml` tracks it.
-- **No ruleset requires a review.** The "master review gate" ruleset (24514824, created
-  2026-10-05) required one approving review on a PR to master. The operator deleted it on
-  2026-10-11. The branch fence below already stops the agent's account merging its own PR,
-  because it restricts updates to master. The gate's other effect was that a repository admin
-  reached master only through a PR. Since its deletion, an admin token can push a commit to
-  master directly, provided the "master CI gate" ruleset's required checks already passed on
-  that commit.
+- **No ruleset requires a review, and both accounts can auto-merge.** The "master review gate"
+  ruleset (24514824, created 2026-10-05) required one approving review on a PR to master. The
+  operator deleted it on 2026-10-11, and the same day chose that PRs from the operator's account
+  and from DanielClaudeBot auto-merge once CI is green. The branch fence therefore excludes
+  master, and the "master CI gate" ruleset carries a `pull_request` rule with zero approvals.
+  That rule makes every change to master arrive as a PR, from any account, and needs no bypass,
+  so GitHub's auto-merge can satisfy it.
+- **The landing policy does not bind an auto-merge.** `land_lib/policy.py` refuses an agent PR
+  that changes an approval-list path, but it runs only inside `land.sh`. DanielClaudeBot can
+  arm GitHub's auto-merge on its own PR, and that merge skips the policy. The operator accepted
+  this on 2026-10-11.
 - **To restore the review gate,** create a ruleset on `refs/heads/master` with one
   `pull_request` rule: `required_approving_review_count: 1`, `dismiss_stale_reviews_on_push:
   true` and `require_last_push_approval: true`. Its bypass actors were
   `RepositoryRole:5:pull_request` and `Integration:2740:pull_request`. The commit that deleted
   it removed its arm from `github-ruleset-drift.sh`, so revert that commit's drift-check hunks
   with the new ruleset id.
-- **`land.sh` merges every PR directly.** GitHub auto-merge ignores a ruleset bypass, while a
-  direct merge honours it. The branch fence restricts updates to master, so every PR needs the
-  bypass. `land.sh --arm-merge` therefore waits for CI, then merges through the REST endpoint,
-  pinned to the head SHA it checked, and arms no auto-merge at all.
+- **`land.sh` merges every PR directly.** `land.sh --arm-merge` waits for CI, then merges
+  through the REST endpoint, pinned to the head SHA it checked. It arms no auto-merge, because
+  auto-merge merges whatever head is green when CI finishes, not the head the policy checked.
 - **Renovate's `platformAutomerge` is off,** for the same reason. Renovate's own direct merge
   uses its bypass. Automerges therefore land on Renovate's next run rather than the moment CI
   passes.

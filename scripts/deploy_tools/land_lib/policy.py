@@ -6,7 +6,8 @@ which is every interactive session and renovate-agent's lander:
 - `LAND_REQUIRE_BRANCH_PREFIX`: the head branch must be in this repo, start with the prefix,
   and target master. The agent's GitHub account can push only under its own prefix ("agent
   branch fence", ruleset 24517167), so this keeps the lander to the branches the fence gives
-  the agent.
+  the agent. The policy binds only a landing: the agent's account can also arm GitHub's
+  auto-merge, which skips it, by the operator's choice on 2026-10-11.
 - `LAND_APPROVAL_PATHS`: a file of path prefixes, one per line. A PR changing a path under one
   of them is refused. Those are the paths that widen the agent's own authority: its roles, its
   credentials, the rulesets' drift checks and this code. A PR changing a module this landing

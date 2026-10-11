@@ -8,11 +8,11 @@ lands anything is: put the commit on a fresh branch, push that, take the commit 
 the local master so gitops-deploy's ``--ff-only`` still succeeds when the squash lands
 under a new SHA, open the PR, and hand it to a detached ``land.py`` that merges it.
 
-WHY A LANDING AND NOT GITHUB'S AUTO-MERGE. The agent branch fence ruleset restricts updates to
-master, so every merge needs a ruleset bypass, and GitHub's auto-merge never applies one: an
-armed PR sits BLOCKED with green checks (#3609, #3911). ``land.py --arm-merge --await-merge`` is
-the path that applies the bypass: it waits for CI and merges through the REST endpoint, pinned
-to the head SHA it read green. ``--detach`` matters as much as the merge. The callers hold the git-tree lock on
+WHY A LANDING AND NOT GITHUB'S AUTO-MERGE. When this was written, a ruleset blocked every
+auto-merged PR, because auto-merge never applies a bypass (#3609, #3911). That block is gone
+since 2026-10-11, and the landing stays because it merges at the head SHA it read green and
+then deploys the merge. ``land.py --arm-merge --await-merge`` waits for CI and merges through
+the REST endpoint, pinned to that SHA. ``--detach`` matters as much as the merge. The callers hold the git-tree lock on
 fd 9 and read this script's output through a pipe, so a landing that inherited either would
 keep the lock for the whole CI wait. The detached landing closes every inherited descriptor
 from 3 up and rebinds its stdio to its own log (``land_lib/detach.py``).

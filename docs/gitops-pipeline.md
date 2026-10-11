@@ -1137,7 +1137,9 @@ units on a non-deployer host. One alerts and the other reconciles:
       success. A token read names `.visibility`; an anonymous read of a private repo answers
       `Not Found`. `land.sh --arm-merge` refuses to arm or direct-merge while the repo is not
       public.
-    - The master CI gate must require exactly `gitops_deploy_expected_ruleset_contexts`.
+    - The master CI gate must require exactly `gitops_deploy_expected_ruleset_contexts`. It must
+      also carry a `pull_request` rule requiring `gitops_deploy_ruleset_required_approvals`
+      approving reviews, which is zero so that GitHub's auto-merge can merge a PR.
     - The branch-protection ruleset (`gitops_deploy_branch_ruleset_id`) must exclude
       `refs/heads/renovate/**`. Without that exclusion GitHub refuses Renovate's post-merge
       branch delete and its rebase force-push, and a merged branch's stale green automerges the
@@ -1147,8 +1149,8 @@ units on a non-deployer host. One alerts and the other reconciles:
       agent's account could push onto a branch an operator session opened, and `land.sh`'s admin
       merge would carry that commit to master.
     - Each bypass list must equal its declaration: none on the CI gate, the admin role and the
-      Renovate app on the fence. The agent's GitHub account is in no list, so its PRs reach
-      master only through the lander.
+      Renovate app on the fence. The agent's GitHub account is in no list. The fence excludes
+      master, so the agent's account can merge or auto-merge its own PR.
 - **`github-interaction-limit.sh`** re-applies `gitops_deploy_interaction_limit` every day.
   GitHub grants an interaction limit for six months at most and lets it lapse silently, so
   re-applying it restores the declared state rather than overriding a decision. The limit keeps

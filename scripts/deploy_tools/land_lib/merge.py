@@ -5,10 +5,11 @@ the ask list, and auto mode suspends the allow list, so a session with nobody to
 prompt times out as a denial.
 Idempotent: a MERGED PR is left alone, a CLOSED one dies.
 
---arm-merge never arms GitHub's auto-merge. Auto-merge does not apply a ruleset bypass, and
-every PR into master needs one (github/docs#45265, open since 2026-07-23). The "agent branch
-fence" (ruleset 24517167) restricts updates to every branch but the agent's own, master
-included: an approved agent PR armed for auto-merge sat BLOCKED until a hand merge (#3911). A CHANGES_REQUESTED PR is refused outright, because the direct merge would apply
+--arm-merge never arms GitHub's auto-merge. Auto-merge merges whatever head is green when CI
+finishes, while the direct merge here is pinned to the head await_ci read green and the landing
+policy checked. Auto-merge also never applies a ruleset bypass (github/docs#45265): while the
+"agent branch fence" (ruleset 24517167) covered master, an approved agent PR armed for
+auto-merge sat BLOCKED until a hand merge (#3911). The fence excludes master since 2026-10-11. A CHANGES_REQUESTED PR is refused outright, because the direct merge would apply
 the operator's bypass to a PR someone asked to change. `gh pr merge` refuses it at its own
 pre-flight as well (cli/cli#13388).
 
