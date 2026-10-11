@@ -270,8 +270,9 @@ hold's command is `gitops_state.py clear-hold <sha>` with the held SHA filled in
 
 It reads `/var/lib/gitops-deploy` directly, so it answers only on daniel-box as the deploy
 user. Elsewhere it says there is no state directory. A marker that exists and cannot be read is
-reported as unreadable, never as absent. Exit 1 means the directory or a marker could not be
-read; the exit says nothing about what the markers hold.
+reported as unreadable, never as absent. Exit 75 means the directory or a marker could not be
+read, and stderr names which. The exit says nothing about what the markers hold, so it is
+never 1.
 
 ### `ha …`
 
