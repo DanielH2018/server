@@ -282,6 +282,56 @@ OWED_K3S = json.dumps(
 )
 
 
+def _owed_text(*entries: dict, runs=None) -> str:
+    owed = "\n".join(
+        json.dumps({"class": "manual_plane", "origin": "c" * 40, "at": 0, **e})
+        for e in entries
+    )
+    snap = landing.collect(lambda: ("", owed), fake_deploy_ui(CLEAR), fake_run(GREEN))
+    return landing.format_text({**snap, "runs": runs, "claims": None})
+
+
+def test_an_owed_apply_and_its_clear_each_print_alone_on_a_line():
+    text = _owed_text(
+        {
+            "subject": "k3s",
+            "playbook": "ansible/k3s-bringup.yml",
+            "tags": ["kubeconfig"],
+        }
+    )
+    lines = [line.strip() for line in text.splitlines()]
+    assert "uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig" in lines
+    assert (
+        "uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s "
+        "--applied kubeconfig" in lines
+    )
+
+
+def test_a_whole_role_apply_prints_its_warning_above_the_command():
+    lines = _owed_text(
+        {"subject": "k3s", "playbook": "ansible/k3s-bringup.yml"}
+    ).splitlines()
+    command = lines.index(
+        "    uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s"
+    )
+    assert lines[command - 2].startswith("  WARNING: ")
+
+
+def test_a_role_no_playbook_applies_prints_no_playbook_command():
+    text = _owed_text({"subject": "common", "playbook": "none"})
+    assert "Apply the role by hand." in text
+    assert "ansible-playbook" not in text
+    assert "clear-owed manual_plane common" in text
+
+
+def test_the_owed_block_prints_before_the_runs_in_flight():
+    run = {"kind": "land", "pr": "7", "tag": "", "elapsed_s": 3, "verdict": None}
+    text = _owed_text(
+        {"subject": "k3s", "playbook": "ansible/k3s-bringup.yml"}, runs=[run]
+    )
+    assert text.index("Owed: the `k3s` setup role") < text.index("In flight:")
+
+
 def test_an_owed_manual_plane_served_by_deploy_ui_is_a_blocker_off_the_host():
     state = {**CLEAR, "manual_plane_owed": OWED_K3S}
     snap = landing.collect(lambda: None, fake_deploy_ui(state), fake_run(GREEN))

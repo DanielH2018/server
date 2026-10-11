@@ -54,6 +54,7 @@ deployer's ``files/`` there itself.
 
 import sys as _sys
 import time
+from dataclasses import dataclass
 from pathlib import Path as _Path
 
 # `scripts/` for `lib.repo_paths`: the SessionStart hook and every other caller already put it
@@ -195,6 +196,73 @@ def _age_phrase(seconds):
     return f"{int(seconds // 3600)}h"
 
 
+# The printed apply runs through the repo's pinned env. The uv-tool shim's bare
+# `ansible-playbook` lacks the collection deps, so a pasted command would fail. The playbook
+# path is relative, so the command runs from a checkout's root, where `ansible.cfg` names the
+# inventory.
+PLAYBOOK_CMD = "uv run ansible-playbook"
+
+
+@dataclass(frozen=True)
+class ManualPlaneRemedy:
+    """One owed `manual_plane` role and the commands that discharge it.
+
+    Attributes:
+        role: the setup role.
+        age: how long ago the deployer recorded it, worded by `_age_phrase`.
+        apply: the command that applies the role, or "" for a role no printed playbook
+            applies.
+        by_hand: what to do instead of `apply` for such a role, else "".
+        warning: what `apply` arms beyond the change, or "".
+        clear: the `clear-owed` command to run once the role is applied.
+    """
+
+    role: str
+    age: str
+    apply: str
+    by_hand: str
+    warning: str
+    clear: str
+
+
+def manual_plane_remedies(owed, now) -> list[ManualPlaneRemedy]:
+    """The way out for each setup role the deployer merged but cannot apply, oldest first.
+
+    `owed` is the deployer's ledger text. Each role's `tags` key lets the way out name the
+    narrowest tags the change needs rather than the whole-role tag (#2307). It is READ, not
+    re-derived: an isolated worktree cannot ask git about the primary checkout. A role with no
+    tags reads as the role tag.
+
+    The command carries `maximal_apply_warning` where it arms something gated (#2345). The
+    journal line, the Discord alert and `land.sh` all warn through `deploy_remediation`, which
+    this module cannot import — the SessionStart hook loads it with only `scripts/` on
+    `sys.path`. So the warning that both surfaces key on is data in `gitops_markers`, and the
+    banner was the one place printing `--tags k3s` with nothing beside it.
+    """
+    remedies = []
+    entries, narrow = manual_plane_entries(owed)
+    for e in entries:
+        selected = narrow.get(e.role) or {e.role}
+        hand = by_hand(e.playbook) or ""
+        apply = (
+            ""
+            if hand
+            else f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(selected))}"
+            f"{target_arg(e.host)}"
+        )
+        remedies.append(
+            ManualPlaneRemedy(
+                role=e.role,
+                age=_age_phrase(now - e.at),
+                apply=apply,
+                by_hand=hand,
+                warning=maximal_apply_warning(e.role, selected) if apply else "",
+                clear=owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
+            )
+        )
+    return remedies
+
+
 def manual_plane_lines(owed, now):
     """One banner line per setup role the deployer merged but cannot apply, or [].
 
@@ -209,35 +277,19 @@ def manual_plane_lines(owed, now):
     role no tick can apply, and nothing but an operator's hand clears it. monitor-bridge gates
     because it PAGES; this is a passive notice on a banner the reader is already reading.
 
-    The line carries the way out, because the session that reads it is usually not the session
-    that landed the change: `land.sh` printed the apply command to whoever merged it, and the
-    banner is the only place the fact reaches anyone else.
-
-    `owed` is the deployer's ledger text. Each role's `tags` key lets the way out name the
-    narrowest tags the change needs rather than the whole-role tag (#2307). It is READ, not
-    re-derived: an isolated worktree cannot ask git about the primary checkout. A role with no
-    tags reads as the role tag.
-
-    The command carries `maximal_apply_warning` where it arms something gated (#2345). The
-    journal line, the Discord alert and `land.sh` all warn through `deploy_remediation`, which
-    this module cannot import — the SessionStart hook loads it with only `scripts/` on
-    `sys.path`. So the warning that both surfaces key on is data in `gitops_markers`, and the
-    banner was the one place printing `--tags k3s` with nothing beside it.
+    The line carries the way out from `manual_plane_remedies`, because the session that reads
+    it is usually not the session that landed the change: `land.sh` printed the apply command
+    to whoever merged it, and the banner is the only place the fact reaches anyone else.
     """
     lines = []
-    entries, narrow = manual_plane_entries(owed)
-    for e in entries:
-        selected = narrow.get(e.role) or {e.role}
-        tags = ",".join(sorted(selected))
-        warning = maximal_apply_warning(e.role, selected)
-        how = by_hand(e.playbook) or (
-            f"apply `{e.playbook} --tags {tags}{target_arg(e.host)}` by hand"
-            + (f" (WARNING: {warning})" if warning else "")
+    for r in manual_plane_remedies(owed, now):
+        how = r.by_hand or (
+            f"apply `{r.apply}` by hand"
+            + (f" (WARNING: {r.warning})" if r.warning else "")
         )
         lines.append(
-            f"  ✗ the GitOps deployer merged a change to the `{e.role}` setup role "
-            f"{_age_phrase(now - e.at)} ago and cannot apply it itself — {how}, then "
-            f"`{owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected)}`"
+            f"  ✗ the GitOps deployer merged a change to the `{r.role}` setup role "
+            f"{r.age} ago and cannot apply it itself — {how}, then `{r.clear}`"
         )
     return lines
 
