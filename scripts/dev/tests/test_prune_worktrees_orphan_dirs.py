@@ -88,6 +88,33 @@ def test_prune_keeps_an_orphan_with_unstored_content_and_names_the_file(
     assert "fresh-content.txt" in done.stdout, done.stdout
 
 
+def test_prune_removes_an_orphan_whose_only_other_file_is_its_gitdir_pointer(
+    tmp_path, monkeypatch
+):
+    repo = _repo(tmp_path, monkeypatch)
+    orphan = _orphan(repo, "bridge-pointer")
+    (orphan / ".git").write_text(f"gitdir: {repo}/.git/worktrees/bridge-pointer\n")
+    (orphan / "a.txt").write_text(TRACKED_CONTENT)
+
+    done = _prune(repo)
+
+    assert done.returncode == 0, done.stderr
+    assert not orphan.exists(), done.stdout
+
+
+def test_prune_keeps_an_orphan_whose_git_file_holds_more_than_a_pointer(
+    tmp_path, monkeypatch
+):
+    repo = _repo(tmp_path, monkeypatch)
+    orphan = _orphan(repo, "bridge-not-pointer")
+    (orphan / ".git").write_text("gitdir: /elsewhere\nnote git never stored\n")
+
+    done = _prune(repo)
+
+    assert orphan.is_dir()
+    assert ".git" in done.stdout, done.stdout
+
+
 def test_a_kept_orphan_names_only_the_files_git_never_stored(tmp_path, monkeypatch):
     repo = _repo(tmp_path, monkeypatch)
     orphan = _orphan(repo, "bridge-mixed")
