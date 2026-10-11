@@ -239,8 +239,11 @@ def _master_paths_since(ln: Landing, head: str) -> list[str]:
         ln.die(f"could not compare {head[:8]} with {BRANCH}: {exc.stderr.strip()}", 1)
     except subprocess.TimeoutExpired:
         ln.die(f"could not compare {head[:8]} with {BRANCH}: gh timed out", 1)
-    except ValueError:
-        ln.die(f"could not compare {head[:8]} with {BRANCH}: unparseable gh output", 1)
+    except ValueError as exc:
+        ln.die(
+            f"could not compare {head[:8]} with {BRANCH}: unparseable gh output: {exc}",
+            1,
+        )
     return [p for p in paths if isinstance(p, str)]
 
 
@@ -339,8 +342,8 @@ def _refuse_private_repo(ln: Landing) -> None:
         ln.die(f"could not read the repo's visibility: {exc.stderr.strip()}", 1)
     except subprocess.TimeoutExpired:
         ln.die("could not read the repo's visibility: gh timed out", 1)
-    except ValueError:
-        ln.die("could not read the repo's visibility: unparseable gh output", 1)
+    except ValueError as exc:
+        ln.die(f"could not read the repo's visibility: unparseable gh output: {exc}", 1)
     visibility = repo.get("visibility") or "<unknown>"
     if visibility != "public":
         ln.die(
