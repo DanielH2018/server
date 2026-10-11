@@ -26,10 +26,12 @@ assembles its answers into the page.
 
 THE TESTS COLUMN NAMES ONLY A DIRECT TEST. A `test_<name>.py` in the script's `tests/` sibling
 or beside it counts, and so does one in the entrypoint's `tests/` for a module inside a `*_lib`
-package, where those packages keep their tests (#4365). Nothing else does. An earlier version also credited any test that
-imported the script or named its path, and keeping that judgement honest took a module and a
-suite of its own for a column nobody acted on (#3283). An empty cell therefore means "no test
-named after it", not "nothing exercises it".
+package, where those packages keep their tests (#4365). There the family-prefixed
+`test_<family>_<name>.py` also counts, the family being the package name less `_lib`, because
+`land_lib/ci.py` is tested by `test_land_ci.py` (#4515). Nothing else does. An earlier
+version also credited any test that imported the script or named its path, and keeping that
+judgement honest took a module and a suite of its own for a column nobody acted on (#3283).
+An empty cell therefore means "no test named after it", not "nothing exercises it".
 
 WHAT IT CANNOT DECIDE. Whether a script is safe to run. The summary is whatever its author
 wrote, and nothing here judges blast radius — `docs/reference/crons.md` does that for the
@@ -147,12 +149,16 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
 
         # The split layout keeps a script's test in a sibling `tests/`; the flat one beside it.
         # A module inside a `*_lib` package keeps its test in the entrypoint's `tests/`, one
-        # level up, as land_lib, probe_lib and fragments_lib do.
+        # level up, as land_lib, probe_lib and fragments_lib do. That test may carry the
+        # family's prefix, which is the package name less `_lib`: land_lib/ci.py is tested by
+        # test_land_ci.py (#4515). The bare name is tried first, so fragments_lib's
+        # fragments_hosts.py keeps test_fragments_hosts.py.
         places = [path.parent / "tests", path.parent]
+        names = [f"test_{path.stem}.py"]
         if path.parent.name.endswith("_lib"):
             places.append(path.parent.parent / "tests")
-        direct = f"test_{path.stem}.py"
-        test = direct if any((p / direct).is_file() for p in places) else ""
+            names.append(f"test_{path.parent.name.removesuffix('_lib')}_{path.stem}.py")
+        test = next((n for n in names if any((p / n).is_file() for p in places)), "")
         run, evidence = verdicts.get(
             path.name, ("adhoc", "no automated caller in the tree")
         )
@@ -214,7 +220,9 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     parts.append(
         '!!! note "Where the Tests column looks"\n'
         "    Only for a `test_<name>.py` in the script's `tests/` sibling or beside it, or, for a "
-        "module inside a `*_lib` package, in the `tests/` beside that package. A script "
+        "module inside a `*_lib` package, in the `tests/` beside that package, where "
+        "`test_<family>_<name>.py` also counts: `land_lib/ci.py` is tested by "
+        "`test_land_ci.py`. A script "
         "with an empty cell may still be exercised elsewhere: `gitops_tick.sh` has five tests "
         "in `test_gitops_manual_trigger.py`, and a module split out of a facade is run by the "
         "facade's suite. The column says where a script's own suite lives, not whether "
