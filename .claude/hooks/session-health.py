@@ -347,7 +347,7 @@ def master_moved_problems(git=None):
     earlier `deploy.sh` run). That is the honest answer for a read-only, always-runs
     SessionStart hook: a live check would mean a network call on every session open. The
     line says "last fetched" rather than claiming to be current, and deploy.sh's own
-    staleness gate (scripts/deploy_tools/deploy_staleness.py, exit 4) is what actually refuses a stale
+    staleness gate (scripts/deploy_tools/deploy_lib/staleness.py, exit 4) is what actually refuses a stale
     deploy -- this is only the earlier, cheaper warning. [] on any failure of the git READ,
     including a checkout with no origin/master ref at all -- diagnosing that is not this
     hook's job.
@@ -390,7 +390,7 @@ def master_moved_problems(git=None):
     return [
         f"  ⚠ this branch is {count} commit{plural} behind origin/master (as of the last "
         "fetch -- `git fetch` to refresh; a deploy from here would be refused, see "
-        "scripts/deploy_tools/deploy_staleness.py)"
+        "scripts/deploy_tools/deploy_lib/staleness.py)"
     ]
 
 

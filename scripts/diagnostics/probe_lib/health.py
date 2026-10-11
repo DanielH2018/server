@@ -7,7 +7,7 @@
 
 What stays here is the part that needs all four: resolving a deploy tag to the workloads the
 role's rendered manifests declare, fetching each one, and rolling the per-workload verdicts up
-into the line `deploy_detach_notify.py` reads.
+into the line `deploy_lib/detach_notify.py` reads.
 
 The gate exits 0 only when the workload is fully rolled out AND nothing restarted recently.
 Both halves are load-bearing, and the reasoning for each sits with the function it governs. A
@@ -15,7 +15,7 @@ role with no Deployment/DaemonSet/StatefulSet but a CronJob (configarr, pi-peer-
 gated the same way on its most recent Job instead — see health_cronjob.format_cronjob_health.
 
 WHAT "NOT FOUND" IS ALLOWED TO MEAN. This paragraph is the canonical statement of the rule, and
-the three helper modules point back at it rather than restating it. `deploy_detach_notify.py`
+the three helper modules point back at it rather than restating it. `deploy_lib/detach_notify.py`
 turns some of this command's failures into a `skipped` that does not fail the deploy verdict,
 matched by substring against its `NOT_APPLICABLE_MARKERS`. Which failures may carry such a
 marker is positional, not a property of any one message:
@@ -449,7 +449,7 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
             return code
         # Genuinely nothing to gate — a Job-only role (media-volume, netpol-baseline) whose
         # one-shot setup Jobs are already gated to completion at deploy time inline, or a role
-        # with neither. This message is load-bearing text: deploy_detach_notify.py's
+        # with neither. This message is load-bearing text: deploy_lib/detach_notify.py's
         # NOT_APPLICABLE_MARKERS matches it by substring, so a reword here must keep it intact
         # (test_deploy_detach_notify.py asserts the exact string is in this file's source).
         # DECIDED: exit 0, a pass with a note (#3596). Exit 1 made `probe.py health <role>`

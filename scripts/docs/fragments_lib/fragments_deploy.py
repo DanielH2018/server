@@ -32,7 +32,7 @@ EXIT_CODES = "scripts/lib/exit_codes.py"
 
 INITIAL_SETUP_TEMPLATES = "ansible/roles/setup/initial_setup/templates"
 SETUP_ROLES = "ansible/roles/setup"
-DEPLOY_UNDER_LOCKS = "scripts/deploy_tools/deploy_under_locks.py"
+DEPLOY_UNDER_LOCKS = "scripts/deploy_tools/deploy_lib/under_locks.py"
 
 ISSUE_MODEL = "scripts/dev/findings_lib/issue_model.py"
 FINDINGS_LIB = "scripts/dev/findings_lib"
@@ -125,7 +125,7 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
 
     A holder is a systemd unit whose `ExecStart` wraps `flock` around `server_git_tree_lock`, a
     cron script that imports the `take_git_tree_lock` macro from `git-tree-lock.j2`, or
-    `deploy.sh` through `deploy_under_locks.py`. The unit and the cron scripts are found by
+    `deploy.sh` through `deploy_lib/under_locks.py`. The unit and the cron scripts are found by
     pattern, so a new one joins the list without an edit here.
 
     Args:
@@ -137,7 +137,7 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
 
     Raises:
         ValueError: when a template imports the macro and never calls it with a job name, or
-            when `deploy_under_locks.py` no longer reads the lock path.
+            when `deploy_lib/under_locks.py` no longer reads the lock path.
     """
     holders = []
     for unit in sorted((repo / SETUP_ROLES).glob("*/templates/*.service.j2")):
@@ -172,7 +172,7 @@ def tree_lock_holders(repo: _Path = REPO) -> list[dict[str, str]]:
     holders.append(
         {
             "job": "deploy.sh",
-            "how": "`deploy_under_locks.py`, held only while it snapshots `HEAD`",
+            "how": "`deploy_lib/under_locks.py`, held only while it snapshots `HEAD`",
             "source": DEPLOY_UNDER_LOCKS,
         }
     )

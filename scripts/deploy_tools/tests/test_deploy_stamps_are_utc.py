@@ -66,8 +66,8 @@ def test_the_pattern_stays_linear_on_a_run_of_flags():
 
 # deploy.sh stamps its snapshot and its --detach log in Python.
 _PYTHON_STAMPERS = (
-    REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py",
-    REPO / "scripts" / "deploy_tools" / "deploy_detach.py",
+    REPO / "scripts" / "deploy_tools" / "deploy_lib" / "under_locks.py",
+    REPO / "scripts" / "deploy_tools" / "deploy_lib" / "detach_run.py",
 )
 _NOW_CALL = re.compile(r"\bdatetime\.now\(([^)]*)\)")
 

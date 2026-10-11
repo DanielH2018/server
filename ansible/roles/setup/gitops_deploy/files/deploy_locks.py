@@ -9,7 +9,7 @@ rather than on the whole tree.
 
 THIS MODULE IS THE ONLY PLACE THAT NAMES AND ORDERS THEM. The wrapper does not build a lock
 name or sort a tag list of its own: it calls `plan` in process
-(`scripts/deploy_tools/deploy_under_locks.py`) and takes the locks it is handed, in that
+(`scripts/deploy_tools/deploy_lib/under_locks.py`) and takes the locks it is handed, in that
 order. Until 2026-09-18 the shell carried its own copy of both, and
 the two agreed only because a test compared them -- `sort` and Python's `sorted` disagree on
 `pihole` against `pi-peer-backup` unless the shell pins `LC_ALL=C`, and a disagreement there
@@ -17,7 +17,7 @@ is a deadlock between a hand deploy and a tick (issue #2054).
 
 A leaf: it imports nothing from the rest of the deployer, so a test can drive it directly.
 
-Stdlib only: the unit runs it under `uv run --no-project`, and `deploy_under_locks.py`
+Stdlib only: the unit runs it under `uv run --no-project`, and `deploy_lib/under_locks.py`
 imports it. The CLI below is for reading a plan by hand.
 
 Usage: deploy_locks.py plan [--exclusive-all] TAG [TAG ...]
@@ -148,7 +148,7 @@ def take(fd: int, mode: int, deadline: float, poll_s: float, flock=fcntl.flock) 
 
     The one polling loop for every lock a Python caller waits on with a budget: the service
     locks below, and `scripts/deploy_tools/gitops_state.py`'s tree lock. The caller opens and
-    closes `fd`, so an open failure stays the caller's to name. `deploy_under_locks._flock_timed`
+    closes `fd`, so an open failure stays the caller's to name. `deploy_lib/under_locks.py:_flock_timed`
     blocks under SIGALRM instead and does not come here, because a blocked waiter shows in
     `/proc/locks` and a polling one does not.
 

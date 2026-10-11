@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Run an interactive Ansible deploy under the locks the automated deployers take.
 
-Invoke it as ``./scripts/deploy.sh``, which execs this file; every doc, skill, hook and consumer names the shim. Its plan is
+Invoke it as ``./scripts/deploy.sh``, which execs ``deploy_cli.py``, whose default command runs this module; every doc,
+skill, hook and consumer names the shim. Its plan is
 archived at ``docs/archive/deploy-sh-python-port.md``, and its *The frozen contract* section lists the exit codes, output lines
 and variables other processes read. This module holds the FRONT half: argument parsing and every gate that runs before the tree
-lock. The locked half -- tree lock, snapshot, service locks, playbook -- is ``deploy_under_locks.py``, and ``--detach``'s is
-``deploy_detach.py``; this module calls one of them once every gate has passed.
+lock. The locked half -- tree lock, snapshot, service locks, playbook -- is ``deploy_lib/under_locks.py``, and ``--detach``'s is
+``deploy_lib/detach_run.py``; this module calls one of them once every gate has passed.
 
 Usage::
 
@@ -43,9 +44,9 @@ from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from deploy_tools.deploy_flags import Refused, check_passthrough
-from deploy_tools.deploy_under_locks import say
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.deploy_lib.flags import Refused, check_passthrough
+from deploy_tools.deploy_lib.under_locks import say
 from lib.cli_help import answer_help
 from lib.exit_codes import (
     DEPLOY_BAD_FLAGS,
@@ -60,10 +61,10 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_VARS, REPO
 # `deploy_logic`, for the build couplings `expand_shared_roles` adds. Imported lazily there.
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-# What a detached run starts once its playbook exits. Named here, in the script every deploy
-# runs, rather than in `deploy_detach.py`: `script_classify` credits a spawn to the script
-# that names it, and a module that only `deploy_run.py` imports is not one.
-DETACH_NOTIFIER = "scripts/deploy_tools/deploy_detach_notify.py"
+# What a detached run starts once its playbook exits. Named here, in the module every deploy
+# runs, rather than in `deploy_lib/detach_run.py`: `script_classify` credits a spawn to the
+# script that names it, and a module that only this one imports is not one.
+DETACH_NOTIFIER = "scripts/deploy_tools/deploy_lib/detach_notify.py"
 
 # host_vars relative to a checkout root, for asking the CALLER's checkout rather than REPO.
 HOST_VARS_REL = HOST_VARS.relative_to(REPO)
@@ -122,7 +123,7 @@ def _call(fn, *args, **kwargs) -> int:
 
 def run_staleness(plan: Plan) -> int:
     """`deploy_staleness.main` against the caller's checkout; its exit status."""
-    from deploy_tools import deploy_staleness
+    from deploy_tools.deploy_lib import staleness as deploy_staleness
 
     argv = ["--repo", str(plan.repo_root)]
     if plan.at_sha:
@@ -136,7 +137,7 @@ def run_staleness(plan: Plan) -> int:
 
 def run_validate(plan: Plan) -> int:
     """`deploy_tags.validate` against the caller's host_vars; its exit status."""
-    from deploy_tools import deploy_tags
+    from deploy_tools.deploy_lib import tags as deploy_tags
 
     return _call(
         deploy_tags.validate,
@@ -148,7 +149,7 @@ def run_validate(plan: Plan) -> int:
 
 def run_changed(plan: Plan) -> tuple[int, str]:
     """`deploy_tags.changed` against the caller's checkout: (status, derived --tags)."""
-    from deploy_tools import deploy_tags
+    from deploy_tools.deploy_lib import tags as deploy_tags
 
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
@@ -172,7 +173,7 @@ def expand_shared_roles(plan: Plan) -> None:
     if not plan.tags:
         return
     try:
-        from deploy_tools import deploy_tags
+        from deploy_tools.deploy_lib import tags as deploy_tags
         from deploy_tools.shared_role_callers import expand_shared_tags
         from lib.k8s_roles import role_callers
 
@@ -212,7 +213,8 @@ def _without_tags(args: list[str]) -> list[str]:
 
 def run_locked(plan: Plan) -> int:
     """The locked half, in process; the wrapper's exit status."""
-    from deploy_tools import deploy_detach, deploy_under_locks
+    from deploy_tools.deploy_lib import detach_run as deploy_detach
+    from deploy_tools.deploy_lib import under_locks as deploy_under_locks
 
     if plan.detach:
         return deploy_detach.run(
@@ -457,7 +459,7 @@ def exec_target(plan: Plan) -> list[str] | None:
     `--check` and `--dry-run` run ansible-playbook unlocked, from the WORKING TREE: a dry run
     renders to a temp dir and applies with --dry-run=server, so it writes neither the cluster
     nor the staging tree, and there is nothing for a lock to serialize. Every other run takes
-    its locks in process: `deploy_under_locks.py`, or `deploy_detach.py` for `--detach`.
+    its locks in process: `deploy_lib/under_locks.py`, or `deploy_lib/detach_run.py` for `--detach`.
     """
     if plan.check or plan.dry_run:
         return ["uv", "run", "ansible-playbook", "ansible/deploy.yml", *plan.args]
@@ -551,13 +553,9 @@ def report(rc: int, argv: list[str], out=None) -> None:
         print(verdict, file=out)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     prepare_stdio()
-    argv = sys.argv[1:]
+    argv = sys.argv[1:] if argv is None else argv
     rc = run(argv)
     report(rc, argv)
     return rc
-
-
-if __name__ == "__main__":
-    sys.exit(main())

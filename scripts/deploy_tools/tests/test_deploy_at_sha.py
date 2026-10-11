@@ -45,7 +45,7 @@ echo "$*" >> "$DEPLOY_SH_CALLS"
 case "$*" in
   *ansible-playbook*) git rev-parse HEAD > "$DEPLOY_TEST_SHA_FILE"; {recap}; exit 0 ;;
   *deploy_tags.py\\ list*) printf 'alpha\\nbeta\\n'; exit 0 ;;
-  *deploy_detach_notify.py*)
+  *detach_notify.py*)
     while [[ $# -gt 0 ]]; do
       if [[ "$1" == "--cwd" ]]; then
         git -C "$2" rev-parse HEAD > "$DEPLOY_TEST_NOTIFY_FILE"
@@ -125,11 +125,11 @@ def _run(
     )
     return (
         result,
-        # The shim's own `uv run … deploy_run.py` is the wrapper starting, not a helper call.
+        # The shim's own `uv run … deploy_cli.py` is the wrapper starting, not a helper call.
         [
             ln
             for ln in calls.read_text().splitlines()
-            if ln.strip() and "deploy_run.py" not in ln
+            if ln.strip() and "deploy_cli.py" not in ln
         ],
         deployed.read_text().strip() if deployed.exists() else "",
     )

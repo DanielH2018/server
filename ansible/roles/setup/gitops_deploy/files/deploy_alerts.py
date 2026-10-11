@@ -126,7 +126,7 @@ def drain_pending(tools: DeployTools, state: DeployerState, config: Config) -> N
 
 
 # The queue `deploy --detach`'s notifier spools an undelivered verdict into, under the state
-# directory. `scripts/deploy_tools/deploy_detach_notify.py:DETACH_SPOOL_DIR` names the same
+# directory. `scripts/deploy_tools/deploy_lib/detach_notify.py:DETACH_SPOOL_DIR` names the same
 # directory, and its test holds the two equal.
 DETACH_SPOOL = "detach_spool"
 

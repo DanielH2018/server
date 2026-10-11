@@ -33,7 +33,7 @@ import argparse
 import json
 from pathlib import Path
 
-from deploy_tools.narrow_broad import context_for
+from deploy_tools.narrow_lib.broad import context_for
 from deploy_tools.render_targets import render_targets
 from lib.render_guard import HOSTS_LAND_SH_NEVER_DEPLOYS
 from lib.repo_paths import HOST_VARS, K8S_ROLES

@@ -25,7 +25,7 @@ from gitops_ledger import OWED_MANUAL_PLANE
 from gitops_markers import MAXIMAL_ROLE_GATED_TAGS, owed_clear_cmd, target_arg
 
 # The branch `broad_remediation` names when a caller does not say. gitops_deploy.py reads the
-# real one from config.env and passes it; the repo-side callers (deploy_tags, land_tags) run
+# real one from config.env and passes it; the repo-side callers (deploy_lib/tags.py, land_tags) run
 # against this repo, where it is master.
 BRANCH_DEFAULT = "master"
 

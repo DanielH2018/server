@@ -17,7 +17,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_lock_wait_budget.py
 
 import pytest
 
-from deploy_tools import deploy_under_locks
+from deploy_tools.deploy_lib import under_locks as deploy_under_locks
 from lib import yaml_fast
 
 from lib.repo_paths import REPO as _REPO

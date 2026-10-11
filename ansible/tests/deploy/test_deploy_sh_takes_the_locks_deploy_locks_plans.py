@@ -32,7 +32,7 @@ import subprocess
 import sys
 
 import deploy_locks
-import deploy_under_locks
+from deploy_tools.deploy_lib import under_locks as deploy_under_locks
 import pytest
 from _helpers import REPO
 from lib.exit_codes import (
@@ -43,8 +43,10 @@ from lib.exit_codes import (
 from lib.proc_testing import run
 
 _DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
-_DEPLOY_UNDER_LOCKS = REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py"
-_DEPLOY_DETACH = REPO / "scripts" / "deploy_tools" / "deploy_detach.py"
+_DEPLOY_UNDER_LOCKS = (
+    REPO / "scripts" / "deploy_tools" / "deploy_lib" / "under_locks.py"
+)
+_DEPLOY_DETACH = REPO / "scripts" / "deploy_tools" / "deploy_lib" / "detach_run.py"
 # The pair `sort` under a UTF-8 locale and Python's `sorted` order differently. Both are live
 # roles, and a census that stopped finding them would prove the order on nothing.
 _DISAGREEING_PAIR = ("pi-peer-backup", "pihole")
@@ -339,9 +341,11 @@ def test_the_locked_half_neither_names_a_service_lock_nor_sorts_through_a_locale
     code may not, and nothing in it hands a tag list to `sort` under a locale."""
     strings = _non_docstring_strings(_DEPLOY_UNDER_LOCKS.read_text())
     naming = [s for s in strings if "server-deploy-" in s]
-    assert naming == [], f"deploy_under_locks.py names a service lock itself: {naming}"
+    assert naming == [], (
+        f"deploy_lib/under_locks.py names a service lock itself: {naming}"
+    )
     sorting = [s for s in strings if "LC_ALL" in s or s == "sort"]
-    assert sorting == [], f"deploy_under_locks.py sorts through a locale: {sorting}"
+    assert sorting == [], f"deploy_lib/under_locks.py sorts through a locale: {sorting}"
 
 
 def test_the_string_census_sees_a_service_lock_literal():

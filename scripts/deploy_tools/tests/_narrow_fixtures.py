@@ -15,7 +15,7 @@ from pathlib import Path
 
 from lib.git_testing import commit, git_out, init_repo
 
-import narrow_broad
+from deploy_tools.narrow_lib import broad as narrow_broad
 
 # The host_vars this fixture declares. Six services, so a key two roles read stays under the
 # coverage ceiling while a key four roles read trips it.

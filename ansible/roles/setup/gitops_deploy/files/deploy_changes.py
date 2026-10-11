@@ -35,7 +35,7 @@ from deploy_setup_roles import (  # noqa: F401  (re-exported for this module's r
 
 # Which role directory a changed path sits in, as ONE question asked once (#3048). Six regexes
 # answered it before — `_ACTIVE_CONFIG`, `_ACTIVE_TASKS`, `_ACTIVE_META`, `_ACTIVE_ROLE`,
-# `_ACTIVE_K8S` and `_SETUP_ROLE` — plus a copy in `narrow_broad.py` and a pair in
+# `_ACTIVE_K8S` and `_SETUP_ROLE` — plus a copy in `narrow_lib/broad.py` and a pair in
 # `land_tags.py`, each re-deriving the same three path segments and differing only in which
 # plane and which subdirectory it accepted.
 #
@@ -67,7 +67,7 @@ def role_of(path: str) -> RolePath | None:
     The PLAIN mapper, deliberately: it answers the path shape and nothing else. Every policy
     about which roles and which files count stays with the caller, because the callers
     genuinely differ — this module routes `containers/common/` to the Pi before the role
-    branches below are reached, `narrow_broad` reads a tree at a ref where
+    branches below are reached, `narrow_lib/broad.py` reads a tree at a ref where
     `containers/archive/` no longer exists, and `land_tags.role_for` reads DIFF paths and so
     still excludes `common` and drops a `.md`. Folding one in would change what deploys.
     """
@@ -118,13 +118,13 @@ _BROAD_DEPLOY_PREFIXES = (
     "ansible.cfg",
 )
 # The two deploy-plane trees a per-path consumer rule exists for: a variable or a macro can be
-# traced to the roles that read it. `narrow_broad.broad_path_tags` derives tags for these, and
+# traced to the roles that read it. `narrow_lib/broad.py:broad_path_tags` derives tags for these, and
 # `probe_lib/releases.py` takes a staleness census over them.
 _BROAD_CENSUS_PREFIXES = ("ansible/inventory/", "ansible/templates/")
 # The rest of the deploy plane: paths whose content EVERY play reads, so no `--tags` value
 # scopes a change to them.
 #
-# DERIVED rather than listed (#3048). `narrow_broad.PLAY_PREFIXES` restated the complement by
+# DERIVED rather than listed (#3048). `narrow_lib/broad.py:PLAY_PREFIXES` restated the complement by
 # hand, so a prefix added to `_BROAD_DEPLOY_PREFIXES` could go missing from it — and a
 # deploy-plane path in neither half reads as narrowable by a rule that has none. Subtraction
 # makes the two exhaustive by construction.
@@ -222,7 +222,7 @@ def _content_lines(text: str) -> list[str]:
 # written as the union so widening either list widens this with it.
 #
 # The DEPLOY plane is deliberately absent. Its narrowing reads a comment-only edit itself
-# (`narrow_templates.comment_edit`, and inventory keys compared as parsed values) and applies
+# (`narrow_lib/templates.py:comment_edit`, and inventory keys compared as parsed values) and applies
 # nothing for one; the failure this exists to stop is a verdict that sends an operator to a
 # playbook with nothing to do, and that verdict only comes off the setup plane.
 _COMMENT_ONLY_PREFIXES = tuple(
@@ -435,8 +435,8 @@ def _import_re(module_id: str) -> re.Pattern:
 # the `no-role-ships-a-markdown-file` row of `ansible/tests/repo/test_census_rows_roles.py` is
 # what makes it safe to assert
 # rather than derive: a task that starts shipping a `.md` fails that guard instead of silently
-# landing a file the deployer skipped. `narrow_paths.is_prose` now calls this, so there is one
-# definition; the reach across the role boundary is the one `narrow_broad` already makes.
+# landing a file the deployer skipped. `narrow_lib/paths.py:is_prose` now calls this, so there is one
+# definition; the reach across the role boundary is the one `narrow_lib/broad.py` already makes.
 def is_doc(path: str) -> bool:
     """Whether a changed path is documentation that reaches no host."""
     return path.endswith(".md")

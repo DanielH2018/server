@@ -190,7 +190,7 @@ def test_main_says_nothing_on_an_unrelated_event(capsys, monkeypatch):
 
 
 def test_every_refusal_code_is_named_a_refusal_and_points_at_the_wrappers_own_lines():
-    """`deploy_run.py:report` prints the name, meaning and remedy, so what is left here is the
+    """`deploy_lib/run.py:report` prints the name, meaning and remedy, so what is left here is the
     framing an exit code cannot carry: this was a refusal, and the wrapper already said
     which one.
     """

@@ -155,7 +155,7 @@ def _deploy_tags():
     `deploy_tags`'s host_vars YAML parse on every invocation, not just `releases`. `scripts/`
     is already on `sys.path` from the bootstrap at the top of this file.
     """
-    from deploy_tools import deploy_tags
+    from deploy_tools.deploy_lib import tags as deploy_tags
 
     return deploy_tags
 
@@ -336,7 +336,7 @@ def _narrow_broad():
     For the reason `_deploy_tags` gives: it parses host_vars YAML and walks the role tree
     on import, which only `releases` needs.
     """
-    from deploy_tools import narrow_broad
+    from deploy_tools.narrow_lib import broad as narrow_broad
 
     return narrow_broad
 

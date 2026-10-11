@@ -57,11 +57,10 @@ waiter from `/proc/locks`. Measured on daniel-box: fuser over the 31 lock files 
 
 `ps` with `ppid` folds each process family — a landing with the `deploy.sh` it spawned, a
 `deploy.sh` with its playbook — to one row carrying `locks` (held) and `waiting_on`. The run
-pattern also matches `deploy_run.py`: the `deploy.sh` shim execs `uv run … deploy_run.py`,
+pattern also matches `deploy_cli.py`: the `deploy.sh` shim execs `uv run … deploy_cli.py`,
 which stays the family root while its python child takes the locks and runs the playbook
 (`docs/archive/deploy-sh-python-port.md`), so no process names `deploy.sh`. A `--detach` run's
-forked child is reparented to 1 and is its own root, still matching `deploy_run.py`. A
-holder that matches no run pattern (the GitOps tick on the tree lock) is a `lock` row rather
+forked child is reparented to 1 and is its own root, still matching `deploy_cli.py`. A holder that matches no run pattern (the GitOps tick on the tree lock) is a `lock` row rather
 than nothing. `deploy.sh --list-services`, which the daemon itself runs on every deploy
 POST, is excluded by name. fuser lists only processes whose `/proc/<pid>/fd` this user can
 read; every deployer here runs as `{{ sys_user }}`, the daemon's own user.
@@ -88,7 +87,7 @@ the reply repeats them — after the Clear nothing records those planes at all (
 (`config`, `deploy`, `cron`) and Ansible's `always`, each of which selects every container
 role at once, so `writes.NON_SERVICE_TAGS` subtracts them from the allowlist and the guard
 refuses one with a 409. A test asserts that literal equals `BLOCK_TAGS | RESERVED_TAGS` in
-`scripts/deploy_tools/deploy_tags.py`, because the daemon runs outside the repo venv and
+`scripts/deploy_tools/deploy_lib/tags.py`, because the daemon runs outside the repo venv and
 cannot import it.
 
 Log names carry a `mkstemp` suffix as well as the second-granular timestamp. Two writes in

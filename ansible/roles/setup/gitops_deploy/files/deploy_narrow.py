@@ -7,7 +7,7 @@ every role, it was 47% of all lock-busy time from 2026-09-04, and twice it faile
 belonging to a service the change never touched and held the fleet. A range the derivation
 refuses no longer runs it either: the tick defers the plane to `k8s_unapplied` (#4333).
 
-The derivation lives in `scripts/deploy_tools/narrow_broad.py` and is reached as a
+The derivation lives in `scripts/deploy_tools/narrow_lib/broad.py` and is reached as a
 SUBPROCESS, not imported: it parses YAML and this unit runs under `uv run --no-project`,
 which cannot import yaml. `narrow_deploy_plane` is that boundary and is a `DeployTools`
 field, so a test replaces it rather than a module attribute.
@@ -479,7 +479,7 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
     # `except Exception` is deliberate and the narrowest correct width: the call decodes a
     # subprocess's output, so it can raise UnicodeDecodeError as well as SubprocessError,
     # and an escape parks every landing behind this tick — `plan` runs BEFORE the ff-merge.
-    # The rules and what each one refuses are in scripts/deploy_tools/narrow_broad.py.
+    # The rules and what each one refuses are in scripts/deploy_tools/narrow_lib/broad.py.
     if rc != 0:
         return _deferred(playbook, f"exit {rc}", out)
     tags = [t for t in out.split(",") if t]
@@ -516,7 +516,7 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
 # tag list to a human — for a change a human authored and merged, with `land.sh` already
 # waiting on this tick to apply it. The third reason, that a dropped tag would be a service
 # left silently stale with nothing to name it, no longer holds on its own: since #1993
-# `Release Staleness Drift` asks `narrow_broad` the same per-path question this plan asks,
+# `Release Staleness Drift` asks `narrow_lib/broad.py` the same per-path question this plan asks,
 # from each service's release record to origin/master, so a denied role whose render reads a
 # merged inventory key or macro reads STALE until it is re-stamped (`_deploy_plane_stale` in
 # scripts/diagnostics/probe_lib/releases.py). That makes a filter viable, not wanted: the

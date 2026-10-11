@@ -102,7 +102,7 @@ def assess(tools: DeployTools, state: DeployerState, config: Config) -> TickTarg
     # from that point on, so it is never deployed and never defer-and-alerted either, with the
     # hold marker and the behind-origin watchdog both reading green.
     #
-    # The window is real, not theoretical: `deploy_run.staleness_gate` runs deploy_staleness (which
+    # The window is real, not theoretical: `deploy_lib/run.py:staleness_gate` runs deploy_lib/staleness.py (which
     # fetches) BEFORE it takes the git-tree lock, and --dry-run returns before the
     # lock entirely — so a dry run in another session moves this repo's remote-tracking ref
     # mid-tick. The ref lives in the shared .git dir every worktree points at.

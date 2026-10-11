@@ -90,7 +90,7 @@ def test_helpers_whose_code_must_match_are_imported_from_beside_land_py():
     assert Path(tools.await_ci.__file__).resolve().parent == tools.HERE
     assert Path(tools.land_tags.__file__).resolve().parent == tools.HERE / "land_lib"
     gate_file = sys.modules[tools.health_gate.__module__].__file__
-    assert gate_file and Path(gate_file).resolve().parent == tools.HERE
+    assert gate_file and Path(gate_file).resolve().parent == tools.HERE / "deploy_lib"
 
 
 def test_read_state_is_empty_for_a_missing_or_blank_marker(tmp_path):

@@ -18,7 +18,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_edges.py
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 import posixpath
 import re
@@ -28,7 +28,7 @@ import yaml
 from lib import yaml_fast
 from lib.git import git
 from lib.narrow_git import CannotNarrow, mapping_at, show_at
-from narrow_setup_playbook import declared_tags, playbook_roles
+from deploy_tools.narrow_lib.setup_playbook import declared_tags, playbook_roles
 
 SETUP_TREE = "ansible/roles/setup"
 

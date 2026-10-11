@@ -1,7 +1,7 @@
 """Tests for the deploy staleness guard.
 
 The guard exists because a worktree behind master deploys stale templates and reverts live config
-while every repo-side check stays green. See scripts/deploy_tools/deploy_staleness.py for the
+while every repo-side check stays green. See scripts/deploy_tools/deploy_lib/staleness.py for the
 mechanism.
 
 The git fixtures here build throwaway repos in tmp_path. They MUST scrub GIT_* from the
@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 
-from deploy_staleness import (
+from deploy_tools.deploy_lib.staleness import (
     behind_ahead,
     format_refusal,
     main,

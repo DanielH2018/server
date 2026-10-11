@@ -1,7 +1,8 @@
 #!/bin/sh
 # cc-wait's `deploy` source: `cc-wait deploy <tags>` waits on one `deploy.sh --detach` run.
-# The logic and its contract are scripts/deploy_tools/deploy_probe.py; this only finds it.
+# The logic and its contract are scripts/deploy_tools/deploy_lib/detach_probe.py; this only
+# runs it through `deploy_cli.py probe`.
 # The repo is 3.14-only and the probe is stdlib-only, so it runs under uv's 3.14 with no
 # project environment, which a fresh worktree would otherwise build on the first read.
 root=$(cd "$(dirname "$0")/../.." && pwd)
-exec uv run --no-project --quiet --python 3.14 python "$root/scripts/deploy_tools/deploy_probe.py" "$@"
+exec uv run --no-project --quiet --python 3.14 python "$root/scripts/deploy_tools/deploy_cli.py" probe "$@"

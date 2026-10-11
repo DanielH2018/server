@@ -15,8 +15,8 @@ import fcntl
 import os
 from pathlib import Path
 
-from deploy_tools import deploy_detach
-from deploy_tools import deploy_under_locks as locked
+from deploy_tools.deploy_lib import detach_run as deploy_detach
+from deploy_tools.deploy_lib import under_locks as locked
 
 
 def _another_deploy_could_take(lock: Path) -> bool:

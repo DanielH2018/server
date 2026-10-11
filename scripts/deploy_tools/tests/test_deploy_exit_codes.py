@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-import deploy_run
+from deploy_tools.deploy_lib import run as deploy_run
 from lib import exit_codes as ec
 
 from _deploy_sh_fakes import (

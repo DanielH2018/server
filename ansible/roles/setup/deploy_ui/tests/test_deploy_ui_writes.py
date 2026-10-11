@@ -74,7 +74,7 @@ def test_non_service_tags_matches_deploy_tags_own_block_set():
     copied. pytest CAN import both, which is what keeps the copy honest: a new block tag in
     `deploy_tags` fails here rather than silently becoming acceptable to `/api/deploy`.
     """
-    import deploy_tags
+    from deploy_tools.deploy_lib import tags as deploy_tags
 
     assert w.NON_SERVICE_TAGS == deploy_tags.BLOCK_TAGS | deploy_tags.RESERVED_TAGS
 

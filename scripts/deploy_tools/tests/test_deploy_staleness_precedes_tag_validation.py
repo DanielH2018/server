@@ -15,7 +15,7 @@ Both halves, per CLAUDE.md: a stale tree carrying an unknown tag must refuse as 
 half the bug got wrong), and an unknown tag on a current tree must still refuse as a TAG MISS
 (the half a naive reorder could delete by never reaching the tag check at all).
 
-The gates run in process in `deploy_run.py`, so `run_front_half` injects their
+The gates run in process in `deploy_lib/run.py`, so `run_front_half` injects their
 verdicts; the order they are asked in is the real code.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_precedes_tag_validation.py
@@ -83,7 +83,7 @@ def test_a_helper_that_exits_or_crashes_returns_a_status_instead_of_ending_the_r
     tag miss to every consumer -- where the subprocess it replaced reported 2 as its status."""
     import sys
 
-    import deploy_run
+    from deploy_tools.deploy_lib import run as deploy_run
 
     assert deploy_run._call(sys.exit, 2) == 2
     assert deploy_run._call(lambda: 1 / 0) == 1

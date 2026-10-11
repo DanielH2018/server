@@ -70,7 +70,7 @@ esac
 # a test that runs several playbooks under one stub needs the gate scoped to the run whose
 # window it is reading -- `alpha` for the detached run, with every other service answering
 # immediately (issue #3173). The quotes make `--tags alpha` one case pattern rather than two
-# words, and `deploy_run.py` leaves the flag and its value adjacent in the playbook's argv.
+# words, and `deploy_lib/run.py` leaves the flag and its value adjacent in the playbook's argv.
 # Writing the `pwd` in the parking arm alone keeps a pattern miss deterministic: no run writes
 # the fifo, and `_playbook_cwd` fails on its deadline instead of degrading to a race.
 _UV_GATED_STUB = """#!/bin/bash

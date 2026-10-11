@@ -347,7 +347,7 @@ def test_the_import_census_sees_a_module_that_reaches_for_a_sibling():
 # A deploy tag names a ROLE, not a workload. Everything below covers the resolution step: for
 # eleven roles the tag is not the name of the thing to health-check, and for four of them it
 # names no workload at all — so `probe.py health <tag>` would report "no Deployment or
-# DaemonSet" and `deploy_detach_notify.py` would skip it.
+# DaemonSet" and `deploy_lib/detach_notify.py` would skip it.
 
 
 def _target(namespace, kind, name, workload, pods_doc=None):

@@ -63,7 +63,7 @@ makes one unnecessary — a producer carries every consumer's tag, so narrowing 
 runs both.
 
 The READING those rules do — the git reads, the YAML parses and `RoleIndex` — is
-`narrow_setup_index.py` beside this. One derivation, split at the 600-line module cap. The
+`narrow_lib/setup_index.py` beside this. One derivation, split at the 600-line module cap. The
 primitives underneath both — `CannotNarrow`, `show_at` and the mapping parse — are
 `lib.narrow_git`, shared with `narrow_broad` since #2419.
 
@@ -79,7 +79,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from deploy_tools import narrow_filters, narrow_paths
+from deploy_tools.narrow_lib import filters as narrow_filters
+from deploy_tools.narrow_lib import paths as narrow_paths
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
@@ -87,8 +88,8 @@ sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 import deploy_cross_role
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
-from narrow_setup_index import SETUP_TREE, RoleIndex, foreign_tags
-from narrow_setup_playbook import playbook_applies_role
+from deploy_tools.narrow_lib.setup_index import SETUP_TREE, RoleIndex, foreign_tags
+from deploy_tools.narrow_lib.setup_playbook import playbook_applies_role
 
 # The directories under a role a changed path can be narrowed from. Everything else in the
 # role — `handlers/` (whose tasks run under the notifying task's tags), `meta/`, `tests/`,

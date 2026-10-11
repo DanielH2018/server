@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The rules `narrow_broad` keeps outside itself: a path shape, and a role-directory read.
 
-Split out for the reason `narrow_containers.py` was: `narrow_broad.py` sits at its
+Split out for the reason `narrow_lib/containers.py` was: `narrow_lib/broad.py` sits at its
 600-line cap, so a rule added there has to live beside it. It imports nothing from
 `narrow_broad`, so the two cannot cycle — the role trees a caller reads are passed in rather
 than imported back.
@@ -10,7 +10,7 @@ than imported back.
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 from collections.abc import Iterable
 from pathlib import Path

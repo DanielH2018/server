@@ -1,7 +1,7 @@
 """`deploy.sh --detach`: take the locks here, then run the playbook in a forked child.
 
-`deploy_run.py` calls `run` once every gate has passed. The locks, the snapshot and the tag
-enumeration are `deploy_under_locks.py`'s, taken synchronously, so a refusal still exits with
+`deploy_lib/run.py` calls `run` once every gate has passed. The locks, the snapshot and the tag
+enumeration are `deploy_lib/under_locks.py`'s, taken synchronously, so a refusal still exits with
 its own code. Only the playbook run, the annotation and the Discord notifier move to the child,
 which is the ~83% of a deploy spent waiting on rollouts.
 
@@ -27,7 +27,7 @@ it exits, which releases nothing: the grandchild still holds the same open file 
 THE CHILD RECORDS THE NOTIFIER'S VERDICT AS ITS EXIT CODE, SO `cc-wait deploy` CAN END ON IT
 (issue #3934). The parent writes `<log stem>.pid` and the child writes `<log stem>.rc` through
 `lib/detach_fork.py`'s record helpers: 0 when the notifier's health gate settled, non-zero
-otherwise. `deploy_probe.py` reads them. The code is written after the service locks are
+otherwise. `deploy_lib/detach_probe.py` reads them. The code is written after the service locks are
 released, so a caller that chains a second deploy of the same service on the wait's end does
 not queue behind this one.
 """
@@ -47,9 +47,9 @@ from pathlib import Path
 
 # Reach the sibling package directories: an importer that did not bootstrap them itself (a
 # test, a REPL) finds only this module's own directory, and `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from deploy_tools import deploy_under_locks as locked
-from deploy_tools.deploy_playbook import annotate, discharge_owed_k8s, run_playbook
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.deploy_lib import under_locks as locked
+from deploy_tools.deploy_lib.playbook import annotate, discharge_owed_k8s, run_playbook
 from lib.detach_fork import (
     close_inherited,
     fork_detached,
@@ -252,7 +252,7 @@ def run(
 ) -> int:
     """Lock, snapshot, fork; the parent's exit status, 0 once the child is running.
 
-    `notifier` is the path of `deploy_detach_notify.py`, relative to `repo_root`.
+    `notifier` is the path of `deploy_lib/detach_notify.py`, relative to `repo_root`.
     """
     tools = tools or DetachTools()
     state = locked.Run(repo_root=repo_root, tags=tags, at_sha=at_sha, args=args)

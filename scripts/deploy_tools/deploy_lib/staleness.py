@@ -34,7 +34,7 @@ NOT THE AUTOMATED PIPELINE. gitops_deploy.py invokes ansible-playbook directly
 (roles/setup/gitops_deploy/files/gitops_deploy.py:572), not this wrapper, and it pulls before
 deploying. This guard covers the interactive and agent path.
 
-Imported by scripts/deploy_tools/deploy_run.py, the front half of scripts/deploy.sh, which
+Imported by scripts/deploy_tools/deploy_lib/run.py, the front half of scripts/deploy.sh, which
 maps a non-zero return here to its own refusal.
 """
 
@@ -45,7 +45,8 @@ from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 
 from lib.deployer_park import (
     GITOPS_STATE_DIR,
@@ -126,7 +127,7 @@ def service_tags_or_none() -> set[str] | None:
     `--help` and every un-tagged run must not pay for it.
     """
     try:
-        from deploy_tags import service_tags
+        from deploy_tools.deploy_lib.tags import service_tags
 
         return service_tags()
     except Exception:

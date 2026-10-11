@@ -1,4 +1,4 @@
-"""The `deploy` source cc-wait reads: `deploy_probe.py` and the `.claude/wait-sources/deploy` shim.
+"""The `deploy` source cc-wait reads: `deploy_lib/detach_probe.py` and the `.claude/wait-sources/deploy` shim.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_probe.py
 
@@ -15,8 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from deploy_tools import deploy_detach, deploy_probe
-from deploy_tools import deploy_under_locks as locked
+from deploy_tools.deploy_lib import detach_run as deploy_detach
+
+from deploy_tools.deploy_lib import detach_probe as deploy_probe
+from deploy_tools.deploy_lib import under_locks as locked
 from lib.detach_fork import recorded_code
 
 _SHIM = Path(__file__).resolve().parents[3] / ".claude" / "wait-sources" / "deploy"

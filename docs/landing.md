@@ -408,7 +408,7 @@ merge SHA, the verdict, and seconds spent in each phase — `wait_merge`, `wait_
 
 `lock` books two kinds of wait: an attempt that LOST the lock and exited 75, and a wait a
 wrapper rode out and then reported itself — `deploy.sh` queuing in a timed `flock(2)`
-(`deploy_under_locks.LOCK_WAIT`) for the tree lock or one of its per-service locks,
+(`deploy_lib/under_locks.py:LOCK_WAIT`) for the tree lock or one of its per-service locks,
 `gitops_tick.sh` watching a tick another actor had already started. Both exit 0, so before they
 reported it the seconds landed in `deploy` and `tick` and every row read `lock=0`. Since
 [ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md) most of what a landing

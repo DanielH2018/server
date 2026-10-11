@@ -19,7 +19,7 @@ from pathlib import Path
 from collections.abc import Mapping
 from typing import Any
 
-from deploy_tools.deploy_detach_notify import GateResult
+from deploy_tools.deploy_lib.detach_notify import GateResult
 from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import landing as landing_mod
 from deploy_tools.land_lib.options import Options

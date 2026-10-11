@@ -14,7 +14,7 @@ Both halves, per CLAUDE.md: a stale tree must refuse as STALE before the derivat
 half the bug got wrong), and a current tree must still reach the derivation and deploy what it
 finds (the half a naive reorder could delete by refusing everything).
 
-The gates run in process in `deploy_run.py`, so `run_front_half` injects their
+The gates run in process in `deploy_lib/run.py`, so `run_front_half` injects their
 verdicts; the order they are asked in is the real code.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_precedes_changed_derivation.py

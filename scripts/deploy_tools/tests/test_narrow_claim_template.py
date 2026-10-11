@@ -11,7 +11,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_claim_template.py
 import pytest
 
 
-import narrow_broad
+from deploy_tools.narrow_lib import broad as narrow_broad
 from lib import yaml_fast
 from lib.git import git_stdout
 from lib.repo_paths import REPO

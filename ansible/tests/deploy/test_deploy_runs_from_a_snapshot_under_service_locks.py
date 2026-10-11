@@ -5,12 +5,12 @@ the working tree instead of the snapshot, or one that skips its service lock, wo
 until something else deploys at the same moment. Neither failure has a symptom on the run that
 caused it, which is why they are pinned at the source.
 
-`scripts/deploy.sh`: a foreground run's playbook is `run_playbook` in `deploy_playbook.py`,
+`scripts/deploy.sh`: a foreground run's playbook is `run_playbook` in `deploy_lib/playbook.py`,
 which runs it with the snapshot as its cwd, called by `deploy_under_locks.run` after
 `take_service_locks`; `deploy_detach.run` takes the same locks before it forks the child
-that calls `run_playbook`. `--check` and `--dry-run` are the exceptions: `deploy_run.py`
+that calls `run_playbook`. `--check` and `--dry-run` are the exceptions: `deploy_lib/run.py`
 execs them above the lock, from the working tree on purpose, and names ansible-playbook
-nowhere else. `deploy_flags.py` names it too and must never RUN it: the pre-lock gate
+nowhere else. `deploy_lib/flags.py` names it too and must never RUN it: the pre-lock gate
 hands the string to ansible's own parser, and a module saying "ansible-playbook" outside the
 service locks is the shape this file exists to catch.
 
@@ -27,11 +27,11 @@ import re
 from _helpers import REPO
 
 # deploy.sh's Python halves.
-_DEPLOY_RUN = REPO / "scripts/deploy_tools/deploy_run.py"
-_DEPLOY_FLAGS = REPO / "scripts/deploy_tools/deploy_flags.py"
-_DEPLOY_UNDER_LOCKS = REPO / "scripts/deploy_tools/deploy_under_locks.py"
-_DEPLOY_PLAYBOOK = REPO / "scripts/deploy_tools/deploy_playbook.py"
-_DEPLOY_DETACH = REPO / "scripts/deploy_tools/deploy_detach.py"
+_DEPLOY_RUN = REPO / "scripts/deploy_tools/deploy_lib/run.py"
+_DEPLOY_FLAGS = REPO / "scripts/deploy_tools/deploy_lib/flags.py"
+_DEPLOY_UNDER_LOCKS = REPO / "scripts/deploy_tools/deploy_lib/under_locks.py"
+_DEPLOY_PLAYBOOK = REPO / "scripts/deploy_tools/deploy_lib/playbook.py"
+_DEPLOY_DETACH = REPO / "scripts/deploy_tools/deploy_lib/detach_run.py"
 _DEPLOY_IO = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
 _DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
 
@@ -177,7 +177,7 @@ def _locks_before_playbook(
 
 
 def test_the_python_locked_half_takes_its_service_locks_before_the_playbook():
-    """The ordering ADR-0017 fixes, read off `run` in deploy_under_locks.py."""
+    """The ordering ADR-0017 fixes, read off `run` in deploy_lib/under_locks.py."""
     run = _functions(_DEPLOY_UNDER_LOCKS.read_text())["run"]
     assert _locks_before_playbook(run), (
         "deploy_under_locks.run reaches the playbook before it takes a service lock"

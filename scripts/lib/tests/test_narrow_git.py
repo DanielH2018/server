@@ -42,7 +42,7 @@ def test_both_narrowing_modules_raise_the_same_class():
     half, so a raise crossing that boundary had to match whichever class the catch site
     happened to import.
     """
-    import narrow_broad
+    from deploy_tools.narrow_lib import broad as narrow_broad
     import narrow_setup
 
     assert narrow_broad.CannotNarrow is CannotNarrow

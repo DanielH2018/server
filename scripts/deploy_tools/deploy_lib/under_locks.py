@@ -1,6 +1,6 @@
 """The locked half of a foreground deploy: tree lock, snapshot, service locks, playbook.
 
-`deploy_run.py` calls `run` once every gate has passed. `--detach` is `deploy_detach.py`,
+`deploy_lib/run.py` calls `run` once every gate has passed. `--detach` is `deploy_lib/detach_run.py`,
 which takes the same locks through the functions here and forks before the playbook.
 
 TWO LOCKS, GUARDING TWO DIFFERENT THINGS (ADR-0017). The git-tree lock guards
@@ -37,7 +37,7 @@ from pathlib import Path
 
 # Reach the sibling package directories: an importer that did not bootstrap them itself (a
 # test, a REPL) finds only this module's own directory, and `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import (
     DEPLOY_LOCK_BUSY,
     DEPLOY_LOCK_PLAN_FAILED,
@@ -46,7 +46,7 @@ from lib.exit_codes import (
     DEPLOY_PLAYBOOK_FAILED,
     DEPLOY_SNAPSHOT_FAILED,
 )
-from deploy_tools.deploy_playbook import annotate, discharge_owed_k8s, run_playbook
+from deploy_tools.deploy_lib.playbook import annotate, discharge_owed_k8s, run_playbook
 from lib.git import git, git_stdout
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 

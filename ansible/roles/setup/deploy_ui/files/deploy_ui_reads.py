@@ -17,10 +17,13 @@ import gitops_ledger
 import gitops_markers
 from gitops_hold import DeployerSnapshot
 
-# `deploy_run.py`: the `deploy.sh` shim execs `uv run … deploy_run.py`, and that `uv` process
+# `deploy_cli.py`: the `deploy.sh` shim execs `uv run … deploy_cli.py`, and that `uv` process
 # stays the family root while the locked half runs under it (#2412), so no process says
-# `deploy.sh` at all.
-_RUN_RE = re.compile(r"\b(land\.py|deploy\.sh|deploy_run\.py|ansible-playbook)\b")
+# `deploy.sh` at all. `deploy_run.py` is what the shim execed before #4347, and a deploy from
+# an older checkout still runs it.
+_RUN_RE = re.compile(
+    r"\b(land\.py|deploy\.sh|deploy_cli\.py|deploy_run\.py|ansible-playbook)\b"
+)
 _PR_RE = re.compile(r"--pr\s+(\d+)")
 _TAGS_RE = re.compile(r"--tags[= ]+(\S+)")
 # `deploy.sh --list-services` is a read this daemon itself runs on every deploy POST, and

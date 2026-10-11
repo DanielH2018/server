@@ -3,7 +3,7 @@
 A test replaces one field of `Tools` and never a PATH entry. The defaults are the real
 implementations, defined here so the phase modules never import subprocess.
 
-WHICH CHECKOUT EACH HELPER COMES FROM. await_ci, land_tags and deploy_detach_notify are
+WHICH CHECKOUT EACH HELPER COMES FROM. await_ci, land_tags and deploy_lib/detach_notify are
 imported from land.py's checkout, so they are always the same release as it -- a PR adding a flag
 to one and its call site must pass its own landing, though the primary checkout still holds
 the previous release. gitops_tick.sh is run from beside land.py for the same reason.
@@ -37,8 +37,8 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# deploy_detach_notify `import deploy_tags` bare, so its directory must be reachable. The shim
-# puts it at sys.path[0] and pytest's pythonpath lists it; this covers an interpreter import.
+# land_tags imports `narrow_setup` bare, so its directory must be reachable. The shim puts it
+# at sys.path[0] and pytest's pythonpath lists it; this covers an interpreter import.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
@@ -51,7 +51,7 @@ from gitops_markers import MARKERS
 from deploy_tools import await_ci, shared_role_reach
 from deploy_tools.land_lib import land_platform, land_reach, land_rerolls
 from deploy_tools.land_lib import land_shared, land_tags
-from deploy_tools.deploy_detach_notify import GateResult, gate as health_gate
+from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
 from lib.gh import gh, gh_json
@@ -62,7 +62,7 @@ from lib.git import git
 HERE = _Path(__file__).resolve().parents[1]
 # What `uv run` reads to find an existing venv instead of building one where it stands.
 UV_PROJECT_ENVIRONMENT = "UV_PROJECT_ENVIRONMENT"
-# `uv run` here resolves the venv from cwd, which is PRIMARY at every call site.
+# `uv run` resolves the venv from cwd, PRIMARY here, which may predate `deploy_cli.py` (#4347).
 DEPLOY_TAGS_ARGV = ("uv", "run", "python", "scripts/deploy_tools/deploy_tags.py")
 # The parent a gate snapshot is made in, and the env var that moves it for a test.
 GATE_TMP_ROOT = "/tmp"

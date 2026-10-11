@@ -43,7 +43,7 @@ from _role_census import role_dirs
 SETUP_ROLES = REPO / "ansible/roles/setup"
 
 # The names Ansible loads from a role's `tasks/`, matching
-# `scripts/deploy_tools/narrow_setup_index.py:_LOADED_EXTENSIONS`. A file this skips is one
+# `scripts/deploy_tools/narrow_lib/setup_index.py:_LOADED_EXTENSIONS`. A file this skips is one
 # Ansible never runs, so it holds no producer and no consumer.
 _LOADED_EXTENSIONS = (".yml", ".yaml", ".json", "")
 
@@ -139,7 +139,7 @@ def _walk(rel: str, tasks, inherited: frozenset[str]) -> list[Task]:
 
 
 # The spellings of a STATIC task import, matching
-# `scripts/deploy_tools/narrow_setup_index.py:_STATIC_IMPORTS`. An `include_tasks` is absent
+# `scripts/deploy_tools/narrow_lib/setup_index.py:_STATIC_IMPORTS`. An `include_tasks` is absent
 # for the reason stated there: a dynamic include's tasks are selected by the include task, not
 # by their own tags, so no tag of the included file selects them.
 _STATIC_IMPORTS = (

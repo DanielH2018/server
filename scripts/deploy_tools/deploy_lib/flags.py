@@ -1,8 +1,8 @@
 """What `deploy.sh` refuses a command line over, and the exception its gates refuse with.
 
 `deploy_run` calls `check_passthrough` once, before the tree lock. `Refused` lives here rather
-than in `deploy_run.py` because this module raises it and that one only catches it, and both
-are here rather than in `deploy_run.py` because that file sits at its length cap
+than in `deploy_lib/run.py` because this module raises it and that one only catches it, and both
+are here rather than in `deploy_lib/run.py` because that file sits at its length cap
 (`ansible/tests/repo/test_module_length_ratchet.py`); this is also the only piece of the
 wrapper that imports ansible itself.
 
@@ -19,7 +19,7 @@ from pathlib import Path
 
 # Reach the sibling package directories: a module imported by a directly-invoked script gets
 # only that script's directory, and pyproject's `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import DEPLOY_BAD_FLAGS
 
 # argparse's exit status, which is what ansible-playbook exits on a usage error. Deliberately

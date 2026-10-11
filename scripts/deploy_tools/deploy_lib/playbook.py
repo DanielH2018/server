@@ -28,7 +28,7 @@ from typing import Protocol
 
 # Reach the sibling package directories: an importer that did not bootstrap them itself (a
 # test, a REPL) finds only this module's own directory, and `pythonpath` is a pytest setting.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.exit_codes import DEPLOY_NO_HOSTS
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 

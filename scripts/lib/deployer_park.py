@@ -2,7 +2,7 @@
 
 TWO READERS ASK THIS AND MUST ANSWER IT IDENTICALLY. The SessionStart banner
 (``.claude/hooks/session-health.py``) reaches a session at the moment it opens.
-``scripts/deploy_tools/deploy_staleness.py`` reaches a session that has been running for an
+``scripts/deploy_tools/deploy_lib/staleness.py`` reaches a session that has been running for an
 hour and hits ``deploy.sh`` exit 4 mid-landing, where the refusal names a rebase of the
 reader's own worktree — the wrong repair when the primary checkout is what has to converge.
 A second derivation of "is this a park?" would drift, and the two would then
