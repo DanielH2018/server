@@ -76,6 +76,12 @@ id_ed25519
 # .claude/hooks/log-permission.py; counts are machine-local by design.
 .claude/logs/
 
+# An agent's scratch drafts, such as a fan-out agent's PR-body draft (pr-<n>.md). Untracked,
+# they read as uncommitted work to every `git status --porcelain` check: on 2026-10-11 one
+# kept the merged fanout-4428 tree out of `fanout.py place clean`, where it went on counting
+# against its host's batch cap (#4461). A draft is never repo content.
+.claude/scratch/
+
 # Ephemeral per-session git worktrees (.claude/worktrees/<name>). Session state, not repo
 # content — and each is itself a git repo, so committing one adds a gitlink nothing can clone.
 .claude/worktrees/

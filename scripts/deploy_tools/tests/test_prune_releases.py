@@ -13,7 +13,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_prune_releases.py
 import os
 
 
-from prune_releases import resolve_current, select_prunable
+from prune_releases import main, resolve_current, select_prunable
 
 
 def _release(root, name, age_seconds):
@@ -123,3 +123,26 @@ def test_pointer_to_a_file_resolves_to_none(tmp_path):
     link = tmp_path / "current"
     link.symlink_to(f)
     assert resolve_current(link) is None
+
+
+# ── main's exit code ─────────────────────────────────────────────────────────────────────────
+
+
+def test_main_exits_1_on_a_dangling_current_and_removes_nothing(tmp_path, capsys):
+    """The refusal is a failure: the play swung `current` just before, so it should resolve."""
+    dirs = _fleet(tmp_path, 8)
+    link = tmp_path / "current"
+    link.symlink_to(tmp_path / "gone")
+    argv = [str(dirs[0].parent), "--current", str(link), "--keep", "1", "--apply"]
+    assert main(argv) == 1
+    assert "refusing to prune anything" in capsys.readouterr().err
+    assert all(d.is_dir() for d in dirs)
+
+
+def test_main_exits_0_when_it_prunes_through_a_live_current(tmp_path):
+    dirs = _fleet(tmp_path, 3)
+    link = tmp_path / "current"
+    link.symlink_to(dirs[0])
+    argv = [str(dirs[0].parent), "--current", str(link), "--keep", "1", "--apply"]
+    assert main(argv) == 0
+    assert [d.is_dir() for d in dirs] == [True, False, False]

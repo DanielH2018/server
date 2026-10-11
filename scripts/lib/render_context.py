@@ -24,11 +24,11 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-import sys
 from pathlib import Path
 
 # The layers and where they live are lib.estate's, which the docs generators read through too,
 # so a template render and a docs page cannot disagree about which value wins (#3899).
+from lib.cli_help import warn
 from lib.estate import (
     PLANE_HOSTS,
     REPO_INVENTORY,
@@ -115,12 +115,12 @@ def render_context(
     if dropped and strict:
         raise UnresolvedVarsError(dropped)
     for key, reason in sorted(dropped.items()):
-        note = f"  [note] {key} left undefined, renders as STUB: {reason}"
+        note = f"{key} left undefined, renders as STUB: {reason}"
         # Once per process: every template of a role shares its defaults, so the same drop
         # would otherwise print once for each of them.
         if note not in _NOTED:
             _NOTED.add(note)
-            print(note, file=sys.stderr)
+            warn(note)
     return {**resolved, **overrides}
 
 

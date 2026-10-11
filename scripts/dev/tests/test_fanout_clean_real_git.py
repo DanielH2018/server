@@ -15,6 +15,7 @@ import pytest
 
 from fanout_lib.clean import clean_one
 from lib.git_testing import git, init_repo, scrub_process_git_env
+from lib.repo_paths import REPO as REPO_ROOT
 from lib.worktrees import Worktree, parse_worktree_list, remove
 
 
@@ -182,3 +183,61 @@ def test_a_worktree_whose_submodule_gitdir_dangles_is_kept_and_names_the_git_err
     # Unreadable is not clean: the tree and its branch both survive.
     assert wt.exists()
     assert "broken-sub" in _branches(repo)
+
+
+def _merged_tree_under_the_repo_gitignore(
+    tmp_path: Path,
+) -> tuple[Path, Path, Worktree]:
+    """A scratch repo whose one commit is THIS repo's `.gitignore`, and a worktree on it.
+
+    The real file, not a hand-written ignore line: a copy would pass with the rule deleted.
+    `add -f`, because the file's own `/*` deny ignores `.gitignore` while it is untracked.
+    """
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    (repo / ".gitignore").write_text((REPO_ROOT / ".gitignore").read_text())
+    (repo / "README.md").write_text("x\n")
+    git(repo, "add", "-f", ".gitignore", "README.md")
+    git(repo, "commit", "-q", "-m", "gitignore", "--no-gpg-sign")
+    wt = tmp_path / "wt"
+    git(repo, "worktree", "add", "-q", "-b", "drafted-branch", str(wt))
+    (wt / ".claude" / "scratch").mkdir(parents=True)
+    (wt / ".claude" / "scratch" / "pr-4428.md").write_text("PR body draft\n")
+    tree = next(
+        t for t in parse_worktree_list(_worktree_list(repo)) if t.path == str(wt)
+    )
+    return repo, wt, tree
+
+
+def test_a_merged_tree_holding_only_a_scratch_draft_is_removed(tmp_path, monkeypatch):
+    """#4461: an agent's `.claude/scratch/` PR-body draft kept a merged fan-out tree as
+    'uncommitted changes', and the kept tree held one of its host's batch slots."""
+    _scrub_git_env(monkeypatch)
+    repo, wt, tree = _merged_tree_under_the_repo_gitignore(tmp_path)
+
+    state, why = clean_one(str(repo), tree, ask=lambda *a, **k: True, remover=remove)
+
+    assert (state, why) == ("removed", "")
+    assert not wt.exists()
+    assert "drafted-branch" not in _branches(repo)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        pytest.param(".claude/notes.md", id="untracked-outside-scratch"),
+        pytest.param("README.md", id="modified-tracked"),
+    ],
+)
+def test_a_merged_tree_with_other_changes_beside_a_scratch_draft_is_kept(
+    tmp_path, monkeypatch, extra
+):
+    _scrub_git_env(monkeypatch)
+    repo, wt, tree = _merged_tree_under_the_repo_gitignore(tmp_path)
+    (wt / extra).write_text("unlanded work\n")
+
+    state, why = clean_one(str(repo), tree, ask=lambda *a, **k: True, remover=remove)
+
+    assert state == "kept" and "uncommitted" in why
+    assert (wt / extra).exists()
+    assert "drafted-branch" in _branches(repo)
