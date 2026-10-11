@@ -291,3 +291,19 @@ def test_a_probe_that_cannot_run_leaves_the_verdict_alone(tmp_path):
     # what shows the stub ran rather than the probe failing for its own reasons.
     assert "GitOps deployer state (" not in proc.stdout
     assert proc.stdout.rstrip().splitlines()[-1].startswith("TICK-VERDICT: ticked")
+
+
+def test_a_run_still_in_flight_at_the_deadline_is_not_called_fine(tmp_path):
+    """The script stopped watching, so it knows nothing about the run's outcome (#4445)."""
+    result = subprocess.run(
+        [str(_TICK_SH), "--wait", "1"],
+        cwd=_REPO,
+        env=_tick_env(tmp_path, _SYSTEMCTL_IN_FLIGHT, _JOURNALCTL),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == ec.TICK_STILL_RUNNING, result.stdout + result.stderr
+    assert "its outcome is unknown" in result.stdout
+    assert "the run is fine" not in result.stdout
