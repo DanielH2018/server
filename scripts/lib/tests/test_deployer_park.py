@@ -12,6 +12,7 @@ import json
 from lib.deployer_park import (
     BEHIND_PARK_SECONDS,
     k8s_deferred_lines,
+    k8s_unapplied_lines,
     manual_plane_lines,
     park_age,
     park_note,
@@ -142,6 +143,19 @@ def test_k8s_unapplied_is_read_from_the_owed_ledger(tmp_path):
 
 def test_k8s_unapplied_with_no_ledger_reads_as_nothing_pending(tmp_path):
     assert read_k8s_unapplied_marker(str(tmp_path)) is None
+
+
+def test_a_shared_role_unapplied_line_names_no_bare_fleet_redeploy():
+    """#4373: a bare `deploy.sh --tags "manifests"` redeploys every caller, while an ordinary
+    service keeps its own deploy command."""
+    marker = "\n".join(
+        owed_line(OWED_K8S_UNAPPLIED, subject, "a" * 40, at)
+        for subject, at in (("manifests", 1000), ("authelia", 2000))
+    )
+    shared, ordinary = k8s_unapplied_lines(marker, 4000)
+    assert '`./scripts/deploy.sh --tags "manifests"`;' not in shared
+    assert "nothing to deploy: `manifests` is a shared role" in shared
+    assert '`./scripts/deploy.sh --tags "authelia"`;' in ordinary
 
 
 def test_a_k8s_deferred_ledger_line_with_an_unknown_key_reaches_the_banner(tmp_path):

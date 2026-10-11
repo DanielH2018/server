@@ -67,8 +67,10 @@ from gitops_hold import read_field
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     CONTENTION_PAGE_SECONDS,
+    SHARED_K8S_ROLES,
     STATE_DIR,
     k8s_deferred_deploy_cmd,
+    k8s_unapplied_remedy,
     parse_contention,
     by_hand,
     maximal_apply_warning,
@@ -306,13 +308,19 @@ def k8s_unapplied_lines(marker, now):
     # red as normal operation, which is the measured ground #2471 ruled the marker out on. A
     # banner line costs a reader one glance and the marker discharges itself off the release
     # record, so the set stays the changes nobody has deployed.
+
+    A shared role's line names no bare `deploy.sh --tags <role>`, which would redeploy every
+    caller; `gitops_markers.k8s_unapplied_remedy` words it (#4373).
     """
     lines = []
     for entry in sorted(parse_owed(marker, OWED_K8S_UNAPPLIED), key=lambda e: e.at):
+        remedy = k8s_unapplied_remedy(entry.subject)
+        if entry.subject not in SHARED_K8S_ROLES:
+            remedy = f"`{remedy}`"
         lines.append(
             f"  ✗ the GitOps deployer merged a k8s change for `{entry.subject}` "
             f"{_age_phrase(now - entry.at)} ago and never applies this role — "
-            f"`{k8s_deferred_deploy_cmd([entry.subject])}`, or "
+            f"{remedy}; or "
             f"`{owed_clear_cmd(OWED_K8S_UNAPPLIED, entry.subject)}` if it was reverted"
         )
     return lines

@@ -216,6 +216,19 @@ def test_the_two_k8s_markers_are_separate_files(gitops_deploy, settings, state):
     assert [e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == ["authelia"]
 
 
+def test_the_journal_names_a_shared_role_apart_from_the_deploy_command(
+    gitops_deploy, state, capsys
+):
+    """#4373: folding `manifests` into the one `--tags` value would redeploy every caller."""
+    state.record_owed(OWED_K8S_UNAPPLIED, ORIGIN, {"manifests", "authelia"}, 1000.0)
+    deploy_k8s_owed.log_k8s_unapplied(state)
+    logged = capsys.readouterr().out.splitlines()
+    assert len(logged) == 1, logged
+    assert 'Deploy: ./scripts/deploy.sh --tags "authelia".' in logged[0]
+    assert "manifests: nothing to deploy" in logged[0]
+    assert '--tags "authelia,manifests"' not in logged[0]
+
+
 # ── the discharge: a deploy the deployer never saw still drops the line ────────────────────
 @pytest.fixture
 def pending(gitops_deploy, state_dir, settings, state):

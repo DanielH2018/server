@@ -55,6 +55,21 @@ def test_every_set_marker_is_printed_with_its_way_out(tmp_path):
     assert "gitops_state.py clear-owed k8s_unapplied homepage" in out
 
 
+def test_a_shared_role_unapplied_line_names_no_bare_fleet_redeploy(tmp_path):
+    """#4373, the land.sh summary: `manifests` gets the render-proof wording, `homepage` its
+    own deploy command."""
+    _state(
+        tmp_path,
+        owed="\n".join(
+            [_owed("k8s_unapplied", "manifests"), _owed("k8s_unapplied", "homepage")]
+        ),
+    )
+    out = view.format_text(view.collect(tmp_path, NOW))
+    assert 'do:   ./scripts/deploy.sh --tags "homepage"' in out
+    assert 'do:   ./scripts/deploy.sh --tags "manifests"' not in out
+    assert "do:   nothing to deploy: `manifests` is a shared role" in out
+
+
 def test_hold_plane_lines_with_no_hold_sha_are_shown_as_orphaned(tmp_path):
     """A hand `rm hold_sha` leaves planes the next hold waits on; `none` alone hid them."""
     _state(tmp_path, owed=_owed("hold_plane", "ansible/deploy.yml sonarr"))
