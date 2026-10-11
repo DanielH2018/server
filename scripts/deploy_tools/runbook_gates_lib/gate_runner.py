@@ -122,7 +122,16 @@ class Gate:
 
 
 class Unreadable(RuntimeError):
-    """A cluster list returned nothing parseable — the gate could not look, so it is not graded."""
+    """A gate's source returned nothing parseable — the gate could not look, so it is not graded.
+
+    `cluster` says whether that source was a kubectl read. The runner prefixes a cluster read's
+    message with "cannot ask the cluster"; a local read, such as a deployer marker under
+    `/var/lib/gitops-deploy`, prints its own message, which names the file (#4485).
+    """
+
+    def __init__(self, message: str, *, cluster: bool = True):
+        super().__init__(message)
+        self.cluster = cluster
 
 
 def cluster_doc(cluster: str, tools: Tools, args: Sequence[str]):
@@ -137,16 +146,18 @@ def run_gates(gates: Sequence[Gate], runbook: str, *context, out=sys.stdout) -> 
     """Run `gates` in order with `context` as each check's arguments; return the exit code.
 
     Prints one line per gate. The first failing gate's offenders are printed under it, and its
-    number is the return value; `EX_UNAVAILABLE` when a gate could not ask the cluster.
+    number is the return value; `EX_UNAVAILABLE` when a gate could not read its source.
     """
     for gate in gates:
         try:
             offenders = gate.check(*context)
         except (WrongCluster, MissingKubectl, Unreadable) as exc:
-            print(
-                f"gate {gate.number} ({gate.title}): cannot ask the cluster — {exc}",
-                file=out,
+            reason = (
+                str(exc)
+                if isinstance(exc, Unreadable) and not exc.cluster
+                else f"cannot ask the cluster — {exc}"
             )
+            print(f"gate {gate.number} ({gate.title}): {reason}", file=out)
             return EX_UNAVAILABLE
         if offenders:
             print(f"gate {gate.number} FAILED — {gate.title}:", file=out)
