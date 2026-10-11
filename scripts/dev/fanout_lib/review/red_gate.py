@@ -52,7 +52,6 @@ Every process goes through the pipeline's `Runner`, so the tests script pytest's
 
 import json
 import re
-import sys
 import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -64,6 +63,8 @@ from pathlib import Path, PurePosixPath
 import sys as _sys
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+# `scripts/lib` sits three levels up, for `lib.cli_help`.
+_sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from fanout_lib.brief import fence_for
 from fanout_lib.review.red_tests import append_only, red_by_absence, stale_suppressions
@@ -82,6 +83,7 @@ from fanout_lib.review.hardened_runs import (
 # The label an issue carries to get a red phase. `findings.py open` applies it to a finding
 # whose every cited path is code the suite runs (`findings_lib.red_green`).
 from findings_lib.red_green import RED_GREEN_LABEL
+from lib.cli_help import warn
 
 # What the implementer may not change once the red commit exists, besides the red files.
 # The `file` of the finding a failed green gate becomes, which no real path can equal.
@@ -165,10 +167,9 @@ def review_flags(
         return review, False
     if review and not red_skip_reason(labels, server):
         return review, True
-    print(
-        f"launch: batch {batch} runs without a red phase: it needs --review, this repo, "
-        f"and the `{RED_GREEN_LABEL}` label on every issue",
-        file=sys.stderr,
+    warn(
+        f"batch {batch} runs without a red phase: it needs --review, this repo, "
+        f"and the `{RED_GREEN_LABEL}` label on every issue"
     )
     return review, False
 

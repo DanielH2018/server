@@ -89,7 +89,7 @@ from fanout_lib.launch_gates import (
     refuse_shared_files,
     refuse_solo_only,
 )
-from lib.cli_help import ArgumentParser
+from lib.cli_help import ArgumentParser, error, warn
 from lib.exit_codes import (
     FANOUT_PLACE_BAD_ARGS,
     FANOUT_PLACE_FAILED,
@@ -165,19 +165,15 @@ def _fetch_issues(
         try:
             fetched[number] = tools.gh_issue(number, repo)
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            print(
-                f"launch: could not fetch issue {number}: {error_text(exc)}",
-                file=sys.stderr,
-            )
+            error(f"could not fetch issue {number}: {error_text(exc)}")
             return None
     unlabelled = [
         n for n, issue in fetched.items() if REQUIRED_LABEL not in issue.labels
     ]
     for number in unlabelled:
-        print(
-            f"launch: issue {number} does not carry the `{REQUIRED_LABEL}` label — only "
-            "issues findings.py filed are fan-out work",
-            file=sys.stderr,
+        error(
+            f"issue {number} does not carry the `{REQUIRED_LABEL}` label — only "
+            "issues findings.py filed are fan-out work"
         )
     return None if unlabelled else fetched
 
@@ -199,9 +195,9 @@ def cmd_launch(args, tools: Tools) -> int:
             args.repo, args.host, this_host(), tools.default_ref
         )
     except ValueError as exc:
-        print(f"launch: {exc}", file=sys.stderr)
+        error(str(exc))
         return FANOUT_PLACE_BAD_ARGS
-    holder = claims_mod.orchestrator_branch(tools, target, "launch")
+    holder = claims_mod.orchestrator_branch(tools, target)
     if holder is None:
         return FANOUT_PLACE_FAILED
     if live_elsewhere(batches, args.manifest_root, target.repo):
@@ -218,7 +214,7 @@ def cmd_launch(args, tools: Tools) -> int:
     # connection against the per-host ssh limit.
     registered = registered_keys(tools)
     if isinstance(registered, str):
-        print(f"launch: {registered} — refusing to launch", file=sys.stderr)
+        error(f"{registered} — refusing to launch")
         return FANOUT_PLACE_NO_SIGNING_HOST
     hosts = [args.host] if args.host else list(HOSTS)
     good, bad = _readings(tools, hosts)
@@ -228,12 +224,11 @@ def cmd_launch(args, tools: Tools) -> int:
         return FANOUT_PLACE_NO_HOST_READABLE
     good, refusals = verified_hosts(good, registered)
     for reason in refusals:
-        print(f"launch: not placing on {reason}", file=sys.stderr)
+        warn(f"not placing on {reason}")
     if not good:
-        print(
-            "launch: no candidate host signs commits GitHub verifies — a batch placed there "
-            "opens a PR that cannot merge",
-            file=sys.stderr,
+        error(
+            "no candidate host signs commits GitHub verifies — a batch placed there "
+            "opens a PR that cannot merge"
         )
         return FANOUT_PLACE_NO_SIGNING_HOST
     try:
