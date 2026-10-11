@@ -4,10 +4,14 @@
 These are the live-DB→code drift helpers: `slug` names the on-disk file, and `normalize`
 rewrites stale datasource uids onto the canonical ones + strips the ephemeral query `key`.
 A regression here churns every exported dashboard or leaks a stale uid (silent "No data").
-The network/docker-exec path (gapi/main) is intentionally not exercised here.
+The kubectl-exec call (gapi/main) is not exercised here; `parse_reply`, which reads its result, is.
 
 Run: uv run pytest scripts/grafana/tests/test_export_grafana_dashboards.py
 """
+
+import subprocess
+
+import pytest
 
 import export_grafana_dashboards as eg
 
@@ -73,3 +77,18 @@ def test_dump_sorts_keys_at_every_depth_and_keeps_non_ascii_literal():
         '{\n  "panels": [\n    {\n      "description": "a — b",\n      "id": 2,\n'
         '      "title": "b"\n    }\n  ],\n  "uid": "x"\n}\n'
     )
+
+
+def test_a_failed_kubectl_exec_names_the_path_and_the_error():
+    proc = subprocess.CompletedProcess(
+        [], 1, stdout="", stderr="x\nerror: pod not found\n"
+    )
+    with pytest.raises(SystemExit) as exc:
+        eg.parse_reply("/api/search", proc)
+    assert "GET /api/search" in str(exc.value)
+    assert "error: pod not found" in str(exc.value)
+
+
+def test_a_json_reply_is_parsed():
+    proc = subprocess.CompletedProcess([], 0, stdout='[{"uid": "a"}]', stderr="")
+    assert eg.parse_reply("/api/search", proc) == [{"uid": "a"}]

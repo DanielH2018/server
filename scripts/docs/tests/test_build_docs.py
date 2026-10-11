@@ -269,3 +269,17 @@ def test_both_skipping_call_sites_are_reported_as_skipped(monkeypatch):
     monkeypatch.setattr(build_docs, "build_site", fake_build)
     build_docs.main(["--site-dir", "/tmp/x", "--skip-generators"])
     assert seen["generators"] == "skipped"
+
+
+def test_a_long_mkdocs_log_keeps_its_last_line():
+    log = (
+        "\n".join(f"INFO line {n}" for n in range(500))
+        + "\nERROR - Aborted with 1 warning"
+    )
+    tail = build_docs.stderr_tail(log, 400)
+    assert tail.endswith("ERROR - Aborted with 1 warning")
+    assert len(tail) <= 400 and tail.startswith("INFO line")
+
+
+def test_a_short_log_is_kept_whole():
+    assert build_docs.stderr_tail("  one\ntwo\n", 400) == "one\ntwo"

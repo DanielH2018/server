@@ -84,8 +84,30 @@ def gapi(path):
         % path,
         privileged=True,
         timeout=30,
-    ).stdout
-    return json.loads(out)
+    )
+    return parse_reply(path, out)
+
+
+def parse_reply(path, proc):
+    """The JSON body of one `gapi` call, or a SystemExit that says what failed and what to try.
+
+    A failed `kubectl exec` leaves stdout empty, and `json.loads("")` raised a bare
+    JSONDecodeError that named neither the API path nor kubectl's own error (#4448).
+    """
+    if proc.returncode != 0 or not proc.stdout.strip():
+        detail = (proc.stderr or "").strip().splitlines()[-1:] or ["no output"]
+        raise SystemExit(
+            f"GET {path} through `kubectl exec deploy/grafana` failed "
+            f"(exit {proc.returncode}): {detail[0]}\n"
+            "Run this on daniel-box, and check the pod with "
+            "`kubectl -n observability get deploy/grafana`."
+        )
+    try:
+        return json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(
+            f"GET {path} returned non-JSON ({exc.msg}): {proc.stdout[:200]!r}"
+        ) from None
 
 
 def slug(title):
