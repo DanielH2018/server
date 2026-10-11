@@ -95,8 +95,8 @@ def kuma_push(
             scheme (``http://uptime-kuma.monitoring:3001``), which a pod uses to reach the
             in-cluster Service directly. Empty skips the push.
         token: the push monitor's token. Empty skips the push.
-        log: called with one line per failed attempt. It never receives the URL, which
-            carries the token.
+        log: called with one line per failed attempt, plus Kuma's own reason before the
+            final one when Kuma answered. It never receives the URL or the token.
         opener: the ``urlopen`` that carries the push, ``urllib.request.urlopen`` when None,
             resolved per call so a stub of the stdlib name reaches it too.
         sleep: the wait between attempts; a test injects a no-op.

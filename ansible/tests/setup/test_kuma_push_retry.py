@@ -20,8 +20,9 @@ any OTHER 4xx, in particular the 404 above. A no-router 404 and a bad-token 404 
 code, so a genuinely bad token burns the retry budget before its log line appears — the
 same trade the sibling cron `crowdsec-update-home-allowlist.sh.j2` accepts. The final line
 says which of the two it was: Kuma's own rejection is `application/json`, Traefik's
-no-router page is `text/plain`, and the library appends `by=kuma` from the content type (the
-body stays discarded). The retry budget is three attempts: a single 30s backoff is under the
+no-router page is `text/plain`, and the library appends `by=kuma` from the content type. Kuma
+answers 404 for any exception, so on a final `by=kuma` failure the library also logs Kuma's own
+`msg`, token redacted, on the line before (#4481). The retry budget is three attempts: a single 30s backoff is under the
 31s longest endpoint-less window measured, so a lone retry could still land inside the
 outage; three attempts at a fixed 30s backoff put the second retry at t=60s, ~2x that
 window. Each behaviour below is therefore guarded by an accept/reject pair.
