@@ -221,6 +221,8 @@ each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
   templates and the play's own trees for each one. A call from `deploy.yml`, `pre_tasks/`,
   `tasks/` or `post_tasks/` still refuses, as do an inventory value that calls the filter, a
   `filters()` that is not a literal dict, a deleted plugin and a plugin another plugin imports.
+  An edit to comments, docstrings or layout alone reaches no caller in either plane (#4412).
+  `filters.comment_only` compares the module's parse tree, less its docstrings, at both refs.
   `scripts/deploy_tools/narrow_lib/filters.py` holds the rule.
 - **A setup role that calls a filter is outside both runs**, because `deploy.yml` applies no
   setup role. The deployer reads those callers from

@@ -255,6 +255,10 @@ def plugin_tags(
             cannot follow), or a role that names none of the plugin's filters, which means the
             table calling it a caller and this walk disagree.
     """
+    if narrow_filters.comment_only(path, old, new, Path(repo)):
+        # No filter changed, so nothing the role reads did (#4412): the path adds no tag,
+        # the way a comment edit to a `defaults/` file adds none in `path_tags`.
+        return frozenset()
     tags: set[str] = set()
     for name in sorted(narrow_filters.plugin_names(path, old, new, Path(repo))):
         r = git(
