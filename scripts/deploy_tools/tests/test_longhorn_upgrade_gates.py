@@ -1,4 +1,4 @@
-"""`longhorn_upgrade_gates.py` against a fake kubectl: each gate's clean/flagged pair, the stop
+"""`runbook_gates.py longhorn-upgrade` against a fake kubectl: each gate's clean/flagged pair, the stop
 order, and the exit code naming the gate.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_longhorn_upgrade_gates.py
@@ -8,7 +8,7 @@ import io
 
 import pytest
 from _gates_fakes import fake_tools, failing_read
-from deploy_tools import longhorn_upgrade_gates as gates
+from deploy_tools.runbook_gates_lib import longhorn_upgrade as gates
 from lib import yaml_fast
 
 from lib.repo_paths import REPO as _REPO
@@ -227,7 +227,7 @@ def test_a_list_that_returns_nothing_is_unavailable_not_a_failed_gate(state_dir)
     )
     out = io.StringIO()
     code = gates.run_gates(tools=tools, state_dir=str(state_dir), out=out)
-    assert code == gates.runbook_gates.EX_UNAVAILABLE
+    assert code == gates.gate_runner.EX_UNAVAILABLE
     assert "returned no document" in out.getvalue()
 
 
@@ -245,10 +245,10 @@ def test_the_runbook_calls_the_script_and_it_runs():
     Running the script with a bad flag exercises its own `sys.path` bootstrap, which the
     in-process import above cannot.
     """
-    script = "scripts/deploy_tools/longhorn_upgrade_gates.py"
-    assert script in _RUNBOOK.read_text()
+    script = "scripts/deploy_tools/runbook_gates.py"
+    assert f"{script} longhorn-upgrade" in _RUNBOOK.read_text()
     proc = run(
-        ["uv", "run", "python", str(_REPO / script), "--bogus"],
+        ["uv", "run", "python", str(_REPO / script), "longhorn-upgrade", "--bogus"],
         cwd=_REPO,
         # A nested `uv run` resolves the dev group before the child starts, which a cold
         # cache makes minutes rather than seconds — longer than `DEFAULT_TIMEOUT` allows.

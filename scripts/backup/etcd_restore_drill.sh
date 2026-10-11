@@ -229,7 +229,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # ANY NON-ZERO IS A FAILURE, exit 69 included. 69 is "could not ask the cluster" — no kubectl, an
 # unreadable kubeconfig, the wrong cluster, or a Forbidden read. That is the RBAC half of what
 # this call exists to exercise, so passing the drill on it would leave the same blind spot the
-# call closes. Same fail-closed posture as `stamp_dir_missing` in runbook_gates.py.
+# call closes. Same fail-closed posture as `stamp_dir_missing` in runbook_gates_lib/gate_runner.py.
 #
 # THE CHECKOUT'S OWN INTERPRETER, not `uv run`, and that is measured rather than stylistic. This
 # cron runs as ROOT with `PATH=/usr/local/bin:/usr/bin:/bin`, and on daniel-box root
@@ -242,20 +242,21 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # must not write to the sys_user-owned .venv.
 #
 # The uv form is the fallback because `.venv` is gitignored, so a fresh checkout has none. The
-# gate's import closure is stdlib plus `lib.kubectl` and `deploy_tools.runbook_gates`, so
-# `--no-project` is enough for it and the python version comes from the repo's own
+# gate's import closure is stdlib plus `lib.kubectl`, `lib.cli_registry` and the two
+# `runbook_gates_lib` modules it runs (the dispatcher imports the other runbooks only when one is
+# named), so `--no-project` is enough for it and the python version comes from the repo's own
 # `.python-version` rather than a second copy of the number here.
 #
 # GATE_CMD is an array so the test can stub it — ansible/tests/setup/test_etcd_restore_drill_gate.py
 # drives a refusal and a pass through it without a cluster.
-GATE_SCRIPT="$REPO_ROOT/scripts/deploy_tools/k3s_etcd_restore_gates.py"
+GATE_SCRIPT="$REPO_ROOT/scripts/deploy_tools/runbook_gates.py"
 if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
-  GATE_CMD=("$REPO_ROOT/.venv/bin/python" "$GATE_SCRIPT" --gate 3)
+  GATE_CMD=("$REPO_ROOT/.venv/bin/python" "$GATE_SCRIPT" etcd-restore --gate 3)
 else
   GATE_CMD=(
     /usr/local/bin/uv run --no-project --no-python-downloads
     --python "$(cat "$REPO_ROOT/.python-version" 2>/dev/null || echo 3.14)"
-    "$GATE_SCRIPT" --gate 3
+    "$GATE_SCRIPT" etcd-restore --gate 3
   )
 fi
 

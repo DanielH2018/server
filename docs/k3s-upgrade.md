@@ -44,7 +44,7 @@ exit code names the first gate that refused — so a skipped gate is impossible 
 is a number rather than a paragraph (#2162):
 
 ```bash
-uv run python scripts/deploy_tools/k3s_upgrade_gates.py
+uv run python scripts/deploy_tools/runbook_gates.py k3s-upgrade
 ```
 
 Exit 0 means all four passed. Exit 1–4 is the gate that failed, and the script prints what it

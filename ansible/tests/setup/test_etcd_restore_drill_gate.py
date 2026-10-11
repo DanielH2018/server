@@ -1,6 +1,6 @@
 """The etcd restore drill's gate-3 call and the order it runs in.
 
-`scripts/deploy_tools/k3s_etcd_restore_gates.py` gate 3 asks the cluster whether a named
+`scripts/deploy_tools/runbook_gates.py etcd-restore` gate 3 asks the cluster whether a named
 snapshot has an `ETCDSnapshotFile` reporting `readyToUse`. The weekly `--list-only` drill
 runs it against the snapshot it just listed, so a k3s change to that CR, or to the readonly
 ServiceAccount's access to it, surfaces before a real restore rather than during an outage.
@@ -37,7 +37,7 @@ _SNAPSHOT = "offbox-daniel-box-1789958702.zip"
 def _finish_list_only(gate_exit: int, stamp_dir) -> subprocess.CompletedProcess:
     """Source the drill and run its `--list-only` tail against a gate stub exiting `gate_exit`.
 
-    The stub stands in for the whole `k3s_etcd_restore_gates.py --gate 3` invocation, so nothing
+    The stub stands in for the whole `runbook_gates.py etcd-restore --gate 3` invocation, so nothing
     here needs a cluster, a kubeconfig or an interpreter of its own — the same way the verify
     test's stub `k3s` stands in for the real kubectl pipeline.
     """
@@ -102,13 +102,14 @@ def test_the_gate_command_names_the_gate_the_drill_can_actually_run():
     ).stdout.split("\n")
     assert "--gate" in out
     assert out[out.index("--gate") + 1] == "3"
-    named = [a for a in out if a.endswith("k3s_etcd_restore_gates.py")]
+    named = [a for a in out if a.endswith("runbook_gates.py")]
     assert len(named) == 1, out
     assert Path(named[0]).is_file(), named
+    assert out[out.index(named[0]) + 1] == "etcd-restore", out
     assert os.access(out[0], os.X_OK), (
         f"GATE_CMD's interpreter {out[0]} is not executable, so the gate would never run"
     )
-    from deploy_tools import k3s_etcd_restore_gates as gates
+    from deploy_tools.runbook_gates_lib import etcd_restore as gates
 
     assert gates.GATES[2].check is gates._gate_snapshot, (
         "gate 3 is no longer the snapshot gate, so --gate 3 drills the wrong stop condition"

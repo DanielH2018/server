@@ -230,6 +230,6 @@ wants `--tags longhorn_backup`; the read-only identity wants `--tags kubeconfig`
 
 The weekly `etcd restore drill` cron is gated on `k3s_etcd_restore_drill_armed` and runs
 `--list-only` on this host, because a full etcd restore cannot pass beside a live k3s. Its
-`--list-only` leg also runs restore gate 3 (`k3s_etcd_restore_gates.py --gate 3`) against the
+`--list-only` leg also runs restore gate 3 (`runbook_gates.py etcd-restore --gate 3`) against the
 snapshot it listed, so the `ETCDSnapshotFile` read the runbook depends on is exercised weekly
 rather than on the day of an outage (#2420); any non-zero exit fails the drill.
