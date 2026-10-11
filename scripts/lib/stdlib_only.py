@@ -16,15 +16,25 @@ derives the whole set instead.
 - `runtime_import(path, dirs)` is the runtime layer: it imports `path` in a fresh interpreter
   with no site-packages and `PYTHONPATH` set to `dirs`.
 
-The callers come from three places. `.claude/settings.json` names each `run-hook.sh` entry, and
+The callers come from four places. `.claude/settings.json` names each `run-hook.sh` entry, and
 one with no flag runs `--no-project`. Each `.claude/wait-sources/*` script names the file and
 subcommand it runs. `FANOUT_UNITS` and `RUNBOOK_UNITS` list the legs whose command line is
 built in Python or in an array of a shell script; `FANOUT_UNITS` lists the two fan-out legs built in
-Python, which `scripts/lib/tests/test_stdlib_only.py` pins against the builders.
+Python, which `scripts/lib/tests/test_stdlib_only.py` pins against the builders. The fourth is
+the role scripts a host runs `--no-project` (#4455), which `lib.role_installs` reads from each
+role's tasks and templates.
 
-Out of scope: the role scripts the host runs `--no-project` from `/opt/...` (configarr,
-janitorr, crowdsec, fake_remux, deploy_ui, the deployer), whose path on the host is not their
-path in the tree (#4455).
+A role script runs from the path its role's `copy` task installs it to, so its `sys.path` is
+the install directory, not its tree path. `lib.role_installs` copies every installed file to
+that layout under a temporary root, and a role entry is reached from its staged copy, so an
+import resolves only against what the role actually ships beside it. `stdlib_only_set()`
+keys a staged member by its tree source; `members()` keeps each staged copy with its own
+install's directories, because `host_lib.py` ships to a dozen of them and a union of their
+directories would resolve an import through a sibling only another install carries.
+
+The deployer's subprocess helpers (`narrow_setup.py`, `setup_routing.py`,
+`shared_role_callers.py`, `digest_provable.py`) are not callers: they run `uv run --frozen`, in
+the venv, and `test_the_deployers_subprocess_helpers_run_in_the_venv` pins that.
 
 Run: uv run pytest scripts/lib/tests/test_stdlib_only.py
 """
@@ -40,7 +50,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib import repo_paths
+from lib import repo_paths, role_installs
 from lib.repo_paths import REPO, ROLE_MODULES, ROLES
 
 HOOKS = REPO / ".claude" / "hooks"
@@ -95,7 +105,11 @@ def entries() -> list[tuple[Path, tuple[str, ...]]]:
     """Every no-venv entry file, with the subcommand argv its caller passes."""
     return sorted(
         set(
-            _hook_entries() + _wait_entries() + list(FANOUT_UNITS) + list(RUNBOOK_UNITS)
+            _hook_entries()
+            + _wait_entries()
+            + list(FANOUT_UNITS)
+            + list(RUNBOOK_UNITS)
+            + role_installs.role_entries()
         )
     )
 
@@ -233,6 +247,12 @@ def _eval(
         case ast.Call(func=ast.Attribute(attr="dirname"), args=[arg]):
             value = _as_path(_eval(arg, path, env))
             return None if value is None else value.parent
+        case ast.Call(
+            func=ast.Attribute(value=ast.Attribute(attr="environ"), attr="get"),
+            args=[_, default],
+        ):
+            # `os.environ.get("DEPLOYER_DIR", "/opt/gitops-deploy")`: the host runs the default.
+            return _eval(default, path, env)
         case ast.Call(func=ast.Attribute(attr="abspath" | "realpath"), args=[arg]):
             return _as_path(_eval(arg, path, env))
         case ast.Call(func=ast.Attribute(value=inner, attr="resolve")):
@@ -278,7 +298,7 @@ def _inserts(path: Path, nodes: list[ast.AST]) -> list[Path]:
         ):
             value = _as_path(_eval(node.args[-1], path, env))
             if value is not None:
-                found.append(value.resolve())
+                found.append(role_installs.installed(value).resolve())
     return found
 
 
@@ -385,14 +405,31 @@ def _reach(entry: Path, argv: tuple[str, ...]) -> tuple[set[Path], list[Path]]:
 
 
 @functools.cache
-def stdlib_only_set() -> dict[Path, list[Path]]:
-    """Each module a no-venv caller reaches, mapped to the directories that caller puts on `sys.path`."""
+def members() -> list[tuple[Path, list[Path]]]:
+    """Each file a no-venv caller reaches, as that caller runs it, with that caller's `sys.path`.
+
+    A role script appears as its staged copy, once per install directory it ships to.
+    """
     found: dict[Path, list[Path]] = {}
     for entry, argv in entries():
-        members, dirs = _reach(entry, argv)
-        for member in members:
+        reached, dirs = _reach(entry, argv)
+        for member in reached:
             have = found.setdefault(member, [])
             have += [d for d in dirs if d not in have]
+    return sorted(found.items())
+
+
+@functools.cache
+def stdlib_only_set() -> dict[Path, list[Path]]:
+    """Each module a no-venv caller reaches, mapped to the directories that caller puts on `sys.path`.
+
+    Keyed by the tree file: a staged copy is keyed by its source, with every install's
+    directories. `members()` keeps the installs apart, for the checks.
+    """
+    found: dict[Path, list[Path]] = {}
+    for member, dirs in members():
+        have = found.setdefault(role_installs.tree_source(member), [])
+        have += [d for d in dirs if d not in have]
     return found
 
 
@@ -427,16 +464,63 @@ def _role_module(top: str, dirs: list[Path]) -> bool:
     )
 
 
+_IMPORT_ERRORS = {"ImportError", "ModuleNotFoundError"}
+
+
+def _ends_the_run(node: ast.AST) -> bool:
+    """Whether `node` is a `raise` or a call to `sys.exit`, `exit` or `SystemExit`."""
+    if isinstance(node, ast.Raise):
+        return True
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", None)
+    return name in {"exit", "SystemExit", "_exit"}
+
+
+# DECIDED: an import inside a `try` whose handler names ImportError or ModuleNotFoundError
+# cannot kill the caller at import, which is the failure this module exists to catch. The
+# deployer's `deploy_setup_roles.routing` imports `setup_routing` that way, and its install
+# directory deliberately ships none. A handler for any other exception guards nothing, and
+# neither does one that raises or exits: `except ImportError: raise SystemExit(...)` still dies.
+def _guarded(tree: ast.Module) -> set[int]:
+    """The ids of the import nodes a `try ... except ImportError` guards."""
+    found = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Try):
+            continue
+        guards = []
+        for handler in node.handlers:
+            kinds = (
+                handler.type.elts
+                if isinstance(handler.type, ast.Tuple)
+                else [handler.type]
+            )
+            if any(isinstance(k, ast.Name) and k.id in _IMPORT_ERRORS for k in kinds):
+                guards.append(not any(map(_ends_the_run, ast.walk(handler))))
+        if guards and all(guards):
+            for statement in node.body:
+                found |= {
+                    id(sub)
+                    for sub in ast.walk(statement)
+                    if isinstance(sub, (ast.Import, ast.ImportFrom))
+                }
+    return found
+
+
 def walk(path: Path, dirs: list[Path]) -> list[str]:
     """The imports in `path` that a no-venv run cannot be shown to satisfy.
 
     The walk reads every import, call-time ones included: a function-local import of a
     first-party module resolves and passes, but a function-local `import yaml` does not.
+    An import guarded by `except ImportError` is skipped (`_guarded`).
     """
     dirs = [Path(d).resolve() for d in dirs]
     colliding = colliding_basenames()
+    guarded = _guarded(_tree(path))
+    nodes = [n for n in ast.walk(_tree(path)) if id(n) not in guarded]
     bad = []
-    for module, names in _imports(path, list(ast.walk(_tree(path)))):
+    for module, names in _imports(path, nodes):
         if module.startswith("\0"):
             if _files(module, names, dirs) is None:
                 bad.append(module.split("\0")[2] or ".")
@@ -447,6 +531,11 @@ def walk(path: Path, dirs: list[Path]) -> list[str]:
         if _role_module(top, dirs):
             continue
         resolved = _files(module, names, dirs)
+        # DECIDED: an import resolving inside a staged install directory passes, a basename
+        # two roles share included. The role's copy task chose which file sits there, so the
+        # host has exactly one candidate and `sys.path` order is not a question.
+        if resolved is not None and resolved[0].is_relative_to(role_installs.stage()):
+            continue
         if resolved is None or top in colliding or resolved[0].is_relative_to(ROLES):
             bad.append(module)
     return sorted(set(bad))
@@ -481,10 +570,20 @@ def runtime_import(path: Path, dirs: list[Path]) -> tuple[bool, str]:
     path = path.resolve()
     dirs = [Path(d).resolve() for d in dirs]
     name = _module_name(path, dirs)
-    code = f"import {name}" if name else _BY_PATH
+    # DECIDED: a module that raises SystemExit at import counts as imported, unless the exit
+    # came from a failed import. Every import it ran before the exit resolved, and `walk` reads
+    # the rest. `longhorn_backup_health.py` exits on an env var its cron wrapper exports, after
+    # all of its imports.
+    code = (
+        f"try:\n    {f'import {name}' if name else _BY_PATH}\n"
+        "except SystemExit as e:\n"
+        "    if isinstance(e.__context__, ImportError):\n"
+        "        raise"
+    )
     env = {
         k: v for k, v in os.environ.items() if k not in {"VIRTUAL_ENV", "PYTHONPATH"}
     }
+    env |= role_installs.staged_overrides()
     env["PYTHONPATH"] = os.pathsep.join(str(d) for d in dirs)
     done = subprocess.run(
         [sys.executable, "-S", "-P", "-c", code, str(path)],
