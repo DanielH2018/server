@@ -12,7 +12,6 @@ which sit under the orchestrator's branch and so outlive any `reap` (#3925).
 import dataclasses
 import shlex
 import subprocess
-import sys
 from datetime import UTC, datetime
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
@@ -21,6 +20,8 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+# `scripts/lib` sits two levels up, for `lib.cli_help`.
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib import manifest as manifest_mod
 from fanout_lib import status as status_mod
@@ -28,6 +29,7 @@ from fanout_lib.clean import busy_refusal, live_process_scan, read_clean_result
 from fanout_lib.manifest import Batch, Manifest
 from fanout_lib.target import SERVER_TARGET, Target, resolve
 from fanout_lib.transport import Tools
+from lib.cli_help import error
 
 
 def remote_abandon_command(
@@ -102,7 +104,7 @@ def release_batch(
     try:
         proc = tools.findings(argv)
     except subprocess.TimeoutExpired:
-        print(f"  release timed out; run: {retry}", file=sys.stderr)
+        error(f"{b.batch} on {b.host}: release timed out; run: {retry}")
         return False
     # findings.py prints a refusal on stderr.
     refusals = [ln for ln in proc.stderr.splitlines() if " refused: " in ln]
@@ -117,9 +119,9 @@ def release_batch(
         return True
     if proc.returncode != 0:
         detail = " ".join((proc.stderr or proc.stdout).split())
-        print(
-            f"  release failed ({proc.returncode}): {detail}; run: {retry}",
-            file=sys.stderr,
+        error(
+            f"{b.batch} on {b.host}: release failed ({proc.returncode}): {detail}; "
+            f"run: {retry}"
         )
         return False
     print(f"  released {issues} from `{holder}`")
@@ -140,10 +142,7 @@ def cmd_abandon(args, tools: Tools) -> int:
     index = next((i for i, b in enumerate(run.batches) if b.batch == args.batch), None)
     if index is None:
         names = ", ".join(b.batch for b in run.batches)
-        print(
-            f"abandon: run {run.run_id} has no batch {args.batch} (it has {names})",
-            file=sys.stderr,
-        )
+        error(f"run {run.run_id} has no batch {args.batch} (it has {names})")
         return 1
     b = run.batches[index]
     if b.removed_at:
@@ -152,19 +151,19 @@ def cmd_abandon(args, tools: Tools) -> int:
     try:
         target = resolve(b.repo, tools.default_ref)
     except ValueError as exc:
-        print(f"{b.batch} on {b.host}: abandon failed: {exc}", file=sys.stderr)
+        error(f"{b.batch} on {b.host}: abandon failed: {exc}")
         return 1
     command = remote_abandon_command(b, target=target)
     try:
         proc = tools.run(b.host, command, 120.0, None)
     except subprocess.TimeoutExpired:
-        print(f"{b.batch} on {b.host}: abandon timed out", file=sys.stderr)
+        error(f"{b.batch} on {b.host}: abandon timed out")
         return 1
     verdict, line = read_clean_result(proc)
-    removed = verdict == "removed"
-    print(f"{b.batch} on {b.host}: {line}", file=sys.stdout if removed else sys.stderr)
-    if not removed:
+    if verdict != "removed":
+        error(f"{b.batch} on {b.host}: {line}")
         return 1
+    print(f"{b.batch} on {b.host}: {line}")
     run.batches[index] = dataclasses.replace(
         b, removed_at=datetime.now(UTC).isoformat()
     )
@@ -206,7 +205,7 @@ def cmd_stop(args, tools: Tools) -> int:
             try:
                 target = resolve(b.repo, tools.default_ref)
             except ValueError as exc:
-                print(f"  claims not released: {exc}", file=sys.stderr)
+                error(f"{b.batch} on {b.host}: claims not released: {exc}")
                 failed = True
             else:
                 failed = not release_batch(tools, run, b, target, "stopped") or failed
