@@ -268,3 +268,30 @@ def test_the_declared_fanout_units_are_the_commands_the_builders_write():
             continue  # what the fanout_place.py shim forwards to, not a command line
         shape = f"{entry.relative_to(REPO).as_posix()} {' '.join(argv)} "
         assert any(shape in command for command in written), shape
+
+
+def test_a_mapped_basename_two_dirs_on_the_path_hold_turns_the_walk_red(tmp_path):
+    # Both gitops roles ship `gitops_hold`; with both on the path the map cannot say which loads.
+    checker = _checker()
+    module = tmp_path / "importer.py"
+    module.write_text("import gitops_hold\n", encoding="utf-8")
+    dirs = [tmp_path, repo_paths.MONITOR_BRIDGE_FILES, repo_paths.GITOPS_DEPLOY_FILES]
+    assert "gitops_hold" in checker.walk(module, dirs)
+    assert checker.walk(module, [tmp_path, repo_paths.GITOPS_DEPLOY_FILES]) == []
+
+
+def test_the_etcd_drill_gate_and_what_its_runbook_imports_are_in_the_set():
+    from lib.stdlib_only import RUNBOOK_UNITS
+
+    drill = (REPO / "scripts/backup/etcd_restore_drill.sh").read_text(encoding="utf-8")
+    no_project = drill[drill.index("--no-project") :]
+    for entry, argv in RUNBOOK_UNITS:
+        assert f'GATE_SCRIPT="$REPO_ROOT/{entry.relative_to(REPO).as_posix()}"' in drill
+        assert f'"$GATE_SCRIPT" {" ".join(argv)} ' in no_project
+    members = _rel_set(_checker())
+    assert {
+        "scripts/deploy_tools/runbook_gates.py",
+        "scripts/deploy_tools/runbook_gates_lib/etcd_restore.py",
+    } <= set(members)
+    # The lazy registry keeps the yaml-importing runbooks off the drill's path.
+    assert "scripts/deploy_tools/runbook_gates_lib/longhorn_upgrade.py" not in members

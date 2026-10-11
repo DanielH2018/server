@@ -18,7 +18,8 @@ derives the whole set instead.
 
 The callers come from three places. `.claude/settings.json` names each `run-hook.sh` entry, and
 one with no flag runs `--no-project`. Each `.claude/wait-sources/*` script names the file and
-subcommand it runs. `FANOUT_UNITS` lists the two fan-out legs whose command line is built in
+subcommand it runs. `FANOUT_UNITS` and `RUNBOOK_UNITS` list the legs whose command line is
+built in Python or in an array of a shell script; `FANOUT_UNITS` lists the two fan-out legs built in
 Python, which `scripts/lib/tests/test_stdlib_only.py` pins against the builders.
 
 Out of scope: the role scripts the host runs `--no-project` from `/opt/...` (configarr,
@@ -58,6 +59,11 @@ FANOUT_UNITS = (
     (_DEV / "fanout_place.py", ("clean-one",)),
     (_DEV / "fanout.py", ("place", "clean-one")),
 )
+# The weekly etcd restore drill runs this gate under `uv run --no-project` when the checkout has
+# no `.venv` (`scripts/backup/etcd_restore_drill.sh`'s `GATE_CMD`), as (entry, argv).
+RUNBOOK_UNITS = (
+    (REPO / "scripts" / "deploy_tools" / "runbook_gates.py", ("etcd-restore",)),
+)
 # A `run-hook.sh` entry with a flag runs `--project`, in the venv.
 _HOOK_ENTRY = re.compile(r"/\.claude/hooks/run-hook\.sh ([\w.-]+)((?: --\S+)*)")
 _WAIT_ENTRY = re.compile(r'--no-project\b.*\bpython "\$root/([^"]+)"((?: [\w-]+)*)')
@@ -87,7 +93,11 @@ def _wait_entries() -> list[tuple[Path, tuple[str, ...]]]:
 
 def entries() -> list[tuple[Path, tuple[str, ...]]]:
     """Every no-venv entry file, with the subcommand argv its caller passes."""
-    return sorted(set(_hook_entries() + _wait_entries() + list(FANOUT_UNITS)))
+    return sorted(
+        set(
+            _hook_entries() + _wait_entries() + list(FANOUT_UNITS) + list(RUNBOOK_UNITS)
+        )
+    )
 
 
 @functools.cache
@@ -125,13 +135,33 @@ def _function(tree: ast.Module, name: str) -> ast.AST | None:
 def _dispatched(tree: ast.Module, command: str) -> tuple[list[str], list[ast.AST]]:
     """What `command` reaches in an entry: module names a dict maps it to, and code it runs.
 
-    Three dispatch shapes occur: `COMMANDS = {"review": "fanout_lib.review_unit"}` with an
-    `importlib.import_module`, `if command == "probe":` around a call-time import, and an
-    argparse `add_parser("clean-one")` whose `set_defaults(fn=...)` names the function.
+    Four dispatch shapes occur: `COMMANDS = {"review": "fanout_lib.review_unit"}` with an
+    `importlib.import_module`, `if command == "probe":` around a call-time import, an argparse
+    `add_parser("clean-one")` whose `set_defaults(fn=...)` names the function, and a registry
+    row `("etcd-restore", "etcd_restore", ...)` whose module sits under a dotted string constant
+    (`runbook_gates.py`'s `LIB`). A candidate that names no module resolves to nothing.
     """
     modules, code = [], []
     parsers: dict[str, str] = {}
+    prefixes = [
+        node.value.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+        and "." in node.value.value
+    ]
     for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Tuple)
+            and len(node.elts) >= 2
+            and isinstance(node.elts[0], ast.Constant)
+            and node.elts[0].value == command
+            and isinstance(node.elts[1], ast.Constant)
+            and isinstance(node.elts[1].value, str)
+        ):
+            stem = node.elts[1].value
+            modules += [f"{prefix}.{stem}" for prefix in prefixes]
         if isinstance(node, ast.Dict):
             for key, value in zip(node.keys, node.values, strict=True):
                 if (
@@ -384,8 +414,15 @@ def colliding_basenames() -> frozenset[str]:
 
 
 def _role_module(top: str, dirs: list[Path]) -> bool:
-    return any(
-        directory.resolve() in dirs and top in names
+    """Whether `top` resolves to exactly one of `dirs`, and the map lists it for that one.
+
+    Exactly one, because the static walk does not model `sys.path` order: with both
+    MONITOR_BRIDGE_FILES and GITOPS_DEPLOY_FILES on the path, which `gitops_hold` loads is
+    the question the map exists to answer, so two holders are refused rather than guessed.
+    """
+    holders = [d for d in dirs if (d / f"{top}.py").is_file() or (d / top).is_dir()]
+    return len(holders) == 1 and any(
+        directory.resolve() == holders[0] and top in names
         for directory, names in ROLE_MODULES.items()
     )
 

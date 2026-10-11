@@ -93,4 +93,5 @@ ANSIBLE_TESTS = ANSIBLE / "tests"
 # from a role directory, or of a basename two of them share, that this map does not list.
 ROLE_MODULES = {
     GITOPS_DEPLOY_FILES: ["gitops_hold", "gitops_ledger", "gitops_markers"],
+    MONITOR_BRIDGE_FILES: ["longhorn_robustness"],
 }
