@@ -23,7 +23,7 @@ Python, which `scripts/lib/tests/test_stdlib_only.py` pins against the builders.
 
 Out of scope: the role scripts the host runs `--no-project` from `/opt/...` (configarr,
 janitorr, crowdsec, fake_remux, deploy_ui, the deployer), whose path on the host is not their
-path in the tree.
+path in the tree (#4455).
 
 Run: uv run pytest scripts/lib/tests/test_stdlib_only.py
 """
