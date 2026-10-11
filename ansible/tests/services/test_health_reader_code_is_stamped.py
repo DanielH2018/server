@@ -171,3 +171,33 @@ def test_a_copied_script_with_no_pair_is_flagged(tmp_path):
     assert not set(copied_into(tasks.parent, "/opt/synthetic-health", tmp_path)) - set(
         stamped_in(tasks.parent)
     )
+
+
+def test_a_loopless_copy_and_a_lib_copy_with_no_pair_are_flagged(tmp_path):
+    """A reader copied with no `loop:`, and a library copied into a subdirectory, are found too.
+
+    configarr ships both shapes since #4416: `configarr_health.py` by a single `src`, and its
+    modules into `/opt/configarr-health/configarr_lib/`.
+    """
+    tasks = tmp_path / "k8s" / "synthetic" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "---\n"
+        "- name: Install the reader library\n"
+        "  ansible.builtin.copy:\n"
+        '    src: "{{ role_path }}/files/reader_lib/{{ item }}"\n'
+        '    dest: "/opt/synthetic-health/reader_lib/{{ item }}"\n'
+        "  loop:\n"
+        "    - reader_logic.py\n"
+        "- name: Install the reader\n"
+        "  ansible.builtin.copy:\n"
+        "    src: reader.py\n"
+        "    dest: /opt/synthetic-health/reader.py\n"
+    )
+    assert copied_into(tasks.parent, "/opt/synthetic-health", tmp_path) == {
+        "/opt/synthetic-health/reader_lib/reader_logic.py": (
+            "k8s/synthetic/files/reader_lib/reader_logic.py"
+        ),
+        "/opt/synthetic-health/reader.py": "k8s/synthetic/files/reader.py",
+    }
+    assert not stamped_in(tasks.parent)
