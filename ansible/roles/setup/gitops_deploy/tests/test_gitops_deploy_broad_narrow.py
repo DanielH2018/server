@@ -102,29 +102,17 @@ def test_a_range_that_moves_no_rendered_output_applies_nothing(
 def test_a_failed_narrowed_apply_holds_the_tags_it_tried(
     gitops_deploy, tick, state_dir, state
 ):
-    """The hold names the narrowed plane, so only an apply covering those tags clears it."""
+    """The hold names the narrowed plane, so only an apply covering those tags clears it.
+
+    The fix-forward deploy of those tags is that apply. It guards the plane's playbook against
+    drifting from the one `Hold.cover_services` clears by, which would leave the hold forever.
+    """
     tick.paths = [GROUP_VARS]
     tick.narrow = (0, "sonarr")
     tick.playbook_outcomes = [RuntimeError("boom")]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert (state_dir / "hold_sha").read_text() == ORIGIN
     assert state.hold_plane == "ansible/deploy.yml sonarr"
-
-
-def test_a_fix_forward_deploy_of_the_held_tags_clears_the_narrowed_hold(
-    gitops_deploy, tick, state_dir, state
-):
-    """#4428: the plane's playbook and the one a service deploy clears by must be one string.
-
-    A narrowed plane writes its hold through `deploy_narrow`, and the fix-forward deploy clears
-    it through `Hold.cover_services`. Were the two spelled differently, this hold would never
-    clear.
-    """
-    tick.paths = [GROUP_VARS]
-    tick.narrow = (0, "sonarr")
-    tick.playbook_outcomes = [RuntimeError("boom")]
-    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert (state_dir / "hold_sha").exists()
     state.clear_service_hold({"sonarr"})
     assert not (state_dir / "hold_sha").exists()
 
