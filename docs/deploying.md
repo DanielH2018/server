@@ -48,7 +48,7 @@ take the lock, so a new holder appears in it without an edit. Cadences are in
 
 `ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py` pins the wait of
 each holder against the deployer's worst-case hold. Its census names the waiters by hand, so a
-new waiter has to join it. `deploy_under_locks.py:TREE_LOCK_HOLDERS` is the message a deploy
+new waiter has to join it. `deploy_lib/under_locks.py:TREE_LOCK_HOLDERS` is the message a deploy
 prints when it could not take the lock, and
 `scripts/docs/tests/test_fragments_deploy.py` fails when that message omits a holder in the table.
 

@@ -450,7 +450,7 @@ def test_no_mutate_covers_check_mode_and_dry_run() -> None:
 
 
 def test_wrapper_translates_dry_run_and_skips_the_lock() -> None:
-    import deploy_run
+    from deploy_tools.deploy_lib import run as deploy_run
 
     dry, plain = (deploy_run.Plan(repo_root=_REPO) for _ in range(2))
     deploy_run.parse_wrapper_flags(["--dry-run", "--tags", "n8n"], dry)

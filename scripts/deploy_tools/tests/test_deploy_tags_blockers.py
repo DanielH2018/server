@@ -14,7 +14,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags_blockers.py
 import argparse
 
 
-import deploy_tags
+from deploy_tools.deploy_lib import tags as deploy_tags
 
 
 def _run(paths, monkeypatch, comment_only=frozenset()) -> int:

@@ -704,7 +704,7 @@ denied about 1 run in 7 on identical text, which is classifier variance rather t
 a compound command that merely contains the tick gets none — the classifier judged the whole line.
 
 On a **failure**, it names a `deploy.sh` exit a refusal rather than a playbook failure, and
-points at the wrapper's own last two lines for what it was. `deploy_run.py:report` prints the name, the meaning and the remedy from
+points at the wrapper's own last two lines for what it was. `deploy_lib/run.py:report` prints the name, the meaning and the remedy from
 `scripts/lib/exit_codes.py` on every non-zero exit. The hook holds only the split -- `_REFUSALS` against `_PLAYBOOK_FAILED`, two integers with no
 prose, pinned to that module by `test_auto_mode_bridge.py`.
 

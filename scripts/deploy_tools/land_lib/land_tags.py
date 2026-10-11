@@ -56,10 +56,11 @@ from deploy_logic import (
     tick_applies_setup_role,
 )
 
-# Bare, from scripts/deploy_tools, inserted above. `service_tags` is the
-# one reader of containers_list, and sharing it is what keeps "is this name a deploy tag?"
-# answered identically here and in deploy.sh's own validation.
-import deploy_tags
+# `deploy_tags.service_tags` is the one reader of containers_list, and sharing it is what keeps
+# "is this name a deploy tag?" answered identically here and in deploy.sh's own validation.
+from deploy_tools.deploy_lib import tags as deploy_tags
+
+# Bare, from scripts/deploy_tools, inserted above.
 import narrow_setup
 import reach
 from deploy_tools.land_lib.land_reach import remaining_setup_hosts_note

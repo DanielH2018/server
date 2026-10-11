@@ -63,12 +63,12 @@ def test_the_playbook_failure_code_is_disjoint_from_every_wrapper_refusal():
 
 def test_the_front_half_refuses_with_the_named_codes():
     """Both Python halves import their codes rather than restating them."""
-    import deploy_run
+    from deploy_tools.deploy_lib import run as deploy_run
 
     assert deploy_run.DEPLOY_TAG_MISS is ec.DEPLOY_TAG_MISS
     assert deploy_run.DEPLOY_STALE is ec.DEPLOY_STALE
     assert deploy_run.DEPLOY_BAD_FLAGS is ec.DEPLOY_BAD_FLAGS
-    import deploy_under_locks as locked
+    from deploy_tools.deploy_lib import under_locks as locked
 
     assert locked.DEPLOY_PLAYBOOK_FAILED is ec.DEPLOY_PLAYBOOK_FAILED
     assert locked.DEPLOY_NO_HOSTS is ec.DEPLOY_NO_HOSTS
@@ -80,7 +80,7 @@ def test_the_broad_refusal_is_returned_by_name_from_deploy_tags():
     wrapper has no `exit 3` literal to grep. The producer returns the constant instead:
     every broad refusal is `return DEPLOY_BROAD`, and no literal `return 3` remains."""
     text = (
-        Path(__file__).resolve().parents[2] / "deploy_tools" / "deploy_tags.py"
+        Path(__file__).resolve().parents[2] / "deploy_tools" / "deploy_lib" / "tags.py"
     ).read_text()
     assert "from lib.exit_codes import DEPLOY_BROAD" in text
     assert "return DEPLOY_BROAD" in text
@@ -119,7 +119,8 @@ def test_no_contract_reuses_a_value_within_itself(group):
 
 def test_the_importers_take_their_values_from_here():
     """Non-vacuity: the module is pointless if a consumer still carries its own copy."""
-    from deploy_tools import deploy_tags, narrow_broad
+    from deploy_tools.deploy_lib import tags as deploy_tags
+    from deploy_tools import narrow_broad
 
     assert deploy_tags.DEPLOY_BROAD is ec.DEPLOY_BROAD
     assert narrow_broad.DEPLOY_OK is ec.DEPLOY_OK

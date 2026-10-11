@@ -1022,9 +1022,10 @@ untouched.
   runs it carries the change, as `scripts/deploy_tools/shared_role_callers.py:caller_tags`
   derives them.
 - Two more callers run the same discharge, so a deployed change does not wait ten minutes for the
-  next tick. A successful `deploy.sh` runs it last (`deploy_playbook.discharge_owed_k8s`), and a
-  `--detach` run runs it before its health gate (`deploy_detach.deploy_and_gate`). It waits 5 s
-  for the tree lock and otherwise leaves the line to the next tick. The tick that records a line
+  next tick. A successful `deploy.sh` runs it last
+  (`deploy_lib/playbook.py:discharge_owed_k8s`), and a `--detach` run runs it before its health
+  gate (`deploy_lib/detach_run.py:deploy_and_gate`). It waits 5 s for the tree lock and otherwise
+  leaves the line to the next tick. The tick that records a line
   also drops it at once when the service's own release record already carries it
   (`deploy_k8s_owed.alert_and_record_deferred`), because a fast-path landing deploys at its merge
   commit before the tick it kicks records the change. That check reads only the own record, since
@@ -1261,7 +1262,7 @@ therefore shows that nothing needed re-rendering, not that the run was incomplet
 **The ff-merge comes before the playbook.** Ansible renders from the working tree, so a playbook
 run on the pre-merge tree copies the OLD files and recaps `changed=0`, which looks like a clean
 idempotent run. `broad_remediation()` emits the pair in that order, so the deployer's Discord
-alert, `deploy_tags.py` and `land_tags.py` all prescribe the working sequence.
+alert, `deploy_cli.py tags` and `land_tags.py` all prescribe the working sequence.
 `test_broad_remediation_puts_the_ff_merge_before_the_playbook` pins the order.
 
 ### Trap: moving a config source changes which remediation the alert prescribes

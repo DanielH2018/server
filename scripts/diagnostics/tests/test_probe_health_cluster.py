@@ -8,7 +8,7 @@ pass about the wrong subject.
 The identity check itself lives in `lib.kubectl` and is tested there
 (`scripts/lib/tests/test_kubectl.py`). What stays here is the gate's own use of it: the
 refusal comes first and is one line, and it is a failure rather than a skip when
-`deploy_detach_notify.py` reads it.
+`deploy_lib/detach_notify.py` reads it.
 
 Run: uv run pytest scripts/diagnostics/tests/test_probe_health_cluster.py
 """
@@ -53,12 +53,12 @@ def test_a_role_with_no_workload_passes_the_gate(capsys):
 def test_a_refusal_is_routed_as_a_failure_not_a_skip():
     """The refusal crosses a subprocess boundary and is classified by substring.
 
-    `deploy_detach_notify.py` reads the gate's first stdout line and turns a
+    `deploy_lib/detach_notify.py` reads the gate's first stdout line and turns a
     NOT_APPLICABLE_MARKERS match into a `skipped` verdict. A refusal means the gate did not
     run, which must fail the verdict rather than skip it — the same rule the absent-workload
     messages follow, and the only thing connecting these two modules is this assertion.
     """
-    from deploy_tools import deploy_detach_notify as notify_mod
+    from deploy_tools.deploy_lib import detach_notify as notify_mod
 
     for requested, served in (("stage", "prod"), ("prod", None)):
         message = cluster_refusal(requested, served)

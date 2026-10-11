@@ -4,8 +4,8 @@
 `cc-wait deploy <tags>` runs this through `.claude/wait-sources/deploy`. cc-wait owns the loop,
 the budget and the output; this answers one question per call: where is this deploy now?
 
-    deploy_probe.py --describe <tags> [--log PATH | --log-dir DIR]   # terminal states, as JSON
-    deploy_probe.py <tags> [--log PATH | --log-dir DIR]              # the state now, one JSON line
+    deploy_lib/detach_probe.py --describe <tags> [--log PATH | --log-dir DIR]   # terminal states, as JSON
+    deploy_lib/detach_probe.py <tags> [--log PATH | --log-dir DIR]              # the state now, one JSON line
 
 The contract is the dotfiles repo's docs/specs/2026-10-04-cc-wait-design.md.
 
@@ -34,7 +34,7 @@ import re
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.detach_fork import alive, recorded_code, recorded_pid
 
 # `deploy_detach.LOG_DIR`, restated: that module imports the deploy machinery, and this probe
@@ -132,7 +132,7 @@ def read(log: Path) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="deploy_probe.py", description=__doc__.splitlines()[0]
+        prog="deploy_cli.py probe", description=__doc__.splitlines()[0]
     )
     parser.add_argument("--describe", action="store_true")
     parser.add_argument("tags", help="the --tags value the deploy was given")
@@ -147,7 +147,3 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(json.dumps(describe(log) if ns.describe else read(log)))
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

@@ -1,8 +1,9 @@
 #!/bin/bash
-# deploy.sh — the entry point every doc, skill, hook and consumer names; it execs deploy_run.py.
+# deploy.sh — the entry point every doc, skill, hook and consumer names; it execs deploy_cli.py.
 #
-# The implementation is scripts/deploy_tools/deploy_run.py, whose docstring carries the usage
-# and the exit codes (docs/archive/deploy-sh-python-port.md).
+# The implementation is scripts/deploy_tools/deploy_lib/run.py, which `deploy_cli.py` runs when
+# no subcommand is named; its docstring carries the usage and the exit codes
+# (docs/archive/deploy-sh-python-port.md).
 #
 # No `cd`, unlike land.sh: the run deploys the checkout containing the CALLER's working
 # directory, and a session in a worktree has always deployed its own tree. `--project` makes
@@ -10,4 +11,4 @@
 # Python that runs is the same release as this shim.
 set -u
 root=$(dirname "$(dirname "$(readlink -f "$0")")")
-exec uv run --project "$root" python "$root/scripts/deploy_tools/deploy_run.py" "$@"
+exec uv run --project "$root" python "$root/scripts/deploy_tools/deploy_cli.py" "$@"

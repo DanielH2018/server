@@ -155,7 +155,7 @@ def _deploy_tags():
     `deploy_tags`'s host_vars YAML parse on every invocation, not just `releases`. `scripts/`
     is already on `sys.path` from the bootstrap at the top of this file.
     """
-    from deploy_tools import deploy_tags
+    from deploy_tools.deploy_lib import tags as deploy_tags
 
     return deploy_tags
 
