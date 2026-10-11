@@ -315,13 +315,18 @@ def k8s_unapplied_lines(marker, now):
     lines = []
     for entry in sorted(parse_owed(marker, OWED_K8S_UNAPPLIED), key=lambda e: e.at):
         remedy = k8s_unapplied_remedy(entry.subject)
-        if entry.subject not in SHARED_K8S_ROLES:
+        # A shared role's line also takes the hand clear when no caller can be proven to
+        # carry the change, so the clause names that case beside the revert.
+        when = "if it was reverted"
+        if entry.subject in SHARED_K8S_ROLES:
+            when = "if no caller can be proven or it was reverted"
+        else:
             remedy = f"`{remedy}`"
         lines.append(
             f"  ✗ the GitOps deployer merged a k8s change for `{entry.subject}` "
             f"{_age_phrase(now - entry.at)} ago and never applies this role — "
             f"{remedy}; or "
-            f"`{owed_clear_cmd(OWED_K8S_UNAPPLIED, entry.subject)}` if it was reverted"
+            f"`{owed_clear_cmd(OWED_K8S_UNAPPLIED, entry.subject)}` {when}"
         )
     return lines
 
