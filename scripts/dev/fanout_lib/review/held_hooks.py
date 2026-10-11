@@ -5,7 +5,8 @@ this repo's `.claude/settings.json` registers every project hook from that tree.
 loaded both after the implementer ran would run whatever it left there (#3794, #3810). The
 pipeline reads the files once at start with `read_hooks`, rewrites a copy outside the worktree
 before every phase with `write_hooks`, and hands a resumed phase the start-time settings with
-every hook command pointed at that copy (`pointed_settings`).
+every hook command pointed at that copy (`pointed_settings`). The SessionStart hook is the
+exception: a held phase does not register it (`UNHELD_EVENTS` says why).
 
 DECIDED: in this repo's batch, every phase that starts after the implementer ran (review, fix,
 review-delta, land, file) runs with `--setting-sources user`. Another repo's batch keeps its
