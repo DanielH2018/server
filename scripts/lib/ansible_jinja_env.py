@@ -37,8 +37,8 @@ from pathlib import Path
 from jinja2 import Environment
 
 from lib.k8s_yaml import to_json_stub
+from lib.repo_paths import FILTER_PLUGINS
 from lib.render_guard import (
-    ANSIBLE,
     SHARED_TPL,
     StubUndefined,
     make_env,
@@ -139,8 +139,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     """
     # The heavy tier: imported here rather than at the top so the light tier above stays
     # free of ansible-core (see the module docstring).
-    if str(ANSIBLE / "filter_plugins") not in _sys.path:
-        _sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
+    if str(FILTER_PLUGINS) not in _sys.path:
+        _sys.path.insert(0, str(FILTER_PLUGINS))
     from authelia_access import authelia_service_rules
     from entry_fields import entry_names, lan_hostnames, published_ports
     from homepage_tiles import (

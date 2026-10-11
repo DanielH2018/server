@@ -248,3 +248,23 @@ def test_the_two_hand_built_inserts_use_repo_paths_constants(rel, directory):
     assert any(getattr(repo_paths, name, None) == directory for name in named), (
         f"no sys.path insert in {rel} names the repo_paths constant for {directory}"
     )
+
+
+def test_the_declared_fanout_units_are_the_commands_the_builders_write():
+    # FANOUT_UNITS copies two command lines built in Python; this keeps the copy honest.
+    from fanout_lib.clean import remote_clean_command
+    from fanout_lib.launch import review_command
+    from fanout_lib.manifest import Batch
+    from lib.stdlib_only import FANOUT_UNITS
+
+    written = [
+        review_command("1"),
+        remote_clean_command(
+            Batch("1", "daniel-box", "/w1", "wt-1", "fanout-1", [1], "t")
+        ),
+    ]
+    for entry, argv in FANOUT_UNITS:
+        if entry.name == "fanout.py" and argv[0] == "place":
+            continue  # what the fanout_place.py shim forwards to, not a command line
+        shape = f"{entry.relative_to(REPO).as_posix()} {' '.join(argv)} "
+        assert any(shape in command for command in written), shape
