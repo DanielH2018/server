@@ -35,7 +35,7 @@ import time
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import configarr_health_logic as logic
+from configarr_lib import configarr_health_logic as logic
 import host_lib
 
 NAMESPACE = os.environ.get("CONFIGARR_NAMESPACE", "homelab")

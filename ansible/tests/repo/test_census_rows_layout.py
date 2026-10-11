@@ -152,8 +152,9 @@ _IMPORTED_LOGIC = (
 )
 _TYPE_CHECKING = (
     "from typing import TYPE_CHECKING\nfrom foo import main\n\nif TYPE_CHECKING:\n"
-    '    main()\n\nif __name__ == "__main__":\n    main(sum([1]))\n'
+    '    main()\n\nif __name__ == "__main__":\n    main()\n'
 )
+_ARG_CALLS = 'import sys\n\nfrom foo import main\n\nif __name__ == "__main__":\n    sys.exit(main(sum([1])))\n'
 
 
 def _fixture(key: str, **members: str) -> Family:
@@ -162,14 +163,6 @@ def _fixture(key: str, **members: str) -> Family:
         key, (Subject(f"{parent}/{name}.py", text) for name, text in members.items())
     )
 
-
-# The families still flat on 2026-10-11 that the census behind #4344-#4355 missed. Each entry
-# is removed in the PR that moves its libraries, because the harness reports it stale from then.
-_PENDING = {
-    "ansible/roles/k8s/configarr/files/configarr_*.py": 4416,
-    "ansible/roles/setup/deploy_ui/files/deploy_*.py": 4417,
-    "scripts/deploy_tools/setup_*.py": 4418,
-}
 
 ROWS = (
     Census(
@@ -198,16 +191,18 @@ ROWS = (
                 foo_cli="def main():\n    return 0\n",
                 foo_util="X = 1\n",
             ),
-            # Logic under the guard that calls an imported name, or a second top-level `if`,
-            # is not forwarding.
+            # Logic under the guard that calls an imported name, a second top-level `if`, or a
+            # forwarding call whose argument calls something is not forwarding. Each of the last
+            # two fixtures breaks one rule only, so either rule regressing turns its proof red.
             _fixture("scripts/x/foo_*.py", foo=_MAIN, foo_a=_IMPORTED_LOGIC, foo_b=""),
             _fixture("scripts/x/foo_*.py", foo=_MAIN, foo_a=_TYPE_CHECKING, foo_b=""),
+            _fixture("scripts/x/foo_*.py", foo=_MAIN, foo_a=_ARG_CALLS, foo_b=""),
         ),
         green=(
             _fixture("scripts/x/foo_*.py", foo_a="X = 1\n", foo_b="", foo_c=""),
             _fixture("scripts/x/foo_*.py", foo=_MAIN, foo_a=_SHIM, foo_b=_SHIM),
         ),
-        # Eight groups on 2026-10-11; five stay once the _PENDING three move.
+        # Five groups on 2026-10-11, after #4416-#4418 moved the last three flat families.
         min_matches=5,
         # A suffix family, a role-`files/` family with an entrypoint, and monitor-bridge's
         # copies, a role-`files/` family with none.
@@ -229,10 +224,6 @@ ROWS = (
                 "flat `files/`, and deploy_ui and renovate_agent install them into /opt from "
                 "these paths"
             ),
-            **{
-                key: f"pending consolidation: #{issue}"
-                for key, issue in _PENDING.items()
-            },
         },
     ),
 )

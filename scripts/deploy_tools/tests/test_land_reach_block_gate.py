@@ -34,20 +34,21 @@ _ROLE = "deploy_ui"
 _MAIN = "ansible/roles/setup/deploy_ui/tasks/main.yml"
 _SHIPPED = (
     "ansible/roles/setup/deploy_ui/files/deploy_ui.py",
-    "ansible/roles/setup/deploy_ui/files/deploy_ui_reads.py",
+    "ansible/roles/setup/deploy_ui/files/deploy_ui_lib/deploy_ui_reads.py",
     "ansible/roles/setup/deploy_ui/files/deploy_ui.html",
     "ansible/roles/setup/deploy_ui/templates/deploy-ui.service.j2",
 )
 # An ungated `copy` under a role initial_setup.yml applies everywhere. If this ever
 # narrows, the narrowing lost its evidence.
 _UNGATED = "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"
-# A real PR's file list for `deploy_ui`, verbatim.
+# A real PR's file list for `deploy_ui`, verbatim but for the two libraries #4417 moved into
+# `deploy_ui_lib/`.
 _PR_1901_PATHS = [
     "ansible/roles/setup/deploy_ui/CLAUDE.md",
     "ansible/roles/setup/deploy_ui/files/deploy_ui.html",
     "ansible/roles/setup/deploy_ui/files/deploy_ui.py",
-    "ansible/roles/setup/deploy_ui/files/deploy_ui_reads.py",
-    "ansible/roles/setup/deploy_ui/files/deploy_ui_writes.py",
+    "ansible/roles/setup/deploy_ui/files/deploy_ui_lib/deploy_ui_reads.py",
+    "ansible/roles/setup/deploy_ui/files/deploy_ui_lib/deploy_ui_writes.py",
     "ansible/roles/setup/deploy_ui/templates/deploy-ui.service.j2",
     "ansible/roles/setup/deploy_ui/tests/test_deploy_ui_app.py",
     "ansible/roles/setup/deploy_ui/tests/test_deploy_ui_reads.py",
@@ -111,12 +112,12 @@ def test_pr_1901_from_another_host_still_names_the_gitops_host():
 
 # A PR's setup-plane paths, verbatim (`git show --name-only` of its merge commit), minus the
 # paths outside `ansible/roles/setup/` -- those derive tags or nothing and never reach this
-# note -- and the two `gitops_markers.py` copies #3275 deleted. The two `tasks/` entries are
-# the ones that widened it.
+# note -- and the two `gitops_markers.py` copies #3275 deleted, with the two libraries #4417
+# moved at their `deploy_ui_lib/` paths. The two `tasks/` entries are the ones that widened it.
 _PR_2071_SETUP_PATHS = [
     "ansible/roles/setup/deploy_ui/files/deploy_ui.py",
-    "ansible/roles/setup/deploy_ui/files/deploy_ui_reads.py",
-    "ansible/roles/setup/deploy_ui/files/deploy_ui_writes.py",
+    "ansible/roles/setup/deploy_ui/files/deploy_ui_lib/deploy_ui_reads.py",
+    "ansible/roles/setup/deploy_ui/files/deploy_ui_lib/deploy_ui_writes.py",
     "ansible/roles/setup/deploy_ui/tasks/main.yml",
     "ansible/roles/setup/gitops_deploy/CLAUDE.md",
     "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py",

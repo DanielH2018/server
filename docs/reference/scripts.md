@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-11 04:41 UTC
-generated_sha: 19eedc380
+generated_at: 2026-10-11 14:41 UTC
+generated_sha: e801c7a24
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 19eedc380
 
 # Scripts
 
-290 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+291 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file. The filter bar above the first table narrows all four at once: by section, by directory, or by any text in a row. A header click sorts by that column.
 
@@ -90,7 +90,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-212 script(s) — imported by another script — not an entry point.
+213 script(s) — imported by another script — not an entry point.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -150,6 +150,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/fanout.py` | dev | The issue-fanout tooling: place batches, wait on them, run a review unit, sum the reviews. | imported by fanout_place.py, fanout_probe.py, fanout_review.py, fanout_review_stats.py | — | — |
 | `scripts/deploy_tools/narrow_lib/filters.py` | deploy_tools | What a filter plugin defines, and which grep hits for its filter names are callers (#3843). | imported by broad.py, narrow_setup.py | — | — |
 | `scripts/deploy_tools/deploy_lib/flags.py` | deploy_tools | What `deploy.sh` refuses a command line over, and the exception its gates refuse with. | imported by run.py | — | — |
+| `scripts/deploy_tools/narrow_lib/foreign_keys.py` | deploy_tools | Every name that carries a changed key of another role's vars file onward (#4361). | imported by narrow_setup.py | — | — |
 | `scripts/dev/foreign_owned.py` | dev | Find the paths under a directory that another uid owns, and say how to clear them. | imported by prune_worktrees.py | `test_foreign_owned.py` | — |
 | `scripts/docs/fragment_readers.py` | docs | The readers behind the doc fragments: the tree, parsed, never imported. | imported by gen_doc_fragments.py | — | — |
 | `scripts/docs/fragment_renderers.py` | docs | The renderers behind the doc fragments: pure functions from plain values to markdown. | imported by gen_doc_fragments.py | — | — |
@@ -222,7 +223,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_lib/metrics.py` | diagnostics | `probe.py metric` and `probe.py loki-query` -- Prometheus and Loki queries. | imported by subcommands.py | — | — |
 | `scripts/infra_map/model.py` | infra_map | Reconciliation: overlay live state onto the declared skeleton. | imported by gen_infra_map.py | — | — |
 | `scripts/diagnostics/probe_lib/monitors.py` | diagnostics | `probe.py monitors` and `probe.py kuma-drift` -- what is down, and what is missing. | imported by postflight.py, subcommands.py | — | — |
-| `scripts/lib/narrow_git.py` | lib | The reads the two narrowing derivations share: a refusal, a `git show`, and a key diff. | imported by broad.py, filters.py, narrow_setup.py, paths.py, setup_index.py, shared_role_reach.py, task_walk.py, templates.py | `test_narrow_git.py` | — |
+| `scripts/lib/narrow_git.py` | lib | The reads the two narrowing derivations share: a refusal, a `git show`, and a key diff. | imported by broad.py, filters.py, foreign_keys.py, narrow_setup.py, paths.py, setup_index.py, shared_role_reach.py, task_walk.py, templates.py | `test_narrow_git.py` | — |
 | `scripts/diagnostics/probe_lib/obs_api.py` | diagnostics | The Prometheus and Loki query client every caller shares: URL builders, window, transport. | no `__main__` guard; carried by deploy: ansible/roles/k8s/homelab-mcp/tasks/main.yml | `test_obs_api.py` | — |
 | `scripts/deploy_tools/land_lib/options.py` | deploy_tools | Everything the command line sets, plus the budgets a test shortens. | imported by _land_fakes.py, handoff.py, land.py, landing.py | — | — |
 | `scripts/deploy_tools/land_lib/outcome.py` | deploy_tools | The words a landing ends with: the verdict set, the cause set, the Outcome, and say(). | imported by ci.py, classify.py, deploy.py, health_verdict.py, land.py, land_probe.py, landing.py, ledger.py, merge.py, pipeline.py, policy.py, tick.py | — | — |
@@ -275,10 +276,10 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/secrets_mgmt/secrets_lib/secret_registry.py` | secrets_mgmt | Pure logic over the rotation registry: seeding, reconciliation, due dates and drift. | imported by secret_rotation.py, secrets.py | `test_secret_registry.py` | — |
 | `scripts/backup/longhorn_reap_lib/selection.py` | backup | The two operator-selected Backup CR sets: a migrated volume's old chain, and retired seeds. | imported by backups.py | — | — |
 | `scripts/lib/service_tiers.py` | lib | The sets derived from containers_list ``tier``, for readers outside Ansible. | imported by catalog_backup.py, fragments_storage.py, gen_doc_fragments.py, shed_set.py | — | — |
-| `scripts/deploy_tools/setup_gates.py` | deploy_tools | Read a playbook entry's `when:` for one host, the way Ansible would. | imported by land_reach.py, setup_routing.py | — | — |
-| `scripts/deploy_tools/narrow_lib/setup_index.py` | deploy_tools | One setup role's task files, templates and vars, read at a single git ref. | imported by narrow_setup.py | — | — |
+| `scripts/deploy_tools/setup_lib/setup_gates.py` | deploy_tools | Read a playbook entry's `when:` for one host, the way Ansible would. | imported by land_reach.py, setup_routing.py | — | — |
+| `scripts/deploy_tools/narrow_lib/setup_index.py` | deploy_tools | One setup role's task files, templates and vars, read at a single git ref. | imported by foreign_keys.py, land_reach.py, narrow_setup.py | — | — |
 | `scripts/deploy_tools/narrow_lib/setup_playbook.py` | deploy_tools | What a playbook and a task list say about tags, without touching git. | imported by narrow_setup.py, setup_index.py | — | — |
-| `scripts/deploy_tools/setup_role_chains.py` | deploy_tools | Reading a setup role's `tasks/` tree for the `when:` chains a changed file sits behind. | imported by land_reach.py, setup_routing.py | — | — |
+| `scripts/deploy_tools/setup_lib/setup_role_chains.py` | deploy_tools | Reading a setup role's `tasks/` tree for the `when:` chains a changed file sits behind. | imported by land_reach.py, setup_routing.py | — | — |
 | `scripts/dev/shard_weight_gate.py` | dev | The measured shard-weight gate: what CI's `pytest_shard.py --check-durations` step decides. | imported by pytest_shard.py | — | — |
 | `scripts/deploy_tools/shared_role_reach.py` | deploy_tools | Which changed SHARED k8s roles move no rendered manifest, so no hand has to apply them. | imported by tools.py | `test_shared_role_reach.py` | — |
 | `scripts/diagnostics/probe_lib/shed_set.py` | diagnostics | `probe.py shed-set` — the k8s workloads to scale down when one node is lost. | imported by subcommands.py | — | — |
@@ -292,7 +293,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_lib/subcommands.py` | diagnostics | The `SUBCOMMANDS` table and the `REGISTRY` built from it: probe.py's dispatch and `--list`. | imported by probe.py | — | — |
 | `scripts/deploy_tools/deploy_lib/tags.py` | deploy_tools | Validate the --tags a deploy was given, before Ansible silently accepts them. | imported by deploy_cli.py, detach_notify.py, land_shared.py, land_tags.py, releases.py, run.py, staleness.py | — | — |
 | `scripts/dev/fanout_lib/target.py` | dev | Which repo a batch works: its register, its primary checkout and the branch it merges to. | imported by _fanout_fakes.py, _review_fakes.py, abandon.py, brief.py, claim_cli.py, claims.py, clean.py, launch.py, manifest.py, place.py, review.py, review_unit.py, status.py, transport.py | — | — |
-| `scripts/deploy_tools/narrow_lib/task_walk.py` | deploy_tools | What one parsed task list says about tags: the files it pulls in and the tags that select it. | imported by setup_index.py | — | — |
+| `scripts/deploy_tools/narrow_lib/task_walk.py` | deploy_tools | What one parsed task list says about tags: the files it pulls in and the tags that select it. | imported by foreign_keys.py, setup_index.py | — | — |
 | `scripts/deploy_tools/narrow_lib/templates.py` | deploy_tools | Two importer edges `narrow_broad.template_importers` must not take at face value. | imported by broad.py, filters.py | — | — |
 | `scripts/deploy_tools/land_lib/tick.py` | deploy_tools | Step 4, the GitOps tick, retried while the unit's own flock gives up. | imported by deploy.py, health_verdict.py, pipeline.py | — | — |
 | `scripts/deploy_tools/land_lib/tools.py` | deploy_tools | Every process boundary a landing crosses, as one injectable object. | imported by _land_fakes.py, land.py, landing.py | — | — |
@@ -305,7 +306,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/worktree_owner.py` | lib | Which Unix user's clone a worktree branch belongs to, read from the branch name alone. | imported by claim.py, target.py | — | — |
 | `scripts/dev/fanout_lib/review/worktree_reset.py` | dev | The reset that returns a red batch's worktree to one commit. | imported by review.py | — | — |
 | `scripts/lib/worktrees.py` | lib | What a Claude session worktree is, and whether it is done with: the worktree library. | imported by _findings_fakes.py, boundaries.py, claim.py, clean.py, place.py, prune_worktrees.py, target.py, transport.py | `test_worktrees.py` | — |
-| `scripts/lib/yaml_fast.py` | lib | `yaml.safe_load` backed by libyaml, which parses the same schema an order faster. | imported by asset_pins.py, atoms.py, compose_templates.py, cron_targets.py, crons.py, digest_provable.py, fragment_readers.py, git_dates.py, glance_facts.py, ha_state_checks.py, ha_state_model.py, inventory.py, invocation_sites.py, jinja_defaults.py, k8s_autodeploy_counts.py, k8s_roles.py, kuma_live.py, kuma_table_loop.py, land_reach.py, landing_blockers.py, longhorn_upgrade.py, monitors.py, narrow_git.py, pinned_rotation.py, release_bin_groups.py, render_guard.py, rotation_tools.py, route_facts.py, secret_bearing_host_paths.py, setup_gates.py, setup_index.py, setup_playbook.py, setup_role_chains.py, setup_routing.py, setup_templates.py, state.py, task_walk.py, validate_ha_config.py | `test_yaml_fast.py` | — |
+| `scripts/lib/yaml_fast.py` | lib | `yaml.safe_load` backed by libyaml, which parses the same schema an order faster. | imported by asset_pins.py, atoms.py, compose_templates.py, cron_targets.py, crons.py, digest_provable.py, foreign_keys.py, fragment_readers.py, git_dates.py, glance_facts.py, ha_state_checks.py, ha_state_model.py, inventory.py, invocation_sites.py, jinja_defaults.py, k8s_autodeploy_counts.py, k8s_roles.py, kuma_live.py, kuma_table_loop.py, land_reach.py, landing_blockers.py, longhorn_upgrade.py, monitors.py, narrow_git.py, pinned_rotation.py, release_bin_groups.py, render_guard.py, rotation_tools.py, route_facts.py, secret_bearing_host_paths.py, setup_gates.py, setup_index.py, setup_playbook.py, setup_role_chains.py, setup_routing.py, setup_templates.py, state.py, task_walk.py, validate_ha_config.py | `test_yaml_fast.py` | — |
 
 ## Run by hand
 
