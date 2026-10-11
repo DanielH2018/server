@@ -27,3 +27,9 @@ ExecStart={{ kuma_check_exec }}
 # Only Restart=always and Restart=on-success are refused for Type=oneshot (systemd 255).
 Restart=on-failure
 RestartSec={{ kuma_check_restart_sec }}
+# The restart loop lives in memory, so a reboot ends it. This marker survives the reboot and
+# gates kuma-check-{{ kuma_check_name }}-boot.service, which reruns the check once at boot while
+# the last verdict was not up (#4495). `+` runs it as root whatever User= is, and `$$` hands the
+# variable to the shell rather than to systemd's own substitution. SERVICE_RESULT is `success`
+# only after an exit 0; a down verdict, a crash and a run killed by shutdown all keep the marker.
+ExecStopPost=+/bin/sh -c 'if [ "$$SERVICE_RESULT" = success ]; then rm -f /var/lib/kuma-check/{{ kuma_check_name }}.down; else mkdir -p /var/lib/kuma-check && touch /var/lib/kuma-check/{{ kuma_check_name }}.down; fi'

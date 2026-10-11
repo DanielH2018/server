@@ -10,10 +10,17 @@
 # THE SHAPE. One oneshot service and one timer per check, rendered from the shared pair in
 # roles/setup/common/templates/. The contract is the exit code: the script exits 1 after it
 # pushes `down` and 0 after `up`, and `Restart=on-failure` reruns it every `RestartSec` until
-# it exits 0. Nothing is persisted by hand; a pending restart lost to a reboot is replaced by
-# the timer's own `Persistent=true` catch-up run. Chosen over a marker-file runner
-# (a third scheduler beside cron and monitor-bridge) and over moving the checks into
-# monitor-bridge (most read the host checkout, root-only files or the host's `gh` login).
+# it exits 0. Chosen over a marker-file runner (a third scheduler beside cron and
+# monitor-bridge) and over moving the checks into monitor-bridge (most read the host checkout,
+# root-only files or the host's `gh` login).
+#
+# A REBOOT ENDS THE RESTART LOOP (#4495). `Persistent=true` catches up only a slot that never
+# fired, and the slot that pushed `down` already had. So the service's ExecStopPost= keeps one
+# marker per check, /var/lib/kuma-check/<name>.down, present while the last run did not exit 0.
+# A third unit, kuma-check-<name>-boot.service, is conditioned on that marker and starts the
+# service once at boot. It schedules nothing: the timer and the restart loop still own every
+# run after that. Chosen over `OnBootSec=` on the timer, which would rerun every check at every
+# boot, and push a false down for up to one RestartSec from each check without a boot grace.
 #
 # BOTH DIRECTIONS. `kuma_check_state: absent` stops and disables the timer, removes the unit
 # files and removes the legacy cron, so a host that leaves a `*_hosts` list keeps neither. The
@@ -56,6 +63,17 @@
   become: true
   register: common_kuma_check_units
 
+- name: Render the boot-rerun unit for {{ kuma_check_name }}
+  when: kuma_check_state == 'present'
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/roles/setup/common/templates/kuma-check-boot.service.j2"
+    dest: "/etc/systemd/system/kuma-check-{{ kuma_check_name }}-boot.service"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: common_kuma_check_boot_unit
+
 - name: Enable and start the kuma-check timer for {{ kuma_check_name }}
   # Under --check the template task writes nothing, so on a host that lacks the unit this task
   # fails with "Could not find the requested service" — --check breaking the consumer, not the
@@ -65,6 +83,16 @@
     name: "kuma-check-{{ kuma_check_name }}.timer"
     enabled: true
     state: started
+    daemon_reload: true
+  become: true
+
+- name: Enable the boot-rerun unit for {{ kuma_check_name }}
+  # Enabled, never started: starting it here would rerun a red check at every deploy rather
+  # than at boot. Same --check guard as the timer start.
+  when: kuma_check_state == 'present' and not (ansible_check_mode and common_kuma_check_boot_unit is changed)
+  ansible.builtin.systemd:
+    name: "kuma-check-{{ kuma_check_name }}-boot.service"
+    enabled: true
     daemon_reload: true
   become: true
 
@@ -93,12 +121,30 @@
     state: stopped
   become: true
 
-- name: Remove the kuma-check units for {{ kuma_check_name }}
+- name: Look for the boot-rerun unit before disabling it, for {{ kuma_check_name }}
+  when: kuma_check_state == 'absent'
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/kuma-check-{{ kuma_check_name }}-boot.service"
+  register: common_kuma_check_boot_file
+
+- name: Disable the boot-rerun unit for {{ kuma_check_name }}
+  # Guarded on the file for the same reason as the timer stop above.
+  when: kuma_check_state == 'absent' and common_kuma_check_boot_file.stat.exists
+  ansible.builtin.systemd:
+    name: "kuma-check-{{ kuma_check_name }}-boot.service"
+    enabled: false
+  become: true
+
+- name: Remove the kuma-check units and the down marker for {{ kuma_check_name }}
   when: kuma_check_state == 'absent'
   ansible.builtin.file:
-    path: "/etc/systemd/system/kuma-check-{{ kuma_check_name }}.{{ item }}"
+    path: "{{ item }}"
     state: absent
-  loop: [service, timer]
+  loop:
+    - "/etc/systemd/system/kuma-check-{{ kuma_check_name }}.service"
+    - "/etc/systemd/system/kuma-check-{{ kuma_check_name }}.timer"
+    - "/etc/systemd/system/kuma-check-{{ kuma_check_name }}-boot.service"
+    - "/var/lib/kuma-check/{{ kuma_check_name }}.down"
   become: true
   register: common_kuma_check_units_removed
 
