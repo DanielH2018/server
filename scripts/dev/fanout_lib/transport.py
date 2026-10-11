@@ -356,7 +356,7 @@ def read_host(tools: Tools, host: str) -> HostReading | str:
         return "%s: headroom read failed (%d): %s" % (
             host,
             proc.returncode,
-            proc.stderr.strip(),
+            " ".join(proc.stderr.split()),
         )
     try:
         return parse_reading(host, proc.stdout)
@@ -365,14 +365,14 @@ def read_host(tools: Tools, host: str) -> HostReading | str:
 
 
 def error_text(exc: BaseException) -> str:
-    """The readable text of a subprocess failure, from either exception shape."""
+    """The readable text of a subprocess failure on one line, from either exception shape."""
     # CalledProcessError.stderr is text under `text=True`; TimeoutExpired.stderr is bytes
     # or None. Printing either straight would raise inside the handler that exists to make
     # the failure clean.
     err = getattr(exc, "stderr", None)
     if isinstance(err, bytes):
         err = err.decode("utf-8", "replace")
-    return (err or str(exc)).strip()
+    return " ".join((err or str(exc)).split())
 
 
 def registered_keys(tools: Tools) -> frozenset[str] | str:
