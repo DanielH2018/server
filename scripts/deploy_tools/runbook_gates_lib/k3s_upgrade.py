@@ -25,7 +25,8 @@ Exit codes:
   0      every gate passed
   1..4   the first gate that failed, by its number above
   69     the cluster could not be asked (no kubectl, no readable kubeconfig, wrong cluster,
-         or a list that returned nothing parseable)
+         or a list that returned nothing parseable), or a deployer marker exists and could
+         not be read
 
 Usage:
     uv run python scripts/deploy_tools/runbook_gates.py k3s-upgrade
