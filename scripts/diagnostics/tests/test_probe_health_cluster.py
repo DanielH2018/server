@@ -13,6 +13,7 @@ refusal comes first and is one line, and it is a failure rather than a skip when
 Run: uv run pytest scripts/diagnostics/tests/test_probe_health_cluster.py
 """
 
+from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import cluster_refusal
 
 from diagnostics.probe_lib import health
@@ -25,8 +26,11 @@ def test_run_health_refuses_before_it_gates_anything(capsys):
     the ordering without a cluster and without patching: a run that reached the gate would
     have to talk to kubectl, and the test host has none.
     """
-    assert health.run_health("authelia", cluster="stage", served="prod") == 1
-    assert "not stage" in capsys.readouterr().out
+    assert (
+        health.run_health("authelia", cluster="stage", served="prod")
+        == PROBE_UNREADABLE
+    )
+    assert "not stage" in capsys.readouterr().err
 
 
 def test_run_health_still_gates_when_the_cluster_matches(capsys):

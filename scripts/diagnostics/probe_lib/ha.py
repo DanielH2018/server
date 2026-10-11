@@ -554,9 +554,9 @@ def run_ha(ns):
             return 0
         try:
             obj = json.loads(body)
-        except json.JSONDecodeError:
-            print(body.strip())
-            return 1
+        except json.JSONDecodeError:  # an error page: the entity was never read (#4468)
+            body = core.redact_log_secrets(body.strip())
+            raise core.Unreadable(f"HA answered {url} with non-JSON:\n{body}") from None
         # A missing entity returns {"message": "Entity not found."}.
         if not isinstance(obj, dict) or "entity_id" not in obj:
             msg = obj.get("message") if isinstance(obj, dict) else body.strip()
