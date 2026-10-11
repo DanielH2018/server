@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-11 00:25 UTC
-generated_sha: 8f2895cb2
+generated_at: 2026-10-11 00:36 UTC
+generated_sha: 4e4415485
 ---
 
 !!! warning "Generated file — do not edit"
@@ -669,7 +669,7 @@ generated_sha: 8f2895cb2
 | git evidence beats the seed even though it can overstate freshness for a credential minted before this file's first commit (2026-01-17) — such a secret dates to when it was committed, not when it was created. The seed it replaces is not a better reading: `seed_last_rotated` backdates by a hash of the NAME, so it is fiction for every secret nobody has rotated since registration. That fiction is what aged calendar_1 into a false OVERDUE and took the monitor down on 2026-08-25. | `scripts/secrets_mgmt/git_dates.py:271` | 2026-09-05 |
 | `email` was the first candidate for this set (#1183) and went to the registry's `ignore` tier instead, because it is an address rather than a credential — it renders as an ACME contact, a git commit author, an Authelia user's email and an SMTP username, and the value that authenticates that SMTP session is `smtp_notify_app_password`, tracked separately. That is the `domain` precedent NON_SECRET_TIERS below already states: when the registry can say a name is not a credential, it says it, and this derivation reads it. GENERIC_NAMES stays for the case the registry CANNOT express — a name that really is a credential but whose word is too common to match on. A registry comment could not have carried this: `rotation_tools.save_registry` rewrites the file with `yaml.safe_dump`, so the weekly rotate cron drops any comment added there. | `scripts/secrets_mgmt/secret_bearing_host_paths.py:54` | 2026-09-05 |
 | 0700` marker for the same reason, and until | `scripts/secrets_mgmt/secret_bearing_host_paths.py:177` | 2026-09-17 |
-| the registry tracks SOPS keys only; a hand-added non-SOPS name reads as stale, fails cmd_audit and every secrets PR, and no tier value rescues it. | `scripts/secrets_mgmt/secret_registry.py:123` | 2026-09-30 |
+| the registry tracks SOPS keys only; a hand-added non-SOPS name reads as stale, fails cmd_audit and every secrets PR, and no tier value rescues it. | `scripts/secrets_mgmt/secrets_lib/secret_registry.py:123` | 2026-09-30 |
 | 0700` marker for it and twelve did not, and three of those | `scripts/secrets_mgmt/tests/test_secret_bearing_host_scripts_are_not_world_readable.py:5` | 2026-09-17 |
 | no fourth rule for Popen. reaches `wait`/`communicate` with no `timeout=` and no preceding `kill()`. The 2026-10-01 census found seven `Popen` call sites in test modules, and that shape sorts them badly. | `scripts/tests/_test_module_rules.py:131` | 2026-10-03 |
 | ` at probe_lib/ha.py:581 and at ha_state_model.py's `cmd_refresh` (the deferred `from diagnostics.probe_lib import core`/`ha`). | `scripts/tests/test_scripts_import_direction.py:107` | 2026-09-05 |

@@ -18,7 +18,7 @@ from secrets_mgmt.consumers import (
     UPTIME_KUMA_TAG,
     consumer_tags,
 )
-from secrets_mgmt.secret_registry import audit
+from secrets_mgmt.secrets_lib.secret_registry import audit
 from lib.repo_paths import HOST_VARS
 from secrets_mgmt.rotation_tools import REPO, load_registry, today
 

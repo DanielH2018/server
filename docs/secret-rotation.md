@@ -68,8 +68,8 @@ fails on the undefined variable.
 - `ignore` — not a secret: the domain, usernames, static addresses.
 
 `sync` gives a newly registered key its tier from two name rules in
-`scripts/secrets_mgmt/secret_classify.py`: `*_push_token` is `auto`, `*_user` and `*_username`
-are `ignore`, and every other key is `assisted`. An `external` or `pinned` key gets its tier
+`scripts/secrets_mgmt/secrets_lib/secret_classify.py`: `*_push_token` is `auto`, `*_user` and
+`*_username` are `ignore`, and every other key is `assisted`. An `external` or `pinned` key gets its tier
 by an edit to its `tier` in the registry after that `sync`, and `sync` preserves the edit.
 
 ## `auto` — automated

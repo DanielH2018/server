@@ -46,7 +46,7 @@ FACADE_EDGES = frozenset(
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.consumers"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.git_dates"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.rotation_tools"),
-        ("secrets_mgmt.secret_rotation", "secrets_mgmt.secret_registry"),
+        ("secrets_mgmt.secret_rotation", "secrets_mgmt.secrets_lib.secret_registry"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.sops_io"),
         # scripts/docs/reference/scripts.py renders the page; the census was split into lib/
         # so the `--help` test could reach it without importing the generator.
