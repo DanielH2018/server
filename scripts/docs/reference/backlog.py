@@ -28,7 +28,6 @@ Usage::
     uv run python scripts/docs/reference/backlog.py --out docs/reference/backlog.md
 """
 
-import argparse
 from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -40,6 +39,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.findings_lib.gh_calls import load_backlog_issues
 from dev.findings_lib.issue_model import DOMAINS, issue_rows, sort_key
+from lib.cli_help import ArgumentParser
 from lib.docs_provenance import finish_generator, generated_banner, md_cell
 
 SOURCE = "scripts/docs/reference/backlog.py"
@@ -145,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
     # after the summary, so `[1]` passed argparse an empty description and `--help` printed
     # none at all. `findings.py`'s `main` carries the same spelling.
     summary = next(line for line in __doc__.splitlines() if line.strip())
-    parser = argparse.ArgumentParser(description=summary)
+    parser = ArgumentParser(description=summary)
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     args = parser.parse_args(argv)
     # Not `open` alone: the settled table below the backlog reads closed rows too. The

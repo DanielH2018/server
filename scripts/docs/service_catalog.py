@@ -53,7 +53,6 @@ Run: uv run python scripts/docs/service_catalog.py --out /tmp/service_catalog.ht
 Tests: uv run pytest scripts/docs/tests/test_service_catalog.py
 """
 
-import argparse
 from pathlib import Path
 
 
@@ -73,6 +72,7 @@ from docs.catalog_lib.catalog_backup import (
 from docs.catalog_lib.catalog_facts import auth_tier, route_for
 from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES, ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
+from lib.cli_help import ArgumentParser
 from lib.estate import Estate, Inventory
 from lib.repo_paths import ALL_VARS, HOST_VARS
 
@@ -148,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         0 on success.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     parser.add_argument(
         "--format",

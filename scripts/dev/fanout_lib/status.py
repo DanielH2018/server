@@ -3,17 +3,24 @@
 import json
 import re
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 import dataclasses
 from dataclasses import dataclass
 
-# Reach the sibling package: a directly-invoked script gets only its own directory on
-# sys.path, and pyproject's `pythonpath` is a pytest setting.
+# Reach the sibling package and `lib` (scripts/): a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from lib.exit_codes import (
+    FANOUT_PLACE_BATCH_FAILED,
+    FANOUT_PLACE_FAILED,
+    FANOUT_PLACE_OK,
+    FANOUT_PLACE_UNREAD,
+)
 from fanout_lib.brief import lands
 from fanout_lib.manifest import Batch, Manifest
 from fanout_lib.transport import Tools
@@ -277,8 +284,8 @@ def status_line(
 
     Returns:
         The line to print, and the exit tier: 0 for running/done/landed, 1 for an
-        unreconciled `no-report` and for a clean finish with no PR (`needs-input`, `no-pr`),
-        5 for a genuine failure.
+        unreconciled `no-report`, for a clean finish with no PR (`needs-input`, `no-pr`) and
+        for a PR with no `VERDICT:` line (`no-verdict`), 5 for a genuine failure.
     """
     s = reconciled(s, branch, merged_pr, repo)
     state = s.state
@@ -299,16 +306,32 @@ def status_line(
         # Tier 1, not 5: nothing here says the work failed, only that neither the unit nor
         # the forge can say what became of it. A 5 would send an operator to a stderr log
         # that a finished batch has already deleted along with its worktree.
-        return line + f" no merged PR for {branch}", 1
+        return line + f" no merged PR for {branch}", FANOUT_PLACE_FAILED
     if state in (NEEDS_INPUT, NO_PR):
         # Tier 1, not 5: the session ended cleanly and its final text is the thing to read,
         # not a stderr log. Not 0 either: no PR exists to land, so an operator has to act.
-        return line, 1
+        return line, FANOUT_PLACE_FAILED
     if state == NO_VERDICT:
         # Tier 1 for the same reason, and the PR url stays on the line: the work to do is to
         # land that PR, which nothing here says has merged or deployed.
-        return line + " — land.sh printed no VERDICT", 1
-    return line, 5 if state == "failed" else 0
+        return line + " — land.sh printed no VERDICT", FANOUT_PLACE_FAILED
+    return line, FANOUT_PLACE_BATCH_FAILED if state == "failed" else FANOUT_PLACE_OK
+
+
+# Worst first. A batch to act on outranks a host to read again, so a timed-out read (75)
+# never hides a failed batch behind "try later"; numeric `max` would rank 75 above 5.
+_TIER_RANK = (
+    FANOUT_PLACE_BATCH_FAILED,
+    FANOUT_PLACE_FAILED,
+    FANOUT_PLACE_UNREAD,
+    FANOUT_PLACE_OK,
+)
+
+
+def exit_tier(tiers: Iterable[int]) -> int:
+    """The worst of `tiers` by `_TIER_RANK`, or 0 when there are none."""
+    present = set(tiers)
+    return next((t for t in _TIER_RANK if t in present), FANOUT_PLACE_OK)
 
 
 UNREAD = "unread"
@@ -318,6 +341,9 @@ def collect(
     run: Manifest, tools: Tools, one_line: Callable[[str], str]
 ) -> tuple[list[dict], int]:
     """One row per batch in `run`, and the worst exit tier among them; `status`'s whole read.
+
+    The tier is `exit_tier` over every batch's: 75 for a host whose read timed out, unless a
+    batch elsewhere reports 1 or 5.
 
     Each row carries `batch`, `host`, `branch`, `state`, `pr_url` and `line`, the text line
     `status` prints. `status --json` prints the rows themselves, so `fanout.py probe` reads the
@@ -330,7 +356,7 @@ def collect(
     active state, no result and no report, and `parse_status` reads exactly that as `failed`,
     which would exit 5 for a batch that landed its PR and was tidied up.
     """
-    rows, worst = [], 0
+    rows, tiers = [], []
 
     def row(b: Batch, host: str, state: str, pr_url: str, line: str) -> dict:
         return {
@@ -355,7 +381,7 @@ def collect(
             for b in mine:
                 line = f"{b.batch} on {host}: status read timed out"
                 rows.append(row(b, host, UNREAD, "", line))
-            worst = max(worst, 1)
+            tiers.append(FANOUT_PLACE_UNREAD)
             continue
         by_id = {b.batch: b for b in mine}
         for st in parse_status(mine, proc.stdout):
@@ -365,6 +391,6 @@ def collect(
             line, tier = status_line(
                 st, host, b.branch, lambda *_: "", one_line, b.repo
             )
-            worst = max(worst, tier)
+            tiers.append(tier)
             rows.append(row(b, host, st.state, st.pr_url, line))
-    return rows, worst
+    return rows, exit_tier(tiers)

@@ -38,7 +38,6 @@ Imported by scripts/deploy_tools/deploy_lib/run.py, the front half of scripts/de
 maps a non-zero return here to its own refusal.
 """
 
-import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -47,6 +46,8 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
+
+from lib.cli_help import ArgumentParser
 
 from lib.deployer_park import (
     GITOPS_STATE_DIR,
@@ -242,7 +243,7 @@ def format_tag_refusal(
 
 def main(argv: list[str] | None = None) -> int:
     """Fetch origin, compare `--sha` (default HEAD) to `--ref`; DEPLOY_STALE when behind."""
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--repo", default=".")
     parser.add_argument("--ref", default="origin/master")
     parser.add_argument(

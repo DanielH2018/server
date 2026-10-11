@@ -44,7 +44,7 @@ def test_a_checkout_outside_claude_worktrees_is_refused(tmp_path):
     # The primary checkout is the case this guards: a stray root file there parks the
     # GitOps deployer.
     primary = init_repo(tmp_path / "server")
-    assert main(["--text", "x"], cwd=primary) == 2
+    assert main(["--text", "x"], cwd=primary) == 64
     assert not (primary / ".claim").exists()
 
 

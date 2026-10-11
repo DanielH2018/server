@@ -112,6 +112,7 @@ from lib.repo_paths import HOST_LIB_FILES
 sys.path.insert(0, str(HOST_LIB_FILES))
 import host_lib
 from lib.cli_help import answer_help
+from lib.exit_codes import USAGE_ERROR
 from longhorn_reap_lib import logic, selection
 
 NAMESPACE = "longhorn-system"
@@ -348,7 +349,7 @@ def main(argv: list[str]) -> int:
     args, arg_err = _parse_args(argv)
     if arg_err:
         print(arg_err, file=sys.stderr)
-        return 2
+        return USAGE_ERROR
 
     needs_admin = args.apply or args.apply_deleted
     refusal = logic.readonly_kubeconfig_refusal(

@@ -170,7 +170,7 @@ name = "Validate Home Assistant config"
 entry = "uv run --frozen python scripts/home_assistant/validate_ha_config.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/home-assistant/(templates/config|files)/.*|scripts/home_assistant/validate_ha_config\\.py|scripts/diagnostics/probe_lib/(core|ha|obs_api)\\.py|scripts/home_assistant/(ha_state_checks|ha_state_model)\\.py|scripts/lib/(ansible_inventory|exit_codes|repo_paths|yaml_fast)\\.py)$"
+files = "^(ansible/roles/k8s/home-assistant/(templates/config|files)/.*|scripts/home_assistant/validate_ha_config\\.py|scripts/diagnostics/probe_lib/(core|ha|obs_api)\\.py|scripts/home_assistant/(ha_state_checks|ha_state_model)\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|repo_paths|yaml_fast)\\.py)$"
 
 # Validate that every provisioned Grafana dashboard's datasource references resolve to a
 # datasource declared in datasources.yml.j2 (uid or name) or a Grafana built-in. Catches the
@@ -351,7 +351,7 @@ pass_filenames = false
 # The whole `scripts/secrets_mgmt/` tree, not `secret_rotation.py` alone: `load_registry`,
 # `sops_names` and every other process boundary the gate depends on moved into
 # `rotation_tools.py`, and a per-file list here is a list that goes stale on the next split.
-files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|ansible/roles/setup/common/files/(host_lib|kuma_push)\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|scripts/lib/(git|repo_paths|yaml_fast)\\.py)$"
+files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|ansible/roles/setup/common/files/(host_lib|kuma_push)\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|scripts/lib/(cli_help|exit_codes|git|repo_paths|yaml_fast)\\.py)$"
 
 # Assert uv.lock stays consistent with pyproject.toml. Every unattended production path
 # (gitops_deploy, secret-rotate, secret-rotation-audit) runs `uv run --frozen`, which installs
@@ -437,7 +437,7 @@ name = "re-hash edited CLAUDE.md sections whose citations changed"
 entry = "uv run --frozen python scripts/dev/fact_status.py reverify --changed-since origin/master"
 language = "system"
 pass_filenames = false
-files = "(^|/)CLAUDE\\.md$|^(scripts/dev/fact_status\\.py|scripts/lib/(ansible_inventory|git|repo_paths|yaml_fast)\\.py|scripts/lib/facts/[^/]+\\.py)$"
+files = "(^|/)CLAUDE\\.md$|^(scripts/dev/fact_status\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|git|repo_paths|yaml_fast)\\.py|scripts/lib/facts/[^/]+\\.py)$"
 
 # Lower each ratchet allowlist entry to what its file is today, so a PR that SHRINKS a listed
 # module needs no hand edit. An entry has to MATCH its file (the `DECIDED:` marker in
@@ -538,7 +538,7 @@ name = "Hook registrations match the .claude/hooks/ declarations"
 entry = "uv run --frozen python scripts/dev/gen_hook_settings.py --check"
 language = "system"
 pass_filenames = false
-files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev/gen_hook_settings\\.py|scripts/lib/repo_paths\\.py)$"
+files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev/gen_hook_settings\\.py|scripts/lib/(cli_help|exit_codes|repo_paths)\\.py)$"
 
 # Lint first-party Python for real bugs only — pyflakes (unused imports/undefined names),
 # syntax errors, bare-except, ==None/==True (ruleset in pyproject [tool.ruff.lint]; vendored

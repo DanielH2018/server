@@ -33,7 +33,6 @@ Exit codes: 0 always for a report (an empty orphan set is the healthy answer); 2
 `git` failed (its stderr is printed), or no open Dependency Dashboard was found.
 """
 
-import argparse
 import json
 import re
 import subprocess
@@ -44,6 +43,10 @@ from pathlib import Path as _Path
 # Reach `lib`: a directly-invoked script gets only its own directory on sys.path, and
 # pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
+
+from lib.exit_codes import RENOVATE_SWEEP_GH_FAILED
 
 from lib.gh import gh as _gh
 from lib.git import git as _git
@@ -139,7 +142,7 @@ def census(gh: Gh = _gh) -> list[str]:
 def main(
     argv: list[str] | None = None, gh: Gh = _gh, git: Git = _git, out=sys.stdout
 ) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument(
         "--prune", action="store_true", help="delete each orphan on origin"
     )
@@ -148,10 +151,10 @@ def main(
         found = census(gh)
     except subprocess.CalledProcessError as exc:
         print(f"gh failed: {exc.stderr.strip()}", file=out)
-        return 2
+        return RENOVATE_SWEEP_GH_FAILED
     except NoDashboard as exc:
         print(str(exc), file=out)
-        return 2
+        return RENOVATE_SWEEP_GH_FAILED
     if not found:
         print("no orphan renovate/* branch", file=out)
         return 0
@@ -175,7 +178,7 @@ def main(
                 f"git push origin --delete {branch} failed: {exc.stderr.strip()}",
                 file=out,
             )
-            return 2
+            return RENOVATE_SWEEP_GH_FAILED
         print(f"deleted origin/{branch}", file=out)
     return 0
 

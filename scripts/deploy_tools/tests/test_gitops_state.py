@@ -382,7 +382,7 @@ def test_an_empty_applied_is_refused(tmp_path, run):
     for empty in ("", ",", " "):
         with pytest.raises(SystemExit) as exc:
             run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", empty)
-        assert exc.value.code == 2
+        assert exc.value.code == 64
     assert pending(tmp_path) == {"k3s": frozenset()}
 
 

@@ -74,6 +74,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from lib.cli_help import ArgumentParser
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
 # The deployer's own modules, so this reads and rewrites the marker through the code that
@@ -522,9 +523,8 @@ def main(
         its own, because a real `logger` line from a test reads as an operator's clear.
       hold_journal: the same for a `clear-hold`. None reads `journal_hold_clear`.
     """
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    parser = ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
         "--state-dir",

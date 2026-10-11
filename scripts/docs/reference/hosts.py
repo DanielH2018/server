@@ -14,7 +14,6 @@ Usage::
     uv run python scripts/docs/reference/hosts.py --out docs/reference/hosts.md
 """
 
-import argparse
 from pathlib import Path
 
 
@@ -24,6 +23,8 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from lib.cli_help import ArgumentParser
 
 from lib.estate import Estate, Inventory
 from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI
@@ -141,7 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         The exit code from `finish_generator` (0 on success, non-zero on a write failure).
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     parser.add_argument("--hosts-ini", type=Path, default=HOSTS_INI)
     parser.add_argument("--host-vars", type=Path, default=HOST_VARS)

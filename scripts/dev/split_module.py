@@ -22,12 +22,17 @@ It works on the AST, so a name that only appears inside a string or a comment is
 moved nor counted as a reference.
 """
 
-import argparse
 import ast
 import json
 import sys
 from pathlib import Path
 from typing import TypedDict
+
+# Reach `lib` (scripts/): a directly-invoked script gets only its own directory on
+# sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 
 class Target(TypedDict):
@@ -166,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
 
     `split` writes its outputs to disk. Exits 1 when the spec is invalid, 0 otherwise.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
     graph = sub.add_parser(
         "graph", help="print each top-level name and what it references"

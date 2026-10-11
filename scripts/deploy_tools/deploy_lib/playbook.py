@@ -59,8 +59,12 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _RECAP_HOST = re.compile(r"^\S+\s+:\s+ok=\d+")
 
 
+# What `recap_state` read from a run's output. These are not exit codes.
+RECAP_HOSTS, RECAP_NO_HOSTS, RECAP_MISSING = 0, 1, 2
+
+
 def recap_state(output: str) -> int:
-    """0 when the PLAY RECAP names a host, 1 when it names none, 2 when there is no recap."""
+    """`RECAP_HOSTS`, `RECAP_NO_HOSTS` when the PLAY RECAP names no host, or `RECAP_MISSING`."""
     recap, hosts = False, 0
     for line in _ANSI.sub("", output).splitlines():
         if line.startswith("PLAY RECAP"):
@@ -68,8 +72,8 @@ def recap_state(output: str) -> int:
         elif recap and _RECAP_HOST.match(line):
             hosts += 1
     if not recap:
-        return 2
-    return 0 if hosts else 1
+        return RECAP_MISSING
+    return RECAP_HOSTS if hosts else RECAP_NO_HOSTS
 
 
 def run_playbook(run: Run) -> int:
@@ -136,7 +140,7 @@ def run_playbook(run: Run) -> int:
     # No host under the recap: nothing ran, whatever ansible returned. A 0 with no recap is
     # the same fault; a non-zero exit with no recap keeps ansible's status, as something may
     # have applied before the run was killed or failed to parse.
-    if state == 1 or (state == 2 and status == 0):
+    if state == RECAP_NO_HOSTS or (state == RECAP_MISSING and status == 0):
         return DEPLOY_NO_HOSTS
     return status
 

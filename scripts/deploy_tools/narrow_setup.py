@@ -86,12 +86,12 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-import argparse
 import sys
 from pathlib import Path
 
 from deploy_tools.narrow_lib import filters as narrow_filters
 from deploy_tools.narrow_lib import paths as narrow_paths
+from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
@@ -393,7 +393,7 @@ def role_tags(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("role", help="the role directory under ansible/roles/setup/")
     parser.add_argument("old", help="the commit the checkout was on")
     parser.add_argument("new", help="the commit carrying the change")

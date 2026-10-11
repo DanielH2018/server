@@ -145,12 +145,13 @@ alert() { logger -t docs-refresh "$1"; PUSH_MSG="$1"; }
 
 # build_docs.py's exit code says WHICH half failed (its main() docstring), and the two need
 # opposite responses: a generator failure publishes stale pages behind a fresh site, a site-build
-# failure leaves the docs pod serving the previous build. 2 is also argparse's usage-error code,
-# which this script's fixed arguments only reach after a flag is renamed, and it wins over 3 when
-# both halves fail. 1 is a crash.
+# failure leaves the docs pod serving the previous build. 2 wins over 3 when both halves fail.
+# 64 is a usage error, which this script's fixed arguments only reach after a flag is renamed.
+# 1 is a crash.
 build_docs_failure() {
   case "$1" in
-    2) echo "one or more generators failed, or build_docs rejected its arguments (exit 2); the published set is incomplete" ;;
+    2) echo "one or more generators failed (exit 2); the published set is incomplete" ;;
+    64) echo "build_docs rejected its arguments (exit 64); nothing was regenerated or built" ;;
     3) echo "the site build failed (exit 3); every generator ran, and the docs site still serves its previous build" ;;
     *) echo "build_docs crashed (exit $1); see the cron log" ;;
   esac

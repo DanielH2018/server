@@ -70,7 +70,8 @@ def test_a_refused_issue_is_dropped_and_the_batch_renamed_from_what_it_kept(
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES, refused_claims={2}
     )
-    assert _launch(tools, tmp_path, "1,2") == 3
+    # 7, not 3: batch 1 is running, and 3 says nothing was placed (#4452).
+    assert _launch(tools, tmp_path, "1,2") == 7
     launch_call = run.host_calls[-1][1]
     assert "fanout-1 " in launch_call and "fanout-1-2" not in launch_call
     assert "body two" not in (run.host_calls[-1][2] or "")

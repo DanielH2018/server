@@ -51,7 +51,9 @@
     B2_APP_KEY: "{{ longhorn_b2_application_key }}"
   register: prune_drain_run
   changed_when: prune_apply | bool
-  failed_when: prune_drain_run.rc == 2
+  # 0 drained and 1 refused a volume both report; 2 (B2 failed mid-run) and 64 (a bad
+  # command line or a missing credential) stop the play. scripts/lib/exit_codes.py: B2_DRAIN_*.
+  failed_when: prune_drain_run.rc not in [0, 1]
 
 - name: Report
   ansible.builtin.debug:

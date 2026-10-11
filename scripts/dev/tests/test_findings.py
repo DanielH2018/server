@@ -322,14 +322,14 @@ def test_settled_reason_is_none_without_a_ruling_comment(issue):
 
 def test_close_refuted_without_a_reason_is_rejected_before_any_write(make_tools):
     tools, calls = make_tools()
-    assert findings.main(["close", "5", "--refuted"], tools) == 2
+    assert findings.main(["close", "5", "--refuted"], tools) == 64
     assert calls.none()
 
 
 def test_close_refuted_with_a_pr_is_rejected(make_tools):
     tools, calls = make_tools()
     argv = ["close", "5", "--refuted", "--reason", "r", "--pr", "700"]
-    assert findings.main(argv, tools) == 2
+    assert findings.main(argv, tools) == 64
     assert calls.none()
 
 
@@ -341,14 +341,14 @@ def test_close_fixed_with_a_pr_is_accepted(make_tools, issue):
 
 def test_close_accepted_without_a_reason_is_rejected_before_any_write(make_tools):
     tools, calls = make_tools()
-    assert findings.main(["close", "5", "--accepted"], tools) == 2
+    assert findings.main(["close", "5", "--accepted"], tools) == 64
     assert calls.none()
 
 
 def test_close_accepted_with_a_pr_is_rejected(make_tools):
     tools, calls = make_tools()
     argv = ["close", "5", "--accepted", "--reason", "r", "--pr", "700"]
-    assert findings.main(argv, tools) == 2
+    assert findings.main(argv, tools) == 64
     assert calls.none()
 
 
