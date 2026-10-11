@@ -183,7 +183,7 @@ def _newest_green_ancestor(
         return None
     if not tools.github_authenticated():
         log(
-            f"origin {tip[:8]}: CI {tip_ci}; not walking for a green ancestor — this host has "
+            f"ci: origin {tip[:8]} is {tip_ci}; not walking for a green ancestor — this host has "
             "no GitHub token, and the anonymous 60/hour limit is shared with every landing"
         )
         return None
@@ -192,14 +192,14 @@ def _newest_green_ancestor(
             ["git", "rev-list", "--first-parent", f"{local}..{tip}"], cwd=config.repo
         ).split()
     except Exception as exc:
-        log(f"could not list the commits below {tip[:8]}: {type(exc).__name__}: {exc}")
+        log(f"ci: could not list commits below {tip[:8]}: {type(exc).__name__}: {exc}")
         return None
     candidates = ci_walk_candidates(rev_list, hold, walk_max)
     for behind, sha in candidates:
         if tools.fetch_ci_verdict(sha) != "pass":
             continue
         log(
-            f"origin {tip[:8]}: CI {tip_ci}; fast-forwarding to the newest green ancestor "
+            f"ci: origin {tip[:8]} is {tip_ci}; fast-forwarding to the newest green ancestor "
             f"{sha[:8]} ({behind} behind the tip)"
         )
         return sha
@@ -207,7 +207,7 @@ def _newest_green_ancestor(
     # deferral needs: a walk that read nine ancestors and found no green one is a different
     # state from a tip with nothing below it, and both defer silently otherwise.
     log(
-        f"origin {tip[:8]}: CI {tip_ci}; no green ancestor in the {len(candidates)} "
+        f"ci: origin {tip[:8]} is {tip_ci}; no green ancestor in the {len(candidates)} "
         f"commit(s) below it that this tick could read"
     )
     return None
@@ -235,7 +235,7 @@ def plan_tick(
     quiet = comment_only_broad_changes(paths, target.local, target.origin, show)
     if quiet:
         log(
-            f"comment-only change in {', '.join(sorted(quiet))} — "
+            f"classify: comment-only change in {', '.join(sorted(quiet))} — "
             "not parking; the tick treats it as no change"
         )
     # The same read for a k8s role's defaults, which would otherwise defer, page and owe a
@@ -243,7 +243,7 @@ def plan_tick(
     quiet_k8s = comment_only_k8s_defaults(paths, target.local, target.origin, show)
     if quiet_k8s:
         log(
-            f"comment-only change in {', '.join(sorted(quiet_k8s))} — "
+            f"classify: comment-only change in {', '.join(sorted(quiet_k8s))} — "
             "not deferring; the tick treats it as no change"
         )
         quiet |= quiet_k8s
@@ -260,7 +260,7 @@ def plan_tick(
     deleted = k8s_roles_deleted_at(tools, config, target.origin, cs.k8s)
     if deleted:
         log(
-            f"{', '.join(sorted(deleted))}: role directory deleted at {target.origin[:8]} — "
+            f"k8s_unapplied: {', '.join(sorted(deleted))}: role directory deleted at {target.origin[:8]} — "
             "nothing left to apply, so no k8s_unapplied line"
         )
     cs.k8s -= deleted
@@ -287,11 +287,11 @@ def _adopt_incoming_cross_role_tables(
         deploy_cross_role.use_tables(deploy_cross_role.tables_in(source))
     except Exception as exc:
         log(
-            f"range edits {path}, and its copy at {origin[:8]} is unusable "
+            f"classify: range edits {path}, and its copy at {origin[:8]} is unusable "
             f"({exc}) — classifying with the installed tables"
         )
         return
-    log(f"range edits {path} — classifying with its copy at {origin[:8]}")
+    log(f"classify: range edits {path} — classifying with its copy at {origin[:8]}")
 
 
 def adopt_setup_routing(tools: DeployTools, config: Config, origin: str) -> None:
@@ -309,7 +309,7 @@ def adopt_setup_routing(tools: DeployTools, config: Config, origin: str) -> None
     except Exception as exc:
         deploy_setup_roles.use_routing({}, failed=True)
         log(
-            f"setup-role routing at {origin[:8]} failed ({type(exc).__name__}: {exc}) — "
+            f"setup-routing: routing at {origin[:8]} failed ({type(exc).__name__}: {exc}) — "
             "a range carrying a setup role parks until a tick can route it",
             level=WARNING,
         )
@@ -317,7 +317,7 @@ def adopt_setup_routing(tools: DeployTools, config: Config, origin: str) -> None
     deploy_setup_roles.use_routing(routes)
     for role, why in sorted(unplaced.items()):
         log(
-            f"setup role {role} cannot be routed at {origin[:8]} ({why}) — "
+            f"setup-routing: setup role {role} cannot be routed at {origin[:8]} ({why}) — "
             "a range carrying it records it in manual_plane for a hand"
         )
 
@@ -446,7 +446,7 @@ def reconcile_denylist(
     except Exception as exc:
         # No marker write: an unreadable ref is transient, so the next tick tries again.
         log(
-            f"could not read k8s declarations at {head[:8]}: {type(exc).__name__}: {exc}",
+            f"denylist: could not read k8s declarations at {head[:8]}: {type(exc).__name__}: {exc}",
             level=WARNING,
         )
         return False
@@ -464,7 +464,7 @@ def reconcile_denylist(
     # can tell an empty listing from a git failure.
     if not declared:
         log(
-            f"empty k8s declaration read at {head[:8]}: no role under ansible/roles/k8s/ "
+            f"denylist: empty k8s declaration read at {head[:8]}: no role under ansible/roles/k8s/ "
             "declared a stance, which is a broken read rather than an empty denylist "
             "— leaving config.env alone and retrying next tick",
             level=WARNING,
@@ -477,7 +477,7 @@ def reconcile_denylist(
     # not be retried every tick against the same checkout.
     state.write("denylist_rendered", head)
     log(
-        f"config.env denylist is stale against the checkout at {head[:8]} "
+        f"denylist: config.env denylist is stale against the checkout at {head[:8]} "
         f"(denied at HEAD but not in config: {sorted(declared - config.k8s_autodeploy_denylist) or 'none'}; "
         f"in config but not at HEAD: {sorted(config.k8s_autodeploy_denylist - declared) or 'none'}) "
         "— re-rendering it"
@@ -495,9 +495,9 @@ def reconcile_denylist(
         # already tolerates — auto-deploy stays disarmed by the origin comparison, which is the
         # fail-safe direction. Parking every unrelated service deploy behind a config render
         # would be a strictly larger outage than the one this heals.
-        log(f"denylist re-render failed: {type(exc).__name__}: {exc}", level=ERR)
+        log(f"denylist: re-render failed: {type(exc).__name__}: {exc}", level=ERR)
         return True
-    log("config.env re-rendered — the next tick reads the fresh denylist")
+    log("denylist: config.env re-rendered — the next tick reads the fresh denylist")
     return True
 
 
@@ -534,7 +534,7 @@ def _promote_k8s_auto_deploys(
             k8s_defaults_at_origin = {}
             declared = None
             read_error = f"{type(exc).__name__}: {exc}"
-            log(f"could not read k8s declarations at origin: {read_error}")
+            log(f"denylist: could not read k8s declarations at origin: {read_error}")
         if declared is None or declared != config.k8s_autodeploy_denylist:
             autodeploy_enabled = False
             if declared is not None:
@@ -563,7 +563,7 @@ def _promote_k8s_auto_deploys(
             else:
                 detail = f"the declarations at origin could not be read ({read_error})"
                 fix = "check the ref/path on the host — this clears on its own once it reads again"
-            log(f"k8s auto-deploy disarmed — stale denylist ({detail})", level=WARNING)
+            log(f"denylist: k8s auto-deploy disarmed — stale ({detail})", level=WARNING)
             deploy_alerts.alert_once(
                 tools,
                 state,

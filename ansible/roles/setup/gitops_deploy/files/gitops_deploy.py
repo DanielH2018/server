@@ -134,7 +134,7 @@ if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
     # state distinguishable from a host that legitimately has the feature off, and therefore
     # what lets `deploy_phases.reconcile_denylist` re-render the file whose damage caused it.
     log(
-        "K8S_AUTODEPLOY_ENABLED is set but the denylist is empty — disabling k8s auto-deploy",
+        "denylist: K8S_AUTODEPLOY_ENABLED is set but the denylist is empty — disabling k8s auto-deploy",
         level=WARNING,
     )
     K8S_AUTODEPLOY_ENABLED = False
@@ -283,14 +283,14 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
     if target.action == "noop":
         return 0
     if target.action == "skip_hold":
-        log(f"origin at known-bad {target.origin[:8]}; holding")
+        log(f"hold: origin at known-bad {target.origin[:8]}; holding")
         return 0
     if target.action == "ci_pending":
         # Normal for the first tick after a push: the workflow is still running. No alert — it
         # resolves on its own, and a host left behind for hours is the behind-origin watchdog's
         # job, not this branch's.
         log(
-            f"origin {target.origin[:8]}: CI not finished — deferring, will retry next tick"
+            f"ci: origin {target.origin[:8]} not finished — deferring, will retry next tick"
         )
         return 0
     if target.action == "ci_failed":
@@ -333,7 +333,7 @@ def entrypoint(
     try:
         head_before = tools.run(["git", "rev-parse", "HEAD"], cwd=config.repo)
     except Exception as e:
-        log(f"could not read HEAD before the tick: {e}", level=WARNING)
+        log(f"tick: could not read HEAD before the tick: {e}", level=WARNING)
         head_before = None
     try:
         rc = main(tools, config, state)
@@ -343,7 +343,7 @@ def entrypoint(
         # blip is invisibly retried next tick, while a persistent fetch break ages last_run and trips
         # GitOps-Alive. Must precede the generic handler below (Python matches except-clauses in order).
         log(
-            f"git fetch failed (retryable) — skipping tick, will retry next run: {e}",
+            f"fetch: git fetch failed (retryable) — skipping tick, will retry next run: {e}",
             level=WARNING,
         )
         return 0
@@ -356,13 +356,13 @@ def entrypoint(
         # on the real deployer is not silent either: last_run stops advancing and GitOps-Alive
         # goes stale inside GITOPS_MAX_AGE_MIN (90 minutes), which is the backstop this exit 0
         # leans on.
-        log(f"gitops-deploy: {e}")
+        log(f"not-deployer: {e}")
         return 0
     except ConfigError as e:
         # One clear line, not a traceback. This was an unhandled ValueError raised during IMPORT
         # until load_config deferred the parse, so it reached an operator as a stack trace with no
         # key name in it, before any of the alerting below existed in the process.
-        log(f"gitops-deploy: {e}", level=ERR)
+        log(f"config: {e}", level=ERR)
         posted = deploy_alerts.discord(
             tools, config, deploy_alert_text.bad_config_alert(HOSTNAME, CONFIG_PATH, e)
         )
@@ -396,13 +396,13 @@ def entrypoint(
             fast_forwarded=head_before is not None and local != head_before,
         )
     except Exception as e:
-        log(f"could not record behind-origin state: {e}", level=WARNING)
+        log(f"behind_since: could not record behind-origin state: {e}", level=WARNING)
     # A tick that got here without deferring on a service lock ends any contention streak:
     # the lock has stopped wedging the deployer, whatever else this tick did. Only a tick
     # that reaches this line clears it — a crash above raises past here, and a crash is not
     # evidence the lock was released.
     if state.clear_contention_unless_touched_since(tick_started):
-        log("contention_since cleared: this tick was not deferred on a service lock")
+        log("contention_since: cleared, this tick was not deferred on a service lock")
     # Liveness marker: a tick that completed without crashing (incl. a rollback, rc=1).
     # monitor-bridge reads this; a crash skips the write so the Alive monitor goes stale.
     state.write("last_run", str(time.time()))

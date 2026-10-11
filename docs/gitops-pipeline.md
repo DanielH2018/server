@@ -57,6 +57,13 @@ log at `warning`, so `-p warning` lists both, but not every one does. Every othe
 `SyslogLevel=notice`. `deploy_config.log` sets the priority with an sd-daemon `<3>` or `<4>`
 prefix, which journald strips (#4446).
 
+Every deployer line opens with one lowercase subject token and a colon: the phase or marker the
+line is about, such as `ci:`, `hold:`, `narrow:`, `denylist:`, `manual_plane:` or
+`k8s_unapplied:`. To list every line about one subject, run `journalctl -u gitops-deploy | grep
+'manual_plane: '`. A relayed child-process line gets the subject of the call that ran it.
+`ansible/roles/setup/gitops_deploy/tests/test_deployer_log_subjects.py` holds every `log()` call
+to that shape (#4507).
+
 `./scripts/deploy_tools/gitops_tick.sh` prints three values after it runs. Read them before concluding
 anything.
 
@@ -81,7 +88,7 @@ for the tick to fast-forward to that commit and deploy it.
 
 **The tree is dirty.** The primary checkout holds an uncommitted change or an untracked file.
 `git status --porcelain` counts untracked files, so one stray output file from a tool parks the
-deployer with nothing modified. The tick logs `working tree dirty — skipping` with the paths on
+deployer with nothing modified. The tick logs `tick: working tree dirty — skipping` with the paths on
 every run and pages Discord at most twice a day (`should_alert_dirty`). Every other signal stays
 green.
 
@@ -241,7 +248,7 @@ each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
   rather than `--tags k3s`. An inventory value that calls a filter refuses, and so does a role
   that names none of them. A refusal falls back to the whole-role tag.
 
-**Every deploy-plane tick also logs a render-digest shadow line.** The `narrow shadow:` line names
+**Every deploy-plane tick also logs a render-digest shadow line.** The `narrow-shadow:` line names
 the services whose applied digests differ from a render record of the commit being applied,
 counts the ones that match, and counts the ones with no usable record, grouped by reason. It
 applies nothing. It is meant to narrow a refused range by a digest diff, but it
@@ -288,9 +295,9 @@ The tick fast-forwards instead, and writes the role to the `owed` ledger
 origin SHA, playbook, first-seen stamp and narrow tags. A role already listed is not re-added,
 so its first-seen stamp is the age everything else reads. Five consequences:
 
-- the journal says `manual_plane pending: <roles> — apply by hand: <commands>` on **every**
+- the journal says `manual_plane: pending <roles> — apply by hand: <commands>` on **every**
   tick, not only the one that recorded it. The recording tick says
-  `manual_plane recorded: <roles>` instead, naming only the roles it added, so no tick prints
+  `manual_plane: recorded <roles>` instead, naming only the roles it added, so no tick prints
   both lines;
 - Discord pages once per SHA, with the same commands and the ledger's path;
 - **GitOps Deploy — Status** goes down once the oldest pending line is older than

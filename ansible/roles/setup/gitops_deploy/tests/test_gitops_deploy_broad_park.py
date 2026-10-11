@@ -96,7 +96,7 @@ def test_an_unapplyable_setup_role_fast_forwards_and_records_the_marker(
         "ansible/k3s-bringup.yml",
         "k3s",
     )
-    assert "manual_plane recorded: k3s" in out, "the tick that adds a role says so"
+    assert "manual_plane: recorded k3s" in out, "the tick that adds a role says so"
     assert "ansible/k3s-bringup.yml --tags k3s" in out
     assert len(tick.posts) == 1, "one page per SHA, naming the hand command"
     assert "k3s-bringup.yml" in tick.posts[0]
@@ -121,7 +121,7 @@ def test_a_pending_role_is_named_on_every_later_tick(
         "converged: an idle tick"
     )
     out = capsys.readouterr().out
-    assert "manual_plane pending: k3s" in out
+    assert "manual_plane: pending k3s" in out
     assert "ansible/k3s-bringup.yml --tags k3s" in out
 
 
@@ -275,7 +275,7 @@ def test_a_role_already_recorded_is_not_announced_again(
     deploy_defer.record(tick.tools, state, config, TARGET, ["k3s"])
     capsys.readouterr()
     deploy_defer.record(tick.tools, state, config, TARGET, ["k3s"])
-    assert "manual_plane recorded" not in capsys.readouterr().out
+    assert "manual_plane: recorded" not in capsys.readouterr().out
     assert len(state.manual_plane_pending()) == 1, "and no second line"
 
 
@@ -284,7 +284,7 @@ def test_an_idle_tick_with_no_pending_role_says_nothing(
 ):
     """The rejecting half: the per-tick line must not fire on an empty marker."""
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert "manual_plane pending" not in capsys.readouterr().out
+    assert "manual_plane: pending" not in capsys.readouterr().out
 
 
 def test_a_mixed_range_applies_the_deploy_plane_and_still_records_the_role(
@@ -369,7 +369,7 @@ def test_a_setup_role_the_deployer_can_apply_logs_no_park(
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     out = capsys.readouterr().out
     assert "parked, nothing merged" not in out
-    assert "manual_plane pending" not in out
+    assert "manual_plane: pending" not in out
     assert tick.merges == [ORIGIN] and tick.playbooks
     assert state.manual_plane_pending() == []
 

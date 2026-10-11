@@ -143,7 +143,7 @@ def narrow_deploy_plane(
     )
     for line in r.stderr.splitlines():
         if line.strip():
-            log(line.strip())
+            log(f"narrow: {line.strip().removeprefix('narrow: ')}")
     return r.returncode, r.stdout.strip()
 
 
@@ -212,7 +212,7 @@ def narrow_setup_role(
     )
     for line in r.stderr.splitlines():
         if line.strip():
-            log(line.strip())
+            log(f"narrow-setup: {line.strip().removeprefix('narrow-setup: ')}")
     return r.returncode, r.stdout.strip()
 
 
@@ -263,7 +263,7 @@ def _role_json(repo: str, argv: list[str]) -> dict:
     )
     for line in r.stderr.splitlines():
         if line.strip():
-            log(line.strip())
+            log(f"k8s_unapplied: {line.strip()}")
     r.check_returncode()
     out = json.loads(r.stdout)
     if not isinstance(out, dict):
@@ -469,7 +469,7 @@ def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
         verdicts = digest_diff(origin)
     except Exception as exc:
         log(
-            f"narrow shadow: no digest diff ({type(exc).__name__}: {exc})",
+            f"narrow-shadow: no digest diff ({type(exc).__name__}: {exc})",
             level=WARNING,
         )
         return
@@ -486,7 +486,7 @@ def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
     else:
         chose = ",".join(deploy.tags)
     log(
-        f"narrow shadow: render digest at {origin[:8]} would apply "
+        f"narrow-shadow: render digest at {origin[:8]} would apply "
         f"{','.join(drifted) or 'nothing'} (current {len(verdicts.get(CURRENT, []))}; "
         f"unknown: {unknown or 'none'}); the narrowing chose {chose}"
     )
