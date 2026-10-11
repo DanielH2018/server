@@ -17,7 +17,8 @@ entry, handing it to a call or a method, returning it from the filter. An opaque
 it with the reason it reads no field the row omits.
 
 `test_every_named_entry_filter_reads_only_the_entry_it_names` holds `NAMED_ENTRY` against the
-filters' behaviour: it edits every other entry and asserts the named filter's answer stays put.
+filters' behaviour: it sets entries beside the target, one valid with other values and one whose
+every field is invalid, and asserts the named filter's answer stays put.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_containers_fields.py
 """
@@ -377,7 +378,7 @@ _NEIGHBOURS = (
         "port": 1,
         "hostname": "other",
         "homepage_widget": True,
-        "tier": "platform",
+        "tier": "home-automation",
         "metrics": [{"job": "target", "port": 1}],
     },
     {
@@ -407,7 +408,7 @@ def _outcome(filter_, containers_list: list, args: tuple) -> tuple:
 
 
 def _reads_only_the_named_entry(name: str) -> bool:
-    """Whether no edit to another entry changes what filter `name` answers for `target`.
+    """Whether the `_NEIGHBOURS` beside `target` leave what filter `name` answers unchanged.
 
     The target is tried whole and without each field, so a filter that falls back to another
     entry when its own lacks a field is caught too.
@@ -434,6 +435,15 @@ def test_every_named_entry_filter_reads_only_the_entry_it_names():
     filters = _filters()
     assert all(
         _outcome(filters[n], [_TARGET], _NAMED_ARGS[n])[0] == "returned"
+        for n in containers.NAMED_ENTRY
+    )
+    # The valid neighbour, read in the target's place, must change each answer. Otherwise a
+    # filter that read it would pass: a `tier` sharing the target's PriorityClass hid exactly
+    # that from `tier_priority_class`.
+    as_target = {**_NEIGHBOURS[0], "name": "target"}
+    assert all(
+        _outcome(filters[n], [as_target], _NAMED_ARGS[n])
+        != _outcome(filters[n], [_TARGET], _NAMED_ARGS[n])
         for n in containers.NAMED_ENTRY
     )
     walkers = sorted(
