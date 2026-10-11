@@ -21,10 +21,12 @@ import time
 from typing import Callable, NamedTuple
 
 from deployer_lib.deploy_config import log
+from deployer_lib.deploy_release import CURRENT, DRIFTED
 
 # The playbook the setup arm runs, and the one `narrow_setup.py` derives reachability against.
 from deployer_lib.deploy_setup_roles import INITIAL_SETUP
 from gitops_hold import held_tag
+from gitops_markers import DEPLOY_PLAYBOOK
 
 # What the tick's receipt records as a plane's tags when a deploy-plane range moves no
 # rendered output at all — a comment-only inventory edit, a variable nothing reads, a macro
@@ -466,7 +468,7 @@ def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
     except Exception as exc:
         log(f"narrow shadow: no digest diff ({type(exc).__name__}: {exc})")
         return
-    drifted = verdicts.get("drifted", [])
+    drifted = verdicts.get(DRIFTED, [])
     unknown = ", ".join(
         f"{key.split(': ', 1)[1]} {len(names)}"
         for key, names in sorted(verdicts.items())
@@ -480,7 +482,7 @@ def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
         chose = ",".join(deploy.tags)
     log(
         f"narrow shadow: render digest at {origin[:8]} would apply "
-        f"{','.join(drifted) or 'nothing'} (current {len(verdicts.get('current', []))}; "
+        f"{','.join(drifted) or 'nothing'} (current {len(verdicts.get(CURRENT, []))}; "
         f"unknown: {unknown or 'none'}); the narrowing chose {chose}"
     )
 
@@ -491,7 +493,7 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
     Whichever it is, `config.k8s_autodeploy_denylist` does not subtract from it — see
     `denylisted_in` and the DECIDED marker on it.
     """
-    playbook = "ansible/deploy.yml"
+    playbook = DEPLOY_PLAYBOOK
     try:
         rc, out = narrow(config.repo, target.local, target.origin, NARROW_TIMEOUT_S)
     except Exception as exc:

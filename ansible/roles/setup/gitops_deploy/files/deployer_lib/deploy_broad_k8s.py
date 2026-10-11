@@ -31,7 +31,7 @@ from deployer_lib.deploy_tick_types import TickPlan, TickTarget
 from deployer_lib.deploy_toolbox import DeployTools
 
 # The playbook a promoted bump is deployed through, and the one the deploy plane runs.
-DEPLOY_PLAYBOOK = "ansible/deploy.yml"
+from gitops_markers import DEPLOY_PLAYBOOK
 
 
 def covered_by_plane(plans, bumps: set[str]) -> set[str]:

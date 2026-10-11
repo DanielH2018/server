@@ -19,9 +19,8 @@ from deploy_tools.land_lib import deploy
 from lib.repo_paths import REPO as _REPO
 from deploy_tools.land_lib.landing import Classification
 
-_DEPLOY_NARROW = (
-    _REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py"
-)
+_DEPLOYER = _REPO / "ansible/roles/setup/gitops_deploy/files"
+_DEPLOY_NARROW = _DEPLOYER / "deployer_lib/deploy_narrow.py"
 
 WHOLE_PLAY = {"ansible/deploy.yml": []}
 # What `deploy_tags.py hosts` answers; the fake returns it whatever the tags asked about.
@@ -137,5 +136,7 @@ def test_the_predicate_reads_the_marker_the_deployer_writes():
     both halves green while the skip silently stopped firing. This is what breaks instead.
     """
     src = _DEPLOY_NARROW.read_text()
-    assert 'playbook = "ansible/deploy.yml"' in src
+    assert "    playbook = DEPLOY_PLAYBOOK\n" in src
+    markers = (_DEPLOYER / "gitops_markers.py").read_text()
+    assert 'DEPLOY_PLAYBOOK = "ansible/deploy.yml"' in markers
     assert 'NARROWED_TO_NOTHING = "narrowed-to-nothing"' in src

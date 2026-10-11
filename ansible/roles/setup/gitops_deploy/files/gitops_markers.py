@@ -132,6 +132,12 @@ ALERT_SLOTS: frozenset[str] = frozenset(
     {"broad", "secrets", "tasks", "k8s", "stale_denylist", "ci"}
 )
 
+# The deploy-plane playbook. A k8s deploy runs it with `--tags <services>`, and a failed one
+# writes it into the hold's `hold_plane` entry. `gitops_hold.Hold.cover_services` clears an entry
+# only when it names this same string, so the writer and the clear take it from here: two
+# spellings that drifted apart would leave a hold no deploy clears (#4428).
+DEPLOY_PLAYBOOK = "ansible/deploy.yml"
+
 # What the `playbook` key of a `manual_plane` ledger line holds for a role no playbook applies
 # (`common`).
 NO_PLAYBOOK = "none"
