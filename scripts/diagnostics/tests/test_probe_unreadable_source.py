@@ -141,3 +141,58 @@ def test_probe_help_documents_every_code_in_its_contract(capsys):
     text = capsys.readouterr().out
     for code in codes:
         assert str(code.value) in text, f"--help does not document exit {code.value}"
+
+
+# The k8s half of `health`: a kubectl read that failed is not a workload that is absent.
+def _k8s_tools(stderr):
+    """A `lib.kubectl.Tools` that serves the prod node list and fails every other read."""
+    nodes = {
+        "items": [{"metadata": {"name": n}} for n in ("daniel-box", "daniel-server")]
+    }
+
+    def run(argv, timeout):
+        if argv[-4:] == ["get", "nodes", "-o", "json"]:
+            return subprocess.CompletedProcess(argv, 0, json.dumps(nodes), "")
+        return subprocess.CompletedProcess(argv, 1, "", stderr)
+
+    return kubectl.Tools(
+        run=run,
+        find_tool=lambda name: "/usr/local/bin/kubectl",
+        find_kubeconfig=lambda: Path("/tmp/kubeconfig"),
+    )
+
+
+def test_a_failed_kubectl_read_under_health_is_unreadable_not_missing(capsys):
+    tools = _k8s_tools("Unable to connect to the server: dial tcp: i/o timeout")
+    rc = _exit_code(lambda: health.run_health("jellyfin", served="prod", tools=tools))
+    captured = capsys.readouterr()
+    assert rc == TEMP_FAIL
+    assert "MISSING" not in captured.out
+    assert "Unable to connect to the server" in captured.err
+
+
+def test_a_notfound_kubectl_read_under_health_is_still_missing(capsys):
+    tools = _k8s_tools(
+        'Error from server (NotFound): deployments.apps "jellyfin" not found'
+    )
+    rc = _exit_code(lambda: health.run_health("jellyfin", served="prod", tools=tools))
+    assert rc == 1
+    assert "MISSING" in capsys.readouterr().out
+
+
+def test_probe_help_renders_each_contract_row_as_value_and_meaning(capsys):
+    """A bare `"0" in text` matches any digit in the help, so check each rendered row whole."""
+    with pytest.raises(SystemExit):
+        probe.main(["--help"])
+    # argparse wraps the epilog, so compare with the line breaks collapsed.
+    text = " ".join(capsys.readouterr().out.split())
+    for code in contract(PROBE):
+        row = f"{code.value} = {code.meaning.rstrip('.')}"
+        assert row in text, f"--help does not render {row!r}"
+
+
+# Appended rather than placed at the top, because nothing above may change.
+from pathlib import Path  # noqa: E402
+
+from diagnostics.probe_lib import health  # noqa: E402
+from lib import kubectl  # noqa: E402

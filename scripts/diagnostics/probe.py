@@ -154,12 +154,21 @@ def main(argv=None, *, plan=plan):
         print("\n".join(REGISTRY.render_list()))
         return 0
     ns = _build_parser().parse_args(argv)
+    path = verdict_path(ns)
     try:
         rc = _dispatch(ns, argv, plan)
     except core.Unreadable:
         # The exception printed its message to stderr when it was built.
         rc = PROBE_UNREADABLE
-    path = verdict_path(ns)
+    except SystemExit as exc:
+        # A message-carrying SystemExit (an HA token refused, a group_vars key missing, a
+        # server's error page) stopped the subcommand before it observed anything, so a
+        # verdict subcommand reports it as unreadable rather than letting it exit 1, the
+        # `fail` verdict, with no verdict line.
+        if path is None or isinstance(exc.code, int) or exc.code is None:
+            raise
+        print(exc.code, file=sys.stderr)
+        rc = PROBE_UNREADABLE
     if path:
         # The detail never repeats the failure: stderr carries it, and stdout stays the
         # verdict alone for a caller that reads only the last line.

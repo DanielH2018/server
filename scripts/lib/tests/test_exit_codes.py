@@ -183,6 +183,8 @@ def test_every_declared_code_has_a_contract_row(entry_point, prefix):
     bare integer while every prose copy of the table still listed seven.
     """
     rows = {code.value for code in ec.contract(entry_point)}
+    # Non-vacuity: a family with neither constants nor a row would compare two empty sets.
+    assert rows, f"{entry_point} has no contract row"
     assert _declared_values(prefix) == rows
 
 

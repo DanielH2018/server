@@ -204,3 +204,20 @@ def test_a_json_view_prints_no_verdict_line_after_its_document(capsys):
     out = capsys.readouterr().out
     assert "PROBE-VERDICT" not in out
     json.loads(out)
+
+
+def test_a_message_exit_from_a_verdict_subcommand_is_unreadable_with_its_line(
+    monkeypatch, capsys
+):
+    """`SystemExit("...")` exits 1, the fail verdict, and skips the line unless main catches it."""
+    from diagnostics.probe_lib import subcommands
+
+    def refused(ns):
+        raise SystemExit("HA websocket auth failed (check claude_ha_token)")
+
+    monkeypatch.setattr(subcommands.REGISTRY.get("landing"), "func", refused)
+    rc = _exit_code(lambda: probe.main(["landing"]))
+    captured = capsys.readouterr()
+    assert rc == TEMP_FAIL
+    assert "HA websocket auth failed" in captured.err
+    _assert_ends_with_verdict(captured.out, rc)
