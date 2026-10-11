@@ -1,15 +1,4 @@
-import importlib.util
-import pathlib
-
-_FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
-
-# Load the host script's pure core directly (not a package), mirroring test_autofix.py.
-_SPEC = importlib.util.spec_from_file_location(
-    "fake_remux_logic", _FILES / "fake_remux_logic.py"
-)
-assert _SPEC and _SPEC.loader, "spec_from_file_location found no loader"
-frl = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(frl)
+from fake_remux_lib import fake_remux_logic as frl
 
 MARKERS = frl.DEFAULT_RE_ENCODER_MARKERS
 # The real NTRX file: a "Bluray-1080p Remux" that is actually a 10.4 s-GOP hevc_qsv encode.

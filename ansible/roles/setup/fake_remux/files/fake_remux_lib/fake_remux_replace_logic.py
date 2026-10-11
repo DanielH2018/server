@@ -11,8 +11,9 @@ import os
 import re
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import fake_remux_logic as frl
+# files/ (the install dir on the host): fake_remux_lib's parent.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from fake_remux_lib import fake_remux_logic as frl
 
 _WRONG_MAP = re.compile(r"wasn.?t requested", re.I)
 _BLOCKED = re.compile(r"blocked till|is disabled|unavailable", re.I)
