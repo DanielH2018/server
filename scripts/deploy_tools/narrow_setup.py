@@ -163,10 +163,11 @@ def path_tags(
                     f"{key} reaches no task file, only vars keys naming each other"
                 )
             tags |= got
-        if not tags:
-            raise CannotNarrow(
-                f"{rel} changed no key, so nothing says which tag to run"
-            )
+        # No changed key means a comment or layout edit. Ansible reads a vars file only
+        # through its parsed values, so the edit reaches no host and adds no tag, the way
+        # `_reaches_no_host` skips prose. A range where every path is like this still refuses
+        # in `role_tags`. Refusing here instead turned a comment edit to `k3s/defaults/main.yml`
+        # into the whole-role `--tags k3s` (#4384).
         return frozenset(tags)
     raise CannotNarrow(f"{rel} is not in a directory this can narrow from")
 
