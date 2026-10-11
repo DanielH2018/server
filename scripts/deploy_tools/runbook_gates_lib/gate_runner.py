@@ -162,7 +162,7 @@ def run_gates(gates: Sequence[Gate], runbook: str, *context, out=sys.stdout) -> 
 def cli(
     doc: str, argv: list[str] | None, run: Callable[..., int], *, takes: int = 0
 ) -> int:
-    """The entry point every gate script shares: the wrong argument count prints `doc`.
+    """The `main` every runbook module shares: the wrong argument count prints `doc`.
 
     `takes` is how many positional arguments the runbook's own invocation carries — 0 for a
     script whose gates read only the host and the cluster, 1 for the etcd restore gates,

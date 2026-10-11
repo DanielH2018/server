@@ -1,4 +1,4 @@
-"""A fake `lib.kubectl.Tools` for the `*_gates.py` tests, and the documents they share.
+"""A fake `lib.kubectl.Tools` for the runbook gate tests, and the documents they share.
 
 The runner takes a `Tools`, so a test answers every cluster read from canned JSON keyed on
 the kubectl arguments after `--kubeconfig <path>` and nothing touches a live API server. The
