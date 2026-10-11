@@ -59,6 +59,22 @@ def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch
     )
 
 
+def test_an_unexpected_exception_still_prints_and_records_a_verdict(tmp_path, capsys):
+    """Direct, it reads as it does through the handoff unit: `refused`, naming the raise."""
+    import land
+    from deploy_tools.land_lib.options import Options
+
+    verdict_file = tmp_path / "7.verdict"
+    opts = Options(pr="7", primary=PRIMARY, verdict_file=str(verdict_file))
+    tools, _ = build_tools(Fakes())
+    tools.gh_json = lambda *a, **k: 1 / 0
+    with pytest.raises(ZeroDivisionError):
+        land._land(opts, tools, None)
+    expected = "VERDICT: refused (PR #7 — the landing raised ZeroDivisionError: division by zero)"
+    assert capsys.readouterr().out.splitlines()[-1] == expected
+    assert verdict_file.read_text() == expected + "\n"
+
+
 @pytest.mark.parametrize("argv", [["--bogus"], []])
 def test_a_usage_error_does_not_annotate(argv):
     """The rejecting half: a bad flag and a missing `--pr` are usage errors, not landings,

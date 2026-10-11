@@ -109,7 +109,7 @@ from deploy_tools.land_lib import detach, handoff, pipeline
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.ledger import annotation_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
-from deploy_tools.land_lib.outcome import write_verdict_file
+from deploy_tools.land_lib.outcome import Outcome, write_verdict_file
 from deploy_tools.land_lib.tools import Classifier, Tools
 
 
@@ -236,6 +236,16 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
         rc = outcome.rc
         outcome.emit()
         line = outcome.file_line()
+    except Exception as exc:
+        # Still one VERDICT line, as every exit-1 end prints (#4451), and the same verdict a
+        # crash reaches through the handoff unit's STOPPED line. The traceback follows, and
+        # the annotation below stays `aborted`, so the board keeps a crash apart from a
+        # refusal.
+        reason = " ".join(f"{type(exc).__name__}: {exc}".split())
+        crashed = Outcome(1, f"PR #{opts.pr} — the landing raised {reason}")
+        crashed.emit()
+        line = crashed.file_line()
+        raise
     finally:
         if opts.verdict_file:
             with contextlib.suppress(OSError):
