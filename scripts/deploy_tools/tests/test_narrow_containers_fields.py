@@ -8,7 +8,8 @@ cannot name the fields of (a loop, `selectattr`, a filter missing from `FILTER_F
 counts as reading every field. A filter that looks up one entry by a literal name keys its read on
 that entry too (#4388), so an edit to radarr's `port` skips a reader of sonarr's. A
 `metrics_port` read by a literal job is keyed on the entry declaring that job, while the edit
-leaves every entry's `metrics` alone (#4396).
+leaves every entry's `metrics` alone (#4396). A read through `hostvars['<host>']` with a literal
+host is keyed on that host's list, so an edit to another host's `host_vars` skips it (#4422).
 
 `test_narrow_filter_tables.py` holds the tables this relies on, `FILTER_FIELDS`, `NAMED_ENTRY`
 and `NAMED_JOB`, against the filter plugins.
@@ -20,10 +21,11 @@ from pathlib import Path
 
 import pytest
 
+from deploy_tools.narrow_lib import broad as narrow_broad
 from deploy_tools.narrow_lib import containers
 from lib.repo_paths import REPO
 
-from _narrow_fixtures import HOST_VARS, Tree, _refs, build_tree
+from _narrow_fixtures import DECLARED, HOST_VARS, Tree, _refs, build_tree
 
 BOX = "ansible/inventory/host_vars/daniel-box.yml"
 
@@ -285,3 +287,72 @@ def test_a_former_list_loop_reads_named_fields_is_clean(template: str):
     reads = containers.reader_reads((REPO / "ansible/roles/k8s" / template).read_text())
     assert reads is not None
     assert not any("depends_on" in fields for fields in reads.values())
+
+
+PI = "ansible/inventory/host_vars/daniel-pi.yml"
+_PI_VARS = "containers_list:\n  - name: alloy\n    port: 12345\n"
+
+
+def _host_keyed_readers(tree: Tree, quote: str = "'") -> None:
+    """Commit a Pi list, one reader keyed on each host and one keyed on a variable host.
+
+    bazarr reads the Pi's list as monitor-bridge does, jellyfin reads daniel-box's, and
+    radarr reads `hostvars[peer]`, whose host no literal names (#4422).
+    """
+    tree.write(PI, _PI_VARS)
+    for role, host in (("bazarr", "daniel-pi"), ("jellyfin", "daniel-box")):
+        tree.write(
+            f"ansible/roles/k8s/{role}/templates/secret.yaml.j2",
+            f"p: {{{{ hostvars[{quote}{host}{quote}].containers_list"
+            " | published_ports | join(',') }}\n",
+        )
+    tree.write(
+        "ansible/roles/k8s/radarr/templates/secret.yaml.j2",
+        "p: {{ hostvars[peer].containers_list | published_ports | join(',') }}\n",
+    )
+    tree.commit("readers keyed on a host")
+
+
+def _narrow(tree: Tree) -> set[str]:
+    """`Tree.narrow` over a fleet wide enough that six tags stay under its ceiling."""
+    old, new = _refs(tree)
+    spare = {"monitor-bridge"} | {f"spare-{n}" for n in range(6)}
+    return narrow_broad.narrow(
+        old, new, cwd=tree.root, declared=DECLARED | spare, callers={}
+    )
+
+
+@pytest.mark.parametrize("quote", ["'", '"'], ids=["single", "double"])
+def test_a_port_edit_to_daniel_box_skips_a_reader_of_the_pis_list(
+    tree: Tree, quote: str
+):
+    """bazarr renders only daniel-pi's list, so a daniel-box `port` edit cannot move it."""
+    _host_keyed_readers(tree, quote)
+    sonarr = "    image: sonarr:1\n"
+    tree.write(BOX, HOST_VARS.replace(sonarr, sonarr + "    port: 8989\n"))
+    # radarr's host is a variable and lidarr's loop is bare, so both stay unkeyed.
+    assert _narrow(tree) == {
+        "sonarr",
+        "prowlarr",
+        "jellyfin",
+        "radarr",
+        "lidarr",
+    }
+
+
+def test_a_port_edit_to_daniel_pi_skips_a_reader_of_daniel_boxs_list(tree: Tree):
+    _host_keyed_readers(tree)
+    tree.write(PI, _PI_VARS.replace("12345", "12346"))
+    # prowlarr reads sonarr's port by name, which daniel-pi's list does not declare.
+    assert _narrow(tree) == {"alloy", "bazarr", "radarr", "lidarr"}
+
+
+def test_a_port_edit_to_daniel_box_skips_monitor_bridge(tree: Tree):
+    """monitor-bridge's `port` reads are uptime-kuma's entry and the Pi's list (#4422)."""
+    secret = "ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2"
+    tree.write(secret, (REPO / secret).read_text())
+    tree.write(PI, _PI_VARS)
+    tree.commit("monitor-bridge as it stands")
+    sonarr = "    image: sonarr:1\n"
+    tree.write(BOX, HOST_VARS.replace(sonarr, sonarr + "    port: 8989\n"))
+    assert "monitor-bridge" not in _narrow(tree)
