@@ -20,6 +20,7 @@ from fanout_lib.status import BLOCKER, NO_PR
 
 ACTIONABLE_SEVERITIES = frozenset({"critical", "high", "medium"})
 CONFIDENCE_FLOOR = 0.6
+REVIEW_EFFORT = "medium"
 HOLD_CONFIDENCE = 0.8
 # The `test` findings the fix round takes at any severity: a test that checks nothing, or one
 # with no durable value. The severity floor dropped 46 of the reviewer's 50 test findings,
@@ -53,6 +54,10 @@ class Record:
 
     batch: str
     pr: str = ""
+    # The `--effort` every reviewer call passes, read from here so the record names what ran
+    # and actionable findings per PR can be compared between settings (#3966). A record
+    # written before this field existed has no key.
+    review_effort: str = REVIEW_EFFORT
     costs: dict[str, float] = field(default_factory=dict)
     review_error: str = ""
     findings: list[dict] = field(default_factory=list)
