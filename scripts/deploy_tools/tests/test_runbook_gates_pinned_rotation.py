@@ -1,7 +1,7 @@
 """`runbook_gates.py pinned-rotation` against a fake kubectl, a registry in `tmp_path` and a patched
 environment: each gate's clean/flagged pair, the stop order, and the exit code naming the gate.
 
-Run: uv run pytest scripts/deploy_tools/tests/test_pinned_rotation_gates.py
+Run: uv run pytest scripts/deploy_tools/tests/test_runbook_gates_pinned_rotation.py
 """
 
 import io
