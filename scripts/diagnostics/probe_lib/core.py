@@ -23,7 +23,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.ansible_inventory import PI_HOST  # noqa: F401  (re-exported as core.PI_HOST)
-from lib.exit_codes import PROBE_UNREADABLE
+from lib.exit_codes import PROBE_UNREADABLE, PROBE_USAGE_ERROR
 from lib.repo_paths import REPO
 
 # The URL builders live in obs_api, which homelab-mcp's image also carries. Re-exported
@@ -127,7 +127,7 @@ def pick_loki_store(logql, requested):
     with a note; every other query keeps the homelab default with no note.
 
     Raises:
-        SystemExit: `--loki homelab` was asked for explicitly with the claude-code selector.
+        UsageError: `--loki homelab` was asked for explicitly with the claude-code selector.
     """
     claude_code = bool(_CLAUDE_CODE_SELECTOR_RE.search(logql))
     if requested is None:
@@ -138,7 +138,7 @@ def pick_loki_store(logql, requested):
             )
         return "homelab", None
     if requested == "homelab" and claude_code:
-        raise SystemExit(
+        raise UsageError(
             'loki-query: `service_name="claude-code"` is observability\'s stream, and '
             "--loki homelab names the store that never holds it. An empty answer here "
             "means nothing. Re-run with --loki observability, or use `otelq logs '<logql>'`."
@@ -206,7 +206,7 @@ _DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
 
 
 def parse_duration_seconds(text):
-    """`30m` / `6h` / `2d` / `1w` -> seconds. Raises SystemExit on anything else.
+    """`30m` / `6h` / `2d` / `1w` -> seconds. Raises UsageError on anything else.
 
     Loki's default query window is an hour, which silently hides anything older — a backup run
     75 minutes ago simply returns nothing, and an empty result reads as "no backups" rather than
@@ -214,7 +214,7 @@ def parse_duration_seconds(text):
     """
     m = re.fullmatch(r"(\d+)([mhdw])", text.strip())
     if not m:
-        raise SystemExit(f"bad duration {text!r} — use forms like 30m, 6h, 2d, 1w")
+        raise UsageError(f"bad duration {text!r} — use forms like 30m, 6h, 2d, 1w")
     return int(m.group(1)) * _DURATION_UNITS[m.group(2)]
 
 
@@ -281,6 +281,26 @@ class Unreadable(SystemExit):
         return self.message
 
 
+class UsageError(SystemExit):
+    """An argument the probe cannot act on, such as `--since 3x` (#4471).
+
+    It exits `PROBE_USAGE_ERROR` (64) rather than 75, because a retry of the same invocation can
+    never succeed, and rather than 1, because the probe observed nothing. Like `Unreadable`,
+    it prints its message to stderr when it is built.
+
+    Attributes:
+        message: what was wrong with the argument, and the forms that are accepted.
+    """
+
+    def __init__(self, message):
+        self.message = message
+        print(message, file=_sys.stderr)
+        super().__init__(PROBE_USAGE_ERROR)
+
+    def __str__(self):
+        return self.message
+
+
 def fetch(url, resolve=None):
     """Run the read-only curl GET and return its body.
 
@@ -327,14 +347,15 @@ def get_status(url, config_body=None, timeout=DEFAULT_TIMEOUT, resolve=None):
     return int(code or 0), body
 
 
-class NonJsonResponse(SystemExit):
+class NonJsonResponse(Unreadable):
     """fetch() returned a body `json.loads` cannot read — an HTTP error page, in practice.
 
     `curl -sS` without `--fail` exits 0 on a 4xx/5xx and hands the error body back as the
     response, so a rejected query would reach `json.loads` and die as a JSONDecodeError that
-    names the probe rather than the server. Raising SystemExit with the body means an uncaught
-    one prints the server's own words and exits 1; a caller that can read the body (alerts'
-    cap clamp) catches it and does.
+    names the probe rather than the server. As an `Unreadable` it prints the server's own words
+    to stderr and exits `PROBE_UNREADABLE` (75): the server answered, but not with anything the
+    probe could read (#4471). A caller that can read the body (alerts' cap clamp) catches it
+    and does.
     """
 
     def __init__(self, url, body):

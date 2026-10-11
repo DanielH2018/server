@@ -317,7 +317,7 @@ def ha_trace(host, token, automation_id, timeout=DEFAULT_TIMEOUT, connect_ip=Non
         _ws_recv_json(recv_exact)  # auth_required
         _ws_send(sock, {"type": "auth", "access_token": token})
         if _ws_recv_json(recv_exact).get("type") != "auth_ok":
-            raise SystemExit("HA websocket auth failed (check claude_ha_token)")
+            raise core.Unreadable("HA websocket auth failed (check claude_ha_token)")
         _ws_send(
             sock,
             {

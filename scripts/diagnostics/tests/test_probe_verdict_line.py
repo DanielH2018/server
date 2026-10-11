@@ -206,18 +206,22 @@ def test_a_json_view_prints_no_verdict_line_after_its_document(capsys):
     json.loads(out)
 
 
-def test_a_message_exit_from_a_verdict_subcommand_is_unreadable_with_its_line(
+def test_a_message_exit_from_a_verdict_subcommand_is_a_failure_with_its_line(
     monkeypatch, capsys
 ):
-    """`SystemExit("...")` exits 1, the fail verdict, and skips the line unless main catches it."""
+    """`SystemExit("...")` skips the line unless main catches it, and is never 75 (#4471).
+
+    A config error cannot clear on a retry, so it is the `fail` verdict; a failed read raises
+    `core.Unreadable` at its own site instead.
+    """
     from diagnostics.probe_lib import subcommands
 
-    def refused(ns):
-        raise SystemExit("HA websocket auth failed (check claude_ha_token)")
+    def misconfigured(ns):
+        raise SystemExit("k8s_namespace not found in group_vars")
 
-    monkeypatch.setattr(subcommands.REGISTRY.get("landing"), "func", refused)
+    monkeypatch.setattr(subcommands.REGISTRY.get("landing"), "func", misconfigured)
     rc = _exit_code(lambda: probe.main(["landing"]))
     captured = capsys.readouterr()
-    assert rc == TEMP_FAIL
-    assert "HA websocket auth failed" in captured.err
+    assert rc == FAILED
+    assert "k8s_namespace not found" in captured.err
     _assert_ends_with_verdict(captured.out, rc)
