@@ -122,8 +122,8 @@ def test_a_pi_only_role_is_applied_with_its_target(tmp_path):
     (tmp_path / MARKERS["owed"]).write_text(json.dumps(line) + "\n")
     (line_text,) = manual_plane_lines(read_manual_plane_marker(str(tmp_path)), 4000)
     assert (
-        "apply `ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi` by hand"
-        in line_text
+        "apply `uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi "
+        "-e target=daniel-pi` by hand" in line_text
     )
 
 

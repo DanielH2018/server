@@ -11,7 +11,9 @@ Every fact comes from a reader that already exists; this module only joins them:
   including a user on the deployer's host the directory's mode shuts out, deploy-ui's
   `/api/state` serves the same two through those same modules.
 - **Manual planes.** Read from the ledger through `gitops_ledger.manual_plane_entries`, and
-  worded by `deployer_park.manual_plane_lines`, the banner's renderer. deploy-ui serves that
+  worded by `deployer_park.manual_plane_lines`, the banner's renderer. The text view prints
+  each role's apply and clear commands on lines of their own, from
+  `deployer_park.manual_plane_remedies`, so each pastes as it stands. deploy-ui serves that
   class's raw ledger lines as `manual_plane_owed`, so both paths word them the same way. A
   deploy-ui that predates the key leaves the field `null` (unknown), never `[]`: an empty list
   would read as "nothing owed" when the truth is "not readable from here".
@@ -75,7 +77,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO, ROLES
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib.deploy_git import _CI_NO_VERDICT_CONCLUSIONS
 from gitops_hold import DeployerSnapshot
-from gitops_ledger import held_planes, manual_plane_entries
+from gitops_ledger import held_planes
 
 # deploy-ui's daemon on the deployer's host: `deploy_ui_port` in
 # `ansible/roles/setup/deploy_ui/defaults/main.yml`. Its ufw rule admits every node IP, which
@@ -203,16 +205,26 @@ def blockers(snap: dict, roles: frozenset[str] | None = None) -> list[str]:
 
 
 def manual_plane_rows(owed: str | None, now: float) -> list[dict]:
-    """Each owed `manual_plane` role with the banner's line for it, oldest first.
+    """Each owed `manual_plane` role with the banner's line for it and its parts, oldest first.
 
-    The line comes from `deployer_park.manual_plane_lines`, which walks the same entries in the
-    same order, so the two zip. The line carries the role's age and its way out.
+    `line` comes from `deployer_park.manual_plane_lines` and carries the role's age and its way
+    out; the deck mod renders it. The other fields are that line's parts, from
+    `deployer_park.manual_plane_remedies`. Both walk the same entries in the same order, so
+    the two zip.
     """
-    entries, _ = manual_plane_entries(owed)
+    remedies = deployer_park.manual_plane_remedies(owed, now)
     lines = deployer_park.manual_plane_lines(owed, now)
     return [
-        {"role": e.role, "line": line.strip().removeprefix("✗ ").strip()}
-        for e, line in zip(entries, lines, strict=True)
+        {
+            "role": r.role,
+            "line": line.strip().removeprefix("✗ ").strip(),
+            "age": r.age,
+            "apply": r.apply,
+            "by_hand": r.by_hand,
+            "warning": r.warning,
+            "clear": r.clear,
+        }
+        for r, line in zip(remedies, lines, strict=True)
     ]
 
 
@@ -414,39 +426,65 @@ def unmatched_claims(snap: dict) -> list[dict]:
     return [c for c in snap["claims"] or [] if c["number"] not in held]
 
 
+def owed_lines(row: dict) -> list[str]:
+    """One owed manual plane as lines for a terminal, each command alone on its line.
+
+    A command line holds nothing but the command, so a triple-click copies a line that runs
+    as pasted. A warning goes above the apply it is about, so it is read before the paste.
+    """
+    lines = [
+        f"Owed: the `{row['role']}` setup role, merged {row['age']} ago. "
+        "The GitOps deployer cannot apply it itself."
+    ]
+    if row["apply"]:
+        if row["warning"]:
+            lines.append(f"  WARNING: {row['warning']}")
+        lines += ["  Apply it by hand:", f"    {row['apply']}"]
+    else:
+        lines.append(f"  {row['by_hand'][:1].upper()}{row['by_hand'][1:]}.")
+    lines += ["  Then clear its ledger line:", f"    {row['clear']}"]
+    return lines
+
+
 def format_text(snap: dict) -> str:
-    """The snapshot as lines for a terminal."""
+    """The snapshot as lines for a terminal, one blank line between sections.
+
+    The owed manual planes follow the status line that counts them, ahead of the runs in
+    flight, so no owed line reads as a run.
+    """
 
     def known(value, render):
         return "unknown" if value is None else render(value)
 
     lines = ["Landing blockers:"]
     lines += [f"  ✗ {b}" for b in snap["blockers"]] or ["  none"]
-    lines.append(
+    lines += [
+        "",
         "hold: "
         + known(snap["hold"], lambda h: h["sha"][:8] or "none")
         + "   master CI: "
         + known(snap["ci"], lambda c: f"{c['state']} {c['sha']}".strip())
         + "   manual planes: "
-        + known(snap["manual_planes"], lambda m: str(len(m)))
-    )
+        + known(snap["manual_planes"], lambda m: str(len(m))),
+    ]
     if snap["hold"] and snap["hold"]["planes"]:
         lines.append("held planes: " + "; ".join(map(str, snap["hold"]["planes"])))
+    for owed in snap["manual_planes"] or []:
+        lines += ["", *owed_lines(owed)]
     if snap["runs"]:
-        lines.append("In flight:")
+        lines += ["", "In flight:"]
         for r in snap["runs"]:
             what = f"PR {r['pr']}" if r["pr"] else r["tag"][:60]
             lines.append(
                 f"  {r['kind']} {what} {r['elapsed_s']}s  {r['verdict'] or ''}".rstrip()
             )
-    for owed in snap["manual_planes"] or []:
-        lines.append(f"  owed: {owed['line']}")
     if snap["last_verdict"]:
-        lines.append(
-            f"Last landing: {snap['last_verdict']['verdict'] or 'no VERDICT line'}"
-        )
+        lines += [
+            "",
+            f"Last landing: {snap['last_verdict']['verdict'] or 'no VERDICT line'}",
+        ]
     if snap["worktrees"]:
-        lines.append("Worktrees:")
+        lines += ["", "Worktrees:"]
         for t in snap["worktrees"]:
             nums = " ".join(f"#{n}" for n in t["claims"])
             lines.append(f"  {t['branch'] or t['path']}  {nums}".rstrip())
