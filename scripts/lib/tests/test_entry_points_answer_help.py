@@ -10,8 +10,10 @@ WHAT COUNTS AS AN ENTRY POINT. `lib.script_classify.classify` reads the tree for
 script is reached, and everything it does not call a library is one. A Python module with no
 `if __name__ == "__main__"` guard cannot be run at all, and the classifier calls every one
 of those a library -- through the importing package's own directory, through a relative import,
-or by naming the tests that are its only importers. So this test filters on the verdict
-alone.
+or by naming the tests that are its only importers. The reverse does not hold. The classifier
+also calls a module a library once another script imports it, guard or not, and
+`ha_state_model.py`, `await_ci.py`, `fanout.py` and `land_tags.py` are each imported and run
+directly. So a library with its own `__main__` guard counts as an entry point too (#4405).
 
 RUNTIME. Each script runs under this interpreter, not under `uv run` -- one `uv run` per entry
 point cost a minute and a half where direct invocation costs ten seconds, over a census this
@@ -35,12 +37,15 @@ import pytest
 
 from lib.cli_help import HELP_FLAGS, answer_help, wants_help
 from lib.repo_paths import REPO, SCRIPTS
-from lib.script_classify import by_name, classify
+from lib.script_classify import _has_main_guard, by_name, classify, file_text
 
 # Non-vacuity: the census reads the tree, so a classifier change or a directory move can empty
-# it, and `all(...)` over nothing passes. These five are the shapes the census must keep --
+# it, and `all(...)` over nothing passes. The first five are the shapes the census must keep --
 # a shell shim, a Python gate, an adhoc tool, a scheduled generator, and the one whose
-# `--help` answer was the reason for the test.
+# `--help` answer was the reason for the test. The last four are imported by other scripts
+# and also run directly, so the classifier calls them libraries; they are here so the
+# `__main__`-guard half of `_entry_points` cannot lose them silently (#4405).
+# `ha_state_model.py` broke three times on one import (#674).
 MUST_FIND = frozenset(
     {
         "deploy.sh",
@@ -48,6 +53,10 @@ MUST_FIND = frozenset(
         "probe.py",
         "findings.py",
         "export_grafana_dashboards.py",
+        "ha_state_model.py",
+        "await_ci.py",
+        "fanout.py",
+        "land_tags.py",
     }
 )
 
@@ -64,6 +73,11 @@ def _entry_points():
         name: paths[name]
         for name, (kind, _why) in classify().items()
         if kind != "library"
+        # `_has_main_guard` is the classifier's own test for "this module can be run", so the
+        # census and `classify` cannot disagree about what a guard is. `classify` also returns
+        # a few test fixtures that `by_name` does not catalogue. They are libraries with no
+        # path here, so the lookup checks membership first.
+        or (name in paths and _has_main_guard(file_text(paths[name])))
     }
 
 
