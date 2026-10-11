@@ -25,10 +25,11 @@ def test_blocked_when_an_incoming_change_needs_a_hand(landing):
 
 
 def test_a_broken_preflight_is_a_plain_failure(landing):
+    """Not `blocked`: nothing in the range was judged, so it takes the exit-1 catch-all."""
     ln, _ = landing(Fakes(blockers=[1]))
     with pytest.raises(Outcome) as exc:
         ci.preflight(ln)
-    assert exc.value.rc == 1 and exc.value.verdict is None
+    assert exc.value.rc == 1 and exc.value.verdict == "refused"
 
 
 @pytest.mark.parametrize(

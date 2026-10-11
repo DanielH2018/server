@@ -224,9 +224,9 @@ def test_arm_merge_on_a_merged_pr_stays_a_no_op_under_a_required_author(landing)
         (["OPEN CONFLICTING dead", "OPEN CONFLICTING dead"], "merge-conflict"),
         (
             ["OPEN CONFLICTING dead", "OPEN MERGEABLE dead", "CLOSED MERGEABLE dead"],
-            None,
+            "refused",
         ),
-        (["OPEN UNKNOWN dead", "OPEN UNKNOWN dead", "CLOSED UNKNOWN dead"], None),
+        (["OPEN UNKNOWN dead", "OPEN UNKNOWN dead", "CLOSED UNKNOWN dead"], "refused"),
     ],
 )
 def test_only_a_settled_conflict_ends_the_wait(landing, states, verdict):
@@ -235,7 +235,7 @@ def test_only_a_settled_conflict_ends_the_wait(landing, states, verdict):
         merge.await_merge(ln)
     assert exc.value.rc == 1
     assert exc.value.verdict == verdict
-    if verdict is None:
+    if verdict == "refused":
         assert "closed without merging" in exc.value.error
 
 
@@ -266,7 +266,9 @@ def test_a_ci_answer_that_is_not_red_keeps_the_wait_going(landing, ci_rc):
     )
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
-    assert exc.value.verdict is None and "closed without merging" in exc.value.error
+    assert (
+        exc.value.verdict == "refused" and "closed without merging" in exc.value.error
+    )
 
 
 def test_the_merge_budget_ends_the_wait_with_its_own_verdict(landing):

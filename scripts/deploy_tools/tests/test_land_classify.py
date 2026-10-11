@@ -12,6 +12,7 @@ import yaml
 from deployer_lib import deploy_cross_role
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes
 from deployer_lib.deploy_changes import setup_roles_for
+from lib.exit_codes import LAND_BAD_ARGS
 from lib.repo_paths import REPO
 from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib import classify
@@ -238,7 +239,7 @@ def test_a_truncated_file_list_without_since_is_a_usage_error(landing):
     ln.merge_sha = MERGE_SHA
     with pytest.raises(Outcome) as exc:
         classify.classify(ln)
-    assert exc.value.rc == 2 and "--since" in exc.value.error
+    assert exc.value.rc == LAND_BAD_ARGS and "--since" in exc.value.error
 
 
 def test_a_truncated_file_list_with_since_defers_derivation(landing, capsys):

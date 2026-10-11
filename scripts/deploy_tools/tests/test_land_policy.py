@@ -226,7 +226,7 @@ def test_the_verdict_file_holds_one_line_naming_the_refusal(
     )
     assert rc == 1
     (line,) = verdict.read_text().splitlines()
-    assert line.startswith("STOPPED: rc=1 PR #999 — refused by the landing policy:")
+    assert line.startswith("VERDICT: refused (PR #999 — refused by the landing policy:")
 
 
 def test_the_verdict_file_reads_pending_until_the_landing_ends(monkeypatch, tmp_path):

@@ -211,3 +211,23 @@ def test_a_stopped_line_from_the_unit_still_prints_a_verdict(tmp_path, capsys):
     assert rc == 1
     printed = _printed_verdicts(capsys.readouterr().out)
     assert len(printed) == 1 and printed[0] in VERDICTS, printed
+
+
+def test_a_start_that_outlasts_the_wait_is_a_handoff_timeout(tmp_path, capsys):
+    """Its own verdict, not one naming a cause the handoff cannot know (#4451)."""
+    _hand_off(tmp_path, raises=subprocess.TimeoutExpired("systemctl", 1))
+    assert _printed_verdicts(capsys.readouterr().out) == ["handoff-timeout"]
+
+
+def test_a_stopped_bad_arguments_line_prints_no_verdict(tmp_path, capsys):
+    """64 is a usage error, and a usage error names no verdict on either path."""
+    line = (
+        "STOPPED: rc=64 PR #3633 — PR file list was truncated and no --since was given"
+    )
+    rc, _ = _hand_off(
+        tmp_path, line=line, status={"Result": "exit-code", "ExecMainStatus": "64"}
+    )
+    assert rc == LAND_BAD_ARGS
+    out, err = capsys.readouterr()
+    assert _printed_verdicts(out) == []
+    assert "--since" in err
