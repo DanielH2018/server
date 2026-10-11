@@ -316,7 +316,8 @@ def test_only_the_one_entrypoint_keeps_the_fake_remux_prefix_in_files():
 
 
 def _old_location_imports(source: str, inside_lib: bool) -> list[str]:
-    old = OLD_ENTRY_MODULES | (set() if inside_lib else OLD_LIB_MODULES)
+    # Inside the lib a module may keep its basename and import a sibling by bare name.
+    old = set() if inside_lib else OLD_ENTRY_MODULES | OLD_LIB_MODULES
     hits = []
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.ImportFrom) and node.module and node.module in old:
@@ -441,6 +442,7 @@ def test_cron_command_runs_from_the_applied_install_dir(cron_file, applied, tmp_
         ("scan", "state.json", "disabled (no Sonarr API key)"),
         ("replace", "replace_state.json", "replacer off"),
     ],
+    ids=["scan", "replace"],
 )
 def test_subcommand_runs_its_own_half(subcommand, state_file, msg, applied, tmp_path):
     # The scan reports itself disabled on an empty API key; the reconciler reports itself off.
