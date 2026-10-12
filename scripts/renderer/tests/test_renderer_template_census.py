@@ -1,9 +1,9 @@
 """Every filter and test name the k8s templates use resolves in the renderer's environment.
 
 The census parses each template under the k8s roles' `templates/` and `ansible/templates/`
-through `renderer_lib.cluster.renderer_env`, the environment `render_tag` renders with. A name
-the environment lacks would otherwise surface only when a render first reaches that template,
-and a template behind a role that does not render yet would hide it.
+through `renderer_lib.environment.renderer_env`, the environment `render_tag` renders with. A
+name the environment lacks would otherwise surface only when a render first reaches that
+template.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_template_census.py
 """
@@ -14,7 +14,8 @@ from jinja2 import nodes
 
 from lib.render_guard import SHARED_TPL
 from lib.repo_paths import K8S_ROLES
-from renderer.renderer_lib.cluster import LABEL_WRAPPER, renderer_env
+from renderer.renderer_lib.cluster import LABEL_WRAPPER
+from renderer.renderer_lib.environment import renderer_env
 
 
 def _corpus() -> list[Path]:

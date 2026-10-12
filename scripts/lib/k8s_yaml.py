@@ -156,7 +156,8 @@ def make_lookup(ctx: dict):
             kind: The lookup plugin name.
             args: The plugin's positional arguments; `args[0]` is always a path or command.
             kwargs: Plugin options. Only `file`'s `rstrip` is recognised (default `True`,
-                matching Ansible's own `file` lookup) — `checksum-annotation.yml.j2`'s
+                which strips all trailing whitespace, as Ansible's own `file` lookup
+                does) — `checksum-annotation.yml.j2`'s
                 path-mode call passes `rstrip=False` so the bytes it hashes match a `copy`
                 task's checksum of the same file, which is not stripped either.
 
@@ -172,7 +173,8 @@ def make_lookup(ctx: dict):
         path = Path(args[0])
         if kind == "file":
             text = path.read_text()
-            return text.rstrip("\n") if kwargs.get("rstrip", True) else text
+            # ansible-core's `file` lookup strips all trailing whitespace, not only newlines.
+            return text.rstrip() if kwargs.get("rstrip", True) else text
         if kind == "pipe":
             # Only the binary-embed idiom, done hermetically in Python rather than by
             # running a shell: lookup('file') utf-8-decodes and would mangle binary, so
@@ -193,7 +195,8 @@ def make_lookup(ctx: dict):
             env.filters.update(context.environment.filters)
             env.filters["from_json"] = _from_json
             env.filters["to_json"] = to_json_stub
-            return env.get_template(path.name).render(ctx).rstrip("\n")
+            # Not rstripped: ansible-core's `template` lookup keeps the trailing newlines.
+            return env.get_template(path.name).render(ctx)
         raise ValueError(
             "lib.k8s_yaml implements lookup('file'), lookup('pipe'), lookup('template') and "
             f"lookup('vars'), got {kind!r}"

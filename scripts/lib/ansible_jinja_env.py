@@ -139,6 +139,10 @@ def register_ansible_filters(env: Environment) -> Environment:
     ``from_json`` is ansible-core's, which home-assistant's ``templates/config/secrets.yaml.j2``
     parses a service-account key with. ``homelab-render`` renders both templates, and its
     template census holds every filter and test name the k8s templates use to this set.
+    ``from_yaml`` and ``regex_replace`` are ansible-core's too, for the role task expressions
+    ``homelab-render`` evaluates: image-builder's content tag parses its context render with
+    the first, and uptime-kuma's ``kuma_declarations`` names each declaration with the second
+    and pairs names with declarations through ``zip``.
 
     Args:
         env: The environment to register on, modified in place.
@@ -166,8 +170,10 @@ def register_ansible_filters(env: Environment) -> Environment:
         b64encode,
         comment,
         from_json,
+        from_yaml,
         get_hash,
         mandatory,
+        regex_replace,
         to_bool,
         to_uuid,
     )
@@ -177,6 +183,10 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["bool"] = to_bool
     env.filters["comment"] = comment
     env.filters["from_json"] = from_json
+    env.filters["from_yaml"] = from_yaml
+    env.filters["regex_replace"] = regex_replace
+    # ansible-core's `zip` filter is the builtin.
+    env.filters["zip"] = zip
     env.filters["hash"] = get_hash
     env.filters["mandatory"] = mandatory
     env.filters["to_uuid"] = to_uuid

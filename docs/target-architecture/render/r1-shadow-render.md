@@ -10,6 +10,8 @@ PR 4, sonarr's API reads skipped under a stub file: [#4723](https://github.com/D
 
 PR 2, the manifests role's file rules, 42 of 56 tags rendering: [#4736](https://github.com/DanielH2018/server/pull/4736).
 
+PR 3, the task-computed inputs, all 57 tags rendering: [#4758](https://github.com/DanielH2018/server/pull/4758).
+
 Depends on: none
 
 Unblocks: [R2](r2-secret-placeholders.md), [R3](r3-remove-live-reads.md) and H3 (the host
