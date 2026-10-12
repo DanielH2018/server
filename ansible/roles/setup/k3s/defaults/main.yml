@@ -26,7 +26,7 @@ k3s_metallb_version: v0.16.0
 # Longhorn holds every PVC, and a careless bump is worse than a stale one: see the version-skip
 # warning at the top of this file. Tracked for the signal, never automerged.
 # renovate: datasource=github-releases depName=longhorn/longhorn
-k3s_longhorn_version: v1.12.1
+k3s_longhorn_version: v1.13.0
 
 # Where k3s's own stdout/stderr goes on both node types (tasks/unit-logging.yml). journald
 # stores nothing below notice on these hosts and every k3s line is info, so without this the
