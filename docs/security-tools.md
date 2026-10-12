@@ -47,6 +47,8 @@ Running it to silence a warning you haven't explained re-blesses whatever caused
 
 **Schedule:** Weekly, Monday at 3:00 AM. Output is sent to syslog tagged `aide`.
 
+Every `aide` command needs `--config=/etc/aide/aide.conf`. AIDE 0.18 has no default config path, so without it the command exits with `ERROR: missing configuration` and checks nothing.
+
 **Check for findings:**
 
 ```bash
@@ -54,7 +56,7 @@ Running it to silence a warning you haven't explained re-blesses whatever caused
 sudo grep '\baide\b' /var/log/syslog
 
 # Run a manual check
-sudo aide --check
+sudo aide --config=/etc/aide/aide.conf --check
 ```
 
 Output shows exactly what changed:
@@ -77,7 +79,7 @@ The letters on the left indicate what changed: `p` = permissions, `u` = user/own
 **Updating the baseline:** After any intentional system change (package update, config edit, re-running `initial_setup.yml`), update the baseline or AIDE keeps reporting those changes:
 
 ```bash
-sudo aide --update
+sudo aide --config=/etc/aide/aide.conf --update
 sudo mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
 ```
 
@@ -240,7 +242,7 @@ sudo unattended-upgrade --dry-run --debug
 |---------|---------|
 | Sensitive file modified | `sudo ausearch -k identity` or `-k sshd` |
 | Rootkit / backdoor suspicion | `sudo rkhunter --check` |
-| Unexpected file change | `sudo aide --check` |
+| Unexpected file change | `sudo aide --config=/etc/aide/aide.conf --check` |
 | Unusual commands run as root | `sudo lastcomm` |
 | Unusual I/O or CPU activity | `sar -d` / `sar -u` |
 | Brute-force attempts / banned IPs | `sudo fail2ban-client status sshd` |

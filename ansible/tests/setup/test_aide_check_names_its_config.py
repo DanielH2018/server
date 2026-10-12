@@ -1,0 +1,42 @@
+"""The weekly AIDE check passes `--config`, or it checks nothing.
+
+WHY. AIDE 0.18 has no default config path. A bare `aide --check` exits on its first line with
+`ERROR: missing configuration`, and the cron pipes that line to `logger -t aide`, where nothing
+alerts on it. Every host ran the check that way until #4591 and checked nothing.
+
+Run: uv run pytest ansible/tests/setup/test_aide_check_names_its_config.py
+"""
+
+import re
+
+from _helpers import ROLES, load_tasks, walk_tasks
+
+INTEGRITY = ROLES / "setup" / "initial_setup" / "tasks" / "integrity.yml"
+CRON_NAME = "Weekly AIDE file integrity check"
+
+# `aide` as a command word, followed by `--config=<path>` or `--config <path>` before the end.
+_AIDE_WITH_CONFIG = re.compile(
+    r"/aide\s+(?:\S+\s+)*?(?:--config[= ]|-c\s)/etc/aide/aide\.conf\b"
+)
+
+
+def _aide_cron_job() -> str:
+    for task in walk_tasks(load_tasks(INTEGRITY)):
+        cron = task.get("ansible.builtin.cron")
+        if isinstance(cron, dict) and cron.get("name") == CRON_NAME:
+            return str(cron["job"])
+    raise AssertionError(f"no cron named {CRON_NAME!r} in {INTEGRITY}")
+
+
+def test_weekly_aide_check_passes_its_config():
+    job = _aide_cron_job()
+    assert "--check" in job, job
+    assert _AIDE_WITH_CONFIG.search(job), (
+        f"the AIDE cron runs aide without --config: {job}"
+    )
+
+
+def test_the_pattern_refuses_a_bare_check():
+    assert not _AIDE_WITH_CONFIG.search(
+        "/usr/bin/nice -n19 /usr/bin/aide --check 2>&1 | logger -t aide"
+    )

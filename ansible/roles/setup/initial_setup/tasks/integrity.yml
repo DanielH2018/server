@@ -200,12 +200,15 @@
   # nice/ionice-idle: the check reads the whole filesystem for >1h (Pi); at normal
   # priority it competes with containers for CPU and SD-card IO. The rkhunter scan
   # is staggered to Wednesday for the same reason.
+  # --config is required: AIDE 0.18 has no default config path, and a bare
+  # `aide --check` exits with "missing configuration" and checks nothing (#4591).
+  # aideinit and the masked dailyaidecheck pass it the same way.
   ansible.builtin.cron:
     name: "Weekly AIDE file integrity check"
     minute: "0"
     hour: "3"
     weekday: "1"
-    job: "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --check 2>&1 | /usr/bin/logger -t aide"
+    job: "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config=/etc/aide/aide.conf --check 2>&1 | /usr/bin/logger -t aide"
     user: root
   become: true
 
