@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-PR D4.0, netpol-baseline drains before it applies: issue #4743.
+PR D4.0, netpol-baseline drains before it applies: [#4747](https://github.com/DanielH2018/server/pull/4747) (issue #4743).
 
 Depends on: [D2](d2-first-leaf.md). PR D4.0 alone depends on nothing, and it must land
 before D2.7 (Open question 3). No PR of D3 waits on D4: the publish layout that D3.3 needs is
