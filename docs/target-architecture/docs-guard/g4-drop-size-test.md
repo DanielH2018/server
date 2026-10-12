@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-PR 1a (issue #4694) moves the inline-budget arithmetic into `_inline_budget.py`.
+PR 1a, #4696 (issue #4694), moves the inline-budget arithmetic into `_inline_budget.py`.
 
 Depends on: none. PR 2 waits on an **operator-only** ruling (step 0). The optional PR 3
 lands after G2's PR 2.
