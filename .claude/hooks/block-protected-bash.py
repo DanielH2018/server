@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
-"""PreToolUse(Bash) guard: the two file rules that only ever watched the Edit tool.
+"""PreToolUse(Bash) guard: the file rules the Edit tool had, and a read-only agent's writes.
 
 Usage: `bash-pretool.py` loads this file as an arm on PreToolUse:Bash, and it also runs
 standalone. It reads the hook JSON payload on stdin. It prints an `ask` or `deny` decision JSON
@@ -15,7 +15,7 @@ or short scripts, rather than using the dedicated Read, Edit, or Write tools". T
 path was the unguarded one. `bash-write-fanout.sh` already closes this gap for the four
 PostToolUse Edit|Write hooks; it does not re-drive a PreToolUse deny, so this does.
 
-TWO ARMS, TWO DECISIONS, ON PURPOSE.
+THREE ARMS, AND THE DECISION EACH TAKES ON PURPOSE.
 
   1. WRITES -> `ask`, never `deny`. The path extraction here is a heuristic over command text,
      not a shell parse, and `bash-write-fanout.sh` states the bargain a heuristic has to keep:
@@ -33,6 +33,11 @@ TWO ARMS, TWO DECISIONS, ON PURPOSE.
      itself names, so a false positive costs one narrower re-run while a false negative costs a
      rotation.
 
+  3. WRITES by a read-only agent -> `deny`. An agent whose frontmatter sets `read_only: true`
+     may not redirect into a file outside /tmp, run a file-changing command such as `rm` or
+     `mv` on one, or run a git or gh verb outside a read-only set. The arm's DECIDED marker
+     says why this write is a deny when arm 1's is an ask.
+
 Reads the hook JSON on stdin. Emits a decision or stays silent -> normal permission flow.
 """
 
@@ -43,6 +48,7 @@ import re
 import sys
 
 from _hook_common import emit_pretooluse_decision, read_payload
+from hooklib.read_only_agents import read_only_decision
 
 
 def _load_edits_hook():
@@ -74,8 +80,8 @@ find_repo_root = _edits_hook.find_repo_root
 # inside `python3 -c` or a called script is invisible in the command text and is not detected.
 # Each pattern captures the path in group 1.
 _WRITE_SHAPES = (
-    # `> path`, `>> path` — the redirect, by far the most common
-    re.compile(r">>?\s*([^\s;&|<>()]+)"),
+    # `> path`, `>> path`, `>| path` — the redirect, by far the most common
+    re.compile(r">[>|]?\s*([^\s;&|<>()]+)"),
     # `tee path`, `tee -a path` — a pipe's write end
     re.compile(r"\btee\s+(?:-[^\s]+\s+)*([^\s;&|<>()]+)"),
     # `sed -i … path`, `perl -pi -e … path` — in-place editors, target last
@@ -234,6 +240,12 @@ def read_reason(command, repo_root):
     return None
 
 
+# ── arm 3: a read-only agent that writes ─────────────────────────────────────────────
+#
+# `hooklib/read_only_agents.py`, split out because this file sat near its 600-line cap. It is
+# given `written_paths` rather than importing it, so the redirect detector stays one function.
+
+
 def decide(command, repo_root):
     """Return (decision, reason), or (None, None) for normal permission flow."""
     reason = read_reason(command, repo_root)
@@ -274,6 +286,9 @@ def decision(payload):
     # checkout those paths resolve in. The shim's `cd` makes it the
     # primary checkout, a real repo root, so both arms keep a tree to read. Issue #2135.
     repo_root = payload.get("cwd") or os.getcwd()
+    denied = read_only_decision(payload, command, repo_root, written_paths)
+    if denied:
+        return denied
     verdict, reason = decide(command, repo_root)
     return (verdict, reason) if verdict else None
 
