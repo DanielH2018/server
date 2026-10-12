@@ -12,7 +12,7 @@
 # Renovate's k8s-defaults manager matches on, and a digest-only pin slips its regex and would
 # age forever with no update signal — which test_every_k8s_role_image_is_renovate_tracked
 # refuses. Same shape as the dri-device-plugin role's pin, for the same reason.
-tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:latest@sha256:6b4dcd9a20dc80a26d06b50378bdfa6955f2d37e413bf4c52d93a4bb37e74afc
+tdarr_k8s_image: ghcr.io/haveagitgat/tdarr:latest@sha256:7ba5325ea64951181a30f2a8d5bbc4fc0985e4c275ea1d09d15491b47b4cd8d6
 
 # The rollout budget, declared once. Read by THREE places, so none of them can drift: the
 # `manifests_rollout_timeout` passed to k8s/manifests in tasks/main.yml, the inline `rollout
