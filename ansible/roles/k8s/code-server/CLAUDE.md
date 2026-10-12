@@ -29,7 +29,9 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   in `code_server_k8s_extensions` (`defaults/main.yml`, with the bump recipe), Node by a
   checksummed official tarball, and the pip and npm packages by exact version. Renovate has
   no datasource for a VS Code extension, so those bump by hand — the base-image PR is the
-  natural moment. `ansible/tests/services/test_code_server_build_is_pinned.py` refuses a
+  natural moment. The exception is `Anthropic.claude-code`: it moves with every Renovate
+  bump of the CLI, in the same PR, and the `code-server build pins` group name says so
+  (#4584). `ansible/tests/services/test_code_server_build_is_pinned.py` refuses a
   floating input.
 - **This image cannot compile LaTeX.** TeX Live, `latexmk`, LaTeX Workshop and the PDF viewer
   extension were removed on 2026-08-27 — 56 packages and ~309 MiB of the ~858 MiB installed
