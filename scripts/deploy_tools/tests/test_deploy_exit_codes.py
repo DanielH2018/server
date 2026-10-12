@@ -22,6 +22,7 @@ import pytest
 
 from deploy_tools.deploy_lib import run as deploy_run
 from lib import exit_codes as ec
+from lib import exit_messages
 
 from _deploy_sh_fakes import (
     FAKE_RECAP,
@@ -235,5 +236,5 @@ def test_a_code_outside_the_contract_prints_nothing_rather_than_a_wrong_meaning(
 def test_the_verdict_prefix_is_not_the_bare_one_a_landing_greps_for():
     """A landing runs deploy.sh with stdout inherited and finds its own outcome with
     `grep -m1 '^VERDICT:'`, so a bare `VERDICT:` here would be read as the landing's."""
-    assert ec.VERDICT_PREFIXES["scripts/deploy.sh"] == "DEPLOY-VERDICT"
-    assert ec.VERDICT_PREFIXES["scripts/deploy_tools/land.sh"] == "VERDICT"
+    assert exit_messages.VERDICT_PREFIXES["scripts/deploy.sh"] == "DEPLOY-VERDICT"
+    assert exit_messages.VERDICT_PREFIXES["scripts/deploy_tools/land.sh"] == "VERDICT"

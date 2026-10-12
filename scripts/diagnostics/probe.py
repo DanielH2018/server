@@ -118,8 +118,8 @@ from lib.exit_codes import (
     PROBE_FAILED,
     PROBE_UNREADABLE,
     PROBE_USAGE_ERROR,
-    verdict_line,
 )
+from lib.exit_messages import verdict_line
 from lib.kubectl import WrongCluster, kubectl_argv, nodes_args
 
 
@@ -145,7 +145,7 @@ def main(argv=None, *, plan=plan):
     """Parse argv, run the matching subcommand, and return its exit code.
 
     A verdict subcommand's output ends with one `PROBE-VERDICT: <ok|fail|unreadable> (...)`
-    line, rendered from the exit code by `lib.exit_codes.verdict_line` so every subcommand
+    line, rendered from the exit code by `lib.exit_messages.verdict_line` so every subcommand
     shares one vocabulary (#4454). A source the subcommand could not read raises
     `core.Unreadable`, which exits `PROBE_UNREADABLE` (75) with the failure on stderr (#4444).
     An argument it cannot act on raises `core.UsageError`, which exits 64 with no verdict
