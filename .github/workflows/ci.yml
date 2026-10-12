@@ -326,7 +326,7 @@ jobs:
           echo "stage: notice" >> "$err"
           SECONDS=0
           notice=(uv --directory "$code" run --frozen python scripts/dev/fact_status.py
-                  notice --since "origin/$BASE_REF" --head "$GITHUB_SHA")
+                  notice --since origin/does-not-exist --head "$GITHUB_SHA")
           "${notice[@]}" --format github
           "${notice[@]}" --format markdown >> "$GITHUB_STEP_SUMMARY"
           echo "notice stage took ${SECONDS}s"
