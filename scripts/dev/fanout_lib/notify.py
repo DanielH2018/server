@@ -116,14 +116,20 @@ def status_block(batch: str, env: Mapping[str, str], fanout: Path) -> str:
     )
 
 
-def stopped_on_request(env: Mapping[str, str]) -> bool:
-    """Whether systemd stopped the unit cleanly, as `fanout.py place stop` does.
+# How a SIGTERM from a stop job ends the process: `claude` traps it and exits 143 (its journal
+# on daniel-box reads `status=143/n/a`), and a review unit's Python dies by the signal.
+_TERM_EXITS = frozenset({("exited", "143"), ("killed", "TERM")})
 
-    The process is killed by signal and systemd still records success. Whoever ran the stop
-    already knows about it, so it does not page. A `RuntimeMaxSec=` expiry records `timeout`
-    and an OOM kill records `oom-kill`, so both still page.
+
+def stopped_on_request(env: Mapping[str, str]) -> bool:
+    """Whether a stop job ended the unit, as `fanout.py place stop` and `abandon` run.
+
+    Whoever ran the stop already knows about it, so it does not page. A `RuntimeMaxSec=`
+    expiry sends the same SIGTERM but records `SERVICE_RESULT=timeout`, so it still pages,
+    and so does an OOM kill, which is a SIGKILL. Both were measured on systemd 255.
     """
-    return env.get("SERVICE_RESULT") == "success" and env.get("EXIT_CODE") == "killed"
+    exit_ = (env.get("EXIT_CODE", ""), env.get("EXIT_STATUS", ""))
+    return env.get("SERVICE_RESULT") != "timeout" and exit_ in _TERM_EXITS
 
 
 def classify(

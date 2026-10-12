@@ -98,11 +98,26 @@ def test_a_tidied_batch_whose_pr_merged_pages_nothing(tmp_path) -> None:
     assert run.calls == []
 
 
-def test_a_batch_stopped_on_request_pages_nothing(tmp_path) -> None:
+@pytest.mark.parametrize(
+    "env",
+    [
+        # `claude` traps the stop job's SIGTERM and exits 143.
+        {"SERVICE_RESULT": "exit-code", "EXIT_CODE": "exited", "EXIT_STATUS": "143"},
+        # A review unit's Python dies by the signal.
+        {"SERVICE_RESULT": "success", "EXIT_CODE": "killed", "EXIT_STATUS": "TERM"},
+    ],
+)
+def test_a_batch_stopped_on_request_pages_nothing(tmp_path, env) -> None:
     run = Recorder()
-    env = {"SERVICE_RESULT": "success", "EXIT_CODE": "killed", "EXIT_STATUS": "TERM"}
     assert "stopped on request" in notify(B, env, fanout(tmp_path, None), no_merge, run)
     assert run.calls == []
+
+
+def test_a_runtime_cap_expiry_still_pages_though_it_sends_the_same_sigterm(tmp_path):
+    run = Recorder()
+    env = {"SERVICE_RESULT": "timeout", "EXIT_CODE": "exited", "EXIT_STATUS": "143"}
+    notify(B, env, fanout(tmp_path, None), no_merge, run)
+    assert run.calls == [page_command("fanout-b", "failed")]
 
 
 def test_a_page_polkit_refuses_is_logged(tmp_path) -> None:
