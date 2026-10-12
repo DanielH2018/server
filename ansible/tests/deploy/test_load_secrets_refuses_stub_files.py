@@ -73,7 +73,27 @@ def _run(
     """
     (tmp_path / "vars").mkdir()
     (tmp_path / "vars" / "secrets.yml").write_text(_SECRETS)
-    play = [{"hosts": "all", "gather_facts": False, "tasks": _stub_asserts()}]
+    # ansible-core has no JSON stdout callback of its own: `ansible.builtin.json` redirects to
+    # `ansible.posix.json`, which CI's env does not install. So each assert registers its
+    # result and lets the play continue, and a final task writes both results to a file per
+    # host, which this function reads back.
+    registers = {OUTSIDE: "outside_result", INCOMPLETE: "incomplete_result"}
+    asserts = [
+        {**task, "register": registers[task["name"]], "ignore_errors": True}
+        for task in _stub_asserts()
+    ]
+    results_by_name = ", ".join(
+        f"{json.dumps(name)}: {var}" for name, var in registers.items()
+    )
+    record = {
+        "name": "Record each assert's result",
+        "ansible.builtin.copy": {
+            "dest": "{{ playbook_dir }}/results/{{ inventory_hostname }}.json",
+            "content": "{{ {" + results_by_name + "} | to_json }}",
+        },
+    }
+    (tmp_path / "results").mkdir()
+    play = [{"hosts": "all", "gather_facts": False, "tasks": [*asserts, record]}]
     (tmp_path / "play.yml").write_text(yaml.safe_dump(play, sort_keys=False))
     inventory = {
         "all": {
@@ -92,7 +112,6 @@ def _run(
     env = scrubbed_env()
     env["ANSIBLE_FILTER_PLUGINS"] = str(ANSIBLE / "filter_plugins")
     env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
-    env["ANSIBLE_STDOUT_CALLBACK"] = "ansible.builtin.json"
     env["ANSIBLE_CONFIG"] = str(tmp_path / "none.cfg")
     env["ANSIBLE_NOCOLOR"] = "1"
     result = subprocess.run(
@@ -104,17 +123,14 @@ def _run(
         timeout=180,
         check=False,
     )
-    try:
-        report = json.loads(result.stdout)
-    except json.JSONDecodeError:
+    if result.returncode != 0:
         pytest.fail(
-            f"ansible-playbook printed no JSON report.\n{result.stdout}\n{result.stderr}"
+            f"ansible-playbook exited {result.returncode}.\n{result.stdout}\n{result.stderr}"
         )
-    by_host: dict[str, dict] = {name: {} for name in hosts}
-    for task in report["plays"][0]["tasks"]:
-        for host, outcome in task["hosts"].items():
-            by_host[host][task["task"]["name"]] = outcome
-    return by_host
+    return {
+        name: json.loads((tmp_path / "results" / f"{name}.json").read_text())
+        for name in hosts
+    }
 
 
 def _verdict(results: dict[str, dict]) -> str:
