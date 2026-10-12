@@ -311,8 +311,9 @@ jobs:
           err="$RUNNER_TEMP/notice.err"
           code="$RUNNER_TEMP/notice-code"
           exec 2> >(tee -a "$err" >&2)
-          # The later steps expect one worktree. A timeout skips this trap, so the failure
-          # step below removes the copy too.
+          # The later steps expect one worktree. A step timeout still runs this trap, but a
+          # kill that ends the script before the trap runs leaves the copy registered, so the
+          # failure step below removes it too.
           trap 'git worktree remove --force "$code" || true' EXIT
 
           echo "stage: setup" >> "$err"
