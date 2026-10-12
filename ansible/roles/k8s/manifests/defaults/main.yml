@@ -117,12 +117,6 @@ manifests_rollout_timeout_default: 600s
 # workload whose only un-hashable input is a Secret, `restart_on: []` for one whose ConfigMap is
 # hashed into its own pod template (`ansible/templates/checksum-annotation.yml.j2`), where the
 # apply itself does the rolling and `manifests_rolled_by_apply` reports it.
-#
-# A `manifests_extra_rollouts` entry narrows the same way, and the shared extra restart in
-# tasks/main.yml reads it alongside the record. The entry stays queued for the batch drain, so
-# `restart_on: []` there means "wait on this Deployment, never restart it": karakeep-chrome,
-# which reads no role-rendered config, Secret or built image, and whose only roll is the one
-# an image-pin bump makes through the apply (#4564).
 manifests_restart_triggers_default: [config, secret, image]
 
 # Manifest basenames this role renders from a SHARED template under `ansible/templates/` when

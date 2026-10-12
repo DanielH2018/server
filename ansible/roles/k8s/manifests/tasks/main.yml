@@ -911,6 +911,13 @@
   # and the stabilisation gate would skip the very workload whose image just moved — a restart
   # that fires but is never soaked.
   # The config arm is the same render-and-apply conjunction as the primary queue above (#3125).
+  #
+  # DECIDED: `changed` ignores the entry's `restart_on`, where the restart task above and the
+  # release record both read it. `restart_on` says which signals RESTART a workload, not which
+  # ones ROLL it: a `restart_on: []` entry still rolls when the apply changes its pod template,
+  # and karakeep-chrome's image-pin bump is that roll (#4564). Narrowed here, `changed` would
+  # read false for it and the stabilisation gate would skip the one pod whose image moved.
+  # Soaking an entry that did not roll costs a restart-count read, never a restart.
   ansible.builtin.set_fact:
     k8s_pending_rollouts: >-
       {{ (k8s_pending_rollouts | default([])) + [{
