@@ -152,8 +152,10 @@ def fix_prompt(found: list[dict], pr: str, red: str = "") -> str:
     rule = (
         f"\nThe red tests committed at {red} stay as they are, with every `conftest.py` and "
         "pytest config: a gate runs them again after this round and refuses the PR otherwise. "
-        "A red test file may only gain new test functions, fixtures, helpers and imports at its "
-        "end; nothing already in it may change. Where a finding says a red test is too weak, "
+        "A red test file may gain new test functions, fixtures, helpers and imports. What the "
+        "red commit wrote in it, and anything there a red test calls or requests, may not "
+        "change; a test that was already in the file and that no red test calls is yours to "
+        "update like any other. Where a finding says a red test is too weak, "
         "keep it and append a test that checks what the finding asks for. Where a finding says "
         "a red test is wrong, answer it in one sentence instead.\n"
         if red
