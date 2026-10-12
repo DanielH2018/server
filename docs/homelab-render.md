@@ -106,7 +106,7 @@ files.
 The renderer renders a role's own manifest templates only. The Ansible manifests role also
 writes the shared `service.yaml` and `ingressroute.yaml` defaults for an entry with a `port`
 or a `hostname`. For a prune-armed role, it wraps every document in
-`ansible/templates/role-labelled.yaml.j2`. R1's next PR adds both, with the claim files and
+`ansible/templates/role-labelled.yaml.j2`. R1's PR 2 adds both, with the claim files and
 the deferred directory. Until then a render is not byte-identical to Ansible's. For
 `littlelink` it holds `deployment.yaml` alone, where Ansible also writes the Service and the
 IngressRoute.

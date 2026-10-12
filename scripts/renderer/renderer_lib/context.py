@@ -102,7 +102,7 @@ def play_hostvars(
     against `group_vars/all.yml`, those two layers and the stubs.
 
     Raises:
-        ValueError: A host's value still holds Jinja after resolution.
+        ValueError: A host's value still holds Jinja, or an undefined name, after resolution.
     """
     group = load_yaml(inventory.all_vars)
     hostvars = {}
@@ -112,7 +112,10 @@ def play_hostvars(
             continue
         own = {**entry.settings, **load_yaml(inventory.host_vars / f"{entry.name}.yml")}
         resolved = resolve_vars(own, {**group, **own, **stubs})
-        unresolved = sorted(k for k, v in resolved.items() if "{{" in str(v))
+        # `resolve_vars` renders an undefined name as `STUB` rather than raising.
+        unresolved = sorted(
+            k for k, v in resolved.items() if "{{" in str(v) or "STUB" in str(v)
+        )
         if unresolved:
             raise ValueError(f"hostvars[{entry.name!r}]: {unresolved} will not expand")
         hostvars[entry.name] = resolved
