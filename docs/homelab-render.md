@@ -175,7 +175,9 @@ is the exception, because its render needs the repo's filter plugins.
 
 `lookup('template')` keeps the render's trailing newlines, as ansible-core's lookup does. The
 content tag hashes those bytes, so a lookup that stripped them gave every build a tag Ansible
-would not compute.
+would not compute. `scripts/lib/k8s_yaml.py:make_lookup`, which the render guards under
+`scripts/validate/` read through, follows the same rules, so a guard checks the bytes a deploy
+writes.
 
 The render is not yet proven byte-identical to Ansible's. R1's PR 7 compares the two and
 closes each class of difference.

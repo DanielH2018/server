@@ -62,15 +62,10 @@ def _template_lookup(env: jinja2.Environment, ctx: dict):
     @pass_context
     def lookup(context: Context, kind: str, *args, **kwargs) -> object:
         kind = kind.removeprefix("ansible.builtin.")
-        if kind == "file":
-            # Ansible's `file` lookup strips all trailing whitespace by default, where
-            # `make_lookup` strips only newlines.
-            text = Path(args[0]).read_text()
-            return text.rstrip() if kwargs.get("rstrip", True) else text
         if kind != "template":
             return base(context, kind, *args, **kwargs)
-        # Not rstripped, unlike `make_lookup`: ansible-core's lookup keeps a render's trailing
-        # newlines, and image-builder's content tag hashes them.
+        # Not rstripped: ansible-core's lookup keeps a render's trailing newlines, and
+        # image-builder's content tag hashes them.
         return _lookup_template(env, Path(args[0])).render(context.get_all())
 
     return lookup
