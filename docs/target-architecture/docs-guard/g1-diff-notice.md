@@ -6,6 +6,8 @@ PR 1, the revision reader: #4699 (issue #4691).
 
 PR 2, `moved_sections`: #4706 (issue #4702).
 
+PR 3, the `notice` subcommand: #4719 (issue #4713).
+
 Depends on: none
 
 Unblocks: [G2](g2-retire-lock.md), and through G2 [G3](g3-freshness-reviewer.md) and
