@@ -10,11 +10,25 @@ handed.
 Every ``GIT_*`` variable is stripped before the call, so ``cwd`` is the only thing that
 decides which tree is read. This is for reads and worktree bookkeeping: a script that
 commits and needs ``GIT_AUTHOR_*`` passes its own ``env`` to ``subprocess`` directly.
+
+``git()`` runs one command to completion. ``git_process()`` starts a long-lived one, such as
+``git cat-file --batch``, that a caller feeds over its pipes. Both take their environment from
+``git_env()``, so the stripping has one definition.
 """
 
 import os
 import subprocess
 from pathlib import Path
+
+
+def git_env() -> dict[str, str]:
+    """The process environment minus every ``GIT_*`` variable, for any git this module starts."""
+    # Benign today: no caller of this module runs under an `Environment=GIT_...` (no
+    # GIT_SSH_COMMAND, no signing config arrives by env for the three publish_pr.py crons).
+    # But this strips ALL of it, including one a future cron unit adds on purpose -- e.g. a
+    # signing key path -- and `git push` would then fail on all three crons with nothing
+    # testing it, since `git()` is the one write path they share.
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 
 
 def git(
@@ -32,21 +46,32 @@ def git(
     want a failed ``rev-parse`` to surface. Pass ``check=False`` to read ``returncode``
     yourself, as a ``merge-base --is-ancestor`` test does.
     """
-    # Benign today: no caller of this module runs under an `Environment=GIT_...` (no
-    # GIT_SSH_COMMAND, no signing config arrives by env for the three publish_pr.py crons).
-    # But this strips ALL of it, including one a future cron unit adds on purpose -- e.g. a
-    # signing key path -- and `git push` would then fail on all three crons with nothing
-    # testing it, since this function is the one write path they share.
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     return subprocess.run(
         ["git", *args],
         cwd=cwd,
-        env=env,
+        env=git_env(),
         capture_output=True,
         text=True,
         check=check,
         timeout=timeout,
         input=input,
+    )
+
+
+def git_process(*args: str, cwd: str | Path) -> subprocess.Popen[bytes]:
+    """Start ``git <args>`` in ``cwd`` with binary pipes on stdin and stdout, and return it.
+
+    For a batch command that answers one request per line, such as ``cat-file --batch``. The
+    caller owns the process: close its stdin and ``wait()`` for it, or git outlives the
+    caller's use of it. Stderr is inherited, so an error git prints reaches the caller's own
+    stderr.
+    """
+    return subprocess.Popen(
+        ["git", *args],
+        cwd=cwd,
+        env=git_env(),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
     )
 
 
