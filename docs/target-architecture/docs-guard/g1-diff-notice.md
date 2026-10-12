@@ -1,6 +1,8 @@
 # G1 — Diff notice alongside the lock
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR 1, the revision reader, is the PR for issue #4691.
 
 Depends on: none
 
