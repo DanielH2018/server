@@ -123,7 +123,11 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             # Same fail-safe direction `cmd_reap` takes: a transient git error must not read
             # as "every worktree is gone". The claim blocks, as it did before this path
             # existed, and `plan_claim` refuses it below. The warning was said once, above.
-            stale = stale_holder(issue, trees, dirty, merged) if ok else None
+            stale = (
+                stale_holder(issue, trees, dirty, merged, tools.batch_holds)
+                if ok
+                else None
+            )
             if stale:
                 holder, why = stale
                 run(
@@ -255,7 +259,13 @@ def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
     if not ok:
         # `reap` refuses instead; a read can render, but must say staleness is a guess.
         sys.stderr.write("warning: worktree read failed; STALE below is unverified\n")
-    states = claim_states(load_issues("open", tools), trees, dirty, merged)
+    states = claim_states(
+        load_issues("open", tools),
+        trees,
+        dirty,
+        merged,
+        batch_holds=tools.batch_holds,
+    )
     others = 0
     if args.worktree:
         mine = {args.worktree} | tools.launched_branches(
@@ -305,7 +315,7 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
     issues = load_issues("open", tools)
     by_number = {i["number"]: i for i in issues}
     reaped = 0
-    for s in claim_states(issues, trees, dirty, merged):
+    for s in claim_states(issues, trees, dirty, merged, batch_holds=tools.batch_holds):
         if s.live:
             continue
         plans = plan_release(

@@ -105,6 +105,11 @@ worktree name before spawning it either. Claiming under a name that doesn't exis
 read as stale immediately. The orchestrator's own worktree is live for the whole fan-out, so a
 claim under it stays live for the whole fan-out.
 
+If the orchestrator's session dies, its worktree reads stale, but its claims do not: `next`,
+`claim` and `reap` hold any claim on an issue that a still-running batch in a run manifest names.
+They ask the batch's host with `systemctl --user is-active`, and a host they cannot read holds
+the claim as "cannot tell" (#4601). Once the batch's unit has finished, the claim reads stale again.
+
 A refused claim — the issue is closed, `manual`, deferred, held by another worktree, or lost a
 race — drops that issue from its batch, and `launch` prints `<batch>: dropped #<n>: claim
 refused …`. The batch is renamed from the issues it kept, and a batch that kept none is not
