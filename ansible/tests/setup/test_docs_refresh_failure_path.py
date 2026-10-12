@@ -7,7 +7,7 @@ path, still writing `last_run`. Only a human cleaning the tree ends it.
 
 The functions below are executed, not pattern-matched. Each one is lifted out of the RENDERED
 template by name and sourced into a scratch git repository, so what these tests exercise is the
-production code rather than a copy of its logic. Four behaviours, each with the half that proves
+production code rather than a copy of its logic. Six behaviours, each with the half that proves
 the test can go red:
 
 - **restore_generated_tree leaves the checkout clean**, for a modified page and for a newly
@@ -370,7 +370,7 @@ def test_the_suite_failure_branch_pushes_the_summary():
 
 
 def test_the_failure_log_is_kept_outside_the_repo(tmp_path):
-    """on_exit deletes the temp log and the cron redirects nothing, so this copy is the record.
+    """on_exit deletes the temp log and the suite output never reaches the cron's logger, so this copy is the record.
 
     Outside the checkout for the same reason as the stamp: a file written inside it is untracked
     dirt, and a diagnostic that parks the deployer is not a diagnostic.
