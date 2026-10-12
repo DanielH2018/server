@@ -77,7 +77,7 @@ authority of those four actuators is written here so a later edit cannot quietly
   `k3s_etcd_restore_drill_armed` the weekly etcd drill, which runs `--list-only` here. Both
   `k3s_manage_*` flags default to `true`, and no host overrides either.
 - **Abort valves:** the drill tears down on EVERY exit path, the trim aborts when the node's
-  longhorn-manager pod is not ready, and the weekly B2 tier is sharded across weekdays so no
+  longhorn-manager pod is not ready or the volume list fails, and the weekly B2 tier is sharded across weekdays so no
   day's deletions reach the B2 transaction cap.
 - **Required evidence:** the trim, the drill and the two B2 accounting crons log every run
   through `logger`, which is evidence only because checks 9 and 10 of `longhorn-backup-health.sh`
