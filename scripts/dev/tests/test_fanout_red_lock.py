@@ -344,13 +344,13 @@ from lib import kubectl
 IPS = {"prometheus": "10.0.0.1"}
 
 
-def _fake_resolve(name):
+def _fake_lookup(name):
     return IPS[name]
 
 
 @pytest.fixture
-def fake_resolve():
-    return _fake_resolve
+def fake_lookup():
+    return _fake_lookup
 
 
 @pytest.fixture
@@ -392,19 +392,19 @@ def _conftest_change(head):
 
 def test_deleting_an_unrequested_fixture_and_what_only_it_used_is_clean():
     """#4359's whole deletion: the fixture, its helper, then the map and its other fixture."""
-    head = _without(SHARED, "_fake_resolve", "fake_resolve", "ips").replace(
+    head = _without(SHARED, "_fake_lookup", "fake_lookup", "ips").replace(
         'IPS = {"prometheus": "10.0.0.1"}\n\n\n', ""
     )
     assert "IPS" not in head and "def repo" in head
     assert _conftest_change(head) == ""
-    assert _conftest_change(_without(SHARED, "fake_resolve")) == ""
+    assert _conftest_change(_without(SHARED, "fake_lookup")) == ""
 
 
 @pytest.mark.parametrize(
     ("deleted", "reason"),
     [
         (("repo",), "binds `repo`, which a red test"),
-        (("_fake_resolve",), "binds `_fake_resolve`, which a red test or the conftest"),
+        (("_fake_lookup",), "binds `_fake_lookup`, which a red test or the conftest"),
         (("_fresh",), "is an autouse fixture"),
         (("pytest_configure",), "is not a fixture, a plain helper"),
     ],
