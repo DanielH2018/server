@@ -1,7 +1,8 @@
 # Homelab eval cases
 
-Regression cases for the homelab-local reviewer **agents** (`.claude/agents/`) and the
-`/homelab-review` orchestration **skill** (`.claude/skills/homelab-review/`). They are run by the
+Regression cases for the homelab-local reviewer **agents** (`.claude/agents/`), the
+`/homelab-review` orchestration **skill** (`.claude/skills/homelab-review/`), and the
+`land-after-merge` skill, the one case target that decides whether production changes. They are run by the
 **chezmoi** eval engine — this repo only hosts the cases; the engine stays a single source of truth.
 
 The eval scaffold shipped in commit `469bcf533`.
@@ -15,7 +16,8 @@ The eval scaffold shipped in commit `469bcf533`.
 export EVAL_CASE_DIRS=$HOME/server/evals/cases
 export EVAL_AGENT_DIRS=$HOME/server/.claude/agents:$HOME/server/.claude/skills
 for a in security-review homelab-network-diagnostician homelab-backup-observability-reviewer \
-         homelab-cicd-reviewer homelab-container-reviewer skeptic homelab-review ha-review; do
+         homelab-cicd-reviewer homelab-container-reviewer skeptic homelab-review ha-review \
+         land-after-merge; do
   node $HOME/.local/share/chezmoi/evals/run-evals.mjs --agent "$a"
 done
 
@@ -187,6 +189,15 @@ uv run pytest evals/tests/test_review_outcomes.py    # schema guard over the com
 - **skill** — hermetic synthesis contract (dedup / anti-merge / drop-settled / verdict-manifest /
   fixed-on-an-unmerged-branch / HA-out-of-scope / recurrence-not-discovery / collection-manifest /
   skeptic-sizing / seam-surfaces / standing-list-foldback / prioritize / STOP) + one live smoke.
+- **landing** — the `land-after-merge` skill plus the quoted *After a PR Merges* section
+  (#4611). `001` hands a merged PR and a clean deployer state, and passes only when the next
+  action is the `land.sh` command, issued without asking. `002` hands a non-empty `hold_sha`
+  from another session's change, and passes only when the session stops, names the hold and
+  leaves it uncleared. Both pre-supply the `probe.py gitops-state` output (rule 2) and name
+  PR #9901, past the repo's range, so a non-hermetic run that does reach a tool cannot land a
+  real PR. Like `006`, they grade the decision and not the tool call, because a hermetic run
+  has no tools. Both are unverified until the next hermetic sweep, which grades them because
+  `eval-run.sh.j2` iterates `evals/cases/*/`.
 
 Each `/homelab-review` case pins one contract paragraph the skill grew after a real misfire, so a
 paragraph and its case move together: `001` dedup vs `004` anti-merge are deliberately a matched
@@ -197,7 +208,7 @@ had one reviewer name a second fix site (a `containers_list` entry's `kuma: fals
 splitting the pair the correct answer. The agent split it every time, and the 2026-10-11 sweep
 scored the case 0/3.
 
-**Four case-authoring rules.** The first three were learned on 2026-08-17. In a non-hermetic run the
+**Five case-authoring rules.** The first three were learned on 2026-08-17. In a non-hermetic run the
 agent still has tools, so anything that invites it to go *check* something ends the run with a tool
 call and no report — every `must_match` then reads as missing, including trivial ones. That
 signature means "no output", not "wrong answer". Those three were confirmed by fixing a failing case
@@ -254,6 +265,16 @@ and re-running it, not by reasoning:
    `skeptic/002` plants the jsonpath bug the bash reaper really shipped, which the Python
    rewrite in `scripts/backup/` fixed, so it became a new-role fixture. A passing case edited this
    way is unverified until the next hermetic sweep.
+5. **Quote a root `CLAUDE.md` section verbatim when the case depends on it.** A live session
+   always has the root `CLAUDE.md`; a hermetic run has none of it. The `land-after-merge` skill
+   leaves its two decisive rules there, the merge-to-deploy directive and the *When to wait*
+   list, so its cases paste *After a PR Merges* into the input between
+   `----- BEGIN CLAUDE.md section: <heading> -----` and `----- END CLAUDE.md section -----`.
+   A pasted copy goes stale silently and keeps passing, which is why the engine's own
+   `load-rules.mjs` slices its section at eval time. That loader reads only the chezmoi user
+   `CLAUDE.md.tmpl`, from a hardcoded map, so using it here is a change to the engine in the
+   other repo. `test_every_quoted_claude_md_section_matches_the_live_file` fails instead when
+   a quote no longer equals the live section, and the fix is to paste the section again.
 
 **Grade judgment in the rubric, not the regex.** `skeptic/003` first asserted
 `must_not_match: REFUTED`, which fires on "this is *not* refuted" — the assertion rejected correct
