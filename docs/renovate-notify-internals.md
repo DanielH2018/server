@@ -100,8 +100,11 @@ drops it, and an awaiting row is neither a problem nor a pending item. `find_aut
 
 The lookback bound exists because Renovate reuses a branch name for the next update of the
 same dependency. Without it, an old autoclose would page for every later update that waits for
-its schedule on that branch. The shell lists closed PRs sorted by `updated`, so a recent close
-of an older PR stays on the first page of 100.
+its schedule on that branch.
+
+The shell finds candidates with one search query bounded by close date, then fetches each hit
+for its branch. A page of the closed-pulls list cannot cover the window: the repo merges about
+68 PRs a day, so the 100 most recently updated closed PRs span about a day and a half.
 
 ## Where the logic lives
 

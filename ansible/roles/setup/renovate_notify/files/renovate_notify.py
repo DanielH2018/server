@@ -24,10 +24,12 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+import urllib.parse
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from notify_logic import (
+    AUTOCLOSED_LOOKBACK_DAYS,
     PR,
     actionable,
     autoclosed_fingerprint,
@@ -167,6 +169,27 @@ def dead_paths(repo: str, n: int, pr: dict) -> tuple[str, ...]:
     return tuple(gone)
 
 
+def autoclosed_candidates(repo: str, now: datetime) -> list[dict]:
+    """Full pull payloads for Renovate PRs autoclosed inside the lookback window.
+
+    One search query bounded by close date, then one detail call per hit for `head.ref`, which
+    search results do not carry. A page of the closed-pulls list does not cover the window:
+    this repo merges about 68 PRs a day, so the 100 most recently updated closed PRs span
+    about a day and a half, and an autoclose would drop out of the report while its update
+    still waits. `find_autoclosed` re-applies every condition, so the query only narrows.
+    """
+    since = (now - timedelta(days=AUTOCLOSED_LOOKBACK_DAYS)).date().isoformat()
+    query = (
+        "repo:%s is:pr is:closed is:unmerged author:app/renovate in:title autoclosed "
+        "closed:>=%s" % (repo, since)
+    )
+    hits = get("search/issues?q=%s&per_page=100" % urllib.parse.quote(query))
+    return [
+        get("repos/%s/pulls/%d" % (repo, hit["number"]))
+        for hit in hits.get("items", [])
+    ]
+
+
 def discord(webhook: str, content: str) -> bool:
     """Post the digest via the shared host_lib.discord_post.
 
@@ -297,16 +320,13 @@ def main() -> int:
     # branch clock is the floor under it (#3076).
     churning = churning_pending(seen, pending, now)
     # An autoclosed PR is no longer open, so the digest drops it, and its update sits on the
-    # dashboard as an ordinary awaiting row (#4630). Sorted by `updated` so a recent close of an
-    # old PR stays on the first page.
-    closed = get(
-        "repos/%s/pulls?state=closed&sort=updated&direction=desc&per_page=100" % repo
-    )
+    # dashboard as an ordinary awaiting row (#4630).
+    now_dt = datetime.fromtimestamp(now, timezone.utc)
     autoclosed = find_autoclosed(
-        [p for p in closed if is_renovate(p)],
+        [p for p in autoclosed_candidates(repo, now_dt) if is_renovate(p)],
         {(p.get("head") or {}).get("ref", "") for p in pulls},
         body or "",
-        now=datetime.fromtimestamp(now, timezone.utc),
+        now=now_dt,
     )
     cur_fp = (
         fingerprint(items)

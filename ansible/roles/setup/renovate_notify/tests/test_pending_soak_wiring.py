@@ -50,8 +50,8 @@ CHURN_DASHBOARD = {
 def _wire(monkeypatch, tmp_path, posts, now, dashboard=DASHBOARD, closed=()):
     """Point main() at a fake GitHub + Discord and a state dir under tmp_path.
 
-    `dashboard` selects which captured body the fake GitHub returns, and `closed` the
-    closed-pulls list. Patching them here rather than re-patching `get` in a wrapper keeps the
+    `dashboard` selects which captured body the fake GitHub returns, and `closed` the pull
+    payloads the autoclosed search finds. Patching them here rather than re-patching `get` in a wrapper keeps the
     module's monkeypatch count where
     `test_no_test_module_patches_more_modules_than_its_allowlist_entry` holds it.
     """
@@ -69,10 +69,12 @@ def _wire(monkeypatch, tmp_path, posts, now, dashboard=DASHBOARD, closed=()):
         rn,
         "get",
         lambda url: (
-            [dashboard]
+            {"items": [{"number": p["number"]} for p in closed]}
+            if url.startswith("search/issues")
+            else [dashboard]
             if "/issues" in url
-            else list(closed)
-            if "state=closed" in url
+            else next(p for p in closed if url.endswith("/pulls/%d" % p["number"]))
+            if "/pulls/" in url
             else []
         ),
     )
