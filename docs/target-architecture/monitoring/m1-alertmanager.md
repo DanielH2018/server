@@ -3,6 +3,7 @@
 Status: IN PROGRESS
 
 PR 1, the promtool and amtool provisioning and its red proof: [#4703](https://github.com/DanielH2018/server/pull/4703).
+PR 2, Alertmanager with its receivers: [#4728](https://github.com/DanielH2018/server/pull/4728).
 
 Depends on: —
 
