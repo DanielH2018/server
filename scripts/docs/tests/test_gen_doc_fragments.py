@@ -302,6 +302,7 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
         group_vars,
         initial_setup,
         {"box": False, "pi": True},
+        {"observability_alertmanager_watchdog_repeat_seconds": 60},
     )
     assert "| `daniel-box-disk-health` | `*/5 * * * *` |" in out
     assert "| `etcd-snapshot-offbox` | `45 2 * * *` |" in out
@@ -311,6 +312,7 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
     assert "| `weekly-reboot-pi` | `30 7 * * 0` |" in out
     assert "| `pi-docker-prune` | `30 6 * * *` |" in out
     assert "| `box-worktree-sweep` | `20 4 * * 0` |" in out
+    assert "| `alertmanager-watchdog` | `every 60s` |" in out
 
 
 def test_deadman_cadences_gives_a_prune_slug_only_to_a_docker_host():
@@ -343,6 +345,7 @@ def test_deadman_cadences_gives_a_prune_slug_only_to_a_docker_host():
             "initial_setup_worktree_sweep_cron_weekday": 0,
         },
         {"box": False},
+        {"observability_alertmanager_watchdog_repeat_seconds": 60},
     )
     assert "weekly-reboot-box" in out
     assert "box-docker-prune" not in out
@@ -351,7 +354,7 @@ def test_deadman_cadences_gives_a_prune_slug_only_to_a_docker_host():
 def test_deadman_cadences_fails_on_a_missing_variable_rather_than_guessing():
     with pytest.raises(KeyError):
         renderers.render_deadman_cadences(
-            {}, {"pi_peer_backup_k8s_schedule": "x"}, {}, {}, {}, {}
+            {}, {"pi_peer_backup_k8s_schedule": "x"}, {}, {}, {}, {}, {}
         )
 
 

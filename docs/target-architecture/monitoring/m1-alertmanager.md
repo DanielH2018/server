@@ -1463,6 +1463,11 @@ Each risk names its class from `docs/failure-classes.md`.
     worst gap plus a margin fits under 30 minutes. *Open questions* 6 and exit criterion 2
     stand until then.
 
+    **Resolved 2026-10-12:** the operator accepted the 30 minutes
+    ([#4693](https://github.com/DanielH2018/server/issues/4693)). The check keeps its 600s
+    period and 1200s grace, and `docs/healthchecks-io-deadman.md`, *Alertmanager's watcher*,
+    records the slower page.
+
 ## Review log
 
 ### Round 1 (per-slice adversarial review, 2026-10-11)
