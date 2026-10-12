@@ -18,7 +18,15 @@ from lib.ansible_inventory import K8S_HOST
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
-from renderer.renderer_lib.task_inputs import TASK_COMPUTED, include_vars
+from lib.render_guard import SHARED_TPL
+from renderer.renderer_lib.task_inputs import (
+    BUILT_IMAGE_TAGS,
+    PINNED_LIVE_FACTS,
+    SET_FACTS,
+    TASK_COMPUTED,
+    _tasks,
+    include_vars,
+)
 
 ROLE_LABEL = "homelab/role"
 
@@ -130,23 +138,70 @@ def _task_computed_readers() -> set[str]:
     return readers
 
 
-def test_pending_is_every_tag_that_reads_a_task_computed_value():
-    """`==`, so a new reader and a tag that stopped reading one both fail."""
+def _set_fact_names() -> set[str]:
+    """Every name a `set_fact` or a `register` in a k8s role's tasks sets."""
+    names = set()
+    for path in cluster.K8S_ROLES.glob("*/tasks/*.yml"):
+        for task in _tasks(yaml_fast.safe_load(path.read_text())):
+            names |= set(task.get("ansible.builtin.set_fact") or {})
+            if isinstance(task.get("register"), str):
+                names.add(task["register"])
+    return {n for n in names if not n.startswith("manifests_")}
+
+
+def test_task_computed_names_every_fact_a_template_or_default_reads():
+    """`==`, so a fact a template starts reading fails here rather than in a render.
+
+    The live-read facts have their stand-ins in `PINNED_LIVE_FACTS` instead. A line that opens
+    with `#` is a comment, in YAML and in a Dockerfile alike, and reads nothing.
+    """
+    files = [*SHARED_TPL.glob("**/*.j2")]
+    for tag in render_targets(K8S_HOST):
+        role = cluster.K8S_ROLES / tag
+        files += [*role.glob("templates/**/*"), *role.glob("defaults/*.yml")]
+    text = "\n".join(
+        line
+        for p in files
+        if p.is_file()
+        for line in p.read_text().splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    read = {
+        name
+        for name in _set_fact_names()
+        if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text)
+    }
+    assert "kuma_declarations" in read
+    assert read - set(PINNED_LIVE_FACTS) == TASK_COMPUTED
+
+
+def test_every_reader_of_a_set_fact_value_derives_it():
+    """Each tag that reads a `TASK_COMPUTED` value is a role whose `SET_FACTS` computes it.
+
+    `k8s_built_image_tags` is the exception: `derived_facts` sets it for every role.
+    """
     readers = _task_computed_readers()
     # Non-vacuity: monitor-bridge reads its script checksum, nut its content tag.
     assert {"monitor-bridge", "nut"} <= readers
-    assert cluster.PENDING == readers
+    for tag in readers:
+        role = cluster.K8S_ROLES / tag
+        files = [*role.glob("templates/**/*"), *role.glob("defaults/*.yml")]
+        text = "\n".join(p.read_text() for p in files if p.is_file())
+        derived = {fact for _, fact in SET_FACTS.get(tag, ())} | {BUILT_IMAGE_TAGS}
+        for name in TASK_COMPUTED:
+            if re.search(rf"(?<!\w){name}(?!\w)", text):
+                assert name in derived, (tag, name)
 
 
 @pytest.mark.parametrize("tag", cluster.select_tags(None))
 def test_every_default_tag_renders_under_the_strict_undefined(tag, stubs):
-    """The verify-by of R1's PR 2: each tag `cluster` renders by default renders clean."""
+    """The verify-by of R1's PR 3: every tag `cluster` renders by default renders clean."""
     rendered = cluster.render_tag(tag, stubs)
     assert set(rendered.files) - {cluster.KUSTOMIZATION}, tag
 
 
-def test_the_default_tag_set_covers_every_target_but_the_pending_ones():
-    """Non-vacuity for the parametrisation above: 42 tags, and none of them pending."""
+def test_the_default_tag_set_is_every_render_target():
+    """Non-vacuity for the parametrisation above, the tags reading task-computed values too."""
     tags = set(cluster.select_tags(None))
-    assert len(tags) >= 42 and {"traefik", "home-assistant", "littlelink"} <= tags
-    assert tags == set(render_targets(K8S_HOST)) - cluster.PENDING
+    assert len(tags) >= 56 and {"traefik", "nut", "uptime-kuma", "game-stats"} <= tags
+    assert tags == set(render_targets(K8S_HOST))

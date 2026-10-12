@@ -47,6 +47,8 @@ TIER_NOTES = {
     "auto": "rotated unattended by the weekly secret-rotate cron",
     "assisted": "needs a human to mint the new value, then `secret_rotation.py rotate`",
     "external": "lives in a third-party system; rotate there first",
+    "external-90d": "lives in a third-party system and expires after 90 days; rotate there "
+    "first",
     "pinned": "DANGER — rotating it breaks decryption or locks out access. Follow the "
     "procedure in the runbook, never the generic rotate path",
     "ignore": "not rotated, and deliberately so",
@@ -104,7 +106,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         by_tier.setdefault(row["tier"], []).append(row)
 
     # pinned first: it is the tier where following the generic procedure causes damage.
-    order = ["pinned", "assisted", "external", "auto", "ignore"]
+    order = ["pinned", "assisted", "external", "external-90d", "auto", "ignore"]
     tiers = [t for t in order if t in by_tier] + sorted(
         t for t in by_tier if t not in order
     )

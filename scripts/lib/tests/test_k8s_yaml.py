@@ -14,9 +14,12 @@ whole tree.
 Run: uv run pytest scripts/lib/tests/test_k8s_yaml.py
 """
 
+from _image_builder_tag import templar_value
+from lib.ansible_jinja_env import make_ansible_env
 from lib.k8s_yaml import (
     find_claim_name_refs,
     find_pvc_names,
+    make_lookup,
     parse_docs,
     yaml_error,
 )
@@ -166,3 +169,27 @@ spec:
 """
     doc = list(parse_docs(rendered))[0]
     assert sorted(find_claim_name_refs(doc)) == ["claim-a", "claim-b"]
+
+
+def _guard_lookup(expression: str) -> str:
+    env = make_ansible_env()
+    env.globals["lookup"] = make_lookup({})
+    return env.from_string(expression).render()
+
+
+def test_a_template_lookup_keeps_trailing_newlines_as_ansible_does(tmp_path):
+    """A guard reading fewer newlines than a deploy flips a `|` block scalar to `|-`."""
+    tpl = tmp_path / "templates" / "tail.j2"
+    tpl.parent.mkdir()
+    tpl.write_text("x\n\n")
+    expression = f"{{{{ lookup('template', '{tpl}') }}}}"
+    assert _guard_lookup(expression) == "x\n\n"
+    assert _guard_lookup(expression) == templar_value(expression, {}, tmp_path)
+
+
+def test_a_file_lookup_strips_all_trailing_whitespace_as_ansible_does(tmp_path):
+    src = tmp_path / "tail.txt"
+    src.write_text("x \t\n\n")
+    expression = f"{{{{ lookup('file', '{src}') }}}}"
+    assert _guard_lookup(expression) == "x"
+    assert _guard_lookup(expression) == templar_value(expression, {}, tmp_path)

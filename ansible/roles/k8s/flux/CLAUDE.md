@@ -37,7 +37,10 @@ so a regeneration diffs as the pipeline plus upstream's change.
   does not clear that failure: it widens `view` for every identity bound to it, so extend
   that module's lists only as a decision the PR states.
   Renovate rewrites `flux_version` alone, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
-  rule) and the header test fails until the file is regenerated.
+  rule) and the header test fails until the file is regenerated. Set the same release as the
+  `version:` of both `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, so the
+  CLI that pushes and tags the artifact moves with the controllers.
+  `ansible/tests/repo/test_promote_workflow.py` fails a drift.
 
 ## How the render meets the fleet guards
 
@@ -93,4 +96,6 @@ NetworkPolicy edit.
   replacement, set it with `gh secret set PROMOTE_TOKEN -R DanielH2018/server`, store the copy
   with `sops set` as `promote_token`, run `uv run python
   scripts/secrets_mgmt/secret_rotation.py sync`, and commit `ansible/secret_rotation.yml`.
-  The token and the workflow arrive in slice D1.4.
+  The copy's registry row is on the `external-90d` tier with `source: record`, so the audit
+  flags it before the token expires. The first SOPS copy and its row land in a follow-up to
+  the PR that added the workflow; until then nothing tracks the expiry.

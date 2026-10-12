@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
-"""PreToolUse(Bash) guard: seven commands that fail silently or cost a second write here.
+"""PreToolUse(Bash) guard: eight commands that fail silently or cost a second write here.
 
 Usage: `bash-pretool.py` loads this file as an arm on PreToolUse:Bash, and it also runs
 standalone. It reads the hook JSON payload on stdin. It prints a `deny` (or `ask`) decision JSON
@@ -54,6 +54,9 @@ a gate the repo requires, so nothing downstream notices either way.
      template afterwards and rewrites the body to fit it, which was 40 of the PR body edits
      read for #3963. Denying the create moves the fit to before the PR exists.
 
+  8. A write to the repository variable `DEPLOY_HOLD` or `PROD_DIGEST`, or an OCI tag move.
+     Each succeeds and moves what the cluster applies; `_deploy_plane_rule.py` has the rule.
+
 Rules that key on a host tool or on GitHub rather than on this repo live in
 `claude_guard.footguns`, which every repo's PreToolUse hook runs.
 
@@ -76,6 +79,7 @@ from _hook_common import (
     split_stages,
     strip_shell_keywords,
 )
+from _deploy_plane_rule import TAG_MOVES, deploy_plane_write_problem
 
 _SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
 # The checkout on the REMOTE host: the guard fires on `ssh daniel-<host> git ...`, and each
@@ -456,6 +460,7 @@ _RULES = (
     remote_git_problem,
     burst_public_hostname_problem,
     issue_create_by_hand_problem,
+    deploy_plane_write_problem,
     skip_staleness_problem,
     ci_dispatch_on_master_problem,
 )
@@ -465,7 +470,9 @@ _RULES = (
 # splitter cannot read the command: text naming none of them cannot reach a rule however it
 # is split, so a typo in a command about something else costs no prompt, and a host without
 # the `claude_guard` deploy prompts only on the commands this hook exists for.
-_RULE_BINARIES = frozenset({"kubectl", "ssh", "gh"}) | _BURST_TOOLS
+_RULE_BINARIES = (
+    frozenset({"kubectl", "ssh", "gh", *(m[0] for m in TAG_MOVES)}) | _BURST_TOOLS
+)
 _RULE_BINARY_RE = re.compile(
     r"(?<![\w/.-])(" + "|".join(sorted(_RULE_BINARIES)) + r")(?![\w.-])"
 )

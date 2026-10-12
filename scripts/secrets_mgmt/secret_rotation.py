@@ -99,6 +99,7 @@ TIER_DAYS = {
     "auto": 180,
     "assisted": 365,
     "external": 365,
+    "external-90d": 90,
     "pinned": 730,
     "ignore": None,
 }

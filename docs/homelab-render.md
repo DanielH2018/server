@@ -18,12 +18,14 @@ steps, and this page describes each piece once its PR has merged.
 - `scripts/renderer/renderer_lib/task_inputs.py` holds `PINNED_LIVE_FACTS`, the stand-ins for
   facts a role task reads from live state.
 - `scripts/renderer/homelab_render.py cluster` renders in stub mode into the C1 layout. It
-  applies the manifests role's file rules (*The file rules*), and renders every tag that
-  reads no value a role task computes (*What renders so far*).
+  applies the manifests role's file rules (*The file rules*), and renders every k8s render
+  target of daniel-box.
 - `scripts/renderer/renderer_lib/context.py` builds the variables a role's templates see in
   the deploy play, and `renderer_lib/cluster.py` renders each tag and writes its directories.
 - `scripts/renderer/renderer_lib/task_inputs.py:include_vars` reads the `manifests_*` vars
   each role passes to its `k8s/manifests` include.
+- `scripts/renderer/renderer_lib/task_inputs.py:derived_facts` computes the values role tasks
+  compute from the tree (*Task-computed values*).
 
 ## The stub form
 
@@ -58,7 +60,8 @@ uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \
 ```
 
 `--role TAG` renders only the tags it names, and it repeats. Without it, `cluster` renders
-every tag that renders so far.
+every k8s render target of daniel-box, the list
+`scripts/deploy_tools/render_targets.py` prints.
 
 Each tag becomes `DIR/cluster/<tag>/`. The directory holds the rendered manifests and a
 `kustomization.yaml` whose `resources` list them in lexical order, the order
@@ -72,8 +75,7 @@ else, and `DIR/flux/` belongs to a later slice.
   R2 adds. A bare `cluster` call in a publish job therefore fails rather than publishing.
 - The stub file does not stub every key of `ansible/vars/secrets.yml`. The message names the
   keys, never a value. Write a fresh stub file for the commit.
-- A `--role` names a tag that is not a k8s render target of daniel-box, or one that does not
-  render yet.
+- A `--role` names a tag that is not a k8s render target of daniel-box.
 - A directory it would write under `DIR/cluster/` already holds files from an earlier
   render.
 
@@ -98,7 +100,8 @@ A role's templates render with the variables they see in the k8s play on daniel-
 
 The render is strict. A name that no layer supplies stops the render with an error naming it.
 The render guards under `scripts/validate/` print `STUB` instead, and lay stub values such as
-`k8s_built_image_tags` under every layer; the renderer does neither. An undefined attribute
+`k8s_built_image_tags` under every layer. The renderer does neither: it derives
+`k8s_built_image_tags` and the other task-computed values (*Task-computed values*). An undefined attribute
 still takes its `| default(...)`, as it does under Ansible.
 
 The same rule holds one level down. A variable whose value names an undefined variable, such
@@ -138,14 +141,43 @@ A template census in `scripts/renderer/tests/` parses every template of the k8s 
 `ansible/templates/`. It fails when a filter or test name does not resolve in the environment
 the renderer renders with.
 
-### What renders so far
+### Task-computed values
 
-`homelab-render cluster` with no `--role` renders every render target of daniel-box except
-`scripts/renderer/renderer_lib/cluster.py:PENDING`. Those 14 tags read a value a role task
-computes: a content tag from `k8s/image-builder`, a script checksum, `kuma_declarations` or
-`janitorr_dry_run`. `scripts/renderer/renderer_lib/task_inputs.py:TASK_COMPUTED` lists the
-names, and a test holds `PENDING` equal to the tags whose templates or defaults name one.
-R1's PR 3 derives those values and empties the set.
+Some values a template or a role default reads are set by a role task, not by a file.
+`scripts/renderer/renderer_lib/task_inputs.py:derived_facts` computes them. It reads each
+task's expression out of its tasks file and evaluates it in the environment the
+templates render in, so the renderer never restates one:
+
+- **Content tags.** Each `include_role` of `k8s/image-builder` gets its tag from the
+  expression of the image-builder task `Compute the content tag`. The tag hashes
+  `context-configmap.yaml.j2`'s rendered `data`. The build's variables are image-builder's
+  defaults under the calling role's context, with the `vars:` of the include over both and
+  `playbook_dir` resolving to `ansible/`. An include whose `when:` is false adds no tag, as
+  valheim's does without mods. The tags form `k8s_built_image_tags`, which every role reads
+  as `{}` when it builds nothing, as `ansible/deploy.yml` resets it.
+- **Script checksums.** monitor-bridge, autofix-bridge and game-stats hash their staged
+  modules with `lookup('file', ..., rstrip=False) | hash('sha1')`. game-stats' two checksums
+  also read `game_stats_lib_checksum`, which `tasks/stage.yml` sets first.
+- **`kuma_declarations`.** uptime-kuma's task renders `static-monitors.yaml.j2` and parses
+  its `stringData`. The template reads it through `default({})`, so a missing value would
+  still render, and a test holds the rendered index above 50 declarations, as the role's own
+  assert does.
+- **`janitorr_dry_run`**, which janitorr's task copies from `janitorr_k8s_dry_run`.
+
+`SET_FACTS` in the same module lists the roles and facts besides the content tags. A role
+default that reads one of these values, such as `nut_k8s_image`, resolves in a second pass of
+the context with the values as overrides, the precedence `set_fact` has over every file
+layer.
+
+Tests in `scripts/renderer/tests/` hold each derived value equal to the value
+ansible-core's `Templar` computes from the same expression and variables. `kuma_declarations`
+is the exception, because its render needs the repo's filter plugins.
+
+`lookup('template')` keeps the render's trailing newlines, as ansible-core's lookup does. The
+content tag hashes those bytes, so a lookup that stripped them gave every build a tag Ansible
+would not compute. `scripts/lib/k8s_yaml.py:make_lookup`, which the render guards under
+`scripts/validate/` read through, follows the same rules, so a guard checks the bytes a deploy
+writes.
 
 The render is not yet proven byte-identical to Ansible's. R1's PR 7 compares the two and
 closes each class of difference.

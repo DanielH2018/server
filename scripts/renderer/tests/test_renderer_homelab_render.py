@@ -72,12 +72,6 @@ def test_a_stub_file_missing_a_key_is_flagged(out, stub_file, tmp_path, capsys):
     assert list(out.iterdir()) == []
 
 
-def test_a_tag_that_does_not_render_yet_is_flagged(out, stub_file, capsys):
-    assert _cluster(out, "--secret-stubs", str(stub_file), "--role", "n8n") == 2
-    assert "do not render yet" in capsys.readouterr().err
-    assert list(out.iterdir()) == []
-
-
 def test_a_tag_directory_left_by_an_earlier_render_is_flagged(out, stub_file, capsys):
     assert _cluster(out, "--secret-stubs", str(stub_file), "--role", "littlelink") == 0
     assert _cluster(out, "--secret-stubs", str(stub_file), "--role", "littlelink") == 2
