@@ -127,13 +127,33 @@
 - name: Reach the WebUI from a pod, as Traefik does
   tags: [deploy]
   # Skipped under --check, unlike proof 1 above: this is the one task in the file that creates a
-  # cluster object rather than reading one. `--rm` cleans it up, but a dry run should not be
-  # scheduling pods at all — and there is no read-only way to ask this question, since the whole
-  # point is to originate the request from the pod CIDR.
+  # cluster object rather than reading one. A dry run should not be scheduling pods at all, and
+  # there is no read-only way to ask this question, since the whole point is to originate the
+  # request from the pod CIDR.
+  #
+  # THE POD NAME IS PER RUN; THE LABEL IS NOT. `kubectl run` refuses a name that already exists,
+  # so a fixed name failed the 2026-10-12 landing after a good rollout: an overlapping qbittorrent
+  # verify held it (#4556). The NetworkPolicy admits the probe by its `app` label, so only the
+  # label must stay fixed. The suffix comes from the unseeded `random` filter rather than a
+  # timestamp, which collides for two runs that probe in the same second. It is inline in `cmd`
+  # because Ansible templates a task's args once, where a task `vars:` entry is re-templated on
+  # every reference and would yield a new name each time.
+  #
+  # `--rm` deletes the pod only while this kubectl client lives, so a controller killed mid-probe
+  # leaves an orphaned pod behind. The orphan no longer fails the next deploy, and nothing removes
+  # it either. The operator clears orphans by hand, because the read-only ServiceAccount cannot:
+  #
+  #   sudo k3s kubectl -n homelab delete pod -l app=qbittorrent-reach-probe \
+  #     --field-selector=status.phase!=Running,status.phase!=Pending
+  #
+  # Do not automate that delete in this file. Even filtered to finished pods, it can delete an
+  # overlapping run's probe between that probe exiting and its client reading the output, which
+  # is the false failure the per-run name removes.
   when: not ansible_check_mode
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} run qbittorrent-reach-probe
+      k3s kubectl -n {{ k8s_namespace }}
+      run qbittorrent-reach-probe-{{ 4294967295 | random }}
       --labels app=qbittorrent-reach-probe
       --rm -i --restart=Never --image={{ qbittorrent_k8s_probe_image }}
       --command -- sh -c
