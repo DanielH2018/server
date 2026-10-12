@@ -66,6 +66,26 @@ evidence and the rsync version it was reproduced under.
 **The patch is forward-only.** Repairing the six already-corrupt files needs a privileged
 write on the Pi; they are readable as they stand and age out as they rotate.
 
+**The patch makes the SD copy of the journal dense.** journald's archives in the tmpfs are
+mostly holes: an archive holding a few hundred KB of entries is 8 MiB long. Without
+`--sparse`, rsync writes each hole to the card as real zeros. journald measures
+`SystemMaxUse=32M` in allocated blocks in the tmpfs, so it never vacuumed those archives. On
+2026-10-12 it reported 32.5M for files with 48 MiB of apparent size. log2ram's daily write runs
+`journalctl --rotate` and adds two archives a day. Between 2026-10-05 and 2026-10-09 the synced
+tree grew from 71 MB to 143 MB. log2ram's start-up guard runs `du` on the SD copy and refuses to
+mount the tmpfs when the copy exceeds `SIZE`. That is how the 2026-10-11 boot left `/var/log`
+on the card (#4583). The guard's own error message is lost, because log2ram runs before journald
+starts. The empty `/var/hdd.log` and a start that exited after 1.1s with status 1 identify the
+guard. `systemctl status` dated the failure 2026-07-28, which is the Pi's clock before NTP sync,
+not the real date. The fix is a file-count cap in the journald drop-in, described below.
+
+**Recovering from a refused start takes a reboot.** Applying `--tags log2ram` restarts
+journald, which trims the journal on the card, but nothing in the role starts the failed
+`log2ram.service`. log2ram mounts its tmpfs only at boot, and the role's `Reboot Pi` handler
+fires only when the package or `/etc/log2ram.conf` changes. Reboot the Pi by hand after the
+apply. Then check that `systemctl is-active log2ram` prints `active` and that
+`findmnt /var/log` shows a tmpfs.
+
 ## Watchdog and debloat
 
 The hardware watchdog is `dtparam=watchdog=on` plus the `watchdog` daemon, which reboots the
@@ -116,7 +136,11 @@ the line once passes unchanged.
 The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
 
 - A Pi journald drop-in, `60-homelab-pi.conf` with `SystemMaxUse=32M`, overrides
-  initial_setup's server-sized 1G cap.
+  initial_setup's server-sized 1G cap. Its `SystemMaxFiles=32` and `SystemMaxFileSize=2M`
+  bound the journal's SD copy at 64 MiB, half the tmpfs, because `SystemMaxUse` cannot see the
+  zeros written to the card (#4583, above). The files are small rather than few: a day's system
+  journal held 786 entries, so 2 MiB holds a day, and 30 archives keep about 15 days of history.
+  That outlasts the weekly AIDE and rkhunter reports, which log to the journal.
 - `ACCT_LOGGING="3"` cuts pacct retention from 30 daily generations (savelog via
   `/etc/cron.daily/acct`, about 28 MB/day of healthcheck exec churn) to 3.
 - auditd is capped to a 12 MB ceiling.
@@ -196,7 +220,14 @@ in `secrets.yml`.
 `.gz` under `/var/log` and `/var/hdd.log` and writes a two-line verdict to
 `optimize_pi_gz_integrity_state_file`. The heartbeat reads that file and pushes `down` on a
 failing verdict, on a verdict older than `optimize_pi_gz_integrity_max_age_h`, and on no
-verdict at all. Three things about it:
+verdict at all.
+
+**The heartbeat also checks that log2ram is mounted** (#4583). It pushes `down` when
+`findmnt --mountpoint /var/log` does not report a `tmpfs`. Without that check, a log2ram that
+refused to start showed up only as an empty `/var/hdd.log` at the next daily sweep, 18 hours
+after the boot that left `/var/log` on the card.
+
+Three things about the integrity verdict:
 
 - **`/var/hdd.log` is the load-bearing tree.** `/var/log` is the RAM tmpfs, rewritten from RAM
   on every rotation; `/var/hdd.log` is the copy on the card and the destination of the sync

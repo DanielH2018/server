@@ -77,6 +77,17 @@ if [ "$GZ_STATUS" != "up" ]; then
 fi
 MSG="${MSG}; ${GZ_MSG}"
 
+# Whether log2ram is mounted at all. When its boot guard refuses to start, /var/log stays a
+# plain directory on the SD card, and every log write lands on the card. The integrity sweep
+# above notices that only indirectly and only once a day, as an empty /var/hdd.log (#4583).
+# This check names the cause directly. It reads the mount table rather than the unit's
+# state, because the mount is what protects the card.
+LOG_FSTYPE=$(findmnt -n -o FSTYPE --mountpoint /var/log 2>/dev/null)
+if [ "$LOG_FSTYPE" != "tmpfs" ]; then
+  STATUS=down
+  MSG="${MSG}; /var/log is not log2ram's tmpfs (fstype '${LOG_FSTYPE:-none}'), so logs write to the SD card — check systemctl status log2ram"
+fi
+
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-sd-health
 
 # Durable record of this cycle, so `probe.py alerts` can reconstruct the episode. The full
