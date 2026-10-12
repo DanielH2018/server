@@ -309,6 +309,29 @@ stringData:
   aide-daniel-pi.json: |
     {"type": "push", "name": "AIDE Integrity (daniel-pi)", "description": "The weekly Monday 03:00 aide-check.sh cron on daniel-pi runs aide --check against the host baseline and pushes when the scan ends. DOWN means AIDE exited with an error and checked nothing (the message carries its first error line, usually a config or database fault), or no run has reported for a week and 6 h. UP means the check completed; its message counts the files that differ from the baseline, which is routine after package upgrades. Run journalctl -t aide-check and journalctl -t aide on daniel-pi.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ aide_daniel_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
+{# The weekly rkhunter scan (#4598), one tile per host for the same reason as the AIDE tiles
+   above.
+
+   UP means the scan completed and found no possible rootkit, NOT that it found nothing: every
+   host warns every week, so warnings push UP with their count. The `DECIDED:` marker at the
+   classification in roles/setup/initial_setup/templates/rkhunter-check.sh.j2 has the evidence.
+
+   612000s: the producer is a weekly cron (Wednesday 02:00, integrity.yml), 604800s, and a scan
+   took 1m46s-2m26s on daniel-server and about 2.5 min on daniel-pi in the logs kept on
+   2026-10-12. The 2 h of slack covers a run taking far longer than the last. Move this and the
+   cron together. No `email`: a broken scan costs coverage, not a service. #}
+{% if rkhunter_daniel_box_push_token | default('') %}
+  rkhunter-daniel-box.json: |
+    {"type": "push", "name": "rkhunter Scan (daniel-box)", "description": "The weekly Wednesday 02:00 rkhunter-check.sh cron on daniel-box runs rkhunter --check and pushes when the scan ends, two to three minutes later. DOWN means rkhunter found a possible rootkit, or the scan did not complete (the message carries rkhunter's exit code and first error line), or no run has reported for a week and 2 h. UP means the scan completed with no possible rootkit; its message counts the warnings, which every host has every week. Read /var/log/rkhunter.log and journalctl -t rkhunter-check on daniel-box.", "interval": 612000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ rkhunter_daniel_box_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
+{% if rkhunter_daniel_server_push_token | default('') %}
+  rkhunter-daniel-server.json: |
+    {"type": "push", "name": "rkhunter Scan (daniel-server)", "description": "The weekly Wednesday 02:00 rkhunter-check.sh cron on daniel-server runs rkhunter --check and pushes when the scan ends, two to three minutes later. DOWN means rkhunter found a possible rootkit, or the scan did not complete (the message carries rkhunter's exit code and first error line), or no run has reported for a week and 2 h. UP means the scan completed with no possible rootkit; its message counts the warnings, which every host has every week. Read /var/log/rkhunter.log and journalctl -t rkhunter-check on daniel-server.", "interval": 612000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ rkhunter_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
+{% if rkhunter_daniel_pi_push_token | default('') %}
+  rkhunter-daniel-pi.json: |
+    {"type": "push", "name": "rkhunter Scan (daniel-pi)", "description": "The weekly Wednesday 02:00 rkhunter-check.sh cron on daniel-pi runs rkhunter --check and pushes when the scan ends, two to three minutes later. DOWN means rkhunter found a possible rootkit, or the scan did not complete (the message carries rkhunter's exit code and first error line), or no run has reported for a week and 2 h. UP means the scan completed with no possible rootkit; its message counts the warnings, which every host has every week. Read /var/log/rkhunter.log and journalctl -t rkhunter-check on daniel-pi.", "interval": 612000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ rkhunter_daniel_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
   # DECIDED: this id stays `claude-otel-health` after the k8s/claude-otel role was renamed
   # `observability` on 2026-10-01 (#2911) — under ON_DELETE=delete a changed id deletes the
   # monitor and its history and creates a new one. The full reasoning is at the `DECIDED:`
