@@ -421,6 +421,7 @@
  "ansible/tests/repo/test_prek_hooks_run_only_at_commit.py": 0.0,
  "ansible/tests/repo/test_prek_uv_entries_are_frozen.py": 0.0,
  "ansible/tests/repo/test_process_waits.py": 0.23,
+ "ansible/tests/repo/test_promote_workflow.py": 0.0,
  "ansible/tests/repo/test_pytest_shards_partition_the_suite.py": 1.98,
  "ansible/tests/repo/test_python_version_consistency.py": 0.0,
  "ansible/tests/repo/test_ratchet_rules.py": 0.0,

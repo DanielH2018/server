@@ -156,6 +156,9 @@ def test_every_rule_binary_reaches_a_rule():
         "ssh": "ssh daniel-pi 'git status'",
         "gh": "gh issue create --title x",
         "ab": "ab -n 100 https://sonarr.daniel-hunter.com/",
+        "flux": "flux tag artifact oci://ghcr.io/o/a:sha-1 --tag prod",
+        "crane": "crane tag ghcr.io/o/a:sha-1 prod",
+        "oras": "oras tag ghcr.io/o/a:sha-1 prod",
     }
     assert set(denied_by) <= _mod._RULE_BINARIES
     for name, command in denied_by.items():
@@ -431,3 +434,51 @@ def test_the_gate_opens_for_a_ci_dispatch():
     """`gh` is in `_RULE_BINARIES` for the issue-create rule; this pins that the
     rule is reachable, so a later narrowing of the gate cannot disarm it silently."""
     assert _mod.could_fire("gh workflow run ci.yml")
+
+
+# --- 8. deploy-plane variable writes and tag moves ------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh variable set DEPLOY_HOLD --body none -R DanielH2018/server",
+        "gh variable set PROD_DIGEST --body sha256:00 -R DanielH2018/server",
+        "gh variable set deploy_hold --body none",
+        "gh -R DanielH2018/server variable set --body none DEPLOY_HOLD",
+        "gh variable delete DEPLOY_HOLD -R DanielH2018/server",
+        "gh api -X PATCH repos/DanielH2018/server/actions/variables/DEPLOY_HOLD -f value=none",
+        "gh api --method=DELETE repos/DanielH2018/server/actions/variables/PROD_DIGEST",
+        "gh api repos/DanielH2018/server/actions/variables -f name=DEPLOY_HOLD -f value=x",
+        "gh api repos/DanielH2018/server/actions/variables --field=name=DEPLOY_HOLD -f value=x",
+        "gh api repos/DanielH2018/server/actions/variables -fname=PROD_DIGEST -fvalue=x",
+        "gh api repos/DanielH2018/server/actions/variables --raw-field=name=deploy_hold",
+        "flux tag artifact oci://ghcr.io/danielh2018/homelab-manifests:sha-1 --tag prod",
+        "crane tag ghcr.io/danielh2018/homelab-manifests:sha-1 prod",
+        "oras tag ghcr.io/danielh2018/homelab-manifests:sha-1 prod",
+    ],
+)
+def test_a_deploy_plane_write_or_tag_move_is_denied(command):
+    """FLAGGED half: the must-deny `gh variable set DEPLOY_HOLD` from the D1 plan, and one case
+    per other denied form. Each succeeds when typed, which is why the hook exists."""
+    assert "operator" in (_mod.problem(command) or "")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh variable get DEPLOY_HOLD -R DanielH2018/server",
+        "gh variable list -R DanielH2018/server",
+        "gh variable set SOME_OTHER --body x",
+        "gh api repos/DanielH2018/server/actions/variables/DEPLOY_HOLD",
+        "gh api -X GET repos/DanielH2018/server/actions/variables/PROD_DIGEST",
+        "gh api -X GET repos/DanielH2018/server/actions/variables -fname=DEPLOY_HOLD",
+        "flux push artifact oci://ghcr.io/o/a:sha-1 --path out",
+        "crane digest ghcr.io/o/a:prod",
+        "grep -rn 'gh variable set DEPLOY_HOLD' docs",
+    ],
+)
+def test_a_deploy_plane_read_and_the_near_misses_stay_clean(command):
+    """CLEAN half: the must-pass `gh variable get`, a GET through `gh api`, another variable,
+    a push that moves no existing tag, and text that only names the command."""
+    assert _mod.problem(command) is None

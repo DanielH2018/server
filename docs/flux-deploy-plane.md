@@ -80,8 +80,49 @@ its six groups, so a Flux upgrade that widens it fails CI.
 To check the controllers after a deploy, run `kubectl -n flux-system get deploy` and
 `uv run python scripts/diagnostics/probe.py health flux`.
 
+## Publishing and promotion
+
+The `promote` workflow, `.github/workflows/promote.yml`, runs after each successful push run
+of CI on master. It publishes the commit as the OCI artifact
+`ghcr.io/danielh2018/homelab-manifests:sha-<commit>` and moves the tag `prod` to the newest
+published master commit. No controller follows `prod` yet, so a move changes nothing in the
+cluster. The workflow has four jobs:
+
+1. `render` checks out the triggering commit and refuses one that is not on master. It builds
+   the bundle, one empty root Kustomization, and scans it with gitleaks. It holds read access
+   only.
+1. `publish` checks out no repository code. It pushes the bundle as `sha-<commit>` and signs
+   it with cosign, under a certificate that names the workflow's own identity.
+1. `promote` runs `promote.py decide`, read-only. `decide` walks master from its tip back to
+   `prod`'s commit and takes the first commit that is published, signed and green in CI. It
+   prints one line, `trigger=<sha> verdict=<verdict> target=<sha>`, where the verdict is
+   `promote`, `held`, `current` or `error`.
+1. `tag` checks out no repository code. On the verdict `promote` it moves `prod` to
+   `sha-<target>` and writes that digest to the repository variable `PROD_DIGEST`.
+
+The repository variable `DEPLOY_HOLD` stops promotion. The value `none` means no hold, and any
+other value holds, so a mistyped hold still holds. An empty or missing variable makes `decide`
+print `error`, and no tag moves. Setting or clearing a hold is **operator-only**:
+
+```bash
+gh variable set DEPLOY_HOLD --body none -R DanielH2018/server
+```
+
+An agent session cannot run that command, nor write `PROD_DIGEST` or move a tag: the
+`block-footguns` hook denies them (`.claude/hooks/_deploy_plane_rule.py`). Reading either
+variable with `gh variable get` stays allowed.
+
+A dispatch of the workflow from master with the input `verify_drill` pushes the bundle
+unsigned to the tag `verify-drill`, for the flux role's signature drill. It skips `promote`
+and `tag`, so it never moves `prod`.
+
 ## Tokens
 
 No agent token ever carries the `write:packages` scope. Pushing an artifact, signing it and
-moving its `prod` tag belong only to the code-free jobs of the promote workflow that a later
-slice adds, under that job's own `GITHUB_TOKEN`.
+moving its `prod` tag belong only to the code-free `publish` and `tag` jobs, under each job's
+own `GITHUB_TOKEN`.
+
+The repository secret `PROMOTE_TOKEN` is a fine-grained token with Variables read and write
+on this repository and a 90-day expiry. `promote` reads `DEPLOY_HOLD` with it, and `tag`
+writes `PROD_DIGEST` with it. The flux role's `CLAUDE.md` has its rotation steps, and the
+rotation registry's `external-90d` tier is the one its SOPS copy belongs on.
