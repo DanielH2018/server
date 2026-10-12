@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 import worktree_holders
+from lib.socket_testing import listening, short_socket_path
 from lib.worktrees import (
     WORKTREE_HOLDER_ROOTS,
     escape_holder,
@@ -214,9 +215,7 @@ def test_the_helper_and_the_caller_read_one_root_map_is_clean():
 
 def _serving(sock: Path, roots: Path, proc: Path) -> threading.Thread:
     """A listener at `sock` that answers one connection the way the service does."""
-    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    listener.bind(str(sock))
-    listener.listen(1)
+    listener = listening(sock)
 
     def one():
         with listener:
@@ -234,11 +233,10 @@ def test_the_caller_reads_the_service_over_a_real_socket_is_flagged(tmp_path):
     root = tmp_path / "worktrees"
     (root / "a\u2028b").mkdir(parents=True)
     _entry(tmp_path / "proc", 7, cwd=root / "a\u2028b", environ=b"")
-    sock = tmp_path / "worktree-holders.sock"
-    thread = _serving(sock, _mapped(tmp_path, {ME: str(root)}), tmp_path / "proc")
-
-    found = privileged_holders(root / "a\u2028b", sock=str(sock), root=root)
-    thread.join(timeout=10)
+    with short_socket_path() as sock:
+        thread = _serving(sock, _mapped(tmp_path, {ME: str(root)}), tmp_path / "proc")
+        found = privileged_holders(root / "a\u2028b", sock=str(sock), root=root)
+        thread.join(timeout=10)
 
     assert found == [(7, f"cwd {escape(str(root / 'a\u2028b'))}")]
 

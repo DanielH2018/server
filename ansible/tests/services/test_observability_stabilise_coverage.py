@@ -103,6 +103,21 @@ def test_the_role_still_waits_inline_before_exec_ing_into_grafana() -> None:
     )
 
 
+def _wait_runs(**ctx) -> bool:
+    """Evaluate the rollout wait's `when:` the way Ansible does."""
+    wait = next(t for t in load_tasks(_TASKS) if "rollout status" in _cmd(t))
+    when = wait.get("when", [])
+    clauses = when if isinstance(when, list) else [when]
+    return all(bool(render_expr("{{ " + str(c) + " }}", **ctx)) for c in clauses)
+
+
+def test_a_dry_run_skips_the_rollout_wait() -> None:
+    """A dry run creates nothing, so a workload the role adds is not live and the wait fails
+    the run with NotFound (#4729). A real deploy still waits."""
+    assert _wait_runs(k8s_no_mutate=True) is False
+    assert _wait_runs(k8s_no_mutate=False) is True
+
+
 def test_the_restart_snapshot_is_taken_after_the_wait() -> None:
     wait = _index_of(lambda t: "rollout status" in _cmd(t))
     snapshot = _index_of(lambda t: "restartCount" in _cmd(t))
@@ -161,7 +176,12 @@ def _snapshot_runs(**over) -> bool:
     ctx = dict(
         k8s_no_mutate=False,
         manifests_render={"changed": True},
-        manifests_secret_render={"changed": False},
+        item={
+            "kind": "deploy",
+            "name": "grafana",
+            "restart_secrets": ["grafana-secret.yaml"],
+        },
+        observability_changed_secret_files=[],
         manifests_apply={
             "changed": True,
             "stdout": "deployment.apps/grafana configured",
@@ -189,10 +209,14 @@ def test_an_inert_manifest_edit_hands_nothing_to_the_stabilisation_gate() -> Non
     assert _snapshot_runs(manifests_apply=inert) is False
     # RED-proof on the other side: the same render with an apply that moved a live object.
     assert _snapshot_runs() is True
-    # A Secret edit still buys the soak — it restarts prometheus and grafana out of band, and
-    # verify_secret_keys can patch a key after an apply that printed `unchanged`.
+    # An edit to a Secret this workload reads still buys the soak — the private restart rolls
+    # it out of band, and verify_secret_keys can patch a key after an apply that printed
+    # `unchanged`. Which workloads one Secret soaks is test_observability_secret_restarts.py.
     assert (
-        _snapshot_runs(manifests_apply=inert, manifests_secret_render={"changed": True})
+        _snapshot_runs(
+            manifests_apply=inert,
+            observability_changed_secret_files=["grafana-secret.yaml"],
+        )
         is True
     )
     # A dry run reads nothing live, so it hands the gate nothing whatever changed.

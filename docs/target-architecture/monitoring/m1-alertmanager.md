@@ -6,6 +6,7 @@ PR 1, the promtool and amtool provisioning and its red proof: [#4703](https://gi
 PR 2, Alertmanager with its receivers: [#4728](https://github.com/DanielH2018/server/pull/4728).
 PR 3, the rules pipeline and three meta rules: [#4740](https://github.com/DanielH2018/server/pull/4740).
 PR 4, the Watchdog to Healthchecks.io: [#4752](https://github.com/DanielH2018/server/pull/4752).
+PR 5, one Secret, one restart: [#4771](https://github.com/DanielH2018/server/pull/4771).
 
 Depends on: —
 
@@ -172,6 +173,19 @@ else.
   `rolled_by_role: true` is stamped `restart: false`. The owning role raises it afterwards
   through `ansible/roles/k8s/manifests/tasks/rollout_amend.yml`, only where it issued a
   `rollout restart`. `ansible/roles/k8s/pihole/tasks/roll_one.yml` is the one caller.
+  `rollout_amend.yml` does not read the marker, so a role can call it for an entry without
+  one.
+- **`rolled_by_role` also takes an entry out of the pod-template fingerprints.** The task
+  "List the workloads whose pod template is fingerprinted" in
+  `ansible/roles/k8s/manifests/tasks/main.yml` ends its list with
+  `manifests_self_rollouts | rejectattr('rolled_by_role', 'defined')`, and it already did at
+  `70591c307`. The marker exists for pihole-2, whose own manifest pihole applies after the
+  shared apply, so a fingerprint around the shared apply would be wrong for it. Observability's
+  workloads are applied by the shared apply, so their fingerprints are right, and the private
+  restart's "the apply already rolled it" skip reads them through `manifests_rolled_by_apply`.
+  An entry with the marker always reads "not rolled" there, so an image bump and a Secret edit
+  in one deploy would roll a `Recreate` pod twice, deleting it mid-pull: the failure #3115
+  fixed. This plan's first draft missed the line (*Restart, PR 5* has the ruling).
 - **The notifier credentials are SOPS keys.** `grep -c '^<name>:' ansible/vars/secrets.yml`
   returns 1 for `email`, `monitor_discord_webhook_url`, `smtp_notify_app_password` and
   `healthchecks_ping_key`. Kuma's `discord.json` and `email.json` declarations in
@@ -438,11 +452,22 @@ M2 to M6 build on these rules and do not restate them.
       Grafana CLI against Grafana's live database. Left alone, each would fire on every
       Alertmanager config edit. The snapshot then reads the per-entry `restart_secrets`
       condition, and the sync reads `grafana-secret.yaml`.
-    - The three entries carry `rolled_by_role: true`, so `release_stamp.yml` stamps
-      `restart: false` for them. A task after the restart includes `rollout_amend.yml` for each
-      workload the restart task actually restarted, as pihole does. The release record then
-      states what the role did, and `release_stamp.yml`, which every k8s role runs, stays
-      unchanged.
+    - The three entries carry `restart_on: []` and no `rolled_by_role`, so `release_stamp.yml`
+      stamps `restart: false` for them and still fingerprints them. A task after the rollout
+      wait includes `rollout_amend.yml` for each workload the restart task actually restarted,
+      as pihole does. The release record then states what the role did, and
+      `release_stamp.yml`, which every k8s role runs, stays unchanged.
+
+  **Orchestrator ruling, 2026-10-12: no `rolled_by_role` on these entries.** The first draft
+  gave the three entries `rolled_by_role: true`. The first attempt at PR 5 found that the shared
+  role drops every entry carrying that marker from the pod-template fingerprints (*Baseline*),
+  which would turn off the restart's skip of a workload the apply already rolled and bring back
+  #3115's double roll. The ruling keeps the end state, exit criterion 4 and the Verify-by, and
+  changes only the mechanism: `restart_on: []` gets the stamp's `restart: false`, the private
+  restart reads `restart_secrets`, and the amend raises the record for each workload it rolled.
+  The `defaults/main.yml` entries carry a `DECIDED no rolled_by_role` marker saying why. A test
+  evaluates the shared role's fingerprint expression against the role's real defaults, with a
+  red case that marks one entry.
 
   The rejected alternative is a per-file key that `release_stamp.yml` reads. It changes the
   shared role every service runs, for one role's need. Until PR 5 deploys, an
@@ -999,16 +1024,18 @@ and those edits must land with the workload.
 ### PR 5 — One Secret, one restart (about 190 lines)
 
 - In `defaults/main.yml`, give Prometheus, Grafana and Alertmanager's
-  `observability_stabilise_workloads` entries `restart_secrets` and `rolled_by_role: true`, as
-  *The Alertmanager workload* sets out.
+  `observability_stabilise_workloads` entries `restart_secrets` and `restart_on: []`, and no
+  `rolled_by_role`, as *The Alertmanager workload* sets out. A `DECIDED no rolled_by_role`
+  marker at the entries records the ruling.
 - In `tasks/main.yml`, a `set_fact` after the `k8s/manifests` include computes
   `observability_changed_secret_files` once: each `manifests_secret_render` result's `changed`
   flag, paired by position with `manifests_secret_files_resolved`. Three tasks keyed on
   `manifests_secret_render is changed` at `70591c307` read it instead:
     - "Restart the telemetry workloads whose secret changed" runs for an entry whose
       `restart_secrets` meets the changed files. Register that task under a name of its own.
-      After it, include `k8s/manifests`' `rollout_amend.yml` once per result that was not
-      skipped. Filtering out the skipped results is what
+      After the rollout wait, include `k8s/manifests`' `rollout_amend.yml` once per result
+      that was not skipped, under a loop variable other than `item`, because
+      `rollout_amend.yml` loops with `item` itself. Filtering out the skipped results is what
       `ansible/tests/deploy/test_conditional_register_consumers.py` requires of a conditional
       register's consumer.
     - "Snapshot the telemetry workloads' restart counts for the end-of-play gate" keeps its
@@ -1045,20 +1072,27 @@ and those edits must land with the workload.
       the stamp's `restart: false` and the amend:
       `test_observability_a_changed_secret_expects_only_its_secret_readers_to_roll`, under
       PR 2's name, and `test_observability_private_restart_reads_the_same_facts_as_the_record`.
-      A pair joins them, rendered through the restart task's
-      `when` with a fixture register: a change to `alertmanager-secret.yaml` alone selects
-      Alertmanager and not Prometheus, and a change to `scrape-credentials-secret.yaml`
-      selects Prometheus.
-    - Two more pairs join it in that file, rendered the same way through the other two
+      That file is near the 500-line cap, so the new pairs go in
+      `ansible/tests/k8s/test_observability_secret_restarts.py`. A pair is rendered through
+      the restart task's `when` with a fixture register: a change to
+      `alertmanager-secret.yaml` alone selects Alertmanager and not Prometheus, and a change to
+      `scrape-credentials-secret.yaml` selects Prometheus.
+    - Two more pairs join it in that module, rendered the same way through the other two
       tasks' `when`. For the snapshot, a change to `alertmanager-secret.yaml` alone
       snapshots Alertmanager and no other workload. Its flagged half is a Prometheus or
       Grafana snapshot on that change. For the Grafana password sync, a change to
       `grafana-secret.yaml` runs it, and a change to `alertmanager-secret.yaml` alone skips it.
       A third assertion holds the file name the sync's `when` names to the one Secret
       template that renders `grafana_admin_password`.
-    - In `ansible/tests/services/test_observability_config_rolls_one_workload.py`,
-      `test_every_workload_reading_a_role_secret_declares_restart_on_secret` also requires each
-      reader's `restart_secrets` to name exactly the Secret files whose Secrets its pod reads.
+    - In `ansible/tests/services/test_observability_config_rolls_one_workload.py`, the guard
+      that each Secret reader declares a restart moves from `restart_on` to `restart_secrets`.
+      It requires each reader's `restart_secrets` to name exactly the Secret files whose
+      Secrets its pod reads, and every entry's `restart_on` to be `[]`, with a red case for
+      each.
+    - The same module that holds the new pairs runs a real `no_log` loop through
+      `ansible-playbook` and shows each result keeps its `changed` flag. It also evaluates the
+      shared role's fingerprint expression against the role's real defaults: the three readers
+      are fingerprinted, and an entry marked `rolled_by_role` is not.
 - Docs: the observability role's `CLAUDE.md`, *One config change, one restart*, replaces the
   one-register sentence that PR 2 leaves with the per-Secret rule. The rule covers the
   restart, the snapshot and the Grafana password sync, so an Alertmanager config edit restarts
@@ -1371,10 +1405,12 @@ Each risk names its class from `docs/failure-classes.md`.
       gains the `every <N>s` case. The deadman fragments regenerate, and the cadences
       fragment's `generated_from` header names the observability defaults.
 - **PR 5.**
-    - Tests: the two rewritten tests (the secret-readers test under PR 2's name), the
-      per-Secret pair, the snapshot pair and the Grafana password sync pair in
-      `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py`, and the `restart_secrets`
-      census in `test_every_workload_reading_a_role_secret_declares_restart_on_secret`.
+    - Tests: the two rewritten tests (the secret-readers test under PR 2's name) in
+      `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py`; the per-Secret pair, the
+      snapshot pair, the Grafana password sync pair, the `no_log` run and the fingerprint pair
+      in `ansible/tests/k8s/test_observability_secret_restarts.py`; and the `restart_secrets`
+      census in
+      `ansible/tests/services/test_observability_config_rolls_one_workload.py::test_every_workload_reading_a_role_secret_names_its_file_in_restart_secrets`.
     - Docs: the observability role's `CLAUDE.md`, *One config change, one restart*. In
       `tasks/main.yml`, the comments above the snapshot and the Grafana password sync describe
       the per-file condition.
@@ -1402,8 +1438,8 @@ Each risk names its class from `docs/failure-classes.md`.
   rules and their tests. A validator of about 200 lines with its test and fixtures, and a
   provisioning script of about 60 lines with a guard test of three cases. Two CI steps. One
   name in `LOCAL_ONLY`. One list variable, `observability_rule_groups`, one integer
-  variable, `observability_alertmanager_watchdog_repeat_seconds`, and two keys on three
-  stabilise entries, `restart_secrets` and `rolled_by_role`. One fact,
+  variable, `observability_alertmanager_watchdog_repeat_seconds`, and one key on three
+  stabilise entries, `restart_secrets`. One fact,
   `observability_changed_secret_files`, read by three tasks. A seventh argument to
   `deadman_crons` and one branch in `cron_mismatches`. One test for the netpol probe table.
   A series budget of 140,000 head series, read as a 7-day average, with two reads in
@@ -1527,8 +1563,10 @@ refuted. Each finding was checked against the tree at `70591c307` before the fix
   narrows the restart to the Secret each workload reads. Confirmed in
   `ansible/roles/k8s/observability/tasks/main.yml` ("Restart the telemetry workloads whose
   secret changed") and `release_stamp.yml`. The design pairs results by position because the
-  render task is `no_log`, and uses `rolled_by_role` with `rollout_amend.yml` so the shared
-  role stays unchanged.
+  render task is `no_log`, and uses `rollout_amend.yml` so the shared role stays unchanged.
+  This round's design also gave the three entries `rolled_by_role`. The orchestrator ruling of
+  2026-10-12 (*Restart, PR 5*) replaced that with `restart_on: []`, because the marker drops
+  an entry from the pod-template fingerprints and brings back #3115's double roll.
 - **M1-R1-03, medium.** The netpol probe row has no `policy` key, which the refused leg
   dereferences. **Fixed**: the row carries
   `policy: networkpolicy-observability.yaml.j2`, and PR 1 adds a test that every refused row

@@ -52,30 +52,39 @@ of the four classes.
 This role sets `manifests_rollout: ''`: `k8s/manifests` neither waits nor restarts for it, and
 each workload carries its own trigger (#2858). A ConfigMap edit rolls its own pod: the
 template hashes the ConfigMap body into that pod template as `checksum/config`
-(`ansible/templates/checksum-annotation.yml.j2`). A Secret edit goes through the restart task
-instead, since hashing one into an annotation would expose it — prometheus, grafana and
-alertmanager declare `restart_on: [secret]` in
-`ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads` and the
-others `restart_on: []`. `manifests_secret_render` is one register over all four Secret
-manifests, so rotating Grafana's admin password also restarts Prometheus and Alertmanager, and
-an Alertmanager config edit restarts all three.
+(`ansible/templates/checksum-annotation.yml.j2`). A Secret edit goes through the role's own
+restart task instead, since hashing one into an annotation would expose it. Each Secret reader
+names the rendered files its pod reads in `restart_secrets`, in
+`ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads`:
+`scrape-credentials-secret.yaml` for prometheus, `grafana-secret.yaml` for grafana and
+`alertmanager-secret.yaml` for alertmanager. The role pairs each result of the shared
+`manifests_secret_render` loop with its file as `observability_changed_secret_files`. One Secret
+edit then restarts its readers alone, soaks them alone in the play gate, and runs the Grafana
+password sync only for `grafana-secret.yaml`. An Alertmanager config edit restarts and soaks
+Alertmanager and never execs the Grafana CLI.
 
 The rule files are the one ConfigMap no annotation hashes. Prometheus mounts `prometheus-rules`
 as a directory and runs with `--config.auto-reload`, so a rule edit reloads in place and never
 rolls the `Recreate` pod
 (`ansible/roles/k8s/observability/templates/prometheus.yaml.j2:DECIDED: rules reload in place`).
 
-`restart_on` is read twice and both readers must agree — the restart task here, and the release
-record's `rollouts[].restart`. A wrong value lands as a red deploy, because `probe.py health
-observability` reads a `restart: true` with no newer `restartedAt` as NOT ROLLED.
+Every entry declares `restart_on: []`, so the shared release record stamps `restart: false`
+for each workload. After its rollout wait, the role raises that to `restart: true` through
+`ansible/roles/k8s/manifests/tasks/rollout_amend.yml` for each workload its restart rolled. A
+wrong raise lands as a red deploy, because `probe.py health observability` reads a
+`restart: true` with no newer `restartedAt` as NOT ROLLED. The entries carry no
+`rolled_by_role`, because the shared role drops a marked entry from the pod-template
+fingerprints, and the restart's skip of a workload the apply already rolled reads them (#3115).
+`ansible/roles/k8s/observability/defaults/main.yml:DECIDED: no rolled_by_role` has the
+ruling.
 
 **Widen the capture when you add a `data:` key.** Every capture but Grafana's holds ONE key's
 body, so a second key in `prometheus.yaml.j2` lands outside the hash and the pod never rolls.
 `ansible/tests/services/test_observability_config_rolls_one_workload.py` guards the three ways
 this goes QUIET.
 
-The snapshot handing these workloads to the play gate fires only when both render and apply
-change, so a comment-only edit buys no soak (#3133).
+The snapshot handing these workloads to the play gate fires for a ConfigMap edit only when both
+render and apply change, so a comment-only edit buys no soak (#3133).
 
 ## Alert plane
 

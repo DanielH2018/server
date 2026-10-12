@@ -25,11 +25,14 @@ import shutil
 import socket
 import threading
 
+import pytest
+
 from fanout_lib.clean import live_process_scan, remote_clean_command
 from fanout_lib.manifest import Batch
 from lib.worktrees import escape_holder
 from lib.git_testing import git, git_out, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, path_with, run
+from lib.socket_testing import listening, short_socket_path
 
 BRANCH = "worktree-fanout-x"
 UNIT = "fanout-x"
@@ -281,11 +284,16 @@ def test_a_stub_a_live_process_still_uses_is_kept_not_deleted(tmp_path):
     assert BRANCH in _branches(repo)
 
 
+@pytest.fixture
+def sock():
+    """A socket path under `/tmp`, which a long `tmp_path` would push past `sun_path` (#4763)."""
+    with short_socket_path() as path:
+        yield path
+
+
 def _serving(sock, answer: bytes) -> threading.Thread:
     """A listener at `sock` that sends `answer` to one connection, as the service does."""
-    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    listener.bind(str(sock))
-    listener.listen(1)
+    listener = listening(sock)
 
     def one():
         with listener:
@@ -310,9 +318,8 @@ def _scan(worktree, sock) -> subprocess.CompletedProcess:
     )
 
 
-def _busy_with_helper(tmp_path, worktree, answer: bytes) -> str:
-    """What `live_process_scan` sets `busy` to when a stand-in root helper answers `answer`."""
-    sock = tmp_path / "worktree-holders.sock"
+def _busy_with_helper(sock, worktree, answer: bytes) -> str:
+    """What `live_process_scan` sets `busy` to when a helper at `sock` answers `answer`."""
     thread = _serving(sock, answer)
     busy = _scan(worktree, sock).stdout.strip()
     thread.join(timeout=10)
@@ -320,7 +327,7 @@ def _busy_with_helper(tmp_path, worktree, answer: bytes) -> str:
 
 
 def test_the_root_helper_sees_another_uids_holder_the_proc_loop_cannot_is_flagged(
-    tmp_path,
+    tmp_path, sock
 ):
     """#4170: a `systemd-run --uid=claude` process in the tree is invisible to /proc as ubuntu."""
     worktree = tmp_path / "wt"
@@ -328,11 +335,11 @@ def test_the_root_helper_sees_another_uids_holder_the_proc_loop_cannot_is_flagge
     sibling = f"{worktree}-other"
     answer = f"ok\n41\tcwd\t{sibling}\n42\tcwd\t{worktree}/sub\nend\n".encode()
 
-    assert _busy_with_helper(tmp_path, worktree, answer) == "42"
+    assert _busy_with_helper(sock, worktree, answer) == "42"
 
 
 def test_a_refused_garbled_truncated_or_blind_answer_keeps_the_tree_is_flagged(
-    tmp_path,
+    tmp_path, sock
 ):
     # A socket carries no exit status, so the framing is what tells a finished answer from an
     # instance that died mid-scan.
@@ -340,18 +347,15 @@ def test_a_refused_garbled_truncated_or_blind_answer_keeps_the_tree_is_flagged(
     worktree.mkdir()
 
     for answer in (b"refused\tno root\n", b"", b"ok\n", b"ok\n7 cwd /x\nend\n"):
-        assert _busy_with_helper(tmp_path, worktree, answer).startswith("unknown"), (
-            answer
-        )
-        (tmp_path / "worktree-holders.sock").unlink()
+        assert _busy_with_helper(sock, worktree, answer).startswith("unknown"), answer
+        sock.unlink()
     blind = b"ok\n7\tunreadable\tcwd: EPERM\nend\n"
-    assert _busy_with_helper(tmp_path, worktree, blind) == "7"
+    assert _busy_with_helper(sock, worktree, blind) == "7"
 
 
-def test_a_socket_nothing_listens_on_keeps_the_tree_is_flagged(tmp_path):
+def test_a_socket_nothing_listens_on_keeps_the_tree_is_flagged(tmp_path, sock):
     worktree = tmp_path / "wt"
     worktree.mkdir()
-    sock = tmp_path / "worktree-holders.sock"
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bound:
         bound.bind(str(sock))
         busy = _scan(worktree, sock).stdout.strip()
@@ -371,15 +375,14 @@ def test_no_socket_falls_back_to_the_proc_loop_and_says_so_is_clean(tmp_path):
     assert "cannot connect to" in proc.stderr
 
 
-def test_a_socket_this_uid_may_not_write_falls_back_and_says_so_is_clean(tmp_path):
+def test_a_socket_this_uid_may_not_write_falls_back_and_says_so_is_clean(
+    tmp_path, sock
+):
     # A session that predates its user's group grant: the root scan does not apply yet, so
     # the chain scans /proc itself rather than keep every tree.
     worktree = tmp_path / "wt"
     worktree.mkdir()
-    sock = tmp_path / "worktree-holders.sock"
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bound:
-        bound.bind(str(sock))
-        bound.listen(1)
+    with listening(sock):
         sock.chmod(0o000)
         proc = _scan(worktree, sock)
 
@@ -387,15 +390,19 @@ def test_a_socket_this_uid_may_not_write_falls_back_and_says_so_is_clean(tmp_pat
     assert "cannot connect to" in proc.stderr
 
 
-def test_a_helper_that_names_only_other_trees_leaves_the_tree_free_is_clean(tmp_path):
+def test_a_helper_that_names_only_other_trees_leaves_the_tree_free_is_clean(
+    tmp_path, sock
+):
     worktree = tmp_path / "wt"
     worktree.mkdir()
     answer = f"ok\n41\tcwd\t{worktree}-other\nend\n".encode()
 
-    assert _busy_with_helper(tmp_path, worktree, answer) == ""
+    assert _busy_with_helper(sock, worktree, answer) == ""
 
 
-def test_a_holder_whose_cwd_has_a_line_break_holds_only_its_tree_is_clean(tmp_path):
+def test_a_holder_whose_cwd_has_a_line_break_holds_only_its_tree_is_clean(
+    tmp_path, sock
+):
     # #4294: the helper escapes the cwd, and the awk compares escaped forms, so the holder of
     # the oddly named tree is found and an unrelated tree stays free.
     odd = tmp_path / "wt\nx y"
@@ -404,15 +411,15 @@ def test_a_holder_whose_cwd_has_a_line_break_holds_only_its_tree_is_clean(tmp_pa
     plain.mkdir()
     answer = f"ok\n42\tcwd\t{escape_holder(str(odd))}/sub\nend\n".encode()
 
-    assert _busy_with_helper(tmp_path, odd, answer) == "42"
-    (tmp_path / "worktree-holders.sock").unlink()
-    assert _busy_with_helper(tmp_path, plain, answer) == ""
+    assert _busy_with_helper(sock, odd, answer) == "42"
+    sock.unlink()
+    assert _busy_with_helper(sock, plain, answer) == ""
 
 
-def test_an_unescaped_line_break_in_an_answer_is_flagged(tmp_path):
+def test_an_unescaped_line_break_in_an_answer_is_flagged(tmp_path, sock):
     # The red half: the same cwd printed as-is splits the record and the answer is garbled.
     odd = tmp_path / "wt\nx"
     odd.mkdir()
     answer = f"ok\n42\tcwd\t{odd}/sub\nend\n".encode()
 
-    assert _busy_with_helper(tmp_path, odd, answer).startswith("unknown")
+    assert _busy_with_helper(sock, odd, answer).startswith("unknown")

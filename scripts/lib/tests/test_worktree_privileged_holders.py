@@ -12,10 +12,10 @@ import errno
 import json
 import os
 import pwd
-import socket
 from pathlib import Path
 
 from _worktree_proc import _unreadable_proc
+from lib.socket_testing import listening, short_socket_path
 from lib.worktrees import holder_root, privileged_holders, processes_using
 
 SOCK = "/run/worktree-holders.sock"
@@ -157,10 +157,7 @@ def test_a_real_socket_this_uid_may_not_write_falls_back_is_clean(tmp_path, caps
     # The group gate through a real connect: a socket whose mode shuts this uid out raises
     # EACCES, which reads as "not granted yet", not as a failed scan.
     root = tmp_path / "worktrees"
-    sock = tmp_path / "worktree-holders.sock"
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as bound:
-        bound.bind(str(sock))
-        bound.listen(1)
+    with short_socket_path() as sock, listening(sock):
         sock.chmod(0o000)
         found = privileged_holders(root / "a", sock=str(sock), root=root)
 
