@@ -5,6 +5,7 @@ Status: IN PROGRESS
 PR 1, the promtool and amtool provisioning and its red proof: [#4703](https://github.com/DanielH2018/server/pull/4703).
 PR 2, Alertmanager with its receivers: [#4728](https://github.com/DanielH2018/server/pull/4728).
 PR 3, the rules pipeline and three meta rules: [#4740](https://github.com/DanielH2018/server/pull/4740).
+PR 4, the Watchdog to Healthchecks.io: [#4752](https://github.com/DanielH2018/server/pull/4752).
 
 Depends on: —
 
@@ -765,30 +766,48 @@ has no cron. The slug rests on five pieces. PR 2 adds the first, and PR 4 adds t
 C7 has M1 set one series budget for the fleet. Each slice that adds a scrape job, a probe
 target or a label states its delta against it.
 
-- **The reading.** The 2026-10-12 pillar review read 137,084 head series through
-  `probe.py metric`, with 6.21 GB of the 7 GB `observability_prometheus_retention_size` in use
-  and 27.3 days of retention.
-- **The rate.** 6.21 GB over 27.3 days is about 227 MB a day, or about 1.66 kB per head
-  series per day at the scrape mix of that day. The model in the observability defaults'
-  comment on the size cap predicts 219 MB a day, within 4%. Bytes scale with samples per
-  second, so a series scraped every 15 seconds costs four times a 1-minute one.
-- **The budget is 140,000 head series.** At the measured rate, the 7 GB cap holds about 30
-  days at that count, which is the `observability_prometheus_retention` the role sets. Above
-  it, the size cap binds before the time cap, and retention shrinks with nothing reporting
-  it, as the `DECIDED` comment on the size cap warns. That comment holds the cap near 58% of
-  the 12 Gi claim, so raising the cap alone does not raise the budget.
-- **The headroom is about 2,900 series.** The longest window a monitoring slice reads is
-  convention 6's 168-hour soak, which the cap covers at any count the plan reaches. The
-  budget therefore protects the dashboards' 30-day history, not the soaks.
+- **The budget reads a 7-day average, never an instant value.** `prometheus_tsdb_head_series`
+  counts every series in the head block, including the series that churned out since the
+  last head compaction. On 2026-10-12 its `min_over_time` and `max_over_time` over `[1d]` read
+  132,561 and 149,136, a swing of about 16,500 within one day. That swing is wider than any
+  slice's delta and wider than the headroom, so an instant read lands on either side of the
+  budget depending on the hour. The budget therefore reads
+  `avg_over_time(prometheus_tsdb_head_series[7d])`, which read 139,171 on 2026-10-12.
+- **The reading.** On 2026-10-12 `prometheus_tsdb_storage_blocks_bytes` read 6.38 GB, and the
+  store reached back 27.7 days. Over those days the head averaged 116,709 series
+  (`avg_over_time(prometheus_tsdb_head_series[27d])`). The 2026-10-12 pillar review read
+  137,084 head series and 6.21 GB a few hours earlier; that 137,084 was an instant read.
+- **The rate.** 6.38 GB over 27.7 days is about 231 MB a day. Divided by the 27-day average
+  of 116,709 series, that is about 1.98 kB per head series per day. The bytes and the series
+  count cover the same window. The pillar review divided by its instant 137,084 instead and
+  got 1.66 kB, which understates the cost of a series. The model in the observability
+  defaults' comment on the size cap predicts 219 MB a day, within 5%. Bytes scale with
+  samples per second, so a series scraped every 15 seconds costs four times a 1-minute one.
+- **The budget is 140,000 head series.** Above the count the cap holds for 30 days, the
+  `observability_prometheus_retention` the role sets, the size cap binds before the time cap.
+  Retention then shrinks with nothing reporting it, as the `DECIDED` comment on the size cap
+  warns. That comment holds the cap near 58% of the 12 Gi claim, so raising the cap alone
+  does not raise the budget. At the 1.98 kB rate, the cap holds 30 days only up to about
+  125,000 average series, below the budget. That figure takes the cap in base-2 bytes, as
+  Prometheus reads `7GB` (7.52 × 10⁹ bytes), less the WAL's 0.18 GB. *Open questions* 9 carries that conflict to the
+  operator, and until the ruling the budget stays 140,000.
+- **The headroom is about 800 series**, 140,000 less the 7-day average of 139,171 on
+  2026-10-12. The longest window a monitoring slice reads is convention 6's 168-hour soak,
+  which the cap covers at any count the plan reaches. The budget therefore protects the
+  dashboards' 30-day history, not the soaks.
 - **How a slice states its delta.** Its *Complexity delta* gives the head series it adds, as
   targets times series per target, with the scrape interval when it is not 1 minute. After
-  its deploy, its PR records `prometheus_tsdb_head_series` before and after. A delta that
-  would cross the budget names its offset in the same slice: a dropped family, as
-  `prometheus.yaml.j2` drops the `_bucket` families, or a shorter label set.
+  its deploy, its PR records a count of its own series, by a selector that matches only them:
+  `count({job="<job>"})` for a new scrape job, or `count(<family>)` before and after for a
+  label added to an existing family. The head-series total cannot resolve a delta, because
+  its daily swing is wider than any slice's. A delta that would cross the budget names its
+  offset in the same slice: a dropped family, as `prometheus.yaml.j2` drops the `_bucket`
+  families, or a shorter label set.
 - **M1's own delta.** PR 2's `alertmanager` scrape job adds one target's Go runtime,
-  process and `alertmanager_*` families, a few hundred series. The rules add `ALERTS` series
-  only while they fire, and the Watchdog's one always. D2.6d adds about 9.
-- **Whether the cap already binds** is *Open questions* 9. The reading's 27.3 days is under
+  process and `alertmanager_*` families. `count({job="alertmanager"})` read 521 on
+  2026-10-12, after PR 2's deploy. The rules add `ALERTS` series only while they fire, and
+  the Watchdog's one always. D2.6d adds about 9.
+- **Whether the cap already binds** is *Open questions* 9. The reading's 27.7 days is under
   30, so either the store is younger than 30 days or the size cap has already deleted a
   block.
 
@@ -899,8 +918,8 @@ and those edits must land with the workload.
       dial the Service port. Whichever of PR 2 and D1.6 lands second rebases its rows onto the
       other's form. Alertmanager's Service port and container port are both 9093, so its row
       reads the same under either form.
-- The PR body records `prometheus_tsdb_head_series` before and after its deploy. That is
-  M1's own delta against the series budget (*The series budget*).
+- The PR body records `count({job="alertmanager"})` after its deploy. That is M1's own delta
+  against the series budget (*The series budget*).
 - From this PR the validator's floor requires `alertmanager.yml`. Add its Go-template survival check
   and that check's `..._is_clean` / `..._is_flagged` pair: a fixture template with its
   `{% raw %}` block removed must be flagged.
@@ -1070,12 +1089,15 @@ uv run python scripts/diagnostics/probe.py health observability
 uv run python scripts/diagnostics/probe.py metric 'kube_pod_start_time{namespace="observability"}'
 uv run python scripts/diagnostics/probe.py releases
 # The series budget (C7), and how far back the store reaches, in days
-uv run python scripts/diagnostics/probe.py metric 'prometheus_tsdb_head_series > 140000'
+uv run python scripts/diagnostics/probe.py metric 'avg_over_time(prometheus_tsdb_head_series[7d]) > 140000'
 uv run python scripts/diagnostics/probe.py metric '(time() - prometheus_tsdb_lowest_timestamp_seconds) / 86400'
 ```
 
 The `AlertmanagerMetricsMissing` read must return nothing: the scrape works, so the alert is
-quiet. The series-budget read must return nothing too. After PR 5's deploy, `probe.py releases` shows the `observability` record's
+quiet. The series-budget read must return nothing too. The headroom is about 800 series, so
+fleet growth that is not M1's can turn that read red. A red read routes to *Open questions* 9
+and [#4756](https://github.com/DanielH2018/server/issues/4756), not to M1: M1's own delta is
+the `count({job="alertmanager"})` read. After PR 5's deploy, `probe.py releases` shows the `observability` record's
 `rollouts[]` with `restart: true` for Alertmanager alone.
 
 **The scale-to-zero drill (operator-only, and it pages for real).** It runs after PR 4 deploys.
@@ -1168,8 +1190,8 @@ M2 depends on all of M1, so it runs before any family cuts over, while Kuma owns
   dropped.
 - The Watchdog's deadman row: the `every <N>s` pair in `cron_mismatches`, whose flagged half
   is `every 600s` against `timeout: 600`.
-- The series budget: the same `probe.py metric` read with a threshold below the live reading,
-  such as `> 100000`, returns the `prometheus` series. If that read returns nothing, the
+- The series budget: the same `probe.py metric` read, 7-day average included, with a
+  threshold below the live reading, such as `> 100000`, returns the `prometheus` series. If that read returns nothing, the
   metric name has moved, and the budget read proves nothing until it is fixed.
 
 ## Rollback
@@ -1384,8 +1406,8 @@ Each risk names its class from `docs/failure-classes.md`.
   stabilise entries, `restart_secrets` and `rolled_by_role`. One fact,
   `observability_changed_secret_files`, read by three tasks. A seventh argument to
   `deadman_crons` and one branch in `cron_mismatches`. One test for the netpol probe table.
-  A series budget of 140,000 head series with two reads in *Verification*. M1's own series
-  delta is a few hundred, from the `alertmanager` scrape job.
+  A series budget of 140,000 head series, read as a 7-day average, with two reads in
+  *Verification*. M1's own series delta is 521, from the `alertmanager` scrape job.
 - **Removed:** nothing yet. M1 is the foundation the removals in M2 to M6 stand on. PR 5
   removes a coupling: a Secret rotation restarts only the workloads that read that Secret. At
   `70591c307`, a rotation of Grafana's admin password also restarts Prometheus, and any Secret
@@ -1445,14 +1467,29 @@ Each risk names its class from `docs/failure-classes.md`.
    obligations in *What M1 hands to M6's batch A3*. The integration-2 cross-slice note
    carries them to M6. Until M6 records them, M1's statements about A3 are a request, not
    a fact.
-9. **Does the 7 GB size cap already bind?** The 2026-10-12 reading's 27.3 days is under the
+9. **Does the 7 GB size cap already bind?** The 2026-10-12 reading's 27.7 days is under the
    30-day setting. If the store is older than 30 days, the size cap binds at that count, and
-   the 140,000 budget sits above what keeps 30 days. Resolution: the retention read in
+   the 140,000 budget sits above what keeps 30 days. Two 2026-10-12 reads disagree on how
+   close that is:
+    - **By head series**, the cap holds 30 days up to about 125,000 average series
+      (*The series budget*). The 7-day average of 139,171 is above that, so the size cap
+      binds.
+    - **By samples**, the store wrote about 1.44 bytes a sample over 27 days, at 1,854
+      samples a second (`rate(prometheus_tsdb_head_samples_appended_total[27d])`). At that
+      cost the cap holds 30 days up to about 2,000 samples a second, again in base-2 bytes
+      less the WAL. Over the last 7 days
+      the rate read 1,482 a second, so the time cap binds.
+    - The head count rose while the sample rate fell. The head counts churned series that
+      take no new samples, and bytes follow samples. The observability defaults' cost model
+      counts samples a second too.
+
+   Resolution: the retention read in
    *Verification* runs once a day for seven days from PR 1's merge, and PR 5's body quotes
    the seven values. A value that climbs past 30
    means the time cap binds, and the budget stands. A value that never passes 30 means the
    size cap binds. Then the operator chooses among a lower budget with a cardinality cut, a
    larger claim with the cap at the same ratio, and a shorter retention (**operator-only**).
+   Either way, the operator also rules whether C7 restates the budget in samples a second.
    Until that ruling, the budget stays 140,000.
 10. **A down Alertmanager pages 30 minutes in.** Kuma paged it 10 to 15 minutes in, and the
     Watchdog check's 600s period and 1200s grace page it up to 30 minutes in (RA-8).
@@ -1462,6 +1499,11 @@ Each risk names its class from `docs/failure-classes.md`.
     the 2026-08-30 record and every later reboot record. Shorten the check only when the
     worst gap plus a margin fits under 30 minutes. *Open questions* 6 and exit criterion 2
     stand until then.
+
+    **Resolved 2026-10-12:** the operator accepted the 30 minutes
+    ([#4693](https://github.com/DanielH2018/server/issues/4693)). The check keeps its 600s
+    period and 1200s grace, and `docs/healthchecks-io-deadman.md`, *Alertmanager's watcher*,
+    records the slower page.
 
 ## Review log
 

@@ -17,8 +17,11 @@ groups it doesn't cover. See repo-root `CLAUDE.md`.
   readinessProbe and a digest-pinned image.
 - **RBAC:** `templates/rbac.yaml.j2` grants the built-in `view` ClusterRole plus
   `headlamp_k8s_crd_api_groups` (`traefik.io`, `metallb.io`, `longhorn.io`, `helm.cattle.io`,
-  `k3s.cattle.io`) — nothing aggregates a CRD group into `view` automatically, so a group
-  missing from that list degrades silently: the UI loads, that resource list is just empty.
+  `k3s.cattle.io`). The only CRD groups `view` covers on its own are Flux's six, which the
+  vendored `flux-view-flux-system` aggregates into it
+  (`ansible/tests/k8s/test_aggregated_clusterroles.py` pins them), so they stay off the list.
+  Any other group missing from it degrades silently: the UI loads, that resource list is just
+  empty.
 - **The observability-namespace Prometheus proxy grant is deferred** (#3575): the armed apply's
   `-n homelab` refuses it, so `tasks/main.yml` applies `headlamp-observability/` itself. A
   `--dry-run` never shows it to the API server.

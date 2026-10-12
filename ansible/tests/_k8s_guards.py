@@ -59,8 +59,11 @@ _GUARD_FACT = re.compile(r"\bk8s_no_mutate\b|\bk8s_dry_run\b")
 _INCLUDED_FILE = re.compile(r"(?:import_tasks|include_tasks):\s*[\"']?([\w.-]+\.ya?ml)")
 
 
-def _guard_covered_files(role: Path) -> set[str]:
+def _guard_covered_files(role: Path, guard: re.Pattern[str] = _GUARD_FACT) -> set[str]:
     """Task files every one of whose tasks inherits a no-mutation guard from its caller.
+
+    `guard` is the pattern an include's text must match to count as guarded. The secret-key
+    task census passes its own, which also accepts `homelab_secret_stubs`.
 
     The retired volume-claim role was the shape this exists for: main.yml was a single
     `import_tasks: seed.yml` under `when: not k8s_no_mutate`, and the import propagated that
@@ -79,7 +82,7 @@ def _guard_covered_files(role: Path) -> set[str]:
     pending = [
         m.group(1)
         for chunk in _task_chunks(main, strip_trailing_comments=True)
-        if _GUARD_FACT.search(chunk)
+        if guard.search(chunk)
         for m in [_INCLUDED_FILE.search(chunk)]
         if m
     ]

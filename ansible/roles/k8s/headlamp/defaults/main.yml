@@ -19,8 +19,9 @@ headlamp_k8s_gid: 101
 # How long a browser session survives before Headlamp re-reads the ServiceAccount token.
 headlamp_k8s_session_ttl: 86400
 headlamp_k8s_netpol_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
-# CRD groups the built-in `view` ClusterRole cannot cover — nothing aggregates into `view`,
-# so a group missing here degrades silently: the UI loads, that one resource list is empty,
+# CRD groups the built-in `view` ClusterRole cannot cover. Only Flux's six groups aggregate
+# into `view` (flux-view-flux-system, pinned by ansible/tests/k8s/test_aggregated_clusterroles.py),
+# so any other group missing here degrades silently: the UI loads, that one resource list is empty,
 # and it reads as "the cluster has none of those". Mirrors k3s_readonly_crd_api_groups
 # (roles/setup/k3s/defaults) plus the two k3s-internal groups a cluster UI wants to show;
 # that var is a different role's default and is not in scope for the k8s deploy play.
