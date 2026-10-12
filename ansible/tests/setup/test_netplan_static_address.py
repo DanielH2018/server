@@ -41,6 +41,13 @@ def static_address_problems(
         for r in iface.get("routes", [])
     ):
         problems.append(f"no default route via {router}")
+    # netplan emits the `[DHCP] RouteMetric` that networkd also gives RA routes only with a DHCP
+    # client on, so the metric without `dhcp6: true` renders nothing (#4561).
+    if (
+        iface.get("dhcp6") is not True
+        or (iface.get("dhcp6-overrides") or {}).get("route-metric") != 100
+    ):
+        problems.append("the IPv6 RA route is not pinned at metric 100")
     return problems
 
 
@@ -70,6 +77,8 @@ network:
       ignore-carrier: true
       addresses: ["10.0.0.215/24"]
       routes: [{to: default, via: 10.0.0.1, metric: 100}]
+      dhcp6: true
+      dhcp6-overrides: {route-metric: 100}
 """
 
 
@@ -82,6 +91,18 @@ def test_an_address_left_on_dhcp_is_flagged() -> None:
     assert static_address_problems(doc, "eno1", "10.0.0.215", "10.0.0.1") == [
         "dhcp4 is not false"
     ]
+
+
+def test_an_ra_route_left_at_the_networkd_default_is_flagged() -> None:
+    # A wrong metric, no metric at all, and a metric netplan renders nothing for without dhcp6.
+    for doc in (
+        _PINNED.replace("{route-metric: 100}", "{route-metric: 1024}"),
+        _PINNED.replace("      dhcp6-overrides: {route-metric: 100}\n", ""),
+        _PINNED.replace("      dhcp6: true\n", ""),
+    ):
+        assert static_address_problems(doc, "eno1", "10.0.0.215", "10.0.0.1") == [
+            "the IPv6 RA route is not pinned at metric 100"
+        ], doc
 
 
 def test_an_address_other_than_server_ip_is_flagged() -> None:
@@ -176,10 +197,10 @@ _LINKDOWN_FILE = "/etc/sysctl.d/90-homelab-static-link.conf"
 
 
 def linkdown_sysctl_problems(tasks: list[dict]) -> list[str]:
-    """What keeps the pinned link's dead default route from losing to a fallback (#4510).
+    """What keeps the pinned link's dead default routes from losing to a fallback (#4510, #4561).
 
-    `ignore-carrier` keeps the pinned route installed with no carrier, and IPv4 still routes over
-    a linkdown route unless `ignore_routes_with_linkdown` is 1 on that link.
+    `ignore-carrier` keeps the pinned routes installed with no carrier, and the kernel still routes
+    over a linkdown route unless `ignore_routes_with_linkdown` is 1 on that link, per family.
     """
     problems = []
     sets = [t for t in tasks if "ansible.posix.sysctl" in t]
@@ -187,9 +208,11 @@ def linkdown_sysctl_problems(tasks: list[dict]) -> list[str]:
         return [f"{len(sets)} tasks set a sysctl, not 1"]
     task, args = sets[0], sets[0]["ansible.posix.sysctl"]
     if args.get("name") != (
-        "net.ipv4.conf.{{ k3s_node_static_link }}.ignore_routes_with_linkdown"
+        "net.{{ item }}.conf.{{ k3s_node_static_link }}.ignore_routes_with_linkdown"
     ):
         problems.append(f"sets {args.get('name')}, not the link's linkdown key")
+    if sorted(task.get("loop") or []) != ["ipv4", "ipv6"]:
+        problems.append(f"covers {task.get('loop')}, not ipv4 and ipv6")
     if str(args.get("value")) != "1":
         problems.append(f"value is {args.get('value')!r}, not '1'")
     if args.get("sysctl_file") != _LINKDOWN_FILE:
@@ -222,3 +245,9 @@ def test_a_linkdown_key_left_at_the_kernel_default_is_flagged() -> None:
         "value"
     ] = "0"
     assert linkdown_sysctl_problems(tasks) == ["value is '0', not '1'"]
+
+
+def test_a_linkdown_key_set_for_ipv4_only_is_flagged() -> None:
+    tasks = _static_address_tasks()
+    next(t for t in tasks if "ansible.posix.sysctl" in t)["loop"] = ["ipv4"]
+    assert linkdown_sysctl_problems(tasks) == ["covers ['ipv4'], not ipv4 and ipv6"]
