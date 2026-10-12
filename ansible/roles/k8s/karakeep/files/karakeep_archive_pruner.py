@@ -105,6 +105,33 @@ def list_archived(api: Api) -> list[dict]:
             return bookmarks
 
 
+def list_tags(api: Api) -> list[dict]:
+    tags, cursor = [], None
+    while True:
+        page = api.request("GET", "tags", {"cursor": cursor} if cursor else None)
+        tags.extend(page["tags"])
+        cursor = page.get("nextCursor")
+        if not cursor:
+            return tags
+
+
+def report_manual_tags(tags: list[dict], auto_tags: frozenset[str]) -> None:
+    """Print every tag a person attached anywhere in the library, archived or not.
+
+    The pruner's own keep lines name only the tags that saved an old archived bookmark, so this
+    is the list to read when deciding what `--auto-tag` should hold. A tag already listed as
+    auto is marked, since Karakeep counts its attachments as `human` too.
+    """
+    manual = sorted(
+        (t for t in tags if (t["numBookmarksByAttachedType"].get("human") or 0) > 0),
+        key=lambda t: (-t["numBookmarksByAttachedType"]["human"], t["name"]),
+    )
+    print(f"tags with manual attachments, whole library: {len(manual)}")
+    for t in manual:
+        mark = "  (listed as auto)" if t["name"] in auto_tags else ""
+        print(f"  {t['numBookmarksByAttachedType']['human']:5d}  {t['name']}{mark}")
+
+
 def check_shape(bookmarks: list[dict]) -> None:
     for b in bookmarks:
         missing = [f for f in REQUIRED_FIELDS if f not in b]
@@ -178,13 +205,11 @@ def plan(
 def apply_actions(
     api: Api, actions: list[Action], apply: bool, max_deletes: int
 ) -> None:
-    deletes = 0
+    deletes = skipped = 0
     for a in actions:
         if a.kind == "delete":
             if deletes >= max_deletes:
-                print(
-                    f"skip delete {a.bookmark_id}: --max-deletes {max_deletes} reached"
-                )
+                skipped += 1
                 continue
             deletes += 1
             path = f"bookmarks/{a.bookmark_id}"
@@ -194,6 +219,11 @@ def apply_actions(
         print(f"{verb}{a.kind} {a.bookmark_id} ({a.age_days}d) {a.title!r}")
         if apply:
             api.request("DELETE", path)
+    # One line, not one per bookmark: a first run over a backlog skipped 772.
+    if skipped:
+        print(
+            f"deferred {skipped} deletes to later runs: --max-deletes {max_deletes} reached"
+        )
 
 
 def summarise(bookmarks: list[dict], now: datetime, actions: list[Action]) -> None:
@@ -243,6 +273,7 @@ def main(argv=None, opener=urllib.request.urlopen, now=None, sleep=time.sleep) -
     )
     print("mode: " + ("apply" if args.apply else "dry run (no changes)"))
     summarise(bookmarks, now, actions)
+    report_manual_tags(list_tags(api), frozenset(args.auto_tag))
     for line in kept:
         print(line)
     apply_actions(api, actions, args.apply, args.max_deletes)
