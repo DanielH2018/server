@@ -6,6 +6,7 @@ D1.1, the Flux schemas and the proposal: [#4697](https://github.com/DanielH2018/
 D1.2, the flux role and its controllers: [#4734](https://github.com/DanielH2018/server/pull/4734).
 D1.2b, guards on the Flux read access `view` aggregation grants: [#4751](https://github.com/DanielH2018/server/pull/4751).
 D1.3, the promotion decision: [#4709](https://github.com/DanielH2018/server/pull/4709).
+D1.4, the promote workflow: [#4759](https://github.com/DanielH2018/server/pull/4759).
 
 Depends on: none
 

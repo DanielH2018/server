@@ -1,8 +1,8 @@
 """A fake forge and a real throwaway master for `promote.py`'s tests.
 
 `FakeTransport` stands in for ghcr.io and api.github.com behind the real `forge.Registry` and
-`forge.GitHub`, so the tests exercise forge's status-to-outcome mapping as well as `decide`.
-It records every request. `FakeRun` answers the `gh variable get` and `cosign verify`
+`forge.GitHub`, so the tests exercise forge's status-to-outcome mapping as well as `decide`
+and `prune`. It records every request. `FakeRun` answers the `gh variable get` and `cosign verify`
 subprocesses. `World` builds a linear master in a temporary git repository, with the
 contexts file `promote.py` reads, and runs `promote.py decide` against all three.
 """
@@ -13,7 +13,7 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import forge
 import promote
@@ -30,15 +30,30 @@ def green(name: str = CONTEXT) -> list[dict]:
     return [{"name": name, "status": "completed", "conclusion": "success"}]
 
 
+def package_version(version_id: int, digest: str, tags, created: str) -> dict:
+    """One entry of the Packages API's version listing, in the shape GitHub documents."""
+    return {
+        "id": version_id,
+        "name": digest,
+        "created_at": created,
+        "updated_at": created,
+        "metadata": {"package_type": "container", "container": {"tags": list(tags)}},
+    }
+
+
 @dataclass
 class FakeTransport:
     """ghcr.io and api.github.com in one callable.
 
     Attributes:
         tags: each published tag and the digest it names.
-        manifests: the manifest body a GET of each tag returns.
+        manifests: the manifest body a GET of each tag, or of each untagged digest, returns.
         check_runs: each commit's check-runs.
         forced: a status to answer for a manifest reference, overriding the tables.
+        versions: the package versions the Packages API lists, newest first.
+        api_forced: a status to answer for an api.github.com path, such as `.../versions`
+            for the listing or `.../versions/<id>` for one delete.
+        deleted: the id of each version a DELETE removed.
         requests: every `(method, url)` sent, in order.
     """
 
@@ -46,6 +61,9 @@ class FakeTransport:
     manifests: dict[str, dict] = field(default_factory=dict)
     check_runs: dict[str, list[dict]] = field(default_factory=dict)
     forced: dict[str, int] = field(default_factory=dict)
+    versions: list[dict] = field(default_factory=list)
+    api_forced: dict[str, int] = field(default_factory=dict)
+    deleted: list[int] = field(default_factory=list)
     requests: list[tuple[str, str]] = field(default_factory=list)
 
     def __call__(self, method, url, headers):
@@ -57,6 +75,21 @@ class FakeTransport:
         if parts.netloc == "api.github.com" and match:
             runs = self.check_runs.get(match.group(1), [])
             return forge.Response(200, body=json.dumps({"check_runs": runs}).encode())
+        if parts.path in self.api_forced:
+            return forge.Response(self.api_forced[parts.path])
+        listing = urlsplit(forge.PACKAGE_VERSIONS_URL).path
+        if parts.path == listing and method == "GET":
+            query = parse_qs(parts.query)
+            size, page = int(query["per_page"][0]), int(query["page"][0])
+            body = self.versions[(page - 1) * size : page * size]
+            return forge.Response(200, body=json.dumps(body).encode())
+        if parts.path.startswith(f"{listing}/") and method == "DELETE":
+            version_id = int(parts.path.rsplit("/", 1)[1])
+            if all(v["id"] != version_id for v in self.versions):
+                return forge.Response(404)
+            self.versions = [v for v in self.versions if v["id"] != version_id]
+            self.deleted.append(version_id)
+            return forge.Response(204)
         return forge.Response(404)
 
     def _registry(self, method, path):
@@ -69,6 +102,9 @@ class FakeTransport:
         reference = path.rsplit("/manifests/", 1)[1]
         if reference in self.forced:
             return forge.Response(self.forced[reference])
+        if reference.startswith("sha256:") and reference in self.manifests:
+            body = json.dumps(self.manifests[reference]).encode()
+            return forge.Response(200, {"docker-content-digest": reference}, body)
         if reference not in self.tags:
             unknown = {"errors": [{"code": "MANIFEST_UNKNOWN"}]}
             return forge.Response(404, body=json.dumps(unknown).encode())
