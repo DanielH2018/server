@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Weekly AIDE file-integrity check — managed by Ansible (initial_setup role); edits overwritten.
+#
+# Usage: aide-check.sh [-h|--help]
+# Takes no arguments. Cron job "Weekly AIDE file integrity check" runs it as root on every host,
+# Monday 03:00. It runs `aide --check` against /var/lib/aide/aide.db at idle CPU and IO priority,
+# writes the report to the journal under the `aide` tag, and pushes a verdict to this host's
+# "AIDE Integrity (<host>)" Kuma monitor using the token in /etc/homelab/aide-kuma-push.env.
+# Running it by hand is safe, but it takes as long as the cron run and it pushes.
+#
+# WHY A SCRIPT (#4594). The cron used to pipe `aide --check` straight into `logger -t aide`. The
+# pipeline's exit status was logger's, and nothing read the tag, so every host exited
+# `ERROR: missing configuration` for weeks and nobody saw it (#4591). This script keeps AIDE's
+# own exit code and reports it: an exit that is not a result pushes DOWN, and a run that never
+# happens trips the monitor's deadline.
+#
+# AIDE's exit code is a bitmask when the check completes: 0 means no differences, and 1, 2 and 4
+# mean entries were added, removed or changed, so 1-7 is a completed check that found something.
+# 14 and up are AIDE's error codes (a write error, an invalid argument, a bad config line, an IO
+# error), and 127 means the binary is gone. Anything outside 0-7 is treated as an error rather
+# than enumerated, so a code AIDE adds later still reads DOWN.
+set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t aide-check "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+# Pinned to the cluster ingress VIP like every sibling: Kuma serves from the k8s edge and the
+# push must not depend on DNS.
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+
+# The report goes to the journal one line per entry. A baseline that predates months of package
+# upgrades reports every file they touched, which can run to thousands of lines. Past this many
+# the rest is dropped with a line saying so, rather than left for journald's rate limit to drop
+# without a trace.
+REPORT_MAX_LINES=2000
+
+# Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
+# local account.
+AIDE_PUSH_TOKEN=""
+# shellcheck source=/dev/null
+[[ -r /etc/homelab/aide-kuma-push.env ]] && . /etc/homelab/aide-kuma-push.env
+
+# Captured whole rather than piped, because a pipeline's exit status is its last command's, which
+# is how the old cron lost it. nice and ionice exit with the status of the command they run.
+# --config is required: AIDE 0.18 has no default config path, and a bare `aide --check` exits
+# with "missing configuration" and checks nothing (#4591).
+START=$SECONDS
+REPORT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config=/etc/aide/aide.conf --check 2>&1)
+RC=$?
+RUN_TIME="$(((SECONDS - START) / 60))m"
+
+REPORT_LINES=$(printf '%s\n' "$REPORT" | wc -l)
+printf '%s\n' "$REPORT" | head -n "$REPORT_MAX_LINES" | logger -t aide
+if ((REPORT_LINES > REPORT_MAX_LINES)); then
+  logger -t aide "report truncated: logged ${REPORT_MAX_LINES} of ${REPORT_LINES} lines; run aide --config=/etc/aide/aide.conf --check by hand for the rest"
+fi
+
+# One count from the report's Summary block. The match requires a number after the colon,
+# because the same labels head the per-entry lists further down the report.
+summary_count() {
+  printf '%s\n' "$REPORT" | awk -v label="$1" '
+    $0 ~ "^[[:space:]]*" label " entries:[[:space:]]*[0-9]+" { print $NF; exit }'
+}
+
+# DECIDED: differences push UP, with their counts in the message; only an error exit pushes DOWN.
+# Unattended-upgrades installs packages on every host every week (dpkg.log on daniel-box and
+# daniel-server, July to October 2026: no week without an upgrade), and AIDE reports each file a
+# package touched. A DOWN on differences would be red every Monday on every host, and a tile that
+# is always red is a signal nobody reads, which is the fault this script exists to fix. The
+# counts still land on the tile's heartbeat and in the journal. They are cumulative: nothing
+# advances the baseline (aideinit runs only when aide.db is absent), so each week's counts include
+# every earlier week's until someone runs `aide --update` by hand. So this check pages when AIDE
+# fails, not when it finds a changed file. Paging on a change needs a way to tell an unexplained
+# change from a package upgrade, and #4599 tracks that.
+if ((RC == 0)); then
+  STATUS=up
+  MSG="no differences from the baseline (run ${RUN_TIME})"
+elif ((RC >= 1 && RC <= 7)); then
+  STATUS=up
+  ADDED=$(summary_count Added)
+  REMOVED=$(summary_count Removed)
+  CHANGED=$(summary_count Changed)
+  if [[ -n "${ADDED}${REMOVED}${CHANGED}" ]]; then
+    MSG="differences from the baseline: ${ADDED:-?} added, ${REMOVED:-?} removed, ${CHANGED:-?} changed (exit ${RC}, run ${RUN_TIME}); journalctl -t aide lists them"
+  else
+    MSG="differences from the baseline (exit ${RC}, run ${RUN_TIME}), but the report has no Summary counts; journalctl -t aide"
+  fi
+else
+  STATUS=down
+  # The first line that names an error, else the first line of output at all.
+  DETAIL=$(printf '%s\n' "$REPORT" | awk 'tolower($0) ~ /error/ { sub(/^[[:space:]]+/, ""); print; exit }')
+  [[ -n "$DETAIL" ]] || DETAIL=$(printf '%s\n' "$REPORT" | awk 'NF { sub(/^[[:space:]]+/, ""); print; exit }')
+  MSG="aide exited ${RC}, so the check did not complete: ${DETAIL:-no output} (run ${RUN_TIME}); journalctl -t aide"
+fi
+
+# Unconditional and before the push: the `|| logger` inside kuma_push only fires when the curl
+# fails, so a successfully-pushed DOWN would otherwise leave no durable record and
+# `probe.py alerts` could never reconstruct this monitor. NOTICE rather than INFO — journald here
+# caps MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
+logger -p daemon.notice -t aide-check "status=${STATUS} ${MSG}"
+
+if [[ -z "$AIDE_PUSH_TOKEN" ]]; then
+  # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word
+  # matches registry names against raw template text and cannot tell a log line from a render.
+  logger -t aide-check "AIDE_PUSH_TOKEN not set — skipping push (see /add-secret)"
+else
+  kuma_push "$STATUS" "$MSG" "https://${KUMA_HOST}/api/push/${AIDE_PUSH_TOKEN}" \
+    "$KUMA_HOST" "$KUMA_RESOLVE_IP" aide-check
+fi
+
+# Cron ignores the exit code; it is non-zero after a DOWN so a run by hand reads the same way.
+[[ "$STATUS" == up ]] || exit 1

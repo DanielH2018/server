@@ -105,6 +105,12 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   AIDE Monday 03:00 and rkhunter Wednesday 02:00, because they used to overlap at full priority
   for over an hour each on the Pi. The AIDE database init is the slow part of a first run on any
   host — about 8 minutes, with progress monitoring, so expect a long pause rather than a hang.
+- **The AIDE cron reports to Kuma; rkhunter does not yet (#4598).** `aide-check.sh` keeps AIDE's exit code
+  and pushes one "AIDE Integrity" tile per host. An error exit pushes DOWN, and differences
+  push UP with their counts, because package upgrades change files every week (#4594).
+  `docs/security-tools.md` has the exit-code table. The script runs from the cron rather than
+  from a `kuma-check-*` timer, because a timer reruns a red check, and each rerun here is
+  another full-filesystem scan.
 - **Postfix binds `inet_interfaces = loopback-only`** and needs `notify: Restart Postfix`: a
   reload does not rebind the socket, so the `0.0.0.0:25` listener would survive it.
 - **The Pi's swap file is bring-up, not tuning.** It is gated on `has_low_memory_board` and the
@@ -112,7 +118,8 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   disk swap. Pi-only packages gate on `has_raspi_kernel` instead — the board and its memory are
   two separate facts.
 - Two templates carry host-specific config: `templates/98_aide_local.conf.j2`, the AIDE
-  exclusions for high-churn paths (the Pi's Docker tree, app data and pseudo filesystems), and `templates/fail2ban_homelab.conf.j2`, the fail2ban
+  exclusions for high-churn paths (the Pi's Docker tree, app data, pseudo filesystems, and on
+  the cluster nodes the Longhorn, containerd, etcd, pod-volume and pod-log paths), and `templates/fail2ban_homelab.conf.j2`, the fail2ban
   jail. Pi-only tasks are individually `when:`-guarded rather than block-scoped, so a server run
   simply skips them.
 
