@@ -2035,8 +2035,8 @@ for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs
           `classify.py`'s setup arm, which D6 hands over. Delete `deploy.sh` and its
           library, `gitops_state.py`, `deployer_park.py`, monitor-bridge's copies of the
           state modules, `gen_gitops_markers.py`, `gen_doc_fragments.py`'s gitops
-          fragment, and the session-health arms. H7.19a already deleted `gitops_tick.sh`
-          with land.sh's tick step.
+          fragment, and the session-health arms. H7.19a's third PR already deleted
+          `gitops_tick.sh` with land.sh's tick step.
         - List `gitops-deploy.service`, `/opt/gitops-deploy`, `/etc/gitops-deploy` and the
           polkit rule as legacy entries in `homelab-daniel-box` (*Retirement, across two
           daniel-box versions*). The PR body names `/var/lib/gitops-deploy/` as the
@@ -3290,11 +3290,14 @@ confirmed against the tree at `70591c307` before it was fixed.
   `deploy.py:deploy_phase` holds a second fatal `run_tick` call on its stale retry, which
   the finding did not name.
     - The new *land.sh stops running the tick* section moves every land.sh path that starts
-      or reads a tick into H7.19a's second PR. That covers `_step_tick`, `tick.py`,
+      or reads a tick into H7.19a. That covers `_step_tick`, `tick.py`,
       `tools.py:run_tick`, the three call sites, `gitops_tick.sh`, and the setup arm's
-      reads of the tick's markers in `classify.py` and `no_tag_outcome`.
+      reads of the tick's markers in `classify.py` and `no_tag_outcome`. This fix put them in
+      H7.19a's second PR. H7-C3-06 later split H7.19a into five PRs, and the third PR owns
+      them (*Steps*, #4609).
     - Root `CLAUDE.md`'s *After a PR Merges* and *When to wait*, the `gitops-tick` and
-      `land-after-merge` skills and `docs/landing.md` move from H7.19b into that PR.
+      `land-after-merge` skills and `docs/landing.md` move from H7.19b into H7.19a. H7-C3-06
+      puts the first two with the fifth PR and the last two with the third.
     - The start-checkout-sync option was rejected. `tick.py:rearm_tick`'s `DECIDED` note
       records that the polkit rule admits `start` on `gitops-deploy.service` alone, so that
       option needs a new polkit rule, and C6's host wait already covers a tagless host PR.
@@ -3498,6 +3501,15 @@ fix.
       series.
     - Container tests with red fixtures cover the fingerprint script and the directory.
       *Rollback*, *Risks*, *Tests and docs* and *Complexity delta* changed with it.
+
+### Cross-slice follow-up (2026-10-12)
+
+- **#4609 (medium): two owners for the deletion of `gitops_tick.sh`.** H7-C2-01's row said
+  that H7.19a's second PR deletes it, and the finding's title still reads that H7.19b
+  deletes it. *Steps* gives it to H7.19a's third PR. Confirmed: H7-C3-06 renumbered the
+  PRs and left H7-C2-01's row behind. **Fixed in the row.** H7.19a's third PR is the one
+  owner, as *land.sh stops running the tick*, *What the deletion touches* and *Steps*
+  state. H7.19b's step now names the third PR.
 
 ### Pillar review fold (2026-10-12)
 
