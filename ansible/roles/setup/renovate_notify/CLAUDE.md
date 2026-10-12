@@ -36,13 +36,14 @@ two overrides, the dashboard parsers, the module layout and what a dry run does 
 
 ## What it watches, and why each arm exists
 
-Three signals, read from the same repo, each blind to what the others see:
+Four signals, read from the same repo, each blind to what the others see:
 
 | Arm | Reads | The failure it exists to catch |
 |---|---|---|
 | PR digest | open PRs (`actionable`) | a PR that will never merge on its own — automerge off, CI failing, conflicting |
 | Dashboard staleness | the dashboard issue's `updated_at` | Renovate itself stopped. With no PRs the digest reads as a cleared backlog, so this is the only fail-loud arm |
 | Dashboard problems | the dashboard issue's **body** | a dependency that silently stops receiving updates while everything reads green |
+| Autoclosed | recently closed PRs | a PR Renovate closed unmerged while the dashboard still lists its update (#4630) |
 
 **The third arm parses two independently rendered blocks**, and missing either is invisible:
 `find_dashboard_problems` unions a parser for each. `docs/renovate-notify-internals.md` has
@@ -50,7 +51,7 @@ both blocks and why a lookup failure leaves the other two arms quiet.
 
 ## The stuck-pending clock, and the two ways it goes inert
 
-A fourth arm reads the dashboard's `## Pending Status Checks` section and pages when an item
+A fifth arm reads the dashboard's `## Pending Status Checks` section and pages when an item
 outlives its `minimumReleaseAge` plus `PENDING_GRACE_DAYS` (issue #886). It measures dwell, so
 it needs state: `/var/lib/renovate-notify/pending_seen.json` holds two first-seen epochs per
 item, written every run. That state is the arm's single point of failure, failing silently two
