@@ -211,6 +211,16 @@ checks and the merge live in `land.sh`, and the lander does not re-implement the
   as its own, so the `land-after-merge` skill works unchanged. The hand-off is a convenience, not
   a boundary: an agent that skips it has no privileges to land with. `cc-wait` is copied to the
   agent the way `claude_guard` is.
+- **A landing that fails or is refused pages Discord** through
+  `OnFailure=claude-land-alert.service`, because the session that started it may be gone
+  (#4602). A refused landing waits on the operator: approve the head, then start
+  `claude-land@<n>` again, since nothing re-runs it.
+- **A fan-out batch that stops on any state but `done` pages Discord too**, as
+  `fanout-alert@<unit>:<state>.service`. A batch is a user unit, so it can neither name a
+  system unit in `OnFailure=` nor read the webhook. Its `ExecStopPost=`
+  (`scripts/dev/fanout_lib/notify.py`) starts the alert instead, and the polkit rule
+  `50-claude-fanout-alert.rules` lets `ubuntu` and each agent user start it for the paging
+  states only. `claude_code_fanout_alert_enabled: false` removes the unit and the rule.
 
 ### The approval floor
 

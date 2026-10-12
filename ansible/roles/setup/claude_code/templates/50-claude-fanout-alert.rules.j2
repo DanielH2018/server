@@ -1,0 +1,23 @@
+// Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
+//
+// Lets the accounts that run fan-out batches START the page a stopped batch sends, and
+// nothing else. A batch runs as a user unit, which cannot read the root-only webhook, so it
+// asks for the page by starting fanout-alert@<unit>:<state>.service, which holds the webhook
+// (#4602). The instance must be a fan-out unit name and one of the states that page, the
+// list scripts/dev/fanout_lib/notify.py:PAGED_STATES holds, so the most a session can post is
+// a page in that fixed shape.
+polkit.addRule(function (action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units") {
+        return undefined;
+    }
+    if ({{ ([sys_user] + claude_code_agents_present) | unique | list | to_json }}.indexOf(subject.user) < 0) {
+        return undefined;
+    }
+    if (!/^fanout-alert@fanout(-[A-Za-z0-9_.]+)+:(failed|needs-input|no-pr|no-verdict|no-report)\.service$/.test(action.lookup("unit"))) {
+        return undefined;
+    }
+    if (action.lookup("verb") !== "start") {
+        return undefined;
+    }
+    return polkit.Result.YES;
+});

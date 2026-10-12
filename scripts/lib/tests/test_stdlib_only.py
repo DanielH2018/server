@@ -274,6 +274,8 @@ def test_the_declared_fanout_units_are_the_commands_the_builders_write():
     from fanout_lib.clean import remote_clean_command
     from fanout_lib.launch import review_command
     from fanout_lib.manifest import Batch
+    from fanout_lib.notify import stop_post
+    from fanout_lib.target import SERVER_TARGET
     from lib.stdlib_only import FANOUT_UNITS
 
     written = [
@@ -281,11 +283,12 @@ def test_the_declared_fanout_units_are_the_commands_the_builders_write():
         remote_clean_command(
             Batch("1", "daniel-box", "/w1", "wt-1", "fanout-1", [1], "t")
         ),
+        stop_post("1", SERVER_TARGET),
     ]
     for entry, argv in FANOUT_UNITS:
-        if entry.name == "fanout.py" and argv[0] == "place":
+        if entry.name == "fanout.py" and argv[:1] == ("place",):
             continue  # what the fanout_place.py shim forwards to, not a command line
-        shape = f"{entry.relative_to(REPO).as_posix()} {' '.join(argv)} "
+        shape = " ".join([entry.relative_to(REPO).as_posix(), *argv]) + " "
         assert any(shape in command for command in written), shape
 
 

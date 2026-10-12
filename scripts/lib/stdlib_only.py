@@ -62,12 +62,14 @@ OUT_OF_TREE = frozenset({"claude_guard", "claude_worktree"})
 # (entry, argv): `launch.review_command` runs `fanout.py review`, and
 # `clean.remote_clean_command` runs the `fanout_place.py` shim, which forwards to
 # `fanout.py place`. The shim's forward is a call, not a dispatch `_dispatched` reads, so the
-# place leg is listed as what it forwards to as well.
+# place leg is listed as what it forwards to as well. `notify.stop_post` runs
+# `fanout_lib/notify.py` directly, with no subcommand.
 _DEV = REPO / "scripts" / "dev"
 FANOUT_UNITS = (
     (_DEV / "fanout.py", ("review",)),
     (_DEV / "fanout_place.py", ("clean-one",)),
     (_DEV / "fanout.py", ("place", "clean-one")),
+    (_DEV / "fanout_lib" / "notify.py", ()),
 )
 # The weekly etcd restore drill runs this gate under `uv run --no-project` when the checkout has
 # no `.venv` (`scripts/backup/etcd_restore_drill.sh`'s `GATE_CMD`), as (entry, argv).

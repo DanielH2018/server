@@ -25,8 +25,9 @@ DEV = Path(__file__).resolve().parents[1]
         ["fanout.py", "review", "--help"],
         ["fanout_review.py", "--help"],
         ["fanout_place.py", "clean-one", "--help"],
+        ["fanout_lib/notify.py", "--help"],
     ],
-    ids=["review-unit", "review-unit-old-path", "clean-remote-leg"],
+    ids=["review-unit", "review-unit-old-path", "clean-remote-leg", "stop-notifier"],
 )
 def test_a_headless_entry_point_imports_without_site_packages(argv):
     done = subprocess.run(

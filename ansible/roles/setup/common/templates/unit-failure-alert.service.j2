@@ -62,12 +62,26 @@ RestartPreventExitStatus=3
 # expands it JSON-escaped. curl exits 26 when the file is missing, and Restart= would retry that
 # forever. The file cannot be missing when ExecStart runs: systemd creates the directory before
 # ExecStartPre, and a failed ExecStartPre ends the attempt before ExecStart.
-RuntimeDirectory={{ alert_unit_name }}-alert
+{% if alert_unit_instanced | default(false) %}
+#
+# An instanced alert keeps each instance's time in its own subdirectory, so two instances
+# pending at once do not share a stamp, and its page opens with the instance name. curl
+# JSON-escapes the name as it does the time, so the instance needs no escaping of its own.
+# The page names `%i`, the instance as written: `%I` unescapes every `-` to `/`, and
+# `fanout-4602:needs-input` posted as `fanout/4602:needs/input` (measured, systemd 255).
+{% endif %}
+{% set alert_run_dir = alert_unit_name ~ '-alert' ~ ('/%i' if alert_unit_instanced | default(false) else '') %}
+RuntimeDirectory={{ alert_run_dir }}
 RuntimeDirectoryPreserve=restart
-ExecStartPre=/bin/sh -c 'test -s %t/{{ alert_unit_name }}-alert/failed-at || date --utc "+%%Y-%%m-%%d %%H:%%M UTC" > %t/{{ alert_unit_name }}-alert/failed-at'
+ExecStartPre=/bin/sh -c 'test -s %t/{{ alert_run_dir }}/failed-at || date --utc "+%%Y-%%m-%%d %%H:%%M UTC" > %t/{{ alert_run_dir }}/failed-at'
 ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors -H "Content-Type: application/json" \
-  --variable 'failed_at@%t/{{ alert_unit_name }}-alert/failed-at' \
+  --variable 'failed_at@%t/{{ alert_run_dir }}/failed-at' \
+{% if alert_unit_instanced | default(false) %}
+  --variable 'instance=%i' \
+  --expand-data '{"content":"{% raw %}{{instance:json}}{% endraw %}: {{ alert_unit_message }} Failed at {% raw %}{{failed_at:trim:json}}{% endraw %}."}' \
+{% else %}
   --expand-data '{"content":"{{ alert_unit_message }} Failed at {% raw %}{{failed_at:trim:json}}{% endraw %}."}' \
+{% endif %}
   "${ALERT_WEBHOOK}"
 # A delivered page left NO on-host record: `curl -fsS` is silent on success, and systemd's own
 # Starting/Finished lines are info-level, which journald drops here (MaxLevelStore=notice). So
@@ -80,7 +94,7 @@ ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors
 # not a `/bin/sh -c '… && echo …'` wrapper: that would re-quote the single-quoted JSON payload
 # for no gain.
 SyslogLevel=notice
-ExecStartPost=/bin/echo {{ alert_unit_name }} failure alert delivered
+ExecStartPost=/bin/echo {{ alert_unit_name }} failure alert delivered{{ ' for %i' if alert_unit_instanced | default(false) else '' }}
 {% if alert_unit_quiet_minutes | default(0) | int > 0 %}
 # A delivered page silences the next {{ alert_unit_quiet_minutes }} minutes of this alert. A parent
 # with Restart=always fires OnFailure= on every exit of its restart loop (systemd 255), so

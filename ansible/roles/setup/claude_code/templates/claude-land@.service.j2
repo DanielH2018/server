@@ -2,6 +2,10 @@
 Description=Land the agent user's PR #%i
 After=network-online.target
 Wants=network-online.target
+# A refused or failed landing pages Discord. The session that started it may be gone, and a
+# landing the policy refused waits on the operator: an approval given later does not restart
+# it (#4602). Exit 75, a wait that ran out, pages too, because nothing re-runs this unit.
+OnFailure=claude-land-alert.service
 
 [Service]
 Type=oneshot

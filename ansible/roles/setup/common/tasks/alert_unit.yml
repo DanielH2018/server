@@ -36,6 +36,11 @@
 #   alert_unit_quiet_minutes optional: after a delivered page, skip the alert for this many
 #                           minutes, for a parent whose Restart= loop fires OnFailure= on every
 #                           exit (#4676). Unset or 0 renders no gate and pages every failure
+#   alert_unit_instanced    optional: true renders /etc/systemd/system/<name>-alert@.service, a
+#                           template whose page opens `<instance>: `, for a caller that starts
+#                           it with the failure in the instance name rather than through
+#                           OnFailure= (the fan-out alert, #4602). Not combined with
+#                           alert_unit_quiet_minutes, whose stamp all instances would share
 
 - name: Write the alert webhook where only systemd reads it, for {{ alert_unit_name }}
   # `src` names the owning role outright, as kuma_check_timer.yml does.
@@ -57,7 +62,7 @@
 - name: Install the alert unit for {{ alert_unit_name }}
   ansible.builtin.template:
     src: "{{ playbook_dir }}/roles/setup/common/templates/unit-failure-alert.service.j2"
-    dest: "/etc/systemd/system/{{ alert_unit_name }}-alert.service"
+    dest: "/etc/systemd/system/{{ alert_unit_name }}-alert{{ '@' if alert_unit_instanced | default(false) else '' }}.service"
     owner: root
     group: root
     mode: "0644"

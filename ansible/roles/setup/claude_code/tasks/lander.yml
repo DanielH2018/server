@@ -33,6 +33,18 @@
       become: true
       when: claude_code_agent_user_enabled and claude_code_lander_enabled
 
+    # The unit's OnFailure= target. Its webhook file goes in /etc/claude-land, so the removal
+    # below takes it with the directory.
+    - name: Install the lander's failure alert
+      tags: [claude_code]
+      when: claude_code_agent_user_enabled and claude_code_lander_enabled
+      ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+      vars:
+        alert_unit_name: claude-land
+        alert_unit_description: Alert when a landing of the agent user's PR fails or is refused
+        alert_unit_message: "claude-land failed on {{ inventory_hostname }}: a PR of the {{ claude_code_lander_agent_user }} agent user did not land, and no retry follows. `systemctl --failed claude-land@*` names the PR, and /var/lib/claude-land/<n>.verdict says why. A refused landing needs your approval, then a fresh start of the unit."
+        alert_unit_env_dir: /etc/claude-land
+
     - name: Write the paths an agent PR cannot land without the operator
       tags: [claude_code]
       ansible.builtin.template:
@@ -78,6 +90,7 @@
       loop:
         - /etc/polkit-1/rules.d/50-claude-land.rules
         - /etc/systemd/system/claude-land@.service
+        - /etc/systemd/system/claude-land-alert.service
         - /etc/claude-land
       become: true
       when: not (claude_code_agent_user_enabled and claude_code_lander_enabled)
