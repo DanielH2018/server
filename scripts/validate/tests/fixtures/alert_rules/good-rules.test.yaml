@@ -1,0 +1,19 @@
+# Passed by `promtool test rules`: the target reads 0 for five minutes, so the alert fires.
+rule_files:
+  - good-rules.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="fixture"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FixtureTargetDown
+        exp_alerts:
+          - exp_labels:
+              job: fixture
+              severity: warning
+              service: fixture
+            exp_annotations:
+              summary: A fixture target is down.

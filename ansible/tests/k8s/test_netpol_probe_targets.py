@@ -198,3 +198,29 @@ def test_terraria_is_absent_while_it_is_scaled_to_zero() -> None:
             "terraria is scaled to zero but is still a probe target, so every full deploy.yml "
             "fails its readiness gate"
         )
+
+
+def _refused_rows_without_policy(rows: list[dict]) -> set[str]:
+    return {
+        r["service"]
+        for r in rows
+        if r.get("expect") == "refused" and not r.get("policy")
+    }
+
+
+def test_every_refused_row_names_its_policy() -> None:
+    """A refused leg's failure message prints the row's `policy`, the fence that let the
+    connection through. A row without the key fails the probe with a message naming none, and
+    only on netpol-baseline's real deploy."""
+    assert not _refused_rows_without_policy(TARGETS), (
+        f"refused rows with no `policy`: {sorted(_refused_rows_without_policy(TARGETS))}. "
+        "Name the NetworkPolicy template or netpol_from entry that should refuse the probe."
+    )
+    # The check above can go red: a refused row without the key is found.
+    unnamed = {
+        "service": "sonarr-two",
+        "plane": "homelab",
+        "port": 1,
+        "expect": "refused",
+    }
+    assert _refused_rows_without_policy([*TARGETS, unnamed]) == {"sonarr-two"}

@@ -48,6 +48,8 @@ LOCAL_ONLY = frozenset(
         ".fanout",
         # A worktree's own label, from `scripts/dev/label_worktree.py`.
         ".claim",
+        # promtool and amtool, provisioned by `scripts/validate/alert_tools.sh`.
+        ".cache",
     }
 )
 
