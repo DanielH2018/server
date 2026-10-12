@@ -8,6 +8,24 @@
 # Container application data — media, downloads, app databases (high-churn)
 !/home/{{ sys_user }}/server/containers/data/
 
+# k3s workload data, the cluster nodes' counterpart of the Docker paths above. Each changes on
+# every write, pull or pod start, so AIDE would hash it weekly and report it every week. The
+# root filesystem it sits on held 469 GB on daniel-box on 2026-10-12. The k3s binaries
+# (/var/lib/rancher/k3s/data), its certificates and staged manifests (the rest of
+# /var/lib/rancher/k3s/server) and /etc/rancher stay checked. Absent on daniel-pi; a rule for a
+# missing path matches nothing.
+# Longhorn replica images: every volume's block data
+!/var/lib/longhorn/
+# containerd image layers and container snapshots
+!/var/lib/rancher/k3s/agent/containerd/
+# The embedded etcd's data and its local snapshots
+!/var/lib/rancher/k3s/server/db/
+# Pod volumes: emptyDirs and projected Secrets and ConfigMaps
+!/var/lib/kubelet/pods/
+# Container logs
+!/var/log/pods/
+!/var/log/containers/
+
 # Virtual/pseudo filesystems — not real files, cause inflated read counts
 !/proc/
 !/sys/

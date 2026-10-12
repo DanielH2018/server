@@ -215,6 +215,9 @@ uptime_kuma_k8s_status_page_groups:
       - "^daniel-box-disk$"
       - "^ups-secondary"
       - "^cloudflare-(ddns|ip-drift)"
+      # The weekly AIDE check, one tile per host, daniel-pi's included: a host-integrity
+      # signal, so the Pi's tile groups with its siblings rather than under Raspberry Pi.
+      - "^aide-"
   - name: Raspberry Pi
     match:
       - "^daniel-pi-"
