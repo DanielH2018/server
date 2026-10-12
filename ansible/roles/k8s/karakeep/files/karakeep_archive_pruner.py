@@ -205,13 +205,11 @@ def plan(
 def apply_actions(
     api: Api, actions: list[Action], apply: bool, max_deletes: int
 ) -> None:
-    deletes = 0
+    deletes = skipped = 0
     for a in actions:
         if a.kind == "delete":
             if deletes >= max_deletes:
-                print(
-                    f"skip delete {a.bookmark_id}: --max-deletes {max_deletes} reached"
-                )
+                skipped += 1
                 continue
             deletes += 1
             path = f"bookmarks/{a.bookmark_id}"
@@ -221,6 +219,11 @@ def apply_actions(
         print(f"{verb}{a.kind} {a.bookmark_id} ({a.age_days}d) {a.title!r}")
         if apply:
             api.request("DELETE", path)
+    # One line, not one per bookmark: a first run over a backlog skipped 772.
+    if skipped:
+        print(
+            f"deferred {skipped} deletes to later runs: --max-deletes {max_deletes} reached"
+        )
 
 
 def summarise(bookmarks: list[dict], now: datetime, actions: list[Action]) -> None:

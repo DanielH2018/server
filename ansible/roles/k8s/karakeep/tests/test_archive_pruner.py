@@ -148,14 +148,17 @@ def test_a_dry_run_sends_no_delete():
     assert api.deletes() == []
 
 
-def test_max_deletes_caps_deletions_per_run():
-    api = FakeKarakeep([bookmark(f"b{i}", 100) for i in range(3)])
+def test_max_deletes_caps_deletions_per_run_and_reports_the_rest_once(capsys):
+    api = FakeKarakeep([bookmark(f"b{i}", 100) for i in range(4)])
     karakeep_archive_pruner.main(
         ["--screenshot-days=30", "--delete-days=90", "--max-deletes=2", "--apply"],
         opener=api,
         now=NOW,
     )
     assert api.deletes() == ["bookmarks/b0", "bookmarks/b1"]
+    out = capsys.readouterr().out
+    assert "deferred 2 deletes to later runs: --max-deletes 2 reached" in out
+    assert "b2" not in out and "b3" not in out
 
 
 def test_a_bookmark_missing_its_tags_aborts_before_any_change():
