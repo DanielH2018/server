@@ -741,7 +741,7 @@
       "automerge": false
     },
     {
-      "description": "code-server's build pins — the venv's pip packages, the Claude Code CLI on npm and the Node.js release (#2149). One group, no automerge: the image is built, so a merged bump ships only when land.sh rebuilds it, and code-server is `k8s_autodeploy: false` (the marker in the group name is what keeps the unattended renovate_agent off the PR, #1963). A node bump is also a manual finish — code_server_k8s_node_sha256 comes from that release's SHASUMS256.txt. matchDatasources keeps this off the role's docker pins, which the denylist rule above owns.",
+      "description": "code-server's build pins — the venv's pip packages, the Claude Code CLI on npm and the Node.js release (#2149). One group, no automerge: the image is built, so a merged bump ships only when land.sh rebuilds it, and code-server is `k8s_autodeploy: false` (the marker in the group name is what keeps the unattended renovate_agent off the PR, #1963). A node bump is also a manual finish — code_server_k8s_node_sha256 comes from that release's SHASUMS256.txt. So is every CLI bump (#4584): the `Anthropic.claude-code` entry of `code_server_k8s_extensions` moves to the same version, Renovate cannot move it because VS Code extensions have no datasource, and `test_the_cli_is_pinned_to_the_extension_release` fails the PR until someone does (#4559 arrived red). The finish is to set the entry's version and both version strings in its `linux-x64` URL, then run `uv run python scripts/validate/asset_pins.py --refresh 'code_server_k8s_extensions[Anthropic.claude-code]'`, which fetches the VSIX, hashes it decoded as the Dockerfile's download does and rewrites the sha256. The group name carries this finish as well as the description and prBodyNotes, because the group name is what reaches the PR title; the prBodyNotes alone did not stop #4559. Renaming the group moved the branch slug once, abandoning a branch whose PR (#4575) was already closed. matchDatasources keeps this off the role's docker pins, which the denylist rule above owns.",
       "matchManagers": [
         "custom.regex"
       ],
@@ -754,14 +754,14 @@
         "npm",
         "node-version"
       ],
-      "groupName": "code-server build pins (manual — built image, finish code_server_k8s_node_sha256 on a node bump; k8s_autodeploy: false)",
+      "groupName": "code-server build pins (manual — built image, move Anthropic.claude-code with the CLI, finish code_server_k8s_node_sha256 on a node bump; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"
       ],
       "updateNotScheduled": false,
       "prBodyNotes": [
-        "If this PR bumps `@anthropic-ai/claude-code`, finish the `Anthropic.claude-code` entry of `code_server_k8s_extensions` in `ansible/roles/k8s/code-server/defaults/main.yml` in the same PR: its version, its `linux-x64` URL and the sha256 of the decoded VSIX. The Marketplace recipe is in the comment above that list. Renovate has no datasource for the extension, so `test_the_cli_is_pinned_to_the_extension_release` stays red until both move together."
+        "If this PR bumps `@anthropic-ai/claude-code`, finish the `Anthropic.claude-code` entry of `code_server_k8s_extensions` in `ansible/roles/k8s/code-server/defaults/main.yml` in the same PR: set its version and both version strings in its `linux-x64` URL, then run `uv run python scripts/validate/asset_pins.py --refresh 'code_server_k8s_extensions[Anthropic.claude-code]'`, which rewrites the sha256 of the decoded VSIX. Renovate has no datasource for the extension, so `test_the_cli_is_pinned_to_the_extension_release` stays red until both move together."
       ],
       "groupSingleUpdates": true,
       "automerge": false
