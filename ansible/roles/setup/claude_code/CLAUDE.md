@@ -47,10 +47,10 @@ directory.
 
 - **That value reaches the alert unit through an `EnvironmentFile=`, never the unit body.**
   `ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py` holds the whole repo to
-  that shape. `no_log: true` hides an undefined-variable failure, so when the task
-  fails opaquely, check `gitops_deploy_discord_webhook` is in scope.
-- **It cannot catch an expired login.** The host reads `active` while every session fails, and
-  no check reads whether it is *registered*.
+  that shape. `no_log: true` hides an undefined-variable failure, so if the task fails
+  opaquely, check `gitops_deploy_discord_webhook` is in scope.
+- **It pages a login dead at start, not one that dies mid-run**, which leaves the host
+  `active`. `docs/claude-code-rc-caps.md` has why (#4618).
 
 ## Traps already paid for
 
