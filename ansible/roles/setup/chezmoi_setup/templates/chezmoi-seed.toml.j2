@@ -6,10 +6,12 @@
 # --promptString flags do NOT cover this: they were passed and init prompted anyway
 # (verified on daniel-box, chezmoi v2.71.1).
 #
-# Only the two prompted values are seeded. `chezmoi init` then renders the FULL config from
+# Only the three prompted values are seeded. `chezmoi init` then renders the FULL config from
 # .chezmoi.toml.tmpl — umask, [interpreters.sh], and anything added later — reusing these
 # answers instead of asking. Not overwritten once it exists, so a value changed by hand on
-# the host survives.
+# the host survives. `agent` is the exception: tasks/main.yml enforces it on an existing
+# config too, because this role manages sys_user and the agent user is claude_code's.
 [data]
     work = {{ chezmoi_setup_work | lower }}
     profile = "{{ chezmoi_setup_profile }}"
+    agent = false
