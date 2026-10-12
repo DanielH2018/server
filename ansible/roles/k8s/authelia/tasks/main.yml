@@ -121,9 +121,16 @@
   # IFS= (not bare `read -r pw`) so a leading/trailing space in the password isn't
   # stripped — `read` trims IFS whitespace by default, which would silently hash the
   # wrong string while still producing a well-formed $argon2id$ hash.
+  #
+  # The pod name carries a per-run suffix, and so do the two hash pods below. `kubectl run`
+  # refuses a name that already exists, and `--rm` deletes the pod only while this kubectl client
+  # lives. With a fixed name, a controller killed mid-hash leaves a pod that fails every later
+  # rehash, and the read-only ServiceAccount cannot delete it (#4566). The suffix is inline in
+  # `cmd` because Ansible templates a task's args once, where a `vars:` entry holding `random`
+  # would yield a new value on every reference.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} run authelia-hash
+      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-{{ 4294967295 | random }}
       --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
       sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
       --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
@@ -158,7 +165,7 @@
   # when one of them is malformed.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-claude
+      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-claude-{{ 4294967295 | random }}
       --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
       sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
       --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
@@ -189,7 +196,7 @@
   # digests into one registered result.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-agent
+      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-agent-{{ 4294967295 | random }}
       --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
       sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
       --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
