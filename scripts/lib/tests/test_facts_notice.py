@@ -7,7 +7,7 @@ real repository. A test that opens a revision `Tree` closes it, because the suit
 
 import pytest
 
-from lib.facts.notice import MissingObject, Tree
+from lib.facts.notice import MissingObject, Notice, Tree, moved_sections
 from lib.git_testing import commit, git_out, init_repo
 from lib.repo_paths import REPO
 
@@ -117,3 +117,176 @@ def test_the_revision_backend_finds_this_repos_docs():
         assert len(docs) >= 80
         assert {"CLAUDE.md", "ansible/roles/k8s/home-assistant/CLAUDE.md"} <= set(docs)
         assert tree.sections("CLAUDE.md")
+
+
+def _doc(*cites: str) -> str:
+    return "# Top\n\n## Ports\n" + "".join(f"See `{c}`.\n" for c in cites)
+
+
+def _notice(tmp_path, base: dict, head: dict) -> list[Notice]:
+    """Commit ``base``, then ``head`` on top of it, and list the notice between the two."""
+    repo = init_repo(tmp_path)
+    old = commit(repo, "base", **base)
+    new = commit(repo, "head", **head)
+    return moved_sections(repo, old, new)
+
+
+def _row(atom: str, form: str, kind: str, edited: bool = False) -> Notice:
+    return Notice("CLAUDE.md#Ports", atom, form, kind, edited)
+
+
+def test_a_content_atom_whose_value_changed_is_moved(tmp_path):
+    rows = _notice(
+        tmp_path,
+        {_DOC: _doc("a/b.py:PORT"), "a/b.py": "PORT = 1\n"},
+        {"a/b.py": "PORT = 2\n"},
+    )
+    assert rows == [_row("a/b.py:PORT", "symbol", "moved")]
+
+
+@pytest.mark.parametrize(
+    ("cite", "before", "after"),
+    [
+        ("a/b.py:PORT", "PORT = 1\n", "PORT = 1\nHOST = 'h'\n"),
+        (
+            "a/b.py:port",
+            'def port():\n    """One."""\n    return 1\n',
+            'def port():\n    """The listen port."""\n    return 1\n',
+        ),
+    ],
+    ids=["another-symbol", "docstring-only"],
+)
+def test_a_touched_file_whose_atom_did_not_change_gives_no_row(
+    tmp_path, cite, before, after
+):
+    """What the notice exists for: the lock would flag a rehash, the notice compares ends."""
+    rows = _notice(tmp_path, {_DOC: _doc(cite), "a/b.py": before}, {"a/b.py": after})
+    assert rows == []
+
+
+def test_a_citation_the_diff_did_not_touch_is_never_read(tmp_path):
+    """The marker is ambiguous at both ends, so reading it at all would list a row."""
+    twice = "# DECIDED: keep one\n# DECIDED: keep two\n"
+    rows = _notice(
+        tmp_path,
+        {_DOC: _doc("a/b.py:DECIDED: keep"), "a/b.py": twice, "c.txt": "1\n"},
+        {"c.txt": "2\n"},
+    )
+    assert rows == []
+
+
+@pytest.mark.parametrize(
+    "after", ["HOST = 1\n", None], ids=["symbol-removed", "file-deleted"]
+)
+def test_a_content_atom_that_resolves_at_the_base_only_is_gone(tmp_path, after):
+    """A deleted file is tracked at the base, so its citation survives to give this row."""
+    rows = _notice(
+        tmp_path,
+        {_DOC: _doc("a/b.py:PORT"), "a/b.py": "PORT = 1\n", "c.txt": ""},
+        {"a/b.py": after},
+    )
+    assert rows == [_row("a/b.py:PORT", "symbol", "gone")]
+
+
+@pytest.mark.parametrize(
+    "before", ["HOST = 1\n", None], ids=["symbol-added", "file-added"]
+)
+def test_a_content_atom_that_resolves_at_the_head_only_gives_no_row(tmp_path, before):
+    base = {_DOC: _doc("a/b.py:PORT")}
+    if before is not None:
+        base["a/b.py"] = before
+    rows = _notice(tmp_path, base, {"a/b.py": "HOST = 1\nPORT = 1\n"})
+    assert rows == []
+
+
+@pytest.mark.parametrize(
+    ("head", "expected"),
+    [
+        ({"a/b.py": "PORT = 2\n"}, []),
+        ({"a/b.py": None}, [_row("a/b.py", "path", "gone")]),
+        ({"a/b.py": None, "a/c.py": "PORT = 1\n"}, [_row("a/b.py", "path", "gone")]),
+    ],
+    ids=["edited", "deleted", "renamed"],
+)
+def test_a_path_atom_lists_only_when_it_goes(tmp_path, head, expected):
+    """A path atom hashes existence in the lock, so an edit never moves it."""
+    base = {_DOC: _doc("a/b.py"), "a/b.py": "PORT = 1\n", "c.txt": ""}
+    assert _notice(tmp_path, base, head) == expected
+
+
+@pytest.mark.parametrize(
+    ("head", "expected"),
+    [
+        ({"d/e/f.py": None}, []),
+        ({"d/e/f.py": None, "d/e/g.py": None}, [_row("d/e/", "path", "gone")]),
+    ],
+    ids=["one-file-left", "emptied"],
+)
+def test_a_directory_citation_is_gone_once_no_file_under_it_remains(
+    tmp_path, head, expected
+):
+    base = {_DOC: _doc("d/e/"), "d/e/f.py": "", "d/e/g.py": "", "c.txt": ""}
+    assert _notice(tmp_path, base, head) == expected
+
+
+def test_a_marker_prefix_that_matches_twice_is_ambiguous(tmp_path):
+    rows = _notice(
+        tmp_path,
+        {_DOC: _doc("a/b.py:DECIDED: keep"), "a/b.py": "# DECIDED: keep one\n"},
+        {"a/b.py": "# DECIDED: keep one\n# DECIDED: keep two\n"},
+    )
+    assert rows == [_row("a/b.py:DECIDED: keep", "marker", "ambiguous")]
+
+
+@pytest.mark.parametrize(
+    ("cite", "path", "before", "after", "form"),
+    [
+        ("a/b.py:PORT", "a/b.py", "PORT = 1\n", "PORT = (\n", "symbol"),
+        ("a/c.yml:port", "a/c.yml", "port: 1\n", "port: [\n", "yaml"),
+    ],
+    ids=["python", "yaml"],
+)
+def test_a_cited_file_that_does_not_parse_is_unparsable(
+    tmp_path, cite, path, before, after, form
+):
+    rows = _notice(tmp_path, {_DOC: _doc(cite), path: before}, {path: after})
+    assert rows == [_row(cite, form, "unparsable")]
+
+
+_TWO_SECTIONS = _doc("a/b.py:PORT") + "\n## Other\nUnrelated.\n"
+
+
+@pytest.mark.parametrize(
+    ("doc_head", "edited"),
+    [
+        (_TWO_SECTIONS.replace("PORT`.", "PORT`, the listen port."), True),
+        (_TWO_SECTIONS.replace("Unrelated.", "Still unrelated."), False),
+    ],
+    ids=["citing-section-edited", "other-section-edited"],
+)
+def test_prose_edited_says_whether_the_diff_changed_the_citing_section(
+    tmp_path, doc_head, edited
+):
+    rows = _notice(
+        tmp_path,
+        {_DOC: _TWO_SECTIONS, "a/b.py": "PORT = 1\n"},
+        {_DOC: doc_head, "a/b.py": "PORT = 2\n"},
+    )
+    assert rows == [_row("a/b.py:PORT", "symbol", "moved", edited)]
+
+
+def test_each_citing_section_lists_the_atom_once(tmp_path):
+    doc = _doc("a/b.py:PORT", "a/b.py:PORT") + "\n## Hosts\nSee `a/b.py:PORT`.\n"
+    rows = _notice(
+        tmp_path,
+        {_DOC: doc, "a/b.py": "PORT = 1\n"},
+        {"a/b.py": "PORT = 2\n"},
+    )
+    assert [r.unit for r in rows] == ["CLAUDE.md#Ports", "CLAUDE.md#Hosts"]
+
+
+def test_with_no_head_the_working_tree_is_the_head(tmp_path):
+    repo = init_repo(tmp_path)
+    base = commit(repo, "base", **{_DOC: _doc("a/b.py:PORT"), "a/b.py": "PORT = 1\n"})
+    (repo / "a/b.py").write_text("PORT = 2\n")
+    assert moved_sections(repo, base) == [_row("a/b.py:PORT", "symbol", "moved")]

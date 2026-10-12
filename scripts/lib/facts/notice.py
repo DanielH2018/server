@@ -21,11 +21,18 @@ backends therefore find the docs by basename in the full listing.
 A doc's sections are cached by path and blob id for the life of the process, so a replay over
 many commits splits a doc that no commit changed only once.
 
-The plan is ``docs/target-architecture/docs-guard/g1-diff-notice.md``. Nothing calls ``Tree``
-yet; ``moved_sections`` is its first caller.
+``moved_sections`` opens a ``Tree`` at each end of one diff and lists a ``Notice`` for every
+cited atom that the diff moved. It compares the two ends of that diff, never a hash recorded
+earlier, so a row means the diff itself moved the atom. The row rules are on
+``moved_sections``.
+
+The plan is ``docs/target-architecture/docs-guard/g1-diff-notice.md``.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
+
+import yaml
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -33,7 +40,9 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.git import git, git_process
 
-from .citations import Section, sections
+from .atoms import Ambiguous, atom_content
+from .citations import Citation, Section, in_tree, parse_citations, sections
+from .lint import bodies_at
 
 DOC_NAME = "CLAUDE.md"
 
@@ -151,3 +160,127 @@ class Tree:
         data = stdout.read(int(fields[2]))
         stdout.read(1)  # the LF that ends every reply
         return data.decode("utf-8", errors="replace")
+
+
+@dataclass(frozen=True)
+class Notice:
+    """One cited atom that a diff moved, in a section that cites it.
+
+    Attributes:
+      unit: the citing section, keyed ``<doc>#<heading>``.
+      atom: the citation as the section spells it.
+      form: one of ``citations.FORMS``.
+      kind: ``moved``, ``gone``, ``ambiguous`` or ``unparsable``.
+      prose_edited: whether the diff also changed the section's body.
+    """
+
+    unit: str
+    atom: str
+    form: str
+    kind: str
+    prose_edited: bool
+
+
+# What ``atom_content`` raises for a file it cannot parse. ``ast.parse`` raises the first two,
+# and ``yaml_fast.safe_load`` raises a ``yaml.YAMLError`` subclass.
+_UNPARSABLE = (SyntaxError, ValueError, yaml.YAMLError)
+
+
+def _changed_paths(repo: Path, base: str, head: str | None) -> set[str]:
+    """Every path that the diff from ``base`` to ``head``, or to the working tree, touched."""
+    ends = [base] if head is None else [base, head]
+    out = git("diff", "--no-renames", "--name-status", "-z", *ends, cwd=repo).stdout
+    # -z prints "<status>\0<path>\0" per file, and --no-renames keeps each entry to one path.
+    return set(out.split("\0")[1::2]) - {""}
+
+
+def _touched(c: Citation, changed: set[str]) -> bool:
+    """Whether the diff touched the file ``c`` names, or any file under the directory it names.
+
+    The match mirrors ``citations.in_tree``, which also accepts a directory cited without its
+    trailing slash.
+    """
+    if c.path.endswith("/"):
+        return any(p.startswith(c.path) for p in changed)
+    return c.path in changed or any(p.startswith(c.path + "/") for p in changed)
+
+
+def _content(c: Citation, tree: Tree) -> str | None:
+    text = tree.text(c.path)
+    return None if text is None else atom_content(c, text)
+
+
+def _kind(c: Citation, base: Tree, head: Tree) -> str | None:
+    """The kind of row ``c`` gives, or None when the diff did not move it."""
+    if c.form == "path":
+        # The lock hashes a path atom's existence, so a path atom can go but never move.
+        gone = in_tree(c, base.tracked) and not in_tree(c, head.tracked)
+        return "gone" if gone else None
+    try:
+        before = _content(c, base)
+        after = _content(c, head)
+    except Ambiguous:
+        return "ambiguous"
+    except _UNPARSABLE:
+        return "unparsable"
+    if before is None:
+        # An atom that resolves only at the head is new, and the lock holds no hash for it.
+        return None
+    if after is None:
+        return "gone"
+    return "moved" if before != after else None
+
+
+def moved_sections(repo: Path, base: str, head: str | None = None) -> list[Notice]:
+    """Lists a ``Notice`` for every cited atom that the diff from ``base`` to ``head`` moved.
+
+    With ``head`` None the head end is the working tree, so an uncommitted edit counts. With a
+    revision, every head-side input is read at that revision: the docs, the tracked set, the
+    diff and the atoms. Rows come in doc order, then section order, one per unit and atom.
+
+    - The sections are those of every ``CLAUDE.md`` at the head. Their citations are parsed
+      with no tracked-set filter.
+    - A citation whose path the diff did not touch gives no row. Neither does one that names
+      a tracked file or directory at neither end. A file that the diff deletes is tracked at
+      the base, so its citations still reach the rules below.
+    - A content atom reads ``moved`` when it resolves at both ends to different content. It
+      reads ``gone`` when it resolves at the base only.
+    - A path atom reads ``gone`` when it is tracked at the base and not at the head.
+    - A marker prefix that matches twice at either end reads ``ambiguous``. A cited file that
+      fails to parse at either end reads ``unparsable``. Any other exception propagates,
+      because it is a defect in the notice rather than in the diff.
+    - ``prose_edited`` compares the section's body at the base, from ``lint.bodies_at``, with
+      its body at the head.
+
+    Raises:
+      subprocess.CalledProcessError: ``base`` or ``head`` does not name a revision.
+      MissingObject: a revision lists a blob that the object store does not hold.
+    """
+    changed = _changed_paths(repo, base, head)
+    if not changed:
+        return []
+    rows: list[Notice] = []
+    kinds: dict[str, str | None] = {}
+    with Tree(repo, base) as before, Tree(repo, head) as after:
+        for doc in after.docs():
+            base_bodies: dict[str, str] | None = None
+            for sec in after.sections(doc) or []:
+                cites, _ = parse_citations(sec.body)
+                seen: set[str] = set()
+                for c in cites:
+                    if c.raw in seen or not _touched(c, changed):
+                        continue
+                    seen.add(c.raw)
+                    if not (in_tree(c, before.tracked) or in_tree(c, after.tracked)):
+                        continue
+                    if c.raw not in kinds:
+                        kinds[c.raw] = _kind(c, before, after)
+                    kind = kinds[c.raw]
+                    if kind is None:
+                        continue
+                    if base_bodies is None:
+                        # One ``git show`` per doc that holds a row, not one per doc read.
+                        base_bodies = bodies_at(repo, base, doc)
+                    edited = base_bodies.get(sec.key) != sec.body
+                    rows.append(Notice(sec.key, c.raw, c.form, kind, edited))
+    return rows
