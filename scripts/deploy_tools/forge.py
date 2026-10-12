@@ -27,6 +27,7 @@ import base64
 import json
 import re
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -44,6 +45,10 @@ PACKAGE_VERSIONS_URL = "https://api.github.com/users/DanielH2018/packages/contai
 # a truncation, because `prune` reads a digest missing from the listing as deleted.
 VERSIONS_PER_PAGE = 100
 VERSION_PAGES_MAX = 300
+# Seconds between two deletes. GitHub's REST best practices ask for at least one second between
+# mutating requests, and a burst trips the secondary rate limit as a 403 that reads like a
+# permission error.
+DELETE_PAUSE_S = 1.0
 
 # The keyless identity the `promote` workflow signs under, and the one the OCIRepository
 # `homelab` checks. A signature from any other workflow or ref does not verify.
@@ -218,6 +223,19 @@ class Registry:
         return digest
 
 
+def _api_message(response: Response) -> str:
+    """`: <message>` from a GitHub API error body, or nothing when it carries none.
+
+    A 403 means either a missing permission or a rate limit, and only the message tells which.
+    """
+    try:
+        body = json.loads(response.body)
+    except ValueError:
+        return ""
+    message = body.get("message") if isinstance(body, dict) else None
+    return f": {message}" if isinstance(message, str) and message else ""
+
+
 def _error_codes(response: Response) -> set[str]:
     """The `code` of each entry in an OCI error body, or nothing when the body has none."""
     try:
@@ -240,6 +258,7 @@ class GitHub:
         run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
         repository: str = REPOSITORY,
         versions_per_page: int = VERSIONS_PER_PAGE,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         """Holds the two ways in.
 
@@ -250,12 +269,14 @@ class GitHub:
             run: starts the `gh` subprocess.
             repository: the `owner/name` slug.
             versions_per_page: the page size of the package listing.
+            sleep: waits DELETE_PAUSE_S before each delete.
         """
         self._transport = transport
         self._token = token
         self._run = run
         self.repository = repository
         self._versions_per_page = versions_per_page
+        self._sleep = sleep
 
     def variable(self, name: str) -> str | None:
         """The value of repository variable `name`, or None when the variable does not exist.
@@ -317,6 +338,7 @@ class GitHub:
             if response.status != 200:
                 raise ForgeError(
                     f"package versions page {page}: HTTP {response.status}"
+                    f"{_api_message(response)}"
                 )
             body = _json(response, f"package versions page {page}")
             if not isinstance(body, list):
@@ -342,12 +364,16 @@ class GitHub:
                 package's Admin role gets a 403 here.
         """
         url = f"{PACKAGE_VERSIONS_URL}/{version_id}"
+        self._sleep(DELETE_PAUSE_S)
         response = self._transport("DELETE", url, self._rest_headers())
         if response.status == 204:
             return True
         if response.status == 404:
             return False
-        raise ForgeError(f"delete package version {version_id}: HTTP {response.status}")
+        raise ForgeError(
+            f"delete package version {version_id}: HTTP {response.status}"
+            f"{_api_message(response)}"
+        )
 
     def _rest_headers(self) -> dict[str, str]:
         headers = {

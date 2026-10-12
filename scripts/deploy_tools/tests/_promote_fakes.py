@@ -76,7 +76,9 @@ class FakeTransport:
             runs = self.check_runs.get(match.group(1), [])
             return forge.Response(200, body=json.dumps({"check_runs": runs}).encode())
         if parts.path in self.api_forced:
-            return forge.Response(self.api_forced[parts.path])
+            message = {"message": f"forced HTTP {self.api_forced[parts.path]}"}
+            body = json.dumps(message).encode()
+            return forge.Response(self.api_forced[parts.path], body=body)
         listing = urlsplit(forge.PACKAGE_VERSIONS_URL).path
         if parts.path == listing and method == "GET":
             query = parse_qs(parts.query)
@@ -210,6 +212,8 @@ class World:
         self.commits = _git(self.repo, "rev-list", "--reverse", "master").split()
         self.transport = FakeTransport()
         self.run = FakeRun()
+        # The pause before each package delete, recorded rather than slept.
+        self.pauses: list[float] = []
 
     def branch_commit(self) -> str:
         """A commit off master's root, on no path master's history takes."""

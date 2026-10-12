@@ -23,7 +23,10 @@ jobs:
     # A dispatch from a branch would run that branch's copy with a token that can delete.
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    # Deletes are paced one a second (forge.py:DELETE_PAUSE_S), about 370 on a normal day. A
+    # backlog that outlasts this is cut off between deletes. Signatures go last, so what is left
+    # is what the next run selects again, never a kept version's missing signature.
+    timeout-minutes: 60
     # Not `promote`: a job queued in that group would evict a pending promote job.
     concurrency:
       group: prune

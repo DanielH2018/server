@@ -455,11 +455,13 @@ def prune(f: forge.Forge, repo: Path, now: datetime) -> int:
             print(f"promote.py: prune: {tag} does not verify: {err}", file=sys.stderr)
             ok = False
 
-    listed = len(facts.versions) if isinstance(facts.versions, list) else 0
-    # Open question 8 reads this count: whether GHCR lists cosign's bundles as versions.
+    listed = facts.versions if isinstance(facts.versions, list) else []
+    # Open question 8 reads these: whether GHCR lists cosign's bundles as package versions.
+    # `untagged` answers from the first run; a subject is read only once a version is old.
+    untagged = sum(not v.tags for v in listed)
     signed = sum(isinstance(subject, str) for subject in facts.subjects.values())
     print(
-        f"listed={listed} untagged_with_subject={signed} "
+        f"listed={len(listed)} untagged={untagged} untagged_with_subject={signed} "
         f"selected={len(selection.delete)} deleted={deleted} "
         f"verified={','.join(verified) or 'none'}"
     )

@@ -143,8 +143,10 @@ deletes a bundle or an index only when the digest it signs is gone.
 read fails. A listing that does not hold `prod`'s or `last-good`'s version counts as a failed
 read. After its deletes, `prune` runs `cosign verify` on `prod`'s digest, and on
 `last-good`'s when that tag exists. A failed verify fails the run, so a wrong selection
-shows as a red run on the day it happens. The run's last line counts the versions it listed,
-selected, deleted and verified, and the untagged versions whose manifest has a `subject`.
+shows as a red run on the day it happens. `prune` waits one second before each delete,
+because GitHub rate-limits bursts of writes with a 403 that reads like a permission error.
+The run's last line counts the versions it listed, the untagged ones among them, the untagged
+versions whose manifest has a `subject`, and the versions it selected, deleted and verified.
 
 The first run shows whether the workflow's `GITHUB_TOKEN` may list and delete versions of a
 package that the user account owns. If the run logs an HTTP 403, the operator grants this

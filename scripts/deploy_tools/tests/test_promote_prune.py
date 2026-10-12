@@ -213,8 +213,12 @@ def world(tmp_path):
 def _prune(world: World, capsys) -> tuple[int, list[str], str]:
     argv = ["prune", "--repo", str(world.repo)]
     clients = world.clients()
-    github = forge.GitHub(
-        world.transport, "job-token", run=world.run, versions_per_page=2
+    github = forge.GitHub(  # two a page, and a pause list rather than a real sleep
+        world.transport,
+        "job-token",
+        run=world.run,
+        versions_per_page=2,
+        sleep=world.pauses.append,
     )
     clients = forge.Forge(clients.registry, github, clients.cosign)
     code = promote.main(argv, f=clients, now=NOW)
@@ -226,9 +230,10 @@ def test_prune_deletes_the_selection_then_verifies_prod_is_clean(world, capsys):
     code, lines, _ = _prune(world, capsys)
     assert code == 0
     assert world.transport.deleted == [1, 3]
+    assert world.pauses == [forge.DELETE_PAUSE_S] * 2
     assert world.run.verified == [digest_of(world.commits[2])]
     assert lines[-1] == (
-        "listed=4 untagged_with_subject=1 selected=2 deleted=2 verified=prod"
+        "listed=4 untagged=1 untagged_with_subject=1 selected=2 deleted=2 verified=prod"
     )
 
 
@@ -237,7 +242,7 @@ def test_a_refused_delete_stops_the_run_and_is_flagged(world, capsys):
     code, _, err = _prune(world, capsys)
     assert code == 1
     assert world.transport.deleted == []
-    assert "delete package version 1: HTTP 403" in err
+    assert "delete package version 1: HTTP 403: forced HTTP 403" in err
     assert world.run.verified == [digest_of(world.commits[2])]
 
 
@@ -253,4 +258,4 @@ def test_a_listing_that_fails_deletes_nothing_and_is_flagged(world, capsys):
     code, _, err = _prune(world, capsys)
     assert code == 1
     assert world.transport.deleted == []
-    assert "package versions page 1: HTTP 403" in err
+    assert "package versions page 1: HTTP 403: forced HTTP 403" in err
