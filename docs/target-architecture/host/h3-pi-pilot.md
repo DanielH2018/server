@@ -163,6 +163,8 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   records about 124 merges a day, a median gap of 315s and a p25 gap of 88s, against a
   ~103s CI sweep. Gating on the tip alone parks a green commit behind every later merge's
   sweep, so `deploy_phases.py:_newest_green_ancestor` walks back from the tip.
+  `deploy_git.py:ci_walk_candidates` lists the first-parent commits that walk grades. A
+  commit on `origin/master` with a green CI verdict is the deployer's whole anchor.
 - **Setup roles that share `common` files are listed in one table.**
   `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES` maps `alert_unit.yml` to
   `_ALERT_UNIT` and `install_host_lib.yml` to `_HOST_LIB`. `_STAMPED`, the importers of
@@ -211,10 +213,12 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
     - `hosts/lib/` holds the scripts several packages ship, with tests in `hosts/lib/tests/`.
     - `hosts/bootstrap-host.sh` is the bring-up script.
     - `hosts/keys/` holds the public keys hosts trust. PR H3.4c commits the first,
-      `homelab-archive-keyring.gpg`. The key the builder checks merges against is not
-      there; see *The builder and the repository*.
-- **Packages and the slice that creates each.** `homelab-updater` and `homelab-daniel-pi` in
-  H3, `homelab-daniel-server` in H4, `homelab-daniel-box` in H6, `homelab-repos` in H7.
+      `homelab-archive-keyring.gpg`. No key that the builder's anchor check reads lives
+      there, so a candidate commit cannot supply its own anchor (*Open questions* 1).
+- **Packages and the slice that creates each.** `homelab-updater`, `homelab-daniel-pi` and
+  `homelab-tools` in H3, `homelab-daniel-server` in H4, `homelab-daniel-box` in H6, and
+  `homelab-repos` in H7. `homelab-tools` is the one architecture-specific package (C5,
+  *`homelab-tools`* below).
 - **Installed paths.**
     - Scripts go in `/usr/lib/homelab/`.
     - Units go in `/usr/lib/systemd/system/`, and enable links in
@@ -240,6 +244,10 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
 - **Repository.**
     - URL `http://10.0.0.215:8791`, which is daniel-box's `server_ip`.
     - Suite `homelab`, component `main`, and `Origin` and `Label` both `homelab`.
+    - `Architectures: amd64 arm64`. Every package but `homelab-tools` is `Architecture:
+      all` and appears in both indexes.
+    - The signed `Release` carries `Valid-Until` seven days after its `Date`, and the
+      signer re-signs it daily (C5, *The builder and the repository*).
     - The deb822 source is `/etc/apt/sources.list.d/homelab.sources`, with
       `Signed-By: /usr/share/keyrings/homelab-archive-keyring.gpg`.
     - `homelab-updater` ships both files. It ships the keyring only from PR H3.4c, the PR
@@ -252,6 +260,9 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
     - `hosts/bootstrap-host.sh` is the one file under `hosts/` that types the URL, because it
       runs on a host before anything is installed. A test holds that URL equal to
       daniel-box's `server_ip` (PR H3.6).
+    - The script types an address, not a name, because the LAN's DNS runs in the
+      cluster. A host that is being bootstrapped, or whose cluster is down, still reaches
+      the repository.
 - **Builder state.** Two system users split building from signing.
     - `homelab-builder` owns `/var/lib/homelab-builder/`: its own clone (`src/`), scratch
       worktrees, the uv cache (`uv-cache/`), the CI verdict cache, the last published render
@@ -259,11 +270,11 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
     - `homelab-signer` owns `/var/lib/homelab-signer/`: the GnuPG home (`gnupg/`, 0700) and
       the published tree (`repo/`).
     - `/etc/homelab-builder/` is root-owned. It holds `config.env` (the GitHub token, the CI
-      context list and the walk bound, 0640, group `homelab-builder`), the merge-signing
-      keyring the trust check reads,
-      `archive-key.fpr`, and the operator's `hold` file. `archive-key.fpr` holds the signing
-      key's fingerprint, mode 0644. The role writes it from the signer's GnuPG home on
-      every apply, because the builder cannot read that home.
+      context list, the walk bound and the Prometheus addresses, 0640, group
+      `homelab-builder`), `archive-key.fpr`, and the operator's `hold` and `release`
+      files (*Staged rollout*). `archive-key.fpr` holds the signing key's fingerprint,
+      mode 0644. The role writes it from the signer's GnuPG home on every apply, because
+      the builder cannot read that home.
 - **Metrics.**
     - The textfile directory is `/var/lib/node-exporter-textfile/` on all three hosts. No
       package in this slice ships it.
@@ -299,14 +310,25 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
           committer time when the tip does not descend from the last built commit, and 0
           when the tip is the last built commit. `sha` names that oldest unbuilt commit, or
           the tip. `reason` says why the run built nothing newer: `hold`, `trust`,
-          `ancestry`, `keyring`, `ci`, `no-green`, or `ok` when it built or had nothing to
-          build.
+          `ancestry`, `keyring`, `ci`, `no-green`, `tools`, `canary`, or `ok` when it
+          built or had nothing to build. Only a check that the *Open questions* 1 ADR
+          adds emits `trust`. `tools` is a pinned binary whose digest differs
+          (*`homelab-tools`*), and `canary` is an open rollout gate (*Staged rollout*).
     - Neither `homelab-builder` nor `homelab-signer` can write the textfile directory. Each
       writes its file under its own state directory. Its unit then runs the role's
       `publish-textfile` script through an `ExecStopPost=-+` line. The `+` runs it as root,
       and the `-` keeps a failed copy from failing the unit. The script copies only series
       whose names start with that unit's prefix, `homelab_builder_` or `homelab_repo_`, and
       writes them with M3's write rule.
+    - **Series budget (C7).** Against M1's fleet budget of 140,000 head series, H3 adds
+      about 16. They are the Pi's four `homelab_host_*` series, one
+      `homelab_repo_published_info` series for each of `homelab-updater`,
+      `homelab-daniel-pi` and `homelab-tools`, and the builder's two series. The Pi's
+      exporter gains two textfile-collector series, `node_textfile_scrape_error` and one
+      `node_textfile_mtime_seconds`. About five more exist while a `sha`, `version` or
+      `reason` label changes inside the head block. Each host that H4 and H6 add brings
+      four `homelab_host_*` series and one published-info series, so the host plane
+      stays under 40.
 - **Ordering on the secrets unit (H4).** A unit that reads a credential or a
   secret-bearing file declares `Wants=homelab-secrets.service` and
   `After=homelab-secrets.service`, never `Requires=`. systemd restarts every unit that
@@ -439,8 +461,9 @@ installed versions are *reconciled* when the record's `result` names exactly the
     - A non-zero exit ends the run non-zero. It writes no metric and no hold, and leaves
       `last_success` alone. An unreachable repository, a stopped `homelab-apt-repo.service`,
       a wrong firewall rule and a keyring mismatch therefore all let the success timestamp
-      go stale, and the `host_packages` page fires once the host's limit passes. One failed
-      fetch does not page, because the limit exceeds the longest gap between two fires.
+      go stale, and `HostUpdateStale` fires once the host's limit passes. One failed fetch
+      does not page, because the limit exceeds the longest gap between two fires. A
+      `Release` past its `Valid-Until` fails the fetch the same way.
 4. Read `dpkg-query -W -f '${db:Status-Abbrev} ${Version}'` for both packages. Read each
    candidate from the homelab `Packages` list that step 3 fetched. `apt-get indextargets`,
    run with step 3's options, names that file, and awk takes the highest `Version:` of each
@@ -448,7 +471,7 @@ installed versions are *reconciled* when the record's `result` names exactly the
     - If the scan finds no `Version:` for `homelab-updater` or for `homelab-<host>`, because
       the list is missing, renamed or reshaped, the run exits non-zero and writes no metric.
       "Nothing found" never reads as "nothing newer", so the success timestamp goes stale
-      and the `host_packages` page fires.
+      and `HostUpdateStale` fires.
     - A package whose status is not `ii `, such as one half-installed by a kill during
       unpack, is reinstalled with `apt-get install --reinstall`. The run continues at step 7.
     - A candidate newer than the installed version continues at step 5.
@@ -594,29 +617,45 @@ all three. PR H3.4b creates it with the deployer-hold procedure, and H3.5b compl
   only if the record then shows the installed versions reconciled. A fix merged after the
   failure reaches that host only after the clear. That is the trade `hold_sha` makes for the
   cluster.
+- **Per host, when the installed package is the cause.** `--clear-hold` cannot pass while
+  the installed version itself makes reconcile fail. `sudo /usr/lib/homelab/homelab-updater
+  --clear-hold --install-newest` removes the hold, then runs steps 3 to 8 as a timer run
+  would. It fetches, installs the newest published versions, runs reconcile and writes the
+  verdict, and a failure writes the hold again. The operator runs it once the builder has
+  published the fix or the revert. With nothing newer published, it acts as `--clear-hold`.
 - **Per host, by hand.** `sudo systemctl mask --now homelab-updater.timer` stops updates on
   one host. Reconcile never starts or restarts a masked unit, so a later package cannot undo
   it.
 - **Every host, by hand.** A root-owned `/etc/homelab-builder/hold` on daniel-box stops the
   builder publishing anything. The builder user cannot remove it.
+- **Every host but the canary, by hand.** A root-owned `/etc/homelab-builder/release`
+  that names a SHA closes an open rollout gate before the canary reports (*Staged
+  rollout*). The builder user cannot create it.
 
-Two pages report the host plane, so a hold or a stall is never silent:
+Two alert paths report the host plane, so a hold or a stall is never silent:
 
-- monitor-bridge's `host_packages` row (PR H3.5c) pushes `down` in four cases. If H3.5c
-  merges after M6's A1 shadow PR, four alert rules carry the same four cases instead
-  (*Steps*, H3.5c). The cases:
-    - any host reports `homelab_host_reconcile_ok` 0;
-    - an expected host's `homelab_host_update_success_timestamp_seconds` is older than its
-      limit, or absent;
+- **Host rules (PR H3.5d, C7).** Two rules in M1's rules directory page through
+  Alertmanager. Each carries C7's labels: `service` is the host the series names, and
+  `severity` is `critical`. Both survive M6, and H5 relies on them.
+    - `HostReconcileFailed` fires when `homelab_host_reconcile_ok` reads 0 for 15 minutes.
+      Its annotation names the host and both `--clear-hold` commands.
+    - `HostUpdateStale` fires when an expected host's
+      `homelab_host_update_success_timestamp_seconds` is older than that host's limit, or
+      absent while that host's exporter `up` reads 1. The expected hosts and their limits
+      are a default of the observability role, empty in H3.5d. H3.9c adds daniel-pi.
+- **Builder arms (PR H3.5c).** monitor-bridge's `host_packages` row pushes `down` in two
+  cases. If H3.5c merges after M6's A1 shadow PR, two alert rules carry the same two cases
+  instead (*Steps*, H3.5c). The cases:
     - `homelab_builder_fetch_timestamp_seconds` is older than
       `monitor_bridge_builder_max_fetch_age_s`, 1800 seconds by default, or absent. That
       covers a dead builder timer, a missing token and a fetch that keeps failing;
     - `homelab_builder_unbuilt_since_timestamp_seconds` is non-zero and older than
       `monitor_bridge_builder_max_lag_s`, 2 hours by default. That covers a trust refusal,
-      a keyring refusal, a rewritten master, an empty CI context list, a CI context that no
-      longer matches, a builder hold, and a master
-      that stays red for 2 hours. In each of these the builder runs and exits 0 while no
-      host receives a change. The bound exceeds the ~103s master CI run many times over.
+      a keyring refusal, a tools refusal, a rewritten master, an empty CI context list, a
+      CI context that no longer matches, a builder hold, a rollout gate the canary never
+      closes, and a master that stays red for 2 hours. In each of these the builder runs
+      and exits 0 while no host receives a change. The bound exceeds the ~103s master CI
+      run many times over.
 - The builder and the signer each carry `OnFailure=` through
   `ansible/roles/setup/common/tasks/alert_unit.yml`, which posts to Discord once per
   failure. The builder fires every 2 minutes, so it exits non-zero only once for each
@@ -670,12 +709,15 @@ Each run does these steps:
     - A pending or red tip over a green parent builds the parent. When no commit in the walk
       is green, it exits 0 and walks again next tick. That exit stays 0, because a pending
       tip is normal. The unbuilt-since metric reports a walk that stays empty.
-5. Apply the trust check to the chosen commit. See *Open questions* 1.
-    - The default verifies GitHub's merge signature against
-      `/etc/homelab-builder/trusted-merge-signing.gpg`. The role installs that keyring from
-      its own `files/`. The builder never reads a keyring from the candidate, so a commit
-      cannot supply its own trust anchor.
-    - A refusal builds nothing, and the run fails (step 8).
+5. The anchor is step 4's result: a commit on `origin/master`'s first-parent chain with a
+   green CI verdict. `deploy_git.py:ci_walk_candidates` gives the GitOps deployer the same
+   anchor (C5). The builder checks no commit signature, because master commits carry
+   GitHub's signature, not the operator's (*Baseline*).
+    - Whether the builder adds a check, and which, is *Open questions* 1. The operator
+      records that choice in an ADR before H3.5a merges (**operator-only**).
+    - A check the ADR adds reads its key from a root-owned file that the role installs,
+      never from the candidate, so a commit cannot supply its own anchor. Its refusal
+      builds nothing, writes `reason="trust"`, and fails the run (step 8).
 6. Check out the chosen commit in a scratch worktree, then run the renderer there with
    `uv run --frozen`: `host` mode for every `hosts/*/package.yml`, and `package` mode for every
    package under `hosts/packages/`. The uv cache is `/var/lib/homelab-builder/uv-cache`, and the
@@ -687,8 +729,9 @@ Each run does these steps:
       (step 8). A placeholder key, a revert of H3.4c or a key rotated on one side only
       therefore never reaches a host.
 7. Run `nfpm package` for each package whose rendered tree differs from its last published
-   render, writing into `staged/`, with the version from *Package rules*. Record the chosen
-   commit as the last built one. Exit 0.
+   render, with the version from *Package rules*. Write `staged/chosen`, which names the
+   chosen commit's 12-hex SHA, and stage only the packages that *Staged rollout* admits.
+   Record the chosen commit as the last built one. Exit 0.
 8. Every run that passed step 2 writes `homelab_builder.prom` before it exits, whichever
    step ends it, and `publish-textfile` copies it (*Shared names*, Metrics). Any failing
    run, step 1's included, records its reason and the tip it met, if any. A later run that fails for the same reason on
@@ -697,16 +740,48 @@ Each run does these steps:
 
 `homelab-repo-sign.service` runs as `homelab-signer`, with
 `OnFailure=homelab-repo-sign-alert.service` from `alert_unit.yml`. It runs a script the role
-installs from its own `files/`, never code from the builder's clone. It exits 0 when
-`staged/` is empty.
-Otherwise it does these steps:
+installs from its own `files/`, never code from the builder's clone at run time. The role
+itself reaches daniel-box from master through the tick, like every setup role.
 
-1. Copy the staged packages into `repo/pool/`.
-2. Regenerate `Packages` and `Release` with `apt-ftparchive`.
-3. Sign `InRelease` and `Release.gpg` with its key, and swap `dists/` in atomically.
-4. Write `homelab_repo.prom` under its own state directory, then empty `staged/`. That
+When `staged/` is empty, the signer exits 0, unless the published `Release` carries a
+`Date` more than 24 hours old. Then it runs steps 3 and 4 alone, which re-signs the
+unchanged tree with a fresh `Valid-Until`. The builder's `OnSuccess=` starts the signer
+after every builder run that exits 0, a held run included, so the re-sign happens daily
+while the builder timer runs. Otherwise the signer does these steps:
+
+1. Check every entry of `staged/` before it copies anything. It accepts `staged/chosen`
+   and `.deb` files whose control `Package` starts with `homelab-` and whose `Version`
+   ends in `+g` and the SHA that `staged/chosen` names. Any other entry, another package
+   name, or a version that names another commit is a refusal. The signer then moves the
+   whole of `staged/` into `refused/` under its own state directory, publishes nothing,
+   and fails the run, so `OnFailure=` posts once.
+2. Copy the accepted packages into `repo/pool/`.
+3. Regenerate the `amd64` and `arm64` `Packages` indexes and `Release` with
+   `apt-ftparchive`. `Release` carries `Valid-Until` seven days after its `Date` (C5).
+4. Sign `InRelease` and `Release.gpg` with its key, and swap `dists/` in atomically.
+5. Write `homelab_repo.prom` under its own state directory, then empty `staged/`. That
    directory is group-owned by `homelab-signer` with mode 2770. `publish-textfile` copies
    the metric file into the textfile directory (*Shared names*, Metrics).
+
+**Sandboxing.** The builder and signer units run under systemd sandboxing, and a test
+holds each directive (*Verification*, Builder):
+
+- Both units set `NoNewPrivileges=yes`, `ProtectSystem=strict`, `ProtectHome=yes`,
+  `PrivateTmp=yes`, `PrivateDevices=yes`, `ProtectKernelTunables=yes`,
+  `ProtectKernelModules=yes`, `ProtectControlGroups=yes`, `RestrictSUIDSGID=yes` and an
+  empty `CapabilityBoundingSet=`.
+- `homelab-builder.service` sets `ReadWritePaths=/var/lib/homelab-builder`. That directory
+  holds the clone, the scratch worktrees, `staged/` and the uv cache, and the role points
+  `UV_PYTHON_INSTALL_DIR` into it as well.
+- `homelab-repo-sign.service` sets `ReadWritePaths=/var/lib/homelab-signer` and
+  `/var/lib/homelab-builder/staged`, and `PrivateNetwork=yes`, because signing needs no
+  network.
+- Each unit's `ExecStopPost=-+` line runs `publish-textfile` outside the sandbox, because
+  systemd's `+` prefix exempts that one command. The script is the role's own, and it
+  copies only the unit's prefixed series.
+
+Sandboxing bounds what a builder run can touch on daniel-box. It does not bound what the
+builder hands the signer, and *Risks* says so.
 
 `homelab-apt-repo.service` runs `python3 -m http.server --bind 10.0.0.215 8791 --directory
 /var/lib/homelab-signer/repo` with `DynamicUser=yes` and `ProtectSystem=strict`. apt trusts
@@ -718,6 +793,73 @@ advancing its success timestamp. The role's templates and the
 `homelab.sources` template read daniel-box's `server_ip` and the peers' `server_ip`, and never
 type an address. `hosts/bootstrap-host.sh` is the one exception, held equal to `server_ip` by
 a test (*Shared names*, Repository).
+
+The builder, the signer and the repository all run on daniel-box. *Risks* accepts that
+concentration.
+
+**Recovering from a revoked archive key.** `Valid-Until` bounds how long a host accepts an
+old index signed by a working key. It does not help once the key itself is revoked,
+because whoever holds the revoked key can sign a fresh `Release`. `docs/host-packages.md`
+carries this procedure from H3.5b. Each host step runs from a LAN session and is
+**operator-only**:
+
+1. On each host, `sudo systemctl mask --now homelab-updater.timer`, so no host installs
+   anything while it still trusts the revoked key. `HostUpdateStale` fires for each
+   masked host once its limit passes, which is expected.
+2. On daniel-box, set the builder hold and generate the replacement key in the signer's
+   GnuPG home. Export its public half with H3.4c's command, and commit it to `hosts/keys/`
+   with the matching pin in `hosts/bootstrap-host.sh`, in one PR. The role's next apply
+   rewrites `archive-key.fpr`, and builder step 6 then accepts the render.
+3. Release the builder hold. The signer re-signs the tree with the replacement key.
+4. On each host, run `sudo ./bootstrap-host.sh <hostname>` from the commit that carries
+   the replacement pin. Its step 2 verifies the keyring against that pin, and its step 5
+   installs the newest packages, whose `homelab-updater` ships the same keyring. Then
+   `sudo systemctl unmask homelab-updater.timer` and `sudo systemctl start
+   homelab-updater.timer`.
+
+A host whose `HostUpdateStale` still fires after step 4 has not recovered.
+
+### Staged rollout (C5)
+
+A run whose changed set holds more than one host package stages only the canary's package.
+The others publish once the canary reports `homelab_host_reconcile_ok 1` at that version,
+or when the operator overrides. PR H3.12 adds the gate, which changes nothing until H4
+publishes a second host package.
+
+- **The canary is daniel-pi.** Each host costs something different when a package breaks
+  it:
+    - daniel-box runs the builder, the signer and the repository, so a package that breaks
+      it can stop the publish of its own fix. It always comes last.
+    - daniel-server runs half the cluster's workloads and the UPS shutdown chain.
+    - daniel-pi runs four LAN utilities and the WireGuard endpoint. A package that breaks
+      it costs off-LAN access until a LAN session repairs it (*Risks*). It is also the
+      pilot, and the hostname every container case runs under.
+
+  The order is daniel-pi, daniel-server, daniel-box. When the Pi's package is not in a
+  run's changed set, the first host in that order whose package changed is that run's
+  canary.
+- **The gate.** A run that stages the canary's package at version V records V's SHA as an
+  open gate in the builder's state. While a gate is open, the builder builds the canary's
+  package as usual, and moves the gate to each newer canary version. It builds no other
+  host package, so their renders keep differing from the last published ones.
+- **Closing the gate.** Each run reads `homelab_host_applied_info` and
+  `homelab_host_reconcile_ok` for the canary through the loopback-then-ClusterIP transport
+  of the land host wait (H3.9a item 3). The gate closes when the canary's applied SHA
+  equals or descends from V's SHA with `homelab_host_reconcile_ok` at 1. The next run
+  builds the deferred host packages at its own chosen commit, so their versions name the
+  commit that `staged/chosen` names, as the signer requires.
+- **The override.** A root-owned `/etc/homelab-builder/release` that names V's SHA, or a
+  descendant, closes the gate at once. The operator removes the file after use.
+- **An open gate pages.** While a gate is open, the unbuilt-since series carries
+  `reason="canary"`, its `sha` names V's commit, and its value is that commit's committer
+  time. H3.5c's lag arm fires once the gate stays open past 2 hours. A held canary fires
+  `HostReconcileFailed` first. An unreachable Prometheus keeps the gate open, which fails
+  closed.
+- **Shared packages are outside the gate.** `homelab-updater` and `homelab-tools` publish
+  in the run that builds them, and every host installs them at its next fire (*Open
+  questions* 10).
+- **Under the Pi's daily fallback schedule** (*Risks*, apt memory), daniel-server is the
+  canary. A daily canary would hold every other host for up to a day and trip the lag arm.
 
 ### CI (builds, never signs)
 
@@ -733,9 +875,10 @@ concurrency group on push. It needs no secrets, and it does these steps:
 3. It builds both renders with nfpm pinned by version and sha256, and runs the
    maintainer-script lint and the `type: config` lint.
 4. It builds the test image from `hosts/lib/tests/container/Dockerfile`. The job does not
-   rely on what the stock image carries, which is a minimal root filesystem. The image starts
-   from `ubuntu:24.04` pinned by digest and installs `systemd`, `systemd-sysv` and `python3`
-   from Ubuntu's snapshot archive
+   rely on what the stock image carries, which is a minimal root filesystem. The job is a
+   matrix over `ubuntu:24.04` and `ubuntu:26.04`, the releases the fleet runs or is moving
+   to (C5). Each leg's image starts from its release pinned by digest and installs
+   `systemd`, `systemd-sysv` and `python3` from Ubuntu's snapshot archive
    (`snapshot.ubuntu.com`) at a pinned timestamp, so a rebuild resolves the same versions.
    The build step writes `dpkg-query -W systemd python3` to the job summary. The image also
    carries these three, so every case, the cold install included, starts with them:
@@ -755,8 +898,9 @@ concurrency group on push. It needs no secrets, and it does these steps:
       is installed but unused, and needs no diversion.
 5. It boots that image with systemd as PID 1 (`--privileged --cgroupns=host`) and
    `--hostname daniel-pi`, because the Pi package's `preinst` refuses any other hostname.
-   Before any case it asserts that `python3 --version` prints `Python 3.12`, so reconcile
-   runs under the interpreter the hosts carry. It serves both builds from a local unsigned
+   Before any case it asserts that `python3 --version` prints the minor its matrix leg
+   names, `Python 3.12` on 24.04, so reconcile runs under the interpreter each release
+   carries. Every case below runs on both legs. It serves both builds from a local unsigned
    repository with `python3 -m http.server` on `127.0.0.1:8791`, as daniel-box serves the
    real one, and runs the updater against it. Every case but the stopped-server case asserts
    that the server's log holds that case's `GET` of `dists/homelab/Release`. Every case
@@ -797,6 +941,30 @@ from the `ci.yml` runs, filtered by job name:
 gh run list --workflow ci.yml --branch master --limit 3 --json databaseId,headSha,conclusion
 gh run view <run-id> --json jobs --jq '.jobs[] | select(.name == "host_packages") | .conclusion'
 ```
+
+### `homelab-tools` (C5)
+
+`homelab-tools` is the one architecture-specific package. nfpm builds it for `amd64` and
+`arm64` from pinned upstream release binaries, `sops` and `chezmoi` among them. PR H3.11
+adds it, and the Pi is its `arm64` pilot.
+
+- `hosts/packages/homelab-tools/package.yml` lists each tool with its version and, for each
+  architecture, its upstream URL and its sha256. A Renovate manager bumps each pin, as the
+  nfpm pin's manager does (H3.3a).
+- Each binary installs at `/usr/lib/homelab/bin/<tool>`, never on `PATH`. `sops` is
+  `/usr/lib/homelab/bin/sops`, the absolute path H4's `homelab-secrets` calls, and
+  `chezmoi` is `/usr/lib/homelab/bin/chezmoi`. A test of the rendered package holds
+  both paths as named members, and a fixture that moves `sops` fails it.
+- The builder downloads each binary into a cache under its state directory, keyed by
+  sha256. A file whose digest differs from its pin builds nothing, writes
+  `reason="tools"`, and fails the run (step 8).
+- Its version follows *Package rules*, and publish-on-change republishes it only when a
+  pin changes.
+- A host takes it through a `Depends` in its host package. An unversioned `Depends` that
+  is already satisfied never upgrades the package, so from H3.11 updater steps 4 and 5
+  cover every installed package whose name starts `homelab-`, not only the two.
+- CI builds both architectures. A job on an `arm64` runner installs the `arm64` build in
+  the test image and runs each tool's `--version` (*Open questions* 9).
 
 ### What H7 inherits from this slice
 
@@ -854,7 +1022,8 @@ The reader fails later, often on a host the move did not touch.
       arms read their series as absent;
     - the builder's once-per-condition failure record (builder step 8). Without it,
       `OnFailure=` posts once every 2 minutes for a persistent condition;
-    - the trusted merge-signing keyring and `config.env`;
+    - `config.env`, the two units' sandboxing directives, the staged-rollout gate and the
+      `release` override file;
     - the writer of `/etc/homelab-builder/archive-key.fpr`. The role writes it from the
       signer's GnuPG home on every apply. With the file absent, builder step 6 refuses
       every `homelab-updater` build with `reason="keyring"`, so a rebuilt daniel-box whose
@@ -879,16 +1048,16 @@ The reader fails later, often on a host the move did not touch.
 
 ```text
 master tip ─▶ homelab-builder (daniel-box, every 2 min, user homelab-builder)
-               token? ─▶ fetch ─▶ hold? ─▶ newest green commit ─▶ trust check ─▶ render ─▶ keyring check ─▶ nfpm ─▶ staged/
+               token? ─▶ fetch ─▶ hold? ─▶ newest green commit (the anchor) ─▶ render ─▶ keyring check ─▶ nfpm ─▶ canary gate ─▶ staged/
                └─▶ every run past the fetch: homelab_builder.prom ─▶ Prometheus ─▶ monitor-bridge
                                                                                    │ OnSuccess
-              homelab-repo-sign (user homelab-signer) ─▶ apt-ftparchive ─▶ sign ─▶ repo/
+              homelab-repo-sign (user homelab-signer) ─▶ refusal rule ─▶ apt-ftparchive ─▶ sign ─▶ repo/
                                                                                    │
 daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-daniel-pi ┘
              └─▶ homelab-reconcile (waits for the dpkg lock, reads, releases) ─▶ units, legacy entries
                    └─▶ applied.json: per-entry state + record {versions, ok}
              └─▶ ok:   /var/lib/node-exporter-textfile/homelab_host.prom ─▶ Prometheus ─▶ land.sh
-             └─▶ fail: /var/lib/homelab-updater/hold, homelab_host_reconcile_ok 0 ─▶ monitor-bridge page
+             └─▶ fail: /var/lib/homelab-updater/hold, homelab_host_reconcile_ok 0 ─▶ HostReconcileFailed
 ```
 
 ### File tree this slice adds
@@ -902,12 +1071,13 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
 + hosts/lib/tests/container/Dockerfile
 + hosts/packages/homelab-updater/package.yml
 + hosts/packages/homelab-updater/units/
++ hosts/packages/homelab-tools/package.yml            (H3.11)
 + hosts/components/reconcile/component.yml
 + hosts/components/pi-heartbeats/component.yml        (defaults moved from optimize_pi)
 + hosts/components/pi-heartbeats/templates/
 + hosts/components/pi-heartbeats/files/pi-health.logrotate
 + hosts/daniel-pi/package.yml
-+ ansible/roles/setup/homelab_builder/                 (incl. files/trusted-merge-signing.gpg, files/publish-textfile)
++ ansible/roles/setup/homelab_builder/                 (incl. files/publish-textfile and the signer's refusal rule)
 + scripts/deploy_tools/land_lib/host_wait.py
   ansible/initial_setup.yml                            (+ homelab_builder entry; parks the deployer)
   .github/workflows/ci.yml                             (+ host_packages job, read by the prek gate)
@@ -927,7 +1097,8 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
   scripts/deploy_tools/land_lib/deploy.py              (no_tag_outcome yields to host targets)
   scripts/deploy_tools/land_lib/health_verdict.py      (verdict wording names hosts)
   ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py  (+ homelab_builder)
-  ansible/roles/k8s/monitor-bridge/files/check_table.py                     (+ host_packages row)
+  ansible/roles/k8s/monitor-bridge/files/check_table.py                     (+ host_packages row, builder arms)
+  the observability role's rules directory, which M1 creates   (+ HostReconcileFailed, HostUpdateStale, H3.5d)
   ansible/roles/k8s/monitor-bridge/files/checks/gitops.py                   (+ the row's check body)
   ansible/roles/k8s/monitor-bridge/files/gates.py                           (host_packages in EXPORTER_DEPENDENT)
   ansible/tests/repo/test_lan_facts_have_one_source.py (+ hosts, .sh, the bootstrap row)
@@ -966,6 +1137,7 @@ says otherwise.
       then names a missing file. Its tests in
       `hosts/lib/tests/` drive the updater against a stub `dpkg-query`, `apt-get`, `systemctl`
       and record (*Verification*, Updater), and hold its `TimeoutStartSec` above reconcile's.
+      The updater carries both `--clear-hold` levers (*Host-plane holds and stop levers*).
     - **H3.2b, reconcile.** Add `hosts/lib/homelab-reconcile` and the `reconcile` component.
       Its tests drive reconcile against a stub `systemctl` and a stub dpkg lock, and parse it
       with the 3.12 grammar (*Verification*, Reconcile and Python 3.12 syntax).
@@ -997,7 +1169,7 @@ says otherwise.
       `needs` entry and result check in the `prek` gate, the nfpm pin, and the pin's Renovate
       manager.
     - **H3.3b, the container cases.** Add `hosts/lib/tests/container/Dockerfile` and *CI*
-      steps 4 and 5. The cases include the Depends case: fixture version N has no `Depends`,
+      steps 4 and 5, as a matrix over `ubuntu:24.04` and `ubuntu:26.04`. The cases include the Depends case: fixture version N has no `Depends`,
       fixture N+1 adds `Depends: tree`, and the updater must leave `tree` installed.
 4. **H3.4a Place the `homelab_builder` role. This PR parks the GitOps deployer.**
     - Add the `initial_setup.yml` entry `{ role: homelab_builder, tags: ["homelab_builder"],
@@ -1061,9 +1233,13 @@ says otherwise.
         - Nothing is published yet, so no host changes. The fingerprint pin in
           `bootstrap-host.sh` is H3.6's, because H3.6 creates the script.
 6. **H3.5a Builder half, staging only.** Merge it after H3.4c, in an attended window. It
-   also waits on two rows of contracts.md: the C5 trust row (Open question 1) and the C5
-   *Version* row (Open question 7). Each must be amended, or listed under *Requested
-   amendments not yet applied* with this gate, before the PR merges.
+   also waits on three gates:
+    - the operator's ADR for *Open questions* 1 is merged (**operator-only**);
+    - the C5 *Version* row (*Open questions* 7) is amended, or listed under *Requested
+      amendments not yet applied* with this gate;
+    - **operator-only:** the signing-key reach check in *Verification* has run for every
+      account an agent session runs as and for `homelab-builder`, and its output is in the
+      PR body. A check that finds any route stops the PR until that route is closed.
     - Add `homelab-builder.service` and `homelab-builder.timer`, the builder script, the
       pinned nfpm and `apt-utils`, and `/etc/homelab-builder/config.env` carrying the token,
       `CI_CONTEXTS` and the walk bound (builder step 4).
@@ -1071,7 +1247,8 @@ says otherwise.
       `homelab_builder` to `deploy_cross_role.py:SETUP_FILES_SHIPPED_BY_OTHER_ROLES`. The
       defaults-read census in `ansible/tests/setup/test_setup_cross_role_files.py` requires
       it once the role's template reads `gitops_deploy_ci_contexts`.
-    - Add the trusted merge-signing keyring to the role's `files/`.
+    - Give `homelab-builder.service` its sandboxing directives (*The builder and the
+      repository*, Sandboxing), with the test that holds them.
     - Give `homelab-builder` uv, the pinned `host_python_version` and a frozen environment.
       Follow the uv and Python steps of `ansible/roles/setup/common/tasks/agent_user.yml`, not
       the whole file, which also installs Claude Code.
@@ -1093,16 +1270,20 @@ says otherwise.
     - Add the `## Autonomous-role contract` section to the role `CLAUDE.md`, because the
       timer acts unattended.
     - The builder stages packages but publishes nothing until H3.5b.
-7. **H3.5b and H3.5c: publish, and page on the host plane.** Two PRs, in order.
+7. **H3.5b to H3.5d: publish, and page on the host plane.** Three PRs. H3.5c follows
+   H3.5b. H3.5d waits on M1 instead (contracts.md index), and H3.9b waits on H3.5d.
     - **H3.5b, signer and publish.** Merge it in an attended window.
         - Add `homelab-repo-sign.service`, its script, the `OnSuccess=` link,
           `homelab_repo.prom` with the signer's `ExecStopPost=-+` line, and the
           `/etc/homelab-builder/hold` lever.
         - Give the signer `OnFailure=homelab-repo-sign-alert.service` through a second
           import of `alert_unit.yml`.
+        - Add the signer's refusal rule, `Valid-Until`, the daily re-sign arm, and the
+          signer unit's sandboxing directives, `PrivateNetwork=yes` included.
         - Extend the autonomous-role contract with the signer and the hold.
         - Complete the runbook `docs/host-packages.md` (*Tests and docs*, H3.4b to H3.5c).
-    - **H3.5c, page on the host plane.** It takes one of two forms. The form depends on
+    - **H3.5c, page on the builder.** It carries the two builder arms. The host arms are
+      H3.5d's rules. It takes one of two forms. The form depends on
       whether M6's A1 shadow PR is on master when H3.5c merges (*Open questions* 8). A
       row-form H3.5c that meets A1's shadow PR on master at its rebase switches to the
       rule form before it merges.
@@ -1117,11 +1298,10 @@ says otherwise.
               Prometheus gate. A Prometheus-sourced arm there would page on every Prometheus
               outage. Its check body joins `checks/gitops.py`, and its Kuma tile is "Host
               Packages — Status"
-              in "Automation & Drift". It pushes `down` in the four cases *Host-plane holds and
-              stop levers* lists. The hold message names the host and its `--clear-hold`
-              command. Each builder message names the series' `reason` and `sha` labels, so a
-              hold, a trust refusal, a rewritten master and a walk with no green commit read
-              differently.
+              in "Automation & Drift". It pushes `down` in the two builder cases
+              *Host-plane holds and stop levers* lists. Each message names the series'
+              `reason` and `sha` labels, so a hold, a refusal, a rewritten master, an open
+              rollout gate and a walk with no green commit read differently.
             - Add `host_packages` to `gates.py:EXPORTER_DEPENDENT["node"]`, because the builder
               arms read daniel-box's node exporter through the `node` job. A dead exporter then
               pages once, through its own row, rather than also as an absent builder series.
@@ -1129,29 +1309,42 @@ says otherwise.
               `monitor_bridge_builder_max_fetch_age_s` (1800) render into
               `ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`, as every bridge
               threshold does.
-            - The expected hosts and their limits are a monitor-bridge default,
-              `monitor_bridge_host_update_max_age_s`, empty in this PR. H3.9c adds daniel-pi. A
-              test beside the renderer's host-mode tests renders each listed host's updater
-              timer with its drop-in. It fails when a limit is shorter than the longest gap
-              between two fires plus the updater's `TimeoutStartSec`, so a schedule change that
-              outgrows the limit fails CI.
             - **Operator-only:** create `monitor_bridge_host_packages_push_token` with the
               `add-secret` skill.
         - **Rule form, once A1's shadow PR has merged.** No row, no Kuma tile and no push
-          token. Four alert rules carry the four arms, because each arm is already a PromQL
-          condition. They join the observability role's rules directory, which M1 creates.
+          token. Two alert rules carry the two builder arms, because each arm is already a
+          PromQL condition. They join the observability role's rules directory, which M1
+          creates.
             - Each rule carries C7's labels. `severity` is `critical`, because the row
-              pages. `service` is the host the series names, and `daniel-box` for the two
-              builder rules.
-            - A rule that reads a series as absent fires only while its exporter's `up`
-              reads 1. That does for each rule what the two `EXPORTER_DEPENDENT` entries do
-              for the row, without waiting for A1's inhibit rule.
-            - The annotations carry the row's messages: the host and its `--clear-hold`
-              command, and the builder series' `reason` and `sha` labels.
-            - The two thresholds and the map of expected hosts become defaults of the
-              observability role, which renders one staleness clause per listed host. The
-              limit test reads that map.
+              pages, and `service` is `daniel-box`.
+            - A rule that reads a series as absent fires only while daniel-box's `node`
+              exporter `up` reads 1. That does for each rule what the `EXPORTER_DEPENDENT`
+              entry does for the row, without waiting for A1's inhibit rule.
+            - The annotations carry the row's messages: the builder series' `reason` and
+              `sha` labels. The two thresholds become defaults of the observability role.
             - Each rule's red and green pair is a `promtool test rules` case beside M2's.
+    - **H3.5d, the host rules.** About 120 lines. It waits on M1, which creates the rules
+      directory, and on none of H3.5a to H3.5c.
+        - Add `HostReconcileFailed` and `HostUpdateStale` to the observability role's rules
+          directory, with C7's labels (*Host-plane holds and stop levers*).
+        - `HostReconcileFailed` is `homelab_host_reconcile_ok == 0` held for 15 minutes.
+          Its annotation names the host and both `--clear-hold` commands.
+        - `HostUpdateStale` renders one clause per entry of the observability role's
+          expected-host map, which is empty in this PR. A clause fires when the host's
+          success timestamp is older than its limit, or absent while that host's exporter
+          `up` reads 1.
+        - A test beside the renderer's host-mode tests renders each listed host's updater
+          timer with its drop-in. It fails when a limit is shorter than the longest gap
+          between two fires plus the updater's `TimeoutStartSec`, so a schedule change
+          that outgrows the limit fails CI.
+        - Each rule's red and green pair is a `promtool test rules` case beside M1's own.
+        - M1's convention 5 bars a rule that is not a shadow from paging `up == 0` for a
+          scrape job without an `origin` label before M6's batch A3. It also requires
+          every `absent()` arm over such a job to be conjoined with `up == 1`. The `node`
+          and `node-pi` jobs in `ansible/roles/k8s/observability/templates/prometheus.yaml.j2`
+          both carry `origin`, so the convention does not bind these rules. They meet it
+          anyway: neither rule pages on `up`, and every absent arm is conjoined with
+          `up == 1`. The builder rules of H3.5c's rule form follow the same shape.
 8. **H3.6 The Pi package, empty, plus bring-up.**
     - Add `hosts/daniel-pi/package.yml` carrying only the `reconcile` component and the Pi's
       updater-schedule drop-in, with no enable link for `homelab-updater.timer`.
@@ -1165,8 +1358,9 @@ says otherwise.
           pin that differs fails it.
         - Step 5 runs `apt-get update --error-on=any` restricted to the homelab source,
           then `apt-get install homelab-updater homelab-<hostname>`.
-      Steps 3, 4 and 6 are H7's. H7 also adds `homelab-repos` to step 2 and `chezmoi` from
-      `homelab-tools` to step 5, because H7.1 creates both packages.
+      Steps 3, 4 and 6 are H7's. H7 also adds `homelab-repos` to step 2, because H7.1
+      creates it, and `chezmoi` from `homelab-tools` to step 5. H3.11 builds
+      `homelab-tools`.
     - The script types the repository URL (*Shared names*, Repository). Add `hosts` to
       `test_lan_facts_have_one_source.py:SCAN_ROOTS` and `.sh` to its `SCAN_SUFFIXES`, with
       an `ALLOWLIST` row for `hosts/bootstrap-host.sh` whose reason names the test below. Add
@@ -1262,7 +1456,7 @@ says otherwise.
           PR's. Otherwise the operator applies the rest first.
 11. **H3.9 Land on facts, and arm the Pi timer.** This step is three PRs, in order. Other
     slices' "H3.9 host-wait module" is H3.9a's, and "H3.9 arms the timer" is H3.9b. H3.9c
-    adds the Pi to the bridge's staleness arm once its timer runs.
+    adds the Pi to `HostUpdateStale` once its timer runs.
     - **H3.9a, the host-wait module, unwired.** Add
       `scripts/deploy_tools/land_lib/host_wait.py`. Nothing calls it yet, so no landing
       changes.
@@ -1302,7 +1496,8 @@ says otherwise.
            next fire, or that no timer is armed, and the operator's command to start the
            updater. Past the deadline, it ends `deferred` too, with the host's last success
            timestamp.
-    - **H3.9b, wire it and arm the Pi.**
+    - **H3.9b, wire it and arm the Pi.** Merge it only after H3.5d is on master, so a hold
+      on the armed Pi pages through `HostReconcileFailed`.
         1. `pipeline.py:_step_resolve` sets `ln.host_candidate` when a changed path falls
            under a member of `HOST_INPUTS`. It runs no renderer. Resolve reads the merge
            commit before master CI, and `deploy_cross_role.py:tables_in` records, in
@@ -1337,20 +1532,17 @@ says otherwise.
            merge SHA. Then run `sudo systemctl start homelab-updater.service` on the Pi.
            Confirm that `systemctl is-active homelab-updater.timer` prints `active`, then
            re-run the same `land.sh` command. Its first query finds the Pi settled.
-    - **H3.9c, the Pi joins the staleness arm.** Merge it only after H3.9b's operator step
+    - **H3.9c, the Pi joins `HostUpdateStale`.** Merge it only after H3.9b's operator step
       reads `active`. Before then, the Pi's last success timestamp is the last hand-started
-      run's, which can be days old, so the arm would page as soon as monitor-bridge
-      redeployed.
-      The two steps below are the row form. H3.9c extends whichever form is on master. When
-      H3.5c took the rule form, or M6's A1 cutover has replaced the row, H3.9c adds
-      daniel-pi to the rules' host map and to the `node-pi` `up` clause instead.
-        1. Add daniel-pi to `monitor_bridge_host_update_max_age_s`.
-        2. Add `host_packages` to `gates.py:EXPORTER_DEPENDENT["node-pi"]`. A failed scrape
-           marks the Pi's series stale, so the success timestamp reads as absent. The
-           `node-pi` job's comment in
-           `ansible/roles/k8s/observability/templates/prometheus.yaml.j2` records 88 minutes
-           of `up == 0` in 7 days. Without the entry, each failed scrape would push `down` once, and every
-           push monitor has `max_retries=0`.
+      run's, which can be days old, so the rule would fire as soon as the observability
+      role redeployed.
+        1. Add daniel-pi, with its limit, to the observability role's expected-host map
+           (H3.5d). The limit test then covers the Pi's rendered schedule.
+        2. The Pi's absent clause reads `up{job="node-pi"}`. A failed scrape marks the
+           Pi's series stale, so the success timestamp reads as absent. The `node-pi`
+           job's comment in `ansible/roles/k8s/observability/templates/prometheus.yaml.j2`
+           records 88 minutes of `up == 0` in 7 days. The clause keeps a failed scrape
+           from reading as a stale host.
     - The `outcome.py:Verdict.SETTLED` path runs only after every target host settles.
 12. **H3.10 The drop proof.** This PR comes in two parts, in order. Both are needed for exit
     observation 2, and the first must leave the timer running, or the drop proves nothing.
@@ -1370,6 +1562,30 @@ says otherwise.
         - Remove the canary pair from the naming census's named members in the same PR, or
           the census asserts members that no longer exist.
         - Reconcile step 1 stops the timer, and dpkg deletes its files on the upgrade.
+13. **H3.11 `homelab-tools`, with the Pi as its `arm64` pilot.** About 200 lines. Merge it
+    after H3.9b, so the Pi installs it through its armed updater. This PR produces both
+    builds: H4.2 waits on its `amd64` build, and H4.5 on its `arm64` build.
+    - Add `hosts/packages/homelab-tools/package.yml` with `sops` and `chezmoi`, and the
+      pins' Renovate manager (*`homelab-tools`*).
+    - The builder downloads and verifies each binary, then runs nfpm once per
+      architecture.
+    - Updater steps 4 and 5 cover every installed `homelab-*` package.
+    - Add `Depends: homelab-tools` to the Pi package. The two-writer census then checks the
+      tools' installed paths against every Ansible task that applies to the Pi.
+    - Add the `arm64` CI job. The `prek` gate lists it in `needs`, and `KNOWN_JOBS` in
+      `ansible/tests/repo/test_every_ci_job_is_gated.py` names it (*Open questions* 9).
+    - **Operator check after the merge:** the Pi lists `homelab-tools:arm64` at the merge
+      SHA or a descendant, and `dpkg --verify homelab-tools` prints nothing.
+14. **H3.12 Staged rollout.** About 150 lines, in `homelab_builder`. It changes nothing
+    while the Pi is the only host with a package. H4's first publish of
+    `homelab-daniel-server` waits on it.
+    - Add the gate, its state, the canary order and the `reason="canary"` arm of the
+      unbuilt-since series (*Staged rollout*).
+    - Render the Prometheus loopback address and `observability_prometheus_cluster_ip`
+      into `config.env`. The builder reads both from there, never from its clone. The PR
+      adds whatever row the defaults-read census in
+      `ansible/tests/setup/test_setup_cross_role_files.py` requires for that read.
+    - Add the root-owned `release` override and its runbook step.
 
 ## Verification
 
@@ -1402,6 +1618,18 @@ ssh daniel-pi 'systemctl is-active homelab-pi-canary.timer; ls /usr/lib/systemd/
 
 # Operator, H3.10b: the dropped timer is gone.
 ssh daniel-pi 'systemctl show homelab-pi-canary.timer -p LoadState -p ActiveState; ls /usr/lib/systemd/system/timers.target.wants/ | grep -c canary'
+
+# Operator, H3.11: the arm64 pilot.
+ssh daniel-pi 'dpkg-query -W homelab-tools:arm64; dpkg --verify homelab-tools'
+```
+
+```bash
+# Operator, on daniel-box, before H3.5a merges: the signing-key reach check. Run it once
+# for each account an agent session runs as, and once for homelab-builder.
+sudo -l -U <account>
+id <account>
+sudo -u <account> -- test -r /var/lib/homelab-signer/gnupg && echo READABLE
+sudo -u <account> -- gpg --homedir /var/lib/homelab-signer/gnupg --list-secret-keys
 ```
 
 The expected results are:
@@ -1418,7 +1646,13 @@ The expected results are:
 - at H3.10a, the canary timer reads `active` and its link count is 1;
 - at H3.10b, the canary reads `LoadState=not-found` and `ActiveState=inactive`, and the link
   count is 0. Only the H3.10a reading makes this one a proof that reconcile stopped a
-  running timer.
+  running timer;
+- at H3.11, `dpkg-query` prints one `arm64` line and `dpkg --verify` prints nothing;
+- the reach check passes for an account when `sudo -l` lists no rule that runs a command
+  as root or as `homelab-signer`, `id` names none of `homelab-signer`, `sudo`, `docker`,
+  `lxd` or `disk`, the `test` line prints nothing, and `gpg` fails. The check covers every
+  route that skips master. A route through a merged change is the anchor itself (*Open
+  questions* 1).
 
 **The recovery disarm (H3.8b).** The container suite proves it, so production never loses
 its recovery timer for a test. It installs the Pi package rendered with
@@ -1501,6 +1735,11 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - `--clear-hold` after a failed restart re-attempts that restart, through the stub
       `systemctl`, rather than passing on an empty diff. With a passing reconcile it removes
       the hold.
+    - With a held host whose stub reconcile fails on the installed version, `--clear-hold`
+      keeps the hold and installs nothing. That is the red half. `--clear-hold
+      --install-newest` over a fixture list with a newer version installs it, runs
+      reconcile, and removes the hold when that run passes. When it fails, the hold is
+      written again.
     - A package whose status is not `ii ` is reinstalled.
     - A fixture with no homelab `Packages` list, and one whose list lacks the host
       package's stanza, each exit non-zero and leave the success timestamp unadvanced.
@@ -1522,28 +1761,37 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
   allowlist is flagged. The URL in `hosts/bootstrap-host.sh` equals
   `http://<server_ip>:8791` for daniel-box, and a fixture with another address fails that
   test.
-- *Host-plane page (H3.5c).* For the `host_packages` check body, each arm is a red and green
-  pair: `reconcile_ok` 0 for any host is red; a listed host's success timestamp past its
-  limit is red, and so is an absent series for a listed host. The limit test flags a fixture
-  limit shorter than the longest gap of the Pi's rendered schedule.
+- *Builder page (H3.5c).* For the `host_packages` check body, each arm is a red and green
+  pair:
     - A builder fetch timestamp 31 minutes old is red, and one 1 minute old is green. An
       absent builder series is red.
     - An unbuilt-since value older than the lag bound is red, and one newer than the bound,
       or 0, is green.
     - With `up{job="node"}` at 0, the row is suppressed. With it at 1 and the builder
       series absent, the row is red.
-    - *H3.9c.* With `up{job="node-pi"}` at 0, the row is suppressed. With it at 1 and the
-      Pi's success timestamp present but past its limit, the row is red.
     - *Rule form.* The same pairs are `promtool test rules` cases. The `up` pairs assert
       that each absent-series rule stays silent while its exporter's `up` reads 0, and
       fires once it reads 1 with the series still absent.
+- *Host rules (H3.5d).* Each pair is a `promtool test rules` case:
+    - `homelab_host_reconcile_ok` at 0 for 16 minutes fires `HostReconcileFailed`, and at
+      0 for 14 minutes, or at 1, does not.
+    - A listed host's success timestamp past its limit fires `HostUpdateStale`, and so
+      does an absent series while that host's `up` reads 1. With `up` at 0, the absent
+      series stays silent.
+    - The limit test flags a fixture limit shorter than the longest gap of the Pi's
+      rendered schedule.
+    - *H3.9c.* With `up{job="node-pi"}` at 1 and the Pi's success timestamp present but
+      past its limit, `HostUpdateStale` fires for daniel-pi.
 - *Builder.*
     - A missing token makes no request and exits 1.
     - A cached final verdict makes no second request.
-    - An unsigned chosen commit, and a tip that does not descend from the last built commit,
-      are each refused. Each exits non-zero on the first run that meets that tip, and 0 on a
-      repeat. Each writes `homelab_builder.prom`, whose unbuilt-since value is then non-zero,
-      with `reason` `trust` or `ancestry` and `sha` naming the commit.
+    - A tip that does not descend from the last built commit is refused. It exits non-zero
+      on the first run that meets that tip, and 0 on a repeat. It writes
+      `homelab_builder.prom`, whose unbuilt-since value is then non-zero, with `reason`
+      `ancestry` and `sha` naming the commit.
+    - A green fixture commit that is not on `origin/master`'s first-parent chain is never
+      chosen. A check that the *Open questions* 1 ADR adds brings its own red and green
+      pair, with `reason="trust"`.
     - A held builder fetches, writes its metrics with `reason="hold"` and builds nothing.
     - A walk with no green commit exits 0 and writes `reason="no-green"`. A run that builds
       writes `reason="ok"` with the value 0.
@@ -1564,8 +1812,30 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       `archive-key.fpr`'s, and one with no keyring, each stage nothing, exit non-zero on
       the first run and 0 on a repeat, and write `reason="keyring"`. A render whose keyring
       matches builds.
-    - A commit that changes `hosts/keys/` and is signed only by a key outside the role's
-      keyring is refused.
+    - *Sandboxing.* A test reads the rendered builder and signer units and asserts each
+      directive *Sandboxing* lists, with `ReadWritePaths` equal to the listed paths. A
+      fixture builder unit without `NoNewPrivileges=yes`, and a fixture signer unit
+      without `PrivateNetwork=yes`, are each flagged.
+    - *Signer refusal.* The signer script runs against a fixture `staged/`. A `.deb`
+      named `other-tool`, a `homelab-daniel-pi` whose version names another SHA, and a
+      stray file each make it publish nothing, move `staged/` into `refused/`, and exit
+      non-zero. One `homelab-daniel-pi` whose version names `staged/chosen`'s SHA is
+      published.
+    - *Valid-Until.* A signed fixture `Release` carries `Valid-Until` seven days after
+      its `Date`. With `staged/` empty, a `Release` dated 25 hours ago is re-signed, and
+      one dated 1 hour ago is left alone. In the container suite, a repository whose
+      `Release` is past its `Valid-Until` makes updater step 3 exit non-zero with
+      `last_success` unchanged.
+    - *Staged rollout (H3.12).* A fixture run that changes two host packages stages the
+      canary's alone and writes `reason="canary"`. A stub Prometheus that reports the
+      canary at V with `reconcile_ok` 1 lets the next run build the other. One that
+      reports V with `reconcile_ok` 0, an older SHA, or no answer on either address
+      builds nothing more. A `release` file naming V's SHA builds the other at once. A
+      change that skips the Pi's package makes daniel-server the canary.
+    - *Tools (H3.11).* A fixture binary whose sha256 differs from its pin builds nothing
+      and writes `reason="tools"`. The `arm64` CI job installs the `arm64` build and
+      runs each tool's `--version`. A fixture host with `homelab-tools` installed and a
+      newer one published makes updater step 5 name it.
 - *Bootstrap pin (H3.6).* The fingerprint pinned in `hosts/bootstrap-host.sh` equals the
   fingerprint of `hosts/keys/homelab-archive-keyring.gpg`, and a fixture pin that differs
   is flagged.
@@ -1608,7 +1878,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
 - **H3.4c:** revert it only while H3.5a is unmerged. Once the builder runs, a revert drops
   the keyring from `homelab-updater`'s render, and builder step 6 refuses every build with
   `reason="keyring"`. That fails closed: nothing is published, `OnFailure=` posts once, and
-  the bridge row pages once the lag bound passes. Replace the key through the rotation in
+  the builder arm pages once the lag bound passes. Replace the key through the rotation in
   `docs/break-glass.md` instead.
 - **A failed tick apply of `homelab_builder` or `gitops_deploy` (H3.4b to H3.5b).** Every
   broad arm of the deployer is forward-only, so the failure writes `hold_sha` and a
@@ -1634,16 +1904,19 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
   It keeps `/var/lib/homelab-signer/`, so the signing key every host trusts survives. Revert
   the role body in a later PR. Deleting the role and its entry is H7's, and that PR parks the
   deployer once more. Hosts keep their installed packages, and apt reports the source as
-  unreachable. Each host's updater then fails at step 3, so after H3.9c a disarm pages
-  through the Pi's staleness arm once its limit passes. That page is the signal that no
+  unreachable. Each host's updater then fails at step 3, so after H3.9c a disarm fires
+  `HostUpdateStale` for the Pi once its limit passes. That page is the signal that no
   host is updating, and it stays until the builder is re-armed. Rotating the key is a separate procedure in `docs/break-glass.md`.
   Reverting H3.5a's `deploy_cross_role.py` rows goes in the PR that removes the role's
   imports and its `config.env` read of the `gitops_deploy` defaults, so the table and the
   tree stay equal.
 - **H3.5c:** revert, and land the revert so monitor-bridge and uptime-kuma redeploy without
   the row and its tile. The push-token secret stays until the operator removes it. In the
-  rule form, land the revert to the observability role, which removes the four rules.
+  rule form, land the revert to the observability role, which removes the two rules.
   Nothing else carries state.
+- **H3.5d:** revert H3.9c first, then H3.5d, and land each to the observability role.
+  While the Pi's timer is armed, nothing then pages on a held Pi, so revert H3.9b first
+  as well when the revert is to last.
 - **H3.6 and H3.7:** the operator runs `sudo apt-get remove homelab-daniel-pi homelab-updater`
   on the Pi. Plain files mean `remove` deletes everything the packages installed. Then the
   operator deletes `/etc/apt/sources.list.d/homelab.sources` and the keyring.
@@ -1656,14 +1929,18 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - Between the two steps no heartbeat runs, and the two Kuma push tiles go DOWN. That gap
       is visible, not silent.
 - **H3.9a:** revert. Nothing calls the module.
-- **H3.9b:** revert H3.9c first, or the staleness arm pages once the hand-started runs age
+- **H3.9b:** revert H3.9c first, or `HostUpdateStale` fires once the hand-started runs age
   past the Pi's limit. Then revert H3.9b. Reconcile stops the Pi's updater timer, because
   its enable link was dropped, and the Pi returns to hand-started updates. land.sh stops
   waiting on hosts, and a hosts-only PR again finishes `nothing-to-deploy`.
-- **H3.9c:** revert. The bridge row loses daniel-pi, so its staleness arm stops for the Pi,
-  and `EXPORTER_DEPENDENT["node-pi"]` loses `host_packages`. Its hold and builder arms stay.
-  In the rule form, the rules' host map loses daniel-pi, with the same effect.
+- **H3.9c:** revert. The expected-host map loses daniel-pi, so `HostUpdateStale` stops for
+  the Pi. `HostReconcileFailed` still covers it.
 - **H3.10:** no rollback is needed.
+- **H3.11:** revert. The Pi package drops its `Depends`, and apt marks `homelab-tools`
+  automatic, so the weekly autoremove removes it. The updater then names only its two
+  packages again.
+- **H3.12:** revert. Every changed host package publishes in the run that builds it. Any
+  open gate state is ignored, and the role's next apply deletes it.
 
 **What a partial failure leaves live:**
 
@@ -1673,8 +1950,11 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
 - An updater killed mid-install leaves a half-configured or half-installed package. The next
   run's step 2 or step 4 repairs it, then runs reconcile before it writes any metric.
 - A reconcile failure leaves the package configured with some units unstarted. The updater
-  holds that host, `homelab_host_reconcile_ok` reads 0, the `host_packages` tile goes DOWN,
-  and `land.sh` reports `deploy-failed` for a PR that touches that host.
+  holds that host, `homelab_host_reconcile_ok` reads 0, `HostReconcileFailed` fires after
+  15 minutes, and `land.sh` reports `deploy-failed` for a PR that touches that host.
+- A signer refusal leaves the last published repo and the refused files under
+  `refused/`. The builder's record still names those renders as published, so the runbook
+  resets that record after the cause is found.
 
 ## Risks
 
@@ -1713,14 +1993,37 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       midnight cluster and precedes man-db, the 01:40 sweep and the apt timers. The land host
       wait then ends `deferred` for the Pi unless its first query finds the Pi settled. The
       operator meets exit observation 4 by starting the updater by hand after the builder
-      publishes, then re-running the same `land.sh` command. The bridge limit test then
-      requires the Pi's limit to exceed a day.
-- **Trust anchor.** The design calls for an operator SSH signature that master commits do not
-  carry. See *Open questions* 1.
+      publishes, then re-running the same `land.sh` command. The limit test then requires
+      the Pi's limit to exceed a day, and daniel-server becomes the rollout canary.
+- **H3 adds the first unattended path from master to root on the Pi.** The Pi carries the
+  WireGuard endpoint. `daniel-pi.yml` sets `has_gitops: false`, so no deploy reaches the
+  Pi unattended at `70591c307`. From H3.9b, a merged commit with a green CI verdict
+  reaches root there within one updater fire. That anchor is the one the deployer gives
+  the two k3s nodes. *Open questions* 1 weighs a stronger one, and option (c) keeps the Pi
+  off the unattended path.
 - **The signing key is root on every host that trusts it.** It lives only in
-  `homelab-signer`'s GnuPG home, mode 0700, plus the break-glass copy. That user runs only the
-  role's own signing script, never code from master's checkout. Agent sessions run as
-  `claude` or `ubuntu`, and neither can read it.
+  `homelab-signer`'s GnuPG home, mode 0700, plus the break-glass copy.
+    - The signer runs only the script the role installs, and the role arrives from master
+      through the tick. A merged change to the role reaches the key by design (*Open
+      questions* 1).
+    - Code that runs as the builder still decides what the signer is handed. The refusal
+      rule limits that to `homelab-*` packages at the chosen commit's version, and the
+      sandbox limits what a builder run can write. A builder run that renders a malicious
+      package for the chosen commit still gets it signed. The anchor, not the split
+      between the two users, is what keeps that commit honest.
+    - H3.5a's reach check is the gate on every other route to the key. The operator runs
+      it before the builder first runs, and the PR body carries its output.
+- **daniel-box holds the builder, the signer and the repository.** A daniel-box outage
+  stops publishing, every host keeps its installed version, and `HostUpdateStale` fires
+  for each host once its limit passes. The break-glass copy of the key is the off-box
+  recovery. Splitting the three across hosts would put the signing key on a second host or
+  the repository behind a second failure domain, which costs more than the outage. This
+  slice accepts the concentration. H7 keeps it, moving the units into
+  `homelab-daniel-box`.
+- **The canary is the WireGuard endpoint.** A shared change that breaks daniel-pi costs
+  off-LAN access until a LAN session repairs it. The alternatives cost more (*Staged
+  rollout*), every Pi step already runs from a LAN session, and a reconcile failure holds
+  the Pi rather than retrying.
 - **Failure class 2, the check observes a proxy.** A configured package is not an applied
   one. Every updater path derives `homelab_host_applied_info` and
   `homelab_host_reconcile_ok` from reconcile's per-version record, never from dpkg state, so
@@ -1728,9 +2031,10 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
   requires `homelab_host_reconcile_ok` at 1.
 - **Failure class 3, empty read as clean.** A missing `homelab_host.prom` must read as stale,
   never as up to date. The land host wait treats an absent series as not settled, and an
-  unreachable Prometheus as not settled with its own message. The `host_packages` bridge row
-  pages on a held host and on a stale or absent success timestamp, and the signer pages
-  through `OnFailure=`, so a hold no landing touches still reaches the operator. The
+  unreachable Prometheus as not settled with its own message. `HostReconcileFailed` and
+  `HostUpdateStale` page on a held host and on a stale or absent success timestamp, and
+  the signer pages through `OnFailure=`, so a hold no landing touches still reaches the
+  operator. The
   updater's candidate scan treats a missing `Version:` as a failure, not as "nothing newer".
     - A builder that runs and builds nothing reads as clean to every host metric, because
       the updater's common path advances the success timestamp whether or not anything new
@@ -1751,9 +2055,9 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
 - **Page cadence.** The builder fires every 2 minutes, and `alert_unit.yml` posts once per
   failure, so a builder failing on every run would post 30 times an hour. The builder exits
   non-zero once for each reason and tip, and the bridge row carries what persists.
-- **`EXPORTER_DEPENDENT` suppresses the whole row.** With `host_packages` under `node` and
-  `node-pi`, a dead exporter on any host hides every arm, the other hosts' hold arms
-  included, until that exporter answers. The exporter's own page fires meanwhile. That is
+- **`EXPORTER_DEPENDENT` suppresses the whole row.** With `host_packages` under `node`, a
+  dead exporter on daniel-box hides both builder arms until that exporter answers. The
+  host rules carry their own `up` clauses, so a dead exporter silences only its host's. The exporter's own page fires meanwhile. That is
   the bridge's rule for every exporter-dependent row (the `DECIDED` marker at the probe in
   `ansible/roles/k8s/monitor-bridge/files/check.py`). In the rule form, a dead exporter
   silences only the rules that read its series.
@@ -1764,7 +2068,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
   Mitigation: H3.5c's form follows A1's shadow PR (*Steps*, H3.5c), and the form check runs
   again at rebase. A row that misses A1 anyway fails M6's planned bijection test at A6-7a,
   so the push path cannot be deleted under it. This round's cross-slice note asks M6 to
-  list the row, its token and its two `EXPORTER_DEPENDENT` entries in A1. Failure class 8
+  list the row, its token and its one `EXPORTER_DEPENDENT` entry in A1. H3.5d's host
+  rules are M1-native, so M6 has nothing to move for them. Failure class 8
   applies: M6's counts are prose that nothing re-derives, so they go stale without an
   error when the row merges first.
 - **Failure class 4, selector drift.**
@@ -1804,8 +2109,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - a test of the `render_context` keyword in `scripts/lib/tests/`;
     - the `testpaths` entry;
     - `docs/homelab-render.md` gains a host-mode section.
-- **H3.2a:** `hosts/lib/tests/` covers the updater, its fetch-failure arm, the
-  maintainer-script lint and the timeout inequality.
+- **H3.2a:** `hosts/lib/tests/` covers the updater, its fetch-failure arm, both
+  `--clear-hold` levers, the maintainer-script lint and the timeout inequality.
 - **H3.2b:** `hosts/lib/tests/` covers reconcile and the 3.12 syntax check.
 - **H3.2c:**
     - the two-writer census joins `ansible/tests/setup/`;
@@ -1816,8 +2121,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - the `validate-unit-templates` selector in `prek.toml`.
 - **H3.3a:** `KNOWN_JOBS` in `ansible/tests/repo/test_every_ci_job_is_gated.py` gains
   `host_packages`.
-- **H3.3b:** none beyond the job, whose cases are the tests, the stopped-server case
-  included.
+- **H3.3b:** none beyond the job, whose cases are the tests on both release legs, the
+  stopped-server case included.
 - **H3.4a:** the `homelab_builder` role `CLAUDE.md`, whose glance block `gen_role_glance.py`
   writes.
 - **H3.4b to H3.5c:**
@@ -1842,16 +2147,20 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       `gitops_deploy` apply wrote (*Rollback*);
     - the shared-package render test names the keyring path as a member of
       `homelab-updater`'s render (H3.4c);
-    - the runbook's remaining procedures (H3.5b): clear a host hold, mask a host's timer,
-      set and clear the builder hold, roll a host back, rotate the key, and clear a park
-      caused by the `homelab_builder` entry with H3.4a's range check. It also covers the
-      five builder pages: reset the builder's last-built commit after a rewritten master,
-      replace the trusted merge-signing keyring after GitHub rotates its key, match
+    - the runbook's remaining procedures (H3.5b): clear a host hold with either lever, mask
+      a host's timer, set and clear the builder hold, roll a host back, rotate the key,
+      recover from a revoked key, and clear a park caused by the `homelab_builder` entry
+      with H3.4a's range check. It also covers the five builder pages: reset the
+      builder's last-built commit after a rewritten master, reset its published record
+      after a signer refusal, match
       `gitops_deploy_ci_contexts` to a renamed CI job, resolve a `keyring` refusal, and
       resolve a `ci` refusal by restoring the context list or the walk bound and re-applying
       `homelab_builder`;
     - the builder's tests beside the role's script: the failure exits, the `ci` refusal,
-      the version count, the keyring check and `publish-textfile` (H3.5a);
+      the version count, the keyring check, `publish-textfile` and the sandboxing test
+      (H3.5a), and the signer refusal and `Valid-Until` tests (H3.5b);
+    - the ADR for *Open questions* 1, under `docs/adr/`, before H3.5a
+      (**operator-only**);
     - `docs/gitops-pipeline.md` gains a note that the builder, not the tick, applies `hosts/`
       (H3.5b);
     - the `host_packages` row's red and green pairs in
@@ -1859,8 +2168,11 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       pair included, the limit test beside the renderer's tests, the row's entry in
       `docs/monitor-bridge-checks.md`, and `host_packages` under `node` in the
       `EXPORTER_DEPENDENT` membership on `docs/monitor-bridge-internals.md` (H3.5c). In the
-      rule form, the four rules' `promtool test rules` cases and the limit test. The
-      runbook's host-plane page section names the four alerts instead of the tile.
+      rule form, the two rules' `promtool test rules` cases. The runbook's builder page
+      section names the two alerts instead of the tile;
+    - the two host rules' `promtool test rules` cases and the limit test, and the
+      runbook's host-plane page section naming `HostReconcileFailed` and
+      `HostUpdateStale` (H3.5d).
 - **H3.6:**
     - `ansible/tests/setup/test_pi_node_exporter_host_unit.py` changes with the textfile
       flag, and asserts the directory task's owner, group and mode;
@@ -1923,31 +2235,45 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       same commit, or the citation reads as `unrecorded-atom`;
     - a land test for the first-parent enable-link rule, and `docs/landing.md` names the
       operator's hand start for a PR that arms a host's timer.
-- **H3.9c:** the `node-pi` suppression pair in `ansible/roles/k8s/monitor-bridge/tests/`,
-  and `host_packages` under `node-pi` on `docs/monitor-bridge-internals.md`. In the rule
-  form, the `node-pi` `up` pair is a `promtool test rules` case instead.
+- **H3.9c:** the daniel-pi `promtool test rules` cases for `HostUpdateStale`, its
+  `node-pi` `up` pair included, and the limit test's daniel-pi member.
 - **H3.10a:** the naming census gains the canary pair as named members.
 - **H3.10b:** the naming census drops the canary pair from its named members.
+- **H3.11:** the tools tests beside the builder's, the updater test for a third
+  `homelab-*` package, `KNOWN_JOBS` gains the `arm64` job, and the runbook names the
+  `tools` refusal.
+- **H3.12:** the staged-rollout tests beside the builder's, and the runbook's override
+  step.
 
 ## Complexity delta
 
 - **Added:**
     - the renderer's host mode and the component defaults layer;
     - two shared scripts (updater, reconcile), and reconcile's per-version record;
-    - one CI job and its test image;
+    - one CI job and its test image on two release legs, and one `arm64` CI job;
     - one Ansible setup role (`homelab_builder`, temporary until H7) with two system users and
       four units;
-    - a signing key;
+    - a signing key, the signer's refusal rule, `Valid-Until` and its daily re-sign arm;
+    - sandboxing directives on two units, and the test that holds them;
+    - one operator-only reach check, run once before H3.5a;
     - `bootstrap-host.sh` (three steps);
     - two package manifests;
     - four lints or censuses, the timeout inequality test, and the unit validator's host
       renders;
     - one land step, a post-CI render and the `HOST_INPUTS` path test;
-    - one monitor-bridge row with its tile and push token, four arms, and two
-      `EXPORTER_DEPENDENT` entries. In H3.5c's rule form, four alert rules with their
+    - one monitor-bridge row with its tile and push token, two builder arms, and one
+      `EXPORTER_DEPENDENT` entry. In H3.5c's rule form, two alert rules with their
       `promtool` cases replace all of it, and no token or tile is added;
+    - two host alert rules (H3.5d) with their `promtool` cases, and one observability
+      default, the expected-host map;
+    - one updater flag, `--install-newest`;
+    - one architecture-specific package, `homelab-tools`, with its pins, their Renovate
+      manager and the builder's download cache;
+    - the staged-rollout gate, one root-owned override file and two `reason` values;
     - the builder's two series, its once-per-condition failure record, and the role's
       `publish-textfile` script;
+    - about 16 head series at H3's end, against M1's budget of 140,000 (*Shared names*,
+      Metrics);
     - the committed archive keyring (H3.4c), `archive-key.fpr`, the builder's keyring check
       and the bootstrap pin test;
     - the builder's `ci` refusal, its `config.env` render test, and one cross-role table
@@ -1963,24 +2289,35 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
 
 ## Open questions
 
-1. **Which signature does the builder trust?** C5 says the builder signs only commits whose
-   SSH signature verifies. Master commits are squash merges, committed and PGP-signed by
-   GitHub. Renovate's commits are the bot's. So no master commit carries an operator SSH
-   signature. Three options:
-    - **(a) GitHub's merge signature, the default here.** Verify against GitHub's
-      merge-signing public key, shipped in the `homelab_builder` role's `files/` and never
-      read from the candidate tip. Add first-parent ancestry and a green CI verdict. This is
-      the trust the GitOps deployer already extends to `origin/master` on daniel-box. A
-      rotation of GitHub's key stops publishing until the role's copy is updated, and that
-      failure is closed.
-    - **(b) A signed landing tag.** `land.sh` pushes an SSH-signed tag for each merge SHA, and
-      the builder verifies the tag against an allowed-signers file. That restores the
-      design's anchor. The cost is a landing step whose failure stalls the host plane until
-      the next landing tags a descendant.
-    - **(c) Rebase merges onto signed commits.** Rejected: GitHub's rebase merge drops
-      signatures, and Renovate commits stay unsigned.
-   Resolution: the operator chooses before H3.5a merges. This is **operator-only**, because it
-   sets the root of trust for every host. The C5 row needs amending either way.
+1. **Does the builder require anything beyond the master-plus-green-CI anchor?** C5 makes a
+   commit on `origin/master` with a green CI verdict the builder's anchor. That is the
+   anchor `deploy_git.py:ci_walk_candidates` gives the GitOps deployer. Master commits
+   carry GitHub's signature, not the operator's (*Baseline*), so no operator-signature
+   check can pass on them. The options:
+    - **(a) Master plus green CI, and nothing more.** The two k3s nodes already take setup
+      roles from master on this anchor. The cost lands on the Pi, which gains its first
+      unattended path from master to root (*Risks*).
+    - **(b) A signed landing tag.** `land.sh` pushes a signed tag for each merge SHA, and
+      the builder verifies it against a root-owned allowed-signers file. The tag adds
+      protection only if its signing key is out of reach of every account that runs
+      `land.sh`. In practice the operator then signs each landing, and every host change
+      waits on the operator.
+    - **(c) A Pi-only manual approval gate.** The Pi package ships no enable link for
+      `homelab-updater.timer`, so the Pi installs only when the operator starts its
+      updater from a LAN session. The other hosts take (a). Every Pi change, Renovate's
+      included, then waits on the operator, and `land.sh` ends `deferred` for the Pi.
+
+   Recommendation: (a). The signer's key lives on daniel-box, and the tick applies
+   `homelab_builder` there from master on the same anchor (H3.4a). A merged change to that
+   role therefore reaches the key whatever the builder checks, so (b) adds a landing step
+   without narrowing what a merged commit reaches. (c) is the only option that narrows it,
+   and only for the Pi. It stays available at no design cost: H3.9b's enable link is the
+   switch, and dropping it moves the Pi to (c).
+
+   Resolution: the operator records the choice in an ADR before H3.5a merges
+   (**operator-only**), because it sets the root of trust for every host. Choice (b) adds
+   its verification to builder step 5 with a red and green pair. Choice (c) drops H3.9b's
+   link and meets exit observation 4 with a hand-started run.
 2. **What if the Depends gate fails?** If `apt-get install homelab-daniel-pi` does not
    install an added `Depends`, the design's fallback applies: ansible-pull becomes the plan,
    and H4 to H7 are re-planned. The slice stops at H3.7. H3.1 to H3.6 stay, because the
@@ -2018,14 +2355,31 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       fixed. The cost is that M6's Phase A, and through A6-7a all of Phases B and C, would
       wait on H3.5a's **operator-only** trust choice (Open question 1).
     - **(b) Two forms, the default here.** H3.5c adds the bridge row while M6's A1 shadow
-      PR has not merged, and four alert rules with C7's labels once it has (*Steps*,
+      PR has not merged, and two alert rules with C7's labels once it has (*Steps*,
       H3.5c). Neither slice waits on the other. M6's A1 batch moves the row when the row
       exists, and M6's planned bijection test fails A6-7a on a row that A1 missed.
    Resolution: (b), with the gate in H3.5c's step. No slice-index edge is requested. The
-   round i1 cross-slice note asks M6 to name the row, its push token and its two
-   `EXPORTER_DEPENDENT` entries in A1's batch and in its counts, for the case where the row
-   is on master when A1's shadow PR opens. H3.9c, and H7.2a's drift-count message, extend
-   whichever form is on master.
+   round i1 cross-slice note asks M6 to name the row, its push token and its
+   `EXPORTER_DEPENDENT` entry in A1's batch and in its counts, for the case where the row
+   is on master when A1's shadow PR opens. H7.2a's drift-count message extends whichever
+   form is on master. The host arms left H3.5c in the 2026-10-12 fold: H3.5d ships them as
+   rules that wait on M1, so they are outside this question.
+9. **Where does the `arm64` CI job run?** H3.11's install case needs an `arm64` userland.
+   Two routes exist: GitHub's hosted `arm64` Linux runner, or QEMU user-mode emulation on
+   the `amd64` runner. This plan cannot confirm from the tree that the hosted label is
+   available to this repository. Recommendation: the hosted runner, because emulation
+   slows the systemd container and can hide a fault that real `arm64` hardware shows.
+   Resolution: H3.11's PR runs the job on the hosted label first. If GitHub refuses the
+   label, the job uses QEMU, and the PR body records the run time.
+10. **Should the canary gate cover the shared packages?** C5's staged rollout names host
+    packages. `homelab-updater` and `homelab-tools` publish in one suite, so every host
+    installs a published version at its next fire. Gating them would need a per-host pin
+    on each shared version, which the updater's install of `homelab-updater` by name does
+    not allow. Recommendation: leave them outside the gate. The container suite runs
+    every `homelab-updater` change on both releases before it publishes, and a
+    `homelab-tools` change is a pin bump with its own `arm64` and `amd64` install cases.
+    Resolution: the H4 owner confirms before `homelab-daniel-server` first publishes,
+    because a second host takes the shared packages only from then.
 
 ## Review log
 
@@ -2526,3 +2880,43 @@ the M6, H4 and H7 texts. Both held, and both are fixed. None was refuted.
       is an **operator-only** runbook step that hand-applies `homelab_builder`. The same PR
       repoints the CI-context procedure in `docs/host-packages.md` to
       `ci_required_contexts`. Builder step 4 now says the route lasts only until H7.2e.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review
+round covers it.
+
+- **F-04, the trust anchor.** Builder step 5 states the C5 anchor, a commit on
+  `origin/master` with a green CI verdict, and checks no signature. *Open questions* 1 is
+  an **operator-only** ADR before H3.5a, with options (a) master plus green CI, (b) a
+  signed landing tag and (c) a Pi-only approval gate, and recommends (a). *Risks* records
+  the Pi's first unattended path from master to root. The trusted merge-signing keyring
+  left *Shared names*, H3.5a, the file tree, *What H7 inherits*, *Verification* and the
+  runbook list.
+- **F-07, signing.** *The builder and the repository* gains *Sandboxing* with named
+  directives and the signer's refusal rule. *Verification* gains red proofs for both.
+  *Risks* states that builder code decides what the signer is handed, and drops the
+  wording that overstated the isolation. H3.5a gains the **operator-only** reach check,
+  whose commands are in *Verification*.
+- **S11, `Valid-Until`.** The signer writes it seven days ahead and re-signs daily,
+  triggered through the builder's `OnSuccess=`. *The builder and the repository* gains
+  the per-host procedure for a revoked archive key, and the H3.5b runbook lists it.
+- **F-14, staged rollout and holds.** *Staged rollout* names daniel-pi as the canary and
+  records the reasoning. PR H3.12 adds the gate and the `release` override. The updater
+  gains `--clear-hold --install-newest`. PR H3.5d ships `HostReconcileFailed` and
+  `HostUpdateStale` and waits on M1. H3.5c keeps only the builder arms, and every
+  bridge page for `reconcile_ok` or host staleness names the rules instead. H3.9b waits on
+  H3.5d. *Open questions* 10 defers gating the shared packages.
+- **F-15, releases and architectures.** The container suite is a matrix over
+  `ubuntu:24.04` and `ubuntu:26.04`. PR H3.11 builds `homelab-tools` for both
+  architectures, with the Pi as the `arm64` pilot. The `arm64` runner went to *Open
+  questions* 9.
+- **P7.** *Shared names* records why `bootstrap-host.sh` types the address. *Risks*
+  accepts that daniel-box holds the builder, the signer and the repository.
+- **Note from the M1 owner.** H3.5d states how the host rules meet M1's convention 5: the
+  `node` and `node-pi` jobs carry `origin`, no rule pages on `up`, and every absent arm
+  is conjoined with `up == 1`. *Shared names*, Metrics, states H3's series delta against
+  the 140,000 budget, and *Complexity delta* carries the figure.
+- **Note from the H4, H6 and H7 owner.** H3.6's bootstrap text credits H3.11, not H7.1,
+  with `homelab-tools`. *`homelab-tools`* names `/usr/lib/homelab/bin/sops`, and H3.11
+  names itself as the PR that H4.2 (`amd64`) and H4.5 (`arm64`) wait on.

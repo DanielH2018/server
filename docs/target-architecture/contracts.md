@@ -25,10 +25,10 @@ merged.
 | R2 | Secret placeholders and CI secret checks | R1 |
 | R3 | Remove the pre-apply live reads | R1 |
 | R4 | Delete the k8s Ansible path | D6 |
-| D1 | Flux installed, owning nothing | — |
-| D2 | One stateless leaf end to end on production | D1, R1, and R2's PRs 1 and 2 (placeholder mode and the five rules). D2.7 also D4.0, and D3.3 under C3's default source for `domain` |
-| D3 | Secrets through Flux | D2, R2. D3.0 to D3.3 need only D2.1 to D2.6, which include D2.6b's empty `SHARED_KINDS` and census |
-| D4 | Ordering (`dependsOn`, deferred applies) | D2. D4.0 needs nothing |
+| D1 | Flux installed, owning nothing | —. D1.6b, the `flux` rule group, also M1 |
+| D2 | One stateless leaf end to end on production | D1, R1, and R2's PRs 1 and 2 (placeholder mode and the five rules). D2.6d also M1. D2.7 also D4.0, M1, and D3.3 under C3's default source for `domain` |
+| D3 | Secrets through Flux | D2, R2. D3.0 to D3.3 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census |
+| D4 | Ordering (`dependsOn`, deferred applies) | D2. D4.0 needs nothing. D4.9 also D1.6b and M1 |
 | D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. The PR that flips the last Ansible-owned stateless leaf also M6's B-1e |
 | D6 | Delete the old deploy path; ADR superseding 0010 | D5 |
 | M1 | Alertmanager and its watcher | — |
@@ -39,10 +39,10 @@ merged.
 | M6 | Switch the readers and retire Kuma | M2, M3, M4, M5. A7's shadow PR also M5's ruler, live; A7's Cutover-a also M2's PR 4a, live. Phase C's C-4b also D6 |
 | H1 | Hand the cluster content to Flux | D2, D4. H1.7b also D3; H1.9 also R4 |
 | H2 | Shrink the host plane (crons → CronJobs) | H1.1a to H1.8. H2.3b also D3; H2.3c also H2.3b, live; H2.8a also D3, H6.4a and H6.4b |
-| H3 | Pi pilot: builder, updater, versioning | R1 |
+| H3 | Pi pilot: builder, updater, versioning | R1. H3.5d, the host-rules PR, also M1, and H3.9b waits on it |
 | H4 | Secrets unit; NUT on daniel-server first | H3 |
 | H5 | Pi Compose | H3, H4 |
-| H6 | system-upgrade-controller for k3s | D2, H1.1a to H1.8, H4, M1 |
+| H6 | system-upgrade-controller for k3s | D2, H1.1a to H1.8, H4, M1. H6.3e's verify Jobs also D5.1a1 (H6 Open question 14) |
 | H7 | Remaining roles, then delete Ansible | H2, H5, H6, R4 |
 | G1 | Diff notice alongside the lock | — |
 | G2 | Retire the lock; ADR amending 0019 | G1 |
@@ -89,8 +89,24 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     `manifests_deferred_files` (R1).
   - `DIR/flux/<tag>.yaml` holds the Kustomization `<tag>` and its suffixed kinds, see C3.
   - `DIR/flux/<name>.yaml` and `DIR/cluster/<name>/` hold a shared kind, see C3.
-  - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`. From D5.1a2,
-    `DIR/digests.json` at the bundle root. No Kustomization's path reaches `digests.json`.
+  - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`.
+  - From D2's first publishing PR, `DIR/digests.json` at the bundle root. No Kustomization's
+    path reaches it. It maps each deploy tag and each member of `SHARED_KINDS` to two
+    SHA-256 digests:
+      - `own` covers `cluster/<name>/` alone. D5 reads it.
+      - `footprint` covers every bundle path that counts for the name. A tag's own
+        directories count, with a reserved suffix stripped. So do its `flux/<tag>.yaml`, and
+        the `cluster-vars` files when the tag substitutes. A shared kind's files count for
+        the names its footprint rule lists (C3).
+
+    Three index paths count for no name and are left out of every footprint:
+    `flux/kustomization.yaml`, `digests.json` itself, and `images/`. A tag that joins or
+    leaves moves its own `flux/<tag>.yaml`, so the index adds nothing to the footprints.
+    Any other path that counts for no name is recorded under the reserved key
+    `_unclassified`, and a change there counts as every name changed. The renderer computes
+    both digests in the render's own process, and no reader recomputes them. C2's changed
+    set and C6's `land.sh` wait read `footprint`. These rules replace D6.1's `--moved-tags`
+    mode. They apply the classification that D6's *What a footprint counts* defines.
 - **Vendored files.** A role may ship verbatim upstream files and kustomize `patches:` in its
   `kustomization.yaml` (H1). The renderer refuses a directory that holds vendored files and a
   placeholder, so such a directory never substitutes.
@@ -127,6 +143,23 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
 - **Artifact.** `oci://ghcr.io/danielh2018/homelab-manifests`. The `publish` job pushes it
   with `flux push artifact --revision master@sha1:<40-hex sha>` and signs it with cosign
   keyless under the `promote` workflow's identity (D1).
+- **Jobs that run repository code hold no write permission.**
+    - The `render` job checks out the commit, renders it, and runs the publish checks: the
+      census, the no-stub check, and gitleaks over `out/`. It holds read-only permissions
+      and passes the bundle on as a workflow artifact.
+    - The `promote` and `verify` jobs run `promote.py` read-only and print a verdict (D1,
+      D2).
+    - Only jobs that check out no repository code hold `packages: write`. Those are
+      `publish`, which pushes and signs; `tag`, which moves `prod`; and `settle`, which
+      moves `last-good` or writes the hold and resets `prod`. Each runs only pinned
+      binaries, either `flux` and `cosign` or `flux` and `gh`.
+    - Only `publish` holds `id-token: write`.
+
+  Code that runs during a render or a decision therefore cannot sign or move a tag (D1,
+  D2).
+- **Only master commits publish.** Before it renders, `render` checks that the commit
+  descends from `origin/master`, using `git merge-base --is-ancestor`. The `sha` dispatch
+  input passes the same check (D1).
 - **Tags:**
   - `sha-<40-hex>` for every green master commit;
   - `prod`, the revision Flux follows;
@@ -144,15 +177,58 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   prints `error`, exits non-zero and moves no tag. `gh` cannot set an empty value, so D1
   creates the variable as `none` (D1).
 - **Verification.** `promote.py verify T` checks T, the commit `decide` printed, never the
-  commit that triggered the run. It expects `flux/homelab` plus `flux/<name>` for every
-  Kustomization name published under `flux/` (D2.5). A missing status keeps it waiting and
-  never reads as success. When every expected status is `success`, `last-good` moves to
-  `sha-<T>`.
-- **On failure**, meaning a `failure` status or a timeout, it writes T to `DEPLOY_HOLD` and
-  then resets `prod` to `last-good`. The hold is written first, so a failed reset still stops
-  the next promotion. Clearing `DEPLOY_HOLD` means setting it back to `none` with
-  `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`, and it is
-  **operator-only**.
+  commit that triggered the run. It expects `flux/homelab` plus `flux/<name>` for every name
+  in T's *changed set* (D2.5).
+    - **The changed set** holds the names whose `footprint` digest (C1) differs between T's
+      `digests.json` and the one on `prod`'s commit before the move. It also holds every
+      Kustomization whose `dependsOn` chain reaches one of those names. Suspended
+      Kustomizations are left out, and so is a name absent from T's `digests.json`, which
+      T removes. Any change under `_unclassified` puts every name in the set.
+    - **A dependent that was already failing** is reported, not expected. That is a
+      dependent whose `flux/<name>` status on `prod`'s commit already read `failure`.
+    - **An empty changed set** expects `flux/homelab` alone, and the soak (C7) passes it
+      without waiting.
+    - **Failures outside the set** never hold. An unchanged Kustomization that fails pages
+      through the Flux rule group (C7).
+
+  A missing expected status keeps `verify` waiting and never reads as success. When every
+  expected status is `success`, `last-good` moves to `sha-<T>`.
+- **On failure**, meaning a `failure` status or a timeout, `verify` writes
+  `<T> failed=<names>` to `DEPLOY_HOLD`, then resets `prod` to `last-good`. `<names>`
+  comma-joins the expected names that read `failure` or had no status at the timeout. The
+  hold is written first, so a failed reset still stops the next promotion. Other writers of
+  `DEPLOY_HOLD` keep their own values (H1, D5, H6), and none of them uses the `failed=`
+  form.
+- **Clearing a hold.** Clearing `DEPLOY_HOLD` means setting it back to `none` with
+  `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`. Clearing by hand is
+  **operator-only**, and an agent hook denies that command (D1). There is one proposed
+  exception.
+- **The revert rule.** This is proposed, and it waits on an **operator-only** ruling. It
+  replaces D5 Open question 17.
+    - While `DEPLOY_HOLD` reads `<T> failed=<names>`, `decide` may promote a candidate U that
+      descends from T. For every name in `<names>`, U's `footprint` digest must equal
+      `last-good`'s.
+    - When U verifies, `verify` sets `DEPLOY_HOLD` to `none`. So a merged revert of the
+      failing change clears its own hold, and the operator need not act.
+    - A hold in any other form clears only by hand. So does a `failed=` hold whose names
+      include `soak`. The soak's verdict covers every service in the changed set, so no
+      single footprint can show that the failure was reverted.
+    - Until the operator rules, every hold clears only by hand, and `decide` treats a
+      `failed=` hold like any other hold.
+- **A `prod` move outside `promote`.** Each time `promote` moves `prod`, it writes the new
+  digest to the repo variable `PROD_DIGEST`. The deploy-pipeline exporter (C7) compares that
+  value with `prod`'s live digest, and a mismatch pages (D2).
+- **Break-glass promotion.** This path is for when GitHub, GHCR or Sigstore cannot be
+  reached (**operator-only**).
+    1. The operator renders from the break-glass repo bundle, or from a host checkout newer
+       than the bundle, once its commit is checked to descend from the OCIRepository's
+       revision.
+    1. They push the bundle to the in-cluster registry.
+    1. They point the OCIRepository at it, with verification against a break-glass cosign
+       public key that the cluster already holds.
+
+  D6 owns the runbook and drills it on kind. Normal promotion resumes once the
+  OCIRepository points back at GHCR.
 - **Commit statuses.** notification-controller posts one status per Kustomization, with context
   `flux/<kustomization>`, on the commit that the origin revision names (C6).
 
@@ -178,9 +254,9 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   set empty, D3.3a adds `cluster-vars`, D5.3b2 adds `soak`, and D5's namespace PR adds
   `homelab-namespace`. Each joins in the PR that renders it, because the census fails a
   member with no file. C1 says where a shared kind is published, and C2 verifies it through
-  `flux/<name>` like a tag. From D6.1, each member also needs a rule in
-  `render_diff_gates.py --moved-tags` that names the deploy tags its move hands `land-wait`,
-  and a census test fails the PR that adds a member without one (D6).
+  `flux/<name>` like a tag. Each member also needs a footprint rule in the renderer that
+  names the deploy tags its files count for (C1 `digests.json`), and a census test fails the
+  PR that adds a member without one (D2).
 - **Reserved names.** The render fails on a deploy tag that equals a member of `SHARED_KINDS`
   or ends in `-deferred`. D5.1a1 reserves `-snapshot`, `-verify`, `soak` and
   `homelab-namespace` too, so no deploy tag takes `soak` or `homelab-namespace` before its
@@ -252,18 +328,51 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
 - **Repository.**
   - Suite `homelab`, component `main`, keyring `/usr/share/keyrings/homelab-archive-keyring.gpg`.
   - Served by a plain systemd unit on daniel-box, outside k3s. H3 picks the port and the URL.
-- **Signing.** Only the LAN builder signs, and only commits whose SSH signature verifies. CI
-  builds the same packages for diffs and tests but never signs.
+- **Architecture-specific tools.** `homelab-tools` is the one architecture-specific package,
+  built for `amd64` and `arm64` by nfpm from pinned upstream binaries, `sops` and `chezmoi`
+  among them. Every other package is `Architecture: all`. H3 builds it, and the Pi is its
+  `arm64` pilot (H3, H4, H7).
+- **Ubuntu releases.** No package depends on one Ubuntu release. H3's container suite runs on
+  every release the fleet runs or is moving to, and H7 owns the release-upgrade procedure.
+- **Repository freshness.** The signed `Release` file carries a `Valid-Until` seven days
+  ahead, and the signer re-signs it daily, so a host cannot be held at an old index without
+  noticing (H3).
+- **Signing.**
+    - Only the LAN builder signs. CI builds the same packages for diffs and tests but never
+      signs.
+    - The builder builds only a commit on `origin/master` that has a green CI verdict. That
+      is the anchor the GitOps deployer trusts.
+    - Whether the builder also requires a signature, and whose, is H3 Open question 1. The
+      operator rules on it in an ADR before H3.5a merges (**operator-only**).
+    - The signer signs only `homelab-*` packages whose version names the commit the builder
+      chose. It refuses anything else in the staging directory.
+    - The builder runs under systemd sandboxing. Code that runs as the builder still decides
+      what the signer is handed, and H3's *Risks* says so.
+- **Staged rollout.** A change that republishes more than one host's package reaches H3's
+  canary host first. The other hosts' packages publish once the canary reports
+  `homelab_host_reconcile_ok 1` at that version, or when the operator overrides (H3).
 - **Package rules.** No conffiles, and enable links ship as package files. The postinst calls
-  only `systemctl`. Packages carry SOPS ciphertext only, which `homelab-secrets.service`
-  decrypts with the host's own age key into `/run/credstore`.
+  only `systemctl`. Packages carry SOPS ciphertext only. Each host package carries one
+  per-host SOPS file, and `homelab-secrets.service` decrypts it with the host's own age key
+  into one of three places (H4):
+    - `/run/credstore`;
+    - `/run/homelab-secrets/<path>`;
+    - for a persisted output, `/var/lib/homelab-secrets/<path>`.
+
+  A consumer reaches a decrypted file through a symlink at the real path, or through a
+  drop-in when another package owns that path. A persisted output is plaintext at rest, so a
+  slice adds one only for a consumer that must start before the decrypt can run, and H4
+  names each one. A lost host key means rotating every value that host held, not only
+  re-keying the host.
 
 ## C6. Applied-commit reporting
 
 - **Host plane.** `homelab-updater` writes a node-exporter textfile metric,
   `homelab_host_applied_info{host="<h>",sha="<12-hex>",version="<v>"} 1`.
 - **Cluster plane.** The commit statuses from C2, plus Flux's `gotk_resource_info` series,
-  whose `revision` label reads `status.lastAppliedOriginRevision` (D1.6).
+  whose `revision` label reads `status.lastAppliedOriginRevision` (D1.6). Every promotion
+  adds one series per Kustomization through that label, and C7's series budget counts
+  them.
 - **Which revision field names a commit.** A Kustomization's `status.lastAppliedOriginRevision`
   holds `master@sha1:<sha>`, the `--revision` that `flux push artifact` wrote. Its
   `status.lastAppliedRevision` holds `<tag>@sha256:<digest>` and names no commit. Every reader
@@ -272,8 +381,11 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   form, and a slice that describes that check uses the digest field.
 - **`land.sh`.** After merging M, it waits until M is covered. It never waits on one `promote`
   run, because GitHub may evict a queued run (D2).
-  - **Cluster.** Every Kustomization of the PR's flux-owned tags is Ready at an origin
-    revision R that equals M or descends from it. From D5 on, `flux/soak` also reads
+  - **Cluster.** Every Kustomization in M's changed set is Ready at an origin revision R
+    that equals M or descends from it, and `flux/homelab` is too. M's changed set is the
+    changed set of C2, taken between M's `digests.json` and the one on the newest published
+    ancestor of M's first parent. `land.sh` reads both files from GHCR and derives no tags
+    itself (D6). From D5 on, `flux/soak` also reads
     `success` on R. A `DEPLOY_HOLD` other than `none` (C2) ends the wait as `deploy-failed`,
     and twice the promote timeout ends it as `gave-up`.
   - **Hosts.** For each host the PR touched, `homelab_host_applied_info` shows M or a
@@ -287,13 +399,43 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
 - **Rule labels.** Every rule carries `service="<deploy tag or host name>"` and
   `severity="critical|warning|info"`. For an exporter's series, `service` is a target label
   that the scrape config sets, or a literal in the rule (M6). A rule that verifies a deploy
-  also carries `verify="true"` (D5).
+  also carries `verify="true"` (D5). One literal falls outside the rule:
+  `service="deploy-pipeline"`, on the deploy-pipeline exporter's alerts. It names no deploy
+  tag and no host, so no health gate reads it, and a standing hold cannot fail the `flux`
+  tag's own gate (D2 Open question 12).
 - **Watchdog.** A rule named `Watchdog` always fires. It routes to the Healthchecks.io ping.
+- **Deploy-pipeline rules.** The deploy pipeline pages through Alertmanager like any other
+  service, from D2.7, which waits on M1. notification-controller's Discord alerts stay as a
+  second channel.
+    - **The `flux` rule group** comes from D1.6b, which waits on M1. It fires on a controller that is down, on a
+      Kustomization or the OCIRepository not Ready for 15 minutes, and on a Kustomization
+      suspended for more than 24 hours. D4 adds a rule for saturated reconcile workers.
+    - **The deploy-pipeline exporter** is a monitor-bridge family that D2 adds. It exports
+      three things: `DEPLOY_HOLD`'s state and age; the age of the oldest green master commit
+      that `prod` has not reached; and whether `prod`'s live digest matches `PROD_DIGEST`
+      (C2).
+    - **The exporter's rules** are four:
+        - `DeployHoldActive`, a warning that repeats daily while a hold stands;
+        - `PromotionStalled`, for an unpromoted green commit older than 2 hours with no
+          hold;
+        - `ProdMovedOutsidePromote`, which is critical;
+        - `DeployPipelineExporterAbsent`, the `absent()` rule that M1 requires for every
+          exporter.
+
+      They land in D2.6d, which waits on M1.
+- **Host rules.** H3 adds `HostReconcileFailed` and `HostUpdateStale` to M1's rules
+  directory. `HostReconcileFailed` fires on `homelab_host_reconcile_ok` at 0 for 15 minutes.
+  The PR that adds the two rules waits on M1. They survive M6, and H5 relies on them.
+- **Series budget.** M1 sets a fleet-wide series budget. Each slice that adds a scrape, a
+  probe target or a label states its series delta against that budget.
+- **Traces.** No slice adds tracing. The deploy timeline comes from commit-status timestamps
+  and from the deploy-pipeline exporter's ages. `design.md` records why.
 - **Health gate.** `probe.py health <tag>` reads
   `ALERTS{alertstate="firing",service="<tag>"}` and `probe_success{service="<tag>"}`.
 - **The soak.** From D5.3, a Job in the shared kind `soak` reads the alerts labelled
-  `severity="critical"` or `verify="true"` for the flux-owned services, after M1's filter for
-  shadow rules and the Watchdog. Its verdict reaches GitHub as the commit status `flux/soak`,
+  `severity="critical"` or `verify="true"` for the services in the revision's changed set
+  (C2), after M1's filter for shadow rules and the Watchdog. An empty changed set passes at
+  once. The soak's window comes from those services' rules alone (D5). Its verdict reaches GitHub as the commit status `flux/soak`,
   which C2's verification expects. The soak is a Job, and no alert rule stands for it.
 - **Verify successors.** Each deploy-time verification that the Ansible play ran gets one
   successor, of one of three shapes, and R4's exit 5 accepts only these:
@@ -380,8 +522,11 @@ request leaves this list and the round's *Review log* entry names it.
   no flux-owned tag. Gate: before D3.3a merges.
 - **The commit input** (R4 Open question 10). *Modes* names `homelab-render cluster --commit
   SHA`. The publish job passes the commit it publishes, and the render-diff job passes the PR
-  head's SHA to both renders. Gate: before D6.1 or R4's PR 1 merges, whichever
-  comes first (D6 Open question 13).
+  head's SHA to both renders. Gate: before R4's PR 1 merges. D6.1 no longer renders twice
+  once C1's footprint replaces `--moved-tags`, so D6 Open question 13 is withdrawn.
+- **Two more digest fields** (D5 Open question 10). Each tag's object in `digests.json` gains
+  `claims` and `suspended` beside `own` and `footprint`. `soak`'s footprint is normalised
+  over the revision's SHA, so the commit alone never moves it. Gate: before D5.1a2 merges.
 - **Image contexts** (D5 Open question 10). `DIR/images/<name>/` and `DIR/images/tags.json`,
   which no Kustomization's path reaches. Gate: before D5.4a1 merges.
 - **Host-mode placeholders** (H4 Open question 6, with H3's *Host mode renders no secret*).
@@ -407,15 +552,19 @@ request leaves this list and the round's *Review log* entry names it.
     - Before it moves `prod`, `decide` records the `flux/<name>` statuses on `prod`'s commit.
       `verify` excuses a `failure` from a name whose tag T did not change and whose recorded
       status was already `failure`. It also excuses an unchanged name with no status at the
-      timeout whose `dependsOn` chain reaches an excused name.
+      timeout whose `dependsOn` chain reaches an excused name. The pillar review fold
+      narrowed this part. C2's changed set no longer expects an unchanged name. What
+      remains is the recorded status of a dependent already failing on `prod`'s commit, and
+      C2 *Verification* now states that (H1).
 
   Gates: before H1.1b merges for the hold, and before H1.1i merges for the excused failures.
   Until then *Verification* moves `last-good` only when every status is `success`.
 - **D5's changes** (D5 Open question 4).
     - Snapshot roles hold without a reset. This part also waits on the operator's ruling in
       D5 Open question 1 (**operator-only**).
-    - The expected statuses become every Kustomization in the bundle's `flux/` directory,
-      minus suspended ones.
+    - The expected statuses become C2's changed set, minus suspended ones. The pillar review
+      fold replaced "every Kustomization in the bundle's `flux/` directory" here. Under the
+      old wording, one unrelated unhealthy workload held every promotion.
     - From D5.3b2 until D5.3b3, `verify`'s observe-only set leaves out `soak` and ignores a
       `flux/soak` `failure`, so the first live soaks neither hold nor reset. D5.3b3 deletes
       the set.
@@ -429,9 +578,29 @@ request leaves this list and the round's *Review log* entry names it.
 
   Gate: before D5.1b merges. The observe-only set alone has a window of its own, from D5.3b2
   to D5.3b3.
+- **The shape of `verify`** (D4 Open question 14). This row is conditional on D5's
+  measured duration of `verify` on the first broad revision. A broad revision can hold one
+  long `verify` job up to the 5.5-hour cap, and no other promotion runs meanwhile. If that
+  measurement shows it, *Verification* changes `verify` into a short job that re-enters, or
+  a scheduled poller. No gate is named until the measurement exists.
 
 ### Requests on C3
 
+- **A sealed path for a secret that no file holds** (D3 Open question 8). *Secrets* gains a
+  third set beside `SOPS_MANIFEST_KEYS`. It holds single-line secrets that `cluster_vars.py
+  seal` writes as their own SOPS manifests from public recipients alone, so an agent can add
+  one without the operator's `write`. R2's `sops-manifest-entries` check widens to match.
+  Gate: before the `seal` PR merges, after D3.3c. Accepting that the two values agree only
+  by construction is **operator-only**.
+- **tdarr's pre-pull kind** (D5 Open question 21). *Per-tag Kustomizations* gains a
+  predecessor kind for tdarr alone. It holds a pre-pull Job pinned to tdarr's node, so
+  tdarr's 3000-second timeout can drop to the default. Its suffix joins *Reserved names* in
+  D5.1a1's list. Gate: before tdarr's conversion PR merges.
+- **Health checks off unchanged tags** (D4 Open question 13). This row is conditional: it
+  is filed only if D4's or D5's measured worker occupancy trips `FluxWorkersSaturated`. If
+  so, *Per-tag Kustomizations* gains `wait: false` plus generated `healthChecks`, or a
+  shorter `timeout`, for a tag outside the changed set. No gate is named until the trigger
+  fires.
 - **The verify drill's OCIRepository** (D1 Open question 7). *Namespace* names
   `verify-drill` as a transient second `OCIRepository` in `flux-system`, present only while
   `flux_verify_drill` is true. Gate: before D1.5 merges.
@@ -487,15 +656,6 @@ request leaves this list and the round's *Review log* entry names it.
   green commit, which can be older than the tip. *Version* then reads
   `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`. Gate: before
   H3.5a merges.
-- **Where decrypted files land** (H4 Open question 4). Besides `/run/credstore`,
-  `/run/homelab-secrets/<path>` and, for a persisted output,
-  `/var/lib/homelab-secrets/<path>`. A consumer reaches one through a symlink at the real
-  path, or through a drop-in when another package owns that path. Each host package carries
-  one per-host SOPS file. Gate: before H4.1a1 merges.
-- **A package for architecture-specific tools** (H7 Open question 1, H4 Open question 2).
-  `homelab-tools` is architecture-specific and built by nfpm from pinned upstream binaries,
-  sops and chezmoi among them. The alternative mirrors upstream's `.deb` files. Gate: before
-  H7.1 merges.
 
 ### Requests on C6
 
@@ -693,3 +853,66 @@ checked against the slice text it quotes before the change.
   `--moved-tags` rule from D6.1, and that a census test enforces it.
 - Cross-slice note from H1 to D5: the D5 index row adds H1.7b as a gate of the flux PR,
   following D5's header.
+
+### Pillar review fold (2026-10-12)
+
+A review of the plan against eleven pillars ran across all 28 slices. The pillars were
+scalability, reliability, availability, observability, maintainability, modularity,
+testability, security, performance, efficiency and portability. This round applies what that
+review found.
+
+The changes are folded in but **not** adversarially reviewed. The pre-start review round
+should cover every section that carries this heading, in every slice.
+
+Applied to this page:
+
+- **C1.** `digests.json` moves to D2's first publishing PR and gains a `footprint` digest.
+  The footprint replaces D6.1's `--moved-tags` mode. The renderer classifies once, and no
+  reader renders a second time. That supersedes the two `--moved-tags` notes in the
+  cross-slice follow-up above.
+- **C2.**
+    - Render and sign are separate jobs, and only master commits publish.
+    - `verify` expects the changed set instead of every published name. Before this, one
+      unrelated unhealthy Kustomization held every promotion and reset `prod`.
+    - The hold records the names that failed, as `<T> failed=<names>`.
+    - The revert rule is proposed for an operator ruling, and it replaces D5 Open question
+      17.
+    - `PROD_DIGEST` detects a `prod` move made outside `promote`.
+    - The break-glass promotion path is new. Before this, no deploy path existed while
+      GitHub was down.
+- **C3.** A shared kind's tag rule lives in the renderer's footprint rules.
+- **C5.**
+    - *Signing* stated an SSH-signature check that master commits cannot pass, as H3's
+      *Baseline* shows. It now states the anchor the builder actually uses, which matches the
+      GitOps deployer's `deploy_git.py:ci_walk_candidates`. The choice stays with H3 Open
+      question 1.
+    - The amendments on `homelab-tools` and on where decrypted files land are applied, with
+      the rule on persisted plaintext.
+    - Also added: `Valid-Until`, the signer's refusal rule, sandboxing and the staged
+      rollout.
+- **C6.** `land.sh` reads its changed set from `digests.json`. The page also notes the
+  series cost of the `revision` label.
+- **C7.**
+    - Added the Flux rule group, the deploy-pipeline exporter and its three rules.
+    - Added the host rules and the series budget.
+    - Traces are declared out of scope.
+- **Index.** D1.6b, D2.6d, D2.7, D4.9 and H3.5d wait on M1, and H3.9b waits through H3.5d.
+  D4.9 also waits on D1.6b, and H6.3e's verify Jobs wait on D5.1a1. D3.0 to D3.3 need D2.1
+  to D2.6c, so D3 does not inherit D2.6d's edge to M1.
+- **Requests.**
+    - The D5 request on C2 expects the changed set.
+    - The H1 request's excuse rule is narrowed to a dependent that was already failing.
+    - The two C5 requests that were applied leave the list.
+    - *The commit input* gates on R4's PR 1 alone.
+    - Added: two digest fields (D5 Open question 10), the sealed secret path (D3 Open
+      question 8), and tdarr's pre-pull kind (D5 Open question 21).
+    - Added as conditional requests: health checks off unchanged tags (D4 Open question 13)
+      and the shape of `verify` (D4 Open question 14).
+- **Further corrections from the slice owners, applied in the same round.**
+    - C1 leaves the three index paths out of every footprint.
+    - In C2, only jobs that check out no repository code hold `packages: write`.
+    - C2 drops a name that T removes from the changed set.
+    - C2 refuses the revert rule for a hold that names `soak`.
+    - C2's break-glass render may come from a host checkout newer than the bundle.
+    - C7 admits `service="deploy-pipeline"` and adds `DeployPipelineExporterAbsent`.
+    - C7 scopes the soak to the changed set.

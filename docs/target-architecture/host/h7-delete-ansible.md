@@ -24,7 +24,12 @@ is out of `pyproject.toml` and `uv.lock`. Each host is configured by `homelab-<h
 configured by chezmoi. The GitOps deployer is gone, and a package timer fast-forwards the
 primary checkout on daniel-box.
 
-The exit criterion is six observations:
+One piece of the old model remains, and this slice keeps it on purpose: that primary
+checkout. `homelab-checkout-sync` keeps it current with a 10-minute timer, the tree lock, a
+dirty-tree refusal and the CI ancestor walk, because the checkout-reading crons run from it.
+*Open questions* 12 proposes how a later slice retires it.
+
+The exit criterion is seven observations:
 
 1. **Nothing of Ansible is left.** Four listings, each with its expected output:
     - `git ls-files ':(glob)ansible/*.yml' ':(glob)ansible/*.sh'` prints only
@@ -81,6 +86,11 @@ The exit criterion is six observations:
    module, and `uv run pytest --collect-only` reports no import error.
 6. **The ADR.** An ADR under `docs/adr/` records this design and supersedes the bring-up
    sections of the setup roles' `CLAUDE.md` files. Approving it is **operator-only**.
+7. **Reconcile stays under its ceiling.** The reconcile-size census in `hosts/lib/tests/`
+   passes at the head of H7.20a. It counts the source lines of `hosts/lib/homelab-reconcile`
+   and of the `hosts/lib/` modules that only reconcile imports, without tests, blank lines
+   or comments. The count is at or below the ceiling that *Reconcile's line ceiling*
+   derives.
 
 ## Baseline at `70591c307`
 
@@ -819,6 +829,31 @@ The design names three reconcilers. This plan has four, because the line arm is 
 mechanism that fits a maintainer-script-generated file or a conffile that another package
 owns. *Open questions* 7 records it.
 
+### Reconcile's line ceiling
+
+The host plane grows a second mechanism beside dpkg. Reconcile gains the ufw, libvirt,
+users and line arms, H4's udev arm and `pending.json` queue, and the activation step.
+[design.md](../design.md) asks in its *Open questions* 7 whether those stay small enough to
+justify that mechanism, and it makes H7's line ceiling the trigger. The ceiling comes from
+the sizes the slices state:
+
+- H3.2b states no size. Its source line count at H3.2b's merge commit is therefore the
+  base, B, which H7.2a's census measures and its PR body records.
+- H4.1b states about 200 lines, half of them tests, so about 100 source lines. H4.3b1's
+  udev arm is about 50 of its 150.
+- This slice states its own: about 120 source lines in H7.2a, 150 in H7.2b, 100 in H7.2c
+  and 200 in H7.2d (*Steps*). Each PR body quotes its measured count.
+
+The ceiling is (B + 720) × 1.3, rounded up to the next 50. The 30% is headroom for fixes
+inside the stated scope, not room for another arm. H7.2a writes the number into the census
+as a constant, and the H7 ADR records how it was derived.
+
+A PR that crosses the ceiling fails the census. Raising the constant is **operator-only**,
+because crossing the ceiling is design.md's trigger to switch the host plan to ansible-pull,
+the design's runner-up. design.md's *Open questions* 6, the `Depends` question, is the other
+trigger. In the crossing PR, the operator rules whether to cut reconcile, to raise the
+ceiling in the ADR with a reason, or to start the switch.
+
 ### The Docker engine stays held
 
 The engine never moves through the updater. `homelab-daniel-pi` declares no versioned
@@ -1196,8 +1231,9 @@ and `owed.jsonl` holds no line, so those frozen reads return nothing in the way.
 binaries, each checked against its sha256: sops and chezmoi, plus nfpm on daniel-box. The
 pins move
 from role defaults such as `sops_setup_version` into `hosts/packages/homelab-tools/`, where
-`asset_pins.py` and Renovate already know the shape. C5 lists no such package, so *Open
-questions* 1 asks for it, gated before H7.1 merges. The Pi's node exporter uses Ubuntu's
+`asset_pins.py` and Renovate already know the shape. C5 names the package, H3 builds it,
+and the Pi is its `arm64` pilot. H7.1 adds nfpm to it for daniel-box.
+The Pi's node exporter uses Ubuntu's
 `prometheus-node-exporter` if its version is acceptable, and `homelab-tools` otherwise.
 
 `bootstrap-host.sh` also carries pins, for nfpm and uv, each a version with a sha256 per
@@ -1354,6 +1390,26 @@ the same PR. Its steps are:
    `OCIRepository` and the root Kustomization. `docs/break-glass.md` links the section and
    adds nothing to it.
 
+**The offline branch.** When GitHub or GHCR cannot be reached, the procedure takes every
+fetch from the break-glass kit instead, and each step stays **operator-only**:
+
+- the clone, from the kit's repo bundle (item 8), as step 3 already allows;
+- the k3s binary and `install.sh` at `k3s_version`, which step 1 otherwise fetches from
+  GitHub;
+- nfpm, uv and uv's package cache, which `--local-build` otherwise fetches;
+- the Flux controller images, which GHCR serves (*Open questions* 14);
+- the cluster artifact, through C2's break-glass promotion. The operator renders from the
+  repo bundle, pushes the result to the in-cluster registry, and points the OCIRepository
+  at it, verified against the break-glass cosign public key. D6 owns that runbook, and step
+  4 links it rather than restating it.
+
+`bootstrap-host.sh` takes `--offline <kit-dir>`. It reads each file from that directory,
+checks it against the same sha256 pin the download path checks, and refuses on a missing
+file or a mismatch, naming the file. `homelab-repos` ships the GitHub CLI apt source, which
+is a GitHub host, so in step 5 `--offline` runs `apt-get update` without that one source.
+The next online updater run reads it again. `docs/break-glass.md` lists the kit's offline files,
+and the *Bootstrap pins* test holds each listed pin equal to the script's.
+
 Nobody creates `homelab-cluster-vars` by hand. In D3's design, the `cluster-vars`
 Kustomization decrypts `cluster-vars.sops.env` with `sops-age`, and its `secretGenerator`
 produces the Secret. A hand-made copy would be a second writer, which Flux then overwrites.
@@ -1436,6 +1492,54 @@ A full-artifact proof, a guest that applies production's `prod`, is not planned.
 write to the ACME resolver, B2 and R2, Healthchecks.io and Discord with real credentials,
 and nothing here suppresses those writes. If the operator wants one, it is a separate
 **operator-only** drill whose PR states that blast radius under C8.
+
+### Ubuntu release upgrades
+
+C5 gives this slice the release-upgrade procedure. No package depends on one Ubuntu
+release, and H3's container suite runs on every release the fleet runs or is moving to.
+One host moves at a time, in H3's canary order, and each step is **operator-only**:
+
+1. The PR that adds the target release to the container suite's matrix merges first, with
+   the suite green. The host's package at master's version is then one the suite tested on
+   that release.
+2. Hold the updater with H3's hold runbook in `docs/host-packages.md`, so no package
+   installs during the upgrade.
+3. On a cluster node, label it `homelab/k3s-upgrade-paused=true`, so no promoted k3s bump
+   starts a SUC Job during the upgrade. Run H6's gate script in `host` mode, and pick a
+   quiet slot outside `homelab-k3s-restart`'s window. Then run `do-release-upgrade` and
+   reboot.
+4. Verify against the matrix release. `lsb_release -rs` prints the target release, and
+   `dpkg --verify` reports nothing for the `homelab-*` packages. `systemctl start
+   homelab-reconcile` exits 0. Prometheus reads `homelab_host_reconcile_ok` at 1 and
+   `homelab_host_applied_info` at the version the suite tested.
+5. Release the hold with the same runbook, and on a cluster node remove the label. The
+   next updater run installs whatever master published meanwhile, and SUC resumes on the
+   node.
+
+A host that fails step 4 stays held. Its rollback is a rebuild on the previous release with
+`bootstrap-host.sh`, as the Pi runbook and the cluster-node procedure describe.
+
+### Adding a host
+
+The tree must be able to take another host before H7.20a deletes the bring-up playbooks,
+which are the old way to add one. `docs/host-packages.md` gains the walkthrough, modelled
+on H4.2's and H6.2's step lists. Steps 1 and 3 to 5 go in the host's first PR:
+
+1. Add `hosts/<host>/package.yml` with the `reconcile` component, the updater's enable
+   link and any `windowed` mark, and the host's nfpm spec in the form H3's builder takes. A
+   host on another architecture first needs H3's `homelab-tools` build for it.
+2. **Operator-only:** run `bootstrap-host.sh <host> --until 3`, which creates the age key
+   and prints its public key.
+3. Add the creation rule for `ansible/vars/hosts/<host>.sops.yaml` ahead of the general
+   rule, with the host's printed key, daniel-box's key and the recovery key. Adding a
+   recipient is **operator-only**.
+4. **Operator-only:** run `host_secrets.py sync` for the host, and commit its file.
+5. Add the host to every census row that names hosts: both CI scans' named sets of
+   package roots, the hosts `host_secrets.py check` must find, and H3's canary order.
+6. After the merge, run `bootstrap-host.sh <host>` to the end (**operator-only**).
+
+A host census in `hosts/lib/tests/` fails when a directory under `hosts/` is missing from
+any of those named sets or has no creation rule, and it names the set.
 
 ### What the deletion touches
 
@@ -1598,11 +1702,12 @@ This step lasts until H7.19b deletes the ledger.
 scripts/dev/fact_status.py forget '<old key>'` for each section key it removes and `verify`
 for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs (Baseline).
 
-1. **H7.1 `homelab-repos` and `homelab-tools`.**
+1. **H7.1 `homelab-repos`, and `sops_setup` retires.**
     - Move the Docker, GitHub CLI and Log2Ram sources and keyrings out of their roles.
-    - Build `homelab-tools` with sops, chezmoi and nfpm.
-    - Repoint `homelab-secrets` at the packaged `sops`, and delete `sops_setup`'s install
-      tasks. Its key generation moves to bootstrap step 3 in H7.15a. List
+    - `homelab-tools` comes from H3, with sops and chezmoi (C5). H7.1 adds nfpm to it for
+      daniel-box, if H3 has not.
+    - `homelab-secrets` already reads the packaged `sops` (H4). Delete `sops_setup`'s
+      install tasks. Its key generation moves to bootstrap step 3 in H7.15a. List
       `/usr/local/bin/sops` as a legacy entry in all three host packages, because that
       directory comes first on `PATH`, and a stale binary there would shadow every Renovate
       bump of the package pin. The PR body quotes `command -v sops` on each host reading
@@ -1613,17 +1718,21 @@ for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs
       daniel-server's user-home copy, which H4.2 duplicated, is removed only after the
       operator confirms that nothing on daniel-server reads it (**operator-only**).
 2. **H7.2 Foundations.** Six PRs. No host uses an arm until a later PR declares state for it.
-    - **H7.2a** The `activate:` field, the validation commands, the pending metrics and
+    - **H7.2a** (about 280 lines, 120 of them reconcile source) The `activate:`
+      field, the validation commands, the pending metrics and
       `/run/homelab/validate-failed`. It also adds `homelab_host_reconcile_drift{host,arm}`
       and the drift rule of *Which outcomes hold the host*, and extends H3's
       `host_packages` check to name a non-zero drift count in its message without going
       down.
-    - **H7.2b** The ufw arm, with its floor, its order check and its default policies, and
+    - **H7.2b** (about 300 lines, 150 of them reconcile source) The ufw arm,
+      with its floor, its order check and its default policies, and
       the ufw extension of H3.2's two-writer census. The census reads
       `<role>_packaged_hosts` guards through H4.3b2's helper, which this PR extends to a
       task-level and an import-level `when:`.
-    - **H7.2c** The libvirt arm, for networks and nwfilters.
-    - **H7.2d** The users arm and the line arm, with its line and block forms and its
+    - **H7.2c** (about 200 lines, 100 of them reconcile source) The libvirt arm, for
+      networks and nwfilters.
+    - **H7.2d** (about 400 lines, 200 of them reconcile source) The users arm and the
+      line arm, with its line and block forms and its
       conffile rule, and the line-arm extension of H3.2's two-writer census.
     - **H7.2e** The shared modules leave the setup tree, as *Design* describes, with
       `ci_walk_candidates`, `ci_required_contexts` and `ci_ancestor_walk_max`, and
@@ -1634,6 +1743,8 @@ for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs
       empty `diff -r` of the cluster render. The fourth grep's output is the list of
       record for H7.19b.
     - **H7.2f** The setup census, in report mode.
+    - H7.2a also adds the reconcile-size census with its ceiling constant, and measures B
+      at H3.2b's merge commit (*Reconcile's line ceiling*).
 3. **H7.3 Pi: `optimize_pi`, part 1.** zram, Log2Ram and the watchdog, each with `activate:
    reboot`. The PR first measures the owners of the Pi paths, `/etc/sysctl.conf` among
    them, in one batched read-only call (`dpkg -S` and `dpkg-query -W -f='${Conffiles}'`),
@@ -1773,7 +1884,8 @@ for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs
       `docs/claude-agent-user.md`, the polkit rule template `50-claude-land.rules.j2` and the
       agent's profile and `CLAUDE.md` templates.
 13. **H7.13 daniel-server: `hypervisor`.**
-    - Move the role. The drill keeps reading `K3S_TOKEN` from the agent's installer env
+    - Move the role, with the SUC rehearsal mode that H6.1b2 adds to the drill's
+      orchestrator. The drill keeps reading `K3S_TOKEN` from the agent's installer env
       file, `/etc/systemd/system/k3s-agent.service.env`, which H6 leaves in place and the
       rebuild restores out of band (*The agent keeps the server token*). Its S3 env file
       becomes an H4 secret-bearing file. The PR states which S3 folder the drill reads
@@ -1810,13 +1922,21 @@ for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs
       assertion in both modes, the agent's refusal without `K3S_URL` or `K3S_TOKEN`, and
       `--local-build` up to `apt-get install --simulate` of the four packages. The script's
       nfpm, uv and k3s pins arrive with their equality test, and the k3s Renovate manager
-      gains the script as a second file.
+      gains the script as a second file. It also adds `--offline <kit-dir>` and the kit's
+      file list in `docs/break-glass.md`, with the offline container case, about 100 more
+      lines (*The cluster-node bring-up*).
     - **H7.15b** The Pi runbook, then the Pi rebuild, which is exit observation 2. The
       operator keeps the old SD card as the rollback. The cluster's wg-easy on 51820 is
       proven first, as in H5.5.
-    - **H7.15c** The cluster-node procedure, and its two proofs, which are exit observation
+    - **H7.15c** The cluster-node procedure with its offline branch, and its two
+      proofs, which are exit observation
       4: R4 PR 7b's kind drill, run on this PR, and the **operator-only** guest drill, whose
       blast radius the PR body states as *The proofs* gives it.
+    - **H7.15d** The host-addition walkthrough in `docs/host-packages.md`, the host census and
+      a fixture-host container case (about 150 lines). It merges before H7.20a (*Adding a
+      host*).
+    - **H7.15e** The release-upgrade procedure in `docs/host-packages.md` (docs only, about
+      60 lines) (*Ubuntu release upgrades*).
 16. **H7.16 Scripts for the operator playbooks.**
     - **H7.16a** Convert `prune_backups.yml`, `seed_volume_backup.yml` and
       `k3s-storage-smoke.yml`, and delete `preflight.yml`.
@@ -2153,6 +2273,10 @@ progress.
   --system`, and asserts that the live-state check, which reads `sysctl -n` against the
   declared value, fails for the drop-in's `0`. The same key declared through the line arm
   passes.
+- *Reconcile ceiling (H7.2a).* A fixture ceiling one line below the measured count fails
+  the census, which prints both numbers. A fixture module that only reconcile imports, and
+  that carries reconcile over the ceiling, also fails it, so a split into helper modules
+  cannot hide growth.
 - *checkout-sync.* Each against a stub `git` and a stub verdict, each with a red fixture
   that skips the gate: a dirty tree refuses and sets `homelab_checkout_dirty` to 1; a
   branch other than `master` refuses; a red, pending or no-verdict tip is not merged; and
@@ -2223,6 +2347,13 @@ progress.
   `homelab-daniel-box` a `Depends` on a package that only the homelab repo would carry and
   the local build does not produce, and the simulation fails. A clone whose `HEAD` fails
   the trust check is refused.
+- *Offline bring-up (H7.15a).* The container runs `--local-build --offline <fixture kit>`
+  with GitHub's and GHCR's hostnames unresolvable, as far as `apt-get install --simulate`,
+  so a fetch the branch missed fails it. A fixture kit with no k3s binary refuses and names the file, and a kit whose
+  nfpm differs from its pin refuses.
+- *Adding a host (H7.15d).* The container renders and builds a fixture host made from the
+  walkthrough's file list. A fixture host with no creation rule, or missing from one named
+  set, fails the host census, which names the set.
 - *Bootstrap pins.* The script's nfpm and uv pins equal the ones in
   `hosts/packages/homelab-tools/` and the builder's. Its three k3s pins equal the keys in
   H6's `system-upgrade` defaults. A fixture that changes one side only is flagged, the k3s
@@ -2642,6 +2773,16 @@ progress.
     - ADR-0011 and ADR-0017, because `gitops-deploy.service` and `deploy.sh` leave the lock
       holders in H7.19, while `homelab-checkout-sync` and the checkout timers keep the tree
       lock.
+- **Added by the pillar review fold:**
+    - H7.2a: the reconcile-size census and its ceiling constant, in `hosts/lib/tests/`;
+    - H7.13: `docs/hypervisor-libvirt-internals.md` names the rehearsal mode that moves
+      with the role;
+    - H7.15a: the offline container case and its two red fixtures, and the kit's offline
+      file list in `docs/break-glass.md`;
+    - H7.15c: the cluster-node procedure in `docs/break-glass.md` gains the offline branch;
+    - H7.15d: `docs/host-packages.md` gains the host-addition walkthrough, and the host census
+      joins `hosts/lib/tests/`;
+    - H7.15e: `docs/host-packages.md` gains the release-upgrade procedure.
 
 ## Complexity delta
 
@@ -2681,7 +2822,10 @@ progress.
       the host, or drift, which does not. H3's updater is unchanged. The alternative, a
       third "pending" result that makes H3's updater rerun reconcile on every fire, would
       amend H3's record and updater for the one case the two-version retirement removes;
-    - `homelab-repos` and `homelab-tools`;
+    - `homelab-repos`, and nfpm in H3's `homelab-tools`;
+    - the reconcile-size census and its ceiling, and the host census;
+    - `--offline` in `bootstrap-host.sh`, with the kit's offline file list;
+    - two docs-only procedures: adding a host and upgrading a host's Ubuntu release;
     - `homelab-checkout-sync` and `homelab-docker-engine.service`;
     - `bootstrap-host.sh`, complete, with the Pi runbook and the cluster-node procedure;
     - four operator commands in place of three playbooks and one runbook role;
@@ -2696,6 +2840,9 @@ progress.
     - nfpm, uv and k3s pins in `bootstrap-host.sh`, held equal to the package pins and to
       H6's `system-upgrade` keys by a test;
     - one ADR.
+- **Kept:** the primary checkout on daniel-box and `homelab-checkout-sync`, which *Open
+  questions* 12 proposes to retire, and the `ansible/` tree name, which *Open questions* 13
+  proposes to change.
 - **Not added:** no `dpkg-divert` lifecycle and no change to H3's maintainer-script
   whitelist, because every owned path measured so far is a conffile, which the line arm
   edits as Ansible does. No agent-scoped k3s token, and no new SOPS key for it.
@@ -2704,18 +2851,17 @@ progress.
   own Healthchecks.io check, for a reboot that the weekly timer already performs within a
   week.
 - The design's net for Area 3 holds with two changes: a fourth reconciler, the line arm, and
-  `homelab-tools`. The rest stays as the design lists it: one CI workflow, 4 package specs,
+  `homelab-tools`, which C5 assigns to H3.
+  The rest stays as the design lists it: one CI workflow, 4 package specs,
   5 shared units, a version monitor, SUC with 2 Plans, `bootstrap-host.sh`, `homelab-repos`,
   a LAN builder and its key, and the CI package tests.
 
 ## Open questions
 
-1. **C5 lacks a package for architecture-specific tools.** sops and chezmoi are
-   per-architecture binaries, and C5 makes every host package `Architecture: all`.
-   Resolution: amend C5 to add `homelab-tools`, which is architecture-specific and built
-   from pinned upstream binaries. The alternative is mirroring upstream's `.deb` files into
-   the repo. Gate: the amendment lands before H7.1 merges. The row is not yet in
-   contracts.md's *Requested amendments not yet applied*, and this round asks for it there.
+1. **C5 lacks a package for architecture-specific tools.** Resolved by the C5 amendment
+   that the pillar review fold applied. `homelab-tools` is C5's one architecture-specific
+   package, H3 builds it, and the Pi is its `arm64` pilot. H7.1 adds nfpm to it and
+   retires `sops_setup`.
 2. **The window between D6 and the end of H7.** Resolved, with one condition. D6 keeps the
    deployer, so the tick keeps applying daniel-box's setup plane until H7.19a retires it,
    after the last daniel-box role is packaged. No window of hand applies on daniel-box
@@ -2757,6 +2903,39 @@ progress.
     runs on kind, C8's first substitute. The host half is C8's third, an **operator-only**
     drill on production hardware, whose PR states the blast radius *The proofs* gives. It
     runs no homelab workload and no Flux, and no production credential reaches it.
+12. **The primary checkout outlives the deployer.** `homelab-checkout-sync` keeps a git
+    checkout on daniel-box current: a 10-minute timer, the tree lock, a dirty-tree refusal
+    and the CI ancestor walk. That is the pillar review's failure class E, a host whose
+    behaviour depends on mutable working-tree state. Recommendation: a later slice runs
+    the checkout-reading crons from a package or an image built at the applied commit. A
+    cron that commits, such as docs-refresh, keeps a private clone under its own state
+    directory, not the operator's checkout. checkout-sync, its lock, its refusal and its
+    walk then retire. Resolution: the H7 ADR lists the primary checkout under what
+    remains, with this recommendation, and the operator rules on the later slice
+    (**operator-only**).
+13. **The tree still reads as Ansible after H7.** The keep-list leaves `ansible/vars/`,
+    `ansible/inventory/`, `ansible/filter_plugins/`, `ansible/templates/`,
+    `ansible/tests/`, and each k8s role's `templates/`, `defaults/` and `files/` under
+    `ansible/`. A reader then looks for playbooks that no longer exist. Recommendation: one
+    move PR after H7.20 renames the tree to a neutral root that the operator picks
+    (**operator-only**), with `git mv` only and every path constant changed through
+    `scripts/lib/repo_paths.py`. The same PR moves `ansible/.sops.yaml` beside `vars/`,
+    because SOPS searches upward from the file, and updates `.gitleaks.toml`, the Renovate
+    rules, the prek hooks, the CI path filters and the `docs/facts.lock` rows. Resolution:
+    the H7 ADR records the follow-on. The PR runs when no other slice has a branch open,
+    because every open branch conflicts with it.
+14. **Two offline items need more than a kit file.** The offline branch takes every fetch
+    from the kit, but two items are not files the script installs.
+    - The Flux controller images come from GHCR. Recommendation: the kit carries them as
+      image tarballs at D1's pinned digests, and the procedure places them in k3s's image
+      import directory before k3s starts, so the node imports them at start.
+    - C2's break-glass promotion pushes to the in-cluster registry. On a fresh cluster that
+      registry is a Flux workload that is not running yet. Recommendation: D6's runbook
+      applies the registry's rendered manifests from the repo bundle first, with its image
+      from the kit, and pushes the artifact after.
+
+    Resolution: D6's break-glass drill on kind adds a fresh-cluster case with no registry
+    and no GHCR, and H7.15c's PR quotes it. This is a cross-slice request to D6.
 
 ## Review log
 
@@ -3319,3 +3498,32 @@ fix.
       series.
     - Container tests with red fixtures cover the fingerprint script and the directory.
       *Rollback*, *Risks*, *Tests and docs* and *Complexity delta* changed with it.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **F-03.** *The cluster-node bring-up* gains an offline branch: each GitHub or GHCR fetch
+  takes a kit source, and the artifact goes through C2's break-glass promotion, which D6
+  owns. `bootstrap-host.sh` gains `--offline` in H7.15a, with a red-proofed container case.
+  The Flux images and the registry's bring-up order on a fresh cluster went to *Open
+  questions* 14, with a cross-slice request to D6.
+- **F-15.** *Design* gains *Ubuntu release upgrades*: the updater hold, the upgrade, the
+  check against the matrix release, and the release of the hold. A cluster node also
+  takes H6's pause label for the duration. PR H7.15e writes it. C5
+  assigns `homelab-tools` to H3, so H7.1, *Architecture-specific binaries* and *Complexity
+  delta* re-attribute it, and H7.1 keeps only nfpm and the `sops_setup` retirement.
+  *Open questions* 1 is resolved by the C5 amendment.
+- **F-05 / F7.** Exit criterion 7 adds the reconcile line ceiling, and *Design* gains
+  *Reconcile's line ceiling*. H3.2b states no size, so the ceiling is the measured base
+  plus the stated sizes, with H7.2a to H7.2d's sizes stated here, times 1.3. Crossing it is
+  design.md's ansible-pull trigger, per its *Open questions* 6 and 7, and raising it is
+  **operator-only**. H7.2a adds the census, with a red proof.
+- **F-05 / failure class E.** *Goal* and *Complexity delta* name the primary checkout and
+  checkout-sync as kept. *Open questions* 12 recommends running the checkout-reading
+  crons from a package or an image.
+- **F-12 / P7.** *Design* gains *Adding a host*, modelled on H4.2 and H6.2, and PR H7.15d
+  adds it with a host census and a fixture-host case before H7.20a.
+- **F-10.** *Open questions* 13 recommends one move PR after H7.20 that renames the
+  `ansible/` tree.
+- **F-11 (from H6).** H7.13 moves H6.1b2's rehearsal mode with the `hypervisor` role.

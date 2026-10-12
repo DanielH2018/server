@@ -64,7 +64,11 @@ and upstream facts through `gh`.
   (2026-10-01), and no v2.10 release exists. The v2.9.0 release notes list compatibility with
   Kubernetes 1.34, 1.35 and 1.36 only.
 - **Memory.** `kubectl top node` reads daniel-box at 13,725Mi (47%) and daniel-server at
-  10,804Mi (34%). ADR-0010's premise was 65%.
+  10,804Mi (34%). On 2026-10-12 the same command read daniel-box at about 54%. The plan's
+  readings of daniel-box therefore span 44–54%. ADR-0010 recorded 65% when it deferred Flux,
+  and sized each Flux controller at about 30 MiB. The premise D1 rests on, that daniel-box
+  has room for three controllers, is stated over that range and not over one reading.
+  *Risks* says what D1's own measurement cannot show.
 - **The Flux CRDs fit a client-side apply.** In the v2.9.6 `install.yaml`, the largest CRD is
   `helmreleases` at 76,373 bytes and `kustomizations` is 40,655 bytes. Both are under the
   262,144-byte limit that `last-applied-configuration` puts on a client-side apply, which is
@@ -334,8 +338,10 @@ and upstream facts through `gh`.
 +   defaults/main.yml               flux_version (Renovate-annotated), flux_pod_patch,
 +                                   flux_controllers (restart_on: []), flux_sync_suspend,
 +                                   flux_verify_drill, k8s_autodeploy: false
-+   files/gotk-components.yaml      vendored install, ResourceQuota stripped, header names
-+                                   the version and the pipeline that produced it
++   files/gotk-components.yaml      vendored install, ResourceQuota and two NetworkPolicies
++                                   stripped, images pinned by digest; header names the
++                                   version and the pipeline that produced it
++   templates/networkpolicy.yaml.j2 flux-allow-prometheus: Prometheus to the controllers' 8080
 +   tasks/main.yml                  include k8s/manifests with no shared wait and three self
 +                                   rollouts; own rollout wait; CRD wait; deferred sync apply;
 +                                   delete ocirepository/verify-drill while the lever is off
@@ -357,10 +363,16 @@ and upstream facts through `gh`.
 + scripts/validate/schemas/…                     the schemas it fetches
   renovate.json                     flux defaults path in the denylist rule, and a
                                     per-package manual rule for fluxcd/flux2
-+ .github/workflows/promote.yml     name: promote; jobs publish and promote
++ .github/workflows/promote.yml     name: promote; jobs render, publish, promote and tag
 + .github/workflows/prune-artifacts.yml   daily retention of old sha-* versions (D1.7)
 + scripts/deploy_tools/promote.py   decide and prune, called by the two workflows
++ scripts/deploy_tools/forge.py     the forge adapter: every GitHub and GHCR call promote.py makes
+  .claude/hooks/block-footguns.py   denies agents the two variable writes and the tag moves (D1.4)
+  scripts/secrets_mgmt/secret_rotation.py   a 90-day tier for PROMOTE_TOKEN's copy (D1.4)
   ansible/roles/k8s/observability/  kube-state-metrics argument for Flux kinds, a scrape job
+                                    with histogram buckets dropped (D1.6); the flux rule
+                                    group and its promtool tests (D1.6b)
+  ansible/roles/k8s/netpol-baseline/defaults/main.yml   a flux-system plane, three refused rows
 + docs/flux-deploy-plane.md
 + docs/adr/<next free number>-…    Proposed: Flux applies the cluster from a promoted artifact
   docs/adr/0010-…                   a dated line in Status, linking the proposal
@@ -376,12 +388,17 @@ copy that set, so a task D1 adds to the role beyond it needs its own row in R4's
 
 ```text
 merge X ─▶ CI (ci.yml) ── success ──▶ workflow_run ─▶ promote.yml
-  publish job:  check out head_sha (X); build the bundle (D1: flux/kustomization.yaml
-                with resources: [])
+  render job (contents: read):  check out head_sha (X) with full history
+                git merge-base --is-ancestor X origin/master, or refuse
+                build the bundle (D1: flux/kustomization.yaml with resources: [])
+                gitleaks over out/ (D2 adds the census and the no-stub check)
+                upload out/ as a workflow artifact; output sha=X
+  publish job (needs: render; no checkout; packages: write, id-token: write):
+                download out/; run only the pinned flux and cosign binaries
                 flux push artifact oci://…/homelab-manifests:sha-X --revision master@sha1:X
                 cosign sign the pushed digest (keyless, the workflow's own identity)
-  promote job (needs: publish; concurrency: promote):  check out github.sha, the
-                workflow's own commit; promote.py decide
+  promote job (needs: publish; concurrency: promote; read-only):  check out github.sha,
+                the workflow's own commit; promote.py decide
                 any read errors            ─▶ error: exit non-zero, no tag moves
                 DEPLOY_HOLD other than none ─▶ held
                 GET prod's manifest; its org.opencontainers.image.revision is prod's commit
@@ -389,8 +406,10 @@ merge X ─▶ CI (ci.yml) ── success ──▶ workflow_run ─▶ promote.
                 HEAD sha-<C>, then the CI verdict, then cosign verify; the first C with
                 all three is T
                 no such commit             ─▶ current
-                otherwise                  ─▶ promote; step outputs verdict and target=T
-  tag step:     flux tag artifact :sha-<target> --tag prod   (target from decide, not head_sha)
+                otherwise                  ─▶ promote; outputs verdict, target=T, digest
+  tag job (needs: promote; concurrency: promote; no checkout; packages: write):
+                flux tag artifact :sha-<target> --tag prod   (target from decide, not head_sha)
+                gh variable set PROD_DIGEST --body <digest>  (PROMOTE_TOKEN)
 daniel-box:   source-controller polls :prod every minute and verifies the signature
               kustomize-controller builds ./flux (no objects) ─▶ Ready, origin revision T
               notification-controller ─▶ GitHub status flux/homelab = success on T
@@ -401,9 +420,36 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
 - **Three controllers only.** The vendored file is the output of `flux install --export
   --components=source-controller,kustomize-controller,notification-controller
   --network-policy=true --version=<flux_version>`, piped through a filter that drops the
-  document of kind `ResourceQuota`. helm-controller and the image-automation controllers stay
-  out, because nothing here uses them. The file's first line names the version and the whole
-  pipeline, so a regeneration is reviewable as that pipeline plus the upstream diff.
+  document of kind `ResourceQuota` and the NetworkPolicies `allow-scraping` and
+  `allow-webhooks`, then through the digest step below. helm-controller and the
+  image-automation controllers stay out, because nothing here uses them. The file's first
+  line names the version and the whole pipeline, so a regeneration is reviewable as that
+  pipeline plus the upstream diff.
+- **The controller images are pinned by digest.** The pipeline's last step resolves each
+  controller image's tag to its index digest with `crane digest`, at a pinned version. It
+  rewrites each `image:` line as `<repo>:<tag>@sha256:<digest>`. The tag stays for the
+  reader, and the kubelet pulls the digest. The fleet digest rule reads `*_image` defaults
+  only, so a role test checks that every rendered flux container image carries a digest.
+  Rejected: the exemption that kept the vendored images tag-pinned. A registry tag can be
+  pushed again, and from D5 on these pods apply every service.
+- **`flux-system` is fenced by default-deny ingress, outside netpol-baseline.** ADR-0009's
+  baseline covers `homelab` and `observability` only
+  ([ADR-0009](../../adr/0009-networkpolicy-default-deny-ingress.md)). flux2 v2.9.6
+  `manifests/policies/` holds the three policies that `--network-policy=true` emits:
+    - `allow-egress` selects every pod, admits ingress only from pods in `flux-system`, and
+      allows all egress. It makes every Flux pod ingress-isolated, so it is the namespace's
+      default-deny. The role keeps it. Its same-namespace rule is the path on which
+      kustomize-controller fetches artifacts and the controllers send events.
+    - `allow-scraping` admits every namespace to TCP 8080 on every pod. The filter drops it.
+      `templates/networkpolicy.yaml.j2` renders `flux-allow-prometheus` instead, which
+      admits only the `app: prometheus` pods in `observability` to 8080.
+    - `allow-webhooks` admits every namespace to notification-controller's TCP 9292, the
+      Receiver port. D1 defines no Receiver, so the filter drops it. A slice that adds a
+      Receiver adds its fence in the same PR.
+
+  Egress is not enforced on this cluster (ADR-0009), so `allow-egress`'s egress rule changes
+  nothing. D1.6 adds `flux-system` rows to netpol-baseline's probe, which test the fence
+  live (*Verification*).
 - **The role meets the fleet guards by patching, with one exemption (operator-visible).** Each
   guard under *Baseline* gets one answer:
     - The `critical-pods` ResourceQuota is stripped when the file is vendored.
@@ -646,46 +692,100 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
   deprecated.
 - **`promote` never moves `prod` backwards.** Every candidate in the walk descends from
   `prod`'s commit, and `decide` refuses a target that does not.
-- **Jobs, ordering and permissions.** Both jobs run on `ubuntu-26.04`. `promote` has
-  `needs: publish`, so a failed push or sign step stops the run before any tag moves. Each
-  job declares its own `permissions`, and nothing else is granted:
-    - `publish`: `contents: read`, `packages: write`, `id-token: write`.
-    - `promote`: `contents: read`, `packages: write`, `checks: read`.
+- **Render and sign are separate jobs (C2).** Code that runs during a render never holds a
+  token that can sign, push or move a tag. The workflow has four jobs, each on
+  `ubuntu-26.04`, and each declares its own `permissions`, with nothing else granted:
+    - `render`: `contents: read`. It checks out the commit, checks its ancestry, builds the
+      bundle and runs the publish checks over `out/`. In D1 the one check is gitleaks, run
+      as a directory scan. D2 adds C1's no-stub check and C3's publish census to this job.
+      It hands `out/` on through `actions/upload-artifact`, pinned by commit SHA, and
+      outputs `sha`.
+    - `publish`: `packages: write` and `id-token: write`. It checks out no repository code.
+      It downloads the bundle, refuses a `sha` that is not 40 lowercase hex, and runs only
+      the pinned `flux` and `cosign` binaries: `flux push artifact`, then `cosign sign` on
+      the pushed digest.
+    - `promote`: `contents: read`, `checks: read`, `packages: read`. It runs
+      `promote.py decide`, which outputs `verdict`, `target` and the digest of
+      `sha-<target>` that its `HEAD` read.
+    - `tag`: `packages: write`. It checks out no repository code and runs only the pinned
+      `flux` binary and the runner's `gh`. It moves `prod` to `sha-<target>`, then writes
+      that digest to the repository variable `PROD_DIGEST` (C2). A failed write leaves a
+      mismatch that D2's deploy-pipeline exporter pages on, which is the safe direction.
 
-  `promote` checks out `github.sha` with `fetch-depth: 0`, because the walk needs master's
-  history. Both jobs install the flux CLI at the version `flux_version` names, read from the
-  role's defaults in their own checkout, so the CLI and the controllers move together.
-  cosign comes from `sigstore/cosign-installer`, pinned by commit SHA, with
-  `cosign-release: v3.1.3`.
+  `publish` needs `render`, `promote` needs `publish`, and `tag` needs `promote` and runs
+  only on the verdict `promote`. A failed render, check, push or sign therefore stops the
+  run before any tag moves. `promote` and `tag` both take the job-level
+  `concurrency: promote`, so no two of them run at once. A pending `tag` is evicted only by
+  a job that arrived later, and that job's run decides afresh from master. So the argument
+  under *`promote` picks its target from master* still holds, and `prod` still never moves
+  backwards. `render` and `promote` check out with `fetch-depth: 0`, never a shallow
+  clone. `render` needs the history for the ancestry check. `promote` needs it back to
+  `prod`'s commit for the walk, and for D2.6c's object-loss check, which reads the
+  `Removes-Object:` trailers on the commits in (`prod`, T]. `publish` and `tag` install the flux CLI
+  through `fluxcd/flux2/action`, pinned by commit SHA, at a version written in the workflow.
+  The D1.4 workflow test holds that version equal to `flux_version`, so the CLI and the
+  controllers move together although neither job reads the role. cosign comes from
+  `sigstore/cosign-installer`, pinned by commit SHA, with `cosign-release: v3.1.3`.
+  Rejected: moving `prod` from `publish`, the only way `publish` alone could hold
+  `packages: write`. The move follows `decide`, and `decide` needs the pushed and signed
+  `sha-X`, so a second writer is unavoidable. `tag` keeps that writer free of repository
+  code instead.
 - **Which token each call uses.**
-    - `flux push artifact`, `flux tag artifact`, `cosign sign`, `cosign verify`, and
-      `promote.py`'s registry reads and prune deletes use `GITHUB_TOKEN`, logged in to
-      `ghcr.io`. GitHub Packages accepts no fine-grained token, so no other token could move
-      the tag.
-    - The check-runs read uses `GITHUB_TOKEN`.
-    - `gh variable get DEPLOY_HOLD` uses the repo secret `PROMOTE_TOKEN`, a fine-grained
-      token with Variables read and write, set as `GH_TOKEN` on that one step. The step reads
-      the variable through the API at the moment it decides, not through the `vars` context,
-      so a hold that an earlier job wrote is always seen. Writing `DEPLOY_HOLD` arrives in
-      D2. Whether `GITHUB_TOKEN` can write repository variables is Open question 3; this plan
-      assumes it cannot.
+    - `flux push artifact` and `cosign sign` in `publish`, and `flux tag artifact` in `tag`,
+      use that job's `GITHUB_TOKEN`, logged in to `ghcr.io`. GitHub Packages accepts no
+      fine-grained token, so no other token could move the tag.
+    - `promote.py`'s registry reads, `cosign verify` and the check-runs read use the
+      read-only `GITHUB_TOKEN` of `promote`. The prune deletes use `prune-artifacts.yml`'s.
+    - `gh variable get DEPLOY_HOLD` in `promote` and `gh variable set PROD_DIGEST` in `tag`
+      use the repo secret `PROMOTE_TOKEN`, a fine-grained token with Variables read and
+      write, set as `GH_TOKEN` on those two steps only. The read goes through the API at the
+      moment `decide` runs, not through the `vars` context, so a hold that an earlier job
+      wrote is always seen. Writing `DEPLOY_HOLD` arrives in D2. Whether `GITHUB_TOKEN` can
+      write repository variables is Open question 3; this plan assumes it cannot.
     - The SOPS variable `flux_github_status_token` is a fine-grained token with Commit statuses
-      read and write on this repository, for notification-controller.
-- **`PROMOTE_TOKEN`'s expiry has a signal.** SOPS holds a copy as `promote_token`, registered
-  `source: record` with tier `external`. The audit then turns "Secret Rotation" down within
-  365 days of the copy's last change, and the operator mints the token with the longest
-  expiry GitHub allows. Nothing in the tree reads the copy.
+      read and write on this repository, for notification-controller. Open question 12 asks
+      whether a GitHub App token replaces it.
+    - **Requirement: no agent token ever carries `write:packages`.** Pushing, signing and
+      moving a tag happen only in the code-free jobs above. A token that an agent session
+      holds never carries that scope, so an agent cannot push an artifact or move `prod`,
+      whatever the hook below misses.
+- **`PROMOTE_TOKEN` expires after 90 days, and its expiry has a signal.** The operator mints
+  it with a 90-day expiry (**operator-only**). It can write repository variables, so a short
+  life bounds a leaked copy. SOPS holds a copy as `promote_token`, registered
+  `source: record`. No registry tier is that short, because `external` is 365 days
+  (*Baseline*). So D1.4 adds a 90-day tier, `external-90d`, to `secret_rotation.py:TIER_DAYS`
+  and to its copy `rotation_tools.DEFAULT_TIER_DAYS`, and puts the row on it. The audit then
+  turns "Secret Rotation" down within 90 days of the copy's last change. Nothing in the tree
+  reads the copy.
+- **An agent cannot write the deploy plane's variables or move a tag.** D1.4 adds a rule to
+  `.claude/hooks/block-footguns.py`, beside `issue_create_by_hand_problem`. It denies an
+  agent `gh variable set DEPLOY_HOLD`, `gh variable set PROD_DIGEST`, a `gh api` call with a
+  write method on either variable's path, `flux tag artifact`, `crane tag` and `oras tag`.
+  The rule lands in D1.4, the PR that creates `DEPLOY_HOLD`, so the variable never exists
+  without it. Clearing a hold stays **operator-only** (C2). A textual guard breaks on an
+  indirection, so the token requirement above is the boundary and the hook is a second
+  layer.
+- **Every GitHub and GHCR call goes through one forge adapter.**
+  `scripts/deploy_tools/forge.py` holds the calls `promote.py` makes: the variable read and
+  write, the check-runs read, the GHCR token request, the manifest fetch and `HEAD`, and the
+  Packages API listing and delete. D2's commit-status reads join it. `promote.py` calls only
+  the adapter's interface, and the fake transport in its tests replaces the adapter. A forge
+  move then rewrites one module. *Risks* lists what else the deploy plane takes from GitHub.
 - **The trigger is guarded.** `promote.yml` triggers on `workflow_run` of `CI` with
-  `types: [completed]`. Both jobs run only when the run's conclusion is `success`, its event
-  is `push`, its branch is `master`, and its head repository is this repository. `publish`
-  checks out `github.event.workflow_run.head_sha || github.sha`, because its bundle must be
-  the triggering commit's tree. A dispatch has no `workflow_run` event, so it publishes
-  master's tip, and D2's `sha` input extends the expression. `promote` checks out
-  `github.sha`, the workflow's own commit, so the `promote.py`
-  that runs always matches the `promote.yml` that calls it (failure class 7). Neither job
-  checks out a pull-request ref. zizmor reports
-  `workflow_run` as a dangerous trigger, so the trigger line carries the repository's
-  `# zizmor: ignore[dangerous-triggers] -- <reason>` form, naming these guards.
+  `types: [completed]`. Every job runs only when the run's conclusion is `success`, its
+  event is `push`, its branch is `master`, and its head repository is this repository.
+  `render` checks out `github.event.workflow_run.head_sha || github.sha`, because the bundle
+  must be the triggering commit's tree. A dispatch has no `workflow_run` event, so it
+  renders master's tip, and D2's `sha` input extends the expression.
+    - **Only master commits publish (C2).** Before it renders, `render` runs
+      `git merge-base --is-ancestor <sha> origin/master`. Exit 0 goes on, exit 1 refuses,
+      and any other exit is an error. D2's `sha` input passes the same check.
+    - `promote` checks out `github.sha`, the workflow's own commit, so the `promote.py` that
+      runs always matches the `promote.yml` that calls it (failure class 7). `publish` and
+      `tag` check out nothing. No job checks out a pull-request ref.
+
+  zizmor reports `workflow_run` as a dangerous trigger, so the trigger line carries the
+  repository's `# zizmor: ignore[dangerous-triggers] -- <reason>` form, naming these guards.
 - **A dispatch passes the same gate.** The workflow also takes `workflow_dispatch` inputs:
   `verify_drill` here, `sha` in D2 and `soak_drill` in D5. Every job reached by a dispatch
   requires `github.ref == 'refs/heads/master'`, so a branch's copy of the workflow never runs
@@ -693,6 +793,26 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
   API with the semantics of `deploy_git.py:ci_verdict`, where `cancelled` is no verdict, and
   refuses anything but green before it publishes or promotes. The two drill inputs never
   touch `prod`.
+- **Flux pages through the alert plane (C7).** D1.6b adds the `flux` rule group to M1's
+  rules directory. Every rule carries `service="flux"`, a literal, as C7 allows:
+    - `FluxControllerDown`, `critical`: a controller's scrape target is down, or its series
+      are absent, for 5 minutes, in M1's form for a scrape job.
+        - The Flux scrape jobs carry no `origin` label. Until M6's batch A3, Kuma's
+          `Cluster Scrape Targets` tile pages a down target, and M1's convention 5 forbids a
+          second `up == 0` pager.
+        - The `up == 0` arm therefore lands with `shadow="true"`. The `absent()` arm is
+          conjoined with `up == 1`.
+        - A3's cutover commit drops the shadow.
+    - `FluxNotReady`, `warning`: a Kustomization, or the OCIRepository `homelab`, has had a
+      Ready condition other than `True` for 15 minutes. The rule names `homelab`, so the
+      drill's `verify-drill`, which is meant to read Ready=False, never fires it.
+    - `FluxSuspended`, `warning`: a Kustomization has been suspended for more than 24
+      hours. `flux_sync_suspend` and a hand suspend both count.
+
+  `FluxNotReady` is a warning because C7's soak reads `critical` alerts, and C2 says that a
+  failure outside the changed set never holds. The group pages only once M1's Alertmanager
+  runs, so D1.6b waits on M1. notification-controller's Discord alerts stay as a second
+  channel.
 - **The way out exists from the first sync PR.** `flux_sync_suspend: true` renders
   `suspend: true` on the OCIRepository and the root Kustomization, which stops all
   reconciliation without deleting anything. With the lever off, the render omits
@@ -783,7 +903,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
     - Add the ADR at the next free number, `status: Proposed`. It states that D1 installs
       Flux owning nothing, and that ADR-0010 is superseded only when the operator accepts it.
 
-2. **D1.2 — The flux role and its controllers** (about 240 hand-written lines, plus the
+2. **D1.2 — The flux role and its controllers** (about 290 hand-written lines, plus the
    vendored file). This is above the 200-line guide, because each guard's patch or exemption
    must land with the templates it covers.
     - Write the role by hand, with the include, the waits, `flux_controllers` with
@@ -799,9 +919,14 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       depName=fluxcd/flux2`. Add the role's defaults path to the `manual — k8s_autodeploy:
       false` rule. Add a per-package rule for `fluxcd/flux2` with `automerge: false` and the
       marker, because the docker-only rule never sees a github-releases pin.
-    - The vendored images stay tag-pinned. Each tag is the controller release that
-      `flux_version` names, and the fleet digest rule reads `*_image` defaults only. The
-      role's `CLAUDE.md` records this exemption and its reason.
+    - Pin the vendored images by digest through the pipeline's digest step (*Decisions*).
+      Add a test in `ansible/tests/k8s/` that every container image the flux role renders
+      matches `<repo>:<tag>@sha256:<64 hex>`. Its red half is a fixture render with one
+      image carrying the tag only.
+    - Filter out `allow-scraping` and `allow-webhooks`, keep `allow-egress`, and add
+      `templates/networkpolicy.yaml.j2` with `flux-allow-prometheus` (*Decisions*). A render
+      test asserts that no rendered NetworkPolicy in `flux-system` has a `namespaceSelector`
+      that matches every namespace. Its red half is the unfiltered vendored file.
     - Add the `_RECREATE` row for source-controller. Add `"flux": "homelab-critical"` to
       `_CLASS_AT_DERIVATION` in `ansible/tests/k8s/test_priority_class_is_derived_from_tier.py`,
       and `flux` to `_EXPECTED_NARROWERS` in
@@ -886,9 +1011,14 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
     - **Done when** the same `kubectl get` prints `No resources found` instead of Forbidden.
       D1.5 does not merge before that.
 
-4. **D1.3 — The promotion decision** (about 220 lines, plus about 250 of tests). This is
+4. **D1.3 — The promotion decision** (about 250 lines, plus about 250 of tests). This is
    above the guide, because the registry client and its outcome mapping land with the
    decision that reads them.
+    - `scripts/deploy_tools/forge.py` holds the registry client and every GitHub call that
+      `decide` makes (*Decisions*). `promote.py` imports no HTTP library and starts no `gh`
+      subprocess itself. A test in `scripts/deploy_tools/tests/` asserts that, by
+      reading `promote.py`'s imports, and names the adapter's module as the one member that
+      must be found. Its red half is a fixture module that imports the HTTP library itself.
     - **Contract gate, satisfied:** C2's *`DEPLOY_HOLD`'s values* row and C6's *`land.sh`*
       row state the `none` rule that `decide` implements (Open question 9, resolved).
     - `scripts/deploy_tools/promote.py` holds a pure function, `decide`. It takes the hold
@@ -928,35 +1058,53 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       present and asserts the requests it made: one token request, one `prod` fetch, and
       one `HEAD` per candidate examined. Its red half counts a client that lists tags.
 
-5. **D1.4 — The `promote` workflow** (about 140 lines).
-    - **Operator-only before merge:** create the `PROMOTE_TOKEN` repository secret, and
-      create the repository variable `DEPLOY_HOLD` with the value `none`:
-      `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`. That form needs no
-      prompt and no standard input. Store the token's copy with `sops set` as
-      `promote_token`. The agent then runs `uv run python
-      scripts/secrets_mgmt/secret_rotation.py sync`, sets that row to `source: record` and
-      tier `external`, and commits `ansible/secret_rotation.yml`.
+5. **D1.4 — The `promote` workflow** (about 190 lines of workflow, about 40 of hook rule
+   and cases, and one rotation tier).
+    - **Operator-only before merge:** create the `PROMOTE_TOKEN` repository secret with a
+      90-day expiry. Create the repository variables `DEPLOY_HOLD` and `PROD_DIGEST`, each
+      with the value `none`, because `gh` cannot set an empty value:
+      `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`, and the same for
+      `PROD_DIGEST`. That form needs no prompt and no standard input. The first `tag` run
+      overwrites `PROD_DIGEST`. Store the token's copy with `sops set` as `promote_token`.
+      The agent then runs `uv run python scripts/secrets_mgmt/secret_rotation.py sync`, sets
+      that row to `source: record` and tier `external-90d`, and commits
+      `ansible/secret_rotation.yml`.
+    - Add the tier `external-90d` with 90 days to `secret_rotation.py:TIER_DAYS` and to
+      `rotation_tools.DEFAULT_TIER_DAYS`. The `regen-doc-fragments` hook rewrites the tier
+      table.
     - Add `.github/workflows/promote.yml` with the guards, jobs and permissions above.
-      `publish` builds the empty bundle, pushes `sha-X` and signs it. `promote` runs
-      `promote.py decide` and tags `prod`. A `workflow_dispatch` input, `verify_drill`,
-      pushes an unsigned bundle to the tag `verify-drill` and skips the `promote` job.
+      `render` checks ancestry, builds the empty bundle and runs gitleaks over `out/`.
+      `publish` pushes `sha-X` and signs it. `promote` runs `promote.py decide`, and `tag`
+      moves `prod` and writes `PROD_DIGEST`. A `workflow_dispatch` input, `verify_drill`,
+      pushes an unsigned bundle to the tag `verify-drill` and skips `promote` and `tag`.
+    - Add the rule from *Decisions* to `.claude/hooks/block-footguns.py`, with its cases in
+      `.claude/hooks/tests/test_block_footguns.py`. The must-deny case is
+      `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`, and each other denied
+      form gets one. The must-pass case is
+      `gh variable get DEPLOY_HOLD -R DanielH2018/server`, so a read stays allowed.
     - Add a test in `ansible/tests/repo/` that parses the workflow and asserts:
         - the four trigger guards and the master-ref guard on every job a dispatch reaches;
-        - the job-level `concurrency: promote` with `cancel-in-progress: false`;
-        - `needs: publish` on `promote`, and `fetch-depth: 0` on its checkout;
-        - that `publish` checks out `github.event.workflow_run.head_sha || github.sha` and
-          `promote` checks out `github.sha`;
+        - the job-level `concurrency: promote` with `cancel-in-progress: false` on `promote`
+          and on `tag`;
+        - the `needs` chain `render`, `publish`, `promote`, `tag`, and `fetch-depth: 0` on
+          the checkouts of `render` and `promote`;
+        - that `render` checks out `github.event.workflow_run.head_sha || github.sha` and runs
+          `git merge-base --is-ancestor` before its build step, that `promote` checks out
+          `github.sha`, and that `publish` and `tag` have no checkout step;
         - each job's permission map exactly as listed under *Decisions*;
-        - that the flux CLI version comes from `flux_version`;
+        - that the flux CLI version written in the workflow equals `flux_version`;
         - that every `sigstore/cosign-installer` step sets `cosign-release: v3.1.3`;
-        - that the tag step takes its SHA from the `decide` step's `target` output, and that
-          no step after `decide` reads `github.event.workflow_run.head_sha`;
+        - that `tag` takes its SHA and digest from `promote`'s outputs, and that no step
+          after `decide` reads `github.event.workflow_run.head_sha`;
         - no `pull_request` trigger.
 
       Its red halves are fixtures: one with a trigger guard removed, one with a
       dispatch-reachable job lacking the ref check, one with an extra permission, one
-      without `needs`, one whose tag step reads `head_sha`, one whose `promote` job
-      checks out `head_sha`, and one whose cosign installer step omits `cosign-release`.
+      without `needs`, one whose `tag` job reads `head_sha`, one whose `promote` job
+      checks out `head_sha`, one whose cosign installer step omits `cosign-release`, one
+      whose `render` lacks the ancestry check, one whose `publish` checks out the
+      repository, one whose `tag` sits outside the `promote` group, and one whose flux CLI
+      version differs from `flux_version`.
     - **Operator-only after the first run:** set the `homelab-manifests` package to public,
       matching the texbrain package and ADR-0018 (Open question 2). D1.5 does not merge
       before this, and its *Gates before merge* checks it.
@@ -1001,13 +1149,14 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
     - Land with `land.sh --tags flux`. Within two minutes the OCIRepository resolves `prod`.
       `probe.py health flux` then passes with no NOT ROLLED line.
 
-7. **D1.6 — Flux in the metrics plane** (about 60 lines).
+7. **D1.6 — Flux in the metrics plane** (about 110 lines).
     - Add a kube-state-metrics custom-resource-state config for the Flux kinds to
       `ansible/roles/k8s/observability/`, with the read-only RBAC it needs. That config
       produces `gotk_resource_info`, the series C6 names. For a Kustomization, its `revision`
       label reads `status.lastAppliedOriginRevision`, so the label carries `master@sha1:<sha>`
-      rather than the OCI tag and digest. The controllers do not export this series
-      themselves.
+      rather than the OCI tag and digest. Its `ready` label reads the Ready condition's
+      status and its `suspended` label reads `spec.suspend`, which D1.6b's rules read. The
+      controllers do not export this series themselves.
     - The config travels as a container argument, not a ConfigMap.
       `kube-state-metrics.yaml.j2` passes `--custom-resource-state-config` with the config
       rendered from a defaults variable through `to_json`. The config then lives in the pod
@@ -1019,15 +1168,42 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
     - The ClusterRole gains `list` and `watch` on the two Flux kinds the config reads, and
       on `customresourcedefinitions`. The comment above it, which requires the RBAC and
       the collector's arguments to change together, gains the new argument.
-    - Add a hand-written scrape job for the controllers' `http-prom` port in
+    - Add a hand-written scrape job, `flux`, for the controllers' `http-prom` port in
       `templates/prometheus.yaml.j2`. `ansible/filter_plugins/scrape_jobs.py` says a job
-      needing pod discovery stays hand-written.
+      needing pod discovery stays hand-written. Its `metric_relabel_configs` drop every
+      series whose name ends in `_bucket`. No rule or board here reads a Flux histogram, and
+      D4's saturation rule reads gauges.
+    - **Series delta against M1's fleet budget (C7).** The planning estimate is under 1,000
+      series for the three controllers after the bucket drop. `gotk_resource_info` adds one
+      series per Flux object and, through the `revision` label, one more per object per
+      promotion. In D1 that is the root and the OCIRepository, about 250 short-lived series
+      a day at 124 merges. The PR body quotes `count({job="flux"})` and the
+      `gotk_resource_info` count, and states both against M1's budget.
+    - Extend netpol-baseline's probe table with a `flux-system` plane and three `refused`
+      rows: `source-controller` and `notification-controller` on their Service port 80,
+      which maps to pod port 9090, and `webhook-receiver` on its Service port 80, which
+      maps to 9292. The table assumes a Service maps its port to the pod port 1:1, and these
+      do not, so the PR widens the table's comment and the leg to dial the Service port for
+      such a row. The plane has no lever. The controllers' 8080 has no Service, so no row
+      dials it. The scrape's `up` series is its positive control.
     - **Landing.** observability is `k8s_autodeploy: false`, so the deployer fast-forwards
       this change and applies nothing. Land with `land.sh --tags observability`, then run
       `uv run python scripts/diagnostics/probe.py health observability` and the revision
-      query under *Verification*.
+      query under *Verification*. The tick applies netpol-baseline, which is
+      auto-deploy-eligible, and `probe.py health netpol-baseline` then reads its probe Job.
 
-8. **D1.7 — Retention for old artifact versions** (about 140 lines, plus about 140 of tests).
+8. **D1.6b — The `flux` rule group** (about 40 lines of rules, plus about 120 of promtool
+   tests). It waits on M1's PR that adds `observability_rule_groups`, the rules directory
+   and the promtool hook, and pages from M1's Alertmanager on.
+    - Add the three rules from *Decisions* as one entry of `observability_rule_groups`, in
+      M1's layout.
+    - Add a promtool test file in M1's rules test directory. Each rule gets a case that
+      fires it and a red case that must not fire: the scrape down for 4 minutes; a
+      Kustomization not Ready for 14 minutes; `verify-drill` Ready=False for 30 minutes; a
+      Kustomization suspended for 23 hours. Each rule also gets M1's zero-series case.
+    - Land with `land.sh --tags observability`.
+
+9. **D1.7 — Retention for old artifact versions** (about 140 lines, plus about 140 of tests).
    Land it within 14 days of D1.4, before the first version is old enough to prune.
     - Add `promote.py prune`. A pure function selects the versions under *Decisions* from
       the package listing, `prod`'s commit, an ancestry answer per `sha-<C>` tag, and the
@@ -1159,8 +1335,37 @@ fails. Exit 2 shows that the same object was read and reconciled.
   fail with `NotFound`. Before the delete, the same command printed the object, so the
   check can go red. The check needs D1.2b's apply: without it the command fails with
   Forbidden, which proves no deletion.
-- *The workflow guard test.* Each of its seven fixtures fails, and so does D1.7's
-  prune-workflow fixture.
+- *The workflow guard test.* Each of its eleven fixtures fails, and so does D1.7's
+  prune-workflow fixture. The fixtures for the ancestry check, a checkout in `publish`, a
+  `tag` outside the `promote` group and a drifted flux CLI version are the red halves of
+  the render and sign split.
+- *The agent hook.* The must-deny case
+  `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server` passes the hook at the
+  commit before D1.4, so the test fails there and passes with the rule. The must-pass
+  `gh variable get` case fails if the rule matches a read.
+- *`PROD_DIGEST`.* After the first `tag` run, `gh variable get PROD_DIGEST -R
+  DanielH2018/server` prints the digest that the D1.5 pipeline's manifest `HEAD` for `prod`
+  returns in its `Docker-Content-Digest` header. Before that run it prints `none`, which
+  the check refuses.
+- *The digest pin and the fence render.* The D1.2 digest test's tag-only fixture fails it.
+  The D1.2 fence test fails on the unfiltered vendored file, whose `allow-scraping` and
+  `allow-webhooks` select every namespace.
+- *The forge adapter.* The D1.3 import test fails on its fixture module that imports the
+  HTTP library directly.
+- *The `flux-system` probe rows.* The readiness gate fails a row whose Service has no ready
+  backend. A wrong port on a `refused` row passes silently, as the table's comment warns.
+  So each row dials the Service port that an in-namespace caller is proven to reach: Exit 2
+  proves source-controller's port, because the root fetched its artifact through it, and
+  Exit 1 proves notification-controller's, because the status was posted from an event
+  sent to it. The D1.6 PR body quotes each Service's port map beside its row.
+- *The flux rule group.* Each D1.6b rule's red case fails if its `for:` is shortened or its
+  selector widened. The `verify-drill` case fails if the rule drops its `name="homelab"`
+  selector for the OCIRepository. M1's zero-series case fails a rule that fires on no
+  input.
+- *The bucket drop.* After D1.6, `count({job="flux",__name__=~".+_bucket"})` returns no
+  series, and `count({job="flux"})` returns a positive count, so an empty job cannot pass.
+  A D1.6 render test asserts that the `flux` job carries the drop rule. Its red half is
+  the same job without the rule.
 - *The D1.2 stop rule.* It refuses on a name, never on an exit code. A reader whose role
   moved on `origin/master` past its applied commit appears in the `--stale-only` lines, and
   one running a worktree's commit reads `unmerged` in the plain table. Either refuses the
@@ -1202,7 +1407,14 @@ fails. Exit 2 shows that the same object was read and reconciled.
   kinds are not in `manifests_prune_allowlist` and the deferred directory is not pruned.
   The lever lasts until D5's flux PR, whose renderer refuses it. From then on, stopping
   everything is the hand suspend in D5's recovery runbook.
-- **D1.6.** Reverting removes the config and the scrape job. Nothing depends on them until D6.
+- **D1.6.** Reverting removes the config, the scrape job and the probe rows. D1.6b's rules
+  read the config, so D1.6b reverts first. Nothing else depends on them until D6.
+- **D1.6b.** Reverting removes the `flux` rule group, and Flux then reports through Discord
+  alone.
+- **The agent hook and the 90-day tier.** Reverting the hook rule lets an agent write the
+  two variables again; the token requirement still keeps `write:packages` from agents.
+  Reverting the tier needs the `promote_token` row moved back to `external` first, or
+  `sync` reads an unknown tier.
 - **D1.7.** Reverting stops pruning, and old versions accumulate. That costs storage only,
   because `decide` lists no tags. A version that a prune run deleted is gone. Only a version
   older than 14 days that no tag or walk can reach is ever deleted, together with the
@@ -1342,18 +1554,49 @@ fails. Exit 2 shows that the same object was read and reconciled.
   workflow runs the version on master, so an edit to `promote.yml` affects runs after it
   merges, never the run of its own PR. A job that checked out the triggering commit would
   run an older `promote.py` under a newer `promote.yml`. Mitigation: `promote` checks out
-  `github.sha`, the commit the workflow file came from, and only `publish` checks out the
-  triggering commit. The D1.4 test reads the file statically and refuses a `promote` job
-  that checks out `head_sha`, and the first live run is checked by hand.
-- **GHCR, GitHub or Sigstore is down.** Keyless verification needs Sigstore's public
-  services, and pulling needs GHCR. Flux keeps applying the last artifact it fetched and
-  verified, so an outage only delays deploys. `decide` errors rather than promoting an older
-  commit. A status that cannot be posted means a later promote waits, then times out (D2).
-- **A token expires.** A fine-grained token expires within a year. When the status token
-  expires, statuses stop and D2's promote job times out into a hold. When `PROMOTE_TOKEN`
-  expires, `decide` errors and promotion stops. Mitigation: both tokens have a SOPS key in
-  the rotation registry, so "Secret Rotation" goes down before the year is out. The role's
-  `CLAUDE.md` holds the operator-only rotation steps for each.
+  `github.sha`, the commit the workflow file came from, and only `render` checks out the
+  triggering commit. `publish` and `tag` check out nothing. The D1.4 test reads the file
+  statically and refuses a `promote` job that checks out `head_sha`, and the first live run
+  is checked by hand.
+- **The split keeps signing out of render code, not bad content out of the bundle.**
+  `publish` signs whatever `render` hands it. Code that runs during a render still shapes
+  what Flux applies, although it can no longer sign, push or move a tag. Mitigation: only
+  master commits publish, and `render` runs the publish checks: gitleaks in D1, and D2's
+  census and no-stub check.
+- **The deploy plane depends on GitHub.** Every promotion uses six GitHub services:
+    - workflow triggers: `workflow_run` on CI, the prune `schedule` and `workflow_dispatch`;
+    - the repository variables `DEPLOY_HOLD` and `PROD_DIGEST`;
+    - check-runs, for each candidate's CI verdict;
+    - commit statuses, which notification-controller posts and D2's `verify` reads;
+    - GitHub's OIDC issuer, to which cosign's keyless signature binds the `promote`
+      workflow's identity;
+    - GHCR, through its OCI registry API and the Packages API that the prune lists and
+      deletes through.
+
+  Sigstore's public services are a seventh dependency, outside GitHub. Flux keeps applying
+  the last artifact it fetched and verified, so an outage only delays deploys. `decide`
+  errors rather than promoting an older commit. A status that cannot be posted means a later
+  promote waits, then times out (D2). Mitigation: `promote.py` makes every GitHub and GHCR
+  call through the forge adapter, so a move to another forge rewrites one module and the
+  workflow. While GitHub, GHCR or Sigstore cannot be reached, the fallback is C2's
+  break-glass promotion, which [D6](d6-delete-old-path.md) owns and drills
+  (**operator-only**).
+- **Commit statuses share a user's rate limit.** At full fleet each promoted SHA gets about
+  70–120 commit-status contexts, one per Kustomization. `flux_github_status_token` is a
+  fine-grained token, and such a token shares its owner's 5,000 requests per hour. D1
+  posts one context per SHA, so the risk starts in D2. Open question 12 recommends a
+  GitHub App token.
+- **A token expires.** `PROMOTE_TOKEN` expires 90 days after it is minted, and the status
+  token within a year. When the status token expires, statuses stop and D2's promote job
+  times out into a hold. When `PROMOTE_TOKEN` expires, `decide` errors and promotion stops.
+  Mitigation: both tokens have a SOPS key in the rotation registry, `promote_token` on the
+  90-day tier and the status token on `external`, so "Secret Rotation" goes down before
+  each expires. The role's `CLAUDE.md` holds the operator-only rotation steps for each.
+- **D1's memory reading is a floor.** Exit 4 measures the controllers while Flux owns
+  nothing, so it records idle working sets. kustomize-controller's memory grows with the
+  objects it builds and applies. Mitigation: D5 re-measures under a full-fleet reconcile,
+  against daniel-box's 44–54% range (*Baseline*). The role's `CLAUDE.md` records D1's
+  number as that floor.
 - **Upgrading Flux is manual.** Renovate's hosted app cannot run `flux install` after a bump.
   Mitigation: the per-package rule keeps the bump out of automerge, the header test fails a
   bump that skipped regeneration, and the renovate-prs skill's "finish the half Renovate
@@ -1373,9 +1616,11 @@ fails. Exit 2 shows that the same object was read and reconciled.
 - **D1.1:** the vendored schemas under `scripts/validate/schemas/`. The ADR, `Proposed`.
 - **D1.2:**
     - `ansible/roles/k8s/flux/CLAUDE.md`, with its generated `## At a glance` block (the
-      `regen-role-glance` hook). It records the guard decision, the tag-pinned images and
-      `PROMOTE_TOKEN`'s rotation steps.
-    - A header-version test in `ansible/tests/k8s/`.
+      `regen-role-glance` hook). It records the guard decision, the digest-pinned images,
+      the `flux-system` fence, the requirement that no agent token carries
+      `write:packages`, and `PROMOTE_TOKEN`'s rotation steps.
+    - A header-version test, a digest test and a fence render test in `ansible/tests/k8s/`,
+      each with its red fixture.
     - A self-rollout test in `ansible/tests/k8s/`, with its red half without `restart_on`.
     - `ansible/tests/k8s/test_deploy_strategy.py:_RECREATE` gains source-controller.
     - `ansible/tests/k8s/test_priority_class_is_derived_from_tier.py:_CLASS_AT_DERIVATION`
@@ -1399,12 +1644,18 @@ fails. Exit 2 shows that the same object was read and reconciled.
   reads the Flux kinds from D1.2b's apply on.
 - **D1.3:** tests in `scripts/deploy_tools/tests/`, the request-count test and the checkout
   test of the CI-context list among them. The comment above `gitops_deploy_ci_contexts` in
-  the role defaults names `promote.py decide` as a reader, beside `fetch_ci_verdict`.
-- **D1.4:** a workflow test in `ansible/tests/repo/`, with seven red fixtures, the seventh
-  for the `cosign-release` pin.
-  `docs/flux-deploy-plane.md` gains the publish and promote section, which names `none` as
-  the value of `DEPLOY_HOLD` with no hold. The rotation registry gains `promote_token`.
-- **D1.5:** the role `CLAUDE.md` records the measured memory, the status token's expiry,
+  the role defaults names `promote.py decide` as a reader, beside `fetch_ci_verdict`. The import test holds `promote.py` to the forge
+  adapter.
+- **D1.4:** a workflow test in `ansible/tests/repo/`, with eleven red fixtures, the seventh
+  for the `cosign-release` pin and the last four for the render and sign split. The hook
+  rule's must-deny and must-pass cases in `.claude/hooks/tests/test_block_footguns.py`. The
+  `external-90d` tier, whose fragment the `regen-doc-fragments` hook rewrites.
+  `docs/flux-deploy-plane.md` gains the render, publish, promote and tag section. It names
+  `none` as the value of `DEPLOY_HOLD` with no hold, states the token requirement, and says
+  that `tag` writes `PROD_DIGEST`. The rotation registry gains `promote_token` on the
+  90-day tier.
+- **D1.5:** the role `CLAUDE.md` records the measured memory as an idle floor that D5
+  re-measures, the status token's expiry,
   `flux_sync_suspend`, and the verify drill with its way out. It says that the next run
   with the lever off removes a suspend that a lever-on run wrote, and that the role is a
   `containers_list` reader, which is why H1's DR order parks the deployer. The rotation registry gains
@@ -1418,7 +1669,12 @@ fails. Exit 2 shows that the same object was read and reconciled.
   travels as an argument. The comment above the ClusterRole in `kube-state-metrics.yaml.j2`
   names the new argument beside `--resources`.
   `ansible/tests/services/test_observability_config_rolls_one_workload.py` stays green
-  unchanged, because no ConfigMap is added.
+  unchanged, because no ConfigMap is added. A render test holds the bucket drop on the
+  `flux` job. netpol-baseline's probe-table comment covers the `flux-system` plane and the
+  Service-port rows, and `ansible/roles/k8s/netpol-baseline/CLAUDE.md` names the plane.
+  `docs/flux-deploy-plane.md` records the measured series counts against M1's budget.
+- **D1.6b:** the `flux` entry of `observability_rule_groups` and its promtool tests.
+  `docs/flux-deploy-plane.md` names the three rules and the Discord second channel.
 - **D1.7:** tests in `scripts/deploy_tools/tests/`, the bundle cases among them, and the
   prune-workflow case in the D1.4 workflow test. `docs/flux-deploy-plane.md` gains the
   retention rule and the signature format it protects.
@@ -1426,14 +1682,24 @@ fails. Exit 2 shows that the same object was read and reconciled.
 ## Complexity delta
 
 - **Added:**
-    - one k8s role (about 240 hand-written lines and a vendored manifest);
+    - one k8s role (about 290 hand-written lines and a vendored manifest), with one
+      NetworkPolicy of its own, a digest test and a fence render test;
     - four vendored Flux schemas and one core schema file;
-    - two workflows (about 140 and 40 lines);
-    - `promote.py` with `decide` and `prune` (about 320 lines and 390 of tests);
+    - two workflows (about 190 and 40 lines). `promote.yml` has four jobs instead of two,
+      and the two that hold write tokens check out no repository code;
+    - `promote.py` with `decide` and `prune`, and the forge adapter it calls (about 350
+      lines and 400 of tests);
     - three members of `k3s_readonly_crd_api_groups`, one derived check in an existing test,
       and one operator hand apply of `k3s-bringup.yml --tags kubeconfig` (D1.2b);
-    - a kube-state-metrics config (about 60 lines);
-    - two GitHub tokens, two SOPS keys, one repository variable, two Renovate rule edits;
+    - a kube-state-metrics config and a scrape job with its bucket drop (about 75 lines);
+    - a `flux-system` plane in netpol-baseline's probe table, with three `refused` rows
+      (about 35 lines);
+    - the `flux` rule group of three rules (about 40 lines and 120 of promtool tests,
+      D1.6b);
+    - one rule in `block-footguns.py`, with a must-deny and must-pass case pair (about 40
+      lines);
+    - one rotation tier of 90 days;
+    - two GitHub tokens, two SOPS keys, two repository variables, two Renovate rule edits;
     - one `_RECREATE` row, one `_CLASS_AT_DERIVATION` row, one `KNOWN_DEFERRED_DIRS` row,
       one `_EXPECTED_NARROWERS` member, and one ADR in `Proposed` status;
     - one operator ruling (Open question 10) and one unattended apply of 23 reader roles
@@ -1452,8 +1718,14 @@ fails. Exit 2 shows that the same object was read and reconciled.
   untagged version older than 14 days, its deletes, and one or two `cosign verify` calls. At
   about 124 merges a day, that is about 124 manifest fetches a day once the backlog has
   drained, because each day's bundles cross the 14-day line once and are then deleted with
-  their digests or kept.
-- **Removed:** nothing. D6 removes the deployer's k8s arms.
+  their digests or kept. A run that moves `prod` adds one variable write, `PROD_DIGEST`.
+- **Series.** Under 1,000 for the three controllers after the bucket drop, as a planning
+  estimate the D1.6 PR replaces with its measurement. `gotk_resource_info` adds about 250
+  short-lived series a day in D1 through the `revision` label (D1.6).
+- **GitHub dependencies.** Six, listed under *Risks*. `promote.py` reaches four of them,
+  the variables, check-runs, commit-status reads and GHCR, only through the forge adapter.
+- **Removed:** the exemption that kept the vendored images tag-pinned, and the two upstream
+  NetworkPolicies that admit every namespace. D6 removes the deployer's k8s arms.
 
 ## Open questions
 
@@ -1528,6 +1800,35 @@ fails. Exit 2 shows that the same object was read and reconciled.
     depends on D1, so a decline needs its own deployer PR ahead of D1.2. The ruling also
     covers the later landings that reach `flux` as a reader until D5's flux PR (*Risks*):
     each of them applies the 23 readers and `flux` under the same stop rule.
+11. **Should a leaf tag apply under a namespace-scoped ServiceAccount?** Recommendation:
+    - a leaf tag's Kustomization sets `spec.serviceAccountName` to a ServiceAccount in
+      `flux-system` whose RoleBinding grants write in `homelab` only, so kustomize-controller
+      impersonates that account for the leaf;
+    - kustomize-controller runs with `--no-cross-namespace-refs=true`. C3 keeps every Flux
+      object in `flux-system`, so the flag costs nothing, and D1.2's `flux_pod_patch` can
+      carry it;
+    - platform tags and the shared kinds keep the controller's own account, because they
+      render cluster-scoped objects.
+
+    Resolution: a census of which tags render cluster-scoped objects, read from the
+    renderer's output for each tag. D2 runs it before its flip PR, so the first leaf already
+    applies under the narrow account. C3 then records the rule as a requested amendment.
+12. **Should notification-controller post commit statuses with a GitHub App token?** Each
+    promoted SHA gets about 70–120 contexts at full fleet (*Risks*). The fine-grained
+    `flux_github_status_token` shares its owner's 5,000 requests per hour with everything
+    else that owner runs. Recommendation: a GitHub App installation token, which has a rate
+    limit of its own and a short life. Resolution: D2 measures the burst per promoted SHA
+    and per hour. The D2 PR also confirms that the pinned notification-controller's `github`
+    Provider accepts App credentials. Creating the App is a GitHub setting
+    (**operator-only**).
+13. **Do commit-status descriptions carry substituted values?** notification-controller
+    posts each event's message as the status description, and the repository is public.
+    D1's root substitutes nothing, so the question starts in D2. Resolution: D2's
+    *Verification* counts the commit-status descriptions that match `domain`, and that
+    count must read 0. If a substituted value appears, the `commit-status` Alert takes an
+    `exclusionList` for that message shape, or the status carries a fixed summary.
+    Recommendation: the fixed summary, because an excluded event posts no status, and C2's
+    `verify` then waits to its timeout.
 
 ## Review log
 
@@ -1884,3 +2185,40 @@ the timer, and the window in D1-I1-02 ends at D5's flux PR rather than D6.1.
 
 - Cross-slice note from R4: *What D1 adds* says that a task added to the flux role beyond
   the listed set needs its own row in R4's PR 1 mapping.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **F-07, signing power.** *Decisions* splits `promote.yml` into `render`, `publish`,
+  `promote` and `tag`. Only `publish` and `tag` hold `packages: write`, only `publish`
+  holds `id-token: write`, and neither checks out repository code. `render` checks
+  ancestry, and D2's `sha` input passes the same check. *Which token each call uses*
+  states that no agent token carries `write:packages`. The `block-footguns.py` rule, its
+  case pair, `PROD_DIGEST` and its writer land in D1.4. The diagram, D1.4's test and its
+  four added fixtures, *Verification*, *Risks* and the delta follow. C2 says `publish`
+  alone holds `packages: write`, but the move of `prod` follows `decide`. So `tag` is a
+  second writer with no repository code, and *Decisions* records the rejected
+  alternative.
+- **F-02, deploy alerts.** *Decisions* and an added PR, D1.6b, bring the `flux` rule group with
+  promtool tests and a red case per rule. D1.6b waits on M1. D1.6 adds the `ready` and
+  `suspended` labels and drops the histogram buckets at scrape, and it states the series
+  delta. Discord stays as the second channel.
+- **F-12, Flux hardening.** The images are pinned by digest in the vendoring pipeline,
+  which replaces the tag-pin exemption in D1.2. *Decisions* keeps upstream's
+  `allow-egress` as `flux-system`'s default-deny and drops `allow-scraping` and
+  `allow-webhooks`. A Prometheus-only fence replaces them, and D1.6 adds the probe rows.
+  The impersonation and `--no-cross-namespace-refs` change went to Open question 11.
+- **F-16, GitHub coupling.** *Decisions* and D1.3 add the forge adapter with an import
+  test. *Risks* lists the six GitHub dependencies and points at C2's break-glass promotion
+  in D6.
+- **F-17, memory premise.** *Baseline* states the 44–54% range and the 2026-10-12 reading.
+  *Risks* calls D1's reading an idle floor that D5 re-measures.
+- **F-13 and P7, status volume.** *Risks* adds the shared rate limit. The App token went to
+  Open question 12. `PROMOTE_TOKEN`'s 90-day expiry is adopted as a requirement, because
+  the 365 days came from the `external` tier and not from a stated reason. D1.4 adds the
+  90-day tier.
+- **S9, status text.** Open question 13, which points at D2's *Verification* count of
+  descriptions that match `domain`.
+- **Coordinator notes.** *Decisions* states the `fetch-depth: 0` that D2.6c's trailer read
+  needs, and Open question 13 points at D2's count.
