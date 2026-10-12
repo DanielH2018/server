@@ -120,6 +120,12 @@ def volume_blocks(text: str) -> list[tuple[str, int, list[str]]]:
 
     Names are kept per block and in order, not merged into a set, because a duplicate name
     within one block is its own defect and set-merging is exactly what hides it.
+
+    The block's items may sit deeper than the key or at the key's own column. The second, the
+    indentless form, is what PyYAML's default dumper, `kubectl get -o yaml` and `flux install
+    --export` all write, and YAML allows nothing else at that column inside the block, so a
+    `- ` there continues it. The item column is fixed by the first item, so a `- name:` in a
+    nested sequence deeper down is never collected (#4733).
     """
     lines = text.splitlines()
     blocks: list[tuple[str, int, list[str]]] = []
@@ -131,6 +137,7 @@ def volume_blocks(text: str) -> list[tuple[str, int, list[str]]]:
             continue
         indent, kind = len(block.group(1)), block.group(2)
         names: list[str] = []
+        item_column: int | None = None
         j = i + 1
         while j < len(lines):
             line = lines[j]
@@ -141,10 +148,14 @@ def volume_blocks(text: str) -> list[tuple[str, int, list[str]]]:
             if line.lstrip().startswith(("{%", "{#")):
                 j += 1
                 continue
-            if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            column = len(line) - len(line.lstrip())
+            item = line.lstrip().startswith("-")
+            if line.strip() and (column < indent or (column == indent and not item)):
                 break
+            if item and item_column is None:
+                item_column = column
             name = NAME_RE.match(line)
-            if name and len(name.group(1)) <= indent + 2:
+            if name and column == item_column:
                 names.append(name.group(2))
             j += 1
         blocks.append((kind, i + 1, names))
@@ -202,13 +213,16 @@ def test_no_volumes_block_repeats_a_name(key: str) -> None:
         )
 
 
+def generic_names(text: str) -> list[str]:
+    """The names in `text`'s volumes and volumeMounts blocks that do not name a workload."""
+    found = volume_names(text)
+    names = found["volumes"] | found["volumeMounts"]
+    return sorted(n for n in names - ALLOWED_UNPREFIXED if n in GENERIC)
+
+
 @pytest.mark.parametrize("key", sorted(MANIFESTS))
 def test_volume_names_name_their_workload(key: str) -> None:
-    names = (
-        volume_names(MANIFESTS[key])["volumes"]
-        | volume_names(MANIFESTS[key])["volumeMounts"]
-    )
-    generic = sorted(n for n in names - ALLOWED_UNPREFIXED if n in GENERIC)
+    generic = generic_names(MANIFESTS[key])
     assert not generic, (
         f"{key} uses generic volume name(s): {generic}. "
         "Name the volume for the workload or component that owns it — "
@@ -246,6 +260,48 @@ def test_the_scanner_still_sees_an_orphan_across_a_jinja_tag() -> None:
         + "{% endif %}\n"
     )
     assert found["volumeMounts"] - found["volumes"] == {"traefik-nonexistent"}
+
+
+# The indentless form: each sequence at its key's own column, as PyYAML's default dumper and
+# `kubectl get -o yaml` write it. The nested `items:` sequence carries a `- name:`-shaped line
+# that belongs to the projected source, not to the block.
+_INDENTLESS_VOLUMES = """\
+      containers:
+      - name: app
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      - name: sidecar
+        volumeMounts:
+        - name: missing
+          mountPath: /missing
+      volumes:
+      - name: data
+        emptyDir: {}
+      - name: data
+        projected:
+          sources:
+          - secret:
+              items:
+              - name: not-a-volume
+"""
+
+
+def test_the_scanner_reads_an_indentless_sequence() -> None:
+    """A block whose items sit at the key's column is read, not taken as empty (#4733).
+
+    Each of the four checks gets the defect it exists for: a generic name, a mount with no
+    volume, a volume nothing mounts, and a repeated volume name.
+    """
+    found = volume_names(_INDENTLESS_VOLUMES)
+    assert generic_names(_INDENTLESS_VOLUMES) == ["data"]
+    assert found["volumeMounts"] - found["volumes"] == {"missing"}
+    assert found["volumes"] == {"data"}
+    assert [names for kind, _, names in volume_blocks(_INDENTLESS_VOLUMES)] == [
+        ["data"],
+        ["missing"],
+        ["data", "data"],
+    ]
 
 
 def test_the_source_fallback_is_only_the_templates_the_render_skips() -> None:
