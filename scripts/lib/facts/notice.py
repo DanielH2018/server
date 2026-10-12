@@ -78,6 +78,7 @@ class Tree:
         self.rev = rev
         self._batch = None
         self._blobs: dict[str, str] | None = None
+        self._present: frozenset[str] | None = None
         if rev is None:
             listed = git("ls-files", "-z", cwd=repo).stdout
             self.tracked = frozenset(p for p in listed.split("\0") if p)
@@ -109,6 +110,21 @@ class Tree:
                 pipe.close()
         self._batch.wait()
         self._batch = None
+
+    def present(self) -> frozenset[str]:
+        """The tracked paths that hold a file: all of ``tracked`` at a revision.
+
+        In the working tree, ``tracked`` lists the index, which still holds a file deleted
+        from disk without ``git rm``. This set leaves such a file out, as the lock's
+        ``atoms.hash_atom`` does by checking ``is_file()``.
+        """
+        if self._blobs is not None:
+            return self.tracked
+        if self._present is None:
+            self._present = frozenset(
+                p for p in self.tracked if (self.repo / p).is_file()
+            )
+        return self._present
 
     def docs(self) -> list[str]:
         """Every tracked ``CLAUDE.md``, at any depth, sorted."""
@@ -214,7 +230,7 @@ def _kind(c: Citation, base: Tree, head: Tree) -> str | None:
     """The kind of row ``c`` gives, or None when the diff did not move it."""
     if c.form == "path":
         # The lock hashes a path atom's existence, so a path atom can go but never move.
-        gone = in_tree(c, base.tracked) and not in_tree(c, head.tracked)
+        gone = in_tree(c, base.tracked) and not in_tree(c, head.present())
         return "gone" if gone else None
     try:
         before = _content(c, base)
@@ -245,7 +261,8 @@ def moved_sections(repo: Path, base: str, head: str | None = None) -> list[Notic
       the base, so its citations still reach the rules below.
     - A content atom reads ``moved`` when it resolves at both ends to different content. It
       reads ``gone`` when it resolves at the base only.
-    - A path atom reads ``gone`` when it is tracked at the base and not at the head.
+    - A path atom reads ``gone`` when it is tracked at the base and not at the head. In the
+      working tree, a file deleted from disk without ``git rm`` counts as not there.
     - A marker prefix that matches twice at either end reads ``ambiguous``. A cited file that
       fails to parse at either end reads ``unparsable``. Any other exception propagates,
       because it is a defect in the notice rather than in the diff.

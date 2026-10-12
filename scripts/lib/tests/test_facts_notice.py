@@ -290,3 +290,15 @@ def test_with_no_head_the_working_tree_is_the_head(tmp_path):
     base = commit(repo, "base", **{_DOC: _doc("a/b.py:PORT"), "a/b.py": "PORT = 1\n"})
     (repo / "a/b.py").write_text("PORT = 2\n")
     assert moved_sections(repo, base) == [_row("a/b.py:PORT", "symbol", "moved")]
+
+
+def test_with_no_head_a_file_deleted_without_git_rm_is_gone(tmp_path):
+    """The index still lists the file, so the path rule has to read the disk, as the lock does."""
+    repo = init_repo(tmp_path)
+    doc = _doc("a/b.py", "a/b.py:PORT")
+    base = commit(repo, "base", **{_DOC: doc, "a/b.py": "PORT = 1\n"})
+    (repo / "a/b.py").unlink()
+    assert moved_sections(repo, base) == [
+        _row("a/b.py", "path", "gone"),
+        _row("a/b.py:PORT", "symbol", "gone"),
+    ]
