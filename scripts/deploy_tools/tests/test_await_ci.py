@@ -173,3 +173,73 @@ def test_wait_does_not_follow_the_tip_for_a_fresh_sha(monkeypatch):
     )
     assert code == 75
     assert msg.startswith("old:")
+
+
+def _actions_suite(status):
+    return {"app": {"slug": "github-actions"}, "status": status}
+
+
+def test_a_sha_with_no_actions_suite_reads_as_a_dropped_push():
+    """#4621: GitHub delivered no push event, so no app registered anything at all."""
+    assert await_ci._push_was_dropped([], [], REQUIRED)
+    other_apps = [{"app": {"slug": "gitguardian"}, "status": "queued"}]
+    assert await_ci._push_was_dropped([], other_apps, REQUIRED)
+
+
+def test_a_queued_actions_suite_is_not_a_dropped_push():
+    assert not await_ci._push_was_dropped([], [_actions_suite("queued")], REQUIRED)
+
+
+def test_green_descendant_takes_the_nearest_green_commit():
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    runs_by_sha = {"near": [], "middle": green, "tip": green}
+    found = await_ci.green_descendant(
+        "old",
+        fetch=lambda s: runs_by_sha[s],
+        descendants=lambda _s: ["near", "middle", "tip"],
+    )
+    assert found == "middle"
+
+
+def _wait_on_dropped(suites, descendant_runs):
+    """wait() on a SHA with no runs, past the grace, with one descendant `next`.
+
+    REQUIRED is await_ci.REQUIRED_CONTEXTS, so nothing needs patching.
+    """
+    runs_by_sha = {"old": [], "next": descendant_runs}
+    now = [0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    return await_ci.wait(
+        "old",
+        await_ci.DROPPED_PUSH_GRACE_S * 2,
+        20,
+        sleep=sleep,
+        clock=lambda: now[0],
+        fetch=lambda s: runs_by_sha[s],
+        fetch_suites=lambda _s: suites,
+        descendants=lambda _s: ["next"],
+    )
+
+
+def test_wait_takes_a_green_descendant_of_a_dropped_push():
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    code, msg = _wait_on_dropped([], green)
+    assert code == 0
+    assert msg.startswith("next: CI green")
+
+
+def test_wait_does_not_take_a_descendant_while_an_actions_suite_is_queued():
+    """The reject half: a registered CI run is this SHA's own verdict, still on its way."""
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    code, msg = _wait_on_dropped([_actions_suite("queued")], green)
+    assert code == 75
+    assert msg.startswith("old:") and "never ran CI" not in msg
+
+
+def test_a_dropped_push_with_no_green_descendant_times_out_saying_why():
+    code, msg = _wait_on_dropped([], [])
+    assert code == 75
+    assert "GitHub never ran CI" in msg and "re-run converges" in msg

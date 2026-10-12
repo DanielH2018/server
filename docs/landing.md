@@ -184,6 +184,15 @@ then never carries the required name, so `await_ci.py` reads the SHA's check-sui
 `completed cancelled` suite with zero runs) to tell that from a fresh push. Before PR #775 that
 case waited out the whole budget and exited 75.
 
+GitHub sometimes drops a master push event, and then the commit never gets a CI run at all.
+`await_ci.py` reads a SHA with no GitHub Actions check suite after `DROPPED_PUSH_GRACE_S` as
+that case. It then takes the verdict from the nearest green descendant on master, which is the
+rule the tick already deploys by (#4621). The log line is `<descendant>: CI green (GitHub never
+ran CI for <sha>; ...)`. The landing still deploys its own merge commit, whose tree no CI ran
+on by itself; the `DECIDED:` marker on `green_descendant` records why that is accepted. When
+no descendant is green yet, the wait exits 75 and says so, and a re-run converges once a later
+master commit goes green.
+
 **It waits on your merge commit rather than on the tip**, because the tick fast-forwards to the
 newest GREEN commit in its range rather than only to a green tip. A later merge whose CI is
 still running no longer holds your PR. Waiting on the tip is what `tip-outran-retries` measured:

@@ -15,6 +15,9 @@ Exit codes:
   2   the gate could not be armed (no required contexts) -- nothing was checked
   75  the wait budget elapsed with no verdict (matches deploy.sh's use of 75)
 
+A SHA GitHub never ran CI for at all reads green through its nearest green descendant on
+master; `green_descendant` has the rule and why it is safe (#4621).
+
 Run: uv run python scripts/deploy_tools/await_ci.py <sha>
 """
 
@@ -56,6 +59,17 @@ CI_REPO = "DanielH2018/server"
 # dependency-management fault.
 # ansible/tests/repo/test_ci_contexts_match_workflows.py pins both directions.
 REQUIRED_CONTEXTS = frozenset({"prek (lint + validate + tests + secrets)"})
+
+
+# A push event GitHub never delivered leaves the SHA with no check suite from Actions, for
+# good: #4596's merge commit and ee451b26e both read `total_count: 0` long after their
+# neighbours went green (#4621). A freshly pushed SHA also has none for its first seconds, so
+# the wait reads the absence as a dropped push only once it has waited this long.
+DROPPED_PUSH_GRACE_S = 180
+
+# How many descendants one poll asks GitHub about, nearest first. Every one is a check-runs
+# request against the hourly budget `fetch_check_runs` describes.
+DESCENDANT_LIMIT = 10
 
 
 class DisarmedGateError(RuntimeError):
@@ -213,6 +227,52 @@ def _no_verdict_will_ever_arrive(target: str, runs: list[dict], fetch_suites) ->
     return _cancelled_before_any_run_registered(runs, suites, required)
 
 
+def _descendants(sha: str) -> list[str]:
+    """The commits on origin/master's ancestry path after `sha`, nearest first.
+
+    Empty when `sha` is the tip, is not on master, or git cannot answer. Runs through the same
+    `lib.git` wrapper as `_fetch_tip`, for the reason `_is_ancestor` gives.
+    """
+    try:
+        tip = _fetch_tip()
+        out = git_stdout("rev-list", "--reverse", "--ancestry-path", f"{sha}..{tip}")
+    except subprocess.CalledProcessError, OSError:
+        return []
+    return out.split()
+
+
+def _push_was_dropped(runs: list[dict], suites: list[dict], required) -> bool:
+    """True when GitHub Actions has registered nothing at all for the SHA.
+
+    Only an Actions suite counts. Another app's suite (gitguardian, renovate) says nothing
+    about whether CI was triggered. The caller applies `DROPPED_PUSH_GRACE_S`, since a fresh
+    push looks the same for its first seconds.
+    """
+    if any(r.get("name") in required for r in runs):
+        return False
+    return not any((s.get("app") or {}).get("slug") == "github-actions" for s in suites)
+
+
+def green_descendant(sha: str, fetch=fetch_check_runs, descendants=_descendants) -> str:
+    """The nearest descendant of `sha` on master whose CI is green, or "" when none is yet.
+
+    Called only for a SHA GitHub never ran CI for. Asks about at most `DESCENDANT_LIMIT`
+    commits, nearest first, and stops at the first green one.
+    """
+    # DECIDED: a green descendant stands in for a merge commit GitHub never ran CI for. The
+    # descendant's run tested a tree that contains every change in the merge commit, which is
+    # the rule the tick already deploys by (it fast-forwards to the newest green ancestor of
+    # the tip). What it does not prove is the merge commit's own tree, the one land.sh
+    # deploys with `deploy.sh --at`. Nothing can prove that once the push event is gone, and
+    # the alternative is a landing no re-run converges (#4621). The nearest green descendant
+    # is the closest tree to that one, so the walk goes nearest first.
+    required = required_contexts()
+    for candidate in descendants(sha)[:DESCENDANT_LIMIT]:
+        if verdict_for(candidate, fetch=fetch, required=required) == "pass":
+            return candidate
+    return ""
+
+
 def wait(
     sha: str,
     timeout_s: int,
@@ -221,10 +281,18 @@ def wait(
     clock=time.monotonic,
     fetch=fetch_check_runs,
     fetch_suites=fetch_check_suites,
+    descendants=_descendants,
 ) -> tuple[int, str]:
-    """(exit code, message). Polls until pass/fail or the budget elapses."""
-    deadline = clock() + timeout_s
+    """(exit code, message). Polls until pass/fail or the budget elapses.
+
+    A SHA with no Actions suite after `DROPPED_PUSH_GRACE_S` is a push GitHub dropped, and
+    its verdict comes from `green_descendant` instead. Until one goes green it keeps waiting,
+    and a timeout says why.
+    """
+    started = clock()
+    deadline = started + timeout_s
     target = sha
+    dropped = False
     while True:
         try:
             runs = fetch(target)
@@ -247,7 +315,28 @@ def wait(
                 )
                 target = moved
                 continue
-        if clock() >= deadline:
+        now = clock()
+        if now - started >= DROPPED_PUSH_GRACE_S and not dropped:
+            try:
+                dropped = _push_was_dropped(
+                    runs, fetch_suites(target), required_contexts()
+                )
+            except urllib.error.URLError, TimeoutError, ValueError, OSError:
+                dropped = False
+        if dropped:
+            green = green_descendant(target, fetch=fetch, descendants=descendants)
+            if green:
+                return 0, (
+                    f"{green[:8]}: CI green (GitHub never ran CI for {target[:8]}; "
+                    f"{green[:8]} descends from it)"
+                )
+        if now >= deadline:
+            if dropped:
+                return 75, (
+                    f"{target[:8]}: no verdict after {timeout_s}s — GitHub never ran CI "
+                    "for it, and no later master commit is green yet; a re-run converges "
+                    "once one is"
+                )
             return 75, f"{target[:8]}: no verdict after {timeout_s}s"
         sleep(interval_s)
 
