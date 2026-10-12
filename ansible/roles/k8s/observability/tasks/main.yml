@@ -24,9 +24,10 @@
     # in a different namespace. Skip its wait and roll our own below.
     manifests_rollout: ''
     # ...but tell the release record which workloads that private restart targets, so
-    # `probe.py health` expects them to roll after a changed render. The same
-    # list the restart loop below and the stabilisation snapshot iterate; the record decides
-    # `restart` from the same facts that loop gates on. The shared role neither restarts nor
+    # `probe.py health` can hold them to a roll. The same list the restart loop below and the
+    # stabilisation snapshot iterate. Every entry declares `restart_on: []`, so the record
+    # stamps `restart: false` for each, and the amend after the restart raises it for the
+    # workloads that restart actually rolled. The shared role neither restarts nor
     # drains these; it does fingerprint each one's pod template across the apply, so the loop
     # below can skip a workload the apply already rolled. `namespace` is load-bearing
     # for that: the fingerprints default to k8s_namespace, and these workloads live in
@@ -35,6 +36,38 @@
     manifests_self_rollouts: >-
       {{ observability_stabilise_workloads
          | map('combine', {'namespace': k8s_observability_namespace}) | list }}
+
+# The per-file signal the restart, the snapshot and the Grafana password sync read. The shared
+# role's `manifests_secret_render` is one register over every Secret file this role renders,
+# so `is changed` on it fires for any of them: an Alertmanager config edit restarted Prometheus
+# and Grafana and exec'd the Grafana CLI. Its loop runs in `manifests_secret_files_resolved`
+# order, so each result's position names its file. The pairing never reads a result's `item`,
+# which the render's `no_log` might censor; it reads only `changed`, which survives `no_log`
+# (ansible/tests/k8s/test_observability_secret_restarts.py runs a real `no_log` loop to show
+# it).
+- name: Check that every Secret render reported whether it changed
+  tags: [deploy]
+  # A result with no `changed` key, or a result count that does not match the file list,
+  # would pair the wrong flag with a file or select nothing at all. Selecting nothing skips
+  # every restart and leaves a pod on its previous Secret behind a green deploy, so this
+  # stops the run instead.
+  ansible.builtin.assert:
+    that:
+      - manifests_secret_render.results | length == manifests_secret_files_resolved | length
+      - manifests_secret_render.results | selectattr('changed', 'undefined') | list | length == 0
+    fail_msg: >-
+      The secret render registered {{ manifests_secret_render.results | default([]) | length }}
+      results for {{ manifests_secret_files_resolved | length }} files, or a result without
+      `changed`. The per-file restart cannot tell which Secret changed.
+    quiet: true
+
+- name: List the Secret files whose render changed
+  tags: [deploy]
+  ansible.builtin.set_fact:
+    observability_changed_secret_files: >-
+      {{ manifests_secret_files_resolved
+         | zip(manifests_secret_render.results | map(attribute='changed') | list)
+         | selectattr('1') | map(attribute='0') | list }}
 
 - name: Restart the telemetry workloads whose secret changed
   tags: [deploy]
@@ -47,8 +80,9 @@
   # `manifests_render is changed` instead would restart all of them on a per-ROLE signal, for
   # an edit none of them read. What the annotation cannot cover is a Secret — hashing one into a
   # world-readable annotation would open a read path over it — so this task runs for exactly
-  # the workloads that read one, selected by `restart_on` rather than by a second hand-written
-  # list.
+  # the workloads that read a Secret whose file changed: each entry's `restart_secrets` names
+  # the rendered files its pod reads, met against `observability_changed_secret_files`. An
+  # Alertmanager config edit restarts Alertmanager alone.
   #
   # Skipped for a Deployment this run created — its pods are already on the new config, and
   # `rollout restart` races the initial rollout. Skipped too for a workload the apply itself
@@ -64,12 +98,12 @@
     label: "{{ item.name }}"
   become: true
   changed_when: true
+  register: observability_secret_restart
   when:
     # A dry-run render is always `changed` and its apply rolled nothing, so without this every
     # dry run would restart the live workloads.
     - not k8s_no_mutate
-    - "'secret' in item.restart_on"
-    - manifests_secret_render is changed
+    - item.restart_secrets | default([]) | intersect(observability_changed_secret_files) | length > 0
     # `| default('')`: if the apply's stdout cannot be read, fall through to "not created" and
     # restart. Read the two failure directions before changing it — they are not symmetric. A
     # spurious restart races only a first-ever creation, which happens once per workload and
@@ -100,6 +134,34 @@
     label: "{{ item.name }}"
   become: true
   changed_when: false
+  # A dry run applies with `--dry-run=server` and creates nothing, so a workload this role adds
+  # is not live to wait on, and the wait fails the run with NotFound (#4729). For a workload
+  # that is live, the wait reads a rollout the dry run did not change, so skipping it loses
+  # nothing the dry run could check.
+  when: not k8s_no_mutate
+
+# The release record stamped `restart: false` for every entry, because each declares
+# `restart_on: []`. This raises it for each workload the secret restart above restarted, the
+# only roll that stamps the `restartedAt` that `probe.py health` then requires. After the wait,
+# as pihole's amend is: ahead of it the record would claim a roll still in flight, and a failed
+# wait would leave that claim behind. A skipped amend leaves no expectation rather than a false
+# one, which is the safe direction rollout_amend.yml names.
+- name: Record the telemetry workloads the secret restart rolled
+  tags: [deploy]
+  ansible.builtin.include_role:
+    name: k8s/manifests
+    tasks_from: rollout_amend.yml
+  vars:
+    manifests_amend_service: observability
+    manifests_amend_workload: "{{ observability_restarted.item.name }}"
+    manifests_amend_restart: "{{ observability_restarted is changed }}"
+  # Only the workloads the restart ran for. A skip result is the workload it left alone.
+  loop: "{{ observability_secret_restart.results | default([]) | rejectattr('skipped', 'defined') | list }}"
+  # Not `item`: rollout_amend.yml loops over the record with `item` itself, and these vars
+  # are templated lazily, so `item.item.name` would resolve against the inner loop's entry.
+  loop_control:
+    loop_var: observability_restarted
+    label: "{{ observability_restarted.item.name }}"
 
 # This role skips the shared role's wait (manifests_rollout: '') and rolls its own above, so it
 # must also opt into the stabilisation gate explicitly — the wait it replaces cannot see a
@@ -142,10 +204,13 @@
     # `checksum/config` annotation is unchanged on such an edit too, so nothing rolled. The
     # apply's `changed_when` is keyed on `created`/`configured` in its stdout, which an image-pin
     # bump trips, so this arm still catches the rolls this role has no separate image arm for
-    # (#3133). The secret arm stays on the render alone: verify_secret_keys patches a stale key
-    # out of a Secret after an apply that printed `unchanged`, and that restart needs soaking.
+    # (#3133). The secret arm is the restart task's own per-entry condition, so a Secret edit
+    # soaks only the workloads it restarted. It reads the render and not the apply:
+    # verify_secret_keys patches a stale key out of a Secret after an apply that printed
+    # `unchanged`, and the key's removal still moved its own file's render, so that restart is
+    # soaked too.
     - (manifests_render is changed and manifests_apply is changed)
-      or manifests_secret_render is changed
+      or (item.restart_secrets | default([]) | intersect(observability_changed_secret_files) | length > 0)
 
 - name: Fail if a telemetry pod selector matched no pods
   tags: [deploy]
@@ -199,9 +264,10 @@
 # GF_SECURITY_ADMIN_PASSWORD (the grafana-admin Secret) is only consulted when Grafana
 # initialises its database, so on an existing install a rotated grafana_admin_password
 # never reaches the live admin user — SOPS and the actual login diverge silently.
-# `grafana cli admin reset-admin-password` writes straight to the DB and needs no knowledge of the CURRENT password. Gated on the
-# secret render changing (also fires on a scrape-credentials rotation — harmless, it
-# re-sets the same password).
+# `grafana cli admin reset-admin-password` writes straight to the DB and needs no knowledge of the CURRENT password. Gated on
+# `grafana-secret.yaml` changing, the one Secret file that renders `grafana_admin_password`. An
+# edit to any other Secret file, Alertmanager's config included, never execs the CLI, whose
+# `Migrate` pass contends with the live server (below).
 #
 # A POLL, not convertible to `kubectl wait`. The condition is the exit status of a process
 # exec'd inside the container, which no API object carries.
@@ -226,7 +292,7 @@
   # credential. It is also latently broken there — check mode skips the command, so `rc` is
   # undefined, the `until` below can never match, and the run would die after 5 retries. That
   # only stays hidden while the secret happens not to differ, which is the condition guarding it.
-  when: manifests_secret_render is changed and not k8s_no_mutate
+  when: "'grafana-secret.yaml' in observability_changed_secret_files and not k8s_no_mutate"
   register: observability_admin_password_sync
   until: (observability_admin_password_sync.rc | default(1)) == 0
   retries: 5
