@@ -156,7 +156,9 @@ push-token secret remains.
 - **Other producers.** M3 removes 1, leaving 38. D5 retires one more, registry-gc, so M6
   moves 37. Most are host scripts; four run in pods. Where each lives:
     - **daniel-box host crons in the k3s role:** longhorn backup health, the etcd snapshot,
-      manifest-prune, release staleness and live-drift.
+      manifest-prune, release staleness and live-drift. M6 owns the last three only until
+      their Kuma side is gone. D6.5 and D6.5b delete the checks themselves, after C-2b
+      (*Cross-slice follow-up*, #4609).
     - **The initial_setup role, on both nodes:** docs-refresh, the eval sweep, the two
       Loki-route witnesses, secret rotation and setup drift.
     - **The gitops_deploy role:** the ruleset-drift and interaction-limit timers.
@@ -559,7 +561,7 @@ dependency between them. The cutover windows run one after another (*No-pager wi
 | A6 bridge exporter | the 15 other-source checks and `swallowed_verdicts`, plus the `b2_reachable` and `wan_reachable` gates | Exporter | monitor-bridge | See *The bridge as an exporter*. The `prometheus` gate retires with its token, because the Watchdog covers a dead Prometheus. `swallowed_verdicts` is exported until C-7 deletes it. | 19 |
 | A7 log arm | `workload_log_errors` | M5 | monitor-bridge (`land.sh`); the rule deploys `loki-homelab` | `startup_grace` becomes `for: 5m`, as in A6. See *A7*. | 1 |
 | B0 shared library | No check. Moves `boot_grace_active`, `wan_reachable` and `reachout_verdict` into `homelab-check-lib.sh`, which also gains `write_check_textfile` (M3's atomic write). Its copy task and its `stamp_deployed` record in `initial_setup/tasks/crons.yml` are `tags: [always]`, like the `kuma-push-lib.sh` pair beside them (*B0, B5, B7 and B8*). | — | the tick (initial_setup) on daniel-box; a hand on daniel-server and the Pi | — | 0 |
-| B1 k3s crons | longhorn backup health, etcd snapshot, manifest-prune, release staleness, live-drift | M3 | a hand: `k3s-bringup.yml --tags "backup-health,etcd-snapshot,manifest-prune,release-staleness,live-drift"` (**operator-only**) | `KumaDown` replaces `uptime-kuma-alive` (see below). | 5 |
+| B1 k3s crons | longhorn backup health, etcd snapshot, manifest-prune, release staleness, live-drift | M3 | a hand: `k3s-bringup.yml --tags "backup-health,etcd-snapshot,manifest-prune,release-staleness,live-drift"` (**operator-only**) | `KumaDown` replaces `uptime-kuma-alive` (see below). B1 retires the tiles and tokens of manifest-prune, release staleness and live-drift; D6.5 deletes those three checks and B1's rules for them, and D6.5b deletes their code. | 5 |
 | B2 initial_setup | docs-refresh, eval sweep, secret rotation, setup drift, the two Loki-route witnesses | M3 | the tick on daniel-box; a hand on daniel-server | daniel-server gets the textfile-directory task. | 6 |
 | B3 gitops_deploy | ruleset drift, interaction limit | M3 | the tick | — | 2 |
 | B4 other setup roles | two etcd drills, three fake_remux, two UPS secondaries, render_records, renovate_agent, renovate_notify | M3 | the tick on daniel-box; a hand on daniel-server for its UPS secondary | — | 10 |
@@ -2789,6 +2791,16 @@ claim was checked at `70591c307` before the edit.
   behind* now says that `audit --check` exits non-zero on any missing or stale row
   (`secret_rotation.py:cmd_audit` at `70591c307`). Each token PR is already one commit, so
   the recipe's order needed no change.
+- **#4609 (medium): B1 and D6.5 both retired the three drift checks' tiles and tokens.**
+  B1 converts manifest-prune, release staleness and live-drift to textfile checks, and
+  D6.5 removed the same tiles and tokens before deleting the checks. Neither page cited the
+  other. **Fixed by giving the Kuma side to B1 and the checks to D6.** X2-13's remedy, which
+  dropped registry-gc from B6, does not fit here. C-1 needs exactly one Kuma series, so the
+  three tiles must be gone before C-1. D6 waits for C-2b through the uptime-kuma edge
+  (*When D5 flips a role M6 edits*), so D6.5 cannot remove them first. B1 therefore keeps
+  all three, and the B1 row and *Other producers* name D6.5 and D6.5b as the slices that
+  delete the checks. D6.5 deletes B1's `<Check>Failed` and `<Check>NotReporting` rules for
+  them in the PR that disarms their crons.
 
 ### Pillar review fold (2026-10-12)
 

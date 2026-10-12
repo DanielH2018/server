@@ -537,8 +537,9 @@ These facts come from the D2, D4 and D5 plans, because their code does not exist
     - `shared_role_callers.py`, `shared_role_reach.py`, `digest_provable.py`,
       `narrow_lib/broad.py` and `narrow_lib/containers.py`;
     - the k8s readings in `reach.py` and `deploy_cross_role.py`;
-    - the three drift checks with their timers, Kuma tiles and tokens, `manifest_declares.py`,
-      and the six `releases*` modules;
+    - the three drift checks with their timers and M6 B1's rules for them,
+      `manifest_declares.py`, and the six `releases*` modules. M6's B1 retires their Kuma
+      tiles and tokens (#4609);
     - every reader of the k8s ledger classes, and arm 1 of D4's `cross_plane_order.py`.
 - **R4 deletes the Ansible k8s mechanics:**
     - the manifests role's render, apply, prune and drain tasks;
@@ -1790,31 +1791,27 @@ The PRs merge in this order.
       `test_a_stale_deployed_copy_is_reported` and `test_a_changed_template_is_reported_stale`.
       A red push on the live tile would page.
 8. **D6.5 — Disarm the drift checks** (about 200 lines changed). It removes every unit and
-   tile and keeps every line of the checks' code, because the release-staleness cron runs
-   `probe.py releases` from the primary checkout until this PR's hand apply removes it
+   alert rule and keeps every line of the checks' code, because the release-staleness cron
+   runs `probe.py releases` from the primary checkout until this PR's hand apply removes it
    (Baseline).
-    - **Remove the tiles** from uptime-kuma's `static-monitors.yaml.j2`, unless M6 has retired
-      Kuma. That template reaches the cluster through `promote`.
-    - **Remove every consumer of the three tokens.** Drop `manifest_prune_push_token` and
-      `release_staleness_push_token` from the shared `kuma-push.env.j2`, and correct its
-      task's `no_log` comment, which counts five tokens. The task that renders
-      `live-drift-check.env.j2` becomes an absent task below. The template itself stays until
-      D6.5b, as *The narrowing gate* below explains. It names the token as
-      `live_drift_push_token | default("")`, so it renders without the key. Drop the three
-      names from `scripts/secrets_mgmt/consumers.py:CROSS_HOST_PUSH_TOKENS`. If a secrets
-      census refuses a template that names a removed key, the removal of
-      `live_drift_push_token` moves to D6.5b with the template.
-    - **Operator-only: remove the three tokens.** The operator removes
-      `live_drift_push_token`, `manifest_prune_push_token` and `release_staleness_push_token`
-      with `sops` on this PR's branch. Then the session runs
-      `uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commits the registry.
-      Without this step, `test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual`
-      fails and `sync` re-adds the rows.
-    - **Operator-only: rewrite the cluster file.** The tiles' placeholders go, so the
-      operator runs D3's `cluster_vars.py write` on the branch before merge and commits what
-      it writes. It decrypts, as D3 states. `cluster_vars.py check` in CI fails until then.
+    - **The Kuma side is M6's, not D6's (#4609).** M6's B1 converts the three checks to
+      textfile checks and retires their tiles, their push tokens and every consumer of the
+      tokens. M6's C-2b then deletes Kuma. D6 opens only after C-2b, because uptime-kuma
+      never becomes flux-owned (M6 *When D5 flips a role M6 edits*). So D6.5 removes no
+      tile, no token and no cluster-file placeholder. Before merge, the PR body quotes
+      `git grep -n -E 'manifest_prune_push_token|release_staleness_push_token|live_drift_push_token'`
+      at its base, expected to print nothing. A hit means B1 left a consumer. The session
+      then stops and hands the hit to M6 rather than removing it here.
+    - **Remove B1's rules for the three checks.** B1 gives each check a `<Check>Failed` and a
+      `<Check>NotReporting` rule (M6 *Recipes*, M3's recipe). A disarmed cron writes no
+      textfile, so its NotReporting rule would fire at its deadline. D6.5 deletes the six
+      rules in this PR. Flux applies the rule removal at merge, before the hand apply below
+      stops the crons, so no rule reads a check that has stopped.
     - **Tasks become `absent` tasks, and only these:**
-        - the two timers, through `kuma_check_state: absent`;
+        - the two timers, through the state variable of their timer imports
+          (`kuma_check_state`, or its name after M6's C-3b);
+        - the three checks' `.prom` files under `/var/lib/node-exporter-textfile/`, which B1
+          added;
         - the release-staleness cron;
         - the three release groups' `/opt/homelab/releases/<group>`,
           `/opt/homelab/current/<group>` and `/usr/local/bin/<name>` links;
@@ -1857,22 +1854,18 @@ The PRs merge in this order.
       that the line differs from what was applied, and the session stops. It never runs
       `--tags k3s`. If the line names the whole role anyway, the session follows D6.5b's
       whole-role procedure.
-    - **Expect one secrets page on the merge tick.** The PR changes `ansible/vars/secrets.yml`
-      beside `setup/k3s`, so the tick takes `handle_broad`. The k3s half goes to
-      `manual_plane`, and the tick reaches the tail that D6.1 added, which sends the secrets
-      page once. The page asks for the consumers to be redeployed, and the hand apply below
-      is that redeploy, so it needs no other action. The session quotes the page in the PR
-      thread. If no page arrives, D6.1's tail is broken: the session stops and reports it.
+    - **No secrets page on the merge tick.** D6.5 leaves `ansible/vars/secrets.yml` alone,
+      because B1 already removed the three tokens. An earlier draft removed them here, which
+      sent the tick through `handle_broad` and D6.1's secrets page.
     - **Until the apply,** the old units keep running against code that is still in the tree.
-      A run that pushes to a tile `promote` already removed fails and pages nothing.
-    - **The apply re-renders the shared push file.** The six tags select the task that renders
-      `/etc/rancher/k3s/kuma-push.env`, so the two token lines go in this apply. The apply
-      also re-runs the install tasks of the three kept heartbeat families, whose sources D6.5
-      does not change. The session quotes the recap and names every `changed` task in the PR
-      thread.
-    - **The tile stays green.** After the apply, the box's setup-drift tile still reads
-      green. A fragment left behind would read as drift (failure class 5). D6.5 changes no
-      source that a remaining fragment stamps.
+      They write `.prom` files that no rule reads after the merge, so they page nothing.
+    - **The apply re-runs the shared tasks.** The six tags also re-run the install tasks of
+      the three kept heartbeat families, whose sources D6.5 does not change. The session
+      quotes the recap and names every `changed` task in the PR thread.
+    - **The setup-drift check stays green.** After the apply, the box's setup-drift check,
+      which M6's B2 made a textfile check, still reads green. A fragment left behind would
+      read as drift (failure class 5). D6.5 changes no source that a remaining fragment
+      stamps.
 9. **D6.5b — Delete the drift checks' code and the absent tasks** (about 2,700 lines
    removed). It opens only after D6.5's hand apply, because the cron it removed ran
    `releases.py` from the primary checkout.
@@ -1905,9 +1898,10 @@ The PRs merge in this order.
            be `backup-health,disk-health,etcd-snapshot`, with the same log redirect as D6.5's
            apply. It quotes the recap and names every `changed` task.
         4. It verifies the state that D6.5's apply made. `systemctl list-unit-files
-           'kuma-check-manifest-prune*' 'kuma-check-live-drift*'` lists no unit, `/etc/cron.d`
-           and root's crontab hold no release-staleness entry, the four fragments are absent
-           from the two manifest directories, and the setup-drift tile reads green.
+           '*-check-manifest-prune*' '*-check-live-drift*'` lists no unit under either
+           timer name (before or after M6's C-3b rename), `/etc/cron.d` and root's crontab
+           hold no release-staleness entry, the four fragments and the three `.prom` files are
+           absent, and the setup-drift check reads green.
         5. It clears the line with a bare `gitops_state.py clear-owed manual_plane k3s`.
     - **The bare clear is an exception to "apply, then clear".** The rule exists so that a
       clear never drops work that is merged and unapplied. D6.5b removes only files that no
@@ -3399,6 +3393,16 @@ Nothing is refuted.
 - Cross-slice note from R4: Open question 14 asks D6.1 to drop or gate the `deploy.yml`
   command in `broad_remediation`. Confirmed at `70591c307`: the function appends it whenever
   `broad_deploy` is set.
+- **#4609 (medium): D6.5 and M6's B1 both retired the three drift checks' tiles and
+  tokens.** M6's B1 row converts manifest-prune, release staleness and live-drift to textfile
+  checks, and D6.5 removed the same tiles, tokens and cluster-file placeholders. Neither page
+  cited the other. **Fixed by giving the Kuma side to M6 and the checks to D6.** D6 opens
+  after M6's C-2b, so by D6.5 the tiles are gone and B1's token PR has removed the tokens.
+  D6.5 now cites B1, quotes an empty token grep instead of removing tokens, and owes no
+  secrets page. It gains the removal of B1's six rules and absent tasks for the three `.prom`
+  files. D6.5b's unit check reads either timer name, because M6's C-3b renames the timers.
+  X2-13's remedy, dropping the checks from M6, would leave three tiles alive at C-1, which
+  M6's one-series gate refuses.
 
 ### Pillar review fold (2026-10-12)
 
