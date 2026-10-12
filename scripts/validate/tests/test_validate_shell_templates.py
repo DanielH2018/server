@@ -74,6 +74,7 @@ def test_discover_templates_finds_the_known_set():
         "ups-secondary-health.sh.j2",
         "setup-drift-check.sh.j2",
         "aide-check.sh.j2",
+        "rkhunter-check.sh.j2",
         "docs-refresh.sh.j2",
         "eval-run.sh.j2",
         "pi-sd-health.sh.j2",
