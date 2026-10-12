@@ -131,6 +131,12 @@ def register_ansible_filters(env: Environment) -> Environment:
     through ``weekly_backup_group``, which raises on a shard outside 0-6, and the restore drill
     names the label prefix, the opt-out group and the B2 target through ``longhorn_backup_name``. Registering the real ones makes those failures reach the guard.
 
+    ``homelab_role_label`` is the filter ``ansible/templates/role-labelled.yaml.j2`` stamps
+    ``homelab/role`` with, for every role that arms the manifests role's prune.
+    ``from_json`` is ansible-core's, which home-assistant's ``templates/config/secrets.yaml.j2``
+    parses a service-account key with. ``homelab-render`` renders both templates, and its
+    template census holds every filter and test name the k8s templates use to this set.
+
     Args:
         env: The environment to register on, modified in place.
 
@@ -147,6 +153,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     import kuma_monitors
     import longhorn_groups
     import py_table
+    import role_label
     import scrape_jobs
     import service_tier
     from toposort import filter_by_platform
@@ -154,6 +161,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     from ansible.plugins.filter.core import (
         b64encode,
         comment,
+        from_json,
         get_hash,
         mandatory,
         to_bool,
@@ -164,6 +172,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["b64encode"] = b64encode
     env.filters["bool"] = to_bool
     env.filters["comment"] = comment
+    env.filters["from_json"] = from_json
     env.filters["hash"] = get_hash
     env.filters["mandatory"] = mandatory
     env.filters["to_uuid"] = to_uuid
@@ -179,6 +188,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["metrics_port"] = scrape_filters["metrics_port"]
     env.filters["entry_port"] = scrape_filters["entry_port"]
     env.filters["py_table"] = py_table.FilterModule().filters()["py_table"]
+    env.filters["homelab_role_label"] = role_label.FilterModule().filters()[
+        "homelab_role_label"
+    ]
     env.filters["kuma_ingress_monitors"] = kuma_monitors.FilterModule().filters()[
         "kuma_ingress_monitors"
     ]

@@ -107,7 +107,8 @@ def main(argv: list[str] | None = None) -> int:
         action="extend",
         nargs="+",
         metavar="TAG",
-        help="a deploy tag to render; repeatable. Default: every tag that renders so far",
+        help="a deploy tag to render; repeatable. Default: every tag that renders so far, "
+        "which leaves out the tags that read a value a role task computes",
     )
     render.add_argument(
         "--secret-stubs",
