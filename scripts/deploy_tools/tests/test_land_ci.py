@@ -136,16 +136,15 @@ def test_a_disarmed_gate_names_where_to_re_arm_it(landing, capsys):
     assert "REQUIRED_CONTEXTS" in out or "await_ci.py" in out, out
 
 
-def test_step_3_does_not_time_out_on_a_merge_commit_github_never_ran_ci_for(
-    landing, tmp_path, monkeypatch
-):
-    """#4621: no push run ever exists for the merge commit, and a later master commit is green.
+def _step_3_over_master(
+    landing, tmp_path, monkeypatch, green: list[bool]
+) -> tuple[list[str], Outcome | None]:
+    """Run step 3's wait on the first of a scratch master's commits; None when it returned.
 
-    Step 3 waited on the merge commit alone and ended `ci-timeout`, the verdict whose resume
-    is a re-run, which entered the same wait on the same SHA. Either it now accepts the green
-    descendant and returns, or it ends on a verdict of its own that names the descendant and
-    the hand-deploy command. deploy.sh refuses a tree behind origin/master, so the command
-    has to name the tip, not an older green commit.
+    `green[i]` says whether commit i went green. A commit that did not has no check run and
+    no check suite at all, which is what GitHub left for a dropped push event (#4621). The
+    REAL await_ci.wait runs over a fake clock and a fake GitHub, and the origin is a real
+    repository, so the wait reaches a descendant through whichever git query a fix chooses.
     """
     import await_ci
     from lib.git_testing import commit, git, init_repo, scrub_process_git_env
@@ -154,21 +153,22 @@ def test_step_3_does_not_time_out_on_a_merge_commit_github_never_ran_ci_for(
     origin = init_repo(tmp_path / "origin.git", bare=True)
     clone = init_repo(tmp_path / "clone", initial_commit="base")
     git(clone, "remote", "add", "origin", str(origin))
-    merge = commit(clone, "the squash merge GitHub never ran CI for", a="1")
-    tip = commit(clone, "a later merge that went green", b="1")
+    shas = [commit(clone, f"merge {i}", **{f"f{i}": "1"}) for i in range(len(green))]
     git(clone, "push", "-q", "origin", "master")
+    # _fetch_tip and _is_ancestor run git with no cwd, as from land.sh's primary checkout.
     monkeypatch.chdir(clone)
 
-    required = next(iter(await_ci.REQUIRED_CONTEXTS))
-    green = [{"name": required, "status": "completed", "conclusion": "success"}]
-    runs_by_sha: dict[str, list[dict]] = {merge: [], tip: green}
+    passed = [
+        {"name": name, "status": "completed", "conclusion": "success"}
+        for name in await_ci.REQUIRED_CONTEXTS
+    ]
+    runs = {sha: (passed if ok else []) for sha, ok in zip(shas, green, strict=True)}
     now = [0.0]
 
     def sleep(seconds):
         now[0] += seconds
 
     def real_wait(sha, timeout_s):
-        # The real wait over a fake clock and a fake GitHub; only the transport is stubbed.
         return CiVerdict(
             *await_ci.wait(
                 sha,
@@ -176,23 +176,57 @@ def test_step_3_does_not_time_out_on_a_merge_commit_github_never_ran_ci_for(
                 20,
                 sleep=sleep,
                 clock=lambda: now[0],
-                fetch=lambda s: runs_by_sha.get(s, []),
+                fetch=lambda s: runs.get(s, []),
                 fetch_suites=lambda s: [],
             )
         )
 
     ln, _ = landing(ci_timeout=900)
-    ln.merge_sha = merge
+    ln.merge_sha = shas[0]
     ln.tools.await_ci = real_wait
-    ended: Outcome | None = None
     try:
         ci.wait_master_ci(ln, ln.merge_sha)
     except Outcome as exc:
-        ended = exc
+        return shas, exc
+    return shas, None
+
+
+def test_step_3_does_not_time_out_on_a_merge_commit_github_never_ran_ci_for(
+    landing, tmp_path, monkeypatch
+):
+    """#4621: no push run ever exists for the merge commit, and the next master commit is green.
+
+    Step 3 waited on the merge commit alone and ended `ci-timeout`, the verdict whose resume
+    is a re-run, which entered the same wait on the same SHA. Either it now accepts the green
+    descendant and returns, or it ends on a verdict of its own that names the descendant and
+    the hand-deploy command.
+    """
+    (_, tip), ended = _step_3_over_master(landing, tmp_path, monkeypatch, [False, True])
     if ended is None:
-        return  # green: step 3 accepted the descendant and the landing goes on
+        return  # Step 3 accepted the green descendant, and the landing goes on.
     detail = ended.error or ""
     assert ended.verdict != "ci-timeout", detail
     assert ended.rc != 75, detail
     assert tip[:8] in detail, detail
+    assert "deploy.sh" in detail, detail
+
+
+def test_step_3_hand_deploy_names_the_tip_not_an_older_green_commit(
+    landing, tmp_path, monkeypatch
+):
+    """#4621's second recurrence: the tip has no run either, and only a middle commit is green.
+
+    deploy.sh refuses any tree behind origin/master with DEPLOY_STALE (4), so a hand-deploy
+    command naming the green middle commit cannot run. A verdict of its own has to name the
+    tip. Accepting the green descendant and returning is also a fix.
+    """
+    (_, middle, tip), ended = _step_3_over_master(
+        landing, tmp_path, monkeypatch, [False, True, False]
+    )
+    if ended is None:
+        return  # Step 3 accepted the green descendant, and the landing goes on.
+    detail = ended.error or ""
+    assert ended.verdict != "ci-timeout", detail
+    assert tip[:8] in detail, detail
+    assert f"deploy.sh --at {middle[:8]}" not in detail, detail
     assert "deploy.sh" in detail, detail
