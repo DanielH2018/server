@@ -118,7 +118,8 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   disk swap. Pi-only packages gate on `has_raspi_kernel` instead — the board and its memory are
   two separate facts.
 - Two templates carry host-specific config: `templates/98_aide_local.conf.j2`, the AIDE
-  exclusions for high-churn paths (the Pi's Docker tree, app data and pseudo filesystems), and `templates/fail2ban_homelab.conf.j2`, the fail2ban
+  exclusions for high-churn paths (the Pi's Docker tree, app data, pseudo filesystems, and on
+  the cluster nodes the Longhorn, containerd, etcd, pod-volume and pod-log paths), and `templates/fail2ban_homelab.conf.j2`, the fail2ban
   jail. Pi-only tasks are individually `when:`-guarded rather than block-scoped, so a server run
   simply skips them.
 
