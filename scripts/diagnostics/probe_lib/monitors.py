@@ -510,7 +510,7 @@ def format_kuma_drift(
     return "\n".join(lines), 0
 
 
-def run_kuma_drift(ns):
+def run_kuma_drift(ns, now=None):
     """Reconcile the declared monitor set against the live one (exit 0 = no drift).
 
     `--pi` scopes both the declared and live sets to daniel-pi's own monitors before handing
@@ -545,7 +545,7 @@ def run_kuma_drift(ns):
     text, code = format_kuma_drift(
         declared,
         live,
-        kuma_live.pod_age_seconds(getattr(ns, "cluster", DEFAULT_CLUSTER)),
+        kuma_live.pod_age_seconds(getattr(ns, "cluster", DEFAULT_CLUSTER), now=now),
         gate_states=gate_states,
         created=kuma_live.created_monitors(),
         stored=kuma_live.last_stored_beats(),

@@ -197,7 +197,7 @@ def stored_down_label(beat):
     )
 
 
-def pod_age_seconds(cluster=DEFAULT_CLUSTER, tools=DEFAULT_TOOLS):
+def pod_age_seconds(cluster=DEFAULT_CLUSTER, tools=DEFAULT_TOOLS, now=None):
     """Seconds since the uptime-kuma pod started, or None if that cannot be read.
 
     A host with no kubectl or no readable kubeconfig reads as None too (#4038): the caller's
@@ -214,7 +214,7 @@ def pod_age_seconds(cluster=DEFAULT_CLUSTER, tools=DEFAULT_TOOLS):
     starts = [
         seconds_since(
             as_object(p.get("status") or {}, "pod status").get("startTime"),
-            datetime.now(timezone.utc),
+            now or datetime.now(timezone.utc),
         )
         for p in as_object_list(pods_doc.get("items", []), "kubectl pods items")
     ]

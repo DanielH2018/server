@@ -332,7 +332,9 @@ def test_run_kuma_drift_pi_end_to_end_reports_a_missing_pi_monitor(monkeypatch, 
     monkeypatch.setattr(core, "fetch", fake_fetch)
     monkeypatch.setattr(core, "get_status", lambda url, resolve: (200, page))
     monkeypatch.setattr(core, "k8s_endpoint", lambda host: ("https://k.test", None))
-    monkeypatch.setattr(kuma_live, "pod_age_seconds", lambda cluster: 86400 * 3)
+    monkeypatch.setattr(
+        kuma_live, "pod_age_seconds", lambda cluster, now=None: 86400 * 3
+    )
 
     ns = cli_parser._build_parser().parse_args(["kuma-drift", "--pi", "--no-secrets"])
     assert monitors.run_kuma_drift(ns) == 1

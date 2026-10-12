@@ -24,6 +24,7 @@ from lib.proc_testing import fake_bin, path_with
 # Kuma up 55631s, as on 2026-10-11: past every daily tile's interval, inside the weekly ones.
 KUMA_AGE = 55631
 STORED_DOWN_TIME = "2026-10-11 02:23:45.734"
+EPOCH = datetime(2026, 10, 11, 18, 0, tzinfo=timezone.utc)
 LONG_INTERVAL_TILES = ["Homelab Evals", "etcd Restore Drill (full)"]
 
 
@@ -109,9 +110,7 @@ def _stub_kuma(monkeypatch, tmp_path, silent_tile, stored_status, live_status=No
             return page
         return prom
 
-    started = (datetime.now(timezone.utc) - timedelta(seconds=KUMA_AGE)).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
+    started = (EPOCH - timedelta(seconds=KUMA_AGE)).strftime("%Y-%m-%dT%H:%M:%SZ")
     kubectl_out = {
         "nodes": {"items": [{"metadata": {"name": "daniel-box"}}]},
         "pods": {
@@ -203,7 +202,8 @@ def test_kuma_drift_names_the_stored_down_of_a_not_yet_due_tile(
     tile = "Homelab Evals"
     _stub_kuma(monkeypatch, tmp_path, tile, stored_status=0)
     ns = cli_parser._build_parser().parse_args(["kuma-drift"])
-    monitors.run_kuma_drift(ns)
+    # The pod's age is measured against the same pinned EPOCH its startTime is dated from.
+    monitors.run_kuma_drift(ns, now=EPOCH)
     lines = _line_naming(capsys.readouterr().out, tile)
     assert any("DOWN" in line for line in lines), lines
 
