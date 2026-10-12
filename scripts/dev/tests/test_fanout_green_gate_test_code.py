@@ -174,6 +174,36 @@ def test_a_conftest_may_lose_only_a_fixture_no_red_test_requests(
 
 
 @pytest.mark.parametrize(
+    ("deleted", "reason"),
+    [
+        ("unused", ""),
+        (
+            "tmp_path_factory",
+            "tests/conftest.py deletes `def tmp_path_factory`, which binds "
+            "`tmp_path_factory`, which a red test or the conftest still uses",
+        ),
+    ],
+    ids=["unrequested", "requested-by-a-builtin-fixture"],
+)
+def test_a_conftest_may_not_lose_a_fixture_a_builtin_fixture_requests(
+    tmp_path, deleted, reason
+):
+    """The red test requests only `tmp_path`, whose `tmp_path_factory` the conftest serves."""
+    fixtures = {
+        "tmp_path_factory": PASS_THROUGH.format(name="tmp_path_factory"),
+        "unused": FIXTURES["unused"],
+    }
+    conftest = "\n\n".join(["import pytest\n", *fixtures.values()])
+    repo, red, gate = _gated(
+        tmp_path, {"tests/conftest.py": conftest}, {"tests/test_new.py": TMP_TEST}
+    )
+    kept = [f for name, f in fixtures.items() if name != deleted]
+    head = "\n\n".join(["import pytest\n", *kept])
+    commit(repo, "fix", **{"mod.py": FIXED, "tests/conftest.py": head})
+    assert green_gate(run, repo, red, gate) == (STANDS_ON + reason if reason else "")
+
+
+@pytest.mark.parametrize(
     ("files", "reason"),
     [
         ({"conftest.py": "x = 1\n"}, "conftest.py added"),
