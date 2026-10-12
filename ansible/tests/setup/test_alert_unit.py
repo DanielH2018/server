@@ -12,6 +12,8 @@ Three properties keep the single source single and correct:
 3. The webhook file is root 0600 under `no_log`, and the task file carries no tags.
 4. A caller that sets `alert_unit_quiet_minutes` pages once per window, not once per exit of
    its parent's restart loop (#4676), and a caller that does not renders no gate.
+5. An instanced alert (`alert_unit_instanced`) keeps each instance's failure time apart and
+   opens its page with the instance name (#4602).
 
 Run: uv run pytest ansible/tests/setup/test_alert_unit.py
 """
@@ -37,8 +39,12 @@ KNOWN_ALERTS = frozenset(
     {
         # One per agent user, named after it.
         "{{ claude_code_agent_user }}-clone-sync",
+        "claude-land",
         "claude-memory-sync",
         "claude-rc",
+        # Instanced, and started by a fan-out batch's ExecStopPost= rather than OnFailure=,
+        # so the OnFailure= scan below does not find it.
+        "fanout",
         "gitops-deploy",
         "renovate-agent",
         "renovate-notify",
@@ -101,7 +107,9 @@ def test_every_onfailure_alert_renders_from_the_shared_template() -> None:
         f"alerts no longer wired through alert_unit.yml: {sorted(missing)}"
     )
     texts = [p.read_text() for p in SETUP_ROLES.glob("*/templates/*.j2")]
-    assert KNOWN_ALERTS <= onfailure_alerts(texts), "the OnFailure= scan found too few"
+    assert KNOWN_ALERTS - {"fanout"} <= onfailure_alerts(texts), (
+        "the OnFailure= scan found too few"
+    )
     unwired = unwired_alerts(texts, set(wired))
     assert not unwired, (
         f"OnFailure= names {sorted(unwired)}-alert.service, but no import of "
@@ -155,10 +163,11 @@ def test_each_message_renders_a_valid_json_payload() -> None:
         message = resolved["alert_unit_message"]
         unit = _render(template, **resolved)
         assert "{{" not in message, f"{name}: curl's --expand-data would expand {{{{"
-        payload = expanded_payload(unit, "2026-10-08 11:04 UTC")
+        payload = expanded_payload(unit, "2026-10-08 11:04 UTC", "fanout-1:failed")
         assert payload is not None, f"{name}: no single-quoted payload in ExecStart"
+        opening = "fanout-1:failed: " if resolved.get("alert_unit_instanced") else ""
         assert json.loads(payload) == {
-            "content": f"{message} Failed at 2026-10-08 11:04 UTC."
+            "content": f"{opening}{message} Failed at 2026-10-08 11:04 UTC."
         }, f"{name}: the message does not survive as the JSON payload's content"
         assert (
             f"EnvironmentFile={variables['alert_unit_env_dir']}/alert-webhook.env"
@@ -166,13 +175,15 @@ def test_each_message_renders_a_valid_json_payload() -> None:
         )
 
 
-def expanded_payload(unit: str, failed_at: str) -> str | None:
-    """The `--expand-data` body as curl sends it, with the recorded failure time filled in."""
+def expanded_payload(unit: str, failed_at: str, instance: str = "") -> str | None:
+    """The `--expand-data` body as curl sends it, with the failure time and instance filled in."""
     found = re.search(r"--expand-data '([^']*)'", unit)
     if not found:
         return None
-    return found.group(1).replace(
-        "{{failed_at:trim:json}}", json.dumps(failed_at)[1:-1]
+    return (
+        found.group(1)
+        .replace("{{failed_at:trim:json}}", json.dumps(failed_at)[1:-1])
+        .replace("{{instance:json}}", json.dumps(instance)[1:-1])
     )
 
 
@@ -232,16 +243,17 @@ def test_an_alert_that_gives_up_or_retries_a_rejection_is_flagged() -> None:
     assert not retries_until_delivered({**retrying, "RestartPreventExitStatus": ""})
 
 
-def records_the_first_failure_time(unit: str, name: str) -> bool:
+def records_the_first_failure_time(unit: str, name: str, run_dir: str = "") -> bool:
     """True when the first attempt writes the time, retries keep it, and curl posts it.
 
     The file must outlive a Restart= re-run (RuntimeDirectoryPreserve=restart) and must not be
     overwritten by one (`test -s ... ||`), or a late page names the retry's time.
     """
     settings = service_settings(unit)
-    stamp = f"%t/{name}-alert/failed-at"
+    run_dir = run_dir or f"{name}-alert"
+    stamp = f"%t/{run_dir}/failed-at"
     return (
-        settings.get("RuntimeDirectory") == f"{name}-alert"
+        settings.get("RuntimeDirectory") == run_dir
         and settings.get("RuntimeDirectoryPreserve") == "restart"
         and settings.get("ExecStartPre", "").startswith(
             f"/bin/sh -c 'test -s {stamp} || "
@@ -278,6 +290,51 @@ def test_a_stamp_a_retry_drops_or_overwrites_is_flagged() -> None:
     assert not records_the_first_failure_time(
         unit.replace("test -s %t/widget-alert/failed-at || ", ""), "widget"
     )
+
+
+def _instanced_unit() -> str:
+    return _render(
+        UNIT.read_text(),
+        alert_unit_name="widget",
+        alert_unit_description="Widget %i",
+        alert_unit_message="widget failed.",
+        alert_unit_env_dir="/etc/widget",
+        alert_unit_instanced=True,
+    )
+
+
+def test_an_instanced_alert_keeps_each_instances_time_and_names_it() -> None:
+    # Two batches can stop inside one retry window, and each page must carry its own unit,
+    # state and time. `%i`, not `%I`: the unescaped form turns every `-` into `/`.
+    unit = _instanced_unit()
+    assert records_the_first_failure_time(unit, "widget", "widget-alert/%i")
+    assert "--variable 'instance=%i'" in unit
+    payload = expanded_payload(unit, "2026-10-12 18:25 UTC", "fanout-4602:needs-input")
+    assert payload is not None
+    assert json.loads(payload) == {
+        "content": "fanout-4602:needs-input: widget failed. Failed at 2026-10-12 18:25 UTC."
+    }
+    install = next(
+        t["ansible.builtin.template"]
+        for t in leaf_tasks(load_tasks(TASKS))
+        if t["ansible.builtin.template"]["src"].endswith(UNIT.name)
+    )
+    dest = _render(install["dest"], alert_unit_name="widget", alert_unit_instanced=True)
+    assert dest == "/etc/systemd/system/widget-alert@.service"
+
+
+def test_an_instanced_alert_sharing_one_stamp_is_flagged() -> None:
+    unit = _instanced_unit()
+    shared = unit.replace("widget-alert/%i", "widget-alert")
+    assert not records_the_first_failure_time(shared, "widget", "widget-alert/%i")
+    plain = _render(
+        UNIT.read_text(),
+        alert_unit_name="widget",
+        alert_unit_description="Widget",
+        alert_unit_message="widget failed.",
+        alert_unit_env_dir="/etc/widget",
+    )
+    assert "instance" not in plain
 
 
 def quiet_gate(unit: str, name: str) -> str | None:

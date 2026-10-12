@@ -62,6 +62,9 @@ def environment(text: str) -> dict[str, str]:
 
 
 def install_dest(task: dict) -> str:
+    if "ansible.builtin.import_tasks" in task:
+        # An import of common/tasks/alert_unit.yml, which installs the alert unit.
+        return f"/etc/systemd/system/{task['vars']['alert_unit_name']}-alert.service"
     module = task.get("ansible.builtin.template") or task["ansible.builtin.file"]
     return module.get("dest") or module["path"]
 
@@ -77,6 +80,15 @@ def test_the_unit_runs_land_sh_as_the_operator_from_the_primary_checkout() -> No
     argv = shlex.split(exec_start)
     land = f"{checkout}/scripts/deploy_tools/land.sh"
     assert land in argv and (ANSIBLE.parent / "scripts/deploy_tools/land.sh").is_file()
+
+
+def test_a_landing_that_fails_or_is_refused_pages_through_its_alert() -> None:
+    """A refused landing waits on the operator, and the session that asked may be gone (#4602)."""
+    assert directive(unit(), "OnFailure") == ["claude-land-alert.service"]
+    alert = next(t for t in tasks() if "ansible.builtin.import_tasks" in t)
+    assert alert["ansible.builtin.import_tasks"].endswith("common/tasks/alert_unit.yml")
+    assert alert["when"] == INSTALLED
+    assert alert["vars"]["alert_unit_name"] == "claude-land"
 
 
 def test_land_sh_accepts_the_units_arguments_and_writes_the_verdict_where_the_session_reads() -> (
@@ -311,6 +323,7 @@ def test_switching_either_flag_off_removes_everything_the_install_writes() -> No
         "/etc/claude-land/approval-paths",
         "/etc/systemd/system/claude-land@.service",
         "/etc/polkit-1/rules.d/50-claude-land.rules",
+        "/etc/systemd/system/claude-land-alert.service",
     }
     (removal,) = [t for t in tasks() if t.get("when") == f"not ({INSTALLED})"]
     removed = removal["loop"]

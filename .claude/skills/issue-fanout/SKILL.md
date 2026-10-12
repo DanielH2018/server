@@ -210,6 +210,12 @@ That line names every batch that is not plain success. The source is
 `scripts/dev/fanout.py probe`, which reads the `status` command below and shares one read per
 90s among every watcher on the host.
 
+A batch that stops on any state but `done` also pages Discord once, as
+`fanout-alert@<unit>:<state>`, whether or not an orchestrator is watching (#4602). The page
+comes from the unit's own `ExecStopPost=`, `scripts/dev/fanout_lib/notify.py`, which logs
+its decision to the batch's `.fanout/notify.log`. A batch stopped with `place stop` pages
+nothing.
+
 To recover a run-id lost to compaction or a resumed session, run `fanout.py place runs
 --orchestrator <branch>`. It lists every run manifest on the host with its batches, hosts,
 branches, issues and whether each was cleaned; `--json` prints the manifests themselves.

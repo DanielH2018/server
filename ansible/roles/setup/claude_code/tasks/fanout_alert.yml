@@ -1,0 +1,57 @@
+---
+# The page a fan-out batch sends when its unit stops on any state but `done` (#4602). Imported
+# from main.yml after the agent users are named, because the polkit rule lists them.
+#
+# A batch is a transient user unit (scripts/dev/fanout_lib/launch.py), and a user unit can
+# neither name a system unit in OnFailure= nor read the root-only webhook. Its ExecStopPost=
+# classifies the batch as `fanout.py place status` would, then starts
+# fanout-alert@<unit>:<state>.service, which the rule below lets the operator and each agent
+# user start. The webhook stays in a root-0600 file; no user account gains a copy.
+
+- name: Create the fan-out alert's config directory
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: /etc/claude-fanout
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  when: claude_code_fanout_alert_enabled
+
+- name: Install the fan-out alert
+  tags: [claude_code]
+  when: claude_code_fanout_alert_enabled
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  vars:
+    alert_unit_name: fanout
+    alert_unit_instanced: true
+    alert_unit_description: Alert that fan-out batch %i stopped without finishing
+    alert_unit_message: "a fan-out batch on {{ inventory_hostname }} stopped without finishing, and no session may be watching it. The page opens with the batch unit and its state. Read the batch with `fanout.py place status <run-id>`, or its log with `journalctl --user -u <unit>` as the account that launched it."
+    alert_unit_env_dir: /etc/claude-fanout
+
+- name: Let the accounts that run fan-out batches start its alert and nothing else (polkit)
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: 50-claude-fanout-alert.rules.j2
+    dest: /etc/polkit-1/rules.d/50-claude-fanout-alert.rules
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  when: claude_code_fanout_alert_enabled
+  # No handler: polkitd watches rules.d and reloads a changed rule on its own.
+
+# The way out. The rule goes first, so no account can start the alert once removal begins.
+- name: Remove the fan-out alert when it is switched off
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/polkit-1/rules.d/50-claude-fanout-alert.rules
+    - /etc/systemd/system/fanout-alert@.service
+    - /etc/claude-fanout
+  become: true
+  when: not claude_code_fanout_alert_enabled
+  notify: Reload systemd

@@ -468,6 +468,11 @@
   become: true
   when: claude_code_agents_with_dotfiles | length == 0
 
+# ── The fan-out alert ───────────────────────────────────────────────────────────────────
+- name: Install the fan-out alert, or take it back
+  tags: [claude_code]
+  ansible.builtin.import_tasks: fanout_alert.yml
+
 # ── The agent's lander ──────────────────────────────────────────────────────────────────
 # In its own file, because that file is on the lander's approval list and pins the lander's
 # settings against an inventory override (tasks/lander.yml).

@@ -14,7 +14,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from fanout_lib.manifest import Batch
-from fanout_lib.target import SERVER_TARGET, Target, branch_name
+from fanout_lib.notify import stop_post
+from fanout_lib.target import HEADLESS_PYTHON, SERVER_TARGET, Target, branch_name
 from fanout_lib.transport import REPO, Tools
 
 LAUNCH_TIMEOUT_S = 120.0
@@ -65,8 +66,6 @@ RUNTIME_MAX_S = 5 * 3600
 # shorter than the implementer, so three hours on top of its five covers them.
 # `review.LAND_MARGIN_S` skips the landing rather than start it too close to this cap.
 REVIEW_RUNTIME_MAX_S = 8 * 3600
-# The interpreter a unit runs repo Python with; `fanout_lib.place.HEALTH_CMD` pins the same one.
-HEADLESS_PYTHON = "3.14.6"
 # The script a `--review` unit runs as `<it> review`, relative to a checkout; see `review_script`.
 REVIEW_SCRIPT = "scripts/dev/fanout.py"
 # Another repo's batch runs this repo's code from a snapshot of `origin/master` inside its own
@@ -299,7 +298,7 @@ def systemd_run_command(
             f"-p StandardOutput=file:{wt}/.fanout/report.json "
             f"-p StandardError=file:{wt}/.fanout/stderr.log "
             f"-p Environment=PATH={unit_path(home)} -p Environment=HOME={home} "
-            f"-p RuntimeMaxSec={runtime} "
+            f"-p RuntimeMaxSec={runtime} -p {stop_post(batch, target)} "
             f"{command}"
         ),
         "systemd-run",

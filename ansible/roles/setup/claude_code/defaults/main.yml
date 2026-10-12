@@ -491,3 +491,11 @@ claude_code_lander_approver: DanielH2018
 # The approval list (the paths an agent PR cannot land without the approver above) is literal
 # in templates/claude-land-approval-paths.j2, not a variable here, so the inventory cannot
 # override it. That template has the floor and the reason for each entry.
+
+# ── The fan-out alert ───────────────────────────────────────────────────────────────────
+# fanout-alert@<unit>:<state>.service pages Discord when a fan-out batch's unit stops on any
+# state but `done` (#4602). The batch's ExecStopPost= starts it
+# (scripts/dev/fanout_lib/notify.py), and templates/50-claude-fanout-alert.rules.j2 lets the
+# operator and each agent user start it for the states that page and nothing else. False
+# removes the unit, the rule and the webhook file, and a stopped batch then pages nothing.
+claude_code_fanout_alert_enabled: true
