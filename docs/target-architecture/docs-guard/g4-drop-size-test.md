@@ -4,7 +4,7 @@ Status: IN PROGRESS
 
 PR 1a, #4696 (issue #4694), moves the inline-budget arithmetic into `_inline_budget.py`.
 PR 1b, #4704 (issue #4698), adds the hook's `--report` mode.
-PR 2 (issue #4712) drops the CI size test, on the operator's ruling of 2026-10-12.
+PR 2, #4717 (issue #4712), drops the CI size test, on the operator's ruling of 2026-10-12.
 
 Depends on: none. PR 2 waits on an **operator-only** ruling (step 0). The optional PR 3
 lands after G2's PR 2.
