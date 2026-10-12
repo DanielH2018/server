@@ -333,7 +333,7 @@ module under `scripts/renderer/tests/` starts `test_renderer_`.
   `ansible/filter_plugins/`.
     - The filter `homelab_stub_keys` takes the parsed `secrets.yml` mapping. It returns the
       sorted key names without `sops` and without the keys in `NEVER_STUB`.
-    - The filter `homelab_secret_stub` maps a key `K` to `stub-` plus `K` with underscores
+    - The filter `homelab_secret_stub` maps a variable `K` to `stub-` plus `K` with underscores
       turned to hyphens. That shape is a valid DNS label, so a stubbed host name still passes
       `--dry-run=server`.
     - `google_assistant_service_account` is the one key a template parses with `from_json`,
@@ -349,7 +349,7 @@ module under `scripts/renderer/tests/` starts `test_renderer_`.
       keys. It returns the keys whose value is not exactly its `homelab_secret_stub`, as
       names only. The preamble's content assert and the manifests role's assert both call
       it, so the comparison has one definition, and neither assert loops over values.
-    - `NEVER_STUB` holds one key, `become_password`, with its reason:
+    - `NEVER_STUB` holds one variable, `become_password`, with its reason:
       `ansible/pre_tasks/load_secrets.yml` hands it to privilege escalation, and no template
       reads it.
     - The plugin lands complete in PR 1a, with all three filters and the home-assistant

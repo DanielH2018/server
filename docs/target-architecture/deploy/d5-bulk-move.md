@@ -2,6 +2,13 @@
 
 Status: PLANNED
 
+Related issues:
+
+- [#4564](https://github.com/DanielH2018/server/issues/4564): karakeep-chrome's rollout wait, superseded by Flux `wait`.
+- [#4556](https://github.com/DanielH2018/server/issues/4556): the qbittorrent reach probe's pod name, superseded when the verify tasks move.
+- [#4188](https://github.com/DanielH2018/server/issues/4188): the Home Assistant hold and its Recreate downtime, relevant to the announced
+  Recreate windows.
+
 Depends on: [D3](d3-secrets.md), [D4](d4-ordering.md), [R3](../render/r3-remove-live-reads.md),
 [M1](../monitoring/m1-alertmanager.md), [M2](../monitoring/m2-first-bridge-family.md). Wave D
 also depends on H2's family PRs for six roles, as *Host-side rows* lists, and never on H1.9.
@@ -17,6 +24,11 @@ also depends on H2's family PRs for six roles, as *Host-side rows* lists, and ne
   task moves*).
 - M6's B-1e gates littlelink's flip, because M6's live health-gate drill needs littlelink
   Ansible-owned. M6 depends on M2 to M5 only, so the edge adds no loop.
+- H1.7b gates the flux PR. Until H1.7b, H1's bring-up runs step 1 with
+  `--skip-tags kubeconfig,longhorn,longhorn_backup` and needs the **operator-only** step 7a,
+  and *Bootstrapping Flux on a rebuilt cluster* carries neither (H1, *The Longhorn window,
+  H1.5a until H1.7b*). H1.7b needs at most D5.1b and D5.1d, under H1's Open question 10
+  fallback, and both come long before the flux PR, so the edge adds no loop.
 
 Unblocks: [D6](d6-delete-old-path.md). H1 sets no `flux_suspend`, because H1.7b retires
 `k3s_manage_backup_targets`. Only under H1's Open question 10 fallback does H1.7b wait on D5.1b
@@ -1866,6 +1878,12 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
     that reads `lastAttemptedRevision` without naming the `prod@sha256:` value it compares
     with, and on a wait for `last-good` that reads `.status.artifact.revision` instead of the
     `org.opencontainers.image.revision` key.
+    The playbook's play gathers facts, because `ansible/roles/k8s/longhorn-api/tasks/resolve.yml`
+    reads `ansible_hostname` four times. It leaves `gather_facts` unset or true, or it runs
+    `ansible.builtin.setup` as `ansible/pre_tasks/load_secrets.yml` does. Every playbook but
+    `bootstrap.yml` sets `gather_facts: false` and gets its facts from that pre_task, so a
+    copied header without the pre_task would run the revert with `ansible_hostname`
+    undefined. R4's PR 8 runbook-resolution test asserts this.
 15. **D5.3a — The Prometheus peer** (about 30 lines). The `flux-system` peer in
     `networkpolicy-prometheus.yaml.j2`. netpol-baseline is Ansible-owned, so `land.sh` deploys
     it. The session checks the peer with the read-only `kubectl -n observability get
@@ -2022,6 +2040,14 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
           predicate, because a bad digest locks every user out of SSO. Each refusal names
           the key and never the value, and each has a fixture test in D3. The flip PR body
           quotes the D3 PR that merged them.
+        - **The rotation procedure moves to Flux.** R3's PR 4 writes a six-step rotation
+          procedure into `docs/secret-rotation.md`. Its step 4 lands a rotation PR with
+          `land.sh --tags authelia`, because a secrets-only PR derives no deploy tag: at
+          `70591c307`, `land_tags.py:plane_note` appends `_ROTATION_NOTE`, and
+          `land_lib/deploy.py:no_tag_outcome` ends the landing with nothing deployed. The
+          flip PR rewrites step 4 to the Flux path, where a merged D3 cluster file reaches
+          the live Secret, as D3's exit criterion 3 shows for peanut. Step 5 keeps its
+          order: the `claude_code` apply runs only after authelia has converged.
     - mosquitto: the precondition is D3's `cluster_vars.py write` refusal of `:` in
       `mqtt_password_hash`, merged before the flip. R2's colon-count assert stops running once
       Flux renders mosquitto. Without the refusal, a value holding `:` would reach the
@@ -2263,7 +2289,8 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
     - The PR changes no runbook, because Ansible still installs Flux until the flux PR.
       Its description quotes the run's three jobs.
 29. **The flux PR** (about 130 lines). Its preconditions are the late-arrivals check under
-    *Waves and windows* and a green run of the bootstrap drill on the flux PR itself.
+    *Waves and windows* and a green run of the bootstrap drill on the flux PR itself. It also
+    waits on H1.7b (*Depends on*).
     - Flip the flux role. Its components and sync objects then come from the artifact, so
       Flux reconciles itself, as `flux bootstrap` would arrange. `flux-deferred` applies the
       sync objects, the root among them, and the root applies `flux-deferred`. `sops-age`
@@ -2275,6 +2302,13 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
       deletion of the Kustomization itself. `flux` joins the CRD census's named members.
       The cost is the same as traefik's: an object a later upgrade drops stays until the
       operator deletes it.
+    - The prune of `flux-deferred` succeeds D1's task that deletes
+      `ocirepository/verify-drill` while `flux_verify_drill` is false, as R4's PR 1 maps that
+      row. `flux_prune: false` therefore renders `prune: false` on the `flux` Kustomization
+      only, and `flux-deferred` keeps `prune: true`, by H1's rule for a role's prune field. A
+      renderer test asserts both fields, and the PR body quotes the `prune` field of the
+      rendered `flux/flux-deferred.yaml`. If it reads `false`, the row has no successor and a
+      `verify-drill` object outlives its drill, so the PR does not merge.
     - The renderer refuses `flux_sync_suspend: true` from here on. Flux would apply the
       suspend to its own source and could never fetch the commit that clears it. Stopping
       everything becomes a hand suspend in the recovery runbook, with its resume beside it.
@@ -2665,7 +2699,9 @@ includes valheim's initContainer.
   The same revert restores the three runbooks' `./scripts/deploy.sh` step, which installs
   Flux again once Ansible owns the role, so the runbooks never point at a path that deploys
   nothing. The bootstrap drill PR reverts on its own, but only after the flux PR's revert,
-  because the bootstrap section links its procedure.
+  because the bootstrap section links its procedure. The revert also turns R4's PR 1
+  precondition red on `flux` by design, because its exemption holds only while `flux` is
+  flux-owned.
 - **The namespace PR.** Reverting it restores the two tasks with their gate
   `containers_list | length > 0`, which holds, and removes `homelab-namespace` and its
   `SHARED_KINDS` member in the same commit. The revert edits `ansible/deploy.yml`, so the
@@ -4049,3 +4085,16 @@ Fixed:
   scenario with the read removed. *Risks* gained *A shed clear erases a failure hold*.
 
 Refuted: none.
+
+### Cross-slice follow-up (2026-10-12)
+
+- Cross-slice note from R3: the authelia flip rewrites step 4 of R3's rotation procedure in
+  `docs/secret-rotation.md` to the Flux path and keeps step 5's order.
+- Cross-slice note from H1: the flux PR waits on H1.7b, in the header and in step 29, rather
+  than carrying H1's step 1 variant and step 7a.
+- Cross-slice note from R4 on the flux PR: step 29 names the prune of `flux-deferred` as the
+  successor of D1's `verify-drill` delete and pins `prune: true` on it, and *Rollback* says
+  that a revert turns R4's precondition red on `flux`.
+- Cross-slice note from R4 on D5.2c: the step says that `ansible/volume-revert.yml` gathers
+  facts. Confirmed at `70591c307`: `longhorn-api/tasks/resolve.yml` reads `ansible_hostname`
+  four times, and `load_secrets.yml` runs `ansible.builtin.setup`.

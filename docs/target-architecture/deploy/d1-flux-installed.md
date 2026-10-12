@@ -367,6 +367,11 @@ and upstream facts through `gh`.
   docs/gitops-pipeline.md           one sentence: Flux runs and applies only flux-system
 ```
 
+R4's PR 1 maps each imperative task in the flux role's `tasks/main.yml` to a successor: the
+include, the `rollout status` wait with its restart-count snapshot, the CRD wait, the deferred
+sync apply and the delete of `verify-drill`. R4's precondition exemption and its red fixtures
+copy that set, so a task D1 adds to the role beyond it needs its own row in R4's PR 1 mapping.
+
 ### How a commit reaches the cluster after D1
 
 ```text
@@ -664,7 +669,7 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
       so a hold that an earlier job wrote is always seen. Writing `DEPLOY_HOLD` arrives in
       D2. Whether `GITHUB_TOKEN` can write repository variables is Open question 3; this plan
       assumes it cannot.
-    - The SOPS key `flux_github_status_token` is a fine-grained token with Commit statuses
+    - The SOPS variable `flux_github_status_token` is a fine-grained token with Commit statuses
       read and write on this repository, for notification-controller.
 - **`PROMOTE_TOKEN`'s expiry has a signal.** SOPS holds a copy as `promote_token`, registered
   `source: record` with tier `external`. The audit then turns "Secret Rotation" down within
@@ -1874,3 +1879,8 @@ the timer, and the window in D1-I1-02 ends at D5's flux PR rather than D6.1.
   hold bullet and D1.3's contract gate cite the rows, and Open question 7 names the listed
   row. The four-slice list was re-verified and dropped: D2, D4, D5, H1 and H6 all write
   `none`.
+
+### Cross-slice follow-up (2026-10-12)
+
+- Cross-slice note from R4: *What D1 adds* says that a task added to the flux role beyond
+  the listed set needs its own row in R4's PR 1 mapping.

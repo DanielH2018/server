@@ -102,13 +102,17 @@ loki-homelab ruler owns log rules. A `Watchdog` rule always fires to Healthcheck
 Alertmanager outage pages off-site. C7 holds the labels and the health gate.
 
 Much of monitor-bridge (12.2k lines plus 12.8k of tests) reimplements Alertmanager built-ins:
-its gates are `inhibit_rules`, its streaks and `STARTUP_GRACE` are `for:` and
-`keep_firing_for:`, and its `resendInterval` is `repeat_interval`. Rejected: Gatus, which
-removes D1 but keeps D2 and D3, and hardening Kuma, which only guards D1.
+its gates are `inhibit_rules` for paging, its `STARTUP_GRACE` and the streaks of the rows
+that read Prometheus are `for:` and `keep_firing_for:`, and its `resendInterval` is
+`repeat_interval`. The in-body streaks of four checks stay in the bridge, and the bridge
+still skips the body of a row whose gate reads down, so that `checks/b2.py:b2_storage_usage` sends no
+billed listing during a B2 cap breach (M6). Rejected: Gatus, which removes D1 but keeps D2
+and D3, and hardening Kuma, which only guards D1.
 
 **Removes by construction** D1 to D3. Deleted: the uptime-kuma role (4 images, 2 PVCs, the
 540-line `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`, 2 sync CronJobs);
-`ansible/roles/k8s/monitor-bridge/files/gates.py`, `files/bridge/streaks.py`, the push path
+`ansible/roles/k8s/monitor-bridge/files/gates.py`, `apply_startup_grace` in
+`files/bridge/streaks.py`, the push path
 and the check bodies that read Prometheus and Loki; 82 of the 83 push-token secrets in
 `ansible/secret_rotation.yml`, with their rotation entries;
 `ansible/roles/setup/common/tasks/kuma_check_timer.yml`; and `probe.py kuma-drift`. Of the 83,
@@ -266,7 +270,7 @@ H2 + H5 + H6 + R4 ──▶ H7
 ```
 
 D2 and D3 interleave. D3.0 to D3.3 need only D2.1 to D2.6, and by default D2.7, the leaf's
-flip, waits on D3.3, because the leaf's route needs the SOPS key `domain` (C3). D4.0 lands
+flip, waits on D3.3, because the leaf's route needs the SOPS variable `domain` (C3). D4.0 lands
 before D2.7. D2.6b ships the empty `SHARED_KINDS` and the publish census that D3.3a adds
 `cluster-vars` to.
 
@@ -345,6 +349,19 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
    although ADR-0010's own evaluation recommended adding Flux in narrow slices. The operator
    rules before D1 merges, on a superseding ADR in `Proposed` status or by confirming that D1
    fits ADR-0010 (**operator-only**).
+1. **The hand fast-forward after a park.** At `70591c307`, `docs/gitops-pipeline.md` *When a
+   tick parks* and `deploy_remediation.py:broad_remediation` both tell the operator to run
+   `git merge --ff-only origin/master` before the playbook. The docstring of
+   `land_tags.py:self_applied_command` says that once local equals origin, every later tick
+   is a noop. A fast-forward to origin therefore strands every commit merged after the
+   parking commit. Until the pipeline doc and the remediation text fast-forward to the
+   parking commit instead, any slice that edits a bring-up playbook bounds its own hand
+   fast-forward to its squash SHA after a `git rev-list HEAD..<sha>` check, as R4's PR 6
+   does. Who makes the general fix, and when, is open.
+1. **An installable `scripts/` package**
+   ([#4435](https://github.com/DanielH2018/server/issues/4435)). Resolution: decide it before
+   R1 fixes the renderer's import path, or defer it until after D6, so that the path changes
+   once.
 
 ## Review log
 
@@ -405,3 +422,14 @@ The round also changed three things here that follow from contracts.md:
   ships the empty `SHARED_KINDS` and the census.
 - The M5 row follows M5 Open question 4: two of the three Loki checks become ruler rules,
   and `swallowed_verdicts` waits for M6 (X2-11).
+
+### Cross-slice follow-up (2026-10-12)
+
+- Cross-slice note from M6: *Monitoring* now deletes only `apply_startup_grace` from
+  `files/bridge/streaks.py`, which keeps `State`, `down_streak` and the probe caches that
+  `bridge/sources.py`, `checks/cloudflare_ips.py` and `checks/healthchecks.py` import at
+  `70591c307`. Only `STARTUP_GRACE` and the Prometheus rows' streaks become `for:`, and the
+  bridge keeps skipping a gated row's body.
+- Cross-slice note from R4: Open questions gains *The hand fast-forward after a park*.
+  `docs/gitops-pipeline.md` describes the pipeline at `70591c307` and is not edited here.
+- Open questions gains [#4435](https://github.com/DanielH2018/server/issues/4435), the installable `scripts/` package.

@@ -302,7 +302,7 @@ EOF
 A placeholder cannot be emitted before escaping, because escaping would escape it too.
 `renderer_lib/placeholders.py` therefore works in three passes:
 
-1. The context maps each secret key `K` to a sentinel, `HOMELAB_SECRET__K__END`. A sentinel
+1. The context maps each secret variable `K` to a sentinel, `HOMELAB_SECRET__K__END`. A sentinel
    of letters and underscores survives `default`, `indent`, `to_json` and `~` intact. It is
    also a valid start for a YAML plain scalar, so a render the renderer parses itself, such as
    `kuma_declarations` or the content tag's ConfigMap, still parses. No image build context
@@ -482,7 +482,7 @@ it empty.
    `vars`-lookup clause below gives.
 
    A key can also be reached by name, through `lookup('vars', X)`. With a string-literal `X`,
-   the rule checks the lookup as a use of key `X`. With any other argument, the lookup counts
+   the rule checks the lookup as a use of variable `X`. With any other argument, the lookup counts
    as a possible secret reference, and only the identity forms above may apply to it: bare,
    under value-position `default(...)`, or under `to_json`. The two push-token sites use it
    bare (Baseline). The third site, `prometheus.yaml.j2`'s `lookup('vars', job.replicas_var)
@@ -587,7 +587,7 @@ whose escapes keep every newline. The `indent` form the old templates use would 
 violation into the new file, because each of these keys is in `SOPS_MANIFEST_KEYS`.
 
 In placeholder mode the renderer emits no document for a template a role lists in the
-defaults key `render_sops_manifests`. Stub mode still renders it, so R1's shadow pair keeps
+defaults variable `render_sops_manifests`. Stub mode still renders it, so R1's shadow pair keeps
 covering it.
 
 That exclusion removes a document from both the published render and the round trip, so a
@@ -630,7 +630,7 @@ question 6).
   holding `google_service_account.json`. `files/configuration.yaml` changes
   `google_assistant.service_account` to `!include google_service_account.json`, the form
   Home Assistant documents. The init step that installs `secrets.yaml` installs the JSON
-  beside it. `project_id` comes from a separate SOPS key, `google_assistant_project_id`, so
+  beside it. `project_id` comes from a separate SOPS variable, `google_assistant_project_id`, so
   the `from_json` parse goes.
 
 ### The round trip
@@ -1047,7 +1047,7 @@ remains the gate.
   members each rule must find in the real render or the real templates. Rule 5's pair flags
   mosquitto's `(K | string).split(':', 1) | last` and an `{% if K %}`. It passes `{{ K }}`,
   `K | default('')`, `('x' ~ K) | to_json`, `K is defined`, and `{{ M | to_json }}` for a
-  fixture key `M` in `SOPS_MANIFEST_KEYS`, the form the dedicated Secret templates use.
+  fixture variable `M` in `SOPS_MANIFEST_KEYS`, the form the dedicated Secret templates use.
 - Rule 5's pass-through filters: a fixture filter outside `PASSTHROUGH_FILTERS` that
   receives a key is flagged. The same call, with the fixture filter added to a fixture set,
   is clean. A fixture filter that returns its argument upper-cased fails the membership

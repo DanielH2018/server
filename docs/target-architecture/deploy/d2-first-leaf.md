@@ -184,11 +184,11 @@ production drill, and Open question 1 asks the operator to accept it before PR D
   writes each role's directory and its `kustomization.yaml`. R1 leaves `DIR/flux/<tag>.yaml`
   unwritten, and without `--secret-stubs` its `cluster` exits 2 (R1 *Design*).
 - **R2 decides the render mode by one flag.** With `--secret-stubs FILE` the render is R1's
-  stub mode. Without it, the render is in placeholder mode, and each secret key `K` renders
+  stub mode. Without it, the render is in placeholder mode, and each secret variable `K` renders
   as `${K}` (R2 *Mode selection*). Stub mode writes R1's `homelab_secret_stub` form,
   `stub-` plus the key with underscores turned to hyphens, so `domain` becomes
   `stub-domain`.
-- **bento-pdf's render names one secret key, `domain`.**
+- **bento-pdf's render names one secret variable, `domain`.**
     - `ansible/templates/ingressroute.yml.j2:ingressroute` builds the `.local.` object's Host
       match as `hostname ~ '.local.' ~ domain`, and the `-public` object's as
       `hostname ~ '.' ~ domain`.

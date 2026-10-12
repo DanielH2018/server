@@ -140,7 +140,7 @@ cluster outage.
       `auto` tier. `grep -c '_push_token:'` on that file prints 83.
       `scripts/secrets_mgmt/secrets_lib/secret_registry.py:sync` adds missing names and only
       reports stale rows. `scripts/secrets_mgmt/secret_rotation.py:cmd_audit` returns 1 under
-      `--check` on any stale row, and the `secret-rotation-registry-sync` prek hook runs that
+      `--check` on any missing or stale row, and the `secret-rotation-registry-sync` prek hook runs that
       check. Commit `6894e3523` ("Retire the E7-orphaned credentials") deleted its retired
       keys' rows by hand, in the commit that removed the keys.
     - Three sibling tests already run a rendered push script hermetically. `_pi_health.py` and
@@ -371,6 +371,12 @@ because the slice index does not order D5 after M3. Each order below holds under
   carries `--applied` with the narrowed tags the tick recorded. Those can be wider than
   `disk-health`, because the env-file task carries five tags, so do not hard-code them. An
   uncleared line pages GitOps Deploy — Status after 6 h.
+  While an H1 PR from H1.1h to H1.7b still has an open k3s `manual_plane` line, that line's
+  tag set is empty, because H1's ranges are expected to refuse the narrowing. A narrowed
+  apply against an empty row keeps the line (`scripts/deploy_tools/gitops_state.py:clear_manual_plane`),
+  so this `--applied` clear may leave it standing. Clearing it then follows H1's *The owed
+  `manual_plane` line*, whose range check sees this commit and takes its tags into the same
+  hand apply.
 - Two-writer check: the script now writes two outputs, but only Kuma pages. No rule reads the
   file yet.
 
@@ -780,7 +786,7 @@ Fixed:
 - **X2-16.** Confirmed in the tree at `70591c307`.
   `scripts/secrets_mgmt/secrets_lib/secret_registry.py:sync` adds missing names and builds
   its `stale` list without deleting a row. `scripts/secrets_mgmt/secret_rotation.py:cmd_audit`
-  returns 1 under `--check` when `stale` is non-empty. The `secret-rotation-registry-sync`
+  returns 1 under `--check` when `missing` or `stale` is non-empty. The `secret-rotation-registry-sync`
   hook in `prek.toml` runs that command. `ansible/secret_rotation.yml` holds the
   `daniel_box_disk_push_token` row, so the old recipe would have failed prek and CI. PR 6 is
   now one commit with five parts: the **operator-only** `sops` removal, the row deleted by
@@ -799,3 +805,15 @@ Fixed:
   which holds only once a later commit has edited `secrets.yml`.
 
 Refuted: none.
+
+### Cross-slice follow-up (2026-10-12)
+
+- Cross-slice note from M5: the Baseline bullet on `daniel_box_disk_push_token` and the X2-16
+  entry now say that `cmd_audit` returns 1 under `--check` on any missing or stale row, as
+  `secret_rotation.py:cmd_audit` and `secret_registry.py:registry_drift` read at `70591c307`.
+  PR 6 is already one commit, so its order needed no change.
+- Cross-slice note from H1: the PR 2 *Apply* bullet now says that the `--applied` clear may
+  keep the k3s `manual_plane` line while an H1 line from H1.1h to H1.7b is open, and that
+  the clear then follows H1's *The owed `manual_plane` line*. Confirmed at `70591c307`:
+  `gitops_state.py:clear_manual_plane` keeps the line when a narrowed apply meets an empty
+  row, and M3's `Depends on` names no H1 PR.

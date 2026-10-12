@@ -4,6 +4,9 @@ Status: PLANNED
 Depends on: H2, H5, H6, R4
 Unblocks: none (it closes Area 3)
 
+Related issues: [#4561](https://github.com/DanielH2018/server/issues/4561), daniel-server's IPv6 default route. Its netplan file moves into the
+host package.
+
 H1 to H6 move the cluster plumbing, the cluster-reading crons, the Pi's heartbeats and
 Compose, the UPS chain on daniel-server, and k3s's binary and flags. This slice moves
 everything the setup roles still own into the three host packages or into chezmoi. It then
@@ -502,7 +505,7 @@ H7.2f, which prints the items left per host. H7.19c turns it strict, so it fails
 setup role still has a task that applies to a host. Its named members are
 `Weekly apt autoremove`, `claude-land@.service.j2`, `k3s/tasks/static-address.yml`,
 `/usr/local/bin/sops`, the `systemd_service` task `Enable and start the host upsmon
-service`, the `ansible.posix.sysctl` key `net.core.bpf_jit_harden` and the ufw task
+service`, the `ansible.posix.sysctl` setting `net.core.bpf_jit_harden` and the ufw task
 `Enable UFW firewall`. The emptied role's `meta: end_role` stub is a control module, so
 strict mode never flags it.
 Until H7.4 moves it, the report must also list pi-peer-backup's forced-command wrapper in

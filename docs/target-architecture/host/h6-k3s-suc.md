@@ -1593,7 +1593,7 @@ which journald does not store on these hosts, so it reads zero on every run.
       for the deploy lock file;
     - daniel-box's SOPS file and its creation rule;
     - a no-downgrade check, a window-derivation test and a pin-routing test;
-    - one SOPS key, `k3s_readonly_token`;
+    - one SOPS variable, `k3s_readonly_token`;
     - one ADR.
 - **Removed:**
     - the hand-run server and agent upgrade sections of the runbook;
@@ -2153,3 +2153,9 @@ How each was handled, with the evidence measured at `70591c307`:
   or restarts a unit outside the boot path". H6's side already stood in *Open questions*
   8. H6.3b's step list now carries the same gate as a "Gate before merge" bullet. The
   1390-second `TimeoutStartSec` and the contract text are H4's to change.
+
+### Cross-slice follow-up (2026-10-12)
+
+- Cross-slice note from H1: no change. H6 edits `server.yml` in place (its install guard, its
+  file tasks and its args clause) but does not move, rename or replace it, and adds no cluster
+  writer to it, so H1.1h's guard placement and its test stay valid.

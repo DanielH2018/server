@@ -29,7 +29,7 @@ merged.
 | D2 | One stateless leaf end to end on production | D1, R1, and R2's PRs 1 and 2 (placeholder mode and the five rules). D2.7 also D4.0, and D3.3 under C3's default source for `domain` |
 | D3 | Secrets through Flux | D2, R2. D3.0 to D3.3 need only D2.1 to D2.6, which include D2.6b's empty `SHARED_KINDS` and census |
 | D4 | Ordering (`dependsOn`, deferred applies) | D2. D4.0 needs nothing |
-| D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a. Wave D also H2.1, and the H2 family PR of each role H2 moves. The PR that flips the last Ansible-owned stateless leaf also M6's B-1e |
+| D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. The PR that flips the last Ansible-owned stateless leaf also M6's B-1e |
 | D6 | Delete the old deploy path; ADR superseding 0010 | D5 |
 | M1 | Alertmanager and its watcher | — |
 | M2 | One bridge family to rules | M1 |
@@ -178,7 +178,9 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   set empty, D3.3a adds `cluster-vars`, D5.3b2 adds `soak`, and D5's namespace PR adds
   `homelab-namespace`. Each joins in the PR that renders it, because the census fails a
   member with no file. C1 says where a shared kind is published, and C2 verifies it through
-  `flux/<name>` like a tag.
+  `flux/<name>` like a tag. From D6.1, each member also needs a rule in
+  `render_diff_gates.py --moved-tags` that names the deploy tags its move hands `land-wait`,
+  and a census test fails the PR that adds a member without one (D6).
 - **Reserved names.** The render fails on a deploy tag that equals a member of `SHARED_KINDS`
   or ends in `-deferred`. D5.1a1 reserves `-snapshot`, `-verify`, `soak` and
   `homelab-namespace` too, so no deploy tag takes `soak` or `homelab-namespace` before its
@@ -211,7 +213,7 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
 
   Any step in either path that needs plaintext is **operator-only**.
 - **The source of `domain` before D3.** `homelab-cluster-vars` first exists at D3.3. D2's leaf
-  references one key, `domain`, in its IngressRoute's Host rule, so it cannot flip before
+  references one variable, `domain`, in its IngressRoute's Host rule, so it cannot flip before
   that key has a source.
   - **Default:** D2.7 waits on D3.3, and `domain` comes from `homelab-cluster-vars` like every
     other key. No plaintext reaches git.
@@ -372,7 +374,8 @@ request leaves this list and the round's *Review log* entry names it.
   no flux-owned tag. Gate: before D3.3a merges.
 - **The commit input** (R4 Open question 10). *Modes* names `homelab-render cluster --commit
   SHA`. The publish job passes the commit it publishes, and the render-diff job passes the PR
-  head's SHA to both renders. Gate: before R4's PR 1 merges.
+  head's SHA to both renders. Gate: before D6.1 or R4's PR 1 merges, whichever
+  comes first (D6 Open question 13).
 - **Image contexts** (D5 Open question 10). `DIR/images/<name>/` and `DIR/images/tags.json`,
   which no Kustomization's path reaches. Gate: before D5.4a1 merges.
 - **Host-mode placeholders** (H4 Open question 6, with H3's *Host mode renders no secret*).
@@ -674,3 +677,13 @@ checked against the slice text it quotes before the change.
 - *C6.* The wait ends on a `DEPLOY_HOLD` other than `none`.
 - *Requested amendments.* Grouped by contract. Rows added and corrected as X2-11 lists, and
   H6's withdrawn row dropped.
+
+### Cross-slice follow-up (2026-10-12)
+
+- Cross-slice note from D6, sent twice: *Requests on C1*, *The commit input*, is now gated
+  before D6.1 or R4's PR 1, whichever merges first, because D6.1's `--moved-tags` mode passes
+  the head's SHA to both renders and R4 waits on D6.
+- Cross-slice note from D6: C3 *Shared kinds* says that each member needs a
+  `--moved-tags` rule from D6.1, and that a census test enforces it.
+- Cross-slice note from H1 to D5: the D5 index row adds H1.7b as a gate of the flux PR,
+  following D5's header.

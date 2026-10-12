@@ -870,7 +870,7 @@ rewrite under the host cron's own evidence before anything moves.
   The other eight drill keys (`_cron`, `_image`, `_pvc`, `_min_bytes`, `_empty_ok_pvcs`,
   `_empty_ok_max_actual_bytes`, `_max_actual_bytes` and `_timeout_s`) move to the
   `longhorn-restore-drill` role's defaults under their names in H2.3d, beside the deadline
-  and grace keys. That role gets its own namespace key, `longhorn_drill_namespace`, and a test
+  and grace keys. That role gets its own namespace variable, `longhorn_drill_namespace`, and a test
   holds it equal to the `setup/k3s` one. The drill's absent arm names no schedule key. After
   H2.3d, no key defined in the new role's defaults appears in a `setup/` task or template. At
   `70591c307`, `git grep -l` for the eight keys under `ansible/roles/setup/` finds only
@@ -2610,7 +2610,7 @@ notes.
   r2_region 70591c307` finds the key defined only in `setup/k3s` defaults and read by
   `longhorn-backuptarget-r2.yaml.j2` and `etcd-snapshot-offbox.sh.j2`, and a grep of H1's
   plan for `r2_region` still finds nothing. H2.8a already carried the gate and the fallback
-  key, `longhorn_backup_etcd_s3_region`. The gap was H2.8b, which cut the script's region
+  variable, `longhorn_backup_etcd_s3_region`. The gap was H2.8b, which cut the script's region
   read but deleted no region key. H2.8b now deletes the region key the script reads from
   `setup/k3s` defaults, whether `k3s_longhorn_r2_region` or H1.7b's twin, with any test that
   holds it. Before deleting, it quotes a `git grep` of `ansible/` and `scripts/` showing the
@@ -2668,3 +2668,8 @@ The H1 and D2 parts go in cross-slice notes.
       Under D2.1c, the revert reaches the same five readers.
     - The block's `--dry-run` step leaves out the drill's tag, which `deploy.sh` refuses with
       exit 5 (D2's entry-point table).
+
+### Cross-slice follow-up (2026-10-12)
+
+- Cross-slice note from H1: no change. H1.1h's guard sits after the `server.yml` import,
+  and a grep of this plan finds no `server.yml`, so no H2 PR moves it or adds a writer to it.

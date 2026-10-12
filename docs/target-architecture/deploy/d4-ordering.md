@@ -1114,6 +1114,14 @@ Each bound below says how long a PR can be reverted alone.
     precedes every D4 PR that reads the hold, because D4 depends on D2. contracts.md's
     *Requested amendments not yet applied* does not list it yet; the cross-slice note of
     round integration-2 asks for the row.
+12. **Does the cross-plane gate share D6.1's layout?** *The cross-plane gate* says that
+    `cross_plane_order.py` renders the cluster at the base and at the head, and names no
+    layout. D6.1 gives the renamed `render_diff_gates.py` a layout function for
+    `--moved-tags`. It runs `git archive <sha>` into a `moved-tags-` temporary directory
+    outside the repository, and it runs each commit's own renderer with `uv run --frozen` and
+    one commit value. Resolution, low priority: D4 adopts that function for its CI arms, or
+    accepts that D6.1 makes it the module's single layout, so that the CI gate and the
+    host-side mode cannot diverge.
 
 ## Review log
 
@@ -1331,3 +1339,8 @@ against the other slice documents and contracts.md before the fix was written.
   one read-only reading.
 
 Refuted: none.
+
+### Cross-slice follow-up (2026-10-12)
+
+- Cross-slice note from D6: Open question 12 records D6.1's layout function as the
+  candidate layout for the cross-plane gate.
