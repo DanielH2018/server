@@ -60,7 +60,8 @@ def _session(tmp_path, monkeypatch, memory_bytes=4000, style_bytes=1500):
     primary = primary_checkout(str(_HOOKS))
     assert primary, "the suite must run inside a git checkout"
     memory = _memory_file(home, os.path.realpath(primary))
-    memory.parent.mkdir(parents=True)
+    # In a plain clone the worktree test's decoy already holds this directory.
+    memory.parent.mkdir(parents=True, exist_ok=True)
     memory.write_bytes(b"- [m](m.md) - pointer\n" + b"m" * (memory_bytes - 22))
     styles = home / ".claude" / "output-styles"
     styles.mkdir(parents=True)
