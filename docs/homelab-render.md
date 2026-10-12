@@ -42,8 +42,8 @@ stub instead, which the filter `homelab_secret_stub` builds:
   `ansible/pre_tasks/load_secrets.yml` hands it to privilege escalation and no template
   reads it.
 
-Two more filters serve the checks that a later R1 PR adds to the playbooks.
-`homelab_stub_keys` lists the key names that take a stub, from the parsed `secrets.yml`. It
+Two more filters serve the stub-file refusals in the playbook preamble (*A stub file stops
+outside a k8s dry run*). `homelab_stub_keys` lists the key names that take a stub, from the parsed `secrets.yml`. It
 reads keys only, so the ciphertext file is enough. `homelab_unstubbed_keys` returns the keys
 whose value is not exactly its stub. It returns names only, never a value.
 
@@ -188,3 +188,35 @@ anything.
 
 A stub file goes stale when a secret key is added or removed, so write a fresh one for each
 commit you render.
+
+## A stub file stops outside a k8s dry run
+
+`ansible/pre_tasks/load_secrets.yml` refuses a misplaced or incomplete stub file. Every
+playbook that reads a secret imports that file, and its two asserts run ahead of the SOPS
+load and before any role. A run counts as a stub run when the sentinel
+`homelab_secret_stubs` is true, or when any secret key already holds its stub. The second
+half catches a stub file whose sentinel was stripped. A run without a stub file defines no
+key before the load, so neither assert fires.
+
+- "Refuse a secret stub file outside a k8s dry run" requires `k8s_dry_run`, the play
+  variable `load_secrets_stubs_allowed` and the sentinel. A stub file stripped of its sentinel
+  is refused even in an allowed dry run, because sonarr's API reads skip on the sentinel
+  alone. Only `ansible/deploy.yml` sets that variable. Its
+  k8s play sets it to true. Its Docker play sets it to true only where the host's
+  `containers_list` holds no Docker entry, so a stubbed run aimed at daniel-pi stops before
+  any Pi role. A stub file passed to any other playbook stops at its preamble, dry run or
+  not.
+- "Refuse a stub file that does not stub every key" reads the key names from the ciphertext
+  `secrets.yml` and names each key that does not hold exactly its stub. A stub file written
+  before a secret was added fails here and names the new key. To fix it, write a fresh stub
+  file from the same tree.
+
+A census in `ansible/tests/k8s/test_secret_key_task_census.py` covers the tasks that would
+act on a stub under an allowed run. It reads every k8s role task whose body names a secret
+key, or a variable derived from one. Each such task must be skipped under a stubbed dry run,
+use a side-effect-free module, or carry a per-task exemption with a reason. sonarr's API
+reads pass on their `homelab_secret_stubs` guard.
+
+From this change on, the preamble names the stub filters, so the deployer cannot narrow an
+edit to `ansible/filter_plugins/secret_stubs.py` to a service. Each such edit defers every
+declared service, and `land.sh` reports `needs-manual-apply`.
