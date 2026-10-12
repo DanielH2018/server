@@ -18,7 +18,10 @@ THE RED GATE reads the test author's commit range `base..red`. It refuses the ra
 - running only the new nodes does not exit 1 with every node reported `FAILED`. Exit 2 is a
   collection error, such as a module-level ImportError of a module the fix will create, and a
   node that errors, skips or xfails proves nothing about the behaviour. The pipeline runs
-  them `RUNS` times, and a node that fails in only some runs is refused as flaky.
+  them `RUNS` times, and a node that fails in only some runs is refused as flaky;
+- `pytest --setup-plan` does not list every new node's fixture closure, which the green gate
+  locks (#4548). A node that failed got through setup, so the plan lists it, and a refusal
+  here most likely means pytest's output format moved.
 
 Only test files change in the range, so running at `red` runs the new tests against `base`'s
 code. In the pipeline, `reset_worktree` runs before the red gate, so the tree already holds
@@ -31,10 +34,12 @@ THE GREEN GATE runs after the implementer and again after every fix round. The w
 must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
 would otherwise pass a gate the pushed head fails (#3821). Every pytest config file but a
 `conftest.py`, the `leakguard` plugin and any red data file must be unchanged since `red`. A
-`conftest.py` may only lose what no red test requests (`red_tests.forbidden_conftest_change`,
+`conftest.py` may only lose what no red test requests (`red_lock.forbidden_conftest_change`,
 #4542). In a red `test_*.py`, what the red commits wrote and what it reaches must be unchanged,
 and anything else may only be a test, a helper, a fixture, an import or a constant;
-`red_tests.forbidden_change` defines both (#4214, #4517). No untracked config file may exist, and every red node must pass in a fresh clone of
+`red_lock.forbidden_change` defines both (#4214, #4517). What a red test reaches includes
+every fixture in its closure, builtin ones included, as the red gate's setup plan listed it
+(#4548). No untracked config file may exist, and every red node must pass in a fresh clone of
 HEAD, in every one of the pipeline's `RUNS` runs. The clone is what makes the verdict HEAD's:
 the implementer controls the worktree's index and git config, so a skip-worktree entry, an
 `info/exclude` line or `status.showUntrackedFiles=no` each hides an edit from `git status`.
@@ -69,18 +74,15 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 _sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from fanout_lib.brief import fence_for
-from fanout_lib.review.red_tests import (
-    forbidden_change,
-    forbidden_conftest_change,
-    red_by_absence,
-    stale_suppressions,
-)
+from fanout_lib.review.red_lock import forbidden_change, forbidden_conftest_change
+from fanout_lib.review.red_tests import red_by_absence, stale_suppressions
 
 from fanout_lib.review.hardened_runs import (
     ORIGIN_MASTER,
     Runner,
     clone_at,
     collect,
+    fixture_closures,
     outcomes,
     pytest_argv,
     worktree_git,
@@ -151,6 +153,8 @@ class Gate:
     # The commit the red commits start from, "" when unknown. The green gate reads each red
     # file there to tell what the red commits wrote from what the file already held (#4517).
     base: str = ""
+    # Each node's fixture closure at `red`, builtin and plugin fixtures included (#4548).
+    closures: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def passed(self) -> bool:
@@ -263,7 +267,7 @@ def judge_green(returncode: int, output: str, nodes: list[str]) -> str:
 def _red_file_change(
     run: Runner, worktree: Path, red: str, path: str, gate: Gate
 ) -> str:
-    """How the fix changed `path` beyond what `red_tests` allows, or "".
+    """How the fix changed `path` beyond what `red_lock` allows, or "".
 
     A red `test_*.py` may gain tests (#4214), and what the red tests do not reach in it may
     change (#4517). A `conftest.py` may lose what no red test requests (#4542). A red data
@@ -281,12 +285,21 @@ def _red_file_change(
     if conftest:
         red_files = [_blob(run, worktree, red, f) or "" for f in tests]
         conftests = _conftests(run, worktree, red, tests)
-        problem = forbidden_conftest_change(red_src, head_src, red_files, conftests)
+        closure = set().union(*gate.closures.values())
+        problem = forbidden_conftest_change(
+            red_src, head_src, red_files, conftests, closure
+        )
     else:
         base_src = _blob(run, worktree, gate.base, path) if gate.base else ""
         names = _red_names(gate.nodes, path)
         conftests = _conftests(run, worktree, red, [path])
-        problem = forbidden_change(base_src or "", red_src, head_src, names, conftests)
+        # A fixture in the file overrides one only for the file's own tests.
+        closure = set().union(
+            *(v for n, v in gate.closures.items() if n.startswith(f"{path}::"))
+        )
+        problem = forbidden_change(
+            base_src or "", red_src, head_src, names, conftests, closure
+        )
     return f"{path} {problem}" if problem else ""
 
 
@@ -300,7 +313,7 @@ def _conftests(run: Runner, worktree: Path, rev: str, paths: list[str]) -> list[
     """Every `conftest.py` pytest loads for a test in `paths`, as `rev` has it (#4543).
 
     Conftests are green-protected, so the copy at the red commit is the one HEAD runs, less
-    what `red_tests.forbidden_conftest_change` let the fix delete.
+    what `red_lock.forbidden_conftest_change` let the fix delete.
     """
     dirs = sorted({d for p in paths for d in PurePosixPath(p).parents})
     found = [_blob(run, worktree, rev, (d / "conftest.py").as_posix()) for d in dirs]
@@ -415,8 +428,18 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str, runs: int = 1) ->
             f"failed in only {failed} of {runs} runs on the unchanged code, so it is "
             f"flaky: {reason}"
         )
-    out = procs[0].stdout
-    return Gate(reason, files, nodes, origin, red_by_absence(out, nodes), base)
+    closures = {}
+    if not reason:
+        plan = run(pytest_argv(worktree, "--setup-plan", *nodes), None)
+        closures = fixture_closures(plan.stdout, nodes)
+        unlisted = [n for n in nodes if n not in closures]
+        if plan.returncode or unlisted:
+            reason = (
+                f"pytest --setup-plan exited {plan.returncode} without listing the "
+                f"fixtures of: {', '.join(unlisted) or 'none named'}"
+            )
+    absent = red_by_absence(procs[0].stdout, nodes)
+    return Gate(reason, files, nodes, origin, absent, base, closures)
 
 
 def green_gate(run: Runner, worktree: Path, red: str, gate: Gate, runs: int = 1) -> str:
@@ -519,7 +542,9 @@ A separate session wrote failing tests for these issues from the issue text alon
 as {red} on this branch. A gate proved they fail on the code as it stands. Your change must
 make them pass. Do not change them, anything in their files they call or request, or
 `pyproject.toml`: a gate after your session runs them again and refuses the PR if you did. You
-may append new test functions, fixtures, helpers, imports and constants to a red test file. A
+may append new test functions, fixtures, helpers, imports and constants to a red test file,
+but no fixture a red test reaches, even through a builtin: a red test that requests `tmp_path`
+reaches `tmp_path_factory` too. A
 test that was in a red file before the red commit, and that no red test calls, is yours to
 update like any other test, for example where your change drops a parameter it passes. So is a
 constant bound to literal data that was there before and that only such older code reads, not

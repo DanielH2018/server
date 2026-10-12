@@ -7,7 +7,8 @@ call for a step that may not fail, and raises `ResetFailed`.
 
 A call that needs a tree nobody wrote goes to a fresh clone instead. `clone_at` checks a commit
 out with `BARE_GIT`, which reads no global, system or worktree configuration, and `bare_git`,
-`collect` and `pytest_argv` run there (#3837). `outcomes` reads the `-rA` summary of such a run.
+`collect` and `pytest_argv` run there (#3837). `outcomes` reads the `-rA` summary of such a run,
+and `fixture_closures` the fixtures a `--setup-plan` run lists for each node.
 
 The red gate, the green gate, the worktree reset and the two red/green measures
 (`base_check`, `hunk_check`) all import from here.
@@ -126,6 +127,27 @@ _OUTCOME = re.compile(r"^(PASSED|FAILED|ERROR|XFAIL|XPASS) (.+?)(?: - .*)?$", re
 def outcomes(output: str) -> dict[str, str]:
     """Each node id in a `pytest -rA` run's short summary, with its outcome."""
     return {m.group(2): m.group(1) for m in _OUTCOME.finditer(output)}
+
+
+_USED = " (fixtures used: "
+
+
+def fixture_closures(output: str, nodes: list[str]) -> dict[str, list[str]]:
+    """Each of `nodes` a `pytest --setup-plan` run lists, with every fixture it resolves (#4548).
+
+    The plan prints a node as its id, followed by `_USED` and its `item.fixturenames` when
+    it has any. A fixture's own SETUP line carries the same suffix, so a line counts only
+    when it starts with a node id given. A node the plan does not list is left out.
+    """
+    lines = {line.strip() for line in output.splitlines()}
+    found = {}
+    for node in nodes:
+        if node in lines:
+            found[node] = []
+        for line in lines:
+            if line.startswith(node + _USED) and line.endswith(")"):
+                found[node] = line[len(node + _USED) : -1].split(", ")
+    return found
 
 
 def pytest_argv(worktree: Path, *args: str) -> list[str]:
