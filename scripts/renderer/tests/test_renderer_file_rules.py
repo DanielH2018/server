@@ -136,3 +136,17 @@ def test_pending_is_every_tag_that_reads_a_task_computed_value():
     # Non-vacuity: monitor-bridge reads its script checksum, nut its content tag.
     assert {"monitor-bridge", "nut"} <= readers
     assert cluster.PENDING == readers
+
+
+@pytest.mark.parametrize("tag", cluster.select_tags(None))
+def test_every_default_tag_renders_under_the_strict_undefined(tag, stubs):
+    """The verify-by of R1's PR 2: each tag `cluster` renders by default renders clean."""
+    rendered = cluster.render_tag(tag, stubs)
+    assert set(rendered.files) - {cluster.KUSTOMIZATION}, tag
+
+
+def test_the_default_tag_set_covers_every_target_but_the_pending_ones():
+    """Non-vacuity for the parametrisation above: 42 tags, and none of them pending."""
+    tags = set(cluster.select_tags(None))
+    assert len(tags) >= 42 and {"traefik", "home-assistant", "littlelink"} <= tags
+    assert tags == set(render_targets(K8S_HOST)) - cluster.PENDING
