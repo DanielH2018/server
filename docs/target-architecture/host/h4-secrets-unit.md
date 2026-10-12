@@ -243,7 +243,10 @@ The unit is `Type=oneshot` with `RemainAfterExit=yes`, `TimeoutStartSec=60` and
       would substitute an empty string; this unit refuses.
     - An output with `persist: false` goes to `/run/homelab-secrets/<destination>`. An output
       with `persist: true` goes to `/var/lib/homelab-secrets/<destination>`, so it survives a
-      reboot and its consumer can start without a decrypt.
+      reboot and its consumer can start without a decrypt. A persisted output is plaintext
+      at rest, on the Pi's SD card as on any other disk. C5 therefore admits one only for a
+      consumer that must start when the decrypt cannot run, and *Persisted outputs* names
+      each one.
     - The script creates or corrects every directory above an output as root:root 0755. The
       file itself takes the listed owner, group and mode, so the file mode alone protects the
       content. A consumer that drops root, such as upsmon on reload, can then reach the file.
@@ -268,9 +271,49 @@ The unit is `Type=oneshot` with `RemainAfterExit=yes`, `TimeoutStartSec=60` and
 6. It calls no `systemctl`, so it restarts nothing itself. Reconcile owns every restart
    (below). The script exits non-zero if any output or credential failed.
 
-The `sops` binary is the one `sops_setup` installs at `/usr/local/bin/sops`. Until H7, this
-is a read-only dependency on an Ansible-owned file. The package does not ship it, because
-C5 makes host packages `Architecture: all`.
+The script runs the `sops` that `homelab-tools` ships. C5 makes that package the one
+architecture-specific package, and H3 builds it for `amd64` and `arm64`. The `secrets`
+component declares `Depends: homelab-tools`, and the host package itself stays
+`Architecture: all`. The script calls `sops` by the absolute path that `homelab-tools`
+installs, `/usr/lib/homelab/bin/sops` (H3.11), and never through `PATH`. H3.11 also makes the
+updater upgrade every installed `homelab-*` package, so an unversioned
+`Depends: homelab-tools` still picks up later builds. The first publish of
+`homelab-daniel-server` follows H3.12's staged rollout. `/usr/local/bin` comes first on `PATH`,
+and it holds the binary `sops_setup` installs until H7.1 lists that file as a legacy entry.
+H4.2 ships the first `secrets` component to an `amd64` host, and H4.5 ships it to the Pi.
+Each of the two waits on H3's `homelab-tools` build for its host's architecture.
+
+### Persisted outputs
+
+C5 admits a persisted output only for a consumer that must start before the decrypt can run.
+This slice persists exactly one:
+
+- **`/var/lib/homelab-secrets/etc/nut/upsmon.conf` on daniel-server** (H4.3a), root:nut
+  0640. Its consumer is `nut-monitor`, the client half of the UPS shutdown chain. The chain
+  must run at boot even when the decrypt cannot, such as after a lost age key or a broken
+  `sops`. A `nut-monitor` that waited on `homelab-secrets` would leave daniel-server
+  unprotected on exactly the boots where something else has already failed. The file
+  carries the exposure `/etc/nut/upsmon.conf` already has (*Risks*).
+
+Every other secret-bearing value that this slice and H6 add stays on tmpfs:
+
+- the Pi's three credentials and daniel-server's two go to `/run/credstore`;
+- H6's `k3s_readonly_token` goes to `/run/credstore` on both cluster nodes.
+
+The Pi therefore persists no output, and its SD card holds no rendered plaintext. H5
+names one conditional exception: if the operator declines alloy's password in the container
+environment, H5's file route makes it a persisted output on the Pi. That route fails C5's
+rule, because `homelab-compose` already starts after `homelab-secrets`. The route takes
+`persist: false` instead, and the census keeps it off the list.
+
+Two files under the persisted root are state, not outputs: `.digests` and `.hmac-key`
+(step 5). They hold one HMAC per output and the random key the HMACs use, and never a value.
+Every host that carries the `secrets` component has them, the Pi included.
+
+A census in `hosts/lib/tests/` holds the set of persisted outputs across every rendered
+package equal to a named list. The list has one member, daniel-server's `upsmon.conf`, and
+each entry carries its reason. A later slice that persists an output adds it to the list in
+the same PR, with the consumer that must start without the decrypt.
 
 ### The restart contract: reconcile, and two restarters for k3s
 
@@ -682,9 +725,8 @@ reconcile change, and H6 and H7 cite `H4.2` for the age-key copy, so those two i
 meaning.
 
 1. **H4.1a1 The secrets script: decrypt and render (about 200 lines, half of them tests).**
-   Gate: the C5 amendment in *Open questions* 4. Its row must stand in contracts.md's
-   *Requested amendments not yet applied*, or the amendment must be applied, before this PR
-   merges.
+   Gate: the C5 amendment in *Open questions* 4. The pillar review fold applied it, so the
+   gate is met.
     - Add `hosts/lib/homelab-secrets` with steps 1 to 4 and 6: the manifest read, the one
       decrypt, the credentials, and each output's single-pass substitution, directory modes
       and atomic write.
@@ -733,7 +775,9 @@ meaning.
       adds no workflow. The `prek` gate already lists that job in `needs` and reads its
       result, so the required context covers every step below. The job still needs no
       repository secret. It gains four steps:
-        - the container installs `sops` at `sops_setup_version`, pinned by sha256;
+        - the container installs the `homelab-tools` package that the job builds, so the
+          tests run the `sops` the hosts run. Until H3's `homelab-tools` build exists, it
+          installs `sops` at `sops_setup_version`, pinned by sha256;
         - each container test of a package that carries `secrets` generates an age key,
           writes it to `/etc/homelab/age.key`, and builds the package with a fixture
           ciphertext encrypted to that key. The fixture holds the real key names with fake
@@ -771,7 +815,11 @@ meaning.
 7. **H4.2 daniel-server's age key, SOPS file and bring-up (about 120 lines).**
     - Add step 3 to `hosts/bootstrap-host.sh`: it creates `/etc/homelab/age.key` if missing
       and prints the public key.
-    - `docs/break-glass.md` gains daniel-server's `/etc/homelab/age.key` and its restore.
+    - `docs/break-glass.md` gains daniel-server's `/etc/homelab/age.key`, its restore, and
+      the loss rule. A lost or exposed host key means rotating every value that host held,
+      not only re-keying the host. The rotation list is derived, not remembered: every
+      value in every SOPS file whose creation rule in `ansible/.sops.yaml` lists that host's
+      public key.
     - Add the creation rule for `ansible/vars/hosts/daniel-server.sops.yaml` ahead of the
       general rule. Its recipients are the daniel-server, daniel-box and recovery keys that
       `ansible/.sops.yaml` already lists.
@@ -792,15 +840,19 @@ meaning.
       `deferred` at its deadline. That deadline comes from the shared timer's schedule,
       because daniel-server ships no updater drop-in (*Open questions* 5). That is the
       expected result, and the operator's bring-up follows.
+    - **Gate:** H3's `homelab-tools` build for `amd64` is published, because this PR ships
+      the first `secrets` component to a host.
     - **Operator-only**, after merge, on daniel-server:
         1. copy the key from `~ubuntu/.config/sops/age/keys.txt` to `/etc/homelab/age.key`
            (root 0600) instead of generating one. The recipient lists stay unchanged;
         2. run `sudo hosts/bootstrap-host.sh daniel-server`, which installs
            `homelab-updater` and `homelab-daniel-server`. Reconcile's step 2 then starts
            `homelab-updater.timer`.
-8. **H4.3a Render daniel-server's `upsmon.conf`, read by nothing (about 80 lines).**
+8. **H4.3a Render daniel-server's `upsmon.conf`, read by nothing (about 110 lines).**
     - Add the `nut-secondary` component with only its declared output: `host-upsmon.conf.j2`
       from the role's templates, `persist: true`, root:nut 0640, with no dependent.
+    - Add the persisted-output census with its one-member list (*Persisted outputs*). Its
+      member first renders in this PR, so the census lands here rather than in H4.1a3.
     - **Operator-only:** run `host_secrets.py sync`, which adds `nut_monitor_password` to
       daniel-server's file. `check` fails the PR until it does.
     - Two-writer check: no Ansible task writes under `/var/lib/homelab-secrets/`.
@@ -888,9 +940,12 @@ meaning.
         - run `host_secrets.py sync`, which writes the file holding `pi_sd_health_push_token`,
           `pi_recovery_push_token` and `domain`.
     - Add daniel-pi to the hosts `host_secrets.py check` must find.
-    - `docs/break-glass.md` gains the Pi's `/etc/homelab/age.key`, and that the Pi is a
-      recipient of its own file only.
+    - `docs/break-glass.md` gains the Pi's `/etc/homelab/age.key`, that the Pi is a
+      recipient of its own file only, and H4.2's loss rule. A lost SD card is a lost host
+      key, so the derived rotation list covers every value in the files the Pi's key
+      decrypts.
 14. **H4.5 The Pi switches to `/run/credstore` (about 60 lines).**
+    - **Gate:** H3's `homelab-tools` build for `arm64`, the Pi pilot, is published.
     - Add the `secrets` component to the Pi package.
     - Repoint all three `LoadCredential=` lines of the two heartbeat units, the two push
       tokens and `domain`, at `/run/credstore/<key>`, with `After=` and `Wants=` on
@@ -1009,6 +1064,10 @@ and before the slice closes.
     - a fixture package whose `package.yml` marks a unit `windowed`, and whose declared
       output lists that unit as a dependent, fails the render and names the unit. The same
       package without the mark renders.
+- *Persisted outputs (H4.3a).* The census has two red fixtures. A fixture component that
+  declares an unlisted output with `persist: true` fails it and names the output. A fixture
+  list whose member no package renders also fails it, so a renamed output cannot shrink the
+  census to nothing.
 - *`homelab-secrets` itself.* Unit tests with a stub `sops` cover these cases:
     - a missing key fails that output, writes the others, and exits non-zero;
     - a failed decrypt writes and deletes nothing, and a persisted output keeps its content;
@@ -1286,7 +1345,9 @@ and before the slice closes.
   first, and the udev arm never triggers on a dropped rule.
 - **A decrypt failure at boot.** Persisting `upsmon.conf` makes `nut-monitor`'s start
   independent of the decrypt, which runs every week through the reboot cron. The persisted
-  file has the exposure `/etc/nut/upsmon.conf` already has: root:nut 0640 at rest.
+  file has the exposure `/etc/nut/upsmon.conf` already has: root:nut 0640 at rest. It is
+  the one output C5's persisted-output rule admits here (*Persisted outputs*), and the
+  census refuses a second one that carries no reason.
 - **The drop-in calls the daemon directly.** A nut-client release that moves
   `/lib/nut/upsmon` would break the start. The watchdog's `is-active` check reports it. The CI
   container case that reinstalls `nut-client` runs against the archive's current version.
@@ -1373,9 +1434,11 @@ and before the slice closes.
       the unattended skip;
     - `docs/secret-rotation.md` gains the host-file copy rule and the `sync` step;
     - `.gitleaks.toml` gains the per-host path.
-- **H4.2:** `docs/break-glass.md` gains daniel-server's `/etc/homelab/age.key`; the
+- **H4.2:** `docs/break-glass.md` gains daniel-server's `/etc/homelab/age.key` and the loss
+  rule; the
   `host_secrets.py check` test gains daniel-server as a member it must find.
-- **H4.3a:** a component test asserts the output's mode, owner and `persist` flag.
+- **H4.3a:** a component test asserts the output's mode, owner and `persist` flag; the
+  persisted-output census joins `hosts/lib/tests/` with its two red fixtures.
 - **H4.3b1:**
     - a renderer test in `hosts/lib/tests/` flags two components shipping one path;
     - H3's heartbeat component tests stop expecting `kuma-push-lib.sh` in `pi-heartbeats`;
@@ -1406,7 +1469,7 @@ and before the slice closes.
       because the task that installs `/usr/local/bin/ups-secondary-health.sh` still applies
       to daniel-box.
 - **H4.4:**
-    - `docs/break-glass.md` gains the Pi's key;
+    - `docs/break-glass.md` gains the Pi's key and the loss rule;
     - the `host_secrets.py check` test gains daniel-pi, with its three keys, as members it
       must find.
 - **H4.5:** H3's heartbeat component tests change their three `LoadCredential=` assertions.
@@ -1421,7 +1484,9 @@ and before the slice closes.
     - a `windowed` skip in reconcile's step 2, and a renderer refusal of a `windowed`
       dependent;
     - declared secret outputs in the renderer, with host-mode placeholders, C1's escape and
-      a persisted output root;
+      a persisted output root that holds one output;
+    - one persisted-output census with a one-member list;
+    - a `Depends: homelab-tools` on the `secrets` component;
     - `inventory_hostname` in the host render context;
     - two per-host SOPS files, one each for daniel-server and the Pi, and the `sync` step
       each key change costs;
@@ -1432,7 +1497,8 @@ and before the slice closes.
     - one `end_role` guard, one reader for it shared by three callers, and two role
       defaults.
 - **Not added:** a byte copy of `secrets.yml` in any package, and the per-secret landing
-  waits it would have caused on every packaged host.
+  waits it would have caused on every packaged host. No read-only dependency on the
+  Ansible-installed `sops`, and no persisted output on the Pi.
 - **Removed on daniel-server:** the udev tasks, the cron, the env file, the stamp and the
   0700 script. daniel-box keeps all but the udev tasks until H7.8.
 - **Removed on the Pi:** H3's interim credential files and their tasks, and the
@@ -1445,10 +1511,11 @@ and before the slice closes.
    `kuma-push-lib.sh`, and no hc-ping exists on that path. This plan uses the Kuma push.
    Resolution: if M6 retires Kuma before H4.3c, the exit signal becomes the M-area replacement
    for that tile.
-2. **Where does `sops` come from after H7?** The package depends on an Ansible-installed
-   binary until H7. C5 lists no package for an architecture-specific tool. Resolution: H7
-   proposes either `homelab-tools`, an architecture-specific package nfpm builds from the
-   pinned upstream binaries, or mirroring upstream's `.deb`. Either one amends C5.
+2. **Where does `sops` come from?** Resolved by the C5 amendment that the pillar review
+   fold applied. `homelab-tools` is the one architecture-specific package, and H3 builds it
+   for `amd64` and `arm64`. The `secrets` component depends on it and calls its `sops` by
+   absolute path (*`homelab-secrets.service`*). H4.2 and H4.5 each wait on the build for
+   their host's architecture.
 3. **Does upsmon honour `NUT_CONFPATH` on daniel-server's nut-client?** The string is present
    in `/lib/nut/upsmon` on daniel-box, which is evidence, not proof. Resolution: the CI
    container cases above prove it, with only `upsmon.conf` in the directory, for start and
@@ -1466,16 +1533,11 @@ and before the slice closes.
    The first two do not show which file the running process read. The environ read runs in
    every case, because it is part of exit criterion 1. The H4.3c PR body records every
    output.
-4. **C5 names one output location.** C5 says `homelab-secrets.service` decrypts into
-   `/run/credstore`. This slice adds two locations for secret-bearing files:
-   `/run/homelab-secrets/<path>` and, for a persisted output, `/var/lib/homelab-secrets/<path>`.
-   It also adds the two ways a consumer reaches one: a symlink at the real path, or a drop-in
-   when another package owns that path. It also names which ciphertext a package carries:
-   one per-host SOPS file per host package. Resolution: amend C5 before H4.1a1 merges.
-   contracts.md's *Requested amendments not yet applied* still does not list this request
-   after integration round 2 (X2-11). The round c1 review and that round hand the row to
-   contracts.md. The row must stand in the register before H4.1a1 merges, and H4.1a1's gate
-   says so.
+4. **C5 names one output location.** Resolved by the pillar review fold (2026-10-12). C5
+   carries the three locations, the symlink and drop-in routes, one per-host SOPS file per
+   host package, and the rule that a persisted output needs a consumer that must start
+   before the decrypt can run. H4.1a1's gate is met. *Persisted outputs* lists the one output
+   this slice persists, with its reason.
 5. **The H3, H5 and H6 mechanisms that this slice changes.** *The restart contract* is the
    one rule for starting and restarting a unit on the host plane, and this slice owns it. H3,
    H5 and H6 state rules that conflict with it or extend it, so their text changes.
@@ -1923,3 +1985,25 @@ How each was handled, with the evidence:
     - *Open questions* 5 gains an H3 item for the step-2 skip and an H6 list. H6's text is
       amended before H6.3b merges, and `docs/host-packages.md` gains the two restarters in
       H6.3b, because they do not exist at H4.1b.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **F-09.** *Design* gains *Persisted outputs*. It lists the one persisted output,
+  daniel-server's `upsmon.conf`, with the reason C5's rule requires: the shutdown chain must
+  start when the decrypt cannot. It states that the Pi persists nothing, and it names the
+  HMAC state files as state, not outputs. None of H4's was cut, because none fails the
+  rule. H5's conditional file route for alloy's password would persist one on the Pi and
+  fails the rule, so H4 sets it to `persist: false` (a cross-slice note to H5). H4.3a
+  adds a persisted-output census with two red fixtures (*Verification*), and *Risks* cites
+  the rule. H4.2's and H4.4's `docs/break-glass.md` entries gain the loss rule. A lost
+  host key means rotating every value in every SOPS file whose creation rule lists that
+  key. *Open questions* 4 is resolved by the pillar fold, and H4.1a1's gate reads as met.
+  *Complexity delta* gains the census.
+- **F-15.** The `sops` paragraph in *`homelab-secrets.service`* reads `sops` from
+  `homelab-tools`, by absolute path, with `Depends: homelab-tools`. The old rationale, that
+  C5 allowed no architecture-specific package, no longer holds. H4.2 and H4.5 wait on
+  H3's build for their architecture, and each carries a `Gate:` line. H4.1c's container installs the built `homelab-tools`.
+  *Open questions* 2 is resolved by the C5 amendment. *Complexity delta* gains the
+  `Depends` and drops the read-only dependency on the Ansible-installed binary.

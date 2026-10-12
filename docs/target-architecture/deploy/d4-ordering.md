@@ -43,8 +43,8 @@ the other. The second adds an edge in the same commit as a change to the depende
     - commit E gives texbrain `depends_on: [bento-pdf]`. texbrain's live spec shows the edge,
       and texbrain is Ready at E;
     - commit D breaks bento-pdf's readiness probe and changes texbrain. T is the commit that
-      `promote` promotes and then holds, which is `DEPLOY_HOLD`'s value: D itself, or a later
-      master commit that contains D;
+      `promote` promotes and then holds, the first field of `DEPLOY_HOLD`'s value
+      `<T> failed=<names>` (C2): D itself, or a later master commit that contains D;
     - during bento-pdf's health-check window, the OCIRepository's revision annotation names
       T, and texbrain's Ready message names bento-pdf. texbrain's
       `lastAppliedOriginRevision` names a commit P that does not contain D: E, or a later
@@ -52,7 +52,8 @@ the other. The second adds an edge in the same commit as a change to the depende
     - no texbrain ReplicaSet ever carries D's change. T's commit statuses hold
       `flux/bento-pdf` = `failure`, the control that the list is not empty, and no
       `flux/texbrain`;
-    - `promote` holds, with `DEPLOY_HOLD` equal to T;
+    - `promote` holds, with `DEPLOY_HOLD` reading T and a `failed=` list that names
+      bento-pdf;
     - after D4.8, the operator's clear leaves `DEPLOY_HOLD` reading `none`.
 5. **Deferred applies are published and verified.** The renderer emits `pihole-deferred`,
    `headlamp-deferred` and `netpol-baseline-deferred` with the edges below, each as the
@@ -258,7 +259,8 @@ the other. The second adds an edge in the same commit as a change to the depende
   watch re-enqueues a dependent when its dependency turns Ready.
 - **A health check holds a worker.** `checkHealth` calls `WaitForSetWithContext` with the
   Kustomization's timeout inside the reconcile. A Kustomization that waits on health holds one
-  of the `--concurrent` workers until it passes or times out.
+  of the `--concurrent` workers until it passes or times out. Every Kustomization on the
+  source reconciles each revision, so an unchanged one that is unhealthy holds a worker too.
 - **Role rollout budgets differ.**
   `ansible/roles/k8s/manifests/defaults/main.yml:manifests_rollout_timeout_default` is 600s.
   Five roles pass a larger `manifests_rollout_timeout`:
@@ -446,16 +448,18 @@ hop to every chain.
   value is a hold. An empty or missing value is an error, never "no hold". This plan writes
   "held" for a value other than `none`. It writes "clear" for setting `none` with
   `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`, which is
-  **operator-only**. C2 and C6 still say "empty" until D1 Open question 9's amendment lands
-  (Open question 11).
+  **operator-only**. C2 and C6 state the same rule.
 - **The promote timeout follows the chain** (D4.3). D2 derived the timeout from the largest
   single Kustomization timeout. With edges, a dependent starts only after its dependencies
-  finish. So `promote.py verify` takes the longest `dependsOn` path in T's bundle, measured
-  by the sum of each Kustomization's own `timeout`: C3's per-role field where a role sets
-  it, and the bundle default otherwise. It adds:
+  finish. So `promote.py verify` takes the longest `dependsOn` path in T's bundle that ends
+  at a name in T's changed set (C2). A name in the changed set counts its own `timeout`:
+  C3's per-role field where a role sets it, and the bundle default otherwise. An unchanged
+  ancestor on the path counts no `timeout`. `dependsOn` still waits for it to reconcile T,
+  but its apply changes nothing, and a healthy one passes its health check without waiting.
+  It adds:
     - one `requeue-dependency` interval per edge on that path;
-    - a queueing term: the number of changed Kustomizations divided by `--concurrent`,
-      rounded up, times the largest changed `timeout`;
+    - a queueing term: the number of names in the changed set, dependents included, divided
+      by `--concurrent`, rounded up, times the largest `timeout` among them;
     - the OCIRepository interval;
     - the Kustomization `retryInterval`.
 
@@ -465,16 +469,26 @@ hop to every chain.
   kustomize-controller args in the flux role's vendored components when they set them, and
   are otherwise the v1.9.6 defaults: 30 seconds and 4. D5.1 sets `--concurrent` to
   `k8s_rollout_batch_width`.
-- **Which Kustomizations count as changed.** A Kustomization counts when its document under
-  `flux/` or its `cluster/<name>/` directory differs between T's bundle and the bundle that
-  `prod` held before the move, or when it is new in T. `promote` pulls that bundle beside
-  `sha-T`, before `prod` moves. If that pull fails, every Kustomization counts.
+- **Which Kustomizations count as changed.** The timeout reads C2's changed set, the set
+  whose statuses `verify` expects (D2.5), and derives no second one. A name counts when its
+  `footprint` digest in T's `digests.json` differs from the one on `prod`'s commit before
+  the move (C1). Every Kustomization whose `dependsOn` chain reaches such a name counts
+  too, and a suspended one does not. A change under `_unclassified` counts every name. The
+  timeout and the expected statuses therefore cannot disagree.
 - **Why the queueing term is in, as D5 asked.** A Kustomization that waits on health holds a
   worker (*Baseline*), so a revision that changes more Kustomizations than `--concurrent`
   queues behind the workers. Without the term, `verify` would time out on such a revision
   and hold. Clearing a hold is **operator-only** (C2), so every false hold costs an operator
   action. The term lengthens the ceiling instead. The ceiling binds only when a status never
   arrives, because `verify` returns on the first `failure` and on the last `success`.
+- **What the ceiling cannot see.** The revision change enqueues every Kustomization on the
+  source, changed or not (*Baseline*). An unchanged Kustomization that is unhealthy holds a
+  worker for its whole `timeout`, retries after its `retryInterval`, and holds a worker
+  again. The bundle does not show which Kustomizations are unhealthy, so the ceiling leaves
+  them out. When `--concurrent` of them fail at once, for example after a node loss, they
+  hold every worker. Every apply then queues, the fix included, and `verify` times out on a
+  changed name that never applied. The rule under *Saturated reconcile workers* reports
+  that state, D4.7 and D5 measure it, and Open question 13 holds the remedy.
 - **The cap.** GitHub stops a job on a GitHub-hosted runner after 6 hours (*Baseline*). A
   job stopped during `verify` writes no hold and moves no `last-good`, so `prod` would stay
   on a revision nobody verified. `verify` therefore caps its derived timeout at 5.5 hours,
@@ -483,27 +497,71 @@ hop to every chain.
   job, so any wait that a later slice adds to that job before `verify` comes out of the 5.5
   hours. D5's wait for the weekly-reboot window is one.
 - **The size.** Each figure is before the OCIRepository interval and the retry.
-    - At the end of D4 the bundle holds bento-pdf and texbrain. The path bento-pdf ─▶
-      texbrain is two 600-second defaults and one hop, and at most four Kustomizations
-      change, which is one queueing round of 600 seconds. That is about 31 minutes, and
-      about 41 once D3's `cluster-vars` sits at the head of the path.
-    - On the full map, tdarr keeps its 3000-second budget as its own `timeout` unless D5
-      replaces its pre-pull task, because Flux runs no such task and a cold pull took
-      25m37s. The longest chain is then crowdsec ─▶ traefik ─▶ authelia ─▶ tdarr ─▶
-      netpol-baseline ─▶ netpol-baseline-deferred. Five 600-second defaults and tdarr's
-      3000 seconds sum to 100 minutes, and five hops add 2.5 minutes. The chain through
-      sonarr and janitorr is shorter, about 74 minutes.
-    - A revision that changes no more Kustomizations than `--concurrent` adds one round of
-      its largest changed timeout, at most tdarr's 50 minutes. That is about 2.5 hours at
-      worst.
-    - A revision that changes every importer of `workload-shell.yml.j2`, 48 roles, adds ten
-      rounds of up to 3000 seconds, so it reaches the 5.5-hour cap.
-    - D5's `soak` and `<tag>-snapshot` Kustomizations lengthen the chain further.
+    - At the end of D4 the bundle holds bento-pdf and texbrain, with no edge between them,
+      because D4.8 reverts D4.6. A change to bento-pdf expects bento-pdf alone: one
+      600-second default plus one queueing round of 600 seconds, about 20 minutes. While
+      D4.6's edge stands, texbrain joins the changed set as a dependent. The path is then
+      two 600-second defaults and one hop, plus one round, about 31 minutes. An unchanged
+      `cluster-vars` at the head of the path adds one hop, and a changed one adds its own
+      `timeout` too.
+    - On the full map, every changed set holds netpol-baseline and netpol-baseline-deferred,
+      because `K8S_APPLIES_LAST` makes netpol-baseline depend on every tag. A one-role
+      change at the 600-second default therefore expects three Kustomizations on one path:
+      30 minutes of timeouts, at least two hops, and one queueing round of 10 minutes,
+      about 41 minutes.
+    - tdarr keeps its 3000-second budget as its own `timeout` unless D5 replaces its
+      pre-pull task, because Flux runs no such task and a cold pull took 25m37s. A change
+      to tdarr alone is the worst case within `--concurrent`: 70 minutes of timeouts, 2.5
+      minutes of hops from crowdsec to netpol-baseline-deferred, and one round of 50
+      minutes, about 2 hours.
+    - The longest chain is crowdsec ─▶ traefik ─▶ authelia ─▶ tdarr ─▶ netpol-baseline ─▶
+      netpol-baseline-deferred. When the changed set holds all of it, five 600-second
+      defaults and tdarr's 3000 seconds sum to 100 minutes, and five hops add 2.5 minutes.
+      The chain through sonarr and janitorr is shorter, about 74 minutes.
+    - The changed set shrinks the expected set for a narrow revision, not for a broad one.
+      A revision that changes every importer of `workload-shell.yml.j2`, 48 roles, expects
+      those 48 plus netpol-baseline's two Kustomizations. At `--concurrent` 5 that adds ten
+      rounds of up to 3000 seconds, so it reaches the 5.5-hour cap. Open question 14 asks
+      whether `verify` should hold one runner that long.
+    - D5's `soak`, `<tag>-snapshot` and `<tag>-verify` Kustomizations lengthen a path where
+      they sit on it.
 
-  `land-wait` gives up at twice the promote timeout (C6): about 5 hours for a revision
-  within `--concurrent` on the full map, and 11 hours at the cap. `verify` writes the hold
+  `land-wait` gives up at twice the promote timeout (C6): about 82 minutes for a one-role
+  change, about 4 hours for a tdarr change, and 11 hours at the cap. `verify` writes the hold
   at its own timeout, and `land-wait` ends on a `DEPLOY_HOLD` other than `none`, so
   `land-wait`'s ceiling binds only when the `promote` job itself never finishes.
+
+### Saturated reconcile workers
+
+C7 gives D4 the rule for saturated reconcile workers (P2).
+
+- **The rule.** D4.9 adds `FluxWorkersSaturated` to D1.6b's `flux` rule group, in M1's rules
+  directory. It fires when kustomize-controller's active workers equal its maximum
+  concurrent reconciles and its work queue is not empty, for 30 minutes.
+  controller-runtime exports an active-workers gauge and a maximum-concurrent-reconciles
+  gauge per controller, and D1.6's scrape of the controllers' `http-prom` port collects
+  them. The rule reads the maximum from its gauge, never a literal, because `--concurrent`
+  is 4 until D5.1 changes it. The D4.9 PR body quotes both series names and the
+  `controller` label value from a live scrape.
+- **Labels.** `service="flux"` and `severity="warning"`. A broad revision fills the workers
+  for hours while it progresses, so the rule reports that applies are queueing, not that a
+  deploy failed. The soak reads only `severity="critical"` and `verify="true"` alerts (C7),
+  so this rule never fails a promotion's soak.
+- **Series.** The rule reads series that D1.6's scrape already collects and adds no label.
+  Its delta against M1's series budget is zero.
+- **The measurement.** The 30-minute window is a starting value. D4.7's drill holds one
+  worker on bento-pdf's failing health check, which gives the first live reading of worker
+  occupancy. D5 repeats the reading on its first Wave D revisions, and the PR that tunes
+  the window quotes both readings.
+- **The shed frees workers within one timeout.** D5.1b's shed steps in `docs/break-glass.md`
+  suspend each flux-owned tag on a down node by hand. A suspend is an API write and needs no
+  worker. Nothing in this plan shows that a suspend ends a health-check wait already in
+  progress, so the bound is one `timeout`: each held worker frees when its current wait
+  ends. The suspended tag then does not retry.
+- **tdarr's 50 minutes.** tdarr's 3000-second `timeout` is the longest that one unhealthy
+  Kustomization holds a worker. D5 owns tdarr's move and its `timeout` (*The size*), so D4
+  adds no PR for it. A cross-slice note asks D5 to replace the cold pull with an image
+  pre-pull that Flux applies, so that tdarr can take the 600-second default.
 
 ### The cross-plane gate
 
@@ -685,11 +743,12 @@ conditions of dispatch runs.
     - **Live effect.** At this point every toposort edge of a flux-owned tag names an
       Ansible-owned role, so no live `dependsOn` changes. The annotation is the only new
       field. A `cluster-vars` edge from D3, if D3 has landed, stays as it is.
-4. **D4.3 — The per-file rule and the chained timeout** (about 140 lines). It depends on
+4. **D4.3 — The per-file rule and the chained timeout** (about 150 lines). It depends on
    D2.5, D2.6b and D4.2. D2.5's name-based `verify` and D2.6b's census, `SHARED_KINDS` and
    reserved names stay D2's, and this PR changes none of them.
     - Add the per-file document rule to `check-bundle`, and the chained timeout, with the
-      queueing term and the 5.5-hour cap, to `verify`.
+      queueing term and the 5.5-hour cap, to `verify`. The timeout reads C2's changed set,
+      the same set `verify` expects.
     - Tests in `scripts/deploy_tools/tests/`, each a pair:
         - a tag file that holds `<tag>` and `<tag>-deferred`, for a fixture tag with
           `manifests_deferred_files`, passes the census. A file that holds a third document,
@@ -702,7 +761,10 @@ conditions of dispatch runs.
           `requeue-dependency` intervals, one queueing round, the interval and the retry. A
           chain with a fixture shared kind at its head counts the shared kind's timeout;
         - eleven changed Kustomizations under `--concurrent` 5 add three rounds of the largest
-          changed timeout, and an unchanged Kustomization adds none;
+          changed timeout. A Kustomization outside the changed set adds nothing to the
+          queueing term, and a dependent of a changed name adds one name to it;
+        - an unchanged ancestor on the path adds one `requeue-dependency` interval and no
+          `timeout`, and a changed one adds its `timeout`;
         - a fixture whose derived timeout exceeds 5.5 hours gets 5.5 hours, and at the cap
           `verify` writes the hold.
     - **Live effect.** The census admits what it did before, because no flux-owned tag has
@@ -791,6 +853,14 @@ conditions of dispatch runs.
 
    `decide` then promotes the newest eligible commit, which contains the revert.
    `probe.py landing` shows `DEPLOY_HOLD` reading `none` (*Verification*).
+10. **D4.9 — The saturated-workers rule** (about 40 lines with its tests). Waits on D1.6,
+    which scrapes the controllers, on D1.6b, whose `flux` rule group it joins, and on M1,
+    which owns the rules directory and its promtool run. It needs no other D4 PR.
+    - Add `FluxWorkersSaturated` to the `flux` rule group, as *Saturated reconcile workers*
+      says, with its promtool test beside the rule.
+    - The PR body quotes the two gauge names and the `controller` label value from a live
+      scrape of kustomize-controller, and states the series delta of zero.
+    - **Live effect.** None until the workers fill. The rule fires as a warning only.
 
 ## Verification
 
@@ -824,7 +894,7 @@ kubectl -n flux-system get kustomization texbrain -o \
 git merge-base --is-ancestor <D> <P>; echo "contains=$?"           # contains=1: P lacks D
 
 # Exit 4, before or after the reset. These records survive it.
-uv run python scripts/diagnostics/probe.py landing                 # DEPLOY_HOLD = T
+uv run python scripts/diagnostics/probe.py landing                 # DEPLOY_HOLD = <T> failed=..., naming bento-pdf
 git merge-base --is-ancestor <D> <T>; echo "contains=$?"           # contains=0
 kubectl -n homelab get rs -l app=texbrain -o jsonpath='{..env}' | grep -c FLUX_DRILL   # 0
 kubectl -n homelab get rs -l app=bento-pdf -o jsonpath='{..readinessProbe}' \
@@ -891,6 +961,15 @@ uv run pytest scripts/validate/tests
   The events grep is supporting evidence only. Its message names no dependency and no
   revision. Once D3's `cluster-vars` edge exists, texbrain can emit it for that edge on any
   revision (failure class 2).
+- D4.9's promtool test is the rule's red proof. A fixture at full occupancy with a non-empty
+  queue for 30 minutes must fire. A fixture one worker below the maximum, and one with an
+  empty queue, must not. pint's `promql/series` check fails the rule when Prometheus holds
+  no series under the quoted names, so a renamed metric reads as red rather than as quiet
+  (failure class 3).
+- The occupancy reading during D4.7 is the live proof that a failing health check holds a
+  worker. While bento-pdf's health check waits, kustomize-controller's active-workers gauge
+  reads at least one. Its peak over the drill is D4's first occupancy measurement, which
+  the D4.7 PR body quotes beside the Ready message.
 
 ## Rollback
 
@@ -919,6 +998,7 @@ Each bound below says how long a PR can be reverted alone.
 - **D4.4.** Revert it. The window it guards reopens.
 - **D4.5.** The handback from D2.
 - **D4.6 and D4.7.** D4.8 reverts both.
+- **D4.9.** Revert it. No check or runbook reads the rule's alert.
 - **What a partial failure leaves.**
     - An edge does not govern the revision that adds it, as *Design* explains. A PR that
       added an edge and changed the dependent together would apply the dependent once
@@ -964,14 +1044,23 @@ Each bound below says how long a PR can be reverted alone.
   becomes about three PRs until D5 ends. Mitigation: copy and migrate is the documented exit,
   and the replay before D4.4 merges measures the real count (Open question 9).
 - **The promote timeout grows with the chain and the queue.** On the full map it is about
-  103 minutes of chain before the queueing term, up to about 2.5 hours for a revision within
+  41 minutes for a one-role change, up to about 2 hours for a revision within
   `--concurrent`, and capped at 5.5 hours. `land-wait` waits twice that. The promote job
   holds `concurrency: promote` while it verifies, so the next master commit waits its turn.
+  A broad revision can hold the runner up to the cap, and no other promotion runs
+  meanwhile (Open question 14).
   GitHub evicts a queued run beyond the first (D1's baseline), and the next run promotes the
   newest descendant, so no commit is skipped. Mitigation: `verify` returns on the first
   `failure` status and on the last `success`, so a ceiling binds only when a status never
   arrives. The cap keeps `verify` inside the 6-hour job limit, so a stuck verify still writes
   the hold.
+- **Unhealthy Kustomizations starve the workers** (failure class 4, a selector narrower than
+  the hazard). The queueing term counts the changed set, but every Kustomization on the
+  source reconciles each revision. `--concurrent` unhealthy ones hold every worker, and
+  tdarr's holds one for 50 minutes. Every apply queues behind them, the fix included.
+  Mitigation: `FluxWorkersSaturated` reports the state (D4.9), D5.1b's shed frees each
+  worker within one `timeout`, and Open question 13 holds the remedy, triggered by the
+  measured saturation.
 - **A drill reading taken too late** (failure class 2). See the red-proof note above. The
   Ready message must be read inside bento-pdf's health-check window.
 - **A reading of the wrong revision field** (failure class 2). `lastAppliedRevision` and
@@ -986,7 +1075,7 @@ Each bound below says how long a PR can be reverted alone.
   per-tag kinds with a fixture.
 - **A drill reading keyed on the wrong commit** (failure class 3, empty read as clean).
   `promote` may promote a later commit than D, and then nothing is posted on D. Mitigation:
-  every drill reading is keyed on T, `DEPLOY_HOLD`'s value, and `flux/bento-pdf` =
+  every drill reading is keyed on T, the first field of `DEPLOY_HOLD`'s value, and `flux/bento-pdf` =
   `failure` on T is the control that the status list is not empty.
 - **The drill puts a known-bad commit on master** (failure class 5). Mitigation: the drill is
   **operator-only**, with the operator's acceptance and the blast radius in its PR body,
@@ -1031,6 +1120,8 @@ Each bound below says how long a PR can be reverted alone.
   to split the PR, the copy-and-migrate exit with its measured cost, the `settled` rule, and
   the handback exit.
 - D4.5: `ansible/roles/k8s/texbrain/CLAUDE.md`.
+- D4.9: the promtool test beside the rule. `docs/flux-deploy-plane.md` gains the rule, the
+  gap the ceiling cannot see, and the shed bound.
 
 ## Complexity delta
 
@@ -1040,17 +1131,20 @@ Each bound below says how long a PR can be reverted alone.
     - three `depends_on` lines and five test rows;
     - one named set of deploy-mechanics fields, and a scaffolder that inserts before
       `K8S_APPLIES_LAST`;
-    - about 170 renderer lines for `dependsOn` and the reserved suffix, and about 140 lines
-      in D4.3 for the per-file rule and the chained timeout with its queueing term and cap;
+    - about 170 renderer lines for `dependsOn` and the reserved suffix, and about 150 lines
+      in D4.3 for the per-file rule and the chained timeout with its queueing term and cap,
+      read over C2's changed set;
+    - one alert rule with its promtool test, about 40 lines in D4.9, with a series delta of
+      zero;
     - a 200-line gate that renders the cluster twice on every PR until D6 deletes it;
     - the tests above.
 - **Removed:** positional ordering and batch arithmetic as load-bearing facts. That removal is
   real, because a reorder of `containers_list` or a change in batch width stops being a
   hazard.
 - **Cost that grows:**
-    - the promote timeout scales with chain depth and with the number of changed
-      Kustomizations: about 103 minutes of chain on the full map, up to about 2.5 hours for a
-      revision within `--concurrent`, and at most the 5.5-hour cap;
+    - the promote timeout scales with chain depth and with the size of the changed set:
+      about 41 minutes for a one-role change on the full map, up to about 2 hours for a
+      revision within `--concurrent`, and the 5.5-hour cap for a broad revision;
     - until D5 ends, a shared-template change that reaches both planes costs about three PRs
       instead of one, and a one-field inventory edit costs a handback and a second flip. The
       replay before D4.4 merges puts a number on how often.
@@ -1106,14 +1200,10 @@ Each bound below says how long a PR can be reverted alone.
     longest-path walk already counts every Kustomization on the path, and the queueing term
     is in, with the 5.5-hour cap and its reason under *What `promote` reads*. D5's
     measurement before the first Wave D flip checks the term against a real revision.
-11. **D4 reads `none` as no hold before C2 and C6 say so.** C2 moves `prod` only when
-    `DEPLOY_HOLD` "is empty", and C6 ends `land.sh`'s wait on a "non-empty" one. D1 and D2
-    use `none` instead, because `gh` cannot set an empty value. D4's preconditions, its
-    clear steps and its *Verification* follow D1 and D2 (*What `promote` reads*).
-    Resolution: D1 Open question 9's amendment to C2 and C6, gated before D1.3 merges. D1.3
-    precedes every D4 PR that reads the hold, because D4 depends on D2. contracts.md's
-    *Requested amendments not yet applied* does not list it yet; the cross-slice note of
-    round integration-2 asks for the row.
+11. **D4 reads `none` as no hold before C2 and C6 say so.** Resolved. C2 reads `none` as no
+    hold and any other non-empty value as a hold, and C6 ends `land.sh`'s wait on a value
+    other than `none`. D4's preconditions, its clear steps and its *Verification* follow
+    that rule (*What `promote` reads*).
 12. **Does the cross-plane gate share D6.1's layout?** *The cross-plane gate* says that
     `cross_plane_order.py` renders the cluster at the base and at the head, and names no
     layout. D6.1 gives the renamed `render_diff_gates.py` a layout function for
@@ -1121,7 +1211,33 @@ Each bound below says how long a PR can be reverted alone.
     outside the repository, and it runs each commit's own renderer with `uv run --frozen` and
     one commit value. Resolution, low priority: D4 adopts that function for its CI arms, or
     accepts that D6.1 makes it the module's single layout, so that the CI gate and the
-    host-side mode cannot diverge.
+    host-side mode cannot diverge. C1 replaces the `--moved-tags` mode with the `footprint`
+    digests in `digests.json`, so the question covers only the gate's own two renders. D6's
+    owner says whether a shared layout function survives that change.
+13. **Should health checks stop holding workers for unchanged tags?** (P2) The trigger is the
+    measured saturation: `FluxWorkersSaturated` firing outside a broad revision, or D5's
+    reading showing unchanged Kustomizations holding workers. Three remedies:
+    - `wait: false` with generated `healthChecks`, which scopes the health check to the
+      objects the renderer lists. C3 fixes `wait: true` on every per-tag Kustomization, so
+      this needs a request on C3.
+    - A shorter `timeout` for a tag that is often unhealthy, starting with tdarr's 3000
+      seconds once D5 replaces its cold pull.
+    - No change, relying on the shed, which frees each worker within one `timeout`.
+
+    Recommendation: first read `checkHealth` at the pinned kustomize-controller version,
+    to learn whether it skips the health check of a Kustomization whose apply changed
+    nothing. If it does not skip, take the shorter `timeout` first, because it needs no
+    contract change. Resolution: D4's owner decides when the trigger fires, and files the
+    C3 request only if a shorter `timeout` does not end the saturation.
+14. **Should `verify` hold one runner for up to 5.5 hours?** (P5) A broad revision, such as
+    one that moves every importer of `workload-shell.yml.j2`, holds `verify`'s runner up to
+    the cap, and `concurrency: promote` runs no other promotion meanwhile. Recommendation:
+    run `verify` as a short job that re-enters, or as a scheduled poller. Each run reads
+    T's statuses once. It writes the hold or moves `last-good` when the verdict is in, and
+    otherwise exits and leaves the deadline to the next run. Either form changes C2's
+    *Promotion target*, so it is a request on C2. Resolution: D5 measures `verify`'s
+    duration on its first broad revision, after the changed-set change. D4's owner files
+    the C2 request if that duration delays a later promotion.
 
 ## Review log
 
@@ -1344,3 +1460,28 @@ Refuted: none.
 
 - Cross-slice note from D6: Open question 12 records D6.1's layout function as the
   candidate layout for the cross-plane gate.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **P2, worker starvation.** *Baseline* says an unchanged, unhealthy Kustomization holds a
+  worker too. *Design* reads C2's changed set for the timeout: *Which Kustomizations count
+  as changed* reads the `footprint` digests in place of a second pulled bundle, an
+  unchanged ancestor on the path counts one hop, and dependents count in the queueing
+  term. *What the ceiling cannot see* states the gap. *Saturated reconcile workers* adds
+  C7's rule, its labels, a series delta of zero, the measurement at D4.7 and in D5, and
+  the shed bound of one `timeout`. tdarr's timeout stays with D5, by a cross-slice note.
+  *The size*, `land-wait`'s figures, *Risks* and *Complexity delta* are restated: about 41
+  minutes for a one-role change, about 2 hours for tdarr, and the cap for a broad
+  revision. *Steps* adds D4.9 at about 40 lines, and D4.3 grows to about 150 lines with
+  split tests. *Verification* gains the promtool and pint red proofs and the drill's
+  occupancy reading. *Risks* gains the starvation entry. The remedy went to Open
+  question 13.
+- **P5, long verify.** The *Risks* entry on the promote timeout names the runner hold.
+  Open question 14 recommends a re-entering `verify` or a scheduled poller, as a request on
+  C2, resolved by D5's measured worst case after the changed-set change.
+- **Contract sync.** Open question 11 is resolved, because C2 and C6 read `none` as no
+  hold. Open question 12 notes that C1 replaces `--moved-tags`. Exit criterion 4, the
+  Exit 4 reading and the drill's *Risks* entry take T from the first field of C2's
+  `<T> failed=<names>` hold, and the hold's `failed=` list must name bento-pdf.

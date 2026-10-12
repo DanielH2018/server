@@ -79,8 +79,10 @@ bytes), and Kustomize, Helm or CUE as renderers (a rewrite of 21.6k template lin
 **Removes by construction** classes A to E. With them go the orphan-GC cron,
 `ansible/roles/k8s/manifests/tasks/verify_secret_keys.yml`, positional ordering, the
 `k8s_autodeploy` denylist (replaced by `suspend`), the CI poll, the five narrowings, range
-parking, the owed ledgers and cross-role reach. `land.py` and `land_lib` shrink from about 6.2k
-lines to about 200.
+parking, the owed ledgers and cross-role reach. `land.py` and `land_lib` lose their k8s arms
+in D6 and their host-plane arms in H7. D6 bounds them at 6,400 lines, against 6,258 at the
+baseline. No slice plans their final size. An earlier "about 200 lines" had no slice behind
+it, and this page withdraws it.
 
 **Remains** as owned code: the health-gated rollback and hold, which move to `promote` and
 `DEPLOY_HOLD`; the restart soak, which becomes a Job that `promote` waits on through the
@@ -89,8 +91,16 @@ rebuilds, which move to CI; and the Discord alerts.
 
 **Failure modes it introduces:** literal `${` and undefined placeholders, and two multi-line
 secret keys that break raw substitution (all R2). A render bug that drops a file deletes live
-objects under prune. Deploys depend on GHCR, Flux CRDs need upgrading, and the cutover rolls
-the 59 `kubectl-rollout`-annotated Deployments once (D5).
+objects under prune, so `promote` refuses a bundle that loses an object no `Removes-Object`
+trailer declares (D2, D5). Deploys depend on GitHub and GHCR, and the break-glass promotion
+covers an outage (C2, D6). Flux CRDs need upgrading. The cutover rolls the 59
+`kubectl-rollout`-annotated Deployments once (D5).
+
+**Promotion is scoped to what changed.** `verify` expects only the changed set: the
+Kustomizations whose footprint digest moved, and their dependents (C2). An unrelated unhealthy
+workload therefore never holds a promotion or resets `prod`. The Flux rule group pages for
+that workload instead (C7). A held or stalled pipeline pages through the deploy-pipeline
+exporter, and a `prod` move made outside `promote` pages as critical.
 
 ### Monitoring: one alert plane on Prometheus and Alertmanager
 
@@ -145,9 +155,11 @@ M6 does not cut registry-gc's check over and leaves its tile and token to D5. If
 Kuma before wave D, the tile goes with Kuma, and wave D drops that part of its PR.
 
 **Decision.** What remains on each host ships as one `.deb` per host (C5, C6). nfpm builds it
-from homelab-render's host output, a LAN builder signs it after verifying the commit's
-signature (H3 Open question 1 decides which signature it trusts), and a `homelab-updater`
-timer installs it from an apt repo served outside k3s. dpkg is the only mechanism the survey
+from homelab-render's host output. A LAN builder builds a commit on `origin/master` with a
+green CI verdict, and a separate signer signs the result. H3 Open question 1 decides whether
+the builder also requires a signature, and whose. A `homelab-updater` timer installs the
+package from an apt repo served outside k3s. A change that republishes several hosts reaches
+one canary host first (C5). dpkg is the only mechanism the survey
 found that removes config the repo stopped shipping, on stock Ubuntu 24.04 and without an
 agent. system-upgrade-controller `Plan`s, reconciled by Flux,
 upgrade k3s. The Pi keeps Docker ([ADR-0013](../adr/0013-daniel-pi-stays-on-docker.md)) with
@@ -199,22 +211,83 @@ notice is advisory, so a moved atom can still go unread.
 
 ## Combined end state
 
-Ansible is gone, and git is the only write path. CI runs one renderer and produces two
-artifacts: an OCI artifact that Flux reconciles into the cluster, and one signed `.deb` per
-host that apt pulls. Both report the commit they applied (C6), so `land.sh` waits on facts
+Ansible is gone, and git is the only write path. The one exception is C2's break-glass
+promotion, an operator-only route for when GitHub cannot be reached. CI runs one renderer and
+produces two artifacts: an OCI artifact that Flux reconciles into the cluster, and one signed
+`.deb` per host that apt pulls. Both report the commit they applied (C6), so `land.sh` waits on facts
 rather than markers. Prometheus rules own alerting, and generators own the facts docs state.
 SOPS gains consumers outside Ansible: the cluster's substitution Secret and its SOPS-encrypted
 Secret manifests (C3, produced as D3 decides), and each host's own age key. The Pi gets a SOPS
 file of its own, encrypted to its own key, and stays off `secrets.yml`'s recipient list (H4).
 
-**Net complexity.** Deleted: ansible-core, the 9,499-line deployer, about 6k `land` lines,
-the `narrow_*` and reach scripts, about 25k lines of setup and containers roles, the bring-up
-playbooks, about 100 Ansible-mechanics tests, the Kuma role and the bridge's check bodies, 83
-push-token secrets and 4,077 lines of lock machinery. Added: the renderer (about 600 lines),
-Flux with about 65 generated Kustomizations, a promote workflow (about 150 lines), 4 nfpm
-specs, 5 shared units and three reconcilers, system-upgrade-controller, Alertmanager,
-blackbox_exporter, rule tests, the diff notice, and a LAN package builder with its signing key.
-Each addition is a standard tool or a small piece of owned code, and no language is added.
+**Net complexity.** This ledger was rebuilt in the pillar review fold (2026-10-12) by summing
+each slice's *Complexity delta*. It counts owned code only, and leaves out tests and prose.
+"Unsized" marks a slice that states no number.
+
+| Component | Added, as the slices state it | Removed, as the slices state it | Bound at the end |
+|---|---|---|---|
+| Renderer (`homelab-render`, `renderer_lib`) | about 1,900: R1 700, R2 500, D3 300, D4 170, R4 230; H1 to H5 unsized | Ansible's k8s render path: the manifests role and 86 task files, 9,635 lines (R4) | at most 2,600 lines (R4 exit 6) |
+| `promote.py` and its workflows | about 930: D1 580 with 230 of workflow, D2 200, D4 150; D5 and H1 unsized | — | `promote.py` at most 900 lines (D6 exit 6) |
+| GitOps deployer | — | about 7.4k at D6 (k8s arms, drift checks, reach, narrowing, ledgers); the host-plane arm in H7, unsized | deleted by H7 |
+| `land` | D6.1 about 80 | the k8s arms with `deploy.sh`'s, about 700 (D6); the host-plane arms in H7, unsized | at most 6,400 lines after D6; final size unplanned |
+| Host reconcile | H5 130; H3, H4, H6 and H7 unsized | — | H7's ceiling, (B + 720) × 1.3, whose crossing switches the host plan to ansible-pull |
+| Host packaging and builder | unsized; H3 measures it | the bring-up playbooks, about 25k lines of setup and containers roles (an unvalidated census that H2 and H7 re-measure) | — |
+| Alert rules and exporters | about 1,100, with 12 items unsized | about 40 | M1's series budget, 140,000 head series |
+| monitor-bridge | D2's deploy-pipeline family, about 150 | about 5,700 to 6,700 (M2, M5, M6) | residual about 6,500, capped at 7,000 (M6) |
+| Uptime Kuma | — | about 3,700 lines and 82 push-token secrets | deleted by M6 |
+| Docs guard | about 700 (G1, G3, G4) | about 925 lines plus the 1,471-line generated lock (G2, G4) | — |
+
+The deleted side still outweighs the added side by a wide margin, so the direction holds.
+The added side is several times what this page claimed before the fold. A promote workflow
+"of about 150 lines" and a renderer "of about 600" were the workflow alone and R1 alone. The
+host plane's additions are mostly unsized. H3's measurement and H7's reconcile ceiling are
+where that gets settled. Each end bound is an exit criterion of its slice, so growth past it
+stops the slice rather than going unnoticed. No language is added.
+
+**What GitHub carries.** The end state leans on GitHub in seven places. Each one has a
+fallback:
+
+| Interface | Used by | Fallback when GitHub is down |
+|---|---|---|
+| Actions (`workflow_run`, `concurrency`) | `promote`, publish, prune (D1) | C2's break-glass promotion (D6) |
+| GHCR, the artifact and built images | Flux's OCIRepository, image pulls (D1, D5) | The in-cluster registry as the break-glass source and as a pull-through mirror (D5, D6) |
+| Repo variables `DEPLOY_HOLD`, `PROD_DIGEST` | `promote`, `land.sh` (C2) | The shed runbook's local hold record (D5) |
+| Check-runs (the CI verdict) | `promote`, the LAN builder (C2, C5) | Break-glass promotion skips it; the host plane waits |
+| Commit statuses | `verify`, `land.sh` (C2, C6) | `flux get` and the `flux` rule group (C7) |
+| GitHub OIDC for cosign | `publish`, Flux verification (C2) | The break-glass cosign key (C2) |
+| Check-run annotations | the docs-guard notice (G2) | `fact_status.py notice`, the source the annotation renders |
+
+D1 puts `promote.py`'s GitHub and GHCR calls behind one module, so leaving GitHub means
+rewriting one module and the workflows, not every caller. k3s and Flux are fixed premises
+in the same sense, and D6's ADR records both.
+
+**Where a secret lives.** A secret can sit in up to five stores: `secrets.yml`,
+`homelab-cluster-vars`, a SOPS manifest, a per-host SOPS file and `sops-age`. Adding a cluster
+secret through `homelab-cluster-vars` needs the operator's `cluster_vars.py write`. D3 Open
+question 8 proposes a `seal` mode that would let an agent add a single-line secret that no
+file holds. The mode encrypts that secret as its own SOPS manifest, using the public
+recipients alone. Until the operator accepts it, every new cluster secret needs the operator. A host secret persisted to disk is plaintext at rest, so
+C5 limits persisted outputs to consumers that must start before the decrypt can run.
+
+**Traces stay out of scope.** No slice adds tracing. Spans for the deploy pipeline would
+mean instrumenting GitHub-hosted jobs and the Flux controllers, and that costs more than it
+shows. The timeline comes from commit-status timestamps and the deploy-pipeline exporter's ages
+(C7).
+
+## Where the migration can stop
+
+The migration runs long, so it should stop only where the lab is better off than today. Three
+points qualify:
+
+- after G2 and G4, which retire the leading cause of red CI on master;
+- after M1 to M5, plus M6 except C-4b and its coupling to B-1e;
+- after D6 and R4, when the cluster has one deploy path.
+
+Every PR between those points leaves the lab safe to run, because C4 holds at each commit.
+Stopping between D2 and D6, or between R1 and R4, still leaves more to maintain than today. Two
+deploy paths and two holds coexist there, and code that D6 deletes keeps growing. G and M
+depend on nothing in D or H, so they go first. D5's inbound edges keep the D2-to-D6 window
+long, and D5's open questions list which of them could be cut.
 
 ## ADR changes this migration needs
 
@@ -264,6 +337,7 @@ G1 ──▶ G2 ──▶ G5          G2 ──▶ G3 (optional)          G4 (in
 R1 ──▶ R2, R3
 M1 ──▶ M2, M3, M4, M5 ──▶ M6          M6's B-1e ──▶ D5's last stateless-leaf flip
 D1 + R1 + R2's PRs 1–2 ──▶ D2 ──▶ D3 (+ all of R2), D4 ──▶ D5 (+ R3, M1, M2) ──▶ D6 ──▶ R4
+M1 ──▶ D2.7          M1 ──▶ H3's host-rules PR
 D2 + D4 ──▶ H1.1a–H1.8 ──▶ H2 ──▶ D5 wave D          R4 ──▶ H1.9
 R1 ──▶ H3 ──▶ H4 ──▶ H5          D2 + H1.1a–H1.8 + H4 + M1 ──▶ H6
 H2 + H5 + H6 + R4 ──▶ H7
@@ -320,8 +394,12 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
 
 ## Open questions
 
-1. **Flux's live memory.** Requests total 192Mi, and no usage figure is published. D1
-   measures it.
+1. **Flux's live memory.** Requests total 192Mi, and no usage figure is published.
+    - D1 measures it while Flux owns nothing, so that reading is a floor.
+    - D5 measures it again at its end, under a full-fleet reconcile.
+    - The ADR-0010 premise is stated as a range. On 2026-10-12, daniel-box read about 54%
+      memory against the baseline's 44–47%. daniel-box is the operator's workstation and the
+      only control-plane node.
 1. **`managedFields` on real Secrets.** The read-only ServiceAccount cannot read Secrets, so in
    D3 the operator reads them with `sudo k3s kubectl` before the cutover (**operator-only**).
 1. **Undefined placeholders.** Answered: an undefined variable fails rather than becoming an
@@ -340,6 +418,15 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
    host plan and H4 to H7 are revised.
 1. **Reconciler size.** Whether the reconcilers for ufw, libvirt and users stay small enough
    to justify a second mechanism beside dpkg. Each H-slice that adds one reports its size.
+   H7 sets a line ceiling on reconcile as an exit criterion. Crossing it is the trigger to
+   switch the host plan to ansible-pull.
+1. **The host trust anchor** (H3 Open question 1, **operator-only**). The builder trusts a
+   commit on `origin/master` with a green CI verdict. That is the anchor the GitOps deployer
+   applies to the two k3s nodes. For the Pi it is the first unattended path from master to
+   root. The operator records the choice in an ADR before H3.5a merges.
+1. **The revert rule** (C2, **operator-only**). It decides whether a merged revert of a
+   failing change clears its own `DEPLOY_HOLD`, or whether every hold waits for the operator.
+   It replaces D5 Open question 17.
 1. **The host census.** A research agent counted 595 files, about 25.2k lines, 114 setup tests
    and about 48 schedules, and nobody validated them. H2 and H7 re-measure them.
 1. **k3s upgrade order.** Settled: H6 upgrades the server first, as the version skew policy
@@ -433,3 +520,28 @@ The round also changed three things here that follow from contracts.md:
 - Cross-slice note from R4: Open questions gains *The hand fast-forward after a park*.
   `docs/gitops-pipeline.md` describes the pipeline at `70591c307` and is not edited here.
 - Open questions gains [#4435](https://github.com/DanielH2018/server/issues/4435), the installable `scripts/` package.
+
+### Pillar review fold (2026-10-12)
+
+This entry folds in the results of a review against eleven pillars. It has not been through
+the adversarial review loop, and the pre-start review round covers it. Changes to this page:
+
+- **Net complexity** is rebuilt from the slice deltas. The earlier figures, the renderer at
+  about 600 lines, promote at about 150 and `land` at about 200, understated the slices.
+  The `land` figure had no slice behind it.
+- **What GitHub carries** is new. It is a table of seven GitHub interfaces and their
+  fallbacks, built around C2's break-glass promotion.
+- **Where a secret lives** gives the five stores and the operator step, with D3's proposed
+  `seal` mode.
+- **Traces stay out of scope** states why no slice adds tracing.
+- **Where the migration can stop** names the three points that leave the lab better off,
+  and says why stopping between D2 and D6, or between R1 and R4, does not.
+- **The deploy plane** gains *Promotion is scoped to what changed*, and its failure modes
+  name the object-loss check and the break-glass path.
+- **The host plane** no longer says that the builder verifies a commit signature. It names
+  the anchor it uses, a commit on `origin/master` with a green CI verdict, and the staged
+  rollout.
+- **Open questions** gain the host trust anchor and the revert rule, both
+  **operator-only**. Flux memory is stated as a range, and the reconciler size gets H7's
+  ceiling.
+- **The sequencing sketch** gains the edges to M1.

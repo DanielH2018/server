@@ -551,9 +551,12 @@ body states this change, and the operator approves it or declines it there. *Ope
 6 records the decision.
 
 If the operator declines, H5.8 does not merge, and the password moves to a file instead: an
-H4 output with `persist: true`, owned by uid 1000, bound read-only into alloy, and read
-through Alloy's `local.file` with `is_secret = true`. That route is not cheap, for two
-reasons:
+H4 output with `persist: false`, owned by uid 1000, bound read-only into alloy, and read
+through Alloy's `local.file` with `is_secret = true`. The file lives under
+`/run/homelab-secrets/`, never at rest. C5 allows a persisted output only for a consumer
+that must start before the secrets unit runs, and alloy is not one, so H4 sets the output
+to `persist: false`. The bind source then exists only once `homelab-secrets` has run.
+That route is not cheap, for two reasons:
 
 - A rotation rewrites the file and changes nothing in the Compose model, so `up -d` does
   not recreate alloy. That is the secret-only recreate problem H5-R1-11 fixed, and the
@@ -1264,14 +1267,16 @@ upstream, revert its downstreams before it.
   scripts. A revert of H5.3 restores the per-project engine upgrade, which is correct while
   no service has moved.
 - **H5.6 to H5.9:** stop the Pi's updater timer first (as in H5.9), then revert the move PR.
+    - The builder publishes a version without the service.
     - If the move's own run failed, the Pi holds (*Restart ordering*). `--clear-hold` cannot
       pass while the installed package still declares the failing service, because it
-      reruns the project. The operator therefore deletes `/var/lib/homelab-updater/hold` by
-      hand from the LAN session. H3 names no lever for this case, and *Open questions* 5
-      asks for one.
-    - The builder publishes a version without the service. The operator starts the updater
-      by hand. The inputs line changed, so reconcile restarts `homelab-compose`, and `up
-      --remove-orphans` removes the `homelab` container.
+      reruns the project. The operator therefore runs `sudo /usr/lib/homelab/homelab-updater
+      --clear-hold --install-newest` from the LAN session (H3, *Host-plane holds and stop
+      levers*). It installs the version without the service before reconcile runs.
+    - When the Pi does not hold, the operator starts the updater by hand instead.
+    - Either way, the inputs line changed, so reconcile restarts `homelab-compose`, and
+      `up --remove-orphans` removes the `homelab` container. A failure there writes the
+      hold again, and `HostReconcileFailed` reports it.
     - The operator then restores the old project from a LAN session with
       `./scripts/deploy.sh --tags "<svc>" -e target=daniel-pi`, using the role the revert
       restored.
@@ -1304,8 +1309,8 @@ upstream, revert its downstreams before it.
       --clear-hold` from a LAN session. It reruns reconcile, whose step 2 starts the failed
       unit, and removes the hold when that run passes. With no hold, `sudo systemctl restart
       homelab-compose.service` reruns the project directly.
-    - A cause inside the installed package cannot pass that rerun. The way out is a revert,
-      as the move PRs' rollback above describes.
+    - A cause inside the installed package cannot pass that rerun. The way out is a revert
+      and H3's `--clear-hold --install-newest`, as the move PRs' rollback above describes.
 - A failed key check, model check or pull stops before compose-adopt. Every container,
   Ansible-era ones included, keeps running as it was, and the result reads 0. This covers a
   stale `compose.env` left by a failed re-render.
@@ -1350,17 +1355,19 @@ upstream, revert its downstreams before it.
 - **A failed compose run holds the Pi.** H4's restart waits for the run, so its failure
   fails reconcile, and the updater holds the host. That stops every later package, Renovate
   bumps included, until the operator clears the hold. This is the host-plane form of the
-  trade `hold_sha` makes for the cluster, and `land.sh` reports it as `deploy-failed`. The
-  hold cannot clear while the installed package itself is the cause, so the rollback deletes
-  the hold file by hand until H3 names a lever (*Open questions* 5).
+  trade `hold_sha` makes for the cluster, and `land.sh` reports it as `deploy-failed`.
+  `--clear-hold` cannot pass while the installed package itself is the cause. H3's
+  `--clear-hold --install-newest` clears it once the builder publishes the revert
+  (*Rollback*). H3's `HostReconcileFailed` pages after 15 minutes at 0.
 - **A failed run outside a landing raises little signal.** Three runs happen outside any
   landing: the boot run, a step-2 start after `--clear-hold`, and a restart from
   `pending.json` alone. `land.sh` reads `homelab_compose_up_result` only during a landing.
   The recovery heartbeat already pushes `down` for a declared container that is missing or
   exited. From H5.2b its compose arm also pushes `down` while the result reads 0, which
-  covers a failed run that leaves every container running. Nothing pages yet for a stale
-  result, or for a Pi held with `homelab_host_reconcile_ok` at 0 after a passing compose
-  run. *Open questions* 5 asks M1 for both rules.
+  covers a failed run that leaves every container running. H3's `HostReconcileFailed`
+  (PR H3.5d, C7) pages for a Pi held with `homelab_host_reconcile_ok` at 0 for 15 minutes,
+  whatever caused the hold. Nothing pages for a stale compose result, and *Open questions*
+  5 asks M1 for that rule.
 - **A compose run lengthens the Pi's reconcile.** One run takes up to the unit's derived
   `TimeoutStartSec`, 1390 s or about 23 minutes at `70591c307`'s healthcheck values. That is
   inside reconcile's `TimeoutStartSec=30min`, and the unit-timeout test holds the relation.
@@ -1528,8 +1535,9 @@ upstream, revert its downstreams before it.
    written, so it asks for no restart behaviour of its own. The items below are notes to the
    owning slices:
     - **H3.**
-        - H3 names no lever that installs over a hold whose cause is the installed package,
-          which H5's move rollback needs.
+        - Resolved in the 2026-10-12 fold: H3 names `--clear-hold --install-newest`, the
+          lever that installs over a hold whose cause is the installed package. H5's move
+          rollback uses it.
         - The engine-upgrade play's wait reads the `TimeoutStartSec` of H3's rendered
           `homelab-updater.service` (*The engine upgrade*). A change to that limit turns
           H5's engine-upgrade test red until the play's limit follows it. H3 needs no
@@ -1582,11 +1590,11 @@ upstream, revert its downstreams before it.
         - D5 names `probe.py metric` for the counter quote, which decrypts `domain` and is
           therefore the operator's. An agent can read the same series through the Prometheus
           loopback-then-ClusterIP transport. D5 should accept either.
-    - **M1.** Ask for three rules, each labelled `service="daniel-pi"` per C7:
-      `homelab_compose_up_result == 0`, a stale `homelab_compose_up_timestamp_seconds`, with
-      a bound M1 derives from the updater's schedule, and `homelab_host_reconcile_ok == 0`.
-      Until they land, the recovery heartbeat's compose arm covers the first, and nothing
-      covers the other two.
+    - **M1.** Ask for two rules, each labelled `service="daniel-pi"` per C7:
+      `homelab_compose_up_result == 0`, and a stale `homelab_compose_up_timestamp_seconds`
+      with a bound M1 derives from the updater's schedule. H3's `HostReconcileFailed`
+      (H3.5d) covers `homelab_host_reconcile_ok == 0`. Until M1's two land, the recovery
+      heartbeat's compose arm covers the first, and nothing covers the stale result.
     - **G2.** G2 says H5.7 adds a Renovate manager. H5.11 adds the Pi's.
 
    Resolution: each owning slice confirms the item or amends its plan, before H5.2a1. The
@@ -1936,3 +1944,20 @@ and against the H3 and H4 texts, and all 3 are fixed. None is refuted.
     - *Verification* gains a named-member case: after a fixture move, `declared_services`
       for daniel-pi still returns `alloy`. The file tree and *Tests and docs* list
       `scripts/infra_map/inventory.py` and its test file.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review
+round covers it.
+
+- **F-14, the held-Pi page.** *Risks* said nothing pages for a Pi held with
+  `homelab_host_reconcile_ok` at 0, while H3 said it pages. Both texts name H3's
+  `HostReconcileFailed` (PR H3.5d, C7) instead. *Risks* and *Open questions* 5 changed,
+  and the M1 item asks for two rules instead of three.
+- **F-14, the hold lever.** The move PRs' *Rollback* and the partial-failure text use H3's
+  `--clear-hold --install-newest` instead of deleting the hold file by hand. *Risks* names
+  the lever, and the H3 item of *Open questions* 5 is resolved. *Complexity delta* is
+  unchanged: the lever is H3's, and H5 adds no step.
+- **Note from the H4 owner, C5's persisted-output rule.** The declined alloy file route in
+  *Secrets* reads `persist: false`, as H4 sets it, because alloy need not start before
+  the secrets unit runs.
