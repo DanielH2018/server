@@ -276,6 +276,91 @@ jobs:
             sed 's/^/  /' "$RUNNER_TEMP/changed.txt"
           fi
 
+      # The facts notice lists every CLAUDE.md section that cites an atom this PR moved, as
+      # annotations and as a job-summary table. It runs beside docs/facts.lock for G1's 30-day
+      # soak, and the lock stays the only blocking check, so the notice never fails the job. The
+      # long form is docs/target-architecture/docs-guard/g1-diff-notice.md, *Design*.
+      #
+      # No step of the three can fail the job. `continue-on-error` turns a failed step green,
+      # but it does not cover the job's 20-minute timeout, and a job timeout fails the `prek`
+      # gate. Each step therefore carries its own `timeout-minutes`, which ends a hang as a step
+      # failure first.
+      #
+      # The step runs the MERGE BASE's code, never the PR's. A PR that breaks a module that
+      # fact_status.py imports would otherwise crash the step, and that crash says nothing about
+      # the notice. The base copy is a second worktree. Its lib.repo_paths.REPO is the copy
+      # itself and its HEAD is the merge base, so `--head "$GITHUB_SHA"` is what points it at
+      # the PR's merge commit. `uv sync --frozen` there installs the base's own lockfile, so the
+      # PR's uv.lock cannot change what the notice imports either.
+      #
+      # $RUNNER_TEMP/notice.err receives every command's stderr and one `stage:` line per stage.
+      # The plan's check 2 reads the last `stage:` line from the failure artifact. `setup` means
+      # the merge base, `git worktree add` or `uv sync` failed, so no notice code ran. `notice`
+      # means the notice itself failed, which is a notice defect unless the `base` line names
+      # code older than the soak's lower bound. A timeout kills the script, but the lines it
+      # already wrote stay in the file.
+      - name: "Notice: CLAUDE.md sections citing atoms this PR moved"
+        id: notice
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+        run: |
+          set -euo pipefail
+          err="$RUNNER_TEMP/notice.err"
+          code="$RUNNER_TEMP/notice-code"
+          exec 2> >(tee -a "$err" >&2)
+          # The later steps expect one worktree. A timeout skips this trap, so the failure
+          # step below removes the copy too.
+          trap 'git worktree remove --force "$code" || true' EXIT
+
+          echo "stage: setup" >> "$err"
+          SECONDS=0
+          base=$(git merge-base "origin/$BASE_REF" "$GITHUB_SHA")
+          echo "base $base" >> "$err"
+          git worktree add --detach "$code" "$base"
+          uv --directory "$code" sync --frozen
+          echo "setup stage took ${SECONDS}s"
+
+          echo "stage: notice" >> "$err"
+          SECONDS=0
+          notice=(uv --directory "$code" run --frozen python scripts/dev/fact_status.py
+                  notice --since "origin/$BASE_REF" --head "$GITHUB_SHA")
+          "${notice[@]}" --format github
+          "${notice[@]}" --format markdown >> "$GITHUB_STEP_SUMMARY"
+          echo "notice stage took ${SECONDS}s"
+
+      # The two steps below run only when the notice step did not succeed. The test reads
+      # `!= 'success'` so that it holds for a timeout whether GitHub records the outcome as
+      # `failure` or as `cancelled`. The warning is a step of its own because a timeout kills
+      # the notice script before it could print one.
+      - name: Notice step failed
+        if: github.event_name == 'pull_request' && steps.notice.outcome != 'success'
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          OUTCOME: ${{ steps.notice.outcome }}
+        run: |
+          echo "::warning title=notice-step-failed::The facts notice step ended with outcome $OUTCOME. Its notice.err is in this run's notice-step-failed artifact."
+          echo "The facts notice step ended with outcome \`$OUTCOME\`. Its \`notice.err\` is in the \`notice-step-failed\` artifact." >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/notice.err" || true
+          git worktree remove --force "$RUNNER_TEMP/notice-code" || true
+
+      # The failure leaves an artifact because nothing else can find it later. With
+      # `continue-on-error`, the jobs API reports the failed step's conclusion as `success`, and
+      # listing runs to read their steps is capped and costly. One name-filtered call to the
+      # artifacts endpoint lists every `notice-step-failed` artifact in the repository.
+      - name: Upload notice failure
+        if: github.event_name == 'pull_request' && steps.notice.outcome != 'success'
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: notice-step-failed
+          path: ${{ runner.temp }}/notice.err
+          if-no-files-found: warn
+
       - name: Run hooks (PR — scoped to changed files)
         if: steps.changed.outputs.mode == 'scoped'
         run: |
