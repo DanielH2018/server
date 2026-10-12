@@ -202,7 +202,8 @@ that commit has a verdict.
   being the tip. To run CI on the tip, run `gh workflow run ci.yml --ref master`, then re-run
   land.sh. The fallback is to deploy the tip by hand without CI, with
   `./scripts/deploy.sh --tags <service> --at <tip>`.
-- The nearest descendant is red and a later one is green. Neither verdict changes, and the
+- The nearest descendant is red and a later one is green. While a later one's CI is still
+  running, the wait keeps polling for it rather than ending red. Neither verdict changes, and the
   tick has already fast-forwarded past your merge commit. To deploy your change, run the
   `deploy.sh --at <tip>` command the line prints. It deploys the tip, because `deploy.sh`
   refuses any tree behind `origin/master` with `DEPLOY_STALE`.

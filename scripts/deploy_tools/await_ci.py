@@ -275,6 +275,7 @@ def descendant_verdict(
     # Neither verdict changes once both exist, so `wait` ends that case on CI_UNPROVEN, not
     # on CI_RED: CI_RED's resume is a re-run, and every re-run reads the same red (#4649).
     # `green_after` finds the later green, and the CI_UNPROVEN line says to deploy the tip.
+    # While a later one has no verdict yet, `wait` keeps polling rather than ending red.
     required = required_contexts()
     for candidate in descendants(sha)[:DESCENDANT_LIMIT]:
         verdict = verdict_for(candidate, fetch=fetch, required=required)
@@ -285,19 +286,25 @@ def descendant_verdict(
 
 def green_after(
     sha: str, red: str, fetch=fetch_check_runs, descendants=_descendants
-) -> str:
-    """The first green descendant of `sha` after its red one `red`, or "" when none is green.
+) -> tuple[str, str]:
+    """(green, pending) for the descendants of `sha` after its red one `red`.
 
-    Searches the same `DESCENDANT_LIMIT` window as `descendant_verdict`.
+    `green` is the first of them whose CI passed, or "". When none passed, `pending` is the
+    first with no verdict yet, or "" when every one is red too. Searches the same
+    `DESCENDANT_LIMIT` window as `descendant_verdict`.
     """
     window = descendants(sha)[:DESCENDANT_LIMIT]
     if red not in window:
-        return ""
+        return "", ""
     required = required_contexts()
+    pending = ""
     for candidate in window[window.index(red) + 1 :]:
-        if verdict_for(candidate, fetch=fetch, required=required) == "pass":
-            return candidate
-    return ""
+        verdict = verdict_for(candidate, fetch=fetch, required=required)
+        if verdict == "pass":
+            return candidate, ""
+        if verdict == "pending" and not pending:
+            pending = candidate
+    return "", pending
 
 
 def run_less_tip(
@@ -407,7 +414,7 @@ def wait(
                     f"{nearest[:8]} descends from it)"
                 )
             if verdict == "fail":
-                fixed = green_after(
+                fixed, unsettled = green_after(
                     target, nearest, fetch=fetch, descendants=descendants
                 )
                 if fixed:
@@ -420,10 +427,22 @@ def wait(
                         f"`./scripts/deploy.sh --tags <service> --at {tip[:8]}`"
                         + (f" once {tip[:8]} is green" if tip != fixed else "")
                     )
-                return CI_RED, (
-                    f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
-                    f"{nearest[:8]} is its nearest descendant with a verdict)"
-                )
+                if not unsettled:
+                    return CI_RED, (
+                        f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
+                        f"{nearest[:8]} is its nearest descendant with a verdict)"
+                    )
+                # A later commit may still go green and stand in for the merge commit,
+                # which is the usual #4649 shape at merge time: the fix's CI is running.
+                if now >= deadline:
+                    return CI_RED, (
+                        f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
+                        f"{nearest[:8]} is its nearest descendant with a verdict). "
+                        f"{unsettled[:8]} after it has no verdict yet; if it goes green, "
+                        "a re-run ends ci-unproven and names the tip to deploy by hand"
+                    )
+                sleep(interval_s)
+                continue
         if now >= deadline:
             tip = (
                 run_less_tip(
