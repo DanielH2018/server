@@ -136,8 +136,17 @@ def test_each_load_row_carries_the_byte_size_of_the_file_it_loaded(tmp_path):
         assert re.search(_thousands(size), row), row
 
 
-def test_a_file_it_cannot_stat_is_logged_without_a_size(tmp_path):
+def test_a_file_it_cannot_stat_keeps_its_row_without_a_size(tmp_path):
+    # Paired with a file it can stat, so the test fails when the hook drops the unreadable
+    # file's row, gives it a made-up size, or records no size at all.
     log = tmp_path / "instructions.log"
+    present = tmp_path / "present" / "CLAUDE.md"
+    present.parent.mkdir()
+    present.write_bytes(b"p" * 4321)
+    _load(log, present, "sessiona-x")
     _load(log, tmp_path / "gone" / "CLAUDE.md", "sessiona-x")
-    row = log.read_text()
-    assert "CLAUDE.md" in row and "bytes=" not in row, row
+
+    rows = log.read_text().splitlines()
+    assert len(rows) == 2, rows
+    assert rows[0].endswith(" bytes=4321"), rows[0]
+    assert rows[1].endswith("CLAUDE.md") and "bytes=" not in rows[1], rows[1]

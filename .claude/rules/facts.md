@@ -118,7 +118,9 @@ carries the row is the squash commit that wrote its hash into the lock, and
   primary checkout and its rotated `.1`, so the span the report prints is usually days, not
   the window. Last, it prints the instruction bytes each session loaded, summed from the
   `bytes=` field `log-instructions.py` ends each row with. A user-level file such as
-  `~/.claude/CLAUDE.md` counts. A subagent's row and a row without the field do not.
+  `~/.claude/CLAUDE.md` counts. A subagent's row and a row without the field do not. The
+  auto-memory `MEMORY.md` and the output style are not counted either, because the harness
+  logs no InstructionsLoaded row for them, so the total is a floor.
   `--json` prints the same as one object.
 
 The lock is kept only while its content atoms pay for it. When `fact_status.py report

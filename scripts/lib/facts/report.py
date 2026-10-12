@@ -217,7 +217,9 @@ def session_bytes(log: Path, since: datetime) -> list[SessionBytes]:
     """Sum the ``bytes=`` fields of ``log`` and its rotated ``.1`` per session, oldest first.
 
     Every row counts whatever doc it names, so a user-level file such as ``~/.claude/CLAUDE.md``
-    is in the total. ``total`` also counts ``compact`` reloads and path-scoped loads, so it is
+    is in the total. The total is a floor, not the whole context: the harness fires no
+    InstructionsLoaded event for the auto-memory ``MEMORY.md`` or the output style, so neither
+    has a row (#4610 measured them at about 20 KB of its 61.7 KB). ``total`` also counts ``compact`` reloads and path-scoped loads, so it is
     what entered context, not what a session started with; ``start`` is that.
 
     Two kinds of row are left out. A row tagged ``agent=`` is a subagent's load into its own
@@ -343,7 +345,8 @@ def render(report: dict, top: int) -> str:
     sessions = report["sessions"]
     lines += [
         "",
-        f"Instruction bytes loaded per session ({len(sessions)} sessions with sized rows)",
+        f"Instruction bytes loaded per session ({len(sessions)} sessions with sized rows;"
+        " MEMORY.md and the output style log no row, so they are not counted)",
         f"  {'session':<8}  {'first load':<20}  {'loads':>5}  {'at start':>10}  {'total':>10}",
     ]
     lines += [
