@@ -12,11 +12,12 @@ Dockerfile, through `_k8s_render.rendered_build_text` (#3175).
 Run: uv run pytest ansible/tests/services/test_code_server_build_is_pinned.py
 """
 
+import json
 import re
 
 import pytest
 
-from _helpers import K8S_ROLES, load_defaults
+from _helpers import K8S_ROLES, REPO, load_defaults
 from _k8s_render import rendered_build_text
 
 ROLE = K8S_ROLES / "code-server"
@@ -128,8 +129,36 @@ def test_the_cli_is_pinned_to_the_extension_release() -> None:
     )
     assert cli == str(extension["version"]), (
         f"CLI pinned to {cli} but the Anthropic.claude-code extension to {extension['version']} — "
-        "the extension drives the CLI, so the two move together"
+        "the extension drives the CLI, so the two move together. Set the extension's version "
+        "and URL, then run `uv run python scripts/validate/asset_pins.py --refresh "
+        "'code_server_k8s_extensions[Anthropic.claude-code]'` for its sha256"
     )
+
+
+# The extension refresh, as the Renovate rule must spell it for whoever finishes a CLI bump.
+EXTENSION_REFRESH = "--refresh 'code_server_k8s_extensions[Anthropic.claude-code]'"
+
+
+def test_the_renovate_rule_names_the_extension_finish() -> None:
+    """A CLI bump's PR title and body both say the extension moves by hand (#4584).
+
+    VS Code extensions have no Renovate datasource, so every CLI bump this rule raises fails
+    the lockstep test above until someone moves the extension. #4559 arrived red with the
+    finish only in its body; the group name is what reaches the title.
+    """
+    rules = json.loads((REPO / "renovate.json").read_text())["packageRules"]
+    rule = next(
+        r
+        for r in rules
+        if "npm" in r.get("matchDatasources", [])
+        and f"{ROLE.relative_to(REPO)}/templates/Dockerfile.j2"
+        in r.get("matchFileNames", [])
+    )
+    assert "Anthropic.claude-code" in rule["groupName"], rule["groupName"]
+    for field in ("description", "prBodyNotes"):
+        assert EXTENSION_REFRESH in json.dumps(rule[field]), (
+            f"the rule's {field} must name `asset_pins.py {EXTENSION_REFRESH}`"
+        )
 
 
 def test_node_is_pinned_with_a_checksum() -> None:
