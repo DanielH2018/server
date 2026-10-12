@@ -27,6 +27,10 @@ _RESULT_TYPE = "result"
 # How much of the session's own closing summary reaches Discord. host_lib.discord_post caps
 # the whole message at 1900 characters; this leaves room for the delta lines above it.
 _SUMMARY_CHARS = 900
+# host_lib.discord_post's cap, less a margin. The summary shrinks further whenever the lines
+# around it are long enough to push the digest past this, because the resume command carries
+# the unit's PATH and so has no fixed length (#4603).
+_DIGEST_CHARS = 1850
 
 
 @dataclass(frozen=True)
@@ -340,13 +344,17 @@ def render_digest(
         # A denial is the failure this whole design rests on not happening: auto mode refusing
         # the session's writes leaves it reading green while doing nothing.
         lines.append("permission denials: " + ", ".join(sorted(set(outcome.denials))))
-    if outcome.summary:
-        lines.append(
-            "> " + outcome.summary.strip().replace("\n", "\n> ")[:_SUMMARY_CHARS]
-        )
+    tail = []
     if resume:
-        lines.append(f"resume this session: `{resume}`")
-    lines.append(
+        tail.append(f"resume this session: `{resume}`")
+    tail.append(
         f"{outcome.turns} turns, ${outcome.cost_usd:.2f} — transcript: {log_path}"
     )
-    return "\n".join(lines)
+    if outcome.summary:
+        # Every line around the summary keeps its full text; only the summary gives way.
+        room = _DIGEST_CHARS - len("\n".join(lines + tail)) - len("\n> ")
+        quoted = outcome.summary.strip().replace("\n", "\n> ")
+        cut = quoted[: max(0, min(_SUMMARY_CHARS, room))]
+        if cut:
+            lines.append("> " + cut)
+    return "\n".join(lines + tail)
