@@ -94,6 +94,28 @@
   become: true
   when: not k8s_dry_run | bool
 
+- name: Create the home-allowlist module directory
+  tags: [cron]
+  ansible.builtin.file:
+    path: /opt/crowdsec-home-allowlist
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  when: not k8s_dry_run | bool
+
+- name: Install the home-allowlist IPv6 masking module
+  tags: [cron]
+  ansible.builtin.copy:
+    src: ipv6_prefix.py
+    dest: /opt/crowdsec-home-allowlist/ipv6_prefix.py
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  when: not k8s_dry_run | bool
+
 - name: Deploy the home-allowlist updater
   tags: [cron]
   ansible.builtin.template:

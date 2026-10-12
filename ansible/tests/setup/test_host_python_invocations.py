@@ -4,18 +4,22 @@ Hosts run Ubuntu 24.04's Python 3.12 as the system interpreter while the repo is
 script run by `/usr/bin/python3` parses 3.13+ syntax in CI and SyntaxErrors on the host --
 silently, in the case of session-health.py, whose wrapper routes stderr to /dev/null and
 exits 0 by design. Host scripts therefore run a pinned 3.14 through uv. A new unit, cron
-entry or hook wrapper reaching for `/usr/bin/python3` puts one script under 3.12 with nothing
-left to notice, so this file guards that route rather than the syntax level.
+entry or hook wrapper reaching for `/usr/bin/python3`, or for a bare `python3` that cron's PATH
+resolves to the same file, puts one script under 3.12 with nothing left to notice, so this file
+guards that route rather than the syntax level.
 
 Container contexts are deliberately out of scope: a Dockerfile or compose healthcheck names the
 interpreter inside its own digest-pinned image, which has nothing to do with the host.
 """
 
 import re
+
+import pytest
 from _helpers import REPO as _REPO, load_tasks, walk_tasks
 from _role_census import task_files
 
 from lib import role_installs
+from lib.k8s_roles import is_manifest_template
 from lib.repo_paths import ALL_VARS, ROLES
 
 
@@ -334,3 +338,101 @@ def test_a_script_run_through_uv_is_clean():
         "      /usr/local/bin/x.py\n"
     )
     assert _shebang_runs(folded, ["/usr/local/bin/x.py"]) == []
+
+
+# A bare `python3` word, wherever it sits: PATH picks it, and under cron's PATH that is the system
+# 3.12. The two needles above are absolute paths, so `python3 -c …` slipped past them (#4605).
+# DECIDED: match the word, not a command position. `_COMMAND_POSITION` misses `if`/`then`/`!`,
+# an env assignment, `sudo`, `env`, a cron user field and Ansible's `shell:`/`cmd:`, and a list
+# of shell grammar stays one shape short. A path (`/usr/bin/python3`) and a package or flag
+# name (`python3-venv`, `--python 3.14.6`) do not match.
+_BARE_PYTHON3 = re.compile(r"(?<![\w./@-])python3(?:\.\d+)?(?![\w./:@-])")
+_HOME_ALLOWLIST = (
+    _REPO / "ansible/roles/k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2"
+)
+_K8S = ROLES / "k8s"
+
+
+def _runs_in_a_container(path) -> bool:
+    """A k8s manifest template or the app config it embeds. Its `python3` is the container
+    image's interpreter, not the host's. A `.sh.j2` beside the manifests is a host script."""
+    try:
+        parts = path.relative_to(_K8S).parts
+    except ValueError:
+        return False
+    if len(parts) < 3 or parts[1] != "templates":
+        return False
+    return parts[2] == "config" or is_manifest_template(path)
+
+
+def _bare_python3_lines(text: str) -> list[int]:
+    """The line numbers in `text` that name `python3` bare, skipping comments and container
+    contexts the same way `_offending_lines` does."""
+    hits = []
+    for n, line in enumerate(text.splitlines(), 1):
+        if line.strip().startswith("#") or _CONTAINER_CONTEXT.search(line):
+            continue
+        if _BARE_PYTHON3.search(line):
+            hits.append(n)
+    return hits
+
+
+def test_no_host_invocation_runs_a_bare_python3():
+    candidates = [p for p in _candidate_files() if not _runs_in_a_container(p)]
+    # Non-vacuous: the template #4605 named must be in the census this scans.
+    assert _HOME_ALLOWLIST in candidates
+    offenders = sorted(
+        f"{path.relative_to(_REPO)}:{n}: {path.read_text().splitlines()[n - 1].strip()[:100]}"
+        for path in candidates
+        for n in _bare_python3_lines(path.read_text())
+    )
+    assert not offenders, (
+        "these run `python3` by name, which resolves to the host's system Python (Ubuntu "
+        "24.04's 3.12) under cron's PATH. Ship the code as a `.py` in the role's `files/` and "
+        "run it by path through `/usr/local/bin/uv run --no-project --no-python-downloads "
+        "--python {{ host_python_version }} /opt/<dir>/<name>.py`. An inline `python -c` "
+        "fails the stdlib-only census (scripts/lib/role_installs.py):\n  "
+        + "\n  ".join(offenders)
+    )
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "  elif ! CURRENT_PREFIX6=$(python3 -c 'import ipaddress' \"$CURRENT_IP6\" 2>/dev/null); then",
+        "if python3 -c 1; then",
+        "then python3 x",
+        "elif python3 -c 1; then",
+        "  ! python3 -c 1",
+        "x=1 python3 -c 1",
+        "sudo python3 -c 1",
+        "ExecStart=/usr/bin/env python3 /x",
+        '    ansible.builtin.shell: python3 -c "print(1)"',
+        "  cmd: python3 /opt/x.py",
+        "*/5 * * * * root python3 /x",
+        "python3.12 -c 1",
+    ],
+)
+def test_a_bare_python3_call_is_flagged(line):
+    assert _bare_python3_lines(line) == [1]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "  elif ! V6_OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads "
+        "--python 3.14.6 python -c 'import ipaddress' \"$CURRENT_IP6\" 2>&1); then",
+        "    - python3-venv",
+        "# python3 -c 1",
+    ],
+)
+def test_python3_through_uv_or_as_a_name_is_clean(line):
+    assert _bare_python3_lines(line) == []
+
+
+def test_a_k8s_manifest_runs_in_a_container_and_a_host_script_beside_it_does_not():
+    templates = _K8S / "crowdsec/templates"
+    assert _runs_in_a_container(templates / "deployment.yaml.j2")
+    assert _runs_in_a_container(_K8S / "configarr/templates/config/config.yml.j2")
+    assert not _runs_in_a_container(_HOME_ALLOWLIST)
+    assert not _runs_in_a_container(ROLES / "setup/x/templates/y.yml.j2")
