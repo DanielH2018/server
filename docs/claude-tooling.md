@@ -476,7 +476,11 @@ plane with Prometheus's and Alertmanager's own parsers. It renders the observabi
 runs `promtool check config --syntax-only` on the rendered `prometheus.yml`, `promtool check
 rules` and `promtool test rules` on the role's rule files and their tests, and `amtool
 check-config` on the Alertmanager config. It also fails a render that lost a Go template
-expression from `alertmanager-secret.yaml.j2`, which `amtool` cannot see.
+expression from `alertmanager-secret.yaml.j2`, which `amtool` cannot see. Before the tools
+run, it holds the rule files to the conventions `promtool` does not check: each group listed
+in `observability_rule_groups`, literal `severity` and `service` labels, one `Watchdog` at
+most, no `${`, a test case firing every alert, and a zero-series case per rule file.
+`scripts/validate/alert_conventions.py` lists each rule in its docstring.
 
 `scripts/validate/alert_tools.sh` provisions both tools at the tags of the role's
 `observability_k8s_prometheus_image` and `observability_k8s_alertmanager_image` pins, into

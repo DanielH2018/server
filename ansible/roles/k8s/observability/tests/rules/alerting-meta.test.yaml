@@ -1,0 +1,130 @@
+# promtool unit tests for files/rules/alerting-meta.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+rule_files:
+  - ../../files/rules/alerting-meta.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so the scrape job is missing from the config.
+  # AlertmanagerMetricsMissing fires through its first arm.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: AlertmanagerMetricsMissing
+        exp_alerts:
+          - exp_labels:
+              job: alertmanager
+              severity: warning
+              service: observability
+            exp_annotations:
+              summary: Prometheus has lost Alertmanager's scrape job or its delivery counter.
+              description: >-
+                Either no up{job="alertmanager"} series exists, so the alertmanager job is gone
+                from prometheus.yml, or the scrape works and
+                alertmanager_notifications_failed_total is gone, as after an upgrade that
+                renamed it. AlertmanagerNotificationsFailing cannot fire until the series is
+                back.
+
+  # The scrape works and the counter is gone. AlertmanagerMetricsMissing fires through its
+  # second arm.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
+        values: '1x15'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: AlertmanagerMetricsMissing
+        exp_alerts:
+          - exp_labels:
+              job: alertmanager
+              severity: warning
+              service: observability
+            exp_annotations:
+              summary: Prometheus has lost Alertmanager's scrape job or its delivery counter.
+              description: >-
+                Either no up{job="alertmanager"} series exists, so the alertmanager job is gone
+                from prometheus.yml, or the scrape works and
+                alertmanager_notifications_failed_total is gone, as after an upgrade that
+                renamed it. AlertmanagerNotificationsFailing cannot fire until the series is
+                back.
+
+  # A failed scrape: up reads 0 and the counter series are stale. Kuma's Cluster Scrape
+  # Targets tile pages this condition, so the rule must stay quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: AlertmanagerMetricsMissing
+        exp_alerts: []
+
+  # Healthy: the scrape works, the counter is present and flat, and the last reload succeeded.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="alertmanager", instance="alertmanager:9093"}'
+        values: '1x40'
+      - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="other"}'
+        values: '0x40'
+      - series: 'prometheus_config_last_reload_successful{job="prometheus", instance="localhost:9090"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: AlertmanagerMetricsMissing
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: AlertmanagerNotificationsFailing
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: PrometheusRuleReloadFailed
+        exp_alerts: []
+
+  # One failed Discord send. The alert fires per integration, and clears once the failure
+  # leaves the 30-minute window.
+  - interval: 1m
+    input_series:
+      - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="discord", reason="serverError"}'
+        values: '0x5 1x60'
+      - series: 'alertmanager_notifications_failed_total{job="alertmanager", instance="alertmanager:9093", integration="email", reason="other"}'
+        values: '0x65'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: AlertmanagerNotificationsFailing
+        exp_alerts:
+          - exp_labels:
+              integration: discord
+              severity: critical
+              service: observability
+            exp_annotations:
+              summary: Alertmanager failed to deliver through discord.
+              description: >-
+                Alertmanager's discord integration failed at least one send in the last 30
+                minutes. Read alertmanager_notifications_failed_total by reason, and the
+                alertmanager pod's log.
+      - eval_time: 45m
+        alertname: AlertmanagerNotificationsFailing
+        exp_alerts: []
+
+  # A reload that keeps failing fires after 10 minutes, and not before.
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_config_last_reload_successful{job="prometheus", instance="localhost:9090"}'
+        values: '1 0x15'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: PrometheusRuleReloadFailed
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: PrometheusRuleReloadFailed
+        exp_alerts:
+          - exp_labels:
+              job: prometheus
+              instance: localhost:9090
+              severity: warning
+              service: observability
+            exp_annotations:
+              summary: Prometheus failed to reload its config or rule files.
+              description: >-
+                localhost:9090 has reported a failed reload for 10 minutes, so it still
+                evaluates the last rule set it loaded. Its log names the file it refused.

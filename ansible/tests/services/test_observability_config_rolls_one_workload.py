@@ -19,11 +19,18 @@ The role rolls per workload instead, and this module guards the ways that goes q
     A second key added to one of the other four lands outside the capture: the ConfigMap
     changes, the pod template does not, and the annotation is present throughout. That blinds
     the gate, so the key count is pinned below.
+  * **The rule files are the one ConfigMap no annotation hashes.** Prometheus reloads them in
+    place (`DECIDED: rules reload in place` in prometheus.yaml.j2), so a rule edit must not roll
+    the pod. That holds only while Prometheus runs with `--config.auto-reload` and mounts the
+    ConfigMap as a whole directory; without either, a rule edit reaches the ConfigMap and never
+    the evaluation. `_rules_reload_problems` pins both in place of the key count.
 
 `restart_on` also decides what the release record expects (`rollouts[].restart`,
 `k8s/manifests/tasks/release_stamp.yml`), so a wrong value fails `probe.py health observability`
 with NOT ROLLED rather than going quiet. That half is the loud one; these two are not.
 """
+
+import copy
 
 import pytest
 
@@ -58,6 +65,11 @@ _CONFIGMAP_DATA_KEYS = {
     "otel-collector-config": 1,
     "grafana-provisioning": 2,
 }
+
+# The ConfigMap Prometheus reloads in place rather than hashing, exempt from the key count above.
+# One key per rule group, so its count moves with every rule PR.
+_RULES_CONFIGMAP = "prometheus-rules"
+_RULES_RELOAD_FLAG = "--config.auto-reload"
 
 _WORKLOAD_KINDS = {"Deployment", "DaemonSet", "StatefulSet"}
 _CHECKSUM_ANNOTATION = "checksum/config"
@@ -196,6 +208,7 @@ def test_no_role_configmap_grew_a_key_the_annotation_does_not_hash():
         (doc.get("metadata") or {}).get("name"): len(doc.get("data") or {})
         for doc in _role_docs()
         if doc.get("kind") == "ConfigMap"
+        and (doc.get("metadata") or {}).get("name") != _RULES_CONFIGMAP
     }
     assert counts == _CONFIGMAP_DATA_KEYS, (
         f"observability's ConfigMap data keys are {counts}, not {_CONFIGMAP_DATA_KEYS}. Each "
@@ -203,6 +216,77 @@ def test_no_role_configmap_grew_a_key_the_annotation_does_not_hash():
         "that capture changes the ConfigMap without moving the pod template, so the edit "
         "reaches the object and never the pod. Widen the capture, then update this map."
     )
+
+
+def _rules_reload_problems(workload):
+    """Why `workload` would not reload a rule edit it mounts, or nothing when it would.
+
+    A workload that mounts no `prometheus-rules` volume has nothing to reload.
+    """
+    spec = pod_spec(workload)
+    volumes = {
+        volume.get("name")
+        for volume in spec.get("volumes") or []
+        if (volume.get("configMap") or {}).get("name") == _RULES_CONFIGMAP
+    }
+    problems = []
+    for container in spec.get("containers") or []:
+        mounts = [
+            m for m in container.get("volumeMounts") or [] if m.get("name") in volumes
+        ]
+        if not mounts:
+            continue
+        if _RULES_RELOAD_FLAG not in (container.get("args") or []):
+            problems.append(
+                f"{container.get('name')} mounts {_RULES_CONFIGMAP} without "
+                f"{_RULES_RELOAD_FLAG}, and no annotation hashes that ConfigMap, so a rule "
+                "edit never reaches the evaluation."
+            )
+        problems += [
+            f"{container.get('name')} mounts {_RULES_CONFIGMAP} with subPath "
+            f"{m['subPath']!r}, and a subPath mount never sees a ConfigMap update."
+            for m in mounts
+            if m.get("subPath")
+        ]
+    return problems
+
+
+def test_prometheus_reloads_the_rules_it_mounts_is_clean():
+    # fact: ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart
+    prometheus = _workloads()["prometheus"]
+    # Non-vacuity: Prometheus mounts the rules, so the predicate has a subject.
+    assert any(
+        (volume.get("configMap") or {}).get("name") == _RULES_CONFIGMAP
+        for volume in pod_spec(prometheus).get("volumes") or []
+    ), f"prometheus no longer mounts {_RULES_CONFIGMAP}; this test has no subject."
+    assert _rules_reload_problems(prometheus) == []
+
+
+def _without(workload, *, flag=False, add_subpath=False):
+    """A copy of `workload` with the reload flag dropped or a subPath added to the rules mount."""
+    workload = copy.deepcopy(workload)
+    for container in pod_spec(workload)["containers"]:
+        if flag:
+            container["args"] = [
+                a for a in container["args"] if a != _RULES_RELOAD_FLAG
+            ]
+        if add_subpath:
+            for mount in container["volumeMounts"]:
+                if mount["name"] == _RULES_CONFIGMAP:
+                    mount["subPath"] = "alerting-meta.yaml"
+    return workload
+
+
+def test_prometheus_mounting_the_rules_without_the_reload_flag_is_flagged():
+    problems = _rules_reload_problems(_without(_workloads()["prometheus"], flag=True))
+    assert len(problems) == 1 and _RULES_RELOAD_FLAG in problems[0], problems
+
+
+def test_prometheus_mounting_the_rules_by_subpath_is_flagged():
+    problems = _rules_reload_problems(
+        _without(_workloads()["prometheus"], add_subpath=True)
+    )
+    assert len(problems) == 1 and "subPath" in problems[0], problems
 
 
 @pytest.mark.parametrize(

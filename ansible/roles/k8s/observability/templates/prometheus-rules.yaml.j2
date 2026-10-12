@@ -1,0 +1,23 @@
+{#
+  Prometheus's rule files, one key per group in observability_rule_groups, each carried verbatim
+  from files/rules/<group>.yaml. lookup('file') does not template the file, so the Go templates
+  in a rule's annotations reach Prometheus intact. The list names each file rather than a glob
+  finding them, because the offline renderer has no fileglob lookup; a file the list does not
+  name never reaches this ConfigMap, and scripts/validate/alert_rules.py fails when the two
+  disagree.
+
+  No checksum annotation hashes this ConfigMap into Prometheus's pod template, on purpose:
+  Prometheus reloads a changed rule file itself (`DECIDED: rules reload in place` at the mount
+  in prometheus.yaml.j2).
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: {{ k8s_observability_namespace }}
+data:
+{% for group in observability_rule_groups %}
+  {{ group }}.yaml: |
+    {{ lookup('file', playbook_dir + '/roles/k8s/observability/files/rules/' + group + '.yaml') | indent(4) }}
+{% endfor %}

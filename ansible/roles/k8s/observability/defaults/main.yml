@@ -197,6 +197,13 @@ observability_health_cron_minute: "*/10"
 # (docs/target-architecture/monitoring/m1-alertmanager.md) sizes the check.
 observability_alertmanager_watchdog_repeat_seconds: 60
 
+# Prometheus's rule groups. Each name is one file, files/rules/<name>.yaml, holding one group of
+# that name, and prometheus-rules.yaml.j2 carries each listed file into the prometheus-rules
+# ConfigMap. A rule file this list does not name never reaches Prometheus, so add the group
+# here in the commit that adds its file; scripts/validate/alert_rules.py fails until they agree.
+observability_rule_groups:
+  - alerting-meta
+
 # The telemetry workloads, as the {kind, name} pairs post_tasks/k8s_stabilise_gate.yml reads.
 # A variable rather than a second inline copy of the list: tasks/main.yml still spells it out
 # once (the wait loop; the restart loop reads this variable), and the stabilisation tasks that

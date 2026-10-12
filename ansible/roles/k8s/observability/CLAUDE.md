@@ -60,11 +60,16 @@ others `restart_on: []`. `manifests_secret_render` is one register over all four
 manifests, so rotating Grafana's admin password also restarts Prometheus and Alertmanager, and
 an Alertmanager config edit restarts all three.
 
+The rule files are the one ConfigMap no annotation hashes. Prometheus mounts `prometheus-rules`
+as a directory and runs with `--config.auto-reload`, so a rule edit reloads in place and never
+rolls the `Recreate` pod
+(`ansible/roles/k8s/observability/templates/prometheus.yaml.j2:DECIDED: rules reload in place`).
+
 `restart_on` is read twice and both readers must agree — the restart task here, and the release
 record's `rollouts[].restart`. A wrong value lands as a red deploy, because `probe.py health
 observability` reads a `restart: true` with no newer `restartedAt` as NOT ROLLED.
 
-**Widen the capture when you add a `data:` key.** Four of the five templates capture ONE key's
+**Widen the capture when you add a `data:` key.** Every capture but Grafana's holds ONE key's
 body, so a second key in `prometheus.yaml.j2` lands outside the hash and the pod never rolls.
 `ansible/tests/services/test_observability_config_rolls_one_workload.py` guards the three ways
 this goes QUIET.
@@ -77,8 +82,10 @@ change, so a comment-only edit buys no soak (#3133).
 Prometheus sends alerts to the role's Alertmanager and scrapes it as job `alertmanager`, which
 carries no `origin` label, so Kuma's Cluster Scrape Targets tile pages a failed scrape.
 Its config, credentials included, is the `alertmanager-config` Secret, and every Go template
-expression in it sits in a Jinja raw block. The routing tree, the receivers and the rules to
-come are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
+expression in it sits in a Jinja raw block. Each rule group is a plain-YAML file in
+`files/rules/` with a promtool test in `tests/rules/`, and ships only once
+`observability_rule_groups` names it. The routing tree, the receivers and the rule conventions
+are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
 
 ## Grafana logs in through Authelia (OIDC), and the admin form stays on
 

@@ -4,6 +4,7 @@ Status: IN PROGRESS
 
 PR 1, the promtool and amtool provisioning and its red proof: [#4703](https://github.com/DanielH2018/server/pull/4703).
 PR 2, Alertmanager with its receivers: [#4728](https://github.com/DanielH2018/server/pull/4728).
+PR 3, the rules pipeline and three meta rules: [#4740](https://github.com/DanielH2018/server/pull/4740).
 
 Depends on: —
 
@@ -270,6 +271,7 @@ else.
  scripts/validate/
 +  alert_tools.sh                          provisions promtool and amtool at the image tags
 +  alert_rules.py                          the validate-alert-rules hook
++  alert_conventions.py                    its Python phase, the rule conventions
 ~  root_ignored_files.py                   LOCAL_ONLY gains .cache
 +  tests/test_validate_alert_rules.py
 +  tests/test_alert_tools_guard.py         the checksum and stamp cases for alert_tools.sh
@@ -947,6 +949,10 @@ and those edits must land with the workload.
   ping returns 404, and `AlertmanagerNotificationsFailing` pages.
 - Add the `Watchdog` rule and its test case. From this PR the validator's floor requires the
   `Watchdog`, and its uniqueness check has its subject.
+- PR 3 already landed the at-most-one `Watchdog` check and the constant-expression check, with
+  their pairs, in `scripts/validate/alert_conventions.py`. PR 4 changes
+  `watchdog_problems` there to require exactly one `Watchdog`, with a pair whose flagged half
+  has none.
 - Add the row to `monitor_bridge_healthchecks_expected`, and add the four pieces after the
   variable in *Healthchecks.io sizing for the Watchdog*: the `deadman_crons` row and its
   seventh argument, `deadman_inputs` and `_deadman`'s sources list, the `every <N>s` branch

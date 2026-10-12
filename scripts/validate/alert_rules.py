@@ -24,6 +24,10 @@ reads. The stubbed `alertmanager.yml` reads `email` as a placeholder address, wh
 accepts as it accepts the real one. `FLOOR` names the rendered files the run must find. A
 render that stopped producing one fails instead of checking nothing.
 
+THE RULE CONVENTIONS. `scripts/validate/alert_conventions.py:rule_problems` holds the rule
+files to the conventions promtool does not check, before the tools run. This script supplies
+the rule groups and the rendered `prometheus-rules` keys from the role's render.
+
 THE GO-TEMPLATE SURVIVAL CHECK. `alertmanager.yml` is part of a Jinja template, and every Go
 template expression in it sits inside a Jinja raw block. Jinja refuses most Go expressions as
 syntax errors, and the hook reports that failed render. A Go expression that Jinja can parse
@@ -65,11 +69,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser
 from lib.repo_paths import K8S_ROLES, REPO
+from validate.alert_conventions import (
+    RULE_TESTS_DIR,
+    RULES_CONFIGMAP,
+    RULES_DIR,
+    rule_problems,
+)
 
 ROLE = "observability"
 ROLE_DIR = K8S_ROLES / ROLE
-RULES_DIR = ROLE_DIR / "files" / "rules"
-RULE_TESTS_DIR = ROLE_DIR / "tests" / "rules"
 TOOLS = REPO / "scripts" / "validate" / "alert_tools.sh"
 FIXTURES = REPO / "scripts" / "validate" / "tests" / "fixtures" / "alert_rules"
 
@@ -96,6 +104,10 @@ ALERTMANAGER_SOURCE = ROLE_DIR / "templates" / "alertmanager-secret.yaml.j2"
 WATCHDOG_STATUS = "{{ .Status }}"
 RAW_BLOCK = re.compile(r"\{% raw %\}(.*?)\{% endraw %\}", re.DOTALL)
 TEMPLATE_DEFINE = re.compile(r'\{\{-? define "([^"]+)" -?\}\}')
+
+# The template that renders the rule files' ConfigMap.
+RULES_TEMPLATE = "prometheus-rules.yaml.j2"
+
 
 # A tool run: the argv after `alert_tools.sh`, returning (exit code, combined output).
 Runner = Callable[[list[str]], tuple[int, str]]
@@ -236,6 +248,32 @@ def go_template_problems(source: str, rendered: str, templates: str) -> list[str
     ]
 
 
+def rendered_rule_keys() -> tuple[list[str], set[str]]:
+    """`observability_rule_groups` and the rendered `prometheus-rules` ConfigMap's data keys.
+
+    Raises:
+        RuntimeError: the rules template failed to render.
+    """
+    from validate import k8s_manifests as validator
+
+    entries = validator.k8s_entries()
+    ctx = validator.render_context(
+        ROLE_DIR, overrides={"container_item": entries[ROLE]}, strict=True
+    )
+    err, docs = validator.check_template(
+        ROLE, ROLE_DIR / "templates" / RULES_TEMPLATE, ctx
+    )
+    if err:
+        raise RuntimeError(f"{ROLE}/{RULES_TEMPLATE} failed to render: {err}")
+    keys = set()
+    for doc in docs:
+        if not isinstance(doc, dict) or doc.get("kind") != "ConfigMap":
+            continue
+        if doc.get("metadata", {}).get("name") == RULES_CONFIGMAP:
+            keys |= set(doc.get("data") or {})
+    return list(ctx.get("observability_rule_groups") or []), keys
+
+
 def tool_checks(
     rendered: Mapping[str, Path],
     rules_dir: Path = RULES_DIR,
@@ -266,20 +304,25 @@ def tool_checks(
 
 
 def check_tree(
-    run: Runner = run_tool, render: Callable[[], dict[str, str]] | None = None
+    run: Runner = run_tool,
+    render: Callable[[], dict[str, str]] | None = None,
+    render_rules: Callable[[], tuple[list[str], set[str]]] | None = None,
 ) -> list[str]:
-    """Render the role, apply the floor, and run every tool check over the tree.
+    """Render the role, apply the floors and the rule conventions, and run every tool check.
 
     Args:
         run: Runs one tool invocation.
         render: Returns the rendered files; `rendered_files` unless a test passes another.
+        render_rules: Returns the rule groups and the rendered rule keys;
+            `rendered_rule_keys` unless a test passes another.
     """
     try:
         found = (render or rendered_files)()
+        groups, keys = (render_rules or rendered_rule_keys)()
     except RuntimeError as err:
         # A Go expression outside a raw block usually lands here, as a Jinja syntax error.
         return [str(err)]
-    problems = floor_problems(found)
+    problems = floor_problems(found) + rule_problems(groups, keys)
     if "alertmanager.yml" in found and "homelab.tmpl" in found:
         problems += go_template_problems(
             ALERTMANAGER_SOURCE.read_text(),
