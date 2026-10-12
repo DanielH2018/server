@@ -211,8 +211,13 @@ def test_dry_run_defaults_off() -> None:
 
 # Mutating verbs, as they appear after `kubectl` (optionally after `-n <ns>`). `create` and
 # `delete` need the trailing space so `--create-annotation` and the like do not match.
+#
+# `run` schedules a pod, `--rm` or not (#4569). It is anchored to the subcommand position,
+# right after `kubectl` and an optional `-n <ns>`, because a chunk keeps its comments and
+# "a dry run" is common prose in a task that only calls `kubectl get`.
 _MUTATES = re.compile(
     r"kubectl\b[^\n]*?\b(apply|create |delete |replace|scale |rollout restart|exec -i|patch )"
+    r"|kubectl\s+(?:-n\s+(?:\{\{[^}]*\}\}|\S+)\s+)?run\s"
 )
 
 # A plain `kubectl exec <pod> -- <cmd>` (no `-i`) is only a mutation if <cmd> itself writes.
@@ -410,6 +415,30 @@ def test_a_guard_named_only_in_a_comment_does_not_excuse_a_mutating_task(
     )
     assert _unguarded_mutations(guarded) == []
     assert _guarded_at_entry(guarded)
+
+
+def test_kubectl_run_is_a_mutation_and_dry_run_prose_is_not(tmp_path: Path) -> None:
+    """`kubectl run --rm` still schedules a pod; qbittorrent's reach probe did on every dry run (#4569)."""
+    run = (
+        "- name: Reach the WebUI from a pod\n"
+        "  ansible.builtin.command:\n"
+        "    cmd: >-\n"
+        "      k3s kubectl -n {{ k8s_namespace }}\n"
+        "      run probe-{{ 4294967295 | random }} --rm -i --restart=Never --image=alpine\n"
+    )
+    assert _unguarded_mutations(_role_with_tasks(tmp_path / "a", main=run)) == [
+        "main.yml: Reach the WebUI from a pod"
+    ]
+    guarded = run + "  when: not (k8s_no_mutate | bool)\n"
+    assert _guarded_at_entry(_role_with_tasks(tmp_path / "b", main=guarded))
+
+    read = (
+        "- name: Read the Secret\n"
+        "  # Runs under a dry run too: reads only.\n"
+        "  ansible.builtin.command:\n"
+        "    cmd: k3s kubectl -n {{ k8s_namespace }} get secret authelia-config\n"
+    )
+    assert not _mutates_outside_manifests(_role_with_tasks(tmp_path / "c", main=read))
 
 
 def test_a_guarded_import_covers_the_file_it_pulls_in(tmp_path: Path) -> None:
