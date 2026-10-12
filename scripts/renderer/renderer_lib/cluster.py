@@ -41,7 +41,7 @@ from jinja2.runtime import Context
 from deploy_tools.render_targets import render_targets
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
-from lib.ansible_jinja_env import template_env
+from lib.ansible_jinja_env import ansible_bool, template_env
 from lib.k8s_roles import (
     CLAIM_TEMPLATE,
     SHARED_MANIFEST_DEFAULTS,
@@ -203,9 +203,9 @@ def _loader_name(env: jinja2.Environment, path: Path) -> str:
     raise RenderError(f"{path} is outside the role's templates and ansible/templates/")
 
 
-def _manifests_prune_default() -> bool:
+def _manifests_prune_default() -> object:
     """`manifests_prune` as the manifests role's own defaults set it."""
-    return bool(yaml_fast.safe_load(MANIFESTS_DEFAULTS.read_text())["manifests_prune"])
+    return yaml_fast.safe_load(MANIFESTS_DEFAULTS.read_text())["manifests_prune"]
 
 
 def _sources(tag: str, names: set[str], own_only: bool) -> dict[str, Path]:
@@ -241,7 +241,10 @@ def render_tag(tag: str, stubs: dict, host: str = K8S_HOST) -> RenderedTag:
             listed basename has no template.
     """
     role_dir = K8S_ROLES / tag
-    ctx = play_context(role_dir, stubs, host)
+    try:
+        ctx = play_context(role_dir, stubs, host)
+    except ValueError as exc:
+        raise RenderError(f"{tag}: {exc}") from exc
     # The k8s play's loop variable over its view of containers_list.
     entry = next(e for e in ctx["containers_list"] if e["name"] == tag)
     ctx["container_item"] = entry
@@ -264,7 +267,8 @@ def render_tag(tag: str, stubs: dict, host: str = K8S_HOST) -> RenderedTag:
     if "manifests_secret_files" in include:
         secret = set(include["manifests_secret_files"])
     deferred = set(include.get("manifests_deferred_files") or [])
-    prune = include.get("manifests_prune", _manifests_prune_default())
+    # Through `bool`, as the render tasks read it: an include's quoted "false" is False.
+    prune = ansible_bool(include.get("manifests_prune", _manifests_prune_default()))
 
     env = renderer_env(role_dir / "templates")
     env.globals["lookup"] = _template_lookup(env, ctx)
