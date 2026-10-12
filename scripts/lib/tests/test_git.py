@@ -5,8 +5,25 @@ import subprocess
 
 import pytest
 
-from git import git, gc_log_path, git_dirty, git_stdout, repair_object_store
+from git import (
+    gc_log_path,
+    git,
+    git_dirty,
+    git_env,
+    git_stdout,
+    repair_object_store,
+)
 from lib.proc_testing import run
+
+
+def test_the_shared_environment_drops_an_inherited_git_dir(monkeypatch):
+    """`git()` and `git_process()` both start git under this, so neither can be redirected."""
+    monkeypatch.setenv("GIT_DIR", "/elsewhere/.git")
+    monkeypatch.setenv("GIT_WORK_TREE", "/elsewhere")
+    monkeypatch.setenv("NOT_GIT_DIR", "kept")
+    env = git_env()
+    assert "GIT_DIR" not in env and "GIT_WORK_TREE" not in env
+    assert env["NOT_GIT_DIR"] == "kept"
 
 
 def _init_repo(path):

@@ -45,6 +45,7 @@ wrong is worth more than the record of one that did not.
 | [0017](0017-the-tree-lock-guards-the-tree-not-the-cluster.md) | The tree lock guards the tree, and per-service locks guard the cluster | Accepted | 2026-09-11 |
 | [0018](0018-the-repository-stays-public-and-ci-stays-hosted.md) | The repository stays public, and CI stays on GitHub-hosted runners | Accepted | 2026-09-28 |
 | [0019](0019-fact-support-stops-at-the-repo-store.md) | Fact support stops at the repo store, and the lock carries its own retirement test | Accepted | 2026-10-10 |
+| [0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md) | Flux applies the cluster from a promoted artifact | Proposed | 2026-10-12 |
 
 ## The long-form behind a record
 
