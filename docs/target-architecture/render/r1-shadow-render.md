@@ -4,6 +4,8 @@ Status: IN PROGRESS
 
 PR 1a, the stub module and the stub file: [#4700](https://github.com/DanielH2018/server/pull/4700).
 
+PR 1b, the first render of `littlelink` in the C1 layout: [#4720](https://github.com/DanielH2018/server/pull/4720).
+
 Depends on: none
 
 Unblocks: [R2](r2-secret-placeholders.md), [R3](r3-remove-live-reads.md) and H3 (the host
