@@ -46,11 +46,10 @@ THE HEAD, NOT THE HEADINGS. The over-budget form was the heading outline alone u
 Headings alone bought almost nothing over no injection: sessions read the full doc after only
 23% of outline injections, against 16% of Bash-only pairs with no hook. The head spends the
 same budget on text a session can act on without a second read: a role doc opens with its
-generated `## At a glance` block and its operative rules. The head path retires only when the
-`over_ceiling` lists of the `PLANES` rows in `ansible/tests/repo/test_role_claude_md.py` are
-empty: those name every role doc still over `_doc_size.MAX_CHARS`, and each entry
-is a doc to trim. That ceiling is what `_fits_inline` leaves a doc — `INLINE_MAX_CHARS` less
-the preamble and the header — not `INLINE_MAX_CHARS` itself (#3245).
+generated `## At a glance` block and its operative rules. No CI check holds a doc under the
+budget, so the head path is permanent: `--report` names each doc that reads as a head. A doc's
+budget is what `_fits_inline` leaves it, `INLINE_MAX_CHARS` less the preamble and the header,
+not `INLINE_MAX_CHARS` itself (#3245), and the head's notice states that budget.
 
 A `CLAUDE.md` inlined whole also carries the `_facts_line` line naming its unverified
 sections, when the doc plus the line fits (`render`).
@@ -350,16 +349,30 @@ _CUT_LINE = "----- sections of this file NOT shown above -----"
 _MIN_HEAD_LINES = 20
 
 
-def _notice(doc, text):
+def _notice(doc, text, header):
+    """The head's first line: the doc's size against the budget `_fits_inline` leaves it.
+
+    That budget is the payload less the preamble and this doc's header, not `INLINE_MAX_CHARS`,
+    and the line names only the limit the doc is over.
+    """
+    body = text.rstrip()
+    chars, lines = len(body), body.count("\n") + 1
+    chars_left, lines_left = _margins(text, header)
+    over = []
+    if chars_left < 0 or lines_left >= 0:
+        over.append((f"{chars:,} chars", f"{chars + chars_left:,}-char"))
+    if lines_left < 0:
+        over.append((f"{lines:,} lines", f"{lines + lines_left:,}-line"))
+    size, budget = (" and ".join(part) for part in zip(*over, strict=True))
     return (
-        f"This file is {len(text):,} chars, over the {INLINE_MAX_CHARS:,}-char hook budget, "
-        f"so this is its head. Read `{doc}` for the rest before you change anything it covers."
+        f"This file is {size}, over the {budget} budget this hook leaves it, so this is its "
+        f"head. Read `{doc}` for the rest before you change anything it covers."
     )
 
 
 def _head_overhead(doc, text, header, trailer):
     """(chars, lines) a head block spends on everything but its head text."""
-    fixed = len(header) + len(_notice(doc, text)) + len(_CUT_LINE) + 8
+    fixed = len(header) + len(_notice(doc, text, header)) + len(_CUT_LINE) + 8
     return fixed + sum(len(h) + 3 for h in trailer), len(trailer) + 4
 
 
@@ -383,7 +396,8 @@ def _head_block(doc, text, header, budget_chars, budget_lines):
             return None
         cut = _head_lines(lines, head_chars, head_lines)
         trailer = _outline(lines[cut:])[:TRAILER_MAX_HEADINGS]
-    block = f"{header}\n{_notice(doc, text)}\n" + "\n".join(lines[:cut]).rstrip() + "\n"
+    notice = _notice(doc, text, header)
+    block = f"{header}\n{notice}\n" + "\n".join(lines[:cut]).rstrip() + "\n"
     if trailer:
         block += _CUT_LINE + "\n" + "\n".join(f"  {h}" for h in trailer) + "\n"
     return block
@@ -394,17 +408,22 @@ def _read(root, doc):
         return fh.read()
 
 
-def _fits_inline(text, header):
-    """True when `render`'s whole-doc block fits the payload after the preamble.
-
-    A doc between that and `INLINE_MAX_CHARS` fits no command and is deferred forever.
-    """
-    chars_left, lines_left = inline_margins(
+def _margins(text, header):
+    """The (chars, newlines) `text`'s whole-doc block leaves of the payload after the preamble."""
+    return inline_margins(
         text,
         header,
         INLINE_MAX_CHARS - len(_PREAMBLE),
         INLINE_MAX_LINES - _PREAMBLE.count("\n"),
     )
+
+
+def _fits_inline(text, header):
+    """True when `render`'s whole-doc block fits the payload after the preamble.
+
+    A doc between that and `INLINE_MAX_CHARS` fits no command and is deferred forever.
+    """
+    chars_left, lines_left = _margins(text, header)
     return chars_left >= 0 and lines_left >= 0
 
 

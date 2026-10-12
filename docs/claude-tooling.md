@@ -479,7 +479,9 @@ check-config` on the Alertmanager config.
 
 `scripts/validate/alert_tools.sh` provisions both tools at the tags of the role's
 `observability_k8s_prometheus_image` and `observability_k8s_alertmanager_image` pins, into
-`.cache/alert-tools/`. The first run in a worktree downloads about 150 MB. To run a tool by
+`alert-tools/` under the git common dir (`git rev-parse --git-common-dir`). Every worktree of
+a clone shares that cache. The first run in a clone downloads about 150 MB, and a later
+worktree of the same clone downloads nothing. To run a tool by
 hand, pass it through the script: `scripts/validate/alert_tools.sh promtool test rules
 <file>`. CI's `hooks` job provisions the tools, then runs `alert_rules.py --prove-red`, which
 shows each tool rejecting its bad fixture under `scripts/validate/tests/fixtures/alert_rules/`.
@@ -640,9 +642,10 @@ headings of the sections the head cut off, then a read pointer: the harness pers
 `additionalContext` to disk and hands the model a preview stub instead. The payload has a
 character limit and a line limit. A doc is weighed against what the preamble leaves of them,
 less its own `===== <doc> (applies to <trigger>) =====` header. The first line of the
-`--report` output below prints both pairs of figures, computed from the hook's own constants. A
-role doc is held under that effective budget by `ansible/tests/_doc_size.py:MAX_CHARS`, which
-derives it rather than restating the payload limit (#3245).
+`--report` output below prints both pairs of figures, computed from the hook's own constants.
+No CI check holds a doc under that effective budget, by the operator's ruling on #2826. The
+report prints each doc's margin under it, and a head's notice states the doc's own budget
+rather than the payload limit (#3245).
 
 `uv run --no-sync python .claude/hooks/inject-nested-docs.py --report` lists every instruction
 file the hook serves. It prints one row per tracked `CLAUDE.md` other than the root one and per
@@ -674,8 +677,7 @@ gets no line. The line says what the lock lacks, not that a section with a row i
 library reads the lock's keys, `git ls-files` and the doc through
 `scripts/lib/facts/citations.py`, and hashes no atom, because master CI already fails on a
 section whose recorded hashes moved. The line is added only when the doc plus the line fits the
-budget, and a head never carries it, so `ansible/tests/_doc_size.py:MAX_CHARS` still promises a
-whole doc. A failure to import or read anything costs the line, never the injection.
+budget, and a head never carries it, so the line never turns a whole doc into a head. A failure to import or read anything costs the line, never the injection.
 
 An editing rule arrives with a write, not a read (#2811). Every rule outside `READ_RULES`
 (`secrets.md` and `facts.md`, which a read needs) is injected only for a path the command

@@ -97,12 +97,6 @@ addopts = "-n auto --dist loadscope -m 'not ui' --strict-markers --strict-config
 # bump surfaces here too, on the PR that bumps it rather than on the day the API goes away.
 filterwarnings = [
   "error",
-  # The one exception, and it is a signal rather than a tolerated wart: the role-doc size band
-  # has to REPORT a doc approaching the character ceiling while the author
-  # still has room to write the bullet, and a blanket `error` would turn that report into
-  # the failure the band exists to arrive before. `always` shows every occurrence in pytest's warnings summary.
-  # Raised only by ansible/tests/repo/test_role_claude_md.py.
-  "always::_doc_size.RoleDocNearCeiling",
 ]
 # `ui` is registered here so it stays a marker rather than becoming a typo nobody notices,
 # and so `--markers` documents it. The deselection lives in addopts above: these tests drive

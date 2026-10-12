@@ -21,7 +21,8 @@ reads. `FLOOR` names the rendered files the run must find. A render that stopped
 one fails instead of checking nothing.
 
 THE TOOLS. `scripts/validate/alert_tools.sh` provisions both at the role's image tags into
-`.cache/alert-tools/`, and every tool call goes through it.
+`alert-tools/` under the git common dir, which every worktree of a clone shares, and every
+tool call goes through it.
 
 `--prove-red` runs each tool against `PROOFS`, the fixtures in
 `scripts/validate/tests/fixtures/alert_rules/`. It exits 0 only when every tool accepts its

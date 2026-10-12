@@ -29,7 +29,8 @@ earlier, so a row means the diff itself moved the atom. The row rules are on
 The plan is ``docs/target-architecture/docs-guard/g1-diff-notice.md``.
 """
 
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import yaml
@@ -276,28 +277,183 @@ def moved_sections(repo: Path, base: str, head: str | None = None) -> list[Notic
     changed = _changed_paths(repo, base, head)
     if not changed:
         return []
+    with Tree(repo, base) as before, Tree(repo, head) as after:
+        return _walk(repo, base, before, after, changed)[0]
+
+
+def _walk(
+    repo: Path, base: str, before: Tree, after: Tree, changed: set[str]
+) -> tuple[list[Notice], int, int]:
+    """The rows between ``before`` and ``after``, and the citations parsed and touched.
+
+    Both counts take each citation once per section, as the rows do.
+    """
     rows: list[Notice] = []
     kinds: dict[str, str | None] = {}
-    with Tree(repo, base) as before, Tree(repo, head) as after:
-        for doc in after.docs():
-            base_bodies: dict[str, str] | None = None
-            for sec in after.sections(doc) or []:
-                cites, _ = parse_citations(sec.body)
-                seen: set[str] = set()
-                for c in cites:
-                    if c.raw in seen or not _touched(c, changed):
-                        continue
-                    seen.add(c.raw)
-                    if not (in_tree(c, before.tracked) or in_tree(c, after.tracked)):
-                        continue
-                    if c.raw not in kinds:
-                        kinds[c.raw] = _kind(c, before, after)
-                    kind = kinds[c.raw]
-                    if kind is None:
-                        continue
-                    if base_bodies is None:
-                        # One ``git show`` per doc that holds a row, not one per doc read.
-                        base_bodies = bodies_at(repo, base, doc)
-                    edited = base_bodies.get(sec.key) != sec.body
-                    rows.append(Notice(sec.key, c.raw, c.form, kind, edited))
-    return rows
+    parsed = touched = 0
+    for doc in after.docs():
+        base_bodies: dict[str, str] | None = None
+        for sec in after.sections(doc) or []:
+            cites, _ = parse_citations(sec.body)
+            seen: set[str] = set()
+            for c in cites:
+                if c.raw in seen:
+                    continue
+                seen.add(c.raw)
+                parsed += 1
+                if not _touched(c, changed):
+                    continue
+                touched += 1
+                if not (in_tree(c, before.tracked) or in_tree(c, after.tracked)):
+                    continue
+                if c.raw not in kinds:
+                    kinds[c.raw] = _kind(c, before, after)
+                kind = kinds[c.raw]
+                if kind is None:
+                    continue
+                if base_bodies is None:
+                    # One ``git show`` per doc that holds a row, not one per doc read.
+                    base_bodies = bodies_at(repo, base, doc)
+                edited = base_bodies.get(sec.key) != sec.body
+                rows.append(Notice(sec.key, c.raw, c.form, kind, edited))
+    return rows, parsed, touched
+
+
+@dataclass(frozen=True)
+class Summary:
+    """How much one notice read, for the line every format but ``json`` prints.
+
+    Attributes:
+      citations: the citations parsed from every section at the head, once per section.
+      touched: those whose path the diff touched.
+      changed_files: the paths the diff touched.
+      base: the full sha of the diff's base.
+    """
+
+    citations: int
+    touched: int
+    changed_files: int
+    base: str
+
+    def line(self) -> str:
+        return (
+            f"parsed {self.citations} citations; {self.touched} in "
+            f"{self.changed_files} changed files; base {self.base[:12]}"
+        )
+
+
+def scan(
+    repo: Path, base: str, head: str | None = None
+) -> tuple[list[Notice], Summary]:
+    """``moved_sections`` with the ``Summary`` that ``render`` prints beside its rows.
+
+    Unlike ``moved_sections``, it parses every section even when the diff is empty, so an
+    empty notice still shows how many citations it read. The summary carries ``base``
+    expanded to a full sha.
+
+    Raises:
+      subprocess.CalledProcessError: ``base`` or ``head`` does not name a revision.
+      MissingObject: a revision lists a blob that the object store does not hold.
+    """
+    sha = git("rev-parse", "--verify", f"{base}^{{commit}}", cwd=repo).stdout.strip()
+    changed = _changed_paths(repo, sha, head)
+    with Tree(repo, sha) as before, Tree(repo, head) as after:
+        rows, parsed, touched = _walk(repo, sha, before, after, changed)
+    return rows, Summary(parsed, touched, len(changed), sha)
+
+
+def resolve_base(repo: Path, ref: str, head: str = "HEAD") -> str | None:
+    """The merge base of ``ref`` and ``head``, or None when git cannot give one.
+
+    None covers a ref that does not resolve at either end, and two histories with no common
+    commit. On CI the merge base of ``origin/master`` and the PR's merge commit is master's
+    tip. On a local branch it is the fork point. Both diffs hold exactly the branch's changes.
+    """
+    done = git("merge-base", ref, head, cwd=repo, check=False)
+    sha = done.stdout.strip()
+    return sha if done.returncode == 0 and sha else None
+
+
+FORMATS = ("text", "markdown", "github", "json")
+
+# Content-form rows come before path rows, so a rename's path rows cannot push a content row
+# past the annotation cap. Within one form, kinds come in this order.
+_KIND_ORDER = ("moved", "gone", "ambiguous", "unparsable")
+
+# GitHub keeps at most 10 notice annotations per step, and the summary takes one of them.
+GITHUB_ROW_CAP = 9
+
+
+def ordered(rows: list[Notice]) -> list[Notice]:
+    """``rows`` in the order every format lists them: content rows by kind, then path rows.
+
+    Rows of one kind sort by unit, and keep their walk order within a unit.
+    """
+    return sorted(
+        rows, key=lambda r: (r.form == "path", _KIND_ORDER.index(r.kind), r.unit)
+    )
+
+
+def _escape_data(s: str) -> str:
+    # ``%`` goes first, or the ``%0A`` written for a line feed would read back as ``%250A``.
+    return s.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def _escape_property(s: str) -> str:
+    return _escape_data(s).replace(":", "%3A").replace(",", "%2C")
+
+
+def _cell(s: str) -> str:
+    return s.replace("|", "\\|").replace("\n", " ")
+
+
+def render(rows: list[Notice], summary: Summary, fmt: str = "text") -> str:
+    """The notice in ``fmt``, one of ``FORMATS``, with no trailing newline.
+
+    Every format lists the rows in ``ordered`` order.
+
+    - ``text``: one ``<kind> <unit> <atom> (prose edited|prose unchanged)`` line per row,
+      then ``summary.line()``.
+    - ``markdown``: the summary line, then the rows as a table, for a job summary.
+    - ``github``: one ``::notice`` workflow command for the summary line, then one per row
+      up to ``GITHUB_ROW_CAP``. A row's unit is its ``title`` and ``<kind> <form> <atom>`` is
+      its message, each escaped as GitHub requires of a property or a message.
+    - ``json``: a list of objects with the keys ``unit``, ``atom``, ``form``, ``kind`` and
+      ``prose_edited``, and no summary.
+
+    Raises:
+      ValueError: ``fmt`` is not one of ``FORMATS``.
+    """
+    rows = ordered(rows)
+    if fmt == "text":
+        lines = [
+            f"{r.kind} {r.unit} {r.atom} "
+            f"({'prose edited' if r.prose_edited else 'prose unchanged'})"
+            for r in rows
+        ]
+        return "\n".join([*lines, summary.line()])
+    if fmt == "markdown":
+        lines = [f"Facts notice: {summary.line()}"]
+        if rows:
+            lines += [
+                "",
+                "| Kind | Form | Section | Atom | Prose edited |",
+                "| --- | --- | --- | --- | --- |",
+            ]
+            lines += [
+                f"| {r.kind} | {r.form} | {_cell(r.unit)} | `{_cell(r.atom)}` | "
+                f"{'yes' if r.prose_edited else 'no'} |"
+                for r in rows
+            ]
+        return "\n".join(lines)
+    if fmt == "github":
+        lines = [f"::notice::{_escape_data(summary.line())}"]
+        lines += [
+            f"::notice title={_escape_property(r.unit)}::"
+            f"{_escape_data(f'{r.kind} {r.form} {r.atom}')}"
+            for r in rows[:GITHUB_ROW_CAP]
+        ]
+        return "\n".join(lines)
+    if fmt == "json":
+        return json.dumps([asdict(r) for r in rows], indent=2)
+    raise ValueError(f"unknown notice format {fmt!r}; expected one of {FORMATS}")

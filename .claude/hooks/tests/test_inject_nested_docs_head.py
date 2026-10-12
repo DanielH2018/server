@@ -8,6 +8,8 @@ fixture's small role doc to push it over the budget.
 Run: uv run pytest .claude/hooks/tests/test_inject_nested_docs_head.py
 """
 
+import re
+
 import test_inject_nested_docs as base
 
 # Bound by assignment, not imported, so the test arguments naming it do not read as a
@@ -157,3 +159,45 @@ def test_a_head_row_logs_the_injected_size_not_the_file_size(repo, tmp_path):
     (row,) = (tmp_path / "instructions.log").read_text().splitlines()
     assert row.endswith(f" bytes={len(block.encode('utf-8'))}"), row
     assert len(block) < doc.stat().st_size
+
+
+FOO_DOC = "ansible/roles/k8s/foo/CLAUDE.md"
+FOO_FILE = "ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+
+
+def _head_notice(repo, text):
+    """The notice line a session reads for `text` as foo's doc, and the header it sits under."""
+    (repo / FOO_DOC).write_text(text)
+    context, chosen = _build(repo, f"cat {FOO_FILE}")
+    ((doc, trigger),) = chosen
+    (notice,) = [ln for ln in context.splitlines() if ln.startswith("This file is")]
+    return notice, _mod._header(doc, trigger)
+
+
+def _stated(notice, unit):
+    found = re.search(rf"over the ([\d,]+)-{unit}", notice)
+    assert found, notice
+    return int(found.group(1).replace(",", ""))
+
+
+def test_notice_for_a_doc_just_over_its_budget_states_that_budget(repo):
+    """Under INLINE_MAX_CHARS but over what the preamble and header leave: the 7,500 is false."""
+    header = _mod._header(FOO_DOC, FOO_FILE)
+    over = _mod.INLINE_MAX_CHARS - len(_mod._PREAMBLE) - len(header) - 2 + 50
+    text = "# Foo\n\n" + "x" * (over - len("# Foo\n\n"))
+    notice, header = _head_notice(repo, text)
+    budget = _stated(notice, "char")
+    assert len(text) == budget + 50 and len(text) < _mod.INLINE_MAX_CHARS
+    assert _mod._fits_inline(text[:budget], header)
+    assert not _mod._fits_inline(text[: budget + 1], header)
+    assert "7,500" not in notice and "-line" not in notice
+
+
+def test_notice_for_a_line_limited_doc_states_the_line_budget(repo):
+    """Cut by the line limit while well under the char limit, so the line budget is the one named."""
+    lines = [f"- line {i}" for i in range(200)]
+    notice, header = _head_notice(repo, "\n".join(lines) + "\n")
+    budget = _stated(notice, "line")
+    assert "200 lines" in notice and "-char" not in notice
+    assert _mod._fits_inline("\n".join(lines[:budget]), header)
+    assert not _mod._fits_inline("\n".join(lines[: budget + 1]), header)
