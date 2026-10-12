@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-PR 1, the workload-service mapping: the pull request that closes issue #4774.
+PR 1, the workload-service mapping: [#4777](https://github.com/DanielH2018/server/pull/4777).
 
 Depends on: M1
 
