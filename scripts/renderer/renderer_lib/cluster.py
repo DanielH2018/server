@@ -19,8 +19,8 @@ apply them:
 - `manifests_deferred_files` render from the role's own templates, unlabelled, into
   `DIR/cluster/<tag>-deferred/`.
 
-`PENDING` names the tags that read a value a role task computes. R1's PR 3 derives those
-values, and until then a pending tag is refused rather than rendered without them.
+A value a role task computes, such as a content tag or a script checksum, comes from
+`task_inputs.derived_facts` and goes in as a `set_fact` would, over every file layer.
 """
 
 import sys as _sys
@@ -30,51 +30,26 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import cast
 
 import jinja2
 import yaml
 from ansible.errors import AnsibleError
-from jinja2 import pass_context
-from jinja2.runtime import Context
 
 from deploy_tools.render_targets import render_targets
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
-from lib.ansible_jinja_env import ansible_bool, template_env
+from lib.ansible_jinja_env import ansible_bool
 from lib.k8s_roles import (
     CLAIM_TEMPLATE,
     SHARED_MANIFEST_DEFAULTS,
     resolved_manifest_files,
 )
 from lib.k8s_context import resolve_vars
-from lib.k8s_yaml import make_lookup
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.context import play_context
-from renderer.renderer_lib.task_inputs import include_vars
-
-# The tags whose templates or defaults read a value a role task computes, a name in
-# `task_inputs.TASK_COMPUTED`. R1's PR 3 derives those values and empties this set. A test
-# holds it equal to a word grep of each tag's role for those names.
-PENDING = frozenset(
-    {
-        "autofix-bridge",
-        "code-server",
-        "game-stats",
-        "homelab-mcp",
-        "ical-proxy",
-        "janitorr",
-        "karakeep",
-        "monitor-bridge",
-        "n8n",
-        "nut",
-        "pi-peer-backup",
-        "terraria",
-        "uptime-kuma",
-        "valheim",
-    }
-)
+from renderer.renderer_lib.environment import RenderError, loader_name, renderer_env
+from renderer.renderer_lib.task_inputs import derived_facts, include_vars
 
 KUSTOMIZATION = "kustomization.yaml"
 DEFERRED_SUFFIX = "-deferred"
@@ -94,10 +69,6 @@ INCLUDE_KEYS = frozenset(
 
 class RenderRefused(ValueError):
     """A requested render that the renderer will not start; nothing has been written."""
-
-
-class RenderError(RuntimeError):
-    """A template that failed to render; nothing has been written."""
 
 
 @dataclass(frozen=True)
@@ -124,24 +95,17 @@ class RenderedTag:
 
 
 def select_tags(requested: list[str] | None, host: str = K8S_HOST) -> list[str]:
-    """The sorted tags to render: `requested`, or every renderable target of `host`.
+    """The sorted tags to render: `requested`, or every render target of `host`.
 
     Raises:
-        RenderRefused: A requested tag is not one of `host`'s render targets, or does not
-            render yet.
+        RenderRefused: A requested tag is not one of `host`'s render targets.
     """
     targets = set(render_targets(host))
     if not requested:
-        return sorted(targets - PENDING)
+        return sorted(targets)
     unknown = sorted(set(requested) - targets)
     if unknown:
         raise RenderRefused(f"{unknown} are not k8s render targets of {host}")
-    pending = sorted(set(requested) & PENDING)
-    if pending:
-        raise RenderRefused(
-            f"{pending} do not render yet: they read values a role task computes, which "
-            "target slice R1 derives in a later PR"
-        )
     return sorted(set(requested))
 
 
@@ -158,49 +122,6 @@ def kustomization_text(files: list[str]) -> str:
         },
         sort_keys=False,
     )
-
-
-def renderer_env(templates: Path) -> jinja2.Environment:
-    """The strict environment a role's templates render in: its own directory, then the shared one.
-
-    The template census in `scripts/renderer/tests/` parses every template through this
-    environment, so a filter or test the renderer lacks fails there before a render meets it.
-    """
-    return template_env(templates, undefined_cls=StrictChainableUndefined)
-
-
-def _template_lookup(env: jinja2.Environment, ctx: dict):
-    """`make_lookup`, with `template` rendered through `env` and the calling template's variables.
-
-    The labelling wrapper calls `lookup('ansible.builtin.template', manifests_label_src)`, and
-    the inner template reads the task's loop variable (`manifests_claim`). So the lookup renders
-    with the caller's variables, through the same strict environment and loader, where
-    `make_lookup` renders with the role context and a `StubUndefined` environment.
-    """
-    base = make_lookup(ctx)
-
-    @pass_context
-    def lookup(context: Context, kind: str, *args, **kwargs) -> object:
-        if kind.removeprefix("ansible.builtin.") != "template":
-            return base(context, kind.removeprefix("ansible.builtin."), *args, **kwargs)
-        name = _loader_name(env, Path(args[0]))
-        # Rstripped as `make_lookup` does, so a template the guards and the renderer both
-        # embed reads the same bytes in each.
-        return env.get_template(name).render(context.get_all()).rstrip("\n")
-
-    return lookup
-
-
-def _loader_name(env: jinja2.Environment, path: Path) -> str:
-    """`path` as a name `env`'s loader resolves, relative to the first search path holding it.
-
-    Raises:
-        RenderError: `path` lies under none of the loader's search paths.
-    """
-    for root in cast(jinja2.FileSystemLoader, env.loader).searchpath:
-        if path.is_relative_to(root):
-            return path.relative_to(root).as_posix()
-    raise RenderError(f"{path} is outside the role's templates and ansible/templates/")
 
 
 def _manifests_prune_default() -> object:
@@ -233,6 +154,15 @@ def _sources(tag: str, names: set[str], own_only: bool) -> dict[str, Path]:
     return sources
 
 
+def tag_context(
+    role_dir: Path, tag: str, overrides: dict, host: str = K8S_HOST
+) -> dict:
+    """`play_context` with `container_item`, the k8s play's loop variable, set to `tag`'s entry."""
+    ctx = play_context(role_dir, overrides, host)
+    ctx["container_item"] = next(e for e in ctx["containers_list"] if e["name"] == tag)
+    return ctx
+
+
 def render_tag(tag: str, stubs: dict, host: str = K8S_HOST) -> RenderedTag:
     """Render every file the manifests role writes for `tag`, with a `kustomization.yaml` each.
 
@@ -242,12 +172,16 @@ def render_tag(tag: str, stubs: dict, host: str = K8S_HOST) -> RenderedTag:
     """
     role_dir = K8S_ROLES / tag
     try:
-        ctx = play_context(role_dir, stubs, host)
-    except ValueError as exc:
+        ctx = tag_context(role_dir, tag, stubs, host)
+        # A role default can read a fact a task sets, as every `*_k8s_image` built here reads
+        # `k8s_built_image_tags`. The first pass leaves such a default undefined, so the facts
+        # go in as the overrides of a second pass, as `set_fact` outranks every file layer.
+        # The stub file's extra vars outrank them in turn.
+        facts = derived_facts(role_dir, ctx)
+        ctx = tag_context(role_dir, tag, {**facts, **stubs}, host)
+    except (ValueError, jinja2.TemplateError, AnsibleError) as exc:
         raise RenderError(f"{tag}: {exc}") from exc
-    # The k8s play's loop variable over its view of containers_list.
-    entry = next(e for e in ctx["containers_list"] if e["name"] == tag)
-    ctx["container_item"] = entry
+    entry = ctx["container_item"]
     try:
         raw = include_vars(role_dir)
         # Only the keys the render reads. The rest (rollout timeouts, extra rollouts) may name
@@ -270,8 +204,7 @@ def render_tag(tag: str, stubs: dict, host: str = K8S_HOST) -> RenderedTag:
     # Through `bool`, as the render tasks read it: an include's quoted "false" is False.
     prune = ansible_bool(include.get("manifests_prune", _manifests_prune_default()))
 
-    env = renderer_env(role_dir / "templates")
-    env.globals["lookup"] = _template_lookup(env, ctx)
+    env = renderer_env(role_dir / "templates", ctx)
 
     def render(path: Path, out_name: str, wrap: bool, **loop_vars) -> str:
         vars_ = {**ctx, **loop_vars}
@@ -279,7 +212,7 @@ def render_tag(tag: str, stubs: dict, host: str = K8S_HOST) -> RenderedTag:
             vars_["manifests_label_src"] = str(path)
             path = LABEL_WRAPPER
         try:
-            return env.get_template(_loader_name(env, path)).render(vars_)
+            return env.get_template(loader_name(env, path)).render(vars_)
         except (jinja2.TemplateError, ValueError, AnsibleError) as exc:
             raise RenderError(f"{tag}/{out_name} from {path.name}: {exc}") from exc
 

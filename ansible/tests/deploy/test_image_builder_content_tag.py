@@ -26,6 +26,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 from _helpers import ANSIBLE
 from _helpers import load_tasks
+from _image_builder_tag import set_fact_expression, templar_content_tag
 from _k8s_render import render_role_template
 
 
@@ -45,25 +46,16 @@ TAG_RE = re.compile(r"^sha-[0-9a-f]{12}$")
 
 def _tag_expression() -> str:
     """The Jinja template the role assigns to the content-tag fact, verbatim."""
-    for task in load_tasks(TASKS):
-        fact = task.get("ansible.builtin.set_fact") or {}
-        if FACT in fact:
-            return fact[FACT]
-    pytest.fail(f"no set_fact assigns {FACT} in {TASKS}")
+    return set_fact_expression(TASKS, FACT)
 
 
 def _tag(dockerfile, context=None, context_files=None, role=ROLE, name="demo") -> str:
     """Evaluate the shipped expression against real paths, exactly as a deploy does.
 
-    `set_basedir` is what puts `<role>/templates/` on the lookup's search path — the same place a
-    role task finds a bare template name. Point `role` at a copy of the role to vary the
-    templates themselves.
+    Point `role` at a copy of the role to vary the templates themselves.
     """
-    loader = DataLoader()
-    loader.set_basedir(str(role))
-    templar = Templar(
-        loader=loader,
-        variables={
+    return templar_content_tag(
+        {
             "image_builder_name": name,
             "k8s_namespace": "homelab",
             "image_builder_dockerfile": str(dockerfile),
@@ -72,8 +64,8 @@ def _tag(dockerfile, context=None, context_files=None, role=ROLE, name="demo") -
                 str(k): v for k, v in (context_files or {}).items()
             },
         },
+        role,
     )
-    return str(templar.template(trust_as_template(_tag_expression()))).strip()
 
 
 def _write(tmp_path, name: str, body: str):
