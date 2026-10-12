@@ -8,13 +8,40 @@ This document covers the security and monitoring tools deployed by `ansible/role
 
 **What it does:** Scans the system for rootkits, backdoors, and suspicious files. Checks whether system binaries (`ls`, `ps`, `netstat`, etc.) have been replaced by trojaned versions, looks for hidden processes or ports, and checks for files/directories that rootkits commonly create.
 
-**Schedule:** Weekly, Wednesday at 2:00 AM (staggered off the Monday AIDE check). Warnings-only output is sent to syslog tagged `rkhunter`.
+**Schedule:** Weekly, Wednesday at 2:00 AM, on every host (staggered off the Monday AIDE check). The cron runs `/usr/local/bin/rkhunter-check.sh`, which writes the warnings to syslog tagged `rkhunter` and pushes a verdict to that host's **rkhunter Scan (&lt;host&gt;)** Kuma tile.
+
+**What the tile means.** rkhunter exits 1 both when it finds a warning and when it fails, so the script reads `/var/log/rkhunter.log` instead (#4598). A scan completed only if this run rewrote the log and the log holds its `System checks summary`.
+
+| Scan | Tile | Message |
+|------|------|---------|
+| completed, no warning, suspect file or possible rootkit | UP | the counts, all 0 |
+| completed, `Possible rootkits` above 0 | DOWN | `possible rootkit found` with the counts |
+| completed, `Suspect files` above 0 | DOWN | `suspect file found` with the counts |
+| completed with a warning | DOWN | `rkhunter warned` with the counts and the first warning |
+| did not complete | DOWN | rkhunter's exit code and its first error line |
+
+No push for a week and 2 hours also reads DOWN, which means the cron stopped running or the scan never finished.
+
+Every warning pages (#4638). Before that change, every host warned every week from two benign causes. rkhunter reported `/etc/.updated` and `/etc/.resolv.conf.systemd-resolved.bak` as hidden files on all three hosts. It also reported `PermitRootLogin` unset on daniel-pi, because rkhunter reads only the main `/etc/ssh/sshd_config` and the Pi hardens a drop-in. `initial_setup` renders `/etc/rkhunter.conf.local` to allowlist both causes, so a healthy week has no warnings. The `DECIDED:` marker in `ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2` holds the evidence. The script's verdict goes to syslog tagged `rkhunter-check` as `status=<up|down> <message>`.
+
+To clear a warning, find its cause first. rkhunter reports a user or group added to `/etc/passwd` or `/etc/group` once, the week after a package or the operator adds it. Once you have confirmed the account is yours, run `sudo /usr/local/bin/rkhunter-check.sh` again; rkhunter stored the new account list on the run that warned, so the rerun reads UP. A benign warning that recurs every week needs an `ALLOW*` line in `ansible/roles/setup/initial_setup/templates/rkhunter.conf.local.j2`, applied with `--tags rkhunter`.
+
+To prove the tile pages, make rkhunter fail to start on one host and run the script by hand. `ionice` then cannot execute it and exits 126 without touching the log, so the tile goes DOWN within seconds:
+
+```bash
+sudo chmod -x /usr/bin/rkhunter
+sudo /usr/local/bin/rkhunter-check.sh
+sudo chmod +x /usr/bin/rkhunter
+```
+
+The tile stays DOWN until the next run. To clear it, run `sudo /usr/local/bin/rkhunter-check.sh` again; a scan takes two to three minutes.
 
 **Check for findings:**
 
 ```bash
 # From the weekly cron
-sudo grep rkhunter /var/log/syslog
+sudo journalctl -t rkhunter -t rkhunter-check --since -7d
+sudo grep Warning /var/log/rkhunter.log
 
 # Full interactive scan with detailed output
 sudo rkhunter --check --nocolors --skip-keypress
@@ -267,6 +294,7 @@ sudo unattended-upgrade --dry-run --debug
 | Sensitive file modified | `sudo ausearch -k identity` or `-k sshd` |
 | Rootkit / backdoor suspicion | `sudo rkhunter --check` |
 | Unexpected file change | `sudo aide --config=/etc/aide/aide.conf --check` |
+| rkhunter tile DOWN | `sudo journalctl -t rkhunter-check -t rkhunter --since -7d` and `/var/log/rkhunter.log` |
 | AIDE tile DOWN | `sudo journalctl -t aide-check -t aide --since -7d` |
 | Unusual commands run as root | `sudo lastcomm` |
 | Unusual I/O or CPU activity | `sar -d` / `sar -u` |

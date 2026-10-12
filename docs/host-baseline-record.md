@@ -105,12 +105,19 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   AIDE Monday 03:00 and rkhunter Wednesday 02:00, because they used to overlap at full priority
   for over an hour each on the Pi. The AIDE database init is the slow part of a first run on any
   host — about 8 minutes, with progress monitoring, so expect a long pause rather than a hang.
-- **The AIDE cron reports to Kuma; rkhunter does not yet (#4598).** `aide-check.sh` keeps AIDE's exit code
+- **The AIDE and rkhunter crons report to Kuma.** `aide-check.sh` keeps AIDE's exit code
   and pushes one "AIDE Integrity" tile per host. An error exit pushes DOWN, and differences
   push UP with their counts, because package upgrades change files every week (#4594).
   `docs/security-tools.md` has the exit-code table. The script runs from the cron rather than
   from a `kuma-check-*` timer, because a timer reruns a red check, and each rerun here is
   another full-filesystem scan.
+- **`rkhunter-check.sh` reads completion from `/var/log/rkhunter.log`, not from the exit code**
+  (#4598). rkhunter exits 1 on a warning and on an error alike, so a scan completed only if this
+  run rewrote the log and the log holds its summary. It pushes one "rkhunter Scan" tile per host:
+  DOWN on a scan that did not complete, and DOWN on any warning, suspect file or possible
+  rootkit (#4638). `/etc/rkhunter.conf.local` exempts the warnings every host raised every
+  week, so a healthy week has none. Its `ALLOW_SSH_ROOT_USER` follows whether the main
+  `sshd_config` sets `PermitRootLogin`, because rkhunter reads no drop-in.
 - **Postfix binds `inet_interfaces = loopback-only`** and needs `notify: Restart Postfix`: a
   reload does not rebind the socket, so the `0.0.0.0:25` listener would survive it.
 - **The Pi's swap file is bring-up, not tuning.** It is gated on `has_low_memory_board` and the
