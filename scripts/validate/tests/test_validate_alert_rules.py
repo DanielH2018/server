@@ -9,10 +9,6 @@ Run: uv run pytest scripts/validate/tests/test_validate_alert_rules.py
 
 import re
 
-import jinja2
-import pytest
-
-from lib.ansible_jinja_env import make_ansible_env
 from lib.repo_paths import REPO
 from validate import alert_rules
 
@@ -86,37 +82,82 @@ def test_a_rejected_alertmanager_config_is_flagged():
     assert "amtool check-config" in problems[0] and "undefined receiver" in problems[0]
 
 
-def _alertmanager_render() -> tuple[str, str]:
-    """The real Secret template's text and its rendered `alertmanager.yml`."""
-    source = alert_rules.ALERTMANAGER_SOURCE.read_text()
-    return source, alert_rules.rendered_files()["alertmanager.yml"]
+def _alertmanager_render() -> tuple[str, str, str]:
+    """The real Secret template's text, its rendered `alertmanager.yml` and `homelab.tmpl`."""
+    found = alert_rules.rendered_files()
+    return (
+        alert_rules.ALERTMANAGER_SOURCE.read_text(),
+        found["alertmanager.yml"],
+        found["homelab.tmpl"],
+    )
 
 
 def test_go_templates_that_survive_the_render_are_clean():
-    source, rendered = _alertmanager_render()
-    # Non-vacuity: the source holds a named reference, so a renamed template fails here
-    # rather than leaving the check with nothing to require.
-    assert '{{ template "homelab.title" . }}' in alert_rules.TEMPLATE_REFERENCE.findall(
-        source
-    )
-    assert alert_rules.go_template_problems(source, rendered) == []
+    source, rendered, templates = _alertmanager_render()
+    # Non-vacuity: named members of both inputs, so a renamed template or an emptied raw
+    # block fails here rather than leaving the check with nothing to require.
+    assert '{{ template "homelab.title" . }}' in alert_rules.RAW_BLOCK.findall(source)
+    assert set(alert_rules.TEMPLATE_DEFINE.findall(templates)) == {
+        "homelab.title",
+        "homelab.message",
+    }
+    assert alert_rules.go_template_problems(source, rendered, templates) == []
 
 
-def test_go_templates_the_render_consumed_are_flagged():
-    """Without its raw blocks the template does not render at all. A Go expression Jinja
-    could parse would render to nothing instead, which is the render this check catches."""
-    source, rendered = _alertmanager_render()
-    with pytest.raises(jinja2.TemplateSyntaxError):
-        make_ansible_env().from_string(
-            source.replace("{% raw %}", "").replace("{% endraw %}", "")
-        )
-    consumed = alert_rules.TEMPLATE_REFERENCE.sub("", rendered).replace(
-        alert_rules.WATCHDOG_STATUS, ""
-    )
-    problems = alert_rules.go_template_problems(source, consumed)
+def test_a_parseable_go_expression_the_render_consumed_is_flagged():
+    """The case amtool cannot see. The message reference is rewritten outside its raw block
+    in a form Jinja parses, so the source no longer holds it and the render drops it. The
+    `define` in homelab.tmpl still requires it."""
+    source, rendered, templates = _alertmanager_render()
+    reference = "'{% raw %}{{ template \"homelab.message\" . }}{% endraw %}'"
+    assert source.count(reference) == 2, "the fixture edit no longer matches the source"
+    edited = source.replace(reference, "'{{ template_message | default(\"\") }}'")
+    consumed = rendered.replace('{{ template "homelab.message" . }}', "")
+    problems = alert_rules.go_template_problems(edited, consumed, templates)
+    assert len(problems) == 1 and 'template "homelab.message"' in problems[0], problems
+
+
+def test_a_raw_block_the_render_lost_is_flagged():
+    source, rendered, templates = _alertmanager_render()
+    consumed = rendered.replace(alert_rules.WATCHDOG_STATUS, "")
+    problems = alert_rules.go_template_problems(source, consumed, templates)
     assert any(alert_rules.WATCHDOG_STATUS in p for p in problems), problems
-    assert any('template "homelab.title"' in p for p in problems), problems
-    assert any('template "homelab.message"' in p for p in problems), problems
+
+
+def test_a_template_with_its_raw_blocks_removed_does_not_render(tmp_path):
+    """Jinja refuses the Go expressions outright, through the validator's own environment."""
+    from validate import k8s_manifests as validator
+
+    stripped = tmp_path / alert_rules.ALERTMANAGER_SOURCE.name
+    stripped.write_text(
+        alert_rules.ALERTMANAGER_SOURCE.read_text()
+        .replace("{% raw %}", "")
+        .replace("{% endraw %}", "")
+    )
+    ctx = validator.render_context(
+        alert_rules.ROLE_DIR,
+        overrides={"container_item": validator.k8s_entries()[alert_rules.ROLE]},
+    )
+    env = validator.template_env(tmp_path)
+    env.globals["lookup"] = validator.make_lookup(ctx)
+
+    rendered, err = validator.render_or_error(env, stripped.name, ctx)
+
+    assert rendered is None and err, rendered
+
+
+def test_a_render_that_fails_is_flagged_rather_than_raised():
+    def fail() -> dict[str, str]:
+        raise RuntimeError("observability/alertmanager-secret.yaml.j2 failed to render")
+
+    problems = alert_rules.check_tree(run=lambda argv: (0, ""), render=fail)
+    assert problems == ["observability/alertmanager-secret.yaml.j2 failed to render"]
+
+
+def test_a_homelab_tmpl_that_defines_nothing_is_flagged():
+    source, rendered, _ = _alertmanager_render()
+    problems = alert_rules.go_template_problems(source, rendered, "")
+    assert problems and "defines no template" in problems[0], problems
 
 
 def test_tools_that_accept_good_and_reject_bad_fixtures_are_clean():

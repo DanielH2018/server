@@ -25,10 +25,16 @@ accepts as it accepts the real one. `FLOOR` names the rendered files the run mus
 render that stopped producing one fails instead of checking nothing.
 
 THE GO-TEMPLATE SURVIVAL CHECK. `alertmanager.yml` is part of a Jinja template, and every Go
-template expression in it sits inside a Jinja raw block. Jinja refuses the two forms the file
-uses as syntax errors, but a Go expression that Jinja could parse would be consumed, and the
-rendered file would still pass amtool. `go_template_problems` requires the render to hold `{{ .Status }}` and every
-`{{ template "homelab.…" . }}` reference the source template holds.
+template expression in it sits inside a Jinja raw block. Jinja refuses most Go expressions as
+syntax errors, and the hook reports that failed render. A Go expression that Jinja can parse
+is consumed instead, and the rendered file still passes amtool. `go_template_problems`
+therefore requires three things of the render, none of which an edit to the Jinja source can
+take away by rewriting the expression:
+
+- the text of every raw block in the source, verbatim;
+- `{{ template "<name>" . }}` for every template `homelab.tmpl` defines, so a reference
+  rewritten outside its raw block is still required;
+- `{{ .Status }}`, the Watchdog's payload.
 
 THE TOOLS. `scripts/validate/alert_tools.sh` provisions both at the role's image tags into
 `alert-tools/` under the git common dir, which every worktree of a clone shares, and every
@@ -83,12 +89,13 @@ RENDERED = {
 # land.
 FLOOR = frozenset({"prometheus.yml", "alertmanager.yml", "homelab.tmpl"})
 
-# The template whose Go expressions must survive the Jinja render, and the expressions the
-# survival check reads from it. `{{ .Status }}` is the Watchdog's payload and is required
-# whatever the source holds.
+# The template whose Go expressions must survive the Jinja render, and what the survival
+# check reads from it and from homelab.tmpl. `{{ .Status }}` is the Watchdog's payload and is
+# required whatever the source holds.
 ALERTMANAGER_SOURCE = ROLE_DIR / "templates" / "alertmanager-secret.yaml.j2"
 WATCHDOG_STATUS = "{{ .Status }}"
-TEMPLATE_REFERENCE = re.compile(r'\{\{ template "homelab\.[^"]+" \. \}\}')
+RAW_BLOCK = re.compile(r"\{% raw %\}(.*?)\{% endraw %\}", re.DOTALL)
+TEMPLATE_DEFINE = re.compile(r'\{\{-? define "([^"]+)" -?\}\}')
 
 # A tool run: the argv after `alert_tools.sh`, returning (exit code, combined output).
 Runner = Callable[[list[str]], tuple[int, str]]
@@ -199,14 +206,28 @@ def floor_problems(found: Mapping[str, str]) -> list[str]:
     ]
 
 
-def go_template_problems(source: str, rendered: str) -> list[str]:
+def go_template_problems(source: str, rendered: str, templates: str) -> list[str]:
     """A problem for each Go template expression the render of `source` lost.
 
     Args:
         source: The text of the Jinja template that renders `alertmanager.yml`.
         rendered: The rendered `alertmanager.yml`.
+        templates: The text of `homelab.tmpl`, whose every `define` the render must
+            reference.
     """
-    required = {WATCHDOG_STATUS, *TEMPLATE_REFERENCE.findall(source)}
+    required = {
+        WATCHDOG_STATUS,
+        *(block for block in RAW_BLOCK.findall(source) if block.strip()),
+        *(
+            f'{{{{ template "{name}" . }}}}'
+            for name in TEMPLATE_DEFINE.findall(templates)
+        ),
+    }
+    if not TEMPLATE_DEFINE.search(templates):
+        return [
+            "homelab.tmpl: defines no template, so nothing says which references "
+            "alertmanager.yml must keep"
+        ]
     return [
         f"alertmanager.yml: the render lost `{expr}`. A Go expression outside a Jinja raw "
         "block is consumed by the render, and Alertmanager then sends an empty field."
@@ -244,13 +265,26 @@ def tool_checks(
     return checks
 
 
-def check_tree(run: Runner = run_tool) -> list[str]:
-    """Render the role, apply the floor, and run every tool check over the tree."""
-    found = rendered_files()
+def check_tree(
+    run: Runner = run_tool, render: Callable[[], dict[str, str]] | None = None
+) -> list[str]:
+    """Render the role, apply the floor, and run every tool check over the tree.
+
+    Args:
+        run: Runs one tool invocation.
+        render: Returns the rendered files; `rendered_files` unless a test passes another.
+    """
+    try:
+        found = (render or rendered_files)()
+    except RuntimeError as err:
+        # A Go expression outside a raw block usually lands here, as a Jinja syntax error.
+        return [str(err)]
     problems = floor_problems(found)
-    if "alertmanager.yml" in found:
+    if "alertmanager.yml" in found and "homelab.tmpl" in found:
         problems += go_template_problems(
-            ALERTMANAGER_SOURCE.read_text(), found["alertmanager.yml"]
+            ALERTMANAGER_SOURCE.read_text(),
+            found["alertmanager.yml"],
+            found["homelab.tmpl"],
         )
     with tempfile.TemporaryDirectory(prefix="alert-rules-") as tmp:
         paths = {}
