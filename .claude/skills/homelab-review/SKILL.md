@@ -250,6 +250,19 @@ reviewer (security, backup/observability, CI/CD) gets `model: opus`; everything 
 `model: sonnet`. A weaker refuter plus an explicit refute-bias is a path for real findings to die in
 the appendix, and the appendix is never re-read.
 
+- **DECIDED: no skeptic cap and no `maxTurns` on `skeptic`** (#4615). Measured from Loki on
+  2026-10-12 over 2026-09-16 to 10-12: 57 skeptic runs took p50 18, p90 28, max 47 tool uses, and
+  the four full reviews dispatched 7, 13, 7 and 9 skeptics, one per verified finding. The run with
+  the longest skeptics (2026-09-24) produced the most refutations and downgrades, so no length
+  cost quality that the data shows. A cap at the guide's 20 would stop up to 18 of 57 skeptics
+  before their verdict. Revisit if one review dispatches more than 20 skeptics or skeptic p90
+  passes 50.
+- **Every other agent type is undecided, not uncapped by decision.** Over the same window the
+  p90 tool uses were implementer 160, general-purpose 101, deep-review 96, security-review 51 and
+  Explore 46, but no outcome was measured for them. #4652 joins implementer run length to red CI,
+  and #4651 measures Workflow subagents, which emit no completion event. A `maxTurns` for those
+  types waits on that evidence.
+
 **Merged history is not the whole history.** Several sessions work this repo at once, one branch
 each, so a fix can be real and not yet on master. The skeptic checks `gh pr list` itself; what it
 cannot see is the SessionStart banner, so pass it the other live worktrees' changed paths when they
