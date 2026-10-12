@@ -13,7 +13,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import re
 
-from dev.findings_lib.issue_model import _TRAILER_RE
+from dev.findings_lib.issue_model import _TRAILER_RE, PR_REPO
 
 # The fan-out pipeline's own code, as an issue body names it: any `fanout*.py` (the
 # `fanout.py` entry point, its `fanout_place.py`-style shims, the `fanout-stop.py` hook) or any file
@@ -25,13 +25,22 @@ _FANOUT_TOOLING_RE = re.compile(
 )
 
 
-def fanout_tooling_paths(body: str) -> list[str]:
+def fanout_tooling_paths(body: str, repo: str | None = None) -> list[str]:
     """The fan-out tooling files an issue body cites, sorted; empty for ordinary work.
 
     An issue citing one is solo-only (#3959): `next` marks it and `fanout.py place launch`
     refuses a batch holding it. A batch that edits this code is reviewed, red-gated and
     stopped by its own edited copy, and fan-out batches on these files caused the most
     rework in 68 review records. A solo session claims and works it as usual.
+
+    Args:
+        body: the issue body.
+        repo: the register the issue is in, None for this repo's own. Another repo's issue
+            is never solo-only (#4624): its batch's worktree cannot edit this repo's
+            pipeline, and its reviewer runs from the snapshot of this repo's `origin/master`
+            that `launch` archives into the batch.
     """
+    if repo not in (None, PR_REPO):
+        return []
     text = _TRAILER_RE.sub("", (body or "").replace("\r\n", "\n"))
     return sorted({m.group(0) for m in _FANOUT_TOOLING_RE.finditer(text)})

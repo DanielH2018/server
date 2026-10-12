@@ -480,7 +480,7 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     rows = rows[: args.limit]
     bodies = {i["number"]: i.get("body") or "" for i in issues}
     for r in rows:
-        r["solo_only"] = bool(fanout_tooling_paths(bodies[r["number"]]))
+        r["solo_only"] = bool(fanout_tooling_paths(bodies[r["number"]], tools.repo))
         # The holder the text render names as `[stale claim by ...]`, null when unclaimed:
         # an orchestrator reading `--json` told a free issue from one `claim` reaps (#3927).
         r["stale_claim_by"] = stale.get(r["number"])
