@@ -29,6 +29,8 @@ network:
       # Configure the address even with no link. Carrier held through the 2026-10-05 outage,
       # but a gateway that is also the switch and loses power takes the link with it, and k3s
       # on this node needs the address to bind whether or not anything can reach it.
+      # This also keeps the default route below installed with no carrier, so static-address.yml
+      # sets ignore_routes_with_linkdown on the link to let a fallback route win (#4510).
       ignore-carrier: true
       addresses:
         - "{{ server_ip }}/{{ lan_subnet.split('/')[1] }}"

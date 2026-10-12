@@ -187,7 +187,13 @@ To back the pin out, empty `k3s_node_static_link` and run the same tag. That run
 file and re-applies netplan, so the link returns to the installer's DHCP.
 
 daniel-server pins its address too (#3891), on `enp88s0`. The gateway reserves 10.0.0.161 for
-that NIC, and wlo1's DHCP route at metric 600 stays as the fallback. The join play cannot
+that NIC, and wlo1's DHCP route at metric 600 stays as the fallback. `ignore-carrier` keeps
+the pinned metric-100 routes installed when the cable drops. By default, IPv4 still routes
+over a link that has lost carrier. The same task file therefore sets
+`net.ipv4.conf.<link>.ignore_routes_with_linkdown = 1` in
+`/etc/sysctl.d/90-homelab-static-link.conf`, so route lookups skip the link while it has no
+carrier and wlo1 wins (#4510). To check it, unplug `enp88s0` and run `ip route get 1.1.1.1`
+and `ip route get 10.0.0.215`; both must name `wlo1`. The join play cannot
 apply the pin: it reaches daniel-server over SSH through a dynamic `include_role`, which
 `--tags node-address` cannot select, and a `netplan apply` there would reconfigure the link
 the session uses. A separate opt-in play imports the same task file statically and runs on
