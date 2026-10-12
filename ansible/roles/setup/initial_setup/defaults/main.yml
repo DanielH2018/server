@@ -45,3 +45,8 @@ initial_setup_worktree_sweep_cron_weekday: 0  # Sunday
 # claude_code's agent_access.yml adds each present agent user, because that task's group list
 # is exact and would strip a membership granted anywhere else.
 initial_setup_worktree_holders_group: worktree-holders
+
+# Where the weekly eval sweep reads its Anthropic API key from: tasks/crons.yml renders the file
+# and templates/eval-run.sh.j2 sources it (#4607). A variable rather than a literal in both, so
+# the test that runs the script points it at a file under tmp_path and never at the live key.
+initial_setup_eval_run_env_file: /etc/homelab/eval-run.env

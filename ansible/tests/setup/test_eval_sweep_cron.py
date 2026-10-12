@@ -15,13 +15,19 @@ What's specific to this cron, and what this file guards:
 - The script self-gates on an empty anthropic_api_key, and the Kuma monitor self-gates on an
   empty homelab_eval_push_token -- a host without those SOPS secrets must install both
   disarmed rather than red or silently non-hermetic.
+- The key reaches the script through a 0600 env file it sources, never through its own body
+  (#4607), and a run with no env file is the disarmed no-op that reports UP.
 """
 
 import re
 
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, ROLES
 from _kuma_monitors import entity, tile_is_gated_on
 from _shell_render import render_shell_script, rendered_shell_text
+from lib import yaml_fast
+from lib.ansible_jinja_env import render_template
+from lib.proc_testing import fake_bin, run
+from validate.shell_templates import template_context
 
 CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 SCRIPT = rendered_shell_text("setup", "initial_setup", "eval-run.sh.j2")
@@ -74,21 +80,120 @@ def _is_gated_on_the_api_key(text: str) -> bool:
     return bool(re.search(r'if\s+\[\s+-z\s+"\$ANTHROPIC_API_KEY"\s+\];\s+then', text))
 
 
-def test_the_script_is_gated_on_the_api_key():
-    # Which variable feeds ANTHROPIC_API_KEY is asserted by rendering that variable to a
-    # SENTINEL and looking for it. At inventory values an unset secret renders as the same
+def _render_env_file(overrides: dict) -> str:
+    path = ROLES / "setup/initial_setup/templates/eval-run.env.j2"
+    return render_template(path, template_context(path, overrides=overrides))
+
+
+def test_the_api_key_renders_into_the_env_file_and_not_the_script():
+    # Both halves render at a SENTINEL. At inventory values an unset secret renders as the same
     # empty string a wrong variable name would, so only a render at a value this variable alone
-    # holds separates the two (#3202).
-    armed = render_shell_script(
-        "setup",
-        "initial_setup",
-        "eval-run.sh.j2",
-        overrides={"anthropic_api_key": KEY_SENTINEL},
+    # holds separates the two (#3202). The script half is #4607: a key inside the script is
+    # printed by every grep, cat or diff over it.
+    overrides = {"anthropic_api_key": KEY_SENTINEL}
+    script = render_shell_script(
+        "setup", "initial_setup", "eval-run.sh.j2", overrides=overrides
     )
-    assert KEY_SENTINEL in armed, (
-        "ANTHROPIC_API_KEY does not render from anthropic_api_key, so the sweep would run "
-        "with no key or with somebody else's"
+    assert KEY_SENTINEL not in script, (
+        "eval-run.sh renders anthropic_api_key into its own body; source it from the env file"
     )
+    assert f"ANTHROPIC_API_KEY='{KEY_SENTINEL}'" in _render_env_file(overrides), (
+        "the env file does not set ANTHROPIC_API_KEY from anthropic_api_key, so the sweep "
+        "would run with no key or with somebody else's"
+    )
+
+
+def _env_file_task(state: str) -> dict:
+    tasks = [
+        t
+        for t in yaml_fast.safe_load(CRONS)
+        if "initial_setup_eval_run_env_file" in str(t)
+        and (t.get("ansible.builtin.file", {}).get("state") == "absent")
+        == (state == "absent")
+    ]
+    assert len(tasks) == 1, (
+        f"expected one {state} task for the eval-run env file: {tasks}"
+    )
+    return tasks[0]
+
+
+def test_the_env_file_task_keeps_the_key_private():
+    task = _env_file_task("present")
+    assert task["no_log"] is True, (
+        "the env-file task renders the key; without no_log a --diff prints it"
+    )
+    module = task["ansible.builtin.template"]
+    assert module["mode"] == "0600"
+    assert module["owner"] == "{{ sys_user }}", (
+        "the cron runs as sys_user, which must read it"
+    )
+
+
+def test_the_env_file_is_removed_when_no_key_is_configured():
+    """The way out: a key dropped from SOPS must not stay armed on disk."""
+    when = _env_file_task("absent")["when"]
+    assert "anthropic_api_key" in when and "length == 0" in when, when
+
+
+def _run_script(tmp_path, env_file_text: str | None):
+    """Run the rendered script whole, with `logger` stubbed to print what it would log.
+
+    `sys_user` points at a home that does not exist, so a run that gets past the key gate stops
+    at `cd "$REPO"` before any git, gh or paid API call. The push token renders empty so the
+    exit hook never pushes to the live Kuma.
+
+    `anthropic_api_key` renders to a sentinel and the caller's environment carries another key,
+    so the env file is the ONLY place a key can come from. A script that rendered the secret
+    into its own body, or kept an inherited key, gets past the gate with no env file present.
+    """
+    env_file = tmp_path / "eval-run.env"
+    if env_file_text is not None:
+        env_file.write_text(env_file_text)
+    script = tmp_path / "eval-run.sh"
+    script.write_text(
+        render_shell_script(
+            "setup",
+            "initial_setup",
+            "eval-run.sh.j2",
+            overrides={
+                "initial_setup_eval_run_env_file": str(env_file),
+                "anthropic_api_key": KEY_SENTINEL,
+                "homelab_eval_push_token": "",
+                "sys_user": "eval-run-test-no-such-user",
+            },
+        )
+    )
+    return run(
+        ["bash", str(script)],
+        cwd=tmp_path,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(tmp_path),
+            "ANTHROPIC_API_KEY": "inherited-from-the-caller",
+        },
+        stub_bin=fake_bin(tmp_path / "bin", logger='printf "%s\\n" "$*"\n'),
+    )
+
+
+def test_a_run_with_no_env_file_is_a_no_op_reporting_up(tmp_path):
+    result = _run_script(tmp_path, env_file_text=None)
+    assert result.returncode == 0, result.stderr
+    assert (
+        "status=up eval-run: skipped, no anthropic_api_key secret configured"
+        in result.stdout
+    ), result.stdout
+
+
+def test_a_run_with_a_key_in_the_env_file_gets_past_the_gate(tmp_path):
+    """The red half: without it the no-op test above passes on a script that never arms."""
+    result = _run_script(tmp_path, env_file_text=f"ANTHROPIC_API_KEY={KEY_SENTINEL}\n")
+    assert "skipped, no anthropic_api_key" not in result.stdout, result.stdout
+    assert "status=down eval-run: /home/eval-run-test-no-such-user/server missing" in (
+        result.stdout
+    ), result.stdout
+
+
+def test_the_script_is_gated_on_the_api_key():
     assert _is_gated_on_the_api_key(SCRIPT), (
         "the script must skip the sweep when no anthropic_api_key secret exists, or it burns "
         "a Claude Code subscription session non-hermetically every week (evals/README.md "

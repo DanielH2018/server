@@ -70,7 +70,15 @@ UNPUBLISHED_HISTORY="$STAMP_DIR/unpublished-history.json"
 SWEEP_ARCHIVE="$STAMP_DIR/sweeps"
 SWEEPS_KEPT=8
 
-ANTHROPIC_API_KEY="{{ anthropic_api_key | default('') }}"
+# The key comes from an env file, never from this script's own text: a grep or diff over an
+# installed script prints whatever secret was rendered into it (#4607). crons.yml renders the file
+# 0600 while anthropic_api_key exists and removes it when the key does not. Empty FIRST, so an
+# absent file leaves the empty-key gate below to fire rather than `set -u` to abort, and a key
+# inherited from the caller's environment can never arm a paid sweep.
+EVAL_ENV_FILE="{{ initial_setup_eval_run_env_file }}"
+ANTHROPIC_API_KEY=""
+# shellcheck source=/dev/null
+[[ -r "$EVAL_ENV_FILE" ]] && . "$EVAL_ENV_FILE"
 export ANTHROPIC_API_KEY
 
 # Same `| default('')` gate as docs_refresh_push_token / setup_drift_push_token in
