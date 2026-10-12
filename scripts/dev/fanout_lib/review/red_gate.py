@@ -29,11 +29,12 @@ refs and the settings that move or skip a reset do not apply (#3871).
 
 THE GREEN GATE runs after the implementer and again after every fix round. The working tree
 must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
-would otherwise pass a gate the pushed head fails (#3821). Every pytest config file, the
-`leakguard` plugin and any red data file must be unchanged since `red`. In a red `test_*.py`,
-what the red commits wrote and what it reaches must be unchanged, and anything else may only be
-a test, a helper, a fixture or an import; `red_tests.forbidden_change` defines both (#4214,
-#4517). No untracked config file may exist, and every red node must pass in a fresh clone of
+would otherwise pass a gate the pushed head fails (#3821). Every pytest config file but a
+`conftest.py`, the `leakguard` plugin and any red data file must be unchanged since `red`. A
+`conftest.py` may only lose what no red test requests (`red_tests.forbidden_conftest_change`,
+#4542). In a red `test_*.py`, what the red commits wrote and what it reaches must be unchanged,
+and anything else may only be a test, a helper, a fixture, an import or a constant;
+`red_tests.forbidden_change` defines both (#4214, #4517). No untracked config file may exist, and every red node must pass in a fresh clone of
 HEAD, in every one of the pipeline's `RUNS` runs. The clone is what makes the verdict HEAD's:
 the implementer controls the worktree's index and git config, so a skip-worktree entry, an
 `info/exclude` line or `status.showUntrackedFiles=no` each hides an edit from `git status`.
@@ -70,6 +71,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from fanout_lib.brief import fence_for
 from fanout_lib.review.red_tests import (
     forbidden_change,
+    forbidden_conftest_change,
     red_by_absence,
     stale_suppressions,
 )
@@ -261,30 +263,48 @@ def judge_green(returncode: int, output: str, nodes: list[str]) -> str:
 def _red_file_change(
     run: Runner, worktree: Path, red: str, path: str, gate: Gate
 ) -> str:
-    """How the fix changed `path` beyond what `red_tests.forbidden_change` allows, or "".
+    """How the fix changed `path` beyond what `red_tests` allows, or "".
 
     A red `test_*.py` may gain tests (#4214), and what the red tests do not reach in it may
-    change (#4517). A red data file, a pytest config file and the `leakguard` plugin may not
-    change at all, and neither may a red file be deleted.
+    change (#4517). A `conftest.py` may lose what no red test requests (#4542). A red data
+    file, any other pytest config file and the `leakguard` plugin may not change at all, and
+    neither may a red file be deleted.
     """
-    if path not in gate.files or not path.endswith(".py"):
+    conftest = PurePosixPath(path).name == "conftest.py"
+    if not conftest and (path not in gate.files or not path.endswith(".py")):
         return path
-    blobs = [
-        worktree_git(run, worktree, "cat-file", "blob", f"{rev}:{path}")
-        for rev in (red, "HEAD")
-    ]
-    if any(b.returncode for b in blobs):
-        return f"{path} deleted"
-    before = (
-        worktree_git(run, worktree, "cat-file", "blob", f"{gate.base}:{path}")
-        if gate.base
-        else None
-    )
-    base_src = before.stdout if before and not before.returncode else ""
-    problem = forbidden_change(
-        base_src, blobs[0].stdout, blobs[1].stdout, _red_names(gate.nodes, path)
-    )
+    blobs = [_blob(run, worktree, rev, path) for rev in (red, "HEAD")]
+    if None in blobs:
+        return f"{path} {'added' if blobs[0] is None else 'deleted'}"
+    red_src, head_src = blobs[0] or "", blobs[1] or ""
+    tests = [f for f in gate.files if f.endswith(".py")]
+    if conftest:
+        red_files = [_blob(run, worktree, red, f) or "" for f in tests]
+        conftests = _conftests(run, worktree, red, tests)
+        problem = forbidden_conftest_change(red_src, head_src, red_files, conftests)
+    else:
+        base_src = _blob(run, worktree, gate.base, path) if gate.base else ""
+        names = _red_names(gate.nodes, path)
+        conftests = _conftests(run, worktree, red, [path])
+        problem = forbidden_change(base_src or "", red_src, head_src, names, conftests)
     return f"{path} {problem}" if problem else ""
+
+
+def _blob(run: Runner, worktree: Path, rev: str, path: str) -> str | None:
+    """`path` as `rev` has it, or None when `rev` has no such file."""
+    proc = worktree_git(run, worktree, "cat-file", "blob", f"{rev}:{path}")
+    return None if proc.returncode else proc.stdout
+
+
+def _conftests(run: Runner, worktree: Path, rev: str, paths: list[str]) -> list[str]:
+    """Every `conftest.py` pytest loads for a test in `paths`, as `rev` has it (#4543).
+
+    Conftests are green-protected, so the copy at the red commit is the one HEAD runs, less
+    what `red_tests.forbidden_conftest_change` let the fix delete.
+    """
+    dirs = sorted({d for p in paths for d in PurePosixPath(p).parents})
+    found = [_blob(run, worktree, rev, (d / "conftest.py").as_posix()) for d in dirs]
+    return [src for src in found if src is not None]
 
 
 def _red_names(nodes: list[str], path: str) -> set[str]:
@@ -497,12 +517,15 @@ def red_section(red: str, gate: Gate) -> str:
     return f"""## Red tests
 A separate session wrote failing tests for these issues from the issue text alone, committed
 as {red} on this branch. A gate proved they fail on the code as it stands. Your change must
-make them pass. Do not change them, anything in their files they call or request, any
-`conftest.py` or `pyproject.toml`: a gate after your session runs them again and refuses the PR
-if you did. You may append new test functions, fixtures, helpers and imports to a red test
-file. A test that was in a red file before the red commit, and that no red test calls, is yours
-to update like any other test, for example where your change drops a parameter it passes.
-Where a red test is wrong, say why in the PR body instead. The red nodes:
+make them pass. Do not change them, anything in their files they call or request, or
+`pyproject.toml`: a gate after your session runs them again and refuses the PR if you did. You
+may append new test functions, fixtures, helpers, imports and constants to a red test file. A
+test that was in a red file before the red commit, and that no red test calls, is yours to
+update like any other test, for example where your change drops a parameter it passes. So is a
+constant bound to literal data that was there before and that only such older code reads, not
+a red test itself. You may delete from a `conftest.py` a fixture no red test requests, and the
+helpers, constants and imports only it used, but change nothing else there. Where a red test
+is wrong, say why in the PR body instead. The red nodes:
 {fence}
 {nodes}
 {fence}
