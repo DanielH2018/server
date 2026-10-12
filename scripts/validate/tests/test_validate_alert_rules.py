@@ -213,9 +213,10 @@ def test_ci_provisions_the_tools_then_runs_the_red_proof():
 
 def test_the_tree_rules_meet_every_convention_is_clean():
     groups, keys = alert_rules.rendered_rule_keys()
-    # Non-vacuity: the floor and the list name the group, and the file holds its four alerts.
+    # Non-vacuity: the floor and the list name the group, and the file holds its five alerts.
     assert "alerting-meta" in alert_conventions.GROUP_FLOOR
-    assert groups == ["alerting-meta"] and keys == {"alerting-meta.yaml"}
+    assert groups == ["alerting-meta", "workload-service"]
+    assert keys == {"alerting-meta.yaml", "workload-service.yaml"}
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()
     )
@@ -224,6 +225,7 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "PrometheusRuleReloadFailed",
         "AlertmanagerNotificationsFailing",
         "AlertmanagerMetricsMissing",
+        "PrometheusRuleEvaluationFailures",
     }
     assert alert_rules.rule_problems(groups, keys) == []
 

@@ -203,6 +203,7 @@ observability_alertmanager_watchdog_repeat_seconds: 60
 # here in the commit that adds its file; scripts/validate/alert_rules.py fails until they agree.
 observability_rule_groups:
   - alerting-meta
+  - workload-service
 
 # The telemetry workloads, as the {kind, name} pairs post_tasks/k8s_stabilise_gate.yml reads.
 # A variable rather than a second inline copy of the list: tasks/main.yml still spells it out

@@ -1,0 +1,89 @@
+# The deploy tag of every workload, as the C7 `service` label a per-workload alert joins to.
+# Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
+# docs/target-architecture/monitoring/m2-first-bridge-family.md, "The workload-service mapping".
+#
+# Each rule emits exactly one series per workload, with value 1. Its domain is the family a
+# census alert counts, so every workload an alert can see has a series here. Each resolution
+# step joins the earlier ones with `or on(namespace, <kind>)`, so a step fills only the
+# workloads the earlier steps left. A step that finds nothing, such as a lost label family or a
+# lost join, leaves the workload to a later step that ends in service="unmapped", never drops it.
+#
+# The steps for a Deployment or a DaemonSet:
+#   1. label_homelab_role, which ansible/filter_plugins/role_label.py stamps on every object an
+#      armed role renders.
+#   2. label_kustomize_toolkit_fluxcd_io_name, with a trailing `-deferred` removed: a deferred
+#      apply's Kustomization is named `<tag>-deferred`.
+#   3. The override table, one label_replace per rendered workload that carries no label.
+#      ansible/tests/k8s/test_workload_service_overrides.py derives that set from the rendered
+#      manifests and fails when the table and the render disagree.
+#   4. `k3s` for anything else in the add-on namespaces, which the setup/k3s role applies.
+#   5. `unmapped`.
+#
+# Rules in one group evaluate in order, so the pod rule reads this cycle's Deployment and
+# DaemonSet series.
+groups:
+  - name: workload-service
+    rules:
+      - record: homelab:deployment_service:info
+        expr: |
+          group by (namespace, deployment, service) (
+              label_replace(kube_deployment_labels{label_homelab_role!=""}, "service", "$1", "label_homelab_role", "(.+)")
+            or on(namespace, deployment)
+              label_replace(kube_deployment_labels{label_kustomize_toolkit_fluxcd_io_name!=""}, "service", "$1", "label_kustomize_toolkit_fluxcd_io_name", "(.+?)(?:-deferred)?")
+            or on(namespace, deployment)
+              label_replace(kube_deployment_status_replicas_unavailable{namespace="homelab", deployment="authelia"}, "service", "authelia", "", "")
+            or on(namespace, deployment)
+              label_replace(kube_deployment_status_replicas_unavailable{namespace="homelab", deployment="authelia-redis"}, "service", "authelia", "", "")
+            or on(namespace, deployment)
+              label_replace(kube_deployment_status_replicas_unavailable{namespace="homelab", deployment="nut"}, "service", "nut", "", "")
+            or on(namespace, deployment)
+              label_replace(kube_deployment_status_replicas_unavailable{namespace="homelab", deployment="pihole-2"}, "service", "pihole", "", "")
+            or on(namespace, deployment)
+              label_replace(kube_deployment_status_replicas_unavailable{namespace=~"kube-system|longhorn-system|metallb-system"}, "service", "k3s", "", "")
+            or on(namespace, deployment)
+              label_replace(kube_deployment_status_replicas_unavailable, "service", "unmapped", "", "")
+          )
+          and on(namespace, deployment) kube_deployment_status_replicas_unavailable
+      # No rendered DaemonSet lacks the label, so this rule has no override step. The pytest
+      # named above asks for one the day a rendered DaemonSet does.
+      - record: homelab:daemonset_service:info
+        expr: |
+          group by (namespace, daemonset, service) (
+              label_replace(kube_daemonset_labels{label_homelab_role!=""}, "service", "$1", "label_homelab_role", "(.+)")
+            or on(namespace, daemonset)
+              label_replace(kube_daemonset_labels{label_kustomize_toolkit_fluxcd_io_name!=""}, "service", "$1", "label_kustomize_toolkit_fluxcd_io_name", "(.+?)(?:-deferred)?")
+            or on(namespace, daemonset)
+              label_replace(kube_daemonset_status_number_unavailable{namespace=~"kube-system|longhorn-system|metallb-system"}, "service", "k3s", "", "")
+            or on(namespace, daemonset)
+              label_replace(kube_daemonset_status_number_unavailable, "service", "unmapped", "", "")
+          )
+          and on(namespace, daemonset) kube_daemonset_status_number_unavailable
+      # The pod domain is every pod in the add-on namespaces, plus every pod elsewhere owned by a
+      # ReplicaSet, a DaemonSet or a StatefulSet. A Job-owned or ownerless pod outside the
+      # add-on namespaces has no series: every such Job runs under `restartPolicy: Never`, so
+      # the kubelet never restarts its container in place. The `job-restart-policy-is-never`
+      # row of ansible/tests/k8s/test_rendered_properties.py holds that. A StatefulSet pod has
+      # no join step, so it lands in `unmapped` until the mapping gains one.
+      - record: homelab:pod_service:info
+        expr: |
+          group by (namespace, pod, service) (
+              (
+                label_replace(group by (namespace, pod, owner_name) (kube_pod_owner{owner_kind="ReplicaSet"}), "replicaset", "$1", "owner_name", "(.+)")
+                * on(namespace, replicaset) group_left(service)
+                group by (namespace, replicaset, service) (
+                  label_replace(group by (namespace, replicaset, owner_name) (kube_replicaset_owner{owner_kind="Deployment"}), "deployment", "$1", "owner_name", "(.+)")
+                  * on(namespace, deployment) group_left(service)
+                  homelab:deployment_service:info
+                )
+              )
+            or on(namespace, pod)
+              (
+                label_replace(group by (namespace, pod, owner_name) (kube_pod_owner{owner_kind="DaemonSet"}), "daemonset", "$1", "owner_name", "(.+)")
+                * on(namespace, daemonset) group_left(service)
+                homelab:daemonset_service:info
+              )
+            or on(namespace, pod)
+              label_replace(kube_pod_owner{namespace=~"kube-system|longhorn-system|metallb-system"}, "service", "k3s", "", "")
+            or on(namespace, pod)
+              label_replace(kube_pod_owner{owner_kind=~"ReplicaSet|DaemonSet|StatefulSet"}, "service", "unmapped", "", "")
+          )

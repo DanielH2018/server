@@ -31,6 +31,22 @@ groups:
           description: >-
             {{ $labels.instance }} has reported a failed reload for 10 minutes, so it still
             evaluates the last rule set it loaded. Its log names the file it refused.
+      # A rule that loaded can still fail every evaluation. A join that matches many-to-many
+      # is the usual cause, and the rule's output then goes stale: workload-service's
+      # recording rules stop, and every alert joined to them falls back to service="unmapped".
+      # PrometheusRuleReloadFailed cannot see this, because the reload succeeded. No Kuma tile
+      # covers it, so it pages without a shadow label.
+      - alert: PrometheusRuleEvaluationFailures
+        expr: sum by (rule_group) (increase(prometheus_rule_evaluation_failures_total[10m])) > 0
+        labels:
+          severity: warning
+          service: observability
+        annotations:
+          summary: Prometheus failed to evaluate a rule in {{ $labels.rule_group }}.
+          description: >-
+            At least one rule in {{ $labels.rule_group }} failed an evaluation in the last 10
+            minutes, so its output is missing or stale. The Prometheus log names the rule and
+            the error.
       # Kuma's counterpart is the Kuma Notification Delivery tile. Critical, so it routes to
       # Discord and email both, and a dropped Discord send still reaches the operator.
       - alert: AlertmanagerNotificationsFailing

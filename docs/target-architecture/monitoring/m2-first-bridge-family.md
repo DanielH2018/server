@@ -1,6 +1,8 @@
 # M2 — One bridge family to rules
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR 1, the workload-service mapping: the pull request that closes issue #4774.
 
 Depends on: M1
 

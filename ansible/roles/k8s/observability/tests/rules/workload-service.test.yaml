@@ -1,0 +1,222 @@
+# promtool unit tests for files/rules/workload-service.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# The input series carry the labels kube-state-metrics v2.20 gives them (job, instance, uid,
+# owner_is_controller), because a join that ignores one of them can pass on bare series and
+# fail many-to-many on real ones. Each case lists every series a rule must emit, so a duplicate
+# or an extra series fails the case as surely as a missing one.
+rule_files:
+  - ../../files/rules/workload-service.yaml
+evaluation_interval: 1m
+tests:
+  # Every Deployment step, one workload each:
+  # - valheim resolves through label_homelab_role (step 1);
+  # - sonarr through the Flux label (step 2);
+  # - pihole-3 carries only kustomize.toolkit.fluxcd.io/name=pihole-deferred. Its name is outside
+  #   the override table, so only the `-deferred` strip can map it to pihole (step 2);
+  # - radarr carries both labels with different values, and yields one series, from step 1;
+  # - authelia, authelia-redis, nut and pihole-2 carry no tag label and resolve through the
+  #   override table (step 3);
+  # - coredns and controller carry no tag label in the add-on namespaces and map to k3s (step 4);
+  # - stray carries no tag label outside the table and maps to unmapped (step 5);
+  # - ghost has a label series and no status series, so it is outside the domain.
+  - interval: 1m
+    input_series:
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="valheim"}'
+        values: '0x10'
+      - series: 'kube_deployment_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="valheim", label_app="valheim", label_homelab_role="valheim"}'
+        values: '1x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="sonarr"}'
+        values: '0x10'
+      - series: 'kube_deployment_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="sonarr", label_app="sonarr", label_kustomize_toolkit_fluxcd_io_name="sonarr"}'
+        values: '1x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="pihole-3"}'
+        values: '0x10'
+      - series: 'kube_deployment_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="pihole-3", label_kustomize_toolkit_fluxcd_io_name="pihole-deferred"}'
+        values: '1x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="radarr"}'
+        values: '0x10'
+      - series: 'kube_deployment_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="radarr", label_app="radarr", label_homelab_role="radarr", label_kustomize_toolkit_fluxcd_io_name="media"}'
+        values: '1x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="authelia"}'
+        values: '0x10'
+      - series: 'kube_deployment_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="authelia"}'
+        values: '1x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="authelia-redis"}'
+        values: '0x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="nut"}'
+        values: '0x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="pihole-2"}'
+        values: '0x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="kube-system", deployment="coredns"}'
+        values: '0x10'
+      - series: 'kube_deployment_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="kube-system", deployment="coredns"}'
+        values: '1x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="metallb-system", deployment="controller"}'
+        values: '0x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="stray"}'
+        values: '0x10'
+      - series: 'kube_deployment_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="stray", label_app="stray"}'
+        values: '1x10'
+      - series: 'kube_deployment_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="ghost", label_homelab_role="ghost"}'
+        values: '1x10'
+    promql_expr_test:
+      - expr: homelab:deployment_service:info
+        eval_time: 5m
+        exp_samples:
+          - labels: 'homelab:deployment_service:info{namespace="homelab", deployment="valheim", service="valheim"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="homelab", deployment="sonarr", service="sonarr"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="homelab", deployment="pihole-3", service="pihole"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="homelab", deployment="radarr", service="radarr"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="homelab", deployment="authelia", service="authelia"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="homelab", deployment="authelia-redis", service="authelia"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="homelab", deployment="nut", service="nut"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="homelab", deployment="pihole-2", service="pihole"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="kube-system", deployment="coredns", service="k3s"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="metallb-system", deployment="controller", service="k3s"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="homelab", deployment="stray", service="unmapped"}'
+            value: 1
+
+  # kube_deployment_labels is absent, as when the allowlist loses its labels. Every Deployment
+  # stays in the mapping: labelled ones fall to unmapped, the table and the add-on namespaces
+  # still resolve.
+  - interval: 1m
+    input_series:
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="valheim"}'
+        values: '0x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="authelia"}'
+        values: '0x10'
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="kube-system", deployment="coredns"}'
+        values: '0x10'
+    promql_expr_test:
+      - expr: homelab:deployment_service:info
+        eval_time: 5m
+        exp_samples:
+          - labels: 'homelab:deployment_service:info{namespace="homelab", deployment="valheim", service="unmapped"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="homelab", deployment="authelia", service="authelia"}'
+            value: 1
+          - labels: 'homelab:deployment_service:info{namespace="kube-system", deployment="coredns", service="k3s"}'
+            value: 1
+
+  # Every DaemonSet step:
+  # - dri-device-plugin sits in kube-system and carries its own label, so step 1 wins over the
+  #   add-on namespace step;
+  # - node-exporter resolves through the Flux label (step 2);
+  # - longhorn-manager and speaker carry no tag label in the add-on namespaces and map to k3s;
+  # - stray-agent carries no tag label in homelab and maps to unmapped.
+  - interval: 1m
+    input_series:
+      - series: 'kube_daemonset_status_number_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="kube-system", daemonset="dri-device-plugin"}'
+        values: '0x10'
+      - series: 'kube_daemonset_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="kube-system", daemonset="dri-device-plugin", label_homelab_role="dri-device-plugin"}'
+        values: '1x10'
+      - series: 'kube_daemonset_status_number_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="observability", daemonset="node-exporter"}'
+        values: '0x10'
+      - series: 'kube_daemonset_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="observability", daemonset="node-exporter", label_kustomize_toolkit_fluxcd_io_name="observability"}'
+        values: '1x10'
+      - series: 'kube_daemonset_status_number_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="longhorn-system", daemonset="longhorn-manager"}'
+        values: '0x10'
+      - series: 'kube_daemonset_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="longhorn-system", daemonset="longhorn-manager"}'
+        values: '1x10'
+      - series: 'kube_daemonset_status_number_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="metallb-system", daemonset="speaker"}'
+        values: '0x10'
+      - series: 'kube_daemonset_status_number_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", daemonset="stray-agent"}'
+        values: '0x10'
+    promql_expr_test:
+      - expr: homelab:daemonset_service:info
+        eval_time: 5m
+        exp_samples:
+          - labels: 'homelab:daemonset_service:info{namespace="kube-system", daemonset="dri-device-plugin", service="dri-device-plugin"}'
+            value: 1
+          - labels: 'homelab:daemonset_service:info{namespace="observability", daemonset="node-exporter", service="observability"}'
+            value: 1
+          - labels: 'homelab:daemonset_service:info{namespace="longhorn-system", daemonset="longhorn-manager", service="k3s"}'
+            value: 1
+          - labels: 'homelab:daemonset_service:info{namespace="metallb-system", daemonset="speaker", service="k3s"}'
+            value: 1
+          - labels: 'homelab:daemonset_service:info{namespace="homelab", daemonset="stray-agent", service="unmapped"}'
+            value: 1
+
+  # Every pod step:
+  # - valheim's pod joins through its ReplicaSet to the valheim Deployment (step 1). The
+  #   Deployment also owns an old, scaled-down ReplicaSet, so the join is many ReplicaSets to
+  #   one Deployment;
+  # - dri-device-plugin's pod joins to its DaemonSet (step 2);
+  # - an InstanceManager-owned and a Job-owned pod in longhorn-system map to k3s (step 3);
+  # - a StatefulSet-owned pod in homelab has no join step and maps to unmapped (step 4);
+  # - a Job-owned pod and an ownerless pod in homelab are outside the domain and yield nothing.
+  - interval: 1m
+    input_series:
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="valheim"}'
+        values: '0x10'
+      - series: 'kube_deployment_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="valheim", label_homelab_role="valheim"}'
+        values: '1x10'
+      - series: 'kube_replicaset_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", replicaset="valheim-7d9f8", owner_kind="Deployment", owner_name="valheim", owner_is_controller="true"}'
+        values: '1x10'
+      - series: 'kube_replicaset_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", replicaset="valheim-5c6b4", owner_kind="Deployment", owner_name="valheim", owner_is_controller="true"}'
+        values: '1x10'
+      - series: 'kube_pod_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="valheim-7d9f8-x2k4p", uid="a1", owner_kind="ReplicaSet", owner_name="valheim-7d9f8", owner_is_controller="true"}'
+        values: '1x10'
+      - series: 'kube_daemonset_status_number_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="kube-system", daemonset="dri-device-plugin"}'
+        values: '0x10'
+      - series: 'kube_daemonset_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="kube-system", daemonset="dri-device-plugin", label_homelab_role="dri-device-plugin"}'
+        values: '1x10'
+      - series: 'kube_pod_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="kube-system", pod="dri-device-plugin-q8w2n", uid="a2", owner_kind="DaemonSet", owner_name="dri-device-plugin", owner_is_controller="true"}'
+        values: '1x10'
+      - series: 'kube_pod_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="longhorn-system", pod="instance-manager-0a1b2c", uid="a3", owner_kind="InstanceManager", owner_name="instance-manager-0a1b2c", owner_is_controller="true"}'
+        values: '1x10'
+      - series: 'kube_pod_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="longhorn-system", pod="daily-backup-29862930-7xk2m", uid="a4", owner_kind="Job", owner_name="daily-backup-29862930", owner_is_controller="true"}'
+        values: '1x10'
+      - series: 'kube_pod_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="cache-0", uid="a5", owner_kind="StatefulSet", owner_name="cache", owner_is_controller="true"}'
+        values: '1x10'
+      - series: 'kube_pod_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="pi-peer-backup-29862940-4hd8s", uid="a6", owner_kind="Job", owner_name="pi-peer-backup-29862940", owner_is_controller="true"}'
+        values: '1x10'
+      - series: 'kube_pod_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="ctx-probe", uid="a7"}'
+        values: '1x10'
+    promql_expr_test:
+      - expr: homelab:pod_service:info
+        eval_time: 5m
+        exp_samples:
+          - labels: 'homelab:pod_service:info{namespace="homelab", pod="valheim-7d9f8-x2k4p", service="valheim"}'
+            value: 1
+          - labels: 'homelab:pod_service:info{namespace="kube-system", pod="dri-device-plugin-q8w2n", service="dri-device-plugin"}'
+            value: 1
+          - labels: 'homelab:pod_service:info{namespace="longhorn-system", pod="instance-manager-0a1b2c", service="k3s"}'
+            value: 1
+          - labels: 'homelab:pod_service:info{namespace="longhorn-system", pod="daily-backup-29862930-7xk2m", service="k3s"}'
+            value: 1
+          - labels: 'homelab:pod_service:info{namespace="homelab", pod="cache-0", service="unmapped"}'
+            value: 1
+
+  # kube_replicaset_owner is absent. A ReplicaSet-owned pod outside the add-on namespaces falls
+  # to unmapped. One inside them still maps to k3s.
+  - interval: 1m
+    input_series:
+      - series: 'kube_deployment_status_replicas_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="valheim"}'
+        values: '0x10'
+      - series: 'kube_deployment_labels{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", deployment="valheim", label_homelab_role="valheim"}'
+        values: '1x10'
+      - series: 'kube_pod_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="valheim-7d9f8-x2k4p", uid="a1", owner_kind="ReplicaSet", owner_name="valheim-7d9f8", owner_is_controller="true"}'
+        values: '1x10'
+      - series: 'kube_pod_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="kube-system", pod="coredns-6799fbcd5-9tq2z", uid="a8", owner_kind="ReplicaSet", owner_name="coredns-6799fbcd5", owner_is_controller="true"}'
+        values: '1x10'
+    promql_expr_test:
+      - expr: homelab:pod_service:info
+        eval_time: 5m
+        exp_samples:
+          - labels: 'homelab:pod_service:info{namespace="homelab", pod="valheim-7d9f8-x2k4p", service="unmapped"}'
+            value: 1
+          - labels: 'homelab:pod_service:info{namespace="kube-system", pod="coredns-6799fbcd5-9tq2z", service="k3s"}'
+            value: 1
