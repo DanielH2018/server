@@ -355,3 +355,83 @@ def test_a_red_descendant_whose_later_one_never_settles_ends_red_saying_why():
     code, msg = _wait_past_a_red_descendant(later_goes_green_at=None)
     assert code == 1
     assert msg.startswith("red: CI RED") and "fix after it has no verdict yet" in msg
+
+
+def _wait_past_reds(runs_by_sha, suites_by_sha, chain):
+    """wait() on dropped `m` over a fixed descendant `chain`; returns (code, msg, elapsed)."""
+    now = [0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    code, msg = await_ci.wait(
+        "m",
+        900,
+        20,
+        sleep=sleep,
+        clock=lambda: now[0],
+        fetch=lambda s: runs_by_sha.get(s, []),
+        fetch_suites=lambda s: suites_by_sha.get(s, []),
+        descendants=lambda _s: chain,
+        fetch_tip=lambda: chain[-1],
+    )
+    return code, msg, now[0]
+
+
+def test_a_cancelled_only_descendant_between_reds_does_not_hold_the_wait_to_its_deadline():
+    """#4667 Verify-by: D3's push cancels D2's run, so D2 never gets a verdict."""
+    name = "prek (lint + validate + tests + secrets)"
+    red = [_run(name, "completed", "failure")]
+    runs_by_sha = {"d1": red, "d2": [_run(name, "completed", "cancelled")], "d3": red}
+    suites_by_sha = {
+        "d1": [_actions_suite("completed")],
+        "d2": [_actions_suite("completed")],
+        "d3": [_actions_suite("completed")],
+    }
+    code, msg, elapsed = _wait_past_reds(runs_by_sha, suites_by_sha, ["d1", "d2", "d3"])
+    assert code == await_ci.CI_RED, msg
+    assert elapsed < await_ci.DROPPED_PUSH_GRACE_S + 20, (elapsed, msg)
+
+
+def test_a_dropped_push_descendant_between_reds_does_not_hold_the_wait_to_its_deadline():
+    """#4667: D2's push was dropped too, so it has no run and no Actions suite for good."""
+    red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
+    runs_by_sha = {"d1": red, "d3": red}
+    suites_by_sha = {
+        "d1": [_actions_suite("completed")],
+        "d3": [_actions_suite("completed")],
+    }
+    code, msg, elapsed = _wait_past_reds(runs_by_sha, suites_by_sha, ["d1", "d2", "d3"])
+    assert code == await_ci.CI_RED, msg
+    assert elapsed < await_ci.DROPPED_PUSH_GRACE_S + 20, (elapsed, msg)
+
+
+def test_a_run_less_tip_after_a_red_descendant_offers_the_dispatch_route():
+    """#4667: D2 is the master tip and has no CI run, so only dispatching CI converges."""
+    red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
+    code, msg, _elapsed = _wait_past_reds(
+        {"d1": red}, {"d1": [_actions_suite("completed")]}, ["d1", "d2"]
+    )
+    assert code != 75, msg
+    assert "gh workflow run ci.yml --ref master" in msg, msg
+
+
+def test_a_run_less_tip_after_a_red_descendant_ends_ci_unproven():
+    """#4667: dispatching CI is the way out, so the wait ends on CI_UNPROVEN, not CI_RED."""
+    red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
+    code, msg, _elapsed = _wait_past_reds(
+        {"d1": red}, {"d1": [_actions_suite("completed")]}, ["d1", "d2"]
+    )
+    assert code == await_ci.CI_UNPROVEN, msg
+
+
+def test_a_tip_with_an_actions_suite_after_a_red_descendant_ends_red_at_the_deadline():
+    """The reject half: a tip whose CI is queued may still settle, so it is no dispatch case."""
+    red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
+    code, msg, _elapsed = _wait_past_reds(
+        {"d1": red},
+        {"d1": [_actions_suite("completed")], "d2": [_actions_suite("queued")]},
+        ["d1", "d2"],
+    )
+    assert code == await_ci.CI_RED, msg
+    assert "gh workflow run" not in msg, msg
