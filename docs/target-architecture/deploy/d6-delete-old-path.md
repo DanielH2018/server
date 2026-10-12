@@ -54,8 +54,9 @@ artifact, and marks [ADR-0010](../../adr/0010-pull-based-gitops-over-argo-and-fl
 2. **The host plane still works.**
     - A setup-plane change merged after the last D6 PR is applied by the deployer's tick,
       and `land.sh` follows it to `VERDICT: settled`.
-    - The setup-drift tile reads green from daniel-box's own stamps, and from
-      daniel-server's.
+    - The setup-drift check reads green from daniel-box's own stamps, and from
+      daniel-server's. `homelab_check_success{check="setup-drift-check"}` reads 1 for each
+      `origin`, and no setup-drift rule fires.
     - The two host-plane pages that rode the k8s modules still fire. A Pi container role's
       `tasks/` change pages the tasks channel once, and a broad setup range that carries
       `ansible/vars/secrets.yml` pages the secrets alert once. D6.1's two tick tests pin
@@ -615,8 +616,8 @@ still runs the old code, so D6.1 carries no such path:
   at the baseline.
 - **The setup plane** is unchanged. No setup role reads an inventory path through the tick at
   the baseline, so an inventory key that a setup role reads needs a named hand apply, unless
-  the same PR changes a file of that role. D6.5a changes the role's own template beside the
-  key, so the tick applies `initial_setup` on daniel-box (Baseline).
+  the same PR changes a file of that role. D6.5a changes the key and a test, and no file of
+  `initial_setup`, so it names a hand apply of `--tags setup_drift` on daniel-box.
 
 `ChangeSet.broad_deploy` stays, because `deploy_lib/tags.py` and `land_tags.py` read it for
 the Pi. The tick fast-forwards past such a path the way it passes a docs-only one. It writes
@@ -953,16 +954,25 @@ daniel-box to `setup_drift_check_hosts` before D6.5 disarms manifest-prune-check
 
 - `setup-drift-check.sh` reads the same `setup-drift-lib.sh` against the same stamp
   directories. The box keeps one detector throughout.
-- Both checkers run on the box between D6.5a and D6.5, so one drift pages twice. The
-  `group_vars` comment calls that redundancy "the safe direction".
-- **The two hosts share one tile and one token.** A green push from one host can cover a red
-  from the other. That lasts until the red host's `Restart=on-failure` pushes `down` again,
-  at most `kuma_check_restart_sec` (30 minutes) later.
-    - D6.5a puts the host name in the check's message. It also renames the tile and its
-      description from "agent hosts" to every host that renders setup templates.
-    - A tile per host needs a second token, which is an **operator-only** secret.
-    - M3's textfile metric is per host by construction. If M3 has converted this timer, this
-      problem does not arise.
+- **By D6, setup drift is a textfile check, not a Kuma tile.** D6 opens only after M6's
+  C-2b deletes Kuma (M6 *When D5 flips a role M6 edits*). M6's B2 has by then made
+  `setup-drift-check.sh` write `setup-drift-check.prom` on each armed host, and given it
+  M3's two rules, `<Check>Failed` and `<Check>NotReporting`. Each rule names one `origin`.
+  B2 ran while daniel-server was the only armed host, so its rules name daniel-server
+  alone. B2's token PR retired `setup_drift_push_token`.
+- **The series is per host, so one host cannot mask the other.** The `node` job labels each
+  host's series with its own `origin` (M3 *The producer metric contract*). The shared tile
+  and token that D6's first drafts worked around are gone. A rule that dropped its `origin`
+  matcher would bring the masking back, because daniel-server's sample would satisfy it
+  while the box wrote none.
+- **D6.5a arms the reader, and D6.5 adds the box's rule arm.** A `NotReporting` arm for
+  daniel-box fires as soon as `promote` applies it, unless the box has already written a
+  sample inside the deadline, and the timer runs once a day. So D6.5a arms the box and
+  checks its series, and D6.5 adds the box's arm once that series exists. Between the two,
+  B1's manifest-prune rules still page drift on the box, so the box keeps one paging
+  detector throughout.
+- Both checkers run on the box between D6.5a and D6.5. The `group_vars` comment calls that
+  redundancy "the safe direction".
 
 ### The deletion policy, and the end of the handback
 
@@ -1766,28 +1776,30 @@ The PRs merge in this order.
     - Rewrite `test_the_reader_is_armed_where_no_manifest_prune_check_runs` so that it
       asserts every host that renders setup templates is armed. It names daniel-box and
       daniel-server.
-    - Put the host name in `setup-drift-check.sh.j2`'s message, and rename the tile and its
-      description in uptime-kuma's `static-monitors.yaml.j2`. That template reaches the
-      cluster through `promote`.
-    - **The tick installs the reader on daniel-box.** The PR changes `setup-drift-check.sh.j2`
-      beside the `group_vars` key, so it routes to `initial_setup`, and the tick applies that
-      role after its fast-forward (Baseline). The session quotes the tick's journal line for
-      `initial_setup`. It runs no parallel hand apply on the box, because a bare
-      `ansible-playbook` takes no tree lock. If the tick parks the role in `manual_plane`
-      instead, the session runs the apply that the ledger line names, operator-attended, and
-      clears the line.
-    - **daniel-server owes its own apply.** Its reader stamps `setup-drift-check.sh.j2` and
-      recomputes the checksum from its own checkout, so it reports its own render stale once
-      that checkout is pulled (Baseline). The host has no deployer, and `connection=local`
-      means the box cannot drive it. The operator pulls daniel-server's checkout and runs
+    - **No tile, no message and no rule.** Kuma is gone before D6 opens, and the series
+      carries the host as `origin`, so the template's message and the Kuma tile need no
+      edit. B2's setup-drift rules stay daniel-server's alone in this PR, and D6.5 adds the
+      box's arm (*The setup-drift reader covers daniel-box*).
+    - **The PR names a hand apply on daniel-box.** It changes `ansible/inventory/group_vars/all.yml`
+      and a test, and no file of `initial_setup`.
+      `deploy_changes.services_from_changed_paths` reads that pair as `broad=True,
+      broad_deploy=True` with no setup role, so the tick applies nothing on the box
+      (D6-R1-05's correction). After the merge tick has fast-forwarded, the session runs
       `uv run ansible-playbook ansible/initial_setup.yml --tags setup_drift > /tmp/d6-5a.log 2>&1 < /dev/null`
-      on daniel-server itself, **operator-attended**.
-    - **The check before D6.5.** On both hosts the `kuma-check-setup-drift` timer is active,
-      and a run after the applies logs `status=up` after reading
-      `/var/lib/homelab/setup-deployed-manifest.d/` and `setup-render-manifest.d/`. Both hosts
-      push to one tile, so both must read green. D6.5 does not open until that holds.
+      on daniel-box, **operator-attended**, and quotes the recap. If the tick records an
+      `initial_setup` line in `manual_plane` instead, the session runs the apply that the
+      line names and clears it.
+    - **daniel-server owes nothing.** Its armed state and its render of
+      `setup-drift-check.sh.j2` do not change, so its reader reads nothing stale.
+    - **The check before D6.5.** On both hosts the setup-drift timer is active, under either
+      name (`systemctl list-timers '*-check-setup-drift*'`, before or after M6's C-3b
+      rename). After the box's first scheduled run, `homelab_check_success{check="setup-drift-check"}`
+      reads 1 for `origin="daniel-box"` and for `origin="daniel-server"`. D6.5 does not open
+      until that holds, because D6.5's `NotReporting` arm for the box needs a sample inside
+      its deadline.
     - **The red proof** is the fixture pair in `ansible/tests/deploy/test_setup_drift_check.py`
-      that runs the same `setup-drift-lib.sh`:
+      that runs the same `setup-drift-lib.sh` (a red verdict on a live host would page through
+      B2's rule):
       `test_a_stale_deployed_copy_is_reported` and `test_a_changed_template_is_reported_stale`.
       A red push on the live tile would page.
 8. **D6.5 — Disarm the drift checks** (about 200 lines changed). It removes every unit and
@@ -1823,6 +1835,13 @@ The PRs merge in this order.
     - **Shared tasks lose a tag, not their state.** A task that also carries `backup-health`,
       `disk-health` or `etcd-snapshot` only drops `manifest-prune` or `release-staleness` from
       its tags. Every absent task carries the drift tag of the task it replaces.
+    - **Add daniel-box's arm to B2's setup-drift rules.** In the same rules file, B2's
+      `<Check>Failed` and `<Check>NotReporting` for `check="setup-drift-check"` gain a copy
+      that names `origin="daniel-box"`, with the box as `service`. Each new arm gets a
+      promtool case that fires on a box series alone, and the `NotReporting` case fires when
+      only daniel-server reports. This PR opens only after D6.5a's check reads the box's
+      series, so the `NotReporting` arm finds a sample at `promote`. The box's arm replaces
+      B1's manifest-prune rules, which this PR removes, as its paging drift detector.
     - **The narrowing gate.** The tick records the `setup/k3s` half in `manual_plane`, with
       the tags that `scripts/deploy_tools/narrow_setup.py` derives for the range. When the
       derivation refuses, the line names the whole role, and its only apply is the maximal
@@ -2093,6 +2112,7 @@ journalctl -t deploy-annotation --since today | grep 'source=promote' \
 journalctl -u gitops-deploy --since today | grep -i 'initial_setup'
 uv run python scripts/diagnostics/probe.py gitops-state
 journalctl -t setup-drift-check --since today | tail -3   # status=up, on each host
+uv run python scripts/diagnostics/probe.py metric 'homelab_check_success{check="setup-drift-check"}'   # 1 per origin
 # Exit 2, the two host-plane pages, from D6.1 on: the two tick tests pass.
 uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py \
   -k 'tasks or secrets'
@@ -2253,9 +2273,11 @@ The deletions have red proofs of their own:
   D6.4 has merged, revert D6.4 first and D6.3 second. D6.4 deletes `k8s_remediation` and
   `shared_role_callers.py`, which D6.3's revert imports at module level, so a D6.3 revert
   on its own would stop every `land.sh` run at import.
-- **D6.5a.** Revert it. The revert changes the same template, so the tick applies
-  `initial_setup` on daniel-box, and the task's `kuma_check_state` follows the list, so the
-  box loses the timer. daniel-server needs the same operator-attended apply on itself as the
+- **D6.5a.** Revert it only while D6.5 is unmerged, or after reverting D6.5, because
+  D6.5's arm for the box pages `NotReporting` once the box stops writing. The revert changes
+  the key and a test, so the tick applies nothing. The timer's state variable
+  (`kuma_check_state`, or its name after M6's C-3b) follows the list, so the box loses the
+  timer once the session runs the same operator-attended `--tags setup_drift` apply as the
   forward PR.
 - **D6.5 and D6.5b.** D6.5 removed host units, B1's six rules and the `.prom` files. To
   restore them, revert D6.5b first,
@@ -2355,15 +2377,17 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
   construction, so D6.5b verifies the host state and clears it bare, operator-attended, and
   never runs `--tags k3s`.
 - **The box loses its host-plane drift detector** (class 3: no reader reads as no drift).
-  Mitigation: D6.5a arms the setup-drift reader before D6.5 disarms manifest-prune-check, and
-  D6.5's stamp fragments go with their tasks.
+  Mitigation: D6.5a arms the setup-drift reader before D6.5 disarms manifest-prune-check,
+  D6.5 adds the box's arm to B2's setup-drift rules, and D6.5's stamp fragments go with their
+  tasks.
 - **A merged deletion breaks a unit that runs code from the primary checkout** (class 5).
   The release-staleness cron runs `probe.py releases` from the checkout the tick
   fast-forwards. Mitigation: D6.5 removes the cron and its hand apply runs before D6.5b
   deletes the code.
-- **Two hosts share one setup-drift tile** (class 2). A green push masks a red one for up to
-  30 minutes. Mitigation: the host name in the message, D6.5a's apply on each host, and Open
-  question 8.
+- **A setup-drift rule without an `origin` matcher lets one host mask the other** (class 2).
+  daniel-server's sample would satisfy a host-free `NotReporting` while the box wrote none.
+  Mitigation: D6.5 adds a separate arm per host, each naming its `origin`, with a promtool
+  case in which only daniel-server reports.
 - **A tag leaves the bundle by accident after D6.7** (class 5: a revert or a rename is not a
   transaction). Mitigation: D6.3's census row, the tag rule's publish arm against `prod`, the
   widened dropped-object arm, and the prune exemptions. The kind drill proves the PVC and
@@ -2562,7 +2586,8 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     - the drill's CI job, about 230 lines with its script and fixture tree. It runs only on a
       PR that touches the renderer, its fixture tree, the flux role's defaults or the
       workflow, or on a dispatch, and costs one kind cluster per such run;
-    - daniel-box's setup-drift timer, which replaces a reader D6 deletes;
+    - daniel-box's setup-drift timer and its arm in B2's two rules, which replace a reader
+      D6 deletes;
     - D6.1b's marker query over kustomize-controller's log, about 80 lines with its
       fixtures, and no emitter;
     - D6.7c's break-glass promotion, about 190 lines: a runbook scenario, a public-key
@@ -2612,9 +2637,9 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
    *Requests on C3*. D6.7's *contract gate* step holds the merge until the amended C3 line
    exists, because the row alone leaves C3 as written. D6.7's operator-only step records
    the operator's decision in the PR thread before `land.sh` runs.
-8. **Does daniel-box get its own setup-drift tile?** One token serves both hosts. Resolution:
-   the operator decides in D6.5a's review. A second tile needs an **operator-only** secret,
-   and M3's per-host metric makes it unnecessary.
+8. **Does daniel-box get its own setup-drift tile?** Resolved (#4632): no. Kuma is gone
+   before D6 opens, and M3's per-host series makes a second tile and its token
+   unnecessary. D6.5 gives the box its own arm in B2's two rules instead.
 9. **Does G2 retire `docs/facts.lock` before D6?** No dependency edge orders them. Resolution:
    each PR runs `fact_status.py verify` only while the lock exists.
 10. **Does `flux-deletion-drill` become a required check?** As a required check, it would
@@ -3445,3 +3470,17 @@ Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-st
   checkout newer than the bundle as the render source.
 - **Coordinator note from D5.** D6.7c and *Break-glass promotion* cite D5 Open question 2
   as a precondition, and the fresh-cluster steps name the rebuilt-cluster case.
+
+### Issue follow-up (2026-10-12)
+
+- **#4632 (medium): D6.5a still edited Kuma after M6's C-2b.** D6.5a renamed the
+  setup-drift tile, put the host name in the message for the shared tile, and checked the
+  `kuma-check-setup-drift` timer and the tile. D6 opens after C-2b, so Kuma is gone and
+  M6's B2 has made setup drift a textfile check with per-host series. **Fixed.** D6.5a now
+  edits no tile and no template. *The setup-drift reader covers daniel-box* records why the
+  box's arm in B2's rules lands in D6.5, not D6.5a: an `absent_over_time` arm fires at
+  `promote` unless the box has already written a sample. Without the template edit, the PR
+  routes to no setup role, so D6.5a names a hand apply on daniel-box, as D6-R1-05's
+  correction first said, and daniel-server owes nothing. D6.5a's check reads the timer
+  under either name, because M6's C-3b renames it. Open question 8 is resolved. The C-3b
+  and D6.5 order, part 1 of the issue, is #4609's (PR #4634).
