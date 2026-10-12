@@ -15,8 +15,10 @@ closes each one at render time:
   `volumes` and in every container's `volumeMounts`.
 
 A merge patch cannot rename a list item, which is why the rename is code rather than patch
-data. Each renamed item is written with `name` as its first key, so a guard that reads the
-rendered `- name:` lines sees the new names.
+data. Each renamed item is written with `name` as its first key, and every block sequence is
+indented under its key, so a guard that reads the rendered `- name:` lines sees the new names.
+PyYAML's default writes a sequence at its key's own column, which that guard reads as the end
+of the block: it then collects no name and passes.
 
 No Ansible import at load time, so the tests call the function the playbook runs.
 """
@@ -36,6 +38,13 @@ if str(_Path(__file__).resolve().parent) not in _sys.path:
 
 from filter_errors import _as_filter
 from role_label import _Dumper, _Loader
+
+
+class _IndentedDumper(_Dumper):
+    """role_label's dumper, with each block sequence indented two columns under its key."""
+
+    def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:
+        return super().increase_indent(flow, False)
 
 
 def _merge(base: dict, patch: dict) -> None:
@@ -110,7 +119,11 @@ def flux_components(
                     for m in container["volumeMounts"]
                 ]
     return yaml.dump_all(
-        docs, Dumper=_Dumper, sort_keys=False, default_flow_style=False, width=4096
+        docs,
+        Dumper=_IndentedDumper,
+        sort_keys=False,
+        default_flow_style=False,
+        width=4096,
     )
 
 

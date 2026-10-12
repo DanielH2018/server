@@ -27,6 +27,7 @@ from lib import yaml_fast
 from _k8s_render import rendered_docs
 from _release_expectation import include_role_vars, rollouts
 from flux_components import FilterModule
+from test_volume_names_descriptive import volume_names
 
 FLUX = ROLES / "k8s" / "flux"
 VENDORED = FLUX / "files" / "gotk-components.yaml"
@@ -239,11 +240,14 @@ def test_flux_components_refuses_an_install_it_cannot_fit(text):
     assert str(caught.value).startswith("flux_components: "), str(caught.value)
 
 
-def test_flux_components_writes_each_renamed_volume_name_first():
-    """The volume-name guard reads rendered `- name:` lines, so a renamed item that put
-    `emptyDir` or `mountPath` first would hide its name from it."""
+def test_the_volume_name_guard_reads_the_renamed_volumes():
+    """The volume-name guard scans rendered `- name:` lines under `volumes:`. A sequence
+    written at its key's own column reads to it as the end of the block, so it collected no
+    name from this filter's first output and passed while checking nothing."""
     out = FilterModule().filters()["flux_components"](
         _DEPLOYMENT, {}, "homelab-critical", {"cache": "cache"}
     )
-    assert "- name: source-controller-cache\n" in out, out
-    assert out.count("source-controller-cache") == 2, out
+    assert volume_names(out) == {
+        "volumes": {"source-controller-cache"},
+        "volumeMounts": {"source-controller-cache"},
+    }, out
