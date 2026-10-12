@@ -599,6 +599,34 @@ fault. Once `observability` is flux-owned, the same critical alert also fails D5
 it becomes active during the soak. That is intended too, because a promote is not safe while
 pages are dropped.
 
+### Rules other slices add (C7)
+
+C7 adds three rule sources that join this rules directory and page through Alertmanager.
+Each follows conventions 1 to 9: its own file and group, its group in
+`observability_rule_groups`, a promtool test that fires every alert, and a zero-series case.
+Each PR that adds one waits on M1.
+
+- **The `flux` rule group, from D1's PR D1.6b.** It fires on a controller that is down, on a
+  Kustomization or the OCIRepository not Ready for 15 minutes, and on a Kustomization
+  suspended for more than 24 hours. D4 adds a rule for saturated reconcile workers.
+- **The deploy-pipeline exporter's rules, from D2's PR D2.6d** (about 260 lines).
+  `DeployHoldActive` is a warning, `PromotionStalled` fires on an unpromoted green commit
+  older than 2 hours with no hold, and `ProdMovedOutsidePromote` is critical.
+  `DeployPipelineExporterAbsent` is the family's zero-series alert (convention 2). The rules
+  carry `service="deploy-pipeline"`. C7 *Rule labels* admits that literal as its one
+  exception to the deploy-tag-or-host rule, because it names no deploy tag and so no health
+  gate reads it. `alert_rules.py` checks only that `service` is present. D2.6d also
+  adds a 24-hour repeat route for `DeployHoldActive` to *The routing tree*, with a case in
+  M1's routing test. It adds about 9 series against *The series budget*.
+- **H3's host rules.** `HostReconcileFailed` fires on `homelab_host_reconcile_ok` at 0 for 15
+  minutes, and `HostUpdateStale` sits beside it. They survive M6, and H5 relies on them.
+
+Convention 5 binds all three until M6's batch A3 cuts the `Cluster Scrape Targets` tile
+over. Until then no unshadowed rule among them may page `up == 0` for a scrape job without an
+`origin` label, and an `absent()` arm over such a job's series is conjoined with `up == 1`.
+A controller-down arm in the `flux` group, and an exporter-absent arm in D2's or H3's, is
+where that rule applies.
+
 ### CI and local tooling
 
 - **`scripts/validate/alert_tools.sh`** provisions `promtool` and `amtool` into
@@ -684,6 +712,13 @@ window, so the 30-minute bound has to absorb the weekly reboot. The last ping le
 and Alertmanager to start. The 2026-08-30 record has the last pod Ready at 07:45, so the gap is
 about 15 minutes against 30. A reboot that takes longer than 30 minutes pages, and it should.
 
+**The down-Alertmanager window (RA-8).** From M6's batch A3 on, a down Alertmanager pages only
+through this check, up to 30 minutes in. Kuma's tile paged it 10 to 15 minutes in. A shorter
+check would page sooner: a 5-minute period with a 10-minute grace pages about 15 minutes in.
+The weekly reboot's gap above is also about 15 minutes, so that check would page on most
+reboots. M1 therefore keeps 600s and 1200s and records the slower page. Accepting it is
+**operator-only** (*Open questions* 10).
+
 `test_monitor_bridge_healthchecks_expected.py` derives slugs from cron variables, and this slug
 has no cron. The slug rests on five pieces. PR 2 adds the first, and PR 4 adds the rest:
 
@@ -713,6 +748,38 @@ has no cron. The slug rests on five pieces. PR 2 adds the first, and PR 4 adds t
   check with a 10-minute period, and every other slug is a Cron check carrying that
   expression". PR 4 rewrites that sentence: an `every <N>s` row is a Simple check too, and its
   period is the slug's `timeout`, not N.
+
+### The series budget (C7)
+
+C7 has M1 set one series budget for the fleet. Each slice that adds a scrape job, a probe
+target or a label states its delta against it.
+
+- **The reading.** The 2026-10-12 pillar review read 137,084 head series through
+  `probe.py metric`, with 6.21 GB of the 7 GB `observability_prometheus_retention_size` in use
+  and 27.3 days of retention.
+- **The rate.** 6.21 GB over 27.3 days is about 227 MB a day, or about 1.66 kB per head
+  series per day at the scrape mix of that day. The model in the observability defaults'
+  comment on the size cap predicts 219 MB a day, within 4%. Bytes scale with samples per
+  second, so a series scraped every 15 seconds costs four times a 1-minute one.
+- **The budget is 140,000 head series.** At the measured rate, the 7 GB cap holds about 30
+  days at that count, which is the `observability_prometheus_retention` the role sets. Above
+  it, the size cap binds before the time cap, and retention shrinks with nothing reporting
+  it, as the `DECIDED` comment on the size cap warns. That comment holds the cap near 58% of
+  the 12 Gi claim, so raising the cap alone does not raise the budget.
+- **The headroom is about 2,900 series.** The longest window a monitoring slice reads is
+  convention 6's 168-hour soak, which the cap covers at any count the plan reaches. The
+  budget therefore protects the dashboards' 30-day history, not the soaks.
+- **How a slice states its delta.** Its *Complexity delta* gives the head series it adds, as
+  targets times series per target, with the scrape interval when it is not 1 minute. After
+  its deploy, its PR records `prometheus_tsdb_head_series` before and after. A delta that
+  would cross the budget names its offset in the same slice: a dropped family, as
+  `prometheus.yaml.j2` drops the `_bucket` families, or a shorter label set.
+- **M1's own delta.** PR 2's `alertmanager` scrape job adds one target's Go runtime,
+  process and `alertmanager_*` families, a few hundred series. The rules add `ALERTS` series
+  only while they fire, and the Watchdog's one always. D2.6d adds about 9.
+- **Whether the cap already binds** is *Open questions* 9. The reading's 27.3 days is under
+  30, so either the store is younger than 30 days or the size cap has already deleted a
+  block.
 
 ## Steps, as PRs
 
@@ -811,6 +878,13 @@ and those edits must land with the workload.
 - `netpol_baseline_probe_targets` gains the `alertmanager` row, with its `policy` key, so this
   PR also deploys `netpol-baseline`, after `observability`. PR 1's `policy` test holds the
   row.
+    - **D1.6 edits the same list.** It adds a `flux-system` plane with Service-port rows,
+      because Flux's Services map port 80 to 9090 and 9292, and it widens the probe table to
+      dial the Service port. Whichever of PR 2 and D1.6 lands second rebases its rows onto the
+      other's form. Alertmanager's Service port and container port are both 9093, so its row
+      reads the same under either form.
+- The PR body records `prometheus_tsdb_head_series` before and after its deploy. That is
+  M1's own delta against the series budget (*The series budget*).
 - From this PR the validator's floor requires `alertmanager.yml`. Add its Go-template survival check
   and that check's `..._is_clean` / `..._is_flagged` pair: a fixture template with its
   `{% raw %}` block removed must be flagged.
@@ -975,10 +1049,13 @@ uv run python scripts/diagnostics/probe.py health observability
 # Prometheus's and Grafana's do not
 uv run python scripts/diagnostics/probe.py metric 'kube_pod_start_time{namespace="observability"}'
 uv run python scripts/diagnostics/probe.py releases
+# The series budget (C7), and how far back the store reaches, in days
+uv run python scripts/diagnostics/probe.py metric 'prometheus_tsdb_head_series > 140000'
+uv run python scripts/diagnostics/probe.py metric '(time() - prometheus_tsdb_lowest_timestamp_seconds) / 86400'
 ```
 
 The `AlertmanagerMetricsMissing` read must return nothing: the scrape works, so the alert is
-quiet. After PR 5's deploy, `probe.py releases` shows the `observability` record's
+quiet. The series-budget read must return nothing too. After PR 5's deploy, `probe.py releases` shows the `observability` record's
 `rollouts[]` with `restart: true` for Alertmanager alone.
 
 **The scale-to-zero drill (operator-only, and it pages for real).** It runs after PR 4 deploys.
@@ -1071,6 +1148,9 @@ M2 depends on all of M1, so it runs before any family cuts over, while Kuma owns
   dropped.
 - The Watchdog's deadman row: the `every <N>s` pair in `cron_mismatches`, whose flagged half
   is `every 600s` against `timeout: 600`.
+- The series budget: the same `probe.py metric` read with a threshold below the live reading,
+  such as `> 100000`, returns the `prometheus` series. If that read returns nothing, the
+  metric name has moved, and the budget read proves nothing until it is fixed.
 
 ## Rollback
 
@@ -1284,6 +1364,8 @@ Each risk names its class from `docs/failure-classes.md`.
   stabilise entries, `restart_secrets` and `rolled_by_role`. One fact,
   `observability_changed_secret_files`, read by three tasks. A seventh argument to
   `deadman_crons` and one branch in `cron_mismatches`. One test for the netpol probe table.
+  A series budget of 140,000 head series with two reads in *Verification*. M1's own series
+  delta is a few hundred, from the `alertmanager` scrape job.
 - **Removed:** nothing yet. M1 is the foundation the removals in M2 to M6 stand on. PR 5
   removes a coupling: a Secret rotation restarts only the workloads that read that Secret. At
   `70591c307`, a rotation of Grafana's admin password also restarts Prometheus, and any Secret
@@ -1343,6 +1425,23 @@ Each risk names its class from `docs/failure-classes.md`.
    obligations in *What M1 hands to M6's batch A3*. The integration-2 cross-slice note
    carries them to M6. Until M6 records them, M1's statements about A3 are a request, not
    a fact.
+9. **Does the 7 GB size cap already bind?** The 2026-10-12 reading's 27.3 days is under the
+   30-day setting. If the store is older than 30 days, the size cap binds at that count, and
+   the 140,000 budget sits above what keeps 30 days. Resolution: the retention read in
+   *Verification* runs once a day for seven days from PR 1's merge, and PR 5's body quotes
+   the seven values. A value that climbs past 30
+   means the time cap binds, and the budget stands. A value that never passes 30 means the
+   size cap binds. Then the operator chooses among a lower budget with a cardinality cut, a
+   larger claim with the cap at the same ratio, and a shorter retention (**operator-only**).
+   Until that ruling, the budget stays 140,000.
+10. **A down Alertmanager pages 30 minutes in.** Kuma paged it 10 to 15 minutes in, and the
+    Watchdog check's 600s period and 1200s grace page it up to 30 minutes in (RA-8).
+    Recommendation: accept the 30 minutes, because a shorter check would page on most weekly
+    reboots (*Healthchecks.io sizing for the Watchdog*). Resolution: the operator rules
+    before PR 4 merges (**operator-only**). To shorten it instead, read the reboot gap from
+    the 2026-08-30 record and every later reboot record. Shorten the check only when the
+    worst gap plus a margin fits under 30 minutes. *Open questions* 6 and exit criterion 2
+    stand until then.
 
 ## Review log
 
@@ -1623,3 +1722,26 @@ the working copy of `m6-retire-kuma.md`.
   tasks in X2-10 belong to those slices' own revisions and are not repeated here.
   *Verification*, *Rollback*, *Tests and docs that change in the same PR* and *Complexity
   delta* need no change. PR 3's comment adds no test, no rollback step and nothing to count.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **F-02 (C7, the rules directory).** *Design* gains *Rules other slices add (C7)*: D1's
+  `flux` group from PR D1.6b, D2.6d's deploy-pipeline rules with
+  `DeployPipelineExporterAbsent` and its 24-hour `DeployHoldActive` route, and H3's two host
+  rules. D2's `service="deploy-pipeline"` is the one literal that C7 *Rule labels* admits.
+  The section binds all three to conventions 1 to 9 and names
+  convention 5's constraint before M6's A3. PR 2 notes that D1.6 edits
+  `netpol_baseline_probe_targets` too, and which form the second PR rebases onto.
+- **P9 (C7, the series budget).** *Design* gains *The series budget (C7)*: 140,000 head
+  series, derived from the review's reading of 137,084 series, 6.21 of 7 GB and 27.3 days.
+  It says how each slice states its delta, and gives M1's own. PR 2 records the head-series
+  read. *Verification* gains the budget read and a retention read, with a red proof. The
+  *Complexity delta* gains the budget. *Open questions* 9 asks whether the size cap already
+  binds (**operator-only** if it does).
+- **RA-8 (the down-Alertmanager window).** Not shortened. The 5-minute period with a
+  10-minute grace pages about 15 minutes in, which is also the measured weekly-reboot gap,
+  so it would page on most reboots. *Healthchecks.io sizing for the Watchdog* records the
+  30 minutes, and *Open questions* 10 asks the operator to accept it, with a resolution
+  path through the reboot records.

@@ -29,7 +29,10 @@ records the retirement under that criterion rather than as an override.
 `prek (lint + validate + tests + secrets)` context. The PR's
 `hooks (lint + validate + secrets + docs)` job carries a `notice` annotation that names the
 section citing the moved atom. An agent reads the annotation through the check-runs
-annotations API, as *Verification* shows. In addition:
+annotations API, as *Verification* shows. Run locally from the PR's branch,
+`fact_status.py notice --since origin/master` prints the same section with no call to
+GitHub's API.
+In addition:
 
 - `git ls-files docs/facts.lock` prints nothing;
 - `fact_status.py --help` lists exactly `notice`, `lint` and `report`;
@@ -235,10 +238,14 @@ the lock is retired*.
 - *Consequences.*
     - A moved atom no longer blocks a merge.
     - Failure class 8 loses blocking coverage for content atoms.
+    - The notice's source is `fact_status.py notice --since origin/master`. G1's CI notice
+      step runs the same notice against the base it computes, once per output format. The
+      job summary and the check-run annotations are therefore two views of one output, and
+      the notice does not depend on GitHub.
     - Agent sessions cannot read the job summary. `gh pr checks` and `gh run view` show
-      neither the summary nor the annotations. An agent reads the notice through the
-      check-runs annotations API, or runs `fact_status.py notice --since origin/master`
-      locally. G3 is the remedy that brings the notice to a reviewer without either step.
+      neither view. An agent runs the command locally, or reads the annotations through the
+      check-runs API. G3 is the remedy that brings the notice to a reviewer without either
+      step.
     - `report`'s notice replay, over a plain `--days` window, is the yield measurement
       from now on, and G3 is the escalation path if the yield falls.
     - Reversing the decision means restoring the lock from git history and re-verifying every
@@ -653,9 +660,10 @@ Each risk is checked against `docs/failure-classes.md`.
 - **Failure class 8, prose that nothing re-derives, loses blocking coverage for content
   atoms.** A moved symbol no longer forces a re-read.
     - Mitigation: the notice lists the section on the PR, as annotations and in the job
-      summary.
-    - Mitigation: an agent reads the annotations through the check-runs API, or runs the
-      notice locally, as the root `CLAUDE.md` row says.
+      summary. Both are views of `fact_status.py notice`, which also runs locally with no
+      GitHub call.
+    - Mitigation: an agent runs the notice locally, or reads the annotations through the
+      check-runs API, as the root `CLAUDE.md` row says.
     - Mitigation: the replay in `report` measures whether authors still act on it.
     - Mitigation: G3 is the escalation if they do not.
     - ADR-0020 records the trade and the agent-visibility gap.
@@ -999,3 +1007,14 @@ Findings raised: one. It is fixed in G2's part, and the G3 part is reported to G
     - Not edited here: G3's *Goal* says G1 PR 3 names `moved` and `moved_prose_edited`,
       and G3 carries a `resolve_base` fallback. G1's *Steps* add the keys in PR 4 and
       `notice.resolve_base` in PR 3. This goes to G3 as a cross-slice note.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **P9 (where the notice lives).** *Design*, in ADR-0020's *Consequences*, names
+  `fact_status.py notice --since origin/master` as the notice's source. G1's CI step runs the
+  same notice once per output format, so the job summary and the check-run annotations are
+  two views of it, and the notice does not depend on GitHub. *Goal and exit criterion* adds
+  the local run, and *Risks* says the same in its failure-class 8 mitigations. No PR, check
+  or line count changes, so *Steps*, *Verification* and *Complexity delta* are unchanged.

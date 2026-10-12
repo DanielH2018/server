@@ -10,9 +10,9 @@ chezmoi_setup_repo: https://github.com/DanielH2018/dotfiles.git
 # A bump here moves nothing on a host that already has the binary (`creates:` on the install
 # task); it decides what the NEXT fresh host gets.
 # renovate: datasource=github-releases depName=twpayne/chezmoi
-chezmoi_setup_version: "v2.72.2"
+chezmoi_setup_version: "v2.73.0"
 chezmoi_setup_installer_url: "https://raw.githubusercontent.com/twpayne/chezmoi/{{ chezmoi_setup_version }}/assets/scripts/install.sh"
-chezmoi_setup_installer_sha256: 75de125a45a82b53c16546db7057052e98c11866ded27c4b6f95a51f59432e7b
+chezmoi_setup_installer_sha256: d92ac6044ecfcd716c0c1d0512693e7d91c3002591cd6c871bb94ef227919982
 
 # Answers to the two promptOnce functions in the dotfiles' .chezmoi.toml.tmpl. Passed on
 # the command line so `chezmoi init` never blocks waiting for a TTY that Ansible has not

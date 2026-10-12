@@ -40,7 +40,7 @@ An accepted ADR records the decision to deploy the cluster with Flux from a CI-r
 artifact, and marks [ADR-0010](../../adr/0010-pull-based-gitops-over-argo-and-flux.md)
 `Superseded by ADR-NNNN`.
 
-**Exit criterion.** Five checks, each under *Verification*:
+**Exit criterion.** Six checks, each under *Verification*:
 
 1. **No path reaches the k8s play.**
     - No kept module imports `deploy_k8s`, `deploy_broad_k8s`, `deploy_k8s_owed` or
@@ -73,6 +73,14 @@ artifact, and marks [ADR-0010](../../adr/0010-pull-based-gitops-over-argo-and-fl
     - Each deleted symbol has no match in the files that shrink.
     - The import grep over every kept module in `ansible/`, `scripts/` and `.claude/` prints
       nothing. Each PR quotes that grep in its body.
+6. **The promotion and landing code ends at a stated size.** Each count is of non-test lines
+   at D6's last PR.
+    - `scripts/deploy_tools/promote.py` is at most 900 lines. D1 states about 320 and D2
+      about 350. The headroom covers D5's additions and D6.7b's tag rule and object-loss
+      change.
+    - `land.sh`, `land.py` and `land_lib/` together are at most 6,400 lines. They measured
+      6,258 at `70591c307`. The bound allows all of D2.3's about 220 lines to land there,
+      less the 121 lines of `land_rerolls.py` that D6.3 deletes, and D6.3 deletes more.
 
 ## Baseline at `70591c307`
 
@@ -453,9 +461,9 @@ These facts come from the D2, D4 and D5 plans, because their code does not exist
     - D5.1d's gate refuses a PR that changes the render of a tag suspended on its base. D5
       keeps `flux_suspend` as the way to stop a role, and `promote.py decide` holds all
       promotion with the cause `suspended-changed` when such a change reaches master.
-    - D5.1f's two removal arms fail a PR that drops a Deployment, StatefulSet or DaemonSet from
-      a flux-owned tag's render without a `Removes-Workload:` trailer, and a PR that adds a
-      flux-owned name to `k8s_retired_services`. The dropped-workload arm exempts a handback,
+    - D5.1f's two removal arms fail two kinds of PR. The first drops an object of any kind
+      from a flux-owned tag's render without a `Removes-Object:` trailer. The second adds a
+      flux-owned name to `k8s_retired_services`. The dropped-object arm exempts a handback,
       because `deletionPolicy: Orphan` deletes nothing.
 - **Flux applies itself.** After D5's flux PR, the `flux` tag applies D1's
   `files/gotk-components.yaml`, which holds the controllers and the Flux CRDs, with
@@ -639,33 +647,45 @@ such a path (*The route of a deploy-plane path after D6*). Its receipt never nam
 `ansible/deploy.yml`, so `land_lib/landing.py:Landing.tick_applied` would read False for
 every such landing.
 
-**From D6.1, the render diff gives the k8s tags.** The tags whose bundle files differ
-between two commits are the tags `promote` changes between them. A tag's bundle files are
-every file that C1 *Cluster output* publishes for it: `cluster/<tag>/`,
-`cluster/<tag>-deferred/`, `cluster/<tag>-snapshot/`, `cluster/<tag>-verify/` and
-`flux/<tag>.yaml`. That last file holds the Kustomization `<tag>` and its suffixed kinds,
-with their `dependsOn`. This set is wider than the one the gates count. D4's *What counts as
-changed* counts a tag only when its `cluster/<tag>/` output differs, so an edit that moves
-only an edge, a deferred apply or a shared kind counts nothing there. The mode therefore
-shares the gates' two renders and keeps its own comparison over the whole bundle. The kept
-arms keep their own count (*The render-diff gates after D6*).
+**From D2.3, `land-wait` reads the changed set, and from D6.1 that set is the whole k8s
+list.** C1's `digests.json` records one `footprint` digest for each deploy tag and each
+member of `SHARED_KINDS`. The renderer computes it in the render that `promote` publishes.
+C6 has `land.sh` wait on C2's changed set between M's `digests.json` and the one on the
+newest published ancestor of M's first parent, and D2.3's `land-wait` reads both files from
+GHCR. D2 *How `land.sh` waits* owns how `land-wait` finds that ancestor and what each read
+costs. A tag's footprint covers every file that C1 *Cluster output* publishes for it:
+`cluster/<tag>/`, `cluster/<tag>-deferred/`, `cluster/<tag>-snapshot/`,
+`cluster/<tag>-verify/` and `flux/<tag>.yaml`. That last file holds the Kustomization
+`<tag>` and its suffixed kinds, with their `dependsOn`. This set is wider than the one the
+gates count. D4's *What counts as changed* counts a tag only when its `cluster/<tag>/`
+output differs, so an edit that moves only an edge, a deferred apply or a shared kind counts
+nothing there. The kept arms keep their own count (*The render-diff gates after D6*).
 
-- **The mode.** D6.1 adds a `--moved-tags` mode to `render_diff_gates.py`. It takes a
-  repository path, a base commit and a head commit. It lays out each commit in a scratch
-  directory, renders each one there as the CI step does, and prints the moved tags
-  comma-joined. *How the mode lays out a commit* below gives the mechanism.
-- **What the mode counts.** Every path that differs between the two bundles must classify.
-  Otherwise the mode exits non-zero, and `land.sh` widens the list.
-    - **A tag's own files count for that tag.** The mode strips `-deferred`, `-snapshot` or
-      `-verify` from a directory name to find its tag. C3 *Reserved names* makes the strip
-      unambiguous, because no deploy tag ends in a reserved suffix. pihole's second instance
-      in `cluster/pihole-deferred/` therefore prints `pihole`. An edit to one entry's
-      `depends_on:` under `ansible/inventory/` moves only the dependent's
-      `flux/<tag>.yaml`, and it prints the dependent tag.
-    - **`cluster-vars` counts for every substituting tag.** A substituting tag is one whose
-      `flux/<tag>.yaml` at the head carries `spec.postBuild` on any of its Kustomizations.
-      C1's *projection* makes that field the bundle-only reader of a directory's key set,
-      and D3.3b gives each such Kustomization the `cluster-vars` edge.
+- **What D6.1 changes.** Until D6.1, `land.sh` also derives k8s tags from paths, and a broad
+  path waits on the tick's `deploy.yml` receipt. D6.1 removes both. Every landing then
+  reaches `land-wait`, and its changed set is the list that the health gate and the
+  `source=promote` marker read. `land.sh` derives no k8s tag itself (C6). D6.3 and D6.4
+  delete the code behind the path-derived tags. If D2.3 calls `land-wait` only for a PR
+  with a flux-owned tag, D6.1 removes that condition.
+- **D3.4's interim rule retires in D6.1.** D3.4 adds an interim `land-wait` rule for the
+  `cluster-vars` files, to retire in the PR that switches `land.sh` to reading
+  `digests.json`. D6.1 is that PR, because from D6.1 the changed set alone fills the k8s
+  list.
+- **What a footprint counts.** C1 cites this bullet by its earlier name, *What the mode
+  counts*. The renderer applies these rules when it writes `digests.json`, from D2's first
+  publishing PR (C1). D2 owns that code, and the census that fails a member of
+  `SHARED_KINDS` with no rule (C3). D6 keeps the rules as their definition. Every bundle
+  path must classify.
+    - **A tag's own files count for that tag.** The renderer strips `-deferred`,
+      `-snapshot` or `-verify` from a directory name to find its tag. C3 *Reserved names*
+      makes the strip unambiguous, because no deploy tag ends in a reserved suffix.
+      pihole's second instance in `cluster/pihole-deferred/` therefore counts for
+      `pihole`. An edit to one entry's `depends_on:` under `ansible/inventory/` moves only
+      the dependent's `flux/<tag>.yaml`, and it changes only the dependent tag's footprint.
+    - **`cluster-vars` counts for every substituting tag.** A substituting tag is one with a
+      directory whose placeholder key set is non-empty, the set C1 calls *the one source*.
+      Its `flux/<tag>.yaml` carries `spec.postBuild` exactly then, and D3.3b gives each
+      such Kustomization the `cluster-vars` edge.
     - **`homelab-namespace` counts for every flux-owned tag.** It owns the Namespace and the
       LimitRange that admit every pod.
     - **`soak` counts for every flux-owned tag only when no tag's own files moved.** Its
@@ -675,31 +695,27 @@ arms keep their own count (*The render-diff gates after D6*).
       moves `soak` alone, such as an edit to the soak Job, widens, because the soak's verdict
       reads every tag's alerts.
     - **Index files count for no tag.** `flux/kustomization.yaml` lists the files under
-      `flux/`, and it moves only when one of them joins or leaves. `digests.json`, and
-      `images/` from D5.4a1, sit where no Kustomization's path reaches.
-    - **Anything else widens.** A shared kind with no rule here, or a name the mode cannot
-      classify, makes the mode exit non-zero. A census test in D6.1 fails when a member of
-      the renderer's `SHARED_KINDS` has no rule, so the PR that adds a shared kind adds its
-      rule.
-    - **A tag that only the base renders is left out**, and the mode names it on stderr. Its
-      Kustomization no longer exists at the head, so `land-wait` could never read it Ready.
-- **The range.** `land.sh` runs the mode on daniel-box and points it at the primary
-  checkout. `Landing.git` runs git there, and `Landing.fetch_branch` fetches there, so that
-  checkout's object database holds the merge commit. The base is the merge commit's first
-  parent, or `--since` for the diff fallback. `land.sh` resolves both to SHAs with `git
-  rev-parse` before the mode starts. The `--since` range can be wider than the PR, which is
-  the safe direction that `land_tags`'s module docstring names: "wider than the truth is
-  recoverable, narrower is not".
-- **The list.** `land.sh` hands `land-wait` the moved tags joined with the path map's tags.
-  The join keeps a role whose change moves no render in the wait, and that costs nothing,
-  because the wait reads Ready at a revision that contains the merge. A PR that moves no
-  bundle file and touches no role path has nothing for `promote` to apply, so its list is
-  empty.
-- **A failed render widens the list.** If either render fails, the mode exits non-zero, or
-  the mode runs past the timeout that D6.1 sets from its measured time, `land.sh` hands
-  `land-wait` every flux-owned tag and says so on the verdict line.
-- **No GitHub call.** Both renders read the local checkout, so the mode spends nothing from
-  the host's anonymous quota.
+      `flux/`, and it moves only when one of them joins or leaves. `images/` from D5.4a1
+      sits where no Kustomization's path reaches. C1 names these files, and `digests.json`
+      itself, as excluded from every footprint. A tag that joins or leaves moves its own
+      `flux/<tag>.yaml`, so a landing that adds or retires a tag waits on that tag alone.
+    - **Anything else widens.** A shared kind with no rule, or a path that no rule claims,
+      lands under `_unclassified` (C1).
+- **The `soak` rule cannot run inside one render.** Its condition compares two bundles, and
+  the renderer sees one. The soak Job also embeds the commit it verifies (R4 *The
+  render-diff gate*), so `soak`'s footprint differs on every commit. A rule that fanned
+  `soak` out to the tags would therefore widen every landing. The rule's text stays as
+  written, and Open question 15 holds it.
+- **A tag that only the base renders is left out of the wait.** Its Kustomization no longer
+  exists at M, so `land-wait` could never read it Ready. This rule belongs to the reader,
+  not to the renderer. C2's changed set does not state it, so a cross-slice note asks C2 to
+  leave such a name out of `verify`'s expected set too.
+- **A role change that moves no bundle file leaves the list.** `promote` has nothing to
+  apply for it. A PR that moves no bundle file waits on `flux/homelab` alone (C2, C6).
+- **The reads cost no `api.github.com` call.** `land-wait` reads both files from ghcr.io
+  through GHCR's anonymous pull token, as D2's `last-good` read does. That token works only
+  while D1 Open question 2 keeps the package public. *Risks* names what a private package
+  does to every landing.
 - **The Pi half stays a hand deploy.** A broad path can also reach a Pi Compose role. At
   `70591c307` the tick's `log_pi_changes` records that half and does not gate a verdict on
   it. From D6.3, `derive_from_diff` does the same. `changed` prints its own line naming
@@ -708,95 +724,23 @@ arms keep their own count (*The render-diff gates after D6*).
   beside the verdict, and the verdict rests on `land-wait`.
 - **`self_applied_playbooks` loses its `deploy.yml` term in D6.1**, in the PR that stops
   the tick's apply. A setup-role change keeps its term, because the tick still applies it.
-- **Rejected: every flux-owned tag for every broad PR.** It needs no render. But it gates
+- **Rejected: every flux-owned tag for every broad PR.** It needs no read. But it gates
   the health checks of about 50 services on a one-template change, and it writes a marker
   naming every service. It stays as the failure fallback only.
+- **Rejected: the `--moved-tags` mode.** An earlier draft of D6.1 rendered both commits on
+  daniel-box, each in a `git archive` scratch tree with its own uv environment, in about
+  240 lines. It cost two renders per landing, a scratch layout kept out of the deployer's
+  checkout, and a second copy of the classification. C1's footprint classifies once, in the
+  render that `promote` publishes, so the reader cannot disagree with what `promote`
+  applies.
+    - **No other reader needs the scratch layout.** D4 Open question 12 asked whether the
+      layout function survives. It does not, and D6.1 adds none. The PR-time render-diff
+      gates run in CI, where the runner's checkout and a worktree of the merge base hold
+      the two trees and no deployer reads the checkout. R4's `render-diff` workflow lays
+      out its base the same way.
 - **Rejected: read the CI render-diff job's result with `gh`.** That costs an artifact
-  download per landing, and the job runs on the PR head, not on the merge commit. At D6.1
-  no job publishes a moved set to download either: the renamed step reports its arms and
-  uploads nothing, and R4's `render-diff` workflow lands after D6.
-
-#### How the mode lays out a commit
-
-The primary checkout belongs to the deployer. The deployer reads any `git status
---porcelain` output there as dirty and parks (`.claude/rules/generated-docs.md`). That
-checkout can also sit at the pre-merge HEAD while `land.sh` runs. The docstring of
-`scripts/deploy_tools/setup_role_chains.py:tree_at` records that deploy-ui runs `land.sh`
-from the primary checkout, which stays at the pre-merge HEAD until the tick fast-forwards.
-So the mode never reads or writes the primary's working tree, index or HEAD:
-
-- **Layout.** For each SHA, the mode runs `git -C <repo> archive <sha>` and extracts the
-  archive with `tarfile`'s `data` filter, as `tree_at` does. Both trees go into one
-  `tempfile.TemporaryDirectory` with the prefix `moved-tags-`. The mode archives the whole
-  commit, because a path list that missed one renderer input would narrow the result
-  without saying so.
-    - **The scratch parent is pinned to `/tmp`.** The mode passes it as `dir`, the way
-      `land_lib/tools.py:gate_snapshot` pins `GATE_TMP_ROOT`. The default honours `TMPDIR`,
-      which `printenv TMPDIR` shows as `/tmp/user/1000` on daniel-box, so a leaked directory
-      would sit where *Rollback* does not look. `gate_snapshot`'s marker `DECIDED the
-      parent directory is PINNED to GATE_TMP_ROOT` records the same trap. An override
-      variable, `MOVED_TAGS_TMPDIR`, moves the parent, and only the no-write test sets it.
-    - `.gitattributes` sets no `export-ignore`, so the archive holds every tracked file.
-    - The archive leaves the one submodule, `Email-to-RSS`, as an empty directory. No
-      renderer input reads it. Under `ansible/`, `git grep` finds the name only in
-      uptime-kuma's `static-monitors.yaml.j2`, as a monitor name and a comment, and in
-      `ansible/README.md`, a `.bashrc` comment and a test.
-- **Output.** Both `--out` directories sit in the same temporary directory. Before it
-  creates anything, the mode resolves the repository root and the scratch parent, and exits
-  non-zero when the scratch parent falls under the repository root. It checks each `--out`
-  the same way before a render writes to it. A non-zero exit widens `land.sh`'s list.
-- **Which code renders.** Each commit renders with its own `scripts/renderer/homelab_render.py`.
-  The mode runs it with `uv run --frozen` inside that commit's extracted tree. The
-  comparison, the layout and the cleanup are the invoking checkout's `render_diff_gates.py`.
-    - **The mode builds the child's environment.** It copies its own environment, removes
-      `VIRTUAL_ENV`, and sets `UV_PROJECT_ENVIRONMENT` to the extracted tree's own `.venv`.
-      The caller can carry that variable pointed at the primary checkout's `.venv`.
-      `land_lib/tools.py:gate_snapshot` sets it process-wide inside `land.py` for the life
-      of its snapshot. `deploy_lib/playbook.py`, `deploy_lib/detach_run.py` and
-      `deploy_lib/under_locks.py` set it for their children. Inherited, it would make uv
-      sync the primary's `.venv` to the base commit's lock and then to the head's, and no
-      `git status` without `--ignored` would show it.
-    - **Where uv writes.** With the explicit value, uv builds each tree's environment from
-      that commit's `uv.lock` inside the scratch directory, and Python's bytecode caches land
-      there too. The one write outside the scratch directory is the uv cache of the user who
-      runs `land.sh`. A PR that changes `uv.lock` needs a download into that cache. On a host
-      that cannot reach the package index, that render fails, and the list widens.
-    - Promote published the base's bundle with the base's renderer, and publishes the head's
-      with the head's. A PR that edits `scripts/renderer/`, `ansible/filter_plugins/` or
-      `uv.lock` therefore moves exactly the renders that each commit's own code moves. One
-      shared renderer would read such a PR as moving nothing, which is the narrower,
-      unrecoverable direction.
-    - C1's CLI renders only the tree it sits in (Open question 11). Running the commit's own
-      copy is the only way the CLI renders a given commit.
-- **One commit value.** Both renders take the head's SHA through C1's commit input. R4's
-  render-diff job later adopts the same convention (R4 *PR 1*). D5's soak Job embeds the
-  commit it verifies, so two renders of two commits differ wherever the commit is embedded,
-  even when no input changed. Without the pin, the mode would report such a tag as moved,
-  which is wrong in the safe direction. D6.0 checks that C1 names the input and that the
-  renderer at `origin/master` takes it. A base commit older than that flag fails its render,
-  so a `--since` range that reaches past it widens the list.
-- **No lock.** The mode reads only object-database content, by SHA. A concurrent fetch or
-  fast-forward adds objects and moves refs, but it never changes what a SHA names. So the
-  mode takes no git-tree lock and cannot race the tick.
-- **Cleanup.** The temporary directory's context manager removes both trees and both
-  outputs when the mode returns and when it raises. A killed run leaves one
-  `/tmp/moved-tags-*` directory, outside every checkout. That directory costs disk and
-  nothing else. On daniel-box, `/usr/lib/tmpfiles.d/tmp.conf` reads `D /tmp 1777 root root
-  30d`, so `systemd-tmpfiles` removes it after 30 days.
-- **Rejected: `git worktree add --detach`, as `deploy.sh --at` and `land.sh`'s health gate
-  lay out their snapshots.** Such a worktree needs no tree lock.
-  `land_lib/tools.py:gate_snapshot` adds one of the merge commit from `land.sh`, and its
-  marker `DECIDED NO tree lock is taken` records that the add writes nothing in the
-  primary's working tree. The cost is the registration under the primary's
-  `.git/worktrees`. The same docstring records that "A SIGKILL or a host reboot still leaks
-  the registration". Recovering it takes a `git worktree prune` in the primary, which
-  deregisters every worktree whose directory is missing, other sessions' included.
-  `deploy_lib/under_locks.py:reap_dead_snapshots` runs that prune only under the tree lock
-  for this reason. A killed `git archive` run leaves only a directory, with no registration
-  to prune, and that is why the mode uses it.
-- **Rejected: check out a commit in place, or render the working tree.** A checkout in place
-  moves the deployer's HEAD. Rendering the working tree reads whatever the primary holds,
-  which can predate the merge, and it races the tick's fast-forward.
+  download per landing, and the job runs on the PR head, not on the merge commit.
+  `digests.json` on the published artifact describes the merge commit itself.
 
 ### The host-plane pages after D6.1
 
@@ -838,11 +782,12 @@ two host-plane pages (Baseline). So D6.1 first moves those calls into `deploy_ha
 
 ### Grafana's deploy markers after D6
 
-**After D6, D2.3's `promote.py land-wait` writes the only marker for a cluster deploy.**
-The dashboards draw a marker only for a `deploy-annotation` line in host syslog (Baseline).
-D6 deletes one emitter that no k8s role reaches any more, and keeps the one that replaced
-it. D6 owns the `deploy-annotation` stream from D6.1 on, as D2 *Risks* hands it over. It
-keeps `land-wait` as the cluster's emitter and records the gap below as a lasting limit.
+**After D6, two sources mark a cluster deploy.** `promote.py land-wait` writes a line for
+every landing, and from D6.1b a query draws a marker from kustomize-controller's own log
+line for every apply. At the baseline the dashboards draw a marker only for a
+`deploy-annotation` line in host syslog (Baseline). D6 deletes one emitter that no k8s role
+reaches any more, and keeps the one that replaced it. D6 owns the `deploy-annotation`
+stream from D6.1 on, as D2 *Risks* hands it over, and D6.1b closes the gap below.
 
 - **The Ansible emitters stop role by role, at each flip, not at D6.1.** C4 makes the
   deployer's k8s arms and `deploy.sh` skip a flux-owned entry. D2's Baseline records that
@@ -860,12 +805,34 @@ keeps `land-wait` as the cluster's emitter and records the gap below as a lastin
   tag, so `deploy_lib/playbook.py:annotate` fires only for a Pi deploy. After H5, no
   `deploy.sh -e target=daniel-pi` runs, and H7.19b deletes `playbook.py`. `land-wait` is
   then the stream's one emitter.
-- **The gap D2 records stays, as a lasting limit.** A promotion that no `land-wait`
-  follows draws no marker. A merge made outside `land.sh` is one such promotion. After the
-  operator clears `DEPLOY_HOLD`, D2 marks the next promotion by re-running `land-wait`, as
-  D2.9 does, and a clear with no re-run is the other (D2 *Risks*). The `event=landing`
-  line does not close the gap, because it marks the merge rather than the apply and only
-  the Landings board reads it (Baseline).
+- **The gap D2 records closes with a query, not an emitter.** A promotion that no
+  `land-wait` follows draws no `deploy-annotation` line. An automerged bump, a merge made
+  outside `land.sh`, and a promotion after the operator clears `DEPLOY_HOLD` with no re-run
+  are three such promotions (D2 *Risks*). The `event=landing` line does not close the gap,
+  because it marks the merge rather than the apply and only the Landings board reads it
+  (Baseline). D6.1b adds a second annotation query beside
+  `observability_deploy_annotation_expr`, and `scripts/grafana/inject_dashboard_annotations.py`
+  adds both to every dashboard.
+    - **The source is kustomize-controller's own log.** loki-homelab's Alloy DaemonSet ships
+      every pod's logs, `flux-system`'s included. The query matches the line that
+      kustomize-controller writes for an apply that changed objects, which names the
+      Kustomization and its revision. It takes its `job` label from `loki_streams`, as
+      every selector does.
+    - **One marker per apply, not per reconcile.** kustomize-controller reconciles each
+      Kustomization on its interval and logs each run. The query matches only the line
+      that reports a changed object, so a reconcile that changed nothing draws no marker.
+    - **The exact line is upstream's.** D6.1b measures it on production with `probe.py
+      loki-query` before it writes the matcher. It pins one captured apply line and one
+      captured no-change line as the test's fixtures.
+    - **A landing draws both markers.** `land-wait`'s line names the PR's changed set, and
+      the controller query draws one marker per Kustomization the promotion changed.
+      `land-wait`'s line stays, because only it names the PR.
+    - **No write credential.** The query reads Loki, as the existing one does, so it needs
+      no Grafana API call and no standing write credential.
+    - **Fallback: `gotk_resource_info`'s `revision` label.** C6 states that every promotion
+      adds one series per Kustomization through that label. If no kustomize-controller
+      line tells an apply from a no-change reconcile, D6.1b draws the marker from each
+      series' first sample through the Prometheus data source instead.
 - **Rejected: an emitter in `promote` itself.** `promote` runs on a GitHub-hosted runner,
   so a `logger` call there writes to the runner's syslog, which no Alloy ships (Baseline).
   A POST to Grafana's HTTP API instead would need the standing write credential that the
@@ -922,7 +889,7 @@ D6.1 deletes one of the four arms of `cross_plane_order.py`, not the module.
       (*The `k8s_autodeploy` key keeps its Renovate readers*). Without the gate, a change to a
       suspended tag merges and then trips `decide`'s `suspended-changed` hold, which stops all
       promotion.
-    - D5.1f's dropped-workload arm is the only PR-time check that a prune is meant. Its
+    - D5.1f's dropped-object arm is the only PR-time check that a prune is meant. Its
       retirement arm stays until R4 deletes `k8s_retired_services` with the play.
 - **The kept arms count a tag whenever its render moves.** The image-only exception goes with
   arm 1. An image bump to a suspended tag is refused like any other change, which D5.1d's rule
@@ -931,11 +898,11 @@ D6.1 deletes one of the four arms of `cross_plane_order.py`, not the module.
 - **The module is renamed for what it checks.** After D6.1 it orders no planes, so D6.1 renames
   it to `scripts/validate/render_diff_gates.py`, with its tests in `scripts/validate/tests/`
   and its CI step. The step keeps its pull-request-only condition.
-- **D6.7b changes the dropped-workload arm twice.** It deletes the handback exemption,
+- **D6.7b changes the dropped-object arm twice.** It deletes the handback exemption,
   because D6.3's census refuses a handback, and from D6.7 the default policy deletes what the
   exemption assumed `Orphan` would keep. It also counts a tag that leaves the render whole,
   judged by the tag's ownership at the base. A retirement PR therefore carries one
-  `Removes-Workload:` trailer per workload. D6.7b adds the tag rule's pull-request arm to the same module.
+  `Removes-Object:` trailer per object it deletes. D6.7b adds the tag rule's pull-request arm to the same module.
 
 ### The `k8s_autodeploy` key keeps its Renovate readers
 
@@ -1102,9 +1069,9 @@ deploy-tag set.
     - **Its early warning runs on pull requests** in `render_diff_gates.py`, which already
       renders the PR's base. The reference there is the base render. A PR whose checks ran on
       an old base can still merge, and the publish arm catches it.
-- **The dropped-workload arm.** From D6.7b it counts a tag that leaves the render whole (*The
-  render-diff gates after D6*). A retirement must name each workload it deletes in a
-  `Removes-Workload:` trailer, so an accidental drop fails at pull-request time.
+- **The dropped-object arm.** From D6.7b it counts a tag that leaves the render whole (*The
+  render-diff gates after D6*). A retirement must name each object it deletes in a
+  `Removes-Object:` trailer, so an accidental drop fails at pull-request time.
 
 D6.7's PR body records the count of handbacks, retirements and renames from D2 to D5 with
 `git log -S 'owner: flux' -- ansible/inventory/host_vars/`. If any handback in that count was
@@ -1210,12 +1177,80 @@ Its drill script sits beside the renderer in `scripts/renderer/`.
   `flux_version` bump touches the flux role's defaults, so its PR runs the drill, and that
   bump is when upstream deletion behaviour could change. The job also takes
   `workflow_dispatch`, and a dispatch always runs the drill. It never self-scopes, unlike
-  image-smoke's dispatch, which skips when it names no images.
+  image-smoke's dispatch, which skips when it names no images. From D6.7c the scope also
+  covers `docs/break-glass.md` and the flux role's OCIRepository template (*Break-glass
+  promotion*).
 - **What it does not cover.** kind is not k3s, and its default class is not Longhorn. The
   Longhorn half follows from the PVC object. Both Longhorn classes set
   `reclaimPolicy: "Delete"` (`ansible/roles/setup/k3s/files/longhorn-storageclass.yaml` and
   `longhorn-storageclass-nobackup.yaml`), so a volume goes only when its PVC is deleted, and
   the drill proves that the PVC is not. *Risks* names this limit.
+
+### Break-glass promotion
+
+C2's normal path needs GitHub, GHCR and Sigstore at once. From D5's last flip, C4 makes
+`deploy.sh` skip every flux-owned entry, and D6.3 deletes its k8s arm. So no local path
+writes the cluster while any of the three is down. D6.7c adds C2's break-glass promotion,
+which is **operator-only**, and drills it on kind.
+
+- **The key pair.** The operator generates a cosign key pair for break-glass alone
+  (**operator-only**). The private half is password-protected and lives in the break-glass
+  kit beside item 8's repo bundle, never in the repo, in CI or on a host. The public half is
+  committed: the flux role carries it as a Secret in `flux-system` that holds that public
+  half alone. Normal operation reads it nowhere, because the production OCIRepository
+  verifies keyless against the `promote` identity alone (D1).
+- **The source form.** The flux role's OCIRepository template takes a second form of its
+  source settings: a registry URL and the break-glass Secret, in place of GHCR and the
+  keyless identity. The default stays GHCR, and a renderer test pins the production render
+  unchanged.
+- **The runbook** is a scenario in `docs/break-glass.md`, *GitHub, GHCR or Sigstore is
+  unreachable*. The operator:
+    1. clones item 8's repo bundle and commits the change to apply on top of it;
+    1. commits the break-glass source form, which names the in-cluster registry;
+    1. checks that the commit to render equals or descends from the commit that the
+       cluster's OCIRepository status names in `org.opencontainers.image.revision`. Item
+       8's bundle is refreshed only with the age-key backup, so it can predate `prod`. A
+       render from an older tree would prune every tag added since and revert every change
+       since. If the bundle fails the check, the operator renders from a surviving host
+       checkout that holds that commit;
+    1. renders with `homelab-render cluster` in placeholder mode, as the `render` job does;
+    1. pushes the bundle to the in-cluster registry with the pinned `flux` CLI, and signs
+       it with `cosign sign --key` and the kit's private half;
+    1. applies the rendered OCIRepository by hand. The bundle it serves carries the same
+       source, so whichever Kustomization applies the OCIRepository keeps that source
+       rather than reverting it.
+- **A fresh or rebuilt cluster needs two more steps.** When H7's bring-up runs offline, or
+  the cluster was rebuilt, it holds neither the in-cluster registry nor the Flux
+  controllers. The runbook then applies
+  the in-cluster registry before the artifact push. It installs the Flux controllers from
+  images that the break-glass kit carries, not from GHCR. Open question 17 holds how the
+  kit carries them, beside H7 Open question 14.
+- **What fires meanwhile.** `ProdMovedOutsidePromote` fires, because `prod`'s live digest no
+  longer matches `PROD_DIGEST` (C2), and the runbook says so. The break-glass path neither
+  reads nor clears `DEPLOY_HOLD`, which needs GitHub.
+- **The way back to GHCR.** Re-pointing at GHCR first would apply `prod`, which predates the
+  emergency change, and silently revert it. So the runbook orders the steps:
+    1. push the break-glass commits to master, with the source form reverted;
+    1. wait until `promote` verifies a commit that contains them and moves `prod` there
+       (C2);
+    1. apply `prod`'s OCIRepository by hand, as the flux role renders it;
+    1. confirm that every Kustomization is Ready at `prod`'s origin revision and that
+       `ProdMovedOutsidePromote` has cleared.
+- **The drill.** D6.7c extends `flux-deletion-drill` rather than adding a second job. That
+  job already serves its bundle from a `registry:2` through its own OCIRepository. Two
+  cases join it:
+    - `case=break-glass`: the job generates a throwaway key pair, stores the public half as
+      the drill's Secret, signs a bundle with the private half, and points the
+      OCIRepository at it with `spec.verify`. The tag must reach Ready at that revision.
+      The kit's private half never reaches CI.
+    - `case=break-glass-red`: a bundle signed with a second throwaway key that the cluster
+      does not hold. source-controller must refuse it, and the OCIRepository must not
+      reach Ready at that revision.
+- **The in-cluster registry stays in service.** Break-glass promotion is a standing
+  consumer, which changes Open question 3's answer. Its precondition is D5 Open question 2,
+  which rules whether the registry stays as a pull-through mirror before nut's Wave C PR.
+  If that ruling retires the registry, D6.7c stops and this design picks another push
+  target.
 
 ### The ADR
 
@@ -1236,6 +1271,28 @@ The ADR states what was decided and what it cost:
     - the end of the handback as a rollback.
 
   It names variables, not values, as `docs/adr/template.md` requires.
+- **Every GitHub dependency, with its fallback.** The ADR lists each place the cluster
+  deploy path needs GitHub, and what its absence stops:
+    - the workflow triggers that run CI, `render`, `publish` and `promote`;
+    - the repository variables `DEPLOY_HOLD` and `PROD_DIGEST`;
+    - the check-runs that give `decide` its CI verdict;
+    - the commit statuses that notification-controller posts and `verify` reads;
+    - GitHub's OIDC token, on which cosign's keyless signature rests;
+    - GHCR: the registry that serves the artifact, the anonymous pull that D1 Open
+      question 2 keeps open, and the Packages API that D1.7's retention reads.
+
+  Without any one of them, no tag moves and Flux keeps applying `prod`. The fallback for a
+  change that cannot wait is C2's break-glass promotion (*Break-glass promotion*), which is
+  **operator-only**.
+- **Fixed premises.** The ADR names k3s and Flux as premises that the design builds on
+  rather than abstracts over, and records what leaving each would cost. Leaving Flux means
+  replacing C3's Kustomizations, C6's commit statuses and `revision` label, `promote`'s
+  verification and D5's soak status. Leaving k3s means replacing the bring-up playbook, its
+  bundled Traefik and its embedded network-policy controller, and every role that assumes
+  them.
+- **No tracing, by decision.** The ADR records that the deploy pipeline carries no traces.
+  The deploy timeline comes from commit-status timestamps and the deploy-pipeline
+  exporter's ages, as C7 *Traces* states, and `design.md` records why.
 
 If D1's operator ruling produced a `Proposed` ADR, D6 completes and accepts that one rather
 than writing a second.
@@ -1270,16 +1327,19 @@ than writing a second.
 - scripts/deploy_tools/{shared_role_callers,shared_role_reach,digest_provable}.py
   scripts/deploy_tools/reach.py                     k8s readings removed
   scripts/deploy_tools/land_lib/{classify,deploy,land_tags,land_shared}.py
-                                                    + the render diff's tags (D6.1);
+                                                    - the path-derived k8s tags (D6.1);
                                                       - shared_caller_tags, _narrowed,
                                                       the k8s_remediation note (D6.3)
   scripts/deploy_tools/deploy_lib/tags.py           the Pi's tags only; - narrow (D6.3)
 - scripts/deploy_tools/land_lib/land_rerolls.py
 - scripts/deploy_tools/narrow_lib/{broad,containers}.py
 - scripts/validate/cross_plane_order.py               renamed; arm 1 and the image-only exception go
-+ scripts/validate/render_diff_gates.py               arm 2, D5.1d, D5.1f; + --moved-tags (D6.1);
++ scripts/validate/render_diff_gates.py               arm 2, D5.1d, D5.1f;
                                                       + the tag rule's PR arm (D6.7b)
-  scripts/deploy_tools/promote.py                     + the tag rule's publish arm, against prod
+  scripts/deploy_tools/promote.py                     + the tag rule's publish arm, against prod;
+                                                      - D3.4's interim cluster-vars rule (D6.1);
+                                                      - the object-loss check's handback
+                                                      exemption (D6.7b)
   scripts/secrets_mgmt/consumers.py                   CROSS_HOST_PUSH_TOKENS - three tokens
   scripts/docs/{gen_role_glance,service_catalog}.py   - the Ansible-owned auto-deploy stance
 - ansible/roles/setup/k3s/templates/{manifest-prune-check,release-staleness-check}.sh.j2
@@ -1291,7 +1351,15 @@ than writing a second.
   scripts/renderer/                                 deletionPolicy default for <tag> except flux;
                                                     prune marker on PersistentVolume, StorageClass;
                                                     + the drill script and its prune-drill fixture tree
-+ .github/workflows/flux-deletion-drill.yml         the kind deletion drill (D6.7a)
++ .github/workflows/flux-deletion-drill.yml         the kind deletion drill (D6.7a);
+                                                    + two break-glass cases (D6.7c)
+  ansible/roles/k8s/flux/                           + the break-glass public-key Secret and
+                                                    source form (D6.7c)
+  docs/break-glass.md                               item 8; + the GitHub-unreachable
+                                                    scenario (D6.7c)
+  ansible/roles/k8s/observability/defaults/main.yml + the kustomize-controller marker
+                                                    query (D6.1b)
+  scripts/grafana/inject_dashboard_annotations.py   adds both queries (D6.1b)
 + docs/adr/<next free>-the-cluster-deploys-from-a-ci-rendered-artifact-through-flux.md
   docs/adr/0010-pull-based-gitops-over-argo-and-flux.md   status: Superseded by ADR-NNNN
 ```
@@ -1324,17 +1392,10 @@ The PRs merge in this order.
       that names a deploy tag*. An unapplied amendment stops the session like any other
       failed check, and the contracts owner applies it. D6 changes no label itself: R4
       deletes the wrapper that stamps `homelab/role`.
-    - contracts.md's C1 *Modes* names the commit input that the register lists as *The
-      commit input*, and the renderer at `origin/master` takes it. From a worktree at
-      `origin/master`, the session runs `uv run python scripts/renderer/homelab_render.py
-      cluster --help`, requires the flag that C1 names, and quotes that output beside C1's
-      line. D5's soak Job already passes the commit to the renderer, so a name that differs
-      between C1 and the code would fail every base render and widen every landing. D6.1's
-      `--moved-tags` mode passes one commit value to both renders through it (*How the mode
-      lays out a commit*). The register gates that request only on R4's PR 1, which merges
-      after D6, so a cross-slice note asks for a gate before D6.1 merges (Open question 13).
-      Until the register carries it, an unapplied request or a missing flag stops the
-      session the same way.
+    - The artifact at `prod` carries a `digests.json` with a `footprint` digest for every
+      deploy tag and every member of `SHARED_KINDS` (C1). The session reads it the way
+      D2.3's `land-wait` does and quotes its names. From D6.1 the changed set alone fills
+      `land.sh`'s k8s list, so a missing footprint would widen every landing.
     - `uv run python scripts/diagnostics/probe.py gitops-state` must show no `hold_sha`, no
       `hold_plane` entry naming `ansible/deploy.yml`, and no `k8s_deferred` or
       `k8s_unapplied` line.
@@ -1462,77 +1523,30 @@ The PRs merge in this order.
       `scripts/validate/render_diff_gates.py` (*The render-diff gates after D6*). The CI step
       follows the rename. `docs/landing.md` and `docs/flux-deploy-plane.md` name the new
       module.
-    - **`land.sh`'s tags from the render diff** (*`land.sh`'s k8s tags after D6*). This PR
-      stops the tick's `deploy.yml` apply, so it also replaces what a broad landing waits on:
-        - add the `--moved-tags` mode to the renamed `render_diff_gates.py`, with an
-          `_is_clean`/`_is_flagged` pair in `scripts/validate/tests/` over fixture bundle
-          pairs. Each flagged fixture must print a non-empty tag list:
-            - a macro edit prints both importing tags;
-            - a change that moves only `cluster/<tag>-deferred/` prints `<tag>`;
-            - a change that moves only `flux/<tag>.yaml`, as a `depends_on:` edit does,
-              prints the dependent tag;
-            - a change that moves only `cluster/cluster-vars/` prints the substituting
-              tags.
-
-          The clean half is an edit that moves no bundle file, which prints none, and an
-          assertion that no printed name ends in a reserved suffix or is a `SHARED_KINDS`
-          member. A census test fails when a `SHARED_KINDS` member has no rule in the mode.
-          The red half of the last three flagged fixtures is the mode as this plan first
-          wrote it, counting `cluster/<tag>/` only, which prints an empty list. The mode
-          lays out each commit with `git archive` into a `/tmp/moved-tags-*` directory,
-          runs each commit's own renderer there with one commit value and its own
-          `UV_PROJECT_ENVIRONMENT`, takes no tree lock, and removes the directory on return
-          and on error (*How the mode lays out a commit*);
-        - add a test in `scripts/validate/tests/` that the mode never writes under the
-          repository it is pointed at. It builds a two-commit fixture repository in
-          `tmp_path`, with git identity passed through `GIT_AUTHOR_*` and
-          `GIT_COMMITTER_*` and with `GIT_DIR` cleared. Each commit carries a stub
-          renderer at `scripts/renderer/homelab_render.py`, which the test runs through
-          the mode's render-command parameter with `sys.executable`, so the fixture needs
-          no uv environment. The fixture's HEAD sits at the
-          base commit, so a mode that rendered the working tree would print no tag. The
-          clean half asserts that the moved tag prints, that `git status --porcelain
-          --ignored` prints nothing, and that HEAD and `git worktree list` are unchanged.
-          Before the run it sets `UV_PROJECT_ENVIRONMENT` to the fixture repository's
-          `.venv` and `VIRTUAL_ENV` to a path. The stub renderer records the environment it
-          receives, and the test asserts that `UV_PROJECT_ENVIRONMENT` points inside the
-          scratch directory and that `VIRTUAL_ENV` is absent. It points
-          `MOVED_TAGS_TMPDIR` at an empty directory and `TMPDIR` at a second one, and
-          asserts that both are empty after a run whose head renderer exits 1. The flagged
-          half points `MOVED_TAGS_TMPDIR` inside the fixture repository and asserts that
-          the mode refuses with a non-zero exit and writes nothing there;
-        - join the mode's tags into `land.sh`'s list, in `land_lib/classify.py` for a PR's
-          own file list and in `land_lib/deploy.py:derive_from_diff` for the fallback,
-          with the every-flux-owned-tag widening when a render fails;
+    - **`land.sh`'s k8s list becomes the changed set** (*`land.sh`'s k8s tags after D6*).
+      This PR stops the tick's `deploy.yml` apply, so it also replaces what a broad landing
+      waits on:
+        - stop joining path-derived k8s tags into `land.sh`'s list, in
+          `land_lib/classify.py` for a PR's own file list and in
+          `land_lib/deploy.py:derive_from_diff` for the fallback. Hand every landing to
+          `land-wait`, whose changed set the health gate and the marker read;
+        - retire D3.4's interim `cluster-vars` rule in `land-wait`, with its test;
         - drop the `cs.broad_deploy` term from `land_tags.self_applied_playbooks`;
         - add four landing tests in `scripts/deploy_tools/tests/`:
-            - a PR whose only path is under `ansible/templates/` reaches `land-wait` with
-              the tags a fake mode prints, and writes one `source=promote` line naming
-              them;
+            - a PR whose only path is under `ansible/templates/` reaches `land-wait`, and
+              its `source=promote` line names the changed set of a fixture pair of
+              `digests.json` files;
             - a PR whose only path is in the shared `manifests` role does the same;
             - a PR whose only path is one entry's `depends_on:` under
-              `ansible/inventory/` reaches `land-wait` with the dependent tag, which the
-              fake mode prints from a moved `flux/<tag>.yaml` alone;
-            - a failed fake render hands `land-wait` every flux-owned tag.
+              `ansible/inventory/` waits on the dependent tag, whose footprint differs in
+              the fixture pair through its `flux/<tag>.yaml` alone;
+            - a failed `digests.json` read makes `land-wait` wait on every flux-owned tag
+              and say so on the verdict line. If D2.3 already pins this, the PR quotes
+              D2.3's test instead.
 
           The red half of the first three is the tree before this PR: each PR waits on a
           `deploy.yml` receipt and never reaches `land-wait`, and the PR body quotes that
           failing run.
-      D6.1 measures the two renders on daniel-box and quotes the time in its body
-      (*Risks*). The timed run uses the PR's own merge base and head and points `--repo`
-      at the primary checkout. The PR body quotes these lines from *Verification*:
-        - `git status --porcelain` on the primary checkout, before and after, which prints
-          nothing;
-        - a `diff` of `git status --porcelain --ignored` saved before and after, which
-          prints nothing. The ignored listing is never empty there, because `.venv/` is
-          ignored, so only a comparison can go red;
-        - `find <primary>/.venv -newer <stamp>`, which counts 0. Git prints an ignored
-          directory collapsed, so a sync into the existing `.venv` leaves the listing
-          above unchanged, and only this line sees it;
-        - `git worktree list | grep -c moved-tags`, which prints 0. A whole-list comparison
-          would fail on other sessions' worktrees;
-        - the `/tmp/moved-tags-*` count, which prints 0 after the run and 1 with a planted
-          directory.
     - **Keep for later PRs:** `ChangeSet.k8s` and the k8s symbols of `deploy_cross_role.py`,
       which `reach.py` and `land_lib` read until D6.3 and D6.4. Also keep `ChangeSet.flux`
       with `service_owners` until D6.4, and the k8s ledger class names and their readers,
@@ -1590,7 +1604,22 @@ The PRs merge in this order.
       the check finds either, or a `hold_sha`, the operator applies what it names, or runs
       `gitops_state.py clear-hold <sha>` or `gitops_state.py clear-owed <class> <subject>`
       (**operator-only**). D6.2a does not open until the check is clean.
-3. **D6.2a — The denylist's deployer readers** (about 300 lines removed, about 120 moved,
+3. **D6.1b — Deploy markers from kustomize-controller's log** (about 80 lines). It needs
+   nothing from D6 and can merge any time after D1.6 (*Grafana's deploy markers after D6*).
+    - **Measure first.** From daniel-box, read kustomize-controller's lines for a recent
+      promotion with `probe.py loki-query` over loki-homelab. The PR body quotes one line
+      for an apply that changed objects and one for a reconcile that changed nothing.
+    - Add the second annotation query beside `observability_deploy_annotation_expr`, with
+      its `job` label from `loki_streams`, and have
+      `scripts/grafana/inject_dashboard_annotations.py` add both queries.
+    - Add a clean and flagged pair to `ansible/tests/deploy/test_deploy_annotations.py`
+      over the two captured lines. The apply line matches once, and the no-change line
+      matches nothing. The red half is the matcher without its changed-object clause,
+      which matches the no-change line.
+    - Rewrite the comment above `observability_deploy_annotation_expr` to name three
+      sources: `deploy.sh` for the Pi, `land-wait` for a landing, and kustomize-controller
+      for every apply. If D6.1 has merged, this replaces its two-emitter wording.
+4. **D6.2a — The denylist's deployer readers** (about 300 lines removed, about 120 moved,
    and about 60 changed in renovate_agent).
     - Move `is_leftover_dir` and the denylist derivation into `scripts/lib/k8s_roles.py`, and
       repoint `_autodeploy.py` and `k8s_autodeploy_counts.py`.
@@ -1647,7 +1676,7 @@ The PRs merge in this order.
       host vars at the PR's head, so the removed `daniel-box.yml` keys take effect. The plugin
       path and the `daniel-box.yml` path take the deploy-plane route. That route is a no-op,
       because the tick that applies D6.2a runs D6.1's code.
-4. **D6.2b — The key's wording** (about 190 changed lines, almost all one-line edits).
+5. **D6.2b — The key's wording** (about 190 changed lines, almost all one-line edits).
     - **Measured against D5's end state, not `70591c307`.** D2 replaced the auto-deploy
       stance with the Flux line in every flux-owned glance block (*What D2, D4 and D5 hand to
       D6*), so this PR rewrites no glance block.
@@ -1662,14 +1691,13 @@ The PRs merge in this order.
       scaffold in `new_k8s_service.py` with its test, and the `new-k8s-service` and
       `renovate-prs` skills.
     - This PR is separate from D6.2a so that the deletion diff stays readable.
-5. **D6.3 — The k8s arms of `land.sh` and `deploy.sh`** (about 700 lines removed).
+6. **D6.3 — The k8s arms of `land.sh` and `deploy.sh`** (about 700 lines removed).
     - Delete `land_lib`'s k8s deploy arm and `land_rerolls.py`. `promote.py land-wait`
       and its `source=promote` annotation stay, because they serve every flux-owned tag
-      (*Grafana's deploy markers after D6*). With the `tag_owners` split gone, `land-wait`
-      receives every k8s tag that `land.sh` derives, and the census row below makes each
-      of them flux-owned. From D6.1 that list joins the render diff's moved tags with the
-      path map's (*`land.sh`'s k8s tags after D6*). So a PR that moves a k8s render hands
-      `land-wait` a non-empty list, whether its path is a role's own, a shared role's, a
+      (*Grafana's deploy markers after D6*). With the `tag_owners` split gone, `land.sh` hands
+      `land-wait` no k8s tag of its own. From D6.1 the changed set is the whole k8s list
+      (*`land.sh`'s k8s tags after D6*), and the census row below makes each of its tags
+      flux-owned. So a PR that moves a k8s render waits on a non-empty list, whether its path is a role's own, a shared role's, a
       template or an inventory key, and the marker's `services=` field reads that list.
       D2.3's test that a settled landing writes one line keeps passing on this PR.
     - Remove the bindings of `land_rerolls` and `shared_role_reach` from `land_lib/tools.py`,
@@ -1682,10 +1710,10 @@ The PRs merge in this order.
         - in `land_tags.py`, the re-export, the CLI's read, the module docstring and
           `plane_note`'s docstring, and the comment in `land_lib/landing.py`;
         - `scripts/dev/findings_lib/precomputed.py:deploy_line`, which predicts a PR's
-          deploy from its paths with no git. It cannot render two commits, so for a k8s
+          deploy from its paths with no git. It reads no artifact, so for a k8s
           path it says that `promote` applies the change and that `land.sh` waits on
-          the tags whose render it moves. Its module docstring changes with it.
-      The render diff already holds every tag whose render a shared role moves.
+          the changed set. Its module docstring changes with it.
+      The changed set already holds every tag whose footprint a shared role moves.
     - **Remove the last two callers of `k8s_remediation`.** `land_tags.py:plane_note` loses
       its shared-role note, and `land_tags.py` drops `k8s_remediation` from its
       `deployer_lib.deploy_logic` import. `deploy_lib/tags.py:_load_deploy_logic` stops
@@ -1725,14 +1753,14 @@ The PRs merge in this order.
       `deploy.sh` now refuses every k8s tag, and run `fact_status.py verify` for that
       section.
     - **Test.** In `scripts/deploy_tools/tests/`, a range over `gh`'s 100-file page that
-      holds an `ansible/templates/` path reaches `land-wait` with the tags a fake
-      `--moved-tags` mode prints, and ends without `needs-manual-apply`. Its red half is
+      holds an `ansible/templates/` path reaches `land-wait` with the changed set of a
+      fixture pair of `digests.json` files, and ends without `needs-manual-apply`. Its red half is
       the tree before this PR, where `derive_from_diff` dies with "deploy it by hand".
       D6.1's four landing tests stay green, and the PR body quotes them.
     - **Before merging,** the PR body quotes the symbol grep for `k8s_remediation`, which
       prints only `deploy_remediation.py`, `deploy_logic.py` and the comments D6.4
       rewrites, plus `land.py --help` and `deploy_tags.py changed origin/master`.
-6. **D6.5a — Arm the setup-drift reader on daniel-box** (about 40 lines).
+7. **D6.5a — Arm the setup-drift reader on daniel-box** (about 40 lines).
     - Add daniel-box to `setup_drift_check_hosts`, and rewrite the comment above it.
     - Rewrite `test_the_reader_is_armed_where_no_manifest_prune_check_runs` so that it
       asserts every host that renders setup templates is armed. It names daniel-box and
@@ -1761,7 +1789,7 @@ The PRs merge in this order.
       that runs the same `setup-drift-lib.sh`:
       `test_a_stale_deployed_copy_is_reported` and `test_a_changed_template_is_reported_stale`.
       A red push on the live tile would page.
-7. **D6.5 — Disarm the drift checks** (about 200 lines changed). It removes every unit and
+8. **D6.5 — Disarm the drift checks** (about 200 lines changed). It removes every unit and
    tile and keeps every line of the checks' code, because the release-staleness cron runs
    `probe.py releases` from the primary checkout until this PR's hand apply removes it
    (Baseline).
@@ -1845,7 +1873,7 @@ The PRs merge in this order.
     - **The tile stays green.** After the apply, the box's setup-drift tile still reads
       green. A fragment left behind would read as drift (failure class 5). D6.5 changes no
       source that a remaining fragment stamps.
-8. **D6.5b — Delete the drift checks' code and the absent tasks** (about 2,700 lines
+9. **D6.5b — Delete the drift checks' code and the absent tasks** (about 2,700 lines
    removed). It opens only after D6.5's hand apply, because the cron it removed ran
    `releases.py` from the primary checkout.
     - **Delete the checks' code:** the two check templates, `live-drift-check.env.j2`,
@@ -1891,7 +1919,7 @@ The PRs merge in this order.
       their `defaults/` keys until H7 deletes the role avoids the whole-role line. It also
       keeps code whose subject D6.5 removed, against `.claude/rules/python-layout.md`'s *A
       check retires when its subject does*, for the rest of the migration.
-9. **D6.4 — Reach and narrowing** (about 1,500 lines removed). It merges after D6.5b.
+10. **D6.4 — Reach and narrowing** (about 1,500 lines removed). It merges after D6.5b.
     - Delete `shared_role_callers.py`, `shared_role_reach.py`, `narrow_lib/broad.py` and
       `narrow_lib/containers.py`.
     - Delete `reach.py`'s k8s readings, `ChangeSet.k8s`, and the k8s symbols of
@@ -1919,7 +1947,7 @@ The PRs merge in this order.
       the path maps to no tag. D6.1's and D6.3's landing tests stay green, and the PR body
       quotes all of them, with `land.py --help` and `deploy_tags.py changed origin/master`.
     - The changes to the deployer's files apply through the tick, as D6.1's did.
-10. **D6.6 — The k8s ledger readers** (about 350 lines removed). It merges after D6.0
+11. **D6.6 — The k8s ledger readers** (about 350 lines removed). It merges after D6.0
     found the ledger empty, and after D6.1 stopped the writers.
     - **Repeat the ledger check immediately before merge.** D6.6 removes `gitops_state.py`'s
       last `clear-owed` path for the two k8s classes. So the session repeats D6.0's
@@ -1936,7 +1964,7 @@ The PRs merge in this order.
     - The source change re-applies deploy_ui and renovate_agent through
       `SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, which the tick does itself. monitor-bridge reaches
       the cluster through `promote`.
-11. **D6.7a — The deletion drill** (about 230 lines: the workflow, the drill script and the
+12. **D6.7a — The deletion drill** (about 230 lines: the workflow, the drill script and the
     fixture tree). It merges before D6.7, because D6.7 quotes the job's run on its own PR.
     - Add the job, the drill script and the fixture tree with `prune-drill`,
       `prune-drill-red` and `prune-drill-keep`, as *The deletion drill runs in a throwaway
@@ -1952,7 +1980,25 @@ The PRs merge in this order.
       because its PR body must quote a green run.
     - **The two-writer rule (C4)** has nothing to check. The drill's cluster is not
       production, and no `containers_list` entry changes.
-12. **D6.7b — The guards the default policy needs** (about 200 lines). It merges before
+13. **D6.7c — Break-glass promotion** (about 190 lines). It merges after D6.7a, whose drill
+   it extends, and as early as that allows, because the gap it closes opened at D5's last
+   flip (*Break-glass promotion*).
+    - **Precondition:** D5 Open question 2 has kept the in-cluster registry. Otherwise the
+      session stops.
+    - **Operator-only, before the PR:** the operator generates the key pair and stores the
+      private half in the break-glass kit. The PR carries only the public half.
+    - Add the public-key Secret to the flux role, and the break-glass source form to its
+      OCIRepository template. A renderer test pins the production render unchanged.
+    - Add the `break-glass` and `break-glass-red` cases to `flux-deletion-drill`, and widen
+      its path scope to `docs/break-glass.md` and the flux role's OCIRepository template.
+    - In `docs/break-glass.md`, update item 8: the repo bundle is also the render source for
+      break-glass promotion, and the kit holds the break-glass private half beside it. Add
+      the scenario *GitHub, GHCR or Sigstore is unreachable*, with the runbook, its
+      fresh-cluster steps and the way back to GHCR.
+    - **The pre-merge proof.** The PR body quotes the drill run with both cases, and the
+      answer to Open question 16 that it gives.
+    - **The two-writer rule (C4)** has nothing to check. No `containers_list` entry changes.
+14. **D6.7b — The guards the default policy needs** (about 200 lines). It merges before
     D6.7, so that every guard is live before a deletion can happen. Each guard is harmless
     under `Orphan`.
     - **The tag rule**, as *The deletion policy, and the end of the handback* describes: one
@@ -1965,10 +2011,17 @@ The PRs merge in this order.
         - flagged: a refused commit followed by an unrelated commit, with `prod` unmoved.
           The second commit must still fail;
         - flagged: a pull from GHCR that fails, so the publish pushes nothing.
-    - **The dropped-workload arm** loses its handback exemption and counts a tag that leaves
+    - **The dropped-object arm** loses its handback exemption and counts a tag that leaves
       the render whole, judged by its ownership at the base (*The render-diff gates after
       D6*). Fixtures: a whole-tag removal without trailers is flagged, and the same removal
       with one trailer per workload is clean.
+    - **`decide`'s object-loss check loses its handback exemption.** D2.6c's check refuses a
+      candidate whose bundle loses an object that no `Removes-Object:` trailer declares. It
+      exempts a Kustomization dropped at a handback, because `Orphan` keeps that handback's
+      objects live. From D6.7 a dropped Kustomization deletes its objects, so the exemption
+      goes here, before D6.7 switches the policy. D6.3's census already refuses a handback,
+      so the change is harmless under `Orphan`. Fixture: a dropped Kustomization with no
+      trailer is flagged, whether or not it has the handback's shape.
     - **The prune marker on PersistentVolumes and StorageClasses**, once the C3 amendment in
       Open question 12 lands. A renderer test pins the marker on media-volume's
       PersistentVolume and `media-local`.
@@ -1982,7 +2035,7 @@ The PRs merge in this order.
       instead: the tag rule refuses to remove a tag whose render at `prod` holds a
       PersistentVolume. With neither line, D6.7b waits, because the next edit to C3 can
       drop a guard that the contract never stated.
-13. **D6.7 — The deletion policy** (about 100 lines).
+15. **D6.7 — The deletion policy** (about 100 lines).
     - **The contract gate.** D6.7 does not merge until C3's *Deletion policy* line names
       the kept set (`flux`, every `<tag>-deferred` and every shared kind keep `Orphan`).
       The register row *The deletion policy's kept set* does not satisfy the gate on its
@@ -2013,12 +2066,12 @@ The PRs merge in this order.
       and keeps the PVC and the Namespace, the red-half case loses the PVC, and the
       inventory-prune case keeps `keep-marked` and loses `keep-unmarked`. D6.7 does not merge
       on a red run, or on a run that printed `skipped`.
-14. **D6.8a — The root docs and the archive** (about 400 lines changed, most of them moved).
+16. **D6.8a — The root docs and the archive** (about 400 lines changed, most of them moved).
     - Rewrite *After a PR Merges* and *When to wait* in full, on top of D6.1's and D6.3's
       edits, run `fact_status.py verify` for each edited section, and commit
       `docs/facts.lock`.
     - Move the k8s sections of `docs/gitops-pipeline.md` to `docs/archive/`, with a pointer.
-15. **D6.8b — The ADR** (about 150 lines).
+17. **D6.8b — The ADR** (about 150 lines).
     - Write or accept the ADR, set ADR-0010's status, and add both rows to
       `docs/adr/index.md` and the nav.
     - Approving the ADR is **operator-only**, and only this PR waits on it.
@@ -2064,24 +2117,12 @@ uv run python scripts/diagnostics/probe.py gitops-state
 grep -c -e deploy_k8s -e deploy_broad_k8s -e deploy_release \
   /var/lib/homelab/setup-deployed-manifest.d/gitops-deploy   # 0
 uv run python scripts/diagnostics/probe.py monitors | grep -i 'manifest prune'
-# D6.1, on daniel-box before merge, from the PR's worktree: a timed --moved-tags run over
-# the PR's merge base and head, pointed at the primary checkout. The first three lines run
-# before it. A tick in the window can also touch .venv, so a non-zero find count is
-# re-run between ticks before it is read as the mode's write.
-git -C <primary checkout> status --porcelain | grep -c .   # 0, before and after
-git -C <primary checkout> status --porcelain --ignored > /tmp/d6-1-ignored-before.txt
-touch /tmp/d6-1-stamp
-time uv run python scripts/validate/render_diff_gates.py --moved-tags \
-  --repo <primary checkout> <merge-base> <PR head>          # the moved tags, comma-joined
-git -C <primary checkout> status --porcelain --ignored > /tmp/d6-1-ignored-after.txt
-diff /tmp/d6-1-ignored-before.txt /tmp/d6-1-ignored-after.txt   # no output
-find <primary checkout>/.venv -newer /tmp/d6-1-stamp | grep -c .   # 0, after
-git -C <primary checkout> worktree list | grep -c moved-tags   # 0, after
-ls -d /tmp/moved-tags-* 2>/dev/null | grep -c .            # 0, after
-mkdir /tmp/moved-tags-redproof                              # red half of the count:
-ls -d /tmp/moved-tags-* 2>/dev/null | grep -c .            # 1
-rmdir /tmp/moved-tags-redproof
-uv run pytest scripts/validate/tests -k moved_tags          # the pair and the no-write test
+# D6.1, before merge: the four landing tests. The red half of the first three runs on the
+# tree before the PR.
+uv run pytest scripts/deploy_tools/tests
+# D6.1b, before merge: one captured apply line and one no-change line from kustomize-controller,
+# through probe.py loki-query (its --help gives the selector flags), then the marker pair.
+uv run pytest ansible/tests/deploy/test_deploy_annotations.py
 # D6.2a, in the primary checkout after its tick: the lander's source prints the list.
 uv run python scripts/dev/k8s_autodeploy_counts.py --denylist   # non-empty, comma-separated
 # D6.2a, after the next agent run that reaches a Renovate PR: each verdict written since
@@ -2106,6 +2147,13 @@ git grep -n -w -E '(from|import) [A-Za-z_. ]*(deploy_k8s|deploy_broad_k8s|deploy
   -- ansible scripts .claude | grep -c .               # 0
 uv run pytest
 
+# D6.7c, on its PR before merge: both break-glass cases ran, with their verdicts.
+gh run view <databaseId> --log | grep -E 'case=break-glass(-red)?'
+# Exit 6, at D6's last PR.
+wc -l scripts/deploy_tools/promote.py                   # at most 900
+git ls-files scripts/deploy_tools/land.sh scripts/deploy_tools/land.py \
+  'scripts/deploy_tools/land_lib/*.py' | grep -v /tests/ | xargs cat | wc -l   # at most 6,400
+
 # D6.7, on its PR before merge: the drill ran (not skipped) and passed all three cases.
 gh run list --workflow flux-deletion-drill.yml --branch <D6.7 branch> --limit 1 \
   --json conclusion,databaseId                         # conclusion: success
@@ -2125,15 +2173,16 @@ gh run view <databaseId> --log | grep -E 'case=(as-rendered|red-half|inventory-p
   pages the secrets alert once, on the success exit and on the failure arm. Its red half is
   a `handle_broad` tail without `alert_secrets_deferred`, where the test fails. Its clean
   half, the same range without `secrets.yml`, pages nothing.
-- **The `--moved-tags` mode's no-write test (D6.1).** Its flagged half points the scratch
-  directory inside the fixture repository, and the mode must refuse. A second red run uses a
-  mode whose layout checks the base out in place: the fixture's HEAD moves and the moved
-  tag no longer prints, so the clean half fails. A third uses a mode that passes no `dir`,
-  so its directory lands under the test's `TMPDIR` and the empty-directory assertion fails.
-  A fourth hands the child the inherited environment, so the recorded
-  `UV_PROJECT_ENVIRONMENT` names the fixture repository's `.venv` and the assertion fails.
-  The PR body quotes each failing run. The mode's `_is_clean`/`_is_flagged` pair, its
-  shared-kind census and the four landing tests carry their own red halves (D6.1's step).
+- **The four landing tests (D6.1).** The red half of the first three is the tree before
+  D6.1, where each landing waits on a `deploy.yml` receipt and never reaches `land-wait`.
+  The fourth's red half is a `land-wait` that empties its list on a failed read.
+- **The controller marker (D6.1b).** Its clean half is the captured no-change line, which
+  draws no marker. Its red half is the matcher without the changed-object clause, which
+  matches that line.
+- **The break-glass case (D6.7c).** Its red half, `case=break-glass-red`, signs with a key
+  the cluster does not hold, and the job fails unless source-controller refuses it.
+- **The object-loss check without its exemption (D6.7b).** Its red half is a dropped
+  Kustomization in the handback's shape with no trailer, which the exemption passed.
 - **The `cs.flux` routing test (D6.4).** Every `ansible/roles/k8s/<role>/` path lands in
   `cs.flux`. Its red half is a k8s branch that adds nothing, which leaves the path in no
   set.
@@ -2146,7 +2195,7 @@ gh run view <databaseId> --log | grep -E 'case=(as-rendered|red-half|inventory-p
 - **The tag rule (D6.7b).** `_is_flagged` drops a tag whose role directory stays, drops
   `flux`, and repeats a refused drop in a later commit while `prod` has not moved.
   `_is_clean` drops a tag together with its directory.
-- **The widened dropped-workload arm (D6.7b).** A whole-tag removal without trailers is
+- **The widened dropped-object arm (D6.7b).** A whole-tag removal without trailers is
   flagged, and the same removal with them is clean.
 - **The PersistentVolume marker and the CRD guard (D6.7b).** The marker test fails on
   media-volume's PersistentVolume without the marker. The CRD guard's red fixture is a tag
@@ -2192,11 +2241,13 @@ The deletions have red proofs of their own:
       `observability_deploy_annotation_expr` too. The emitter has no k8s service to mark,
       and `land-wait` keeps marking cluster deploys either way. The revert also restores
       `self_applied_playbooks`' `deploy.yml` term with the tick's `deploy.yml` apply,
-      and removes the render diff's tags, so the landing and the tick agree again. The
-      `--moved-tags` mode leaves no state on the host to undo. It writes under
-      `/tmp/moved-tags-*`, and a killed run's directory there can be removed by hand at any
-      time. Its one write outside that directory is the uv cache of the user who runs
-      `land.sh`, which needs no undo.
+      and the path-derived k8s tags, so the landing and the tick agree again. D6.1 writes no
+      state on the host, so nothing else needs undoing.
+- **D6.1b.** A revert removes the controller query. Markers then come from `land-wait`
+  alone, as before.
+- **D6.7c.** A revert removes the two drill cases, the public-key Secret, the source form
+  and the scenario. While the cluster follows the in-cluster registry, revert nothing until
+  the way back has completed.
 - **D6.2a's lander change.** A revert restores the `config.env` line and the lander's read
   of it together, and the tick applies both `gitops_deploy` and `renovate_agent`. If the
   renovate_agent apply fails, the lander refuses every landing until it is applied, which
@@ -2206,7 +2257,7 @@ The deletions have red proofs of their own:
   census row: reverting it also allows a handback again. D6.3 leaves `land-wait` and its
   annotation in place, so its revert changes no deploy marker. Before D6.4 merges, D6.3
   reverts alone. It restores `_narrowed`, the caller expansion and `k8s_remediation`'s
-  two callers beside the render diff, and the join only widens `land-wait`'s list. Once
+  two callers beside the changed set, and the join only widens `land-wait`'s list. Once
   D6.4 has merged, revert D6.4 first and D6.3 second. D6.4 deletes `k8s_remediation` and
   `shared_role_callers.py`, which D6.3's revert imports at module level, so a D6.3 revert
   on its own would stop every `land.sh` run at import.
@@ -2269,31 +2320,29 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
   PR reaches `land-wait` with an empty list, so no health gate runs and no marker is
   written while `promote` applies the change. The same holds for a PR that moves only an
   edge, a deferred apply or a shared kind, which no `cluster/<tag>/` comparison sees.
-  Mitigation: D6.1 adds the render diff as the source with four landing tests, D6.3 and
-  D6.4 each add one, and each PR quotes all of them. The mode compares every bundle file
-  of a tag, gives each shared kind a stated rule, and widens on any difference it cannot
-  classify. A failed render widens the list to every flux-owned tag rather than emptying
-  it.
-- **Two renders per landing cost time on daniel-box.** No render ran on the host before
-  D6. Each landing now archives and extracts two commits, builds two uv environments from
-  the host's uv cache, and renders twice. D6.1 times the whole mode on daniel-box, more
-  than once, and quotes the times. If the per-tree environment dominates, the mode reuses
-  one environment when both commits carry the same `uv.lock` blob. The fallback is the
-  widening that a timeout already triggers, because no other producer of the moved set
-  exists at D6.1 (*Rejected: read the CI render-diff job's result with `gh`*). A mode that
-  times out on every landing would turn every landing into the rejected every-tag list. So
-  if the measured time leaves no margin under the promote timeout, D6.1 stops before merge
-  and this plan records the measurement for a redesign.
-- **The mode writes into the deployer's checkout.** An untracked file there parks the
-  deployer, a checkout in place moves its HEAD, and a registered worktree leaks on a
-  SIGKILL. An inherited `UV_PROJECT_ENVIRONMENT` would also sync the primary's ignored
-  `.venv`. Mitigation: the mode reads the primary checkout only through `git archive
-  <sha>`, refuses a scratch or output path under the repository root, sets its child's
-  `UV_PROJECT_ENVIRONMENT` to the extracted tree, and removes its temporary directory on
-  every exit (*How the mode lays out a commit*). D6.1's no-write test pins this against a
-  fixture repository. Its PR body quotes the *Verification* lines around a timed run on
-  daniel-box: the status checks with and without `--ignored`, the `.venv` stamp check and a
-  `git worktree list` there that names no `moved-tags` entry.
+  Mitigation: D6.1 makes the changed set the source, with four landing tests, D6.3 and
+  D6.4 each add one, and each PR quotes all of them. The footprint covers every bundle file
+  of a tag, each shared kind has a stated rule, and a path that no rule claims lands under
+  `_unclassified`, which widens to every name. A failed read widens the list to every
+  flux-owned tag rather than emptying it.
+- **The changed set depends on GHCR and on the package staying public** (class 3 if a
+  failed read were taken as empty). `land-wait` reads both `digests.json` files through
+  GHCR's anonymous pull token, which works only while D1 Open question 2 keeps the package
+  public. Mitigation: a failed read widens to every flux-owned tag and says so on the
+  verdict line, and D6.1's fourth landing test pins it.
+- **An excluded index file hides a real change.** C1 leaves `flux/kustomization.yaml`,
+  `digests.json` and `images/` out of every footprint. Mitigation: each of the three only
+  mirrors files that do count. The index lists `flux/<tag>.yaml` files, and a consumer's
+  image ref sits in its own `cluster/<tag>/`. A change that reaches a Kustomization
+  therefore moves a counted file too.
+- **A stale repo bundle reverts the cluster** (class 5). Item 8's bundle can predate
+  `prod`, and a break-glass render from it would prune and revert everything since.
+  Mitigation: the runbook's ancestry check against the OCIRepository's revision, with a
+  surviving host checkout as the source when the bundle fails it.
+- **The break-glass private half is a second signing identity.** Mitigation: the operator
+  holds it only in the kit, password-protected. The production OCIRepository verifies
+  keyless against the `promote` identity alone, so the cluster accepts a key-signed
+  artifact only after the operator re-points the source by hand.
 - **A k8s path falls into the setup branch after D6.4** (class 3). Deleting `cs.k8s` without
   a destination would hand a k8s path to the branch that handles setup paths. Mitigation:
   D6.4 routes it to `cs.flux`, and the routing test's red half proves the test can fail.
@@ -2323,7 +2372,7 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
   question 8.
 - **A tag leaves the bundle by accident after D6.7** (class 5: a revert or a rename is not a
   transaction). Mitigation: D6.3's census row, the tag rule's publish arm against `prod`, the
-  widened dropped-workload arm, and the prune exemptions. The kind drill proves the PVC and
+  widened dropped-object arm, and the prune exemptions. The kind drill proves the PVC and
   Namespace exemption on both deleting paths before D6.7 merges.
 - **Deleting the `flux` Kustomization cascades through the Flux CRDs** (class 5). Under the
   default policy it deletes every Kustomization and OCIRepository, and each finalizer may
@@ -2387,8 +2436,8 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
 ## Tests and docs that change in the same PR
 
 - **D6.1:**
-    - the moved-tag mode's pair, its shared-kind census and its no-write test in
-      `scripts/validate/tests/`, and the four landing tests in `scripts/deploy_tools/tests/`;
+    - the four landing tests in `scripts/deploy_tools/tests/`, and the removal of D3.4's
+      interim `cluster-vars` rule with its test;
     - the gitops_deploy role's `CLAUDE.md` (*Safety*, *Autonomous-role contract* and *Which
       apply clears a hold*), with their `facts.lock` rows;
     - in `docs/gitops-pipeline.md`, *Broad changes* and *A deploy-plane change is narrowed
@@ -2410,6 +2459,9 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
       `ansible/roles/k8s/observability/defaults/main.yml:observability_deploy_annotation_expr`,
       which names the two emitters that remain (*Grafana's deploy markers after D6*);
     - the regenerated monitor-bridge copy of `gitops_markers.py`.
+- **D6.1b:** the marker pair in `ansible/tests/deploy/test_deploy_annotations.py`,
+  `scripts/grafana/inject_dashboard_annotations.py` and its test, and the comment above
+  `observability_deploy_annotation_expr`.
 - **D6.2a:**
     - the deployer-denylist tests, and the `denylist_rendered` row of
       `test_deployer_state.py`;
@@ -2458,9 +2510,13 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     - the monitor-bridge, deploy_ui, renovate_agent and `.claude/hooks/tests/` tests.
 - **D6.7a:** the workflow, the drill script and the three-tag fixture tree. In
   `docs/flux-deploy-plane.md`, a paragraph that names the job, what it proves and its limit.
+- **D6.7c:** the drill's two cases, the flux role's Secret and source form with their
+  renderer test, the flux role's `CLAUDE.md`, `docs/break-glass.md` item 8 and its
+  scenario, and the drill paragraph in `docs/flux-deploy-plane.md`.
 - **D6.7b:**
     - the tag rule's tests beside `promote.py` and beside `render_diff_gates.py`;
-    - the dropped-workload arm's fixtures;
+    - the object-loss check's fixture beside `promote.py`;
+    - the dropped-object arm's fixtures;
     - the renderer tests for the PersistentVolume and StorageClass marker and for the CRD
       guard;
     - `docs/landing.md`, for the tag rule's pull-request arm.
@@ -2487,14 +2543,14 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     - the k8s ledger readers, about 350.
 
   Also removed: one hold (`hold_sha` for k8s), the k8s owed ledger, the handback, the
-  two-step retirement, and the deployer's `deploy-annotation` emitter, which leaves
-  `deploy.sh`'s for the Pi and D2.3's `land-wait` for the cluster.
-- **Added:** about 240 lines in D6.1 for the render diff's tags: the `--moved-tags`
-  mode, its bundle-wide classification and shared-kind rules, its `git archive` layout,
-  pinned scratch parent, child environment, path refusal and cleanup, `land.sh`'s call and
-  its widening, and the tests, the no-write test and the shared-kind census among them. It replaces about 900 lines of
-  tag derivation that D6.3 and D6.4 delete. It adds two archives, two uv environments and
-  two renders to every landing, all in one temporary directory outside the repository.
+  two-step retirement, the handback exemption of D2.6c's object-loss check, and the
+  deployer's `deploy-annotation` emitter. That leaves `deploy.sh`'s emitter for the Pi,
+  D2.3's `land-wait` for a landing and D6.1b's query for every apply.
+- **Added:** about 80 lines in D6.1 for `land.sh`'s k8s list, tests included. Every
+  landing reaches `land-wait`, whose changed set replaces the path-derived k8s tags. It
+  replaces about 900 lines of tag derivation that D6.3 and D6.4 delete. The footprint
+  classification lands in D2's renderer and the reads in D2.3's `land-wait`, so D6 adds no
+  render on the host. The `--moved-tags` mode it replaces was about 240 lines.
 - **Kept, against the earlier count of this plan:** `land_reach.py` 563, `prune_releases.py`
   123, four `narrow_lib` modules (550), and most of `deploy_cross_role.py`. All of them serve
   the host plane until H7. D4's and D5's render-diff gates also stay, renamed, less arm 1 and
@@ -2504,7 +2560,7 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     - the checks listed under *Each new check can go red*, each with a red proof: the
       inventory routing test, the two tick tests for the tasks and secrets pages, the
       `cs.flux` routing test, the `owner: flux` census row, the tag rule's two arms, the
-      widened dropped-workload arm, the PersistentVolume marker test, the CRD guard and the
+      widened dropped-object arm, the PersistentVolume marker test, the CRD guard and the
       kind deletion drill;
     - about 60 lines in `deploy_handlers.py`: three direct `alert_deferred` calls and the new
       tail of `handle_broad`, which replace the paths through the two deleted modules;
@@ -2513,6 +2569,12 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
       PR that touches the renderer, its fixture tree, the flux role's defaults or the
       workflow, or on a dispatch, and costs one kind cluster per such run;
     - daniel-box's setup-drift timer, which replaces a reader D6 deletes;
+    - D6.1b's marker query over kustomize-controller's log, about 80 lines with its
+      fixtures, and no emitter;
+    - D6.7c's break-glass promotion, about 190 lines: a runbook scenario, a public-key
+      Secret and a second source form in the flux role, and two drill cases. It adds one
+      operator-held key pair and keeps the in-cluster registry in service;
+    - two size bounds in exit 6, read once at D6's last PR;
     - one exception among the per-tag Kustomizations, `flux`. Every other Kustomization,
       every `-deferred` and every shared kind among them, keeps `Orphan`.
 
@@ -2528,6 +2590,8 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
    (**operator-only**).
 3. **Does the in-cluster registry retire?** This is D5's open question 2. Resolution: D6.6
    counts its remaining consumers. With none, a retirement PR follows D6, outside this slice.
+   From D6.7c, break-glass promotion is a standing consumer, so the registry stays, and
+   D6.6's count names it.
 4. **Does the tick outlive D6?** Yes. The tick's setup arm stays until H7, and D6 deletes no
    tick. Resolution: recorded here. design.md's slice index says "The deployer is gone"
    against D6, which needs a correction (cross-slice note).
@@ -2580,13 +2644,10 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     applied*, with the gate and the fallback named, because nothing else tracks it. The
     register lists it under *Requests on C3*, *Wider prune exemptions*, and D6.7b's
     *contract gate* step holds the merge until that row or the amended C3 line exists.
-13. **What gates the commit input before D6.1?** The register row *The commit input* under
-    *Requests on C1* names only "Gate: before R4's PR 1 merges", and R4 waits on D6. D6.1's
-    `--moved-tags` mode passes the head's SHA to both renders through that input, so it
-    needs the input named in C1 and taken by the renderer before D6.1 merges. Resolution: a
-    cross-slice note asks contracts.md to add "before D6.1 merges" to that row's gate, and
-    the row now reads "before D6.1 or R4's PR 1 merges, whichever comes first". D6.0's check stops the session on an unnamed input or a renderer whose `cluster
-    --help` lacks the flag.
+13. **Withdrawn: what gates the commit input before D6.1?** C1's footprint digests replaced
+    D6.1's `--moved-tags` mode, so D6.1 renders nothing and needs no commit input. D6.0
+    checks `digests.json` instead. A cross-slice note tells the register that the row *The
+    commit input* can gate on R4's PR 1 alone.
 14. **Does a parked range still name a full `deploy.yml` run after D6.1?** At `70591c307`,
     `deploy_remediation.py:broad_remediation` appends `ansible-playbook ansible/deploy.yml`
     whenever `broad_deploy` is set, and `deploy_defer.py` keeps calling it after D6.3. After
@@ -2596,6 +2657,27 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     `deploy.sh -e target=daniel-pi` line that D6.3 prints. D6.1's review also decides whether
     the whole `initial_setup.yml` clause is still the right advice. R4's PR 6 tells the
     operator to run none of the alert's commands, so R4 does not depend on the answer.
+15. **How does the `soak` rule become a rule over one render?** *What a footprint counts*
+    says that `soak` counts for every flux-owned tag only when no tag's own files moved.
+    That condition compares two bundles, and the renderer writes one bundle's digests. The
+    soak Job also embeds the commit it verifies, so `soak`'s footprint differs on every
+    commit, and a rule that fanned it out to the tags would widen every landing.
+    Resolution: the rule's text stays as written until the contracts owner, D2 and D5
+    restate it over one render. The gate is D5.3b2, which adds `soak` to `SHARED_KINDS`
+    with its footprint rule (C3). A cross-slice note carries it.
+16. **Does source-controller verify a key-signed artifact from a plain-HTTP registry?** The
+    drill's `registry:2` serves plain HTTP, and the in-cluster registry may too. Whether
+    source-controller's cosign check reads the signature through `insecure: true` is
+    upstream behaviour that this plan did not reproduce. Resolution: D6.7c's
+    `case=break-glass` answers it on kind. If it fails, the runbook requires TLS on the
+    in-cluster registry, and the drill serves TLS too.
+17. **How does break-glass promotion bring up a fresh cluster offline?** H7 Open question
+    14 records that H7's offline bring-up needs the in-cluster registry applied before the
+    artifact push, and the Flux controller images from the break-glass kit rather than
+    GHCR. Resolution: D6.7c's runbook names both steps, and the kit carries the controller
+    images at `flux_version`, refreshed with item 8's bundle. The drill gains a
+    fresh-cluster case once H7 Open question 14 rules that the offline bring-up runs
+    through this runbook. Until then, D6.7c's two cases cover a running cluster only.
 
 ## Review log
 
@@ -2768,7 +2850,7 @@ round 2's choice to switch `<tag>-deferred`.
       `render_diff_gates.py`. The new section *The render-diff gates after D6* states what
       each kept arm guards and why the image-only exception goes.
     - The retirement arm stays until R4 deletes `k8s_retired_services` (cross-slice note).
-    - D6.7b widens the dropped-workload arm to whole-tag removals and drops its handback
+    - D6.7b widens the dropped-object arm to whole-tag removals and drops its handback
       exemption, whose premise, that `Orphan` deletes nothing, D6.7 ends. The arm joins the
       checks that guard an accidental drop.
     - The Goal, *What D6 deletes*, *Stays after D6*, the tree diff and the complexity delta
@@ -3317,3 +3399,45 @@ Nothing is refuted.
 - Cross-slice note from R4: Open question 14 asks D6.1 to drop or gate the `deploy.yml`
   command in `broad_remediation`. Confirmed at `70591c307`: the function appends it whenever
   `broad_deploy` is set.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **F-05 with C1 and C6 (`--moved-tags` replaced by footprint digests).** *`land.sh`'s k8s
+  tags after D6* drops the mode and the whole of *How the mode lays out a commit*. D2.3's
+  `land-wait` reads the changed set from `digests.json`, and D6.1 makes that set the whole
+  k8s list. The classification stays as *What a footprint counts*, which D2's renderer
+  applies. Also changed: D6.0's commit-input check, D6.1's step and tests, the tree diff,
+  *Verification*, *Rollback*, *Risks*, *Tests and docs* and the delta, from about 240 to
+  about 80 lines. Open question 13 is withdrawn. Stop note: the `soak` rule compares two
+  bundles, so its text stays as written and Open question 15 holds it. The index-file rule
+  follows C1's `_unclassified` and widens.
+- **F-03 (no deploy path without GitHub).** *Break-glass promotion* and step D6.7c add the
+  operator-only runbook as a scenario in `docs/break-glass.md`, the key pair, the source
+  form, the item 8 update, the way back to GHCR, and two cases in the existing
+  `flux-deletion-drill`. Open question 3 keeps the in-cluster registry. Open question 16
+  holds the plain-HTTP verification question.
+- **F-02 / O3 (deploy annotations).** *Grafana's deploy markers after D6* replaces the
+  lasting limit with D6.1b's query over kustomize-controller's log in loki-homelab, with
+  `gotk_resource_info`'s `revision` label as the fallback.
+- **F-16 / P8 / O4 (the superseding ADR).** *The ADR* lists every GitHub dependency with
+  its fallback, names k3s and Flux as fixed premises with their exit cost, and records no
+  tracing by decision.
+- **F-05 (end sizes).** Exit 6 bounds `promote.py` at 900 lines and the landing code at
+  6,400, and *Verification* reads both.
+- **Coordinator note from D2.** D6.7b removes the handback exemption from D2.6c's
+  object-loss check in `decide`, so the guard is live before D6.7 switches the policy.
+- **Coordinator note from D3.** D6.1 is the PR in which D3.4's interim `cluster-vars` rule
+  retires.
+- **Coordinator note from D4.** The rejected `--moved-tags` bullet answers D4 Open question
+  12: no layout function survives, because the PR-time gates render in CI.
+- **Coordinator note from H7.** *Break-glass promotion* names the fresh-cluster steps: the
+  in-cluster registry before the push, and Flux controller images from the kit. Open
+  question 17 holds the kit's images and the drill's fresh-cluster case, beside H7 Open
+  question 14.
+- **Follow-up check on F-03.** The runbook gains an ancestry check before the push, and
+  *Risks* names the stale-bundle revert. A cross-slice note asks C2 to allow a host
+  checkout newer than the bundle as the render source.
+- **Coordinator note from D5.** D6.7c and *Break-glass promotion* cite D5 Open question 2
+  as a precondition, and the fresh-cluster steps name the rebuilt-cluster case.

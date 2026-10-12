@@ -4,9 +4,10 @@ Status: PLANNED
 
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five
-rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3) and,
-under C3's default source for `domain`, on D3.3 of [D3](d3-secrets.md), meaning both D3.3a
-and D3.3b. The contracts slice index states the same two sub-edges.
+rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3), on
+[M1](../monitoring/m1-alertmanager.md), and, under C3's default source for `domain`, on D3.3
+of [D3](d3-secrets.md), meaning both D3.3a and D3.3b. The contracts slice index states the
+same three sub-edges. PR D2.6d waits on M1 too, because its rules join M1's rules directory.
 
 Unblocks: [D3](d3-secrets.md), [D4](d4-ordering.md), H1, H6
 
@@ -15,8 +16,9 @@ Unblocks: [D3](d3-secrets.md), [D4](d4-ordering.md), H1, H6
 After D2, Flux reconciles one service, `bento-pdf`, from the promoted artifact, and nothing
 else writes it. Its `containers_list` entry carries `owner: flux`. Every Ansible-side path
 that could apply it refuses or skips it, and `land.sh` follows a bento-pdf change through
-`promote`. The `promote` job verifies each revision through its commit statuses, moves
-`last-good` on success, and on failure writes `DEPLOY_HOLD` and resets `prod`.
+`promote`. The `promote` job verifies each revision through the commit statuses of the
+Kustomizations that revision changed, moves `last-good` on success, and on failure writes
+`DEPLOY_HOLD` and resets `prod`. The deploy pipeline pages through Alertmanager from D2.7.
 
 No stage cluster exists at `70591c307` (see *Baseline*), so D2 runs on production. Its leaf
 is a service whose failed rollout keeps the old pod serving. D2.8 is C8's **operator-only**
@@ -34,13 +36,17 @@ production drill, and Open question 1 asks the operator to accept it before PR D
    bento-pdf PR waits on promotion and prints `VERDICT: settled`.
 3. **A broken probe holds.** A merged commit D points bento-pdf's readiness probe at a
    missing path. Let T be the commit that `decide` promotes next: D itself, or a later master
-   commit that contains D. The drill ends with these four facts:
+   commit that contains D. The drill ends with these six facts:
     - a `flux/bento-pdf` status of `failure` on T;
-    - `DEPLOY_HOLD` equal to T;
+    - `DEPLOY_HOLD` equal to `<T> failed=bento-pdf`;
     - `prod` on the same digest as `last-good`;
-    - the old bento-pdf pod serving throughout.
+    - the old bento-pdf pod serving throughout;
+    - the `DeployHoldActive` alert firing while the hold stands;
+    - the `ProdMovedOutsidePromote` alert silent through the reset, because the reset writes
+      `PROD_DIGEST`.
 4. **The hold clears.** After the revert R merges, the operator clears `DEPLOY_HOLD` and
-   dispatches `promote`, and `last-good` moves to a revision that contains R. The proof reads
+   dispatches `promote`, and `last-good` moves to a revision that contains R. The revert
+   rule's flag stays off through D2, so the clear is by hand. The proof reads
    the commit behind `last-good`, that commit's `flux/bento-pdf` status, and the bento-pdf
    Kustomization's origin revision.
 
@@ -226,10 +232,21 @@ production drill, and Open question 1 asks the operator to accept it before PR D
   to Grafana, because that needs a pinned address or a standing write credential through
   Traefik. `ansible/tests/deploy/test_deploy_annotations.py` holds the query to both emitters.
   After D2.7 neither emitter runs for bento-pdf.
-- **D1's `promote` job holds three permissions and one extra token.** D1 grants it
-  `contents: read`, `packages: write` and `checks: read`. It sets `PROMOTE_TOKEN` as
-  `GH_TOKEN` only on the step that reads `DEPLOY_HOLD`. The D1.4 workflow test asserts each
-  job's permission map exactly. D1's registry client speaks the OCI distribution API to
+- **D1 splits deciding from writing.**
+    - D1's `promote` job checks out the workflow's commit. It runs `promote.py decide` with
+      `contents: read` and `checks: read`. It sets `PROMOTE_TOKEN` as `GH_TOKEN` only on
+      the step that reads `DEPLOY_HOLD`.
+    - D1's `tag` job checks out no repository code and holds `packages: write`. It moves
+      `prod` to the target that `decide` printed.
+    - D2.5 keeps that split for `verify`. A read-only `verify` job runs
+      `promote.py verify T` and prints a verdict.
+    - A `settle` job applies that verdict. It checks out no repository code, holds
+      `packages: write` and sets `PROMOTE_TOKEN`. It moves `last-good`, or it writes the
+      hold and then resets `prod`. With the revert rule on, it also clears the hold. Its
+      concurrency group is set by an expression: `promote` on a promote run, and
+      `promote-reset` on D5's `reset_to_last_good` dispatch. One job then serves both
+      without serialising a reset behind a waiting promotion.
+    - The D1.4 workflow test asserts each job's permission map exactly. D1's registry client speaks the OCI distribution API to
   `ghcr.io` with a token from GHCR's token endpoint (D1 *Decisions*).
 - **`DEPLOY_HOLD` has no empty value.** D1 creates the variable as `none`, because `gh`
   cannot set an empty value, and reads `none` as no hold (D1 *Decisions* and Open question
@@ -422,12 +439,13 @@ and D2 follows it:
 ### Publication and verification
 
 ```text
-publish job (one run per green master commit X):
+render job (one run per green master commit X; a dispatched sha passes D1's ancestry check first):
   published tags (owner: flux), none ─▶ write out/flux/kustomization.yaml, resources: []
   published tags, some ─▶ homelab_render.py cluster --out out --role <tag> ...
                           placeholder mode, selected by passing no --secret-stubs;
                           R2's five rules run inside the render and fail it, and so does
-                          a deploy tag named homelab or a SHARED_KINDS member
+                          a deploy tag named homelab or a SHARED_KINDS member;
+                          the render writes out/digests.json (own, footprint, _unclassified)
   promote.py check-bundle out, failing the job before any push:
     census    out/flux/ holds kustomization.yaml plus one <name>.yaml per published tag and
               per SHARED_KINDS member; kustomization.yaml lists exactly those files
@@ -436,17 +454,36 @@ publish job (one run per green master commit X):
     host      every Host(...) in an IngressRoute ends in .${domain}, or in the
               operator-ruled literal under C3's alternative
     no-stub   no R1 stub value, stub-<key>, anywhere under out/
-  gitleaks over out/ ─▶ push sha-X and sign
+  gitleaks over out/ ─▶ hand out/ on as a workflow artifact
+publish job (no checkout): push sha-X and sign
 promote job (concurrency: promote):
-  promote.py decide ─▶ promote T | held | current | error
-  promote T ─▶ flux pull artifact sha-T; a pull error exits non-zero, nothing moves
-            ─▶ tag prod = sha-T ─▶ promote.py verify T
-     expected statuses = flux/homelab + flux/<name> for every
-       kustomize.toolkit.fluxcd.io Kustomization document in the pulled flux/
-     every one success                ─▶ tag last-good = sha-T
-     any failure, or timeout          ─▶ set DEPLOY_HOLD = T, then tag prod = last-good
+  promote.py decide: pull prod's artifact once; per candidate T, pull sha-T;
+                     skip a T that loses an object no Removes-Object trailer declares
+                     ─▶ promote T | held | current | error
+  promote T ─▶ a pull error exits non-zero, nothing moves
   held or current ─▶ nothing moves;   error ─▶ exit non-zero, nothing moves
+tag job (no checkout; packages: write): tag prod = sha-T, write PROD_DIGEST
+verify job (read-only, statuses: read): promote.py verify T
+     expected statuses = flux/homelab + flux/<name> for every name in T's changed set:
+       footprint differs from prod's digests.json, plus dependsOn dependents,
+       minus suspended; a dependent already failing on prod's commit is reported only
+     every one success                ─▶ verdict good
+     any failure, or timeout          ─▶ verdict failed=<names>
+settle job (no checkout; packages: write; PROMOTE_TOKEN):
+     good   ─▶ tag last-good = sha-T
+     failed ─▶ set DEPLOY_HOLD = "<T> failed=<names>",
+               then tag prod = last-good, write PROD_DIGEST
 ```
+
+C2 splits the render from the signing, and the decisions from the writes.
+
+- The render job holds read-only permissions.
+- Only jobs that check out no repository code hold `packages: write`: `publish`, `tag` and
+  `settle`.
+- Only `publish` holds `id-token: write`.
+
+D1 builds the split. D2 adds its steps to the render job, and it adds the `verify` and
+`settle` jobs.
 
 - **The render mode is stated by the absent flag.** C1 requires the publish command to say
   that it renders in placeholder mode. R2 offers no flag for that mode: R2 *Mode selection*
@@ -494,11 +531,36 @@ promote job (concurrency: promote):
   not X would wait on statuses that Flux never posts, time out, and write a false hold. The
   pull happens before `prod` moves, so a registry error follows D1's rule that an error
   promotes nothing.
+- **`decide` makes two kinds of artifact pull.** It pulls `prod`'s artifact once per run,
+  before `prod` moves, for that bundle's `digests.json` and its object set. It also pulls
+  `sha-T` for each candidate it weighs, for the object check below, and `verify` reuses the
+  last of those pulls. A run that weighs one candidate therefore makes one more pull than
+  D1's design. A failed pull is an `error`, and nothing moves.
 - **Expected statuses come from names, not files.** Each document of apiVersion
-  `kustomize.toolkit.fluxcd.io/v1` and kind `Kustomization` under the bundle's `flux/` adds
-  `flux/<metadata.name>`. The kustomize `kustomization.yaml` in that directory is not one of
-  them. D3's `cluster-vars` and D4's `-deferred` documents are then waited on with no change
-  to `verify`, which settles D4's Open question 5.
+  `kustomize.toolkit.fluxcd.io/v1` and kind `Kustomization` under the bundle's `flux/` names
+  one Kustomization that `verify` may expect. The kustomize `kustomization.yaml` in that
+  directory is not one of them. D3's `cluster-vars` and D4's `-deferred` documents are then
+  candidates with no change to `verify`, which settles D4's Open question 5.
+- **`verify` expects only T's changed set (C2 *Verification*).** Every Kustomization
+  reconciles on each revision it receives, so expecting all of them gated a promotion on
+  the whole fleet. A crashloop that predated the change, in one unrelated leaf, then held
+  every promotion and reset `prod`, rolling back other PRs' healthy changes. `verify`
+  expects `flux/homelab` plus `flux/<name>` for each name in T's changed set:
+    - the names whose `footprint` digest differs between T's `digests.json` and `prod`'s,
+      read before the move;
+    - every Kustomization whose `dependsOn` chain in T's bundle reaches one of those names.
+      A tag's `-deferred` and `-verify` Kustomizations join through that rule;
+    - minus each Kustomization whose document in T's bundle sets `spec.suspend: true`.
+      `verify` cannot see a suspend made live outside the bundle, so such a Kustomization
+      stays expected, and its missing status times out into a hold. That is the safe
+      direction.
+
+  Any change under `_unclassified` puts every name in the set. A bundle with no
+  `digests.json`, published before D2.6b, counts as every name changed. A dependent whose
+  `flux/<name>` status on `prod`'s commit already read `failure` is reported in the job log,
+  not expected, which costs one more status read per run. An empty changed set expects
+  `flux/homelab` alone. A failure outside the set never holds, and the Flux rule group (C7)
+  pages it instead.
 - **A non-tag Kustomization has a place from the start.** A shared kind, such as D3's
   `cluster-vars`, is written as `out/flux/<name>.yaml`, with its manifests in
   `out/cluster/<name>/`. The census computes its allowlist from inputs, never from the
@@ -510,6 +572,58 @@ promote job (concurrency: promote):
   deploy tag named `homelab`, the root Kustomization's name, or named after a member of
   `SHARED_KINDS`. D4.2 adds the `-deferred` suffix to the same check, and D5.1a1 adds
   `-snapshot` and `-verify`. `check-bundle` repeats none of these.
+- **`digests.json` is written by the render (C1).** D2.6b, D2's first publishing PR, adds
+  it at the bundle root. It maps each deploy tag and each `SHARED_KINDS` member to an `own`
+  and a `footprint` digest, and records under `_unclassified` every path that counts for no
+  name. The renderer computes the digests in process, and `decide`, `verify` and `land-wait`
+  read them without recomputing. Each `SHARED_KINDS` member needs a footprint rule that
+  names the tags its files count for, and a census in `scripts/renderer/tests/` fails a
+  member without one (C3).
+- **`decide` refuses a candidate that silently loses an object.** A render that drops a
+  NetworkPolicy, IngressRoute, CronJob, Service or RBAC object gets it pruned, while its
+  Kustomization stays Ready, so `verify` passes. `decide` therefore compares the set of
+  objects, as kind, namespace and name, in candidate T's `cluster/` with the set in
+  `prod`'s. T is eligible only when every lost object is declared by a
+  `Removes-Object: <kind>/<namespace>/<name>` trailer on some commit in (`prod`, T]. A
+  cluster-scoped object leaves the namespace empty, as in `ClusterRole//<name>`. `decide`
+  reads the trailers with `git log` over that range in the promote job's checkout of master,
+  which therefore fetches history back to `prod`'s commit.
+    - The check runs in `decide`, not in `check-bundle`, because only `decide` knows the
+      `prod` that T replaces. A reset or a later promotion can move `prod` after X was
+      published.
+    - An ineligible T is skipped with a log line that names each undeclared object, and
+      the walk goes on to older candidates. When every candidate loses the object, `decide`
+      prints `current`. The `PromotionStalled` alert pages after 2 hours, and a later
+      commit that carries the trailer releases the walk.
+    - A tag whose whole Kustomization leaves the bundle is exempt, such as at a handback's
+      `owner: released`. `deletionPolicy: Orphan` prunes none of its objects. The exemption
+      holds while C3's Orphan policy does, and D6.7's switch must remove it.
+    - D5 generalises its PR-time `Removes-Workload` check to `Removes-Object` in parallel,
+      with the same trailer grammar. The PR-time check stops the PR, and `decide` stops a
+      commit that reaches master without one.
+    - A squash merge keeps only the message it is given, so `land.sh` copies every
+      `Removes-Object:` trailer from the PR's commits into the squash commit's body. D2.6c
+      adds the copy, with a test whose red half drops one trailer. A merge that bypasses
+      `land.sh`, such as Renovate's automerge, carries no trailers. Such a bump that drops
+      an object therefore stalls at `decide`, and `PromotionStalled` pages. That is the
+      intended direction (D5.1f).
+- **The hold names what failed.** `verify` writes `<T> failed=<names>` (C2), where `<names>`
+  comma-joins the expected names that read `failure` or had no status at the timeout. At the
+  drill that is `<T> failed=bento-pdf`.
+- **The revert rule is code behind a flag that stays off (C2).** D2.5 writes the rule and a
+  module constant in `promote.py` that disables it. Turning it on is an **operator-only**
+  ruling (Open question 11), made in a PR of its own. While the flag is off, `decide` treats
+  a `failed=` hold like any other hold, and every hold clears only by hand. With the flag
+  on:
+    - `decide` may promote a candidate U that descends from the held T when, for every name
+      in `<names>`, U's `footprint` digest equals `last-good`'s. Reading `last-good`'s
+      `digests.json` costs one more pull, made only while a `failed=` hold stands;
+    - when U verifies, `verify` sets `DEPLOY_HOLD` to `none`;
+    - a hold in any other form, and a bundle with no `digests.json`, never qualify.
+- **`PROD_DIGEST` records each move of `prod` (C2).** Each time `promote.py` moves `prod`,
+  on a promotion or a reset, it writes the digest it moved to into the repo variable
+  `PROD_DIGEST` with `PROMOTE_TOKEN`. The deploy-pipeline exporter (D2.6d) compares it with `prod`'s live
+  digest. The first move after D2.5 creates the variable.
 - **The hold is written before the reset**, the order `deploy_handlers.py:_rollback_k8s`
   uses for `hold_sha`. If the reset fails, the hold still stops the next promotion. If the
   hold write fails, `verify` still attempts the reset and then exits non-zero, naming both
@@ -530,9 +644,17 @@ promote job (concurrency: promote):
   `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`, the no-hold value D1
   uses. Then `gh workflow run promote.yml --ref master -f sha=<master tip>` re-runs
   promotion after D1's CI re-check of that commit, and `decide` promotes the newest eligible
-  commit. `probe.py landing` prints `DEPLOY_HOLD`, `prod` and `last-good` beside the
-  deployer's `hold_sha` (below). The deploy UI's Clear button covers `hold_sha` only, and
-  Open question 4 asks whether it should cover `DEPLOY_HOLD`.
+  commit. The deploy UI's Clear button covers `hold_sha` only, and Open question 4 asks
+  whether it should cover `DEPLOY_HOLD`.
+- **`probe.py landing` prints both holds while they coexist.** Until D6 deletes the
+  deployer, every run prints a `hold_sha` line and a `DEPLOY_HOLD` line, each naming its
+  source and the plane it holds, even when one reads `none`. A `failed=` hold prints its
+  names. `prod` and `last-good` follow (below).
+- **The `sha` input passes D1's ancestry check before the render.** D2.5 adds the dispatch
+  input `sha`, and the render job's checkout reads it. Before rendering, the job runs D1's
+  `git merge-base --is-ancestor` check of that commit against `origin/master`, then D1's CI
+  re-check. A commit that is not on master stops the run before any render, so a dispatch
+  publishes only a master commit (C2 *Only master commits publish*).
 
 ### What `probe.py landing` reads, and what it costs
 
@@ -566,15 +688,19 @@ exists by then, so each read has a subject.
 C6 *`land.sh`* states the rule: after merging M, wait until M is covered, never on one
 `promote` run, because GitHub may evict a queued run and a run may promote a newer T. The
 promotion that covered M is whichever one applied a commit that contains M, read from the
-cluster rather than from a run. `promote.py land-wait M` takes the PR's published tags and
-polls until one of these holds:
+cluster rather than from a run. `promote.py land-wait M` takes M's changed set (C6): the
+changed set of C2, taken between M's `digests.json` and the one on the newest published
+ancestor of M's first parent. It reads both files from GHCR and derives no tags itself. A
+missing `digests.json`, or a read that fails, counts as every name changed, and the verdict
+line says it widened. It then polls until one of these holds:
 
-- Every one of those tags' Kustomizations is Ready, and its origin revision names a commit R
-  that descends from M or equals it. The change is applied and healthy, and the result is
-  `settled`. From D5 on, `flux/soak` must also read `success` on R.
+- Every Kustomization in that set, and `homelab`, is Ready, and its origin revision names a
+  commit R that descends from M or equals it. The change is applied and healthy, and the
+  result is `settled`. From D5 on, `flux/soak` must also read `success` on R.
 - `DEPLOY_HOLD` holds a value other than `none`. The result is `deploy-failed` with a new
-  `Cause`, `promote-held`, and the message names the held SHA. That SHA may contain M or
-  predate it. A hold set before M merged ends the wait at the first poll.
+  `Cause`, `promote-held`, and the message names the held SHA and, for a `failed=` hold, the
+  failed names. That SHA may contain M or predate it. A hold set before M merged ends the
+  wait at the first poll.
 - The wait reaches twice the promote timeout. The result is `gave-up` with a new `Cause`,
   `promote-timeout`.
 
@@ -624,6 +750,57 @@ read-only kubeconfig. It refuses the merge while any such Kustomization exists, 
 `NotFound` lets the merge proceed. That one read, made only for a handback PR, is the guard
 on every path that the merge would otherwise start (*Rollback*).
 
+### The deploy-pipeline exporter and its alerts
+
+Without it, `promote`'s verdicts live only in Actions logs. D2.6d adds the deploy-pipeline
+exporter as a monitor-bridge family (C7), and D2.7 waits on M1, so the pipeline pages
+through Alertmanager from the first real flip.
+
+- **Four gauges, one series each, refreshed each 300-second cycle:**
+    - `homelab_deploy_hold_active` reads 1 while `DEPLOY_HOLD` reads anything but `none`;
+    - `homelab_deploy_hold_age_seconds` is the age of the variable's last update while a
+      hold stands;
+    - `homelab_deploy_unpromoted_age_seconds` is the age of the oldest green master commit
+      that `prod`'s commit does not contain, and 0 when there is none;
+    - `homelab_deploy_prod_digest_match` reads 1 when `prod`'s digest in GHCR equals
+      `PROD_DIGEST`. D1 creates `PROD_DIGEST` as `none`. While it reads `none` and no `prod`
+      tag exists, the gauge reads 1, because nothing has moved `prod` yet.
+
+  A hold's failed names stay out of the labels, so the series count never grows with them.
+- **Where it reads, per cycle.** One variables call returns `DEPLOY_HOLD` and `PROD_DIGEST`.
+  One call lists master's successful CI runs. One compare call checks the oldest run's
+  commit against `prod`'s. `prod`'s digest and commit come from one GHCR manifest fetch, the
+  way `probe.py landing` reads `last-good`. That is three `api.github.com` calls per cycle,
+  or 36 an hour.
+- **Its token is read-only.** The family needs its own fine-grained token, limited to this
+  repository, with Actions read and Variables read and no other scope. It holds no write
+  scope, so the exporter can neither clear a hold nor move a tag. The operator mints it
+  (**operator-only**). It joins monitor-bridge's env-secret through `/add-secret` and the
+  rotation registry. D2.6d's PR body quotes one compare call made with it, which shows the
+  two scopes suffice. If the call fails, adding Contents read is an **operator-only** token
+  change.
+- **Exposition.** monitor-bridge pushes its checks to Uptime Kuma. D2.6d adds the scrape
+  endpoint this family needs, and a scrape job in the observability role's
+  `prometheus.yaml.j2`. The scrape adds the four gauges and five automatic series, nine in
+  all, against M1's series budget (C7).
+- **The rule group `deploy-pipeline`**, in M1's rules directory, with a promtool test file
+  beside M1's:
+    - `DeployHoldActive`, severity `warning`, fires when the hold gauge reads 1 for 15
+      minutes. Its Alertmanager route repeats it every 24 hours while the hold stands.
+    - `PromotionStalled`, severity `warning`, fires when the unpromoted age exceeds 2 hours
+      and the hold gauge reads 0.
+    - `ProdMovedOutsidePromote`, severity `critical`, fires when the match gauge reads 0 for
+      15 minutes. The 15 minutes cover the gap between a `prod` move and its `PROD_DIGEST`
+      write, and one exporter cycle.
+    - `DeployPipelineExporterAbsent` is the zero-series case that M1's rule 2 requires of
+      every family. It fires when the four gauges are absent. The bridge's scrape job
+      carries no `origin` label, so, under M1's convention 5, the `absent()` is conjoined
+      with `up == 1` until M6's batch A3. Kuma's `Cluster Scrape Targets` tile pages a
+      down bridge meanwhile.
+
+  Each rule carries `service="deploy-pipeline"`, the literal C7 *Rule labels* admits (Open
+  question 12).
+
 ### Tree diff
 
 ```diff
@@ -649,27 +826,37 @@ on every path that the merge would otherwise start (*Rollback*).
   scripts/deploy_tools/land_lib/merge.py                 refuse a handback while the
                                                            Kustomization exists
   scripts/deploy_tools/land_lib/outcome.py               + Cause promote-held, promote-timeout
-  scripts/deploy_tools/promote.py                        + verify T, land-wait, check-bundle;
+  scripts/deploy_tools/promote.py                        + verify T over the changed set,
+                                                           land-wait, check-bundle, the
+                                                           object-loss check in decide, the
+                                                           revert rule (flag off), PROD_DIGEST;
                                                            land-wait annotates a settled landing
   scripts/deploy_tools/render_targets.py                 + render_record_targets, used by main
   scripts/secrets_mgmt/secret_rotation.py                drop in --deploy
   scripts/diagnostics/probe_lib/{health,releases}.py     skip by tree ownership
-  scripts/diagnostics/probe_lib/landing_blockers.py      print DEPLOY_HOLD, prod, last-good
+  scripts/diagnostics/probe_lib/landing_blockers.py      print both holds, prod, last-good
   scripts/docs/gen_role_glance.py, service_catalog.py    print the Flux owner
   ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2   skip while the Kustomization
                                                                    exists
   ansible/roles/setup/k3s/files/live_drift_check.py              a handed-back object counts
   scripts/renderer/                                      + DIR/flux/<name>.yaml and root writer,
                                                            postBuild, SHARED_KINDS (empty),
-                                                           reserved tag names
+                                                           reserved tag names, digests.json
+                                                           with its footprint rules
   .github/workflows/promote.yml                          render, check-bundle, gitleaks, verify T,
-                                                           dispatch; statuses: read
+                                                           dispatch with the ancestry check;
+                                                           statuses: read
+  ansible/roles/k8s/monitor-bridge/                      + deploy-pipeline family, scrape
+                                                           endpoint, read-only token (D2.6d)
+  ansible/roles/k8s/observability/                       + scrape job, deploy-pipeline rule
+                                                           group and its promtool tests (D2.6d)
+  ansible/vars/secrets.yml, ansible/secret_rotation.yml  + the exporter's token (D2.6d)
   ansible/inventory/host_vars/daniel-box.yml             bento-pdf: owner: flux   (PR D2.7 only)
 ```
 
 ## Steps, as PRs
 
-PRs D2.1a to D2.6c change how no service is deployed: no entry carries `owner` until D2.7,
+PRs D2.1a to D2.6d change how no service is deployed: no entry carries `owner` until D2.7,
 and each PR tests its skip with a fixture entry. D2.1d is the exception at its landing. It
 edits two paths that every play reads, so the deployer refuses to narrow it and records
 every declared k8s service as owed. D2.1d therefore carries its own landing procedure. D2.7
@@ -677,6 +864,8 @@ is the one commit in which both writers change, which is how C4's "in that same 
 D2.6a is withdrawn in round 10. D2.6b and D2.6c keep their IDs, because D3 and D4 cite them.
 "D2.1" in other plans means D2.1a to D2.1d, and "D2.4" means both of its halves. D2.1d keeps
 its letter after D2.1c, although it needs neither D2.1b nor D2.1c and lands before D2.2.
+D2.6d waits on M1. D3's sub-edge on "D2.1 to D2.6" excludes D2.6d, because D3 reads nothing
+that D2.6d adds.
 
 1. **D2.1a — The flag's script reader and the narrowing** (about 120 lines).
     - Add `tag_owners`, with both values of `owner`. Add `DEPLOY_MECHANICS_FIELDS`, leave
@@ -798,13 +987,17 @@ its letter after D2.1c, although it needs neither D2.1b nor D2.1c and lands befo
           alone;
         - the three-reader census test.
     - The deployer applies this setup-plane change itself.
-6. **D2.3 — `land.sh` waits on promotion** (about 220 lines).
-    - Add `promote.py land-wait`, the split before `deploy_by_host`, the handback refusal in
+6. **D2.3 — `land.sh` waits on promotion** (about 250 lines).
+    - Add `promote.py land-wait`, which waits on M's changed set from the two
+      `digests.json` files (C6), the split before `deploy_by_host`, the handback refusal in
       `land_lib/merge.py`, the two `Cause` values, and the annotation that `land-wait` writes
       on `settled`.
     - Tests in `scripts/deploy_tools/tests/`:
         - the three outcomes, including an evicted run whose descendant settles, and a hold
           set before the merge that ends the wait at the first poll;
+        - the changed set: a fixture pair whose `footprint` differs for one tag waits on that
+          tag and `homelab` alone, while an unchanged tag that is not Ready does not block
+          `settled`. A fixture ancestor with no `digests.json` waits on every name;
         - the revision read: an origin revision of `master@sha1:<R>` with R descending from
           M settles, while an absent origin revision, or a `lastAppliedRevision` of
           `prod@sha256:<digest>` with no origin revision, keeps waiting;
@@ -854,20 +1047,41 @@ its letter after D2.1c, although it needs neither D2.1b nor D2.1c and lands befo
           still fails NOT ROLLED;
         - in `scripts/docs/tests/`, a flux-owned fixture role's glance and catalogue row
           print the Flux owner and exit 5, and an Ansible-owned one prints its deploy tag.
-9. **D2.5 — Verification, `last-good` and the hold** (about 200 lines).
-    - Add `promote.py verify T`, which pulls `sha-T` and derives the expected statuses from
-      its Kustomization names, the `last-good` seeding, the hold-then-reset order, the
-      `workflow_dispatch` input `sha`, and the `probe.py landing` lines.
-    - Give the `promote` job `statuses: read`, and set `PROMOTE_TOKEN` as `GH_TOKEN` on the
-      verify step. The D1.4 workflow test's expected permission map gains `statuses: read`,
-      with a red fixture that lacks it.
+9. **D2.5 — Verification, `last-good` and the hold** (about 300 lines).
+    - Add `promote.py verify T`, which pulls `sha-T` and expects the statuses of T's changed
+      set. One function computes the changed set. `verify`, `land-wait` and D4.3's timeout
+      derivation all call it, and none of them derives the set a second time.
+    - Add the `last-good` seeding and the hold-then-reset order with the
+      `<T> failed=<names>` value. Add the `PROD_DIGEST` write on every `prod` move, the
+      revert rule behind its disabled flag, and `decide`'s pull of `prod`'s artifact. Add
+      the `workflow_dispatch` input `sha` behind D1's ancestry check, and the
+      `probe.py landing` lines for both holds.
+    - Add a read-only `verify` job with `statuses: read`. Add a `settle` job that checks out
+      no repository code, holds `packages: write`, and sets `PROMOTE_TOKEN` as `GH_TOKEN`.
+    - The D1.4 workflow test's expected permission map gains both jobs. It has a red fixture
+      in which `settle` checks out code, and one in which `verify` holds `packages: write`.
     - **Preconditions, quoted in the PR body:** the three reads under *What `probe.py
       landing` reads*, each timed three times against the live system, with the timeouts
       set from them. The C2 attribution in Open question 6 is amended.
     - Tests in `scripts/deploy_tools/tests/`, each a pair:
         - all statuses `success` moves `last-good` to `sha-T`;
-        - one `failure` writes the hold, `DEPLOY_HOLD = T`, before the reset, asserted by
-          call order;
+        - one `failure` writes the hold, `<T> failed=<name>`, before the reset, asserted by
+          call order, and a timeout names each expected name that had no status;
+        - the changed set: a fixture T whose `footprint` differs from `prod`'s for one tag
+          expects that tag, its fixture `-deferred` dependent and `flux/homelab`, and an
+          unchanged tag whose status reads `failure` neither holds nor blocks
+          `last-good`. Its red half expects every name and holds on that unrelated
+          failure. A suspended fixture Kustomization is not expected, an `_unclassified`
+          change expects every name, an empty set expects `flux/homelab` alone, and a
+          dependent already `failure` on `prod`'s commit is reported and not expected;
+        - the revert rule: with the flag off, a `failed=` hold holds a candidate whose
+          footprints match `last-good`'s. With the flag on, that candidate promotes, its
+          success sets `DEPLOY_HOLD` to `none`, and a candidate whose footprint for a failed
+          name differs stays held. A hold in another form stays held with the flag on;
+        - each `prod` move, the reset included, writes `PROD_DIGEST`, and a failed write
+          exits non-zero after the move;
+        - `probe.py landing` prints a `hold_sha` line and a `DEPLOY_HOLD` line when both are
+          set, when one is set and when both read `none`. Its red half drops either line;
         - an empty status list keeps waiting and never reads as success;
         - a timeout holds;
         - `decide` returns a T newer than the triggering SHA X. `verify` waits on T's
@@ -881,12 +1095,20 @@ its letter after D2.1c, although it needs neither D2.1b nor D2.1c and lands befo
           a reset that fails after a written hold exits non-zero with the hold in place;
         - `probe.py landing` prints `last-good: unknown` when the registry read fails, and
           then never reports `prod` equal to `last-good`.
-10. **D2.6b — The bundle writer, its census and the reserved names** (about 160 lines).
+    - The D1.4 workflow test in `ansible/tests/repo/` gains the `sha` input's order: D1's
+      ancestry step reads the dispatched commit and runs before the render step. Its red
+      fixtures are a render step placed before the ancestry step, and an ancestry step that
+      reads `github.sha` instead of the input.
+10. **D2.6b — The bundle writer, `digests.json`, its census and the reserved names** (about
+    230 lines). This is D2's first publishing PR (C1).
     - Add the `DIR/flux/<name>.yaml` and `DIR/flux/kustomization.yaml` writers in
       `scripts/renderer/`, the `postBuild` rule that names `homelab-cluster-vars`, an empty
       `SHARED_KINDS`, and the renderer's reserved-name check for `homelab` and the set's
       members. Add the publish job's render step over the published tags, with its
       empty-list rule, and `promote.py check-bundle` with the census.
+    - Add `DIR/digests.json`, with `own` and `footprint` digests per tag and per shared
+      kind, the `_unclassified` key, and the footprint-rule table that every `SHARED_KINDS`
+      member needs (C1, C3). The renderer computes the digests in the render's process.
     - With no published tag the bundle is the root alone, exactly D1's, so `flux/homelab`
       stays `success` on the next commit.
     - **Precondition:** the C1 and C3 amendments of Open question 6 are applied.
@@ -895,13 +1117,37 @@ its letter after D2.1c, although it needs neither D2.1b nor D2.1c and lands befo
           `${domain}` and without it for one that holds no placeholder;
         - the root's `resources` list every file in `flux/`;
         - a fixture tag named `homelab`, and one named after a fixture `SHARED_KINDS`
-          member, fail the render, and an ordinary tag renders.
+          member, fail the render, and an ordinary tag renders;
+        - `digests.json`: two renders of one tree write identical files. An edit under a
+          fixture tag's `cluster/<tag>/` moves its `own` and its `footprint`, an edit to its
+          `flux/<tag>.yaml` moves only its `footprint`, and an edit to another tag moves
+          neither. A fixture path that counts for no name lands under `_unclassified`. A
+          fixture shared kind's file moves the footprint of each tag its rule lists and of
+          no other tag;
+        - the footprint-rule census: every `SHARED_KINDS` member has a footprint rule. The
+          set is empty at D2, so the census runs over a fixture member, and its red half is
+          that member without a rule.
     - Tests in `scripts/deploy_tools/tests/`, each a pair: the census fails when a
       published tag renders no file, when an extra file appears, and when the root's list
       omits a file. A fixture `SHARED_KINDS` member with its own file passes. A fixture
       `released` tag is absent from the bundle, and the census passes.
-11. **D2.6c — The publish gates** (about 130 lines).
+11. **D2.6c — The publish gates and the object-loss check** (about 220 lines).
     - Add the source, host and no-stub gates to `check-bundle`, and the gitleaks step.
+    - Add `decide`'s object-loss check with its `Removes-Object` trailer and its handback
+      exemption, and the promote job's history fetch back to `prod`'s commit.
+    - Tests in `scripts/deploy_tools/tests/`, each a pair, for the object-loss check. Its
+      named member is bento-pdf's `.local.` IngressRoute, because the check exists for kinds
+      that no workload rollout covers:
+        - a fixture `prod` bundle that holds that IngressRoute and a candidate bundle that
+          lacks it, with no trailer in the range, makes the candidate ineligible, and the
+          log line names `IngressRoute/homelab/<name>`. The same pair with a
+          `Removes-Object` trailer on one commit in the range promotes;
+        - a trailer on a commit outside (`prod`, T] does not count;
+        - a cluster-scoped fixture `ClusterRole` lost without a trailer is refused, and its
+          `ClusterRole//<name>` trailer admits it;
+        - a candidate whose bundle drops the whole `bento-pdf` Kustomization, as a handback
+          does, is eligible;
+        - when every candidate is ineligible, `decide` prints `current` and moves nothing.
     - Tests in `scripts/deploy_tools/tests/`, each a pair, with bento-pdf's placeholder
       render as the clean half and as each gate's named member:
         - source, no `postBuild`: a shell `${HOME}` passes, and `${domain}` fails;
@@ -915,10 +1161,39 @@ its letter after D2.1c, although it needs neither D2.1b nor D2.1c and lands befo
     - The D1.4 workflow test in `ansible/tests/repo/` gains two assertions: the render step
       passes no `--secret-stubs`, and `check-bundle` and gitleaks run before the push step.
       Each has a red fixture.
-12. **D2.7 — The flip** (about 20 lines, plus test fixtures).
+    - Edit `docs/flux-deploy-plane.md` for the `Removes-Object` trailer and its grammar.
+12. **D2.6d — The deploy-pipeline exporter and its rules** (about 260 lines). It needs D2.5,
+    which writes `PROD_DIGEST`, and M1, whose rules directory and routing it joins. It lands
+    before D2.7, so the first flip pages.
+    - Add the monitor-bridge family with its four gauges and scrape endpoint, the scrape job
+      in `prometheus.yaml.j2`, the `deploy-pipeline` rule group, its promtool test file and
+      the Alertmanager route that repeats `DeployHoldActive` daily. Add the read-only token
+      through `/add-secret`, then run `secret_rotation.py sync`.
+    - **Preconditions, quoted in the PR body:** the operator has minted the token
+      (**operator-only**); one compare call made with it succeeds; Open question 12's label
+      is settled; and the PR states its series delta against M1's budget.
+    - Tests in monitor-bridge's `tests/`, each a pair: a fixture `DEPLOY_HOLD` of `none`
+      exports 0 and a `failed=` value exports 1; a `PROD_DIGEST` equal to the fixture
+      manifest's digest exports 1 and a different one exports 0; a green run that `prod`
+      contains is not unpromoted, and one that `prod` does not contain sets the age. A
+      missing variable exports no series rather than a 0.
+    - promtool cases, one firing case per alert with its `service` and `severity` labels
+      asserted, as M1's rule 2 requires:
+        - `DeployHoldActive` fires after 15 minutes at 1, and stays silent at 0;
+        - `PromotionStalled` fires at 3 hours with the hold gauge at 0, and stays silent at
+          3 hours with the hold gauge at 1;
+        - `ProdMovedOutsidePromote` fires after 15 minutes at 0, and stays silent after 10;
+        - `DeployPipelineExporterAbsent` fires with the input series absent.
+    - The 24-hour repeat joins M1's routing test, with a red fixture whose route omits it.
+    - Edit monitor-bridge's role `CLAUDE.md` for the family and `docs/flux-deploy-plane.md`
+      for the three alerts and what each one means.
+    - Land with `land.sh`. monitor-bridge and observability are Ansible-owned and
+      denylisted, so `land.sh` deploys both.
+13. **D2.7 — The flip** (about 20 lines, plus test fixtures).
     - Add `owner: flux` to bento-pdf's entry.
     - **Preconditions**, each checked and quoted in the PR body:
-        - D2.1a to D2.6c and D4.0 have landed;
+        - D2.1a to D2.6d, D4.0 and M1 have landed, and the four deploy-pipeline gauges
+          read in Prometheus;
         - under C3's default, D3.3a and D3.3b have landed, and `flux/cluster-vars` reads
           `success` on `prod`'s commit. Under the operator's literal ruling instead, the
           ruling is recorded and the renderer PR that writes the literal has landed;
@@ -954,12 +1229,13 @@ its letter after D2.1c, although it needs neither D2.1b nor D2.1c and lands befo
       statuses, and a failure holds and resets `prod`. Before D2.7, the deployer's
       image-only arm applied these bumps through the play's health gate and annotated
       them. *Risks* names the gap, and D6 owns the emitter that closes it.
-13. **D2.8 — The drill** (one line). This is C8's **operator-only** production drill. The
+14. **D2.8 — The drill** (one line). This is C8's **operator-only** production drill. The
     operator merges it, or the Open question 1 ruling says the session may.
     - Point bento-pdf's `readinessProbe` path at `/flux-drill-not-found`. CI is green,
       because no test checks a probe path. Land with `land.sh`. The expected verdict is
-      `deploy-failed` with cause `promote-held`. The held SHA is T, the commit `decide`
-      promoted, which is D unless another commit merged first.
+      `deploy-failed` with cause `promote-held`. The hold reads `<T> failed=bento-pdf`,
+      where T is the commit `decide` promoted, which is D unless another commit merged
+      first. `DeployHoldActive` fires 15 minutes later.
     - **The PR body states the blast radius**, and the session posts it in the deploy
       channel before merging:
         - *Objects touched:* Deployment `bento-pdf` in `homelab` only. Flux applies its new
@@ -973,12 +1249,13 @@ its letter after D2.1c, although it needs neither D2.1b nor D2.1c and lands befo
           itself. Flux's health wait, notification-controller's status on this repo,
           `verify`, `DEPLOY_HOLD`, the GHCR tags and the reset act together only here. A
           kind cluster in CI would exercise the health wait and none of the rest.
-14. **D2.9 — Revert the drill.** Revert D2.8 and land it. The hold from D2.8 is still set
+15. **D2.9 — Revert the drill.** Revert D2.8 and land it. The hold from D2.8 is still set
     when the revert merges, so `land.sh` ends at its first poll with `deploy-failed` and
-    cause `promote-held`. The operator then clears `DEPLOY_HOLD` and dispatches `promote`
-    (**operator-only**). `decide` promotes the newest eligible commit, which contains the
-    revert. The session re-runs `uv run python scripts/deploy_tools/promote.py land-wait <R>`
-    for the revert's merge commit R, and it settles.
+    cause `promote-held`. The revert rule's flag is off, so `decide` holds the revert too.
+    The operator then clears `DEPLOY_HOLD` and dispatches `promote` (**operator-only**).
+    `decide` promotes the newest eligible commit, which contains the revert. The session
+    re-runs `uv run python scripts/deploy_tools/promote.py land-wait <R>` for the revert's
+    merge commit R, and it settles.
 
 ## Verification
 
@@ -1004,12 +1281,18 @@ uv run python scripts/deploy_tools/render_targets.py daniel-box | grep -c bento-
 # After a bento-pdf landing settles: land-wait's annotation.
 journalctl -t deploy-annotation --since today | grep 'source=promote'
 
-# Exit 3 (after D2.8 merges as commit D): the hold and the reset. T is DEPLOY_HOLD's value.
-uv run python scripts/diagnostics/probe.py landing                 # DEPLOY_HOLD=T, prod == last-good
+# Exit 3 (after D2.8 merges as commit D): the hold and the reset. T is the SHA that
+# DEPLOY_HOLD's value opens with.
+uv run python scripts/diagnostics/probe.py landing  # hold_sha line; DEPLOY_HOLD=<T> failed=bento-pdf;
+                                                    # prod == last-good
 git merge-base --is-ancestor <D> <T>; echo "contains=$?"           # contains=0
 gh api repos/DanielH2018/server/commits/<T>/statuses \
   --jq '.[] | select(.context == "flux/bento-pdf") | .state'      # failure
 uv run python scripts/diagnostics/probe.py health bento-pdf        # the old ReplicaSet is ready
+# On daniel-box, 15 minutes after the hold: one firing DeployHoldActive, and no
+# ProdMovedOutsidePromote at any point through the reset.
+curl -s 127.0.0.1:9090/api/v1/query --data-urlencode \
+  'query=ALERTS{alertname=~"DeployHoldActive|ProdMovedOutsidePromote",alertstate="firing"}'
 
 # Exit 4 (after D2.9 and the operator's dispatch). R is the revert's merge commit, and L is
 # the commit that probe.py landing prints for last-good.
@@ -1025,6 +1308,27 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
 Through the drill, the `homelab-ui` MCP server loads `bento-pdf.local.<domain>` through Traefik
 once before D2.8 merges, once while `flux/bento-pdf` is `failure`, and once after the reset.
 The page must render each time. A Ready pod alone does not prove that the UI renders.
+
+**Measurements, quoted in the PR bodies of D2.7 and D2.9.** D2 records three facts that
+later slices size against:
+
+- **Merge-to-Ready time for the leaf.** It is the time from the PR's `mergedAt` to the
+  `created_at` of the `flux/bento-pdf` status of `success` on the first promoted commit
+  that contains the merge. The measurement checks C7's 2-hour `PromotionStalled` threshold
+  and the `land-wait` timeout against a real figure.
+- **The commit-status burst per promotion.** The session counts the statuses on T with
+  `gh api --paginate repos/DanielH2018/server/commits/<T>/statuses`, and the span between
+  the first and the last `created_at`. It divides the count by the number of Kustomizations
+  in the bundle and projects that rate to D5's Kustomization count. The PR body compares
+  the projection with GitHub's secondary limits of 80 content-creating requests a minute
+  and 500 an hour. A projection above either limit goes to Open question 13.
+- **What the status descriptions contain.** Commit statuses on this public repository are
+  public, so a substituted value in a description would publish it. The PR body records
+  the description shapes on T and on the drill's failed T, such as a health-check message
+  or a reconcile error. The session also checks that no description holds a substituted
+  value, which at D2 means `domain`. It compares the descriptions with the host in the
+  live IngressRoute's match rule and prints only the count of matches, which must read 0.
+  D1 asks D2 for this check. A non-zero count stops D2 before D2.8.
 
 **Each new check can go red.**
 
@@ -1051,8 +1355,26 @@ The page must render each time. A Ready pod alone does not prove that the UI ren
   Kustomization exists.
 - `promote.py verify` has its red halves in D2.5, including the empty list that must not read
   as success (failure class 3), a T that is not the triggering SHA, and a failed hold write.
+- The changed-set pair in D2.5 fails if `verify` expects every name and holds on a failure
+  in an unchanged tag, and its other half fails if a changed tag's `-deferred` dependent
+  drops out of the expected set.
+- The revert rule's flag-off pair in D2.5 fails if a `failed=` hold lets any candidate
+  through while the flag is off.
+- `probe.py landing`'s pair in D2.5 fails if either hold line goes missing.
+- The `sha` input's workflow test in D2.5 fails on a render step placed before D1's
+  ancestry step, and on an ancestry step that reads `github.sha`.
 - `land-wait`'s revision read has its red half in D2.3: an absent origin revision, or a
-  digest-form revision alone, never settles.
+  digest-form revision alone, never settles. Its changed-set pair fails if an unchanged tag
+  that is not Ready blocks `settled`.
+- The `digests.json` tests in D2.6b fail if a `flux/<tag>.yaml` edit leaves the tag's
+  `footprint` unmoved, or if an edit to one tag moves another's. The footprint-rule census
+  fails a fixture `SHARED_KINDS` member with no rule.
+- The object-loss check in D2.6c fails a candidate that lost bento-pdf's `.local.`
+  IngressRoute with no `Removes-Object` trailer, its named member. Its other halves fail if
+  a trailer outside the range counts, or if a handback's dropped Kustomization is refused.
+- Each deploy-pipeline alert in D2.6d has a promtool case that makes it fire, and a case
+  that keeps it silent. `DeployPipelineExporterAbsent` is the family's zero-series case.
+  The routing test fails on a route without the 24-hour repeat.
 - The drill is the live red proof of the whole chain. It is the only check here that
   exercises Flux's health wait, the commit status, `verify`, the hold and the reset together.
 - The publish census fails on a fixture where a published tag renders no file, on an extra
@@ -1065,9 +1387,12 @@ The page must render each time. A Ready pod alone does not prove that the UI ren
 
 ## Rollback
 
-- **D2.1a to D2.6c** change how no service is deployed, and each reverts on its own before
+- **D2.1a to D2.6d** change how no service is deployed, and each reverts on its own before
   D2.7. After D2.7, undo D2.7 first, through the handback below. A plain revert of D2.7 is
-  the one-commit move that the handback exists to avoid.
+  the one-commit move that the handback exists to avoid. A revert of D2.6d after D2.7
+  leaves the pipeline paging only through notification-controller's Discord alerts.
+- **The revert rule's flag** turns off in a one-line PR, after which every hold clears only
+  by hand again.
 - **D2.1d** reverts like the others for the play's behaviour, but its revert edits
   `ansible/deploy.yml` and `toposort.py` again. The tick refuses to narrow it and records a
   `k8s_unapplied` line for every declared k8s service, as at D2.1d's landing. The revert
@@ -1138,18 +1463,36 @@ The page must render each time. A Ready pod alone does not prove that the UI ren
   tick in flight.
 - **The takeover rolls bento-pdf once.** `RollingUpdate` keeps a pod serving.
 - **A dropped file deletes an object** (failure class 2). If a render bug drops bento-pdf's
-  Deployment, prune deletes it, and the Kustomization still reads Ready, because nothing is
-  left to wait on. `promote` cannot see it. `probe.py health bento-pdf`, which `land.sh`
-  runs, renders the role from the tree and reports the Deployment `MISSING`. D5's soak adds
-  an alert-based check.
+  Deployment, or a NetworkPolicy, IngressRoute, CronJob, Service or RBAC object, prune
+  deletes it, and the Kustomization still reads Ready, because nothing is left to wait on.
+  `verify` cannot see it. Mitigation: `decide`'s object-loss check (D2.6c) refuses a
+  candidate that lost an object no `Removes-Object` trailer declares, and D5's PR-time
+  check stops such a PR before it merges. `probe.py health bento-pdf`, which `land.sh`
+  runs, still reports a missing Deployment.
+- **The object-loss check stalls promotion until a trailer lands.** A removal merged
+  without a trailer makes every later candidate ineligible, and `decide` prints `current`.
+  Mitigation: `decide` logs each undeclared object, `PromotionStalled` pages after 2
+  hours, and a follow-up commit that carries the trailer releases the walk.
+- **A failure outside the changed set does not hold.** An unchanged Kustomization that
+  fails, such as a crashloop that predates the change, lets other changes promote.
+  Mitigation: the Flux rule group (C7) pages a Kustomization that is not Ready for 15
+  minutes, so the failure still reaches a person.
+- **The commit-status burst grows with the fleet.** notification-controller posts at least
+  one status per Kustomization on each promoted commit. At D5's Kustomization count that
+  can approach GitHub's secondary limit of 80 a minute. A rejected status reads as a
+  timeout and holds, which is the safe direction but a false hold. Mitigation: D2 measures
+  the burst and projects it (*Verification*), and Open question 13 carries the result to
+  D5.
 - **Two holds exist until D6.** The deployer's `hold_sha` and `DEPLOY_HOLD` answer for
-  different roles. Mitigation: `probe.py landing` prints both, and `docs/landing.md` names
-  which role each one covers.
+  different roles. Mitigation: `probe.py landing` prints a line for each on every run, even
+  when one reads `none`, and `docs/landing.md` names which role each one covers.
+  `DeployHoldActive` pages a standing `DEPLOY_HOLD` daily.
 - **The drill puts a known-bad commit on master** (failure class 5). Mitigation: the revert is
   prepared before D2.8 merges, and at D2 only bento-pdf waits on the hold.
 - **Orphaned objects on retirement.** Under `deletionPolicy: Orphan`, retiring a flux-owned
   service leaves its objects live. Mitigation: until D6, a retirement first empties the
-  service's templates, which prunes its objects, and removes the entry in a second PR.
+  service's templates, which prunes its objects, and removes the entry in a second PR. The
+  first PR carries a `Removes-Object` trailer for each object it empties.
   `docs/flux-deploy-plane.md` states the order.
 - **`promote` sees only GitHub.** A status that notification-controller cannot post reads as
   a timeout and holds. That is the safe direction.
@@ -1238,12 +1581,19 @@ The page must render each time. A Ready pod alone does not prove that the UI ren
   `scripts/diagnostics/tests/` and `scripts/docs/tests/`. The render_records role's
   `CLAUDE.md` says the list leaves out flux-owned services.
 - D2.5: tests in `scripts/deploy_tools/tests/`, and the D1.4 workflow test in
-  `ansible/tests/repo/`. `docs/flux-deploy-plane.md` gains verification of T, the hold, its
-  way out and the sources `probe.py landing` reads.
+  `ansible/tests/repo/`. `docs/flux-deploy-plane.md` gains verification of T over its
+  changed set, the `failed=` hold, its way out, the revert rule and its disabled flag,
+  `PROD_DIGEST`, and the sources `probe.py landing` reads. `docs/landing.md` shows both
+  hold lines.
 - D2.6b, D2.6c: tests in `scripts/renderer/tests/` and `scripts/deploy_tools/tests/`, and
   the D1.4 workflow test in `ansible/tests/repo/`. `docs/flux-deploy-plane.md` gains the
-  render mode, the bundle layout, `SHARED_KINDS`, the reserved names, the census and the
-  three gates.
+  render mode, the bundle layout, `digests.json` and its footprint rules, `SHARED_KINDS`,
+  the reserved names, the census, the three gates, the object-loss check and the
+  `Removes-Object` trailer.
+- D2.6d: tests in monitor-bridge's `tests/`, the promtool test file beside M1's, and M1's
+  routing test. monitor-bridge's role `CLAUDE.md` names the family and its token, and
+  `docs/flux-deploy-plane.md` names the three alerts. `ansible/secret_rotation.yml` gains
+  the token through `secret_rotation.py sync`.
 - D2.7: `ansible/roles/k8s/bento-pdf/CLAUDE.md` says Flux owns it. Its generated
   `## At a glance` block regenerates through the `regen-role-glance` hook, and D2.4b's
   generator change makes that block name Flux and exit 5.
@@ -1252,16 +1602,25 @@ The page must render each time. A Ready pod alone does not prove that the UI ren
 
 - **Added:** an ownership flag with two values, three readers and their census; a named set
   of deploy-mechanics fields; one exit code, registered in three places; two land causes and
-  one pre-merge refusal; about 350 lines in `promote.py`, including `check-bundle` with its
-  census and three gates; the renderer's Kustomization and root writers, an empty
-  `SHARED_KINDS` and the reserved names; skips in ten modules and two generators; a
-  per-entry narrowing record for a Flux-born entry, with its render census; a third
-  `deploy-annotation` emitter.
+  one pre-merge refusal; about 550 lines in `promote.py`, up from about 350, including
+  `check-bundle` with its census and three gates, the changed-set `verify`, the object-loss
+  check in `decide`, the revert rule behind its disabled flag and the `PROD_DIGEST` write;
+  the renderer's Kustomization and root writers, `digests.json` with its footprint rules
+  and their census, an empty `SHARED_KINDS` and the reserved names; skips in ten modules
+  and two generators; a per-entry narrowing record for a Flux-born entry, with its render
+  census; a third `deploy-annotation` emitter; one commit trailer, `Removes-Object`; one
+  repo variable, `PROD_DIGEST`; a monitor-bridge family of about 150 lines with a scrape
+  endpoint, one scrape job, a rule group of four alerts with its promtool cases, and nine
+  series against M1's budget.
 - **Removed:** nothing yet. Each skip exists only until D6 deletes the path it guards. The
-  withdrawn `homelab-identifiers` Secret leaves nothing to retire after D3.
+  withdrawn `homelab-identifiers` Secret leaves nothing to retire after D3. `digests.json`
+  replaces D6.1's `--moved-tags` mode before D6 writes it (C1).
 - **Net, for an operator:** one more hold to clear, `DEPLOY_HOLD`, beside `hold_sha` until
-  D6. At D2.1d's landing, and again at any revert of it, one ruling, then one
-  `clear-owed k8s_unapplied` call per remaining service or a full deploy instead.
+  D6. A hold names what failed, and it pages daily while it stands. One more token to
+  mint and rotate, read-only. Three more alerts to read. One ruling on the revert rule,
+  which would let a merged revert clear its own hold. At D2.1d's landing, and again at any
+  revert of it, one ruling, then one `clear-owed k8s_unapplied` call per remaining service
+  or a full deploy instead.
 
 ## Open questions
 
@@ -1305,10 +1664,8 @@ The page must render each time. A Ready pod alone does not prove that the UI ren
    then the removal of `owner` once the tag's Kustomization reads `NotFound`." Resolution:
    the contracts.md maintainer amends C4. Gate: before D2.7 merges, because D2.7's rollback
    relies on it.
-8. **`DEPLOY_HOLD`'s no-hold value.** D2 reads and writes `none`, as D1 does, because `gh`
-   cannot set an empty value. C2 and C6 still say "empty". Resolution: the amendment D1 Open
-   question 9 requests, which names D2 among the plans it changes. D2 changes nothing else
-   when it lands.
+8. **Resolved: `DEPLOY_HOLD`'s no-hold value.** D2 reads and writes `none`, as D1 does,
+   because `gh` cannot set an empty value. C2 *`DEPLOY_HOLD`'s values* states `none`.
 9. **How are D2.1d's `k8s_unapplied` lines discharged?** The default is the operator's
    clear, one `gitops_state.py clear-owed k8s_unapplied <svc>` per line left after the
    self-discharge, on the grounds of the equality test and the diff. The alternative is a
@@ -1335,6 +1692,30 @@ The page must render each time. A Ready pod alone does not prove that the UI ren
     own-tag-only branch and the 23-tag expectation for Flux-born entries, and run D1.2's
     stop rule over the tags their narrow output names. Gate: before H1's first PR that adds
     a `containers_list` entry, and before H2's and H6's.
+11. **Should the revert rule turn on?** C2 proposes it, and it replaces D5 Open question 17.
+    D2.5 ships it behind a module constant in `promote.py` that disables it. With it on, a
+    merged revert whose footprints for the failed names equal `last-good`'s promotes past a
+    `failed=` hold and clears it, with no operator step. The cost is an automatic clear
+    that a human did not read. Recommendation: keep it off through D2.9, then turn it on,
+    because the drill shows that a `failed=` hold names the right Kustomization. Resolution:
+    the operator rules (**operator-only**), and a one-line PR flips the constant. Gate:
+    none for D2, because every D2 step assumes the flag is off.
+12. **Which `service` label do the deploy-pipeline alerts carry?** C7 requires a deploy tag
+    or a host name. `service="flux"` names the pipeline's role, but `probe.py health flux`
+    reads every firing alert with that label. A standing hold would then fail the flux
+    role's own health gate and couple `DEPLOY_HOLD` into the deployer's `hold_sha`. A host
+    name names a machine, not the pipeline. Recommendation: C7 admits one literal,
+    `service="deploy-pipeline"`, that names no deploy tag and no host, so no health gate
+    reads it. Resolved in the pillar review fold: C7 *Rule labels* admits
+    `service="deploy-pipeline"` as its one literal outside the rule.
+13. **Does the commit-status burst fit GitHub's secondary limits at D5's scale?** D2
+    measures the statuses per promotion and projects them (*Verification*). At D2 the
+    bundle holds a handful of Kustomizations, so D2 itself stays far below 80 a minute.
+    Recommendation: if the projection exceeds either limit, D5 batches its flips so that
+    no promotion changes more Kustomizations than the limit allows. The changed set does
+    not reduce the burst, because every Kustomization reconciles and posts on each
+    revision. Resolution: D2.9's PR body quotes the projection, and D5 sizes its waves
+    from it. Gate: before D5's first wave.
 
 ## Review log
 
@@ -1595,3 +1976,38 @@ Refuted:
   `--placeholders` would call a flag that no plan adds. The command therefore states its
   mode by the absent `--secret-stubs`, as R2 reads C1, and the D1.4 workflow test pins that
   absence with a red fixture.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review
+round covers it.
+
+- **F-01, promotion gated on the whole fleet.** *Design* states that `verify` expects T's
+  changed set from `digests.json` `footprint`, plus `dependsOn` dependents, minus suspended
+  Kustomizations, with an already-failing dependent reported only and an empty set
+  expecting `flux/homelab` alone. The hold reads `<T> failed=<names>`. The revert rule is
+  code behind a disabled flag, and turning it on is Open question 11 (**operator-only**).
+  `decide`'s pull of `prod`'s artifact is stated as one extra pull. `digests.json`, its
+  `_unclassified` key and the footprint-rule census join D2.6b, D2's first publishing PR.
+  `land-wait` in D2.3 waits on M's changed set (C6). D2.3, D2.5 and D2.6b grow, with added
+  red halves under *Verification*. *Goal* and Exit 3 name the `failed=` form.
+- **F-06, silent prune.** `decide` refuses a candidate whose object set lost an entry that
+  no `Removes-Object` trailer in (`prod`, T] declares. A handback's dropped Kustomization
+  is exempt. The check joins D2.6c with its red proof, its named member being bento-pdf's
+  `.local.` IngressRoute. *Risks* updates the dropped-file entry and adds the stall it can
+  cause.
+- **F-02, deploy alerts.** An added PR, D2.6d, adds the deploy-pipeline exporter as a
+  monitor-bridge family with a read-only token and the rules `DeployHoldActive`,
+  `PromotionStalled` and `ProdMovedOutsidePromote`. Each has promtool cases. M1's rule 2
+  adds `DeployPipelineExporterAbsent` as the zero-series case. D2.5 writes `PROD_DIGEST`
+  on every `prod` move. Exit 3 checks two of the alerts live. The `service` label went to
+  Open question 12.
+- **F-08 and RA-10, two holds.** `probe.py landing` prints a line for each hold on every
+  run while both exist, with a red pair in D2.5.
+- **F-13, latency and volume.** *Verification* gains three measurements: merge-to-Ready
+  time, the commit-status burst against the secondary limits, and the status descriptions
+  checked for a substituted value. The scaling question went to Open question 13.
+- **S5, the `sha` input.** The render job runs D1's ancestry check on the dispatched commit
+  before rendering, and D2.5's workflow test pins the order with two red fixtures.
+- **Contract alignment.** The header and D2.7's preconditions name M1. The diagram follows
+  C2's render and publish split. Open question 8 is resolved, because C2 states `none`.

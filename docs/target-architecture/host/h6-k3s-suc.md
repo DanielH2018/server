@@ -251,7 +251,10 @@ exists. M2 plans to add `replicasets` to the same flag, and M6's B7 plans to add
 
 **No stage cluster.** D2's Baseline records that `daniel-stage` was retired on 2026-09-29
 (#2941). `scripts/lib/kubectl.py:RETIRED_CLUSTER_NODES` keeps it only so that a request
-refuses. Every step here runs on production.
+refuses. Production is the only standing cluster, so every live step here runs on it. A
+throwaway k3s node is still available: the etcd restore drill's transient libvirt guest on
+daniel-server, which H7's bring-up drill also uses. *Rehearsal in a drill guest* runs the
+SUC Plan and the Flux apply there first.
 
 **Upstream behaviour.** Read from `rancher/system-upgrade-controller` (release v0.20.2 is the
 newest, 2026-09-23) and `k3s-io/k3s-upgrade` at their default branches on 2026-10-11, with
@@ -312,6 +315,13 @@ newest, 2026-09-23) and `k3s-io/k3s-upgrade` at their default branches on 2026-1
 
 ## Design
 
+### Fixed premises
+
+k3s and SUC are fixed premises of this slice. [design.md](../design.md) names k3s and Flux as
+fixed premises of the migration, and its *Host plane* section chooses SUC to upgrade k3s.
+This slice weighs no other Kubernetes distribution and no other k3s upgrade mechanism. Every
+gate, window and check below assumes SUC's Job model and k3s's single binary.
+
 ### SUC through Flux
 
 A k8s role, `system-upgrade`, is born Flux-owned. Its `containers_list` entry carries
@@ -329,6 +339,21 @@ A k8s role, `system-upgrade`, is born Flux-owned. Its `containers_list` entry ca
   renderer cannot fetch them. A kustomize patch sets
   `SYSTEM_UPGRADE_JOB_ACTIVE_DEADLINE_SECONDS=3600` and
   `SYSTEM_UPGRADE_JOB_ACTIVE_DEADLINE_SECONDS_MAX=5400` in the controller's env ConfigMap.
+- **Images by digest.** The vendored manifest names the controller image by tag. A
+  kustomize `images:` entry pins it by digest instead, from
+  `system_upgrade_controller_image` in the role's defaults, with a Renovate annotation. A
+  render test asserts that every container image in the rendered `system-upgrade`
+  directory carries `@sha256:`, the gate image and the verify Job's image included. The
+  Plans' `upgrade.image` is outside that test, because SUC builds that reference from the
+  Plan's `version` (*Open questions* 12).
+- **Default-deny ingress.** The role ships one NetworkPolicy, `default-deny-ingress`, with
+  `podSelector: {}`, `policyTypes: [Ingress]` and no ingress rule. [ADR-0009](../../adr/0009-networkpolicy-default-deny-ingress.md) sets that rule
+  for `homelab` and `observability`, and this namespace takes it from its first commit. No
+  caller connects into `system-upgrade`: the controller and the Plan Jobs call the API
+  server, and nothing calls them. Egress stays open, because the cluster does not enforce
+  egress (ADR-0009). A render test asserts the policy, with a red fixture that drops it.
+  Whether a netpol-baseline probe row can prove it live depends on whether the controller
+  listens on a port, which H6.1b reads from the vendored manifest (*Open questions* 13).
 - **Forward-only.** The role sets `flux_forward_only: true` in its defaults, H1's flag
   (*the forward-only hold*). A failed or timed-out revision that changes this tag holds
   without a reset, so `promote` never lowers the Plans below a version a node already
@@ -412,7 +437,10 @@ minutes. A healthy bump ends well inside that: the server's gate wait, about ten
 of server upgrade, then the agent's wait for Longhorn's recovery and for 15 minutes after
 the server's start, then about ten minutes of agent upgrade. A Job
 that fails, or runs out its deadline, turns `flux/system-upgrade` red. `promote` then
-writes `DEPLOY_HOLD` and, because the tag is forward-only, does not reset `prod`. While the
+writes `DEPLOY_HOLD` and, because the tag is forward-only, does not reset `prod`. The value
+is H6's own value, the failed revision, and never C2's `<T> failed=<names>` form.
+C2's proposed revert rule acts only on that form, so a merged revert never clears this
+hold. Only the operator clears it (**operator-only**). While the
 hold stands, SUC re-creates a failed Job after its 900-second TTL, so the gate keeps
 retrying. A successful upgrade lets `last-good` move to the bump commit. PR H6.1c proves
 the red path on production, and pins the reason string it observes.
@@ -499,6 +527,30 @@ downgrading. A CI check in `scripts/validate/` refuses a decrease of `k3s_versio
 `k3s_downgrade_acknowledged` in the same file equals the new pin. A raise must leave that key
 absent. The acknowledged decrease exists for the H6.6 rollback, which lowers the pin after a
 hand downgrade.
+
+### The installed binary matches the release
+
+`rancher/k3s-upgrade` is pulled by tag from Docker Hub into a privileged Job that replaces
+the k3s binary on both nodes. The Ansible install it replaces checks its script by sha256.
+The image's build checks the asset against the release's sums (Baseline), but nothing on
+the node checks what the Job installed. H6.3e adds that check.
+
+- **The pin.** The role's defaults carry `k3s_binary_sha256_amd64`, the `k3s` line of the
+  release's `sha256sum-amd64.txt` for `k3s_version`. The PR that bumps `k3s_version`
+  finishes it, as it finishes the installer sha256 (H6.6). A CI check in
+  `scripts/validate/`, beside the no-downgrade check, refuses a change to `k3s_version`
+  that leaves the sum unchanged.
+- **The mode.** `k3s_gates.py` gains a `binary` mode. It first reads the node's
+  `kubeletVersion` through the API, as agent mode does, and executes no host binary. A
+  version other than `k3s_version` reads pending, not a mismatch, because a hold can leave
+  a node on the old version while the pin moved. At the pinned version, it compares the
+  binary's sha256 with the pin and fails on a mismatch, naming the node.
+- **The gate.** One Job per node in `system_upgrade_nodes` runs the mode in the
+  `system-upgrade-verify` Kustomization (C3), C7's second verify-successor shape. Each Job
+  mounts the node's binary and the packaged script read-only by hostPath, in the
+  digest-pinned gate image, and reads the API as `k3s-plan`. A mismatch turns `flux/system-upgrade-verify` red, which holds
+  promotion and keeps `last-good` where it was. `-verify` exists from D5.1a1, which is not
+  one of this slice's edges (*Open questions* 14).
 
 ### Flags move from the unit to a package drop-in
 
@@ -731,6 +783,50 @@ Reconcile never starts a masked unit (H3, step 2). `docs/k3s-etcd-restore.md` ga
 that masks both timers on daniel-box before k3s stops, and unmasks them after the restore is
 verified.
 
+### Rehearsal in a drill guest
+
+Production is the only standing cluster (Baseline), so the SUC Plan and the Flux apply are
+rehearsed on a throwaway k3s node first. The node is a transient guest on daniel-server,
+built by the etcd restore drill's orchestrator on its `staging` network behind
+`fence_check`. H7's bring-up drill uses the same guest.
+
+- **When.** Before H6.1c, and before every PR that raises `k3s_version` by a minor
+  release. The PR body quotes the run's result. A patch bump, such as H6.6's, needs none.
+- **What it runs.**
+    - k3s at the running pin, from the release installer checked against
+      `k3s_install_script_sha256`.
+    - Flux's controllers at D1's pinned version.
+    - The `system-upgrade` bundle rendered from the PR's head, and nothing else. The
+      orchestrator pushes it with `flux push artifact` to a registry container inside the
+      guest, and points an OCIRepository at it. The guest never reads GHCR or `prod`, so
+      it makes none of the real writes H7 *The proofs* rejects for a guest that applies
+      `prod`.
+    - A guest overlay sets `system_upgrade_nodes` to the guest's hostname and drops
+      `prepare`. The gates read Longhorn, both nodes and the deployer, and the guest has
+      none of them. The gate fixtures and the parity test prove the gates instead (*Gates at
+      apply time*).
+- **What it proves.**
+    - The server Plan only. A lone guest can be a server, never an agent, because an agent
+      could not reach daniel-box through the fence.
+    - For an upgrade: the Plan moves the guest to the PR's version, the node's
+      `plan.upgrade.cattle.io/k3s-server` label equals the Plan's `latestHash`, and the
+      `system-upgrade` Kustomization reads Ready through the health expressions.
+    - Before H6.1c: H6.1c's drill Plan turns the Kustomization's health `failed` within
+      minutes, as H6.1c then expects on production.
+- **Why the guest suffices, and why k3d does not.** SUC's upgrade container replaces the
+  binary under `/host` and restarts the k3s unit. In a k3d node the k3s process is the
+  container's entrypoint, so the replacement never takes the path a node takes. The guest
+  is a systemd host like daniel-box. Under C8 it is the third substitute, an
+  **operator-only** drill on production hardware, as H7 *Open questions* 11 rules for its
+  own guest.
+- **Blast radius.** A run touches a transient domain and its disk on daniel-server, the
+  `staging` network and the fence. It takes CPU and memory from the agent node for one run.
+  The guest holds no production credential: k3s generates a guest-only token, and the guest
+  gets no SOPS key and no registry credential. It pulls `rancher/k3s-upgrade` and the SUC
+  image from Docker Hub over its internet egress, as production does. Every service keeps
+  serving, and `DEPLOY_HOLD` and `prod` stay untouched. The rollback is the orchestrator's
+  teardown.
+
 ### Alerts
 
 The rules go in `ansible/roles/k8s/observability/files/rules/k3s-upgrade.yaml`, with promtool
@@ -809,6 +905,8 @@ PR H6.1a records the operator's approval.
   ansible/roles/setup/k3s/tasks/agent.yml                (join only on a fresh host; file tasks removed)
 - ansible/roles/setup/k3s/tasks/unit-logging.yml
   ansible/roles/setup/k3s/tasks/coredns.yml              (.skip task removed)
+  ansible/roles/setup/hypervisor/                        (+ the SUC rehearsal mode, H6.1b2)
+  scripts/validate/                                      (+ the sum co-change check, H6.3e)
   docs/k3s-upgrade.md                                    (rewritten for SUC)
 ```
 
@@ -823,7 +921,7 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
     - Add the ADR: SUC upgrades k3s and `homelab-k3s-restart` restarts it, unattended inside
       a gate and a window. It names the pause levers and the contract.
     - **Operator-only:** approve the ADR before H6.1b merges.
-2. **H6.1b SUC role, selecting no node (about 240 lines, plus vendored bytes).**
+2. **H6.1b SUC role, selecting no node (about 280 lines, plus vendored bytes).**
     - Add the role, its `owner: flux` entry, both Plans with `system_upgrade_nodes: []` and
       their `jobActiveDeadlineSecs`, the `flux_health_check_exprs` and `flux_timeout` keys,
       `flux_forward_only: true`, and the role `CLAUDE.md` with the contract.
@@ -878,9 +976,23 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
     - Update `renovate.json`'s rule text and prose notes. `asset_pins.py:KNOWN_PINS` must
       still find `k3s_install_script` in its new file, and the pin census proves it.
     - Fix the stale symbol and the pin path in `docs/k3s-upgrade.md`.
+    - Add the `default-deny-ingress` NetworkPolicy and the controller's digest pin, each
+      with its render test (*SUC through Flux*). Quote the vendored controller manifest's
+      container ports in the PR body (*Open questions* 13).
     - Two-writer check: none. The Plans select no node.
-3. **H6.1c Red-path drill (about 30 lines, then a revert). Operator-only.** This mirrors
+3. **H6.1b2 The guest rehearsal (about 180 lines). Operator-only run.**
+    - Add the rehearsal mode to the etcd drill's orchestrator in the `hypervisor` role,
+      with the guest overlay (*Rehearsal in a drill guest*). Its tests join the
+      orchestrator's own and cover the teardown on every exit path.
+    - The change reaches daniel-server the way any `hypervisor` change does before H7.13,
+      and the PR body names that path. H7.13 moves the mode with the role.
+    - **Operator-only:** run the rehearsal twice, against H6.1c's drill Plan and against a
+      server Plan one release above the guest's version. Both must pass before H6.1c
+      starts.
+4. **H6.1c Red-path drill (about 30 lines, then a revert). Operator-only.** This mirrors
    D2's hold drill, and C8 requires an operator-only drill to state its blast radius.
+    - **Gate:** H6.1b2's rehearsal of this Plan passed in the guest, and this PR's body
+      quotes it.
     - Add a Plan `k3s-redproof` that selects daniel-box by hostname and carries the
       `homelab/k3s-upgrade-paused DoesNotExist` clause. It carries `k3s_version` as its
       `version`, so the expressions can leave InProgress. It declares no `prepare`, because
@@ -913,7 +1025,7 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       DanielH2018/server`. The next `promote` moves `prod` to the revert, and Flux prunes
       the drill Plan. The operator then removes the label, and silences or waits out the
       alert's 2-hour `keep_firing_for`.
-4. **H6.2 daniel-box's package (about 60 lines).**
+5. **H6.2 daniel-box's package (about 60 lines).**
     - **Operator-only:** copy daniel-box's age key to `/etc/homelab/age.key`, as H4.2 did on
       daniel-server.
     - Add the creation rule for `ansible/vars/hosts/daniel-box.sops.yaml` ahead of the
@@ -927,7 +1039,7 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       with the credentials the host uses, and before H6.3b daniel-box uses none.
     - The builder, the repository and every daniel-box timer stay with Ansible until H7.
     - Two-writer check: none, because no path moves.
-5. **H6.3a The gate script (about 220 lines with tests).**
+6. **H6.3a The gate script (about 220 lines with tests).**
     - Add `hosts/lib/k3s_gates.py` with `server`, `agent` and `host` modes, and its tests in
       `hosts/lib/tests/`, including the parity test. Nothing ships yet.
     - **Operator-only**, before merging: measure the server-restart signal. Run `sudo k3s
@@ -938,7 +1050,7 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       must be at or after the k3s start, `2026-10-11 07:40:12 UTC` unless k3s restarted
       later. If it is older, the Lease does not track a restart, and the guard is not
       merged until *Open questions* 9 names another signal.
-6. **H6.3b The restart component (about 230 lines).**
+7. **H6.3b The restart component (about 230 lines).**
     - **Gate before merge:** H4's *The restart contract* names this unit and SUC's upgrade
       container as the two restarters of a `windowed` k3s unit, each with its condition
       and their mutual exclusion (*Open questions* 8). Without that amendment, H6.3b does
@@ -982,7 +1094,7 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       both `daniel-box` and `daniel-server`, grouped by the `host` label the alerts read
       (*Verification*). A missing host means its textfile never reached Prometheus, and
       `K3sConfigRestartFailed` would read empty for it.
-7. **H6.3c Server Plan to daniel-box (about 120 lines).**
+8. **H6.3c Server Plan to daniel-box (about 120 lines).**
     - **Operator-only**, before merging: for each read the gates make, run `sudo k3s kubectl
       auth can-i <verb> <resource> --as=system:serviceaccount:system-upgrade:k3s-plan`,
       with `-n kube-system` for the CoreDNS Deployment and the `kube-controller-manager`
@@ -997,14 +1109,23 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
     - Add the no-downgrade check.
     - Rewrite the server half of `docs/k3s-upgrade.md`.
     - Two-writer check: the server's version has one writer, SUC.
-8. **H6.3d Agent Plan to daniel-server (about 80 lines).**
+9. **H6.3d Agent Plan to daniel-server (about 80 lines).**
     - Before merging, read `sha256sum /usr/local/bin/k3s` on daniel-server in one batched
       read-only call. Compare it with the release's `sha256sum-amd64.txt`. A mismatch means
       the merge restarts the agent, so the operator merges only inside the window.
     - Set `system_upgrade_nodes: [daniel-box, daniel-server]`.
     - Make the same guard change in `agent.yml`, and rewrite the agent half of the runbook.
     - Two-writer check: the agent's version has one writer, SUC.
-9. **H6.4a Server files to the package (about 180 lines; forward-only).**
+10. **H6.3e The binary-sum check (about 150 lines).**
+    - Add `k3s_binary_sha256_amd64` to the role's defaults, the co-change check in
+      `scripts/validate/`, and the `binary` mode of `k3s_gates.py` with its tests
+      (*The installed binary matches the release*).
+    - If D5.1a1's `-verify` support exists, add the verify Jobs here. Otherwise a
+      follow-up PR adds them once D5.1a1 lands (*Open questions* 14). Until then H6.6's
+      verification compares both nodes' sums with the pin by hand.
+    - The Jobs pass at once: daniel-box's binary matches the release (Baseline), and
+      H6.3d reads daniel-server's.
+11. **H6.4a Server files to the package (about 180 lines; forward-only).**
     - Add the `k3s-server` component with the same-path files, the audit log directory, the
       logging lines of `50-homelab.conf`, `/etc/logrotate.d/k3s` and the `tmpfiles.d` entry.
       Add the legacy entry for the server's `10-log-to-file.conf`.
@@ -1029,7 +1150,7 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       away from this restart, so an empty read shows only that the check held. It is not
       evidence of how Flux's `wait` treats an API restart, and *Risks* keeps that question
       open for H6.6.
-10. **H6.4b Server flags to the package (about 150 lines).**
+12. **H6.4b Server flags to the package (about 150 lines).**
     - Add `k3s_server_config`, the config drop-in, and the `ExecStart` lines of
       `50-homelab.conf`.
     - Remove the installer's args clause from `server.yml`, and delete `k3s_server_args`
@@ -1045,7 +1166,7 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       runs `k3s server` with its flags from `config.yaml.d`.
     - During that restart, read kustomize-controller's events again, as in H6.4a, with the
       same limit on what an empty read shows.
-11. **H6.5a Agent files to the package (about 120 lines; forward-only for
+13. **H6.5a Agent files to the package (about 120 lines; forward-only for
     `registries.yaml`).**
     - Add the `k3s-agent` component with `registries.yaml`, the logging lines,
       `/etc/logrotate.d/k3s-agent` and the legacy entry for the agent's `10-log-to-file.conf`.
@@ -1055,19 +1176,22 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       registries.yaml`. Delete `unit-logging.yml`, which nothing imports any more.
     - The host-render test from H6.4a gains the `k3s-agent` component for daniel-server.
     - Two-writer check: the H3.2 census, as in H6.4a.
-12. **H6.5b Agent flags to the package (about 100 lines).**
+14. **H6.5b Agent flags to the package (about 100 lines).**
     - Add `k3s_agent_config`, the config drop-in, and the `ExecStart` lines.
       `EnvironmentFile=` is left alone.
     - Remove the args clause from `agent.yml`, and delete `k3s_agent_args`.
     - The `Read the join credentials` play stays for a fresh join until H7.
     - The next window restarts `k3s-agent` once.
-13. **H6.6 The patch bump.**
+15. **H6.6 The patch bump.**
     - The operator takes the next Renovate k3s patch PR. In the PR it finishes the installer
-      sha256, the vendored schemas, and H1's CoreDNS pin and excerpt, as the Renovate rule's
+      sha256, `k3s_binary_sha256_amd64`, the vendored schemas, and H1's CoreDNS pin and
+      excerpt, as the Renovate rule's
       notes require.
     - The operator lands it with `land.sh`, which waits on promotion. SUC upgrades the server,
       then the agent, each behind its gates.
-14. **H6.7 The harmless flag change.**
+    - A minor bump, unlike this patch bump, first passes H6.1b2's rehearsal, and its PR body
+      quotes the result (*Rehearsal in a drill guest*).
+16. **H6.7 The harmless flag change.**
     - Append `image-gc-high-threshold=85` to the `kubelet-arg` list in
       `k3s_server_config`, in `hosts/components/k3s-server/component.yml`. 85 is the
       kubelet's default value.
@@ -1106,7 +1230,8 @@ kubectl -n system-upgrade get jobs -o custom-columns=NAME:.metadata.name,DONE:.s
 kubectl -n kube-system get lease kube-controller-manager \
   -o custom-columns='HOLDER:.spec.holderIdentity,ACQUIRED:.spec.acquireTime,TRANSITIONS:.spec.leaseTransitions'
 systemctl show k3s -p ExecMainStartTimestamp
-ssh daniel-server 'systemctl show k3s-agent -p ExecMainStartTimestamp'
+ssh daniel-server 'systemctl show k3s-agent -p ExecMainStartTimestamp; sha256sum /usr/local/bin/k3s'
+sha256sum /usr/local/bin/k3s
 uv run python scripts/diagnostics/probe.py health system-upgrade
 uv run python scripts/diagnostics/probe.py landing
 
@@ -1143,6 +1268,8 @@ The expected results are:
   evidence. daniel-box's `Ready` `lastTransitionTime` is not read (Baseline);
 - after H6.6, `flux/system-upgrade` reads `success` on a revision R that equals the bump
   commit or descends from it, and `probe.py landing` shows `last-good` covering R;
+- after H6.6, both nodes' `sha256sum /usr/local/bin/k3s` equals `k3s_binary_sha256_amd64`,
+  and once H6.3e's Jobs exist, `flux/system-upgrade-verify` reads `success` on R;
 - after H6.6, the volume count and robustness match the pre-upgrade capture, `monitors`
   shows nothing new, the VIP answers, and `probe.py landing` shows `DEPLOY_HOLD` reading
   `none`, the no-hold value (D1). An empty or missing value is an error, not a pass;
@@ -1155,6 +1282,16 @@ which journald does not store on these hosts, so it reads zero on every run.
 
 **Red proofs for the checks this slice adds.**
 
+- *Images by digest (H6.1b).* A fixture role with one tag-only image fails the render test
+  and names the image.
+- *Default-deny ingress (H6.1b).* A fixture render without the policy fails its test.
+- *Binary sum (H6.3e).* The `binary` mode's tests use fixture binaries and node fixtures. A
+  node at the pinned version whose binary has a different sum fails and names the node. A
+  node at another version reads pending and does not fail. The co-change check refuses a fixture diff that raises
+  `k3s_version` and leaves the sum.
+- *Rehearsal (H6.1b2).* The drill Plan's run in the guest is the rehearsal's own red: its
+  Kustomization must read `failed`. The teardown tests fail on a fixture exit path that
+  leaves the domain defined.
 - *Plan health.* PR H6.1c makes `flux/system-upgrade` red on production and sets
   `DEPLOY_HOLD`. A static test asserts the rendered Kustomization carries the three
   expressions with the observed reason string. An expression test evaluates them with
@@ -1436,7 +1573,9 @@ which journald does not store on these hosts, so it reads zero on every run.
   SUC runs a Job, so H6.3c, H6.3d and exit 1 verify by the node label instead.
 - **A held `system-upgrade` revision stops every later promotion** until the operator clears
   it, because the tag is forward-only. That is the price of never lowering a Plan, and the
-  hold pages through `DEPLOY_HOLD`. The clear is **operator-only**: `gh variable set
+  hold pages through `DEPLOY_HOLD`. The hold carries H6's own value, never C2's
+  `failed=` form, so C2's proposed revert rule cannot clear it, and a merged revert waits
+  behind it. The clear is **operator-only**: `gh variable set
   DEPLOY_HOLD --body none -R DanielH2018/server`, after the cause is fixed.
 - **Flux's `wait` across an API restart.** Flux's documentation does not say whether a
   transient API error during a health poll reads as `HealthCheckFailed`. If it does, a
@@ -1473,7 +1612,14 @@ which journald does not store on these hosts, so it reads zero on every run.
 - **No drain on the agent.** This matches the runbook. The agent's `prepare` waits for
   storage health after the server restart, which the runbook did by hand.
 - **Image pulls from Docker Hub.** `rancher/k3s-upgrade`, the SUC image and the gate image
-  come from Docker Hub, like the cluster's other public images.
+  come from Docker Hub, like the cluster's other public images. The SUC and gate images are
+  pinned by digest. `rancher/k3s-upgrade` is pulled by the tag SUC builds from the Plan's
+  version, into a privileged Job that replaces the binary (*Open questions* 12). H6.3e's
+  check catches an installed binary that differs from the release before `last-good`
+  moves, but only after the Job ran.
+- **A rehearsal is not production.** The guest runs the server Plan without `prepare`, on
+  one node with no Longhorn. It proves the Plan and the Flux apply, not the gates or the
+  agent's wait. The gates rest on their fixtures and the parity test.
 - **dpkg lock contention on daniel-box.** The updater's install takes the dpkg lock for
   seconds, because it writes plain files and its postinst starts reconcile with
   `--no-block`. Ansible's `apt` module waits 60 seconds by default (`lock_timeout`).
@@ -1518,7 +1664,10 @@ which journald does not store on these hosts, so it reads zero on every run.
       pin home through the new `repo_paths` constant;
     - `ansible/tests/setup/test_setup_cross_role_files.py` admits the `include_vars`;
     - `docs/k3s-upgrade.md` (pin path, stale symbol);
-    - `ansible/roles/setup/k3s/CLAUDE.md`, whose `## At a glance` block regenerates.
+    - `ansible/roles/setup/k3s/CLAUDE.md`, whose `## At a glance` block regenerates;
+    - the digest and default-deny render tests, each with its red fixture.
+- **H6.1b2:** the orchestrator's rehearsal-mode tests, and
+  `docs/hypervisor-libvirt-internals.md` names the mode.
 - **H6.1c:** the expression test records the observed reason.
 - **H6.2:** `docs/host-packages.md` lists daniel-box; `ansible/.sops.yaml` gains its
   creation rule; both CI scans' named sets gain `homelab-daniel-box`.
@@ -1542,9 +1691,12 @@ which journald does not store on these hosts, so it reads zero on every run.
     - `ansible/roles/setup/gitops_deploy/tests/test_deploy_remediation.py` follows
       `_K3S_CONTROL_PLANE_GATES`;
     - the no-downgrade check's tests;
-    - the server half of `docs/k3s-upgrade.md`, and its *Rollback* section;
+    - the server half of `docs/k3s-upgrade.md`, its *Rollback* section, and the rehearsal
+      that every minor bump takes;
     - the k3s role `CLAUDE.md` loses the server upgrade path.
 - **H6.3d:** the agent half of `docs/k3s-upgrade.md`.
+- **H6.3e:** the `binary` mode's tests in `hosts/lib/tests/`, the co-change check's tests in
+  `scripts/validate/tests/`, and the role `CLAUDE.md`'s note on the sum pin.
 - **H6.4a:**
     - `ansible/tests/setup/test_k3s_unit_logging.py` retargets the component's logging
       lines, logrotate file and `tmpfiles.d` entry, and keeps the agent case;
@@ -1593,6 +1745,11 @@ which journald does not store on these hosts, so it reads zero on every run.
       for the deploy lock file;
     - daniel-box's SOPS file and its creation rule;
     - a no-downgrade check, a window-derivation test and a pin-routing test;
+    - one NetworkPolicy and two render tests, for default-deny ingress and image digests;
+    - one sum pin, a co-change check, a `binary` gate mode, and one verify Job per selected
+      node;
+    - a rehearsal mode in the etcd drill's orchestrator, run before H6.1c and before each
+      minor bump;
     - one SOPS variable, `k3s_readonly_token`;
     - one ADR.
 - **Removed:**
@@ -1690,6 +1847,33 @@ which journald does not store on these hosts, so it reads zero on every run.
     tag only, with a test. Resolution: until that lands, H6.1b and its revert carry
     D1.2's stop rule and refusal exit. If it lands first, H6.1b's recorded narrow output
     lists only `system-upgrade`, and the stop rule then covers that one tag.
+12. **`rancher/k3s-upgrade` by digest.** SUC builds the upgrade container's reference from
+    `upgrade.image` and the Plan's version, so the Plans name the image by tag. This plan
+    cannot confirm whether SUC v0.20.2 accepts a digest there. Recommendation: before
+    H6.3c, read SUC's job and plan source at the pinned version. If it accepts a digest,
+    pin by digest. If not, mirror `rancher/k3s-upgrade` at each pinned version into the
+    in-cluster registry, check the mirrored digest against the one the bump PR records,
+    and point `upgrade.image` at the mirror. H6.3e's sum check stays in both cases.
+    Resolution: the H6.3c PR body quotes the source read and names the choice.
+13. **A probe row for `system-upgrade`.** netpol-baseline's probe fails every deploy on a
+    target with no ready endpoint, so a Plan Job's transient pod can never be one. The
+    controller is the only standing pod. Recommendation: if the vendored manifest declares
+    a container port, add a `refused` row for it with `policy: default-deny-ingress`, and
+    teach the probe its namespace. If it declares none, nothing in the namespace accepts a
+    connection, and the render test is the whole proof. Resolution: H6.1b quotes the
+    ports and takes the matching branch.
+14. **The verify Kustomization is a D5 feature.** H6.3e's gate runs in
+    `system-upgrade-verify`, and C3 makes `-verify` available from D5.1a1. contracts.md's
+    H6 row names D2, H1.1a to H1.8, H4 and M1. Recommendation: add D5.1a1 as an edge of
+    the verify Jobs only, not of H6 as a whole. H6.3e's pin, co-change check and mode land
+    without it, and until the Jobs exist H6.6 compares the sums by hand. Resolved in the
+    pillar review fold: the index's H6 row carries "H6.3e's verify Jobs also D5.1a1".
+15. **A `ghcr.io` mirror in `registries.yaml`.** D5 Open question 2 recommends keeping the
+    in-cluster registry as a pull-through mirror for GHCR. Images then still pull while the
+    WAN is down, and the break-glass promotion has a registry to push to. If the operator
+    accepts it, the k3s `registries.yaml` that H6's config drop-ins carry gains a
+    `mirrors."ghcr.io"` entry pointing at that registry. Resolution: the PR that carries the
+    entry lands after D5 Open question 2 is ruled, and before nut's Wave C PR.
 
 ## Review log
 
@@ -2159,3 +2343,25 @@ How each was handled, with the evidence measured at `70591c307`:
 - Cross-slice note from H1: no change. H6 edits `server.yml` in place (its install guard, its
   file tasks and its args clause) but does not move, rename or replace it, and adds no cluster
   writer to it, so H1.1h's guard placement and its test stay valid.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **F-11.** *Baseline* says production is the only standing cluster and names the drill
+  guest. *Design* gains *Rehearsal in a drill guest*. PR H6.1b2 adds the rehearsal mode,
+  and H6.1c gates on its run. H6.6 and the rewritten runbook require it for every minor
+  bump. The guest is C8's third substitute, as H7 *Open questions* 11 rules for its own
+  guest, so C8 needs no change. *Risks*, *Verification*, *Tests and docs*, the file tree
+  and *Complexity delta* follow. H7.13 carries the mode when the role moves.
+- **F-12.** *SUC through Flux* gains the controller's digest pin and a default-deny ingress
+  NetworkPolicy, each with a render test and a red fixture, in H6.1b, which grows to about
+  280 lines. The probe row went to *Open questions* 13, because it depends on the
+  controller's ports. *Design* gains *The installed binary matches the release*, built by
+  PR H6.3e: a sum pin, a co-change check and a `binary` gate mode, with verify Jobs whose
+  D5.1a1 edge is *Open questions* 14. `upgrade.image` by digest went to *Open questions*
+  12, with a mirror as the recommendation.
+- **P8.** *Design* gains *Fixed premises*: k3s and SUC.
+- **RA-1.** The outcome paragraph and *Risks* say the hold carries H6's own value,
+  never C2's `failed=` form, so C2's revert rule cannot clear it. Only the operator clears
+  it.
