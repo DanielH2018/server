@@ -181,8 +181,8 @@ jobs:
       # promtool and amtool, at the tags of the observability role's Prometheus and Alertmanager
       # image pins, for the `validate-alert-rules` hook. The script fetches both release
       # tarballs, checks each against its release's sha256sums.txt, and unpacks the binary into
-      # .cache/alert-tools/, which root_ignored_files.py's LOCAL_ONLY covers. It is the tool
-      # path the hook itself calls, so CI and a worktree provision the same way.
+      # alert-tools/ under the git common dir, .git/alert-tools/ in this checkout. It is the
+      # tool path the hook itself calls, so CI and a worktree provision the same way.
       - name: Provision promtool and amtool
         run: scripts/validate/alert_tools.sh
 
