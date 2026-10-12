@@ -31,6 +31,9 @@ for arg in "$@"; do
 done
 
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin  # cron ships a bare PATH
+# Root cron, and the pinned interpreter the /64 masking below runs on is installed `become: false`
+# under {{ sys_user }}'s HOME, so root's uv needs pointing at it (crowdsec-prune-bouncers.sh.j2).
+export UV_PYTHON_INSTALL_DIR="/home/{{ sys_user }}/.local/share/uv/python"
 
 ALLOWLIST="home-ips"
 STATE_DIR=/var/lib/crowdsec-home-allowlist
@@ -242,10 +245,15 @@ if ip -6 addr show scope global 2>/dev/null | grep -q inet6; then
     V6_STATUS=down
     V6_MSG="host has global IPv6 but failed to resolve public IPv6 from ipify"
   # Validate AND mask to the /64 in one step; ip_network raises on junk, so a bad value fails
-  # loudly instead of becoming an allowlist entry.
-  elif ! CURRENT_PREFIX6=$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1] + "/64", strict=False))' "$CURRENT_IP6" 2>/dev/null); then
+  # loudly instead of becoming an allowlist entry. It runs on the pinned uv interpreter, not
+  # PATH's python3 (#4605). The message carries the last line of the combined output, so a
+  # Python `ValueError` reads differently from uv failing to find its interpreter. On success
+  # that last line is the prefix, after anything uv printed first.
+  elif ! V6_OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} python -c 'import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1] + "/64", strict=False))' "$CURRENT_IP6" 2>&1); then
     V6_STATUS=down
-    V6_MSG="invalid IPv6 from ipify: $CURRENT_IP6"
+    V6_MSG="cannot mask IPv6 from ipify ($CURRENT_IP6) to a /64: ${V6_OUT##*$'\n'}"
+  else
+    CURRENT_PREFIX6=${V6_OUT##*$'\n'}
   fi
 fi
 

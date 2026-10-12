@@ -4,8 +4,9 @@ Hosts run Ubuntu 24.04's Python 3.12 as the system interpreter while the repo is
 script run by `/usr/bin/python3` parses 3.13+ syntax in CI and SyntaxErrors on the host --
 silently, in the case of session-health.py, whose wrapper routes stderr to /dev/null and
 exits 0 by design. Host scripts therefore run a pinned 3.14 through uv. A new unit, cron
-entry or hook wrapper reaching for `/usr/bin/python3` puts one script under 3.12 with nothing
-left to notice, so this file guards that route rather than the syntax level.
+entry or hook wrapper reaching for `/usr/bin/python3`, or for a bare `python3` that cron's PATH
+resolves to the same file, puts one script under 3.12 with nothing left to notice, so this file
+guards that route rather than the syntax level.
 
 Container contexts are deliberately out of scope: a Dockerfile or compose healthcheck names the
 interpreter inside its own digest-pinned image, which has nothing to do with the host.
@@ -334,3 +335,59 @@ def test_a_script_run_through_uv_is_clean():
         "      /usr/local/bin/x.py\n"
     )
     assert _shebang_runs(folded, ["/usr/local/bin/x.py"]) == []
+
+
+# A bare `python3` command word: PATH picks it, and under cron's PATH that is the system 3.12.
+# The two needles above are absolute paths, so `python3 -c …` slipped past them (#4605).
+_BARE_PYTHON3 = re.compile(
+    _COMMAND_POSITION + r"(python3(?:\.\d+)?)(?![\w./:-])", re.MULTILINE
+)
+_HOME_ALLOWLIST = (
+    _REPO / "ansible/roles/k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2"
+)
+
+
+def _bare_python3_lines(text: str) -> list[int]:
+    """The line numbers in `text` that run `python3` by name, skipping comments and container
+    contexts the same way `_offending_lines` does."""
+    hits = []
+    for n, line in enumerate(text.splitlines(), 1):
+        if line.strip().startswith("#") or _CONTAINER_CONTEXT.search(line):
+            continue
+        if _BARE_PYTHON3.search(line):
+            hits.append(n)
+    return hits
+
+
+def test_no_host_invocation_runs_a_bare_python3():
+    candidates = list(_candidate_files())
+    # Non-vacuous: the template #4605 named must be in the census this scans.
+    assert _HOME_ALLOWLIST in candidates
+    offenders = sorted(
+        f"{path.relative_to(_REPO)}:{n}: {path.read_text().splitlines()[n - 1].strip()[:100]}"
+        for path in candidates
+        for n in _bare_python3_lines(path.read_text())
+    )
+    assert not offenders, (
+        "these run `python3` by name, which resolves to the host's system Python (Ubuntu "
+        "24.04's 3.12) under cron's PATH. Run it through `/usr/local/bin/uv run --no-project "
+        "--no-python-downloads --python {{ host_python_version }} python …`:\n  "
+        + "\n  ".join(offenders)
+    )
+
+
+def test_a_bare_python3_call_is_flagged():
+    line = (
+        "  elif ! CURRENT_PREFIX6=$(python3 -c 'import ipaddress,sys; "
+        'print(ipaddress.ip_network(sys.argv[1] + "/64", strict=False))\' "$CURRENT_IP6" '
+        "2>/dev/null); then\n"
+    )
+    assert _bare_python3_lines(line) == [1]
+
+
+def test_python3_through_uv_is_clean():
+    line = (
+        "  elif ! V6_OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads "
+        "--python 3.14.6 python -c 'import ipaddress' \"$CURRENT_IP6\" 2>&1); then\n"
+    )
+    assert _bare_python3_lines(line) == []
