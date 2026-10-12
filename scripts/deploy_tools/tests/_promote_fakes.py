@@ -133,12 +133,14 @@ class FakeRun:
         hold: DEPLOY_HOLD's value, or None for a missing variable.
         hold_fails: make `gh` fail with an error other than "not found".
         cosign_fails: make every `cosign verify` exit 1.
+        cosign_fails_for: the digests whose `cosign verify` exits 1.
         verified: each digest cosign was asked to verify.
     """
 
     hold: str | None = "none"
     hold_fails: bool = False
     cosign_fails: bool = False
+    cosign_fails_for: set[str] = field(default_factory=set)
     verified: list[str] = field(default_factory=list)
 
     def __call__(self, argv, **_kwargs):
@@ -153,8 +155,9 @@ class FakeRun:
                 )
             return subprocess.CompletedProcess(argv, 0, self.hold + "\n", "")
         if argv[:2] == ["cosign", "verify"]:
-            self.verified.append(argv[-1].rsplit("@", 1)[1])
-            if self.cosign_fails:
+            digest = argv[-1].rsplit("@", 1)[1]
+            self.verified.append(digest)
+            if self.cosign_fails or digest in self.cosign_fails_for:
                 return subprocess.CompletedProcess(argv, 1, "", "no signatures found")
             return subprocess.CompletedProcess(argv, 0, "", "")
         raise AssertionError(f"unexpected subprocess {argv}")

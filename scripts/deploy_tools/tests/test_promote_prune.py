@@ -174,8 +174,17 @@ def test_every_version_is_kept_when_the_listing_fails():
 
 
 def test_a_signature_is_deleted_after_the_version_it_signs():
+    """The bundle and index are older and listed first, so only the partition puts them last."""
+    signatures = [
+        version("ancestor-bundle", age_days=31),
+        version("ancestor-index", index_tag("ancestor"), age_days=31),
+    ]
     facts = artifact_retention.PruneFacts(
-        versions=[version("prod", "prod"), *BASE],
+        versions=[
+            version("prod", "prod"),
+            *signatures,
+            version("ancestor", f"sha-{ANCESTOR}"),
+        ],
         prod=PROD_FACT,
         last_good=None,
         ancestry={ANCESTOR: True},
@@ -183,7 +192,11 @@ def test_a_signature_is_deleted_after_the_version_it_signs():
         now=NOW,
     )
     order = [v.digest for v, _ in artifact_retention.select_prunable(facts).delete]
-    assert order[0] == digest_of("ancestor")
+    assert order == [
+        digest_of("ancestor"),
+        digest_of("ancestor-bundle"),
+        digest_of("ancestor-index"),
+    ]
 
 
 # -- the CLI ---------------------------------------------------------------------------------
@@ -251,6 +264,34 @@ def test_a_prod_that_no_longer_verifies_is_flagged(world, capsys):
     code, _, err = _prune(world, capsys)
     assert code == 1
     assert "prod does not verify" in err
+
+
+def _set_last_good(world: World) -> str:
+    """Tag c1, a strict ancestor of prod's commit, `last-good` as well, and return its digest."""
+    c1 = world.commits[1]
+    world.transport.tags["last-good"] = digest_of(c1)
+    world.transport.versions.append(
+        package_version(5, digest_of(c1), [f"sha-{c1}", "last-good"], _stamp(30))
+    )
+    return digest_of(c1)
+
+
+def test_prune_keeps_and_verifies_last_good_is_clean(world, capsys):
+    last_good = _set_last_good(world)
+    code, lines, _ = _prune(world, capsys)
+    assert code == 0
+    assert 5 not in world.transport.deleted
+    assert world.run.verified == [digest_of(world.commits[2]), last_good]
+    assert lines[-1].endswith(" verified=prod,last-good")
+
+
+def test_a_last_good_that_no_longer_verifies_is_flagged(world, capsys):
+    last_good = _set_last_good(world)
+    world.run.cosign_fails_for.add(last_good)
+    code, lines, err = _prune(world, capsys)
+    assert code == 1
+    assert "last-good does not verify" in err
+    assert lines[-1].endswith(" verified=prod")
 
 
 def test_a_listing_that_fails_deletes_nothing_and_is_flagged(world, capsys):
