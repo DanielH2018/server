@@ -1,5 +1,7 @@
 """The file-level collision check: two batches citing one file are refused at launch."""
 
+import socket
+
 from fanout_lib.brief import Issue
 from fanout_lib.launch_gates import shared_files
 from fanout_lib.place import main
@@ -136,6 +138,18 @@ def test_launch_refuses_a_batch_holding_a_fanout_tooling_issue_before_any_ssh(
     err = capsys.readouterr().err
     assert "batch 1784-3959: #3959 cites the fan-out tooling (fanout_place.py)" in err
     assert not list(tmp_path.glob("*.json"))
+
+
+def test_launch_accepts_another_repos_issue_that_only_mentions_the_fanout_tooling(
+    tmp_path,
+):
+    """The clean half of the refusal above: a dotfiles batch cannot edit this repo (#4624)."""
+    here = socket.gethostname()
+    issue = Issue(838, "hook", "like the counter in `fanout-stop.py`", ("claude",))
+    tools, _ = fake_tools(answers={here: ok(HEADROOM)}, issues=[issue])
+    argv = ["launch", "--repo", "DanielH2018/dotfiles", "--batch", "838"]
+    assert main([*argv, "--manifest-root", str(tmp_path)], tools) == 0
+    assert list(tmp_path.glob("*.json"))
 
 
 def test_the_triage_step_names_the_file_level_collision_check():

@@ -205,7 +205,7 @@ def cmd_launch(args, tools: Tools) -> int:
     fetched = _fetch_issues(tools, batches, target.repo)
     if fetched is None:
         return FANOUT_PLACE_FAILED
-    if refuse_solo_only(batches, fetched):
+    if refuse_solo_only(batches, fetched, target.repo):
         return FANOUT_PLACE_FAILED
     tracked = tracked_files() if target.is_server else ()
     if refuse_shared_files(batches, fetched, args.allow_shared_file, tracked):

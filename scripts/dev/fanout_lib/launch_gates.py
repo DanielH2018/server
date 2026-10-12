@@ -208,20 +208,21 @@ def refuse_shared_files(
 
 
 def refuse_solo_only(
-    batches: Mapping[str, Sequence[int]], issues: Mapping[int, Issue]
+    batches: Mapping[str, Sequence[int]], issues: Mapping[int, Issue], repo: str
 ) -> bool:
     """Whether `launch` must refuse because a batch holds an issue citing the fan-out tooling.
 
     `next` marks such an issue `[solo-only]` (#3959). A batch that edits the pipeline runs
     under its own edited copy of the reviewer, the red gate and the Stop hook, which is why
     the held-settings machinery exists. Refused before the first ssh, like the shared-file
-    check, and a solo session claims and works the issue instead.
+    check, and a solo session claims and works the issue instead. `repo` is the register the
+    batches come from; another repo's issue is never solo-only (#4624).
     """
     refused = False
     for batch, numbers in batches.items():
         for number in numbers:
             issue = issues.get(number)
-            cited = fanout_tooling_paths(issue.body) if issue else []
+            cited = fanout_tooling_paths(issue.body, repo) if issue else []
             if not cited:
                 continue
             refused = True

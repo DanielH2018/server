@@ -247,6 +247,16 @@ def test_next_json_offers_a_fanout_tooling_issue_marked_solo_only(capsys):
     assert {r["number"]: r["solo_only"] for r in rows} == {1150: True, 1151: False}
 
 
+def test_next_json_does_not_mark_another_repos_issue_solo_only(capsys):
+    """A dotfiles batch cannot edit this repo's pipeline, so the gate's reason is absent (#4624)."""
+    tooling = make_issue(829)
+    tooling["body"] = "The hint must name `scripts/dev/fanout.py place launch`."
+    tools, _ = build_tools(Fakes(issues=[tooling], worktree_facts=facts()))
+    assert main(["next", "--json", "--repo", "DanielH2018/dotfiles"], tools) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert {r["number"]: r["solo_only"] for r in rows} == {829: False}
+
+
 def test_next_text_render_marks_a_solo_only_issue(capsys):
     tooling = make_issue(1150, title="tooling")
     tooling["body"] = "scripts/dev/fanout_lib/review/red_gate.py drops the commit"
