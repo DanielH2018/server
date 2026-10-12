@@ -305,6 +305,13 @@ def test_the_budget_sits_under_both_harness_caps():
     assert _mod.INLINE_MAX_LINES < 200
 
 
+def test_the_budget_is_the_numbers_this_repo_was_measured_against():
+    """Moving the budget changes what every session reads, so it fails until these move too."""
+    assert (_mod.INLINE_MAX_CHARS, _mod.INLINE_MAX_LINES) == (7500, 190)
+    assert _mod.INLINE_MAX_CHARS - len(_mod._PREAMBLE) == 7272
+    assert _mod.INLINE_MAX_LINES - _mod._PREAMBLE.count("\n") == 188
+
+
 def test_a_doc_under_the_budget_is_inlined(repo):
     context, _ = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
     assert "Deploy it with care." in context
