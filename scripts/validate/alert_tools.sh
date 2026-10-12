@@ -14,12 +14,17 @@
 # is a half-finished unpack and is fetched again. The stamp is written only after a clean
 # unpack, as `scripts/validate/vale.sh` does for its style package.
 #
-# THE LOCK IS ON .cache/alert-tools/, NOT ON A VERSION DIRECTORY. The critical section removes
-# the version directory, so a lock held on it would leave every waiter holding a lock on a
-# deleted inode. The parent is opened read-only on fd 9, so no lock file is created.
+# THE CACHE IS IN THE GIT COMMON DIR, SO EVERY WORKTREE OF A CLONE SHARES IT. The tools live in
+# `$(git rev-parse --git-common-dir)/alert-tools/`, which is `.git/alert-tools/` of the main
+# checkout. A cache inside each checkout made every fresh worktree download about 150 MB on its
+# first alert-plane commit, 6m36s on daniel-box on 2026-10-12, and fail that commit offline
+# (#4705). Each user on a host has its own clone, so one uid owns the cache. Outside a git
+# checkout the script fails rather than fall back to a per-checkout cache.
 #
-# .cache/ is untracked and ignored by `.gitignore`'s root `/*` rule, and
-# `scripts/validate/root_ignored_files.py` lists it in LOCAL_ONLY so its hook stays quiet.
+# THE LOCK IS ON THE alert-tools/ DIRECTORY, NOT ON A VERSION DIRECTORY. The critical section
+# removes the version directory, so a lock held on it would leave every waiter holding a lock
+# on a deleted inode. The parent is opened read-only on fd 9, so no lock file is created. The
+# lock and the stamp together make concurrent provisions from several worktrees safe.
 #
 # With no arguments the script provisions both tools and exits 0. That is how CI provisions
 # before the hooks run. With `promtool ...` or `amtool ...` it provisions, then runs that tool
@@ -37,7 +42,10 @@ fi
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 defaults="$repo/ansible/roles/k8s/observability/defaults/main.yml"
-cache="$repo/.cache/alert-tools"
+# --path-format=absolute because a main checkout's common dir is otherwise the relative `.git`.
+# Under a git hook GIT_DIR overrides -C, and it names a directory of this same clone.
+common_dir="$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)"
+cache="$common_dir/alert-tools"
 # The fetch directory of the provision in progress. The trap removes it on any exit, so a
 # failed curl or a refused digest leaves nothing behind under the cache.
 tmp=""

@@ -479,7 +479,9 @@ check-config` on the Alertmanager config.
 
 `scripts/validate/alert_tools.sh` provisions both tools at the tags of the role's
 `observability_k8s_prometheus_image` and `observability_k8s_alertmanager_image` pins, into
-`.cache/alert-tools/`. The first run in a worktree downloads about 150 MB. To run a tool by
+`alert-tools/` under the git common dir (`git rev-parse --git-common-dir`). Every worktree of
+a clone shares that cache. The first run in a clone downloads about 150 MB, and a later
+worktree of the same clone downloads nothing. To run a tool by
 hand, pass it through the script: `scripts/validate/alert_tools.sh promtool test rules
 <file>`. CI's `hooks` job provisions the tools, then runs `alert_rules.py --prove-red`, which
 shows each tool rejecting its bad fixture under `scripts/validate/tests/fixtures/alert_rules/`.

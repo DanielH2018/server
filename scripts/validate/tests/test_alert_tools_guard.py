@@ -5,15 +5,16 @@ fake serves fixture tarballs and sums files from a temporary directory, keyed by
 and file name in the URL, and logs every fetch. That log is what tells "reused the cache"
 apart from "fetched it again".
 
-Each case runs the real script from a throwaway checkout whose observability defaults pin
-both images, so nothing here writes the real `.cache/`.
+Each case runs the real script from a throwaway git repository whose observability defaults
+pin both images. The script puts its cache under the git common dir, so every run gets
+`scrubbed_env()`: an inherited `GIT_DIR` from a commit hook would otherwise point it at the
+real clone's `.git/alert-tools/`.
 
 Run: uv run pytest scripts/validate/tests/test_alert_tools_guard.py
 """
 
 import hashlib
 import io
-import os
 import platform
 import shutil
 import tarfile
@@ -21,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from lib.git_testing import commit, git, init_repo, scrubbed_env
 from lib.proc_testing import fake_bin, run
 from lib.repo_paths import REPO
 
@@ -64,12 +66,19 @@ def _tarball(project: str, version: str, binary: str) -> bytes:
 
 @pytest.fixture
 def checkout(tmp_path):
-    """A throwaway repo holding the real script, pinned defaults, and served releases."""
-    (tmp_path / "scripts" / "validate").mkdir(parents=True)
-    shutil.copy2(SCRIPT, tmp_path / "scripts" / "validate" / "alert_tools.sh")
-    defaults = tmp_path / "ansible" / "roles" / "k8s" / "observability" / "defaults"
-    defaults.mkdir(parents=True)
-    (defaults / "main.yml").write_text(DEFAULTS)
+    """A throwaway git repo holding the real script and pinned defaults, with releases served.
+
+    The repository is `tmp_path / "main"`. The served releases, the fake `curl` and its log sit
+    beside it in `tmp_path`, outside every worktree.
+    """
+    repo = init_repo(tmp_path / "main")
+    (repo / "scripts" / "validate").mkdir(parents=True)
+    shutil.copy2(SCRIPT, repo / "scripts" / "validate" / "alert_tools.sh")
+    commit(
+        repo,
+        "pin the images",
+        **{"ansible/roles/k8s/observability/defaults/main.yml": DEFAULTS},
+    )
     for project, (version, binary) in VERSIONS.items():
         served = tmp_path / "releases" / project
         served.mkdir(parents=True)
@@ -80,32 +89,32 @@ def checkout(tmp_path):
             f"{hashlib.sha256(data).hexdigest()}  {name}\n"
         )
     fake_bin(tmp_path / "bin", curl=FAKE_CURL)
-    return tmp_path
+    return repo
 
 
 def _run(repo: Path, *args: str):
-    env = dict(
-        os.environ, CURL_LOG=str(repo / "curl.log"), RELEASES=str(repo / "releases")
+    env = scrubbed_env(
+        CURL_LOG=str(repo.parent / "curl.log"), RELEASES=str(repo.parent / "releases")
     )
     return run(
         [str(repo / "scripts" / "validate" / "alert_tools.sh"), *args],
         cwd=repo,
         env=env,
-        stub_bin=repo / "bin",
+        stub_bin=repo.parent / "bin",
     )
 
 
 def _fetches(repo: Path) -> list[str]:
-    log = repo / "curl.log"
+    log = repo.parent / "curl.log"
     return log.read_text().splitlines() if log.exists() else []
 
 
 def _tool_dir(repo: Path, project: str) -> Path:
-    return repo / ".cache" / "alert-tools" / f"{project}-{VERSIONS[project][0]}"
+    return repo / ".git" / "alert-tools" / f"{project}-{VERSIONS[project][0]}"
 
 
 def test_a_tarball_whose_digest_is_not_in_the_sums_file_is_flagged(checkout):
-    sums = checkout / "releases" / "prometheus" / "sha256sums.txt"
+    sums = checkout.parent / "releases" / "prometheus" / "sha256sums.txt"
     sums.write_text(f"{'f' * 64}  prometheus-3.15.0.linux-{ARCH}.tar.gz\n")
 
     result = _run(checkout)
@@ -136,10 +145,24 @@ def test_a_version_directory_with_files_but_no_stamp_is_flagged_and_fetched_agai
 
 def test_a_complete_stamped_cache_is_reused_with_no_fetch_is_clean(checkout):
     assert _run(checkout).returncode == 0
-    (checkout / "curl.log").unlink()
+    (checkout.parent / "curl.log").unlink()
 
     result = _run(checkout, "amtool", "check-config", "x.yml")
 
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "amtool check-config x.yml"
     assert _fetches(checkout) == []
+
+
+def test_a_second_worktree_of_the_clone_reuses_the_first_ones_cache_is_clean(checkout):
+    assert _run(checkout).returncode == 0
+    (checkout.parent / "curl.log").unlink()
+    second = checkout.parent / "second"
+    git(checkout, "worktree", "add", "-q", str(second))
+
+    result = _run(second, "promtool", "--version")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "promtool --version"
+    assert _fetches(second) == []
+    assert not (second / ".cache").exists()
