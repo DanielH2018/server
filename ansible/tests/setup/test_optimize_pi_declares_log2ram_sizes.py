@@ -157,7 +157,7 @@ def test_the_journals_sd_copy_leaves_half_the_tmpfs_for_the_other_logs():
     "content",
     [
         "SystemMaxUse=32M\nSystemMaxFileSize=8M\n",  # the drop-in before #4583
-        "SystemMaxUse=32M\nSystemMaxFileSize=8M\nSystemMaxFiles=100\n",  # journald's default
+        "SystemMaxUse=32M\nSystemMaxFileSize=2M\nSystemMaxFiles=100\n",  # journald's default
     ],
 )
 def test_the_journal_bound_reads_red_without_a_file_cap(content):

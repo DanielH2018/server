@@ -129,9 +129,11 @@ the line once passes unchanged.
 The caps themselves, set when the tmpfs was 81% full on 2026-06-11:
 
 - A Pi journald drop-in, `60-homelab-pi.conf` with `SystemMaxUse=32M`, overrides
-  initial_setup's server-sized 1G cap. Its `SystemMaxFiles=8` bounds the journal's SD copy
-  at 8 files of 8 MiB, half the tmpfs, because `SystemMaxUse` cannot see the zeros written
-  to the card (#4583, above).
+  initial_setup's server-sized 1G cap. Its `SystemMaxFiles=32` and `SystemMaxFileSize=2M`
+  bound the journal's SD copy at 64 MiB, half the tmpfs, because `SystemMaxUse` cannot see the
+  zeros written to the card (#4583, above). The files are small rather than few: a day's system
+  journal held 786 entries, so 2 MiB holds a day, and 30 archives keep about 15 days of history.
+  That outlasts the weekly AIDE and rkhunter reports, which log to the journal.
 - `ACCT_LOGGING="3"` cuts pacct retention from 30 daily generations (savelog via
   `/etc/cron.daily/acct`, about 28 MB/day of healthcheck exec churn) to 3.
 - auditd is capped to a 12 MB ceiling.
