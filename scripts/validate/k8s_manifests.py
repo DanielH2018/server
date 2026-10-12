@@ -392,8 +392,9 @@ def main(argv: Sequence[str] = ()) -> int:
     # Printed rather than silent: an unschema'd kind is unvalidated, and the only honest way to
     # report coverage is to name what was not covered. A CRD count that jumps means a new
     # custom resource arrived with nothing checking its shape. This should read 0 — a CRD kind
-    # reaching here means no vendored schema matched it, which
-    # test_every_rendered_kind_has_a_vendored_schema fails on.
+    # reaching here means no vendored schema matched it, which the
+    # `rendered-kinds-have-vendored-schemas` row of ansible/tests/k8s/test_rendered_properties.py
+    # fails on.
     if skipped_kinds:
         total = sum(skipped_kinds.values())
         detail = ", ".join(f"{k} x{v}" for k, v in sorted(skipped_kinds.items()))

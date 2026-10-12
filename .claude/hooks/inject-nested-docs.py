@@ -71,6 +71,8 @@ from _hook_common import (
     read_payload,
     session_state_path,
 )
+from _inline_budget import header as _header
+from _inline_budget import inline_margins, rule_globs
 
 # Under both harness caps with headroom for the wrapper text: local persist at 10,000 chars,
 # remote truncation at 8,000 chars / 200 lines. Pinned by `test_inject_nested_docs.py`.
@@ -208,37 +210,6 @@ def _is_edit_rule(doc):
 
 
 # ── which docs the harness would have loaded for them ────────────────────────────────
-
-
-def rule_globs(rule_text):
-    """The `paths:` globs in a rule file's YAML frontmatter, parsed without a YAML library.
-
-    The block-list form is what this repo's three rule files use; the flow form is accepted
-    so a fourth written that way still matches.
-    """
-    if not rule_text.startswith("---"):
-        return []
-    end = rule_text.find("\n---", 3)
-    frontmatter = rule_text[3:end] if end != -1 else rule_text[3:]
-    globs, in_paths = [], False
-    for line in frontmatter.splitlines():
-        flow = re.match(r"^paths:\s*\[(.*)\]\s*$", line)
-        if flow:
-            globs.extend(
-                g.strip().strip(_QUOTES) for g in flow.group(1).split(",") if g.strip()
-            )
-            continue
-        if re.match(r"^paths:\s*$", line):
-            in_paths = True
-            continue
-        if in_paths:
-            item = re.match(r"^\s+-\s*(.+?)\s*$", line)
-            if item:
-                globs.append(item.group(1).strip(_QUOTES))
-                continue
-            if line.strip():
-                in_paths = False
-    return globs
 
 
 def docs_for(root, rel):
@@ -420,19 +391,18 @@ def _read(root, doc):
         return fh.read()
 
 
-def _header(doc, trigger):
-    return f"===== {doc} (applies to `{trigger}`) ====="
-
-
 def _fits_inline(text, header):
     """True when `render`'s whole-doc block fits the payload after the preamble.
 
     A doc between that and `INLINE_MAX_CHARS` fits no command and is deferred forever.
     """
-    block = f"{header}\n{text.rstrip()}\n"
-    return len(block) <= INLINE_MAX_CHARS - len(_PREAMBLE) and block.count(
-        "\n"
-    ) <= INLINE_MAX_LINES - _PREAMBLE.count("\n")
+    chars_left, lines_left = inline_margins(
+        text,
+        header,
+        INLINE_MAX_CHARS - len(_PREAMBLE),
+        INLINE_MAX_LINES - _PREAMBLE.count("\n"),
+    )
+    return chars_left >= 0 and lines_left >= 0
 
 
 def head_floor(root, doc, trigger):
