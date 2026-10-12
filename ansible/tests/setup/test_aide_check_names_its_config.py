@@ -33,7 +33,7 @@ def _aide_cron_job() -> str:
 
 
 def test_the_weekly_cron_runs_the_check_script():
-    assert _aide_cron_job() == "/usr/local/bin/aide-check.sh", (
+    assert _aide_cron_job().startswith("/usr/local/bin/aide-check.sh "), (
         "the AIDE cron must run aide-check.sh, which keeps aide's exit code and pushes it"
     )
 

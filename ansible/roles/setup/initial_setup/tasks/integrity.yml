@@ -248,7 +248,9 @@
     minute: "0"
     hour: "3"
     weekday: "1"
-    job: "/usr/local/bin/aide-check.sh"
+    # The script logs its own report and verdict; this routes anything else it prints, such as
+    # a bash error, to the journal rather than to root's unread mail spool.
+    job: "/usr/local/bin/aide-check.sh 2>&1 | /usr/bin/logger -t aide-check"
     user: root
   become: true
 

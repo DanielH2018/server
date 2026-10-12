@@ -294,11 +294,21 @@ stringData:
    lands when the scan ends. The deadline counts from the previous push, so the slack has to
    cover one run taking longer than the last; 6 h is unmeasured, since no run had completed when
    these tiles were added (every earlier run exited on the missing --config, #4591). Move this
-   and the cron together. No `email`: a broken integrity check costs coverage, not a service. #}
-{% for host, token in [('daniel-box', aide_daniel_box_push_token | default('')), ('daniel-server', aide_daniel_server_push_token | default('')), ('daniel-pi', aide_daniel_pi_push_token | default(''))] if token %}
-  aide-{{ host }}.json: |
-    {"type": "push", "name": "AIDE Integrity ({{ host }})", "description": "The weekly Monday 03:00 aide-check.sh cron on {{ host }} runs aide --check against the host baseline and pushes when the scan ends. DOWN means AIDE exited with an error and checked nothing (the message carries its first error line, usually a config or database fault), or no run has reported for a week and 6 h. UP means the check completed; its message counts the files that differ from the baseline, which is routine after package upgrades. Run journalctl -t aide-check and journalctl -t aide on {{ host }}.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% endfor %}
+   and the cron together. No `email`: a broken integrity check costs coverage, not a service.
+   Three literal blocks rather than a loop: `probe.py kuma-drift` reads tile names out of this
+   template's raw text. #}
+{% if aide_daniel_box_push_token | default('') %}
+  aide-daniel-box.json: |
+    {"type": "push", "name": "AIDE Integrity (daniel-box)", "description": "The weekly Monday 03:00 aide-check.sh cron on daniel-box runs aide --check against the host baseline and pushes when the scan ends. DOWN means AIDE exited with an error and checked nothing (the message carries its first error line, usually a config or database fault), or no run has reported for a week and 6 h. UP means the check completed; its message counts the files that differ from the baseline, which is routine after package upgrades. Run journalctl -t aide-check and journalctl -t aide on daniel-box.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ aide_daniel_box_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
+{% if aide_daniel_server_push_token | default('') %}
+  aide-daniel-server.json: |
+    {"type": "push", "name": "AIDE Integrity (daniel-server)", "description": "The weekly Monday 03:00 aide-check.sh cron on daniel-server runs aide --check against the host baseline and pushes when the scan ends. DOWN means AIDE exited with an error and checked nothing (the message carries its first error line, usually a config or database fault), or no run has reported for a week and 6 h. UP means the check completed; its message counts the files that differ from the baseline, which is routine after package upgrades. Run journalctl -t aide-check and journalctl -t aide on daniel-server.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ aide_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
+{% if aide_daniel_pi_push_token | default('') %}
+  aide-daniel-pi.json: |
+    {"type": "push", "name": "AIDE Integrity (daniel-pi)", "description": "The weekly Monday 03:00 aide-check.sh cron on daniel-pi runs aide --check against the host baseline and pushes when the scan ends. DOWN means AIDE exited with an error and checked nothing (the message carries its first error line, usually a config or database fault), or no run has reported for a week and 6 h. UP means the check completed; its message counts the files that differ from the baseline, which is routine after package upgrades. Run journalctl -t aide-check and journalctl -t aide on daniel-pi.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ aide_daniel_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
   # DECIDED: this id stays `claude-otel-health` after the k8s/claude-otel role was renamed
   # `observability` on 2026-10-01 (#2911) — under ON_DELETE=delete a changed id deletes the
   # monitor and its history and creates a new one. The full reasoning is at the `DECIDED:`
