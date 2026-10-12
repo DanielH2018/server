@@ -24,8 +24,8 @@ full, and the journald-cap forensics.
   - `Homelab eval sweep` — `0 2 * * 0`
   - `Weekly rkhunter malware scan` — `0 2 * * 3`
   - `Weekly AIDE file integrity check` — `0 3 * * 1`
-- **Timers (3):** `kuma-check-secret-rotation-audit.timer` (`OnCalendar=*-*-* 08:00:00`),
-  `kuma-check-setup-drift.timer` (`OnCalendar=*-*-* 07:50:00`),
+- **Timers (3):** `kuma-check-secret-rotation-audit.timer` (`OnCalendar=*-*-* 08:30:00`),
+  `kuma-check-setup-drift.timer` (`OnCalendar=*-*-* 08:20:00`),
   `kuma-check-loki-read-route.timer` (`OnCalendar=*-*-* *:23:00`)
 <!-- /generated_from -->
 

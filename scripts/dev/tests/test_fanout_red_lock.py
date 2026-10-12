@@ -1,14 +1,14 @@
-"""The lock the green gate puts on a red test file (#4214, #4517).
+"""The lock the green gate puts on a red test file and on a conftest (#4214, #4517, #4542).
 
 Pure source-to-source checks, so no case here starts git or pytest; the gate-level cases are
-in `test_fanout_red_gate.py`.
+in `test_fanout_red_gate.py` and `test_fanout_green_gate_test_code.py`.
 
 Run: uv run pytest scripts/dev/tests/test_fanout_red_lock.py
 """
 
 import pytest
 
-from fanout_lib.review.red_tests import forbidden_change
+from fanout_lib.review.red_tests import forbidden_change, forbidden_conftest_change
 
 # The file before the red commits.
 BASE = '''"""Tests for mod."""
@@ -86,7 +86,15 @@ FLAGGED = {
     ),
     "a module-level statement": (
         "\n\npytestmark = pytest.mark.skip\n",
-        "only test functions, fixtures, helpers and imports",
+        "only test functions, fixtures, helpers, imports and constants",
+    ),
+    "a constant that shadows the code under test": (
+        "\n\ndouble = 4\n",
+        "rebinds `double`",
+    ),
+    "a builtin a constant may call, rebound to the fix's code": (
+        "\n\ndef frozenset(items):\n    return items\n",
+        "rebinds `frozenset`",
     ),
     "a decorator that is not a pytest mark or fixture": (
         "\n\n@some_wrapper\ndef test_wrapped():\n    pass\n",
@@ -149,10 +157,147 @@ def test_an_edited_helper_a_red_test_reaches_is_flagged(helper):
     assert forbidden_change(BASE, RED, edited) == f"changes or removes `def {helper}`"
 
 
-def test_an_assignment_already_in_the_file_stays_locked_though_unreached():
-    """A module-level statement runs at import, around every test; #4372 changed one."""
+def test_an_assignment_that_runs_code_stays_locked_though_unreached():
+    """A module-level statement that is not literal data runs at import, around every test."""
+    base, red = (s.replace("LIMIT = 10", "LIMIT = len('ten')") for s in (BASE, RED))
+    edited = red.replace("len('ten')", "len('eleven')")
+    assert forbidden_change(base, red, edited).startswith("changes or removes `assign")
+
+
+def test_an_unreached_constant_is_the_fixs_to_change():
     edited = RED.replace("LIMIT = 10", "LIMIT = 11")
-    assert forbidden_change(BASE, RED, edited).startswith("changes or removes `assign")
+    assert forbidden_change(BASE, RED, edited) == ""
+
+
+# A guard module whose red test reaches its constant only through an older helper, as #4372's
+# reached `REAPERS` through `scheduled_reapers`.
+GUARD_BASE = '''"""The guard."""
+
+NAMES = frozenset({"old.py"})
+WANT = ["new.py"]
+
+
+def flagged(text):
+    return [n for n in sorted(NAMES) if n in text]
+
+
+def test_old_is_flagged():
+    assert flagged("run old.py") == ["old.py"]
+'''
+GUARD_RED = GUARD_BASE + (
+    "\n\ndef test_new_is_flagged():\n    assert flagged('run new.py') == ['new.py']\n"
+)
+NEW_NAMES = 'NAMES = frozenset({"old.py", "new.py"})'
+
+
+def test_a_constant_only_an_older_helper_reads_is_the_fixs_to_change():
+    """#4372: the fix had to change the guard's constant, which the red test reaches."""
+    edited = GUARD_RED.replace('NAMES = frozenset({"old.py"})', NEW_NAMES)
+    assert forbidden_change(GUARD_BASE, GUARD_RED, edited) == ""
+
+
+def test_a_constant_a_red_test_names_itself_stays_locked():
+    red = (
+        GUARD_BASE + "\n\ndef test_want():\n    assert flagged('run new.py') == WANT\n"
+    )
+    edited = red.replace('WANT = ["new.py"]', "WANT = []")
+    assert forbidden_change(GUARD_BASE, red, edited) == (
+        "changes or removes `assign at line 4`"
+    )
+
+
+def test_a_constant_a_module_level_statement_reads_stays_locked():
+    """`sorted(...)` runs at import, around the red test, so what it reads is the red test's."""
+    base, red = (s + "\n\nORDERED = sorted(NAMES)\n" for s in (GUARD_BASE, GUARD_RED))
+    edited = red.replace('NAMES = frozenset({"old.py"})', NEW_NAMES)
+    assert (
+        forbidden_change(base, red, edited) == "changes or removes `assign at line 3`"
+    )
+
+
+def test_a_changed_constant_that_runs_code_is_flagged():
+    edited = GUARD_RED.replace(
+        'NAMES = frozenset({"old.py"})', "NAMES = frozenset(__import__('os').listdir())"
+    )
+    assert "is not allowed" in forbidden_change(GUARD_BASE, GUARD_RED, edited)
+
+
+# Statements a fix may append under a name nothing locked reads, and ones it may not, because
+# evaluating them runs code or because pytest reads the name they bind.
+LITERALS = [
+    "NEW = 1",
+    "NEW = ('a', -1, 2 * 3)",
+    "NEW = frozenset({'a', 'b'})",
+    "NEW = {'k': [1, 2], 'j': set()}",
+]
+NOT_LITERALS = [
+    "NEW: int = 1",
+    "NEW = LIMIT",
+    "NEW = pytest.mark",
+    "NEW = ('a',)[0]",
+    "NEW = sorted({'a'})",
+    "NEW = dict(a=1)",
+    "__all__ = ['x']",
+    "collect_ignore = ['x']",
+]
+
+
+@pytest.mark.parametrize("statement", LITERALS)
+def test_an_appended_literal_constant_is_clean(statement):
+    assert forbidden_change(BASE, RED, f"{RED}\n\n{statement}\n") == ""
+
+
+@pytest.mark.parametrize("statement", NOT_LITERALS)
+def test_an_appended_assignment_that_is_not_a_literal_is_flagged(statement):
+    assert "is not allowed" in forbidden_change(BASE, RED, f"{RED}\n\n{statement}\n")
+
+
+# #4543: pytest resolves `repo`'s request for `workdir` from the red test's module, so a
+# `workdir` fixture there serves every red node that requests `repo`.
+CONFTEST = """import pytest
+
+
+@pytest.fixture
+def workdir(scratch):
+    return scratch
+
+
+@pytest.fixture
+def repo(workdir):
+    return workdir
+
+
+@pytest.fixture(autouse=True)
+def _env(clock):
+    yield
+"""
+REPO_RED = BASE + "\n\ndef test_repo(repo):\n    assert repo\n"
+FIXTURE = "\n\n@pytest.fixture\ndef {name}():\n    return None\n"
+
+
+@pytest.mark.parametrize("name", ["workdir", "scratch", "clock"])
+def test_an_appended_fixture_a_conftest_fixture_requests_is_flagged(name):
+    """Directly, one fixture further down, and through an autouse fixture."""
+    head = REPO_RED + FIXTURE.format(name=name)
+    assert forbidden_change(BASE, REPO_RED, head) == ""
+    assert forbidden_change(BASE, REPO_RED, head, conftests=[CONFTEST]) == (
+        f"adds `def {name}`, which rebinds `{name}`"
+    )
+
+
+def test_an_appended_fixture_no_conftest_fixture_requests_is_clean():
+    head = REPO_RED + FIXTURE.format(name="other")
+    assert forbidden_change(BASE, REPO_RED, head, conftests=[CONFTEST]) == ""
+
+
+def test_an_older_fixture_that_serves_a_conftest_fixture_stays_locked():
+    base = BASE + "\n\n@pytest.fixture\ndef workdir():\n    return 'a'\n"
+    red = base + "\n\ndef test_repo(repo):\n    assert repo == 'a'\n"
+    edited = red.replace("return 'a'\n", "return 'b'\n", 1)
+    assert forbidden_change(base, red, edited) == ""
+    assert forbidden_change(base, red, edited, conftests=[CONFTEST]) == (
+        "changes or removes `def workdir`"
+    )
 
 
 def test_a_red_node_collected_from_an_unchanged_function_stays_locked():
@@ -183,4 +328,120 @@ def test_a_removed_red_test_is_flagged():
 def test_a_file_that_no_longer_parses_is_flagged():
     assert forbidden_change(BASE, RED, RED + "\ndef broken(:\n").startswith(
         "does not parse"
+    )
+
+
+# #4542: the shape of `scripts/conftest.py` before #4359 deleted its unused resolver.
+SHARED = '''"""Shared fixtures."""
+
+import json
+
+import pytest
+
+import side_effects
+from lib import kubectl
+
+IPS = {"prometheus": "10.0.0.1"}
+
+
+def _fake_lookup(name):
+    return IPS[name]
+
+
+@pytest.fixture
+def fake_lookup():
+    return _fake_lookup
+
+
+@pytest.fixture
+def ips():
+    return IPS
+
+
+@pytest.fixture
+def repo(workdir):
+    return json.dumps(str(workdir))
+
+
+@pytest.fixture
+def workdir(tmp_path):
+    return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def _fresh():
+    kubectl.forget()
+    yield
+
+
+def pytest_configure(config):
+    pass
+'''
+CENSUS = "def test_no_resolver(repo):\n    assert repo\n"
+
+
+def _without(src, *names):
+    """`src` with each top-level statement that binds one of `names` deleted."""
+    blocks = src.split("\n\n\n")
+    return "\n\n\n".join(b for b in blocks if not any(f" {n}(" in b for n in names))
+
+
+def _conftest_change(head):
+    return forbidden_conftest_change(SHARED, head, [CENSUS], [SHARED])
+
+
+def test_deleting_an_unrequested_fixture_and_what_only_it_used_is_clean():
+    """#4359's whole deletion: the fixture, its helper, then the map and its other fixture."""
+    head = _without(SHARED, "_fake_lookup", "fake_lookup", "ips").replace(
+        'IPS = {"prometheus": "10.0.0.1"}\n\n\n', ""
+    )
+    assert "IPS" not in head and "def repo" in head
+    assert _conftest_change(head) == ""
+    assert _conftest_change(_without(SHARED, "fake_lookup")) == ""
+
+
+@pytest.mark.parametrize(
+    ("deleted", "reason"),
+    [
+        (("repo",), "binds `repo`, which a red test"),
+        (("_fake_lookup",), "binds `_fake_lookup`, which a red test or the conftest"),
+        (("_fresh",), "is an autouse fixture"),
+        (("pytest_configure",), "is not a fixture, a plain helper"),
+    ],
+    ids=["requested", "still-named", "autouse", "hook"],
+)
+def test_deleting_what_a_red_test_or_the_conftest_still_reaches_is_flagged(
+    deleted, reason
+):
+    assert reason in _conftest_change(_without(SHARED, *deleted))
+
+
+def test_deleting_an_import_only_its_effect_could_need_is_flagged():
+    head = SHARED.replace("import side_effects\n", "")
+    assert "is an import no deleted statement used" in _conftest_change(head)
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        SHARED.replace('"10.0.0.1"', '"10.0.0.9"'),
+        SHARED + "\n\n@pytest.fixture\ndef extra():\n    return 1\n",
+    ],
+    ids=["changed", "added"],
+)
+def test_a_conftest_change_that_is_not_a_deletion_is_flagged(head):
+    assert _conftest_change(head).startswith("adds or changes ")
+
+
+def test_deleting_a_fixture_another_conftests_fixture_requests_is_flagged():
+    """`repo` in a nearer conftest requests `workdir` from this one for the red test."""
+    outer = _without(SHARED, "repo")
+    inner = (
+        "import pytest\n\n\n@pytest.fixture\ndef repo(workdir):\n    return workdir\n"
+    )
+    head = _without(outer, "workdir")
+    assert forbidden_conftest_change(outer, head, [CENSUS], [outer]) == ""
+    assert forbidden_conftest_change(outer, head, [CENSUS], [outer, inner]) == (
+        "deletes `def workdir`, which binds `workdir`, which a red test or the conftest "
+        "still uses"
     )
