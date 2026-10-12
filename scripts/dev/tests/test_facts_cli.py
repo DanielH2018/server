@@ -288,12 +288,12 @@ def _hook_log_env():
     return mod.INSTRUCTIONS_LOG_ENV
 
 
-def _load(log, path, session_id, memory_type):
+def _load(log, cwd, path, session_id, memory_type):
     """Log one InstructionsLoaded event through the real log-instructions.py hook."""
     payload = {
         "hook_event_name": "InstructionsLoaded",
         "session_id": session_id,
-        "cwd": str(path.parent),
+        "cwd": str(cwd),
         "file_path": str(path),
         "load_reason": "session_start",
         "memory_type": memory_type,
@@ -326,9 +326,11 @@ def test_report_prints_each_sessions_total_instruction_bytes(tmp_path, capsys):
     user.parent.mkdir()
     user.write_bytes(b"u" * 5000)
     log = tmp_path / "instructions.log"
-    _load(log, doc, "aaaaaaaa-1", "Project")
-    _load(log, user, "aaaaaaaa-1", "User")
-    _load(log, doc, "bbbbbbbb-2", "Project")
+    # The session runs in the repo, so the user file's row keeps its absolute path, as
+    # ~/.claude/CLAUDE.md's does: a total built only from repo docs misses it.
+    _load(log, repo, doc, "aaaaaaaa-1", "Project")
+    _load(log, repo, user, "aaaaaaaa-1", "User")
+    _load(log, repo, doc, "bbbbbbbb-2", "Project")
 
     assert main(["report", "--repo", str(repo), "--log", str(log)]) == 0
     out = capsys.readouterr().out
