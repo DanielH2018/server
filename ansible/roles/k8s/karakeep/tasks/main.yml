@@ -41,9 +41,7 @@
     # waited on that roll and the landing read `VERDICT: settled` mid-pull. `restart_on: []`
     # keeps the shared extra restart off it. chrome mounts no role-rendered config, reads no
     # Secret and runs no built image, so all three signals would only restart it on an
-    # unrelated karakeep edit and drop any crawl in flight. It stays LAST in this list:
-    # ansible/tests/deploy/_autodeploy_rollout.py reads the names with a regex that stops at
-    # the first line that is not `- name:`.
+    # unrelated karakeep edit and drop any crawl in flight.
     #
     # ACCEPTED COST: the restart is gated on the render changing, not on the SECRET changing, so
     # any karakeep manifest edit also rolls time-tagger, and this extra rollout is queued for

@@ -91,24 +91,38 @@ def _rollout_gate_offender(role: Path) -> bool:
     return any(not name or name not in gated for _, name in batch)
 
 
+_EXTRA_ROLLOUTS_BLOCK = re.compile(
+    r"^[ \t]*manifests_extra_rollouts:[ \t]*(?:#.*)?\n"
+    r"(?P<indent>[ \t]*)-[ \t]*name:.*\n?"
+    r"(?:(?P=indent)(?:-[ \t]*name:|[ \t]+\S).*\n?)*",
+    re.MULTILINE,
+)
+
+
 def _extra_rollouts(role: Path) -> set[str]:
     """Deployment names the role gates via `manifests_extra_rollouts`.
 
     Parsed with a regex rather than yaml.safe_load: tasks/main.yml is Jinja-templated, and a
     role is free to build the list from a variable. A name this cannot see reads as ungated,
     which fails the guard — the safe direction.
+
+    The first `- name:` fixes the list's indent. A line at that indent starting `- name:` is
+    the next entry, and a line indented deeper is a key of the entry above it (`restart_on:
+    []`, `kind: daemonset`), so an entry carrying a second key hides none listed after it
+    (#4578). A line at the list's indent or shallower that is not `- name:` ends the list,
+    which is where a sibling var such as `manifests_rollout_timeout:` sits. Its own list is
+    never credited.
     """
     tasks = role / "tasks/main.yml"
     if not tasks.is_file():
         return set()
-    block = re.search(
-        r"^\s*manifests_extra_rollouts:\s*$\n((?:\s*-\s*name:.*\n?)+)",
-        tasks.read_text(),
-        re.MULTILINE,
-    )
+    block = _EXTRA_ROLLOUTS_BLOCK.search(tasks.read_text())
     if not block:
         return set()
-    return set(re.findall(r"-\s*name:\s*(\S+)", block.group(1)))
+    item = re.escape(block.group("indent"))
+    return set(
+        re.findall(rf"^{item}-[ \t]*name:[ \t]*(\S+)", block.group(0), re.MULTILINE)
+    )
 
 
 def _primary_rollout_name(role: Path) -> str:
