@@ -45,15 +45,39 @@ Running it to silence a warning you haven't explained re-blesses whatever caused
 
 **What it does:** Takes a cryptographic snapshot of the filesystem (hashes, permissions, ownership, timestamps) and detects any additions, modifications, or deletions since that snapshot was taken.
 
-**Schedule:** Weekly, Monday at 3:00 AM. Output is sent to syslog tagged `aide`.
+**Schedule:** Weekly, Monday at 3:00 AM, on every host. The cron runs `/usr/local/bin/aide-check.sh`, which writes the report to syslog tagged `aide` and pushes a verdict to that host's **AIDE Integrity (&lt;host&gt;)** Kuma tile.
 
 Every `aide` command needs `--config=/etc/aide/aide.conf`. AIDE 0.18 has no default config path, so without it the command exits with `ERROR: missing configuration` and checks nothing.
+
+**What the tile means.** The script reads AIDE's exit code (#4594):
+
+| Exit | Tile | Message |
+|------|------|---------|
+| 0 | UP | no differences from the baseline |
+| 1-7 | UP | the added, removed and changed counts from the report's Summary |
+| anything else | DOWN | AIDE's first error line: the check did not complete |
+
+No push for a week and 6 hours also reads DOWN, which means the cron stopped running or the scan never finished.
+
+Differences read UP on purpose. Unattended-upgrades installs packages on every host every week, and AIDE reports every file a package touched, so a DOWN on differences would be red every Monday. An UP tile therefore means that AIDE completed a check, not that nothing changed. Read the counts in the tile's message, and read the list in the journal. The `DECIDED:` marker in `ansible/roles/setup/initial_setup/templates/aide-check.sh.j2` holds the evidence.
+
+The script logs at most 2000 report lines. A longer report ends with a `report truncated` line. To see the rest, run the check by hand. Its verdict goes to syslog tagged `aide-check` as `status=<up|down> <message>`.
+
+To prove the tile pages, force an error exit on one host and run the script by hand. Rename the database, run `sudo /usr/local/bin/aide-check.sh`, then put the database back. AIDE exits 18 at once, and the tile goes DOWN with `open (read-only) failed for file '/var/lib/aide/aide.db'` in its message:
+
+```bash
+sudo mv /var/lib/aide/aide.db /var/lib/aide/aide.db.held
+sudo /usr/local/bin/aide-check.sh
+sudo mv /var/lib/aide/aide.db.held /var/lib/aide/aide.db
+```
+
+The tile stays DOWN until the next run. To clear it, run `sudo /usr/local/bin/aide-check.sh` again. That run scans the whole filesystem, so on the Pi it takes over an hour.
 
 **Check for findings:**
 
 ```bash
 # From the weekly cron
-sudo grep '\baide\b' /var/log/syslog
+sudo journalctl -t aide -t aide-check --since -7d
 
 # Run a manual check
 sudo aide --config=/etc/aide/aide.conf --check
@@ -243,6 +267,7 @@ sudo unattended-upgrade --dry-run --debug
 | Sensitive file modified | `sudo ausearch -k identity` or `-k sshd` |
 | Rootkit / backdoor suspicion | `sudo rkhunter --check` |
 | Unexpected file change | `sudo aide --config=/etc/aide/aide.conf --check` |
+| AIDE tile DOWN | `sudo journalctl -t aide-check -t aide --since -7d` |
 | Unusual commands run as root | `sudo lastcomm` |
 | Unusual I/O or CPU activity | `sar -d` / `sar -u` |
 | Brute-force attempts / banned IPs | `sudo fail2ban-client status sshd` |
