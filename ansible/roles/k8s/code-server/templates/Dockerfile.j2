@@ -6,7 +6,7 @@
 # reproducible from a commit — linuxserver rebuilds a tag in place, so the tag alone named a
 # moving image (#2149). Renovate bumps both together. See Dockerfile.j2 in roles/k8s/n8n
 # for the full reasoning behind pinning a built image's base.
-FROM lscr.io/linuxserver/code-server:4.140.0-ls368@sha256:c84b35f6238af058e3543e2e9c0532c4d3d3902ef11effea3ed90e4ec293d46d
+FROM lscr.io/linuxserver/code-server:4.141.0-ls369@sha256:0d590a1a80a36bd2559222ad6e9f69559e962cca003f6f716b62487999d575f5
 
 # 1. Install system dependencies
 #    No TeX Live here. LaTeX moved to the texbrain workload on 2026-08-27, which compiles in
