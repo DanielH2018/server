@@ -1,4 +1,4 @@
-"""The green gate when a red test stands on test code: a conftest, its fixtures, a guard.
+"""The green gate when a red test stands on test code: a conftest, a fixture, a guard.
 
 Real git and real pytest on a scratch repo, as in `test_fanout_red_gate.py`, whose length
 cap these cases would cross. The pure lock rules are in `test_fanout_red_lock.py`.
@@ -9,6 +9,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_green_gate_test_code.py
 import pytest
 
 from _scratch_pytest import run
+from fanout_lib.review.hardened_runs import fixture_closures
 from fanout_lib.review.red_gate import green_gate, red_gate
 from lib.git_testing import commit, init_repo
 
@@ -67,6 +68,79 @@ def test_an_appended_fixture_passes_unless_a_conftest_fixture_requests_it(
     head = f"import pytest\n\n\n{RED_TEST}\n\n{appended}"
     commit(repo, "fix", **{"mod.py": FIXED, "tests/test_new.py": head})
     assert green_gate(run, repo, red, gate) == (STANDS_ON + reason if reason else "")
+
+
+# #4548: pytest's builtin `tmp_path` requests `tmp_path_factory` from the red test's module,
+# so an appended pass-through `tmp_path_factory` would serve the red node and pass.
+TMP_TEST = (
+    "def test_doubles_in_tmp(tmp_path):\n    from mod import double\n\n"
+    "    assert tmp_path.is_dir() and double(2) == 4\n"
+)
+PASS_THROUGH = (
+    "@pytest.fixture\ndef {name}(tmp_path_factory):\n    return tmp_path_factory\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("fixture", "reason"),
+    [
+        ("other", ""),
+        (
+            "tmp_path_factory",
+            "tests/test_new.py adds `def tmp_path_factory`, which rebinds "
+            "`tmp_path_factory`",
+        ),
+    ],
+    ids=["unrequested", "requested-by-a-builtin-fixture"],
+)
+def test_an_appended_fixture_passes_unless_a_builtin_fixture_requests_it(
+    tmp_path, fixture, reason
+):
+    repo, red, gate = _gated(tmp_path, {}, {"tests/test_new.py": TMP_TEST})
+    head = f"import pytest\n\n\n{TMP_TEST}\n\n{PASS_THROUGH.format(name=fixture)}"
+    commit(repo, "fix", **{"mod.py": FIXED, "tests/test_new.py": head})
+    assert green_gate(run, repo, red, gate) == (STANDS_ON + reason if reason else "")
+
+
+# `pytest --setup-plan -q` with pytest 9.1.1, measured on 2026-10-12: a node with fixtures, one
+# with none, a parametrize id holding a space, and a fixture's SETUP line with the same suffix.
+PLAN = """\
+SETUP    S tmp_path_factory
+        SETUP    F tmp_path (fixtures used: tmp_path_factory)
+        tests/test_x.py::test_a (fixtures used: request, tmp_path, tmp_path_factory)
+        TEARDOWN F tmp_path
+        tests/test_x.py::test_b
+        SETUP    F n['a b']
+        tests/test_x.py::test_c[a b] (fixtures used: n, request)
+        TEARDOWN F n['a b']
+TEARDOWN S tmp_path_factory
+no tests ran in 0.00s
+"""
+
+
+def test_the_setup_plan_gives_each_listed_node_its_fixtures():
+    a, b, c, unlisted = (
+        f"tests/test_x.py::{n}" for n in ("test_a", "test_b", "test_c[a b]", "test_d")
+    )
+    assert fixture_closures(PLAN, [a, b, c, unlisted]) == {
+        a: ["request", "tmp_path", "tmp_path_factory"],
+        b: [],
+        c: ["n", "request"],
+    }
+
+
+def test_the_red_gate_refuses_a_new_test_the_setup_plan_does_not_list(tmp_path):
+    hidden = (
+        "import pytest\n\n\ndef pytest_runtest_setup(item):\n"
+        "    if item.config.option.setupplan:\n        pytest.skip('hidden')\n"
+    )
+    repo = init_repo(tmp_path / "repo")
+    base = commit(repo, "base", **{"mod.py": CODE, **CONFIG, "conftest.py": hidden})
+    red = commit(repo, "red", **{"tests/test_new.py": TMP_TEST})
+    assert red_gate(run, repo, base, red).reason == (
+        "pytest --setup-plan exited 0 without listing the fixtures of: "
+        "tests/test_new.py::test_doubles_in_tmp"
+    )
 
 
 # #4359: the red test demanded that the conftest drop a fixture nothing requests.

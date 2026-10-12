@@ -1,4 +1,4 @@
-"""The lock the green gate puts on a red test file and on a conftest (#4214, #4517, #4542).
+"""The lock the green gate puts on a red test file and on a conftest (#4214, #4517, #4542, #4548).
 
 Pure source-to-source checks, so no case here starts git or pytest; the gate-level cases are
 in `test_fanout_red_gate.py` and `test_fanout_green_gate_test_code.py`.
@@ -8,7 +8,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_red_lock.py
 
 import pytest
 
-from fanout_lib.review.red_tests import forbidden_change, forbidden_conftest_change
+from fanout_lib.review.red_lock import forbidden_change, forbidden_conftest_change
 
 # The file before the red commits.
 BASE = '''"""Tests for mod."""
@@ -300,6 +300,34 @@ def test_an_older_fixture_that_serves_a_conftest_fixture_stays_locked():
     )
 
 
+# #4548: `test_two`'s fixture closure, as `pytest --setup-plan` lists it. The builtin
+# `tmp_path` requests `tmp_path_factory`, which pytest resolves from the red test's module.
+CLOSURE = ["request", "tmp_path", "tmp_path_factory"]
+
+
+def test_an_appended_fixture_a_builtin_fixture_requests_is_flagged():
+    head = RED + FIXTURE.format(name="tmp_path_factory")
+    assert forbidden_change(BASE, RED, head) == ""
+    assert forbidden_change(BASE, RED, head, closure=CLOSURE) == (
+        "adds `def tmp_path_factory`, which rebinds `tmp_path_factory`"
+    )
+
+
+def test_an_appended_fixture_outside_the_closure_is_clean():
+    head = RED + FIXTURE.format(name="other")
+    assert forbidden_change(BASE, RED, head, closure=CLOSURE) == ""
+
+
+def test_an_older_fixture_a_builtin_fixture_requests_stays_locked():
+    base = BASE + "\n\n@pytest.fixture\ndef tmp_path_factory():\n    return 'a'\n"
+    red = base + RED.removeprefix(BASE)
+    edited = red.replace("return 'a'\n", "return 'b'\n", 1)
+    assert forbidden_change(base, red, edited) == ""
+    assert forbidden_change(base, red, edited, closure=CLOSURE) == (
+        "changes or removes `def tmp_path_factory`"
+    )
+
+
 def test_a_red_node_collected_from_an_unchanged_function_stays_locked():
     """A red data file can add `test_zero[case]` without touching the function."""
     edited = RED.replace("double(0) == 0", "True")
@@ -444,4 +472,13 @@ def test_deleting_a_fixture_another_conftests_fixture_requests_is_flagged():
     assert forbidden_conftest_change(outer, head, [CENSUS], [outer, inner]) == (
         "deletes `def workdir`, which binds `workdir`, which a red test or the conftest "
         "still uses"
+    )
+
+
+def test_deleting_a_fixture_in_a_red_nodes_closure_is_flagged():
+    """A plugin fixture `test_no_resolver` reaches could request `ips` (#4548)."""
+    head = _without(SHARED, "ips")
+    assert _conftest_change(head) == ""
+    assert forbidden_conftest_change(SHARED, head, [CENSUS], [SHARED], ["ips"]) == (
+        "deletes `def ips`, which binds `ips`, which a red test or the conftest still uses"
     )
