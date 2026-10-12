@@ -103,8 +103,8 @@ spec:
         app: otel-collector
         netpol-baseline: enforced
     spec:
-      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: observability tiers`
-      # in this role's CLAUDE.md.
+      # Tier 4; `DECIDED: observability tiers` in this role's CLAUDE.md names the tier-1
+      # exceptions.
 {{ pod_shell('homelab-best-effort') }}
       containers:
         - name: otel-collector

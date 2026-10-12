@@ -70,6 +70,10 @@ _RECREATE = {
     ): "TSDB holds an exclusive lock on its data directory",
     ("observability", "loki"): "single-writer index on a filesystem store",
     ("observability", "tempo"): "single-writer trace store",
+    (
+        "observability",
+        "alertmanager",
+    ): "silences and notification log on a ReadWriteOnce claim; one replica, gossip off",
     ("loki-homelab", "loki-homelab"): "single-writer index on a filesystem store",
     (
         "scrutiny",

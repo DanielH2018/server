@@ -84,8 +84,8 @@ spec:
         app: kube-state-metrics
         netpol-baseline: enforced
     spec:
-      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: observability tiers`
-      # in this role's CLAUDE.md.
+      # Tier 4; `DECIDED: observability tiers` in this role's CLAUDE.md names the tier-1
+      # exceptions.
 {{ pod_shell('homelab-best-effort', service_account='kube-state-metrics', run_as_user=65534, run_as_group=65534, non_root=true) }}
       containers:
         - name: kube-state-metrics
