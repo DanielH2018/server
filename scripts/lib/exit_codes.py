@@ -458,7 +458,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
     "scripts/deploy_tools/await_ci.py": (
         _c(CI_GREEN, "CI_GREEN", "every required check on the SHA concluded green."),
         _c(CI_RED, "CI_RED", "a required check concluded red."),
-        _c(CI_DISARMED, "CI_DISARMED", "the CI gate is disarmed; no verdict formed."),
+        _c(CI_DISARMED, "CI_DISARMED", "the CI gate is disarmed and checks nothing."),
         _c(CI_UNPROVEN, "CI_UNPROVEN", "no CI verdict can ever arrive for the SHA."),
         _c(CI_PENDING, "CI_PENDING", "the budget elapsed with checks still running."),
     ),

@@ -282,3 +282,32 @@ def test_wait_on_a_dropped_push_ends_red_when_its_nearest_descendant_is_red():
     code, msg = _wait_on_dropped([], red)
     assert code == 1
     assert msg.startswith("next: CI RED") and "never ran CI for old" in msg
+
+
+def _run_less_tip(chain, suites=(), tip="tip"):
+    return await_ci.run_less_tip(
+        "old",
+        fetch=lambda _s: [],
+        fetch_suites=lambda _s: list(suites),
+        descendants=lambda _s: chain,
+        fetch_tip=lambda: tip,
+    )
+
+
+def test_run_less_tip_names_the_tip_when_no_commit_from_the_sha_has_ci():
+    assert _run_less_tip(["next", "tip"]) == "tip"
+    assert _run_less_tip([], tip="old") == "old"
+
+
+def test_run_less_tip_says_nothing_for_a_sha_not_on_master():
+    """The reject half: no descendants because `old` is off master, not because it is the tip."""
+    assert _run_less_tip([], tip="other") == ""
+
+
+def test_run_less_tip_says_nothing_while_a_descendant_suite_is_queued():
+    assert _run_less_tip(["next"], suites=[_actions_suite("queued")]) == ""
+
+
+def test_run_less_tip_says_nothing_past_the_descendant_window():
+    chain = [f"c{i}" for i in range(await_ci.DESCENDANT_LIMIT + 1)]
+    assert _run_less_tip(chain) == ""
