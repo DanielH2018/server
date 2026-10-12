@@ -23,10 +23,9 @@ not decoration: `publish_pr.py` in particular defines two groups of its own that
 to 3 with different meanings, and they are `PUBLISH_*` and `UNLANDED_*` here for that reason.
 
 `CONTRACTS` AT THE BOTTOM IS THE ONE RENDERABLE COPY. `deploy_lib/run.py` prints a failing code's
-name and meaning from it, `docs/reference/scripts.md` renders its Exit-codes column from it,
-and `test_exit_codes.py` asserts it covers every constant defined above. A table in a skill,
-a hook or a CLAUDE.md paragraph is a copy nothing reads; this one is read by the thing that
-exits.
+name and meaning from it, `docs/reference/scripts.md` renders its Exit-codes column from it, and
+`test_exit_codes.py` asserts it covers every constant defined above. A table in a skill, a hook
+or a CLAUDE.md paragraph is a copy nothing reads; this one is read by the thing that exits.
 
 Typical usage example:
 
@@ -208,6 +207,7 @@ FINDINGS_BAD_ARGS = USAGE_ERROR
 FACT_STATUS_OK = OK
 FACT_STATUS_OUT = FAILED
 FACT_STATUS_BAD_ARGS = USAGE_ERROR
+FACT_STATUS_BAD_REF = 2
 
 # -- scripts/deploy_tools/runbook_gates.py ----------------------------------------------
 # A failed gate exits its own number, 1..N, which each runbook's `--help` lists; those are per
@@ -633,15 +633,15 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             FACT_STATUS_OK,
             "FACT_STATUS_OK",
-            "every section read is IN, or the write is done.",
+            "every section read is IN, the write is done, or `notice` ran.",
         ),
         _c(
             FACT_STATUS_OUT,
             "FACT_STATUS_OUT",
-            "a section is OUT, a lint finding is blocking, or `reverify` wrote the lock and "
-            "the commit must stage it.",
+            "a section is OUT, a lint finding blocks, or `reverify` wrote the lock.",
         ),
         _c(FACT_STATUS_BAD_ARGS, "FACT_STATUS_BAD_ARGS", "the command line is wrong."),
+        _c(FACT_STATUS_BAD_REF, "FACT_STATUS_BAD_REF", "`notice` found no merge base."),
     ),
     "scripts/deploy_tools/runbook_gates.py": (
         _c(RUNBOOK_GATES_OK, "RUNBOOK_GATES_OK", "every gate run passed."),
