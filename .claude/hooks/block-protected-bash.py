@@ -80,8 +80,8 @@ find_repo_root = _edits_hook.find_repo_root
 # inside `python3 -c` or a called script is invisible in the command text and is not detected.
 # Each pattern captures the path in group 1.
 _WRITE_SHAPES = (
-    # `> path`, `>> path` — the redirect, by far the most common
-    re.compile(r">>?\s*([^\s;&|<>()]+)"),
+    # `> path`, `>> path`, `>| path` — the redirect, by far the most common
+    re.compile(r">[>|]?\s*([^\s;&|<>()]+)"),
     # `tee path`, `tee -a path` — a pipe's write end
     re.compile(r"\btee\s+(?:-[^\s]+\s+)*([^\s;&|<>()]+)"),
     # `sed -i … path`, `perl -pi -e … path` — in-place editors, target last

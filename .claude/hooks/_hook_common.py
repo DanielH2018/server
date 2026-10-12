@@ -90,6 +90,25 @@ def segments(command: str, parse: Callable[[str], Any] | None = _deployed_parse)
     return list(parsed.segments)
 
 
+def command_substitutions(
+    command: str, parse: Callable[[str], Any] | None = _deployed_parse
+) -> list[str]:
+    """The body of every `$( )`, backtick, `<( )` and `>( )` in `command`, in order.
+
+    `split_stages` reads only the top level, so a command inside a substitution is not one
+    of its stages.
+
+    Raises:
+        Unsplittable: see `segments`.
+    """
+    if parse is None:
+        raise Unsplittable("segmenter-missing", _PARSE_UNAVAILABLE)
+    parsed = parse(command)
+    if not parsed.ok:
+        raise Unsplittable(parsed.status)
+    return list(parsed.substitutions)
+
+
 def split_stages(
     command: str, parse: Callable[[str], Any] | None = _deployed_parse
 ) -> list[list[str]]:

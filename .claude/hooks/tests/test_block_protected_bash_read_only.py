@@ -73,6 +73,44 @@ FLAGGED = [
     "echo 'unbalanced",
     "echo x > $PWD/CLAUDE.md",
     'echo x >> "$HOME/notes.md"',
+    # A nested shell, `eval` or `source` runs text this hook does not judge.
+    "bash -c 'rm -rf ansible'",
+    "sh -c 'git push'",
+    "eval 'git push'",
+    "builtin eval 'git push'",
+    "source /tmp/x.sh",
+    # A wrapper is read past to the command it runs.
+    "timeout 5 git push",
+    "timeout 5 rm CLAUDE.md",
+    "nice -n 5 rm CLAUDE.md",
+    "uv run git commit -am x",
+    "uv run gh pr comment 1 --body x",
+    "echo CLAUDE.md | xargs rm",
+    # The noclobber redirect, and a link the same command creates.
+    "echo x >| CLAUDE.md",
+    "ln -s $PWD/CLAUDE.md /tmp/zz9 && echo x > /tmp/zz9",
+    "cd /tmp && echo x > CLAUDE.md",
+    # Variables and options that make a read run a command.
+    "GIT_PAGER='rm -rf x' git log",
+    "GIT_EXTERNAL_DIFF=./evil git diff",
+    "git ls-remote --upload-pack='touch /x' .",
+    "ssh -o ProxyCommand='rm x' daniel-server true",
+    # Writers no denylist named.
+    "sort -o CLAUDE.md CLAUDE.md",
+    "awk -i inplace 1 CLAUDE.md",
+    "awk '{system(\"rm x\")}' CLAUDE.md",
+    "sed 's/a/b/w CLAUDE.md' README.md",
+    "gzip CLAUDE.md",
+    "uv run ruff check --fix .",
+    "prek run --all-files",
+    "./scripts/deploy.sh --tags docs",
+    "uv run python scripts/dev/findings.py open --title x",
+    'python3 -c \'open("x", "w")\'',
+    "uv run pytest ansible/tests/repo -q",
+    "cp ansible/vars/secrets.yml /tmp/copy.yml",
+    # A write inside a substitution or an ssh remote command.
+    "cat $(rm -rf x)",
+    "ssh daniel-server 'rm -rf /srv/x'",
 ]
 
 CLEAN = [
@@ -90,8 +128,18 @@ CLEAN = [
     "gh api repos/o/r/pulls/12",
     "grep -rn foo ansible/ &>/dev/null",
     "echo '{}' > /tmp/payload.json && cat /tmp/payload.json",
-    "cp ansible/vars/secrets.yml /tmp/copy.yml",
-    "uv run pytest ansible/tests/repo -q",
+    "timeout 5 git log -1",
+    "uv run python scripts/diagnostics/probe.py health docs",
+    "uv run python scripts/dev/fact_status.py lint",
+    "ssh daniel-server 'journalctl -u k3s -n 50 | grep -i error'",
+    "for f in a b; do cat $f; done",
+    "cat $(git rev-parse --show-toplevel)/CLAUDE.md",
+    "kubectl get pods -n homelab -o wide",
+    "sed -n 1,20p CLAUDE.md",
+    "awk '{print $1}' CLAUDE.md | sort | uniq -c",
+    "find ansible -name '*.yml' | xargs grep -l image",
+    "command -v jq",
+    "LC_ALL=C sort CLAUDE.md",
     "echo $HOME 2>&1 | head",
 ]
 

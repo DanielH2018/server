@@ -585,13 +585,15 @@ deployed host script that renders a credential inline;
 
 It **denies** a write from a read-only agent: one whose frontmatter in `.claude/agents/` sets
 `read_only: true`, matched against the payload's `agent_type`. The arm denies a redirect into a
-file outside `/dev/`, `/tmp/`, `/var/tmp/` and `~/.cache/claude/`. It also denies a
-file-changing command such as `rm`, `mv` or `cp` aimed outside those directories, and any git
-or gh verb outside a read-only set. That set includes `git log`, `git branch -a`,
-`gh pr view` and a `gh api` GET. The reviewer agents and the skeptic read text that any GitHub
-account can write, such as PR bodies and upstream release notes, so their "Read-only" description is enforced here rather
-than left to the prompt (#4617). A write inside `python3 -c`, a called script or an `ssh` remote
-command is outside what the arm reads.
+file outside `/dev/`, `/tmp/`, `/var/tmp/` and `~/.cache/claude/`. It then judges every command
+the text runs against an allowlist. The allowlist is
+`.claude/hooks/hooklib/read_only_commands.py` for ordinary commands, and a read-only set of git
+and gh verbs such as `git log`, `git branch -a`, `gh pr view` and a `gh api` GET. A command the
+allowlist does not name is denied, so a read it lacks costs the agent one rephrased command. The
+arm reads past wrappers such as `timeout`, `xargs` and `uv run`. It judges the body of a `$( )`
+and an `ssh` remote command as commands of their own. The reviewer agents and the skeptic read
+text that any GitHub account can write, such as PR bodies and upstream release notes, so their
+"Read-only" description is enforced here rather than left to the prompt (#4617).
 
 A Bash write that leaves an isolated session's worktree is **denied** by the dotfiles
 `claude_guard` package, not by this hook (`checks/worktree_escape.py`, moved there by #2818).

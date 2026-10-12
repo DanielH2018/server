@@ -11,10 +11,12 @@ import re
 
 from _hook_common import (
     Unsplittable,
+    command_substitutions,
     git_invocation,
     split_stages,
     strip_shell_keywords,
 )
+from hooklib import read_only_commands as commands
 
 _OWN_CHECKOUT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -29,10 +31,10 @@ _OWN_CHECKOUT = os.path.dirname(
 # DECIDED: deny, not arm 1's ask. Arm 1 asks because one wrong extraction must not block the
 # operator's own session. Here the session is an agent that has declared it writes nothing, so
 # a false positive costs it one rephrased read, while a missed write is the injected action the
-# arm exists to stop. The arm is still a reading of command text: a write inside `python3 -c`,
-# a called script or an `ssh` remote command is not seen, nor are `curl -o`, `wget -O`,
-# `tar -x`, `find -delete`/`-exec` or `cp -t <dir>`. kubectl's read-only ServiceAccount covers
-# the cluster on its own.
+# arm exists to stop. Outside git and gh, each command is judged against the allowlist in
+# `read_only_commands.py`, whose docstring says why it is an allowlist. A wrapper (`timeout`,
+# `env`, `xargs`, `uv run`, …) is read past, an `ssh` remote command and a `$( )` body are
+# judged as commands of their own, and a nested shell or `eval` is denied.
 
 _AGENTS_DIR = os.path.join(_OWN_CHECKOUT, ".claude", "agents")
 
@@ -80,29 +82,19 @@ _SCRATCH_PREFIXES = (
 
 
 def _is_scratch(path, repo_root):
-    # `realpath`, not `normpath`: `ln -s <repo file> /tmp/l` then `> /tmp/l` writes the repo.
-    target = os.path.realpath(os.path.join(repo_root, os.path.expanduser(path)))
+    """True when `path` resolves under a scratch directory.
+
+    A relative path is never scratch: the hook resolves it against the session's cwd, and a
+    `cd` earlier in the same command moves where the shell resolves it. `realpath`, not
+    `normpath`: `> /tmp/l` writes the repo when `/tmp/l` already links into it. A link the
+    same command creates is refused at the `ln`, which is not a read.
+    """
+    expanded = os.path.expanduser(path)
+    if not os.path.isabs(expanded):
+        return False
+    target = os.path.realpath(expanded)
     return (target + "/").startswith(_SCRATCH_PREFIXES)
 
-
-# Commands that change a file named in their arguments. For a copy the destination is the last
-# argument, so `cp ansible/x /tmp/y` stays a read of the repo.
-_FILE_MUTATORS = {
-    "rm",
-    "rmdir",
-    "unlink",
-    "shred",
-    "mv",
-    "touch",
-    "mkdir",
-    "chmod",
-    "chown",
-    "chgrp",
-    "truncate",
-    "patch",
-}
-_FILE_COPIERS = {"cp", "install", "ln", "rsync", "scp"}
-_WRAPPER_WORDS = {"sudo", "env", "xargs", "nohup", "command", "exec", "nice", "time"}
 
 # git subcommands that write nothing whatever their arguments. `fetch` is not one: a refspec
 # such as `+x:refs/heads/master` rewrites a local branch in the `.git` every worktree shares.
@@ -212,7 +204,16 @@ def _git_problem(stage):
     if inv.config:
         # `-c core.pager=<cmd>` runs a command under any subcommand, `git log` included.
         return "sets git config inline"
+    if any(o.split("=", 1)[0] == "--exec-path" for o in inv.global_opts):
+        return "points git at another directory of subcommands"
     args = list(inv.args)
+    # `--upload-pack=<cmd>` and its kin run a command under `ls-remote`, which is otherwise a read.
+    if any(
+        a.split("=", 1)[0] in ("--upload-pack", "--receive-pack", "--exec")
+        or (inv.sub == "ls-remote" and a == "-u")
+        for a in args
+    ):
+        return "names a command for git to run"
     # `--output=<file>` writes the diff under every subcommand that takes diff options, and
     # `git grep -O<cmd>` runs a command on the matches.
     if any(a.split("=", 1)[0] == "--output" for a in args):
@@ -284,55 +285,170 @@ def _gh_problem(stage):
     return f"runs `{' '.join(['gh', *positional])}`, which is not in the read-only set"
 
 
+_UV_RUN_VALUE_FLAGS = frozenset(
+    {
+        "--with",
+        "--with-requirements",
+        "--with-editable",
+        "--project",
+        "--directory",
+        "--python",
+        "-p",
+        "--group",
+        "--only-group",
+        "--no-group",
+        "--extra",
+        "--env-file",
+        "--package",
+        "--index",
+    }
+)
+_XARGS_VALUE_FLAGS = frozenset(
+    {"-I", "-n", "-P", "-L", "-d", "-E", "-s", "-a", "--arg-file", "--delimiter"}
+)
+_TIMEOUT_VALUE_FLAGS = frozenset({"-s", "-k", "--signal", "--kill-after"})
+_SSH_VALUE_FLAGS = frozenset(
+    "-b -c -D -E -e -F -I -i -J -L -l -m -O -o -p -Q -R -S -W -w -B".split()
+)
+_SYSTEM_BIN = ("/usr/bin/", "/bin/", "/usr/sbin/", "/sbin/")
+
+
+def _skip_flags(words, i, value_flags=frozenset()):
+    """The index of the first word from `i` on that is not a flag or a flag's value."""
+    while i < len(words) and words[i].startswith("-") and words[i] != "-":
+        i += 2 if words[i] in value_flags else 1
+    return i
+
+
 def _unwrapped(stage):
-    """`stage` from the command it actually runs: past keywords, assignments and wrappers."""
-    words = strip_shell_keywords(stage)
+    """`(words, problem)`: the command `stage` runs, past keywords, wrappers and assignments.
+
+    `problem` is set when the stage's own prefix already writes or cannot be judged: `sudo`,
+    `env -S`, a variable outside `SAFE_ASSIGNMENTS`, or `uv` other than `uv run`.
+    """
+    if stage[:1] in (["command"], ["type"]) and {"-v", "-V"} & set(stage[1:]):
+        # `command -v jq` looks a name up; `strip_shell_keywords` drops `command` itself.
+        return [], None
+    words = list(strip_shell_keywords(stage))
+    if words and words[0].startswith("("):
+        words[0] = words[0].lstrip("(")
+        words = [w for w in words[:1] if w] + words[1:]
+    if words and words[-1].endswith(")"):
+        words[-1] = words[-1].rstrip(")")
     i = 0
     while i < len(words):
         word = words[i]
-        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", word) or word.startswith("-"):
+        name = word
+        assignment = commands.ASSIGNMENT.match(word)
+        if assignment:
+            if assignment.group(1) not in commands.SAFE_ASSIGNMENTS:
+                return (
+                    [],
+                    f"sets `{assignment.group(1)}`, which can make a program run a command",
+                )
             i += 1
-        elif os.path.basename(word) in _WRAPPER_WORDS:
+        elif name in ("else", "{", "!"):
             i += 1
+        elif name in ("sudo", "doas"):
+            return [], f"runs `{name}`"
+        elif name in ("nohup", "time", "command", "builtin", "exec", "stdbuf"):
+            i = _skip_flags(words, i + 1)
+        elif name == "nice":
+            i = _skip_flags(words, i + 1, frozenset({"-n"}))
+        elif name == "timeout":
+            i = _skip_flags(words, i + 1, _TIMEOUT_VALUE_FLAGS) + 1
+        elif name == "env":
+            if {"-S", "--split-string"} & {w.split("=", 1)[0] for w in words[i + 1 :]}:
+                return [], "runs `env -S`, which splits a string into a command"
+            i = _skip_flags(words, i + 1, frozenset({"-u", "--unset", "-C", "--chdir"}))
+        elif name == "xargs":
+            i = _skip_flags(words, i + 1, _XARGS_VALUE_FLAGS)
+        elif name == "uv":
+            if words[i + 1 : i + 2] != ["run"]:
+                return [], f"runs `uv {' '.join(words[i + 1 : i + 2])}`"
+            i = _skip_flags(words, i + 2, _UV_RUN_VALUE_FLAGS)
+            if words[i : i + 1] == ["--"]:
+                i += 1
         else:
             break
-    return words[i:]
+    return words[i:], None
 
 
-def _stage_problem(stage, repo_root):
+def _ssh_problem(args, repo_root, written_paths, depth):
+    for i, arg in enumerate(args):
+        option = args[i + 1] if arg == "-o" and i + 1 < len(args) else arg[2:]
+        if (arg == "-o" or arg.startswith("-o")) and re.match(
+            r"(?i)\s*(proxycommand|localcommand|permitlocalcommand|proxyjump)", option
+        ):
+            return "passes an ssh option that runs a local command"
+        if arg == "-F" or arg.startswith("-F"):
+            return "reads an ssh config file the command names"
+    found = commands._positionals(args, _SSH_VALUE_FLAGS)
+    if len(found) < 2:
+        return "opens an interactive ssh session"
+    remote = " ".join(found[1:])
+    # The remote shell has no session cwd, so every relative path there is non-scratch.
+    problem = read_only_reason(remote, "/", written_paths, depth + 1)
+    return f"runs on `{found[0]}` a command that {problem}" if problem else None
+
+
+def _python_problem(words, repo_root):
+    args = words[1:]
+    if {"-c", "-m"} & set(args) or not args:
+        return "runs Python code this hook cannot read"
+    found = commands._positionals(args, frozenset({"-W", "-X"}))
+    if not found or found[0] == "-":
+        return "runs Python code this hook cannot read"
+    script = found[0]
+    rest = args[args.index(script) + 1 :]
+    return commands.script_problem(script, rest, repo_root, _OWN_CHECKOUT)
+
+
+def _stage_problem(stage, repo_root, written_paths, depth):
     """Why this one stage writes, or None."""
-    words = _unwrapped(stage)
-    if not words:
+    words, problem = _unwrapped(stage)
+    if problem or not words:
+        return problem
+    word = words[0]
+    if word.startswith(_SYSTEM_BIN):
+        word = os.path.basename(word)
+    if word in ("for", "case", "done", "fi", "esac", "}", "in"):
         return None
-    name = os.path.basename(words[0])
-    if name == "git":
-        problem = _git_problem(stage)
-        if problem:
-            return problem
-    if name == "gh":
+    if word in commands.SHELLS or os.path.basename(word) in commands.SHELLS:
+        return f"runs `{word}`, whose command text this hook does not judge"
+    if word == "git":
+        return _git_problem(words)
+    if word == "gh":
         return _gh_problem(words)
-    targets = [w for w in words[1:] if not w.startswith("-")]
-    if name in _FILE_COPIERS:
-        targets = targets[-1:]
-    elif name == "dd":
-        targets = [w[3:] for w in words[1:] if w.startswith("of=")]
-    elif name not in _FILE_MUTATORS:
-        return None
-    for target in targets:
-        if not _is_scratch(target, repo_root):
-            return f"runs `{name}` on `{target}`"
-    return None
+    if word == "ssh":
+        return _ssh_problem(words[1:], repo_root, written_paths, depth)
+    if re.fullmatch(r"python3?(\.\d+)?", word):
+        return _python_problem(words, repo_root)
+    if word.endswith(".py"):
+        return commands.script_problem(word, words[1:], repo_root, _OWN_CHECKOUT)
+    check = commands.checks(repo_root, _is_scratch).get(word)
+    if check is None:
+        return f"runs `{word}`, which is not in the read-only command set"
+    return check(words[1:])
 
 
-_VARIABLE_REDIRECT = re.compile(r"(?<![<])>>?\s*[\"']?\$")
+_VARIABLE_REDIRECT = re.compile(r"(?<![<])>[>|]?\s*[\"']?\$")
+# Deeper than any real command nests; past it the text is refused rather than recursed into.
+_MAX_DEPTH = 4
 
 
-def read_only_reason(command, repo_root, written_paths):
+def read_only_reason(command, repo_root, written_paths, depth=0):
     """A deny reason if this command writes, from an agent that declared it writes nothing.
 
-    `written_paths` is block-protected-bash's redirect detector, passed in to keep it one
-    function.
+    Args:
+        command: the Bash text.
+        repo_root: the directory a relative path resolves against.
+        written_paths: block-protected-bash's redirect detector, passed in to keep it one
+            function.
+        depth: how many `$( )` bodies or `ssh` remote commands deep this text is.
     """
+    if depth > _MAX_DEPTH:
+        return "nests commands deeper than this hook reads"
     for path in written_paths(command):
         if not _is_scratch(path, repo_root):
             return f"redirects output into `{path}`"
@@ -342,15 +458,20 @@ def read_only_reason(command, repo_root, written_paths):
         return "redirects output into a path held in a shell variable"
     try:
         stages = split_stages(command)
+        bodies = command_substitutions(command)
     except Unsplittable as exc:
         if exc.missing:
             # The redirect check above has already run; the verb checks need the segmenter.
             return None
         return f"cannot be read as shell ({exc.status}), so it cannot be shown to be a read"
     for stage in stages:
-        problem = _stage_problem(stage, repo_root)
+        problem = _stage_problem(stage, repo_root, written_paths, depth)
         if problem:
             return problem
+    for body in bodies:
+        problem = read_only_reason(body, repo_root, written_paths, depth + 1)
+        if problem:
+            return f"runs a substitution that {problem}"
     return None
 
 
@@ -375,6 +496,7 @@ def read_only_decision(
     return (
         "deny",
         f"Agent `{agent}` is read-only (`read_only: true` in its frontmatter), and this "
-        f"command {problem}. Report the change you would make instead of making it; a "
-        f"scratch file under /tmp is allowed.",
+        f"command {problem}. Report the change you would make instead of making it. A "
+        f"redirect into /tmp is allowed, and the commands allowed are in "
+        f"`.claude/hooks/hooklib/read_only_commands.py`.",
     )
