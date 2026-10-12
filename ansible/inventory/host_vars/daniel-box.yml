@@ -896,21 +896,19 @@ containers_list:
   - name: flux
     platform: k8s
     tier: platform
-  # LAST on purpose, and it must NOT sit in traefik's rollout batch.
+  # LAST on purpose: every workload role must finish before this role fences the namespace
+  # (docs/networkpolicy-slice-answers.md). Nothing but list position keeps it last; no
+  # depends_on edge says so yet.
   #
   # Not for the usual "after traefik" reason — this role renders no Traefik CRDs, and a
   # NetworkPolicy peer podSelector is a label match evaluated at connection time, so
   # `app: traefik` resolves whether or not a traefik pod exists when the policy is applied.
   #
-  # What DOES constrain the position is the role's probe job. tasks/k8s_batch.yml drains
-  # rollouts only at the END of a batch, and traefik is replicas: 1 with strategy: Recreate,
-  # so inside traefik's own batch there is a window with zero traefik pods — and the probe's
-  # first assertion dials traefik:80. Sharing a batch would fail the probe on timing,
-  # aborting the play with the fencing already applied. Running last also guarantees
-  # littlelink (the probe's liveness and isolation target) is settled before the probe runs.
-  #
-  # Being last is safe: the selector is the opt-in label `netpol-baseline: enforced`, so the
-  # policy only affects pods already carrying it.
+  # Its batch does not matter. tasks/k8s_batch.yml drains rollouts only at the END of a
+  # batch, so a role sharing this role's batch may still be rolling when it runs. The role's
+  # first task drains them itself, so its exempt-set reads, its policy applies and its probe
+  # all run against settled workloads, never against a shared end-of-batch drain. That drain
+  # waits only for roles listed BEFORE this entry, which is why it stays last.
   - name: netpol-baseline
     platform: k8s
 # False until this host's first manual initial_setup.yml + deploy.yml run finishes green
