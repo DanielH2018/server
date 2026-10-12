@@ -139,7 +139,9 @@
   become: true
   changed_when: false
   no_log: true
-  when: authelia_password_hash is not defined
+  when:
+    - not (k8s_no_mutate | bool)
+    - authelia_password_hash is not defined
 
 - name: Extract the digest
   tags: [config]
@@ -148,12 +150,12 @@
   ansible.builtin.set_fact:
     authelia_password_hash: "{{ authelia_k8s_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
   when:
-    # The generate task above is a `command`, so `--check` skips it whatever its `when:`
-    # says and leaves a skip result with no `stdout`. On a cluster that already holds the
+    # The generate task above is skipped on a no-mutation run (`--check` or `--dry-run`),
+    # which leaves a skip result with no `stdout`. On a cluster that already holds the
     # Secret the read-back defines the hash and neither task is reached; on a fresh one a
     # dry run falls through to here, and without this it errors on the attribute instead
     # of reaching the assert below, which says what is actually wrong.
-    - not ansible_check_mode
+    - not (k8s_no_mutate | bool)
     - authelia_password_hash is not defined
   no_log: true
 
@@ -175,6 +177,7 @@
   changed_when: false
   no_log: true
   when:
+    - not (k8s_no_mutate | bool)
     - authelia_k8s_manage_claude_user | bool
     - authelia_claude_password_hash is not defined
 
@@ -184,7 +187,7 @@
     authelia_claude_password_hash: "{{ authelia_k8s_claude_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
   when:
     # Same reasoning as the operator digest above.
-    - not ansible_check_mode
+    - not (k8s_no_mutate | bool)
     - authelia_k8s_manage_claude_user | bool
     - authelia_claude_password_hash is not defined
   no_log: true
@@ -206,6 +209,7 @@
   changed_when: false
   no_log: true
   when:
+    - not (k8s_no_mutate | bool)
     - authelia_k8s_manage_agent_user | bool
     - authelia_agent_password_hash is not defined
 
@@ -215,9 +219,25 @@
     authelia_agent_password_hash: "{{ authelia_k8s_agent_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
   when:
     # Same reasoning as the operator digest above.
-    - not ansible_check_mode
+    - not (k8s_no_mutate | bool)
     - authelia_k8s_manage_agent_user | bool
     - authelia_agent_password_hash is not defined
+  no_log: true
+
+- name: Stand in a placeholder digest for each user a dry run could not hash
+  tags: [config]
+  # Hashing starts a pod, so a no-mutation run skips it (#4569). The read-back still covers the
+  # common case. A user with no digest in the live Secret, or any user under
+  # `-e authelia_k8s_rehash_passwords=true`, reaches here undefined. Failing the assert below
+  # would stop the hourly render-records dry run at authelia and leave every later service
+  # unrecorded. The placeholder renders as a changed password, which is what the real run
+  # would apply. It is not an argon2 digest, so the server-side dry run is the only place
+  # it can reach.
+  ansible.builtin.set_fact:
+    authelia_password_hash: "{{ authelia_password_hash | default('dry-run-placeholder-operator', true) }}"
+    authelia_claude_password_hash: "{{ authelia_claude_password_hash | default('dry-run-placeholder-claude-ui', true) }}"
+    authelia_agent_password_hash: "{{ authelia_agent_password_hash | default('dry-run-placeholder-claude-agent', true) }}"
+  when: k8s_no_mutate | bool
   no_log: true
 
 - name: Fail if no password hash could be obtained

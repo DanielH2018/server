@@ -126,11 +126,11 @@
 # already that wait. The loop is bounded (20 x 2s) and is the probe's own body.
 - name: Reach the WebUI from a pod, as Traefik does
   tags: [deploy]
-  # Skipped under --check, unlike proof 1 above: this is the one task in the file that creates a
-  # cluster object rather than reading one, and there is no read-only way to ask this question,
-  # since the whole point is to originate the request from the pod CIDR. The guard is
-  # `ansible_check_mode` alone, so a `--dry-run` still runs this task and creates the pod. The
-  # hourly render-records job is such a dry run, and it takes no deploy lock (#4569).
+  # Skipped on any no-mutation run, unlike proof 1 above: this is the one task in the file that
+  # creates a cluster object rather than reading one, and there is no read-only way to ask this
+  # question, since the whole point is to originate the request from the pod CIDR. The guard is
+  # `k8s_no_mutate`, not `ansible_check_mode`, because `--dry-run` is not check mode. The hourly
+  # render-records job is such a dry run, and it created this pod every hour until #4569.
   #
   # THE POD NAME IS PER RUN; THE LABEL IS NOT. `kubectl run` refuses a name that already exists,
   # so a fixed name failed the 2026-10-12 landing after a good rollout: an overlapping qbittorrent
@@ -151,7 +151,7 @@
   # Do not automate that delete in this file. Even filtered to finished pods, it can delete an
   # overlapping run's probe between that probe exiting and its client reading the output, which
   # is the false failure the per-run name removes.
-  when: not ansible_check_mode
+  when: not (k8s_no_mutate | bool)
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }}
