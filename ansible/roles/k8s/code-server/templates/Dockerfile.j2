@@ -19,7 +19,11 @@ FROM lscr.io/linuxserver/code-server:4.141.0-ls369@sha256:0d590a1a80a36bd2559222
 #    compile one at all, and there is no local fallback. texbrain needs the pod, a browser,
 #    and a jsDelivr mirror for any package outside its bundled TeX Live subset.
 #
-#    These four apt packages are the one build input still resolved at build time. A
+#    gcc and libc6-dev are the C toolchain step 3's rustc links through: without them the first
+#    `cargo build` fails with "linker `cc` not found". pkg-config and libssl-dev let the common
+#    *-sys crates (openssl-sys above all) find their system library.
+#
+#    These apt packages are the one build input still resolved at build time. A
 #    `pkg=version` pin breaks the build the day noble-updates supersedes the version — the
 #    archive pool keeps only the current one — and a snapshot.ubuntu.com timestamp has no
 #    Renovate datasource, so it would freeze the security updates for git/curl/python3 with
@@ -31,6 +35,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     curl \
     xz-utils \
+    gcc \
+    libc6-dev \
+    pkg-config \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/* \
     && ln -s /usr/bin/python3 /usr/bin/python
 
@@ -48,7 +56,40 @@ RUN curl -fsSL -o /tmp/node.tar.xz \
     && rm /tmp/node.tar.xz \
     && node --version && npm --version
 
-# 3. Python virtual environment outside /config so it survives volume mounts, with its
+# 3. Rust from the official standalone installers, checksum-verified, into /usr/local. The
+#    toolchain tarball supplies rustc, cargo, clippy and rustfmt; rust-src supplies the std
+#    source that rust-analyzer needs to resolve `std`. The shape is Node's above, for the same
+#    reason: rustup's install script piped to sh resolves whatever rustup serves on build day.
+#    Version and both sha256s live in defaults/main.yml (code_server_k8s_rust_*). Renovate
+#    tracks the version, and `asset_pins.py --refresh rust-lang/rust` rewrites both digests.
+#
+#    There is no rustup, so a project's `rust-toolchain.toml` and `rustup target add` do nothing
+#    here. The image carries one stable toolchain for the host target. DECIDED: standalone
+#    tarball over a pinned rustup-init — operator choice on 2026-10-12, because it leaves no
+#    runtime-writable toolchain state and pins exactly like Node.
+#
+#    CARGO_HOME holds the registry cache and `cargo install` binaries, so the abc user must be
+#    able to write it. CARGO_TARGET_DIR moves every project's build output off
+#    /config/workspace, the backed-up claim, because one project's target/ reaches several GiB.
+#    Both paths sit on the config volume, which holds derived state and is not backed up.
+#    `test_cargo_writes_stay_off_the_backed_up_claim` holds both off the backed-up mounts.
+RUN curl -fsSL -o /tmp/rust.tar.xz "{{ code_server_k8s_rust_url }}" \
+    && echo "{{ code_server_k8s_rust_sha256 }}  /tmp/rust.tar.xz" | sha256sum -c - \
+    && curl -fsSL -o /tmp/rust-src.tar.xz "{{ code_server_k8s_rust_src_url }}" \
+    && echo "{{ code_server_k8s_rust_src_sha256 }}  /tmp/rust-src.tar.xz" | sha256sum -c - \
+    && mkdir /tmp/rust /tmp/rust-src \
+    && tar -xJf /tmp/rust.tar.xz -C /tmp/rust --strip-components=1 --no-same-owner \
+    && tar -xJf /tmp/rust-src.tar.xz -C /tmp/rust-src --strip-components=1 --no-same-owner \
+    && /tmp/rust/install.sh --prefix=/usr/local --disable-ldconfig \
+        --components=rustc,cargo,rust-std-x86_64-unknown-linux-gnu,clippy-preview,rustfmt-preview \
+    && /tmp/rust-src/install.sh --prefix=/usr/local --disable-ldconfig \
+    && rm -rf /tmp/rust /tmp/rust-src /tmp/rust.tar.xz /tmp/rust-src.tar.xz \
+    && rustc --version && cargo --version && cargo clippy --version && rustfmt --version
+ENV CARGO_HOME=/config/.cargo
+ENV CARGO_TARGET_DIR=/config/.cargo-target
+ENV PATH="/config/.cargo/bin:$PATH"
+
+# 4. Python virtual environment outside /config so it survives volume mounts, with its
 #    packages and its ownership settled in the SAME layer. `chown -R` rewrites every file,
 #    and a rewritten file is a new file to the layer format — so doing it in a later step
 #    stored a second full copy of the venv (89 M compressed) on top of the one already
@@ -75,7 +116,7 @@ RUN python3 -m venv $VIRTUAL_ENV \
         python-dotenv==1.2.4 \
     && chown -R {{ puid }}:{{ pgid }} $VIRTUAL_ENV
 
-# 4. Claude Code CLI, pinned to the same release as the Anthropic.claude-code extension in
+# 5. Claude Code CLI, pinned to the same release as the Anthropic.claude-code extension in
 #    defaults/main.yml — the extension drives this binary, so the two move together. Renovate
 #    tracks the pin on npm (regex manager in renovate.json). npm's download cache is ~96 M that
 #    the running container never reads, so it is dropped in the same layer that creates it — a
@@ -83,7 +124,7 @@ RUN python3 -m venv $VIRTUAL_ENV \
 RUN npm install -g @anthropic-ai/claude-code@2.1.289 \
     && npm cache clean --force
 
-# 5. VS Code extensions, downloaded at build time from the exact URL each entry in
+# 6. VS Code extensions, downloaded at build time from the exact URL each entry in
 #    code_server_k8s_extensions (defaults/main.yml) names, and kept only when the sha256
 #    matches. Until 2026-09-21 this step asked Open VSX and the marketplace for the CURRENT
 #    version of each and took the first build listed — which for a platform-specific
@@ -100,6 +141,6 @@ RUN curl -fsSL --compressed -A "VSCode/1.95.0" -o "/opt/vsix/{{ ext.name }}.vsix
     && echo "{{ ext.sha256 }}  /opt/vsix/{{ ext.name }}.vsix" | sha256sum -c -
 {% endfor %}
 
-# 6. Startup script installs all /opt/vsix extensions into the config volume
+# 7. Startup script installs all /opt/vsix extensions into the config volume
 COPY extensions.sh /custom-cont-init.d/10-extensions.sh
 RUN chmod +x /custom-cont-init.d/10-extensions.sh
