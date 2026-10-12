@@ -1,6 +1,8 @@
 # R1 — Shadow render with zero diff
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR 1a, the stub module and the stub file: issue #4692.
 
 Depends on: none
 
