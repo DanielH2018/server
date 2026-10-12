@@ -178,10 +178,10 @@ remove it by hand where that rule is wrong. Before the implementer starts, a sep
 writes one failing test per claim in each issue's `## Verify-by`, and per stated behaviour
 those miss, from the issue text alone. `scripts/dev/fanout_lib/review/red_gate.py` proves each new
 test fails on the unchanged code. A batch that runs no red phase records why, as
-`red_skipped`. The implementer gets that commit and may not edit it or what its tests call, but
-may append tests to its files and update a test that was already there and that no red test
+`red_skipped`. The implementer gets that commit and may not edit it, what its tests call, or a
+fixture they reach, even through a builtin such as `tmp_path`, but may append tests to its files and update a test that was already there and that no red test
 reaches. It may also change a literal constant that only such older code reads, and delete a
-`conftest.py` fixture that no red test requests (`fanout_lib/review/red_tests.py` says what is
+`conftest.py` fixture that no red test requests (`fanout_lib/review/red_lock.py` says what is
 locked). A refused red commit is
 dropped and the batch runs as usual. A PR that still fails the green gate after the fix round
 is not landed. Once it passes, each hunk of the fix is reverted on its own under the red tests,
