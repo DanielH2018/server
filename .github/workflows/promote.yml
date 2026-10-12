@@ -86,18 +86,23 @@ jobs:
             'kind: Kustomization' \
             'resources: []' > out/flux/kustomization.yaml
 
-      # The version matches the gitleaks `rev` in prek.toml, so CI and the bundle scan read one
-      # ruleset. The checksum is the release's own, from gitleaks_8.30.1_checksums.txt.
+      # The same gitleaks release as the `rev` in prek.toml, checked against the release's own
+      # checksums file. A renovate.json custom manager moves the version in both URLs, and its
+      # `gitleaks (prek.toml and the promote workflow)` group moves this copy and prek.toml's in
+      # one PR.
       - name: Scan the bundle for secrets
         id: gitleaks
         run: |
           set -euo pipefail
-          tarball=gitleaks_8.30.1_linux_x64.tar.gz
-          curl --retry 3 -fsSLo "$RUNNER_TEMP/$tarball" \
-            "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/$tarball"
-          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $RUNNER_TEMP/$tarball" \
-            | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" gitleaks
+          cd "$RUNNER_TEMP"
+          curl --retry 3 -fsSLO \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          curl --retry 3 -fsSLo checksums.txt \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt
+          # --ignore-missing skips the other platforms' lines; a run that verifies no file fails.
+          sha256sum -c --ignore-missing --strict checksums.txt
+          tar -xzf gitleaks_*_linux_x64.tar.gz gitleaks
+          cd "$GITHUB_WORKSPACE"
           "$RUNNER_TEMP/gitleaks" dir out --config .gitleaks.toml --no-banner --redact
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -216,6 +221,14 @@ jobs:
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v3.1.3
+
+      # `cosign verify` inside `decide` passes no credentials of its own and reads the docker
+      # config, and the package is private until the operator makes it public.
+      - name: Log in to GHCR read-only
+        env:
+          GH_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
 
       # GITHUB_TOKEN reads the registry and the check-runs. GH_TOKEN is PROMOTE_TOKEN, for the
       # `gh variable get DEPLOY_HOLD` inside `decide`. That read goes through the API when
