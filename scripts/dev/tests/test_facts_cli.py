@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from fact_status import _USAGE, main
 from lib.git_testing import git, init_repo
 from lib.facts.lock import read_lock
@@ -336,3 +338,44 @@ def test_report_prints_each_sessions_total_instruction_bytes(tmp_path, capsys):
     out = capsys.readouterr().out
     assert _total_on_session_line(out, "aaaaaaaa", 8000), out
     assert _total_on_session_line(out, "bbbbbbbb", 3000), out
+
+
+def test_notice_exits_zero_with_rows_and_with_an_unparsable_row(tmp_path, capsys):
+    """A row is a notice, never a failure: the exit code carries no finding."""
+    repo = _repo(tmp_path)
+    (repo / "t" / "m.py").write_text("LIMIT = 90\nOTHER = 1\n")
+    git(repo, "commit", "-qam", "move", "--no-gpg-sign")
+    args = ["notice", "--repo", str(repo), "--since", "HEAD~1", "--head", "HEAD"]
+    assert main(args) == 0
+    out = capsys.readouterr().out
+    assert "moved CLAUDE.md#Gate t/m.py:LIMIT (prose unchanged)" in out
+    (repo / "t" / "m.py").write_text("LIMIT = (\n")
+    assert main(["notice", "--repo", str(repo), "--since", "HEAD"]) == 0
+    assert "unparsable CLAUDE.md#Gate t/m.py:LIMIT" in capsys.readouterr().out
+
+
+def test_notice_with_an_unresolvable_ref_exits_2(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    assert main(["notice", "--repo", str(repo), "--since", "origin/nope"]) == 2
+    assert "no merge base of 'origin/nope'" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("fmt", "expected"),
+    [
+        ("text", "moved CLAUDE.md#Gate t/m.py:LIMIT (prose unchanged)"),
+        ("markdown", "| moved | symbol | CLAUDE.md#Gate | `t/m.py:LIMIT` | no |"),
+        ("github", "::notice title=CLAUDE.md#Gate::moved symbol t/m.py:LIMIT"),
+        ("json", '"kind": "moved"'),
+    ],
+)
+def test_notice_format_reaches_the_renderer(tmp_path, capsys, fmt, expected):
+    repo = _repo(tmp_path)
+    (repo / "t" / "m.py").write_text("LIMIT = 90\nOTHER = 1\n")
+    assert (
+        main(["notice", "--repo", str(repo), "--since", "HEAD", "--format", fmt]) == 0
+    )
+    out = capsys.readouterr().out
+    assert expected in out
+    if fmt == "json":
+        assert json.loads(out)[0]["atom"] == "t/m.py:LIMIT"

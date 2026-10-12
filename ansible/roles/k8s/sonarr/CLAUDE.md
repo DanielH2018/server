@@ -42,6 +42,12 @@ conventions.
 - `tasks/verify.yml` reads the Sonarr API through the Service ClusterIP (not the
   ingress, which Authelia would intercept) to check the library actually loaded — a
   running pod alone proves nothing about a broken import.
+- **`verify.yml` skips its API reads under a secret stub file.** The two `uri` reads and
+  the two asserts on their registers carry `when: not (homelab_secret_stubs | default(false)
+  | bool)`. `scripts/renderer/shadow_diff.py stubs` writes that sentinel into the stub file.
+  A stub API key draws a 401 from Sonarr, which would stop a shadow-render dry run. The guard
+  is not `k8s_dry_run`, because an ordinary dry run still evaluates the reads with the real
+  key.
 - **`verify.yml` opens with its own `rollout status` gate**, because `k8s/manifests` queues
   the rollout for `k8s/manifests/tasks/drain.yml` at the end of the batch rather than waiting. Until
   2026-09-22 the rootfolder read covered that rollout with a 12-sample `until:` poll, whose

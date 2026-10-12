@@ -5,10 +5,21 @@ real repository. A test that opens a revision `Tree` closes it, because the suit
 `ResourceWarning` of an unwaited `cat-file` process into an error.
 """
 
+import json
+
 import pytest
 
-from lib.facts.notice import MissingObject, Notice, Tree, moved_sections
-from lib.git_testing import commit, git_out, init_repo
+from lib.facts.notice import (
+    MissingObject,
+    Notice,
+    Summary,
+    Tree,
+    moved_sections,
+    render,
+    resolve_base,
+    scan,
+)
+from lib.git_testing import commit, git, git_out, init_repo
 from lib.repo_paths import REPO
 
 _DOC = "CLAUDE.md"
@@ -302,3 +313,148 @@ def test_with_no_head_a_file_deleted_without_git_rm_is_gone(tmp_path):
         _row("a/b.py", "path", "gone"),
         _row("a/b.py:PORT", "symbol", "gone"),
     ]
+
+
+def test_the_summary_counts_every_citation_even_when_the_diff_is_empty():
+    """The citation-count half of the non-vacuity floor, read from this repository's HEAD.
+
+    An empty diff still parses every section, so the CI summary line shows how much it read.
+    HEAD parsed 894 citations on 2026-10-12, and CI's delivery check reads a floor of 300.
+    Both backends must also list the same docs, or the working tree and a revision disagree.
+    """
+    _, summary = scan(REPO, "HEAD", "HEAD")
+    assert summary.citations >= 300
+    assert summary.touched == summary.changed_files == 0
+    with Tree(REPO, "HEAD") as rev:
+        assert Tree(REPO).docs() == rev.docs()
+
+
+def _branched(tmp_path):
+    """A feature branch that moves PORT and then moves it back, while master moves it too.
+
+    Returns the repo, the fork point, the feature commit that moved PORT, and master's tip.
+    """
+    repo = init_repo(tmp_path)
+    fork = commit(repo, "base", **{_DOC: _doc("a/b.py:PORT"), "a/b.py": "PORT = 1\n"})
+    git(repo, "checkout", "-q", "-b", "feature")
+    moved = commit(repo, "move", **{"a/b.py": "PORT = 2\n"})
+    commit(repo, "move back", **{"a/b.py": "PORT = 1\n", "c.txt": "x\n"})
+    git(repo, "checkout", "-q", "master")
+    tip = commit(repo, "master moves", **{"a/b.py": "PORT = 3\n"})
+    return repo, fork, moved, tip
+
+
+def test_a_base_that_moved_on_after_the_fork_is_ignored(tmp_path):
+    """The merge base, not master's tip, is the base: master's own move lists nothing."""
+    repo, fork, _, tip = _branched(tmp_path)
+    assert resolve_base(repo, "master", "feature") == fork
+    assert scan(repo, fork, "feature")[0] == []
+    # The other half: diffing from master's tip would have listed master's move.
+    assert moved_sections(repo, tip, "feature") == [
+        _row("a/b.py:PORT", "symbol", "moved")
+    ]
+
+
+def test_since_resolves_against_head_not_the_checkout(tmp_path):
+    repo, fork, moved, _ = _branched(tmp_path)
+    assert resolve_base(repo, "master", moved) == fork
+    assert scan(repo, fork, moved)[0] == [_row("a/b.py:PORT", "symbol", "moved")]
+
+
+@pytest.mark.parametrize(
+    ("ref", "head"), [("nope", "HEAD"), ("HEAD", "nope")], ids=["since", "head"]
+)
+def test_resolve_base_is_none_for_a_ref_git_cannot_resolve(tmp_path, ref, head):
+    repo = init_repo(tmp_path)
+    commit(repo, "base", **{_DOC: _doc("a/b.py")})
+    assert resolve_base(repo, ref, head) is None
+
+
+_SUMMARY = Summary(894, 6, 41, "0123456789abcdef0123")
+
+# Given out of order. The order every format must print is content rows by kind, moved, gone,
+# ambiguous, unparsable, then path rows, and by unit within a kind.
+_MIXED = [
+    Notice("A.md#a", "p/gone.py", "path", "gone", False),
+    Notice("B.md#b", "u/unparsable.py:X", "symbol", "unparsable", False),
+    Notice("Z.md#z", "m/second.py:X", "symbol", "moved", True),
+    Notice("A.md#a", "m/first.py:X", "symbol", "moved", False),
+    Notice("C.md#c", "g/gone.yml:x", "yaml", "gone", False),
+    Notice("D.md#d", "a/ambiguous.py:DECIDED: x", "marker", "ambiguous", False),
+]
+_ORDER = [
+    "m/first.py:X",
+    "m/second.py:X",
+    "g/gone.yml:x",
+    "a/ambiguous.py:DECIDED: x",
+    "u/unparsable.py:X",
+    "p/gone.py",
+]
+
+
+@pytest.mark.parametrize("fmt", ["text", "markdown", "github", "json"])
+def test_every_format_lists_rows_in_the_same_order(fmt):
+    out = render(_MIXED, _SUMMARY, fmt)
+    positions = [out.index(atom) for atom in _ORDER]
+    assert positions == sorted(positions)
+
+
+def test_text_ends_on_the_summary_line_and_says_whether_prose_changed():
+    lines = render(_MIXED, _SUMMARY, "text").splitlines()
+    assert lines[0] == "moved A.md#a m/first.py:X (prose unchanged)"
+    assert lines[1] == "moved Z.md#z m/second.py:X (prose edited)"
+    assert lines[-1] == (
+        "parsed 894 citations; 6 in 41 changed files; base 0123456789ab"
+    )
+
+
+def test_json_carries_the_five_keys_and_no_summary():
+    rows = json.loads(render(_MIXED, _SUMMARY, "json"))
+    assert [r["atom"] for r in rows] == _ORDER
+    assert rows[1] == {
+        "unit": "Z.md#z",
+        "atom": "m/second.py:X",
+        "form": "symbol",
+        "kind": "moved",
+        "prose_edited": True,
+    }
+
+
+def _many(content: int, paths: int) -> list[Notice]:
+    """``paths`` path rows first, so only the ordering can keep them below the content rows."""
+    return [
+        Notice(f"P.md#{i}", f"p/{i}.py", "path", "gone", False) for i in range(paths)
+    ] + [
+        Notice(f"C.md#{i:02}", f"c/{i}.py:X", "symbol", "moved", False)
+        for i in range(content)
+    ]
+
+
+@pytest.mark.parametrize(
+    ("rows", "shown"), [(_many(9, 3), 9), (_many(4, 1), 5)], ids=["capped", "under-cap"]
+)
+def test_github_format_caps_at_nine_rows(rows, shown):
+    lines = render(rows, _SUMMARY, "github").splitlines()
+    assert len(lines) == 1 + shown
+    assert all(line.startswith("::notice") for line in lines)
+    assert lines[0] == (
+        "::notice::parsed 894 citations; 6 in 41 changed files; base 0123456789ab"
+    )
+    if shown == 9:
+        assert not any(" path " in line for line in lines)
+    else:
+        assert lines[-1].endswith("::gone path p/0.py")
+
+
+def test_github_format_escapes_properties_and_messages():
+    row = Notice("CLAUDE.md#100% done, a: b", "a\nb.py:X", "symbol", "moved", False)
+    line = render([row], _SUMMARY, "github").splitlines()[1]
+    assert (
+        line
+        == "::notice title=CLAUDE.md#100%25 done%2C a%3A b::moved symbol a%0Ab.py:X"
+    )
+
+
+def test_an_unknown_format_raises():
+    with pytest.raises(ValueError, match="unknown notice format"):
+        render([], _SUMMARY, "yaml")

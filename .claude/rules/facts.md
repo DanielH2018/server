@@ -124,6 +124,17 @@ carries the row is the squash commit that wrote its hash into the lock, and
   compaction reloads `MEMORY.md` without the event as well, so the hook writes a `compact` row
   for it then. The output style sits in the system prompt and gets no `compact` row.
   `--json` prints the same as one object.
+- `fact_status.py notice --since <ref> [--head <rev>]` lists every section that cites an
+  atom the diff moved. The diff runs from the merge base of `<ref>` and the head to the head,
+  and the head is the working tree unless `--head` names a revision. It compares the atom
+  at the two ends of the diff, never against a recorded hash, so a row means the diff itself
+  moved the atom. A row's kind is `moved`, `gone`, `ambiguous` or `unparsable`, and each row
+  says whether the diff also edited the section's prose. `--format` takes `text`,
+  `markdown`, `github` or `json`. The rules for each row and each format are on
+  `scripts/lib/facts/notice.py:moved_sections` and `scripts/lib/facts/notice.py:render`. The
+  command exits 0 with rows or without, and exits 2 only when git cannot resolve the merge
+  base. It runs beside the lock, and G2 of the plan decides whether it replaces the lock.
+  `docs/target-architecture/docs-guard/g1-diff-notice.md` is the plan.
 
 The lock is kept only while its content atoms pay for it. When `fact_status.py report
 --days 60` shows fewer than two actual moves across the symbol, YAML, test and marker
