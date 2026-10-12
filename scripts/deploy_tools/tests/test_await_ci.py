@@ -173,3 +173,59 @@ def test_wait_does_not_follow_the_tip_for_a_fresh_sha(monkeypatch):
     )
     assert code == 75
     assert msg.startswith("old:")
+
+
+def _master_with_a_descendant(tmp_path, monkeypatch) -> tuple[str, str]:
+    """A clone whose origin/master is `merge` followed by one later commit `tip`.
+
+    A real repository rather than a stubbed `resolve_sha`, so the wait reaches the tip
+    through whichever git query a fix chooses. The process cwd is the clone, because
+    `_fetch_tip` and `_is_ancestor` run git with no `cwd`, as land.sh's primary checkout does.
+    """
+    from lib.git_testing import commit, git, init_repo, scrub_process_git_env
+
+    scrub_process_git_env(monkeypatch)
+    origin = init_repo(tmp_path / "origin.git", bare=True)
+    clone = init_repo(tmp_path / "clone", initial_commit="base")
+    git(clone, "remote", "add", "origin", str(origin))
+    merge = commit(clone, "the squash merge GitHub never ran CI for", a="1")
+    tip = commit(clone, "a later merge that went green", b="1")
+    git(clone, "push", "-q", "origin", "master")
+    monkeypatch.chdir(clone)
+    return merge, tip
+
+
+def test_wait_names_a_green_descendant_when_github_never_ran_ci_on_the_sha(
+    tmp_path, monkeypatch
+):
+    """#4621: GitHub created no workflow run and no check suite for a merge commit.
+
+    The SHA reads zero check runs and zero suites on every poll, for good, while a later
+    commit on master is green. The wait used to sit out its whole budget and report no
+    verdict on the merge commit, so every re-run of land.sh did the same. The fix may follow
+    the descendant (exit 0) or report the case on its own; either way it answers before the
+    budget elapses and names the green descendant.
+    """
+    merge, tip = _master_with_a_descendant(tmp_path, monkeypatch)
+    # The real required set, unpatched: the wait reads it through `required_contexts()`.
+    green = [_run(name, "completed", "success") for name in await_ci.REQUIRED_CONTEXTS]
+    runs_by_sha = {merge: [], tip: green}
+    suites_by_sha = {merge: [], tip: [_suite("completed", "success", 1)]}
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    timeout = 900
+    code, msg = await_ci.wait(
+        merge,
+        timeout,
+        20,
+        sleep=sleep,
+        clock=lambda: now[0],
+        fetch=lambda s: runs_by_sha.get(s, []),
+        fetch_suites=lambda s: suites_by_sha.get(s, []),
+    )
+    assert code != 75, msg
+    assert now[0] < timeout, (now[0], msg)
+    assert tip[:8] in msg, msg

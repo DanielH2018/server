@@ -8,6 +8,7 @@ import pytest
 from _land_fakes import PRIMARY, Fakes
 from deploy_tools.land_lib import ci
 from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib.tools import CiVerdict
 
 
 def test_preflight_passes_when_nothing_is_incoming(landing, capsys):
@@ -133,3 +134,65 @@ def test_a_disarmed_gate_names_where_to_re_arm_it(landing, capsys):
     assert await_ci.REQUIRED_CONTEXTS, "the gate is armed at HEAD"
     out = _disarmed_output(landing, capsys)
     assert "REQUIRED_CONTEXTS" in out or "await_ci.py" in out, out
+
+
+def test_step_3_does_not_time_out_on_a_merge_commit_github_never_ran_ci_for(
+    landing, tmp_path, monkeypatch
+):
+    """#4621: no push run ever exists for the merge commit, and a later master commit is green.
+
+    Step 3 waited on the merge commit alone and ended `ci-timeout`, the verdict whose resume
+    is a re-run, which entered the same wait on the same SHA. Either it now accepts the green
+    descendant and returns, or it ends on a verdict of its own that names the descendant and
+    the hand-deploy command. deploy.sh refuses a tree behind origin/master, so the command
+    has to name the tip, not an older green commit.
+    """
+    import await_ci
+    from lib.git_testing import commit, git, init_repo, scrub_process_git_env
+
+    scrub_process_git_env(monkeypatch)
+    origin = init_repo(tmp_path / "origin.git", bare=True)
+    clone = init_repo(tmp_path / "clone", initial_commit="base")
+    git(clone, "remote", "add", "origin", str(origin))
+    merge = commit(clone, "the squash merge GitHub never ran CI for", a="1")
+    tip = commit(clone, "a later merge that went green", b="1")
+    git(clone, "push", "-q", "origin", "master")
+    monkeypatch.chdir(clone)
+
+    required = next(iter(await_ci.REQUIRED_CONTEXTS))
+    green = [{"name": required, "status": "completed", "conclusion": "success"}]
+    runs_by_sha: dict[str, list[dict]] = {merge: [], tip: green}
+    now = [0.0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    def real_wait(sha, timeout_s):
+        # The real wait over a fake clock and a fake GitHub; only the transport is stubbed.
+        return CiVerdict(
+            *await_ci.wait(
+                sha,
+                timeout_s,
+                20,
+                sleep=sleep,
+                clock=lambda: now[0],
+                fetch=lambda s: runs_by_sha.get(s, []),
+                fetch_suites=lambda s: [],
+            )
+        )
+
+    ln, _ = landing(ci_timeout=900)
+    ln.merge_sha = merge
+    ln.tools.await_ci = real_wait
+    ended: Outcome | None = None
+    try:
+        ci.wait_master_ci(ln, ln.merge_sha)
+    except Outcome as exc:
+        ended = exc
+    if ended is None:
+        return  # green: step 3 accepted the descendant and the landing goes on
+    detail = ended.error or ""
+    assert ended.verdict != "ci-timeout", detail
+    assert ended.rc != 75, detail
+    assert tip[:8] in detail, detail
+    assert "deploy.sh" in detail, detail
