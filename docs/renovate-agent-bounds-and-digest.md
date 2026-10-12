@@ -181,12 +181,19 @@ headline is that delta:
 - `FAILED — <reason>` — timeout, non-zero exit, or `is_error`.
 
 When the result JSON carries a `session_id`, the digest prints a `resume this session:` line
-above its cost line (#4603). It holds a `sudo -H -u <renovate_agent_user> sh -c 'cd <run
-worktree> && exec claude --resume <id>'` command, which reopens the session that wrote a
+above its cost line (#4603). The line holds a command that reopens the session that wrote a
 `manual —` hand-off with its context intact. The harness stores a session under its owner's
 home and keys it by the working directory it ran in, so a resume as another user or from
 another path does not find it. The line sits outside the 900-character summary cut, so a long
 summary cannot truncate it.
+
+The command is `sudo sh -c 'cd <run worktree> && set -a && . <EnvironmentFile> && exec runuser
+-u <renovate_agent_user> -- env <unit variables> claude --resume <id>'`. The session's GitHub
+token and Claude credential exist only in the unit's root-only `EnvironmentFile`, so the
+command reads that file as root before it switches user. `sudo` resets the environment, so the
+command also sets again each variable the unit sets: `PATH`, `HOME` and the hook shim's
+`RUN_HOOK_*` paths among them. `SESSION_ENV_KEYS` in `files/renovate_agent.py` lists them, and
+`test_session_resume.py` fails when the unit sets a variable that list lacks.
 
 The transcript lives under the owner's home rather than in the worktree, so it survives the
 next tick's `prepare_worktree`. A resumed session works in the tree a tick reuses, though. Any

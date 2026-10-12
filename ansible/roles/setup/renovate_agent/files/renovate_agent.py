@@ -64,6 +64,18 @@ RENOVATE_AUTHOR = "app/renovate"
 OPEN_PR_LIMIT = 200
 # One JSON line per tick under STATE_DIR, from agent_logic.run_record.
 RUNS_FILE = "runs.jsonl"
+# The unit's EnvironmentFile: the session's GitHub token and Claude credential, root 0600.
+SESSION_ENV_FILE = "/etc/renovate-agent/session.env"
+# Every other variable the unit sets for the session. A resume has to set each again, because
+# sudo resets the environment (#4603). test_session_resume.py holds this to the unit template.
+SESSION_ENV_KEYS = (
+    "PATH",
+    "HOME",
+    "PYTHONDONTWRITEBYTECODE",
+    "RUN_HOOK_PROJECT_DIR",
+    "RUN_HOOK_UV",
+    "BASH_MAX_TIMEOUT_MS",
+)
 
 
 def discord_spool(state_dir: str) -> str:
@@ -276,7 +288,12 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         # session's owner.
         owner = pwd.getpwuid(os.geteuid()).pw_name
         resume = resume_command(
-            outcome.session_id, path, owner, cfg.get("CLAUDE_BIN", "claude")
+            outcome.session_id,
+            path,
+            owner,
+            cfg.get("CLAUDE_BIN", "claude"),
+            SESSION_ENV_FILE,
+            {k: os.environ[k] for k in SESSION_ENV_KEYS if k in os.environ},
         )
     tools.discord_post(
         webhook,

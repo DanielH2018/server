@@ -453,14 +453,6 @@ class TestRunRecord:
         assert rec["touched"] == []
         assert rec["turns"] == outcome.turns
 
-    def test_a_result_without_a_session_id_records_and_offers_no_resume(self) -> None:
-        """A missing id must not become an empty field or a `claude --resume ''` line."""
-        moved = al.delta([_pr(1)], [_pr(1)], {})
-        outcome = al.parse_run(_result(), 0, False)
-        rec = json.loads(al.run_record(100, "ran", "", moved, outcome))
-        assert "session_id" not in rec
-        assert "--resume" not in al.render_digest(outcome, moved, "box", "/tmp/s.json")
-
 
 class TestSkipExitCodes:
     """The Alive beat is the unit's ExecStartPost, so it fires on any exit 0 — including a

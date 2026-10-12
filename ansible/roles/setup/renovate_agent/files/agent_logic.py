@@ -261,15 +261,41 @@ def render_skip(gate: Gate, host: str) -> str:
     return f"renovate-agent: skipped on {host} — {gate.reason}."
 
 
-def resume_command(session_id: str, cwd: str, user: str, claude_bin: str) -> str:
+def resume_command(
+    session_id: str,
+    cwd: str,
+    user: str,
+    claude_bin: str,
+    env_file: str,
+    env: Mapping[str, str],
+) -> str:
     """The shell command that reopens session `session_id` for a person (#4603).
 
     The harness stores a session under its owner's home and keys it by the working directory
-    it ran in, so the command switches to `user` and changes into `cwd` before resuming. A
+    it ran in, so the command changes into `cwd` and switches to `user` before resuming. A
     resume as any other user, or from any other path, does not find the session.
+
+    The session's credentials reach it only through `env_file`, which is root 0600, so the
+    command sources that file as root before it drops to `user`. `sudo` resets the
+    environment, so the command also passes on again everything else the unit set (`env`:
+    PATH, HOME, the hook shim's paths). Without them claude starts with no login, and the
+    hook shim falls back to a checkout `user` cannot read.
+
+    Args:
+        session_id: The `session_id` from the session's result JSON.
+        cwd: The run worktree the session ran in.
+        user: The user that owns the session.
+        claude_bin: The claude binary the session ran.
+        env_file: The unit's EnvironmentFile, which holds the session's credentials.
+        env: The unit's other environment variables.
     """
-    inner = f"cd {shlex.quote(cwd)} && exec {shlex.quote(claude_bin)} --resume {shlex.quote(session_id)}"
-    return f"sudo -H -u {shlex.quote(user)} sh -c {shlex.quote(inner)}"
+    pairs = " ".join(shlex.quote(f"{k}={v}") for k, v in env.items())
+    script = (
+        f"cd {shlex.quote(cwd)} && set -a && . {shlex.quote(env_file)} && "
+        f"exec runuser -u {shlex.quote(user)} -- env {pairs} "
+        f"{shlex.quote(claude_bin)} --resume {shlex.quote(session_id)}"
+    )
+    return f"sudo sh -c {shlex.quote(script)}"
 
 
 def render_digest(

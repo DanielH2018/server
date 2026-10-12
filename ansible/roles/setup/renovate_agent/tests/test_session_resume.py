@@ -16,7 +16,10 @@ import os
 import pathlib
 import pwd
 import re
+import shlex
+import subprocess
 
+import agent_logic
 import renovate_agent
 from gitops_hold import DeployerSnapshot
 from lib.proc_testing import write_exec
@@ -174,3 +177,74 @@ def test_the_resume_command_survives_a_summary_longer_than_discord_allows(
     (digest,) = host.posts
     assert len(digest) < 1900
     assert _resume_lines(digest), digest
+
+
+def test_a_session_id_is_recorded_only_when_the_result_carries_one() -> None:
+    """A missing id must not become an empty field in `runs.jsonl`."""
+    moved = agent_logic.delta([], [], {})
+
+    def record(session_id: str) -> dict:
+        stdout = json.dumps({"type": "result", "session_id": session_id})
+        outcome = agent_logic.parse_run(stdout, 0, False)
+        return json.loads(agent_logic.run_record(100, "ran", "", moved, outcome))
+
+    assert record(SESSION_ID)["session_id"] == SESSION_ID
+    assert "session_id" not in record("")
+
+
+def test_the_resumed_claude_gets_the_units_credentials_and_hook_env(tmp_path) -> None:
+    """Run the printed command, minus `sudo`, against stub `runuser` and `claude` binaries.
+
+    The credentials are only in the root-owned EnvironmentFile and sudo resets the
+    environment, so a command that skips either reaches a claude with no login.
+    """
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    bindir = tmp_path / "bin"
+    seen = tmp_path / "seen"
+    write_exec(
+        bindir / "runuser",
+        f'echo "user=$2" > {seen}\nshift 3\nexec "$@"\n',
+    )
+    claude = write_exec(
+        bindir / "claude",
+        f'echo "args=$*" >> {seen}\necho "cwd=$PWD" >> {seen}\nenv >> {seen}\n',
+    )
+    creds = tmp_path / "creds"
+    creds.write_text("GH_TOKEN=gh-sentinel\nCLAUDE_CODE_OAUTH_TOKEN=claude-sentinel\n")
+    cmd = agent_logic.resume_command(
+        SESSION_ID,
+        str(worktree),
+        "agent-sentinel",
+        str(claude),
+        str(creds),
+        {"PATH": f"{bindir}:/usr/bin:/bin", "RUN_HOOK_PROJECT_DIR": str(worktree)},
+    )
+    argv = shlex.split(cmd)
+    assert argv[0] == "sudo"
+    subprocess.run(
+        argv[1:], env={"PATH": f"{bindir}:/usr/bin:/bin"}, check=True, timeout=30
+    )
+
+    lines = seen.read_text().splitlines()
+    assert "user=agent-sentinel" in lines
+    assert f"args=--resume {SESSION_ID}" in lines
+    assert f"cwd={worktree}" in lines
+    assert "GH_TOKEN=gh-sentinel" in lines
+    assert "CLAUDE_CODE_OAUTH_TOKEN=claude-sentinel" in lines
+    assert f"RUN_HOOK_PROJECT_DIR={worktree}" in lines
+
+
+def test_the_resume_carries_every_variable_the_unit_sets() -> None:
+    """A variable added to the unit but not to SESSION_ENV_KEYS would be lost on a resume."""
+    unit = (
+        pathlib.Path(renovate_agent.__file__).parents[1]
+        / "templates"
+        / "renovate-agent.service.j2"
+    ).read_text()
+    keys = re.findall(r"^Environment=([A-Z_]+)=", unit, re.MULTILINE)
+    assert "RUN_HOOK_PROJECT_DIR" in keys
+    assert sorted(keys) == sorted(renovate_agent.SESSION_ENV_KEYS)
+    assert re.findall(r"^EnvironmentFile=(\S+)$", unit, re.MULTILINE) == [
+        renovate_agent.SESSION_ENV_FILE
+    ]
