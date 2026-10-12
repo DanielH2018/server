@@ -508,10 +508,46 @@ a short window with none, which is the safe direction of convention 5.
   `uv run ansible-playbook ansible/k3s-bringup.yml --tags "<the PR's tags>"`
   (**operator-only**), with the tags the PR names.
 
+### No-pager windows
+
+About 15 batches each open a window in which their checks have no live pager. It runs from
+the Kuma-side PR's deploy to the shadow-dropping PR's deploy. The two-hour bound above
+depends on someone remembering to revert. Three rules bound the windows without that.
+
+- **One window at a time.** A batch's Kuma-side PR merges only when no other batch's window
+  is open.
+- **`CheckWithoutPager`, a temporary rule.** It lives in its own group, `kuma-cutover`, in
+  `files/rules/kuma-cutover.yaml`.
+    - A rule that does not fire has no series, so PromQL cannot read its `shadow` label. The
+      rule therefore lists the tiles itself. Each shadow PR adds one term per tile its batch
+      retires, `absent(monitor_status{monitor_name="<tile>"})`. Each shadow-dropping PR
+      (Cutover-b, Cutover-1b, A6-7b) removes its batch's terms. A term exists exactly while
+      its rule is `shadow`, and it reads 1 once the tile is gone.
+    - The expression joins the terms with `or`, then applies
+      `unless on() (up{job="uptime-kuma"} == 0)`, with `for: 2h`. A Kuma outage fires no
+      term, because Kuma's own liveness pager covers it. `absent()` carries the tile's name
+      as a label, so the page names the tile. A misspelt tile name fires two hours after its
+      shadow PR deploys, so the soak catches it.
+    - It is `critical`, with `service: uptime-kuma`, the role whose tiles it counts. It
+      does not carry `service: observability`. Until B-1, C7's literal gate fails on any
+      firing alert for a tag, and the shadow-dropping PR that ends a window deploys
+      `observability`.
+    - With empty input every term fires, which is the group's zero-series case (M1
+      convention 2).
+    - A rule with no term is not valid PromQL, and shadow PRs overlap. So a PR that removes
+      the last term deletes the group and its `observability_rule_groups` entry, and a PR
+      that adds a term to a missing group re-creates it. After Phase A's last
+      shadow-dropping PR, the group stays deleted.
+- **A6-7a in a quiet window.** A6-7a opens the widest window, over 16 checks and two gates.
+  It merges only when no other window is open, not within two hours of the weekly reboot
+  (about 07:35), with A6-7b open and green, and with the operator reachable for the two
+  hours that follow.
+
 ### Phase A — drain the producers
 
 Each batch is one shadow PR, its cutover PRs (above), and a token PR, each about 100 to 200
-lines or fewer. Batches without a dependency between them run in parallel.
+lines or fewer. The shadow PRs and their soaks run in parallel when their batches have no
+dependency between them. The cutover windows run one after another (*No-pager windows*).
 
 | Batch | What moves | Recipe | Plane of the producer change | Gate, grace and inhibit replacements | Tokens |
 |---|---|---|---|---|---|
@@ -546,7 +582,8 @@ secrets. The arithmetic: 83 at the baseline, less M5's 3, M3's 1 and D5's
   *Applied with no contract text.* says M5's handoff "changes slice counts, not a contract
   row" and that "M6's first Cutover-1a has no gate left from it".
 - A1 to A5, B0 to B6 and B8 are independent of each other, except for the inhibit ordering
-  below. Every host batch waits for B0's apply on its own host.
+  below. Every host batch waits for B0's apply on its own host. Independence lets their
+  shadow PRs and soaks overlap. Their cutover windows still open one at a time.
 - Each inhibit lands in the later of the two PRs that drop `shadow` from its source and from
   its target (*A3 and the handoffs it closes*, task 6). For A1 that is the later of A1's
   Cutover-b and A3's Cutover-b. Until then a dead exporter pages twice, which is the safe
@@ -829,6 +866,22 @@ Kuma still pages for every unmigrated batch until C-1, so it keeps a watcher unt
       space out the external calls: `b2_probe` holds a billed B2 answer for
       `B2_PROBE_INTERVAL_S` (1800s), six cycles, and `r2_probe`, `email_probe`,
       `cloudflare_ips_probe` and `healthchecks_probe` hold theirs for their own intervals.
+- **The residual bridge and its cap.** After C-7 the bridge is an exporter beside
+  Alertmanager. It keeps 15 check bodies, `State`, `down_streak`, the probe caches and the
+  gate skip. D2's PR D2.6d adds the deploy-pipeline family to the same exporter (C7), so the
+  residual counts it.
+    - An estimate from `wc -l` at the plan worktree's HEAD on 2026-10-12: the loop (`cli.py`, `check.py`,
+      `check_table.py`, `registry.py`), the three `gitops_*` modules, the `checks/` modules
+      for the B2, R2, WAN, notify, service, edge, Cloudflare, Healthchecks.io and gitops
+      bodies, `verdicts/service.py` and all of `bridge/` sum to 7,456 lines. The push path
+      and the deleted rows' settings in `bridge/config_host.py` and `bridge/config_cluster.py`
+      leave, so the residual is about 6,500 lines before D2.6d.
+    - **The planning cap is 7,000 production lines** under `files/`, with D2.6d's family
+      inside it. A6-8 measures the residual and sets the cap to that figure plus D2.6d's
+      production lines, rounded up to the next 500, in either direction.
+    - A6-8 adds a test to the monitor-bridge tests directory. It sums the lines of every
+      `.py` under `files/` and fails above the cap. A body that wants to join replaces one or
+      raises the cap in a reviewed PR.
 - **A6's PRs**, in order, each with its size:
     1. **A6-1, the exporter beside the push (~200 lines).** The serving thread, the gauges, the
        `port` and `metrics` items, two tests, and no rules. The gauges are written in
@@ -902,10 +955,12 @@ Kuma still pages for every unmigrated batch until C-1, so it keeps a watcher unt
        `fragments_bridge.py`'s `bridge-gate-sets` to read the `gate` column alone, deletes
        `kuma_table_loop.py`'s `CHECKS`-loop half, and adds the bijection test. Every A6 rule
        stays shadow. `land.sh` deploys `uptime-kuma` and `monitor-bridge`, in that order.
+       It merges only in a quiet window (*No-pager windows*).
     5. **A6-7b, the rules page (~40 lines).** It drops `shadow` from every A6 rule and the two
        exporter rules, and updates their promtool cases. `land.sh` deploys `observability`
        alone, under the two-hour bound in *The cutover order*.
-    6. **A6-8, the row fields (~150 lines).** It deletes `token`, `kuma_id`, `display` and
+    6. **A6-8, the row fields and the size cap (~180 lines).** It adds the cap test
+       (*The residual bridge and its cap*). It deletes `token`, `kuma_id`, `display` and
        `status_group`, and moves each `description` into its rule's `description` annotation.
        It updates `bridge/types.py`, `fragments_bridge.py`'s `bridge-checks` table and their
        tests, and deletes the `check_table.py` `DECIDED` marker on spelled-out tokens with
@@ -926,6 +981,9 @@ and changes nothing a pager sees:
 - **`check.py:run_once`** runs the gate rows first as ordinary rows. It reads each row's gate
   from a new `Check.gate` field, not from the `Gates` sets. It keeps the skip before the body,
   the `startup_grace` hold on the push, and the gauge values *What a row exports* lists.
+  A6-7r writes a `DECIDED the gate skip stays in the bridge` marker at the skip. Its reason
+  names the billed B2 listing and the WAN timeouts (*Gates and grace*), so a later review
+  does not move the skip into Alertmanager with the paging suppression.
   `_evaluate` moves into `check.py` unchanged, so a raising body still becomes a `down`
   verdict and the loop goes on. `check_enabled` moves into `check.py` too.
 - **`registry.py:build_checks`** keeps the `is_gate` rows, orders them first, and passes the
@@ -1056,6 +1114,11 @@ reach A6-7a, fail the bijection test and lose its only pager.
 1. **`probe.py health`.** A new `scripts/diagnostics/probe_lib/health_alerts.py` reads the
    alert plane through `probe_lib/obs_api.py`. `run_health` folds it into its verdict after the
    rollout rollup.
+    - **Deploy-pipeline and `flux` rules (C7).** They carry `service` labels like every
+      rule. A critical `flux` rule fails the `flux` tag's gate. D2.6d's rules carry
+      `service="deploy-pipeline"`, the one literal C7 *Rule labels* admits outside its
+      rule. It names no deploy tag, so no health gate reads it. `health_alerts.py` needs no
+      special case for either source.
     - **Merge gate.** B-1 merges only after C7's amendment for Open question 4 has landed in
       contracts.md. Until then C7's literal selector stands (contracts.md *Requested
       amendments not yet applied*).
@@ -1136,7 +1199,8 @@ reach A6-7a, fail the bijection test and lose its only pager.
    widget. Its blocks are firing critical, firing warning and the Watchdog. Its CSS overrides
    and their test move with it.
 6. **Grafana.** `uptime-kuma-monitors.json` is deleted. `alert-history.json` is rebuilt on
-   `ALERTS`.
+   `ALERTS`. Its panels group by `service`, so the deploy-pipeline and `flux` rules appear
+   under the `service` values C7 gives them.
 7. **The Alertmanager UI.** A LAN-only route, `alertmanager.local.<domain>`, behind Authelia
    `two_factor`, because it can silence every alert. It replaces the Kuma UI's pause button and
    resolves M1 open question 2.
@@ -1494,7 +1558,10 @@ here. C-1 waits for the operator's acceptance.
 batches, B8); or Cutover-1a, Cutover-1b and Cutover-2 (B1 to B7); then the token PR a week
 after the last cutover. A6 runs as A6-1 to A6-9, with the refactor A6-7r before A6-7a.
 *The cutover order* above names each deploy.
-Phase A is about 75 PRs, and A0 lands before any Kuma-side PR.
+Phase A is about 75 PRs, and A0 lands before any Kuma-side PR. Each shadow PR adds its
+tiles' terms to the `kuma-cutover` group, and each shadow-dropping PR removes them. A PR
+that removes the last term deletes the group, and a PR that adds a term to a missing group
+re-creates it, with its test, in about 40 lines (*No-pager windows*).
 
 **Every token PR, and C-5, is one commit with four parts.** The operator removes the keys
 from `ansible/vars/secrets.yml` with `sops` (**operator-only**). In the same commit the agent
@@ -1704,6 +1771,11 @@ M4's rules.
 - C-1: the dry run's prune-guard task passes on the emptied role, and the probe Job renders
   without the uptime-kuma row, quoted in the PR. The readiness task skips in a dry run, so
   that quote proves the render only.
+- `CheckWithoutPager`: promtool cases in `kuma-cutover.test.yaml`. A listed tile absent for
+  2 hours with `up{job="uptime-kuma"}` at 1 fires, naming the tile. The same case with `up`
+  at 0 does not fire, and a listed tile that is present does not fire. The empty-input case
+  fires.
+- The size cap: the cap test with its cap set one line below the measured sum fails.
 
 ## Rollback
 
@@ -1795,7 +1867,10 @@ M4's rules.
   starts in it pages only once the shadow-dropping PR deploys and the rule's `for:` elapses.
   A6-7a opens the widest one, over 16 checks and two gates. Mitigation: M2's, applied to every
   split. The shadow-dropping PR is open and green before the Kuma-side PR merges, and the
-  two-hour bound reverts the Kuma-side PR if it cannot follow.
+  two-hour bound reverts the Kuma-side PR if it cannot follow. *No-pager windows* adds three
+  rules: one window at a time, `CheckWithoutPager` paging a window older than two hours,
+  and A6-7a in a quiet window. The cost is that about 15 cutover windows run in sequence,
+  while the soaks still overlap.
 - **A6-7r rewrites the run loop of a live pager.** A slip in it can fail in three ways.
   Lost suppression pages a WAN outage on every WAN tile. A lost push lets a tile go DOWN at
   its interval. A dropped gate row stops exporting its series (class 3), so `WANUnreachable`
@@ -2006,9 +2081,11 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
     - The uptime-kuma role (3,655 lines, 4 images, 2 claims, 2 CronJobs).
     - From monitor-bridge: `gates.py` (333 lines), `apply_startup_grace`, the push path, the
       check bodies of 21 Prometheus-reading rows, and the log arm (`with_log_errors`,
-      `log_error_verdict`). That is most of its 12.2k lines. The 15 bodies that read other
-      sources stay, and so does `bridge/streaks.py`'s `State`, `down_streak` and probe caches
-      (*Gates and grace*).
+      `log_error_verdict`). That is roughly half of its 12.2k lines. The 15 bodies that read
+      other sources stay, and so does `bridge/streaks.py`'s `State`, `down_streak` and probe
+      caches (*Gates and grace*).
+    - `CheckWithoutPager` and its `kuma-cutover` group, removed by the last
+      shadow-dropping PR.
     - Their tests, a large share of the bridge's 12.8k test lines.
     - `kuma-push-lib.sh`'s push half, `kuma_push.py`, `monitors.py`'s drift half,
       `kuma_live.py` and `kuma_table_loop.py`.
@@ -2032,6 +2109,12 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
       `B2Unreachable`) with one config test, one
       hand-written Authelia rule, and one ADR.
     - One tombstone ConfigMap, from C-1 until C-2b and the operator's delete.
+    - The temporary `CheckWithoutPager` rule, about 40 lines with its test, for the length
+      of Phase A.
+    - The size-cap test, one `DECIDED` marker on the gate skip, and about 5 lines per shadow
+      PR for its tiles' terms.
+- **Kept:** the bridge as an exporter, about 6,500 lines plus D2.6d's family, under a
+  7,000-line cap.
 - **Net:** one alert plane, where there were two stateful systems and a token per check.
 
 ## Open questions
@@ -2152,6 +2235,12 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
     deletes that textfile rule instead of the tile. Whichever lands second quotes
     `git grep -n -i 'registry.gc'` over `ansible/roles/k8s/uptime-kuma/` and
     `ansible/roles/k8s/observability/` to show it removed the other's copy.
+14. **D2.6d and A6-1 both need the bridge's serving thread.** D2.6d adds the deploy-pipeline
+    family to the bridge's exporter, and A6-1 adds the serving thread, the `port` and the
+    `metrics` item. The index gives D2.6d no edge to A6-1. Recommendation: whichever of the
+    two lands first adds the thread and the scrape job, and the other reuses them, so the
+    index needs no edge. Resolution: D2's owner confirms. If D2 declines, the index carries
+    "D2.6d after M6's A6-1, live".
 
 ## Review log
 
@@ -2700,3 +2789,26 @@ claim was checked at `70591c307` before the edit.
   behind* now says that `audit --check` exits non-zero on any missing or stale row
   (`secret_rotation.py:cmd_audit` at `70591c307`). Each token PR is already one commit, so
   the recipe's order needed no change.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **RA-9 / O6 (no-pager windows).** *Design* gains *No-pager windows*: one cutover window at
+  a time, the temporary `CheckWithoutPager` rule in its own `kuma-cutover` group, and A6-7a
+  in a quiet window. The rule lists tiles as `absent()` terms, because a shadow rule that
+  does not fire has no series to read. A PR that removes the last term deletes the group,
+  and a PR that adds a term re-creates it, so it is gone after Phase A rather than at M6's
+  last PR: a rule with no term is not valid PromQL. *Phase A* and *Order* let soaks overlap and serialize the windows. *Steps*,
+  *Verification* (four promtool cases), *Risks* and *Complexity delta* follow.
+- **F-11 (the residual bridge).** *The bridge as an exporter* gains *The residual bridge and
+  its cap*: 15 bodies, `State`, `down_streak`, the gate skip and D2.6d's family, about
+  6,500 lines plus D2.6d's, under a 7,000-line planning cap that A6-8 sets from its
+  measurement. A6-8 adds the cap test (~150 to ~180
+  lines), with a red proof in *Verification*. A6-7r plans a
+  `DECIDED the gate skip stays in the bridge` marker. The *Complexity delta* says "roughly
+  half", not "most", of the 12.2k lines leave. *Open questions* 14 covers the serving
+  thread that D2.6d and A6-1 both need.
+- **F-02 (C7).** Phase B item 1 notes that a critical deploy-pipeline or `flux` alert gates
+  the tag its `service` names. D2's `service="deploy-pipeline"` names no tag, so it gates
+  nothing, and C7 admits the literal. Item 6 notes that `alert-history.json` groups them by `service`.

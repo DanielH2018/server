@@ -473,18 +473,25 @@ B2.
   read the same, since its X2-01 entry applied the change.
 - **The rule.** When a revision fails or times out, `promote` writes `DEPLOY_HOLD` and does
   **not** reset `prod` if the revision changes a forward-only tag relative to `last-good`. A
-  tag changes when its digest in `out/digests.json` differs, when `last-good` lacks the tag,
-  or when T lacks a tag that `last-good` has. The second case covers each takeover PR, whose
+  tag changes when its `footprint` digest in `out/digests.json` (C1) differs, when
+  `last-good` lacks the tag, or when T lacks a tag that `last-good` has. The second case covers each takeover PR, whose
   `last-good` predates the tag. The third covers a revert of a takeover: a reset would
   re-create the Kustomization over objects that the restored tasks write, which is two
   writers (C4).
+- **The hold's form.** A forward-only hold writes T's SHA alone. That is the form `decide`
+  already writes for an ungated bump (*Longhorn and MetalLB bumps gate at the merge*).
+  `verify` writes it in place of C2's `<T> failed=<names>`, never after it. The value never
+  carries `failed=`, so the revert rule that C2 proposes never clears it. That rule clears a
+  hold once a descendant restores the failed names' footprints. For a forward-only tag, such
+  a descendant is a downgrade or a takeover revert, which is the two-writer case above. A
+  forward-only hold therefore clears only by hand, with the command above.
 - **Tier changes stay outside the rule.** No forward-only tag renders from
   `containers_list`. The desired tiers live in `longhorn-reconcile` (*Six Flux-born tags*),
   so a failed revision that only adds a claim or moves a tier resets like any other.
 - **Where it lives.** H1.1b adds it to `promote.py` beside D2's hold-then-reset. D5.2 adds the
   same hold for snapshot roles, so the two share one predicate: a failed revision holds
-  without reset when its changed tags include a snapshot role or a forward-only tag. If H1.1b
-  lands before D5.1, it adds `digests.json` in D5.1's format.
+  without reset when its changed tags include a snapshot role or a forward-only tag. It reads
+  `out/digests.json`, which D2's first publishing PR adds (C1).
 - **The range it reads.** C2's `decide` takes T, the newest published master commit, which
   can sit several commits past the last promotion. The digest rule and the gate rule
   therefore read the range (`last-good`, T]: the digest rule compares T's bundle with
@@ -532,27 +539,29 @@ B2.
   gate rule checks each commit in the range rather than assuming the bump stands alone.
 - **The timeout cannot reset either.** A Kustomization that exceeds its timeout fails the
   revision. Under this rule that is a hold, never a reset.
-- **A tag that was already failing does not fail T (H1.1i).** Every per-tag Kustomization
-  sets `wait: true` (C3), and every revision moves the shared source, so each one re-runs its
-  health check. While a node is NotReady, the `longhorn-manager` and MetalLB `speaker`
-  DaemonSets each keep a pod there that is not Ready. `longhorn` and `metallb` then fail
-  every revision, the outage's own fix included, and under C2 as written each failure sets
-  `DEPLOY_HOLD`. H1.1i amends `verify` (*Open questions* 3):
+- **A dependent that was already failing does not fail T (H1.1i).** Every per-tag
+  Kustomization sets `wait: true` (C3), and every revision moves the shared source, so each
+  one re-runs its health check. While a node is NotReady, the `longhorn-manager` and MetalLB
+  `speaker` DaemonSets each keep a pod there that is not Ready, so `longhorn` and `metallb`
+  fail every revision. C2's *Verification* expects only T's changed set (D2.5). A revision
+  that leaves both tags' footprints, and every name upstream of them, unchanged does not
+  expect them, and C7's `flux` rule group pages their failure instead. What is left for
+  H1.1i is a dependent that was already failing (*Open questions* 3):
     - Before it moves `prod`, `decide` records the newest `flux/<name>` status on `prod`'s
-      commit for every expected name.
-    - `verify T` does not count a `failure` from a name whose tag T did not change, by the
-      predicate above, when the recorded status was already `failure`. It prints the name as
-      `excused <name>`, and `last-good` moves to T once every other status is `success`.
-    - A tag that T changed counts as before, so a revision that changes `longhorn` during an
-      outage still holds. A name that read `success` before the move and fails after it
-      counts, because T may have broken it. A name with no recorded status counts, and so
-      does a name with no digest, such as a shared kind: a `cluster-vars` change can break a
-      tag whose placeholder render did not change.
-    - A name with no status on T when `verify` times out is excused when T did not change
-      its tag and its `dependsOn` chain in T's bundle reaches an excused name. While
-      `longhorn` is not Ready, `longhorn-backup` and `longhorn-reconcile` never apply at T,
-      so without this case the timeout would still set `DEPLOY_HOLD`. A dependent that T
-      changed counts, so a disarm during an outage still holds.
+      commit for every name in the changed set.
+    - A dependent is a name in the changed set only through its `dependsOn` chain, with its
+      own footprint unchanged. `verify T` reports a dependent whose recorded status was
+      `failure` as `excused <name>` and does not expect it. C2's *Verification* states this
+      rule. A T that changes `cluster-base` during an outage makes `longhorn` such a
+      dependent, because `longhorn` declares `cluster-base`.
+    - A name whose footprint T changed counts as before, so a revision that changes
+      `longhorn` during an outage still holds. A dependent that read `success` before the
+      move and fails after it counts, because T may have broken it. A dependent with no
+      recorded status counts too. The footprint covers the `cluster-vars` files for a tag
+      that substitutes (C1), so a `cluster-vars` change makes that tag a changed name.
+    - The timeout excuse is gone. The pillar review fold narrowed contracts.md's request row
+      to the recorded status. A dependent with no status at the timeout counts, even when
+      its `dependsOn` chain reaches an excused name. *Risks* names the case that still holds.
 
   The excuse needs no cluster read, so `promote` stays a GitHub workflow.
 
@@ -1435,7 +1444,7 @@ before H1.2. Four of them merge in a fixed order: H1.1f, then H1.1g, then H1.1b,
   MetalLB bump merged before H1.1g would hold every promotion, so H1.1b also waits until
   (`last-good`, master tip] holds no pin change from before H1.1g.
 - H1.1g's land gate relies on H1.1f's check that a bump stands alone in its PR.
-- H1.1i reads the changed-tag predicate that H1.1b adds.
+- H1.1i edits the `verify` path whose failure write H1.1b changes.
 
 The other six merge in any order. H1.1b keeps its id because contracts.md's C2 amendment
 gates on it. Each estimate counts hand-written lines, tests included.
@@ -1450,7 +1459,7 @@ gates on it. Each estimate counts hand-written lines, tests included.
       `timeout`, in place of `manifests_rollout_timeout_default`.
     - The verbatim files and the patches stay outside `rendered_docs()`. *Vendored upstream
       manifests* names the guards they bypass and why that is accepted.
-- **H1.1b Promote: the forward-only hold and the gate status** (about 230 lines, over the
+- **H1.1b Promote: the forward-only hold and the gate status** (about 220 lines, over the
   guide because the age bound and the backstop reuse the range walk; split out, they would
   repeat it).
     - The forward-only hold in `promote.py`, over the range (`last-good`, T], with a tag
@@ -1459,7 +1468,8 @@ gates on it. Each estimate counts hand-written lines, tests included.
       six-hour bound on the status's age for commits in (`prod`, T].
     - The backstop: two changes to one forward-only pin in (`prod`, T], or a Longhorn move
       of more than one minor, hold.
-    - `out/digests.json`, if D5.1 has not added it.
+    - The hold's form: T's SHA alone, written in place of C2's `failed=` value. The
+      predicate reads `footprint` from the `out/digests.json` that D2 publishes.
 - **H1.1c Publish: the per-tag object census** (about 120 lines). The named members are the
   ones *Plumbing tags are never pruned* lists for each of the six tags. The census applies
   to a tag from the commit that adds the tag.
@@ -1578,12 +1588,12 @@ gates on it. Each estimate counts hand-written lines, tests included.
     - `scripts/deploy_tools/tests/test_narrow_setup.py:test_the_real_k3s_roles_untagged_task_files_are_named_as_such`
       names `tasks/stale-checkout-check.yml` as a fourth untagged file, because its tags come
       from each import site.
-- **H1.1i Verify: a tag that was already failing** (about 130 lines). `decide` records the
-  `flux/<name>` statuses on `prod`'s commit before it moves `prod`. `verify` excuses a
-  failure from a tag that T did not change and that was already failing. It also excuses a
-  timeout from an unchanged tag whose `dependsOn` chain reaches an excused one. It waits on
-  contracts.md's C2 amendment row for the excused failures (*Open questions* 3), as H1.1b
-  waits on the row for the hold.
+- **H1.1i Verify: a dependent that was already failing** (about 70 lines). `decide` records
+  the `flux/<name>` statuses on `prod`'s commit before it moves `prod`. `verify` reports a
+  dependent in T's changed set whose own footprint T did not change and whose recorded
+  status was `failure`, and does not expect it. C2's *Verification* states that rule, so C2's
+  text meets the request row's gate for this PR (*Open questions* 3). H1.1b still waits on
+  the row for the hold.
 - **H1.1j The takeover census** (about 120 lines). `scripts/dev/takeover_census.py`, which
   the rule *A takeover census before each flip* runs, with tests in `scripts/dev/tests/`.
   It reads both inputs as JSON on its standard input or from files, so it makes no API call
@@ -1918,16 +1928,22 @@ subject's tests.
     - a gate status posted seven hours before `decide` holds, and the same status posted
       one hour before promotes. A seven-hour-old status on a commit in (`last-good`,
       `prod`] does not hold.
-- *Excused failures (H1.1i).* Tests in `scripts/deploy_tools/tests/`, with stubbed statuses:
-    - `flux/longhorn` read `failure` on `prod`'s commit and reads `failure` on T, T leaves
-      `longhorn`'s digest unchanged, and the changed `bento-pdf` reads `success`. `last-good`
-      moves to T, and the output names `excused longhorn`;
+- *The hold's form (H1.1b).* A failed revision that changes `longhorn` writes
+  `DEPLOY_HOLD` as T's SHA alone. A stub `verify` that writes C2's `<T> failed=<names>` form
+  for it goes red.
+- *Already-failing dependents (H1.1i).* Tests in `scripts/deploy_tools/tests/`, with stubbed
+  statuses and digests. T changes only `cluster-base`'s footprint, so its changed set holds
+  `cluster-base` and its dependents `longhorn`, `longhorn-backup` and `longhorn-reconcile`:
+    - `flux/longhorn` read `failure` on `prod`'s commit and reads `failure` on T, and every
+      other expected name reads `success`. `last-good` moves to T, and the output names
+      `excused longhorn`;
     - the same case with `success` recorded on `prod`'s commit holds;
-    - the same case with T changing `longhorn` holds;
+    - the same case with T also changing `longhorn`'s footprint holds;
     - the same case with no recorded status for `longhorn` holds;
-    - `flux/longhorn-reconcile` has no status on T at the timeout, T leaves its digest
-      unchanged, and its `dependsOn` reaches the excused `longhorn`. `last-good` moves. The
-      same case with T changing `longhorn-reconcile` holds.
+    - `flux/longhorn-reconcile` has no status on T at the timeout, and its `dependsOn`
+      reaches the excused `longhorn`. The revision holds, because the timeout excuse is gone;
+    - the outage regression: a T that changes only `bento-pdf` expects neither
+      `flux/longhorn` nor `flux/metallb`, and a stubbed `failure` on both does not hold it.
 - *CI pin checks.* `v1.12.1` to `v1.12.0` is flagged as a decrease, and `v1.12.1` to
   `v1.14.0` as a skipped minor. `v1.12.2` is clean. A bump PR that also edits another role is
   flagged. A PR that moves `k3s_longhorn_version` into another file at `v1.12.1`, and
@@ -2142,11 +2158,17 @@ subject's tests.
   the CI decrease check stop the reset. H1.1g's land rule reads (`last-good`, tip] and
   H1.1b's backstop reads (`prod`, T], so two sequential minor bumps cannot apply in one
   promotion.
-- **A node outage fails every revision.** While a node is NotReady, `longhorn` and `metallb`
-  fail their health checks on every revision. H1.1i excuses a failure from a tag that T did
-  not change and that was already failing before `prod` moved. Two cases still hold: a
-  revision that changes `longhorn` or `metallb` during the outage, and an outage that starts
-  while `verify` waits. The operator clears those holds once the node is back. H6's node
+- **A node outage fails `longhorn` and `metallb` on every revision.** C2's changed set
+  expects neither unless T changes it or a name upstream of it, so most revisions promote,
+  and C7's `flux` rule group pages the failing tags. H1.1i reports a dependent that was
+  already failing. Three cases still hold:
+    - a revision that changes `longhorn` or `metallb` during the outage;
+    - a revision that changes a name upstream of them, such as `cluster-base`. Their
+      transitive dependents `longhorn-backup` and `longhorn-reconcile` never apply while
+      `longhorn` is not Ready, so they may have no recorded status and time out;
+    - an outage that starts while `verify` waits.
+
+  The operator clears those holds once the node is back. H6's node
   upgrades take a node down by design, and D5's node-pinned workloads fail health while
   their node is down, so both widen the exposure.
 - **A held bump's gates go stale.** `promote` refuses a gate status older than six hours,
@@ -2508,7 +2530,8 @@ subject's tests.
     - kustomize patches, `prune: false` and a per-tag timeout in the renderer, with the
       per-directory placeholder key set if R2 or D3 has not added it;
     - the forward-only hold, the status check with its age bound and the backstop in
-      `promote`, and the excused-failure rule in `verify`;
+      `promote`, and the report of an already-failing dependent in `verify`, narrowed from
+      an excuse with a timeout case;
     - the per-tag object census in publish;
     - vendored targets and three checks in `probe.py health`;
     - the CI pin checks, the `land.sh` pin gate, its land rule and `--regate`;
@@ -2580,25 +2603,28 @@ subject's tests.
       note asks contracts.md to replace that row with one row that carries both halves and
       H1.1a's gate. That gate also comes before traefik's flip, which waits on H1.1a, so D5
       loses nothing. A second note asks D5 to quote the merged wording.
-3. **C2's reset is unsafe for forward-only tags.** *Resolution:* amend C2: "On failure it resets
-   `prod` to `last-good`, unless the failed revision changes a forward-only tag (H1) or a
-   snapshot role (D5). Then it writes `DEPLOY_HOLD` and leaves `prod`. `prod` moves to T only
-   when every commit in (`last-good`, T] that changes a forward-only pin maps, through the
-   commit-to-pulls lookup, to a PR whose head carries a successful `homelab/upgrade-gates`
-   status. A commit with no PR fails that test, and a failed lookup ends the run as
-   `error`. `prod` also stays when (`prod`, T] changes one forward-only pin in more than one
-   commit, or moves `k3s_longhorn_version` more than one minor, or when a required gate
-   status on a commit in (`prod`, T] is older than six hours. A tag that T drops counts as changed. Before it moves
-   `prod`, `decide` records the `flux/<name>` statuses on `prod`'s commit. `verify` does not
-   count a `failure` from a name whose tag T did not change and whose recorded status was
-   already `failure`, and `last-good` moves when every other status is `success`. An unchanged name with no
-   status at the timeout is excused when its `dependsOn` chain reaches an excused name." The
-   gate
-   stays "before H1.1b merges" for the hold and "before H1.1i merges" for the excused
-   failures. contracts.md's pending row, *The forward-only hold* under *Requests on C2*,
-   carries the full text above with both gates. Until the amendment lands, C2's
-   *Verification* still moves `last-good` only when every status is `success`, and H1.1i's
-   PR does not merge before contracts.md applies it.
+3. **C2's reset is unsafe for forward-only tags.** *Resolution:* amend C2. contracts.md's
+   pending row, *The forward-only hold* under *Requests on C2*, carries this text: "A failed
+   revision that changes a forward-only tag (H1) or a snapshot role (D5) writes
+   `DEPLOY_HOLD` and leaves `prod`. `prod` moves to T only when every commit in
+   (`last-good`, T] that changes a forward-only pin maps to a PR whose head carries a
+   successful `homelab/upgrade-gates` status. A commit with no PR fails that test, and a
+   failed lookup ends the run as `error`. `prod` also stays when (`prod`, T] changes one
+   forward-only pin in more than one commit, moves `k3s_longhorn_version` more than one
+   minor, or carries a required gate status older than six hours. A tag that T drops counts
+   as changed."
+    - **The excused failures.** The pillar review fold narrowed the row's last part. C2's
+      changed set no longer expects an unchanged name, so what remains is a dependent whose
+      `flux/<name>` status on `prod`'s commit already read `failure`. C2's *Verification*
+      states that rule. The timeout excuse for a dependent whose `dependsOn` chain reaches an
+      excused name is dropped.
+    - **The gates.** The row keeps "before H1.1b merges" for the hold and "before H1.1i
+      merges" for the excused failures. C2's *Verification* text meets the second. Until the
+      hold half lands, C2 resets `prod` on every failure, so H1.1b does not merge before
+      contracts.md applies it.
+    - **The hold's form.** H1's holds write T's SHA alone and never C2's `failed=` form, so
+      the revert rule that C2 proposes never clears one. Each clears only by hand
+      (**operator-only**).
     - **The no-hold value.** C2's *`DEPLOY_HOLD`'s values* and C6 read `none` as no hold,
       any other non-empty value as a hold, and an empty or missing value as an error.
       contracts.md applied that in its X2-01 entry, so H1 needs no row for it. The DR hold
@@ -3452,3 +3478,26 @@ entry below gives the evidence.
       consumer. The weekly-shard narrowing case moves to a fixture tree.
     - `test_longhorn_group_labels.py` moves under H1.6 and H1.7b, and the H1.7a entry no
       longer claims it.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **F-01 (the expected set).** C2's `verify` expects T's changed set, and the H1 request
+  row's excuse covers only a dependent that was already failing.
+    - *Design*, *Forward-only tags and the promote rule*: the H1.1i bullet is rewritten
+      around the changed set. The timeout excuse is gone, and the forward-only predicate
+      reads the `footprint` digest. A bullet, *The hold's form*, says that H1's holds write
+      T's SHA alone, never C2's `failed=` form, and clear only by hand. The stale clause on
+      adding `digests.json` before D5.1 is replaced: D2's first publishing PR adds it (C1).
+    - *Steps*: H1.1b drops `digests.json` and gains the hold's form, about 230 to about 220
+      lines. H1.1i is renamed and shrinks from about 130 to about 70 lines, and C2's text
+      meets its gate. The order note names the shared `verify` path.
+    - *Verification*: a hold-form case for H1.1b. H1.1i's cases are rewritten on the
+      `cluster-base` dependency edge: the timeout case holds, and an outage regression case
+      joins them.
+    - *Risks*: the node-outage entry names the three cases that still hold, among them a
+      transitive dependent with no recorded status.
+    - *Complexity delta*: the `verify` item is narrowed. No count changes.
+    - *Open questions* 3 quotes contracts.md's row as it stands and records the narrowing
+      and the hold's form.

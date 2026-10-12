@@ -429,6 +429,41 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
     - The cron is a host process that holds the host's key, not an agent. D3.2c commits
       the files and the CI gate only after D3.2b's setup-plane apply has settled.
 
+### What one secret costs
+
+A secret lives in up to five stores (F-09). What reads the secret decides which stores it
+touches, and each store has its own writers:
+
+- **`ansible/vars/secrets.yml`** holds every secret. The add-secret author writes a value
+  there with `sops set`, and the rotation cron rewrites a rotated one. The two cluster
+  files derive from it. H4 states how the per-host files relate to it.
+- **`cluster-vars.sops.env`** holds each value that a cluster placeholder substitutes. The
+  `cluster-vars` Kustomization turns it into the Secret `homelab-cluster-vars`. Only
+  `cluster_vars.py write` writes the file: the operator (**operator-only**), or the rotation
+  cron for a rotated value (D3.2b).
+- **A SOPS manifest under `ansible/vars/cluster-manifests/`** holds the values in
+  `SOPS_MANIFEST_KEYS`, one manifest per `render_sops_manifests` entry. `write` writes it,
+  with the same two writers.
+- **A per-host SOPS file** holds the values its host reads, and the host package carries it
+  (C5). H4 owns its writer.
+- **`sops-age`** holds the cluster's private age key and no application value, so adding a
+  secret never touches it. Creating or replacing it is **operator-only** (D3.0, D3.4).
+
+`cluster-vars.source` is evidence, not a store. `write` rewrites it with the cluster files.
+
+The cost of one secret follows from the list:
+
+- A secret that only Ansible reads touches `secrets.yml` alone. Its author needs no operator
+  step.
+- A secret that the cluster reads touches `secrets.yml` and one cluster file. The cluster
+  file needs the operator's `write`, so an agent that adds such a secret stops before the PR
+  and hands `write` to the operator (D3.4).
+- A secret that a host and the cluster both read touches three stores, and each store
+  changes through its own writer.
+
+Open question 8 asks whether a cluster secret that no file in the tree holds could skip the
+operator's step.
+
 ### Where the `cluster-vars` Kustomization is published (D3.3a)
 
 `cluster-vars` is the first shared kind, a Kustomization that is not a deploy tag. The rule
@@ -603,7 +638,10 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
   `cluster-vars.sops.env` or `cluster-vars.source` touches no role. D3.4 makes `land-wait`
   treat it as touching `cluster-vars` and every flux-owned tag whose Kustomization depends
   on `cluster-vars`. It names no changed key, so it keeps to the `DECIDED fire on ANY change
-  to secrets.yml` marker in `land_tags.py`.
+  to secrets.yml` marker in `land_tags.py`. This rule is interim. C6 has `land.sh` read its
+  changed set from `digests.json` and derive no tags itself (D6), and C1 counts the
+  `cluster-vars` files in every substituting tag's `footprint`. The rule retires in the PR
+  that makes that switch.
 
 ### Tree diff
 
@@ -790,7 +828,9 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
           `cluster-vars` and a fixture dependent, and a PR changing neither cluster file adds
           no wait.
     - Edit `.claude/skills/add-secret/SKILL.md`. An agent adding a cluster-referenced key
-      stops before the PR and hands `write` to the operator.
+      stops before the PR and hands `write` to the operator. The skill lists the stores
+      from *What one secret costs*, so the author knows before starting which ones the
+      secret touches.
     - Edit `docs/secret-rotation.md`: the cluster file, and the cluster key rotation
       procedure under *Design*, marked **operator-only**.
     - Add the cluster age key to the recovery kit in `docs/break-glass.md`: where its private
@@ -1039,6 +1079,8 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   value's shape.
 - **The operator becomes a step in every cluster-secret change.** Mitigation: `check` tells
   the author exactly which keys need `write`, and the rotation cron runs `write` itself.
+  *What one secret costs* says which secrets need the step. Open question 8 proposes
+  `seal`, which would drop the step for a secret that no file in the tree holds.
 - **The checksum misses a mount it cannot see** (failure class 2). A pod that reads a Secret
   outside its own role is not stamped. Mitigation: D3.3c's outside-role reference test, with
   peanut as its named member and a red fixture.
@@ -1102,7 +1144,8 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   D3.2d adds two per-key refusals to `write` (about 60 lines with their tests) and one
   member to the argon2 parameter-agreement test. `{{` joins D3.2a's character set.
 - **Not added:** a key set in D2.6c's source gate. D2 declines it, and `check` with R2's
-  rules covers it.
+  rules covers it. D3 also adds no second writer of cluster manifests. Open question 8
+  proposes one, `seal`, at about 120 lines with its tests.
 - **Removed:** for each flux-owned role, `verify_secret_keys.yml` no longer runs. R4 deletes
   it once no role is Ansible-owned. Under C3's default, no interim `domain` source exists, so
   D3 has none to retire.
@@ -1171,6 +1214,43 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
       template's split and after it through the stored value.
     - A malformed or duplicated `_argon2` digest: mint it again with R3's procedure, which
       validates the digest against the plaintext before `sops set`.
+8. **Could a cluster secret that no file in the tree holds skip the operator's `write`?**
+   (F-09) SOPS encrypts with the public recipients in `ansible/.sops.yaml` alone, and
+   `write` already encrypts each manifest from stdin with `--filename-override` and
+   `--config`. Only a change to a file that is already encrypted needs that file's data key.
+   Such a secret could therefore ship as its own SOPS manifest, through C3's second path.
+   Only a value that a placeholder substitutes would then need the operator's `write`. This
+   plan does not adopt it, for two reasons:
+    - C3 sends only `SOPS_MANIFEST_KEYS` down the second path. R2's `sops-manifest-entries`
+      check fails an entry whose template names any other secret. A single-line value in a
+      manifest changes both.
+    - CI cannot compare a manifest's plaintext with `secrets.yml`, so the two values would
+      agree only by construction.
+
+   Recommendation: adopt it as a `cluster_vars.py seal` mode, one PR of about 120 lines with
+   its tests, after D3.3c.
+    - `seal` reads the value from stdin once. It passes the value to the same `sops set` that
+      the add-secret skill runs, through `rotation_tools.py:sops_set`. It then encrypts the
+      manifest from the same bytes, and writes the `.source` line from the public ciphertext.
+    - It refuses a key that `secrets.yml` already holds, a key that any placeholder
+      references, and a manifest path that already exists. A value added to an encrypted
+      manifest needs that manifest's data key, so that case stays with `write`.
+    - It applies `write`'s value refusals in memory. A refused run adds and changes no file.
+    - `check`'s failure message names `seal` beside `write` for a manifest that is absent
+      from the base.
+    - Red proof: a test runs the manifest encrypt with no age identity reachable, with
+      `SOPS_AGE_KEY_FILE` unset and `XDG_CONFIG_HOME` on an empty directory, and the encrypt
+      succeeds. Its control runs `sops decrypt` on the output under the same environment,
+      which must exit non-zero, as D3.3a's unrelated-key check does. A third test decrypts
+      the fixture manifest with the throwaway key and finds the input value.
+    - The next `write`, by the operator or the rotation cron, decrypts both files and
+      regenerates a manifest that differs from `secrets.yml`. Drift between the two lasts
+      at most until then.
+
+   `cluster_vars.py write` stays **operator-only**. Resolution, before the PR opens: the
+   contracts.md maintainer decides a request on C3's second path, R2's owner rules on
+   widening `SOPS_MANIFEST_KEYS` or adding a second set beside it, and the operator accepts
+   equality by construction (**operator-only**).
 
 ## Review log
 
@@ -1405,3 +1485,19 @@ supersedes the rationale of D3-R10-03 and D3-R10-04 above.
   commit-guard comment says a live value must not be reverted. `check --no-render` therefore
   runs in process after `write` and before the deploy, where a failure reverts with nothing
   live.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **F-09, secrets in up to five stores.** *Design* gains *What one secret costs*: the five
+  stores, the writers of each, and which stores a secret touches by what reads it. D3.4's
+  add-secret edit lists those stores, and the *Risks* entry on the operator step points at
+  them. The encrypt-only path went to Open question 8 rather than into the design. C3 and
+  R2's `sops-manifest-entries` check limit the second path to `SOPS_MANIFEST_KEYS`, so a
+  single-line secret in a manifest needs a contract change. The question recommends a
+  `seal` mode of about 120 lines and gives its red proof. *Complexity delta* names `seal` as
+  not added. `cluster_vars.py write` stays operator-only.
+- **Contract sync, C6.** D3.4's `land-wait` rule for the cluster files is marked interim.
+  C6 has `land.sh` derive no tags itself, and C1's `footprint` counts the cluster files for
+  every substituting tag.

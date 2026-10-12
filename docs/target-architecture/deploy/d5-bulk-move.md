@@ -50,7 +50,7 @@ applies nothing. Four duties that Ansible tasks performed get a Flux-era owner:
 The 59 Deployments and 5 DaemonSets that carry `restartedAt` roll once at their takeover. The
 40 `Recreate` Deployments among them roll inside announced windows.
 
-**Exit criterion.** Six checks, each under *Verification*:
+**Exit criterion.** Seven checks, each under *Verification*:
 
 1. **Every entry is flux-owned.** Every k8s entry carries `owner: flux`: the 56 at
    `70591c307`, plus `flux`, plus any entry added after the baseline, such as M4's
@@ -66,9 +66,10 @@ The 59 Deployments and 5 DaemonSets that carry `restartedAt` roll once at their 
    that label carries `kubectl.kubernetes.io/last-applied-configuration`. The add-ons in
    `longhorn-system`, `metallb-system` and the rest of `kube-system` belong to H1, so this
    check leaves them out.
-3. **Every promotion is verified, soak included.** `promote` waits on `flux/soak` as well as
-   on every tag's status, and the last ten promoted master commits show `flux/soak` as
-   `success`.
+3. **Every promotion is verified, soak included.** `promote` waits on the statuses of each
+   revision's changed set (C2), and `flux/soak` joins that set whenever a flux-owned tag
+   changes. The soak Job runs on every promoted commit, so the last ten promoted master
+   commits show `flux/soak` as `success`.
 4. **Snapshots and images have their new owners.** Each of the 14 roles that declare
    `k8s_autodeploy_snapshot_pvcs` has a Longhorn snapshot whose name starts
    `autodeploy-<tag>-<digest8>-`, for its digest at `prod`'s revision. Each of the ten built
@@ -81,6 +82,11 @@ The 59 Deployments and 5 DaemonSets that carry `restartedAt` roll once at their 
    drill runs again end to end. Each hand suspend survives at least one reconcile of the
    Kustomization that applies the suspended object, and lists the field manager
    `homelab-operator`.
+7. **kustomize-controller's memory is re-measured at full load.** After the namespace PR,
+   kustomize-controller's peak working set during a reconcile of every Kustomization stays
+   at or under its 64Mi request, the figure D1's exit 4 records beside ADR-0010's premise
+   of about 30 MiB per controller. The flux role's `CLAUDE.md` records the peak beside
+   D1's figure.
 
 ## Baseline at `70591c307`
 
@@ -410,7 +416,7 @@ The 59 Deployments and 5 DaemonSets that carry `restartedAt` roll once at their 
 
 ```text
 D5.1a1 per-tag kinds in D4.3a's allowlist census, reserved names, deletionPolicy
-D5.1a2 prune-disabled labels, digests.json, collision census
+D5.1a2 prune-disabled labels, claims and suspend fields in digests.json, collision census
 D5.1a3 Job census: TTL, names, backoffLimit, rerun-safe, connection helper
 D5.1b the suspend lever: render, no `suspend: false`, promote exclusion, hand-write field manager
 D5.1c host-write census, kustomize-controller concurrency
@@ -437,10 +443,18 @@ D5.4a1 image contexts ─▶ D5.4a2 CI images ─▶ (operator: packages public)
   `<tag>-verify`, `soak` and `homelab-namespace` too. Removing any of them from the bundle
   then deletes nothing, which matters most for `homelab-namespace`'s LimitRange. A renderer
   test fails on a Kustomization in the fixture bundle without it.
-- **Per-tag digests.** `out/digests.json` maps each tag to the SHA-256 of its rendered
-  directory, its snapshot claims when it declares any, and whether it is suspended. `promote`
-  reads it to learn which tags a revision changed. `digest8` is the digest's first eight hex
-  characters.
+- **Per-tag digests.** D2's first publishing PR adds `out/digests.json`, which maps each
+  name to an object with two digests, `own` and `footprint` (C1). D5 reads `own`, the
+  SHA-256 of `cluster/<tag>/` alone, wherever this plan says a tag's digest: `digest8`,
+  snapshot names, the D5.1d gate, `suspended-changed` and the stateful hold's trigger.
+  `digest8` is the first eight hex characters of `own`. C2's changed set reads `footprint`.
+    - **What D5.1a2 adds.** Each tag's object gains two fields: `claims`, the snapshot
+      claims the tag declares, and `suspended`, the rendered suspend flag. C1 does not list
+      them, and Open question 10 requests that amendment.
+    - **Why the stateful rules read `own`.** The snapshot Job and the revert both key on
+      `own`'s `digest8`, so a rule keyed on `footprint` would name a revision that took no
+      snapshot. A change that moves only `footprint`, such as a `flux/<tag>.yaml` timeout or
+      a `cluster-vars` file, changes no image the role runs.
 - **A collision census.** A test in `scripts/renderer/tests/` fails when two tags render the
   same apiVersion, kind, namespace and name. A pair that must share an object is listed with
   its reason and moves in one PR. Otherwise one object would have two writers, one per plane.
@@ -452,9 +466,10 @@ D5.4a1 image contexts ─▶ D5.4a2 CI images ─▶ (operator: packages public)
       `out/flux/<name>.yaml`, holding exactly the Kustomization `<name>`, and its own
       directory, `out/cluster/<name>/`. A member with no file fails the census (D4, *A shared
       kind has its own file*). D3.3a adds `cluster-vars`, the first member. The expected
-      statuses need no change, because D4.3's rule expects `flux/<name>` for each
-      Kustomization in `out/flux/`. The one exception is temporary: from D5.3b2 until
-      D5.3b3, `verify`'s observe-only set holds `soak` (*The soak as a Job*).
+      statuses need no change, because C2's changed set covers each Kustomization in
+      `out/flux/` whose footprint moved, with its dependents. A kind that D5 adds needs only its
+      footprint rule. The one exception is temporary: from D5.3b2 until D5.3b3, `verify`'s
+      observe-only set holds `soak` (*The soak as a Job*).
     - **What D5.1a1 adds.** A per-tag kind (`<tag>-snapshot`, `<tag>-verify`) is a document
       in `out/flux/<tag>.yaml`, with its manifests in `out/cluster/<tag>-snapshot/` or
       `out/cluster/<tag>-verify/`. Each tag's file must hold exactly `<tag>` and the suffixed
@@ -469,7 +484,8 @@ D5.4a1 image contexts ─▶ D5.4a2 CI images ─▶ (operator: packages public)
       `homelab-namespace`, beside the members of `SHARED_KINDS`, so no deploy tag can take
       either name before its kind exists. It also reserves the suffixes `-snapshot` and
       `-verify`, beside D4.3a's `-deferred`.
-    - `out/digests.json` sits at the bundle root. No Kustomization's path reaches it.
+    - D2's `out/digests.json` sits at the bundle root (C1). No Kustomization's path reaches
+      it.
     - Red fixtures: an unknown extra document in a tag's file, an unknown extra file, a
       fixture tag named `soak`, which the literal reserved list fails, and a renderer patched
       to emit a `-snapshot` document for a role that declares no snapshot claims. Each later
@@ -501,9 +517,10 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
   from D5.2c on, so the runbook does not change shape at the flux PR. The manager is for
   `spec.suspend` only. A hand apply of whole objects keeps kubectl's default manager, so that
   Flux takes its fields back (the broken-sync-object runbook in the flux PR).
-- **Not an expected status.** `promote.py verify` drops a suspended Kustomization from the
-  statuses it waits on, reading `digests.json`. A suspended Kustomization never posts and never
-  advances its revision, so without this every verify would time out. Any other reader that
+- **Not an expected status.** C2's changed set leaves suspended Kustomizations out, and
+  `promote.py verify` reads the flag from the `suspended` field of `digests.json`. A
+  suspended Kustomization never posts and never advances its revision, so without this every
+  verify whose changed set reached it would time out. Any other reader that
   compares a Kustomization's `status.lastAppliedRevision` with its source's revision must drop
   a suspended Kustomization the same way. H6's host-mode gate is one such reader.
 - **No edge to it.** The renderer drops every `dependsOn` edge that names a suspended
@@ -517,15 +534,18 @@ reconciliation of a flux-owned role. D5.1b rewrites the sentence in
   suspend is a temporary stop, and three checks hold it there:
     - **The gate.** `cross_plane_order.py` refuses a PR that changes the render under
       `cluster/<tag>/` of a tag suspended on its base, unless the tag is not suspended at the
-      PR's head. It reads the suspend flag from `digests.json` at both ends, never the
+      PR's head. It compares `own` and reads the `suspended` field of `digests.json` at both
+  ends, never the
       `flux_suspend` key itself, so a role that derives the key from another variable is
       covered too. A shared-template change whose render touches the suspended tag waits for
       the resume. That is the cost.
     - **The race.** Master's status-check rule is not strict (Baseline), so a PR whose checks
       ran before the suspend merged can still merge after it. `promote.py decide` therefore
-      treats a revision R that changes the `cluster/<tag>/` digest of a tag suspended at both
+      treats a revision R that changes the `own` digest of a tag suspended at both
       `last-good` and R as a hold, with the cause `suspended-changed`, naming the tag. The
-      hold path writes `DEPLOY_HOLD` and posts, as in D5.2b1. `probe.py landing` prints the
+      hold path writes `DEPLOY_HOLD` as `<R> suspended-changed=<tag>` and posts, as in
+      D5.2b1. The value never takes C2's `failed=` form, so C2's proposed revert rule never
+      clears it. `probe.py landing` prints the
       cause beside `DEPLOY_HOLD`. The way out is a commit that reverts the racing change or
       resumes the tag. Clearing `DEPLOY_HOLD` without one only holds again at the next
       `decide`, and the post says so.
@@ -669,20 +689,35 @@ Two removals look like ordinary edits and delete live objects. Both checks run i
 `cross_plane_order.py --base <sha>`, which renders the cluster at the PR's base and head. A
 cross-slice note tells D4 that D5.1d and D5.1f extend it.
 
-- **A dropped workload.** D2's *Risks* expected D5's soak to notice a Deployment that prune
+- **A dropped object.** D2's *Risks* expected D5's soak to notice a Deployment that prune
   deleted. The soak cannot: a dropped template is absent from the render, so no rendered list
-  names it, and a pruned workload creates no pod. The check compares revisions instead. It
-  fails a PR that removes a Deployment, StatefulSet or DaemonSet from a flux-owned tag's
-  render, unless one of the PR's commits carries a `Removes-Workload: <tag> <kind>/<name>`
-  trailer for each removed object. Red fixture: a base with two Deployments in a tag and a
-  head with one, and no trailer. Green: the same pair with the trailer. A cross-slice note
-  asks D2 to point its sentence at this check.
+  names it, and a pruned workload creates no pod. Prune deletes a NetworkPolicy, an
+  IngressRoute, a CronJob, a Service or an RBAC object just as silently. The check compares
+  revisions instead. It fails a PR that removes an object of any kind from a flux-owned
+  tag's render, unless one of the PR's commits carries a trailer for each removed object.
+  The trailer reads `Removes-Object: <kind>/<namespace>/<name>`. A cluster-scoped object
+  leaves the namespace empty, as in `Removes-Object: ClusterRole//<name>`, the grammar D2
+  shares.
+    - **What it exempts.** A rename is not a removal. An object whose kind and name, with
+      the trailing digest that the renderer appends removed, still render in the head
+      passes, such as a Job named by its spec digest or a ConfigMap named by its script
+      digest. An object labelled `kustomize.toolkit.fluxcd.io/prune: disabled` passes too,
+      because prune never deletes it.
+    - **Fixtures.** Red: a base with a Deployment and a NetworkPolicy in a tag and a head
+      without the NetworkPolicy, with no trailer; and a head that drops a ClusterRole with
+      no trailer. Green: the same pairs with their trailers, and a head that renames a
+      snapshot Job because the role's digest moved.
+    - **D2 checks the same trailer at promote time.** D2.6c's `decide` reads it over the
+      commits between `prod` and T, because only `decide` knows which `prod` T replaces. An
+      automerged bump that drops an object is then covered too. A squash merge need not
+      keep a PR commit's trailer, so a cross-slice note asks D2 where `decide` reads it. A
+      second note asks D2 to point its *Risks* sentence at this check.
     - **A handback is exempt.** A PR that removes a tag's `owner: flux`, such as the revert
       of a flip in *Rollback*, removes the tag's whole Flux render, and `deletionPolicy:
       Orphan` deletes nothing. The arm skips such a tag, so the emergency path never needs
       trailers. A green fixture reverts a flip and passes.
     - **The first of D2's two retirement PRs** empties the templates, so it carries a trailer
-      for each workload it removes.
+      for each object it removes.
     - **It runs on pull requests only.** It reads the trailers from the PR's own commits. A
       squash merge need not copy them into the master commit, so on a push to master the
       arm is skipped, and the PR has already passed it.
@@ -934,9 +969,14 @@ bullet).
 - **The rollback rule changes.** Today the deployer reverts the volumes and then redeploys the
   prior commit. In CI, `promote` cannot reach Longhorn. Resetting `prod` would apply the old
   image onto data the failed image may have migrated, the very state `volume-snapshot` exists
-  to prevent. So when a failed revision's changed tags, read from `digests.json` against
-  `last-good`'s, include a snapshot role, `promote` writes `DEPLOY_HOLD` and does **not**
-  reset `prod`. For every other failure, D2's hold-then-reset stands.
+  to prevent. So when a failed revision's changed tags, read from the `own` digests in
+  `digests.json` against `last-good`'s, include a snapshot role, `promote` writes
+  `DEPLOY_HOLD` and does **not** reset `prod`. For every other failure, C2's hold-then-reset
+  stands.
+- **The hold's value is D5's own.** The stateful hold writes `<T> stateful=<names>`, where
+  `<names>` are the expected names that failed or timed out. It never takes C2's `failed=`
+  form, so C2's proposed revert rule cannot clear it while a volume still holds data R
+  wrote. Only the operator clears it, at the end of the revert runbook's branch.
 - **The trigger is a changed snapshot role, not a failed one.** `promote`'s concurrency group
   cancels pending runs, so one revision often spans several merges, such as a Renovate bump of
   an eligible snapshot role and a hand change to traefik. If traefik fails, the revision still
@@ -970,6 +1010,11 @@ bullet).
   moves `prod` to `last-good` and does nothing else. Like D1's inputs, it runs only from
   `refs/heads/master`. The failure path already performs this reset. The input exposes it to
   the revert runbook and to the flux PR's broken-sync-object runbook.
+    - **Decide, then write.** The input follows C2's split. A read-only job checks the hold
+      and names `last-good`'s digest. A second job of the same shape as D2's `settle` job,
+      with no checkout and `packages: write`, moves the tag. Both run in `promote-reset`,
+      so the write never waits in the group `promote`. The `promote` and `verify` jobs stay
+      read-only, and any other tag move D5 adds follows the same split.
     - **It runs in its own concurrency group, `promote-reset`.** In the group `promote`, a
       reset dispatched while a run verifies would wait up to that run's derived timeout, as
       much as 5.5 hours (D4), and the next merge's run would cancel it while it was pending
@@ -1175,7 +1220,17 @@ promotion, an automerged one included, without having to page.
 - **The Kustomization.** A non-tag Kustomization, `soak`, depends on every flux-owned tag and
   every `-deferred` and `-verify` Kustomization, minus suspended ones. It holds one Job,
   `soak-<spec digest8>`, whose spec embeds R's SHA. The renderer takes the commit SHA as an
-  input, so two renders of one commit stay identical. The Job's ServiceAccount may read
+  input, so two renders of one commit stay identical. Those edges also make `soak` a
+  dependent of every tag, so C2's changed set holds `soak` whenever it holds a tag. Open
+  question 19 asks whether the edges stay, because an unchanged tag that is not Ready
+  blocks the soak through them.
+- **Its footprint ignores R's SHA.** The renderer computes `soak`'s `own` and `footprint`
+  digests (C1) over its render with R's SHA and the Job name derived from it replaced by
+  fixed values. Otherwise `cluster/soak/` would change on every commit, and C2's changed set
+  would never be empty. A docs-only commit then expects `flux/homelab` alone, as C2 says.
+  The renderer test is two fixture commits that differ only in a docs file and give an
+  empty changed set. Its red half is the same pair with the digest taken over the raw
+  render, which puts `soak` in the set. The Job's ServiceAccount may read
   OCIRepositories in `flux-system`. In each namespace in its scope it may list pods, and
   `get` and `list` ReplicaSets in the `apps` group.
 - **Its scope.** The Job reads only pods whose owner chain ends in a Deployment, DaemonSet or
@@ -1203,20 +1258,41 @@ promotion, an automerged one included, without having to page.
       `prod@sha256:<digest>` and names no commit (C6). A check against it would never match
       R, so every soak would exit 1 and every promotion would hold (failure class 2, D4's
       Risks).
-- **Its wait.** The renderer computes W as the larger of `k8s_rollout_stabilise_seconds` and
-  the longest `for:` among critical or `verify="true"` rules labelled with a flux-owned
-  service, plus 60 seconds
-  for the kube-state-metrics scrape and 60 seconds for rule evaluation. It renders W into the
-  Job's spec, and the PR quotes W's value. The Job waits until W has passed since the latest
-  Ready `lastTransitionTime` that the API reports among in-scope pods created after T0. The
+- **Its scope is R's changed set.** The Job reads two `digests.json` files from GHCR, R's
+  from `sha-<R>` and the base's from `last-good`, and computes C2's changed set between
+  them. R's file is not embedded in the Job's ConfigMap, because it would then move
+  `soak`'s own digest on every change. Its services are the set's names with any reserved suffix stripped,
+  minus the members of `SHARED_KINDS`. The restart and alert legs below read only those
+  services.
+    - **The base.** C2 takes the changed set against `prod`'s commit before the move, and
+      the Job runs after the move. `last-good` names that commit in every case but two.
+      After a stateful hold, `prod` stays at the held revision, so the Job's set is a
+      superset of `verify`'s and checks more services, not fewer. In the reset race of *The
+      stateful hold*, `prod` can trail `last-good`, and the Job's set leaves out names
+      already verified at `last-good`.
+    - **It fails toward the fleet.** The Job narrows only from a `digests.json` whose
+      artifact signature verifies against the `promote` workflow's identity (C2). A failed
+      read, a failed verification or a malformed file widens the scope to every flux-owned
+      service and W to the fleet value, and the Job logs why.
+    - **An empty scope passes at once.** When the set holds no service, the Job runs no
+      leg, waits for nothing and exits 0.
+- **Its wait.** W is the larger of `k8s_rollout_stabilise_seconds` and the longest `for:`
+  among critical or `verify="true"` rules labelled with a service in the scope, plus 60
+  seconds for the kube-state-metrics scrape and 60 seconds for rule evaluation. The renderer
+  writes each flux-owned service's longest such `for:` into the Job's ConfigMap, and the Job
+  computes W at run time from the services in its scope. A future 1-hour critical rule on
+  one service therefore lengthens only the soaks of revisions that change that service. The
+  PR quotes the map's largest entry, the fleet value. The Job waits until W has passed since
+  the latest Ready `lastTransitionTime` that the API reports among in-scope pods created
+  after T0 and mapped to a service in the scope. The
   anchor comes from the API, not from Prometheus, so a pod not yet scraped cannot drop out of
   it. W includes a scrape interval, so every such pod has a Ready sample by the time the
-  checks run. When no in-scope pod was created after T0, as for a docs-only commit, it waits
-  W from T0 and then runs only the alert check.
+  checks run. When no such pod was created after T0, as for a change that rolls no pod, it
+  waits W from T0 and then runs only the alert check.
 - **Restarts.** The Job reads restart counts and termination times from the API, from each
   pod's `containerStatuses`, never from a scrape. Prometheus supplies only the service mapping
   and the first Ready time. The check covers every in-scope pod created after T0 and mapped to
-  a flux-owned service through `homelab:pod_service:info`, in two legs:
+  a service in the scope through `homelab:pod_service:info`, in two legs:
     - **The gate leg** is today's gate, exactly. The Job reads `restartCount` when it starts,
       which is after every tag is Ready, and again when its wait ends. The wait is never
       shorter than `k8s_rollout_stabilise_seconds`. Any increase fails.
@@ -1240,28 +1316,24 @@ promotion, an automerged one included, without having to page.
     - An in-scope pod created after T0 whose `homelab:pod_service:info` series is missing or
       reads `service="unmapped"` fails the soak rather than passing, because an empty join
       must not read as clean (failure class 3).
-- **Alerts.** Any firing alert for a flux-owned service, with `severity="critical"` or the
+- **Alerts.** Any firing alert for a service in the scope, with `severity="critical"` or the
   label `verify="true"`, whose `ALERTS_FOR_STATE` value is at or after T0 fails the soak and is
   named. Both series are read with `shadow!="true",alertname!="Watchdog"`, the filter M1's
   Open question 5 sets for C7's gate. A shadow alert pages nobody, and M4's
   `IngressProbeFailedCritical` keeps `shadow: "true"` until M4 PR 5, which can overlap D5.
   The Watchdog always fires, carries `service: observability` and has no `for`.
-- **The alert leg reads every flux-owned service, not only the ones R changed.** Today's
-  gate reads only the roles in its batch. The soak cannot narrow to R's tags, because the
-  base it would diff against is not in its render. The renderer reads one commit, and
-  `decide` picks T against `prod` only at run time. A Job that fetched `last-good`'s
-  `digests.json` from GHCR at run time could narrow it, at the cost of a WAN read and a
-  second artifact reader on every soak. D5 keeps the fleet-wide scope instead, because a
-  critical alert during a promotion is a reason to stop promoting, as M1 says of
-  `AlertmanagerNotificationsFailing`.
-    - **The cost.** An unrelated critical or `verify="true"` alert that becomes active in
-      R's window fails the soak. For a revision that changes no snapshot role, C2's failure
-      path then resets `prod` to `last-good`, which rolls back R's healthy changes until the
-      operator clears the hold. The post names the alert and its service, so the operator
-      can tell an unrelated alert from a fault.
-    - The restart leg is narrow already. It reads only pods created after T0, which are
-      almost all pods that R rolled.
-    - Open question 17 asks the operator to accept this trade (**operator-only**).
+    - From the flux PR on, the soak reads D1.6b's `FluxControllerDown`, a critical alert
+      with `service="flux"`, whenever `flux` is in the scope. The same group's
+      `FluxNotReady` is a warning without `verify="true"`, so the soak ignores it.
+- **Why the scope is read at run time.** Today's gate reads only the roles in its batch, and
+  the soak matches it. The render cannot hold the scope, because the base it would diff
+  against is not in its render. The renderer reads one commit, and `decide` picks T against
+  `prod` only at run time. The GHCR read adds no outage mode, because a promotion already
+  needs GitHub and GHCR, and so does the `flux/soak` post.
+    - **The residual.** An unrelated critical alert no longer fails the soak. It pages
+      through Alertmanager like any critical alert. A failed soak still resets `prod` for a
+      revision that changes no snapshot role. Open question 17 states what C2's proposed
+      revert rule leaves open (**operator-only**).
 - **A Prometheus roll in its own revision.** When R changes observability, Prometheus rolls
   (`Recreate`). `soak` depends on `observability`, so the Job starts after Prometheus is back.
   Prometheus's pod is an in-scope pod created after T0, so the wait runs W past its Ready, as
@@ -1280,8 +1352,8 @@ promotion, an automerged one included, without having to page.
   read-only command that reads this line (D5.2c, *Choosing the branch*).
 - **The status.** The Job's completion makes `soak` Ready, and notification-controller posts
   `flux/soak`. That is how a GitHub-hosted job learns a LAN-only verdict.
-- **Observe first, then gate.** `promote.py verify` derives its expected set from every
-  Kustomization published under `flux/` (C2, D4.3). So `out/flux/soak.yaml` would make
+- **Observe first, then gate.** `promote.py verify` expects every name in C2's changed set,
+  and `soak` joins it whenever a tag changes. So `out/flux/soak.yaml` would make
   `flux/soak` gate in the same PR that first publishes it. Gating would then start on a soak
   nobody had watched pass. The first live soak could fail on a wrong field, a fence refusal
   or a missing Prometheus peer. It would then hold, and for a revision with no snapshot role
@@ -1292,7 +1364,7 @@ promotion, an automerged one included, without having to page.
       neither holds nor resets. The name differs from D5.1b's soak exclusion, which drops a
       suspended tag from `soak`'s `dependsOn`.
     - D5.3b3 deletes the set, and from then on `verify` expects `flux/soak` like any other
-      published Kustomization.
+      name in the changed set.
 - **`land-wait` waits on the soak from D5.3b3 on.** C6 and D2's *How `land.sh` waits* make a
   `flux/soak` `success` on R part of `settled`. The PR's tags never include `soak`, and
   `soak` depends on every flux-owned tag, so the tags are always Ready before the soak Job
@@ -1317,8 +1389,14 @@ promotion, an automerged one included, without having to page.
       timeout (*Its timeout*, below).
     - **Before D5.3b3 the soak gates nothing**, so a `settled` that ignores it is accurate.
       That is why the read lands with the observe-only set's deletion, not with D5.3b2.
-- **Its timeout.** The renderer sets `soak`'s `timeout` to W plus 10 minutes, so the Job's
-  wait never outlives its Kustomization. That timeout feeds D4's chained verify timeout.
+- **Its timeout.** The renderer sets `soak`'s `timeout` to the fleet W plus 10 minutes, a
+  static ceiling, so the Job's wait never outlives its Kustomization. D4's chained verify
+  timeout keeps the same ceiling, because the Job's W can exceed T's own. After a stateful
+  hold the Job's base gives a superset of `verify`'s set, and a failed base read falls back
+  to the fleet W. A `verify` budget taken from T's own W would then time out on a healthy
+  soak and write a false hold. The per-scope W shortens only the Job's actual wait. The
+  cost is that the reboot window and `land-wait`'s give-up deadline still scale with the
+  fleet W.
 - **Reaching Prometheus.** Prometheus's fence is the bespoke
   `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-prometheus.yaml.j2`, which
   netpol-baseline's tasks apply. The Job is a cross-namespace caller from `flux-system`, so
@@ -1377,6 +1455,11 @@ promotion, an automerged one included, without having to page.
       rollout pulled. GHCR is needed only for a new content tag, or after kubelet's image
       garbage collection removes an image no container uses. H4 keeps the `nut` pod in the
       cluster, so this holds until an H-slice changes it.
+    - A cold pull still needs GHCR. A node that never pulled nut's tag, or whose kubelet
+      removed it, cannot start nut during a WAN outage, and WAN outages tend to come with
+      the power events nut exists for. So nut's image keeps a LAN source, and Open question
+      2 carries the recommendation: the in-cluster registry as a pull-through mirror of
+      GHCR. nut's Wave C PR waits on that ruling.
     - A renderer census in `scripts/renderer/tests/` fails on a `ghcr.io/danielh2018/*:sha-*`
       ref with `imagePullPolicy: Always`, or with no policy. Its red fixture is nut's
       Deployment with `Always`.
@@ -1519,7 +1602,8 @@ assertion becomes a standing rule.
   11).
 - Its Job embeds the role's `digest8`, so it runs once per role revision, an automerged bump
   included.
-- It is an expected status of `promote`, and `soak` depends on it.
+- It is an expected status of `promote` whenever C2's changed set holds it, and `soak`
+  depends on it.
 
 **`probe.py health` is never the only successor of an eligible role's verify.** It runs only
 from `land.sh`, so it misses every automerged bump. It may be the only successor for a role
@@ -1661,6 +1745,10 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
 
 ### Waves and windows
 
+**Wave size and the status burst.** Each promotion posts one commit status per Kustomization
+that reconciles it. D2's Open question 13 projects that burst at D5's scale, and each wave PR
+sizes its batch of roles against that projection.
+
 | Wave | Roles | Shape | Window |
 |---|---|---|---|
 | A | deploy-ui, gpu-exporter, homepage, littlelink, longhorn-ui, node-exporter, nut-exporter, pihole-exporter | one task, `RollingUpdate` or DaemonSet, no snapshot | any time; littlelink only after M6's B-1e |
@@ -1733,9 +1821,11 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
    suffixes `-snapshot` and `-verify`, and `deletionPolicy: Orphan` on every non-tag kind,
    with the red fixtures listed in the design. It adds no member to `SHARED_KINDS`. Inert for
    every role. It lands after D3.3 and before any PR that adds a D5 kind.
-2. **D5.1a2 — Prune labels, digests and collisions** (about 120 lines). The prune-disabled
-   labels, `digests.json` with each tag's claims and suspend flag, and the collision census
-   with its red fixture of two tags rendering one Middleware.
+2. **D5.1a2 — Prune labels, digest fields and collisions** (about 90 lines). The
+   prune-disabled labels, the `claims` and `suspended` fields that each tag's object in D2's
+   `digests.json` gains, and the collision census with its red fixture of two tags rendering
+   one Middleware. D2's first publishing PR creates the file, so D5.1a2 lands after it and
+   after the C1 amendment in Open question 10.
 3. **D5.1a3 — The Job census** (about 130 lines). The census rows for TTL, name, `backoffLimit`
    and `homelab/rerun-safe`, the shared connection helper with its retry, and the row against
    a script that connects without it. Red fixtures: one Job of each kind with a TTL, a
@@ -1758,11 +1848,20 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
       such a service. D5.1b rewrites them, all **operator-only** because they need `sudo
       k3s kubectl` and a `DEPLOY_HOLD` change:
         1. Set `DEPLOY_HOLD` with `gh variable set DEPLOY_HOLD --body <reason> -R
-           DanielH2018/server`. A hand suspend is not in `digests.json`, so `verify` would
-           wait on the suspended tag until it timed out, as in the revert runbook.
+           DanielH2018/server`. A hand suspend is not in `digests.json`. So when a
+           suspended tag is in a later revision's changed set, `verify` would wait on it
+           until it timed out, as in the revert runbook.
+            - **Offline branch.** When GitHub cannot be reached, the operator skips this
+              step and records the reason and the time in a local file on daniel-box.
+              Step 2 runs as written, because it needs only the LAN. Once the WAN returns,
+              the first action is this step's `gh variable set`, before any resume and
+              before step 3, because a queued `promote` run can start as soon as GitHub
+              answers.
         2. For each flux-owned service in the shed set, suspend `<tag>` with
            `--field-manager=homelab-operator` (*The stop lever*), then scale it to zero. An
-           Ansible-owned one scales to zero as before.
+           Ansible-owned one scales to zero as before. A suspend frees the reconcile worker
+           that the tag holds only when that worker's current wait ends, which can take up
+           to the tag's `timeout`.
         3. Once the node is back, and before any resume, read the hold with `gh variable
            get DEPLOY_HOLD -R DanielH2018/server` and compare it with step 1's reason.
            Step 1 does not stop a promote run that was already past `decide`, because
@@ -1808,8 +1907,9 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
    design. Inert until observability or pihole flips, because it stamps only flux-owned
    tags. It lands before the first Wave A PR, so no role with `manifests_rollout: ''` flips
    without a restart trigger (Baseline).
-8. **D5.1f — Removal gates** (about 120 lines). Both checks in `cross_plane_order.py`, with
-   their red and green fixtures beside it, and the retirement order with its
+8. **D5.1f — Removal gates** (about 150 lines). Both checks in `cross_plane_order.py`, with
+   their red and green fixtures beside it, the `Removes-Object:` grammar and its two
+   exemptions, and the retirement order with its
    **operator-only** claim delete in `docs/flux-deploy-plane.md`.
 9. **D5.1g — The takeover census** (about 120 lines). `probe.py takeover <tag>`, its tests
    in `scripts/diagnostics/tests/` with speedtest's `restartedAt` as the red half, and the
@@ -1844,6 +1944,8 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
     `DEPLOY_DISCORD_WEBHOOK`. Tests in `scripts/deploy_tools/tests/`:
     - a failed revision that changes a snapshot role holds without resetting, and one that
       does not resets;
+    - the stateful hold writes `<T> stateful=<names>`. The red half is a hold written in
+      C2's `failed=` form, which C2's proposed revert rule could clear;
     - a revision that changes a snapshot role and a failing non-snapshot role holds without
       resetting, and its message marks which tag failed;
     - a revision that changes two snapshot roles, one of which failed, posts a full command
@@ -1872,7 +1974,10 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
     `--field-manager=homelab-operator`. In the shed scenario it also fails when the step
     that clears `DEPLOY_HOLD` with `--body none` comes before, or without, a `gh variable
     get DEPLOY_HOLD` read. Its red fixture for that clause is the shed scenario with that
-    read removed, which leaves the clear unconditional. The test also fails on a
+    read removed, which leaves the clear unconditional. In the shed scenario's offline
+    branch it fails when a resume or a clear comes before the branch's `gh variable set
+    DEPLOY_HOLD`. Its red fixture is the offline branch with a resume moved first, and the
+    branch as written passes. The test also fails on a
     `volume-revert.yml` command written into Branch 1 itself, so that Branch 1 always runs
     the post's per-role blocks rather than a one-role copy. It also fails on a classify step
     that reads `lastAttemptedRevision` without naming the `prod@sha256:` value it compares
@@ -1888,7 +1993,12 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
     `networkpolicy-prometheus.yaml.j2`. netpol-baseline is Ansible-owned, so `land.sh` deploys
     it. The session checks the peer with the read-only `kubectl -n observability get
     networkpolicy`.
-16. **D5.3b1 — The soak script, inert** (about 190 lines). Requires M1 and M2 to have landed.
+16. **D5.3b1 — The soak script, inert** (about 230 lines, split in two if review asks).
+    Requires M1 and M2 to have landed. The script includes the run-time scope: the two
+    signed `digests.json` reads, the changed set, the fallback to the fleet and W from the
+    per-service map. It names the signature verifier the Job runs. If
+    `flux_job_image` cannot carry it, a second pinned image joins the soak Job, and the
+    Complexity delta counts it.
     The Job script and its tests, from fixture API and query results, which no render emits
     yet:
     - an authelia pod that restarts after its first Ready fails the soak and names
@@ -1908,14 +2018,21 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
       gap fails, naming the gap; a restart during the gate leg's wait fails;
     - a failure writes `failed-services:` to the termination message, naming each failing
       service, a snapshot role's service among them;
+    - a critical alert after T0 on a service outside the changed set passes, and the same
+      fixture fails when the base file does not verify, because the scope widens to the
+      fleet. The red half is a Job that ignores the scope;
+    - a 1-hour critical rule on an unchanged service leaves W at the changed services'
+      value, and an empty changed set exits 0 at once without waiting;
     - a first connection that is refused twice and then answers passes;
     - the revision check reads the origin key. A fixture OCIRepository whose
       `artifact.revision` is `prod@sha256:<digest>` and whose
       `artifact.metadata["org.opencontainers.image.revision"]` is `master@sha1:<R>` passes.
       The same fixture with that key naming another commit exits 1. The first fixture is the
       red half for a check that reads `artifact.revision`.
-17. **D5.3b2 — The soak Kustomization, observed** (about 110 lines). The `soak` renderer
-    kind, W's derivation, the Job's RBAC, ReplicaSets included, and its ConfigMap. `soak`
+17. **D5.3b2 — The soak Kustomization, observed** (about 140 lines). The `soak` renderer
+    kind, the per-service map that W reads, the Job's RBAC, ReplicaSets included, and its
+    ConfigMap. `soak`'s footprint rule with R's SHA normalised, and its renderer test with
+    the docs-only pair as described in *The soak as a Job*. `soak`
     joins `SHARED_KINDS` here,
     with a fixture showing that it passes the census. The PR quotes W's value. It also adds
     `verify`'s observe-only set holding `soak` (*The soak as a Job*). Tests in
@@ -1931,7 +2048,8 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
     nothing. The session reads the failing services as *Choosing the branch* says, and fixes
     the soak before D5.3b3.
 18. **D5.3b3 — `verify` waits on the soak** (about 40 lines). It deletes the observe-only set,
-    so `promote.py verify` expects `flux/soak`. The D5.3b2 tests flip: the fixture with no
+    so `promote.py verify` expects `flux/soak` whenever the changed set holds it. It merges
+    only after the rulings in Open questions 17 and 19. The D5.3b2 tests flip: the fixture with no
     `flux/soak` status keeps waiting, and the one with a `flux/soak` `failure` holds. Its
     precondition, quoted in the PR body, is D5.3b2's two consecutive `success` statuses.
     Edit `renovate.json`'s descriptions that say "the deployer's health gate and rollback are
@@ -1979,8 +2097,19 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
     becomes the gate Job in `pi-peer-backup-verify`, a named member of that PR with the
     `pull-pi-peers.sh` pattern test. **Each Wave C PR's precondition:** an anonymous token from
     `https://ghcr.io/token` for `repository:danielh2018/<name>:pull`, then a manifest GET of
-    the exact content tag, returns 200 on daniel-box and on daniel-server.
+    the exact content tag, returns 200 on daniel-box and on daniel-server. nut's PR also waits
+    on Open question 2's ruling. If the mirror is kept, a manifest GET of nut's content tag
+    through the mirror on daniel-server returns 200 first.
 26. **D5.19 onwards — Wave D**, in the order of the wave table.
+    - **Two readings on the first Wave D revisions.** The session re-takes D4's
+      worker-occupancy reading and tunes the 30-minute window of D4.9's
+      `FluxWorkersSaturated` from it. It also measures how long `verify` runs on the first
+      broad revision, the number D4 Open question 14 waits on. The next Wave D PR's body
+      quotes both.
+    - **tdarr's pre-pull moves to Flux.** tdarr's conversion PR replaces its pre-pull task
+      with a pre-pull that Flux applies, so tdarr's `timeout` drops from 3000 s to the
+      600 s default and a stuck tdarr holds a worker for at most 10 minutes. Open question
+      21 asks where that pre-pull lives.
     - **Conversion PRs first**, while Ansible still owns the role. Each replaces one group of
       tasks with rendered objects or `k8s_host_files` tasks that Ansible applies, at about
       100 to 200 lines. Every role over 200 task lines gets at least two, and observability,
@@ -2087,7 +2216,7 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
       a second writer on `spec.replicas`, with the same drift-correction hazard as the host
       cron. So H2 drops both PRs and the `registry-gc` row from its exit list, and the host
       cron runs as today until this PR retires it. registry's flip therefore waits on no H2
-      PR. D6 decides the registry's own fate (Open question 2).
+      PR. Open question 2 rules on the registry's own fate before nut's Wave C PR.
     - traefik: the CRDs come from a URL in the role's `tasks/main.yml`, which no render may
       fetch under C1, so they get an in-tree copy pinned by `traefik_k8s_crd_version`. The
       cluster RBAC carries `kustomize.toolkit.fluxcd.io/prune: disabled` before the move, so
@@ -2183,7 +2312,7 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
               dispatch `reset_to_last_good`, which moves only a GHCR tag and makes `prod`
               name `last-good`'s commit, **only when no tag changed between `last-good` and
               `prod` is a snapshot role or a forward-only tag.** A tag has changed when its
-              digest in `digests.json` differs between the two bundles, or when only one
+              `own` digest in `digests.json` differs between the two bundles, or when only one
               bundle holds it (*The stateful hold*, and H1's *The rule*). A failure hold's
               post lists the changed tags and marks each snapshot role (D5.2b1). H1 names
               the forward-only tags.
@@ -2201,7 +2330,10 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
 
            Once the hold is settled, the operator reads `prod`'s commit without the
            cluster, from the `org.opencontainers.image.revision` key of `prod`'s manifest in
-           GHCR (C2). The render is `homelab-render cluster` in placeholder mode at that
+           GHCR (C2).
+            - **Offline branch.** When GitHub or GHCR cannot be reached, steps 1 and 2
+              cannot run. The operator follows C2's break-glass promotion instead, and D6
+              owns that runbook and its order against steps 3 to 9. The render is `homelab-render cluster` in placeholder mode at that
            commit, with `flux_verify_drill` false.
         3. Apply `cluster/flux/`, the Flux components (D1).
         4. Create `flux-system/sops-age` from the cluster age key in the password manager,
@@ -2455,6 +2587,10 @@ role's tasks the moment it is flux-owned, so D5 converts each verify at that rol
       play that keeps the apply task gated on `containers_list | ansible_owned | length >
       0`, which runs against the handed-back fixture. A second test fails when
       `homelab-namespace` is missing from the render or from `SHARED_KINDS`.
+31. **The memory reading** (about 10 lines). After the namespace PR, the flux role's
+    `CLAUDE.md` records kustomize-controller's peak working set from exit 7, beside D1's
+    figure and its 64Mi request. The PR body quotes the `probe.py metric` output. If the
+    peak exceeds the request, the same PR raises the request and says so.
 
 ## Verification
 
@@ -2491,7 +2627,7 @@ grep -F -f /tmp/last10.txt /tmp/promoted.txt \
   | awk '$2 == "flux/soak" && $3 == "success"' | wc -l                               # 10
 
 # Exit 4.
-jq -r '.tags | to_entries[] | select((.value.claims // []) | length > 0) | "autodeploy-\(.key)-\(.value.digest[0:8])-"' \
+jq -r 'to_entries[] | select(.key != "_unclassified") | select((.value.claims // []) | length > 0) | "autodeploy-\(.key)-\(.value.own[0:8])-"' \
   /tmp/out/digests.json > /tmp/prefixes.txt
 wc -l < /tmp/prefixes.txt                                                           # 14
 kubectl -n longhorn-system get snapshots.longhorn.io -o name | sed 's#.*/##' \
@@ -2527,6 +2663,13 @@ kubectl -n flux-system get kustomization traefik flux \
 kubectl -n flux-system get kustomization speedtest speedtest-snapshot \
   -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.suspend}{" "}{.metadata.managedFields[*].manager}{"\n"}{end}'
 # Each line reads `<name> true` and lists `homelab-operator`.
+
+# Exit 7, after the namespace PR. Operator-only trigger: delete kustomize-controller's
+# pod. The fresh pod reconciles every Kustomization at once, and no restartedAt is written. Then read its peak working set, in bytes,
+# over the hour that followed.
+uv run python scripts/diagnostics/probe.py metric \
+  'max_over_time(container_memory_working_set_bytes{namespace="flux-system",container="manager",pod=~"kustomize-controller-.*"}[1h])'
+# At or under 67108864, the 64Mi request.
 ```
 
 Exit 3 counts only commits that `prod` pointed at. notification-controller posts `flux/*`
@@ -2584,8 +2727,8 @@ includes valheim's initContainer.
 - **The restart annotations.** An Alertmanager Secret edit that moves another workload's
   annotation fails, a pihole ConfigMap edit that leaves instance 2's annotation unmoved
   fails, and pihole-2's entry with its annotation removed fails D5.1e's census.
-- **The removal gates.** A head that drops a Deployment with no `Removes-Workload:` trailer
-  fails, and a flux-owned entry moved into `k8s_retired_services` fails. The revert of a
+- **The removal gates.** A head that drops a NetworkPolicy, or a ClusterRole, with no
+  `Removes-Object:` trailer fails, a head that renames a snapshot Job passes, and a flux-owned entry moved into `k8s_retired_services` fails. The revert of a
   flip passes, so the gate never blocks a handback.
 - **The co-batched hold.** A post that carries a command block for the failed snapshot role
   alone fails D5.2b1's two-role test.
@@ -2625,6 +2768,15 @@ includes valheim's initContainer.
 - **The shed lever.** `probe.py shed-set` prints the suspend command for a flux-owned
   service, and D5.2c's text test fails on a shed patch without the field manager, and on
   a shed clear of `DEPLOY_HOLD` with no `gh variable get DEPLOY_HOLD` read before it.
+- **The shed scenario's offline branch.** D5.2c's text test fails on its red fixture, a
+  resume moved before the branch's `gh variable set DEPLOY_HOLD`.
+- **The soak's footprint.** Two fixture commits that differ only in a docs file give an
+  empty changed set. The same pair hashed over the raw render puts `soak` in the set and
+  fails.
+- **The soak's scope.** D5.3b1's unrelated-alert fixture passes inside the scope and fails
+  when the base file does not verify. A Job that ignores the scope fails it.
+- **kustomize-controller's memory.** The exit-7 comparison reads a fixture sample of 80Mi as
+  over the request and fails.
 - **A new claim.** D5.2a's new-claim fixture passes and its inventory-listed twin fails.
 - **The reboot window.** `promote`'s first Sunday run inside the window ends `deferred`, and
   the scheduled run at the window's end promotes master's tip with `verify`'s full derived
@@ -2774,13 +2926,13 @@ includes valheim's initContainer.
   its own group, and a test fails on a `decide` that sleeps. The residue is GitHub's
   scheduling: a late or skipped scheduled run delays the promotion until the next merge or
   a dispatch, and never holds.
-- **An unrelated alert holds a good revision, and the reset rolls it back.** The soak's alert
-  leg reads every flux-owned service, so a critical or `verify="true"` alert that becomes
-  active in R's window for a reason R did not cause, such as a Discord failure firing
-  `AlertmanagerNotificationsFailing`, fails the soak. A revision with no snapshot role is
-  then reset to `last-good` until the operator clears the hold. Mitigation: the post names
-  the alert and its service. The trade is stated in *The soak as a Job* and put to the
-  operator in Open question 17 (**operator-only**).
+- **An unrelated failure holds a good revision.** The soak reads only R's changed set, so
+  an unrelated alert no longer fails it. Two paths remain. An unchanged tag that is not
+  Ready blocks `soak` through its `dependsOn` edges, and `verify` then times out on
+  `flux/soak` (Open question 19). A failed or unverified base read widens that soak's scope
+  to the fleet. Mitigation: the post names the alert or the blocking Kustomization, and the
+  Job logs why it widened. Open question 17 states what C2's revert rule leaves open
+  (**operator-only**).
 - **A snapshot name collides with a retained or `markRemoved` CR** (failure class 6).
   Mitigation: the per-run token, a Job that never adopts an existing CR, and its red test.
 - **The revert runbook is a sequence, not a transaction** (failure class 5). A resume before
@@ -2811,9 +2963,10 @@ includes valheim's initContainer.
   a stale staged render while Flux at the old `prod` re-creates it. Mitigation: D5.1f refuses
   a flux-owned name in `k8s_retired_services`, and a flux-owned service retires by D2's two
   PRs.
-- **A dropped template deletes a live workload behind a green status.** Prune removes it and
-  `wait` reads Ready. Mitigation: D5.1f's gate requires a `Removes-Workload:` trailer for each
-  workload a PR removes.
+- **A dropped template deletes a live object behind a green status.** Prune removes it and
+  `wait` reads Ready. Mitigation: D5.1f's gate requires a `Removes-Object:` trailer for each
+  object of any kind that a PR removes, and D2's `decide` checks the same trailer at promote
+  time.
 - **A snapshot taken long before its apply.** Without edges, `<tag>-snapshot` runs when the
   revision arrives. Mitigation: it inherits `<tag>`'s `dependsOn`, with a renderer test.
 - **The takeover strips or fails on live state** (failure class 3: a dry-run diff cannot see
@@ -2890,7 +3043,8 @@ includes valheim's initContainer.
   reboot and crash recovery of the ten consumers, nut's UPS pod among them. Mitigation:
   `IfNotPresent` on every GHCR ref, safe because the content tag is immutable, and the census
   that refuses `Always` on one. The residual is a node that has never pulled the tag, or whose
-  kubelet garbage-collected it. The in-cluster registry stays until D6 decides its fate.
+  kubelet garbage-collected it. Open question 2 recommends keeping the in-cluster registry
+  as a LAN pull-through mirror of GHCR, which gives nut a LAN source for that cold pull.
 - **The crowdsec verify's evidence crosses the edge it tests.** Mitigation: the evidence
   reaches Prometheus by a direct scrape of the Pi's Alloy, and a red fixture names a blocked
   channel apart from a failing edge.
@@ -2975,7 +3129,8 @@ includes valheim's initContainer.
     - D5.1h: the role's `CLAUDE.md` with the Autonomous-role contract, the `StrictUndefined`
       render test and the pair test in `ansible/tests/setup/`, and the clear procedure in
       `docs/flux-deploy-plane.md`.
-    - D5.1f: `docs/flux-deploy-plane.md` states the `Removes-Workload:` trailer and the
+    - D5.1f: `docs/flux-deploy-plane.md` states the `Removes-Object:` trailer, its
+      cluster-scoped form, its two exemptions and the
       retirement order with its operator-only claim delete.
     - D5.2b2: `docs/flux-deploy-plane.md` states the reset input's concurrency group, its
       refusal without a hold, the `deferred` result, the derived `schedule:` run at the
@@ -3059,7 +3214,7 @@ includes valheim's initContainer.
 
 - **Added:** four generated non-tag Kustomization kinds (`<tag>-snapshot`, `<tag>-verify`,
   `soak`, `homelab-namespace`), with an allowlist publish census and reserved names; the
-  snapshot and soak Job scripts, one Job image pin and one retry helper, and per Wave D role a
+  snapshot and soak Job scripts, one Job image pin, or two if the soak's verifier needs its own, and one retry helper, and per Wave D role a
   Job, an initContainer or a rule for each converted task; the `flux_suspend` lever, its
   dropped edges, its change gate and one `land-wait` verdict; one field-manager name for hand
   writes; a revert playbook and a `reset_to_last_good` input with its own concurrency
@@ -3067,7 +3222,8 @@ includes valheim's initContainer.
   secret; an `images` job and the renderer's image-context output; one setup role for host
   files, with a pair test for shared variables; one read-only `probe.py takeover`
   subcommand; one Pi timer and one Alloy metrics stage; the self-rolled targets of D3's
-  `checksum/restart`; two removal gates and one commit trailer; a fence peer per verify or
+  `checksum/restart`; two removal gates and one `Removes-Object:` commit trailer over every kind, which D2's
+  `decide` shares; a fence peer per verify or
   mutation Job; seven census rows (host writes, host scripts, Job rules, Job connections,
   GHCR pull policy, publish layout, restart annotations, the last replacing D3's interim
   one); `prune: false` on traefik and `flux` through H1.1a's existing lever, and one
@@ -3077,7 +3233,13 @@ includes valheim's initContainer.
   `Cause`, `soak-failed`; one `deferred` promote result and one derived `schedule:`
   trigger; one ReplicaSet grant on the soak's Role; one skip rule for a new claim in the
   snapshot Job; one CI drill workflow for the cold bootstrap, which R4 would otherwise add;
-  one owner column in `probe.py shed-set`.
+  one owner column in `probe.py shed-set`; two fields in each tag's object of D2's
+  `digests.json`, which D2 creates; a normalised footprint for `soak`; the soak's run-time
+  scope, with two signed GHCR reads and a per-service W map; an offline branch each in the
+  shed scenario and the cold bootstrap; one exit check on kustomize-controller's memory, recorded by a 10-line PR;
+  one pre-pull for tdarr that Flux applies, which replaces a task. Net PR sizes: D5.1a2
+  shrinks by about 30 lines, D5.1f grows by about 30, D5.3b1 by about 40 and D5.3b2 by
+  about 30.
 - **Removed:** every Ansible k8s task that is only render, apply, wait or restart, including
   observability's secret restart, pihole's `roll_one.yml` and the Grafana password sync. The
   converted imperative tasks. `cronjob-gate`'s delete-and-create. `image_builder_force`. The
@@ -3104,14 +3266,28 @@ includes valheim's initContainer.
    of them takes Branch 1 for every role that attempted R, so a reset reverts the healthy
    ones' volumes too, unless the operator records that a role's data suits `last-good`'s
    image. Resolution: the operator decides all three in D5.2b1's review (**operator-only**).
-2. **Does the in-cluster registry retire?** After D5.4 no role pushes to it. Resolution: D6
-   counts its remaining consumers and proposes retiring it, or keeping it as a pull-through
-   cache.
+2. **Does the in-cluster registry stay as a LAN mirror of GHCR?** After D5.4 no role pushes
+   to it. A GHCR-only image path leaves the cluster no GitHub-independent pull, and nut, the
+   pod half of the UPS shutdown chain, cannot start cold during a WAN outage.
+    - **Recommendation:** keep the registry as a pull-through mirror for `ghcr.io`, named as
+      a mirror endpoint in k3s's `registries.yaml`. containerd then tries the LAN registry
+      first and GHCR second. A mirror holds only what was pulled through it, so nut's Wave C
+      PR gains a precondition: a manifest GET of nut's content tag through the mirror on
+      daniel-server returns 200.
+    - **Why D5 and not D6.** D6 waits on D5, and nut flips in Wave C, so the ruling cannot
+      wait for D6. The conversion takes two PRs: the registry's proxy configuration, moved
+      ahead of nut's PR, and the `registries.yaml` entry, which `roles/setup/k3s` writes and
+      H6 packages.
+    - Resolution: the operator rules before nut's Wave C PR merges (**operator-only**). If
+      the operator declines, nut's PR states the residual, a failed cold pull during a WAN
+      outage, and D6 keeps the retirement question.
 3. **Is the soak's Prometheus reach a new exposure?** It is one more caller on an existing
    fence. Resolution: reviewed in D5.3a against ADR-0009.
 4. **C2 changes in seven ways.** Snapshot roles hold without a reset. `promote`'s expected
-   statuses become every Kustomization in the bundle's `flux/` directory, minus suspended
-   ones, which adds `<tag>-snapshot`, `<tag>-verify`, `soak` and `homelab-namespace`. From
+   statuses become C2's changed set, minus suspended ones, which can hold `<tag>-snapshot`,
+   `<tag>-verify`, `soak` and `homelab-namespace`. The pillar review fold applied this part
+   to C2. D5's own hold values, `<T> stateful=<names>` and `<R> suspended-changed=<tag>`,
+   never take C2's `failed=` form. From
    D5.3b2 until D5.3b3, `verify` also leaves out `soak`, through its observe-only set, and
    ignores a `flux/soak` `failure`. A
    `reset_to_last_good` dispatch input exists, in its own concurrency group
@@ -3156,16 +3332,18 @@ includes valheim's initContainer.
    through the `node-pi` scrape. M4's blackbox_exporter fits only if it gains a probe outside
    the cluster. Resolution: crowdsec's first conversion PR confirms the channel, and crowdsec
    does not flip without it.
-10. **C1's output layout grows by the image contexts.** C1 already lists the shared-kind
-    files and directories, `DIR/cluster/<tag>-snapshot/`, `DIR/cluster/<tag>-verify/` and
-    `DIR/digests.json`, from the integration round. C1 dates `digests.json` from D5.1a1,
-    while D5.1a2 adds it, and a cross-slice note asks for that word. D5.4a1 adds the image
+10. **C1's output layout grows by two digest fields and the image contexts.** C1 already
+    lists the shared-kind files and directories, `DIR/cluster/<tag>-snapshot/` and
+    `DIR/cluster/<tag>-verify/`. It dates `DIR/digests.json` from D2's first publishing PR,
+    with an `own` and a `footprint` digest per name. D5.1a2 adds two fields to each tag's
+    object, `claims` and `suspended`, which C1 does not list. D5.4a1 adds the image
     contexts: `DIR/images/<name>/`, holding each of the ten rendered contexts, and
     `DIR/images/tags.json`, mapping each name to its content tag, `sha-<12 hex>` over the
     context's `data` as `image_builder_content_tag` computes it. A flux-owned consumer's ref
     reads that tag from the same render, never from
     `render_guard.py:BUILT_IMAGE_TAG_STUBS`, and no Kustomization's path reaches
-    `DIR/images/`. Resolution: contracts.md's C1 row is amended before D5.4a1 merges, as its
+    `DIR/images/`. Resolution: contracts.md's C1 row is amended, for the two fields before
+    D5.1a2 merges and for the contexts before D5.4a1 merges, as its
     *Requested amendments not yet applied* lists.
 11. **Where a verifying Job lives.** D4 places netpol-baseline's probe Job in
     `netpol-baseline-deferred` and makes it a named member there (D4's Open question 4). D5
@@ -3206,8 +3384,8 @@ includes valheim's initContainer.
       H1.1a to H1.8, and only D5's Wave D flips need H2. The index would then name an H1.7b
       sub-edge rather than a whole slice.
     - Resolution: H2 records the decision, and the contracts index gains the PR-level edges,
-      before H2.6a would have merged. If D6 keeps the registry as a pull-through cache, D6
-      states how that cache expires blobs.
+      before H2.6a would have merged. If the registry stays as a pull-through mirror
+      (Open question 2), the PR that converts it states how the mirror expires blobs.
 16. **When do `soak` and `homelab-namespace` join `SHARED_KINDS`?** C3 says D5.1a1 adds
     both. D4's census fails a member with no file, and no file renders either kind until
     D5.3b2 and the namespace PR, so D5.1a1 would fail its own census. D5 therefore adds each
@@ -3217,15 +3395,23 @@ includes valheim's initContainer.
     and the namespace PR adds `homelab-namespace`; D5.1a1 reserves both names", before
     D5.1a1 merges, and the change joins *Requested amendments not yet applied* with that
     gate. D4 corrects its sentence in the same round.
-17. **Does the operator accept a fleet-wide soak?** The soak's alert leg reads every
-    flux-owned service, because the render cannot know which tags R changed against `prod`
-    (*The soak as a Job*). So an unrelated critical or `verify="true"` alert in R's window
-    holds the promotion, and for a revision with no snapshot role, C2's failure path resets
-    `prod` to `last-good` and rolls back R's healthy changes until the operator clears the
-    hold. The alternative is a soak Job that fetches `last-good`'s `digests.json` from GHCR at
-    run time and reads only the changed tags plus their `dependsOn` neighbours, at the cost of
-    a WAN read and a second artifact reader on every soak. Resolution: the operator decides
-    in D5.3b1's review (**operator-only**). The default is the fleet-wide scope.
+17. **What does C2's revert rule leave open for the soak?** C2's proposed revert rule
+    replaces the trade this question asked about, a fleet-wide soak whose failure reset
+    `prod` and rolled back other PRs' healthy changes. The soak reads R's changed set (*The
+    soak as a Job*), and the ruling on the revert rule is the operator's under C2
+    (**operator-only**). Two residual trades stay:
+    - **A failed soak still resets `prod`** for a revision that changes no snapshot role,
+      until a revert lands or the operator clears the hold. A critical alert on an
+      unchanged service no longer stops promoting, which M1 gave as a reason for the
+      fleet-wide scope. It pages through Alertmanager instead.
+    - **A `failed=` hold that names `soak` should not clear by the revert rule.** A later
+      commit U leaves `soak`'s footprint equal to `last-good`'s, because the footprint
+      ignores R's SHA. U's soak judges only pods created after U's T0 and alerts activated
+      after it, so a service still broken from T passes, and the hold would clear with no
+      revert. Recommendation: C2's rule treats a `failed=` list that holds `soak` as
+      ineligible, and a cross-slice note asks C2 for it.
+    - Resolution: the operator rules on C2's revert rule, with this exclusion, before
+      D5.3b3 makes the soak gate (**operator-only**).
 18. **C6 changes.** C6's *`land.sh`* row says that from D5 on `flux/soak` also reads
     `success` on R. D5 makes that true from D5.3b3, not from D5's first PR, because before
     D5.3b3 the soak gates nothing. It also adds a case C6 does not state: a `flux/soak`
@@ -3233,6 +3419,43 @@ includes valheim's initContainer.
     `verify` writes `DEPLOY_HOLD`. `land-wait` repeats the combined-status read on each poll
     until the soak has a verdict, where D2 reads it once. Resolution: contracts.md's C6 row
     is amended before D5.3b3 merges.
+19. **Do `soak`'s `dependsOn` edges stay?** They make `soak` start after every tag is Ready
+    and put it in every changed set that holds a tag. They also block it behind any
+    unchanged tag that is not Ready. `flux/soak` then never posts on R, and `verify` times
+    out and holds, which is the whole-fleet gate that C2's changed set removes.
+    - **Recommendation:** the renderer drops the edges. The Job waits at run time until
+      each Kustomization in its scope reads Ready at R by `status.lastAppliedOriginRevision`
+      (C6), with `get` and `list` on Kustomizations in `flux-system`. C2 gains a rule that
+      `soak` is in the changed set whenever the set holds a tag. kustomize-controller's
+      `--concurrent` gains one worker, because the soak would hold its worker from the
+      start of R's rollout.
+    - **Why it is not design yet.** The rule is a C2 amendment, and the soak's timeout
+      would leave D4's chained path, so D4's timeout function changes too.
+    - Resolution: decided in D5.3b2's review, before D5.3b3 makes the soak gate. Until
+      D5.3b3 the soak is observe-only, so the edges hold nothing.
+20. **Which inbound edges could narrow, so that the D2-to-D6 interim is one short window?**
+    D5's index row names about ten inbound edges from four areas: D3 and D4; R3; M1, M2
+    and M6's B-1e; and H1.1a, H1.7b, H2.1 and H2's family PRs. Both planes run until D6, so
+    every edge that holds D5's first PR back lengthens the interim. Candidates for the
+    pre-start review round:
+    - **R3 as a PR-level sub-edge** on the n8n, pi-peer-backup and authelia PRs only. The
+      mechanism PRs D5.1a1 to D5.2c and D5.4 need no part of R3.
+    - **M1 and M2 as a PR-level sub-edge from D5.3b1 on.** D5.3b1 is the first PR that
+      reads their rules, and D5.3a's fence peer needs only the Prometheus that runs today.
+    - **D3 and D4 as PR-level edges.** D5.1a1 needs D3.3 and D4.3a, and each role PR needs
+      D3's per-role pieces.
+    - H1, H2 and M6 are sub-edges already.
+    - Resolution: the pre-start review round decides, and the index row stays as written
+      until it does.
+21. **Where does tdarr's pre-pull live?** A Job that must finish before `tdarr` applies
+    needs a Kustomization that `tdarr` depends on, and D5 renders no such kind for a role
+    without snapshot claims. Recommendation: a pre-pull Job pinned to tdarr's node, with
+    tdarr's image and a no-op command, in a predecessor Kustomization that the renderer
+    adds for tdarr alone. A predecessor with `wait: true` holds a worker through the cold
+    pull, so it moves the 25-minute wait rather than removing it. The pre-pull's own
+    `timeout` bounds that wait, and a failed pre-pull delays only tdarr. Resolution:
+    tdarr's conversion PR names the kind, and the publish census admits it in the same PR.
+    The suffix needs a C3 per-tag-kind amendment and a reserved name in D5.1a1's list.
 
 ## Review log
 
@@ -4098,3 +4321,34 @@ Refuted: none.
 - Cross-slice note from R4 on D5.2c: the step says that `ansible/volume-revert.yml` gathers
   facts. Confirmed at `70591c307`: `longhorn-api/tasks/resolve.yml` reads `ansible_hostname`
   four times, and `load_secrets.yml` runs `ansible.builtin.setup`.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review
+round covers it.
+
+- **F-01.** C2's changed set replaces "every Kustomization in `flux/`, minus suspended" in
+  the exit criterion, *Where each Kustomization is written*, the stop lever and `-verify`'s
+  status, D5.3b2 and D5.3b3, and Open question 4. The soak reads R's changed set at run
+  time from two signed `digests.json` reads, fails toward the fleet, exits at once on an
+  empty scope, and takes W from a per-service map (*The soak as a Job*, D5.3b1, D5.3b2).
+  `soak`'s footprint ignores R's SHA, so a docs-only commit's set is empty. Open question
+  17 points at C2's revert rule and keeps two residual trades. The stateful hold
+  writes `<T> stateful=<names>` and `decide` writes `<R> suspended-changed=<tag>`. The
+  fleet gate through `soak`'s `dependsOn` went to Open question 19. *Risks* was rewritten.
+- **`digests.json`.** D2 creates it. D5 reads `own` for `digest8`, the gate,
+  `suspended-changed`, the stateful hold and bootstrap step 2. D5.1a2 shrinks to the
+  `claims` and `suspended` fields, which C1 lacks, so Open question 10 requests them. Exit
+  4's `jq` reads `.own`.
+- **F-03.** Open question 2 recommends the registry as a LAN pull-through mirror, ruled
+  before nut's Wave C PR. nut keeps a LAN source through it (D5.4b, Wave C, *Risks*). The
+  shed scenario and bootstrap step 2 gained offline branches, and D5.2c's text test
+  accepts the shed branch.
+- **F-06.** D5.1f's check became `Removes-Object:` over every kind, with D2's grammar, two
+  exemptions, added fixtures and D2's `decide` at promote time.
+- **F-17.** Exit criterion 7 and its `probe.py metric` read. D1 states no premise range,
+  so the bound is the 64Mi request.
+- **F-08.** Open question 20 lists edge candidates. The index is unchanged.
+- **Coordinator notes.** `FluxControllerDown` in the soak's scope, the reset input's
+  decide-then-write split, the shed's worker timing, two Wave D readings for D4, tdarr's
+  pre-pull (Open question 21) and D2's burst projection in *Waves and windows*.
