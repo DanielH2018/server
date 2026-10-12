@@ -107,3 +107,18 @@ def test_a_live_worktree_claim_never_reads_the_batches():
     )
     assert main(["next", "--json"], tools) == 0
     assert calls.batch_holds == []
+
+
+def test_claim_reads_the_batches_once_for_a_whole_batch_of_stale_claims(capsys):
+    # One read per issue would spend an ssh connection each on a peer host's batches.
+    issues = [make_issue(n, comments=[claim_comment(ORCH, None, "t")]) for n in (1, 2)]
+    tools, calls = build_tools(
+        Fakes(
+            issues=issues,
+            view={i["number"]: i for i in issues},
+            worktree_facts=DEAD_ORCH_FACTS,
+            batch_holds={1: "running", 2: "running"},
+        )
+    )
+    assert main(["claim", "1", "2", "--worktree", MINE], tools) == 3
+    assert calls.batch_holds == [(None, [1, 2])]

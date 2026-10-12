@@ -16,6 +16,7 @@ and this file is the CLI over the three.
 """
 
 import argparse
+import functools
 import json
 import sys
 
@@ -116,6 +117,10 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     # syncs first. Without this the FIRST claim posts its comment, fails the label edit and
     # exits 1; the retry then reads "already claimed" and the label is never added at all.
     run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
+    # One running-batch read for the whole batch, taken on the first stale claim. Asked per
+    # issue, a resumed orchestrator re-claiming its old batches would open one ssh connection
+    # each, and `ufw limit ssh` rejects the sixth inside 30 seconds.
+    batch_holds = functools.cache(lambda: tools.batch_holds(args.numbers))
     refused = False
     for number in args.numbers:
         issue = _load_issue(number, tools)
@@ -124,7 +129,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             # as "every worktree is gone". The claim blocks, as it did before this path
             # existed, and `plan_claim` refuses it below. The warning was said once, above.
             stale = (
-                stale_holder(issue, trees, dirty, merged, tools.batch_holds)
+                stale_holder(issue, trees, dirty, merged, lambda _n: batch_holds())
                 if ok
                 else None
             )
