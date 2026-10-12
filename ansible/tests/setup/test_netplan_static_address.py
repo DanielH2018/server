@@ -170,3 +170,55 @@ def test_an_agent_pin_by_dynamic_include_is_flagged() -> None:
     assert _agent_pin_play_problems([server, pin]) == [
         "the server play still runs while pin_agent_address is set"
     ]
+
+
+_LINKDOWN_FILE = "/etc/sysctl.d/90-homelab-static-link.conf"
+
+
+def linkdown_sysctl_problems(tasks: list[dict]) -> list[str]:
+    """What keeps the pinned link's dead default route from losing to a fallback (#4510).
+
+    `ignore-carrier` keeps the pinned route installed with no carrier, and IPv4 still routes over
+    a linkdown route unless `ignore_routes_with_linkdown` is 1 on that link.
+    """
+    problems = []
+    sets = [t for t in tasks if "ansible.posix.sysctl" in t]
+    if len(sets) != 1:
+        return [f"{len(sets)} tasks set a sysctl, not 1"]
+    task, args = sets[0], sets[0]["ansible.posix.sysctl"]
+    if args.get("name") != (
+        "net.ipv4.conf.{{ k3s_node_static_link }}.ignore_routes_with_linkdown"
+    ):
+        problems.append(f"sets {args.get('name')}, not the link's linkdown key")
+    if str(args.get("value")) != "1":
+        problems.append(f"value is {args.get('value')!r}, not '1'")
+    if args.get("sysctl_file") != _LINKDOWN_FILE:
+        problems.append(f"writes {args.get('sysctl_file')}, not {_LINKDOWN_FILE}")
+    if task.get("when") != "k3s_node_static_link | length > 0":
+        problems.append("does not run exactly when a link is pinned")
+    removal = [
+        t
+        for t in tasks
+        if t.get("ansible.builtin.file", {}).get("path") == _LINKDOWN_FILE
+        and t["ansible.builtin.file"].get("state") == "absent"
+        and t.get("when") == "k3s_node_static_link | length == 0"
+    ]
+    if len(removal) != 1:
+        problems.append("no task removes the sysctl file when the link is emptied")
+    return problems
+
+
+def _static_address_tasks() -> list[dict]:
+    return yaml_fast.safe_load((K3S_ROLE / "tasks" / "static-address.yml").read_text())
+
+
+def test_the_pinned_link_ignores_its_routes_without_carrier() -> None:
+    assert linkdown_sysctl_problems(_static_address_tasks()) == []
+
+
+def test_a_linkdown_key_left_at_the_kernel_default_is_flagged() -> None:
+    tasks = _static_address_tasks()
+    next(t for t in tasks if "ansible.posix.sysctl" in t)["ansible.posix.sysctl"][
+        "value"
+    ] = "0"
+    assert linkdown_sysctl_problems(tasks) == ["value is '0', not '1'"]
