@@ -101,6 +101,9 @@ def test_extra_rollout_entry_with_a_second_key_hides_no_later_entry(
         templates={},
     )
     assert _extra_rollouts(followed_by_a_task) == {"widget-direct"}
-    assert {"karakeep-meilisearch", "karakeep-time-tagger", "karakeep-chrome"} == (
-        _extra_rollouts(_K8S_ROLES / "karakeep")
-    )
+    # scrutiny lists scrutiny-collector after a `restart_on: []` entry, the real-role shape
+    # the old pattern missed.
+    assert _extra_rollouts(_K8S_ROLES / "scrutiny") == {
+        "scrutiny-influxdb",
+        "scrutiny-collector",
+    }
