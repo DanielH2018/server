@@ -352,10 +352,14 @@ def test_a_gate_that_stamps_attempts_or_loses_its_stamp_is_flagged() -> None:
     )
 
 
-def test_an_alert_with_no_quiet_period_pages_every_failure() -> None:
+def test_only_a_positive_quiet_period_renders_the_gate() -> None:
+    # The variable is the switch: the five callers that leave it unset keep a page per
+    # failure, and the one that sets it gets the gate.
     for minutes in (None, 0):
-        settings = service_settings(_quiet_unit(minutes))
-        assert "ExecCondition" not in settings and "StateDirectory" not in settings
+        unit = _quiet_unit(minutes)
+        assert quiet_gate(unit, "widget") is None, f"{minutes!r} rendered a gate"
+        assert "ExecCondition" not in service_settings(unit)
+    assert quiet_gate(_quiet_unit(1), "widget") is not None, "1 rendered no gate"
 
 
 def test_the_claude_rc_alert_pages_once_per_quiet_period() -> None:
