@@ -18,6 +18,10 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
+    # A cold pull of the chrome image outlasts the shared default. The number lives in
+    # defaults/main.yml because every template's progressDeadlineSeconds reads it too, and the
+    # drain gives every extra rollout below the role's timeout.
+    manifests_rollout_timeout: "{{ karakeep_k8s_rollout_timeout }}"
     # meilisearch reads MEILI_MASTER_KEY from this role's Secret as an ENV var, which is only
     # injected at container start. Without this, rotating that key rolls `karakeep` with the new
     # value while `karakeep-meilisearch` keeps serving the old one — the app and its search
