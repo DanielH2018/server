@@ -244,12 +244,14 @@ def test_is_record_reads_only_the_exact_marker():
     assert record_names(reg) == ["a"]
 
 
-def test_the_live_registry_marks_exactly_the_two_record_keys():
+def test_the_live_registry_marks_exactly_the_three_record_keys():
     """Keys a rotation can find inert: authelia derives its hash from the live
-    Secret and prefers it, and the only bazarr_api_key reference in the tree is a
-    monitor-bridge reader."""
+    Secret and prefers it, the only bazarr_api_key reference in the tree is a
+    monitor-bridge reader, and nothing in the tree reads promote_token (the
+    GitHub repository secret holds the credential)."""
     reg = yaml_fast.safe_load(REGISTRY.read_text())
     assert record_names(reg) == [
         "authelia_password",
         "bazarr_api_key",
+        "promote_token",
     ]
