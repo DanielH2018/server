@@ -15,6 +15,10 @@ path_glob_match, nested_traversal, include, compact. `inject-nested-docs.py` app
 named a path under it — so one log grades both the harness's loads and the
 hook's.
 
+A row this hook writes ends in `bytes=<n>`, the loaded file's size on disk, so
+`fact_status.py report` can total the instruction bytes each session loads (#4610). A file it
+cannot stat gets no `bytes=` field rather than a wrong one.
+
 The point: verify that path-scoped rules actually fire. Claude Code has known bugs where a
 `paths:`-scoped rule isn't loaded when you edit a matching file (or loads globally regardless). With
 this log you can edit, say, a compose template and check that `docker.md` shows up with
@@ -31,6 +35,7 @@ checkout.
 
 import os
 import sys
+from pathlib import Path
 
 from _hook_common import append_instructions_row as append_row
 from _hook_common import read_payload
@@ -46,6 +51,18 @@ def rel(path, cwd):
     return path
 
 
+def size_field(path, cwd):
+    """The ` bytes=<n>` field for the file at `path`, or "" when it cannot be read.
+
+    `path` is the payload's own path, taken before `rel` shortens it: a repo-relative path
+    would resolve against this process's cwd, not the session's.
+    """
+    try:
+        return " bytes={}".format((Path(cwd or ".") / path).stat().st_size)
+    except OSError, TypeError:
+        return ""
+
+
 def main():
     """Append one line to the instructions log for an InstructionsLoaded event on stdin.
 
@@ -56,7 +73,8 @@ def main():
     if d is None or d.get("hook_event_name") != "InstructionsLoaded":
         return
     cwd = d.get("cwd") or ""
-    fp = rel(d.get("file_path") or "?", cwd)
+    raw = d.get("file_path")
+    fp = rel(raw or "?", cwd)
     reason = d.get("load_reason") or "?"
     mtype = d.get("memory_type") or "?"
     sid = (d.get("session_id") or "")[:8]
@@ -70,6 +88,8 @@ def main():
     # A subagent shares its parent's session id; inject-nested-docs tells the two apart by this.
     if d.get("agent_id"):
         extra += " agent=" + d["agent_id"]
+    if raw:
+        extra += size_field(raw, cwd)
     append_row(reason, mtype, fp, sid, extra)
 
 

@@ -376,7 +376,7 @@ def append_instructions_row(
     """Append one row to the instructions log: `<ts> [<sid>] <reason> <mtype> <path><extra>`.
 
     `session_id` may be the full id or the 8-char prefix the row carries; `extra` is the
-    already-formatted tail (` trigger=…`), empty for a session_start row. One appender serves
+    already-formatted tail (` trigger=…`, and ` bytes=<n>` from log-instructions). One appender serves
     both the InstructionsLoaded event and inject-nested-docs, so the log keeps one row format.
     `start` is the checkout `instructions_log_path` resolves the log from.
     """

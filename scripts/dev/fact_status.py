@@ -10,8 +10,9 @@ refuses one whose recorded atom moved. ``forget`` drops a lock row whose
 section no longer exists, which is the way out of a ``section-gone`` finding: a renamed
 heading is a new unit, and the old row cannot be hand-deleted without tripping the lock's
 own checksum. ``lint`` reports citations that cannot be support. ``report`` measures the
-lock from git and the instructions log: potential against actual moves per atom form, and the
-sections not IN ranked by how often their doc loads (``--json`` for a cron or an agent).
+lock from git and the instructions log: potential against actual moves per atom form, the
+sections not IN ranked by how often their doc loads, and the instruction bytes each session
+loaded (``--json`` for a cron or an agent).
 """
 
 import sys as _sys
