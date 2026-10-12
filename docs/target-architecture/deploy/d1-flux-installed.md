@@ -1,6 +1,8 @@
 # D1 — Flux installed, owning nothing
 
-Status: PLANNED
+Status: IN PROGRESS
+
+D1.1, the Flux schemas and the proposal: PR pending.
 
 Depends on: none
 
