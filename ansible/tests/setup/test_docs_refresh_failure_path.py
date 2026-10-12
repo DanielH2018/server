@@ -17,6 +17,8 @@ the test can go red:
   the repo. Path-based attribution cannot: a human running build_docs.py by hand dirties the
   same files.
 - **say_failure names the failing hook**, and still says something when no hook token matches.
+- **say_suite_failure names the failing node ids**, and falls back to the tail without them.
+- **keep_failure_log keeps one log per failing run**, pruned to the newest few.
 - **build_docs_failure tells a generator failure from a site-build failure**, which
   build_docs.py reports as exit 2 and exit 3.
 """
@@ -37,6 +39,8 @@ CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 # every test below sourcing an empty string and passing on nothing at all.
 SOURCED = (
     "say_failure",
+    "suite_summary",
+    "say_suite_failure",
     "keep_failure_log",
     "keep_tree_evidence",
     "restore_generated_tree",
@@ -47,6 +51,7 @@ SOURCED = (
 )
 
 STAMP_DIR = "/var/lib/homelab/docs-refresh.d"
+FAILURE_LOG_NAME = "failure-20261012T061700Z.log"
 
 
 def _function(name: str) -> str:
@@ -93,7 +98,8 @@ def _bash(script: str, cwd: Path, stamp_dir: Path) -> subprocess.CompletedProces
         "GIT_COMMITTER_EMAIL": "t@example.invalid",
         "STAMP_DIR": str(stamp_dir),
         "COMMIT_FAILED_STAMP": str(stamp_dir / "commit-failed"),
-        "COMMIT_FAILED_LOG": str(stamp_dir / "last-commit-failure.log"),
+        "FAILURE_LOG": str(stamp_dir / FAILURE_LOG_NAME),
+        "FAILURE_LOGS_KEPT": "5",
     }
     return run(
         ["bash", "-uo", "pipefail", "-c", f"{PRELUDE}\n{script}"], cwd=cwd, env=env
@@ -275,11 +281,11 @@ def test_both_paths_that_end_a_healthy_run_clear_the_stamp():
     )
 
 
-def _alert(log_text: str, tmp_path: Path) -> str:
+def _alert(log_text: str, tmp_path: Path, say: str = "say_failure") -> str:
     log = tmp_path / "commit.log"
     log.write_text(log_text)
     run = _bash(
-        f"alert() {{ printf '%s' \"$1\"; }}; say_failure 'commit failed' {shlex.quote(str(log))}",
+        f"alert() {{ printf '%s' \"$1\"; }}; {say} 'failed' {shlex.quote(str(log))}",
         tmp_path,
         tmp_path / "stamp",
     )
@@ -316,6 +322,53 @@ def test_the_alert_falls_back_to_the_plain_tail_when_no_hook_failed(tmp_path):
     assert "gpg failed to sign the data" in alert, alert
 
 
+# A failing run under cron: no tty, so a node id wider than 80 columns loses its ` - reason`. A
+# captured-log `ERROR` line precedes the block; the shutdown traceback that was the whole pushed
+# message on 2026-10-12 18:20 follows it, and say_failure's `Failed` token matches it.
+SUITE_LOG = (
+    "____________________________ test_bad ____________________________\n"
+    "------------------------- Captured log call -------------------------\n"
+    "ERROR    root:witness.py:12 loki answered 503\n"
+    "E       AssertionError: boom\n"
+    "=========================== short test summary info ============================\n"
+    "FAILED ansible/tests/setup/test_loki_route_witness.py::test_an_up_verdict_exits_zero_so_the_timer_rests\n"
+    "FAILED scripts/tests/test_sample.py::test_param[a b] - AssertionError: assert 'a b' == 'c'\n"
+    "ERROR scripts/tests/test_broken.py - ImportError while importing test module '/tmp/x...\n"
+    "========= 2 failed, 9061 passed, 1 error in 312.45s (0:05:12) =========\n"
+    "Exception ignored in: <function _remove at 0x7f>\n"
+    "Traceback (most recent call last):\n"
+    '    hook_error = RuntimeError("Failed to process unraisable exception")\n'
+)
+
+
+def test_the_suite_alert_names_the_failing_node_ids(tmp_path):
+    """ACCEPT: the count line first, then each FAILED/ERROR id, and nothing outside the block."""
+    alert = _alert(SUITE_LOG, tmp_path, say="say_suite_failure")
+    count = "failed: 2 failed, 9061 passed, 1 error in 312.45s (0:05:12); "
+    assert alert.startswith(count), alert
+    assert (
+        "FAILED ansible/tests/setup/test_loki_route_witness.py::"
+        "test_an_up_verdict_exits_zero_so_the_timer_rests" in alert
+    ), alert
+    assert "FAILED scripts/tests/test_sample.py::test_param[a b];" in alert, alert
+    assert alert.endswith("ERROR scripts/tests/test_broken.py"), alert
+    assert "unraisable" not in alert and "loki answered 503" not in alert, alert
+
+
+def test_the_suite_alert_falls_back_to_the_tail_without_a_summary(tmp_path):
+    """REJECT: a `timeout` kill prints no summary; without the fallback the alert is empty."""
+    log = "collected 9063 items\n........F.....\nTerminated\n"
+    assert "Terminated" in _alert(log, tmp_path, say="say_suite_failure")
+
+
+def test_the_suite_failure_branch_pushes_the_summary():
+    """The production call site: the tests above prove a function nothing might call."""
+    branch = SCRIPT[SCRIPT.index('if [ "$SUITE_RC" -ne 0 ]; then') :]
+    branch = branch[: branch.index("\nfi\n")]
+    assert 'say_suite_failure "docs-refresh: the test suite failed' in branch, branch
+    assert "say_failure " not in branch, branch
+
+
 def test_the_failure_log_is_kept_outside_the_repo(tmp_path):
     """on_exit deletes the temp log and the cron redirects nothing, so this copy is the record.
 
@@ -327,9 +380,44 @@ def test_the_failure_log_is_kept_outside_the_repo(tmp_path):
     log.write_text("- hook id: gen-doc-fragments\n")
     run = _bash(f"keep_failure_log {shlex.quote(str(log))}", repo, stamp)
     assert run.returncode == 0, run.stderr
-    assert "gen-doc-fragments" in (stamp / "last-commit-failure.log").read_text()
+    assert "gen-doc-fragments" in (stamp / FAILURE_LOG_NAME).read_text()
     assignment = SCRIPT[SCRIPT.index("STAMP_DIR=") :].split("\n")[0]
     assert "$REPO" not in assignment and STAMP_DIR in assignment, assignment
+    # Named by the run's start time: a fixed name is the one overwritten file again.
+    assert '\nFAILURE_LOG="$STAMP_DIR/failure-$(date -u' in SCRIPT
+
+
+def _keep_runs(names: list[str], tmp_path: Path) -> Path:
+    """Run keep_failure_log once per name, each as its own run with its own FAILURE_LOG."""
+    stamp = tmp_path / "stamp"
+    stamp.mkdir(exist_ok=True)
+    (stamp / "commit-failed").write_text("suite failed at T\n")
+    log = tmp_path / "suite.log"
+    script = ""
+    for name in names:
+        script += (
+            f"printf '%s' {shlex.quote(name)} >{shlex.quote(str(log))}; "
+            f"FAILURE_LOG={shlex.quote(str(stamp / name))} "
+            f"keep_failure_log {shlex.quote(str(log))}\n"
+        )
+    _bash(script, tmp_path, stamp).check_returncode()
+    return stamp
+
+
+def test_two_failing_runs_leave_two_logs(tmp_path):
+    """ACCEPT: the 18:17 failure no longer overwrites the 06:17 one's traceback."""
+    first, second = "failure-20261012T061700Z.log", "failure-20261012T181700Z.log"
+    stamp = _keep_runs([first, second], tmp_path)
+    assert [(stamp / name).read_text() for name in (first, second)] == [first, second]
+
+
+def test_the_prune_keeps_only_the_newest_logs(tmp_path):
+    """Past FAILURE_LOGS_KEPT the oldest go; the stamp stays, as the prune globs `failure-`."""
+    names = [f"failure-2026101{day}T061700Z.log" for day in range(7)]
+    stamp = _keep_runs(names, tmp_path)
+    kept = sorted(p.name for p in stamp.glob("failure-*.log"))
+    assert kept == names[2:], kept
+    assert (stamp / "commit-failed").exists()
 
 
 def _hook_rewrites_a_staged_page(repo: Path) -> None:
@@ -352,7 +440,7 @@ def test_the_kept_log_names_the_file_a_hook_rewrote(tmp_path):
     _hook_rewrites_a_staged_page(repo)
     run = _bash("keep_tree_evidence", repo, stamp)
     assert run.returncode == 0, run.stderr
-    log = (stamp / "last-commit-failure.log").read_text()
+    log = (stamp / FAILURE_LOG_NAME).read_text()
     assert "docs/reference/state.md" in log, log
     assert "git diff --stat" in log, log
 
@@ -369,7 +457,7 @@ def test_the_evidence_is_gone_once_the_restore_has_run(tmp_path):
     run = _bash(
         f"restore_generated_tree {shlex.quote(staged)}; keep_tree_evidence", repo, stamp
     )
-    log = (stamp / "last-commit-failure.log").read_text()
+    log = (stamp / FAILURE_LOG_NAME).read_text()
     assert "docs/reference/state.md" not in log, log
     assert run.returncode == 0, run.stderr
 
