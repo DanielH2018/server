@@ -4,6 +4,7 @@
 | `longhorn-backup-health` | Simple | 20 minutes |
 | `daniel-box-disk-health` | Simple | 25 minutes |
 | `uptime-kuma-alive` | Simple | 20 minutes |
+| `alertmanager-watchdog` | Simple | 20 minutes |
 | `manifest-prune-check` | Cron | 2 hours |
 | `etcd-snapshot-offbox` | Cron | 1 hour |
 | `pi-peer-backup` | Cron | 2 hours |

@@ -80,8 +80,8 @@ k8s_autodeploy_reason: "observability — this IS the alert pipeline; a broken d
 # its expression and timezone.
 #
 # A literal rather than a reference to the cron variables, because those live in the setup/k3s,
-# k8s/pi-peer-backup and k8s/registry defaults, and role defaults do not cross the deploy play's
-# include_role loop. ansible/tests/services/test_monitor_bridge_healthchecks_expected.py holds
+# setup/initial_setup, k8s/pi-peer-backup, k8s/registry and k8s/observability defaults, and role
+# defaults do not cross the deploy play's include_role loop. ansible/tests/services/test_monitor_bridge_healthchecks_expected.py holds
 # this list to those variables (through the deadman-cadences fragment's reader), so a cron
 # cannot move in one place alone. The period-and-grace table in
 # docs/healthchecks-io-deadman.md is the deadman-graces fragment, rendered from this list.
@@ -92,6 +92,10 @@ monitor_bridge_healthchecks_expected:
   - {slug: longhorn-backup-health, kind: simple, timeout: 600, grace: 1200}
   - {slug: daniel-box-disk-health, kind: simple, timeout: 600, grace: 1500}
   - {slug: uptime-kuma-alive, kind: simple, timeout: 600, grace: 1200}
+  # Pinged by Alertmanager's always-firing Watchdog every
+  # observability_alertmanager_watchdog_repeat_seconds, not by a cron. Sized like
+  # uptime-kuma-alive, so the weekly reboot's gap fits inside period plus grace.
+  - {slug: alertmanager-watchdog, kind: simple, timeout: 600, grace: 1200}
   - {slug: manifest-prune-check, kind: cron, schedule: "15 5 * * *", tz: UTC, grace: 7200}
   - {slug: etcd-snapshot-offbox, kind: cron, schedule: "45 2 * * *", tz: UTC, grace: 3600}
   - {slug: pi-peer-backup, kind: cron, schedule: "0 23 * * *", tz: "{{ tz }}", grace: 7200}
