@@ -24,7 +24,7 @@ moves*), and Flux is the only writer to the cluster before R4 starts (C4). No PR
 ownership of a live object. Each R4 PR either deletes code that no longer writes anything,
 or changes how the renderer reads the tree without changing a rendered byte.
 
-**Exit criterion.** Five checks, all green at one master commit:
+**Exit criterion.** Six checks, all green at one master commit:
 
 1. **The path is gone.** `git ls-files 'ansible/roles/k8s/*/tasks/*'` prints exactly the
    runbook allowlist that PR 1 records. PR 8 adds a test that asserts the set equals that
@@ -66,6 +66,15 @@ or changes how the renderer reads the tree without changing a rendered byte.
       `<tag>-deferred` where one exists, `<tag>` otherwise (D5, *`<tag>-verify`*).
 
    A row with no successor stops R4, and the gap goes back to D5. The full suite passes.
+6. **The renderer ends at a stated size.** The non-test Python under `scripts/renderer/` is
+   at most 2,600 lines at R4's last PR. The slices' stated additions sum to about 1,940:
+   R1's 600, R2's about 500, D3's about 300, D4's about 170 and 140, and R4's about 150 of
+   filters and 80 of targeting. The headroom covers what the measured set holds with no
+   stated estimate: D2.6b's Kustomization and root writers, D2's footprint digests, D5's
+   suffixed kinds, D6's deletion policy and tag rule, R4's moved task-made facts, and H3's
+   host and package modes if they have landed, which C1 puts in the same CLI.
+   `ansible/filter_plugins/` is outside the set. An overrun stops R4, and the operator
+   decides whether the dialect ADR's subset shrinks or the bound rises (**operator-only**).
 
 ## Baseline at `70591c307`
 
@@ -534,12 +543,24 @@ job, when the PR touches any of these paths:
 - anything under `ansible/roles/k8s/*/tasks/`;
 - a deletion anywhere under `ansible/roles/k8s/`;
 - `scripts/renderer/`, `scripts/lib/k8s_roles.py` or `scripts/lib/ansible_jinja_env.py`;
-- `ansible/filter_plugins/`.
+- `ansible/filter_plugins/`;
+- the renderer's dependency pins, from PR 7e: a `uv.lock` or `pyproject.toml` entry for a
+  package in the renderer's dependency closure, Jinja2 and MarkupSafe among them.
 
 Every R4 PR touches one of them or carries the line anyway. On a PR that touches none and
 carries no line, the job only prints the diff, because most PRs change render output on
 purpose. A role's `defaults/` stays out of the list, because Renovate's image bumps edit it;
 R4's moves into defaults also delete from `tasks/`, which the list covers.
+
+**A renderer dependency bump stops for a declaration.** After PR 8 no oracle compares a
+render with Ansible's. A dependency bump that changes output would only print a diff, and
+Renovate could automerge it into a pruning apply. PR 7e therefore adds the renderer's
+dependency pins to the list. The job reads the closure from `uv.lock`, starting from one
+literal set of the renderer's direct dependencies, and compares those entries between base
+and head. A bump of any other package needs no line. A Renovate PR that bumps one fails the
+job until a session adds the line, so it cannot automerge. A census test asserts that every
+third-party module the renderer imports is in that literal set. PR 11 removes this hazard
+with the rest of the gate, and Open question 12 asks whether it should outlive R4.
 
 **Authors learn the line from the template and from the failure.** PR 1 adds a
 `Render-diff:` section to `.github/pull_request_template.md` that names the hazard paths and
@@ -662,6 +683,39 @@ Two tests hold the move:
   `scripts/validate/k8s_manifests.py` validates the renderer's output instead of rendering
   on its own; its schema and semantic rules stay. `ansible/tests/_k8s_render.py` renders
   through the renderer, so the render-property tests read the bytes Flux applies.
+
+### The renderer's dialect is specified
+
+After PR 8, nothing checks the renderer against Ansible. R1 rebuilds `hostvars`, variable
+precedence and `include_role` vars. PR 10 reimplements about 150 lines of filters. PR 8
+deletes the Ansible render that R1's byte-for-byte comparison reads, and PR 9 deletes the
+comparison. After H7 removes ansible-core, PR 10's parity tests lose their oracle too. The
+renderer is then a private dialect of Jinja under `ansible/`, defined only by its code.
+PR 7d writes the dialect down and holds the renderer to it.
+
+- **An ADR states the supported subset.** It lists every filter, lookup and test that the
+  renderer accepts. It states the variable semantics the renderer implements: the
+  precedence of role defaults, `group_vars`, `host_vars` and `include_role` vars, what
+  `hostvars` holds, and how an undefined variable fails. Anything off the list is
+  unsupported. Approving the ADR is **operator-only**.
+- **Spec tests hold the renderer to the subset.** They sit in `scripts/renderer/tests/`.
+  Each supported construct gets a fixture and its expected output as a literal, so the
+  tests need no oracle. PR 7d checks each literal once against Ansible, and the PR body
+  quotes the two outputs equal:
+    - a filter, lookup or test fixture against ansible-core's `Templar`;
+    - a precedence, `hostvars` or `include_role` fixture against an `ansible-playbook`
+      render of a fixture inventory. `Templar` templates against one flat vars dict and
+      applies no precedence, so it cannot check these.
+
+  The second check needs the Ansible play, which PR 8 deletes, so PR 7d must merge before
+  PR 8. The literals then outlive H7.
+- **Refusals are part of the spec.** A template that uses a filter, lookup or test off the
+  list fails the render with an error that names it. A census test parses every template
+  under `ansible/roles/k8s/` and asserts that each filter, lookup and test it uses is on the
+  list. The refusal and the census read one literal in the renderer, and a test asserts
+  that the ADR's table names the same set.
+- **PR 10 keeps the subset.** Its reimplemented filters are exactly the ADR's list, and the
+  spec tests pass before and after the switch.
 
 ### render_records
 
@@ -872,10 +926,13 @@ root is withheld, not suspended*).
   scripts/dev/new_k8s_service.py                   (scaffolds no tasks/)
   scripts/docs/gen_role_glance.py                  (marker names no tasks)
   ansible/tests/_k8s_render.py                     (renders through the renderer; - deploy_play)
-  .github/workflows/render-diff.yml                (PR 1 adds it, PR 11 deletes it)
+  .github/workflows/render-diff.yml                (PR 1 adds it, PR 7e adds the pin hazard,
+                                                   PR 11 deletes it)
   .github/pull_request_template.md                 (PR 1 adds Render-diff:, PR 11 removes it)
   ansible/roles/setup/gitops_deploy/defaults/main.yml  (render-diff context: PR 1 +, PR 11 -)
   docs/break-glass.md                              (the laptop scenario's step 3, PR 8)
++ docs/adr/<next free>-the-renderer-supports-a-closed-jinja-subset.md   (PR 7d)
+  scripts/renderer/tests/                          (+ dialect spec tests and census, PR 7d)
 ```
 
 R4 adds no bootstrap workflow and no bootstrap section. D5 owns both (*Bootstrapping Flux
@@ -1030,7 +1087,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       once.
     - **Operator-only:** remove `/var/lib/homelab/k8s-renders.d` on daniel-box. It needs
       root, which the agent's permissions deny.
-7. **Three prerequisites of PR 8.**
+7. **Five prerequisites of PR 8.**
     - **PR 7a: a standalone entry for the revert runbook** (about 60 lines). It runs only if
       PR 1 found no `ansible/volume-revert.yml`, or found that D5's command still reaches
       `volume-revert` through the manifests role or `deploy.yml`. D5.2c ships that playbook,
@@ -1142,6 +1199,14 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
 
       `Render-diff: none`. The description quotes `grep -rln deploy_play ansible/tests
       scripts --include='*.py'`, which prints no kept test.
+    - **PR 7d: the dialect ADR and its spec tests** (about 200 lines, most of them
+      fixtures). It adds the ADR, the spec tests, the construct census and the literal set
+      they read (*The renderer's dialect is specified*). It merges before PR 8, because its
+      precedence fixtures are checked against an `ansible-playbook` render. Approving the ADR is
+      **operator-only**. `Render-diff: none`.
+    - **PR 7e: the renderer's dependency pins join the hazard list** (about 60 lines). It
+      adds the closure read, its census test and the template's wording (*The render-diff
+      gate*). The operator pushes the workflow change, as for PR 1. `Render-diff: none`.
 8. **Delete the k8s play and the manifests role** (deletion PR).
     - Delete the play, the batch and retire task files, the two post_tasks, and every
       `tasks/` directory under `ansible/roles/k8s/` outside the runbook allowlist. Delete
@@ -1317,7 +1382,18 @@ recorded, and the three named members must exist.
 On daniel-box, `systemctl list-unit-files 'kuma-check-render-records*'` lists nothing, and
 `/opt/render-records` and `/etc/render-records` are gone.
 
+Exit 6 is read at R4's last PR with `git ls-files 'scripts/renderer/*.py' | grep -v
+/tests/ | xargs cat | wc -l`, which prints at most 2,600.
+
 **Red-proofs:**
+
+- The dialect census (PR 7d): a fixture template that uses a filter off the list fails the
+  census and the render, and the failure names the filter. A precedence spec test run
+  against a renderer with `group_vars` and `host_vars` swapped fails.
+- The dependency-pin hazard (PR 7e): a fixture pair whose `uv.lock` bumps Jinja2 with no
+  `Render-diff:` line fails the job, and the same pair bumping an unrelated test dependency
+  passes. A fixture renderer module that imports a package outside the literal set fails
+  the census.
 
 - The ownership precondition: a fixture service without Flux as its writer fails the test,
   and a flux-owned one passes.
@@ -1533,6 +1609,12 @@ daniel-box. The operator produces them, because each needs the host:
   exists (Baseline). Mitigation: each such proof in R4 names a substitute that exists: the
   kind drill in CI, or an **operator-only** production drill with its blast radius stated.
 
+- **The renderer drifts from what its templates assume once the oracle is gone.** After
+  PR 8 no render compares with Ansible's, and after H7 no parity test does. Mitigation:
+  PR 7d's ADR fixes the subset, its spec tests hold the renderer to literals checked once
+  against ansible-core, and its census refuses a template outside the subset. PR 7e makes a
+  renderer dependency bump declare its render diff.
+
 ## Tests and docs that change in the same PR
 
 - PR 1: `docs/homelab-render.md` (the render-diff gate, its pinned commit value and its
@@ -1577,6 +1659,11 @@ daniel-box. The operator produces them, because each needs the host:
       with the PR.
 - PRs 6, 8 and 9: `docs/failure-classes.md` loses any detector citation whose test goes, as
   that page's own meta-test requires.
+- PR 7d: the dialect ADR, `docs/adr/index.md` and the `mkdocs.yml` nav; the spec tests and
+  the construct census in `scripts/renderer/tests/`; `docs/homelab-render.md`, which links
+  the ADR.
+- PR 7e: the `render-diff` workflow's hazard list, its census test, and the template's
+  `Render-diff:` section, which names the dependency pins.
 - PR 9: `docs/homelab-render.md` and any other doc that names `compare` or `stubcheck`.
 - PR 10: `docs/homelab-render.md` (no ansible-core import; reimplemented filters).
 - PR 11: `docs/homelab-render.md` loses the gate's section, and
@@ -1597,13 +1684,15 @@ daniel-box. The operator produces them, because each needs the host:
   constants.
 - **Added:** about 150 lines of reimplemented filters with parity tests; about 80 lines of
   task-free targeting; the floor, allowlist, ansible-free and runbook-resolution tests;
-  possibly one runbook playbook. R4 adds no bootstrap workflow, fixture bundle or
+  possibly one runbook playbook; an ADR on the renderer's dialect, its spec tests and its
+  construct census (PR 7d); a size bound in exit 6, read once at R4's last PR. R4 adds no bootstrap workflow, fixture bundle or
   hand-apply test: D5 owns them, so the plan carries one bootstrap procedure where it
   carried three.
 - **Added, then removed within R4:** the `render-diff` workflow, its required context and
   its template section live from PR 1 to PR 11. The precondition test, with its one named
   `flux` exemption and two fixtures for it, lives from PR 1 to PR 8, and the equality test
-  from PR 5 to PR 6. R4's end state carries none of them.
+  from PR 5 to PR 6. The dependency-pin hazard lives from PR 7e to PR 11, unless Open
+  question 12 keeps it. R4's end state carries none of them.
 
 ## Open questions
 
@@ -1699,6 +1788,18 @@ daniel-box. The operator produces them, because each needs the host:
     syntax check. PR 6 cannot split below the role: the role, its `initial_setup.yml` entry
     and its `_KUMA_CHECK` entry must leave in one commit (*render_records*). Its readers
     that D6 left can go in a PR of their own before it.
+12. **Does the renderer-dependency hazard outlive R4?** PR 11 removes the `render-diff`
+    gate and its hazard list. After R4, nothing then stops a renderer dependency bump that
+    changes output from automerging. Two options (**operator-only**):
+    - keep the `render-diff` job and its required context after PR 11, with the hazard
+      list narrowed to the renderer's dependency pins;
+    - remove the required context as planned, keep the job as an advisory one that prints
+      the diff, and add a Renovate rule that disables automerge for the renderer's
+      dependency closure.
+
+    Recommendation: the second, because it keeps no required context, and a human reads
+    the printed diff before merging. Resolution: the operator rules in PR 11's review, and
+    PR 11 implements the choice.
 
 ## Review log
 
@@ -2155,3 +2256,19 @@ Raised against R4: one high and three mediums. All four are fixed, and nothing w
       fails, and so does a playbook copy with `gather_facts: false` and no setup task.
     - *Verification* and *Risks* (*The revert runbook loses its caller or a variable*)
       name both checks.
+
+### Pillar review fold (2026-10-12)
+
+Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-start review round covers it.
+
+- **F-10 (the dialect).** *The renderer's dialect is specified* and PR 7d add an ADR that
+  states the supported filters, lookups, tests and variable semantics. Spec tests hold the
+  renderer to literals checked once against ansible-core, and a census refuses a template
+  outside the subset. *Verification*, *Risks*, *Tests and docs*, the file tree and the
+  delta follow. PR 7 lists five prerequisites of PR 8.
+- **T3 (renderer dependency bumps).** *The render-diff gate* and PR 7e add the renderer's
+  dependency pins to the hazard list, keyed on named `uv.lock` entries rather than the
+  whole file. PR 11 still removes the gate, so Open question 12 asks the operator whether
+  the hazard outlives R4.
+- **F-05 (end size).** Exit 6 bounds the renderer at 2,600 non-test lines, against stated
+  additions of about 1,940, and names what the headroom covers.

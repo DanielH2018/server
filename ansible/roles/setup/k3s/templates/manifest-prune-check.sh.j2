@@ -82,9 +82,9 @@ source /usr/local/lib/setup-drift-lib.sh || {
 }
 
 # Runs as root under cron, whose default PATH (/usr/bin:/bin) omits /usr/local/bin — where
-# the k3s install script puts the binary. Without this, `k3s` resolves to nothing, the
-# `kubectl get` calls below silently no-op (stderr swallowed by check_kind's 2>/dev/null),
-# ORPHANS stays empty, and the check pushes a permanent false "up". Same trap as
+# the k3s install script puts the binary. Without this, `k3s` resolves to nothing and every
+# `kubectl get` below fails. Until #4604 that failure read as zero objects and the check pushed a
+# permanent false "up"; check_kind now records it in LIST_ERR, so the tile goes red. Same trap as
 # cron-path-omits-usr-local-bin.md; the sibling heartbeats beside this one (disk-health.sh.j2,
 # longhorn-backup-health.sh.j2) don't set this either and should be checked for the same bug.
 export PATH="/usr/local/bin:${PATH}"
@@ -94,13 +94,12 @@ KUBECTL="k3s kubectl"
 MANIFEST_ROOT=/etc/rancher/k3s/manifests
 
 # A non-root `stat`/`-d` test on MANIFEST_ROOT itself still succeeds (only traverse permission
-# on the parent is needed), but `grep -r` into its mode-0700 per-service subdirs then fails
-# permission-denied on every one, and that failure is swallowed by check_kind's 2>/dev/null —
-# indistinguishable from "no template declares this name". Every live object would misclassify
-# as an orphan, and both push blocks below are unconditional, so a hand-run as a non-root user
-# corrupts the real Kuma monitor and fires the healthchecks.io dead-man's switch on entirely
-# false data. Must precede PUSH_TOKEN handling, the grep, the early -d push path, and both push
-# blocks, so a non-root run pushes nothing at all.
+# on the parent is needed), but MANIFEST_ROOT is mode 0700, so manifest-declares.py reads no
+# objects from it and exits 1. The orphan arm then reports DECLARED_ERR, a read failure whose
+# real cause is the wrong user. Both push blocks below are unconditional, so a hand-run as a
+# non-root user would push that false DOWN to the real Kuma monitor and fire the healthchecks.io
+# dead-man's switch. Must precede PUSH_TOKEN handling, the declared-set read, the early -d push
+# path, and both push blocks, so a non-root run pushes nothing at all.
 if [[ $EUID -ne 0 ]]; then
   echo "must run as root: the staged manifest dirs under $MANIFEST_ROOT are mode 0700 (try: sudo $0)" >&2
   exit 64
@@ -222,8 +221,20 @@ is_excluded_ns() {
   return 1
 }
 
+# Kinds whose `kubectl get` failed. A failed list prints no rows, which used to read as "no
+# orphans of this kind", so an unreachable apiserver, an unreadable kubeconfig or a missing CRD
+# pushed UP for a sweep that read nothing (#4604). The output is captured before it is read so
+# the exit code survives; a process substitution discards it.
+LIST_ERR=""
+
 check_kind() {
-  local kind="$1" ns name owner
+  local kind="$1" ns name owner rows
+  if ! rows=$($KUBECTL get "$kind" -A \
+    -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{" "}{.metadata.ownerReferences}{"\n"}{end}' \
+    2>/dev/null); then
+    LIST_ERR="${LIST_ERR:+$LIST_ERR, }$kind"
+    return
+  fi
   while IFS=' ' read -r ns name owner; do
     [[ -z "$ns" || -z "$name" ]] && continue
     is_excluded_ns "$ns" "$kind" && continue
@@ -234,9 +245,7 @@ check_kind() {
     if [[ -z "${DECLARED[${kind}/${name}]:-}" ]]; then
       add_orphan "${kind}/${ns}/${name}"
     fi
-  done < <($KUBECTL get "$kind" -A \
-    -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{" "}{.metadata.ownerReferences}{"\n"}{end}' \
-    2>/dev/null)
+  done <<< "$rows"
 }
 
 # tlsoption joined on 2026-08-15: the Longhorn UI stages one, and the kind had never been checked
@@ -295,7 +304,7 @@ setup_drift_scan
 DEPLOYED_NOTE="${DEPLOYED_NOTE/the setup plays once each/initial_setup.yml and k3s-bringup.yml once each}"
 MANIFEST_NOTE="${MANIFEST_NOTE/the setup plays once each/k3s-bringup.yml and initial_setup.yml once each}"
 
-if [[ -z "$ORPHANS" && -z "$DRIFTED" && -z "$STALE" && -z "$DECLARED_ERR" ]]; then
+if [[ -z "$ORPHANS" && -z "$DRIFTED" && -z "$STALE" && -z "$DECLARED_ERR" && -z "$LIST_ERR" ]]; then
   STATUS=up
   # Names the arms it actually covered. The old wording — "deployed scripts match the repo" —
   # was true of the three copy:-deployed files and silently claimed the other twenty.
@@ -304,6 +313,7 @@ else
   STATUS=down
   MSG=""
   [[ -n "$DECLARED_ERR" ]] && MSG="$DECLARED_ERR"
+  [[ -n "$LIST_ERR" ]] && MSG="${MSG:+$MSG; }kubectl get failed for ${LIST_ERR} — orphans of those kinds unchecked"
   [[ -n "$ORPHANS" ]] && MSG="${MSG:+$MSG; }live but absent from staged manifests: ${ORPHANS}"
   # Each name is a repo-relative path, so the role it belongs to says which playbook renders it:
   # roles/setup/k3s/... comes from k3s-bringup.yml, every other setup role from initial_setup.yml.

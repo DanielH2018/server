@@ -24,10 +24,18 @@ Installs the chezmoi binary into `~/.local/bin`, seeds `~/.config/chezmoi/chezmo
 - **The home directory is `/home/{{ sys_user }}`, not `ansible_env.HOME`.** Facts are
   gathered under the play's `become: true`, so `ansible_env.HOME` reads `/root` even inside a
   `become: false` task — it failed on daniel-box with `Permission denied: /root/.local`.
-- **The seed answers the two `promptOnce` questions** in the dotfiles' `.chezmoi.toml.tmpl`
-  (`chezmoi_setup_profile`, `chezmoi_setup_work`). chezmoi records them on
-  first init and reuses them; changing a seed value after that needs the config edited on the
-  host, not just a re-run.
+- **The seed answers the three `promptOnce` questions** in the dotfiles' `.chezmoi.toml.tmpl`
+  (`chezmoi_setup_profile`, `chezmoi_setup_work`, and `agent`, always `false` here). chezmoi
+  records them on first init and reuses them; changing a seed value after that needs the
+  config edited on the host, not just a re-run.
+- **A prompt the dotfiles add later breaks every apply on an existing host.** The seed is
+  `force: false`, so the new key never reaches a config rendered before the prompt existed,
+  and init dies on `could not open a new TTY`. `agent` (dotfiles, 2026-10-10) did this
+  and held the deployer, so a task enforces it on an existing config. A new prompt needs a
+  line in the seed and the same kind of task. The agent user's seed in `claude_code` answers
+  the same questions, and
+  `ansible/tests/setup/test_chezmoi_setup_seed.py::test_the_operator_seed_answers_every_prompt_the_agent_seed_answers`
+  fails when the two seeds disagree.
 - **The distro packages the dotfiles scripts cannot install themselves** are one apt task
   here (`chezmoi_setup_distro_packages`); a new dotfiles dependency that needs root goes
   there, never into a hand install on the host.

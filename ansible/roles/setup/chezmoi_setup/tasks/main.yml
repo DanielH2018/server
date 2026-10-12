@@ -77,6 +77,21 @@
     force: false
   become: false
 
+- name: Answer the agent prompt in a config seeded before the dotfiles asked it
+  tags: [chezmoi]
+  # The dotfiles added `promptBoolOnce . "agent"` on 2026-10-10. The seed above is
+  # force: false, so a config rendered before then never gains the key, and every later init
+  # dies on that prompt's TTY. The deployer held 943faa50 on exactly this. Unlike work and
+  # profile, the answer is not a host choice: this role manages sys_user, and the agent user's
+  # `agent = true` is claude_code's (agent-chezmoi-seed.toml.j2). So it is enforced, not
+  # seeded once.
+  ansible.builtin.lineinfile:
+    path: /home/{{ sys_user }}/.config/chezmoi/chezmoi.toml
+    regexp: '^\s*agent\s*='
+    line: "    agent = false"
+    insertafter: '^\[data\]'
+  become: false
+
 - name: Initialise chezmoi from the dotfiles repo and apply
   tags: [chezmoi]
   # Unconditional rather than gated on the source directory being absent. A failed init
