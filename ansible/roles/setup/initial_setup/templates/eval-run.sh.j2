@@ -63,7 +63,11 @@ PR_BRANCH_PREFIX="evals-history/"
 # exactly as a modified one does, so a file whose job is to record a failure must never be a
 # failure itself. crons.yml creates this subdirectory owned by the cron user.
 STAMP_DIR="/var/lib/homelab/eval-run.d"
-COMMIT_FAILED_LOG="$STAMP_DIR/last-commit-failure.log"
+# One log per failing run, pruned to the newest FAILURE_LOGS_KEPT: docs-refresh.sh lost a traceback
+# to the next failure's overwrite (#4764). The `failure-` prefix keeps the prune off the files and
+# the sweeps/ directory beside it.
+FAILURE_LOG="$STAMP_DIR/failure-$(date -u '+%Y%m%dT%H%M%SZ').log"
+FAILURE_LOGS_KEPT=5
 UNPUBLISHED_HISTORY="$STAMP_DIR/unpublished-history.json"
 # One directory per sweep, named by its UTC start, holding each agent's --json report and the
 # sweep's console log. Weekly runs, so 8 is about two months of per-run evidence.
@@ -138,12 +142,35 @@ say_failure() {
   alert "$1: $detail"
 }
 
+# The suite-failure alert, a copy of docs-refresh.sh's: its header has why say_failure's `Failed`
+# token and plain tail name no test for pytest output (#4764). The two copies are held identical by
+# test_eval_run_failure_path.py, so the behavioural tests in docs-refresh's module cover both.
+suite_summary() {
+  awk '
+    /^=+ short test summary info =+$/ { in_block = 1; next }
+    in_block && /^=+ .* in [0-9.]+s/ { gsub(/^=+ | =+$/, ""); count = $0; in_block = 0; next }
+    in_block && /^(FAILED|ERROR) / { sub(/ - .*$/, ""); ids = ids "; " $0 }
+    END { out = count ids; sub(/^; /, "", out); printf "%s", out }
+  ' "$1" 2>/dev/null
+}
+
+say_suite_failure() {
+  local summary
+  summary="$(suite_summary "$2")"
+  [ -n "$summary" ] || summary="$(tr '\n' ' ' < "$2" | tail -c 400)"
+  alert "$1: $(printf '%s' "$summary" | head -c 600)"
+}
+
 # on_exit removes the temp log, the cron entry redirects nothing and Loki has no stream for this
-# script, so without this copy the cause of a commit failure is unrecoverable the moment the run
-# ends. Bounded, and outside $REPO for the same reason as the rest of $STAMP_DIR.
+# script, so without this copy the cause of a failure is unrecoverable the moment the run ends.
+# Bounded, and outside $REPO for the same reason as the rest of $STAMP_DIR. Each run writes its own
+# FAILURE_LOG; the prune keeps the newest FAILURE_LOGS_KEPT.
 keep_failure_log() {
   mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
-  tail -c 65536 "$1" >"$COMMIT_FAILED_LOG" 2>/dev/null || return 0
+  tail -c 65536 "$1" >"$FAILURE_LOG" 2>/dev/null || return 0
+  # The names sort chronologically because they are UTC timestamps of a fixed width.
+  find "$STAMP_DIR" -maxdepth 1 -name 'failure-*.log' 2>/dev/null | sort \
+    | head -n "-$FAILURE_LOGS_KEPT" | xargs -r -d '\n' rm -f --
 }
 
 # Keeps this sweep's per-run output, which nothing else does (#4019). $REPORT_DIR holds each
@@ -368,7 +395,7 @@ if [ "$SUITE_RC" -ne 0 ]; then
   else
     RESTORE_NOTE="TREE STILL DIRTY - gitops-deploy is parked until it is cleaned; ${KEPT_NOTE}"
   fi
-  say_failure "eval-run: the test suite failed (pytest exit ${SUITE_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
+  say_suite_failure "eval-run: the test suite failed (pytest exit ${SUITE_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
   exit 1
 fi
 

@@ -83,7 +83,8 @@ def _bash(
         "GIT_COMMITTER_NAME": "t",
         "GIT_COMMITTER_EMAIL": "t@example.invalid",
         "STAMP_DIR": str(stamp_dir),
-        "COMMIT_FAILED_LOG": str(stamp_dir / "last-commit-failure.log"),
+        "FAILURE_LOG": str(stamp_dir / "failure-20261012T020000Z.log"),
+        "FAILURE_LOGS_KEPT": "5",
         "UNPUBLISHED_HISTORY": str(stamp_dir / "unpublished-history.json"),
         "SWEEP_ARCHIVE": str(stamp_dir / "sweeps"),
         "SWEEPS_KEPT": "8",
@@ -293,6 +294,32 @@ def test_neither_cron_tails_the_whole_log_unfiltered():
         assert "files were modified by this hook" in text, (
             f"{name}.sh.j2 no longer filters for prek's failure tokens"
         )
+
+
+def _docs_refresh_function(name: str) -> str:
+    match = re.search(rf"^{name}\(\) \{{\n.*?^\}}$", DOCS_REFRESH, re.M | re.S)
+    assert match, f"{name}() is gone from docs-refresh.sh.j2"
+    return match.group(0)
+
+
+def test_the_suite_alert_and_failure_log_are_docs_refresh_s_own_code():
+    """The copies stay identical, so test_docs_refresh_failure_path.py's behavioural tests cover
+    them here too: the summary that names the failing ids, and one log per run (#4764)."""
+    for name in ("suite_summary", "say_suite_failure", "keep_failure_log"):
+        assert _function(name) == _docs_refresh_function(name), name
+    for text in (SCRIPT, DOCS_REFRESH):
+        assert (
+            "\nFAILURE_LOG=\"$STAMP_DIR/failure-$(date -u '+%Y%m%dT%H%M%SZ').log\""
+            in text
+        )
+
+
+def test_the_suite_failure_branch_pushes_the_summary():
+    """REJECT the old call site: say_failure's `Failed` token matches pytest's shutdown noise."""
+    branch = SCRIPT[SCRIPT.index('if [ "$SUITE_RC" -ne 0 ]; then') :]
+    branch = branch[: branch.index("\nfi\n")]
+    assert 'say_suite_failure "eval-run: the test suite failed' in branch, branch
+    assert "say_failure " not in branch, branch
 
 
 def test_secret_rotate_keeps_its_plain_tail_only_while_it_skips_hooks():

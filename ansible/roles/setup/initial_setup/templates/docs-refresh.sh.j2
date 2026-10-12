@@ -89,7 +89,12 @@ PR_BRANCH_PREFIX="docs-refresh/"
 # runs without become.
 STAMP_DIR="/var/lib/homelab/docs-refresh.d"
 COMMIT_FAILED_STAMP="$STAMP_DIR/commit-failed"
-COMMIT_FAILED_LOG="$STAMP_DIR/last-commit-failure.log"
+# ONE LOG PER FAILING RUN, named by the run's start time. A single overwritten file lost the
+# 2026-10-12 06:17 traceback to the 18:17 failure, which was a different test (#4764).
+# keep_failure_log prunes to the newest FAILURE_LOGS_KEPT. The `failure-` prefix is what the prune
+# globs on, so it never matches the stamp beside it.
+FAILURE_LOG="$STAMP_DIR/failure-$(date -u '+%Y%m%dT%H%M%SZ').log"
+FAILURE_LOGS_KEPT=5
 
 # The token is interpolated here rather than sourced from /etc/rancher/k3s/kuma-push.env,
 # matching secret-rotate.sh -- the sibling pusher in this same role. `| default('')` gates it:
@@ -201,12 +206,47 @@ say_failure() {
   alert "$1: $detail"
 }
 
-# on_exit removes the temp log, the cron entry redirects nothing and Loki has no stream for this
-# script, so without this copy the cause of a commit failure is unrecoverable the moment the run
-# ends. Bounded, and outside $REPO for the same reason as the stamp.
+# suite_summary LOG -- pytest's own verdict: the count line, then each FAILED/ERROR node id.
+#
+# NOT say_failure. Its `Failed` token matches pytest output too, and the plain tail is wherever
+# the run stopped printing. On 2026-10-12 18:20 that was a shutdown traceback printed AFTER the
+# summary, `hook_error = RuntimeError("Failed to process unraisable exception")`, which named no
+# test. So this reads only the `short test summary info` block, wherever it sits in the file:
+# a captured-log line can also start `ERROR` at column 0, outside the block.
+#
+# The count goes first because kuma_push keeps the head of an over-long message. The ` - reason`
+# suffix is dropped to fit more ids; a node id wider than pytest's 80 columns arrives with no
+# suffix at all. Prints nothing when the block is missing: a `timeout` kill or an INTERNALERROR.
+suite_summary() {
+  awk '
+    /^=+ short test summary info =+$/ { in_block = 1; next }
+    in_block && /^=+ .* in [0-9.]+s/ { gsub(/^=+ | =+$/, ""); count = $0; in_block = 0; next }
+    in_block && /^(FAILED|ERROR) / { sub(/ - .*$/, ""); ids = ids "; " $0 }
+    END { out = count ids; sub(/^; /, "", out); printf "%s", out }
+  ' "$1" 2>/dev/null
+}
+
+# say_suite_failure PREFIX LOG -- alert with suite_summary, else the plain tail of LOG.
+#
+# Capped at 600 so the prefix and the count survive kuma_push's 900 and logger's line limit; the
+# count line still says how many failures a cut list dropped.
+say_suite_failure() {
+  local summary
+  summary="$(suite_summary "$2")"
+  [ -n "$summary" ] || summary="$(tr '\n' ' ' < "$2" | tail -c 400)"
+  alert "$1: $(printf '%s' "$summary" | head -c 600)"
+}
+
+# on_exit removes the temp log, the cron's logger pipe never sees output that went to $LOG, and
+# Loki has no stream for this script, so without this copy the cause of a failure is
+# unrecoverable the moment the run ends. Bounded, and outside $REPO for the same reason as the
+# stamp. Each run writes its own FAILURE_LOG; the prune keeps the newest FAILURE_LOGS_KEPT.
 keep_failure_log() {
   mkdir -p "$STAMP_DIR" 2>/dev/null || return 0
-  tail -c 65536 "$1" >"$COMMIT_FAILED_LOG" 2>/dev/null || return 0
+  tail -c 65536 "$1" >"$FAILURE_LOG" 2>/dev/null || return 0
+  # The names sort chronologically because they are UTC timestamps of a fixed width.
+  find "$STAMP_DIR" -maxdepth 1 -name 'failure-*.log' 2>/dev/null | sort \
+    | head -n "-$FAILURE_LOGS_KEPT" | xargs -r -d '\n' rm -f --
 }
 
 # Puts the checkout back the way it was before `git add`. $1 is the output of
@@ -283,7 +323,7 @@ keep_tree_evidence() {
     git status --porcelain -uall 2>&1 | head -c 8192
     printf '# git diff --stat (unstaged: what a hook rewrote after git add)\n'
     git diff --stat 2>&1 | head -c 8192
-  } >>"$COMMIT_FAILED_LOG" 2>/dev/null || return 0
+  } >>"$FAILURE_LOG" 2>/dev/null || return 0
 }
 
 mark_commit_failed() {
@@ -490,8 +530,8 @@ if [ "$SUITE_RC" -ne 0 ]; then
   else
     RESTORE_NOTE="TREE STILL DIRTY - gitops-deploy is parked until it is cleaned"
   fi
-  mark_commit_failed "suite failed $(date -u '+%Y-%m-%dT%H:%M:%SZ') (pytest exit ${SUITE_RC}); ${RESTORE_NOTE}; full log: ${COMMIT_FAILED_LOG}"
-  say_failure "docs-refresh: the test suite failed (pytest exit ${SUITE_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
+  mark_commit_failed "suite failed $(date -u '+%Y-%m-%dT%H:%M:%SZ') (pytest exit ${SUITE_RC}); ${RESTORE_NOTE}; full log: ${FAILURE_LOG}"
+  say_suite_failure "docs-refresh: the test suite failed (pytest exit ${SUITE_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
   exit 1
 fi
 
@@ -512,7 +552,7 @@ if [ "$COMMIT_RC" -ne 0 ]; then
   fi
   # Stamped whichever way the restore went, and cleared only by a run that publishes or finds
   # nothing to publish: it is what lets the NEXT run recognise leftover dirt as its own.
-  mark_commit_failed "commit failed $(date -u '+%Y-%m-%dT%H:%M:%SZ') (git exit ${COMMIT_RC}); ${RESTORE_NOTE}; full log: ${COMMIT_FAILED_LOG}"
+  mark_commit_failed "commit failed $(date -u '+%Y-%m-%dT%H:%M:%SZ') (git exit ${COMMIT_RC}); ${RESTORE_NOTE}; full log: ${FAILURE_LOG}"
   say_failure "docs-refresh: commit failed (git exit ${COMMIT_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
   exit 1
 fi

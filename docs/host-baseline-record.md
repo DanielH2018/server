@@ -241,6 +241,12 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
   read against origin rather than the open-PR list), and the commit-failure stamp under
   `/var/lib/homelab/docs-refresh.d`, which is what lets the next run tell its own leftover dirt
   from a human's.
+- **Each failing run keeps its own log** in that directory, named `failure-<UTC start>.log`,
+  and the script prunes all but the newest five (#4764). One overwritten file lost the
+  2026-10-12 06:17 traceback to the 18:17 failure of a different test.
+- **A red suite pushes pytest's own verdict**: the count line and each `FAILED`/`ERROR` node id
+  from the `short test summary info` block. The output's tail is only the fallback, for a run
+  with no such block. On 2026-10-12 the tail was a shutdown traceback that named no test.
 - **Before adding a fourth staged path**, or a prek hook matching one of the three, check the
   hook cannot fail on generator output — a hook that can wedges this cron on every run, and
   `end-of-file-fixer` and Vale have both already tried. Vale is the one kept exception, on
@@ -271,6 +277,10 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
   last MiB of the console log. The newest 8 sweeps stay. Read these before editing a case that
   fell below its threshold; `history.json` holds only the scores and each sweep's
   total cost (#4019, #4273).
+- **A failed suite or commit keeps its own log** at `/var/lib/homelab/eval-run.d/failure-<UTC
+  start>.log`, and the script prunes all but the newest five. A red suite pushes pytest's count
+  line and failing node ids. The code is docs-refresh's, and a test holds the two copies
+  identical (#4764).
 - **A REGRESSED case still gets committed** — the data is real — but reports the push DOWN with
   the regression named, matching autofix-bridge's "act, but do not launder the result" pattern
   rather than silently dropping the regression or silently blocking the commit.
