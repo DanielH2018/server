@@ -29,8 +29,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
-from lib.exit_codes import FAILED as RENDER_FAILED
-from lib.exit_codes import OK as RENDER_OK
+from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
 from renderer.renderer_lib.cluster import (
     RenderError,
@@ -48,10 +47,6 @@ if str(FILTER_PLUGINS) not in _sys.path:
 from secret_stubs import homelab_stub_keys, homelab_unstubbed_keys
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
-
-# C1 in docs/target-architecture/contracts.md fixes 2 for `cluster` without --secret-stubs.
-# The parser exits 64 on a usage error, so 2 always means this refusal.
-RENDER_REFUSED = 2
 
 
 def unstubbed(stubs: dict, secrets: Path = SECRETS) -> list[str]:
@@ -112,7 +107,8 @@ def main(argv: list[str] | None = None) -> int:
         action="extend",
         nargs="+",
         metavar="TAG",
-        help="a deploy tag to render; repeatable. Default: every tag that renders so far",
+        help="a deploy tag to render; repeatable. Default: every tag that renders so far, "
+        "which leaves out the tags that read a value a role task computes",
     )
     render.add_argument(
         "--secret-stubs",

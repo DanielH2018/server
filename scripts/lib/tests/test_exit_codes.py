@@ -18,6 +18,7 @@ from _row_table import Census, Subject, check, proof_problems, tracked
 
 
 from lib import exit_codes as ec
+from lib import exit_messages
 from lib.repo_paths import REPO
 
 
@@ -146,6 +147,7 @@ def test_the_importers_take_their_values_from_here():
         ("FINDINGS_BAD_ARGS", "USAGE_ERROR"),
         ("SECRET_ROTATION_BAD_ARGS", "USAGE_ERROR"),
         ("B2_DRAIN_BAD_ARGS", "USAGE_ERROR"),
+        ("RENDER_BAD_ARGS", "USAGE_ERROR"),
     ],
 )
 def test_each_family_takes_its_usage_and_temp_fail_from_the_spine(name, spine):
@@ -192,6 +194,7 @@ def _declared_values(prefix):
         ("scripts/infra_map/gen_infra_map.py", "INFRA_MAP_"),
         ("scripts/dev/renovate_rebase.py", "RENOVATE_REBASE_"),
         ("scripts/dev/renovate_branch_sweep.py", "RENOVATE_SWEEP_"),
+        ("scripts/renderer/homelab_render.py", "RENDER_"),
     ],
 )
 def test_every_declared_code_has_a_contract_row(entry_point, prefix):
@@ -219,7 +222,7 @@ def test_every_contract_row_names_a_constant_that_exists():
 
 
 def test_describe_renders_the_constant_the_value_and_the_remedy():
-    note = ec.describe("scripts/deploy.sh", ec.DEPLOY_STALE)
+    note = exit_messages.describe("scripts/deploy.sh", ec.DEPLOY_STALE)
     assert note is not None
     assert note.startswith("DEPLOY_STALE (4): ")
     assert "NOTHING was deployed" in note and "Pull first" in note
@@ -227,8 +230,8 @@ def test_describe_renders_the_constant_the_value_and_the_remedy():
 
 def test_describe_returns_none_for_a_code_outside_the_contract():
     """The reject half: a wrapper must print the bare code rather than a wrong meaning."""
-    assert ec.describe("scripts/deploy.sh", 200) is None
-    assert ec.describe("scripts/nothing.sh", 1) is None
+    assert exit_messages.describe("scripts/deploy.sh", 200) is None
+    assert exit_messages.describe("scripts/nothing.sh", 1) is None
 
 
 def test_every_no_verdict_code_carries_a_remedy():
@@ -260,7 +263,7 @@ def test_the_place_docstring_lists_every_code_its_contract_declares():
 
 def test_die_prints_the_detail_and_the_codes_meaning_then_exits_with_it(capsys):
     with pytest.raises(SystemExit) as exc:
-        ec.die(
+        exit_messages.die(
             "scripts/backup/b2_drain.py", ec.B2_DRAIN_BAD_ARGS, "no volumes were named"
         )
     assert exc.value.code == 64
@@ -271,7 +274,7 @@ def test_die_prints_the_detail_and_the_codes_meaning_then_exits_with_it(capsys):
 
 def test_die_prints_no_meaning_for_a_code_outside_the_contract(capsys):
     with pytest.raises(SystemExit) as exc:
-        ec.die("scripts/nothing.py", 9, "boom")
+        exit_messages.die("scripts/nothing.py", 9, "boom")
     assert exc.value.code == 9
     assert capsys.readouterr().err == "nothing.py: error: boom\n"
 

@@ -18,10 +18,12 @@ steps, and this page describes each piece once its PR has merged.
 - `scripts/renderer/renderer_lib/task_inputs.py` holds `PINNED_LIVE_FACTS`, the stand-ins for
   facts a role task reads from live state.
 - `scripts/renderer/homelab_render.py cluster` renders in stub mode into the C1 layout. It
-  renders one tag so far, `littlelink`, and only that role's own templates
-  (*What renders so far*).
+  applies the manifests role's file rules (*The file rules*), and renders every tag that
+  reads no value a role task computes (*What renders so far*).
 - `scripts/renderer/renderer_lib/context.py` builds the variables a role's templates see in
-  the deploy play, and `renderer_lib/cluster.py` renders each tag and writes its directory.
+  the deploy play, and `renderer_lib/cluster.py` renders each tag and writes its directories.
+- `scripts/renderer/renderer_lib/task_inputs.py:include_vars` reads the `manifests_*` vars
+  each role passes to its `k8s/manifests` include.
 
 ## The stub form
 
@@ -60,8 +62,9 @@ every tag that renders so far.
 
 Each tag becomes `DIR/cluster/<tag>/`. The directory holds the rendered manifests and a
 `kustomization.yaml` whose `resources` list them in lexical order, the order
-`kubectl apply -f <dir>/` reads a directory in. The renderer writes nothing else, and
-`DIR/flux/` belongs to a later slice.
+`kubectl apply -f <dir>/` reads a directory in. A tag that defers files also gets
+`DIR/cluster/<tag>-deferred/`, with its own `kustomization.yaml`. The renderer writes nothing
+else, and `DIR/flux/` belongs to a later slice.
 
 `cluster` exits 2 and writes nothing in four cases:
 
@@ -71,9 +74,11 @@ Each tag becomes `DIR/cluster/<tag>/`. The directory holds the rendered manifest
   keys, never a value. Write a fresh stub file for the commit.
 - A `--role` names a tag that is not a k8s render target of daniel-box, or one that does not
   render yet.
-- A tag's directory under `DIR/cluster/` already holds files from an earlier render.
+- A directory it would write under `DIR/cluster/` already holds files from an earlier
+  render.
 
-It exits 1 when a template fails to render, and it writes nothing then either.
+It exits 1 when a template fails to render, and it writes nothing then either. It exits 64
+on a usage error. `scripts/lib/exit_codes.py` holds the four codes as its `RENDER_*` family.
 
 ### The play-time context
 
@@ -103,20 +108,47 @@ Ansible's lazy evaluation. That matters because three `group_vars/all.yml` value
 variables that only setup roles or Ansible itself define. Another host's `hostvars` entry is
 stricter: a value there that does not resolve stops the render at once.
 
+### The file rules
+
+The renderer writes the files the Ansible manifests role writes for a tag, by the rules of
+its render tasks in `ansible/roles/k8s/manifests/tasks/main.yml`:
+
+- **The file lists.** `scripts/lib/k8s_roles.py:resolved_manifest_files` derives them from
+  the role's templates and its `containers_list` entry. A role whose include passes
+  `manifests_files` or `manifests_secret_files` gets that list instead, resolved against the
+  play-time context. navidrome's list, for one, names `ingressroute.yaml` only while it has
+  replicas.
+- **The shared defaults.** A listed `service.yaml` or `ingressroute.yaml` that the role ships
+  no template for renders from `service-default.yaml.j2` or `ingressroute-default.yaml.j2`
+  in `ansible/templates/`. A listed name with no template stops the render.
+- **The claims.** Each `k8s_claims` entry renders `claim-default.yaml.j2` to
+  `claim-<name>.yaml`, with the entry as `manifests_claim`.
+- **The labelling wrapper.** A role that arms `manifests_prune`, the default, renders its
+  files, its secret files and its claims through `role-labelled.yaml.j2`. The wrapper stamps
+  `homelab/role: <tag>` on every document. authelia and nut opt out at their includes.
+- **The deferred files.** `manifests_deferred_files` render from the role's own templates,
+  unlabelled, into `DIR/cluster/<tag>-deferred/`. Ansible stages them in a subdirectory
+  named by `manifests_deferred_dir_name`. pihole, headlamp and netpol-baseline defer files.
+
+`include_vars` reads the include whose `tasks_from` is absent or `main`, and refuses a role
+with none or with two. It keeps the `manifests_*` keys, and the renderer resolves only the
+five it reads: the two file lists, the deferred pair and `manifests_prune`.
+
+A template census in `scripts/renderer/tests/` parses every template of the k8s roles and
+`ansible/templates/`. It fails when a filter or test name does not resolve in the environment
+the renderer renders with.
+
 ### What renders so far
 
-Target slice R1 widens the renderer one PR at a time, and
-`scripts/renderer/renderer_lib/cluster.py:RENDERABLE` names the tags that render so far. It
-holds `littlelink`, which reads no task-computed value and has no claims and no deferred
-files.
+`homelab-render cluster` with no `--role` renders every render target of daniel-box except
+`scripts/renderer/renderer_lib/cluster.py:PENDING`. Those 14 tags read a value a role task
+computes: a content tag from `k8s/image-builder`, a script checksum, `kuma_declarations` or
+`janitorr_dry_run`. `scripts/renderer/renderer_lib/task_inputs.py:TASK_COMPUTED` lists the
+names, and a test holds `PENDING` equal to the tags whose templates or defaults name one.
+R1's PR 3 derives those values and empties the set.
 
-The renderer renders a role's own manifest templates only. The Ansible manifests role also
-writes the shared `service.yaml` and `ingressroute.yaml` defaults for an entry with a `port`
-or a `hostname`. For a prune-armed role, it wraps every document in
-`ansible/templates/role-labelled.yaml.j2`. R1's PR 2 adds both, with the claim files and
-the deferred directory. Until then a render is not byte-identical to Ansible's. For
-`littlelink` it holds `deployment.yaml` alone, where Ansible also writes the Service and the
-IngressRoute.
+The render is not yet proven byte-identical to Ansible's. R1's PR 7 compares the two and
+closes each class of difference.
 
 ## Pinned live-read facts
 

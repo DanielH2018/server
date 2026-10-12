@@ -22,10 +22,11 @@ tick. The prefixes are what let a reader tell which contract a value belongs to,
 not decoration: `publish_pr.py` in particular defines two groups of its own that both reuse 0
 to 3 with different meanings, and they are `PUBLISH_*` and `UNLANDED_*` here for that reason.
 
-`CONTRACTS` AT THE BOTTOM IS THE ONE RENDERABLE COPY. `deploy_lib/run.py` prints a failing code's
-name and meaning from it, `docs/reference/scripts.md` renders its Exit-codes column from it, and
-`test_exit_codes.py` asserts it covers every constant defined above. A table in a skill, a hook
-or a CLAUDE.md paragraph is a copy nothing reads; this one is read by the thing that exits.
+`CONTRACTS` AT THE BOTTOM IS THE ONE RENDERABLE COPY. `lib/exit_messages.py` prints a failing
+code's name and meaning from it, `docs/reference/scripts.md` renders its Exit-codes column from
+it, and `test_exit_codes.py` asserts it covers every constant defined above. A table in a
+skill, a hook or a CLAUDE.md paragraph is a copy nothing reads; this one is read by the thing
+that exits.
 
 Typical usage example:
 
@@ -36,9 +37,6 @@ Typical usage example:
 """
 
 import dataclasses
-import sys
-from pathlib import PurePosixPath
-from typing import NoReturn
 
 # -- the spine every family below reuses ------------------------------------------------
 # sysexits.h's EX_USAGE and EX_TEMPFAIL, plus the two verdict codes. A family names these
@@ -249,6 +247,14 @@ RENOVATE_REBASE_BAD_ARGS = USAGE_ERROR
 RENOVATE_SWEEP_OK = OK
 RENOVATE_SWEEP_GH_FAILED = 2
 RENOVATE_SWEEP_BAD_ARGS = USAGE_ERROR
+
+# -- scripts/renderer/homelab_render.py -------------------------------------------------
+# C1 in docs/target-architecture/contracts.md fixes 2 for a render refused before it writes.
+# The parser exits 64 on a usage error, so 2 always means that refusal.
+RENDER_OK = OK
+RENDER_FAILED = FAILED
+RENDER_REFUSED = 2
+RENDER_BAD_ARGS = USAGE_ERROR
 
 
 # -- the renderable copy ----------------------------------------------------------------
@@ -754,74 +760,26 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "the command line is wrong.",
         ),
     ),
+    "scripts/renderer/homelab_render.py": (
+        _c(RENDER_OK, "RENDER_OK", "every requested tag rendered under DIR/cluster/."),
+        _c(
+            RENDER_FAILED,
+            "RENDER_FAILED",
+            "a template failed to render, so nothing was written.",
+            "The message names the template and the undefined name or filter error.",
+        ),
+        _c(
+            RENDER_REFUSED,
+            "RENDER_REFUSED",
+            "the render was refused before anything was written.",
+            "Pass --secret-stubs with a fresh shadow_diff.py stubs file, name only renderable "
+            "tags, and render into an empty --out.",
+        ),
+        _c(RENDER_BAD_ARGS, "RENDER_BAD_ARGS", "the command line is wrong."),
+    ),
 }
-
-
-# -- the verdict line an entry point ends with ------------------------------------------
-#
-# `land.sh` prints `VERDICT: <verdict> (<detail>)` as its last line. `fanout_status.py` and the
-# `land-after-merge` wait both find a landing's outcome by grepping `^VERDICT:`.
-#
-# DECIDED: deploy.sh and the tick print that same shape under their OWN prefix rather than
-# under `VERDICT:`. A landing runs both as subprocesses with stdout INHERITED
-# (`land_lib/tools.py:run_deploy`), so their lines reach the landing's own logfile ABOVE its
-# verdict -- and `grep -m1 '^VERDICT:'` takes the FIRST match, which would report the deploy's
-# outcome as the landing's on every landing, with nothing failing. One format, three prefixes,
-# one renderer. Issue #2853 asked for a bare `VERDICT:` from all three; the PR that closed it
-# carries the measurement.
-VERDICT_PREFIXES = {
-    "scripts/deploy.sh": "DEPLOY-VERDICT",
-    "scripts/deploy_tools/gitops_tick.sh": "TICK-VERDICT",
-    "scripts/deploy_tools/land.sh": "VERDICT",
-    # A landing runs `probe.py health` and its stdout can reach the landing's log, so the probe
-    # takes its own prefix for the reason the DECIDED note above gives.
-    "scripts/diagnostics/probe.py": "PROBE-VERDICT",
-}
-
-
-def verdict_line(entry_point: str, rc: int, detail: str) -> str | None:
-    """`<PREFIX>: <verdict> (<detail>)` for `rc`, or None when the code names no verdict.
-
-    The outermost tool an operator ran is the one whose prefix is bare `VERDICT`; see the
-    DECIDED note above for why the inner two are not.
-    """
-    prefix = VERDICT_PREFIXES.get(entry_point)
-    for code in contract(entry_point):
-        if code.value == rc and prefix and code.verdict:
-            return f"{prefix}: {code.verdict} ({detail})"
-    return None
 
 
 def contract(entry_point: str) -> tuple[Code, ...]:
     """`CONTRACTS[entry_point]`, or an empty tuple for an entry point that declares none."""
     return CONTRACTS.get(entry_point, ())
-
-
-def describe(entry_point: str, rc: int) -> str | None:
-    """`<const> (<value>): <meaning> <remedy>` for `rc`, or None when it is not in the contract.
-
-    What an entry point prints on its own non-zero exit, so an operator reading a bare
-    `Exit code N` does not have to look the number up. The wrapper prints this; nothing
-    downstream re-decodes it.
-    """
-    for code in contract(entry_point):
-        if code.value == rc:
-            tail = f" {code.remedy}" if code.remedy else ""
-            return f"{code.const} ({code.value}): {code.meaning}{tail}"
-    return None
-
-
-def die(entry_point: str, rc: int, detail: str) -> NoReturn:
-    """Print `<prog>: error: <detail>` and the code's meaning to stderr, then exit `rc`.
-
-    `<prog>` is the entry point's file name. The second line is `describe(entry_point, rc)`,
-    left out when the contract has no row for `rc`.
-
-    Raises:
-        SystemExit: always, with `rc` as its code.
-    """
-    print(f"{PurePosixPath(entry_point).name}: error: {detail}", file=sys.stderr)
-    note = describe(entry_point, rc)
-    if note:
-        print(note, file=sys.stderr)
-    raise SystemExit(rc)
