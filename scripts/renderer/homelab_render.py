@@ -10,7 +10,8 @@ Target slice R1 implements stub mode only. `--secret-stubs FILE` takes the file 
 placeholder mode, which arrives with target slice R2. Until then it exits 2 before writing
 anything. A stub render is a comparison input and is never published.
 
-Exit codes: 0 rendered; 1 a template failed to render; 2 refused before writing anything.
+Exit codes: 0 rendered; 1 a template failed to render; 2 refused before writing anything;
+64 a usage error.
 
 Run: uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
      uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \\
@@ -28,6 +29,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
+from lib.exit_codes import FAILED as RENDER_FAILED
+from lib.exit_codes import OK as RENDER_OK
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
 from renderer.renderer_lib.cluster import (
     RenderError,
@@ -45,6 +48,10 @@ if str(FILTER_PLUGINS) not in _sys.path:
 from secret_stubs import homelab_stub_keys, homelab_unstubbed_keys
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
+
+# C1 in docs/target-architecture/contracts.md fixes 2 for `cluster` without --secret-stubs.
+# The parser exits 64 on a usage error, so 2 always means this refusal.
+RENDER_REFUSED = 2
 
 
 def unstubbed(stubs: dict, secrets: Path = SECRETS) -> list[str]:
@@ -64,7 +71,7 @@ def cluster(out: Path, roles: list[str] | None, secret_stubs: Path | None) -> in
             "arrives with target slice R2. Nothing was written.",
             file=sys.stderr,
         )
-        return 2
+        return RENDER_REFUSED
     stubs = load_stubs(secret_stubs)
     missing = unstubbed(stubs)
     if missing:
@@ -73,21 +80,21 @@ def cluster(out: Path, roles: list[str] | None, secret_stubs: Path | None) -> in
             "shadow_diff.py stubs. Nothing was written.",
             file=sys.stderr,
         )
-        return 2
+        return RENDER_REFUSED
     try:
         tags = select_tags(roles)
         rendered = [render_tag(tag, stubs) for tag in tags]
         written = write_cluster(rendered, out)
     except RenderRefused as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
-        return 2
+        return RENDER_REFUSED
     except RenderError as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
-        return 1
+        return RENDER_FAILED
     print(
         f"homelab-render: {len(tags)} tags, {len(written)} files under {out / 'cluster'}"
     )
-    return 0
+    return RENDER_OK
 
 
 def main(argv: list[str] | None = None) -> int:
