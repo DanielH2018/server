@@ -94,10 +94,15 @@ def test_an_address_left_on_dhcp_is_flagged() -> None:
 
 
 def test_an_ra_route_left_at_the_networkd_default_is_flagged() -> None:
-    doc = _PINNED.replace("      dhcp6: true\n", "")
-    assert static_address_problems(doc, "eno1", "10.0.0.215", "10.0.0.1") == [
-        "the IPv6 RA route is not pinned at metric 100"
-    ]
+    # A wrong metric, no metric at all, and a metric netplan renders nothing for without dhcp6.
+    for doc in (
+        _PINNED.replace("{route-metric: 100}", "{route-metric: 1024}"),
+        _PINNED.replace("      dhcp6-overrides: {route-metric: 100}\n", ""),
+        _PINNED.replace("      dhcp6: true\n", ""),
+    ):
+        assert static_address_problems(doc, "eno1", "10.0.0.215", "10.0.0.1") == [
+            "the IPv6 RA route is not pinned at metric 100"
+        ], doc
 
 
 def test_an_address_other_than_server_ip_is_flagged() -> None:
