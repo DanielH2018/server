@@ -201,13 +201,21 @@ def test_green_descendant_takes_the_nearest_green_commit():
     assert found == "middle"
 
 
-def _wait_on_dropped(suites, descendant_runs):
+def _wait_on_dropped(suites, descendant_runs, late_runs=None):
     """wait() on a SHA with no runs, past the grace, with one descendant `next`.
 
     REQUIRED is await_ci.REQUIRED_CONTEXTS, so nothing needs patching.
     """
     runs_by_sha = {"old": [], "next": descendant_runs}
     now = [0]
+
+    def fetch(sha):
+        # The descendant goes green one poll after the grace; a late run lands before it.
+        if now[0] <= await_ci.DROPPED_PUSH_GRACE_S + 20:
+            return []
+        if sha == "old" and late_runs:
+            return late_runs
+        return runs_by_sha[sha]
 
     def sleep(seconds):
         now[0] += seconds
@@ -218,7 +226,7 @@ def _wait_on_dropped(suites, descendant_runs):
         20,
         sleep=sleep,
         clock=lambda: now[0],
-        fetch=lambda s: runs_by_sha[s],
+        fetch=fetch,
         fetch_suites=lambda _s: suites,
         descendants=lambda _s: ["next"],
     )
@@ -243,3 +251,12 @@ def test_a_dropped_push_with_no_green_descendant_times_out_saying_why():
     code, msg = _wait_on_dropped([], [])
     assert code == 75
     assert "GitHub never ran CI" in msg and "re-run converges" in msg
+
+
+def test_a_late_push_whose_run_registers_after_the_grace_keeps_its_own_verdict():
+    """The reject half: a run arriving after the grace is a late push, not a dropped one."""
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    running = [_run("prek (lint + validate + tests + secrets)", "in_progress", None)]
+    code, msg = _wait_on_dropped([], green, late_runs=running)
+    assert code == 75
+    assert msg.startswith("old:") and "never ran CI" not in msg

@@ -323,6 +323,9 @@ def wait(
                 )
             except urllib.error.URLError, TimeoutError, ValueError, OSError:
                 dropped = False
+        if any(r.get("name") in required_contexts() for r in runs):
+            # A push that was only late, not dropped: its own run now carries the verdict.
+            dropped = False
         if dropped:
             green = green_descendant(target, fetch=fetch, descendants=descendants)
             if green:
