@@ -9,9 +9,10 @@ Run: uv run pytest .claude/hooks/tests/test_inject_nested_docs_report.py
 
 import test_inject_nested_docs as base
 
-from _inline_budget import inline_margins
-
+# Reached through the hook module, which imported it from `_inline_budget`: the base module
+# puts `.claude/hooks` on `sys.path` before it loads the hook.
 _mod = base._mod
+inline_margins = _mod.inline_margins
 MAX_CHARS = _mod.INLINE_MAX_CHARS - len(_mod._PREAMBLE)
 MAX_LINES = _mod.INLINE_MAX_LINES - _mod._PREAMBLE.count("\n")
 HEADER = _mod._header("ansible/roles/k8s/foo/CLAUDE.md", "ansible/roles/k8s/foo")
