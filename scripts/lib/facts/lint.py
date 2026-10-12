@@ -37,8 +37,6 @@ from .lock import LOCK_REL, lock_tampered
 from .pins import image_pins, pinned_keys, split_image_ref
 from .removed import identifiers, removed_tokens, still_present
 
-raise ImportError("notice proof")
-
 RULES = frozenset(
     {
         "rejected-form",
