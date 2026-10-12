@@ -85,7 +85,7 @@ def test_a_fully_verified_doc_has_no_facts_line(repo):
 
 
 def test_a_doc_with_no_room_for_the_line_stays_whole_without_it(repo):
-    """The doc's own text outranks the line, so `_doc_size.MAX_CHARS` still means a whole doc."""
+    """The doc's own text outranks the line, so the line never turns a whole doc into a head."""
     header = _mod._header(DOC, ROLE)
     budget = _mod.INLINE_MAX_CHARS - len(_mod._PREAMBLE)
     text = "# foo\n" + "x" * (budget - 100 - len(header) - 2 - len("# foo\n"))
