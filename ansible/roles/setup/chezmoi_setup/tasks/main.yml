@@ -75,8 +75,12 @@
     dest: /home/{{ sys_user }}/.config/chezmoi/chezmoi.toml
     mode: "0644"
     force: false
+  register: chezmoi_setup_seed
   become: false
 
+# Skipped by a --check run that has not written the seed: check mode reports the template
+# changed but creates nothing, and lineinfile fails on a destination that does not exist.
+# Where the config exists the seed reports ok, so the task still runs, and diffs, under --check.
 - name: Answer the agent prompt in a config seeded before the dotfiles asked it
   tags: [chezmoi]
   # The dotfiles added `promptBoolOnce . "agent"` on 2026-10-10. The seed above is
@@ -85,6 +89,7 @@
   # profile, the answer is not a host choice: this role manages sys_user, and the agent user's
   # `agent = true` is claude_code's (agent-chezmoi-seed.toml.j2). So it is enforced, not
   # seeded once.
+  when: not (ansible_check_mode and chezmoi_setup_seed is changed)
   ansible.builtin.lineinfile:
     path: /home/{{ sys_user }}/.config/chezmoi/chezmoi.toml
     regexp: '^\s*agent\s*='
