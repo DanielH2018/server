@@ -12,7 +12,9 @@ Run: uv run pytest ansible/roles/setup/renovate_agent/tests/test_session_resume.
 """
 
 import json
+import os
 import pathlib
+import pwd
 import re
 
 import renovate_agent
@@ -141,6 +143,26 @@ def test_the_resume_command_runs_from_the_session_worktree(tmp_path) -> None:
     # The path belongs to the resume instruction, not merely to some other digest line.
     resume_at = digest.index(_resume_lines(digest)[0])
     assert abs(digest.index(str(worktree)) - resume_at) < 300, digest
+
+
+def test_the_resume_command_runs_as_the_user_that_owns_the_session(tmp_path) -> None:
+    """The harness stores a session under its owner's home, so the operator must switch user.
+
+    The unit runs this process as `renovate_agent_user`, so the effective user here is the
+    session's owner.
+    """
+    owner = pwd.getpwuid(os.geteuid()).pw_name
+    host, _ = _tick(tmp_path, HANDOFF)
+
+    (digest,) = host.posts
+    as_owner = re.compile(
+        rf"(?:sudo\s+(?:-\S+\s+)*-u\s*|runuser\s+-u\s*|su\s+(?:-\s+)?){owner}\b"
+    )
+    hits = [m.start() for m in as_owner.finditer(digest)]
+    assert hits, digest
+    # The switch belongs to the resume instruction, not merely to some other digest line.
+    resume_at = digest.index(_resume_lines(digest)[0])
+    assert any(abs(at - resume_at) < 300 for at in hits), digest
 
 
 def test_the_resume_command_survives_a_summary_longer_than_discord_allows(
