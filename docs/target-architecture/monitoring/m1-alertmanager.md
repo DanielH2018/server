@@ -787,7 +787,8 @@ target or a label states its delta against it.
   Retention then shrinks with nothing reporting it, as the `DECIDED` comment on the size cap
   warns. That comment holds the cap near 58% of the 12 Gi claim, so raising the cap alone
   does not raise the budget. At the 1.98 kB rate, the cap holds 30 days only up to about
-  125,000 average series, below the budget. *Open questions* 9 carries that conflict to the
+  125,000 average series, below the budget. That figure takes the cap in base-2 bytes, as
+  Prometheus reads `7GB` (7.52 × 10⁹ bytes), less the WAL's 0.18 GB. *Open questions* 9 carries that conflict to the
   operator, and until the ruling the budget stays 140,000.
 - **The headroom is about 800 series**, 140,000 less the 7-day average of 139,171 on
   2026-10-12. The longest window a monitoring slice reads is convention 6's 168-hour soak,
@@ -1092,7 +1093,10 @@ uv run python scripts/diagnostics/probe.py metric '(time() - prometheus_tsdb_low
 ```
 
 The `AlertmanagerMetricsMissing` read must return nothing: the scrape works, so the alert is
-quiet. The series-budget read must return nothing too. After PR 5's deploy, `probe.py releases` shows the `observability` record's
+quiet. The series-budget read must return nothing too. The headroom is about 800 series, so
+fleet growth that is not M1's can turn that read red. A red read routes to *Open questions* 9
+and [#4756](https://github.com/DanielH2018/server/issues/4756), not to M1: M1's own delta is
+the `count({job="alertmanager"})` read. After PR 5's deploy, `probe.py releases` shows the `observability` record's
 `rollouts[]` with `restart: true` for Alertmanager alone.
 
 **The scale-to-zero drill (operator-only, and it pages for real).** It runs after PR 4 deploys.
@@ -1471,7 +1475,8 @@ Each risk names its class from `docs/failure-classes.md`.
       binds.
     - **By samples**, the store wrote about 1.44 bytes a sample over 27 days, at 1,854
       samples a second (`rate(prometheus_tsdb_head_samples_appended_total[27d])`). At that
-      cost the cap holds 30 days up to about 2,000 samples a second. Over the last 7 days
+      cost the cap holds 30 days up to about 2,000 samples a second, again in base-2 bytes
+      less the WAL. Over the last 7 days
       the rate read 1,482 a second, so the time cap binds.
     - The head count rose while the sample rate fell. The head counts churned series that
       take no new samples, and bytes follow samples. The observability defaults' cost model
