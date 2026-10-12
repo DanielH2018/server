@@ -22,7 +22,7 @@ karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:c
 # failing at 20 minutes rather than 10. A cached image rolls in seconds, so the budget costs time
 # only on a real hang or a cold pull.
 karakeep_k8s_rollout_timeout: 1200s
-karakeep_k8s_meili_image: getmeili/meilisearch:v1.54.0
+karakeep_k8s_meili_image: getmeili/meilisearch:v1.54.3@sha256:e68913ab7d6f5b159529e472cfd362ce3c741fafd3c127961b2142abbe41b3c9
 # Built in-cluster. The base-image pin (uv `python3.14-bookworm-slim` digest) lives in
 # `templates/Dockerfile.j2`'s `FROM` line, where Renovate's dockerfile manager reads it. All five
 # pinned pip deps below must resolve wheel-only under the base's interpreter, because
