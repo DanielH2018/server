@@ -72,6 +72,7 @@ def render_context(
     strict: bool = False,
     inventory: Inventory = REPO_INVENTORY,
     host_vars: dict | None = None,
+    base: dict = BASE_CONTEXT,
 ) -> dict:
     """The resolved context a template under `path` renders with in a deploy, `overrides` on top.
 
@@ -90,6 +91,9 @@ def render_context(
             uses it to render a host the inventory does not hold, a key removed or a value
             changed. Unlike `overrides`, it resolves like the file it replaces: a value
             aliasing another (``x: "{{ sys_user }}"``) arrives expanded, never as braces.
+        base: The stubs under every file layer. A guard keeps ``BASE_CONTEXT``, so a name no
+            file holds still renders. ``homelab-render`` passes ``{}``, because a stub such as
+            ``k8s_built_image_tags`` would fill in an input its strict render must refuse.
 
     Returns:
         A fresh dict, safe for the caller to extend.
@@ -101,7 +105,7 @@ def render_context(
     host = host or inventory.plane_hosts.get(role_dir.parent.name)
     overrides = overrides or {}
     raw = {
-        **BASE_CONTEXT,
+        **base,
         **inventory_layers(
             role_defaults(role_dir),
             load_yaml(inventory.all_vars),

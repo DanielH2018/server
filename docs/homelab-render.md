@@ -17,8 +17,11 @@ steps, and this page describes each piece once its PR has merged.
   render take.
 - `scripts/renderer/renderer_lib/task_inputs.py` holds `PINNED_LIVE_FACTS`, the stand-ins for
   facts a role task reads from live state.
-
-The entry point `homelab_render.py` and its `cluster` mode follow in the next R1 PR.
+- `scripts/renderer/homelab_render.py cluster` renders in stub mode into the C1 layout. It
+  renders one tag so far, `littlelink`, and only that role's own templates
+  (*What renders so far*).
+- `scripts/renderer/renderer_lib/context.py` builds the variables a role's templates see in
+  the deploy play, and `renderer_lib/cluster.py` renders each tag and writes its directory.
 
 ## The stub form
 
@@ -41,6 +44,72 @@ Two more filters serve the checks that a later R1 PR adds to the playbooks.
 `homelab_stub_keys` lists the key names that take a stub, from the parsed `secrets.yml`. It
 reads keys only, so the ciphertext file is enough. `homelab_unstubbed_keys` returns the keys
 whose value is not exactly its stub. It returns names only, never a value.
+
+## Render the cluster tree
+
+To render the tags in stub mode, write a stub file for the commit and pass it to `cluster`:
+
+```bash
+uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
+uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \
+    --secret-stubs /tmp/r1-stubs.yml
+```
+
+`--role TAG` renders only the tags it names, and it repeats. Without it, `cluster` renders
+every tag that renders so far.
+
+Each tag becomes `DIR/cluster/<tag>/`. The directory holds the rendered manifests and a
+`kustomization.yaml` whose `resources` list them in lexical order, the order
+`kubectl apply -f <dir>/` reads a directory in. The renderer writes nothing else, and
+`DIR/flux/` belongs to a later slice.
+
+`cluster` exits 2 and writes nothing in four cases:
+
+- `--secret-stubs` is missing. Without it the render is placeholder mode, which target slice
+  R2 adds. A bare `cluster` call in a publish job therefore fails rather than publishing.
+- The stub file does not stub every key of `ansible/vars/secrets.yml`. The message names the
+  keys, never a value. Write a fresh stub file for the commit.
+- A `--role` names a tag that is not a k8s render target of daniel-box, or one that does not
+  render yet.
+- A tag's directory under `DIR/cluster/` already holds files from an earlier render.
+
+It exits 1 when a template fails to render, and it writes nothing then either.
+
+### The play-time context
+
+A role's templates render with the variables they see in the k8s play on daniel-box:
+
+- role defaults, `group_vars/all.yml` and daniel-box's host_vars, in Ansible's precedence,
+  with the stub file's variables over all of them as `-e @FILE` puts them;
+- `containers_list` as the play holds it: the k8s entries only, in the dependency order of
+  `toposort_containers`. `ansible/deploy.yml` builds it with the same two filters from
+  `ansible/filter_plugins/toposort.py`, and templates read that order;
+- `container_item`, the tag's own entry from that list, as the play's loop sets it;
+- `hostvars` for every host in `ansible/inventory/hosts.ini`. daniel-box's entry is the
+  rendered context, so `hostvars[k8s_primary_node].containers_list` is the play's view.
+  Another host's entry holds its `hosts.ini` inline variables under its own host_vars,
+  resolved against that host's own variables. daniel-pi's `ansible_host`, the Jinja
+  `{{ server_ip }}`, therefore resolves to daniel-pi's address, not daniel-box's.
+
+The render is strict. A name that no layer supplies stops the render with an error naming it.
+The render guards under `scripts/validate/` print `STUB` instead, and lay stub values such as
+`k8s_built_image_tags` under every layer; the renderer does neither. An undefined attribute
+still takes its `| default(...)`, as it does under Ansible.
+
+### What renders so far
+
+Target slice R1 widens the renderer one PR at a time, and
+`scripts/renderer/renderer_lib/cluster.py:RENDERABLE` names the tags that render so far. It
+holds `littlelink`, which reads no task-computed value and has no claims and no deferred
+files.
+
+The renderer renders a role's own manifest templates only. The Ansible manifests role also
+writes the shared `service.yaml` and `ingressroute.yaml` defaults for an entry with a `port`
+or a `hostname`. For a prune-armed role, it wraps every document in
+`ansible/templates/role-labelled.yaml.j2`. R1's next PR adds both, with the claim files and
+the deferred directory. Until then a render is not byte-identical to Ansible's. For
+`littlelink` it holds `deployment.yaml` alone, where Ansible also writes the Service and the
+IngressRoute.
 
 ## Pinned live-read facts
 
