@@ -32,6 +32,10 @@ so a regeneration diffs as the pipeline plus upstream's change.
 - **To bump Flux**, set `flux_version`, then rerun line 1's pipeline at the new `--version`
   with that release's `flux` and crane v0.22.1 on `PATH`. Put the two header lines back above
   the output with the new version, and review the diff as upstream's change plus three digests.
+  A release that changes `flux-view-flux-system`'s groups or verbs, or adds an aggregating
+  ClusterRole, also fails `ansible/tests/k8s/test_aggregated_clusterroles.py`. Regenerating
+  does not clear that failure: it widens `view` for every identity bound to it, so extend
+  that module's lists only as a decision the PR states.
   Renovate rewrites `flux_version` alone, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
   rule) and the header test fails until the file is regenerated. Set the same release as the
   `version:` of both `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, so the

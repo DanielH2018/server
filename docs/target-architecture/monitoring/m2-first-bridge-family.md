@@ -213,8 +213,9 @@ The kube-state-metrics ClusterRole gains `list` and `watch` on `replicasets`, in
 flag. The Prometheus `kube-state-metrics` job gains a `metric_relabel_configs` drop that keeps
 `kube_replicaset_owner` and drops the other `kube_replicaset_*` families. The drop names each
 family explicitly, because RE2 has no lookaround, as the comment in `prometheus.yaml.j2` warns.
-The PR records the series count before and after, against the 7GB retention cap that the
-`prometheus.yaml.j2` header measures.
+The PR records `count({__name__=~"kube_replicaset_.*"})` after its deploy, which should equal
+`count(kube_replicaset_owner)`, and states it against M1's series budget (C7). The head-series
+total cannot resolve a delta this size, because it swings by about 16,500 a day.
 
 ### The workload-service mapping
 
@@ -907,7 +908,7 @@ is shown to come from a Prometheus that answered:
   question 6 gates PR 4a on another slice's text adopting the port, the row's deletion and
   the token's retirement. M6's A7 adopts all three, and M6's A6-7a waits for A7's Cutover-a.
 - **Cardinality.** `replicasets` adds series. Mitigation: the relabel drop keeps one family. PR
-  1 records `prometheus_tsdb_head_series` before and after, against the byte-capped retention.
+  1 counts the `kube_replicaset_*` series it adds, against M1's series budget.
 - **Flux substitution and `$1`.** The recording rules use `label_replace` with `$1`.
   Mitigation: M1 open question 7 resolves this in R2, before D5 moves `observability` to Flux.
 - **D5 reads the same alerts.** D5's soak joins `homelab:*_service:info`, so a mapping bug would

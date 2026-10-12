@@ -6,6 +6,17 @@
 groups:
   - name: alerting-meta
     rules:
+      # Always fires. Alertmanager routes it to the alertmanager-watchdog check on
+      # Healthchecks.io every 60s, so a silent Alertmanager, or a Prometheus that stopped
+      # sending it alerts, pages off-site. The C7 health gate excludes it by name, and
+      # alert_conventions.py holds the repo to exactly one rule of that name.
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: info
+          service: observability
+        annotations:
+          summary: The alert pipeline is alive. This alert always fires.
       # prometheus_config_last_reload_successful covers the rule files as well as
       # prometheus.yml: a rule file that fails to load fails the whole reload, and Prometheus
       # keeps evaluating the last good set.

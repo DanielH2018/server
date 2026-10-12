@@ -44,6 +44,14 @@ def _meta_rules(doc):
     return doc["groups"][0]["rules"]
 
 
+def _reload_rule(doc):
+    """The PrometheusRuleReloadFailed rule, the one ordinary alert the flagged cases edit."""
+    (rule,) = [
+        r for r in _meta_rules(doc) if r.get("alert") == "PrometheusRuleReloadFailed"
+    ]
+    return rule
+
+
 def _rule_problems(rules_dir, tests_dir, groups=("alerting-meta",)):
     return alert_conventions.rule_problems(
         list(groups),
@@ -115,7 +123,7 @@ def test_a_firing_case_that_asserts_no_severity_is_flagged(tmp_path):
                     alert["exp_labels"].pop("severity")
 
     problems = _rule_problems(*_rule_tree(tmp_path, edit_tests=drop_severity))
-    assert len(problems) == 3, problems
+    assert len(problems) == 4, problems
     assert all("asserts both its service and severity" in p for p in problems), problems
 
 
@@ -135,7 +143,7 @@ def test_an_alert_with_a_label_outside_the_conventions_is_flagged(
     tmp_path, labels, expected
 ):
     def relabel(rules):
-        _meta_rules(rules)[0]["labels"] = labels
+        _reload_rule(rules)["labels"] = labels
 
     problems = _rule_problems(*_rule_tree(tmp_path, edit_rules=relabel))
     assert any(expected in p for p in problems), problems
@@ -143,7 +151,7 @@ def test_an_alert_with_a_label_outside_the_conventions_is_flagged(
 
 def test_a_shadow_alert_is_clean(tmp_path):
     def shadow(rules):
-        _meta_rules(rules)[0]["labels"]["shadow"] = "true"
+        _reload_rule(rules)["labels"]["shadow"] = "true"
 
     assert _rule_problems(*_rule_tree(tmp_path, edit_rules=shadow)) == []
 
@@ -158,7 +166,7 @@ def test_a_group_not_named_like_its_file_is_flagged(tmp_path):
 
 def test_a_placeholder_in_a_rule_file_is_flagged(tmp_path):
     def substitute(rules):
-        _meta_rules(rules)[0]["annotations"]["summary"] = "Reload failed on ${host}."
+        _reload_rule(rules)["annotations"]["summary"] = "Reload failed on ${host}."
 
     problems = _rule_problems(*_rule_tree(tmp_path, edit_rules=substitute))
     assert any("files/rules/alerting-meta.yaml: holds `${`" in p for p in problems), (
@@ -192,15 +200,6 @@ def test_a_test_file_with_no_zero_series_case_is_flagged(tmp_path):
 
 def test_a_zero_series_case_that_fires_only_the_watchdog_is_flagged(tmp_path):
     """The Watchdog fires on any input, so an empty-input case firing it proves nothing."""
-
-    def watchdog(rules):
-        _meta_rules(rules).append(
-            {
-                "alert": "Watchdog",
-                "expr": "vector(1)",
-                "labels": {"severity": "info", "service": "observability"},
-            }
-        )
 
     def zero_series_fires_the_watchdog_alone(tests):
         for case in tests["tests"]:
@@ -243,7 +242,6 @@ def test_a_zero_series_case_that_fires_only_the_watchdog_is_flagged(tmp_path):
     problems = _rule_problems(
         *_rule_tree(
             tmp_path,
-            edit_rules=watchdog,
             edit_tests=zero_series_fires_the_watchdog_alone,
         )
     )
@@ -279,6 +277,16 @@ def test_one_watchdog_in_its_group_is_clean():
     assert alert_conventions.watchdog_problems(docs) == []
 
 
+def test_no_watchdog_is_flagged():
+    docs = {
+        "alerting-meta": {
+            "groups": [{"name": "alerting-meta", "rules": [{"alert": "Other"}]}]
+        }
+    }
+    problems = alert_conventions.watchdog_problems(docs)
+    assert len(problems) == 1 and "no rule is named Watchdog" in problems[0], problems
+
+
 def test_a_second_watchdog_is_flagged():
     docs = {
         "alerting-meta": {
@@ -302,8 +310,7 @@ def test_a_watchdog_with_another_expression_is_flagged():
 
 def test_an_always_on_alert_is_flagged(tmp_path):
     def always_on(rules):
-        _meta_rules(rules)[0]["alert"] = "AlwaysOn"
-        _meta_rules(rules)[0]["expr"] = "vector(1)"
+        _reload_rule(rules).update(alert="AlwaysOn", expr="vector(1)")
 
     def rename_cases(tests):
         for case in tests["tests"]:

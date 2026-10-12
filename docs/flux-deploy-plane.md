@@ -66,10 +66,16 @@ for later landings that reach `flux` as a reader.
 
 ## Reading Flux objects
 
-The read-only identity that plain `kubectl` uses reads no Flux API group yet, so a
-`kubectl get` on a Flux kind returns Forbidden. Read the controllers' Deployments and pods
-instead, which it can read. Granting the three Flux groups is a later change, applied by the
-operator through `k3s-bringup.yml --tags kubeconfig` (**operator-only**).
+The read-only identity that plain `kubectl` uses reads every Flux kind. The vendored
+ClusterRole `flux-view-flux-system` carries the label
+`rbac.authorization.k8s.io/aggregate-to-view`, so Kubernetes adds its `get`, `list` and
+`watch` on six Flux API groups to `view`, which that identity binds. No change to
+`k3s_readonly_crd_api_groups` is needed. The operator accepted the aggregation on 2026-10-12.
+
+Two guards in `ansible/tests/k8s/test_aggregated_clusterroles.py` keep the grant from
+widening unseen. Every ClusterRole that aggregates into `view`, `edit` or `admin` must be on
+that module's allowlist with a reason. `flux-view-flux-system` must stay read-only on exactly
+its six groups, so a Flux upgrade that widens it fails CI.
 
 To check the controllers after a deploy, run `kubectl -n flux-system get deploy` and
 `uv run python scripts/diagnostics/probe.py health flux`.
