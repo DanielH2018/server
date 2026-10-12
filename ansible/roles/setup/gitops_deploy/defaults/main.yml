@@ -16,6 +16,11 @@ gitops_deploy_require_ci: true
 # renovate.json does not change what a deploy renders or applies: the config is consumed by the
 # hosted Mend app when it opens PRs, a plane this deployer never touches. Blocking the deploy
 # gate on it would park every later image bump behind a dependency-management fault.
+#
+# `scripts/deploy_tools/promote.py decide` also reads this list, from this file in its own
+# checkout, to decide whether a master commit may move the cluster's `prod` tag. promote.py
+# refuses anything but a non-empty list of strings, so moving this key or making it a Jinja
+# reference means repointing promote.py in the same change.
 gitops_deploy_ci_contexts:
   - prek (lint + validate + tests + secrets)
 
