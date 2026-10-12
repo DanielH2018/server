@@ -30,15 +30,9 @@ The k8s roles importing a setup file are a second table, `K8S_ROLES_IMPORTING_SE
 (#3320). Their import spelling climbs one more level (`{{ role_path }}/../../setup/<owner>/`),
 and the deployer defer-and-alerts them rather than re-applying them.
 
-The setup roles calling a filter plugin's filters are a third, `SETUP_ROLES_CALLING_FILTER_PLUGINS`
-(#3874). `ansible/deploy.yml` runs no setup role, so the deployer re-applies or records them
-beside the deploy plane. `_FILTER_CALLERS_EXEMPT` names each call that leaves nothing rendered
-for a plugin change to stale, with the reason.
-
-A setup role reading another's `defaults/` variable is a row of the first table too (#4303),
-held by its own census: the scan matches a defaults key as a word, the way the filter-plugin
-census matches a filter name. `_DEFAULTS_READS_EXEMPT` names each match that is not a read,
-with what it matched instead (#4357).
+The setup roles calling a filter plugin's filters, `SETUP_ROLES_CALLING_FILTER_PLUGINS`, and
+the setup roles reading another's `defaults/` variable have their own census in
+`test_setup_cross_role_reads.py`.
 
 Run: uv run pytest ansible/tests/setup/test_setup_cross_role_files.py
 """
@@ -48,14 +42,11 @@ import re
 
 from _helpers import ROLES
 from _role_census import role_dirs, role_task_files
-from deploy_tools.narrow_lib import filters as narrow_filters
-from lib import yaml_fast
 
 from deployer_lib.deploy_cross_role import (
     K8S_ROLES_IMPORTING_SETUP_FILES,
     SETUP_FILES_ROUTED_TO_OWNER,
     SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
-    SETUP_ROLES_CALLING_FILTER_PLUGINS,
 )
 
 _REFERENCE = re.compile(
@@ -95,19 +86,6 @@ KNOWN_EDGES = {
         "render_records",
     },
 }
-# A setup role naming a plugin's filter where no rendered value can go stale, with the reason.
-_FILTER_CALLERS_EXEMPT = {
-    ("ansible/filter_plugins/toposort.py", "docker_install"): (
-        "`filter_by_platform` runs in the `loop:` of `engine-upgrade.yml`, a never-tagged "
-        "task file an operator runs by hand, so it renders nothing the plugin change leaves"
-    ),
-}
-KNOWN_FILTER_CALLERS = {
-    "ansible/filter_plugins/service_tier.py": {"k3s"},
-    "ansible/filter_plugins/k8s_autodeploy.py": {"gitops_deploy"},
-    "ansible/filter_plugins/longhorn_groups.py": {"k3s"},
-}
-_COMMENT_LINE = re.compile(r"^\s*#.*$", re.MULTILINE)
 KNOWN_K8S_EDGES = {
     "ansible/roles/setup/common/files/host_lib.py": {"configarr", "janitorr"},
     "ansible/roles/setup/common/files/kuma_push.py": {
@@ -309,156 +287,3 @@ def test_a_k8s_role_importing_a_setup_task_file_is_flagged():
     assert cross_role_files({"svc": task + sibling}, _K8S_REFERENCE) == {
         "ansible/roles/setup/common/tasks/shared.yml": frozenset({"svc"})
     }
-
-
-def filter_callers(
-    names: dict[str, set[str]], texts: dict[str, dict[str, str]]
-) -> dict[str, frozenset[str]]:
-    """Each plugin whose filter a setup role's YAML or template names, mapped to those roles.
-
-    Args:
-        names: a plugin path -> the filter names it registers.
-        texts: a role -> {its file path: text}, `.py`, `.md` and `tests/` already left out:
-            Python names a filter without piping into it, and neither of the other two
-            reaches a host.
-    """
-    out: dict[str, set[str]] = {}
-    for plugin, filters in names.items():
-        words = re.compile(rf"(?<!\w)({'|'.join(map(re.escape, filters))})(?!\w)")
-        for role, files in texts.items():
-            if any(words.search(_COMMENT_LINE.sub("", t)) for t in files.values()):
-                out.setdefault(plugin, set()).add(role)
-    return {plugin: frozenset(roles) for plugin, roles in out.items()}
-
-
-def _plugin_names() -> dict[str, set[str]]:
-    repo = ROLES.parent.parent
-    return {
-        str(p.relative_to(repo)): narrow_filters.filter_names(p.read_text(), str(p))
-        for p in sorted((ROLES.parent / "filter_plugins").glob("*.py"))
-    }
-
-
-def _setup_role_texts() -> dict[str, dict[str, str]]:
-    texts = {}
-    for role_dir in role_dirs(ROLES / "setup"):
-        texts[role_dir.name] = {
-            str(f): f.read_text()
-            for f in sorted(role_dir.rglob("*"))
-            if f.is_file()
-            and f.suffix not in (".py", ".md", ".pyc")
-            and "tests" not in f.relative_to(role_dir).parts
-        }
-    return texts
-
-
-def _tree_filter_callers() -> dict[str, frozenset[str]]:
-    found = filter_callers(_plugin_names(), _setup_role_texts())
-    kept = {
-        plugin: frozenset(r for r in roles if (plugin, r) not in _FILTER_CALLERS_EXEMPT)
-        for plugin, roles in found.items()
-    }
-    return {plugin: roles for plugin, roles in kept.items() if roles}
-
-
-def test_the_filter_callers_table_equals_the_tree():
-    assert _tree_filter_callers() == SETUP_ROLES_CALLING_FILTER_PLUGINS
-    for plugin, roles in KNOWN_FILTER_CALLERS.items():
-        assert SETUP_ROLES_CALLING_FILTER_PLUGINS.get(plugin) == roles, plugin
-
-
-def test_every_filter_caller_exemption_is_still_a_caller():
-    # An exemption for a call that is gone is dead weight, and would hide a new one.
-    found = filter_callers(_plugin_names(), _setup_role_texts())
-    for plugin, role in _FILTER_CALLERS_EXEMPT:
-        assert role in found.get(plugin, ()), (plugin, role)
-
-
-def test_a_setup_role_calling_a_filter_is_flagged():
-    texts = {"k3s": {"defaults/main.yml": "x: \"{{ list | tier_claims('a') }}\"\n"}}
-    assert filter_callers({"p.py": {"tier_claims"}}, texts) == {
-        "p.py": frozenset({"k3s"})
-    }
-
-
-def test_a_setup_role_naming_a_filter_only_in_a_comment_or_a_longer_word_is_clean():
-    texts = {"k3s": {"a.yml": "# tier_claims is read here\ny: my_tier_claims_x\n"}}
-    assert filter_callers({"p.py": {"tier_claims"}}, texts) == {}
-
-
-# Word matches of a defaults key that are not reads of the variable, each with what the scan
-# matched instead. An exemption the scan no longer finds fails below.
-_DEFAULTS_READS_EXEMPT = {
-    ("ansible/roles/setup/k3s/defaults/main.yml", "hypervisor"): (
-        "etcd-restore-drill-vm.sh.j2 declares a bash local named k3s_version, filled from "
-        "`k3s --version` on the host, and staging-nwfilter.xml.j2 names k3s_agent_node_ips "
-        "only inside an XML comment"
-    ),
-}
-
-
-def defaults_readers(
-    keys: dict[str, set[str]], texts: dict[str, dict[str, str]]
-) -> dict[str, frozenset[str]]:
-    """Each `defaults/` file mapped to the OTHER setup roles naming one of its keys (#4303).
-
-    Args:
-        keys: a defaults path -> the top-level keys it defines.
-        texts: as `filter_callers` takes them.
-    """
-    found = filter_callers(keys, texts)
-    out = {path: roles - {path.split("/")[3]} for path, roles in found.items()}
-    return {path: roles for path, roles in out.items() if roles}
-
-
-def _defaults_keys() -> dict[str, set[str]]:
-    repo = ROLES.parent.parent
-    return {
-        str(p.relative_to(repo)): set(yaml_fast.safe_load(p.read_text()) or {})
-        for role_dir in role_dirs(ROLES / "setup")
-        for p in sorted((role_dir / "defaults").glob("*.yml"))
-    }
-
-
-def _tree_defaults_readers() -> dict[str, frozenset[str]]:
-    return defaults_readers(_defaults_keys(), _setup_role_texts())
-
-
-def test_the_defaults_rows_equal_the_trees_cross_role_reads():
-    found = _tree_defaults_readers()
-    kept = {
-        path: frozenset(r for r in roles if (path, r) not in _DEFAULTS_READS_EXEMPT)
-        for path, roles in found.items()
-    }
-    recorded = {
-        path: roles
-        for path, roles in SETUP_FILES_SHIPPED_BY_OTHER_ROLES.items()
-        if "/defaults/" in path
-    }
-    assert {path: roles for path, roles in kept.items() if roles} == recorded
-    assert recorded.get("ansible/roles/setup/initial_setup/defaults/main.yml") == {
-        "claude_code"
-    }
-
-
-def test_every_defaults_exemption_is_still_matched():
-    found = _tree_defaults_readers()
-    for path, role in _DEFAULTS_READS_EXEMPT:
-        assert role in found.get(path, ()), (path, role)
-
-
-def test_a_role_reading_another_roles_default_is_flagged():
-    owner = "ansible/roles/setup/initial_setup/defaults/main.yml"
-    texts = {
-        "initial_setup": {"tasks/crons.yml": "name: '{{ initial_setup_group }}'\n"},
-        "claude_code": {"tasks/a.yml": "groups: '{{ [initial_setup_group] }}'\n"},
-    }
-    assert defaults_readers({owner: {"initial_setup_group"}}, texts) == {
-        owner: frozenset({"claude_code"})
-    }
-
-
-def test_a_role_reading_only_its_own_default_is_clean():
-    owner = "ansible/roles/setup/initial_setup/defaults/main.yml"
-    texts = {"initial_setup": {"tasks/crons.yml": "x: '{{ initial_setup_group }}'\n"}}
-    assert defaults_readers({owner: {"initial_setup_group"}}, texts) == {}

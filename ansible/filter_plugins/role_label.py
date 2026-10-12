@@ -24,10 +24,19 @@ No Ansible import at load time, so the tests call the same function the playbook
 (#4505).
 """
 
-import functools
 import re
 
 import yaml
+
+import sys as _sys
+from pathlib import Path as _Path
+
+# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
+# once this directory is on the path (#4527).
+if str(_Path(__file__).resolve().parent) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+
+from filter_errors import _as_filter
 
 ROLE_LABEL = "homelab/role"
 
@@ -141,27 +150,6 @@ def homelab_role_label(text: str, role: str) -> str:
     return yaml.dump_all(
         docs, Dumper=_Dumper, sort_keys=False, default_flow_style=False, width=4096
     )
-
-
-def _as_filter(func):
-    """`func` as Ansible calls it: a ValueError re-raised as `AnsibleFilterError`.
-
-    The message opens with `<func's name>: `, which is the name the filter registers under.
-    The prefix names the filter that refused, since a render failure otherwise reaches the
-    operator as a bare message under the task's template path (#4480). The import is deferred
-    so the module still loads where Ansible is not installed.
-    """
-
-    @functools.wraps(func)
-    def wrapped(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except ValueError as exc:
-            from ansible.errors import AnsibleFilterError
-
-            raise AnsibleFilterError(f"{func.__name__}: {exc}") from exc
-
-    return wrapped
 
 
 class FilterModule:
