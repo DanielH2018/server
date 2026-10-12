@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import pwd
 import subprocess
 import sys
 import time
@@ -39,6 +40,7 @@ from agent_logic import (
     parse_run,
     render_digest,
     render_skip,
+    resume_command,
     run_record,
 )
 from agent_toolbox import TOOLS, AgentTools, log, read_file
@@ -268,9 +270,17 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         f"{moved.touched} remaining={moved.remaining} "
         f"ok={outcome.ok}"
     )
+    resume = ""
+    if outcome.session_id:
+        # The unit runs this process as renovate_agent_user, so the effective user is the
+        # session's owner.
+        owner = pwd.getpwuid(os.geteuid()).pw_name
+        resume = resume_command(
+            outcome.session_id, path, owner, cfg.get("CLAUDE_BIN", "claude")
+        )
     tools.discord_post(
         webhook,
-        render_digest(outcome, moved, host, log_path),
+        render_digest(outcome, moved, host, log_path, resume),
         USER_AGENT,
         log=log,
         spool_dir=spool,

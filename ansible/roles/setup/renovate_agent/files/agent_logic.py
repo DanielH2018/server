@@ -14,6 +14,7 @@ failures.
 from __future__ import annotations
 
 import json
+import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -63,6 +64,9 @@ class Outcome:
     turns: int
     denials: tuple[str, ...]
     error: str = ""
+    # The harness keeps the transcript under this id, so a `manual —` hand-off can be resumed
+    # in the session that wrote it (#4603). "" when the result JSON carried none.
+    session_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -148,6 +152,7 @@ def parse_run(stdout: str, rc: int, timed_out: bool) -> Outcome:
         turns=int(obj.get("num_turns") or 0),
         denials=denials,
         error=error,
+        session_id=str(obj.get("session_id") or ""),
     )
 
 
@@ -243,6 +248,8 @@ def run_record(
             "turns": outcome.turns,
             "denials": len(outcome.denials),
         }
+        if outcome.session_id:
+            rec["session_id"] = outcome.session_id
     return json.dumps(rec, sort_keys=True)
 
 
@@ -254,11 +261,26 @@ def render_skip(gate: Gate, host: str) -> str:
     return f"renovate-agent: skipped on {host} — {gate.reason}."
 
 
-def render_digest(outcome: Outcome, moved: Delta, host: str, log_path: str) -> str:
+def resume_command(session_id: str, cwd: str, user: str, claude_bin: str) -> str:
+    """The shell command that reopens session `session_id` for a person (#4603).
+
+    The harness stores a session under its owner's home and keys it by the working directory
+    it ran in, so the command switches to `user` and changes into `cwd` before resuming. A
+    resume as any other user, or from any other path, does not find the session.
+    """
+    inner = f"cd {shlex.quote(cwd)} && exec {shlex.quote(claude_bin)} --resume {shlex.quote(session_id)}"
+    return f"sudo -H -u {shlex.quote(user)} sh -c {shlex.quote(inner)}"
+
+
+def render_digest(
+    outcome: Outcome, moved: Delta, host: str, log_path: str, resume: str = ""
+) -> str:
     """The Discord digest, headlined by the measured delta.
 
     The first line answers "did anything move", because that is the question a reader of a
-    daily automation post is actually asking.
+    daily automation post is actually asking. `resume` is the `resume_command` for the
+    session; it goes after the summary, outside the summary's cut, so a long summary cannot
+    truncate it.
     """
     if not outcome.ok:
         head = f"🚨 renovate-agent FAILED on {host} — {outcome.error}"
@@ -296,6 +318,8 @@ def render_digest(outcome: Outcome, moved: Delta, host: str, log_path: str) -> s
         lines.append(
             "> " + outcome.summary.strip().replace("\n", "\n> ")[:_SUMMARY_CHARS]
         )
+    if resume:
+        lines.append(f"resume this session: `{resume}`")
     lines.append(
         f"{outcome.turns} turns, ${outcome.cost_usd:.2f} — transcript: {log_path}"
     )
