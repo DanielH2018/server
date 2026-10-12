@@ -186,6 +186,11 @@ survives it. Each has a different mechanism:
   `roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`. Regenerate it in Bazarr's
   Settings → General, `sops set` the new value, then redeploy monitor-bridge; setting SOPS
   alone breaks the checker with an HTTP 401 that reads as a monitoring fault.
+- `promote_token` — the GitHub `PROMOTE_TOKEN` repository secret holds the credential: a
+  fine-grained token on DanielH2018/server with Variables read and write, minted on the
+  operator's account with a 90-day expiry. Nothing in the tree reads the SOPS copy; it exists
+  so the audit tracks the expiry on the `external-90d` tier. The operator re-mints the token
+  and re-sets both the repository secret and the SOPS copy together.
 
 Verify against the app, not the deploy: a login, an API call, a monitor past its grace window.
 `audit` cannot tell the cases apart — it derives `last_rotated` from the git history of
