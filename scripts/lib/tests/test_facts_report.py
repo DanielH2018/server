@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from lib.facts.lock import LOCK_REL, verify_units
-from lib.facts.report import doc_reads, precision, ranked_backlog
+from lib.facts.report import doc_reads, precision, ranked_backlog, session_bytes
 from lib.git_testing import commit, git, init_repo
 
 # A fixed epoch: the log rows are dated against it, never against the live clock.
@@ -82,3 +82,25 @@ def test_the_backlog_is_ranked_by_its_docs_reads(tmp_path):
 def test_a_missing_log_reads_as_no_rows(tmp_path):
     reads = doc_reads(tmp_path / "instructions.log", {"CLAUDE.md"}, _NOW)
     assert (reads.rows, dict(reads.counts)) == (0, {})
+
+
+def test_session_bytes_split_start_from_total_and_skip_unsized_and_subagent_rows(
+    tmp_path,
+):
+    stamp = _NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
+    log = tmp_path / "instructions.log"
+    log.write_text(
+        f"{stamp} [aaaaaaaa] session_start    Project  CLAUDE.md bytes=3000\n"
+        f"{stamp} [aaaaaaaa] compact          Project  CLAUDE.md bytes=3000\n"
+        # A subagent's load shares the parent's id but fills its own context window.
+        f"{stamp} [aaaaaaaa] session_start    Project  CLAUDE.md agent=ab12 bytes=3000\n"
+        f"{stamp} [aaaaaaaa] bash_path_match  Project  a/CLAUDE.md trigger=a/x.py\n"
+        # A session whose rows predate the field is left out, not listed as 0.
+        f"{stamp} [bbbbbbbb] session_start    Project  CLAUDE.md\n"
+    )
+
+    rows = session_bytes(log, _NOW - timedelta(days=30))
+
+    assert [(r.session, r.loads, r.start, r.total) for r in rows] == [
+        ("aaaaaaaa", 2, 3000, 6000)
+    ]

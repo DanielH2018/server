@@ -134,3 +134,10 @@ def test_each_load_row_carries_the_byte_size_of_the_file_it_loaded(tmp_path):
     assert len(rows) == 2
     for row, size in zip(rows, (98765, 4321), strict=True):
         assert re.search(_thousands(size), row), row
+
+
+def test_a_file_it_cannot_stat_is_logged_without_a_size(tmp_path):
+    log = tmp_path / "instructions.log"
+    _load(log, tmp_path / "gone" / "CLAUDE.md", "sessiona-x")
+    row = log.read_text()
+    assert "CLAUDE.md" in row and "bytes=" not in row, row
