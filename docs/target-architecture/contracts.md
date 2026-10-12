@@ -235,6 +235,9 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
 ## C3. Flux objects
 
 - **Namespace.** Everything lives in `flux-system`, with one `OCIRepository` named `homelab`.
+  The one exception is `verify-drill`, a transient second `OCIRepository` in `flux-system`.
+  It is present only while `flux_verify_drill` is true, and the flux role deletes it while
+  the lever is off (D1).
 - **Root.** One Kustomization, `homelab`, with path `./flux`, applies every Kustomization the
   bundle publishes. It sets `prune: true` and `wait: false`, because each child reports its
   own health and status (D1).
@@ -601,9 +604,6 @@ request leaves this list and the round's *Review log* entry names it.
   so, *Per-tag Kustomizations* gains `wait: false` plus generated `healthChecks`, or a
   shorter `timeout`, for a tag outside the changed set. No gate is named until the trigger
   fires.
-- **The verify drill's OCIRepository** (D1 Open question 7). *Namespace* names
-  `verify-drill` as a transient second `OCIRepository` in `flux-system`, present only while
-  `flux_verify_drill` is true. Gate: before D1.5 merges.
 - **The root's name is reserved** (D2 Open question 6). The render fails on a deploy tag
   named `homelab`, the root Kustomization's name. Gate: before D2.6b merges.
 - **Deferred applies by variable** (D4 Open question 7). *Per-tag Kustomizations* reads "a
@@ -916,3 +916,10 @@ Applied to this page:
     - C2's break-glass render may come from a host checkout newer than the bundle.
     - C7 admits `service="deploy-pipeline"` and adds `DeployPipelineExporterAbsent`.
     - C7 scopes the soak to the changed set.
+
+### Applied request (2026-10-12)
+
+- **The verify drill's OCIRepository** (D1 Open question 7). C3 *Namespace* now names
+  `verify-drill` as a transient second `OCIRepository` in `flux-system`. It is present only
+  while `flux_verify_drill` is true, and the flux role deletes it while the lever is off. The
+  request leaves *Requests on C3*, which clears the gate before D1.5 merges.

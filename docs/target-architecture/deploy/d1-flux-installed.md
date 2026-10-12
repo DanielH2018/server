@@ -1787,8 +1787,9 @@ fails. Exit 2 shows that the same object was read and reconciled.
    lever is off (*Decisions*). Resolution: a requested amendment on C3 that names
    `verify-drill` as a transient exception, present only while `flux_verify_drill` is true.
    Gate: before D1.5 merges, because D1.5 adds the template that renders it. contracts.md
-   lists the row under *Requested amendments not yet applied*, *Requests on C3*, with this
-   gate. The gate stands until contracts.md applies the row to C3's *Namespace* row.
+   listed the row under *Requested amendments not yet applied*, *Requests on C3*, with this
+   gate. The amendment is applied on 2026-10-12 in contracts.md C3 *Namespace*, so the gate
+   is cleared.
    The rejected alternative is a scratch namespace deleted afterwards, which adds a
    Namespace that the role must create and delete for one object.
 8. **Does GitHub accept `GITHUB_TOKEN` to list and delete versions of this package?** The
