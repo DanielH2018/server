@@ -123,7 +123,14 @@ carries the row is the squash commit that wrote its hash into the lock, and
   style, so `session-health.py` writes a `session_start` row for each at SessionStart. A
   compaction reloads `MEMORY.md` without the event as well, so the hook writes a `compact` row
   for it then. The output style sits in the system prompt and gets no `compact` row.
-  `--json` prints the same as one object.
+  Last, it prints the *Notice replay*. The replay runs `notice` once per first-parent commit
+  from the last lock commit before the window, with the parent as the base. It grades every
+  content-form lock move as `listed`, `hashing`, `split` or `miss`, and only `miss` counts
+  against parity. `scripts/lib/facts/replay.py:notice_replay` has the class rules.
+  `--json` prints the same as one object. Under `notice_replay`, `moved` counts the replay's
+  `moved` rows, and `moved_prose_edited` counts the ones whose commit also edited the
+  section's prose. `content_lock_moves` lists each content-form lock move with its
+  `committed_at` and class.
 - `fact_status.py notice --since <ref> [--head <rev>]` lists every section that cites an
   atom the diff moved. The diff runs from the merge base of `<ref>` and the head to the head,
   and the head is the working tree unless `--head` names a revision. It compares the atom
