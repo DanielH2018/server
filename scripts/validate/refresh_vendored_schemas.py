@@ -12,8 +12,8 @@ THE CORE SCHEMAS COME FROM KUBERNETES ITSELF. They are the per-group files under
 the check validates against the API the cluster actually runs, and a new minor needs nothing but
 this script once k3s ships it. Until #2367 they came from the kubernetes-validate package, which
 went quiet after publishing 1.36 and so held the k3s upgrade behind it. Each file is cut to its
-``components.schemas`` with every ``description`` dropped, which takes the seven files from
-5.3 MB to about 310 KB, and ``SOURCE.json`` beside them records the tag and the sha256 of each
+``components.schemas`` with every ``description`` dropped, which takes the eight files from
+5.5 MB to about 330 KB, and ``SOURCE.json`` beside them records the tag and the sha256 of each
 file as upstream served it.
 
 WHY THESE ARE VENDORED RATHER THAN FETCHED. `validate/k8s_manifests.py` runs as a prek hook, on
@@ -24,9 +24,10 @@ snapshot on disk, and the network cost is paid deliberately by running this scri
 
 WHAT AGES, AND WHAT CATCHES IT. A vendored schema drifts from the CRD the cluster actually
 serves, with no signal — the failure mode this repo has a memory entry for. Two things bound it.
-`test_every_rendered_kind_has_a_vendored_schema` fails the moment a manifest renders a kind, core
-or CRD, with no schema here, so a NEW kind cannot arrive unvalidated. And this script is
-idempotent: run it, and a non-empty `git diff` under schemas/ is the drift.
+The `rendered-kinds-have-vendored-schemas` row of ``ansible/tests/k8s/test_rendered_properties.py``
+fails the moment a manifest renders a kind, core or CRD, with no schema here, so a NEW kind cannot
+arrive unvalidated. And this script is idempotent: run it, and a non-empty `git diff` under
+schemas/ is the drift.
 
 Refresh: uv run python scripts/validate/refresh_vendored_schemas.py
 """
@@ -55,10 +56,14 @@ SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
 KUBERNETES_OPENAPI = "https://raw.githubusercontent.com/kubernetes/kubernetes/{tag}/api/openapi-spec/v3/{name}"
 
 # The apiVersions this repo renders, as upstream names their files. Kept in step with the tree by
-# test_every_rendered_kind_has_a_vendored_schema, which reads the manifests, so a manifest in a
-# new group fails there until its group is added here.
+# the `rendered-kinds-have-vendored-schemas` row of ansible/tests/k8s/test_rendered_properties.py,
+# which reads the manifests, so a manifest in a new group fails there until its group is added
+# here. apiextensions.k8s.io is listed ahead of its first manifest, for the Flux
+# CustomResourceDefinitions that slice D1's flux role renders
+# (docs/target-architecture/deploy/d1-flux-installed.md).
 CORE_GROUP_FILES = [
     "api__v1_openapi.json",
+    "apis__apiextensions.k8s.io__v1_openapi.json",
     "apis__apps__v1_openapi.json",
     "apis__batch__v1_openapi.json",
     "apis__discovery.k8s.io__v1_openapi.json",
@@ -67,14 +72,18 @@ CORE_GROUP_FILES = [
     "apis__storage.k8s.io__v1_openapi.json",
 ]
 
-# (group, kind, version) for every CRD this repo renders. Kept in step with the tree by
-# test_every_rendered_kind_has_a_vendored_schema, which reads the manifests rather than
-# this list — so adding a kind here without a manifest is harmless, and adding a manifest
-# without a kind here fails that test.
+# (group, kind, version) for every CRD this repo renders. Kept in step with the tree by the
+# `rendered-kinds-have-vendored-schemas` row of ansible/tests/k8s/test_rendered_properties.py,
+# which reads the manifests rather than this list — so adding a kind here without a manifest is
+# harmless, and adding a manifest without a kind here fails that row.
 VENDORED = [
     ("traefik.io", "ingressroute", "v1alpha1"),
     ("traefik.io", "middleware", "v1alpha1"),
     ("traefik.io", "tlsoption", "v1alpha1"),
+    ("source.toolkit.fluxcd.io", "ocirepository", "v1"),
+    ("kustomize.toolkit.fluxcd.io", "kustomization", "v1"),
+    ("notification.toolkit.fluxcd.io", "provider", "v1beta3"),
+    ("notification.toolkit.fluxcd.io", "alert", "v1beta3"),
 ]
 
 # Authelia publishes a JSON Schema per MINOR release of its own configuration file, and it sets

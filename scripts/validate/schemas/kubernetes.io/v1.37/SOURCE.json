@@ -3,6 +3,7 @@
   "upstream": "https://raw.githubusercontent.com/kubernetes/kubernetes/{tag}/api/openapi-spec/v3/{name}",
   "sha256": {
     "api__v1_openapi.json": "d09ab224a98fb9c0e7fd128b6f395f66b23d43b6635272109dcaaafc4a3dd9c9",
+    "apis__apiextensions.k8s.io__v1_openapi.json": "41d85b9f6f2757d35b6645086d5bcadf4904a8f0133b00d77e2576b3feb47d56",
     "apis__apps__v1_openapi.json": "e1326db2904fd6356d2f16e6179f8ad8e4800c0112cb74ab3b21da7286df4dbe",
     "apis__batch__v1_openapi.json": "39e41a47689d58ed0ba29c7e576fd88a47917b5c00dd2efaab71c9cf90a6b5f7",
     "apis__discovery.k8s.io__v1_openapi.json": "ec495888f7179b410d365dca5491d3d928028330ace1337c507c29e800303155",
