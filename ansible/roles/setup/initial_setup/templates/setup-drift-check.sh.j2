@@ -3,7 +3,7 @@
 # (initial_setup role); edits overwritten.
 #
 # Usage: setup-drift-check.sh [-h|--help]
-# Takes no arguments. systemd timer kuma-check-setup-drift.timer runs it as root daily at 07:50
+# Takes no arguments. systemd timer kuma-check-setup-drift.timer runs it as root daily at 08:20
 # on hosts that run no manifest-prune-check.sh, and again every 30 minutes while the last run
 # failed. It reads /etc/homelab/kuma-push.env for the Kuma push token and compares the deployed
 # scripts with the render manifests under /var/lib/homelab. Running it by hand is safe, but it

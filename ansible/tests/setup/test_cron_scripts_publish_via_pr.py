@@ -601,20 +601,20 @@ def test_the_audit_watches_the_gh_token_both_crons_depend_on():
 def test_the_audit_grace_is_shorter_than_the_gap_to_the_first_audit():
     """The grace period must not swallow the first audit after a failed publish.
 
-    rotate is Sunday 09:00 and the audit is daily 08:00 (crons.yml), so that first audit is
-    23h later. A 24h grace would let it push UP -- green on the operator's Monday morning, with
+    rotate is Sunday 09:00 and the audit is daily 08:30 (crons.yml), so that first audit is
+    23h30m later. A 24h grace would let it push UP -- green on the operator's Monday morning, with
     the sticky DOWN not appearing until Tuesday.
     """
     crons = (TEMPLATES.parent / "tasks/crons.yml").read_text()
     assert (
-        'kuma_check_on_calendar: "*-*-* 08:00:00"' in crons and 'hour: "9"' in crons
+        'kuma_check_on_calendar: "*-*-* 08:30:00"' in crons and 'hour: "9"' in crons
     ), "the schedule moved; re-derive the grace period against the new times"
     text = read(ROTATION_AUDIT)
     seconds = [int(m) for m in re.findall(r"-gt (\d{4,})", text)]
     assert seconds, "no age threshold found in the stray-branch arm"
     assert max(seconds) < 23 * 3600, (
-        "the grace period is at least as long as the 23h gap between a Sunday 09:00 rotate "
-        "and the next 08:00 audit, so the first audit after a failed publish reports UP: %s"
+        "the grace period is at least 23h, within reach of the 23h30m gap between a Sunday "
+        "09:00 rotate and the next 08:30 audit, so the first audit after a failed publish reports UP: %s"
         % seconds
     )
 
