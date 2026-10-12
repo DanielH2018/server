@@ -175,7 +175,17 @@ PROPERTIES = (
             # census, since every role at the default budget passes on the default deadline.
             # Re-derive the set if `_DEFAULT_DEADLINE_S` or a role's budget moves.
             must_find=frozenset(
-                {"prowlarr", "flaresolverr", "valheim", "sonarr", "radarr"}
+                {
+                    "prowlarr",
+                    "flaresolverr",
+                    "valheim",
+                    "sonarr",
+                    "radarr",
+                    "karakeep",
+                    "karakeep-chrome",
+                    "karakeep-meilisearch",
+                    "karakeep-time-tagger",
+                }
             ),
         ),
         Property(

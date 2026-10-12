@@ -50,9 +50,9 @@ plaintext too takes two SOPS keys that rotate together.
 role also deploys. Without it the provider is in-memory and every roll of the portal destroys every
 session, remember-me included.
 
-- **`authelia-redis` is deliberately NOT in `manifests_extra_rollouts`**: the central
-  rollout-restart fires whenever this role's manifests change, and rolling the session store on that
-  cadence hands back the original bug. `ansible/tests/services/test_authelia_redis_sessions.py`
+- **`authelia-redis` is in `manifests_extra_rollouts` only with `restart_on: []`**: the drain
+  waits on its roll, and a restart signal would roll the session store on every manifest change,
+  handing back the original bug. `ansible/tests/services/test_authelia_redis_sessions.py`
   pins that, the provider block, the `wait-for-redis` gate and the 6379 agreement.
 - **The store is an emptyDir and persists nothing**, so a node reboot or an image bump still logs
   everyone out — and a Longhorn volume here would be a backed-up disk of session credentials.

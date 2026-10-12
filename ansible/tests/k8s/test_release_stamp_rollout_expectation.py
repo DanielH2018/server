@@ -33,9 +33,11 @@ from lib import yaml_fast
 from _helpers import ANSIBLE, render_expr, task_named, walk_tasks
 from _k8s_render import render_role_template
 from _release_expectation import (
+    BASE,
     FACT_EXPR,
     MAIN,
     STAMP,
+    extra_restarts,
     rollouts as _rollouts,
 )
 
@@ -211,6 +213,8 @@ def test_the_restart_tasks_fire_on_the_apply_verdict_not_the_render_bytes_alone(
             manifests_secret_render={"changed": False},
             manifests_image_changed=False,
             k8s_rebuilt_images=[],
+            # What an extra entry with no `restart_on` resolves its task var to.
+            manifests_target_triggers=BASE["manifests_restart_triggers_default"],
         )
         expr = "{{ " + " ".join(clause.split()) + " }}"
         assert render_expr(
@@ -232,6 +236,21 @@ def test_the_restart_tasks_fire_on_the_apply_verdict_not_the_render_bytes_alone(
             manifests_apply={"changed": False},
             **{**ctx, "manifests_secret_render": {"changed": True}},
         ), name
+
+
+def test_an_extra_with_no_restart_signals_is_never_restarted():
+    """`restart_on: []` on an extra entry turns every signal off for the restart task and
+    for the record alike, which is how a role waits on a Deployment without restarting it
+    (#4564). The same entry without `restart_on` restarts on the same facts: the accept half."""
+    loud = {"name": "flaresolverr", "kind": "deploy", "image": "flaresolverr"}
+    quiet = {**loud, "restart_on": []}
+    every_signal = dict(
+        manifests_secret_render={"changed": True}, k8s_rebuilt_images=["flaresolverr"]
+    )
+    assert extra_restarts(loud, **every_signal)
+    assert not extra_restarts(quiet, **every_signal)
+    record = _rollouts(manifests_extra_rollouts=[quiet], **every_signal)
+    assert record["flaresolverr"]["restart"] is False
 
 
 def test_a_secret_change_alone_queues_a_restart():
