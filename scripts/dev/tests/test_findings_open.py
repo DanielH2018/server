@@ -164,6 +164,39 @@ def test_open_review_leftover_applies_the_label(tmp_path, make_tools):
     assert "review-leftover" in create
 
 
+def test_open_review_leftover_labels_an_open_issue_the_dedup_matched(
+    tmp_path, issue, make_tools
+):
+    """The fix round filed it first, so the leftover re-file matches; a touch drops the flag."""
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    fp = fingerprint("T", "a.py:1")
+    argv = [*_open_argv(body), "--file", "a.py:1", "--review-leftover"]
+    add = ["issue", "edit", "3", "--add-label", "review-leftover"]
+
+    tools, calls = make_tools(Fakes(issues=[issue(3, fp=fp)]))
+    assert findings.main(argv, tools) == 0
+    assert add in calls.gh
+
+    labelled = issue(3, labels=("review-leftover",), fp=fp)
+    tools, calls = make_tools(Fakes(issues=[labelled]))
+    assert findings.main(argv, tools) == 0
+    assert add not in calls.gh
+
+
+def test_open_review_leftover_labels_a_fixed_issue_it_reopens(
+    tmp_path, issue, make_tools
+):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    fixed = issue(3, state="CLOSED", fp=fingerprint("T", "a.py:1"))
+    tools, calls = make_tools(Fakes(issues=[fixed]))
+    argv = [*_open_argv(body), "--file", "a.py:1", "--review-leftover"]
+    assert findings.main(argv, tools) == 0
+    assert ["issue", "reopen", "3"] in calls.gh
+    assert ["issue", "edit", "3", "--add-label", "review-leftover"] in calls.gh
+
+
 def test_open_cli_exits_3_on_accepted(tmp_path, capsys, issue, make_tools):
     """Exit 3 is what the review skill reads as 'already decided'; 0 would be silent."""
     body = tmp_path / "b.md"

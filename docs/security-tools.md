@@ -8,13 +8,36 @@ This document covers the security and monitoring tools deployed by `ansible/role
 
 **What it does:** Scans the system for rootkits, backdoors, and suspicious files. Checks whether system binaries (`ls`, `ps`, `netstat`, etc.) have been replaced by trojaned versions, looks for hidden processes or ports, and checks for files/directories that rootkits commonly create.
 
-**Schedule:** Weekly, Wednesday at 2:00 AM (staggered off the Monday AIDE check). Warnings-only output is sent to syslog tagged `rkhunter`.
+**Schedule:** Weekly, Wednesday at 2:00 AM, on every host (staggered off the Monday AIDE check). The cron runs `/usr/local/bin/rkhunter-check.sh`, which writes the warnings to syslog tagged `rkhunter` and pushes a verdict to that host's **rkhunter Scan (&lt;host&gt;)** Kuma tile.
+
+**What the tile means.** rkhunter exits 1 both when it finds a warning and when it fails, so the script reads `/var/log/rkhunter.log` instead (#4598). A scan completed only if this run rewrote the log and the log holds its `System checks summary`.
+
+| Scan | Tile | Message |
+|------|------|---------|
+| completed, `Possible rootkits: 0` | UP | the warning, suspect-file and possible-rootkit counts |
+| completed, `Possible rootkits` above 0 | DOWN | `possible rootkit found` with the counts |
+| did not complete | DOWN | rkhunter's exit code and its first error line |
+
+No push for a week and 2 hours also reads DOWN, which means the cron stopped running or the scan never finished.
+
+Warnings read UP on purpose. Every host warns every week: `/etc/.updated` and `/etc/.resolv.conf.systemd-resolved.bak` are reported as hidden files on all three hosts, and daniel-pi reports `PermitRootLogin` unset. A DOWN on warnings would be red every Wednesday. Read the warning count in the tile's message. Paging on a warning or a suspect file is tracked in #4638. The `DECIDED:` marker in `ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2` holds the evidence. The script's verdict goes to syslog tagged `rkhunter-check` as `status=<up|down> <message>`.
+
+To prove the tile pages, make rkhunter fail to start on one host and run the script by hand. `ionice` then cannot execute it and exits 126 without touching the log, so the tile goes DOWN within seconds:
+
+```bash
+sudo chmod -x /usr/bin/rkhunter
+sudo /usr/local/bin/rkhunter-check.sh
+sudo chmod +x /usr/bin/rkhunter
+```
+
+The tile stays DOWN until the next run. To clear it, run `sudo /usr/local/bin/rkhunter-check.sh` again; a scan takes two to three minutes.
 
 **Check for findings:**
 
 ```bash
 # From the weekly cron
-sudo grep rkhunter /var/log/syslog
+sudo journalctl -t rkhunter -t rkhunter-check --since -7d
+sudo grep Warning /var/log/rkhunter.log
 
 # Full interactive scan with detailed output
 sudo rkhunter --check --nocolors --skip-keypress
@@ -267,6 +290,7 @@ sudo unattended-upgrade --dry-run --debug
 | Sensitive file modified | `sudo ausearch -k identity` or `-k sshd` |
 | Rootkit / backdoor suspicion | `sudo rkhunter --check` |
 | Unexpected file change | `sudo aide --config=/etc/aide/aide.conf --check` |
+| rkhunter tile DOWN | `sudo journalctl -t rkhunter-check -t rkhunter --since -7d` and `/var/log/rkhunter.log` |
 | AIDE tile DOWN | `sudo journalctl -t aide-check -t aide --since -7d` |
 | Unusual commands run as root | `sudo lastcomm` |
 | Unusual I/O or CPU activity | `sar -d` / `sar -u` |
