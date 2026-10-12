@@ -401,6 +401,18 @@ def test_get_reports_curl_failure_as_status_zero(monkeypatch):
     assert core.get_status("http://x") == (0, "connection refused")
 
 
+def test_get_reports_output_without_a_status_line_as_status_zero(monkeypatch):
+    # A trailing line that is not digits raised ValueError out of every caller.
+    class Result:
+        returncode = 0
+        stdout = '{"a": 1}'
+        stderr = ""
+
+    stub_curl(monkeypatch, lambda *a, **kw: Result())
+    status, body = core.get_status("http://x")
+    assert status == 0 and "not an HTTP status" in body
+
+
 def test_get_reports_a_curl_that_never_returns_as_status_zero(monkeypatch):
     """The subprocess timeout is what turns a hung curl into a status-0 reply."""
 
