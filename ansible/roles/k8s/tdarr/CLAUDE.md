@@ -13,9 +13,7 @@ shared conventions.
   (default target)), `media-data` (not Longhorn (media-local))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — state coupled outside the volume —
   rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the
-  snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server);
-  ALSO the digest pin's 'stays manual' intent is unenforced — renovate.json automerges a digest
-  re-push after a 3-day soak with no tdarr exclusion
+  snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server)
 <!-- /generated_from -->
 
 - **`tdarr-server`** (3Gi, `longhorn`, backed up — the 204MB library/transcode
@@ -25,10 +23,20 @@ shared conventions.
   that rewrites library files in place.
 - **The snapshot/revert machinery works here, but a revert can't undo a completed transcode**: it rewrites the untranscoded original on
   `media-data`, which is not reverted. Two claims also mean a failed deploy can revert
-  them to different points in time, and the digest pin's "stays manual" intent has no
-  enforcement against a Renovate digest re-push. Full reasoning in `defaults/main.yml`.
+  them to different points in time. Full reasoning in `defaults/main.yml`.
 
 ## Notable
+- **The image pin carries a version tag, so a major release reads as one.** Upstream tags
+  every release on ghcr.io, and the `:latest` digest pin it replaced hid Tdarr v3 inside a
+  bare digest bump (#4555). A version bump is still a manual landing: the denylist keeps
+  Renovate's automerge off.
+- **The Deployment pins the engine to Rust and Tdarr's own auth off.** A 2.x server picks its
+  engine from upstream on every start. The Rust engine migrated the library DB out of the
+  NodeJS engine's `DB2/` tree, so NodeJS would read state from before the move. The engine
+  pin is what makes a rollback to a 2.x tag safe.
+  Tdarr's auth stays off because Authelia is the login; 3.x would otherwise turn it on for a
+  fresh `tdarr-configs` claim. The reasoning sits beside both env entries in
+  `templates/deployment.yaml.j2`.
 - `tdarr_k8s_server_port` (8266, the internal-node control channel) is deliberately
   **not** in the Service — exposing it would publish an unauthenticated channel for a
   process that rewrites media.

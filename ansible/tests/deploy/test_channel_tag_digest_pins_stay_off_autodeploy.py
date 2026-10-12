@@ -39,10 +39,11 @@ _PIN = re.compile(
     re.MULTILINE,
 )
 
-# The roles that are the expensive subset: a torrent client mid-transfer and a transcoder
-# holding a queue. Named rather than derived
-# — "expensive" is a judgement about what a regression costs, which no file states.
-_EXPENSIVE = frozenset({"qbittorrent", "tdarr"})
+# The roles that are the expensive subset: a torrent client mid-transfer. Named rather than
+# derived — "expensive" is a judgement about what a regression costs, which no file states.
+# tdarr left the set when its pin moved to a version tag (#4555), the second remedy the
+# parametrized test below names.
+_EXPENSIVE = frozenset({"qbittorrent"})
 
 # The floor the census must clear. Below it the regex has stopped matching and every assertion
 # built on it passes over an empty set (CLAUDE.md: a check that finds its own subject by
