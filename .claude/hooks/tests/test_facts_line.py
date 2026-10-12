@@ -73,14 +73,14 @@ def _facts_lines(context):
 
 def test_a_doc_with_an_unverified_section_names_only_that_section(repo):
     context, chosen = _mod.build_context(COMMAND, str(repo), "sess-a")
-    assert [d for d, _ in chosen] == [DOC]
+    assert [d for d, _, _ in chosen] == [DOC]
     assert _facts_lines(context) == ['facts.lock: not verified: "Traps"']
 
 
 def test_a_fully_verified_doc_has_no_facts_line(repo):
     _write_lock(repo, "Layout", "Traps")
     context, chosen = _mod.build_context(COMMAND, str(repo), "sess-a")
-    assert [d for d, _ in chosen] == [DOC]
+    assert [d for d, _, _ in chosen] == [DOC]
     assert _facts_lines(context) == []
 
 
@@ -100,6 +100,6 @@ def test_the_doc_is_injected_when_the_facts_library_cannot_be_imported(
     """A broken `lib.facts` costs the line, never the injection it rides on."""
     monkeypatch.setitem(sys.modules, "lib.facts.citations", None)  # import raises
     context, chosen = _mod.build_context(COMMAND, str(repo), "sess-a")
-    assert [d for d, _ in chosen] == [DOC]
+    assert [d for d, _, _ in chosen] == [DOC]
     assert "The template is" in context
     assert _facts_lines(context) == []

@@ -139,3 +139,21 @@ def test_the_head_cuts_at_a_heading_rather_than_mid_section(repo):
     assert shown, head[-400:]
     assert f"## S{shown[-1] + 1}" in context  # the next section is named, not shown
     assert f"rule {shown[-1] + 1} body" not in head
+
+
+def test_a_head_row_logs_the_injected_size_not_the_file_size(repo, tmp_path):
+    """`fact_status.py report` totals `bytes=`; a head row must count the head it delivered."""
+    doc = repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md"
+    doc.write_text(_big_doc())
+    payload = {
+        "tool_name": "Bash",
+        "session_id": "sess-size-0001",
+        "cwd": str(repo),
+        "tool_input": {
+            "command": "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+        },
+    }
+    block = _mod.context(payload).removeprefix(_mod._PREAMBLE)
+    (row,) = (tmp_path / "instructions.log").read_text().splitlines()
+    assert row.endswith(f" bytes={len(block.encode('utf-8'))}"), row
+    assert len(block) < doc.stat().st_size
