@@ -4,6 +4,7 @@
 | `auto` | 180 d | 89 |
 | `assisted` | 365 d | 77 |
 | `external` | 365 d | 11 |
+| `external-90d` | 90 d | 0 |
 | `pinned` | 730 d | 2 |
 | `ignore` | — | 11 |
 

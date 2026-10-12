@@ -64,6 +64,8 @@ fails on the undefined variable.
 - `assisted` — app passwords, API keys and OIDC secrets. An app-side step, below.
 - `external` — provider-managed (Cloudflare, Discord, Mullvad, SMTP, LLM). Mint in the
   provider console.
+- `external-90d` — provider-managed like `external`, minted with a 90-day expiry, such as
+  the promote workflow's `PROMOTE_TOKEN`. The audit flags the copy before the token expires.
 - `pinned` — **must not be naively swapped**. The special procedure, below.
 - `ignore` — not a secret: the domain, usernames, static addresses.
 

@@ -214,7 +214,14 @@ def run_deploy(tags: list[str], *, run: Callable = subprocess.run) -> int:
 # `test_the_default_tier_table_is_the_one_secret_rotation_assigns`. A MappingProxyType rather
 # than a dict, because a dataclass rejects a mutable default and this object is frozen.
 DEFAULT_TIER_DAYS = MappingProxyType(
-    {"auto": 180, "assisted": 365, "external": 365, "pinned": 730, "ignore": None}
+    {
+        "auto": 180,
+        "assisted": 365,
+        "external": 365,
+        "external-90d": 90,
+        "pinned": 730,
+        "ignore": None,
+    }
 )
 
 
