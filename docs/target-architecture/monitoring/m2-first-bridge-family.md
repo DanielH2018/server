@@ -1,6 +1,8 @@
 # M2 — One bridge family to rules
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR 1, the workload-service mapping: [#4777](https://github.com/DanielH2018/server/pull/4777).
 
 Depends on: M1
 

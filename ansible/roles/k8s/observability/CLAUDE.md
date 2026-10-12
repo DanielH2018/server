@@ -96,6 +96,19 @@ expression in it sits in a Jinja raw block. Each rule group is a plain-YAML file
 `observability_rule_groups` names it. The routing tree, the receivers and the rule conventions
 are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
 
+**A per-workload alert takes its `service` label from a recording rule.**
+`ansible/roles/k8s/observability/files/rules/workload-service.yaml` records one series per
+Deployment, DaemonSet and pod, each carrying the deploy tag as `service`. kube-state-metrics
+exports the `homelab/role` and `kustomize.toolkit.fluxcd.io/name` labels through its
+`--metric-labels-allowlist`. It collects ReplicaSets only for `kube_replicaset_owner`, the hop
+from a pod to its Deployment, and the `kube-state-metrics` scrape job drops the other
+`kube_replicaset_*` families. A workload with no label resolves through a literal override
+table in the rule, then to `k3s` in the add-on namespaces, then to `unmapped`.
+`ansible/tests/k8s/test_workload_service_overrides.py` derives the table from the render. The
+pod mapping leaves out Job-owned and ownerless pods outside the add-on namespaces. That holds
+only while every rendered Job runs under `restartPolicy: Never`, which the
+`job-restart-policy-is-never` row of `ansible/tests/k8s/test_rendered_properties.py` enforces.
+
 ## Grafana logs in through Authelia (OIDC), and the admin form stays on
 
 Grafana is an OIDC client of the Authelia portal: client `grafana` in

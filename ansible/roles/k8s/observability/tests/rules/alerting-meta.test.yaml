@@ -69,6 +69,8 @@ tests:
         values: '0x40'
       - series: 'prometheus_config_last_reload_successful{job="prometheus", instance="localhost:9090"}'
         values: '1x40'
+      - series: 'prometheus_rule_evaluation_failures_total{job="prometheus", instance="localhost:9090", rule_group="/etc/prometheus-rules/workload-service.yaml;workload-service"}'
+        values: '0x40'
     alert_rule_test:
       - eval_time: 40m
         alertname: AlertmanagerMetricsMissing
@@ -78,6 +80,9 @@ tests:
         exp_alerts: []
       - eval_time: 40m
         alertname: PrometheusRuleReloadFailed
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: PrometheusRuleEvaluationFailures
         exp_alerts: []
       # The Watchdog fires whatever the input, and vector(1) carries no job or instance.
       - eval_time: 40m
@@ -137,3 +142,31 @@ tests:
               description: >-
                 localhost:9090 has reported a failed reload for 10 minutes, so it still
                 evaluates the last rule set it loaded. Its log names the file it refused.
+
+  # One failed evaluation in one group. The alert fires for that group alone, at once, and
+  # clears once the failure leaves the 10-minute window.
+  - interval: 1m
+    input_series:
+      - series: 'prometheus_rule_evaluation_failures_total{job="prometheus", instance="localhost:9090", rule_group="/etc/prometheus-rules/workload-service.yaml;workload-service"}'
+        values: '0x5 1x30'
+      - series: 'prometheus_rule_evaluation_failures_total{job="prometheus", instance="localhost:9090", rule_group="/etc/prometheus-rules/alerting-meta.yaml;alerting-meta"}'
+        values: '0x35'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: PrometheusRuleEvaluationFailures
+        exp_alerts:
+          - exp_labels:
+              rule_group: /etc/prometheus-rules/workload-service.yaml;workload-service
+              severity: warning
+              service: observability
+            exp_annotations:
+              summary: >-
+                Prometheus failed to evaluate a rule in
+                /etc/prometheus-rules/workload-service.yaml;workload-service.
+              description: >-
+                At least one rule in /etc/prometheus-rules/workload-service.yaml;workload-service
+                failed an evaluation in the last 10 minutes, so its output is missing or stale.
+                The Prometheus log names the rule and the error.
+      - eval_time: 20m
+        alertname: PrometheusRuleEvaluationFailures
+        exp_alerts: []

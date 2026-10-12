@@ -71,6 +71,7 @@ MUST_DROP = [
     ("longhorn", "longhorn_rest_client_request_latency_seconds_bucket"),
     ("longhorn", "longhorn_workqueue_queue_duration_seconds_bucket"),
     ("longhorn", "longhorn_workqueue_work_duration_seconds_bucket"),
+    ("kube-state-metrics", "kube_replicaset_created"),
 ]
 
 # (job, metric, why it matters) — the half that catches a rule widened past its intent.
@@ -114,6 +115,11 @@ MUST_KEEP = [
         "longhorn",
         "longhorn_disk_usage_bytes",
         "storage headroom; 5 references in the repo",
+    ),
+    (
+        "kube-state-metrics",
+        "kube_replicaset_owner",
+        "the pod to Deployment hop in observability's files/rules/workload-service.yaml",
     ),
 ]
 

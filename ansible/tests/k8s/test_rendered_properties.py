@@ -135,6 +135,18 @@ def _tdarr_env_offence(role: str, container: dict) -> str | None:
     return f"env {wrong} is not pinned to {TDARR_ENV_PINS}"
 
 
+def _job_pod_specs(role: str, tpl: str, doc: dict):
+    if doc.get("kind") in {"Job", "CronJob"}:
+        yield f"{doc['kind']}/{doc['metadata']['name']}", pod_spec(doc)
+
+
+def _restart_policy_offence(role: str, spec: dict) -> str | None:
+    policy = spec.get("restartPolicy")
+    if policy == "Never":
+        return None
+    return f"restartPolicy is {policy!r}, not 'Never'"
+
+
 PROPERTIES = (
     (
         Property(
@@ -274,6 +286,29 @@ PROPERTIES = (
                 ),
             ),
             must_find=frozenset({"tdarr"}),
+        ),
+        Property(
+            name="job-restart-policy-is-never",
+            reason=(
+                "observability's homelab:pod_service:info leaves a Job-owned pod outside the "
+                "add-on namespaces out of its domain, because under `restartPolicy: Never` the "
+                "kubelet never restarts a Job's container in place, so the crash-loop arm has "
+                "nothing to read there. `OnFailure` restarts it in place, which would put a "
+                "restarting pod outside the workload-service mapping. Keep Never, or add the "
+                "Job hop to files/rules/workload-service.yaml first; "
+                "docs/target-architecture/monitoring/m2-first-bridge-family.md, 'The "
+                "workload-service mapping', has the reasoning."
+            ),
+            select=_job_pod_specs,
+            offence=_restart_policy_offence,
+            red=("pi-peer-backup", {"restartPolicy": "OnFailure"}),
+            green=("pi-peer-backup", {"restartPolicy": "Never"}),
+            # A pod template with no restartPolicy is refused by the API for a Job, but the
+            # predicate must not read the gap as Never either.
+            more_red=(("pi-peer-backup", {}),),
+            # 15 Jobs and CronJobs render. Close enough to notice a contraction.
+            min_matches=12,
+            must_find=frozenset({"CronJob/pi-peer-backup", "Job/registry-gc"}),
         ),
     )
     + CONFIG_PROPERTIES

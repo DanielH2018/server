@@ -28,7 +28,7 @@ metadata:
   namespace: {{ k8s_observability_namespace }}
 automountServiceAccountToken: true
 ---
-# Scoped to the four resource types --resources= below actually collects, rather than the
+# Scoped to the resource types --resources= below actually collects, rather than the
 # upstream manifest's blanket grant across ~20 API groups. kube-state-metrics reads object
 # SPEC and STATUS cluster-wide, so every resource added here is a resource it can enumerate;
 # a Secret or ConfigMap grant would let it read their contents. Keep this list and the
@@ -44,6 +44,12 @@ rules:
     verbs: [list, watch]
   - apiGroups: [apps]
     resources: [deployments, statefulsets, daemonsets]
+    verbs: [list, watch]
+  # ReplicaSets, for kube_replicaset_owner alone: it is the hop from a pod's ReplicaSet owner to
+  # its Deployment that the workload-service recording rules (files/rules/workload-service.yaml)
+  # join through. The Prometheus job drops every other kube_replicaset_* family at scrape.
+  - apiGroups: [apps]
+    resources: [replicasets]
     verbs: [list, watch]
   # Nodes, for kube_node_status_allocatable — the only continuous signal that an extended
   # resource is still advertised. dri-device-plugin can wedge while its pod stays Running and
@@ -93,8 +99,12 @@ spec:
           args:
             # Must match the ClusterRole above. Restricting the set also drops the metric
             # cardinality this stack has no use for.
-            - --resources=pods,deployments,statefulsets,daemonsets,nodes
-            - --metric-labels-allowlist=pods=[app],deployments=[app]
+            - --resources=pods,deployments,replicasets,statefulsets,daemonsets,nodes
+            # homelab/role and kustomize.toolkit.fluxcd.io/name name the deploy tag that applied
+            # a Deployment or DaemonSet. They reach Prometheus as label_homelab_role and
+            # label_kustomize_toolkit_fluxcd_io_name on kube_<kind>_labels, which the
+            # workload-service recording rules read.
+            - --metric-labels-allowlist=pods=[app],deployments=[app,homelab/role,kustomize.toolkit.fluxcd.io/name],daemonsets=[homelab/role,kustomize.toolkit.fluxcd.io/name]
           ports:
             - name: metrics
               containerPort: 8080

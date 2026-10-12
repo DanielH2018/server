@@ -131,15 +131,13 @@ data:
       # measured against a 3GB cap; at the 7GB cap set since, the TSDB held 5.5 days at 2.94GB
       # (measured 2026-08-31) and was still filling. Re-measure rather than trusting either figure.
       #
-      # Safe because nothing reads these at sub-minute resolution — checked, not assumed:
-      # no rule in files/rules/ reads these four jobs' families (alerting-meta reads only
-      # Prometheus's and Alertmanager's own metrics), and Grafana provisions no alert; no
-      # `irate()` anywhere in files/dashboards/; the only boards touching these
-      # families use fixed [5m] windows or the daniel-server datasource, which already declares
-      # timeInterval 1m (grafana.yaml.j2). monitor-bridge's `check_k8s_workloads` reads
-      # kube_deployment_/kube_daemonset_/kube_node_ as instant vectors on a 300s cycle, and its
-      # restart arm reads increase(kube_pod_container_status_restarts_total[1h]) — a COUNTER, so
-      # a 1m scrape loses no restart event, only its timing to within 60s against a 30m/1h window.
+      # Safe because nothing reads these at sub-minute resolution — checked, not assumed. The
+      # rule groups in files/rules/ evaluate every minute, Prometheus's default, since this file
+      # sets no evaluation_interval. monitor-bridge reads Prometheus every 300s. Grafana
+      # provisions no alert, files/dashboards/ holds no `irate()`, and the only boards touching
+      # these families use fixed [5m] windows or the daniel-server datasource, which already
+      # declares timeInterval 1m (grafana.yaml.j2). A restart count is a COUNTER, so a 1m scrape
+      # loses no restart event, only its timing to within 60s.
       #
       # A RULE THAT READS ONE OF THESE FOUR JOBS' FAMILIES MUST KEEP THAT TRUE: no `irate()` over
       # them, and every range window at least four scrape intervals (4m), so a missed scrape
@@ -148,6 +146,15 @@ data:
         scrape_interval: 1m
         static_configs:
           - targets: ['kube-state-metrics:8080']
+        # kube-state-metrics collects replicasets for kube_replicaset_owner alone, the pod to
+        # Deployment hop of files/rules/workload-service.yaml. Each of the other ten families
+        # would add one series per ReplicaSet, old revisions included, for no reader. The list
+        # is explicit because RE2 has no lookaround (see control_plane_bucket_drop above), so
+        # a family a kube-state-metrics upgrade adds is kept until it is named here.
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            action: drop
+            regex: kube_replicaset_(annotations|created|labels|metadata_generation|spec_replicas|status_fully_labeled_replicas|status_observed_generation|status_ready_replicas|status_replicas|status_terminating_replicas)
       # The plain exporters: a static `<service>.<namespace>.svc:<port>` target with no auth or
       # relabeling. Each is a `metrics` item on its containers_list entry, which is where the
       # port is defined; the owning role reads it back with `metrics_port`, so its Service and

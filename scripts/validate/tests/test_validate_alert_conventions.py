@@ -123,7 +123,7 @@ def test_a_firing_case_that_asserts_no_severity_is_flagged(tmp_path):
                     alert["exp_labels"].pop("severity")
 
     problems = _rule_problems(*_rule_tree(tmp_path, edit_tests=drop_severity))
-    assert len(problems) == 4, problems
+    assert len(problems) == 5, problems
     assert all("asserts both its service and severity" in p for p in problems), problems
 
 
