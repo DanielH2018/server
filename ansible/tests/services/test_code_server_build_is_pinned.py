@@ -18,7 +18,7 @@ import re
 import pytest
 
 from _helpers import K8S_ROLES, REPO, load_defaults
-from _k8s_render import rendered_build_text
+from _k8s_render import rendered_build_text, rendered_k8s_text
 
 ROLE = K8S_ROLES / "code-server"
 
@@ -42,10 +42,19 @@ KNOWN_EXTENSIONS = frozenset(
         "astral-sh.ty",
         "ms-python.vscode-pylance",
         "Anthropic.claude-code",
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "vadimcn.vscode-lldb",
     }
 )
 PLATFORM_SPECIFIC = frozenset(
-    {"charliermarsh.ruff", "astral-sh.ty", "Anthropic.claude-code"}
+    {
+        "charliermarsh.ruff",
+        "astral-sh.ty",
+        "Anthropic.claude-code",
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+    }
 )
 TARGET_PLATFORM = "linux-x64"
 
@@ -59,7 +68,13 @@ FLOATING_FORMS = (
     "| bash",
     "extensionquery",
     "/api/${publisher}",
+    "sh.rustup.rs",
 )
+
+# The subPath mounts of the backed-up workspace claim in deployment.yaml.j2. Cargo must write
+# none of them: a target/ there fills the 1 Gi claim and rides the weekly B2 backup.
+BACKED_UP_MOUNTS = ("/config/workspace", "/config/.ssh", "/config/.config")
+CARGO_PATH_VARS = ("CARGO_HOME", "CARGO_TARGET_DIR")
 
 
 def extension_pin_problems(entries: list[dict]) -> list[str]:
@@ -95,6 +110,21 @@ def floating_pip_packages(dockerfile: str) -> list[str]:
         if token and not token.startswith("-") and "==" not in token:
             floating.append(token)
     return floating
+
+
+def cargo_path_problems(dockerfile: str, backed_up: tuple[str, ...]) -> list[str]:
+    """Every cargo write path the Dockerfile leaves unset or puts under a backed-up mount."""
+    problems: list[str] = []
+    for var in CARGO_PATH_VARS:
+        m = re.search(rf"^ENV\s+{var}=(\S+)\s*$", dockerfile, re.MULTILINE)
+        if m is None:
+            problems.append(f"{var} is not set, so cargo writes under $HOME")
+            continue
+        path = m.group(1).rstrip("/")
+        under = [b for b in backed_up if path == b or path.startswith(b + "/")]
+        if under:
+            problems.append(f"{var}={path} lands on the backed-up mount {under[0]}")
+    return problems
 
 
 def test_the_base_image_carries_a_digest() -> None:
@@ -171,6 +201,44 @@ def test_node_is_pinned_with_a_checksum() -> None:
     assert "sha256sum -c" in rendered
 
 
+def test_rust_is_pinned_with_a_checksum() -> None:
+    defaults = load_defaults(ROLE)
+    version = str(defaults["code_server_k8s_rust_version"])
+    assert _RELEASE.match(version), f"rust version {version!r} is not an exact release"
+    rendered = _rendered_dockerfile()
+    # (published tarball, where the Dockerfile saves it, the key holding its digest)
+    for tarball, local, key in (
+        (
+            f"rust-{version}-x86_64-unknown-linux-gnu.tar.xz",
+            "/tmp/rust.tar.xz",
+            "code_server_k8s_rust_sha256",
+        ),
+        (
+            f"rust-src-{version}.tar.xz",
+            "/tmp/rust-src.tar.xz",
+            "code_server_k8s_rust_src_sha256",
+        ),
+    ):
+        sha = str(defaults[key])
+        assert _SHA256.match(sha), f"{key} is not 64 hex characters"
+        assert f"static.rust-lang.org/dist/{tarball}" in rendered, (
+            f"{tarball} is not downloaded by the rendered Dockerfile"
+        )
+        assert f"{sha}  {local}" in rendered, (
+            f"{key} is not checked by sha256sum -c in the rendered Dockerfile"
+        )
+
+
+def test_cargo_writes_stay_off_the_backed_up_claim() -> None:
+    # fact: ansible/roles/k8s/code-server/CLAUDE.md#Notable
+    deployment = rendered_k8s_text("code-server", "deployment.yaml.j2")
+    for mount in BACKED_UP_MOUNTS:
+        assert f"mountPath: {mount}\n" in deployment, (
+            f"{mount} is no longer a mount in the rendered deployment; update BACKED_UP_MOUNTS"
+        )
+    assert not cargo_path_problems(_rendered_dockerfile(), BACKED_UP_MOUNTS)
+
+
 def test_no_build_step_resolves_a_version_from_the_network() -> None:
     rendered = _rendered_dockerfile()
     back = [form for form in FLOATING_FORMS if form in rendered]
@@ -231,3 +299,29 @@ def test_a_fully_pinned_pip_block_is_clean() -> None:
 def test_a_bare_pip_package_is_flagged() -> None:
     text = "RUN pip install --no-cache-dir \\\n        uv==1.0.0 \\\n        ruff \\\n    && true\n"
     assert floating_pip_packages(text) == ["ruff"]
+
+
+_CARGO_ENV = (
+    "ENV CARGO_HOME=/config/.cargo\nENV CARGO_TARGET_DIR=/config/.cargo-target\n"
+)
+
+
+def test_cargo_paths_off_the_backed_up_mounts_are_clean() -> None:
+    assert cargo_path_problems(_CARGO_ENV, BACKED_UP_MOUNTS) == []
+
+
+@pytest.mark.parametrize(
+    "dockerfile",
+    [
+        "ENV CARGO_HOME=/config/.cargo\n",
+        "ENV CARGO_HOME=/config/.cargo\nENV CARGO_TARGET_DIR=/config/workspace/target\n",
+        "ENV CARGO_HOME=/config/.config/cargo\nENV CARGO_TARGET_DIR=/config/.cargo-target\n",
+    ],
+    ids=[
+        "target-dir-unset",
+        "target-dir-in-workspace",
+        "cargo-home-in-backed-up-config",
+    ],
+)
+def test_a_cargo_path_on_the_backed_up_claim_is_flagged(dockerfile: str) -> None:
+    assert cargo_path_problems(dockerfile, BACKED_UP_MOUNTS)

@@ -8,8 +8,9 @@ A SCAN THAT DID NOT COMPLETE PUSHES DOWN. rkhunter exits 1 on a warning and on a
 the script reads completion from the log this run wrote, and a log left from last week reads as
 no scan at all.
 
-A POSSIBLE ROOTKIT PUSHES DOWN; WARNINGS PUSH UP WITH THEIR COUNT. Every host warns every week;
-the script's `DECIDED:` marker has the evidence.
+ANY WARNING, SUSPECT FILE OR POSSIBLE ROOTKIT PUSHES DOWN (#4638). The warnings every host raised
+every week are allowlisted in rkhunter.conf.local, so a healthy week has none; the script's
+`DECIDED:` marker has the evidence.
 
 ONE TOKEN PER HOST. A shared token would let one host's `up` cover another whose scan stopped.
 
@@ -21,6 +22,8 @@ Run: uv run pytest ansible/tests/setup/test_rkhunter_check.py
 
 import os
 
+import jinja2
+
 from lib.proc_testing import fake_bin, run, write_exec
 from _helpers import ROLES, load_tasks, walk_tasks
 from _kuma_monitors import entity, tile_is_gated_on
@@ -30,6 +33,7 @@ from test_aide_check import LOGGER_STUB
 
 SCRIPT = ("setup", "initial_setup", "rkhunter-check.sh.j2")
 PUSH_ENV = "rkhunter-kuma-push.env.j2"
+CONF_LOCAL = "rkhunter.conf.local.j2"
 INTEGRITY = ROLES / "setup" / "initial_setup" / "tasks" / "integrity.yml"
 CRON_NAME = "Weekly rkhunter malware scan"
 
@@ -51,22 +55,22 @@ REAL_ENV = "/etc/homelab/rkhunter-kuma-push.env"
 REAL_LOG = "RKHUNTER_LOG=/var/log/rkhunter.log"
 REAL_RKHUNTER = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/rkhunter"
 
-# The tail of /var/log/rkhunter.log as daniel-server wrote it on 2026-09-30.
+# The account-change warning daniel-box logged the week the claude user was added.
 WARNINGS = """\
-[02:02:01]   Checking for hidden files and directories       [ Warning ]
-[02:02:01] Warning: Hidden file found: /etc/.resolv.conf.systemd-resolved.bak: ASCII text
-[02:02:01] Warning: Hidden file found: /etc/.updated: ASCII text
+[02:02:01]   Checking for passwd file changes                 [ Warning ]
+[02:02:01] Warning: User 'claude' has been added to the passwd file.
 """
 
 
-def _log(rootkits: str = "0") -> str:
+def _log(rootkits: str = "0", suspect: str = "0", warnings: str = "") -> str:
+    """The tail of /var/log/rkhunter.log, shaped as daniel-server wrote it on 2026-09-30."""
     return (
-        WARNINGS
+        warnings
         + "[02:02:01] System checks summary\n"
         + "[02:02:01] =====================\n"
         + "[02:02:01] File properties checks...\n"
         + "[02:02:01] Files checked: 142\n"
-        + "[02:02:01] Suspect files: 0\n"
+        + (f"[02:02:01] Suspect files: {suspect}\n" if suspect else "")
         + "[02:02:01] Rootkit checks...\n"
         + "[02:02:01] Rootkits checked : 498\n"
         + (f"[02:02:01] Possible rootkits: {rootkits}\n" if rootkits else "")
@@ -75,10 +79,7 @@ def _log(rootkits: str = "0") -> str:
     )
 
 
-STDOUT = (
-    "Warning: Hidden file found: /etc/.resolv.conf.systemd-resolved.bak: ASCII text\n"
-    "Warning: Hidden file found: /etc/.updated: ASCII text\n"
-)
+STDOUT = "Warning: User 'claude' has been added to the passwd file.\n"
 ERROR_STDOUT = "Invalid option specified: --bogus\n"
 
 
@@ -151,15 +152,40 @@ def _run_check(
     )
 
 
-def test_a_completed_scan_with_warnings_pushes_up_with_the_count(tmp_path):
-    """rkhunter exits 1 on the routine warnings every host has every week."""
-    code, pushed, logged, _ = _run_check(tmp_path, STDOUT, rc=1, log=_log())
+def test_a_clean_scan_pushes_up(tmp_path):
+    """The accept half of the DOWN arms below: a scan with nothing to report must not page.
+
+    It passes on the pre-#4638 script too, by design. It goes red if a new DOWN arm misfires on
+    a clean log, such as the Suspect files count check or the first-warning lookup. Whether a
+    real host's routine warnings are suppressed is rkhunter.conf.local's job, and a stubbed
+    rkhunter cannot exercise it. Only a real scan on a host after the apply can.
+    """
+    code, pushed, _, _ = _run_check(tmp_path, "", rc=0, log=_log())
     assert pushed[0] == "up", pushed
-    assert "2 warnings, 0 suspect files, 0 possible rootkits (exit 1" in pushed[1], (
+    assert "0 warnings, 0 suspect files, 0 possible rootkits (exit 0" in pushed[1], (
         pushed[1]
     )
     assert code == 0
-    assert "rkhunter: Warning: Hidden file found: /etc/.updated: ASCII text" in logged
+
+
+def test_a_warning_pushes_down_naming_the_first(tmp_path):
+    """rkhunter exits 1 on a warning, and the scan still completed."""
+    code, pushed, logged, _ = _run_check(
+        tmp_path, STDOUT, rc=1, log=_log(warnings=WARNINGS)
+    )
+    assert pushed[0] == "down", pushed
+    assert "1 warnings, 0 suspect files, 0 possible rootkits (exit 1" in pushed[1]
+    assert "User 'claude' has been added to the passwd file." in pushed[1], pushed[1]
+    assert code == 1
+    assert (
+        "rkhunter: Warning: User 'claude' has been added to the passwd file." in logged
+    )
+
+
+def test_a_suspect_file_pushes_down(tmp_path):
+    _, pushed, _, _ = _run_check(tmp_path, "", rc=1, log=_log(suspect="1"))
+    assert pushed[0] == "down", pushed
+    assert "suspect file found" in pushed[1], pushed[1]
 
 
 def test_an_error_exit_that_writes_no_log_pushes_down(tmp_path):
@@ -185,17 +211,43 @@ def test_last_weeks_log_does_not_pass_for_this_run(tmp_path):
 
 
 def test_a_possible_rootkit_pushes_down(tmp_path):
-    code, pushed, _, _ = _run_check(tmp_path, STDOUT, rc=1, log=_log(rootkits="1"))
+    code, pushed, _, _ = _run_check(
+        tmp_path, STDOUT, rc=1, log=_log(rootkits="1", warnings=WARNINGS)
+    )
     assert pushed[0] == "down", pushed
     assert "possible rootkit found" in pushed[1], pushed[1]
     assert code == 1
 
 
-def test_a_summary_without_a_rootkit_count_pushes_down(tmp_path):
-    """The one count the tile pages on is unreadable, so the scan cannot read as clean."""
-    _, pushed, _, _ = _run_check(tmp_path, STDOUT, rc=1, log=_log(rootkits=""))
-    assert pushed[0] == "down", pushed
-    assert "no Possible rootkits count" in pushed[1], pushed[1]
+def test_a_summary_missing_a_count_pushes_down(tmp_path):
+    """A count the tile pages on is unreadable, so the scan cannot read as clean."""
+    for missing in ({"rootkits": ""}, {"suspect": ""}):
+        _, pushed, _, _ = _run_check(tmp_path, "", rc=0, log=_log(**missing))
+        assert pushed[0] == "down", (missing, pushed)
+        assert "lacks a Possible rootkits or Suspect files count" in pushed[1], pushed[
+            1
+        ]
+
+
+def test_the_ssh_root_setting_follows_the_main_sshd_config():
+    """rkhunter reads PermitRootLogin from the main sshd_config only (#4638).
+
+    daniel-box's main file carries the line and daniel-pi's does not, though both harden a
+    drop-in, so the setting follows what the play read rather than the host's config path.
+    """
+    task = next(
+        task
+        for task in walk_tasks(load_tasks(INTEGRITY))
+        if (task.get("ansible.builtin.template") or {}).get("src") == CONF_LOCAL
+    )
+    (name, expression), *_ = task["vars"].items()
+    for rc, expected in ((0, "no"), (1, "unset")):
+        # grep's exit code, as the register before this task records it.
+        value = jinja2.Template(expression).render(
+            initial_setup_rkhunter_sshd_root_login={"rc": rc}
+        )
+        rendered = render_setup_text("initial_setup", CONF_LOCAL, {name: value})
+        assert f"\nALLOW_SSH_ROOT_USER={expected}\n" in rendered, (rc, rendered)
 
 
 def test_the_scan_still_runs_when_no_token_is_set(tmp_path):

@@ -364,10 +364,9 @@ who runs the `homelab-review` grep finds it before flagging the missing gate.
 **The optional third PR makes the report read-weighted.**
 
 - The hook appends ` form=head` to the instructions-log row of a doc it delivered as a head.
-- `context` finds those docs without changing the shape of the chosen pairs. It re-runs
-  `named_paths(command, cwd)` and takes the first root whose relative path equals the
-  trigger. It then calls `head_floor(root, doc, trigger)`. A floor that is not `None` means
-  `render` delivered a head, because both rest on `_fits_inline`.
+- `context` finds those docs from the rendered block that `build_context` returns with each
+  doc, which #4653 added to size the row's `bytes=` field. A head block carries the
+  `_notice` line, and a whole-doc block never does.
 - `fact_status.py report` ranks the docs read as a head by how often they were read.
 - That turns "which docs are too long" into "which long docs are read most." That is the
   order a trim should follow.
