@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-D1.1, the Flux schemas and the proposal: PR pending.
+D1.1, the Flux schemas and the proposal: [#4697](https://github.com/DanielH2018/server/pull/4697).
 
 Depends on: none
 
