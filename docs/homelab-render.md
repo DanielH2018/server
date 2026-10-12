@@ -11,8 +11,8 @@ steps, and this page describes each piece once its PR has merged.
 
 ## What is in place
 
-- `ansible/filter_plugins/secret_stubs.py` holds the stub form. The renderer and the Ansible
-  playbooks read the one definition.
+- `ansible/filter_plugins/secret_stubs.py` holds the stub form. It is the one definition
+  that R1's renderer and its playbook checks are built to share, so neither restates it.
 - `scripts/renderer/shadow_diff.py stubs` writes the stub file both halves of the shadow
   render take.
 - `scripts/renderer/renderer_lib/task_inputs.py` holds `PINNED_LIVE_FACTS`, the stand-ins for

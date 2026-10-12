@@ -3,9 +3,9 @@
 The shadow render compares `homelab-render` with the Ansible manifests role for identical
 inputs, and the inputs it can share without decrypting anything are stub values: every
 secret key `K` renders as `stub-` plus `K` with underscores turned to hyphens. That shape is a
-valid DNS label, so a stubbed host name still passes `kubectl apply --dry-run=server`. The
-renderer and the Ansible preamble both read the form from this one module, so no second copy
-of the rule exists to drift. `docs/homelab-render.md` is the operator's page.
+valid DNS label, so a stubbed host name still passes `kubectl apply --dry-run=server`. This
+module is the one definition of the form, which R1's renderer and its playbook checks are
+built to share, so neither restates it. `docs/homelab-render.md` is the operator's page.
 
 `google_assistant_service_account` is the one key a template parses: home-assistant's
 `templates/config/secrets.yaml.j2` runs it through `from_json` and reads three fields. Its
@@ -97,6 +97,9 @@ def homelab_unstubbed_keys(keys, values) -> list[str]:
 
 
 class FilterModule:
+    # Unwrapped by `_as_filter`, unlike the siblings: importing `filter_errors` would add a
+    # sibling import to a plugin that must load in every play, and the one ValueError raised
+    # here already names its filter.
     def filters(self):
         return {
             "homelab_secret_stub": homelab_secret_stub,
