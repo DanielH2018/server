@@ -11,6 +11,10 @@
 observability_k8s_collector_image: otel/opentelemetry-collector-contrib:0.161.0
 observability_k8s_loki_image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
 observability_k8s_prometheus_image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+# No workload runs this image yet. scripts/validate/alert_tools.sh reads its tag, as it reads
+# the Prometheus one above, to provision amtool for the validate-alert-rules hook, so the
+# Alertmanager the M1 slice deploys and the amtool CI checks with move in one Renovate bump.
+observability_k8s_alertmanager_image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
 # Grafana 12 removed Angular, so every `graph` panel must be converted to `timeseries` and
 # deployed before a major bump, not alongside it.
 #

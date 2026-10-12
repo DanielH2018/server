@@ -4,9 +4,11 @@
 """PreToolUse(Bash): load the nested CLAUDE.md and `.claude/rules` a Bash read would skip.
 
 Usage: `bash-pretool.py` loads this file as an arm on PreToolUse:Bash, and it also runs
-standalone. It reads the hook JSON payload on stdin. It prints an `additionalContext` JSON object
-or nothing, and it always exits 0. `-h` or `--help` prints this text and exits 0 without reading
-stdin.
+standalone. As a hook it reads the JSON payload on stdin, prints an `additionalContext` JSON
+object or nothing, and always exits 0. `-h` or `--help` prints this text and exits 0 without
+reading stdin. `--report [--root DIR]` reads no stdin and writes nothing. It prints the budgets,
+then every non-root `CLAUDE.md` and `.claude/rules/*.md` the checkout tracks with its margins,
+tightest first, then the root `CLAUDE.md`. It exits non-zero on any error.
 
 WHY. Claude Code loads a role's `CLAUDE.md` (`nested_traversal`) and a `.claude/rules/*.md`
 whose `paths:` glob matches (`path_glob_match`) only when the Read, Edit or Write tool touches
@@ -53,7 +55,8 @@ the preamble and the header — not `INLINE_MAX_CHARS` itself (#3245).
 A `CLAUDE.md` inlined whole also carries the `_facts_line` line naming its unverified
 sections, when the doc plus the line fits (`render`).
 
-Observability-shaped: never emits a decision, swallows every error and exits 0.
+Observability-shaped: the hook path never emits a decision, swallows every error and exits 0.
+`--report` is dispatched before that swallow, so a report that fails says so.
 """
 
 import importlib.util
@@ -72,7 +75,7 @@ from _hook_common import (
     session_state_path,
 )
 from _inline_budget import header as _header
-from _inline_budget import inline_margins, rule_globs
+from _inline_budget import inline_margins, print_report, rule_globs
 
 # Under both harness caps with headroom for the wrapper text: local persist at 10,000 chars,
 # remote truncation at 8,000 chars / 200 lines. Pinned by `test_inject_nested_docs.py`.
@@ -557,8 +560,17 @@ def main():
 
 
 if __name__ == "__main__":
-    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+    args = sys.argv[1:]
+    if any(arg in ("-h", "--help") for arg in args):
         print(__doc__.strip())
+        sys.exit(0)
+    # Before the try: the swallow below would turn a failed report into an empty exit 0.
+    if "--report" in args:
+        if "--root" in args:
+            root = args[args.index("--root") + 1]
+        else:
+            root = _checkout_root(os.path.dirname(os.path.abspath(__file__)))
+        print_report(root, INLINE_MAX_CHARS, INLINE_MAX_LINES, _PREAMBLE)
         sys.exit(0)
     try:
         sys.exit(main())

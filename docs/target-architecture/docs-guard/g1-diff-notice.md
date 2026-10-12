@@ -1,6 +1,10 @@
 # G1 — Diff notice alongside the lock
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR 1, the revision reader: #4699 (issue #4691).
+
+PR 2, `moved_sections`: #4706 (issue #4702).
 
 Depends on: none
 

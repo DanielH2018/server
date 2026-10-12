@@ -132,9 +132,12 @@ _ANCHOR = re.compile(
 )
 
 
-# ── subprocess.run(["git", ...]) under scripts/ ───────────────────────────────────────
+# ── subprocess.run(["git", ...]) or subprocess.Popen(["git", ...]) under scripts/ ─────
 
 _ROUTED = frozenset({"git", "gh", "kubectl"})
+# A long-lived `git cat-file --batch` needs the same GIT_*-free environment as a one-shot
+# call; `lib.git.git_process` is its routed form.
+_RAW_CALLS = frozenset({"run", "Popen"})
 
 
 def _scripts_production_modules() -> list[str]:
@@ -154,7 +157,7 @@ def _raw_call_offence(subject: Subject) -> list[str]:
         if not (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "run"
+            and node.func.attr in _RAW_CALLS
             and isinstance(node.func.value, ast.Name)
             and node.func.value.id == "subprocess"
             and node.args
@@ -164,7 +167,9 @@ def _raw_call_offence(subject: Subject) -> list[str]:
             continue
         first = node.args[0].elts[0]
         if isinstance(first, ast.Constant) and first.value in _ROUTED:
-            hits.append(f"line {node.lineno}: raw subprocess.run of {first.value}")
+            hits.append(
+                f"line {node.lineno}: raw subprocess.{node.func.attr} of {first.value}"
+            )
     return hits
 
 
@@ -404,17 +409,24 @@ ROWS = (
         reason=(
             "`lib.git.git` strips every GIT_* variable so `cwd` alone picks the repository, and "
             "`lib.gh.gh` disables the prompt and update notifier so a cron cannot hang. A raw "
-            '`subprocess.run(["git", ...])` has neither, and the repo re-grew fourteen. Role '
-            "`files/*.py` stay raw on purpose: they deploy to hosts without `scripts/lib`."
+            '`subprocess.run(["git", ...])` has neither, and the repo re-grew fourteen. A raw '
+            "`subprocess.Popen` of git lacks the scrub too; `lib.git.git_process` starts a "
+            "long-lived one. Role `files/*.py` stay raw on purpose: they deploy to hosts "
+            "without `scripts/lib`."
         ),
         files=_scripts_production_modules,
         offence=_raw_call_offence,
         red=(
             Subject("a.py", 'subprocess.run(\n    ["git", "status"],\n)'),
             Subject("b.py", 'subprocess.run(["gh", *args], check=True)'),
+            Subject(
+                "c.py",
+                'subprocess.Popen(["git", "cat-file", "--batch"], stdin=subprocess.PIPE)',
+            ),
         ),
         green=(
             Subject("a.py", 'git("status", cwd=repo)'),
+            Subject("e.py", 'subprocess.Popen(["tee", capture], stdin=read_end)'),
             Subject("b.py", 'subprocess.run(["ssh", host, "git rev-parse HEAD"])'),
             Subject(
                 "c.py", 'subprocess.CompletedProcess(args=["gh", *args], returncode=1)'
@@ -437,6 +449,7 @@ ROWS = (
                 "infra_map/live.py",
                 "lib/facts/citations.py",
                 "lib/facts/lint.py",
+                "lib/facts/notice.py",
             )
         ),
     ),

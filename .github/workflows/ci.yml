@@ -178,6 +178,21 @@ jobs:
           vale --version
           scripts/validate/vale.sh
 
+      # promtool and amtool, at the tags of the observability role's Prometheus and Alertmanager
+      # image pins, for the `validate-alert-rules` hook. The script fetches both release
+      # tarballs, checks each against its release's sha256sums.txt, and unpacks the binary into
+      # .cache/alert-tools/, which root_ignored_files.py's LOCAL_ONLY covers. It is the tool
+      # path the hook itself calls, so CI and a worktree provision the same way.
+      - name: Provision promtool and amtool
+        run: scripts/validate/alert_tools.sh
+
+      # The tools' red proof. Each one must accept its good fixture and reject its bad one
+      # with the expected message under scripts/validate/tests/fixtures/alert_rules/. The
+      # pytest shards install neither binary, so without this step nothing shows the hook's
+      # tool phase can fail.
+      - name: Prove each alert tool rejects its bad fixture
+        run: uv run python scripts/validate/alert_rules.py --prove-red
+
       # On a PR, run every hook against only the files the PR actually touches — the same thing
       # prek does locally at commit time, and what each hook's `files` regex in prek.toml is
       # already written for. Measured locally, this sweep is 7.1s over --all-files and 0.10s

@@ -1,0 +1,5 @@
+# Accepted by `amtool check-config`: one route to one receiver that sends nowhere.
+route:
+  receiver: blackhole
+receivers:
+  - name: blackhole
