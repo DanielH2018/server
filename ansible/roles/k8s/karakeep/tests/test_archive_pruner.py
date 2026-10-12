@@ -46,11 +46,12 @@ def bookmark(bid, age_days, tags=(), assets=(), **extra):
 
 
 class FakeKarakeep:
-    """Serves one page of archived bookmarks and records every request."""
+    """Serves one page of archived bookmarks, two pages of tags, and records every request."""
 
-    def __init__(self, bookmarks, highlighted=()):
+    def __init__(self, bookmarks, highlighted=(), tag_pages=((), ())):
         self.bookmarks = bookmarks
         self.highlighted = set(highlighted)
+        self.tag_pages = [list(p) for p in tag_pages]
         self.calls = []
 
     @contextmanager
@@ -64,6 +65,13 @@ class FakeKarakeep:
         elif path == "bookmarks":
             assert urllib.parse.parse_qs(url.query)["archived"] == ["true"]
             body = {"bookmarks": self.bookmarks, "nextCursor": None}
+        elif path == "tags":
+            page = int(urllib.parse.parse_qs(url.query).get("cursor", ["0"])[0])
+            last = page == len(self.tag_pages) - 1
+            body = {
+                "tags": self.tag_pages[page],
+                "nextCursor": None if last else str(page + 1),
+            }
         elif path.endswith("/highlights"):
             bid = path.split("/")[1]
             body = {"highlights": [{"id": "h"}] if bid in self.highlighted else []}
@@ -176,3 +184,28 @@ def test_the_auto_tag_default_names_every_tag_the_time_tagger_attaches():
     assert {"0-1m", "0-5m", "30m+"} <= attached  # Both name sets were read.
     defaults = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
     assert set(defaults["karakeep_k8s_pruner_auto_tags"]) == attached
+
+
+def tag(name, human, ai=0):
+    return {
+        "id": name,
+        "name": name,
+        "numBookmarksByAttachedType": {"human": human, "ai": ai},
+    }
+
+
+def test_the_log_lists_every_manually_attached_tag_across_tag_pages(capsys):
+    api = FakeKarakeep(
+        [],
+        tag_pages=(
+            [tag("Read Later", 3), tag("rust", 0, ai=40)],
+            [tag("Recipes", 12), tag("0-5m", 900)],
+        ),
+    )
+    run(api)
+    out = capsys.readouterr().out
+    assert "tags with manual attachments, whole library: 3" in out
+    assert "  900  0-5m  (listed as auto)" in out
+    assert "   12  Recipes\n" in out
+    assert "    3  Read Later\n" in out
+    assert "rust" not in out
