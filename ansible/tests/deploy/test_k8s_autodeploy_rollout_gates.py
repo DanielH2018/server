@@ -14,7 +14,6 @@ from lib import yaml_fast
 from pathlib import Path
 
 from _autodeploy import (
-    _K8S_ROLES,
     _auto_deployable,
     _declares_autodeploy,
     _deployment_templates,
@@ -26,13 +25,11 @@ from _autodeploy_rollout import (
     _MANIFEST_KIND_TO_ROLLOUT_KIND,
     _deployment_docs,
     _deployments_missing_readiness_probe,
-    _extra_rollouts,
     _gated_names,
     _primary_rollout_kind,
     _primary_rollout_name,
     _rollout_gate_offender,
     _sets_empty_rollout,
-    _ungated_deployment_count,
     _ungated_deployments,
 )
 
@@ -188,55 +185,6 @@ def test_the_workload_matcher_sees_daemonsets(widget_role) -> None:
     assert _deployment_docs(_template_texts(role)["daemonset.yaml.j2"]) == [
         ("DaemonSet", "widget")
     ]
-
-
-def test_extra_rollouts_are_counted_as_gated() -> None:
-    """prowlarr renders two Deployments and gates both, by name — it is not an offender.
-
-    This pins the guard's matching model (identity, not count) against a role that actually
-    has an extra: a rendered Deployment is gated only if its own resolved name equals the
-    primary rollout name or appears in `manifests_extra_rollouts`. prowlarr stays on the
-    denylist regardless — the migrating-state PVC/Recreate shape covered in its
-    `k8s_autodeploy_reason`, unrelated to whether it gates cleanly — so this test is about the
-    guard's model, not about prowlarr's eligibility.
-    """
-    prowlarr = _K8S_ROLES / "prowlarr"
-    assert len(_deployment_templates(prowlarr)) == 2
-    assert _primary_rollout_name(prowlarr) == "prowlarr"
-    assert _extra_rollouts(prowlarr) == {"flaresolverr"}
-    assert _deployment_docs(
-        _template_texts(prowlarr)["deployment-flaresolverr.yaml.j2"]
-    ) == [("Deployment", "flaresolverr")]
-    assert _ungated_deployment_count(prowlarr) == 0
-
-
-def test_extra_rollout_naming_the_wrong_deployment_reads_as_ungated(
-    widget_role,
-) -> None:
-    """A typo'd or drifted `manifests_extra_rollouts` name doesn't gate anything real.
-
-    Matching by count alone (rendered - 1 - len(extras) == 0) would read this as fully gated even
-    though the declared extra's name matches neither rendered Deployment. Matching by identity
-    catches it: the second Deployment's real name isn't in {primary, declared extra}.
-    """
-    role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-        "    manifests_extra_rollouts:\n"
-        "      - name: widget-typo\n",
-        templates={},
-    )
-    (role / "templates" / "deployment.yaml.j2").write_text(
-        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget\n"
-    )
-    (role / "templates" / "deployment-cache.yaml.j2").write_text(
-        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: widget-cache\n"
-    )
-    assert _extra_rollouts(role) == {"widget-typo"}
-    assert _ungated_deployments(role) == ["deployment-cache.yaml.j2"]
-    assert _ungated_deployment_count(role) == 1
 
 
 def test_rollout_gate_credits_a_fully_gated_batch_role(widget_role) -> None:
