@@ -344,6 +344,10 @@ def get_status(url, config_body=None, timeout=DEFAULT_TIMEOUT, resolve=None):
     if out.returncode != 0:
         return 0, out.stderr.strip()
     body, _, code = out.stdout.rpartition("\n")
+    if code and not code.isdigit():
+        # `-w` always appends digits, so output without them is not curl's (a stub's or a
+        # wrapper's). Read it as a failed transfer rather than raise out of the caller.
+        return 0, f"curl output ended in {code[:80]!r}, not an HTTP status"
     return int(code or 0), body
 
 
