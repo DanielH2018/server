@@ -12,13 +12,14 @@ import json
 
 from _findings_fakes import Fakes, build_tools, facts, make_issue
 
+from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings import main
 from dev.findings_lib.issue_model import claim_comment
 from lib.worktrees import Worktree
 
 MINE = "worktree-mine"
 ORCH = "worktree-fanout-orchestrator-backlog"
-RUNNING = {1132: "fan-out batch 1132 is still running (u on daniel-box)"}
+RUNNING = {1132: BatchHold("fan-out batch 1132 is still running", ORCH)}
 
 # A session that can claim: its lock reason does not parse, which `session_is_alive` reads live.
 MINE_TREE = Worktree(
@@ -96,7 +97,7 @@ def test_claims_names_the_running_batch_as_the_reason(capsys):
     tools, _ = _tools(RUNNING)
     assert main(["claims"], tools) == 0
     out = capsys.readouterr().out
-    assert "live " in out and RUNNING[1132] in out
+    assert "live " in out and RUNNING[1132].reason in out
 
 
 def test_a_live_worktree_claim_never_reads_the_batches():
@@ -117,8 +118,22 @@ def test_claim_reads_the_batches_once_for_a_whole_batch_of_stale_claims(capsys):
             issues=issues,
             view={i["number"]: i for i in issues},
             worktree_facts=DEAD_ORCH_FACTS,
-            batch_holds={1: "running", 2: "running"},
+            batch_holds={n: BatchHold("running", ORCH) for n in (1, 2)},
         )
     )
     assert main(["claim", "1", "2", "--worktree", MINE], tools) == 3
     assert calls.batch_holds == [(None, [1, 2])]
+
+
+def test_claims_names_a_holder_the_batch_did_not_claim_under(capsys):
+    # A stale claim by another worktree on an issue a running batch works stays held, but the
+    # row must not read as if the batch held it (#4688).
+    issue = make_issue(1132, comments=[claim_comment("worktree-gone", None, "t")])
+    tools, _ = build_tools(
+        Fakes(issues=[issue], worktree_facts=DEAD_ORCH_FACTS, batch_holds=RUNNING)
+    )
+    assert main(["claims"], tools) == 0
+    out = capsys.readouterr().out
+    assert "live " in out
+    assert f"claimed it as `{ORCH}`" in out
+    assert "this claim by `worktree-gone`" in out
