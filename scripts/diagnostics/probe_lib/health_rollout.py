@@ -66,7 +66,8 @@ def format_k8s_health(deploy, pods, service, now):
     could not check them would be a gate with holes exactly where the node-level agents are.
 
     exit_code is 0 only when the rollout is COMPLETE (the observed generation has caught up and
-    every replica is updated, ready and available) AND no container restarted within
+    every replica is updated, ready and available, and no old-ReplicaSet pod is still
+    running) AND no container restarted within
     RECENT_RESTART_SECONDS. Both halves are load-bearing: readiness alone flips Available before
     a bad liveness probe starts killing the container, which produces a green deploy and a
     crashlooping workload.
@@ -85,8 +86,20 @@ def format_k8s_health(deploy, pods, service, now):
     # "the controller has not looked at my change yet" — the old ReplicaSet satisfies every
     # replica count in the meantime.
     stale = status.get("observedGeneration", 0) < meta.get("generation", 0)
+    # Under RollingUpdate with maxSurge >= 1, a surviving old pod can supply every ready and
+    # available replica while the new pod supplies `updated`, so the three counts all equal
+    # `desired` mid-rollout (#4563). Only `status.replicas` counts old and new pods together;
+    # `kubectl rollout status` refuses on the same comparison. Kubernetes omits a zero count, so
+    # an absent field reads as 0. A DaemonSet's counts are per node and carry no such field.
+    old_pods = 0
+    if deploy.get("kind") != "DaemonSet":
+        old_pods = max(status.get("replicas", 0) - updated, 0)
     rolled_out = (
-        not stale and updated == desired and ready == desired and available == desired
+        not stale
+        and updated == desired
+        and ready == desired
+        and available == desired
+        and not old_pods
     )
 
     restarts, recent = 0, []
@@ -116,6 +129,8 @@ def format_k8s_health(deploy, pods, service, now):
         line += " — spec changed, rollout not observed yet"
     elif not rolled_out:
         line += " — rollout incomplete"
+        if old_pods:
+            line += f" ({old_pods} old pod(s) still running)"
     if recent:
         line += f" — RECENT RESTART: {'; '.join(recent)}"
     return (line, 0 if rolled_out and not recent else 1)

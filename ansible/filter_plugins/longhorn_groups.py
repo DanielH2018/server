@@ -28,7 +28,6 @@ filter through `_as_filter`, which re-raises the `ValueError` as
 No Ansible import at load time, so the tests call the same functions the playbook runs.
 """
 
-import functools
 import sys as _sys
 from pathlib import Path as _Path
 
@@ -41,6 +40,12 @@ for _files in (_ROLES / "common" / "files", _ROLES / "k3s" / "files"):
         _sys.path.insert(0, str(_files))
 
 from longhorn_lib import longhorn_backups  # noqa: E402
+
+# `filter_errors` sits beside this plugin, which Ansible loads by file path (#4527).
+if str(_Path(__file__).resolve().parent) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+
+from filter_errors import _as_filter  # noqa: E402
 
 _SHARDS = range(longhorn_backups.WEEKLY_SHARDS)
 KNOWN_GROUPS = frozenset(
@@ -145,27 +150,6 @@ def longhorn_backup_name(key: str) -> str:
             f"{key!r} is not a Longhorn backup name; known: {', '.join(sorted(NAMES))}"
         )
     return NAMES[key]
-
-
-def _as_filter(func):
-    """`func` as Ansible calls it: a ValueError re-raised as `AnsibleFilterError`.
-
-    The message opens with `<func's name>: `, which is the name the filter registers under.
-    The prefix names the filter that refused, since a render failure otherwise reaches the
-    operator as a bare message under the task's template path (#4480). The import is deferred
-    so the module still loads where Ansible is not installed.
-    """
-
-    @functools.wraps(func)
-    def wrapped(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except ValueError as exc:
-            from ansible.errors import AnsibleFilterError
-
-            raise AnsibleFilterError(f"{func.__name__}: {exc}") from exc
-
-    return wrapped
 
 
 class FilterModule:
