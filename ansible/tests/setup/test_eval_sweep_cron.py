@@ -141,6 +141,10 @@ def _run_script(tmp_path, env_file_text: str | None):
     `sys_user` points at a home that does not exist, so a run that gets past the key gate stops
     at `cd "$REPO"` before any git, gh or paid API call. The push token renders empty so the
     exit hook never pushes to the live Kuma.
+
+    `anthropic_api_key` renders to a sentinel and the caller's environment carries another key,
+    so the env file is the ONLY place a key can come from. A script that rendered the secret
+    into its own body, or kept an inherited key, gets past the gate with no env file present.
     """
     env_file = tmp_path / "eval-run.env"
     if env_file_text is not None:
@@ -153,6 +157,7 @@ def _run_script(tmp_path, env_file_text: str | None):
             "eval-run.sh.j2",
             overrides={
                 "initial_setup_eval_run_env_file": str(env_file),
+                "anthropic_api_key": KEY_SENTINEL,
                 "homelab_eval_push_token": "",
                 "sys_user": "eval-run-test-no-such-user",
             },
@@ -161,7 +166,11 @@ def _run_script(tmp_path, env_file_text: str | None):
     return run(
         ["bash", str(script)],
         cwd=tmp_path,
-        env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)},
+        env={
+            "PATH": "/usr/bin:/bin",
+            "HOME": str(tmp_path),
+            "ANTHROPIC_API_KEY": "inherited-from-the-caller",
+        },
         stub_bin=fake_bin(tmp_path / "bin", logger='printf "%s\\n" "$*"\n'),
     )
 
