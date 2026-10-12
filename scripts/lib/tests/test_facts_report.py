@@ -19,7 +19,8 @@ _DOC = "## Gate\n`t/m.py:LIMIT` bounds {what}.\n"
 def _verified_commit(repo, message, units=("CLAUDE.md#Gate",), days_ago=0, **files):
     """One commit holding ``files`` and the lock re-verified against them, as `verify` leaves it.
 
-    ``days_ago`` backdates the commit, so a test can place it before the report's window.
+    The commit is dated ``days_ago`` days before ``_NOW``, so a test can place it before the
+    report's window.
     """
     for rel, text in files.items():
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -27,7 +28,7 @@ def _verified_commit(repo, message, units=("CLAUDE.md#Gate",), days_ago=0, **fil
     git(repo, "add", "-A")
     verify_units(repo, repo / LOCK_REL, list(units), message)
     git(repo, "add", "-A")
-    stamp = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
+    stamp = (_NOW - timedelta(days=days_ago)).isoformat()
     env = scrubbed_env(GIT_AUTHOR_DATE=stamp, GIT_COMMITTER_DATE=stamp)
     git(repo, "commit", "-q", "-m", message, "--no-gpg-sign", env=env)
 
@@ -47,7 +48,7 @@ def test_a_move_with_a_prose_edit_is_actual_and_one_without_is_potential(tmp_pat
     # A refactor that moves the atom and leaves the prose alone.
     _verified_commit(repo, "refactor", **{"t/m.py": "LIMIT = 1 + 1\n"})
 
-    counts = precision(repo, 30).forms
+    counts = precision(repo, 30, now=_NOW).forms
     assert (counts["symbol"].potential, counts["symbol"].actual) == (2, 1)
     assert all(c.potential == 0 for f, c in counts.items() if f != "symbol")
 
@@ -119,7 +120,7 @@ def test_session_bytes_split_start_from_total_and_skip_unsized_and_subagent_rows
 
 
 def _replay(repo, notice=None):
-    prec = precision(repo, 30)
+    prec = precision(repo, 30, now=_NOW)
     return notice_replay(repo, prec, notice) if notice else notice_replay(repo, prec)
 
 
@@ -279,7 +280,7 @@ def test_a_split_whose_first_half_is_the_lock_commit_before_the_window_reads_spl
     edge = git_out(repo, "rev-parse", "HEAD")
     _verified_commit(repo, "B")
 
-    prec = precision(repo, 30)
+    prec = precision(repo, 30, now=_NOW)
     replay = notice_replay(repo, prec)
 
     assert (prec.start, prec.lock_commits) == (edge, 1)
@@ -307,7 +308,7 @@ def test_a_row_whose_python_changed_is_named_and_not_counted(tmp_path):
     write_lock(repo / LOCK_REL, units)
     bump = commit(repo, "bump")
 
-    prec = precision(repo, 30)
+    prec = precision(repo, 30, now=_NOW)
 
     assert prec.python_changed == [(bump, "CLAUDE.md#Gate")]
     assert prec.moves == []
