@@ -61,8 +61,8 @@ Usage::
 
 Exit codes:
   0   deployed and settled, or there was nothing to deploy
-  1   CI red, blocked by a change needing a hand, deploy failed, the health gate failed, or
-      the PR was closed unmerged, conflicts with master, or its own CI is red
+  1   CI red or unproven, blocked by a change needing a hand, deploy failed, the health gate
+      failed, or the PR was closed unmerged, conflicts with master, or its own CI is red
   64  bad arguments
   75  gave up waiting -- the merge budget or CI budget elapsed, the deploy lock stayed busy,
       the tick was skipped for lock contention every time, master merged faster than one
@@ -70,7 +70,7 @@ Exit codes:
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 blocked | needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
-ci-red | ci-timeout | lock-busy | tip-outran-retries | refused | handoff-timeout.
+ci-red | ci-timeout | ci-unproven | lock-busy | tip-outran-retries | refused | handoff-timeout.
 
 `blocked` is not a failure of this PR -- something else in the incoming range needs an
 operator, and nothing was deployed. `needs-manual-apply` means this PR reaches something
@@ -85,6 +85,8 @@ changes requested, a read or a fetch that failed. The `land:` line on stderr, re
 verdict's detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
 still running (`LAND_HANDOFF_UNIT` below); a re-run waits on it again. Bad arguments (64) print
 no verdict.
+`ci-unproven` means GitHub never ran CI for the merge commit and no later master commit can
+stand in for it, so a re-run alone never converges; the detail names the tip and the way out.
 `merge-conflict` and `pr-ci-red` are the merge wait ending early on the two states an armed
 auto-merge never recovers from. `pr-ci-red` is the PR's CI before the merge; `ci-red` is
 master's after it.

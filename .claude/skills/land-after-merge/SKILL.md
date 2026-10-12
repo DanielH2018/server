@@ -97,7 +97,7 @@ pre-squash commits, so the follow-up PR opens CONFLICTING and GitHub runs no che
 ## Reading the verdict
 
 The `VERDICT:` line is the last line of the log. `land.sh --help` lists the closed vocabulary;
-`land_lib/outcome.py:Verdict` is where it is defined. Six of them need a decision from you:
+`land_lib/outcome.py:Verdict` is where it is defined. Seven of them need a decision from you:
 
 | Verdict | What to do |
 |---|---|
@@ -106,6 +106,7 @@ The `VERDICT:` line is the last line of the log. `land.sh --help` lists the clos
 | `deferred` | Nothing is wrong; the next tick applies it. Re-run only if the line says this run stopped watching a tick mid-apply. |
 | `tip-outran-retries` | A resume point, not a fault in your change: master merged faster than one tick-and-deploy cycle. Re-run the same command. |
 | `refused` | The landing stopped before it deployed anything, and the detail says why: the landing policy, a closed PR, changes requested, a read that failed. Fix what it names, then re-run. |
+| `ci-unproven` | GitHub never ran CI for the merge commit, and no later master commit can stand in for it, so a re-run alone never converges. The detail names the tip and the way out. When no commit has run CI, dispatch it with `gh workflow run ci.yml --ref master` and re-run. When a red commit sits between the merge commit and a green one, deploy the tip by hand with the `deploy.sh --at <tip>` command it prints. |
 | `handoff-timeout` | The lander unit outlived land.sh's wait and may still be running. Re-run the same command; it waits on the unit again rather than starting a second landing. |
 
 `deploy-failed` has one variant that is **not** a resume point — `a playbook task failed AFTER

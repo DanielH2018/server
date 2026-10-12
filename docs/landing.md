@@ -191,9 +191,22 @@ finished, which is the rule the tick already deploys by (#4621). The log line is
 `<descendant>: CI green (GitHub never ran CI for <sha>; ...)`. A red nearest descendant ends
 the wait red; a later green commit is not taken past it, since it may hold the fix your merge
 commit lacks. The landing still deploys its own merge commit, whose tree no CI ran on by
-itself; the `DECIDED:` marker on `descendant_verdict` records why that is accepted. When no
-descendant has finished yet, the wait exits 75 and says so, and a re-run converges once a
-later master commit has a verdict.
+itself; the `DECIDED:` marker on `descendant_verdict` records why that is accepted. When a
+descendant's CI is still running, the wait exits 75 and says so, and a re-run converges once
+that commit has a verdict.
+
+**Two shapes end `ci-unproven` instead, because no re-run converges on them (#4641, #4649).**
+`await_ci.py` exits `CI_UNPROVEN` and its line names the master tip and the way out:
+
+- No commit from the merge commit to the tip has a CI run, which includes the merge commit
+  being the tip. To run CI on the tip, run `gh workflow run ci.yml --ref master`, then re-run
+  land.sh. The fallback is to deploy the tip by hand without CI, with
+  `./scripts/deploy.sh --tags <service> --at <tip>`.
+- The nearest descendant is red and a later one is green. While a later one's CI is still
+  running, the wait keeps polling for it rather than ending red. Neither verdict changes, and the
+  tick has already fast-forwarded past your merge commit. To deploy your change, run the
+  `deploy.sh --at <tip>` command the line prints. It deploys the tip, because `deploy.sh`
+  refuses any tree behind `origin/master` with `DEPLOY_STALE`.
 
 **It waits on your merge commit rather than on the tip**, because the tick fast-forwards to the
 newest GREEN commit in its range rather than only to a green tip. A later merge whose CI is
