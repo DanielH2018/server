@@ -150,6 +150,25 @@ def parse_ts(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def display_title(bookmark: dict) -> str:
+    """Return the title Karakeep's UI shows (`getBookmarkTitle` in `bookmarkUtils.ts`).
+
+    The top-level `title` is only a title a person typed. A link's crawled title is
+    `content.title`, falling back to its URL, and an uploaded asset's is its file name.
+    """
+    if bookmark.get("title"):
+        return bookmark["title"]
+    content = bookmark.get("content") or {}
+    match content.get("type"):
+        case "link":
+            return content.get("title") or content.get("url") or ""
+        case "asset":
+            return content.get("fileName") or ""
+        case "text":
+            return (content.get("text") or "").strip()
+    return ""
+
+
 def manual_tags(bookmark: dict, auto_tags: frozenset[str]) -> list[str]:
     return sorted(
         t["name"]
@@ -175,7 +194,7 @@ def plan(
     for b in bookmarks:
         age = now - parse_ts(b["modifiedAt"])
         age_days = age.days
-        title = (b.get("title") or "")[:80]
+        title = display_title(b)[:80]
         if age >= timedelta(days=delete_days):
             reasons = []
             if b["favourited"]:
