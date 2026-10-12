@@ -583,6 +583,21 @@ It also **denies** a content-printing read (`cat`, `head`, `grep` without `-o`/`
 deployed host script that renders a credential inline;
 `scripts/secrets_mgmt/secret_bearing_host_paths.py` derives that set from the tree.
 
+It **denies** a write from a read-only agent: one whose frontmatter in `.claude/agents/` sets
+`read_only: true`, matched against the payload's `agent_type`. The arm denies a redirect into a
+file outside `/dev/`, `/tmp/`, `/var/tmp/` and `~/.cache/claude/`. It then judges every command
+the text runs against an allowlist. The allowlist is
+`.claude/hooks/hooklib/read_only_commands.py` for ordinary commands, and a read-only set of git
+and gh verbs such as `git log`, `git branch -a`, `gh pr view` and a `gh api` GET. A command the
+allowlist does not name is denied, so a read it lacks costs the agent one rephrased command. The
+arm reads past wrappers such as `timeout`, `xargs` and `uv run`. It judges the body of a `$( )`
+and an `ssh` remote command as commands of their own. The reviewer agents and the skeptic read
+text that any GitHub account can write, such as PR bodies and upstream release notes, so the
+arm narrows what their Bash can write (#4617). It is defense in depth, not a guarantee: five
+bypasses are known (#4680). Their descriptions therefore say they are report-only by
+instruction, and no longer claim to be read-only. The structural fix is an agent without Bash, or one running under a
+user that cannot write the repo.
+
 A Bash write that leaves an isolated session's worktree is **denied** by the dotfiles
 `claude_guard` package, not by this hook (`checks/worktree_escape.py`, moved there by #2818).
 `isolation-guard.sh` covers `Edit|Write` only, so `cd /home/ubuntu/server && python3 - <<'EOF'`

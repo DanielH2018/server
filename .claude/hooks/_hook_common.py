@@ -90,6 +90,25 @@ def segments(command: str, parse: Callable[[str], Any] | None = _deployed_parse)
     return list(parsed.segments)
 
 
+def command_substitutions(
+    command: str, parse: Callable[[str], Any] | None = _deployed_parse
+) -> list[str]:
+    """The body of every `$( )`, backtick, `<( )` and `>( )` in `command`, in order.
+
+    `split_stages` reads only the top level, so a command inside a substitution is not one
+    of its stages.
+
+    Raises:
+        Unsplittable: see `segments`.
+    """
+    if parse is None:
+        raise Unsplittable("segmenter-missing", _PARSE_UNAVAILABLE)
+    parsed = parse(command)
+    if not parsed.ok:
+        raise Unsplittable(parsed.status)
+    return list(parsed.substitutions)
+
+
 def split_stages(
     command: str, parse: Callable[[str], Any] | None = _deployed_parse
 ) -> list[list[str]]:
@@ -160,6 +179,21 @@ def invokes(stage: list[str], prefix: tuple[str, ...]) -> bool:
     if not words:
         return True
     return any(rest[i : i + len(words)] == words for i in range(len(rest)))
+
+
+def git_invocation(argv: list[str]):
+    """`claude_guard.gitargv.invocation(argv)`: the git this argv runs, as git reads it.
+
+    Returns None when `argv` runs no git. Imported here, beside the segmenter, so a hook
+    reaches the deployed package through the one module that bootstraps it.
+
+    Raises:
+        ImportError: the `claude_guard` package is not deployed on this host.
+    """
+    import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
+    from claude_guard.gitargv import invocation
+
+    return invocation(argv)
 
 
 def short_flags(stage: list[str]) -> set[str]:
