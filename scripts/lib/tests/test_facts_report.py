@@ -5,26 +5,31 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from lib.facts.lock import LOCK_REL, verify_units
+from lib.facts.lock import LOCK_REL, read_lock, verify_units, write_lock
 from lib.facts.notice import Notice
 from lib.facts.replay import notice_replay, render_replay
 from lib.facts.report import doc_reads, precision, ranked_backlog, session_bytes
-from lib.git_testing import commit, git, init_repo
+from lib.git_testing import commit, git, git_out, init_repo, scrubbed_env
 
 # A fixed epoch: the log rows are dated against it, never against the live clock.
 _NOW = datetime(2026, 10, 10, 12, tzinfo=timezone.utc)
 _DOC = "## Gate\n`t/m.py:LIMIT` bounds {what}.\n"
 
 
-def _verified_commit(repo, message, units=("CLAUDE.md#Gate",), **files):
-    """One commit holding ``files`` and the lock re-verified against them, as `verify` leaves it."""
+def _verified_commit(repo, message, units=("CLAUDE.md#Gate",), days_ago=0, **files):
+    """One commit holding ``files`` and the lock re-verified against them, as `verify` leaves it.
+
+    ``days_ago`` backdates the commit, so a test can place it before the report's window.
+    """
     for rel, text in files.items():
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text(text)
     git(repo, "add", "-A")
     verify_units(repo, repo / LOCK_REL, list(units), message)
     git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", message, "--no-gpg-sign")
+    stamp = (datetime.now(timezone.utc) - timedelta(days=days_ago)).isoformat()
+    env = scrubbed_env(GIT_AUTHOR_DATE=stamp, GIT_COMMITTER_DATE=stamp)
+    git(repo, "commit", "-q", "-m", message, "--no-gpg-sign", env=env)
 
 
 def test_a_move_with_a_prose_edit_is_actual_and_one_without_is_potential(tmp_path):
@@ -247,6 +252,68 @@ def test_a_move_whose_lock_update_lands_a_commit_later_reads_split(
         if m["unit"] == "CLAUDE.md#Gate"
     ]
     assert gate == ["split"]
+
+
+def test_a_split_whose_first_half_is_the_lock_commit_before_the_window_reads_split(
+    tmp_path,
+):
+    repo = init_repo(tmp_path)
+    doc = _DOC.format(what="it") + "\n## Other\n`t/o.py:OTHER` too.\n"
+    commit(repo, "seed", README="x\n")
+    _verified_commit(
+        repo,
+        "base",
+        units=("CLAUDE.md#Gate", "CLAUDE.md#Other"),
+        days_ago=40,
+        **{"t/m.py": "LIMIT = 1\n", "t/o.py": "OTHER = 1\n", "CLAUDE.md": doc},
+    )
+    # A moves LIMIT 35 days ago and records only Other, so it is the last lock commit before
+    # the 30-day window; B records LIMIT inside the window.
+    _verified_commit(
+        repo,
+        "A",
+        units=("CLAUDE.md#Other",),
+        days_ago=35,
+        **{"t/m.py": "LIMIT = 2\n", "t/o.py": "OTHER = 2\n"},
+    )
+    edge = git_out(repo, "rev-parse", "HEAD")
+    _verified_commit(repo, "B")
+
+    prec = precision(repo, 30)
+    replay = notice_replay(repo, prec)
+
+    assert (prec.start, prec.lock_commits) == (edge, 1)
+    assert [(m["unit"], m["class"]) for m in replay["content_lock_moves"]] == [
+        ("CLAUDE.md#Gate", "split")
+    ]
+
+
+def test_a_row_whose_python_changed_is_named_and_not_counted(tmp_path):
+    repo = init_repo(tmp_path)
+    doc = _DOC.format(what="it") + "\n## Other\n`t/o.py:OTHER` too.\n"
+    both = ("CLAUDE.md#Gate", "CLAUDE.md#Other")
+    commit(repo, "seed", README="x\n")
+    _verified_commit(
+        repo,
+        "base",
+        units=both,
+        **{"t/m.py": "LIMIT = 1\n", "t/o.py": "OTHER = 1\n", "CLAUDE.md": doc},
+    )
+    (repo / "t/m.py").write_text("LIMIT = 2\n")
+    verify_units(repo, repo / LOCK_REL, list(both), "bump")
+    # Gate's hash moves under a new interpreter; Other is re-recorded unchanged.
+    units = read_lock(repo / LOCK_REL)
+    units["CLAUDE.md#Gate"]["python"] = "0.0"
+    write_lock(repo / LOCK_REL, units)
+    bump = commit(repo, "bump")
+
+    prec = precision(repo, 30)
+
+    assert prec.python_changed == [(bump, "CLAUDE.md#Gate")]
+    assert prec.moves == []
+    assert notice_replay(repo, prec)["python_changed"] == [
+        {"commit": bump, "unit": "CLAUDE.md#Gate"}
+    ]
 
 
 def test_a_section_deleted_after_its_move_is_still_listed_at_the_move(tmp_path):
