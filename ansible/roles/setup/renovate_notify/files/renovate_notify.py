@@ -24,20 +24,26 @@ import os
 import subprocess
 import sys
 import time
+import urllib.parse
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from notify_logic import (
+    AUTOCLOSED_LOOKBACK_DAYS,
     PR,
     actionable,
+    autoclosed_fingerprint,
     ci_rollup,
     dashboard_body,
     dashboard_headers_unrecognized,
     dashboard_stale,
     find_dashboard,
+    find_autoclosed,
     find_dashboard_problems,
     fingerprint,
     parse_automerge,
     problems_fingerprint,
+    render_autoclosed,
     render_digest,
     render_problems,
     should_notify,
@@ -161,6 +167,27 @@ def dead_paths(repo: str, n: int, pr: dict) -> tuple[str, ...]:
         # The file still exists on base: an ordinary conflict, resolvable by rebase.
         return ()
     return tuple(gone)
+
+
+def autoclosed_candidates(repo: str, now: datetime) -> list[dict]:
+    """Full pull payloads for Renovate PRs autoclosed inside the lookback window.
+
+    One search query bounded by close date, then one detail call per hit for `head.ref`, which
+    search results do not carry. A page of the closed-pulls list does not cover the window:
+    this repo merges about 68 PRs a day, so the 100 most recently updated closed PRs span
+    about a day and a half, and an autoclose would drop out of the report while its update
+    still waits. `find_autoclosed` re-applies every condition, so the query only narrows.
+    """
+    since = (now - timedelta(days=AUTOCLOSED_LOOKBACK_DAYS)).date().isoformat()
+    query = (
+        "repo:%s is:pr is:closed is:unmerged author:app/renovate in:title autoclosed "
+        "closed:>=%s" % (repo, since)
+    )
+    hits = get("search/issues?q=%s&per_page=100" % urllib.parse.quote(query))
+    return [
+        get("repos/%s/pulls/%d" % (repo, hit["number"]))
+        for hit in hits.get("items", [])
+    ]
 
 
 def discord(webhook: str, content: str) -> bool:
@@ -292,6 +319,15 @@ def main() -> int:
     # A tag re-pushed faster than its own soak + grace resets the dwell above forever, so the
     # branch clock is the floor under it (#3076).
     churning = churning_pending(seen, pending, now)
+    # An autoclosed PR is no longer open, so the digest drops it, and its update sits on the
+    # dashboard as an ordinary awaiting row (#4630).
+    now_dt = datetime.fromtimestamp(now, timezone.utc)
+    autoclosed = find_autoclosed(
+        [p for p in autoclosed_candidates(repo, now_dt) if is_renovate(p)],
+        {(p.get("head") or {}).get("ref", "") for p in pulls},
+        body or "",
+        now=now_dt,
+    )
     cur_fp = (
         fingerprint(items)
         + ("|dashboard-stale" if stale else "")
@@ -299,6 +335,7 @@ def main() -> int:
         + ("|problems:" + problems_fingerprint(problems) if problems else "")
         + ("|pending:" + pending_fingerprint(stuck_pending) if stuck_pending else "")
         + ("|pending-churn:" + churn_fingerprint(churning) if churning else "")
+        + ("|autoclosed:" + autoclosed_fingerprint(autoclosed) if autoclosed else "")
         # Keyed on the date the clocks become usable, so the same loss pages once. The run
         # after this one rewrites the file, the component drops, and the fingerprint moves
         # again — so expect one follow-up digest (or CLEARED_MSG) the next day. That is the
@@ -309,7 +346,7 @@ def main() -> int:
     notify, kind = should_notify(prev_fp, cur_fp)
     log(
         "actionable=%d dashboard_stale=%s problems=%d pending=%d stuck_pending=%d "
-        "churning=%d unparseable=%s pending_reset=%s fp=%r prev=%r -> %s"
+        "churning=%d autoclosed=%d unparseable=%s pending_reset=%s fp=%r prev=%r -> %s"
         % (
             len(items),
             stale,
@@ -317,6 +354,7 @@ def main() -> int:
             len(pending),
             len(stuck_pending),
             len(churning),
+            len(autoclosed),
             unparseable,
             pending_reset,
             cur_fp,
@@ -331,6 +369,7 @@ def main() -> int:
             or problems
             or stuck_pending
             or churning
+            or autoclosed
             or unparseable
             or pending_reset
         ):
@@ -347,6 +386,8 @@ def main() -> int:
                 parts.append(render_pending(stuck_pending))
             if churning:
                 parts.append(render_churning(churning))
+            if autoclosed:
+                parts.append(render_autoclosed(autoclosed))
             content = "\n\n".join(parts)
             if items:
                 content += "\n\n" + render_digest(items)

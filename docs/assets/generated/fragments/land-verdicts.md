@@ -2,10 +2,10 @@
 | Exit | Name | Meaning |
 |---|---|---|
 | 0 | `LAND_SETTLED` | deployed and settled, or there was nothing to deploy. |
-| 1 | `LAND_FAILED` | CI red, blocked by a change needing a hand, the deploy failed, the health gate failed, or the PR was closed without merging, conflicts with master, or its own CI is red. |
+| 1 | `LAND_FAILED` | CI red or unproven, blocked by a change needing a hand, the deploy failed, the health gate failed, or the PR was closed without merging, conflicts with master, or its own CI is red. |
 | 64 | `LAND_BAD_ARGS` | the command line is wrong. |
 | 75 | `LAND_GAVE_UP` | gave up waiting — a budget elapsed, the deploy lock stayed busy, the tick was skipped for lock contention every time, master merged faster than one tick-and-deploy cycle, or the tick has not yet crossed origin. |
 
-The `VERDICT:` line ends with one of 16 words: `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`, `needs-manual-apply`, `deferred`, `merge-conflict`, `pr-ci-red`, `merge-timeout`, `ci-red`, `ci-timeout`, `lock-busy`, `tip-outran-retries`, `refused`, `handoff-timeout`.
+The `VERDICT:` line ends with one of 17 words: `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`, `needs-manual-apply`, `deferred`, `merge-conflict`, `pr-ci-red`, `merge-timeout`, `ci-red`, `ci-timeout`, `ci-unproven`, `lock-busy`, `tip-outran-retries`, `refused`, `handoff-timeout`.
 
 A `deploy-failed` verdict carries one of 14 causes in the landing annotation: `tick-held`, `tick-failed`, `host-lookup`, `tag-miss`, `playbook-failed`, `deploy-exit-1`, `deploy-exit-3`, `deploy-exit-4`, `deploy-exit-64`, `deploy-exit-76`, `deploy-exit-78`, `deploy-exit-79`, `deploy-exit-other`, `invalid-cause`.

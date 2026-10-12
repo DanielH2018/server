@@ -10,17 +10,21 @@ Three properties keep the single source single and correct:
 2. Each caller's message renders into ExecStart's single-quoted JSON as valid JSON. A quote in
    the message would break the payload, and curl would post a body Discord rejects.
 3. The webhook file is root 0600 under `no_log`, and the task file carries no tags.
+4. A caller that sets `alert_unit_quiet_minutes` pages once per window, not once per exit of
+   its parent's restart loop (#4676), and a caller that does not renders no gate.
 
 Run: uv run pytest ansible/tests/setup/test_alert_unit.py
 """
 
 import json
+import os
 import re
 from pathlib import Path
 
 import jinja2
 from lib.ansible_jinja_env import make_ansible_env
-from _helpers import SETUP_ROLES, leaf_tasks, load_tasks
+from lib.proc_testing import run
+from _helpers import SETUP_ROLES, leaf_tasks, load_tasks, load_yaml
 from _role_census import task_files_by_role
 
 COMMON = SETUP_ROLES / "common"
@@ -127,16 +131,29 @@ def test_a_role_local_alert_template_is_flagged() -> None:
     assert local_alert_templates([UNIT, stray]) == [stray]
 
 
+# What a caller's vars may reference, so each one renders as the play would render it.
+CALLER_CONTEXT = {
+    "inventory_hostname": "daniel-box",
+    "claude_code_memory_sync_target": "daniel-server",
+    "claude_code_agent_user": "claude",
+    **load_yaml(SETUP_ROLES / "claude_code" / "defaults" / "main.yml"),
+}
+
+
+def _caller_vars(variables: dict) -> dict:
+    """A caller's import vars with the Jinja in each string value resolved."""
+    return {
+        k: _render(v, **CALLER_CONTEXT) if isinstance(v, str) else v
+        for k, v in variables.items()
+    }
+
+
 def test_each_message_renders_a_valid_json_payload() -> None:
     template = UNIT.read_text()
     for name, variables in _wired_alerts().items():
-        message = _render(
-            variables["alert_unit_message"],
-            inventory_hostname="daniel-box",
-            claude_code_memory_sync_target="daniel-server",
-            claude_code_agent_user="claude",
-        )
-        unit = _render(template, **{**variables, "alert_unit_message": message})
+        resolved = _caller_vars(variables)
+        message = resolved["alert_unit_message"]
+        unit = _render(template, **resolved)
         assert "{{" not in message, f"{name}: curl's --expand-data would expand {{{{"
         payload = expanded_payload(unit, "2026-10-08 11:04 UTC")
         assert payload is not None, f"{name}: no single-quoted payload in ExecStart"
@@ -261,6 +278,98 @@ def test_a_stamp_a_retry_drops_or_overwrites_is_flagged() -> None:
     assert not records_the_first_failure_time(
         unit.replace("test -s %t/widget-alert/failed-at || ", ""), "widget"
     )
+
+
+def quiet_gate(unit: str, name: str) -> str | None:
+    """The ExecCondition shell command as the shell runs it, or None when the gate is broken.
+
+    The gate must read a stamp in the StateDirectory, because systemd removes the
+    RuntimeDirectory after each delivery, and only ExecStartPost may write it, so an attempt
+    that failed leaves the page eligible.
+    """
+    settings = service_settings(unit)
+    stamp = f"%S/{name}-alert/delivered"
+    condition = settings.get("ExecCondition", "")
+    if not (
+        settings.get("StateDirectory") == f"{name}-alert"
+        and f"ExecStartPost=/usr/bin/touch {stamp}\n" in unit
+        and stamp in condition
+        and stamp not in settings.get("ExecStartPre", "")
+    ):
+        return None
+    found = re.fullmatch(r"/bin/sh -c '(.*)'", condition)
+    return found.group(1).replace("$$", "$") if found else None
+
+
+def gate_exit(command: str, state_dir: Path) -> int:
+    """Run the gate with `%S` pointed at `state_dir`; 0 pages, 1-254 skips."""
+    return run(["/bin/sh", "-c", command.replace("%S", str(state_dir))]).returncode
+
+
+def _quiet_unit(minutes: int | None) -> str:
+    extra = {} if minutes is None else {"alert_unit_quiet_minutes": minutes}
+    return _render(
+        UNIT.read_text(),
+        alert_unit_name="widget",
+        alert_unit_description="Widget",
+        alert_unit_message="widget failed.",
+        alert_unit_env_dir="/etc/widget",
+        **extra,
+    )
+
+
+def test_a_delivered_page_silences_the_alert_for_the_quiet_period(
+    tmp_path: Path,
+) -> None:
+    # A parent with Restart=always fires OnFailure= on every exit of its restart loop: 1,540
+    # to 1,686 claude-rc alert runs a day from 2026-10-05 to 2026-10-08 (#4676).
+    command = quiet_gate(_quiet_unit(360), "widget")
+    assert command is not None, "the quiet-period gate did not render"
+    stamp = tmp_path / "widget-alert" / "delivered"
+    assert gate_exit(command, tmp_path) == 0, (
+        "no page yet, so the first one must go out"
+    )
+    stamp.parent.mkdir()
+    stamp.touch()
+    assert gate_exit(command, tmp_path) == 1, "a page inside the window must be skipped"
+    # A fixed instant long before any run, so the test reads no clock of its own.
+    os.utime(stamp, (1_759_276_800, 1_759_276_800))  # 2025-10-01 00:00 UTC
+    assert gate_exit(command, tmp_path) == 0, "a page after the window must go out"
+
+
+def test_a_gate_that_stamps_attempts_or_loses_its_stamp_is_flagged() -> None:
+    unit = _quiet_unit(360)
+    assert quiet_gate(unit, "widget") is not None
+    assert (
+        quiet_gate(unit.replace("StateDirectory=widget-alert\n", ""), "widget") is None
+    )
+    assert (
+        quiet_gate(
+            unit.replace("ExecStartPost=/usr/bin/touch", "ExecStartPre=/usr/bin/touch"),
+            "widget",
+        )
+        is None
+    )
+
+
+def test_only_a_positive_quiet_period_renders_the_gate() -> None:
+    # The variable is the switch: the five callers that leave it unset keep a page per
+    # failure, and the one that sets it gets the gate.
+    for minutes in (None, 0):
+        unit = _quiet_unit(minutes)
+        assert quiet_gate(unit, "widget") is None, f"{minutes!r} rendered a gate"
+        assert "ExecCondition" not in service_settings(unit)
+    assert quiet_gate(_quiet_unit(1), "widget") is not None, "1 rendered no gate"
+
+
+def test_the_claude_rc_alert_pages_once_per_quiet_period() -> None:
+    # claude-rc.service is the Restart=always parent the gate exists for.
+    resolved = _caller_vars(_wired_alerts()["claude-rc"])
+    minutes = int(resolved.get("alert_unit_quiet_minutes", 0))
+    assert minutes > 0, "the claude-rc alert has no quiet period"
+    unit = _render(UNIT.read_text(), **resolved)
+    assert quiet_gate(unit, "claude-rc") is not None
+    assert f"-mmin -{minutes} " in unit
 
 
 def test_every_notified_handler_exists_in_the_calling_role() -> None:

@@ -33,6 +33,9 @@
 #   alert_unit_notify       optional list of the caller's own handler names to notify beside
 #                           `Reload systemd`, such as a role whose every task kicks a run-once
 #                           handler; defaults to none
+#   alert_unit_quiet_minutes optional: after a delivered page, skip the alert for this many
+#                           minutes, for a parent whose Restart= loop fires OnFailure= on every
+#                           exit (#4676). Unset or 0 renders no gate and pages every failure
 
 - name: Write the alert webhook where only systemd reads it, for {{ alert_unit_name }}
   # `src` names the owning role outright, as kuma_check_timer.yml does.

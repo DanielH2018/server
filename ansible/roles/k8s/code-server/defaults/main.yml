@@ -98,6 +98,26 @@ code_server_k8s_extensions:
     version: 2026.72.0
     url: https://open-vsx.org/api/astral-sh/ty/linux-x64/2026.72.0/file/astral-sh.ty-2026.72.0@linux-x64.vsix
     sha256: b2051aa6f40304960685c5b7e4895e40869cc0d96d23691ccfd45e28c6fc3f1c
+  # Bundles its own rust-analyzer server; resolves `std` from the rust-src the Dockerfile installs.
+  - name: rust-lang.rust-analyzer
+    version: 0.4.3080
+    url: https://open-vsx.org/api/rust-lang/rust-analyzer/linux-x64/0.4.3080/file/rust-lang.rust-analyzer-0.4.3080@linux-x64.vsix
+    sha256: 07aa97e77b9668ee967ebab39a00adb1dde85127e501ca8da2648923eaab7bcd
+  # Open VSX — universal. TOML language server for Cargo.toml and friends.
+  - name: tamasfe.even-better-toml
+    version: 0.21.2
+    url: https://open-vsx.org/api/tamasfe/even-better-toml/0.21.2/file/tamasfe.even-better-toml-0.21.2.vsix
+    sha256: f3dc44f1c551edef397a79f0f8c5db4066c6a547e210b5c3cec4400bf173b008
+  # GitHub release, NOT Open VSX. Open VSX carries only CodeLLDB's universal VSIX, a bootstrap
+  # that downloads the platform package (debug adapter plus lldb) from GitHub the first time it
+  # activates: an unpinned fetch at runtime, into the config volume. The release's
+  # codelldb-linux-x64.vsix is that platform package, complete. GitHub lists its sha256 as the
+  # asset digest: `gh release view v<version> -R vadimcn/codelldb --json assets`. Being a GitHub
+  # release, it is the one extension Renovate tracks (its own customManager in renovate.json).
+  - name: vadimcn.vscode-lldb
+    version: 1.12.3
+    url: https://github.com/vadimcn/codelldb/releases/download/v1.12.3/codelldb-linux-x64.vsix
+    sha256: 1cd7f386598022b51a5b93b9ffa23e812b23f519cfe1833384ec4bef4bfd1be1
   # MS Marketplace — proprietary, not published to Open VSX. Pylance is universal.
   - name: ms-python.vscode-pylance
     version: 2026.3.104
@@ -121,6 +141,19 @@ code_server_k8s_extensions:
 code_server_k8s_node_version: "24.21.0"
 code_server_k8s_node_url: "https://nodejs.org/dist/v{{ code_server_k8s_node_version }}/node-v{{ code_server_k8s_node_version }}-linux-x64.tar.xz"
 code_server_k8s_node_sha256: fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
+
+# Rust, installed from the official standalone installers rather than rustup (the Dockerfile's
+# step 3 says why). Two tarballs render from the one version: the toolchain, and rust-src, which
+# rust-analyzer needs to resolve `std`. Each sha256 is the content of the `.sha256` file
+# published beside its tarball under https://static.rust-lang.org/dist/. Renovate tracks the
+# version through the annotation below and files it in the `code-server build pins` group; the
+# two digests are the manual finish on that PR, `asset_pins.py --refresh rust-lang/rust`.
+# renovate: datasource=github-releases depName=rust-lang/rust
+code_server_k8s_rust_version: "1.99.0"
+code_server_k8s_rust_url: "https://static.rust-lang.org/dist/rust-{{ code_server_k8s_rust_version }}-x86_64-unknown-linux-gnu.tar.xz"
+code_server_k8s_rust_sha256: 891c6366d7100feda0bca4c03ce63f3c9ac827cbebbc283e7433061d42c6a376
+code_server_k8s_rust_src_url: "https://static.rust-lang.org/dist/rust-src-{{ code_server_k8s_rust_version }}.tar.xz"
+code_server_k8s_rust_src_sha256: 3f1f9b7ed48f4596fc87889b7b3c61747336a55c9c22db1ab0c697e0aadb77aa
 
 # The claims k8s/manifests renders and applies for this role, ahead of the pre-apply snapshot of
 # both (k8s_autodeploy_snapshot_pvcs above).

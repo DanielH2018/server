@@ -2133,10 +2133,11 @@ uv run python scripts/deploy_tools/narrow_setup.py k3s <merge-base> <PR head> \
 uv run python scripts/diagnostics/probe.py gitops-state
 # After D6.1's first tick, on daniel-box: the stamp fragment names no deleted module (0),
 # and manifest-prune-check still reports. M6's B1 made it a textfile check, and Kuma is
-# gone before D6 opens, so the observable is the series, not a tile.
+# gone before D6 opens, so the observable is the series, not a tile. M3's contract sets
+# the check label to the producer's syslog tag, which is manifest-prune-check.
 grep -c -e deploy_k8s -e deploy_broad_k8s -e deploy_release \
   /var/lib/homelab/setup-deployed-manifest.d/gitops-deploy   # 0
-uv run python scripts/diagnostics/probe.py metric 'homelab_check_success{check="manifest-prune"}'
+uv run python scripts/diagnostics/probe.py metric 'homelab_check_success{check="manifest-prune-check"}'
 # D6.1, before merge: the four landing tests. The red half of the first three runs on the
 # tree before the PR.
 uv run pytest scripts/deploy_tools/tests

@@ -81,3 +81,19 @@ ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors
 # for no gain.
 SyslogLevel=notice
 ExecStartPost=/bin/echo {{ alert_unit_name }} failure alert delivered
+{% if alert_unit_quiet_minutes | default(0) | int > 0 %}
+# A delivered page silences the next {{ alert_unit_quiet_minutes }} minutes of this alert. A parent
+# with Restart=always fires OnFailure= on every exit of its restart loop (systemd 255), so
+# without this a host that cannot start pages about every 10 seconds (#4676).
+# ExecStartPost stamps the time of a delivery, never of an attempt, so an undelivered page
+# stays eligible and its retries run as above. ExecCondition skips a start whose last
+# delivery is inside the window: an exit of 1 to 254 there leaves the unit inactive, not
+# failed, so Restart=on-failure does not re-run it. The check fails open, because a missing
+# stamp or a find error prints nothing and the page goes out. The stamp lives in a
+# StateDirectory because systemd removes the RuntimeDirectory after every delivery. A
+# second, separate failure of the parent inside the window is not paged either; that is the
+# cost of the bound.
+StateDirectory={{ alert_unit_name }}-alert
+ExecCondition=/bin/sh -c 'test -z "$$(find %S/{{ alert_unit_name }}-alert/delivered -mmin -{{ alert_unit_quiet_minutes | int }} 2>/dev/null)"'
+ExecStartPost=/usr/bin/touch %S/{{ alert_unit_name }}-alert/delivered
+{% endif %}

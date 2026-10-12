@@ -68,16 +68,17 @@ summary_count() {
   printf '%s\n' "$SUMMARY" | awk -v label="$1" '$0 ~ label ":[[:space:]]*[0-9]+[[:space:]]*$" { print $NF; exit }'
 }
 
-# DECIDED: a possible rootkit pushes DOWN, and a warning by itself pushes UP with the count in the
-# message. Every host warns every week. daniel-server's journal holds 17 weekly runs, and each one
-# reports /etc/.updated and /etc/.resolv.conf.systemd-resolved.bak as hidden files; the rotated
-# logs on daniel-box and daniel-pi report the same two, daniel-pi adds PermitRootLogin unset, and a
-# passwd or group warning appears in any week a system user was added (checked 2026-10-12). A DOWN
-# on warnings would be red every Wednesday, and a tile that is always red is a signal nobody
-# reads. The 12 rotated logs on the three hosts all read "Possible rootkits: 0" and
-# "Suspect files: 0", so a DOWN on a possible rootkit costs no noise. Suspect files (system
-# binaries whose properties changed without an apt event) push UP with their count. Whether a
-# warning or a suspect file should page is #4638.
+# DECIDED: any warning, any suspect file and any possible rootkit pushes DOWN (#4638). Measured on
+# 2026-10-12 over daniel-server's journal (18 weekly runs) and the rotated logs on all three hosts,
+# the warnings fell into three classes. Two hidden files under /etc appeared on every host in every
+# run, and daniel-pi reported PermitRootLogin unset in every run. Both classes are allowlisted in
+# /etc/rkhunter.conf.local (rkhunter.conf.local.j2), which leaves a healthy week with no warnings
+# at all. The third class is a passwd or group change: daniel-server had one in 5 of its 18 weeks,
+# and daniel-box and daniel-pi one week each, every one a package or the operator adding an
+# account. It pages, because a new account is what this scan exists to catch. rkhunter stores its
+# copy of passwd and group on every run, so running this script again by hand acknowledges the
+# change and clears the tile. Suspect files read 0 in every log kept, because APT_AUTOGEN refreshes
+# the baseline after package upgrades, so a suspect file is a binary that changed outside apt.
 if [[ -z "$SUMMARY" ]]; then
   STATUS=down
   # The first line that names an error, else the first line of output at all.
@@ -89,17 +90,24 @@ else
   SUSPECT=$(summary_count "Suspect files")
   WARNINGS=$(grep -c '^\[[0-9:]*\] Warning:' "$RKHUNTER_LOG")
   COUNTS="${WARNINGS} warnings, ${SUSPECT:-?} suspect files, ${ROOTKITS:-?} possible rootkits (exit ${RC}, run ${RUN_TIME})"
-  if [[ -z "$ROOTKITS" ]]; then
-    # The rootkit checks were skipped or the summary changed shape: the one count this tile
-    # pages on is unreadable, so the scan cannot be called clean.
+  FIRST_WARNING=$(grep -m1 '^\[[0-9:]*\] Warning:' "$RKHUNTER_LOG" | sed 's/^\[[0-9:]*\] Warning: //')
+  if [[ -z "$ROOTKITS" || -z "$SUSPECT" ]]; then
+    # A group of checks was skipped or the summary changed shape: a count this tile pages on is
+    # unreadable, so the scan cannot be called clean.
     STATUS=down
-    MSG="the summary in ${RKHUNTER_LOG} has no Possible rootkits count: ${COUNTS}"
+    MSG="the summary in ${RKHUNTER_LOG} lacks a Possible rootkits or Suspect files count: ${COUNTS}"
   elif ((ROOTKITS > 0)); then
     STATUS=down
     MSG="possible rootkit found: ${COUNTS}; grep Warning ${RKHUNTER_LOG} lists them"
+  elif ((SUSPECT > 0)); then
+    STATUS=down
+    MSG="suspect file found, a system binary changed outside apt: ${COUNTS}; grep Warning ${RKHUNTER_LOG} lists them"
+  elif ((WARNINGS > 0)); then
+    STATUS=down
+    MSG="rkhunter warned: ${COUNTS}; the first reads: ${FIRST_WARNING}. grep Warning ${RKHUNTER_LOG} lists them. An account change clears when this script is run again by hand; any other benign warning needs a line in /etc/rkhunter.conf.local"
   else
     STATUS=up
-    MSG="scan completed: ${COUNTS}; grep Warning ${RKHUNTER_LOG} lists the warnings"
+    MSG="scan completed: ${COUNTS}"
   fi
 fi
 

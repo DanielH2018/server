@@ -123,6 +123,73 @@ fails, and a oneshot unit has no start timeout (`TimeoutStartUSec=infinity`), so
 cannot be cut short. `test_alert_units_retry_a_failed_delivery` in the same test file holds every
 `*-alert.service.j2` to the flags.
 
+## What sees an expired login (#4618)
+
+Measured on daniel-box on 2026-10-12 against Claude Code 2.1.296. The login can be dead when the
+host starts, or it can die while the host is registered. The crash alert covers the first case,
+and nothing covers the second.
+
+**A login that is dead at start pages through `OnFailure=`.** With no credentials, `claude rc`
+exits 1 at once. This is the output with an empty `HOME` and `env -i`:
+
+```text
+Error: You must be logged in to use Remote Control.
+
+Remote Control is only available with claude.ai subscriptions. Run `claude auth login` to sign in with your claude.ai account.
+exit=1
+```
+
+`Restart=always` starts the host again ten seconds later. systemd 255 records each exit as a
+failure, so `OnFailure=` starts `claude-rc-alert.service` on every exit and `Restart=always` does
+not hide it. The journal shows both halves. From 2026-10-05 21:54 to 2026-10-08 21:54 UTC,
+`claude-rc.service` exited with status 1 between 7,698 and 8,429 times a day, and
+`claude-rc-alert.service` ran between 1,540 and 1,686 times a day. That loop came from the
+network outage the alert template records (#3902), not from a login, and the same outage lost its
+pages.
+
+With the network up, that loop would have paged Discord every ten seconds. The alert therefore
+pages once and then skips for `claude_code_rc_alert_quiet_minutes` (360) after each delivered
+page (#4676). A loop that lasts days pages four times a day. A second, separate crash inside the
+window is not paged, and the page text says so. `RestartMode=direct` with a start limit on the
+host was rejected: it pages once by leaving the host `failed`, and the weekly `try-restart` never
+starts a failed unit, so the host would have stayed down after the #3902 outage cleared. A token that is present but refused takes the same path: in the 2.1.296 bundle a 401 at
+registration throws `BridgeFatalError`. That path was read from the bundle, not observed.
+
+**A login that dies while the host is registered pages nothing.** The bridge polls for work with
+an environment secret, not with the OAuth token. The host uses the OAuth token only to register,
+and again to renew that secret before it expires. Phone sessions fail at once, because each one
+calls the API with the OAuth token, but the host keeps polling. At the renewal, the host writes
+"Could not renew the Remote Control credential because your claude.ai login is no longer valid"
+only when it runs with `--verbose`, and keeps working until the secret expires. Only then does it
+re-register, take the 401 and start the loop above. The secret's lifetime is unmeasured. The
+weekly `try-restart` caps the wait at a week, because a restart registers again.
+
+Four candidate signals were ruled out for the second case:
+
+- `~/.claude/daemon.log` is the background supervisor's log, and the systemd-hosted host does not
+  write it. The agent's copy was last written on 2026-10-10 18:07, before the running host started
+  on 2026-10-11.
+- `~/.claude/daemon-auth-status.json` is sticky. The supervisor writes `auth_required` when a
+  refresh fails and never rewrites the file afterwards. The operator's copy still read
+  `auth_required` from 2026-09-18 05:32, although the same `daemon.log` records "token found via
+  keychain re-check" at 08:58 that day. The agent has no such file.
+- `claude auth status` reports `loggedIn: true` when a token is present. It does not ask the
+  server whether the token works.
+- `claudeAiOauth.expiresAt` in `.credentials.json` lapses on a healthy idle host, because nothing
+  refreshes the access token between renewals of the environment secret. A check on it would page
+  every quiet night.
+
+Three changes would close the gap, and each one costs something the operator has to accept:
+
+- `--verbose` on the unit would put the renewal failure in the journal for a check to match. It
+  detects only at the renewal, whose interval is unmeasured, and the volume of the other verbose
+  lines is unknown. Measuring either needs a host restart, which drops live phone sessions.
+- A daily `try-restart` instead of a weekly one would make a dead login loop within a day, and
+  `OnFailure=` would page it. It also drops live phone sessions every day.
+- An authenticated probe as the agent user would detect a dead login within one run. Every form
+  found spends inference (`claude -p`) or reads `.credentials.json` outside Claude Code's own
+  locking.
+
 ## Why the weekly restart uses `try-restart`, not `RuntimeMaxSec=`
 
 `claude-rc-restart.timer` exists to pick up the binary Claude Code updates in the background,

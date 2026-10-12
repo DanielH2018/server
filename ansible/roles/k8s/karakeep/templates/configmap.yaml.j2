@@ -16,3 +16,12 @@ data:
   test_karakeep_time_tagger_script.py asserts this file's sha256 equals the pinned checksum.
 #}
 {{ lookup('file', playbook_dir + '/roles/k8s/karakeep/files/karakeep-time-tagger.py') | indent(4, true) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: karakeep-archive-pruner
+  namespace: {{ k8s_namespace }}
+data:
+  karakeep_archive_pruner.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/karakeep/files/karakeep_archive_pruner.py') | indent(4, true) }}

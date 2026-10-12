@@ -1,0 +1,18 @@
+# Managed by Ansible (initial_setup role) — edits here are overwritten.
+#
+# rkhunter reads this file after /etc/rkhunter.conf on every run. It allowlists the warnings every
+# host raised every week from benign causes, so that rkhunter-check.sh can page on any warning
+# that is left (#4638). Add a line here only for a warning whose cause you have confirmed.
+
+# Both are written by systemd packaging, and rkhunter reported both as hidden files on all three
+# hosts in every weekly run kept on 2026-10-12: /etc/.updated is the systemd-update-done stamp,
+# and the backup is left by the systemd-resolved package.
+ALLOWHIDDENFILE=/etc/.updated
+ALLOWHIDDENFILE=/etc/.resolv.conf.systemd-resolved.bak
+
+# rkhunter reads PermitRootLogin from a file named sshd_config and never follows its Include, so
+# SSH_CONFIG_DIR cannot point it at a drop-in. Where this role hardens a drop-in and the main file
+# carries no PermitRootLogin line (daniel-pi), rkhunter warns "has not been set" every week.
+# The task that renders this file sets `no` where the main file carries the line and `unset`
+# where it does not.
+ALLOW_SSH_ROOT_USER={{ initial_setup_rkhunter_allow_ssh_root_user }}
