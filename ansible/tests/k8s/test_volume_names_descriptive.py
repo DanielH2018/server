@@ -144,8 +144,10 @@ def volume_blocks(text: str) -> list[tuple[str, int, list[str]]]:
             # A Jinja block tag sits at column 0, because lstrip_blocks is off and an indented
             # tag would leave its leading spaces in the rendered YAML. Taken as YAML that reads
             # as dedenting out of the block, so a conditional volume would end the scan and
-            # every entry after it would look undeclared. Skip the tag, keep scanning.
-            if line.lstrip().startswith(("{%", "{#")):
+            # every entry after it would look undeclared. Skip the tag, keep scanning. A YAML
+            # comment ends nothing either, and in an indentless block it can sit at the key's
+            # own column.
+            if line.lstrip().startswith(("{%", "#")):
                 j += 1
                 continue
             column = len(line) - len(line.lstrip())
@@ -264,7 +266,7 @@ def test_the_scanner_still_sees_an_orphan_across_a_jinja_tag() -> None:
 
 # The indentless form: each sequence at its key's own column, as PyYAML's default dumper and
 # `kubectl get -o yaml` write it. The nested `items:` sequence carries a `- name:`-shaped line
-# that belongs to the projected source, not to the block.
+# that belongs to the projected source, not to the block, and the comment must not end it.
 _INDENTLESS_VOLUMES = """\
       containers:
       - name: app
@@ -278,6 +280,7 @@ _INDENTLESS_VOLUMES = """\
       volumes:
       - name: data
         emptyDir: {}
+      # A comment at the key's column ends nothing.
       - name: data
         projected:
           sources:
