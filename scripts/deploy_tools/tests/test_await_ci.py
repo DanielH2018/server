@@ -173,3 +173,110 @@ def test_wait_does_not_follow_the_tip_for_a_fresh_sha(monkeypatch):
     )
     assert code == 75
     assert msg.startswith("old:")
+
+
+def _actions_suite(status):
+    return {"app": {"slug": "github-actions"}, "status": status}
+
+
+def test_a_sha_with_no_actions_suite_reads_as_a_dropped_push():
+    """#4621: GitHub delivered no push event, so no app registered anything at all."""
+    assert await_ci._push_was_dropped([], [], REQUIRED)
+    other_apps = [{"app": {"slug": "gitguardian"}, "status": "queued"}]
+    assert await_ci._push_was_dropped([], other_apps, REQUIRED)
+
+
+def test_a_queued_actions_suite_is_not_a_dropped_push():
+    assert not await_ci._push_was_dropped([], [_actions_suite("queued")], REQUIRED)
+
+
+def test_descendant_verdict_skips_a_pending_commit_for_a_green_one():
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    runs_by_sha = {"near": [], "middle": green, "tip": green}
+    found = await_ci.descendant_verdict(
+        "old",
+        fetch=lambda s: runs_by_sha[s],
+        descendants=lambda _s: ["near", "middle", "tip"],
+    )
+    assert found == ("middle", "pass")
+
+
+def test_descendant_verdict_stops_at_a_red_commit_before_a_green_one():
+    """The reject half: a later green commit may carry the fix the merge commit lacks."""
+    red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    runs_by_sha = {"near": [], "broken": red, "fixed": green}
+    found = await_ci.descendant_verdict(
+        "old",
+        fetch=lambda s: runs_by_sha[s],
+        descendants=lambda _s: ["near", "broken", "fixed"],
+    )
+    assert found == ("broken", "fail")
+
+
+def _wait_on_dropped(suites, descendant_runs, late_runs=None):
+    """wait() on a SHA with no runs, past the grace, with one descendant `next`.
+
+    REQUIRED is await_ci.REQUIRED_CONTEXTS, so nothing needs patching.
+    """
+    runs_by_sha = {"old": [], "next": descendant_runs}
+    now = [0]
+
+    def fetch(sha):
+        # The descendant goes green one poll after the grace; a late run lands before it.
+        if now[0] <= await_ci.DROPPED_PUSH_GRACE_S + 20:
+            return []
+        if sha == "old" and late_runs:
+            return late_runs
+        return runs_by_sha[sha]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    return await_ci.wait(
+        "old",
+        await_ci.DROPPED_PUSH_GRACE_S * 2,
+        20,
+        sleep=sleep,
+        clock=lambda: now[0],
+        fetch=fetch,
+        fetch_suites=lambda _s: suites,
+        descendants=lambda _s: ["next"],
+    )
+
+
+def test_wait_takes_a_green_descendant_of_a_dropped_push():
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    code, msg = _wait_on_dropped([], green)
+    assert code == 0
+    assert msg.startswith("next: CI green")
+
+
+def test_wait_does_not_take_a_descendant_while_an_actions_suite_is_queued():
+    """The reject half: a registered CI run is this SHA's own verdict, still on its way."""
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    code, msg = _wait_on_dropped([_actions_suite("queued")], green)
+    assert code == 75
+    assert msg.startswith("old:") and "never ran CI" not in msg
+
+
+def test_a_dropped_push_with_no_green_descendant_times_out_saying_why():
+    code, msg = _wait_on_dropped([], [])
+    assert code == 75
+    assert "GitHub never ran CI" in msg and "re-run converges" in msg
+
+
+def test_a_late_push_whose_run_registers_after_the_grace_keeps_its_own_verdict():
+    """The reject half: a run arriving after the grace is a late push, not a dropped one."""
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    running = [_run("prek (lint + validate + tests + secrets)", "in_progress", None)]
+    code, msg = _wait_on_dropped([], green, late_runs=running)
+    assert code == 75
+    assert msg.startswith("old:") and "never ran CI" not in msg
+
+
+def test_wait_on_a_dropped_push_ends_red_when_its_nearest_descendant_is_red():
+    red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
+    code, msg = _wait_on_dropped([], red)
+    assert code == 1
+    assert msg.startswith("next: CI RED") and "never ran CI for old" in msg
