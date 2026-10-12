@@ -24,6 +24,7 @@ from verdicts.logs import (
     otelcol_export_failures,
     shipper_dropped,
     swallowed_verdicts,
+    tempo_poll_errors,
 )
 
 
@@ -97,7 +98,7 @@ def check_shipper_dropped(
     if uptime is not None:
         since_settle = int(uptime - cfg.BOOT_SETTLE_S)
         if since_settle <= 0:
-            return with_export_failures(
+            return with_telemetry_arms(
                 cfg,
                 src,
                 True,
@@ -131,7 +132,19 @@ def check_shipper_dropped(
         backlog_grace_active=uptime is not None
         and uptime < cfg.SHIPPER_BACKLOG_GRACE_S,
     )
-    return with_export_failures(cfg, src, ok, msg)
+    return with_telemetry_arms(cfg, src, ok, msg)
+
+
+def with_telemetry_arms(
+    cfg: Config, src: Sources, ok: bool, msg: str
+) -> tuple[bool, str]:
+    """Fold the collector and Tempo arms into the shipper verdict, the order the data flows.
+
+    Both return paths of check_shipper_dropped go through here, so neither arm is skipped
+    inside BOOT_SETTLE_S: a Tempo restart after a reboot is when a half-written block bites.
+    """
+    ok, msg = with_export_failures(cfg, src, ok, msg)
+    return with_tempo_poll_errors(cfg, src, ok, msg)
 
 
 def with_export_failures(
@@ -170,6 +183,33 @@ def with_export_failures(
     if export_ok:
         return ok, "%s, %s" % (msg, export_msg)
     return False, "%s | %s" % (export_msg, msg)
+
+
+def with_tempo_poll_errors(
+    cfg: Config, src: Sources, ok: bool, msg: str
+) -> tuple[bool, str]:
+    """Fold Tempo's blocklist-poll arm into the shipper verdict, a failure winning.
+
+    The arms above ask whether telemetry was lost on its way to a backend. This one asks
+    whether Tempo can serve what arrived: a failed poll leaves the blocklist empty after a
+    restart, so every stored trace is unsearchable and retention deletes nothing, while the
+    pod stays Ready and ingest looks healthy (#4626 ran a week unnoticed). Folded here for the
+    reason with_export_failures was: a new monitor needs a new push token in SOPS.
+
+    Prom-dependent like its caller. An empty TEMPO_POLL_ERRORS_METRIC disables the arm.
+    """
+    if not cfg.TEMPO_POLL_ERRORS_METRIC:
+        return ok, msg
+    errors = src.prom_scalar(
+        "sum(increase(%s[%s]))"
+        % (cfg.TEMPO_POLL_ERRORS_METRIC, cfg.TEMPO_POLL_ERRORS_WINDOW),
+    )
+    tempo_ok, tempo_msg = tempo_poll_errors(
+        errors, cfg.TEMPO_POLL_ERRORS_WINDOW, cfg.TEMPO_POLL_ERRORS_MAX
+    )
+    if tempo_ok:
+        return ok, "%s, %s" % (msg, tempo_msg)
+    return False, "%s | %s" % (tempo_msg, msg)
 
 
 def check_loki_reachable(cfg: Config, src: Sources) -> tuple[bool, str]:

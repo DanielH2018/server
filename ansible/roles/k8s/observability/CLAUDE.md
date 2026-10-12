@@ -99,7 +99,8 @@ heartbeat — while carrying no real signal. **Run `claude -p` on the quiet host
 investigating its collector**, and read the logs before the metrics, not from counters alone.
 The four behaviours behind it are on the docs page.
 `telemetry-health.sh` checks OTLP reachability, and monitor-bridge's `with_export_failures`
-arms export failures — neither can detect "nobody is using it".
+arms export failures — neither can detect "nobody is using it". `with_tempo_poll_errors` pages
+when Tempo's blocklist poll fails: stored traces go unsearchable behind a Ready pod.
 
 ## Content logging is on
 

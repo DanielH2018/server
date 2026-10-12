@@ -1046,7 +1046,21 @@ checks each gate suppresses.
   an empty `OTELCOL_SEND_FAILED_METRICS` disables the arm. The OTLP hostPort probe did NOT fold:
   that door is a CNI portmap DNAT on the node's 127.0.0.1, so no in-cluster pod can reach it, and
   `telemetry-health.sh` survives as that one TCP connect. The `DECIDED:` marker at the top of the
-  template carries the rejected alternatives.)
+  template carries the rejected alternatives.
+  **Arm 4, Tempo's blocklist poll** (#4681): `sum(increase(tempodb_blocklist_tenant_index_errors_total[15m]))`,
+  `down` above `TEMPO_POLL_ERRORS_MAX` (0). The other arms ask whether telemetry reached a
+  backend; this one asks whether Tempo can serve what arrived. A failed poll does not drop just
+  the bad block: Tempo keeps the previous blocklist, which is empty after a pod restart. In #4626
+  two blocks with zero-byte `meta.json` files (written 2026-10-04) left every stored trace
+  unsearchable and retention deleting nothing for a week. The pod stayed Ready and ingest looked
+  healthy, so no other tile changed. The counter rises by 2 per failed poll (Tempo retries once),
+  so the 15m window holds at least two 5-minute polls. Measured 2026-10-12: the increase read 4.3
+  during the incident and the series did not exist before it, which the verdict counts as 0.
+  The arm runs on both of the check's return paths, including inside `BOOT_SETTLE_S`. It does
+  NOT see a failed listing of the tenant's blocks, which Tempo only logs. An absent
+  `tempodb_blocklist_length` was rejected as a second signal: Tempo also deletes that series
+  when the tenant legitimately holds no blocks. An empty `TEMPO_POLL_ERRORS_METRIC` disables the
+  arm.)
 - **Swallowed Push Verdicts** (a host cron's DOWN verdict that `kuma-push-lib.sh` logged and then
   lost, #1869. The library returns 0 after a failed push by design, so the cron does not fail, and
   the verdict reaches nobody until the tile's heartbeat deadline (a day and an hour later for the
