@@ -110,8 +110,6 @@ def test_every_base_image_pin_carries_a_digest():
 # Dependency Dashboard (#3): every one lists its current tag as an update, which is the pin.
 # The test below fails once an entry gains its digest, so the list only shrinks.
 PENDING_DIGEST_PINS = {
-    # "Awaiting Schedule": the meilisearch rule runs before 6am on Mondays.
-    "karakeep_k8s_meili_image": "meilisearch manual-upgrade branch, Monday schedule",
     # "Pending Status Checks": a Docker Hub version bump soaks 7 days.
     "observability_k8s_collector_image": "otel collector version bump, 7-day soak",
 }
