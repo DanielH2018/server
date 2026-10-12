@@ -21,8 +21,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import subprocess
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Collection, Mapping
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 from dev.findings_lib.issue_model import (
@@ -40,6 +40,15 @@ from lib.worktrees import REMOVABLE, Worktree, classify
 # `lib.git.git_dirty` runs git with `check=True`, so a missing cwd surfaces as OSError from
 # subprocess itself, and a git that ran but exited non-zero surfaces as CalledProcessError.
 _UNREADABLE = (OSError, subprocess.SubprocessError)
+
+# `(stale issue numbers) -> {issue: reason}` for the ones a running fan-out batch still works,
+# `fanout_lib.batch_holds.running_batch_holds` bound to a register. Asked only about claims the
+# worktree already calls stale, so a register with none reads no unit and opens no ssh.
+BatchHolds = Callable[[Collection[int]], Mapping[int, str]]
+
+
+def _no_batch_holds(_issues: Collection[int]) -> Mapping[int, str]:
+    return {}
 
 
 @dataclass(frozen=True)
@@ -89,7 +98,11 @@ def claim_is_live(
     and no edits, so its HEAD is an ancestor of origin/master and `is_merged` says True —
     every claim it makes would read as stale the moment it was written, and `reap` would
     release it while the fan-out was running. `classify` checks the live lock FIRST, which
-    is exactly what that case needs.
+    is exactly what that case needs. Once the orchestrator's session dies its lock is dead,
+    the worktree reads REMOVABLE, and this returns stale while its batches still run (#4601).
+    The worktree cannot answer that, and the issue number is not known here, so the callers
+    that hold an issue — `claim_states` and `stale_holder` — ask the run manifests through
+    their `batch_holds` argument.
 
     AN UNREADABLE WORKTREE IS HELD, NOT RELEASED. A PRUNABLE worktree — one whose directory
     was removed without `git worktree remove` — keeps appearing in `git worktree list
@@ -149,8 +162,12 @@ def stale_holder(
     trees: list[Worktree],
     dirty: Callable[[str], bool],
     merged: Callable[[Worktree], bool],
+    batch_holds: BatchHolds = _no_batch_holds,
 ) -> tuple[str, str] | None:
     """(holder, why) when this issue's claim is STALE, else None.
+
+    A claim the worktree calls stale is still held while ``batch_holds`` names the issue: a
+    fan-out batch is working it under an orchestrator whose session died (#4601).
 
     What `cmd_claim` reaps before taking an issue. Takes the same three facts
     `claim_states` does rather than `worktree_facts`'s 4-tuple, so the caller keeps the
@@ -161,7 +178,9 @@ def stale_holder(
     if not held:
         return None
     live, why = claim_is_live(held, trees, dirty, merged)
-    return None if live else (held, why)
+    if live or issue["number"] in batch_holds([issue["number"]]):
+        return None
+    return held, why
 
 
 def claim_states(
@@ -169,12 +188,17 @@ def claim_states(
     trees: list[Worktree],
     dirty: Callable[[str], bool],
     merged: Callable[[Worktree], bool],
+    batch_holds: BatchHolds = _no_batch_holds,
     now: datetime | None = None,
 ) -> list[ClaimState]:
     """One `ClaimState` per issue that is currently claimed, in issue order.
 
     `now` dates `age_days`; None reads the clock. A test passes a fixed datetime so an
     exact day count cannot straddle a midnight while the suite runs.
+
+    A claim the worktree calls stale reads live, under the batch's reason, while
+    ``batch_holds`` names its issue. It is called once, with every stale issue, and not at
+    all when none is stale.
     """
     states = []
     for issue in issues:
@@ -187,7 +211,12 @@ def claim_states(
                 issue["number"], held, live, reason, _claim_age_days(issue, held, now)
             )
         )
-    return states
+    stale = [s.number for s in states if not s.live]
+    holds = batch_holds(stale) if stale else {}
+    return [
+        replace(s, live=True, reason=holds[s.number]) if s.number in holds else s
+        for s in states
+    ]
 
 
 def _claim_age_days(issue: dict, held: str, now: datetime | None = None) -> int | None:

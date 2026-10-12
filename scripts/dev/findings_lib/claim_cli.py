@@ -16,6 +16,7 @@ and this file is the CLI over the three.
 """
 
 import argparse
+import functools
 import json
 import sys
 
@@ -116,6 +117,10 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     # syncs first. Without this the FIRST claim posts its comment, fails the label edit and
     # exits 1; the retry then reads "already claimed" and the label is never added at all.
     run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
+    # One running-batch read for the whole batch, taken on the first stale claim. Asked per
+    # issue, a resumed orchestrator re-claiming its old batches would open one ssh connection
+    # each, and `ufw limit ssh` rejects the sixth inside 30 seconds.
+    batch_holds = functools.cache(lambda: tools.batch_holds(args.numbers))
     refused = False
     for number in args.numbers:
         issue = _load_issue(number, tools)
@@ -123,7 +128,11 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             # Same fail-safe direction `cmd_reap` takes: a transient git error must not read
             # as "every worktree is gone". The claim blocks, as it did before this path
             # existed, and `plan_claim` refuses it below. The warning was said once, above.
-            stale = stale_holder(issue, trees, dirty, merged) if ok else None
+            stale = (
+                stale_holder(issue, trees, dirty, merged, lambda _n: batch_holds())
+                if ok
+                else None
+            )
             if stale:
                 holder, why = stale
                 run(
@@ -255,7 +264,13 @@ def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
     if not ok:
         # `reap` refuses instead; a read can render, but must say staleness is a guess.
         sys.stderr.write("warning: worktree read failed; STALE below is unverified\n")
-    states = claim_states(load_issues("open", tools), trees, dirty, merged)
+    states = claim_states(
+        load_issues("open", tools),
+        trees,
+        dirty,
+        merged,
+        batch_holds=tools.batch_holds,
+    )
     others = 0
     if args.worktree:
         mine = {args.worktree} | tools.launched_branches(
@@ -305,7 +320,7 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
     issues = load_issues("open", tools)
     by_number = {i["number"]: i for i in issues}
     reaped = 0
-    for s in claim_states(issues, trees, dirty, merged):
+    for s in claim_states(issues, trees, dirty, merged, batch_holds=tools.batch_holds):
         if s.live:
             continue
         plans = plan_release(

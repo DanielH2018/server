@@ -467,7 +467,7 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     issues = load_issues("open", tools)
     stale: dict[int, str] = {}
     if ok:
-        states = claim_states(issues, trees, dirty, merged)
+        states = claim_states(issues, trees, dirty, merged, tools.batch_holds)
         live = {s.number for s in states if s.live}
         stale = {s.number: s.worktree for s in states if not s.live}
     else:
