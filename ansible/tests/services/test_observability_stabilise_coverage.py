@@ -176,7 +176,12 @@ def _snapshot_runs(**over) -> bool:
     ctx = dict(
         k8s_no_mutate=False,
         manifests_render={"changed": True},
-        manifests_secret_render={"changed": False},
+        item={
+            "kind": "deploy",
+            "name": "grafana",
+            "restart_secrets": ["grafana-secret.yaml"],
+        },
+        observability_changed_secret_files=[],
         manifests_apply={
             "changed": True,
             "stdout": "deployment.apps/grafana configured",
@@ -204,10 +209,14 @@ def test_an_inert_manifest_edit_hands_nothing_to_the_stabilisation_gate() -> Non
     assert _snapshot_runs(manifests_apply=inert) is False
     # RED-proof on the other side: the same render with an apply that moved a live object.
     assert _snapshot_runs() is True
-    # A Secret edit still buys the soak — it restarts prometheus and grafana out of band, and
-    # verify_secret_keys can patch a key after an apply that printed `unchanged`.
+    # An edit to a Secret this workload reads still buys the soak — the private restart rolls
+    # it out of band, and verify_secret_keys can patch a key after an apply that printed
+    # `unchanged`. Which workloads one Secret soaks is test_observability_secret_restarts.py.
     assert (
-        _snapshot_runs(manifests_apply=inert, manifests_secret_render={"changed": True})
+        _snapshot_runs(
+            manifests_apply=inert,
+            observability_changed_secret_files=["grafana-secret.yaml"],
+        )
         is True
     )
     # A dry run reads nothing live, so it hands the gate nothing whatever changed.
