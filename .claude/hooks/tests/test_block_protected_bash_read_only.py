@@ -71,6 +71,8 @@ FLAGGED = [
     "gh api repos/o/r/issues/4/comments -f body=hi",
     "gh api -X DELETE repos/o/r/git/refs/heads/x",
     "echo 'unbalanced",
+    "echo x > $PWD/CLAUDE.md",
+    'echo x >> "$HOME/notes.md"',
 ]
 
 CLEAN = [
@@ -90,6 +92,7 @@ CLEAN = [
     "echo '{}' > /tmp/payload.json && cat /tmp/payload.json",
     "cp ansible/vars/secrets.yml /tmp/copy.yml",
     "uv run pytest ansible/tests/repo -q",
+    "echo $HOME 2>&1 | head",
 ]
 
 
@@ -146,3 +149,11 @@ def test_every_read_only_agent_in_the_tree_carries_the_key():
     assert claimed <= derived, (
         f"read-only in prose but not in frontmatter: {claimed - derived}"
     )
+
+
+def test_a_scratch_symlink_into_the_repo_is_not_scratch(tmp_path):
+    """A redirect into a /tmp link that points at the tree writes the tree."""
+    link = tmp_path / "link"
+    link.symlink_to(os.path.join(_REPO, "CLAUDE.md"))
+    verdict = _mod.decision(_payload(f"echo x > {link}"))
+    assert verdict and verdict[0] == "deny"

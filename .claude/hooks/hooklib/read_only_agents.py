@@ -30,8 +30,9 @@ _OWN_CHECKOUT = os.path.dirname(
 # operator's own session. Here the session is an agent that has declared it writes nothing, so
 # a false positive costs it one rephrased read, while a missed write is the injected action the
 # arm exists to stop. The arm is still a reading of command text: a write inside `python3 -c`,
-# a called script or an `ssh` remote command is not seen. kubectl's read-only ServiceAccount
-# covers the cluster on its own.
+# a called script or an `ssh` remote command is not seen, nor are `curl -o`, `wget -O`,
+# `tar -x`, `find -delete`/`-exec` or `cp -t <dir>`. kubectl's read-only ServiceAccount covers
+# the cluster on its own.
 
 _AGENTS_DIR = os.path.join(_OWN_CHECKOUT, ".claude", "agents")
 
@@ -79,7 +80,8 @@ _SCRATCH_PREFIXES = (
 
 
 def _is_scratch(path, repo_root):
-    target = os.path.normpath(os.path.join(repo_root, os.path.expanduser(path)))
+    # `realpath`, not `normpath`: `ln -s <repo file> /tmp/l` then `> /tmp/l` writes the repo.
+    target = os.path.realpath(os.path.join(repo_root, os.path.expanduser(path)))
     return (target + "/").startswith(_SCRATCH_PREFIXES)
 
 
@@ -322,6 +324,9 @@ def _stage_problem(stage, repo_root):
     return None
 
 
+_VARIABLE_REDIRECT = re.compile(r"(?<![<])>>?\s*[\"']?\$")
+
+
 def read_only_reason(command, repo_root, written_paths):
     """A deny reason if this command writes, from an agent that declared it writes nothing.
 
@@ -331,6 +336,10 @@ def read_only_reason(command, repo_root, written_paths):
     for path in written_paths(command):
         if not _is_scratch(path, repo_root):
             return f"redirects output into `{path}`"
+    # `written_paths` drops a `$VAR/...` target, since it cannot resolve it. Here a target the
+    # hook cannot resolve counts as a write: `> $PWD/CLAUDE.md` is one.
+    if _VARIABLE_REDIRECT.search(command):
+        return "redirects output into a path held in a shell variable"
     try:
         stages = split_stages(command)
     except Unsplittable as exc:
