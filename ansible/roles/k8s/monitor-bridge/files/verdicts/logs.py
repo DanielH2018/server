@@ -129,6 +129,31 @@ def otelcol_export_failures(
     )
 
 
+def tempo_poll_errors(
+    error_count: float | None,
+    window: str,
+    threshold: float,
+) -> tuple[bool, str]:
+    """Pure: did Tempo's blocklist poll fail past `threshold` in `window`?
+
+    (ok, msg). `error_count` = increase(tempodb_blocklist_tenant_index_errors_total[window]),
+    None when the counter has no series, which is its state until the first failure.
+
+    A failed poll is not a partial result: Tempo keeps the previous blocklist, which is empty
+    after a restart, so stored traces become unsearchable and retention stops (#4626). The
+    message says where to look, because it lands on a tile named for the log shipper.
+    """
+    n = error_count or 0.0
+    if n <= threshold:
+        return True, "no Tempo blocklist poll errors in %s" % window
+    return False, (
+        "Tempo blocklist poll failed %d time(s) in %s (> %.0f) — stored traces are unsearchable "
+        "and retention is stopped. Find the block under tempo-data's blocks/single-tenant/ whose "
+        "meta.json is empty or invalid and move it off the volume (#4626)"
+        % (int(n), window, threshold)
+    )
+
+
 # The host crons' push outcomes, as rsyslog ships them: "<iso-ts> <host> <tag>[pid]: <rest>".
 # Same prefix shape scripts/diagnostics/probe_lib/alerts.py parses (`_SYSLOG_LINE_RE`), and
 # the Pi's health.log is written in it deliberately so the one reader covers both.

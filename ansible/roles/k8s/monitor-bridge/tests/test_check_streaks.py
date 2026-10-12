@@ -387,6 +387,68 @@ def test_check_shipper_dropped_disables_the_collector_arm_on_an_empty_selector(c
     assert not any("otelcol" in q for q in queries), queries
 
 
+# ── arm 4: Tempo's blocklist poll (#4681) ──
+
+
+@pytest.mark.parametrize(
+    ("errors", "ok", "must_contain"),
+    [
+        # The counter has no series until Tempo's first failed poll.
+        pytest.param(
+            None, True, ("no Tempo blocklist poll errors",), id="no_series_is_clean"
+        ),
+        pytest.param(
+            0.0, True, ("no Tempo blocklist poll errors",), id="zero_is_clean"
+        ),
+        # 4.3 is what increase(...[15m]) read during #4626.
+        pytest.param(
+            4.3,
+            False,
+            ("Tempo blocklist poll failed 4 ", "meta.json", "#4626"),
+            id="incident_is_flagged",
+        ),
+    ],
+)
+def test_tempo_poll_errors(errors, ok, must_contain):
+    result_ok, msg = checks.logs.tempo_poll_errors(errors, "15m", 0)
+    assert result_ok is ok
+    for s in must_contain:
+        assert s in msg
+
+
+@pytest.mark.parametrize(
+    "uptime_s",
+    [
+        pytest.param(_unread_clock, id="normal_path"),
+        # Inside BOOT_SETTLE_S the shipper arms are skipped; the Tempo arm must not be, since a
+        # Tempo restart after a reboot is when a half-written block surfaces.
+        pytest.param(lambda: 300.0, id="boot_settle_path"),
+    ],
+)
+def test_check_shipper_dropped_pages_on_tempo_poll_errors(cfg, uptime_s):
+    src = FakeSources(
+        prom_scalar=lambda q: (
+            4.3 if "tempodb_blocklist_tenant_index_errors_total" in q else 0.0
+        ),
+        prom_vector=lambda q: [],
+    )
+    ok, msg = checks.logs.check_shipper_dropped(cfg, src, uptime_s=uptime_s)
+    assert not ok
+    # The tile is named for the log shipper, so the Tempo cause must lead the message.
+    assert msg.startswith("Tempo blocklist poll failed 4 "), msg
+    queries = [args[0] for _, args in src.calls]
+    assert (
+        "sum(increase(tempodb_blocklist_tenant_index_errors_total[15m]))" in queries
+    ), queries
+
+
+def test_check_shipper_dropped_disables_the_tempo_arm_on_an_empty_metric(cfg):
+    ok, msg, queries = _shipper_queries(replace(cfg, TEMPO_POLL_ERRORS_METRIC=""), 0.0)
+    assert ok
+    assert "Tempo" not in msg
+    assert not any("tempodb" in q for q in queries), queries
+
+
 def test_check_shipper_dropped_reads_server_side_by_reason(cfg):
     """The SERVER-side arm queries Loki's own discard counter, grouped `by (reason)`.
 

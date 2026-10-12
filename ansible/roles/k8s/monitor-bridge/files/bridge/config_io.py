@@ -69,6 +69,9 @@ class IoConfig:
     OTELCOL_SEND_FAILED_METRICS: str
     OTELCOL_SEND_FAILED_WINDOW: str
     OTELCOL_SEND_FAILED_MAX: float
+    TEMPO_POLL_ERRORS_METRIC: str
+    TEMPO_POLL_ERRORS_WINDOW: str
+    TEMPO_POLL_ERRORS_MAX: float
     SWALLOWED_VERDICTS_WINDOW_S: int
     BOOT_SETTLE_S: int
     SHIPPER_BACKLOG_GRACE_S: int
@@ -400,6 +403,23 @@ def io_config(
         # over unchanged so the fold does not also change what pages.
         OTELCOL_SEND_FAILED_WINDOW=_env("OTELCOL_SEND_FAILED_WINDOW"),
         OTELCOL_SEND_FAILED_MAX=_num("OTELCOL_SEND_FAILED_MAX"),
+        # The fourth arm, on the far side of the collector (#4681): telemetry that reached Tempo
+        # but that Tempo cannot serve. A failed blocklist poll keeps the previous blocklist,
+        # which is empty after a pod restart, so one block with an empty meta.json left every
+        # backend block unsearchable and retention deleting nothing for a week (#4626).
+        #
+        # A bare name, not a regex: Tempo has exported this one counter under this name since
+        # 2.x, and it is live (114 on 2026-10-12, before the fix). It counts a failed block-meta
+        # read and a failed tenant-index write, but NOT a failed listing of the tenant's blocks,
+        # which only logs. Measured 2026-10-12 against the #4626 incident: increase over 15m read
+        # 4.3 during it, and the series did not exist before it, which the verdict counts as 0.
+        TEMPO_POLL_ERRORS_METRIC=_env("TEMPO_POLL_ERRORS_METRIC"),
+        # 15m and 0. Tempo polls every 5m and the counter rises by 2 per failed poll
+        # (blocklist_poll_tolerate_consecutive_errors: 1 retries once), so 15m holds at least two
+        # polls and `increase()` sees the second failure. Any failure is real: the counter had no
+        # series before #4626 at all.
+        TEMPO_POLL_ERRORS_WINDOW=_env("TEMPO_POLL_ERRORS_WINDOW"),
+        TEMPO_POLL_ERRORS_MAX=_num("TEMPO_POLL_ERRORS_MAX"),
         # How far back check_swallowed_verdicts reads the host crons' push-outcome lines. Long
         # enough that a lost DOWN verdict stays paged past a cycle or two of Loki ingest lag,
         # and past the next run of a */30 producer that may land; short enough that the fetch

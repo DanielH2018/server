@@ -147,7 +147,9 @@ def _shipper_ranges(cfg, uptime, client=0.0):
         return []
 
     ok, msg = checks.logs.check_shipper_dropped(
-        dataclasses.replace(cfg, OTELCOL_SEND_FAILED_METRICS=""),
+        dataclasses.replace(
+            cfg, OTELCOL_SEND_FAILED_METRICS="", TEMPO_POLL_ERRORS_METRIC=""
+        ),
         FakeSources(prom_scalar=_scalar, prom_vector=_vector),
         uptime_s=lambda: uptime,
     )

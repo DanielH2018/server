@@ -217,7 +217,7 @@ CHECKS: tuple[PushCheck, ...] = (
     PushCheck(
         name="shipper_dropped", fn=logs.check_shipper_dropped, token="monitor_bridge_promtail_dropped_push_token",
         kuma_id="monitor-bridge-promtail-dropped", display="Log Shipper Dropped Entries", status_group="Observability", gate="prometheus",
-        description="Alloy dropped entries client-side or Loki discarded them server-side, over 3000 in an hour, or the OTel collector failed to export telemetry at all in the last 15 min. `too_far_behind` after a shipper restart is a re-tail, not loss; anything else is throughput or limits.",
+        description="Alloy dropped entries client-side or Loki discarded them server-side, over 3000 in an hour, or the OTel collector failed to export telemetry at all in the last 15 min, or Tempo's blocklist poll failed in the last 15 min (stored traces unsearchable; the message names the fix). `too_far_behind` after a shipper restart is a re-tail, not loss; anything else is throughput or limits.",
     ),
     # #1869: kuma-push-lib.sh logs a lost push and returns 0, so a lost DOWN surfaced only at the
     # tile's deadline, a day late for the daily producers. Reads that log line out of Loki and
