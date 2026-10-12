@@ -42,10 +42,26 @@ def _gh_api_method(words: list[str]) -> str:
             return word[2:].upper()
     has_field = any(
         word in _GH_API_FIELD_FLAGS
-        or any(word.startswith(f"{flag}=") for flag in _GH_API_FIELD_FLAGS[2:])
+        or _attached_field(word) is not None
+        or word.startswith("--input=")
         for word in words
     )
     return "POST" if has_field else "GET"
+
+
+def _attached_field(word: str) -> str | None:
+    """The `key=value` a field flag carries in the same word, or None.
+
+    gh's flag parser takes a value attached to the flag as well as one in the next word:
+    `-fname=X`, `-Fname=X`, `--field=name=X` and `--raw-field=name=X` all add the field
+    `name=X`.
+    """
+    for prefix in ("--field=", "--raw-field="):
+        if word.startswith(prefix):
+            return word[len(prefix) :]
+    if word[:2] in ("-f", "-F") and len(word) > 2:
+        return word[2:]
+    return None
 
 
 def _api_variable(words: list[str]) -> str | None:
@@ -53,12 +69,14 @@ def _api_variable(words: list[str]) -> str | None:
 
     Two shapes: the variable's own path (`.../actions/variables/DEPLOY_HOLD`, which PATCH and
     DELETE take), and the collection path with a `name=` field (`.../actions/variables -f
-    name=DEPLOY_HOLD`, which POST takes to create one).
+    name=DEPLOY_HOLD`, which POST takes to create one). The field may be its own word or
+    attached to its flag.
     """
     for word in words:
         upper = word.upper()
+        field = (_attached_field(word) or word).upper()
         for name in DEPLOY_PLANE_VARIABLES:
-            if f"/VARIABLES/{name}" in upper or upper == f"NAME={name}":
+            if f"/VARIABLES/{name}" in upper or field == f"NAME={name}":
                 return name
     return None
 
