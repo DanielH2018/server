@@ -198,8 +198,10 @@ load and before any role. A run counts as a stub run when the sentinel
 half catches a stub file whose sentinel was stripped. A run without a stub file defines no
 key before the load, so neither assert fires.
 
-- "Refuse a secret stub file outside a k8s dry run" requires `k8s_dry_run` and the play
-  variable `load_secrets_stubs_allowed`. Only `ansible/deploy.yml` sets that variable. Its
+- "Refuse a secret stub file outside a k8s dry run" requires `k8s_dry_run`, the play
+  variable `load_secrets_stubs_allowed` and the sentinel. A stub file stripped of its sentinel
+  is refused even in an allowed dry run, because sonarr's API reads skip on the sentinel
+  alone. Only `ansible/deploy.yml` sets that variable. Its
   k8s play sets it to true. Its Docker play sets it to true only where the host's
   `containers_list` holds no Docker entry, so a stubbed run aimed at daniel-pi stops before
   any Pi role. A stub file passed to any other playbook stops at its preamble, dry run or

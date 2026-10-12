@@ -147,6 +147,9 @@ def test_each_stub_run_case_is_refused_or_accepted(tmp_path: Path) -> None:
         },
         "not_allowed": {**_STUBS, "homelab_secret_stubs": True, "k8s_dry_run": True},
         "sentinel_stripped": {**_STUBS, "load_secrets_stubs_allowed": True},
+        # Allowed and a dry run, yet refused: sonarr's API reads skip on the sentinel, so
+        # without it they would send stub keys to a live Sonarr.
+        "sentinel_stripped_in_a_dry_run": {**_STUBS, **_SHADOW},
         "one_key_missing": {
             **{k: v for k, v in _STUBS.items() if k != "alpha_token"},
             "homelab_secret_stubs": True,
@@ -162,6 +165,7 @@ def test_each_stub_run_case_is_refused_or_accepted(tmp_path: Path) -> None:
         "not_a_dry_run": OUTSIDE,
         "not_allowed": OUTSIDE,
         "sentinel_stripped": OUTSIDE,
+        "sentinel_stripped_in_a_dry_run": OUTSIDE,
         "one_key_missing": INCOMPLETE,
         "sentinel_without_a_file": INCOMPLETE,
     }

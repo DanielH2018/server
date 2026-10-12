@@ -182,10 +182,15 @@ def test_the_derivation_finds_the_measured_derived_variable() -> None:
     assert MUST_DERIVE in derived_variables(keys, _var_files())
 
 
+def stale_exemptions(exempt: Mapping[str, str], offenders: list[str]) -> list[str]:
+    """The exempted task ids that the census, run with no exemptions, does not flag."""
+    return sorted(set(exempt) - set(offenders))
+
+
 def test_every_exemption_names_a_task_the_census_would_flag() -> None:
     """A stale exemption would hide the removal of a guard the task later gains."""
     _, offenders = _live_census(exempt={})
-    assert sorted(set(EXEMPT) - set(offenders)) == []
+    assert stale_exemptions(EXEMPT, offenders) == []
 
 
 def _role(tmp_path: Path, **files: str) -> Path:
@@ -290,3 +295,30 @@ def test_a_stub_guard_at_the_include_site_covers_the_file(tmp_path: Path) -> Non
     names = _word_pattern({"alpha_token"})
     assert census(guarded, names)[1] == []
     assert census(bare, names)[1] == ["widget/verify.yml::Post the token"]
+
+
+def test_an_exemption_for_a_guarded_or_missing_task_is_stale(tmp_path: Path) -> None:
+    role = _role(
+        tmp_path,
+        **{
+            "tasks/main.yml": """
+- name: Post the token
+  ansible.builtin.uri:
+    url: "https://example.invalid/?t={{ alpha_token }}"
+- name: Post the token when not stubbed
+  ansible.builtin.uri:
+    url: "https://example.invalid/?t={{ alpha_token }}"
+  when: not (homelab_secret_stubs | default(false) | bool)
+"""
+        },
+    )
+    _, offenders = census(role, _word_pattern({"alpha_token"}), exempt={})
+    exempt = {
+        "widget/main.yml::Post the token": "acts",
+        "widget/main.yml::Post the token when not stubbed": "guarded",
+        "widget/main.yml::Gone": "absent",
+    }
+    assert stale_exemptions(exempt, offenders) == [
+        "widget/main.yml::Gone",
+        "widget/main.yml::Post the token when not stubbed",
+    ]
