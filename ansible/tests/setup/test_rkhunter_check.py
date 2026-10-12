@@ -153,6 +153,13 @@ def _run_check(
 
 
 def test_a_clean_scan_pushes_up(tmp_path):
+    """The accept half of the DOWN arms below: a scan with nothing to report must not page.
+
+    It passes on the pre-#4638 script too, by design. It goes red if a new DOWN arm misfires on
+    a clean log, such as the Suspect files count check or the first-warning lookup. Whether a
+    real host's routine warnings are suppressed is rkhunter.conf.local's job, and a stubbed
+    rkhunter cannot exercise it. Only a real scan on a host after the apply can.
+    """
     code, pushed, _, _ = _run_check(tmp_path, "", rc=0, log=_log())
     assert pushed[0] == "up", pushed
     assert "0 warnings, 0 suspect files, 0 possible rootkits (exit 0" in pushed[1], (
