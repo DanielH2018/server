@@ -332,3 +332,92 @@ def test_no_case_cites_a_missing_role_path():
         "live file (evals/README.md, rule 4), or, for a fixture of a role that does not exist "
         f"yet, follow one citation of it with '{NEW_ROLE_MARKER}' (rule 1)."
     )
+
+
+# A case that quotes a section of the root CLAUDE.md, because a hermetic run loads no CLAUDE.md
+# and the engine's own section loader (`load-rules.mjs`) reads only the chezmoi user file.
+_CLAUDE_MD_QUOTE_RE = re.compile(
+    r"----- BEGIN CLAUDE\.md section: (?P<heading>[^\n]+?) -----\n"
+    r"(?P<body>.*?)\n----- END CLAUDE\.md section -----",
+    re.S,
+)
+
+
+def markdown_section(md: str, heading: str) -> str | None:
+    """The body under `## <heading>`, up to the next heading of level 2 or shallower.
+
+    The same slice `extractSection` in the engine's `load-rules.mjs` takes, without the
+    heading line itself. None when no such heading exists.
+    """
+    lines = md.split("\n")
+    try:
+        start = lines.index(f"## {heading}")
+    except ValueError:
+        return None
+    end = next(
+        (i for i in range(start + 1, len(lines)) if re.match(r"#{1,2}\s", lines[i])),
+        len(lines),
+    )
+    return "\n".join(lines[start + 1 : end]).strip()
+
+
+def stale_claude_md_quotes(obj: dict, claude_md: str) -> list[str]:
+    """The quoted CLAUDE.md headings whose quoted body no longer equals the live section.
+
+    A pasted copy keeps passing its case after the source changes, so the case would grade
+    text no session is given. A heading that no longer exists counts as stale too.
+    """
+    return [
+        m["heading"]
+        for m in _CLAUDE_MD_QUOTE_RE.finditer(obj.get("input", ""))
+        if markdown_section(claude_md, m["heading"]) != m["body"]
+    ]
+
+
+_FAKE_CLAUDE_MD = "# Title\n\n## Landing\n\nMerge, then deploy.\n\n### When to wait\n\nA hold.\n\n## Next\n\nx\n"
+
+
+def _quoting(body: str) -> dict:
+    return {
+        "input": "----- BEGIN CLAUDE.md section: Landing -----\n"
+        f"{body}\n----- END CLAUDE.md section -----\n\nWhat next?"
+    }
+
+
+def test_a_quote_matching_its_section_is_not_stale():
+    body = "Merge, then deploy.\n\n### When to wait\n\nA hold."
+    assert stale_claude_md_quotes(_quoting(body), _FAKE_CLAUDE_MD) == []
+
+
+def test_an_edited_quote_is_stale():
+    body = "Merge, then ask before you deploy.\n\n### When to wait\n\nA hold."
+    assert stale_claude_md_quotes(_quoting(body), _FAKE_CLAUDE_MD) == ["Landing"]
+
+
+def test_a_quote_of_a_renamed_section_is_stale():
+    md = _FAKE_CLAUDE_MD.replace("## Landing", "## Landing a PR")
+    body = "Merge, then deploy.\n\n### When to wait\n\nA hold."
+    assert stale_claude_md_quotes(_quoting(body), md) == ["Landing"]
+
+
+def test_every_quoted_claude_md_section_matches_the_live_file():
+    claude_md = (REPO / "CLAUDE.md").read_text()
+    cases = {f: json.loads(f.read_text()) for f in _all_case_files()}
+    # A scan that matches nothing would pass vacuously: both land-after-merge cases quote it.
+    for name in ("001-merged-pr-lands-unasked", "002-hold-sha-stops"):
+        quoted = _CLAUDE_MD_QUOTE_RE.findall(
+            cases[CASES_DIR / "land-after-merge" / f"{name}.json"]["input"]
+        )
+        assert [h for h, _ in quoted] == ["After a PR Merges — Pull, Deploy, Verify"], (
+            f"land-after-merge/{name} no longer quotes the After a PR Merges section"
+        )
+    stale = {
+        str(f.relative_to(CASES_DIR)): headings
+        for f, obj in cases.items()
+        if (headings := stale_claude_md_quotes(obj, claude_md))
+    }
+    assert not stale, (
+        f"cases quote CLAUDE.md sections that no longer match the file: {stale}. Re-paste the "
+        "section into each case's input so the case grades the text a session is given "
+        "(evals/README.md, rule 5)."
+    )
