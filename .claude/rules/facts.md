@@ -133,7 +133,7 @@ carries the row is the squash commit that wrote its hash into the lock, and
   `markdown`, `github` or `json`. The rules for each row and each format are on
   `scripts/lib/facts/notice.py:moved_sections` and `scripts/lib/facts/notice.py:render`. The
   command exits 0 with rows or without, and exits 2 only when git cannot resolve the merge
-  base. It runs beside the lock and replaces nothing yet.
+  base. It runs beside the lock, and G2 of the plan decides whether it replaces the lock.
   `docs/target-architecture/docs-guard/g1-diff-notice.md` is the plan.
 
 The lock is kept only while its content atoms pay for it. When `fact_status.py report

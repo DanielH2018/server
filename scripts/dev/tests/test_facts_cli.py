@@ -8,6 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from fact_status import _USAGE, main
 from lib.git_testing import git, init_repo
 from lib.facts.lock import read_lock
@@ -356,3 +358,24 @@ def test_notice_with_an_unresolvable_ref_exits_2(tmp_path, capsys):
     repo = _repo(tmp_path)
     assert main(["notice", "--repo", str(repo), "--since", "origin/nope"]) == 2
     assert "no merge base of 'origin/nope'" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("fmt", "expected"),
+    [
+        ("text", "moved CLAUDE.md#Gate t/m.py:LIMIT (prose unchanged)"),
+        ("markdown", "| moved | symbol | CLAUDE.md#Gate | `t/m.py:LIMIT` | no |"),
+        ("github", "::notice title=CLAUDE.md#Gate::moved symbol t/m.py:LIMIT"),
+        ("json", '"kind": "moved"'),
+    ],
+)
+def test_notice_format_reaches_the_renderer(tmp_path, capsys, fmt, expected):
+    repo = _repo(tmp_path)
+    (repo / "t" / "m.py").write_text("LIMIT = 90\nOTHER = 1\n")
+    assert (
+        main(["notice", "--repo", str(repo), "--since", "HEAD", "--format", fmt]) == 0
+    )
+    out = capsys.readouterr().out
+    assert expected in out
+    if fmt == "json":
+        assert json.loads(out)[0]["atom"] == "t/m.py:LIMIT"
