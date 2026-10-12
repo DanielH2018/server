@@ -8,7 +8,7 @@ PR 2, `moved_sections`: #4706 (issue #4702).
 
 PR 3, the `notice` subcommand: #4719 (issue #4713).
 
-PR 4, the replay and the parity table: this PR (issue #4724).
+PR 4, the replay and the parity table: #4727 (issue #4724).
 
 Depends on: none
 
