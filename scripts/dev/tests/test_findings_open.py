@@ -170,11 +170,18 @@ def test_open_review_leftover_labels_an_open_issue_the_dedup_matched(
     """The fix round filed it first, so the leftover re-file matches; a touch drops the flag."""
     body = tmp_path / "b.md"
     body.write_text("B")
-    match = issue(3, fp=fingerprint("T", "a.py:1"))
-    tools, calls = make_tools(Fakes(issues=[match]))
+    fp = fingerprint("T", "a.py:1")
     argv = [*_open_argv(body), "--file", "a.py:1", "--review-leftover"]
+    add = ["issue", "edit", "3", "--add-label", "review-leftover"]
+
+    tools, calls = make_tools(Fakes(issues=[issue(3, fp=fp)]))
     assert findings.main(argv, tools) == 0
-    assert ["issue", "edit", "3", "--add-label", "review-leftover"] in calls.gh
+    assert add in calls.gh
+
+    labelled = issue(3, labels=("review-leftover",), fp=fp)
+    tools, calls = make_tools(Fakes(issues=[labelled]))
+    assert findings.main(argv, tools) == 0
+    assert add not in calls.gh
 
 
 def test_open_review_leftover_labels_a_fixed_issue_it_reopens(
