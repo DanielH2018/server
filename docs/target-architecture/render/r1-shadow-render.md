@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-PR 1a, the stub module and the stub file: issue #4692.
+PR 1a, the stub module and the stub file: [#4700](https://github.com/DanielH2018/server/pull/4700).
 
 Depends on: none
 
