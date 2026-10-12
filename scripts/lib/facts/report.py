@@ -1,6 +1,6 @@
 """``fact_status.py report``: whether ``docs/facts.lock`` pays for itself, read from git and the log.
 
-Three measurements, none kept in a store of its own.
+Four measurements, none kept in a store of its own.
 
 - **Potential against actual, per atom form.** A *potential* is a lock commit in which a
   recorded atom's hash changed. It is *actual* when the same commit also changed the owning
@@ -16,10 +16,15 @@ Three measurements, none kept in a store of its own.
   ``bash_path_match`` row with the size of the block it injected (#4653). The report sums them
   per session id, user-level files outside the repo included (#4610). That is the always-loaded context's trend, which
   otherwise shows only when someone runs ``wc -c`` by hand.
+- **The notice replay.** ``notice.moved_sections`` runs once per first-parent commit, with the
+  parent as the base, and every content-form lock move is graded by whether the replay listed
+  it (``replay.notice_replay``). That parity decides whether the diff notice can replace the lock. The
+  plan is ``docs/target-architecture/docs-guard/g1-diff-notice.md``.
 """
 
 import re
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -34,6 +39,8 @@ from lib.repo_paths import primary_checkout_of
 from .citations import parse_citations
 from .lint import bodies_at
 from .lock import LOCK_REL, parse_lock
+from .notice import Notice, moved_sections
+from .replay import LockMove, notice_replay, render_replay
 
 FORMS = ("path", "symbol", "yaml", "test", "marker")
 LOG_REL = ".claude/logs/instructions.log"
@@ -47,13 +54,21 @@ class FormCount:
 
 @dataclass
 class Precision:
-    """Per-form counts over the lock commits in a window."""
+    """Per-form counts over the lock commits in a window, and the moves behind them.
+
+    ``start`` is the last lock commit before ``since``, or None when the lock is younger than
+    the window. ``python_changed`` names each ``(commit, unit)`` the counts skip because the
+    row's ``python`` changed.
+    """
 
     since: datetime
     lock_commits: int = 0
     forms: dict[str, FormCount] = field(
         default_factory=lambda: {f: FormCount() for f in FORMS}
     )
+    start: str | None = None
+    moves: list[LockMove] = field(default_factory=list)
+    python_changed: list[tuple[str, str]] = field(default_factory=list)
 
 
 def atom_form(atom: str) -> str | None:
@@ -82,6 +97,12 @@ def _prose_changed(
     return bodies[(parent, doc)].get(unit) != bodies[(sha, doc)].get(unit)
 
 
+def _utc(epoch: str) -> str:
+    return datetime.fromtimestamp(int(epoch), timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
 def precision(repo: Path, days: int, now: datetime | None = None) -> Precision:
     """Count potential and actual moves in every lock commit of the last ``days`` days.
 
@@ -93,45 +114,79 @@ def precision(repo: Path, days: int, now: datetime | None = None) -> Precision:
     No row's ``verified_sha`` is read. That is often a branch commit a squash merge dropped,
     and the walk needs none: it follows the lock's own first-parent history on HEAD, where
     each squash commit carries the lock change and the prose change together.
+
+    The walk also reads ``start``, the last lock commit before the window, without counting
+    it, so that each move knows which lock commit recorded the hash it replaced.
     """
     now = now or datetime.now(timezone.utc)
     out = Precision(since=now - timedelta(days=days))
     bodies: dict[tuple[str, str], dict[str, str]] = {}
+    fmt = "--format=%H %ct %P"
     log = git(
         "log",
         "--first-parent",
         f"--since={out.since.isoformat()}",
-        "--format=%H %P",
+        fmt,
         "--",
         LOCK_REL,
         cwd=repo,
-    ).stdout
-    for line in log.splitlines():
-        sha, *parents = line.split()
+    ).stdout.splitlines()
+    edge = git(
+        "log",
+        "--first-parent",
+        "-1",
+        f"--until={out.since.isoformat()}",
+        fmt,
+        "--",
+        LOCK_REL,
+        cwd=repo,
+    ).stdout.split()
+    walk = [(line, True) for line in reversed(log)]
+    if edge:
+        out.start = edge[0]
+        walk.insert(0, (" ".join(edge), False))
+    recorded: dict[tuple[str, str], str] = {}
+    for line, counted in walk:
+        sha, epoch, *parents = line.split()
         if not parents:
             continue
         before, after = _lock_at(repo, parents[0]), _lock_at(repo, sha)
-        if before is None or after is None:
+        if after is None:
             continue
-        out.lock_commits += 1
+        if counted and before is not None:
+            out.lock_commits += 1
         for unit, rec in sorted(after.items()):
-            old = before.get(unit)
-            if old is None or old.get("python") != rec.get("python"):
-                continue
-            moved = [
-                a
-                for a, h in rec.get("atoms", {}).items()
-                if a in old.get("atoms", {}) and old["atoms"][a] != h
+            old = (before or {}).get(unit)
+            old_atoms = (old or {}).get("atoms", {})
+            changed = [
+                a for a, h in rec.get("atoms", {}).items() if old_atoms.get(a) != h
             ]
-            if not moved:
-                continue
-            actual = _prose_changed(repo, parents[0], sha, unit, bodies)
+            countable = counted and before is not None and old is not None
+            if countable and changed and old.get("python") != rec.get("python"):
+                out.python_changed.append((sha, unit))
+                countable = False
+            moved = [a for a in changed if a in old_atoms] if countable else []
+            actual = bool(moved) and _prose_changed(repo, parents[0], sha, unit, bodies)
             for atom in moved:
                 form = atom_form(atom)
                 if form not in out.forms:
                     continue
                 out.forms[form].potential += 1
                 out.forms[form].actual += int(actual)
+                out.moves.append(
+                    LockMove(
+                        sha,
+                        parents[0],
+                        _utc(epoch),
+                        unit,
+                        atom,
+                        form,
+                        actual,
+                        recorded.get((unit, atom)),
+                    )
+                )
+            for atom in changed:
+                recorded[(unit, atom)] = sha
     return out
 
 
@@ -271,8 +326,9 @@ def build(
     days: int,
     log: Path,
     now: datetime | None = None,
+    notice: Callable[[Path, str, str], list[Notice]] = moved_sections,
 ) -> dict:
-    """Both measurements as one JSON-ready mapping; ``render`` prints the same thing as text."""
+    """Every measurement as one JSON-ready mapping; ``render`` prints the same thing as text."""
     now = now or datetime.now(timezone.utc)
     prec = precision(repo, days, now)
     docs = {u.partition("#")[0] for u in statuses}
@@ -309,6 +365,7 @@ def build(
             }
             for r in sessions
         ],
+        "notice_replay": notice_replay(repo, prec, notice),
     }
 
 
@@ -316,7 +373,9 @@ def render(report: dict, top: int) -> str:
     """The text form of ``build``'s mapping, cut to ``top`` rows per list.
 
     The per-form table comes first, then the ``top`` most-read sections that are not IN, then
-    the instruction bytes of the ``top`` most recent sessions.
+    the instruction bytes of the ``top`` most recent sessions, then the notice replay. The
+    replay names every lock move outside ``listed`` and every crash, whatever ``top`` says,
+    because each one is a parity finding.
     """
     lines = [
         f"Lock precision since {report['since']} "
@@ -360,4 +419,4 @@ def render(report: dict, top: int) -> str:
     rest = len(sessions) - top
     if rest > 0:
         lines.append(f"  ... {rest} older; --top or --json lists them")
-    return "\n".join(lines)
+    return "\n".join(lines + render_replay(report["notice_replay"]))

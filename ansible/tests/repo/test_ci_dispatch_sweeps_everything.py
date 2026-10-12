@@ -33,6 +33,9 @@ SCOPED_STEPS = frozenset(
         "Run hooks (PR — scoped to changed files)",
         "Collect this PR's changed ansible files",
         "Lint the changed ansible files",
+        "Notice: CLAUDE.md sections citing atoms this PR moved",
+        "Notice step failed",
+        "Upload notice failure",
     }
 )
 KNOWN_JOBS = frozenset(

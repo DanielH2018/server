@@ -1,0 +1,94 @@
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+---
+# Alertmanager: routes the alerts Prometheus sends to Discord, email, a blackhole for shadow
+# alerts, and the Healthchecks.io check that watches it from outside. Its whole config,
+# credentials included, is the `alertmanager-config` Secret (alertmanager-secret.yaml.j2).
+#
+# The design is the M1 slice plan, docs/target-architecture/monitoring/m1-alertmanager.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  # ReadWriteOnce PVC — see the note on the loki Deployment.
+{{ spec_shell('Recreate') }}
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      # No checksum annotation: the config is a Secret, and hashing its bytes into a
+      # world-readable annotation would open a read path over it. The role's restart task rolls
+      # this pod on a Secret change instead (`restart_on: [secret]` in defaults/main.yml).
+      labels:
+        app: alertmanager
+        netpol-baseline: enforced
+    spec:
+      # Tier 1: Alertmanager is the paging path, so it sits beside Prometheus — see
+      # `DECIDED: observability tiers` in this role's CLAUDE.md.
+      #
+      # The image runs as `nobody` and a fresh Longhorn volume's root is owned by root, so the
+      # pod takes Prometheus's ids. Without fs_group it cannot write its silences or its
+      # notification log. No service_account: it calls no Kubernetes API, so pod_shell emits
+      # `automountServiceAccountToken: false`.
+{{ pod_shell('homelab-critical', run_as_user=65534, run_as_group=65534, fs_group=65534) }}
+      containers:
+        - name: alertmanager
+          image: {{ observability_k8s_alertmanager_image }}
+{{ hardened_security_context(non_root=true) }}
+          args:
+            - --config.file=/etc/alertmanager/alertmanager.yml
+            - --storage.path=/alertmanager
+            # Empty turns gossip off. One replica has no peer, and a listening cluster port
+            # would only add a surface.
+            - --cluster.listen-address=
+          ports:
+            - name: http
+              containerPort: 9093
+          volumeMounts:
+            # The Secret's five keys land side by side, so the config names its template as
+            # the relative path `homelab.tmpl`, which also resolves when amtool checks the
+            # rendered pair in CI.
+            - name: alertmanager-config
+              mountPath: /etc/alertmanager
+              readOnly: true
+            - name: alertmanager-data
+              mountPath: /alertmanager
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: 9093
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # Requests from the slice plan's estimate. A week after the first deploy, read
+          # max_over_time(container_memory_working_set_bytes{namespace="observability",
+          # container="alertmanager"}[7d]) and raise the request if the peak sits above it.
+{{ container_resources(cpu_limit='200m', mem_limit='128Mi', cpu_request='10m', mem_request='64Mi') }}
+      volumes:
+        # 0444 because alertmanager runs as nobody and secret-volume files are root-owned.
+        - name: alertmanager-config
+          secret:
+            secretName: alertmanager-config
+            defaultMode: 0o444
+        - name: alertmanager-data
+          persistentVolumeClaim:
+            claimName: alertmanager-data
+---
+# Prometheus sends alerts here and scrapes `alertmanager_*` from the same port. No route: the
+# role reads Alertmanager's state from that scrape job and from `ALERTS` in Prometheus.
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  selector:
+    app: alertmanager
+  ports:
+    - name: http
+      port: 9093
+      targetPort: 9093

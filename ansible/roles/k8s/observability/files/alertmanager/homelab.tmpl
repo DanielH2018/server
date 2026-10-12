@@ -1,0 +1,15 @@
+{{/*
+  The Discord and email bodies for every alert. alertmanager-secret.yaml.j2 reads this file
+  verbatim with lookup('file'), so Jinja never parses it.
+
+  homelab.title is the Discord title and the email subject: the status, the firing count, the
+  alert name and its C7 `service` label. homelab.message lists each alert with its severity,
+  its summary and description, and its runbook when the rule names one.
+*/}}
+{{ define "homelab.title" }}[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }}{{ with .CommonLabels.service }} ({{ . }}){{ end }}{{ end }}
+
+{{ define "homelab.message" }}{{ range .Alerts }}**{{ .Labels.severity }}** {{ .Annotations.summary }}
+{{ with .Annotations.description }}{{ . }}
+{{ end }}{{ with .Annotations.runbook_url }}Runbook: {{ . }}
+{{ end }}
+{{ end }}{{ end }}

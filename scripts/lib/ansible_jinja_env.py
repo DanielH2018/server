@@ -129,7 +129,10 @@ def register_ansible_filters(env: Environment) -> Environment:
     ``py_table`` reads monitor-bridge's check table out of its Python source, for the
     env-secret and the Kuma tiles. The k3s RecurringJob template names each weekly shard
     through ``weekly_backup_group``, which raises on a shard outside 0-6, and the restore drill
-    names the label prefix, the opt-out group and the B2 target through ``longhorn_backup_name``. Registering the real ones makes those failures reach the guard.
+    names the label prefix, the opt-out group and the B2 target through ``longhorn_backup_name``.
+    The flux role fits its vendored install to the workload guards through ``flux_components``,
+    which raises on a Deployment volume it has no rename for. Registering the real ones makes
+    those failures reach the guard.
 
     ``homelab_role_label`` is the filter ``ansible/templates/role-labelled.yaml.j2`` stamps
     ``homelab/role`` with, for every role that arms the manifests role's prune.
@@ -148,6 +151,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     if str(FILTER_PLUGINS) not in _sys.path:
         _sys.path.insert(0, str(FILTER_PLUGINS))
     from authelia_access import authelia_service_rules
+    import flux_components
     from entry_fields import entry_names, lan_hostnames, published_ports
     import homepage_tiles
     import kuma_monitors
@@ -179,6 +183,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["to_json"] = to_json_stub
     env.filters["filter_by_platform"] = filter_by_platform
     env.filters["authelia_service_rules"] = authelia_service_rules
+    env.filters["flux_components"] = flux_components.FilterModule().filters()[
+        "flux_components"
+    ]
     # Through FilterModule, as Ansible loads them, so a refusal carries the filter's name.
     service_tier_filters = service_tier.FilterModule().filters()
     env.filters["tier_priority_class"] = service_tier_filters["tier_priority_class"]

@@ -8,7 +8,7 @@ after `k8s/manifests` returns. These properties are pinned here, over the harnes
 They declare those workloads to the record as `manifests_self_rollouts`, and
 three things hold -- the record decides `restart` for them from the same facts (the red-proof
 pair: a changed render names grafana `restart: true`, an unchanged one `false`), each role's
-declaration equals the loop its private restart iterates (a seventh workload added to the loop
+declaration equals the loop its private restart iterates (a workload added to the loop
 alone re-opens the gap with both halves of the pair still green), and the private restart runs
 after the include_role that writes the record.
 
@@ -16,15 +16,15 @@ The skip the shared restart takes when the apply rolled a workload reaches those
 restarts. The pod-template fingerprints cover every `manifests_self_rollouts` entry, each private
 restart reads `manifests_rolled_by_apply` for its own workload, and observability's entries
 carry the namespace the fingerprints must read in -- the fingerprints default to
-`k8s_namespace`, its six workloads live in `observability`, and a read in the wrong namespace
+`k8s_namespace`, its workloads live in `observability`, and a read in the wrong namespace
 fails on both sides and reads as "not rolled", which is the double roll.
 pihole's gate sits on the restart task inside roll_one.yml rather than on the include, so the
 sibling check and the rollout wait still follow a roll the apply started.
 
 Observability's declaration is also narrowed per SIGNAL rather than per
 workload. Each entry carries `restart_on`, so the record decides `restart` from the same key
-the private restart selects its targets with. Five of the six no longer restart for a changed
-render at all — their ConfigMaps are hashed into their own pod templates — and a record that
+the private restart selects its targets with. Those that read no Secret never restart for a
+changed render at all — their ConfigMaps are hashed into their own pod templates — and a record that
 still expected one would fail `probe.py health` as NOT ROLLED.
 
 The shared apply carries `deployment.yaml`, which holds `pihole` alone: `pihole-2` is applied
@@ -142,20 +142,24 @@ def test_observability_a_changed_render_expects_nothing_to_roll():
     assert not any(r["restart"] for r in rollouts.values()), rollouts
 
 
-def test_observability_a_changed_secret_expects_only_its_two_readers_to_roll():
+def test_observability_a_changed_secret_expects_only_its_secret_readers_to_roll():
     """The green half. A Secret's bytes are not hashed into a pod template, so the private
-    restart survives for the two workloads that read one, and the record expects exactly
-    those two to carry a fresh `restartedAt`."""
+    restart survives for the workloads that read one, and the record expects exactly those
+    to carry a fresh `restartedAt`."""
     rollouts = _observability_rollouts(
         manifests_render={"changed": False},
         manifests_secret_render={"changed": True},
         manifests_apply={"stdout": "deployment.apps/grafana configured"},
     )
-    assert {n for n, r in rollouts.items() if r["restart"]} == {"prometheus", "grafana"}
+    assert {n for n, r in rollouts.items() if r["restart"]} == {
+        "prometheus",
+        "grafana",
+        "alertmanager",
+    }
 
 
 def test_observability_an_unchanged_render_expects_nothing_to_roll():
-    """An idempotent re-run names the six with `restart: false`."""
+    """An idempotent re-run names every workload with `restart: false`."""
     rollouts = _observability_rollouts(manifests_render={"changed": False})
     assert rollouts["grafana"]["restart"] is False
     assert not any(r["restart"] for r in rollouts.values()), rollouts
@@ -165,7 +169,7 @@ def test_observability_a_created_workload_is_not_expected_to_roll():
     """The private loop's guard is `.apps/<name> created`, kind-agnostic; the record's is per
     kind, so the prefix has to resolve or the record would expect a restart of a workload the
     loop skipped. Driven by a secret change, because that is the only signal that still reaches
-    this role's restart task — `restart_on: []` decides the other five before the `created`
+    this role's restart task — `restart_on: []` decides the others before the `created`
     clause is consulted, which is why the DaemonSet no longer exercises this branch."""
     rollouts = _observability_rollouts(
         manifests_render={"changed": False},
@@ -177,7 +181,7 @@ def test_observability_a_created_workload_is_not_expected_to_roll():
 
 
 def test_observability_declares_the_same_workloads_its_private_restart_rolls():
-    """A seventh workload added to the restart loop alone would re-open the gap with the pair
+    """A workload added to the restart loop alone would re-open the gap with the pair
     above still green. The loop and the declaration read ONE variable, so they
     cannot drift — assert that rather than comparing two literals, which would pass vacuously
     once one of them stopped being a literal."""
@@ -210,13 +214,13 @@ def test_observability_private_restart_reads_the_same_facts_as_the_record():
     assert "'secret' in item.restart_on" in when
     assert "'secret' in manifests_target_triggers" in FACT_EXPR
     assert "manifests_render is changed" not in when, (
-        "the restart task is back on the per-ROLE render signal, which restarts all six for "
+        "the restart task is back on the per-ROLE render signal, which restarts every workload for "
         "one workload's edit — the regression #2858 fixed."
     )
 
 
 def test_observability_declares_the_namespace_the_fingerprints_must_read():
-    """Its six workloads live outside k8s_namespace, which the fingerprints default to. A
+    """Its workloads live outside k8s_namespace, which the fingerprints default to. A
     declaration without the namespace passes every other test here and double-rolls in the
     play: both reads fail, every entry reads "not rolled", the private restart fires."""
     declared = observability_self_rollouts()

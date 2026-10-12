@@ -11,9 +11,9 @@
 observability_k8s_collector_image: otel/opentelemetry-collector-contrib:0.161.0
 observability_k8s_loki_image: grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
 observability_k8s_prometheus_image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
-# No workload runs this image yet. scripts/validate/alert_tools.sh reads its tag, as it reads
-# the Prometheus one above, to provision amtool for the validate-alert-rules hook, so the
-# Alertmanager the M1 slice deploys and the amtool CI checks with move in one Renovate bump.
+# scripts/validate/alert_tools.sh reads this tag, as it reads the Prometheus one above, to
+# provision amtool for the validate-alert-rules hook, so the Alertmanager this role runs and the
+# amtool CI checks its config with move in one Renovate bump.
 observability_k8s_alertmanager_image: prom/alertmanager:v0.34.1@sha256:e9733bafb1bdef9b00e25a21f8f99dc26a22224bf16641ad754d1649f4c3357a
 # Grafana 12 removed Angular, so every `graph` panel must be converted to `timeseries` and
 # deployed before a major bump, not alongside it.
@@ -30,12 +30,12 @@ observability_k8s_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/k
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the Claude Code telemetry stack (collector/Loki/Prometheus/Grafana/Tempo/
-# kube-state-metrics) — a broken deploy blinds this whole diagnostic surface with nothing else
+# kube-state-metrics/Alertmanager) — a broken deploy blinds this whole diagnostic surface with nothing else
 # watching it. ALSO Recreate + a PVC on each stateful sub-service (loki-data, grafana-data,
-# prometheus-data, tempo-data) — several independently migrating-state-shaped Deployments behind
+# prometheus-data, tempo-data, alertmanager-data) — several independently migrating-state-shaped Deployments behind
 # one role, which compounds the risk across more than one component at once.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "observability — the cluster metrics plane and Claude Code's own telemetry stack, six sub-images across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "observability — the cluster metrics plane and Claude Code's own telemetry stack, one sub-image per workload across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo/alertmanager) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits"  # noqa var-naming[no-role-prefix]
 
 # longhorn-nobackup, NOT longhorn. Two reasons, either sufficient on its own:
 #   - Volume: Loki with content logging on grows fast, and Prometheus TSDB is high-churn.
@@ -52,8 +52,11 @@ observability_prometheus_storage: 12Gi
 # scripts/grafana/export_grafana_dashboards.py round-trips it into the git tree — git is the
 # backup, the export is the save step.
 observability_grafana_storage: 1Gi
+# Alertmanager's silences and notification log. Small, and on the no-backup class: losing it
+# costs only those two, and the cost is one re-sent notification per open alert.
+observability_alertmanager_storage: 1Gi
 
-# The four claims, rendered by k8s/manifests (#3387). Each names `namespace` because the claims
+# The role's claims, rendered by k8s/manifests (#3387). Each names `namespace` because the claims
 # live beside their workloads in k8s_observability_namespace, not in the shared k8s_namespace.
 # No `k8s_autodeploy_snapshot_pvcs` here, so the claims are applied by the directory apply,
 # after 00-namespace.yaml creates the namespace on a fresh cluster.
@@ -73,6 +76,10 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: tempo-data
     storage_class: "{{ observability_storage_class }}"
     size: "{{ observability_tempo_storage }}"
+    namespace: "{{ k8s_observability_namespace }}"
+  - name: alertmanager-data
+    storage_class: "{{ observability_storage_class }}"
+    size: "{{ observability_alertmanager_storage }}"
     namespace: "{{ k8s_observability_namespace }}"
 
 # OTLP gRPC, bound to loopback ON THE NODE via hostPort. Deliberately not a MetalLB VIP:
@@ -183,7 +190,14 @@ observability_tempo_retention: 720h
 # (see the uptime-kuma role) so a dead cron trips the watchdog.
 observability_health_cron_minute: "*/10"
 
-# The six telemetry workloads, as the {kind, name} pairs post_tasks/k8s_stabilise_gate.yml reads.
+# How often Alertmanager re-sends the always-firing Watchdog alert to its Healthchecks.io check,
+# in whole seconds. alertmanager-secret.yaml.j2 renders it as the Watchdog route's
+# `repeat_interval`, so no reader parses a duration string. The check's 600s period must stay
+# well above it, or one late send pages. The M1 slice plan
+# (docs/target-architecture/monitoring/m1-alertmanager.md) sizes the check.
+observability_alertmanager_watchdog_repeat_seconds: 60
+
+# The telemetry workloads, as the {kind, name} pairs post_tasks/k8s_stabilise_gate.yml reads.
 # A variable rather than a second inline copy of the list: tasks/main.yml still spells it out
 # once (the wait loop; the restart loop reads this variable), and the stabilisation tasks that
 # consume it must iterate the SAME set or the gate silently watches fewer workloads than rolled.
@@ -192,17 +206,19 @@ observability_health_cron_minute: "*/10"
 # `restart_on` names which of roles/k8s/manifests's three change signals queues a
 # `rollout restart` for that workload, and so which makes the release record expect a fresh
 # `restartedAt` from it (`manifests_restart_triggers_default`, that role's defaults/main.yml).
-# The shared default `[config, secret, image]` would restart all six for one workload's edit:
-# `manifests_render is changed` fires when ANY of this role's eight manifests changed.
+# The shared default `[config, secret, image]` would restart all of them for one workload's
+# edit: `manifests_render is changed` fires when ANY of this role's manifests changed.
 #
 # `[]` means nothing this role renders needs a restart TASK for that workload. Its ConfigMap is
 # hashed into its own pod template (`checksum/config`), so the apply moves the pod template and
 # rolls the pod by itself; kube-state-metrics renders no ConfigMap at all, and every input it
 # does have already lives in the pod template. `[secret]` is the one case the annotation cannot
-# cover: prometheus file-mounts `prometheus-scrape-credentials` and grafana reads `grafana-admin`
-# through `env.valueFrom`, and hashing a Secret's bytes into a world-readable annotation would
-# open a read path over it. Those two restart on a secret render, which is one register over all
-# three secret manifests — so rotating grafana's password also restarts prometheus.
+# cover: prometheus file-mounts `prometheus-scrape-credentials`, grafana reads `grafana-admin`
+# through `env.valueFrom`, and alertmanager file-mounts `alertmanager-config`, its whole config.
+# Hashing a Secret's bytes into a world-readable annotation would open a read path over it.
+# Those three restart on a secret render, which is one register over every secret manifest the
+# role renders — so rotating grafana's password also restarts prometheus and alertmanager, and an
+# alertmanager config edit restarts all three.
 observability_stabilise_workloads:
   - { kind: deploy, name: loki, restart_on: [] }
   - { kind: deploy, name: prometheus, restart_on: [secret] }
@@ -210,3 +226,4 @@ observability_stabilise_workloads:
   - { kind: deploy, name: tempo, restart_on: [] }
   - { kind: daemonset, name: otel-collector, restart_on: [] }
   - { kind: deploy, name: grafana, restart_on: [secret] }
+  - { kind: deploy, name: alertmanager, restart_on: [secret] }

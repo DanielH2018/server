@@ -475,7 +475,8 @@ The `validate-alert-rules` prek hook (`scripts/validate/alert_rules.py`) checks 
 plane with Prometheus's and Alertmanager's own parsers. It renders the observability role and
 runs `promtool check config --syntax-only` on the rendered `prometheus.yml`, `promtool check
 rules` and `promtool test rules` on the role's rule files and their tests, and `amtool
-check-config` on the Alertmanager config.
+check-config` on the Alertmanager config. It also fails a render that lost a Go template
+expression from `alertmanager-secret.yaml.j2`, which `amtool` cannot see.
 
 `scripts/validate/alert_tools.sh` provisions both tools at the tags of the role's
 `observability_k8s_prometheus_image` and `observability_k8s_alertmanager_image` pins, into

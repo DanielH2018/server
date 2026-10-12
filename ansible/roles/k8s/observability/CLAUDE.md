@@ -23,26 +23,29 @@ The working-out lives in `docs/observability-dashboards.md`.
   (`observability_k8s_kube_state_metrics_image`), `grafana/tempo`
   (`observability_k8s_tempo_image`)
 - **Route:** `grafana.<domain>` · `grafana.local.<domain>`, Authelia one_factor
-- **Claims:** `grafana-data` (no backup (StorageClass longhorn-nobackup)), `loki-data` (no
-  backup (StorageClass longhorn-nobackup)), `prometheus-data` (no backup (StorageClass
-  longhorn-nobackup)), `tempo-data` (no backup (StorageClass longhorn-nobackup))
+- **Claims:** `alertmanager-data` (no backup (StorageClass longhorn-nobackup)), `grafana-data`
+  (no backup (StorageClass longhorn-nobackup)), `loki-data` (no backup (StorageClass
+  longhorn-nobackup)), `prometheus-data` (no backup (StorageClass longhorn-nobackup)),
+  `tempo-data` (no backup (StorageClass longhorn-nobackup))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — observability — the cluster metrics
-  plane and Claude Code's own telemetry stack, six sub-images across several Deployments. ALSO
-  each stateful component (loki/grafana/prometheus/tempo) is Recreate + its own PVC —
-  compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana
-  dashboards live only in the PVC until an export script round-trips them to git; a revert
-  discards unsaved edits
+  plane and Claude Code's own telemetry stack, one sub-image per workload across several
+  Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo/alertmanager) is
+  Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future
+  promotion: UI-edited Grafana dashboards live only in the PVC until an export script
+  round-trips them to git; a revert discards unsaved edits
 <!-- /generated_from -->
 
 **`probe.py health observability` gates every workload in the role**, none of them named observability.
 
 ## Eviction tiers
 
-DECIDED: observability tiers — Prometheus is `homelab-critical`; the other five pod templates
-are `homelab-best-effort` (#1851). Prometheus earns tier 1 because tier-1 monitor-bridge reads
-it every cycle via `PROMETHEUS_URL`; its exporters stay tier 4 — a lost one surfaces loudly as
-`up == 0`. `ansible/tests/k8s/test_pod_template_hygiene.py` holds every long-running
-pod template to one of the four classes.
+DECIDED: observability tiers — Prometheus and Alertmanager are `homelab-critical`; the other
+pod templates are `homelab-best-effort` (#1851). Prometheus earns tier 1 because tier-1
+monitor-bridge reads it every cycle via `PROMETHEUS_URL`. Alertmanager earns it because it is
+the paging path, which the operator accepted on 2026-10-12 (#4693, the M1 plan's open question
+1). The exporters stay tier 4 — a lost one surfaces loudly as `up == 0`.
+`ansible/tests/k8s/test_pod_template_hygiene.py` holds every long-running pod template to one
+of the four classes.
 
 ## One config change, one restart
 
@@ -50,11 +53,12 @@ This role sets `manifests_rollout: ''`: `k8s/manifests` neither waits nor restar
 each workload carries its own trigger (#2858). A ConfigMap edit rolls its own pod: the
 template hashes the ConfigMap body into that pod template as `checksum/config`
 (`ansible/templates/checksum-annotation.yml.j2`). A Secret edit goes through the restart task
-instead, since hashing one into an annotation would expose it — prometheus and grafana declare
-`restart_on: [secret]` in
-`ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads` and the other
-four `restart_on: []`. `manifests_secret_render` is one register over all three, so rotating
-Grafana's admin password also restarts Prometheus.
+instead, since hashing one into an annotation would expose it — prometheus, grafana and
+alertmanager declare `restart_on: [secret]` in
+`ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads` and the
+others `restart_on: []`. `manifests_secret_render` is one register over all four Secret
+manifests, so rotating Grafana's admin password also restarts Prometheus and Alertmanager, and
+an Alertmanager config edit restarts all three.
 
 `restart_on` is read twice and both readers must agree — the restart task here, and the release
 record's `rollouts[].restart`. A wrong value lands as a red deploy, because `probe.py health
@@ -65,8 +69,16 @@ body, so a second key in `prometheus.yaml.j2` lands outside the hash and the pod
 `ansible/tests/services/test_observability_config_rolls_one_workload.py` guards the three ways
 this goes QUIET.
 
-The snapshot handing these six to the play gate fires only when both render and apply change,
-so a comment-only edit buys no soak (#3133).
+The snapshot handing these workloads to the play gate fires only when both render and apply
+change, so a comment-only edit buys no soak (#3133).
+
+## Alert plane
+
+Prometheus sends alerts to the role's Alertmanager and scrapes it as job `alertmanager`, which
+carries no `origin` label, so Kuma's Cluster Scrape Targets tile pages a failed scrape.
+Its config, credentials included, is the `alertmanager-config` Secret, and every Go template
+expression in it sits in a Jinja raw block. The routing tree, the receivers and the rules to
+come are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
 
 ## Grafana logs in through Authelia (OIDC), and the admin form stays on
 

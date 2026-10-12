@@ -13,12 +13,28 @@ the render `probe.py health` uses, with secrets stubbed. It extracts each render
 - `promtool check config --syntax-only` on `prometheus.yml`. `--syntax-only` skips the files
   the config references, such as the scrape-credential and service-account paths, which do
   not exist outside the pod.
+- `amtool check-config` on `alertmanager.yml`, with `homelab.tmpl` written beside it, because
+  the config names its template by that relative path. The credentials are `*_file` paths,
+  which amtool does not open.
 - `promtool check rules` on every rule file in the role's `files/rules/`.
 - `promtool test rules` on every test file in the role's `tests/rules/`.
 
 The rendered `prometheus.yml` holds no stubbed value, so the stubbing changes nothing promtool
-reads. `FLOOR` names the rendered files the run must find. A render that stopped producing
-one fails instead of checking nothing.
+reads. The stubbed `alertmanager.yml` reads `email` as a placeholder address, which amtool
+accepts as it accepts the real one. `FLOOR` names the rendered files the run must find. A
+render that stopped producing one fails instead of checking nothing.
+
+THE GO-TEMPLATE SURVIVAL CHECK. `alertmanager.yml` is part of a Jinja template, and every Go
+template expression in it sits inside a Jinja raw block. Jinja refuses most Go expressions as
+syntax errors, and the hook reports that failed render. A Go expression that Jinja can parse
+is consumed instead, and the rendered file still passes amtool. `go_template_problems`
+therefore requires three things of the render, none of which an edit to the Jinja source can
+take away by rewriting the expression:
+
+- the text of every raw block in the source, verbatim;
+- `{{ template "<name>" . }}` for every template `homelab.tmpl` defines, so a reference
+  rewritten outside its raw block is still required;
+- `{{ .Status }}`, the Watchdog's payload.
 
 THE TOOLS. `scripts/validate/alert_tools.sh` provisions both at the role's image tags into
 `alert-tools/` under the git common dir, which every worktree of a clone shares, and every
@@ -35,6 +51,7 @@ Run directly or via the `validate-alert-rules` prek hook. Exits non-zero on any 
 prints each one, with the tool's output, on stderr.
 """
 
+import re
 import subprocess
 import sys
 import tempfile
@@ -60,11 +77,25 @@ FIXTURES = REPO / "scripts" / "validate" / "tests" / "fixtures" / "alert_rules"
 # and data key of the object that carries it.
 RENDERED = {
     "prometheus.yml": ("prometheus.yaml.j2", "ConfigMap", "prometheus-config"),
+    "alertmanager.yml": (
+        "alertmanager-secret.yaml.j2",
+        "Secret",
+        "alertmanager-config",
+    ),
+    "homelab.tmpl": ("alertmanager-secret.yaml.j2", "Secret", "alertmanager-config"),
 }
 
-# The rendered files a run must find. The M1 slice plan raises it: alertmanager.yml joins it
-# with the Alertmanager Secret.
-FLOOR = frozenset({"prometheus.yml"})
+# The rendered files a run must find. The M1 slice plan raises it again when the rule files
+# land.
+FLOOR = frozenset({"prometheus.yml", "alertmanager.yml", "homelab.tmpl"})
+
+# The template whose Go expressions must survive the Jinja render, and what the survival
+# check reads from it and from homelab.tmpl. `{{ .Status }}` is the Watchdog's payload and is
+# required whatever the source holds.
+ALERTMANAGER_SOURCE = ROLE_DIR / "templates" / "alertmanager-secret.yaml.j2"
+WATCHDOG_STATUS = "{{ .Status }}"
+RAW_BLOCK = re.compile(r"\{% raw %\}(.*?)\{% endraw %\}", re.DOTALL)
+TEMPLATE_DEFINE = re.compile(r'\{\{-? define "([^"]+)" -?\}\}')
 
 # A tool run: the argv after `alert_tools.sh`, returning (exit code, combined output).
 Runner = Callable[[list[str]], tuple[int, str]]
@@ -175,6 +206,36 @@ def floor_problems(found: Mapping[str, str]) -> list[str]:
     ]
 
 
+def go_template_problems(source: str, rendered: str, templates: str) -> list[str]:
+    """A problem for each Go template expression the render of `source` lost.
+
+    Args:
+        source: The text of the Jinja template that renders `alertmanager.yml`.
+        rendered: The rendered `alertmanager.yml`.
+        templates: The text of `homelab.tmpl`, whose every `define` the render must
+            reference.
+    """
+    required = {
+        WATCHDOG_STATUS,
+        *(block for block in RAW_BLOCK.findall(source) if block.strip()),
+        *(
+            f'{{{{ template "{name}" . }}}}'
+            for name in TEMPLATE_DEFINE.findall(templates)
+        ),
+    }
+    if not TEMPLATE_DEFINE.search(templates):
+        return [
+            "homelab.tmpl: defines no template, so nothing says which references "
+            "alertmanager.yml must keep"
+        ]
+    return [
+        f"alertmanager.yml: the render lost `{expr}`. A Go expression outside a Jinja raw "
+        "block is consumed by the render, and Alertmanager then sends an empty field."
+        for expr in sorted(required)
+        if expr not in rendered
+    ]
+
+
 def tool_checks(
     rendered: Mapping[str, Path],
     rules_dir: Path = RULES_DIR,
@@ -182,6 +243,8 @@ def tool_checks(
 ) -> list[list[str]]:
     """The tool invocations for every discovered input, as `alert_tools.sh` argv lists."""
     checks = []
+    if "alertmanager.yml" in rendered:
+        checks.append(["amtool", "check-config", str(rendered["alertmanager.yml"])])
     if "prometheus.yml" in rendered:
         checks.append(
             [
@@ -202,10 +265,27 @@ def tool_checks(
     return checks
 
 
-def check_tree(run: Runner = run_tool) -> list[str]:
-    """Render the role, apply the floor, and run every tool check over the tree."""
-    found = rendered_files()
+def check_tree(
+    run: Runner = run_tool, render: Callable[[], dict[str, str]] | None = None
+) -> list[str]:
+    """Render the role, apply the floor, and run every tool check over the tree.
+
+    Args:
+        run: Runs one tool invocation.
+        render: Returns the rendered files; `rendered_files` unless a test passes another.
+    """
+    try:
+        found = (render or rendered_files)()
+    except RuntimeError as err:
+        # A Go expression outside a raw block usually lands here, as a Jinja syntax error.
+        return [str(err)]
     problems = floor_problems(found)
+    if "alertmanager.yml" in found and "homelab.tmpl" in found:
+        problems += go_template_problems(
+            ALERTMANAGER_SOURCE.read_text(),
+            found["alertmanager.yml"],
+            found["homelab.tmpl"],
+        )
     with tempfile.TemporaryDirectory(prefix="alert-rules-") as tmp:
         paths = {}
         for key, text in found.items():

@@ -32,9 +32,10 @@ _MANIFESTS = REPO / "ansible/roles/k8s/manifests"
 _SIGNALS = frozenset({"config", "secret", "image"})
 
 # Roles known to narrow. Keeps the census below non-vacuous: a renamed variable would leave it
-# iterating nothing and passing. observability narrows in its defaults, karakeep in the vars of
-# its include (karakeep-chrome, #4564), so each names one of the two places the census reads.
-_EXPECTED_NARROWERS = frozenset({"observability", "karakeep"})
+# iterating nothing and passing. observability and flux narrow in their defaults, karakeep in
+# the vars of its include (karakeep-chrome, #4564), so each names one of the two places the
+# census reads.
+_EXPECTED_NARROWERS = frozenset({"observability", "karakeep", "flux"})
 
 _TRIGGERS_VAR = "manifests_target_triggers"
 
