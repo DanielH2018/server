@@ -73,8 +73,10 @@ MSG="did not complete"
 
 finish() {
   mkdir -p "$STATE_DIR"
-  printf '{"ts":"%s","status":"%s","msg":"%s"}\n' \
-    "$(date -Is)" "$STATUS" "${MSG//\"/\'}" > "$STATE_FILE"
+  # jq, not printf: MSG carries crane and kubectl error text, and a backslash, newline or
+  # control character in it made the file unreadable by the jq an operator reads it with (#4606).
+  jq -nc --arg ts "$(date -Is)" --arg status "$STATUS" --arg msg "$MSG" \
+    '{ts: $ts, status: $status, msg: $msg}' > "$STATE_FILE"
   # Explicit, because root's umask here renders this 0640 and the operator reading it after a
   # run is not root. Nothing secret is in it — a status, a timestamp and a count.
   chmod 0644 "$STATE_FILE"
