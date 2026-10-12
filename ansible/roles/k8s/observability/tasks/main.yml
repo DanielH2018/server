@@ -100,6 +100,11 @@
     label: "{{ item.name }}"
   become: true
   changed_when: false
+  # A dry run applies with `--dry-run=server` and creates nothing, so a workload this role adds
+  # is not live to wait on, and the wait fails the run with NotFound (#4729). For a workload
+  # that is live, the wait reads a rollout the dry run did not change, so skipping it loses
+  # nothing the dry run could check.
+  when: not k8s_no_mutate
 
 # This role skips the shared role's wait (manifests_rollout: '') and rolls its own above, so it
 # must also opt into the stabilisation gate explicitly — the wait it replaces cannot see a

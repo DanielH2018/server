@@ -103,6 +103,21 @@ def test_the_role_still_waits_inline_before_exec_ing_into_grafana() -> None:
     )
 
 
+def _wait_runs(**ctx) -> bool:
+    """Evaluate the rollout wait's `when:` the way Ansible does."""
+    wait = next(t for t in load_tasks(_TASKS) if "rollout status" in _cmd(t))
+    when = wait.get("when", [])
+    clauses = when if isinstance(when, list) else [when]
+    return all(bool(render_expr("{{ " + str(c) + " }}", **ctx)) for c in clauses)
+
+
+def test_a_dry_run_skips_the_rollout_wait() -> None:
+    """A dry run creates nothing, so a workload the role adds is not live and the wait fails
+    the run with NotFound (#4729). A real deploy still waits."""
+    assert _wait_runs(k8s_no_mutate=True) is False
+    assert _wait_runs(k8s_no_mutate=False) is True
+
+
 def test_the_restart_snapshot_is_taken_after_the_wait() -> None:
     wait = _index_of(lambda t: "rollout status" in _cmd(t))
     snapshot = _index_of(lambda t: "restartCount" in _cmd(t))
