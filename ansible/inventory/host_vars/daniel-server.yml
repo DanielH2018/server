@@ -4,7 +4,8 @@ server_ip: 10.0.0.161
 # statically, so the k3s agent still starts when the gateway's DHCP server is down (#3891).
 # The gateway reserves server_ip for this NIC (operator, 2026-10-10). wlo1 keeps its DHCP
 # route at metric 600 as the fallback. That fallback wins only because static-address.yml sets
-# ignore_routes_with_linkdown on this link (#4510).
+# ignore_routes_with_linkdown on this link (#4510). The pin also holds the link's IPv6 RA route
+# at metric 100, so IPv6 prefers it over wlo1 too (#4561).
 k3s_node_static_link: enp88s0
 ssh_config_path: /etc/ssh/sshd_config
 # Intel XE iGPU present — enables /dev/dri passthrough for jellyfin/tdarr hardware transcode.

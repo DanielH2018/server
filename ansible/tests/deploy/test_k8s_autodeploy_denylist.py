@@ -273,10 +273,9 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
     # A FOURTH denial reason, tdarr alone. The snapshot/revert machinery works fine for tdarr —
     # this is not the trio's hazard recurring — the compounding reasons are specific to it: it
     # also mounts media-data (shared RWX, never reverted) and rewrites library files there IN
-    # PLACE, so a revert can't undo an already-committed transcode; its own two claims
-    # (tdarr-configs, tdarr-server) revert non-atomically; and the digest pin's "stays manual"
-    # intent needs renovate.json not to automerge a digest re-push, so the denylist turns
-    # automerge off too (test_renovate_automerge_follows_the_autodeploy_denylist.py).
+    # PLACE, so a revert can't undo an already-committed transcode; and its own two claims
+    # (tdarr-configs, tdarr-server) revert non-atomically. The denylist also turns Renovate's
+    # automerge off for it (test_renovate_automerge_follows_the_autodeploy_denylist.py).
     # Checked by name for the same reason as the groups above.
     for role in ("tdarr",):
         assert role in denied

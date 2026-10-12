@@ -6,6 +6,19 @@
     name: k8s/manifests
   vars:
     manifests_rollout: scrutiny-web
+    # The other two workloads, listed so the batch drain WAITS on their rollouts, never so this
+    # role restarts them (#4564). A Renovate digest bump of `scrutiny_k8s_influxdb_image` or
+    # `scrutiny_k8s_collector_image` rolls the workload through the apply, and before these
+    # entries nothing waited on that roll. Neither needs a restart: the collector mounts its
+    # ConfigMap as a directory, which kubelet syncs and each cron run re-reads, and InfluxDB
+    # reads its credentials file only at first-run setup. A restart on every scrutiny manifest
+    # change would take InfluxDB, a Recreate Deployment, down for nothing.
+    manifests_extra_rollouts:
+      - name: scrutiny-influxdb
+        restart_on: []
+      - name: scrutiny-collector
+        kind: daemonset
+        restart_on: []
     # networkpolicy-influxdb.yaml renders from THIS role rather than netpol-baseline on purpose.
     # scrutiny-web panics rather than retries when InfluxDB is unreachable, so the policy
     # admitting it is part of this workload rather than part of the fleet baseline. Shipped one

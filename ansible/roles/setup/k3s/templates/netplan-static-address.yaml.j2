@@ -10,7 +10,7 @@
 # and the static config claim the same address, and whether networkd removes it when the
 # lease is lost is not something this config should depend on. DNS does not come from the
 # lease (this role renders resolv.conf), so the address and the default route are all the lease
-# supplied. IPv6 router advertisements are untouched.
+# supplied. IPv6 router advertisements are still accepted, with their route metric pinned below.
 #
 # The gateway must keep {{ server_ip }} out of its DHCP pool (a reservation for this NIC's
 # MAC, or a pool that ends below it). With DHCP off, nothing renews a lease, and an address
@@ -26,11 +26,20 @@ network:
 {% for link in [k3s_node_static_link] | select %}
     {{ link }}:
       dhcp4: false
+      # The IPv6 default route arrives by router advertisement, and networkd gives it the
+      # `[DHCP] RouteMetric`, or 1024 with none. netplan 1.1.2 has no `ra-overrides` metric key
+      # and emits `[DHCP]` only with a DHCP client on, so `dhcp4: false` alone left the RA route
+      # at 1024, behind wifi's 600, and IPv6 egress took wlo1 (#4561). `dhcp6: true` adds no
+      # client in practice: the gateway's RA sets the M flag, so networkd already runs DHCPv6.
+      dhcp6: true
+      dhcp6-overrides:
+        route-metric: 100
       # Configure the address even with no link. Carrier held through the 2026-10-05 outage,
       # but a gateway that is also the switch and loses power takes the link with it, and k3s
       # on this node needs the address to bind whether or not anything can reach it.
       # This also keeps the default route below installed with no carrier, so static-address.yml
-      # sets ignore_routes_with_linkdown on the link to let a fallback route win (#4510).
+      # sets ignore_routes_with_linkdown on the link, for IPv4 and IPv6, to let a fallback route
+      # win (#4510).
       ignore-carrier: true
       addresses:
         - "{{ server_ip }}/{{ lan_subnet.split('/')[1] }}"

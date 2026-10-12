@@ -53,6 +53,20 @@ spec:
               value: "true"
             - name: maxLogSizeMB
               value: "10"
+            # A 2.x server asks upstream's rollout API which engine to run on every start,
+            # unless this is set. This install moved to the Rust engine through that rollout,
+            # and Rust migrated the library DB out of the NodeJS engine's DB2/ tree, so a 2.x
+            # pod that drew NodeJS would come up on library state from before the move. 3.x
+            # runs Rust whatever this says, so the pin matters after a rollback to a 2.x tag
+            # (#4555).
+            - name: TDARR_ENGINE
+              value: "rust"
+            # Authelia's one_factor gate on the route is the only login. 3.x enables Tdarr's
+            # own auth on a NEW install, one whose server config file carries no `auth` key,
+            # so a fresh tdarr-configs claim would boot to an account form, and the internal
+            # node would need an apiKey. The env value outranks the config file.
+            - name: auth
+              value: "false"
             # Follows the host — so it registers as `daniel-box`
             # where the seeded database was written by a node called `daniel-server`.
             # Measured after the move: `/api/v2/get-nodes` returns exactly ONE node, unpaused, so
