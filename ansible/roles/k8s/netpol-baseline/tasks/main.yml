@@ -1,4 +1,18 @@
 ---
+# FIRST, ahead of every task that reads the cluster or applies. roles/k8s/manifests queues each
+# rollout for a drain at the END of its batch (tasks/k8s_batch.yml), so a workload earlier in
+# this role's batch may still be rolling when this role runs. Its exempt-set reads, its policy
+# applies and its probe's readiness gate would then all see the half-rolled cluster: a
+# Recreate workload such as traefik has no pod at all mid-roll. Draining here waits for every
+# rollout queued earlier in the batch, so the batch this role lands in no longer matters. The
+# drain cannot wait for a role listed after this one; list order covers that. In a run of
+# `--tags netpol-baseline` alone the queue is empty and the drain does nothing. configarr
+# includes the same drain before its reconcile, for the same reason.
+- name: Wait for the rollouts queued earlier in this batch before reading or fencing anything
+  ansible.builtin.include_role:
+    name: k8s/manifests
+    tasks_from: drain.yml
+
 # Both levers are read in two places that coerce differently, so a value neither place would
 # reject on its own is checked here once, before anything is applied.
 #
