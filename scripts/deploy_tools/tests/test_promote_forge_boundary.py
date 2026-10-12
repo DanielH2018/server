@@ -38,6 +38,14 @@ ALLOWED_LIB = frozenset(
     {"lib.cli_help", "lib.exit_codes", "lib.git", "lib.repo_paths", "lib.yaml_fast"}
 )
 
+# The `deployer_lib` modules promote.py may import, for the same reason: `deploy_git` is pure,
+# while `deploy_toolbox.fetch_ci_verdict` reads GitHub's check-runs API through `urlopen` and
+# `deploy_alerts` posts to webhooks.
+ALLOWED_DEPLOYER_LIB = frozenset({"deployer_lib.deploy_git"})
+
+# Each package whose imports are held to an allowlist, by the package name.
+ALLOWLISTS = {"lib": ALLOWED_LIB, "deployer_lib": ALLOWED_DEPLOYER_LIB}
+
 # The `os` functions that start a process, which promote.py's `import os` would reach.
 _OS_EXEC = ("system", "popen", "exec", "spawn", "posix_spawn", "fork")
 
@@ -49,15 +57,15 @@ ADAPTER = "forge"
 def imported_modules(source: str) -> set[str]:
     """Every module name an `import` or `from ... import` in `source` names.
 
-    `from lib import yaml_fast` names `lib.yaml_fast`, so the `lib` allowlist sees the module
-    rather than the package.
+    `from lib import yaml_fast` names `lib.yaml_fast`, so an allowlist in ALLOWLISTS sees the
+    module rather than the package.
     """
     names = set()
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
             names.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module == "lib":
-            names.update(f"lib.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module in ALLOWLISTS:
+            names.update(f"{node.module}.{alias.name}" for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             names.add(node.module)
     return names
@@ -95,7 +103,8 @@ def forbidden_imports(source: str) -> set[str]:
         | {
             name
             for name in modules
-            if name.split(".")[0] == "lib" and name not in ALLOWED_LIB
+            if name.split(".")[0] in ALLOWLISTS
+            and name not in ALLOWLISTS[name.split(".")[0]]
         }
         | _os_exec_uses(source)
     )
@@ -127,18 +136,34 @@ def test_a_module_starting_gh_itself_is_flagged():
         ("import lib.kubectl\n", "lib.kubectl"),
         ("import os\n\nos.system('gh variable get DEPLOY_HOLD')\n", "os.system"),
         ("from os import popen\n", "os.popen"),
+        (
+            "from deployer_lib.deploy_toolbox import fetch_ci_verdict\n",
+            "deployer_lib.deploy_toolbox",
+        ),
+        ("from deployer_lib import deploy_alerts\n", "deployer_lib.deploy_alerts"),
     ],
-    ids=["from-lib-gh", "from-lib-import-gh", "lib-kubectl", "os-system", "os-popen"],
+    ids=[
+        "from-lib-gh",
+        "from-lib-import-gh",
+        "lib-kubectl",
+        "os-system",
+        "os-popen",
+        "deployer-lib-toolbox",
+        "from-deployer-lib-import-alerts",
+    ],
 )
-def test_a_module_reaching_gh_through_lib_or_os_is_flagged(source, flagged):
+def test_a_module_reaching_gh_through_a_package_or_os_is_flagged(source, flagged):
     assert flagged in forbidden_imports("import forge\n" + source)
 
 
-def test_the_allowed_lib_imports_are_found_in_promote():
-    """Non-vacuity for the allowlist: promote.py's own `lib` imports are each recognised."""
+def test_the_allowed_package_imports_are_found_in_promote():
+    """Non-vacuity for the allowlists: promote.py's own package imports are each recognised."""
     modules = imported_modules(PROMOTE.read_text(encoding="utf-8"))
-    assert {"lib.git", "lib.yaml_fast"} <= modules
+    assert {"lib.git", "lib.yaml_fast", "deployer_lib.deploy_git"} <= modules
     assert {name for name in modules if name.startswith("lib.")} <= ALLOWED_LIB
+    assert {
+        name for name in modules if name.startswith("deployer_lib.")
+    } <= ALLOWED_DEPLOYER_LIB
 
 
 # -- request count -------------------------------------------------------------------------
