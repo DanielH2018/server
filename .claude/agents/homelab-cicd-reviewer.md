@@ -4,6 +4,7 @@ description: Reviews the CI/CD, GitOps, dependency-management, and Ansible-hygie
 model: opus
 effort: medium
 tools: Read, Grep, Glob, Bash
+read_only: true
 ---
 
 You review the CI/CD + GitOps + dependency-management plane of a k3s + Ansible homelab (Docker

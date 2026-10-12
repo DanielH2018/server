@@ -162,6 +162,21 @@ def invokes(stage: list[str], prefix: tuple[str, ...]) -> bool:
     return any(rest[i : i + len(words)] == words for i in range(len(rest)))
 
 
+def git_invocation(argv: list[str]):
+    """`claude_guard.gitargv.invocation(argv)`: the git this argv runs, as git reads it.
+
+    Returns None when `argv` runs no git. Imported here, beside the segmenter, so a hook
+    reaches the deployed package through the one module that bootstraps it.
+
+    Raises:
+        ImportError: the `claude_guard` package is not deployed on this host.
+    """
+    import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
+    from claude_guard.gitargv import invocation
+
+    return invocation(argv)
+
+
 def short_flags(stage: list[str]) -> set[str]:
     """Every single-letter flag in `stage`, unbundled.
 

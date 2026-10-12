@@ -4,6 +4,7 @@ description: Reviews the backup + observability plane of this k3s/Ansible homela
 model: opus
 effort: medium
 tools: Read, Grep, Glob, Bash
+read_only: true
 ---
 
 You review the BACKUP and OBSERVABILITY plane of a k3s + Ansible homelab (daniel-box as the
