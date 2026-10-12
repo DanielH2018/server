@@ -70,6 +70,10 @@ code_server_k8s_mem_request: 256Mi
 #               for the version, download the `vspackage` URL below with `curl -fsSL --compressed`
 #               (the marketplace serves it gzip-encoded; the hash is over the decoded VSIX) and
 #               `sha256sum` it.
+#   Either way, `uv run python scripts/validate/asset_pins.py --refresh '<pin name>'` does the
+#               hash step in one command once the version and URL are edited; the pin name is
+#               `code_server_k8s_extensions[<publisher>.<name>]`. Anthropic.claude-code moves
+#               with every Renovate bump of the `@anthropic-ai/claude-code` CLI (#4584).
 # Then redeploy: the rebuilt image rolls the pod, and extensions.sh installs the new VSIX.
 # A base-image bump PR (the Renovate `k8s base image` group, manual for this role) is the natural
 # moment to refresh these too.
