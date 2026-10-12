@@ -622,11 +622,26 @@ worktree is deleted with the worktree. `instructions_log_path` in
 `.claude/hooks/_hook_common.py` finds the primary checkout through `primary_checkout`, the
 parent of `git rev-parse --git-common-dir`. A doc the hook cannot fit arrives as its HEAD up to the budget, then the
 headings of the sections the head cut off, then a read pointer: the harness persists a longer
-`additionalContext` to disk and hands the model a preview stub instead. The payload is 7,500
-chars, and what a doc is weighed against is the 7,272 the preamble leaves, less its own
-`===== <doc> (applies to <trigger>) =====` header. A role doc is held under that effective
-budget by `ansible/tests/_doc_size.py:MAX_CHARS`, which derives it rather than restating the
-7,500 (#3245).
+`additionalContext` to disk and hands the model a preview stub instead. The payload has a
+character limit and a line limit. A doc is weighed against what the preamble leaves of them,
+less its own `===== <doc> (applies to <trigger>) =====` header. The first line of the
+`--report` output below prints both pairs of figures, computed from the hook's own constants. A
+role doc is held under that effective budget by `ansible/tests/_doc_size.py:MAX_CHARS`, which
+derives it rather than restating the payload limit (#3245).
+
+`uv run --no-sync python .claude/hooks/inject-nested-docs.py --report` lists every instruction
+file the hook serves. It prints one row per tracked `CLAUDE.md` other than the root one and per
+`.claude/rules/*.md`, with the doc's size, its margin under each limit, and whether the hook
+delivers it `whole` or as a `head`. Rows run tightest margin first. A `CLAUDE.md` is measured at
+its own directory, the shortest header the hook can build for it, so `head` holds on every
+trigger. A rule is measured at the shortest tracked path its `paths:` globs match, and reads
+`none` when they match nothing. A `whole` row within 200 characters or 10 lines of a limit is
+marked `near`. The last line is the root `CLAUDE.md`'s line count, which the hook never injects.
+The report reads no stdin, writes nothing and exits non-zero on any error, because `__main__`
+dispatches it before the hook's error swallow. Two heads in one command do not share the
+payload: the first head takes what the whole docs leave, and the second defers to a later
+command that names a matching path. `docs_for` lists a `CLAUDE.md` before the rules, so a role
+doc that grows into a head defers `facts.md` or `python-layout.md` in the same command.
 
 The head spends the budget on text a session acts on without a second read: a role doc opens
 with its generated `## At a glance` block and its operative rules (#2650). It cuts at a heading
