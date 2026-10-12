@@ -592,8 +592,11 @@ and gh verbs such as `git log`, `git branch -a`, `gh pr view` and a `gh api` GET
 allowlist does not name is denied, so a read it lacks costs the agent one rephrased command. The
 arm reads past wrappers such as `timeout`, `xargs` and `uv run`. It judges the body of a `$( )`
 and an `ssh` remote command as commands of their own. The reviewer agents and the skeptic read
-text that any GitHub account can write, such as PR bodies and upstream release notes, so their
-"Read-only" description is enforced here rather than left to the prompt (#4617).
+text that any GitHub account can write, such as PR bodies and upstream release notes, so the
+arm narrows what their Bash can write (#4617). It is defense in depth, not a guarantee: five
+bypasses are known (#4680). Their descriptions therefore say they are report-only by
+instruction, and no longer claim to be read-only. The structural fix is an agent without Bash, or one running under a
+user that cannot write the repo.
 
 A Bash write that leaves an isolated session's worktree is **denied** by the dotfiles
 `claude_guard` package, not by this hook (`checks/worktree_escape.py`, moved there by #2818).
