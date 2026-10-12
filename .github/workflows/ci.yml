@@ -303,7 +303,7 @@ jobs:
         id: notice
         if: github.event_name == 'pull_request'
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 1
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
         run: |
@@ -316,6 +316,7 @@ jobs:
           trap 'git worktree remove --force "$code" || true' EXIT
 
           echo "stage: setup" >> "$err"
+          sleep 120
           SECONDS=0
           base=$(git merge-base "origin/$BASE_REF" "$GITHUB_SHA")
           echo "base $base" >> "$err"
@@ -326,7 +327,7 @@ jobs:
           echo "stage: notice" >> "$err"
           SECONDS=0
           notice=(uv --directory "$code" run --frozen python scripts/dev/fact_status.py
-                  notice --since origin/does-not-exist --head "$GITHUB_SHA")
+                  notice --since "origin/$BASE_REF" --head "$GITHUB_SHA")
           "${notice[@]}" --format github
           "${notice[@]}" --format markdown >> "$GITHUB_STEP_SUMMARY"
           echo "notice stage took ${SECONDS}s"
