@@ -18,6 +18,11 @@ work doesn't start blind:
     stop every deploy in the fleet and that a worktree session cannot look at for itself,
     because the isolation guard refuses a git command targeting the shared checkout
 
+It also appends one `session_start` row to the instructions log for the auto-memory
+`MEMORY.md` and one for the active output style. Claude Code fires no InstructionsLoaded
+event for either, so without these rows `fact_status.py report` under-counts each session's
+at-start bytes (#4656).
+
 Design contract (mirrors the other hooks here):
   - SILENT when all-green: prints nothing, so it adds zero context noise on a
     healthy day. Set SESSION_HEALTH_VERBOSE=1 to force an all-clear line (demo/test).
@@ -535,6 +540,13 @@ def main(
     # Don't re-banner on mid-session compaction — only on a genuine open/resume/clear.
     if payload.get("source") == "compact":
         return 0
+    try:
+        # Imported here so a broken module costs these two rows, never the banner.
+        from hooklib.instruction_rows import log_unevented_loads
+
+        log_unevented_loads(payload)
+    except Exception:  # noqa: S110 -- a failed row must never cost the banner
+        pass
 
     targets = target_problems()
     master_moved = master_moved_problems()
