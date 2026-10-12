@@ -137,12 +137,13 @@ def test_a_disarmed_gate_names_where_to_re_arm_it(landing, capsys):
 
 
 def _step_3_over_master(
-    landing, tmp_path, monkeypatch, green: list[bool]
+    landing, tmp_path, monkeypatch, green: list[bool], red: frozenset[int] = frozenset()
 ) -> tuple[list[str], Outcome | None]:
     """Run step 3's wait on the first of a scratch master's commits; None when it returned.
 
     `green[i]` says whether commit i went green. A commit that did not has no check run and
-    no check suite at all, which is what GitHub left for a dropped push event (#4621). The
+    no check suite at all, which is what GitHub left for a dropped push event (#4621), unless
+    its index is in `red`, which gives it a failed required run instead. The
     REAL await_ci.wait runs over a fake clock and a fake GitHub, and the origin is a real
     repository, so the wait reaches a descendant through whichever git query a fix chooses.
     """
@@ -162,7 +163,11 @@ def _step_3_over_master(
         {"name": name, "status": "completed", "conclusion": "success"}
         for name in await_ci.REQUIRED_CONTEXTS
     ]
-    runs = {sha: (passed if ok else []) for sha, ok in zip(shas, green, strict=True)}
+    failed = [{**run, "conclusion": "failure"} for run in passed]
+    runs = {
+        sha: (passed if ok else failed if i in red else [])
+        for i, (sha, ok) in enumerate(zip(shas, green, strict=True))
+    }
     now = [0.0]
 
     def sleep(seconds):
@@ -246,3 +251,66 @@ def test_step_3_accepts_the_green_middle_commit_when_the_tip_has_no_run_either(
     out = capsys.readouterr().out
     assert f"{middle[:8]}: CI green" in out, out
     assert f"{tip[:8]}: CI green" not in out, out
+
+
+@pytest.mark.parametrize(
+    "green", [[False], [False, False]], ids=["merge-is-tip", "all-run-less"]
+)
+def test_step_3_names_the_tip_when_no_commit_from_the_merge_on_has_a_run(
+    landing, tmp_path, monkeypatch, green
+):
+    """#4641: the run-less merge commit is the tip, or every commit after it is run-less too.
+
+    No re-run converges until somebody merges something, so step 3 must not end
+    `ci-timeout` (whose resume is a re-run). Its own verdict names the tip, whichever route
+    out it then offers.
+    """
+    shas, ended = _step_3_over_master(landing, tmp_path, monkeypatch, green)
+    tip = shas[-1]
+    assert ended is not None, "no commit is green, so step 3 cannot accept a verdict"
+    detail = ended.error or ""
+    assert ended.verdict != "ci-timeout", detail
+    assert ended.rc != 75, detail
+    assert tip[:8] in detail, detail
+
+
+def test_step_3_does_not_end_red_for_good_once_a_later_descendant_is_green(
+    landing, tmp_path, monkeypatch
+):
+    """#4649: the merge commit's push was dropped, D1 went red on its own bug, D2 is green.
+
+    The nearest descendant's red never changes, so every re-run ended `ci-red` while the
+    tick fast-forwarded past the merge commit to D2. Either step 3 now converges, or the
+    verdict it ends on names the tip and a hand-deploy route out of this state.
+    """
+    (_, _, tip), ended = _step_3_over_master(
+        landing, tmp_path, monkeypatch, [False, False, True], red=frozenset({1})
+    )
+    if ended is None:
+        return  # Step 3 accepted the green tip, and the landing goes on.
+    detail = ended.error or ""
+    assert ended.verdict != "ci-timeout", detail
+    assert tip[:8] in detail, detail
+    if ended.verdict == "ci-red":
+        assert "deploy.sh" in detail, detail
+
+
+@pytest.mark.parametrize(
+    "label, where", [(None, ""), ("the tip def456", " on the tip def456")]
+)
+def test_an_unproven_merge_commit_ends_ci_unproven_and_names_the_way_out(
+    landing, label, where
+):
+    """#4641/#4649: exit 1, not the 75 resume point, carrying await_ci's line and the tags."""
+    from lib.exit_codes import CI_UNPROVEN
+
+    line = "abc12345: no verdict can arrive — run `gh workflow run ci.yml --ref master`"
+    ln, _ = landing(Fakes(await_ci=[(CI_UNPROVEN, line)]))
+    ln.resolved_tags = ["grafana", "loki"]
+    with pytest.raises(Outcome) as exc:
+        ci.wait_master_ci(ln, "abc123", label)
+    assert (exc.value.rc, exc.value.verdict) == (1, "ci-unproven")
+    assert exc.value.error == (
+        f"no CI verdict can arrive{where}: {line} (this PR's tags: grafana,loki) "
+        "— nothing deployed"
+    )

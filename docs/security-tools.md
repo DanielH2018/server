@@ -14,13 +14,17 @@ This document covers the security and monitoring tools deployed by `ansible/role
 
 | Scan | Tile | Message |
 |------|------|---------|
-| completed, `Possible rootkits: 0` | UP | the warning, suspect-file and possible-rootkit counts |
+| completed, no warning, suspect file or possible rootkit | UP | the counts, all 0 |
 | completed, `Possible rootkits` above 0 | DOWN | `possible rootkit found` with the counts |
+| completed, `Suspect files` above 0 | DOWN | `suspect file found` with the counts |
+| completed with a warning | DOWN | `rkhunter warned` with the counts and the first warning |
 | did not complete | DOWN | rkhunter's exit code and its first error line |
 
 No push for a week and 2 hours also reads DOWN, which means the cron stopped running or the scan never finished.
 
-Warnings read UP on purpose. Every host warns every week: `/etc/.updated` and `/etc/.resolv.conf.systemd-resolved.bak` are reported as hidden files on all three hosts, and daniel-pi reports `PermitRootLogin` unset. A DOWN on warnings would be red every Wednesday. Read the warning count in the tile's message. Paging on a warning or a suspect file is tracked in #4638. The `DECIDED:` marker in `ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2` holds the evidence. The script's verdict goes to syslog tagged `rkhunter-check` as `status=<up|down> <message>`.
+Every warning pages (#4638). Before that change, every host warned every week from two benign causes. rkhunter reported `/etc/.updated` and `/etc/.resolv.conf.systemd-resolved.bak` as hidden files on all three hosts. It also reported `PermitRootLogin` unset on daniel-pi, because rkhunter reads only the main `/etc/ssh/sshd_config` and the Pi hardens a drop-in. `initial_setup` renders `/etc/rkhunter.conf.local` to allowlist both causes, so a healthy week has no warnings. The `DECIDED:` marker in `ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2` holds the evidence. The script's verdict goes to syslog tagged `rkhunter-check` as `status=<up|down> <message>`.
+
+To clear a warning, find its cause first. rkhunter reports a user or group added to `/etc/passwd` or `/etc/group` once, the week after a package or the operator adds it. Once you have confirmed the account is yours, run `sudo /usr/local/bin/rkhunter-check.sh` again; rkhunter stored the new account list on the run that warned, so the rerun reads UP. A benign warning that recurs every week needs an `ALLOW*` line in `ansible/roles/setup/initial_setup/templates/rkhunter.conf.local.j2`, applied with `--tags rkhunter`.
 
 To prove the tile pages, make rkhunter fail to start on one host and run the script by hand. `ionice` then cannot execute it and exits 126 without touching the log, so the tile goes DOWN within seconds:
 

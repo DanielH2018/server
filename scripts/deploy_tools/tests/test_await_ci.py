@@ -260,8 +260,10 @@ def test_wait_does_not_take_a_descendant_while_an_actions_suite_is_queued():
     assert msg.startswith("old:") and "never ran CI" not in msg
 
 
-def test_a_dropped_push_with_no_green_descendant_times_out_saying_why():
-    code, msg = _wait_on_dropped([], [])
+def test_a_dropped_push_whose_descendant_ci_is_in_flight_times_out_saying_why():
+    """The reject half of CI_UNPROVEN (#4641): a run on its way makes a re-run converge."""
+    running = [_run("prek (lint + validate + tests + secrets)", "in_progress", None)]
+    code, msg = _wait_on_dropped([], running)
     assert code == 75
     assert "GitHub never ran CI" in msg and "re-run converges" in msg
 
@@ -280,3 +282,76 @@ def test_wait_on_a_dropped_push_ends_red_when_its_nearest_descendant_is_red():
     code, msg = _wait_on_dropped([], red)
     assert code == 1
     assert msg.startswith("next: CI RED") and "never ran CI for old" in msg
+
+
+def _run_less_tip(chain, suites=(), tip="tip"):
+    return await_ci.run_less_tip(
+        "old",
+        fetch=lambda _s: [],
+        fetch_suites=lambda _s: list(suites),
+        descendants=lambda _s: chain,
+        fetch_tip=lambda: tip,
+    )
+
+
+def test_run_less_tip_names_the_tip_when_no_commit_from_the_sha_has_ci():
+    assert _run_less_tip(["next", "tip"]) == "tip"
+    assert _run_less_tip([], tip="old") == "old"
+
+
+def test_run_less_tip_says_nothing_for_a_sha_not_on_master():
+    """The reject half: no descendants because `old` is off master, not because it is the tip."""
+    assert _run_less_tip([], tip="other") == ""
+
+
+def test_run_less_tip_says_nothing_while_a_descendant_suite_is_queued():
+    assert _run_less_tip(["next"], suites=[_actions_suite("queued")]) == ""
+
+
+def test_run_less_tip_says_nothing_past_the_descendant_window():
+    chain = [f"c{i}" for i in range(await_ci.DESCENDANT_LIMIT + 1)]
+    assert _run_less_tip(chain) == ""
+
+
+def _wait_past_a_red_descendant(later_goes_green_at):
+    """wait() on dropped `old`: `red` fails at once; `fix` is in flight until a time, or forever."""
+    name = "prek (lint + validate + tests + secrets)"
+    now = [0]
+
+    def fetch(sha):
+        if sha == "red":
+            return [_run(name, "completed", "failure")]
+        if sha == "fix":
+            if later_goes_green_at is not None and now[0] >= later_goes_green_at:
+                return [_run(name, "completed", "success")]
+            return [_run(name, "in_progress", None)]
+        return []
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    return await_ci.wait(
+        "old",
+        900,
+        20,
+        sleep=sleep,
+        clock=lambda: now[0],
+        fetch=fetch,
+        fetch_suites=lambda _s: [],
+        descendants=lambda _s: ["red", "fix"],
+        fetch_tip=lambda: "fix",
+    )
+
+
+def test_wait_keeps_polling_past_a_red_descendant_while_a_later_one_is_in_flight():
+    """#4649 at merge time: the fix's CI is still running when the red one is found."""
+    code, msg = _wait_past_a_red_descendant(later_goes_green_at=600)
+    assert code == await_ci.CI_UNPROVEN, msg
+    assert "fix" in msg and "deploy.sh" in msg
+
+
+def test_a_red_descendant_whose_later_one_never_settles_ends_red_saying_why():
+    """The reject half: the budget runs out, and the line says what a re-run would need."""
+    code, msg = _wait_past_a_red_descendant(later_goes_green_at=None)
+    assert code == 1
+    assert msg.startswith("red: CI RED") and "fix after it has no verdict yet" in msg
