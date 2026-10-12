@@ -19,13 +19,14 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
 | `registry-gc` | `roles/k8s/registry/templates/registry-gc.sh.j2` | GC job exceeded its deadline, the registry pod would not terminate, the job manifest failed to apply, or the registry did not come back afterwards |
 | `uptime-kuma-alive` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | that script's Kuma push returned non-zero — see *Watching the spine itself* below |
+| `alertmanager-watchdog` | the `healthchecks` receiver in `roles/k8s/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `roles/k8s/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
 | `weekly-reboot-<host>` | the `Weekly system restart` cron in `roles/setup/initial_setup/tasks/crons.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
 | `<host>-docker-prune` | the `Clean unused Docker images` cron in the same file, on each `has_docker` host (`daniel-pi`) | never: it pings only after the prune succeeds, and silence is the failure |
 | `daniel-box-worktree-sweep` | the `Weekly git object-store repair` cron in the same file, on `ops_cron_host` | `prune_worktrees.py --prune` exits non-zero: it pings the exit-status endpoint `/<rc>`, so a failed removal or branch deletion fails the check |
 
 The cron behind each slug, read from the variables that set it:
 
-<!-- Generated from the cron variables in the k3s, pi-peer-backup and registry roles; edit those. -->
+<!-- Generated from the variables its header names; edit those. -->
 --8<-- "assets/generated/fragments/deadman-cadences.md"
 
 Cadences are the host's clock, and daniel-box runs **UTC** — not the `America/Chicago` the
@@ -40,9 +41,11 @@ verified against their crons at all. Set them to match this table. monitor-bridg
 *Healthchecks.io Console Drift* tile compares the console against it every day (see *The
 console drifts* below).
 
-The period or expression is the cron in the table above: a `*/10` minute cron is a Simple
-check with a 10-minute period, and every other slug is a Cron check carrying that expression
-in the timezone its cron runs in. That is UTC for every host cron, and `America/Chicago` for
+The period or expression comes from the cron in the table above. A `*/10` minute cron is a
+Simple check with a 10-minute period. An `every <N>s` row is a Simple check too, but its sender
+is not a cron: its period is the slug's own `timeout`, which must stay above N so that one late
+send cannot page. Every other slug is a Cron check carrying its expression in the timezone its
+cron runs in. That is UTC for every host cron, and `America/Chicago` for
 `pi-peer-backup` alone: it is a k8s CronJob whose manifest sets `timeZone: {{ tz }}`
 (`roles/k8s/pi-peer-backup/templates/cronjob.yaml.j2`), so its console check carries
 `0 23 * * *` in `America/Chicago`. The timezone field is load-bearing: a UTC expression
@@ -75,14 +78,15 @@ than a wider grace — see the boot-grace note under *Watching the spine itself*
 
 ## Watching the spine itself
 
-The five job checks above all answer "did this job run and succeed." `uptime-kuma-alive`
+The job checks above all answer "did this job run and succeed." `uptime-kuma-alive`
 answers a different question: is the thing every alert terminates in still working.
 
 The gap it closes: `longhorn-backup-health` and `daniel-box-disk-health` ping hc-ping.com
 whether or not their Kuma push succeeded, which is right for a backup check and leaves Kuma
 itself uncovered. A dead Kuma pod, a wedged SQLite, or a NetworkPolicy that fences off :3001
-silences every one of the ~82 tiles — there is no Alertmanager, so nothing else pages — while
-all six checks above keep reporting green. A *cluster* outage is caught, because these scripts
+silences every one of the ~82 tiles while every job check above keeps reporting green. Kuma
+remains the only pager for its tiles until M2 cuts a family over to Alertmanager, and until then
+Alertmanager pages only its own meta alerts. A *cluster* outage is caught, because these scripts
 go silent with it. A Kuma-only outage was caught by nothing.
 
 `longhorn-backup-health` carries its Kuma push's exit status to this second slug: success
@@ -123,11 +127,33 @@ What it does not cover: Kuma accepting pushes while failing to *deliver* notific
 `Discord Delivery` tile watches the Discord leg from inside Kuma, and the email tier is the
 second channel. A Kuma that accepts a push and then drops the alert still reads green here.
 
+### Alertmanager's watcher
+
+`alertmanager-watchdog` watches Alertmanager as `uptime-kuma-alive` watches Kuma. Prometheus
+evaluates an always-firing `Watchdog` rule, and Alertmanager routes it to this check every
+`observability_alertmanager_watchdog_repeat_seconds` (60 seconds). The route comes first and
+takes no mute interval, so no maintenance window silences it. The pings stop when Alertmanager
+is down, when Prometheus stops evaluating rules or sending alerts, or when the receiver breaks,
+and the check pages by silence. A ping that Healthchecks.io refuses also counts in
+`alertmanager_notifications_failed_total`, so `AlertmanagerNotificationsFailing` pages it through
+Discord and email.
+
+The receiver sets `send_resolved: false`. When the Watchdog stops arriving, Alertmanager
+resolves it after `resolve_timeout`, and a resolved notification would count as a ping and hide
+the outage.
+
+The check is Simple, with a 10-minute period and a 20-minute grace, like `uptime-kuma-alive`, so
+a down Alertmanager pages up to 30 minutes in. A shorter check would page on most weekly
+reboots: the gap between the last ping before the reboot and the first after it is about 15
+minutes. The operator accepted the 30 minutes on 2026-10-12
+([#4693](https://github.com/DanielH2018/server/issues/4693)). The
+[M1 slice plan](target-architecture/monitoring/m1-alertmanager.md) has the sizing.
+
 ## What leaves the house
 
 Healthchecks.io stores the ping body (first 100 kB per ping), so the body is the disclosure
-surface. Two of the six send a generic string instead of their Kuma message, because theirs
-name internal infrastructure, and one sends no body at all:
+surface. Some checks send a generic string instead of their Kuma message, because theirs name
+internal infrastructure, and some send no body at all:
 
 | Check | Body sent off-site | Why |
 |---|---|---|
@@ -138,6 +164,7 @@ name internal infrastructure, and one sends no body at all:
 | `pi-peer-backup` | generic | An rsync failure echoes `PI_SRC`, which carries the Pi's LAN IP and ssh user. |
 | `registry-gc` | full message | A blob/link count, or a failure naming the cluster namespace and the `registry` Deployment. Low value to an outsider and it is what makes the failure actionable. |
 | `uptime-kuma-alive` | none | Status only, and status is the whole signal — it reports on Kuma, not on what Kuma found. |
+| `alertmanager-watchdog` | `{"status": "firing"}` | The receiver's `payload` carries the alert's status alone, so no label, annotation or URL goes off-site. |
 | `weekly-reboot-<host>`, `<host>-docker-prune` | none | Status only. The ping discards curl's output, and the cron sends no body. |
 
 The withheld detail is still in Kuma, on the LAN. The off-site copy only has to carry *that*
@@ -273,7 +300,7 @@ catches by silence.
   RecurringJob CRDs, not rendered by this repo, so there is no command to append to.
   `longhorn-backup-health` covers the same ground and covers it better: it asserts backup
   *freshness and coverage* rather than that a job ran.
-- **The other ~15 Kuma push sites.** Free-tier headroom is 20 checks and eleven slugs are used; the
-  limit is not the reason. An off-site check earns its slot only where the silence is both
+- **The other ~15 Kuma push sites.** Free-tier headroom is 20 checks, and the cadence table
+  above lists the slugs in use; the limit is not the reason. An off-site check earns its slot only where the silence is both
   invisible and consequential, and adding the rest would mostly duplicate what Kuma already
   reports correctly whenever the cluster is up enough to have a problem worth reporting.

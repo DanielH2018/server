@@ -10,10 +10,11 @@ Prometheus. `rule_problems` holds the role's rule files to the conventions in
   ConfigMap. `GROUP_FLOOR` names the groups the run must find;
 - every alert carries a literal `severity` from `SEVERITIES` and a `service`, and `shadow` is
   absent or `"true"`;
-- at most one rule is named `Watchdog`, in `alerting-meta`, with the expression `vector(1)`.
-  The C7 health gate excludes that name, so a second one would be hidden from every gate.
-  Every other alert's expression names a metric (`names_a_metric`), because a constant
-  expression fires forever;
+- exactly one rule is named `Watchdog`, in `alerting-meta`, with the expression `vector(1)`.
+  The C7 health gate excludes that name, so a second one would be hidden from every gate, and
+  with none nothing pings the `alertmanager-watchdog` check on Healthchecks.io. Every other
+  alert's expression names a metric (`names_a_metric`), because a constant expression fires
+  forever;
 - no rule, rule test or Alertmanager template source holds `${`. The rendered
   `alertmanager.yml` is outside this, because it carries placeholders by design;
 - a test case fires every alert and asserts its `service` and `severity`;
@@ -43,7 +44,8 @@ ROLE_DIR = K8S_ROLES / "observability"
 RULES_DIR = ROLE_DIR / "files" / "rules"
 RULE_TESTS_DIR = ROLE_DIR / "tests" / "rules"
 
-# The ConfigMap that carries the rule files, and the rule groups a run must find. The M1 slice plan raises the floor again when the Watchdog lands.
+# The ConfigMap that carries the rule files, and the rule groups a run must find. The other
+# member a run must find is the one `Watchdog`, which `watchdog_problems` requires.
 RULES_CONFIGMAP = "prometheus-rules"
 GROUP_FLOOR = frozenset({"alerting-meta"})
 RULE_TEST_SUFFIX = ".test.yaml"
@@ -193,7 +195,7 @@ def rule_file_problems(stem: str, doc: object) -> list[str]:
 
 
 def watchdog_problems(docs: Mapping[str, object]) -> list[str]:
-    """A problem unless at most one rule is the Watchdog, in its group, as `vector(1)`.
+    """A problem unless exactly one rule is the Watchdog, in its group, as `vector(1)`.
 
     Args:
         docs: Each parsed rule file, by stem.
@@ -204,6 +206,11 @@ def watchdog_problems(docs: Mapping[str, object]) -> list[str]:
         for group, rule in _alerts(doc)
         if rule["alert"] == WATCHDOG
     ]
+    if not found:
+        return [
+            f"no rule is named {WATCHDOG}, so nothing pings the alertmanager-watchdog check on "
+            f"Healthchecks.io. It belongs in the {WATCHDOG_GROUP} group as {WATCHDOG_EXPR!r}."
+        ]
     if len(found) > 1:
         return [
             f"{len(found)} rules are named {WATCHDOG}, in {sorted(s for s, _, _ in found)}. "

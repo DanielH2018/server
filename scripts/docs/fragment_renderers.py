@@ -170,6 +170,7 @@ def deadman_crons(
     group_vars: dict,
     initial_setup: dict,
     has_docker: dict[str, bool],
+    observability: dict,
 ) -> list[tuple[str, str, str]]:
     """(slug, cron, source) per Healthchecks.io slug, assembled from the variables that set it.
 
@@ -179,6 +180,10 @@ def deadman_crons(
     `has_docker` is `{host: bool}` over every host initial_setup runs on. The weekly reboot
     pings a slug per host, and the Docker prune pings one per host that installs it (#2806).
     The worktree sweep runs on `ops_cron_host` alone, so it pings one slug (#4482).
+
+    `alertmanager-watchdog` has no cron: Alertmanager re-sends the always-firing Watchdog alert
+    every `observability_alertmanager_watchdog_repeat_seconds`. Its cadence is `every <N>s`,
+    a form no cron expression takes, so a reader cannot mistake it for one.
     """
     every_10 = f"{k3s['k3s_longhorn_backup_health_cron_minute']} * * * *"
     rows = [
@@ -217,6 +222,12 @@ def deadman_crons(
             "uptime-kuma-alive",
             every_10,
             "the `longhorn-backup-health` cron; the same script pings both",
+        ),
+        (
+            "alertmanager-watchdog",
+            f"every {observability['observability_alertmanager_watchdog_repeat_seconds']}s",
+            "`observability_alertmanager_watchdog_repeat_seconds`, Alertmanager's Watchdog "
+            "repeat, not a cron",
         ),
     ]
     reboot = (
@@ -264,9 +275,12 @@ def render_deadman_cadences(
     group_vars: dict,
     initial_setup: dict,
     has_docker: dict[str, bool],
+    observability: dict,
 ) -> str:
     """One row per Healthchecks.io slug: the cron that pings it, assembled from its vars."""
-    rows = deadman_crons(k3s, pi_peer, registry, group_vars, initial_setup, has_docker)
+    rows = deadman_crons(
+        k3s, pi_peer, registry, group_vars, initial_setup, has_docker, observability
+    )
     lines = ["| Check slug | Cron (host clock, UTC) | Set by |", "|---|---|---|"]
     lines += [f"| `{slug}` | `{cron}` | {source} |" for slug, cron, source in rows]
     return "\n".join(lines) + "\n"

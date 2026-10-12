@@ -4,6 +4,7 @@ Status: IN PROGRESS
 
 D1.1, the Flux schemas and the proposal: [#4697](https://github.com/DanielH2018/server/pull/4697).
 D1.2, the flux role and its controllers: [#4734](https://github.com/DanielH2018/server/pull/4734).
+D1.2b, guards on the Flux read access `view` aggregation grants: [#4751](https://github.com/DanielH2018/server/pull/4751).
 D1.3, the promotion decision: [#4709](https://github.com/DanielH2018/server/pull/4709).
 
 Depends on: none
@@ -48,11 +49,24 @@ and upstream facts through `gh`.
   binds it to `view`, adds `get`, `list` and `watch` on `customresourcedefinitions`, and
   grants `resources: ["*"]` read on each group in
   `ansible/roles/setup/k3s/defaults/main.yml:k3s_readonly_crd_api_groups`. That list holds
-  `traefik.io`, `metallb.io`, `longhorn.io` and `k3s.cattle.io`, and no Flux group, so a
-  `kubectl get` on any Flux kind returns Forbidden.
+  `traefik.io`, `metallb.io`, `longhorn.io` and `k3s.cattle.io`, and no Flux group. The plan
+  concluded that a `kubectl get` on any Flux kind returns Forbidden.
   `ansible/tests/k8s/test_k8s_manifests_rbac.py:test_readonly_role_covers_the_crd_groups_this_homelab_deploys`
   checks only the Traefik groups and the k3s group. Its docstring says a missing group
   "degrades silently".
+    - **Corrected on 2026-10-12 (#4742): the read-only identity reads every Flux kind.**
+      D1.2 vendored `ansible/roles/k8s/flux/files/gotk-components.yaml`, which carries the
+      ClusterRole `flux-view-flux-system`. That role is labelled
+      `rbac.authorization.k8s.io/aggregate-to-view: "true"` and grants `get`, `list` and
+      `watch` on `resources: '*'` in six groups: `kustomize.toolkit.fluxcd.io`,
+      `source.toolkit.fluxcd.io`, `notification.toolkit.fluxcd.io`,
+      `helm.toolkit.fluxcd.io`, `image.toolkit.fluxcd.io` and `source.extensions.fluxcd.io`.
+      Kubernetes adds those rules to `view`, which the read-only identity binds. So after
+      D1.2 landed, `kubectl get kustomizations.kustomize.toolkit.fluxcd.io -A` printed
+      `No resources found`, not Forbidden. The vendored `flux-edit-flux-system` aggregates
+      Flux writes into `edit` and `admin` only, and nothing in the tree binds either.
+      The operator accepted the aggregation on 2026-10-12, so D1 adds no Flux group to
+      `k3s_readonly_crd_api_groups`.
 - **A change to that list is a hand apply.** `ansible/roles/setup/k3s/tasks/kubeconfig.yml`
   renders and applies `readonly-rbac.yaml.j2` under the tag `kubeconfig`, and
   `scripts/deploy_tools/tests/test_narrow_setup.py:test_the_real_k3s_role_still_maps_readonly_rbac_to_kubeconfig`
@@ -359,10 +373,8 @@ and upstream facts through `gh`.
   ansible/tests/k8s/test_priority_class_is_derived_from_tier.py   _CLASS_AT_DERIVATION gains flux
   ansible/tests/k8s/test_deferred_manifest_dir_is_reserved.py     KNOWN_DEFERRED_DIRS gains flux-sync
   ansible/tests/deploy/test_restart_on_narrows_the_restart_signals.py   _EXPECTED_NARROWERS gains flux
-  ansible/roles/setup/k3s/defaults/main.yml   k3s_readonly_crd_api_groups gains the three Flux
-                                              groups (D1.2b, a hand apply)
-  ansible/tests/k8s/test_k8s_manifests_rbac.py   the CRD-group coverage test derives the groups
-                                                 of every CRD the flux role renders
++ ansible/tests/k8s/test_aggregated_clusterroles.py   every aggregating ClusterRole is listed;
+                                                     flux-view-flux-system's grant is pinned (D1.2b)
   scripts/validate/refresh_vendored_schemas.py   apiextensions core file, four Flux kinds
 + scripts/validate/schemas/…                     the schemas it fetches
   renovate.json                     flux defaults path in the denylist rule, and a
@@ -529,23 +541,25 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
   `validate-k8s-manifests` hook validates the render against the vendored schemas.
   Rejected: landing the Namespace in an earlier PR. It would add a PR and a deploy for a
   check that the schema validation already makes.
-- **The read-only identity reads the Flux kinds (D1.2b).** Every check in *Verification* that
-  names a Flux kind runs as the read-only ServiceAccount, which reads no Flux group
-  (*Baseline*). D1.2b appends `source.toolkit.fluxcd.io`, `kustomize.toolkit.fluxcd.io` and
-  `notification.toolkit.fluxcd.io` to `k3s_readonly_crd_api_groups`.
-    - `resources: ["*"]` on the notification group grants read on Provider, Alert and
+- **The read-only identity reads the Flux kinds through `view` (D1.2b).** Every check in
+  *Verification* that names a Flux kind runs as the read-only ServiceAccount. The vendored
+  `flux-view-flux-system` aggregates read on six Flux groups into `view`, which that
+  identity binds (*Baseline*, corrected on 2026-10-12). The operator accepted the
+  aggregation on 2026-10-12, so D1.2b changes no RBAC and guards the grant instead.
+    - `resources: '*'` on the notification group grants read on Provider, Alert and
       Receiver. On the source group it grants read on OCIRepository. These objects hold
       Secret references, never values. The `discord` Provider takes its address from the
       Secret `flux-discord` and leaves `spec.address` empty. The `github-status` Provider's
       address is the public repository URL.
-    - The change is a `setup/k3s` change, so the tick records it as `manual_plane` and never
-      applies it (*Baseline*). The operator applies it (**operator-only**), as H2 does for
-      its `k3s-bringup.yml` applies, because the change widens the identity every agent
-      session reads the cluster as.
-    - The coverage test derives the required groups from the `spec.group` of every
-      CustomResourceDefinition the flux role renders, so a later Flux group fails CI rather
-      than reading Forbidden. Rejected: listing the three groups in the test, which would
-      miss a group that a `flux_version` bump adds.
+    - Every ClusterRole that aggregates into `view`, `edit` or `admin` must be on an
+      allowlist with a reason. A role that widens `view` is a grant to every identity bound
+      to it, made without touching any binding, so the next one is a reviewed decision.
+    - The test pins `flux-view-flux-system` to read verbs on exactly the six groups.
+      Rejected: deriving the groups from the CRDs the flux role renders, as the plan first
+      proposed for `k3s_readonly_crd_api_groups`. A derived set follows a `flux_version`
+      bump silently, and the bump is exactly the change that should be reviewed.
+    - Rejected: removing the aggregation with a render-time patch. The operator ruled to
+      accept it, and the read-only identity needs these reads anyway.
 - **The verify drill's object has a way out.** While `flux_verify_drill` is true,
   `sync.yaml.j2` renders a second OCIRepository, `verify-drill`. Dropping it from the render
   deletes nothing (*Baseline*), so while the lever is false the role runs
@@ -990,33 +1004,32 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       rules otherwise, and clears the lines of services outside it with `gitops_state.py
       clear-owed k8s_unapplied <svc>` (**operator-only**).
 
-3. **D1.2b — The read-only identity reads the Flux kinds** (about 10 lines of defaults and
-   about 25 of test). It lands after D1.2, whose CRDs the test reads, and its apply must be
-   done before D1.5 lands.
-    - Append `source.toolkit.fluxcd.io`, `kustomize.toolkit.fluxcd.io` and
-      `notification.toolkit.fluxcd.io` to
-      `ansible/roles/setup/k3s/defaults/main.yml:k3s_readonly_crd_api_groups`. The comment
-      above them follows the `k3s.cattle.io` paragraph's form: it names the deploy
-      controller's kinds as the reason, and says that `resources: ["*"]` grants read on
-      Provider, Alert, Receiver and OCIRepository, which hold Secret references, not values.
-    - Extend
-      `ansible/tests/k8s/test_k8s_manifests_rbac.py:test_readonly_role_covers_the_crd_groups_this_homelab_deploys`.
-      It collects `spec.group` from every CustomResourceDefinition document that
-      `ansible/tests/_k8s_render.py:rendered_docs` yields for role `flux`, asserts that the
-      set contains `kustomize.toolkit.fluxcd.io`, so an empty derivation cannot pass, and
-      asserts that every collected group is in `k3s_readonly_crd_api_groups`. Its red half
-      runs the same check against a copy of the list with `source.toolkit.fluxcd.io`
-      dropped and expects that group named as unreadable.
-    - Before the PR, run `kubectl get kustomizations.kustomize.toolkit.fluxcd.io -A` and
-      record in the PR body that it fails with Forbidden.
-    - **Landing.** `land.sh` merges and waits on the tick, which fast-forwards the change
-      and records `k3s` as a `manual_plane` line narrowed to `kubeconfig` (*Baseline*).
-      `land.sh` then reads `needs-manual-apply`. **Operator-only:** run
-      `uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig`, then
-      `uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s
-      --applied kubeconfig`. *Decisions* says why the operator applies it.
-    - **Done when** the same `kubectl get` prints `No resources found` instead of Forbidden.
-      D1.5 does not merge before that.
+3. **D1.2b — Guard the Flux read access that `view` aggregation grants** (about 130 lines
+   of test, and doc corrections). Revised on 2026-10-12 (#4742). The first batch on the
+   issue found that the read-only identity already reads every Flux kind, through the
+   vendored `flux-view-flux-system` (*Baseline*, corrected). The operator accepted the
+   aggregation, so this PR changes no RBAC, and its earlier list change and operator apply
+   are **not needed**.
+    - A new test module in `ansible/tests/k8s/` lists every ClusterRole across the render
+      that carries an `aggregate-to-view`, `aggregate-to-edit` or `aggregate-to-admin`
+      label, each with a reason. The census must find exactly the listed names, among them
+      `flux-view-flux-system`. `flux-edit-flux-system` is the second member: it aggregates
+      Flux writes into `edit` and `admin` only, and the same check refuses any binding to
+      either. Its red half is an unlisted ClusterRole labelled `aggregate-to-view`, and a
+      RoleBinding to `edit`.
+    - The same module pins `flux-view-flux-system` to `get`, `list` and `watch` on exactly
+      the six groups. It must find `kustomize.toolkit.fluxcd.io`, so an empty parse cannot
+      pass. Its red halves are a copy with a seventh group and a copy with `create`.
+    - Correct the texts that said the identity reads no Flux group: the docstring of
+      `ansible/tests/k8s/test_k8s_manifests_rbac.py:test_readonly_role_covers_the_crd_groups_this_homelab_deploys`
+      and `docs/flux-deploy-plane.md`, *Reading Flux objects*. The matching comment above
+      `k3s_readonly_crd_api_groups` is filed as
+      [#4749](https://github.com/DanielH2018/server/issues/4749), because any edit under
+      `ansible/roles/setup/k3s/` is a hand apply.
+    - **Landing.** No service changes, so `land.sh` reads `nothing-to-deploy`. The PR body
+      quotes `kubectl get kustomizations.kustomize.toolkit.fluxcd.io -A` printing
+      `No resources found`, and `kubectl auth can-i --list` naming the six groups.
+    - **Done when** the guards are on master. D1.5's read gate already holds.
 
 4. **D1.3 — The promotion decision** (about 250 lines, plus about 250 of tests). This is
    above the guide, because the registry client and its outcome mapping land with the
@@ -1117,8 +1130,8 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       before this, and its *Gates before merge* checks it.
 
 6. **D1.5 — Flux follows `prod`** (about 120 lines).
-    - **Gates before merge:** D1.2b's apply is done, so the read-only identity can read the
-      objects this PR creates, and the C3 amendment that Open question 7 requests has
+    - **Gates before merge:** the read-only identity can read the objects this PR creates,
+      which `view` aggregation has granted since D1.2 (*Baseline*, corrected), and the C3 amendment that Open question 7 requests has
       landed. The third gate is that Flux can pull `prod` with no credentials, because
       OCIRepository `homelab` carries no pull secret (Open question 2). This pipeline asks
       GHCR for an anonymous pull token, then sends a manifest `HEAD` for `prod`, and must
@@ -1243,8 +1256,8 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
 
 Run these after D1.5 and D1.6 have landed, and after a docs-only commit X has merged. Read T
 from Exit 2 first, because Exit 1 and the revision label take it. Exits 2 and 3 and the
-verify-drill check run `kubectl` on Flux kinds as the read-only identity, so each is gated on
-D1.2b's apply. Before that apply, each fails with Forbidden.
+verify-drill check run `kubectl` on Flux kinds as the read-only identity. That identity reads
+them through `view` aggregation (*Baseline*, corrected), so none needs a hand apply first.
 
 ```bash
 # Exit 4: the three controllers are Ready, and their memory, beside 3 x 64Mi of requests.
@@ -1285,21 +1298,21 @@ fails. Exit 2 shows that the same object was read and reconciled.
 - *Exit 1.* The same `gh api` call on the merge commit of D1.4, which predates the sync
   objects, prints nothing. An empty status list is pending and never success, which is
   failure class 3, so the verification must print `success` and not merely exit 0.
-- *The read-only identity.* Before D1.2b's apply,
-  `kubectl get kustomizations.kustomize.toolkit.fluxcd.io -A` fails with Forbidden, and
-  D1.2b's PR body records that. After the apply it prints `No resources found`. The D1.2b
-  coverage test's red half, the group list with `source.toolkit.fluxcd.io` dropped, names
-  that group as unreadable.
-- *Exit 2.* Before D1.2 lands, the kind does not exist. Between D1.2's landing and D1.2b's
-  apply, the command fails with Forbidden. After the apply and before D1.5 lands, it fails
-  with `NotFound`. None of the three prints a revision, so each refuses. After D1.5 lands,
+- *The read-only identity.* Before D1.2 landed, the Flux kinds did not exist. Since then
+  `kubectl get kustomizations.kustomize.toolkit.fluxcd.io -A` prints `No resources found`,
+  and D1.2b's PR body records that. D1.2b's guards each fail on their red halves: an
+  unlisted `aggregate-to-view` ClusterRole, a binding to `edit`, and a copy of
+  `flux-view-flux-system` with a seventh group or a `create` verb.
+- *Exit 2.* Before D1.2 lands, the kind does not exist. After D1.2 lands and before D1.5
+  lands, the command fails with `NotFound`. Neither prints a revision, so each refuses.
+  After D1.5 lands,
   `jsonpath='{.status.lastAppliedRevision}'` on the same object prints
   `prod@sha256:<digest>`, which is why Exit 2 reads the origin field. `git merge-base
   --is-ancestor <X> <X>~1` exits 1, so the ancestry check refuses a T older than X.
 - *Exit 3.* The same command with a misspelt path, `-o jsonpath='{.status.inventroy}'`,
   prints the empty string, which is not the expected output, so the check refuses it.
-  After D1.2b's apply and before D1.5 lands, the command fails with `NotFound`, and before
-  that apply it fails with Forbidden. An inventory that names an object
+  After D1.2 lands and before D1.5 lands, the command fails with `NotFound`. An inventory
+  that names an object
   outside `flux-system` prints a non-empty `entries` list, which the check also refuses.
 - *The revision label.* The same query for the commit before T returns no series. The check
   passes only on one series, never on an empty result.
@@ -1340,8 +1353,9 @@ fails. Exit 2 shows that the same object was read and reconciled.
   `land.sh --tags flux`. The role's delete task then removes the object, and
   `kubectl -n flux-system get ocirepositories.source.toolkit.fluxcd.io verify-drill` must
   fail with `NotFound`. Before the delete, the same command printed the object, so the
-  check can go red. The check needs D1.2b's apply: without it the command fails with
-  Forbidden, which proves no deletion.
+  check can go red. A Forbidden would prove no deletion. The read-only identity reads
+  OCIRepository through `view` aggregation (*Baseline*, corrected), so a Forbidden here means
+  that aggregation is gone.
 - *The workflow guard test.* Each of its eleven fixtures fails, and so does D1.7's
   prune-workflow fixture. The fixtures for the ancestry check, a checkout in `publish`, a
   `tag` outside the `promote` group and a drifted flux CLI version are the red halves of
@@ -1402,11 +1416,9 @@ fails. Exit 2 shows that the same object was read and reconciled.
   (*Baseline*), so the operator then runs `gitops_state.py clear-hold <sha>`
   (**operator-only**). `ansible/roles/setup/gitops_deploy/CLAUDE.md`'s *Which apply clears a
   hold* has the coverage rule.
-- **D1.2b.** Reverting records `k3s` as a `manual_plane` line again, and the operator runs
-  the same pair, `k3s-bringup.yml --tags kubeconfig` and the clear (**operator-only**).
-  The task applies the whole ClusterRole with `kubectl apply`, and a ClusterRole's `rules`
-  list has no merge key, so the reapply replaces the list and drops the three groups. Exits 2
-  and 3 and the drill check then read Forbidden again.
+- **D1.2b.** Reverting removes the guards and the doc corrections. D1.2b changes no RBAC,
+  so nothing live changes, and the read-only identity keeps reading the Flux kinds through
+  `view`.
 - **D1.3 and D1.4.** Reverting stops publication. Tags already in GHCR stay, which is
   harmless because Flux does not read them until D1.5.
 - **D1.5.** The way out is a PR that sets `flux_sync_suspend: true`, landed with `land.sh`.
@@ -1500,13 +1512,12 @@ fails. Exit 2 shows that the same object was read and reconciled.
   run, so each refusal is read as the missing namespace and not as a passing check. A
   namespaced document that only the API server would refuse first fails at the landing,
   as a hold with the way out under *Rollback*.
-- **Every Flux read waits on a hand apply** (failure class 3, as in
-  `readonly-sa-forbidden-on-secrets`). The read-only identity reads no Flux group
-  until the operator applies D1.2b, and the tick never applies it (*Baseline*). Until then
-  Exits 2 and 3 and the drill check print Forbidden, which an unwary reader could take for
-  "not created yet". Mitigation: D1.5 does not merge before the apply, `land.sh` reads
-  `needs-manual-apply` and the SessionStart banner names the pending `manual_plane` line,
-  and the coverage test fails CI if a later Flux group is missing from the list.
+- **A Flux upgrade can widen `view` without touching a binding.** The read-only identity
+  reads the Flux kinds only because `flux-view-flux-system` aggregates into `view`
+  (*Baseline*, corrected). A regenerated vendored file could add a group or a verb to that
+  role, or ship a new aggregating role, and every identity bound to `view` would gain it.
+  Mitigation: D1.2b's guards fail CI on an unlisted aggregating ClusterRole, a binding to
+  `edit` or `admin`, and any change to `flux-view-flux-system`'s groups or verbs.
 - **The no-op status proves only the notification path** (failure class 2). It says nothing
   about apply. D2 is what proves apply, and D1 claims no more.
 - **A reader that names the applied commit by the wrong value reports a false hold**
@@ -1645,10 +1656,11 @@ fails. Exit 2 shows that the same object was read and reconciled.
       `test_renovate_per_package_manual_rules_carry_the_denylist_marker.py` hold both.
     - The `regen-doc-fragments` hook rewrites the auto-deploy coverage fragment.
     - `docs/flux-deploy-plane.md` and its `mkdocs.yml` nav entry. ADR-0010's dated line.
-- **D1.2b:** the comment above the three new members of `k3s_readonly_crd_api_groups`.
-  `test_readonly_role_covers_the_crd_groups_this_homelab_deploys` gains the derived Flux
-  check and its red half. `docs/flux-deploy-plane.md` states that the read-only identity
-  reads the Flux kinds from D1.2b's apply on.
+- **D1.2b:** a new test module in `ansible/tests/k8s/` with the aggregation census, the
+  grant pin and their red halves. The docstring of
+  `test_readonly_role_covers_the_crd_groups_this_homelab_deploys` names the Flux groups
+  `view` aggregation covers. `docs/flux-deploy-plane.md` states that the read-only identity
+  reads the Flux kinds through `view`.
 - **D1.3:** tests in `scripts/deploy_tools/tests/`, the request-count test and the checkout
   test of the CI-context list among them. The comment above `gitops_deploy_ci_contexts` in
   the role defaults names `promote.py decide` as a reader, beside `fetch_ci_verdict`. The import test holds `promote.py` to the forge
@@ -1696,8 +1708,8 @@ fails. Exit 2 shows that the same object was read and reconciled.
       and the two that hold write tokens check out no repository code;
     - `promote.py` with `decide` and `prune`, and the forge adapter it calls (about 350
       lines and 400 of tests);
-    - three members of `k3s_readonly_crd_api_groups`, one derived check in an existing test,
-      and one operator hand apply of `k3s-bringup.yml --tags kubeconfig` (D1.2b);
+    - one test module of about 130 lines with two guards and their red halves, and no RBAC
+      change or hand apply (D1.2b);
     - a kube-state-metrics config and a scrape job with its bucket drop (about 75 lines);
     - a `flux-system` plane in netpol-baseline's probe table, with three `refused` rows
       (about 35 lines);
