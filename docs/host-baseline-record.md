@@ -249,6 +249,9 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
   hermetic, or it is empty and the whole run is a no-op that reports UP with the reason logged
   (`eval-run.sh.j2`'s header). There is no non-hermetic fallback, because a subscription run's
   numbers are noise `evals/trend.py` refuses to trend anyway.
+- **The key lives in `/etc/homelab/eval-run.env`, not in the script.** `crons.yml` renders
+  that file 0600 to the cron user while `anthropic_api_key` exists, and removes it when the key
+  does not. `eval-run.sh` sources it, so reading the script never prints the key (#4607).
 - **The authoritative source is the chezmoi eval engine's own grading**
   (`~/.local/share/chezmoi/evals/run-evals.mjs`) — never a cached or hand-edited report.
 - **Its abort valves** are the shared git-tree lock (a dirty tree or another in-flight commit

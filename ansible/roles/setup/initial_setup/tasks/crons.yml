@@ -983,18 +983,56 @@
     mode: "0755"
   become: true
 
+- name: Create the eval-run credentials directory (box only)
+  tags: [crons, evals]
+  # Same owner and mode as the AIDE, setup-drift and Loki-witness tasks that also create it, so
+  # they never fight over it. Created here too so a `--tags evals` run on a fresh host has it.
+  when: inventory_hostname == ops_cron_host
+  ansible.builtin.file:
+    path: /etc/homelab
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Deploy the eval sweep's Anthropic API key (box only)
+  tags: [crons, evals]
+  # A file the script sources rather than a value rendered into the script, so reading the
+  # script never prints the key (#4607). 0600 sys_user: the cron runs as sys_user and nothing
+  # else reads it.
+  when: inventory_hostname == ops_cron_host and (anthropic_api_key | default('')) | length > 0
+  ansible.builtin.template:
+    src: eval-run.env.j2
+    dest: "{{ initial_setup_eval_run_env_file }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  no_log: true  # renders anthropic_api_key
+  become: true
+
+- name: Remove the eval sweep's Anthropic API key when none is configured (box only)
+  tags: [crons, evals]
+  # The way out of the task above: a key dropped from SOPS must not stay armed on disk. With the
+  # file gone, eval-run.sh's empty-key gate makes the run a no-op that reports UP.
+  when: inventory_hostname == ops_cron_host and (anthropic_api_key | default('')) | length == 0
+  ansible.builtin.file:
+    path: "{{ initial_setup_eval_run_env_file }}"
+    state: absent
+  become: true
+
 - name: Install the homelab eval sweep script (box only)
   tags: [crons, evals]
   when: inventory_hostname == ops_cron_host
   ansible.builtin.template:
     src: eval-run.sh.j2
     dest: /usr/local/bin/eval-run.sh
-    # DECIDED: 0700 owned by sys_user, not 0755 root — embeds two Kuma push tokens, and the
+    # DECIDED: 0700 owned by sys_user, not 0755 root — embeds a Kuma push token, and the
     # cron below runs as sys_user. See the docs-refresh marker above.
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0700"
-  no_log: true  # renders homelab_eval_push_token and anthropic_api_key once minted
+  no_log: true  # renders homelab_eval_push_token; the API key lives in the env file above
   become: true
 
 - name: Schedule the weekly homelab eval sweep (box only)

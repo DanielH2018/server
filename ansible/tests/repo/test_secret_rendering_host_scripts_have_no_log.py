@@ -18,9 +18,10 @@ expression. A whole-body match would flag a script that only names a secret in a
 disagree about what counts as a secret.
 
 LIMIT: a script rendering a name the registry does not carry is invisible here.
-`eval-run.sh.j2` renders `homelab_eval_push_token` and `anthropic_api_key`, neither of which
-exists in SOPS yet, so its task carries `no_log` by hand and joins KNOWN_SECRET_SCRIPTS only
-when the token is minted and registered.
+`eval-run.sh.j2` renders `homelab_eval_push_token`, which does not exist in SOPS yet, so its
+task carries `no_log` by hand and joins KNOWN_SECRET_SCRIPTS only when the token is minted and
+registered. Its `anthropic_api_key` goes to `eval-run.env.j2` instead, whose `no_log` is
+pinned by `ansible/tests/setup/test_eval_sweep_cron.py`.
 
 WHY THIS IS NOT A CENSUS ROW (#3430). A row judges one subject from its own text, but this
 predicate reads a second file: the template a task's `src` names. A red fixture would have to be
