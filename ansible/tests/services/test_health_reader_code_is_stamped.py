@@ -7,8 +7,8 @@ only the pairs a role declared in `/var/lib/homelab/setup-deployed-manifest.d/`,
 that is copied but not declared runs stale behind a check reporting "deployed code matches the
 repo".
 
-WHY A DERIVATION RATHER THAN A LIST. The copy task already names the scripts, in a `loop:` an
-author edits when they add one. Reading that loop means a new reader is in scope the moment it
+WHY A DERIVATION RATHER THAN A LIST. The copy tasks already name the scripts, in a `src:` or a
+`loop:` an author edits when they add one. Reading those means a new reader is in scope the moment it
 is added, where an enumeration here would go quiet exactly when the role grows. `_ROLES` is the
 non-vacuity assertion over the derivation: it names the two roles the scan must find, so a
 renamed task or a moved `/opt` directory fails by name instead of scanning nothing.
@@ -35,29 +35,43 @@ _ROLES = {
 }
 
 
-def copied_into(role_dir: Path, opt_dir: str, repo_root: Path = REPO) -> dict[str, str]:
-    """live path -> the source relative to repo_root, per script a `copy:` loop ships into opt_dir.
+def _expand(template: str, item: str | None, role_dir: Path) -> str:
+    """`template` with the loop item, then `{{ role_path }}`, substituted the way Ansible would."""
+    if item is not None:
+        template = template.replace("{{ item | basename }}", Path(item).name)
+        template = template.replace("{{ item }}", item)
+    return template.replace("{{ role_path }}", str(role_dir))
 
-    A loop item is either a bare basename, resolved against the role's `files/`, or a
-    `{{ role_path }}/files/<name>` path that lands under the same directory — `dest` takes the
-    basename either way, which is what makes both spellings comparable. `repo_root` is a
-    parameter so the rejecting half below can build its offender outside the tree.
+
+def copied_into(role_dir: Path, opt_dir: str, repo_root: Path = REPO) -> dict[str, str]:
+    """live path -> the source relative to repo_root, per script a `copy:` ships into opt_dir.
+
+    Each task's own `src` and `dest` are expanded per loop item, or once for a copy with no
+    loop, so a reader in a subdirectory of opt_dir such as `configarr_lib/` lands at the path
+    the task writes. A relative `src` resolves against the role's `files/`, as Ansible's does.
+    `repo_root` is a parameter so the rejecting half below can build its offender outside the
+    tree.
     """
     out = {}
     for task_file in role_task_files(role_dir):
         for task in walk_tasks(load_tasks(task_file)):
             copy = task.get("ansible.builtin.copy") or task.get("copy")
+            if not isinstance(copy, dict):
+                continue
+            dest_template = str(copy.get("dest", ""))
+            if opt_dir not in dest_template:
+                continue
             items = task.get("loop")
-            if not isinstance(copy, dict) or not isinstance(items, list):
-                continue
-            if opt_dir not in str(copy.get("dest", "")):
-                continue
-            for item in items:
-                if not isinstance(item, str) or not item.endswith(".py"):
+            for item in items if isinstance(items, list) else [None]:
+                if item is not None and not isinstance(item, str):
                     continue
-                name = Path(item).name
-                src = role_dir / "files" / name
-                out[f"{opt_dir}/{name}"] = str(src.relative_to(repo_root))
+                dest = _expand(dest_template, item, role_dir)
+                if not dest.endswith(".py"):
+                    continue
+                src = Path(_expand(str(copy.get("src", "")), item, role_dir))
+                if not src.is_absolute():
+                    src = role_dir / "files" / src
+                out[dest] = str(src.relative_to(repo_root))
     return out
 
 
@@ -80,7 +94,7 @@ def test_every_copied_reader_script_is_stamped_is_clean():
     for role, opt_dir in _ROLES.items():
         copied = copied_into(_role(role), opt_dir)
         assert copied, (
-            f"no `copy:` loop in roles/k8s/{role}/tasks writes into {opt_dir} any more, so this "
+            f"no `copy:` in roles/k8s/{role}/tasks writes into {opt_dir} any more, so this "
             f"guard is scanning nothing — repoint it or delete it."
         )
         stamped = stamped_in(_role(role))
@@ -157,3 +171,49 @@ def test_a_copied_script_with_no_pair_is_flagged(tmp_path):
     assert not set(copied_into(tasks.parent, "/opt/synthetic-health", tmp_path)) - set(
         stamped_in(tasks.parent)
     )
+
+
+def test_a_loopless_copy_and_a_lib_copy_with_no_pair_are_flagged(tmp_path):
+    """A reader copied with no `loop:`, and a library copied into a subdirectory, are found too.
+
+    configarr ships both shapes since #4416: `configarr_health.py` by a single `src`, and its
+    modules into `/opt/configarr-health/configarr_lib/`.
+    """
+    tasks = tmp_path / "k8s" / "synthetic" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "---\n"
+        "- name: Install the reader library\n"
+        "  ansible.builtin.copy:\n"
+        '    src: "{{ role_path }}/files/reader_lib/{{ item }}"\n'
+        '    dest: "/opt/synthetic-health/reader_lib/{{ item }}"\n'
+        "  loop:\n"
+        "    - reader_logic.py\n"
+        "- name: Install the reader\n"
+        "  ansible.builtin.copy:\n"
+        "    src: reader.py\n"
+        "    dest: /opt/synthetic-health/reader.py\n"
+    )
+    copied = copied_into(tasks.parent, "/opt/synthetic-health", tmp_path)
+    assert sorted(set(copied) - set(stamped_in(tasks.parent))) == [
+        "/opt/synthetic-health/reader.py",
+        "/opt/synthetic-health/reader_lib/reader_logic.py",
+    ]
+
+    # The accepting half: once both are stamped at the paths the copies write, nothing is
+    # missing, so a scan that flagged every subdirectory copy fails here.
+    (tasks / "main.yml").write_text(
+        (tasks / "main.yml").read_text()
+        + "- name: Record the deployed code\n"
+        + '  ansible.builtin.import_tasks: "stamp_deployed.yml"\n'
+        + "  vars:\n"
+        + "    stamp_deployed_pairs:\n"
+        + "      - live: /opt/synthetic-health/reader.py\n"
+        + "        src: k8s/synthetic/files/reader.py\n"
+        + "      - live: /opt/synthetic-health/reader_lib/reader_logic.py\n"
+        + "        src: k8s/synthetic/files/reader_lib/reader_logic.py\n"
+    )
+    stamped = stamped_in(tasks.parent)
+    copied = copied_into(tasks.parent, "/opt/synthetic-health", tmp_path)
+    assert not set(copied) - set(stamped)
+    assert all(stamped[live] == src for live, src in copied.items())

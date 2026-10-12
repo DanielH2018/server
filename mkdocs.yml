@@ -248,12 +248,12 @@ nav:
               - headlamp plugins and OIDC record: headlamp-oidc-and-plugins.md
               - homepage widgets and layout: homepage-widgets-and-layout.md
               - Jellyfin plugins: jellyfin-plugins.md
-              - AniList integration: anilist-integration.md
               - qbittorrent VPN and prefs: qbittorrent-vpn-and-prefs.md
               - n8n community node packages: n8n-community-packages.md
               - game-stats internals: game-stats-internals.md
               - Valheim modding: valheim-modding.md
               - Email to RSS: email-to-rss.md
+              - artifacts star list: artifacts-star-list.md
       - Recovery and upgrades:
           - k3s control-plane upgrade: k3s-upgrade.md
           - Longhorn upgrade: longhorn-upgrade.md

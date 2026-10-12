@@ -14,7 +14,7 @@ batches: `red` (the red gate passed), `red-refused` (a red phase ran and was ref
   how many no red test noticed, and how many were noticed only through a missing name.
 - `base`: the PR's new tests that pass with its code changes taken out
   (`fanout_lib.review.base_check`), which every batch measures, red phase or not.
-- `test_findings`: the reviewer's `test` findings at confidence 0.6 or more, by subkind.
+- `test_findings`: the reviewer's `test` findings at the confidence floor or more, by subkind.
 - `red_cost_share`: the red phase's share of the group's spend.
 
 The records live under each user's `~/.local/state/fanout-review/`, so pass `--dir` once per
@@ -25,7 +25,6 @@ Usage::
     fanout.py stats [--dir DIR ...] [--since YYYY-MM-DD] [--json]
 """
 
-import argparse
 import json
 import re
 import sys
@@ -35,8 +34,10 @@ from pathlib import Path
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib.review.api import CONFIDENCE_FLOOR, STATE_DIR
+from lib.cli_help import ArgumentParser
 
 # `<batch>-<YYYYMMDDTHHMMSSZ>.json`, as `Pipeline._save` names a record.
 _STAMP = re.compile(r"-(\d{8})T\d{6}Z\.json$")
@@ -131,7 +132,7 @@ def _counts(counts: dict) -> str:
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(
+    p = ArgumentParser(
         prog="fanout.py stats", description=__doc__.splitlines()[0], allow_abbrev=False
     )
     p.add_argument(

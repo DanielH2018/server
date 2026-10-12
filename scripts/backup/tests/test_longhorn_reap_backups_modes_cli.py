@@ -270,5 +270,5 @@ def test_every_modes_dry_run_prints_the_per_block_cost(tmp_path, args):
 def test_a_flag_that_belongs_to_another_mode_is_rejected(tmp_path, args):
     """A mode flag silently ignored would read as a scope the run did not have."""
     proc, calls = _run(BACKUPS_ENTRY, args, {"volumes": []}, tmp_path)
-    assert proc.returncode == 2, proc.stdout
+    assert proc.returncode == 64, proc.stdout
     assert calls == []

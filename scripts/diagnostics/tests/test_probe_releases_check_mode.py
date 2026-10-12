@@ -1,4 +1,5 @@
-"""Staleness narrowed by reading a diff: a `tasks/` change that only gates `--check`.
+"""Staleness narrowed by reading a diff: a `tasks/` change that only gates `--check`, and a
+`defaults/` change that only edits comments (#4460, at the end).
 
 Every other staleness rule is a question about a path, and lives in
 `test_probe_releases_stale.py` beside the path narrowings. This one has to open the diff --
@@ -10,6 +11,8 @@ narrowing did not swallow a byte-moving change.
 
 Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_check_mode.py
 """
+
+import pytest
 
 from diagnostics.probe_lib import releases as pr
 from lib.git_testing import git
@@ -220,3 +223,44 @@ def test_the_diff_context_is_pinned_against_a_hosts_git_config(tmp_path):
         [_record("authelia", commit=base)], repo_root=repo, shared_roles={"manifests"}
     )
     assert stale == {}
+
+
+# ── a comment-only edit to a service role's defaults (#4460) ────────────────────────────────
+#
+# The deployer drops this edit before it classifies a tick, so it neither defers nor deploys
+# the role. Counted here, the role would read stale with only a no-op deploy able to clear it.
+
+_JELLYFIN_DEFAULTS = """\
+# The plugin's design record: docs/anilist-integration.md.
+jellyfin_k8s_size: 8Gi
+jellyfin_k8s_init_script: |
+  set -eu
+  # not a comment: part of the script
+"""
+
+
+def _defaults_range(tmp_path, after):
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    path = "ansible/roles/k8s/jellyfin/defaults/main.yml"
+    base = _commit(repo, {path: _JELLYFIN_DEFAULTS}, "baseline")
+    tip = _commit(repo, {path: after}, "the change under test")
+    _set_origin_master(repo, tip)
+    return pr.compute_stale(
+        [_record("jellyfin", commit=base)], repo_root=repo, shared_roles={"manifests"}
+    )
+
+
+def test_a_comment_only_defaults_change_is_clean(tmp_path):
+    after = _JELLYFIN_DEFAULTS.replace("docs/", "docs/archive/")
+    assert _defaults_range(tmp_path, after) == {}
+
+
+@pytest.mark.parametrize(
+    "old, new",
+    [("8Gi", "16Gi"), ("part of the script", "part of the script, reworded")],
+    ids=["value-edit", "hash-line-inside-a-block-scalar"],
+)
+def test_a_content_change_to_defaults_is_flagged(tmp_path, old, new):
+    stale = _defaults_range(tmp_path, _JELLYFIN_DEFAULTS.replace(old, new))
+    assert "jellyfin/defaults/main.yml" in stale["jellyfin"]

@@ -24,8 +24,8 @@ full, and the journald-cap forensics.
   - `Homelab eval sweep` — `0 2 * * 0`
   - `Weekly rkhunter malware scan` — `0 2 * * 3`
   - `Weekly AIDE file integrity check` — `0 3 * * 1`
-- **Timers (3):** `kuma-check-secret-rotation-audit.timer` (`OnCalendar=*-*-* 08:00:00`),
-  `kuma-check-setup-drift.timer` (`OnCalendar=*-*-* 07:50:00`),
+- **Timers (3):** `kuma-check-secret-rotation-audit.timer` (`OnCalendar=*-*-* 08:30:00`),
+  `kuma-check-setup-drift.timer` (`OnCalendar=*-*-* 08:20:00`),
   `kuma-check-loki-read-route.timer` (`OnCalendar=*-*-* *:23:00`)
 <!-- /generated_from -->
 
@@ -39,7 +39,7 @@ A hardware gate names the FACT it reads, not the host that has it —
 `ansible/inventory/group_vars/all.yml:has_raspi_kernel`,
 `ansible/inventory/group_vars/all.yml:has_ample_ram`. Each defaults false there and is true in
 every carrying host's `host_vars` (#2981), so replacing a machine is a `host_vars` edit. They
-sit in `group_vars` because `scripts/deploy_tools/setup_gates.py:_eval_when` resolves a gate
+sit in `group_vars` because `scripts/deploy_tools/setup_lib/setup_gates.py:_eval_when` resolves a gate
 against those two files only, and an unknown name reads as every host.
 
 Three gates keep a host literal behind a `DECIDED:` comment, because they read HOST HISTORY

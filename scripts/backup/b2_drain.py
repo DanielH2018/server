@@ -33,7 +33,6 @@ supplies them):
         --live-volumes-file /tmp/live.txt --volumes pvc-aaa,pvc-bbb [--apply]
 """
 
-import argparse
 import os
 import sys
 from collections import defaultdict
@@ -41,6 +40,13 @@ from collections.abc import Callable
 from pathlib import Path as _Path
 
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+from lib.cli_help import ArgumentParser
+from lib.exit_codes import (
+    B2_DRAIN_BAD_ARGS,
+    B2_DRAIN_ERRORED,
+    B2_DRAIN_OK,
+    B2_DRAIN_REFUSED,
+)
 from lib.b2 import B2Error, B2Session
 
 BACKUPSTORE_PREFIX = "longhorn/backupstore/volumes/"
@@ -154,14 +160,14 @@ def main(
 ) -> int:
     """Parse args, drain the requested volumes' B2 prefixes, and report the result.
 
-    Without ``--apply`` this only reports what a drain would delete. Exits 2 on a
-    missing credential, an unreadable input file, no volumes named, or a ``DrainError``
+    Without ``--apply`` this only reports what a drain would delete. Exits 64 on a
+    missing credential, an unreadable input file or no volumes named; 2 on a ``DrainError``
     (including a failed post-delete verification) or a B2 API failure; exits 1 if any
     requested volume was refused (e.g. still live); exits 0 otherwise. ``open_session``
     builds the authorized session from the key id and application key; tests pass one bound
     to a fake transport.
     """
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = ArgumentParser(description=__doc__)
     parser.add_argument("--live-volumes-file", required=True)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument(
@@ -186,7 +192,7 @@ def main(
         key_id, app_key = os.environ["B2_KEY_ID"], os.environ["B2_APP_KEY"]
     except KeyError as exc:
         print(f"missing credential in the environment: {exc}", file=sys.stderr)
-        return 2
+        return B2_DRAIN_BAD_ARGS
 
     if args.volumes_file:
         try:
@@ -194,13 +200,13 @@ def main(
                 raw = handle.read()
         except OSError as exc:
             print(f"cannot read {args.volumes_file}: {exc}", file=sys.stderr)
-            return 2
+            return B2_DRAIN_BAD_ARGS
     else:
         raw = args.volumes
     requested = parse_volume_list(raw)
     if not requested:
         print("no volumes were named", file=sys.stderr)
-        return 2
+        return B2_DRAIN_BAD_ARGS
 
     try:
         live = read_live_volumes(args.live_volumes_file)
@@ -254,10 +260,10 @@ def main(
         print(f"list calls (Class C): {b2.list_calls}")
         if drainable and not args.apply:
             print("dry run — nothing was deleted. Re-run with --apply.")
-        return 1 if refused else 0
+        return B2_DRAIN_REFUSED if refused else B2_DRAIN_OK
     except (DrainError, B2Error) as exc:
         print(f"error: {exc}", file=sys.stderr)
-        return 2
+        return B2_DRAIN_ERRORED
 
 
 if __name__ == "__main__":

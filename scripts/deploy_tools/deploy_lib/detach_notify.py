@@ -23,7 +23,6 @@ detached deploy, so it has no next run of its own to retry from.
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_detach_notify.py
 """
 
-import argparse
 import contextlib
 import subprocess
 import sys
@@ -36,11 +35,13 @@ from typing import NamedTuple
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
+from lib.cli_help import ArgumentParser
+
 from lib.repo_paths import HOST_VARS, REPO
 
 # `tag_platforms` is the reader of containers_list that says which probe can see a tag's workload.
 from deploy_tools.deploy_lib import tags as deploy_tags
-from lib.exit_codes import DEPLOY_NO_HOSTS
+from lib.exit_codes import DEPLOY_NO_HOSTS, PROBE_UNREADABLE
 
 # The inventory directory as a path relative to a checkout root. `check_one` reads the
 # inventory from whichever tree the probe renders the manifests from, which is not always this
@@ -161,6 +162,10 @@ def check_one(
             )
         except subprocess.TimeoutExpired:
             return 1, f"{tag}: probe.py health timed out after {PROBE_TIMEOUT_S}s"
+        if res.returncode == PROBE_UNREADABLE and (res.stderr or "").strip():
+            # stdout holds only the PROBE-VERDICT line here, and the failed read is on stderr.
+            # Its LAST line, because `uv run` can print its own warnings ahead of it.
+            return res.returncode, res.stderr.strip().splitlines()[-1]
         out = (res.stdout or res.stderr or "").strip()
         return res.returncode, out.splitlines()[0] if out else ""
 
@@ -284,7 +289,7 @@ def notify(content: str) -> None:
 
 def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int:
     """Gate the deploy's health, post the verdict to Discord, and exit 0 if settled else 1."""
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--status", type=int, required=True, help="ansible-playbook's exit status"
     )

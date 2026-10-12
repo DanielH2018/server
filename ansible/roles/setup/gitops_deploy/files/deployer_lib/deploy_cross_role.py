@@ -25,7 +25,8 @@ from pathlib import Path
 # reads a variable of from another's `defaults/`, mapped to those roles, so a change to it re-applies them beside the owner (#3306, #3317).
 # A template a shared task file renders inherits that task file's importers (#3319): the
 # kuma-check pair reaches a host only through `kuma_check_timer.yml`.
-# `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
+# `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree, and
+# `test_setup_cross_role_reads.py` holds its `defaults/` rows.
 _COMMON = "ansible/roles/setup/common"
 _HOST_LIB = frozenset(
     {"fake_remux", "gitops_deploy", "k3s", "renovate_agent", "renovate_notify"}
@@ -46,6 +47,7 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/tasks/kuma_check_timer.yml": _KUMA_CHECK,
     f"{_COMMON}/templates/kuma-check.service.j2": _KUMA_CHECK,
     f"{_COMMON}/templates/kuma-check.timer.j2": _KUMA_CHECK,
+    f"{_COMMON}/templates/kuma-check-boot.service.j2": _KUMA_CHECK,
     f"{_COMMON}/tasks/release_bin.yml": frozenset({"k3s"}),
     f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
     f"{_COMMON}/tasks/stamp_render.yml": _STAMPED | {"nut_host"},
@@ -104,7 +106,7 @@ K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
 # whole, re-renders these. `setup_roles_for` returns them, and the tick
 # applies or records each as it would its own change: `gitops_deploy` through
 # `initial_setup.yml`, and `k3s` as a `manual_plane` line, since only `k3s-bringup.yml` runs it.
-# `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
+# `ansible/tests/setup/test_setup_cross_role_reads.py` holds it to the tree.
 SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
     "ansible/filter_plugins/claude_agents.py": frozenset(
         {"claude_code", "initial_setup"}
@@ -112,6 +114,8 @@ SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
     "ansible/filter_plugins/k8s_autodeploy.py": frozenset({"gitops_deploy"}),
     "ansible/filter_plugins/longhorn_groups.py": frozenset({"k3s"}),
     "ansible/filter_plugins/service_tier.py": frozenset({"k3s"}),
+    # Registers no filter; `longhorn_groups` and `service_tier` wrap theirs in it (#4527).
+    "ansible/filter_plugins/filter_errors.py": frozenset({"k3s"}),
 }
 
 

@@ -87,6 +87,18 @@ def test_a_module_level_import_of_a_missing_module_is_refused(tmp_path):
     assert gate.reason.startswith("pytest exited 2: a collection")
 
 
+def test_a_red_commit_adding_an_ignore_the_fix_leaves_unused_is_refused(tmp_path):
+    """#4403: once the fix existed, ty failed the fix's commit on the red file's ignores."""
+    ignored = NEW_TEST.replace(
+        "from mod import double",
+        "from mod import triple  # ty: ignore[unresolved-import]",
+    )
+    repo, base, red = _repo(tmp_path, **{"tests/test_mod.py": OLD_TEST + ignored})
+    gate = red_gate(run, repo, base, red)
+    assert gate.reason.startswith("the red commits add a type-checker suppression")
+    assert "tests/test_mod.py line 9: `# ty: ignore[unresolved-import]`" in gate.reason
+
+
 def test_a_new_test_that_already_passes_is_refused(tmp_path):
     passes = "def test_vacuous():\n    assert True\n"
     repo, base, red = _repo(tmp_path, **{"tests/test_new.py": passes})
@@ -159,15 +171,31 @@ def test_the_green_gate_passes_a_fix_that_appends_a_test_to_a_red_file(tmp_path)
     assert green_gate(run, repo, red, gate) == ""
 
 
-def test_the_green_gate_refuses_an_edit_to_a_test_already_in_a_red_file(tmp_path):
-    """#4183: the fix edited a pre-existing test in the red file instead of the code."""
-    repo, base, red = _repo(tmp_path, **{"tests/test_mod.py": OLD_TEST + NEW_TEST})
+def test_the_green_gate_refuses_an_edit_to_a_test_a_red_test_calls(tmp_path):
+    """#4183: the fix edited a pre-existing test the red node calls, instead of the code."""
+    calls_old = NEW_TEST.replace("    assert", "    test_zero()\n    assert")
+    repo, base, red = _repo(tmp_path, **{"tests/test_mod.py": OLD_TEST + calls_old})
     gate = red_gate(run, repo, base, red)
-    weakened = OLD_TEST.replace("double(0) == 0", "True") + NEW_TEST
+    weakened = OLD_TEST.replace("double(0) == 0", "True") + calls_old
     commit(repo, "fix", **{"mod.py": FIXED, "tests/test_mod.py": weakened})
     assert green_gate(run, repo, red, gate).endswith(
         "tests/test_mod.py changes or removes `def test_zero`"
     )
+
+
+def test_the_green_gate_passes_a_red_file_edit_that_follows_a_dropped_parameter(
+    tmp_path,
+):
+    """#4338: the fix dropped a parameter, so a test already in the red file stopped passing it."""
+    old = OLD_TEST.replace("double(0)", "double(0, None)")
+    repo = init_repo(tmp_path / "repo")
+    code = CODE.replace("(x)", "(x, factor=None)")
+    base = commit(repo, "base", **{"mod.py": code, "tests/test_mod.py": old, **CONFIG})
+    red = commit(repo, "red", **{"tests/test_mod.py": old + NEW_TEST})
+    gate = red_gate(run, repo, base, red)
+    assert gate.passed, gate.reason
+    commit(repo, "fix", **{"mod.py": FIXED, "tests/test_mod.py": OLD_TEST + NEW_TEST})
+    assert green_gate(run, repo, red, gate) == ""
 
 
 # A test that counts its runs in a file outside the repo, so no gate sees an untracked file,

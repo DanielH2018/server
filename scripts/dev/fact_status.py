@@ -23,6 +23,10 @@ import argparse
 import json
 from pathlib import Path
 
+from lib.cli_help import ArgumentParser
+
+from lib.exit_codes import FACT_STATUS_BAD_ARGS
+
 from lib.facts.lint import changed_units, first_cited_units, lint_sections
 from lib.facts.lock import (
     LOCK_REL,
@@ -39,7 +43,18 @@ from lib.facts.report import build, default_log, render
 from lib.git import git_stdout
 from lib.repo_paths import REPO
 
-_USAGE = 2
+_USAGE = FACT_STATUS_BAD_ARGS
+
+# The next step each command prints after its findings, so a red run ends on what to do (#4448).
+FIX_ATOMS = (
+    "fix: edit the section so what it cites holds, or re-record it with "
+    "`fact_status.py verify '<doc>#<heading>'` and commit docs/facts.lock. A renamed "
+    "heading also needs `fact_status.py forget '<old key>'`."
+)
+FIX_ONE_WAY = "fix: add `# fact: <doc>#<heading>` to the body of each cited test above."
+FIX_LINT = (
+    "fix: .claude/rules/facts.md describes each rule above and how to resolve it."
+)
 
 
 def cmd_status(args: argparse.Namespace) -> int:
@@ -58,6 +73,10 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"  {f.kind}: {f.unit} {f.atom} — {f.detail}")
     for u, a in sorted(idb.one_way):
         print(f"  one-way: {u} cites {a} which carries no `# fact: {u}`")
+    if idb.out or findings:
+        print(FIX_ATOMS)
+    if idb.one_way:
+        print(FIX_ONE_WAY)
     return 1 if idb.out or findings else 0
 
 
@@ -131,6 +150,8 @@ def cmd_reverify(args: argparse.Namespace) -> int:
         print("not folded, and CI fails on these:", file=_sys.stderr)
         for f in elsewhere:
             print(f"  {f.kind}: {f.unit} {f.atom} — {f.detail}", file=_sys.stderr)
+    if blocking:
+        print(FIX_ATOMS, file=_sys.stderr)
     recorded = read_lock(repo / LOCK_REL)
     for u in done:
         if u not in recorded:
@@ -174,6 +195,8 @@ def cmd_lint(args: argparse.Namespace) -> int:
     findings = lint_sections(repo, keys, since=args.changed_since)
     for f in findings:
         print(f"{'warn ' if f.warn else 'ERROR'} {f.rule:<20} {f.unit}: {f.detail}")
+    if findings:
+        print(FIX_LINT)
     return 1 if any(not f.warn for f in findings) else 0
 
 
@@ -202,7 +225,7 @@ def _add_common(sp: argparse.ArgumentParser) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    p = ArgumentParser(description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
     st = sub.add_parser("status")
     _add_common(st)

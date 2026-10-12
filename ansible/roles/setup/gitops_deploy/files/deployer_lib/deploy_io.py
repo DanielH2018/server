@@ -33,6 +33,7 @@ import subprocess
 from collections.abc import Callable
 
 from deployer_lib.deploy_config import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
+    WARNING,
     Config,
     ConfigError,
     load_config,
@@ -56,6 +57,7 @@ from deployer_lib.deploy_failtext import (  # noqa: F401 — re-exported for `de
 from deployer_lib.deploy_k8s import k8s_role_paths
 from deployer_lib.deploy_locks import locked_budget
 from deployer_lib.deploy_state import STATE_DIR, DeployerState  # noqa: F401 — re-exported
+from gitops_markers import DEPLOY_PLAYBOOK
 
 
 # ── subprocess ────────────────────────────────────────────────────────────────────────────────
@@ -329,8 +331,8 @@ def deploy_k8s(
     is never added — the call is byte-identical to before this argument existed.
     """
     tags = ",".join(sorted(services))
-    log(f"deploying k8s services: {tags} (timeout {timeout:.0f}s)")
-    argv = [*PLAYBOOK_ARGV, "ansible/deploy.yml", "--tags", tags]
+    log(f"k8s-deploy: deploying {tags} (timeout {timeout:.0f}s)")
+    argv = [*PLAYBOOK_ARGV, DEPLOY_PLAYBOOK, "--tags", tags]
     if restore_sha is not None and restore_sha.strip():
         argv += ["-e", f"k8s_restore_snapshot_sha={restore_sha}"]
     with locked_budget(services, timeout) as budget:
@@ -393,4 +395,7 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
             timeout=10,
         )
     except Exception as exc:
-        log(f"deploy annotation failed (deploy itself succeeded): {exc}")
+        log(
+            f"k8s-deploy: annotation failed (deploy itself succeeded): {exc}",
+            level=WARNING,
+        )

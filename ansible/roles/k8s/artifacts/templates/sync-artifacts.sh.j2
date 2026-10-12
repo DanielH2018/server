@@ -2,9 +2,10 @@
 # Managed by ansible (roles/k8s/artifacts) — edits here are overwritten on the next deploy.
 #
 # Copy every other host's ~/.claude/artifacts onto daniel-box, one directory per host, so the
-# artifacts Deployment can serve them all from a single hostPath tree. Pull rather than push:
-# `daniel-box` does not resolve from daniel-server, and pushing would put an ssh key somewhere
-# this one does not have to go.
+# artifacts Deployment can serve them all from a single hostPath tree, and copy the GUI's star
+# list back to each of them, so their own prune-artifacts.sh keeps what was starred here. Both
+# run from daniel-box: `daniel-box` does not resolve from daniel-server, and a peer-side job
+# would put an ssh key somewhere this one does not have to go.
 #
 # Usage: sync-artifacts.sh (no arguments)
 # Runs from the sync-artifacts cron on daniel-box as the sys user, every 5 minutes by default
@@ -49,9 +50,17 @@ report=""
 # {{ peer.ssh_target }}: rsync's transport needs no forwarding, and a forward whose local port is
 # already held fails the whole ssh with "bind [127.0.0.1]:<port>: Address already in use"
 # rather than just declining the tunnel (#2467).
+{% if peer.stars_path | default('') %}
+# The star list goes back over the same transport, after the pull, and a failed push counts
+# toward the same streak: until it lands, {{ peer.name }}'s prune can delete an artifact starred
+# here. No list yet means nothing was ever starred, and there is nothing to push.
+{% endif %}
 if rsync -a --delete --timeout=60 \
     -e 'ssh -o BatchMode=yes -o ConnectTimeout=10 -o ClearAllForwardings=yes' \
-    "{{ peer.ssh_target }}:{{ peer.path }}/" "{{ artifacts_peer_dir }}/{{ peer.name }}/"; then
+    "{{ peer.ssh_target }}:{{ peer.path }}/" "{{ artifacts_peer_dir }}/{{ peer.name }}/"{% if peer.stars_path | default('') %} \
+  && { [ ! -f "{{ artifacts_stars_file }}" ] || rsync -a --timeout=60 \
+    -e 'ssh -o BatchMode=yes -o ConnectTimeout=10 -o ClearAllForwardings=yes' \
+    "{{ artifacts_stars_file }}" "{{ peer.ssh_target }}:{{ peer.stars_path }}"; }{% endif %}; then
   # A run that recovers says so in the journal and forgets the streak, so the next outage
   # starts counting from zero rather than inheriting the last one's total.
   if [ -f "${state_dir}/sync-artifacts-{{ peer.name }}.fails" ]; then

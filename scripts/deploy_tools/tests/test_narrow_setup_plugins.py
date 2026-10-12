@@ -66,6 +66,13 @@ def test_a_role_change_beside_an_unchanged_plugin_still_narrows(calls_plugin):
     assert narrow(calls_plugin, *_refs(calls_plugin)) == frozenset({"alpha"})
 
 
+def test_a_docstring_edit_to_the_plugin_needs_nothing_applied(calls_plugin):
+    """#4412: no filter changed, so no key the role reads did."""
+    calls_plugin.write(PLUGIN, '"""Demo filters."""\n' + PLUGIN_TEXT.format(factor=2))
+    with pytest.raises(narrow_setup.NothingToApply):
+        narrow(calls_plugin, *_refs(calls_plugin))
+
+
 def test_a_plugin_whose_filters_the_role_never_names_is_flagged(calls_plugin):
     calls_plugin.write(f"{ROLE}/defaults/main.yml", DEFAULTS)
     calls_plugin.commit("drop the caller")

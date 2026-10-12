@@ -6,34 +6,26 @@ edits never touched. `narrow_lib/containers.py` now maps an edit to its changed 
 reader to the fields its filters read, and keeps a reader only where the two meet. A reader it
 cannot name the fields of (a loop, `selectattr`, a filter missing from `FILTER_FIELDS`) still
 counts as reading every field. A filter that looks up one entry by a literal name keys its read on
-that entry too (#4388), so an edit to radarr's `port` skips a reader of sonarr's.
+that entry too (#4388), so an edit to radarr's `port` skips a reader of sonarr's. A
+`metrics_port` read by a literal job is keyed on the entry declaring that job, while the edit
+leaves every entry's `metrics` alone (#4396). A read through `hostvars['<host>']` with a literal
+host is keyed on that host's list, so an edit to another host's `host_vars` skips it (#4422).
 
-`test_filter_fields_cover_every_key_each_filter_reads` holds `FILTER_FIELDS` against the filter
-plugins' own source, so a filter that starts reading a new key fails here rather than
-narrowing past a role whose render that key moves. The scan in `_filter_field_scan.py` reports
-any use of an entry it cannot resolve to a literal key as opaque: a computed key, iterating the
-entry, handing it to a call or a method, returning it from the filter. An opaque use fails
-`test_no_filter_in_the_table_reads_a_field_the_scan_cannot_name` unless `VETTED_OPAQUE` names
-it with the reason it reads no field the row omits.
-
-`test_every_named_entry_filter_reads_only_the_entry_it_names` holds `NAMED_ENTRY` against the
-filters' behaviour: it sets entries beside the target, one valid with other values and one whose
-every field is invalid, and asserts the named filter's answer stays put. The valid one, read in
-the target's place, must return an answer that differs from the target's, never a raise.
+`test_narrow_filter_tables.py` holds the tables this relies on, `FILTER_FIELDS`, `NAMED_ENTRY`
+and `NAMED_JOB`, against the filter plugins.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_containers_fields.py
 """
 
-import importlib
 from pathlib import Path
 
 import pytest
 
+from deploy_tools.narrow_lib import broad as narrow_broad
 from deploy_tools.narrow_lib import containers
 from lib.repo_paths import REPO
 
-from _filter_field_scan import filter_reads
-from _narrow_fixtures import HOST_VARS, Tree, _refs, build_tree
+from _narrow_fixtures import DECLARED, HOST_VARS, Tree, _refs, build_tree
 
 BOX = "ansible/inventory/host_vars/daniel-box.yml"
 
@@ -82,6 +74,37 @@ def test_a_lookup_by_a_variable_name_reaches_every_entrys_edit(tree: Tree):
     tree.commit("a reader whose entry is a variable")
     radarr = "  - name: radarr\n    platform: k8s\n"
     tree.write(BOX, HOST_VARS.replace(radarr, radarr + "    port: 7878\n"))
+    assert tree.narrow(*_refs(tree)) == {"radarr", "lidarr", "bazarr"}
+
+
+_RADARR = "  - name: radarr\n    platform: k8s\n"
+
+
+def _bazarr_reads_radarrs_job(tree: Tree) -> str:
+    """Commit a `radarr-x` job on radarr and a bazarr reader of it; return the host_vars."""
+    with_job = HOST_VARS.replace(
+        _RADARR, _RADARR + "    metrics:\n      - job: radarr-x\n"
+    )
+    tree.write(BOX, with_job)
+    tree.write(
+        "ansible/roles/k8s/bazarr/templates/service.yaml.j2",
+        "port: {{ containers_list | metrics_port('radarr-x') }}\n",
+    )
+    tree.commit("a reader of radarr's metrics job")
+    return with_job
+
+
+def test_a_port_edit_skips_a_reader_of_another_entrys_metrics_job(tree: Tree):
+    """bazarr reads the job radarr declares, so sonarr's `port` cannot move it (#4396)."""
+    with_job = _bazarr_reads_radarrs_job(tree)
+    sonarr = "    image: sonarr:1\n"
+    tree.write(BOX, with_job.replace(sonarr, sonarr + "    port: 8989\n"))
+    assert tree.narrow(*_refs(tree)) == {"sonarr", "lidarr", "prowlarr"}
+
+
+def test_a_port_edit_to_the_jobs_entry_reaches_its_metrics_port_reader(tree: Tree):
+    with_job = _bazarr_reads_radarrs_job(tree)
+    tree.write(BOX, with_job.replace(_RADARR, _RADARR + "    port: 7878\n"))
     assert tree.narrow(*_refs(tree)) == {"radarr", "lidarr", "bazarr"}
 
 
@@ -139,15 +162,60 @@ def test_a_named_lookup_by_a_literal_is_keyed_by_that_entry_is_clean(line, entry
         "{{ containers_list | entry_port(t.service) }}",
         "{{ containers_list | entry_port('uptime-' ~ suffix) }}",
         "{{ containers_list | entry_port('a' | lower) }}",
-        "{{ containers_list | metrics_port('crowdsec') }}",
+        "{{ containers_list | metrics_port(job) }}",
     ],
-    ids=["variable", "concatenated", "filtered", "job-not-entry"],
+    ids=["variable", "concatenated", "filtered", "job-variable"],
 )
 def test_a_lookup_by_anything_but_a_literal_entry_name_is_keyed_by_no_entry_is_flagged(
     line,
 ):
     reads = containers.reader_reads(line)
     assert reads is not None and set(reads) == {None}
+
+
+def test_a_metrics_port_read_by_a_literal_job_is_keyed_by_the_job_is_clean():
+    reads = containers.reader_reads("{{ containers_list | metrics_port('crowdsec') }}")
+    assert reads == {
+        containers.Job("crowdsec"): containers.FILTER_FIELDS["metrics_port"]
+    }
+
+
+_JOB_READ: dict[str | containers.Job | None, frozenset[str]] = {
+    containers.Job("x"): containers.FILTER_FIELDS["metrics_port"]
+}
+
+
+def test_a_job_read_meets_only_its_owners_edit_is_clean():
+    owners = {"x": "a"}
+    assert not containers.reads_changed(_JOB_READ, {"b": frozenset({"port"})}, owners)
+    assert containers.reads_changed(_JOB_READ, {"a": frozenset({"port"})}, owners)
+
+
+@pytest.mark.parametrize(
+    ("changed", "owners"),
+    [
+        ({"b": frozenset({"metrics"})}, {"x": "a"}),
+        ({"b": frozenset({"port"})}, {}),
+        ({"b": frozenset({"port"})}, {"x": None}),
+    ],
+    ids=["metrics-moved", "no-owner", "unnamed-owner"],
+)
+def test_a_job_read_meets_any_entrys_edit_when_its_owner_is_unknown_is_flagged(
+    changed, owners
+):
+    assert containers.reads_changed(_JOB_READ, changed, owners)
+
+
+def test_job_owners_names_the_first_entry_declaring_each_job():
+    doc = {
+        "containers_list": [
+            {"name": "a", "metrics": [{"job": "x"}]},
+            {"metrics": [{"job": "y"}]},
+            {"name": "b", "metrics": [{"job": "x"}, {"job": "y"}, {"job": "z"}]},
+            {"name": "c", "metrics": "bogus"},
+        ]
+    }
+    assert containers.job_owners(doc) == {"x": "a", "y": None, "z": "b"}
 
 
 def test_changed_fields_names_the_keys_an_edit_moved_by_entry():
@@ -193,94 +261,6 @@ def test_a_removed_entry_changes_every_field():
     )
 
 
-# ── FILTER_FIELDS against the filter plugins' source ────────────────────────────────────
-
-
-# A use the scan cannot resolve to a literal field name, vetted as reading no field the row omits.
-VETTED_OPAQUE = {
-    ("in_service_tier", "found.append()"): (
-        "`tier_entries` collects whole entries into the list it returns, and "
-        "`in_service_tier` reads each one by the literal key `name`"
-    ),
-}
-
-
-def _plugin_reads() -> dict[str, tuple[set[str], set[str]]]:
-    reads: dict[str, tuple[set[str], set[str]]] = {}
-    for path in sorted((REPO / "ansible" / "filter_plugins").glob("*.py")):
-        reads.update(filter_reads(path.read_text()))
-    return reads
-
-
-def _unvetted(name: str, opaque: set[str]) -> set[str]:
-    return {use for use in opaque if (name, use) not in VETTED_OPAQUE}
-
-
-def test_filter_fields_cover_every_key_each_filter_reads():
-    reads = _plugin_reads()
-    # Non-vacuity: the scan must find the filters the table names, entry_port among them.
-    assert "entry_port" in reads and set(containers.FILTER_FIELDS) <= set(reads)
-    missing = {
-        name: sorted(reads[name][0] - fields)
-        for name, fields in containers.FILTER_FIELDS.items()
-        if reads[name][0] - fields
-    }
-    assert not missing, f"FILTER_FIELDS omits keys these filters read: {missing}"
-
-
-def test_no_filter_in_the_table_reads_a_field_the_scan_cannot_name():
-    """A row whose filter iterates or forwards the entry would narrow past a moved render."""
-    reads = _plugin_reads()
-    # Non-vacuity: the table leaves `filter_by_platform` out because it returns whole entries,
-    # and the scan must reach the same verdict from the source.
-    assert any(use.startswith("return ") for use in reads["filter_by_platform"][1])
-    opaque = {
-        name: sorted(_unvetted(name, reads[name][1]))
-        for name in containers.FILTER_FIELDS
-        if _unvetted(name, reads[name][1])
-    }
-    assert not opaque, (
-        "these filters read fields no constant names; drop their FILTER_FIELDS row so their "
-        f"readers read every field, or vet the use in VETTED_OPAQUE: {opaque}"
-    )
-    # The vetted uses must still exist, or the exemption outlived its subject.
-    assert all(use in reads[name][1] for name, use in VETTED_OPAQUE)
-
-
-_ENTRY_PORT = (
-    "def entry_port(containers_list, name):\n"
-    "    return _lookup(containers_list, name)['port']\n"
-    "def _lookup(containers_list, name):\n"
-    "    return [e for e in containers_list if {probe}][0]\n"
-    "class FilterModule:\n"
-    "    def filters(self):\n"
-    "        return {{'entry_port': entry_port}}\n"
-)
-
-
-def test_the_scan_flags_a_filter_reading_a_key_the_table_omits():
-    keys, _ = filter_reads(_ENTRY_PORT.format(probe="e.get('hostname')"))["entry_port"]
-    assert keys - containers.FILTER_FIELDS["entry_port"] == {"hostname"}
-
-
-@pytest.mark.parametrize(
-    ("probe", "use"),
-    [
-        ("any(e.values())", ".values()"),
-        ("e.get(name)", ".get(<computed>)"),
-        ("render(**e)", "**"),
-        ("getattr(e, name)", "getattr()"),
-        ("e[name]", "e[name]"),
-        ("any(k for k in e)", "for over e"),
-        ("json.dumps(e)", "json.dumps()"),
-        ("dict(e)", "dict()"),
-    ],
-)
-def test_the_scan_flags_a_filter_that_iterates_or_forwards_the_entry(probe, use):
-    _, opaque = filter_reads(_ENTRY_PORT.format(probe=probe))["entry_port"]
-    assert use in opaque
-
-
 def test_the_real_tree_names_filter_readers():
     """The narrowing finds its readers by pattern, so it must still see named ones."""
     reader = (
@@ -292,206 +272,113 @@ def test_the_real_tree_names_filter_readers():
     }
 
 
-# The entry reaches a helper as a parameter here, and the helper has a local of its own. That is
-# the shape the comprehension harness above cannot exercise: there `e` is a loop variable.
-_HELPER = (
-    "def entry_port(containers_list, name):\n"
-    "    for e in containers_list:\n"
-    "        if e.get('name') == name:\n"
-    "            return _read(e, name)\n"
-    "def _read(entry, key):\n"
-    "    out = {{}}\n"
-    "    {probe}\n"
-    "    return out['port']\n"
-    "class FilterModule:\n"
-    "    def filters(self):\n"
-    "        return {{'entry_port': entry_port}}\n"
-)
-
-
 @pytest.mark.parametrize(
-    ("probe", "use"),
+    "template",
     [
-        ("out['port'] = entry[key]", "entry[key]"),
-        ("for k in entry: out[k] = 1", "for over entry"),
-        ("out = dict(entry)", "dict()"),
-        ("out.update(entry)", "out.update()"),
-        ("out['port'] = ', '.join(entry)", "', '.join()"),
+        "artifacts/templates/configmap.yaml.j2",
+        "monitor-bridge/templates/env-secret.yaml.j2",
+        "netpol-baseline/templates/networkpolicy-callers.yaml.j2",
+        "pihole/templates/config/pihole-dnsmasq.conf.j2",
+        "uptime-kuma/templates/deployment.yaml.j2",
     ],
-    ids=["computed-key", "iterates", "walks", "attribute-call", "constant-receiver"],
 )
-def test_a_helper_reading_an_entry_it_was_handed_by_a_computed_route_is_flagged(
-    probe, use
+def test_a_former_list_loop_reads_named_fields_is_clean(template: str):
+    """These five looped the list, so every entry edit reached their roles (#4395)."""
+    reads = containers.reader_reads((REPO / "ansible/roles/k8s" / template).read_text())
+    assert reads is not None
+    assert not any("depends_on" in fields for fields in reads.values())
+
+
+PI = "ansible/inventory/host_vars/daniel-pi.yml"
+_PI_VARS = "containers_list:\n  - name: alloy\n    port: 12345\n"
+
+
+def _host_keyed_readers(tree: Tree, quote: str = "'") -> None:
+    """Commit a Pi list, one reader keyed on each host and one keyed on a variable host.
+
+    bazarr reads the Pi's list as monitor-bridge does, jellyfin reads daniel-box's, and
+    radarr reads `hostvars[peer]`, whose host no literal names, and readarr reads the list
+    bare, which names no host either (#4422).
+    """
+    tree.write(PI, _PI_VARS)
+    for role, host in (("bazarr", "daniel-pi"), ("jellyfin", "daniel-box")):
+        tree.write(
+            f"ansible/roles/k8s/{role}/templates/secret.yaml.j2",
+            f"p: {{{{ hostvars[{quote}{host}{quote}].containers_list"
+            " | published_ports | join(',') }}\n",
+        )
+    tree.write(
+        "ansible/roles/k8s/radarr/templates/secret.yaml.j2",
+        "p: {{ hostvars[peer].containers_list | published_ports | join(',') }}\n",
+    )
+    tree.write(
+        "ansible/roles/k8s/readarr/templates/secret.yaml.j2",
+        "p: {{ containers_list | published_ports | join(',') }}\n",
+    )
+    tree.commit("readers keyed on a host")
+
+
+def _narrow(tree: Tree) -> set[str]:
+    """`Tree.narrow` over a fleet wide enough that seven tags stay under its ceiling."""
+    old, new = _refs(tree)
+    spare = {"monitor-bridge", "readarr"} | {f"spare-{n}" for n in range(6)}
+    return narrow_broad.narrow(
+        old, new, cwd=tree.root, declared=DECLARED | spare, callers={}
+    )
+
+
+@pytest.mark.parametrize("quote", ["'", '"'], ids=["single", "double"])
+def test_a_port_edit_to_daniel_box_skips_a_reader_of_the_pis_list(
+    tree: Tree, quote: str
 ):
-    _, opaque = filter_reads(_HELPER.format(probe=probe))["entry_port"]
-    assert use in opaque
+    """bazarr renders only daniel-pi's list, so a daniel-box `port` edit cannot move it."""
+    _host_keyed_readers(tree, quote)
+    sonarr = "    image: sonarr:1\n"
+    tree.write(BOX, HOST_VARS.replace(sonarr, sonarr + "    port: 8989\n"))
+    # radarr's host is a variable and readarr's and lidarr's reads are bare: all unkeyed.
+    assert _narrow(tree) == {
+        "sonarr",
+        "prowlarr",
+        "jellyfin",
+        "radarr",
+        "readarr",
+        "lidarr",
+    }
+
+
+def test_a_port_edit_to_daniel_pi_skips_a_reader_of_daniel_boxs_list(tree: Tree):
+    _host_keyed_readers(tree)
+    tree.write(PI, _PI_VARS.replace("12345", "12346"))
+    # prowlarr reads sonarr's port by name, which daniel-pi's list does not declare.
+    assert _narrow(tree) == {"alloy", "bazarr", "radarr", "readarr", "lidarr"}
+
+
+def test_a_port_edit_to_daniel_box_skips_monitor_bridge(tree: Tree):
+    """monitor-bridge's `port` reads are uptime-kuma's entry and the Pi's list (#4422)."""
+    secret = "ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2"
+    tree.write(secret, (REPO / secret).read_text())
+    tree.write(PI, _PI_VARS)
+    tree.commit("monitor-bridge as it stands")
+    sonarr = "    image: sonarr:1\n"
+    tree.write(BOX, HOST_VARS.replace(sonarr, sonarr + "    port: 8989\n"))
+    assert "monitor-bridge" not in _narrow(tree)
+
+
+def test_an_added_daniel_box_entry_skips_a_reader_of_the_pis_list(tree: Tree):
+    """An added entry changes every field, and still only daniel-box's list (#4422)."""
+    _host_keyed_readers(tree)
+    added = "  - name: whisparr\n    image: whisparr:1\n"
+    tree.write(BOX, HOST_VARS + added)
+    assert "bazarr" not in _narrow(tree)
 
 
 @pytest.mark.parametrize(
-    "probe",
-    ["out['port'] = entry['port']", "out['port'] = entry.get('port', 0)", "pass"],
+    "path, host",
+    [
+        ("ansible/inventory/host_vars/daniel-pi.yml", "daniel-pi"),
+        ("ansible/inventory/host_vars/daniel-box/containers.yml", "daniel-box"),
+        ("ansible/inventory/group_vars/all.yml", None),
+    ],
 )
-def test_a_helper_reading_an_entry_by_literal_keys_is_clean(probe):
-    _, opaque = filter_reads(_HELPER.format(probe=probe))["entry_port"]
-    assert opaque == set()
-
-
-def test_the_comprehension_harness_reading_a_literal_key_is_clean():
-    """Without this the probes above could pass because the harness flags everything."""
-    _, opaque = filter_reads(_ENTRY_PORT.format(probe="e.get('name') == name"))[
-        "entry_port"
-    ]
-    assert opaque == set()
-
-
-def test_a_filter_returning_a_whole_entry_is_flagged():
-    """The template then reads whatever it likes from it, as from `selectattr`."""
-    source = _HELPER.replace("return _read(e, name)", "return e")
-    _, opaque = filter_reads(source.format(probe="pass"))["entry_port"]
-    assert "return e" in opaque
-
-
-# ── NAMED_ENTRY against the filters' behaviour ─────────────────────────────────────────
-
-
-# Each named filter's arguments after the list and the name.
-_NAMED_ARGS = {
-    "entry_port": (),
-    "homepage_href": ("example.com",),
-    "homepage_widget_url": ("media",),
-    "in_service_tier": ("home-critical",),
-    "metrics_port": (),
-    "tier_priority_class": (),
-}
-_TARGET = {
-    "name": "target",
-    "port": 8080,
-    "hostname": "target",
-    "homepage_widget": True,
-    "tier": "home-edge",
-    "metrics": [{"job": "target", "port": 9100}],
-}
-# Entries beside the target: one valid entry that answers differently from it, one whose
-# every field would fail a filter that read it, and one that is no entry at all.
-_NEIGHBOURS = (
-    {
-        "name": "other",
-        "port": 1,
-        "hostname": "other",
-        "homepage_widget": True,
-        "tier": "home-automation",
-        "metrics": [{"job": "target", "port": 1}],
-    },
-    {
-        "name": "junk",
-        "port": "x",
-        "hostname": None,
-        "homepage_widget": False,
-        "tier": "bogus",
-        "metrics": "bogus",
-    },
-    "not-an-entry",
-)
-
-
-def _filters() -> dict:
-    found = {}
-    for path in sorted((REPO / "ansible" / "filter_plugins").glob("*.py")):
-        found.update(importlib.import_module(path.stem).FilterModule().filters())
-    return found
-
-
-def _outcome(filter_, containers_list: list, args: tuple) -> tuple:
-    try:
-        return ("returned", filter_(containers_list, "target", *args))
-    except (KeyError, TypeError, ValueError) as exc:
-        return ("raised", type(exc).__name__, str(exc))
-
-
-def _reads_only_the_named_entry(filter_, args: tuple) -> bool:
-    """Whether the `_NEIGHBOURS` beside `target` leave what `filter_` answers unchanged.
-
-    The target is tried whole and without each field, so a filter that falls back to another
-    entry when its own lacks a field is caught too.
-    """
-    variants = [_TARGET] + [
-        {k: v for k, v in _TARGET.items() if k != key}
-        for key in _TARGET
-        if key != "name"
-    ]
-    return all(
-        _outcome(filter_, [neighbour, target, neighbour], args)
-        == _outcome(filter_, [target], args)
-        for target in variants
-        for neighbour in _NEIGHBOURS
-    )
-
-
-def test_every_named_entry_filter_reads_only_the_entry_it_names():
-    # Non-vacuity: the table must name the lookups the real templates call most.
-    assert {"entry_port", "tier_priority_class"} <= containers.NAMED_ENTRY
-    assert containers.NAMED_ENTRY <= set(containers.FILTER_FIELDS)
-    # The target and the valid neighbour, each read as the entry the filter names, must both
-    # be answered, and answered differently. Otherwise a filter that read the neighbour would
-    # pass: a `tier` sharing the target's PriorityClass hid exactly that from
-    # `tier_priority_class`. A raise is no answer here, so it cannot count as a different one:
-    # a filter that skips entries it cannot read, as it skips `junk`, would then skip this
-    # neighbour too, and nothing beside the target would tell it apart.
-    filters = _filters()
-    as_target = {**_NEIGHBOURS[0], "name": "target"}
-    answers = {
-        n: (
-            _outcome(filters[n], [_TARGET], _NAMED_ARGS[n]),
-            _outcome(filters[n], [as_target], _NAMED_ARGS[n]),
-        )
-        for n in containers.NAMED_ENTRY
-    }
-    unanswered = {
-        n: (target, other)
-        for n, (target, other) in answers.items()
-        if "raised" in (target[0], other[0])
-    }
-    assert not unanswered, (
-        f"target or valid neighbour raised, so nothing compares: {unanswered}"
-    )
-    alike = sorted(n for n, (target, other) in answers.items() if target == other)
-    assert not alike, f"the valid neighbour answers as the target does for: {alike}"
-    walkers = sorted(
-        n
-        for n in containers.NAMED_ENTRY
-        if not _reads_only_the_named_entry(filters[n], _NAMED_ARGS[n])
-    )
-    assert not walkers, (
-        f"these NAMED_ENTRY filters read entries other than the one they name: {walkers}; "
-        "drop them from NAMED_ENTRY so their readers stay keyed by no entry"
-    )
-
-
-@pytest.mark.parametrize("name", ["metrics_port", "in_service_tier"])
-def test_a_filter_that_reads_entries_beside_the_one_it_names_is_flagged(name: str):
-    """The two `NAMED_ENTRY` leaves out: a job any entry may declare, a tier check over all."""
-    assert name not in containers.NAMED_ENTRY
-    assert not _reads_only_the_named_entry(_filters()[name], _NAMED_ARGS[name])
-
-
-def test_a_filter_answering_from_a_valid_neighbour_is_flagged():
-    """Only the valid neighbour can catch this one, so the guard must keep consulting it.
-
-    It raises wherever `tier_priority_class` raises, so the target-without-a-field variants
-    match, and it skips `junk` and the non-entry, so they match too. Both flagged filters above
-    also fail through `junk`, which would hide the walk dropping the valid neighbour.
-    """
-    service_tier = importlib.import_module("service_tier")
-
-    def from_a_neighbour(containers_list, name):
-        answer = service_tier.tier_priority_class(containers_list, name)
-        for entry in containers_list:
-            if (
-                isinstance(entry, dict)
-                and entry.get("name") != name
-                and entry.get("tier") in service_tier.SERVICE_TIERS
-            ):
-                return service_tier.SERVICE_TIERS[entry["tier"]]
-        return answer
-
-    assert not _reads_only_the_named_entry(from_a_neighbour, ())
+def test_edited_host_names_the_host_vars_owner_only(path: str, host: str | None):
+    assert containers.edited_host(path) == host

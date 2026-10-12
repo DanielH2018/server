@@ -25,6 +25,7 @@ from lib.exit_codes import (
     DEPLOY_NO_HOSTS,
     DEPLOY_STALE,
     FAILED,
+    LAND_FAILED,
     LAND_GAVE_UP,
 )
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -65,6 +66,14 @@ class Verdict(StrEnum):
     # tick-and-deploy cycle. Nothing was deployed and re-running is safe, which is the
     # opposite of what `deploy-failed` reads as. See `deploy.deploy_phase`.
     TIP_OUTRAN_RETRIES = "tip-outran-retries"
+    # The landing stopped on a refusal or an error of its own before it reached any other
+    # verdict: the landing policy, a PR closed unmerged or with changes requested, a read
+    # that failed. `Outcome` gives every exit-1 end this verdict when its site named none,
+    # so no exit-1 landing ends without a `VERDICT:` line (#4451). The detail says which.
+    REFUSED = "refused"
+    # land.sh handed the landing to a lander unit (`handoff.py`) and stopped waiting on it
+    # before it ended. The unit may still be running, and a re-run waits on it again.
+    HANDOFF_TIMEOUT = "handoff-timeout"
 
 
 VERDICTS = frozenset(Verdict)
@@ -128,7 +137,9 @@ class Outcome(Exception):
     """How a landing ends: the exit code, the verdict, and what to print.
 
     An exit-75 outcome must name a verdict, or the Landings board buckets it as
-    `aborted` and it reads as lock contention.
+    `aborted` and it reads as lock contention. An exit-1 outcome that names none takes
+    `refused`, so every exit-1 end prints a `VERDICT:` line too (#4451). Exit 64, a usage
+    error, prints none.
 
     `error` is the `land: <error>` stderr line, and "" means there is none: `Landing.finish`
     raises without one. It is a `str` rather than `str | None` so a caller that reads it
@@ -142,6 +153,8 @@ class Outcome(Exception):
             raise ValueError(f"unknown verdict {verdict!r}")
         if rc == LAND_GAVE_UP and verdict is None:
             raise ValueError("an exit-75 outcome must name a verdict")
+        if rc == LAND_FAILED and verdict is None:
+            verdict = Verdict.REFUSED
         super().__init__(detail)
         self.rc = rc
         self.detail = detail
@@ -231,3 +244,16 @@ def remaining_hosts_note(remaining: str) -> str:
     role either way. One string, printed by both verdict sites, so the two cannot drift.
     """
     return f"  STILL UNAPPLIED on the hosts this tick never touched: {remaining}"
+
+
+def disarmed(where: str, consequence: str) -> str:
+    """The message for await_ci's CI_DISARMED, shared by ci.py's step 3 and merge.py's direct merge.
+
+    Not a CI result: await_ci refused to report one because its required-context set is
+    empty. Waiting or re-running changes nothing; re-arming the gate does (#4464).
+    """
+    return (
+        f"the CI gate is disarmed{where} — await_ci requires no CI contexts, so it "
+        f"reports no verdict; {consequence}. To re-arm it, set REQUIRED_CONTEXTS in "
+        "scripts/deploy_tools/await_ci.py to the deployer's gitops_deploy_ci_contexts"
+    )

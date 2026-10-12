@@ -24,6 +24,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
 from diagnostics.probe_lib import core
 
+from lib.exit_codes import PROBE_UNREADABLE
 from lib.kubectl import DEFAULT_CLUSTER, kubectl, kubectl_argv
 
 # What plain `kubectl` must NEVER be able to do here. Ansible is the only write path to this
@@ -66,8 +67,8 @@ def format_readonly_rbac(denied_results, allowed_results):
     """Render the RBAC verdict.
 
     `denied_results` / `allowed_results` map (verb, resource) -> bool "the SA is permitted".
-    Fails when a denied verb became permitted (privilege creep) OR when a control verb is
-    refused (the probe cannot conclude anything).
+    Fails (1) when a denied verb became permitted, which is privilege creep. A refused control
+    verb is PROBE_UNREADABLE (75) instead: the probe could not look, so it concludes nothing.
     """
     lines = []
     creep = sorted(f"{v} {r}" for (v, r), ok in denied_results.items() if ok)
@@ -89,7 +90,7 @@ def format_readonly_rbac(denied_results, allowed_results):
             "nothing — a broken kubeconfig refuses everything. Fix access first: "
             + ", ".join(lost)
         )
-        return "\n".join(lines), 2
+        return "\n".join(lines), PROBE_UNREADABLE
     if creep:
         lines.append(
             "FAIL: the read-only ServiceAccount is now PERMITTED verbs it must never hold. "

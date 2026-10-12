@@ -159,7 +159,9 @@ def resolve_service_ip(name, cluster=DEFAULT_CLUSTER):
     ns = core.k8s_namespace()
     out = kubectl(cluster, *k8s_service_ip_args(name, ns))
     if out.returncode != 0:
-        raise SystemExit(f"kubectl get service {name} failed: {out.stderr.strip()}")
+        raise core.Unreadable(
+            f"kubectl get service {name} failed: {out.stderr.strip()}"
+        )
     ip = out.stdout.strip()
     if not ip:
         raise SystemExit(f"{name} has no ClusterIP (does the Service exist?)")
@@ -174,7 +176,9 @@ def resolve_ip(container):
     """
     out = subprocess.run(inspect_ip_argv(container), capture_output=True, text=True)
     if out.returncode != 0:
-        raise SystemExit(f"docker inspect {container} failed: {out.stderr.strip()}")
+        raise core.Unreadable(
+            f"docker inspect {container} failed: {out.stderr.strip()}"
+        )
     ip = parse_ip(out.stdout)
     if not ip:
         raise SystemExit(f"{container} has no container IP (is it running?)")

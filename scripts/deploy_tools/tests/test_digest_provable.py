@@ -101,7 +101,11 @@ def test_the_deployers_argv_is_one_main_accepts(capsys):
     assert argv[4] == deploy_narrow.DIGEST_PROVABLE_SCRIPT
     repo = str(REPO_K8S.parents[2])
     assert digest_provable.main([*argv[5:], "--repo", repo]) == 0
-    assert json.loads(capsys.readouterr().out) == {
+    out, err = capsys.readouterr()
+    assert json.loads(out) == {
         "homepage": True,
         "no-such-role": False,
     }
+    # A typo reads `false` like a role that acts outside its digest; only stderr names it.
+    assert "no role directory at" in err and "no-such-role" in err
+    assert "homepage" not in err

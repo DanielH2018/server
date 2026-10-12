@@ -54,11 +54,14 @@
 - name: Install the configarr health reader
   tags: [config]
   ansible.builtin.file:
-    path: /opt/configarr-health
+    path: "{{ item }}"
     state: directory
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0755"
+  loop:
+    - /opt/configarr-health
+    - /opt/configarr-health/configarr_lib # configarr_health.py's modules
   become: true
   when: not k8s_dry_run | bool
 
@@ -72,22 +75,51 @@
     host_lib_dir: /opt/configarr-health
     host_lib_owner: "{{ sys_user }}"
 
-- name: Install the configarr health reader scripts
+- name: Install the configarr health reader library
+  tags: [config]
+  # Before the reader, for the reason host_lib goes first: the cron invokes the reader by
+  # absolute path, and a reader that exists without the modules it imports is a spurious page.
+  # One file at a time rather than the directory: a directory copy also ships whatever
+  # __pycache__ the controller's checkout holds.
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/configarr_lib/{{ item }}"
+    dest: "/opt/configarr-health/configarr_lib/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0644"
+  loop:
+    - configarr_health_logic.py
+    # The verdict logic, whose tests live beside it.
+    # Copied rather than duplicated for the same reason host_lib.py is: the copy is what
+    # `configarr_lib.configarr_status` resolves to at runtime, and a second edited copy is how
+    # two callers quietly stop agreeing about what a failed sync looks like.
+    - configarr_status.py
+  become: true
+  when: not k8s_dry_run | bool
+
+- name: Install the configarr health reader script
   tags: [config]
   ansible.builtin.copy:
-    src: "{{ item }}"
-    dest: "/opt/configarr-health/{{ item | basename }}"
+    src: configarr_health.py
+    dest: /opt/configarr-health/configarr_health.py
     owner: "{{ sys_user }}"
     group: "{{ sys_user }}"
     mode: "0755"
+  become: true
+  when: not k8s_dry_run | bool
+
+- name: Remove the configarr health modules that moved into configarr_lib
+  tags: [config]
+  # Until #4416 these two sat flat beside the reader. A copy loop removes nothing it stops
+  # naming, so without this the stale copies stay on the host and the drift check no longer
+  # watches them. After the reader copy, so the reader on disk never imports a module that is
+  # already gone.
+  ansible.builtin.file:
+    path: "/opt/configarr-health/{{ item }}"
+    state: absent
   loop:
-    - configarr_health.py
     - configarr_health_logic.py
-    # The verdict logic, whose tests live beside it.
-    # Copied rather than duplicated for the same reason host_lib.py is: the sibling copy is what
-    # `import configarr_status` resolves at runtime, and a second edited copy is how two callers
-    # quietly stop agreeing about what a failed sync looks like.
-    - "{{ role_path }}/files/configarr_status.py"
+    - configarr_status.py
   become: true
   when: not k8s_dry_run | bool
 
@@ -110,10 +142,10 @@
         src: ansible/roles/setup/common/files/kuma_push.py
       - live: /opt/configarr-health/configarr_health.py
         src: ansible/roles/k8s/configarr/files/configarr_health.py
-      - live: /opt/configarr-health/configarr_health_logic.py
-        src: ansible/roles/k8s/configarr/files/configarr_health_logic.py
-      - live: /opt/configarr-health/configarr_status.py
-        src: ansible/roles/k8s/configarr/files/configarr_status.py
+      - live: /opt/configarr-health/configarr_lib/configarr_health_logic.py
+        src: ansible/roles/k8s/configarr/files/configarr_lib/configarr_health_logic.py
+      - live: /opt/configarr-health/configarr_lib/configarr_status.py
+        src: ansible/roles/k8s/configarr/files/configarr_lib/configarr_status.py
 
 - name: Deploy the configarr sync heartbeat
   tags: [cron]

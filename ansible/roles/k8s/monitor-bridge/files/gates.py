@@ -327,7 +327,10 @@ def _gate(
     if not check_enabled(name, only, cfg.CHECKS_SKIP):
         return CheckResult(True, "disabled by check filter")
     ok, msg = _evaluate(cfg, src, name, fn)
-    bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
+    # Logged on the same terms as an ordinary check in run_once: DOWN always, OK only on a
+    # narrowed or dry run (#4448).
+    if not ok or only or dry_run:
+        bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
     if not dry_run:
         sink.push(_env(push_env(name), ""), ok, msg)
     return CheckResult(ok, msg)

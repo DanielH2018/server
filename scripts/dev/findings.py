@@ -107,7 +107,7 @@ claim. `open --manual` labels an issue the dedup matched as well as a new one, s
 never dropped silently.
 
 Exit codes: 0 done; 1 gh failed, or `reap` refused a git read failure rather than call it
-"nothing is claimed"; 2 bad arguments, which includes a `--worktree` name the claim trailer
+"nothing is claimed"; 64 bad arguments, which includes a `--worktree` name the claim trailer
 could not carry; 3 nothing was written because the issue refuses it — closed, `manual`,
 deferred to a later date, outside the register, held by another worktree, not claimed, or
 lost a race to another claim — or because `claim`'s own `--worktree` would read stale at
@@ -125,12 +125,14 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 # DECIDED: the leaves are imported as `dev.findings_lib.<leaf>`, never as bare siblings.
 # `scripts/docs/reference/backlog.py` reaches this code as `dev.findings` with only
 # `scripts/` on sys.path, so a bare `from issue_model import ...` would raise
 # ModuleNotFoundError under the docs-refresh cron while pytest stayed green.
 from dev.findings_lib.claim import claim_states
+from lib.exit_codes import FINDINGS_BAD_ARGS
 from dev.findings_lib.claim_cli import cmd_claim, cmd_claims, cmd_reap, cmd_release
 from dev.findings_lib.cli import _parser
 from dev.findings_lib.export_cli import cmd_export
@@ -187,12 +189,12 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         tools: the process boundaries every gh call goes through.
 
     Returns:
-        The process exit code: 0 on success, 2 if the body file is missing, 3 if the
+        The process exit code: 0 on success, 64 if the body file is missing, 3 if the
         fingerprint belongs to an issue closed as refuted or accepted.
     """
     if not args.body_file.is_file():
         sys.stderr.write(f"open: body file not found: {args.body_file}\n")
-        return 2
+        return FINDINGS_BAD_ARGS
     body = args.body_file.read_text()
     fp = fingerprint(args.title, args.file)
     labels = ["claude", f"severity/{args.severity}", f"kind/{args.kind}"]
@@ -277,7 +279,7 @@ def cmd_touch(args: argparse.Namespace, tools: FindingsTools) -> int:
     if issue.get("state") == "CLOSED":
         terminal = sorted(NO_REOPEN & label_names(issue))
         why = terminal[0] if terminal else "fixed"
-        print(f"#{args.number} is closed ({why}); use open to re-file")
+        print(f"#{args.number} is closed ({why}); use open to re-file", file=sys.stderr)
         return 3
     plans = plan_touch(issue, args.source)
     run(plans, args.dry_run, tools)
@@ -298,7 +300,7 @@ def cmd_defer(args: argparse.Namespace, tools: FindingsTools) -> int:
             issue, until=args.until, existing_labels=_existing_labels(tools)
         )
     except ClaimRefused as exc:
-        print(f"#{args.number} refused: {exc.reason}")
+        print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
         return 3
     run(plans, args.dry_run, tools)
     what = (
@@ -324,7 +326,7 @@ def cmd_manual(args: argparse.Namespace, tools: FindingsTools) -> int:
     try:
         plans = plan_manual(issue, clear=args.clear)
     except ClaimRefused as exc:
-        print(f"#{args.number} refused: {exc.reason}")
+        print(f"#{args.number} refused: {exc.reason}", file=sys.stderr)
         return 3
     if not args.clear:
         plans += _release_for_manual(issue)
@@ -348,12 +350,12 @@ def cmd_close(args: argparse.Namespace, tools: FindingsTools) -> int:
     # argparse cannot express "--pr only with --fixed" across a mutually exclusive group.
     if outcome != "fixed" and args.pr:
         sys.stderr.write("close --pr goes with --fixed\n")
-        return 2
+        return FINDINGS_BAD_ARGS
     if outcome != "fixed" and not args.reason:
         sys.stderr.write(
             f"close --{outcome} needs --reason: a bare verdict teaches the next run nothing\n"
         )
-        return 2
+        return FINDINGS_BAD_ARGS
     if outcome != "fixed":
         # `gh issue edit --add-label` fails on a label the repo does not have, and the
         # not-planned outcomes are the only close that applies one. `refuted` exists only
@@ -382,14 +384,14 @@ def cmd_verify(args: argparse.Namespace, tools: FindingsTools) -> int:
         tools: the process boundaries the issue reads go through.
 
     Returns:
-        2 if neither or both of ``--all``/issue numbers were given, 0 otherwise.
+        64 if neither or both of ``--all``/issue numbers were given, 0 otherwise.
     """
     if args.all and args.numbers:
         sys.stderr.write("verify: pass --all or issue numbers, not both\n")
-        return 2
+        return FINDINGS_BAD_ARGS
     if not args.all and not args.numbers:
         sys.stderr.write("verify: need --all or at least one issue number\n")
-        return 2
+        return FINDINGS_BAD_ARGS
     issues = (
         load_issues("open", tools)
         if args.all
@@ -556,7 +558,7 @@ def main(argv: list[str] | None, tools: FindingsTools) -> int:
             f"known: {', '.join(sorted(REGISTER_CHECKOUTS))} "
             "(findings_lib/boundaries.py REGISTER_CHECKOUTS)\n"
         )
-        return 2
+        return FINDINGS_BAD_ARGS
     tools = aimed(tools, args.repo)
     handler = {
         "sync-labels": cmd_sync_labels,

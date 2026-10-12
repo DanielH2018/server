@@ -1,7 +1,7 @@
 // Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
 //
-// Lets the agent user START one landing unit, and nothing else. Its GitHub account cannot
-// merge to master: the review rule wants an approval from someone other than the last pusher.
+// Lets the agent user START one landing unit, and nothing else. The agent user has no sudo,
+// so it cannot deploy what it merges.
 // It asks for a landing by starting claude-land@<n>.service, which runs land.sh as the
 // operator under the landing policy. The instance must be a plain PR number, so no other unit
 // name or verb reaches this rule's YES.

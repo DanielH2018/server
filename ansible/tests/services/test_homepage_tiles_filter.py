@@ -21,7 +21,14 @@ import pytest
 
 from _homepage_config import config_urls, namespace
 from _k8s_render import host_context, rendered_docs
-from homepage_tiles import homepage_href, homepage_widget_url, netpol_callers
+from ansible.errors import AnsibleFilterError
+from homepage_tiles import (
+    FilterModule,
+    homepage_href,
+    homepage_widget_url,
+    netpol_caller_fences,
+    netpol_callers,
+)
 from lib.ansible_inventory import containers_entries_in
 
 ENTRIES = [
@@ -146,3 +153,54 @@ def test_each_bespoke_fence_admits_homepage():
             for peer in rule.get("from") or []
         ]
         assert "homepage" in peers, f"{template} no longer admits homepage"
+
+
+def test_caller_fences_skip_what_a_role_renders_itself():
+    """netpol-baseline renders these; a `role_owned` entry or item is its own role's."""
+    entries = [
+        {
+            "name": "scrutiny",
+            "netpol_app": "scrutiny-web",
+            "port": 8080,
+            "homepage_widget": True,
+        },
+        {
+            "name": "sonarr",
+            "port": 8989,
+            "netpol_from": ["bazarr"],
+            "netpol_role_owned": True,
+        },
+        {"name": "plain", "port": 1},
+        {
+            "name": "obs",
+            "netpol_fences": [
+                {"app": "loki", "port": 3100, "from": ["alloy"]},
+                {"app": "tempo", "port": 4317, "from": ["alloy"], "role_owned": True},
+            ],
+        },
+    ]
+    assert netpol_caller_fences(entries) == [
+        {"app": "scrutiny-web", "port": 8080, "callers": ["homepage"]},
+        {"app": "loki", "port": 3100, "callers": ["alloy"]},
+    ]
+
+
+# ── error shape (#4480) ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("name", "args"),
+    [
+        ("homepage_widget_url", ("absent", "ns")),
+        ("homepage_widget_url", ("jellyfin", "ns")),
+        ("homepage_href", ("absent", "example.com")),
+        ("homepage_href", ("loki-homelab", "example.com")),
+    ],
+    ids=["widget-missing", "widget-unflagged", "href-missing", "href-no-hostname"],
+)
+def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter(name, args):
+    """A render failure names the filter that refused, through the filter Ansible calls."""
+    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+        FilterModule().filters()[name](ENTRIES, *args)
+    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
+    assert str(caught.value).startswith(f"{name}: "), str(caught.value)

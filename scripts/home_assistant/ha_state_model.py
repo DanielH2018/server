@@ -8,7 +8,6 @@ guardrail checks consumed by the validate-ha-config prek/CI hook live in the sib
 any of that — `refresh` (snapshot integration entities) is the only live path.
 """
 
-import argparse
 import re
 import sys
 import tempfile
@@ -28,6 +27,8 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 from lib import yaml_fast
 
@@ -421,11 +422,9 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
     failure here leaves a stale external_entities.yml in place.
     """
     if get_states is None or get_services is None:
-        import json
-
         # DECIDED: deferred, the reverse edge of probe_lib/ha.py:581's `run_ha_state`. That
         # function needs build_model() to render `ha state`; `refresh` here needs core/ha's
-        # live-HTTP helpers (ha_base/ha_resolve/ha_token/ha_get) to snapshot external entities.
+        # live-HTTP helpers (ha_base/ha_resolve/ha_token/ha_get_json) to snapshot external entities.
         # Both edges stay inside the one function that needs them, so neither runs at import
         # time. Fixing it means carving the HA HTTP client out of probe_lib.ha into a module
         # neither side owns — real restructuring, so it is pinned in ALLOWED_CYCLES instead.
@@ -438,17 +437,15 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
     if get_states is None:
         live = [
             s["entity_id"]
-            for s in json.loads(
-                ha.ha_get(ha.ha_get_url(base, "states"), token, resolve=resolve)
+            for s in ha.ha_get_json(
+                ha.ha_get_url(base, "states"), token, resolve=resolve
             )
         ]
     else:
         live = list(get_states())
     if get_services is None:
         services = parse_services(
-            json.loads(
-                ha.ha_get(ha.ha_get_url(base, "services"), token, resolve=resolve)
-            )
+            ha.ha_get_json(ha.ha_get_url(base, "services"), token, resolve=resolve)
         )
     else:
         services = set(get_services())
@@ -504,7 +501,7 @@ def main(argv=None) -> int:
     Exits 1 when `check` finds a hard error; each subcommand otherwise returns its own
     exit code.
     """
-    p = argparse.ArgumentParser(prog="ha_state_model.py", description=__doc__)
+    p = ArgumentParser(prog="ha_state_model.py", description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("generate", help="regenerate derived_state.yml + STATE.md")
     sub.add_parser(
@@ -527,9 +524,9 @@ def main(argv=None) -> int:
 
     errs = check_errors()
     if errs:
-        print("HA state-model checks FAILED:")
+        print("HA state-model checks FAILED:", file=sys.stderr)
         for e in errs:
-            print(f"  - {e}")
+            print(f"  - {e}", file=sys.stderr)
         return 1
     print("HA state-model OK")
     return 0

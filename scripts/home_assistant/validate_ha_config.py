@@ -472,9 +472,9 @@ def main() -> int:
     """Run `validate()`, print its errors (if any), and exit 1 if it found one."""
     errors = validate()
     if errors:
-        print("Home Assistant config validation FAILED:")
+        print("Home Assistant config validation FAILED:", file=sys.stderr)
         for error in errors:
-            print(f"  - {error}")
+            print(f"  - {error}", file=sys.stderr)
         return 1
     print("Home Assistant config OK")
     return 0

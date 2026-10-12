@@ -58,7 +58,6 @@ never reads it, because that account has no TOTP registration.
 Exit 0 = a usable state file is on disk. Exit 1 = it is missing, expired or rejected.
 """
 
-import argparse
 import base64
 import hashlib
 import hmac
@@ -77,6 +76,7 @@ from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from diagnostics.probe_lib import core
+from lib.cli_help import ArgumentParser
 
 # The cookie Authelia issues for the LAN cookie-domain. Mirrors
 # `authelia_k8s_cookie_name` in roles/k8s/authelia/defaults/main.yml:48 — a rename there
@@ -441,7 +441,7 @@ def check(two_factor=False):
     path = state_path(two_factor)
     hint = mint_hint(two_factor)
     if not os.path.exists(path):
-        print(f"no state file at {path} — mint one by running with {hint}")
+        sys.stderr.write(f"no state file at {path} — mint one by running with {hint}\n")
         return 1
     with open(path) as f:
         state = json.load(f)
@@ -542,7 +542,7 @@ def main(argv=None):
     `--check` and `--verify` inspect an existing session without minting a new one. Returns
     the exit code of the action taken; a bare mint always returns 0.
     """
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = ArgumentParser(description=__doc__)
     parser.add_argument(
         "--check",
         action="store_true",

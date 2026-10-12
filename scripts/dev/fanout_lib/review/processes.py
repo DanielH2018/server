@@ -7,11 +7,14 @@
 `nohup sh -c 'sleep 120; echo ... > .claude/settings.local.json' &` and have it write after
 the worktree is reset. While the block is open the pipeline is a child subreaper, so an
 orphaned descendant reparents to it rather than to init, `setsid` or not, and the block's exit
-kills each one.
+kills each one. The red author's tests can do the same when a later gate runs them, so the
+green gate, the hunk check and the base check are reaped as well (#4508).
 
-DECIDED: only the red phase is reaped. The landing runs `land.sh --detach`, which
-double-forks so the landing outlives the call (`land_lib/detach.py`). Under a subreaper the
-landing would reparent to the pipeline and be killed.
+DECIDED: the red phase and every test run the pipeline starts are reaped, and nothing else.
+The landing runs `land.sh --detach`, which double-forks so the landing outlives the call
+(`land_lib/detach.py`). Under a subreaper the landing would reparent to the pipeline and be
+killed. The implement and fix phases run the red tests as well, and are not reaped: the
+implementer may leave a process on purpose, and #3865 covers what a session starts.
 
 A process started outside this tree, such as through `systemd-run --user`, is not reached.
 """

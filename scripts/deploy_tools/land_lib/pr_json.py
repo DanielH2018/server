@@ -8,7 +8,8 @@ nothing about a `.get` chain on it (#3704). Each reader here narrows one shape a
   listings, which the landing policy reads.
 
 Every key is optional, because a `gh pr view` answer carries only the fields asked for. A field
-of the wrong type raises `ValueError`, which `Landing.view` reports as unparseable gh output. A
+of the wrong type raises `ValueError` naming the field, which `Landing.view` reports as
+unparseable gh output followed by that text. A
 string field that is JSON `null` reads as `""`: every caller already treats the two alike.
 A top-level view field `PrView` does not declare raises `KeyError`, because ty reports
 `view["x"]` for an undeclared key but not `view.get("x")`, which would read `None` forever. A
@@ -60,6 +61,10 @@ class PrFile(TypedDict, total=False):
 
     filename: str
     previous_filename: str
+    # added, removed, modified, renamed, copied, changed or unchanged.
+    status: str
+    # The blob at the PR head; absent when GitHub sends none.
+    sha: str
 
 
 class PrReview(TypedDict, total=False):
@@ -150,10 +155,23 @@ def parse_view(obj: JsonObject) -> PrView:
 
 
 def parse_file(obj: JsonObject) -> PrFile:
-    """A REST changed-file entry: its path, and its old path when it was renamed."""
-    entry: PrFile = {"filename": _str(obj.get("filename"), "filename")}
+    """A REST changed-file entry: its path, its status and blob, and a rename's old path.
+
+    Raises:
+        ValueError: the entry has no status. The import-shape rules skip some checks for a
+            removed file and run others only for an added one, so a guessed status could
+            skip a check.
+    """
+    entry: PrFile = {
+        "filename": _str(obj.get("filename"), "filename"),
+        "status": _str(obj.get("status"), "status"),
+    }
+    if not entry["status"]:
+        raise ValueError("status: missing")
     if "previous_filename" in obj:
         entry["previous_filename"] = _str(obj["previous_filename"], "previous_filename")
+    if obj.get("sha") is not None:
+        entry["sha"] = _str(obj["sha"], "sha")
     return entry
 
 

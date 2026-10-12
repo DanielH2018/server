@@ -1,9 +1,7 @@
-"""--arm-merge and --await-merge on a PR that can merge only through a ruleset bypass.
+"""--arm-merge and --await-merge on a PR that land.sh merges directly.
 
-GitHub's auto-merge does not apply a ruleset bypass (github/docs#45265), and every PR into
-master needs one, so an armed PR sits BLOCKED until merge-timeout. arm_merge therefore never
-arms one, and await_merge merges it through the REST endpoint once await_ci reads its head
-green. Each behaviour is tested against its counterpart: a PR left for a direct merge against
+arm_merge never arms GitHub's auto-merge, and await_merge merges the PR through the REST
+endpoint once await_ci reads its head green, pinned to that head. Each behaviour is tested against its counterpart: a PR left for a direct merge against
 one only polled, a green head against a pending one, and a merge GitHub accepts against one
 it refuses.
 
@@ -31,16 +29,16 @@ def _wait(states: list[str]):
     ]
 
 
-# REVIEW_REQUIRED needs the bypass for the review gate. APPROVED needs it for the agent branch
-# fence, which restricts updates to master itself: armed, an approved agent PR sat BLOCKED
-# until a hand merge (#3911). An empty decision, a PR into a master with no review gate, still
-# meets the fence, so it takes the same path rather than the auto-merge it once did (#4001).
-BYPASS_ONLY = pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED", "APPROVED"])
+# Every decision takes the direct merge. Armed for auto-merge, an approved agent PR once sat
+# BLOCKED until a hand merge (#3911). An empty decision, which is every PR since the master
+# review gate was retired on 2026-10-11, takes the same path rather than the auto-merge it once
+# did (#4001). REVIEW_REQUIRED stays covered for a review rule added back.
+EVERY_DECISION = pytest.mark.parametrize("review", ["", "REVIEW_REQUIRED", "APPROVED"])
 
 
-@BYPASS_ONLY
-def test_a_pr_only_a_bypass_merges_is_left_for_a_direct_merge(landing, review):
-    """Armed, it would sit BLOCKED: GitHub's auto-merge never applies a ruleset bypass."""
+@EVERY_DECISION
+def test_every_pr_is_left_for_a_direct_merge(landing, review):
+    """No PR is armed for auto-merge, which would merge whatever head is green, not the checked one."""
     ln, calls = landing(
         Fakes(
             gh_views={
@@ -58,8 +56,8 @@ def test_a_pr_only_a_bypass_merges_is_left_for_a_direct_merge(landing, review):
     assert ln.direct_merge_subject == "Bump vale to 3.19.0"
 
 
-@BYPASS_ONLY
-def test_a_pr_only_a_bypass_merges_dies_without_await_merge(landing, review):
+@EVERY_DECISION
+def test_a_direct_merge_dies_without_await_merge(landing, review):
     """Nothing else in the run would merge it, so leaving it unarmed would end silently."""
     ln, calls = landing(
         Fakes(
@@ -81,7 +79,7 @@ def test_a_pr_only_a_bypass_merges_dies_without_await_merge(landing, review):
 
 
 def test_a_pr_with_changes_requested_is_refused_before_any_merge(landing):
-    """A direct merge would apply the operator's bypass to a PR someone asked to change."""
+    """Someone asked for this PR to change, so no merge call is made."""
     ln, calls = landing(
         Fakes(
             gh_views={
@@ -161,3 +159,15 @@ def test_a_refused_direct_merge_keeps_the_wait_going(landing):
     )
     merge.await_merge(ln)
     assert len([c for c in calls if c[0] == "gh"]) == 2
+
+
+def test_a_disarmed_gate_ends_a_direct_merge_wait_naming_it(landing):
+    """A direct merge fires only on await_ci's green, which a disarmed gate never gives (#4464)."""
+    ln, calls = _left_for_a_direct_merge(
+        landing, ["OPEN MERGEABLE aaaa"], [(2, "await_ci: no required CI contexts")]
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert exc.value.rc == 1 and exc.value.verdict == "refused"
+    assert "disarmed" in exc.value.error and "REQUIRED_CONTEXTS" in exc.value.error
+    assert not [c for c in calls if c[0] == "gh"]

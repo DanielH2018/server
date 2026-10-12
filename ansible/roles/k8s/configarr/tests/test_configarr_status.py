@@ -1,4 +1,4 @@
-from configarr_status import evaluate, has_error_line, summarize
+from configarr_lib.configarr_status import evaluate, has_error_line, summarize
 
 
 def test_clean_exit_no_errors_is_ok():

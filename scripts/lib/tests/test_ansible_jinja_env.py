@@ -24,6 +24,8 @@ EXPECTED_FILTERS = {
     "to_uuid": "ansible.plugins.filter.core.to_uuid",
     "filter_by_platform": "toposort.filter_by_platform",
     "authelia_service_rules": "authelia_access.authelia_service_rules",
+    "lan_hostnames": "entry_fields.lan_hostnames",
+    "netpol_caller_fences": "homepage_tiles.netpol_caller_fences",
 }
 
 
@@ -207,3 +209,28 @@ def test_the_light_tier_loads_no_ansible_core():
         "the light tier now imports ansible-core — see the DECIDED: marker in "
         f"scripts/lib/k8s_context.py\n{proc.stdout}"
     )
+
+
+@pytest.mark.parametrize(
+    ("name", "args"),
+    [
+        ("py_table", ("ROWS = 1\n", "ROWS")),
+        (
+            "kuma_ingress_monitors",
+            ([{"name": "svc", "hostname": "svc", "kuma": "yes"}],),
+        ),
+        ("backup_group_label", ("no-such-group",)),
+        ("weekly_backup_group", (9,)),
+        ("weekly_backup_shard", ("ns/absent", {})),
+        ("longhorn_backup_name", ("no_such_key",)),
+    ],
+)
+def test_a_guard_refusal_names_its_filter_as_a_deploy_does(name: str, args: tuple):
+    """The guard env registers the FilterModule versions, so its refusal reads as a deploy's (#4505)."""
+    from ansible.errors import AnsibleFilterError
+
+    env = aje.make_ansible_env([SHARED_TPL])
+    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+        env.filters[name](*args)
+    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
+    assert str(caught.value).startswith(f"{name}: "), str(caught.value)

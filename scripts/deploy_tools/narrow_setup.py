@@ -86,18 +86,23 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-import argparse
 import sys
 from pathlib import Path
 
 from deploy_tools.narrow_lib import filters as narrow_filters
 from deploy_tools.narrow_lib import paths as narrow_paths
+from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deployer_lib import deploy_cross_role
+from lib.exit_codes import (
+    NARROW_SETUP_NARROWED,
+    NARROW_SETUP_NOTHING,
+    NARROW_SETUP_REFUSED,
+)
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
 from deploy_tools.narrow_lib.foreign_keys import keys_reaching
 from deploy_tools.narrow_lib.setup_index import SETUP_TREE, RoleIndex, foreign_tags
@@ -112,10 +117,10 @@ INVENTORY = "ansible/inventory/"
 # How `main` says the role needs no tag. Both halves, because the tick runs this script from
 # the pre-merge checkout while its own code is the copy shipped under /opt, so either side
 # can be the older one. A non-zero exit sends a deployer that predates the answer to its
-# whole-role fallback, and the exact stdout keeps any other exit 3 from reading as one.
-# `deploy_narrow` holds the same pair, which it cannot import from here, and
+# whole-role fallback, and the exact stdout keeps any other exit with the same code from
+# reading as one. `deploy_narrow` holds the same pair, which it cannot import from here, and
 # `test_the_deployers_argv_for_a_range_needing_nothing_exits_with_the_deployers_pair` pins them.
-NOTHING_EXIT = 3
+NOTHING_EXIT = NARROW_SETUP_NOTHING
 NOTHING_OUT = "narrowed-to-nothing"
 
 
@@ -255,6 +260,10 @@ def plugin_tags(
             cannot follow), or a role that names none of the plugin's filters, which means the
             table calling it a caller and this walk disagree.
     """
+    if narrow_filters.comment_only(path, old, new, Path(repo)):
+        # No filter changed, so nothing the role reads did (#4412): the path adds no tag,
+        # the way a comment edit to a `defaults/` file adds none in `path_tags`.
+        return frozenset()
     tags: set[str] = set()
     for name in sorted(narrow_filters.plugin_names(path, old, new, Path(repo))):
         r = git(
@@ -384,7 +393,7 @@ def role_tags(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("role", help="the role directory under ansible/roles/setup/")
     parser.add_argument("old", help="the commit the checkout was on")
     parser.add_argument("new", help="the commit carrying the change")
@@ -417,9 +426,9 @@ def main(argv: list[str] | None = None) -> int:
         return NOTHING_EXIT
     except CannotNarrow as exc:
         print(f"narrow-setup: cannot narrow {args.role} ({exc})", file=sys.stderr)
-        return 1
+        return NARROW_SETUP_REFUSED
     print(",".join(sorted(tags)))
-    return 0
+    return NARROW_SETUP_NARROWED
 
 
 if __name__ == "__main__":

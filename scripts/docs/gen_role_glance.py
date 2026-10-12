@@ -85,7 +85,6 @@ Usage::
     uv run python scripts/docs/gen_role_glance.py --fix    # write, exit 1 if any was stale
 """
 
-import argparse
 import sys as _sys
 import textwrap
 from collections.abc import Callable
@@ -116,6 +115,7 @@ from docs.catalog_lib.glance_facts import (
     setup_glance_lines,
     setup_role_dirs,
 )
+from lib.cli_help import ArgumentParser
 from lib.estate import Estate, role_defaults
 from lib.render_guard import ALL_VARS, entry_tags
 from lib.repo_paths import ANSIBLE, REPO
@@ -472,7 +472,7 @@ def main(
 
     `find_stale` is the seam a test uses to point a real run at fixture roles.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
         "--check",

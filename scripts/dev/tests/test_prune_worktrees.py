@@ -66,7 +66,7 @@ def test_missing_worktrees_dir_is_not_an_error():
 # innocent and a test calling brief(prune=True) would have passed against the broken build.
 
 
-def _main_recording_removals(monkeypatch, tmp_path, argv, removable=2):
+def _main_recording_removals(monkeypatch, tmp_path, argv, removable=2, removes=True):
     """Run main(argv) over a fabricated survey, returning every path it asked to remove.
 
     `remove` itself is `lib.worktrees`' and is tested against real git there; what is under
@@ -80,7 +80,7 @@ def _main_recording_removals(monkeypatch, tmp_path, argv, removable=2):
 
     def fake_remove(repo, tree):
         removed.append(tree.path)
-        return True, ""
+        return removes, "" if removes else "is dirty"
 
     trees = [
         Worktree(
@@ -118,6 +118,18 @@ def test_brief_without_prune_removes_nothing(monkeypatch, tmp_path):
     assert removed == []
 
 
+def test_brief_shows_a_removable_trees_label_beside_its_name(
+    capsys, monkeypatch, tmp_path
+):
+    labelled = tmp_path / ".claude" / "worktrees" / "w0"
+    labelled.mkdir(parents=True)
+    (labelled / ".claim").write_text("#1345 Fix the cert watcher\n")
+    _main_recording_removals(monkeypatch, tmp_path, ["--brief"])
+    out = capsys.readouterr().out
+    assert "  w0 [#1345 Fix the cert watcher] — merged" in out
+    assert "  w1 — merged" in out
+
+
 def test_prune_with_brief_does_not_tell_the_caller_to_re_run_prune(
     capsys, monkeypatch, tmp_path
 ):
@@ -137,14 +149,33 @@ def test_prune_without_brief_still_removes_every_removable_worktree(
 
 
 def test_prune_all_reports_a_removal_git_refused(capsys, tmp_path):
-    prune_all(
+    failed = prune_all(
         str(tmp_path),
         [_tree()],
         advise=lambda root: [f"  blocked under {root}"],
         remover=lambda repo, tree: (False, "is dirty"),
     )
-    out = capsys.readouterr().out
-    assert "could not remove /w: is dirty\n  blocked under /w\n" in out
+    assert failed == 1
+    err = capsys.readouterr().err
+    assert "could not remove /w: is dirty\n  blocked under /w\n" in err
+
+
+def test_prune_all_counts_no_failure_when_every_removal_succeeds(tmp_path):
+    failed = prune_all(
+        str(tmp_path),
+        [_tree()],
+        advise=lambda root: [],
+        remover=lambda repo, tree: (True, ""),
+        reaper=lambda repo: [],
+    )
+    assert failed == 0
+
+
+def test_prune_exits_1_when_a_removal_failed(monkeypatch, tmp_path):
+    # The weekly cron's invocation: a refused removal must not exit 0 (#4445).
+    for argv in (["--prune", "--brief"], ["--prune"]):
+        rc, _, _ = _main_recording_removals(monkeypatch, tmp_path, argv, removes=False)
+        assert rc == 1, argv
 
 
 def _reaps_after(tmp_path, removed_ok):

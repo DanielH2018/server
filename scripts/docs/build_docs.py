@@ -34,7 +34,6 @@ Usage::
     uv run python scripts/docs/build_docs.py --skip-generators        # rebuild only
 """
 
-import argparse
 import contextlib
 import datetime as dt
 import importlib
@@ -49,6 +48,14 @@ from pathlib import Path
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
+
+from lib.exit_codes import (
+    BUILD_DOCS_GENERATOR_FAILED,
+    BUILD_DOCS_OK,
+    BUILD_DOCS_SITE_FAILED,
+)
 
 from lib.repo_paths import REPO
 
@@ -255,9 +262,25 @@ def run_generators() -> list[str]:
         if code != 0:
             failed.append(script)
             print(f"build_docs: {script} FAILED rc={code}", file=sys.stderr)
-        else:
-            print(f"build_docs: {script} ok -> {out}")
+    # One line for the whole pass: each generator already reports its own page, so a
+    # per-generator "ok" here only doubled the log (#4448).
+    print(
+        f"build_docs: {len(GENERATORS) - len(failed)}/{len(GENERATORS)} generator(s) ok"
+    )
     return failed
+
+
+def stderr_tail(text: str, limit: int) -> str:
+    """The last `limit` characters of `text`, cut at a line start.
+
+    mkdocs and rsync print the error that decides a failure last, so a cap keeps the tail.
+    The head that it replaced dropped exactly that line on a long log (#4448).
+    """
+    text = text.strip()
+    if len(text) <= limit:
+        return text
+    tail = text[-limit:]
+    return tail[tail.find("\n") + 1 :] if "\n" in tail else tail
 
 
 def _write_build_stamp(site: Path, generators: str = "ok") -> None:
@@ -318,11 +341,13 @@ def build_site(site_dir: str, generators: str = "ok") -> bool:
         check=False,
     )
     if result.returncode != 0:
+        print(stderr_tail(result.stderr, 4000), file=sys.stderr)
         print(
-            "build_docs: mkdocs build FAILED (previous site left serving)",
+            f"build_docs: mkdocs build FAILED rc={result.returncode}; the previous site is "
+            "left serving. The last line above is the deciding error; reproduce it with "
+            "`uv run mkdocs build --strict`.",
             file=sys.stderr,
         )
-        print(result.stderr.strip()[:4000], file=sys.stderr)
         shutil.rmtree(staging, ignore_errors=True)
         return False
 
@@ -347,8 +372,12 @@ def build_site(site_dir: str, generators: str = "ok") -> bool:
     )
     shutil.rmtree(staging, ignore_errors=True)
     if synced.returncode != 0:
-        print("build_docs: rsync into the served directory FAILED", file=sys.stderr)
-        print(synced.stderr.strip()[:2000], file=sys.stderr)
+        print(stderr_tail(synced.stderr, 2000), file=sys.stderr)
+        print(
+            f"build_docs: rsync into {final} FAILED rc={synced.returncode}; the served "
+            "site may be partly updated. Re-run build_docs.py once the error above is fixed.",
+            file=sys.stderr,
+        )
         return False
 
     print(f"build_docs: site built -> {final}")
@@ -363,9 +392,10 @@ def main(argv: list[str] | None = None) -> int:
     so the caller can tell stale pages from a stale site.
 
     Returns:
-        0 on success, 2 if one or more generators failed, 3 if the site build failed.
+        0 on success, 2 if one or more generators failed, 3 if the site build failed,
+        64 for a bad command line.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--site-dir",
         default=str(Path.home() / "docs-site"),
@@ -398,8 +428,8 @@ def main(argv: list[str] | None = None) -> int:
     # tree keeps its previous contents (build_site swaps in only on success) -- right content,
     # visibly old. Collapsing both into 1 left docs-refresh.sh unable to say which it hit.
     if failed:
-        return 2
-    return 0 if built else 3
+        return BUILD_DOCS_GENERATOR_FAILED
+    return BUILD_DOCS_OK if built else BUILD_DOCS_SITE_FAILED
 
 
 if __name__ == "__main__":

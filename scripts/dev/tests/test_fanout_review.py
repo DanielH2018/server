@@ -171,7 +171,7 @@ def test_the_pr_comment_lists_only_actionable_findings_and_counts_the_rest(tmp_p
 
 
 def test_a_security_finding_stays_off_the_public_comment_and_the_tracker(tmp_path):
-    # Actionable (0.6+) but under the 0.8 hold bar, so the batch still reaches the landing.
+    # Actionable (0.5+) but under the 0.8 hold bar, so the batch still reaches the landing.
     held = _finding("token leaks to the log", confidence=0.7, category="security")
     reports = [
         _report(f"Opened {PR}"),
@@ -224,20 +224,25 @@ def test_the_landing_is_skipped_when_too_little_run_time_is_left(tmp_path):
 
 
 def test_actionable_keeps_medium_at_the_confidence_floor_and_drops_the_rest():
-    kept = _finding("kept", "medium", 0.6)
+    kept = _finding("kept", "medium", 0.5)
     assert actionable(
-        [kept, _finding("unsure", "medium", 0.59), _finding("nit", "low")]
+        [kept, _finding("unsure", "medium", 0.49), _finding("nit", "low")]
     ) == [kept]
 
 
-def _test_finding(subkind, confidence=0.6):
+def _test_finding(subkind, confidence=0.5):
     return dict(_finding(subkind, "low", confidence, "test"), subkind=subkind)
 
 
-def test_a_low_vacuous_or_scaffold_test_finding_reaches_the_fix_round():
+def test_a_low_vacuous_test_finding_reaches_the_fix_round():
     # The severity floor dropped these anti-patterns unfiled (#4023).
-    vacuous, scaffold = _test_finding("vacuous"), _test_finding("scaffold")
-    assert actionable([vacuous, scaffold]) == [vacuous, scaffold]
+    vacuous = _test_finding("vacuous")
+    assert actionable([vacuous]) == [vacuous]
+
+
+def test_a_low_scaffold_test_finding_stays_below_the_bar():
+    # 1 of 7 actionable scaffold findings was real when #3675 judged them.
+    assert actionable([_test_finding("scaffold")]) == []
 
 
 def test_a_low_missing_coverage_or_unsure_vacuous_finding_stays_below_the_bar():
@@ -245,7 +250,7 @@ def test_a_low_missing_coverage_or_unsure_vacuous_finding_stays_below_the_bar():
         actionable(
             [
                 _test_finding("missing-coverage"),
-                _test_finding("vacuous", confidence=0.59),
+                _test_finding("vacuous", confidence=0.49),
             ]
         )
         == []
@@ -288,6 +293,16 @@ def test_another_repos_batch_runs_no_base_check(tmp_path):
     assert _record(tmp_path)["base_tests"] == 0
 
 
+def test_the_reviewer_runs_at_the_effort_its_record_names(tmp_path):
+    reports = [_report(f"Opened {PR}"), _report(structured={"findings": []})]
+    pipeline, _ = _pipeline(tmp_path, reports)
+    reviewer = pipeline._reviewer()
+    effort = reviewer[reviewer.index("--effort") + 1]
+    assert effort == "medium"
+    pipeline.run_all()
+    assert _record(tmp_path)["review_effort"] == effort
+
+
 def test_the_reviewer_reads_the_anti_patterns_read_at_start(tmp_path):
     pipeline, _ = _pipeline(tmp_path, [])
     pipeline.anti_patterns = "ANTI-PATTERNS AT START"
@@ -327,9 +342,11 @@ def test_every_phase_runs_the_prompt_and_hooks_read_at_start(tmp_path):
     ]
     pipeline, run = _pipeline(tmp_path, reports)
     pipeline.headless_prompt = "PROMPT AT START"
-    pipeline.hooks = dict(pipeline.hooks, **{"fanout-stop.py": b"HOOK AT START"})
-    assert "hooklib/worktree_lines.py" in pipeline.hooks
-    assert not [name for name in pipeline.hooks if name.startswith("tests/")]
+    pipeline.hooks = dict(
+        pipeline.hooks, **{".claude/hooks/fanout-stop.py": b"HOOK AT START"}
+    )
+    assert ".claude/hooks/hooklib/worktree_lines.py" in pipeline.hooks
+    assert not [name for name in pipeline.hooks if "/tests/" in name]
 
     hooks = pipeline.hook_root / ".claude" / "hooks"
     hook = hooks / "fanout-stop.py"
@@ -384,8 +401,18 @@ def test_a_resumed_phase_loads_no_settings_file_the_agent_can_write(tmp_path):
             for group in groups
             for h in group["hooks"]
         ]
+        # session-health reads the tree around its own file, and the held copy has none
+        # (#4393), so a held phase registers every project hook but the SessionStart one.
+        assert "SessionStart" in held["hooks"]
+        assert "SessionStart" not in settings["hooks"]
         assert len(commands) == len(
-            [h for groups in held["hooks"].values() for g in groups for h in g["hooks"]]
+            [
+                h
+                for event, groups in held["hooks"].items()
+                if event != "SessionStart"
+                for g in groups
+                for h in g["hooks"]
+            ]
         )
         assert all(c.startswith(f"{hooks}/run-hook.sh ") for c in commands)
         assert settings["permissions"] == held["permissions"]
@@ -462,3 +489,10 @@ def test_the_final_report_replaces_whatever_was_already_in_report_json(tmp_path)
         write_report(_report("failed: no PR"), out)
 
     assert report.read_text() == json.dumps(_report("failed: no PR")) + "\n"
+
+
+def test_the_review_unit_exits_1_when_its_report_is_an_error():
+    from fanout_lib.review_unit import exit_code
+
+    assert exit_code(_report("failed: no PR", is_error=True)) == 1
+    assert exit_code(_report(f"Opened {PR}")) == 0

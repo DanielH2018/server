@@ -100,6 +100,20 @@ def test_a_package_module_names_the_test_beside_its_entrypoint(tmp_path):
     assert rows["fragments_hosts.py"]["tests"] == "test_fragments_hosts.py"
 
 
+def test_a_package_module_names_a_test_named_after_its_family(tmp_path):
+    """`land_lib/ci.py` is tested by `test_land_ci.py`: the family is the package's prefix (#4515).
+
+    The decoy is named after the entrypoint's directory and sorts first, so a lookup that
+    globs `test_*_ci.py` or takes the family from the wrong directory picks it instead.
+    """
+    _write(tmp_path / "deploy_tools" / "land.py", '"""Summary."""\n')
+    _write(tmp_path / "deploy_tools" / "land_lib" / "ci.py", '"""Summary."""\n')
+    _write(tmp_path / "deploy_tools" / "tests" / "test_deploy_tools_ci.py", '"""x"""\n')
+    _write(tmp_path / "deploy_tools" / "tests" / "test_land_ci.py", '"""x"""\n')
+    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    assert rows["ci.py"]["tests"] == "test_land_ci.py"
+
+
 def test_only_a_lib_package_reaches_into_the_parents_tests(tmp_path):
     _write(tmp_path / "docs" / "reference" / "backlog.py", '"""Summary."""\n')
     _write(tmp_path / "docs" / "tests" / "test_backlog.py", '"""x"""\n')
@@ -409,3 +423,19 @@ def test_the_basename_guard_flags_a_real_clash():
     assert clashes == [
         "scripts/availability_bots/common.py and scripts/infra_map/common.py"
     ]
+
+
+def test_a_subpackage_module_names_a_test_named_after_its_family(tmp_path):
+    """`fanout_lib/review/red_gate.py` is tested by `test_fanout_red_gate.py` (#4529).
+
+    The family and the `tests/` both come from the nearest `*_lib` ancestor. The decoy is
+    named after the module's direct parent, which a lookup that stops there would pick.
+    """
+    _write(tmp_path / "dev" / "fanout.py", '"""Summary."""\n')
+    _write(
+        tmp_path / "dev" / "fanout_lib" / "review" / "red_gate.py", '"""Summary."""\n'
+    )
+    _write(tmp_path / "dev" / "tests" / "test_fanout_red_gate.py", '"""x"""\n')
+    _write(tmp_path / "dev" / "tests" / "test_review_red_gate.py", '"""x"""\n')
+    rows = {r["name"]: r for r in g.build_rows(tmp_path)}
+    assert rows["red_gate.py"]["tests"] == "test_fanout_red_gate.py"

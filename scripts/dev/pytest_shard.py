@@ -64,7 +64,6 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log --warn-only  # annotate, exit 0
 """
 
-import argparse
 import json
 import statistics
 import subprocess
@@ -75,6 +74,8 @@ from pathlib import Path, PurePosixPath
 # Reach `scripts/lib`: a directly-invoked script gets only its own directory on sys.path,
 # and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 from lib.git import git
 from lib.repo_paths import REPO
@@ -293,7 +294,7 @@ def _summary(shards: int) -> str:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--of", type=int, default=4, help="how many shards in total")
     parser.add_argument("--shard", type=int, help="which 1-based shard to print")
     parser.add_argument(
@@ -407,7 +408,10 @@ def main(argv=None) -> int:
         print(_summary(args.of))
         return 0
     if args.shard is None:
-        parser.error("one of --shard, --summary or --record is required")
+        parser.error(
+            "one of --shard, --summary, --record, --record-missing, --record-files or "
+            "--check-durations is required"
+        )
 
     files = shard_files(args.shard, args.of)
     # An empty list is not a fast green: pytest exits 5 ("no tests collected") on one, and a

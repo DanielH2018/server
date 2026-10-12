@@ -51,6 +51,19 @@ is what stops a tick and an operator's deploy driving the same rollout. See
 
 ## Reading the deployer's state
 
+To list only a failed deploy's lines, run `journalctl -u gitops-deploy -p err`. A failure that
+leaves a hold or a rollback logs at `err`. Most failed reads and gates the tick worked around
+log at `warning`, so `-p warning` lists both, but not every one does. Every other line stays at the unit's
+`SyslogLevel=notice`. `deploy_config.log` sets the priority with an sd-daemon `<3>` or `<4>`
+prefix, which journald strips (#4446).
+
+Every deployer `log()` line opens with one lowercase subject token and a colon: the phase or marker the
+line is about, such as `ci:`, `hold:`, `narrow:`, `denylist:`, `manual_plane:` or
+`k8s_unapplied:`. To list every line about one subject, run `journalctl -u gitops-deploy | grep
+'manual_plane: '`. A relayed child-process line gets the subject of the call that ran it.
+`ansible/roles/setup/gitops_deploy/tests/test_deployer_log_subjects.py` holds every `log()` call
+to that shape (#4507).
+
 `./scripts/deploy_tools/gitops_tick.sh` prints three values after it runs. Read them before concluding
 anything.
 
@@ -75,7 +88,7 @@ for the tick to fast-forward to that commit and deploy it.
 
 **The tree is dirty.** The primary checkout holds an uncommitted change or an untracked file.
 `git status --porcelain` counts untracked files, so one stray output file from a tool parks the
-deployer with nothing modified. The tick logs `working tree dirty — skipping` with the paths on
+deployer with nothing modified. The tick logs `tick: working tree dirty — skipping` with the paths on
 every run and pages Discord at most twice a day (`should_alert_dirty`). Every other signal stays
 green.
 
@@ -221,11 +234,13 @@ each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
   templates and the play's own trees for each one. A call from `deploy.yml`, `pre_tasks/`,
   `tasks/` or `post_tasks/` still refuses, as do an inventory value that calls the filter, a
   `filters()` that is not a literal dict, a deleted plugin and a plugin another plugin imports.
+  An edit to comments, docstrings or layout alone reaches no caller in either plane (#4412).
+  `filters.comment_only` compares the module's parse tree, less its docstrings, at both refs.
   `scripts/deploy_tools/narrow_lib/filters.py` holds the rule.
 - **A setup role that calls a filter is outside both runs**, because `deploy.yml` applies no
   setup role. The deployer reads those callers from
   `deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS`, a static table that
-  `ansible/tests/setup/test_setup_cross_role_files.py` holds to the tree. A plugin change joins
+  `ansible/tests/setup/test_setup_cross_role_reads.py` holds to the tree. A plugin change joins
   the setup plane beside the deploy plane. The tick applies an `initial_setup.yml` caller such as
   `gitops_deploy`, and records a `k3s-bringup.yml` caller such as `k3s` as a `manual_plane` line.
   `narrow_setup.plugin_tags` narrows each caller to the readers of the vars key whose value calls
@@ -233,7 +248,7 @@ each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
   rather than `--tags k3s`. An inventory value that calls a filter refuses, and so does a role
   that names none of them. A refusal falls back to the whole-role tag.
 
-**Every deploy-plane tick also logs a render-digest shadow line.** The `narrow shadow:` line names
+**Every deploy-plane tick also logs a render-digest shadow line.** The `narrow-shadow:` line names
 the services whose applied digests differ from a render record of the commit being applied,
 counts the ones that match, and counts the ones with no usable record, grouped by reason. It
 applies nothing. It is meant to narrow a refused range by a digest diff, but it
@@ -280,9 +295,9 @@ The tick fast-forwards instead, and writes the role to the `owed` ledger
 origin SHA, playbook, first-seen stamp and narrow tags. A role already listed is not re-added,
 so its first-seen stamp is the age everything else reads. Five consequences:
 
-- the journal says `manual_plane pending: <roles> — apply by hand: <commands>` on **every**
+- the journal says `manual_plane: pending <roles> — apply by hand: <commands>` on **every**
   tick, not only the one that recorded it. The recording tick says
-  `manual_plane recorded: <roles>` instead, naming only the roles it added, so no tick prints
+  `manual_plane: recorded <roles>` instead, naming only the roles it added, so no tick prints
   both lines;
 - Discord pages once per SHA, with the same commands and the ledger's path;
 - **GitOps Deploy — Status** goes down once the oldest pending line is older than
@@ -316,7 +331,7 @@ uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s -
 The clear then keeps the line and prints what is still pending. Every surface that prints a
 narrowed apply prints the matching `--applied` beside it, so following the printed pair is enough.
 A clear whose `--applied` covers the whole row takes the line. A clear with `--applied` against an
-EMPTY or missing row keeps the line and says so: an empty row means the whole role is pending,
+EMPTY or missing row keeps the line, says so on stderr and exits 1: an empty row means the whole role is pending,
 because a later range's derivation refused after your command was printed. Apply the whole role,
 then clear without `--applied`. `common`'s row is always empty, so a remediation naming several
 roles prints one clear per role, and only the narrowed ones carry `--applied`.
@@ -335,7 +350,9 @@ matched no task, exited 0 and recorded an apply the Pi never received.
 `scripts/deploy_tools/setup_routing.py` reads the role's `when:` against each host's vars and
 finds the one host it admits. The deployer writes that host into the role's `manual_plane` line
 as its `host` key, and every surface that prints the remediation appends `-e target=<host>`
-from it: `ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e target=daniel-pi`.
+from it: `uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi -e
+target=daniel-pi`. Each prints `gitops_markers.PLAYBOOK_CMD` as the prefix, because a bare `ansible-playbook`
+is the uv-tool shim without the collection deps (#4413).
 A second role gated off the tick's host is derived the same way, with no table to update
 (#3734).
 
@@ -389,7 +406,10 @@ Refusing on those would leave the narrowing almost never firing, because most ra
 touching `setup/k3s` carry the role's own `CLAUDE.md`. A range of nothing but such paths is an
 answer rather than a narrowing: `narrow_setup.py` exits 3 printing `narrowed-to-nothing`, since
 an empty `--tags` value runs the whole playbook (#4361). The tick drops the role from its run.
-The remediation keeps the role tag, because it reads exit 3 as a refusal like any non-zero exit.
+`deploy_defer.record` writes no `manual_plane` line and sends no page for such a role. It
+records `narrowed-to-nothing` as the role's row in the tick's receipt instead, because an
+empty row there reads as a refusal. `land.sh`'s plane note leaves the role out, from that
+receipt row after the tick or from the PR's own derivation on the fast path (#4408).
 
 **Any other doubt refuses**, and a refusal prints the role tag with
 `deploy_remediation.maximal_tag_warning` beside it. Refusing is the safe direction, because a
@@ -535,7 +555,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     every reader's next call would read `HTTP Error 403`, which this gate maps to `pending`. The
     rule is `deploy_git.ci_walk_candidates`, which carries the `DECIDED:` marker. The property the
     gate keeps is that **the tree the host runs always has its own green CI verdict.** One line
-    names the choice: `origin <tip8>: CI <pending|fail>; fast-forwarding to the newest green
+    names the choice: `ci: origin <tip8> is <pending|fail>; fast-forwarding to the newest green
     ancestor <sha8> (<n> behind the tip)`.
   - `fail` on the tip with no green ancestor makes `next_action` return **`ci_failed`**: no
     ff-merge, no deploy, and a Discord alert throttled once per SHA (the `ci` slot of the
@@ -914,6 +934,12 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   **A k8s change that is not an eligible bump defers.** A path under `roles/k8s/**` that is not an
   eligible image-pin bump lands in `ChangeSet.k8s` (`deploy_logic.role_of` matches the whole role
   directory). The tick still `--ff-only` merges it and does not deploy it.
+  A role `defaults/` edit that moves no content line is not a change at all
+  (`deploy_k8s.comment_only_k8s_defaults`, #4460): the tick drops the path before it
+  classifies, so it neither defers nor pages. The release-staleness census drops the same
+  path with the same reader, so the role does not read stale either, and land.sh derives no
+  deploy tag for it (`deploy_tags.comment_only_paths`). `templates/` and
+  `tasks/` are outside that read.
   `alert_deferred` posts once per SHA on the `k8s` alert slot. Deploy the change with
   `./scripts/deploy.sh --tags <svc>`, even where the post prints the bare `ansible-playbook`
   form. The compose mechanisms in this page (`containers_for()`, the
@@ -1124,21 +1150,20 @@ units on a non-deployer host. One alerts and the other reconciles:
       success. A token read names `.visibility`; an anonymous read of a private repo answers
       `Not Found`. `land.sh --arm-merge` refuses to arm or direct-merge while the repo is not
       public.
-    - The master CI gate must require exactly `gitops_deploy_expected_ruleset_contexts`.
+    - The master CI gate must require exactly `gitops_deploy_expected_ruleset_contexts`. It must
+      also carry a `pull_request` rule requiring `gitops_deploy_ruleset_required_approvals`
+      approving reviews, which is zero so that GitHub's auto-merge can merge a PR.
     - The branch-protection ruleset (`gitops_deploy_branch_ruleset_id`) must exclude
       `refs/heads/renovate/**`. Without that exclusion GitHub refuses Renovate's post-merge
       branch delete and its rebase force-push, and a merged branch's stale green automerges the
       next PR empty.
-    - The review ruleset (`gitops_deploy_review_ruleset_id`) must stay active on master and
-      require `gitops_deploy_review_ruleset_approvals` approving reviews. Stale approvals must be
-      dismissed on push, and the last push must be approved by someone other than its pusher.
     - The fence ruleset (`gitops_deploy_fence_ruleset_id`) must restrict creating, updating and
       deleting every branch except exactly `gitops_deploy_fence_ruleset_exclude`. Without it, the
       agent's account could push onto a branch an operator session opened, and `land.sh`'s admin
       merge would carry that commit to master.
     - Each bypass list must equal its declaration: none on the CI gate, the admin role and the
-      Renovate app on the review ruleset and the fence. The agent's GitHub account is in no list,
-      so its PRs reach master only through the lander.
+      Renovate app on the fence. The agent's GitHub account is in no list. The fence excludes
+      master, so the agent's account can merge or auto-merge its own PR.
 - **`github-interaction-limit.sh`** re-applies `gitops_deploy_interaction_limit` every day.
   GitHub grants an interaction limit for six months at most and lets it lapse silently, so
   re-applying it restores the declared state rather than overriding a decision. The limit keeps

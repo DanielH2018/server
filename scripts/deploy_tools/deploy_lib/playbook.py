@@ -29,6 +29,7 @@ from typing import Protocol
 # Reach the sibling package directories: an importer that did not bootstrap them itself (a
 # test, a REPL) finds only this module's own directory, and `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.deploy_lib.messages import say_warning
 from lib.exit_codes import DEPLOY_NO_HOSTS
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
@@ -59,8 +60,12 @@ _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _RECAP_HOST = re.compile(r"^\S+\s+:\s+ok=\d+")
 
 
+# What `recap_state` read from a run's output. These are not exit codes.
+RECAP_HOSTS, RECAP_NO_HOSTS, RECAP_MISSING = 0, 1, 2
+
+
 def recap_state(output: str) -> int:
-    """0 when the PLAY RECAP names a host, 1 when it names none, 2 when there is no recap."""
+    """`RECAP_HOSTS`, `RECAP_NO_HOSTS` when the PLAY RECAP names no host, or `RECAP_MISSING`."""
     recap, hosts = False, 0
     for line in _ANSI.sub("", output).splitlines():
         if line.startswith("PLAY RECAP"):
@@ -68,8 +73,8 @@ def recap_state(output: str) -> int:
         elif recap and _RECAP_HOST.match(line):
             hosts += 1
     if not recap:
-        return 2
-    return 0 if hosts else 1
+        return RECAP_MISSING
+    return RECAP_HOSTS if hosts else RECAP_NO_HOSTS
 
 
 def run_playbook(run: Run) -> int:
@@ -136,7 +141,7 @@ def run_playbook(run: Run) -> int:
     # No host under the recap: nothing ran, whatever ansible returned. A 0 with no recap is
     # the same fault; a non-zero exit with no recap keeps ansible's status, as something may
     # have applied before the run was killed or failed to parse.
-    if state == 1 or (state == 2 and status == 0):
+    if state == RECAP_NO_HOSTS or (state == RECAP_MISSING and status == 0):
         return DEPLOY_NO_HOSTS
     return status
 
@@ -172,10 +177,6 @@ LOCK_POLL_S = 0.1
 GITOPS_STATE_DIR_ENV = "HOMELAB_DEPLOY_GITOPS_STATE_DIR"
 RELEASE_DIR_ENV = "HOMELAB_DEPLOY_RELEASE_DIR"
 TREE_LOCK_ENV = "HOMELAB_DEPLOY_TREE_LOCK"
-
-
-def say(line: str) -> None:
-    print(line, file=sys.stderr, flush=True)
 
 
 def _take_lock(fd: int, wait_s: float) -> bool:
@@ -226,8 +227,8 @@ def discharge_owed_k8s(
         fd = os.open(lock, os.O_RDONLY | os.O_CREAT, 0o666)
         try:
             if not _take_lock(fd, lock_wait_s):
-                say(
-                    f"deploy: a gitops tick held the tree lock past {lock_wait_s}s, so the "
+                say_warning(
+                    f"a gitops tick held the tree lock past {lock_wait_s}s, so the "
                     "k8s_unapplied ledger was not checked; the next tick discharges what "
                     "this deploy carried"
                 )
@@ -241,7 +242,7 @@ def discharge_owed_k8s(
             os.close(fd)
     # Broad on purpose: the deploy already succeeded, and nothing here may change that.
     except Exception as exc:
-        say(
-            f"deploy: did not check the k8s_unapplied ledger ({type(exc).__name__}: {exc}); "
+        say_warning(
+            f"did not check the k8s_unapplied ledger ({type(exc).__name__}: {exc}); "
             "the next gitops tick discharges what this deploy carried"
         )

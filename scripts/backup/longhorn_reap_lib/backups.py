@@ -112,6 +112,7 @@ from lib.repo_paths import HOST_LIB_FILES
 sys.path.insert(0, str(HOST_LIB_FILES))
 import host_lib
 from lib.cli_help import answer_help
+from lib.exit_codes import USAGE_ERROR
 from longhorn_reap_lib import logic, selection
 
 NAMESPACE = "longhorn-system"
@@ -312,12 +313,13 @@ def _parse_args(argv: list[str]) -> tuple[Args, str]:
 
 
 def _print_dry_run(args: Args, buckets: list[tuple[str, list, bool]]) -> None:
-    """Say what an --apply would delete, then what it would cost and which flags it takes.
+    """Say what an --apply would delete, what it would cost, and the next step, in three lines.
 
     The cost paragraph is the reason this prints at all: the reapable list reads as cheap
     because it is short, while the spend is per stored block. It is the prose the retired
     `prune_backups.yml` header carried for the two operator modes, which is why the deletion
-    cost now has to survive someone reading only this output. ENFORCED:
+    cost now has to survive someone reading only this output. The flag table it once
+    carried is in `--help`; a 20-line banner on every dry run buried the count (#4448). ENFORCED:
     scripts/backup/tests/test_longhorn_reap_backups_cli.py
     ::test_every_modes_dry_run_prints_the_per_block_cost
     """
@@ -331,45 +333,14 @@ def _print_dry_run(args: Args, buckets: list[tuple[str, list, bool]]) -> None:
             "dry run — %d %s would be deleted in the %s mode."
             % (len(buckets[0][1]), buckets[0][0], args.mode)
         )
-    print()
     print(
-        "  COST: each deletion walks that volume's whole block tree — roughly 1.28 Class C"
+        "COST: ~1.28 Class C per stored block against a 2,500/day free tier; seven strays cost "
+        "~3,640 on 2026-08-17. Check 'probe.py b2-budget' before --apply."
     )
     print(
-        "  transactions per stored block, against a 2,500/day free-tier cap. Seven strays"
-    )
-    print(
-        "  measured ~3,640 Class C on 2026-08-17, 1.5x the daily cap. A short list is not a"
-    )
-    print(
-        "  cheap one. Check 'probe.py b2-budget' for the per-volume figure before --apply."
-    )
-    print()
-    print("  --apply                  deletes this mode's own bucket")
-    print("  --apply-deleted-volumes  deletes backups whose volume no longer exists")
-    print(
-        "  --max-deletions N        caps the deletions one run makes across both buckets."
-    )
-    print(
-        "                           Default %d: ~%d Class C per deletion measured "
-        "2026-08-17, so %d"
-        % (
-            MAX_DELETIONS_DEFAULT,
-            CLASS_C_PER_DELETION,
-            MAX_DELETIONS_DEFAULT,
-        )
-    )
-    print(
-        "                           costs ~%s against the 2,500/day free tier. Over the "
-        "cap the" % f"{MAX_DELETIONS_DEFAULT * CLASS_C_PER_DELETION:,}"
-    )
-    print("                           run refuses before deleting anything.")
-    print("  --mode <%s>" % "|".join(MODES))
-    print(
-        "                           which set to select. --claim <pvc> scopes the two"
-    )
-    print(
-        "                           operator modes; --seed-floor N is the seeds floor."
+        "next: --apply deletes this mode's bucket, capped at --max-deletions (default %d, "
+        "~%s Class C); --help lists the other flags."
+        % (MAX_DELETIONS_DEFAULT, f"{MAX_DELETIONS_DEFAULT * CLASS_C_PER_DELETION:,}")
     )
 
 
@@ -378,7 +349,7 @@ def main(argv: list[str]) -> int:
     args, arg_err = _parse_args(argv)
     if arg_err:
         print(arg_err, file=sys.stderr)
-        return 2
+        return USAGE_ERROR
 
     needs_admin = args.apply or args.apply_deleted
     refusal = logic.readonly_kubeconfig_refusal(

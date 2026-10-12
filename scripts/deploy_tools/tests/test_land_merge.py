@@ -196,6 +196,22 @@ def test_arm_merge_accepts_a_public_repo_after_reading_its_visibility(landing):
     assert ln.direct_merge_subject
 
 
+def test_arm_merge_names_the_field_when_the_visibility_read_is_the_wrong_shape(landing):
+    ln, _ = landing(
+        Fakes(gh_views={"state,title,body,reviewDecision": _OPEN}),
+        arm_merge=True,
+        await_merge=True,
+    )
+    read = ln.tools.gh_json
+    ln.tools.gh_json = lambda *a, **k: (
+        ["public"] if a[:2] == ("api", "repos/{owner}/{repo}") else read(*a, **k)
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.arm_merge(ln)
+    assert exc.value.rc == 1
+    assert "gh api repos: expected a JSON object, got list" in exc.value.error
+
+
 def test_arm_merge_reads_no_author_when_none_is_required(landing):
     """An interactive landing makes exactly the calls it made before the check existed."""
     ln, calls = landing(
@@ -224,9 +240,9 @@ def test_arm_merge_on_a_merged_pr_stays_a_no_op_under_a_required_author(landing)
         (["OPEN CONFLICTING dead", "OPEN CONFLICTING dead"], "merge-conflict"),
         (
             ["OPEN CONFLICTING dead", "OPEN MERGEABLE dead", "CLOSED MERGEABLE dead"],
-            None,
+            "refused",
         ),
-        (["OPEN UNKNOWN dead", "OPEN UNKNOWN dead", "CLOSED UNKNOWN dead"], None),
+        (["OPEN UNKNOWN dead", "OPEN UNKNOWN dead", "CLOSED UNKNOWN dead"], "refused"),
     ],
 )
 def test_only_a_settled_conflict_ends_the_wait(landing, states, verdict):
@@ -235,7 +251,7 @@ def test_only_a_settled_conflict_ends_the_wait(landing, states, verdict):
         merge.await_merge(ln)
     assert exc.value.rc == 1
     assert exc.value.verdict == verdict
-    if verdict is None:
+    if verdict == "refused":
         assert "closed without merging" in exc.value.error
 
 
@@ -266,7 +282,9 @@ def test_a_ci_answer_that_is_not_red_keeps_the_wait_going(landing, ci_rc):
     )
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
-    assert exc.value.verdict is None and "closed without merging" in exc.value.error
+    assert (
+        exc.value.verdict == "refused" and "closed without merging" in exc.value.error
+    )
 
 
 def test_the_merge_budget_ends_the_wait_with_its_own_verdict(landing):

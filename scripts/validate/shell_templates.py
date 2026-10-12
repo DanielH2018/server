@@ -33,7 +33,7 @@ and KUBECONFIG rules those targets must satisfy).
 import shutil
 import sys
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -43,6 +43,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from validate.validate_lib.ok_lines import ok_printer
 from validate.validate_lib.cron_checks import (
     cron_kubeconfig_error,
     cron_path_error,
@@ -162,10 +163,14 @@ def check_template(
     return None
 
 
-def main(which: Callable[[str], str | None] = shutil.which) -> int:
+def main(
+    argv: Sequence[str] = (), which: Callable[[str], str | None] = shutil.which
+) -> int:
     """Render every discovered shell template, then `bash -n` and shellcheck the output.
 
     Args:
+        argv: The command-line arguments. `-v` or `--verbose` also lists each clean
+            template as an `[ok]` line; by default only failures and the summary print.
         which: the PATH lookup used to find shellcheck. A parameter rather than a module
             attribute so a test can prove the fail-closed branch without patching `shutil`.
 
@@ -173,6 +178,7 @@ def main(which: Callable[[str], str | None] = shutil.which) -> int:
         0 if every template rendered clean and passed both linters, 1 otherwise (including
         when shellcheck is missing from PATH or no templates were found).
     """
+    ok = ok_printer(argv)
     shellcheck_bin = find_shellcheck(which)
     if not shellcheck_bin:
         print(
@@ -216,11 +222,11 @@ def main(which: Callable[[str], str | None] = shutil.which) -> int:
                     f"  [FAIL] {rel}: shellcheck: {flagged[out_path]}", file=sys.stderr
                 )
             else:
-                print(f"  [ok]   {rel}")
+                ok(f"  [ok]   {rel}")
 
     print(f"\n{len(templates)} shell template(s) checked, {failures} failure(s).")
     return 1 if failures else 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

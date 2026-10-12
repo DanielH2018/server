@@ -12,7 +12,7 @@ reasoning behind every rule below, and the incident that put it there, is
 
 ## The invocation
 
-One command. Do not write the redirect, do not poll CI, do not run `gh pr merge` yourself.
+One command. Do not write the redirect and do not poll CI.
 
 ```bash
 ./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>
@@ -22,8 +22,13 @@ It merges the PR directly once its CI is green, waits for master CI on the merge
 commit, deploys that commit, kicks the tick, gates the health, and prints the landing's
 `VERDICT:` line. `--detach` names its own logfile, forks into it and returns. `cc-wait land <n>`
 is the wait: it prints the landing's `VERDICT:` line and exits with the landing's own code.
-No PR is armed for GitHub's auto-merge, because every PR into master needs a ruleset bypass
-and auto-merge ignores one (`docs/landing.md` has the detail).
+`land.sh` arms no PR for GitHub's auto-merge. Its direct merge is pinned to the head SHA it
+checked, which auto-merge cannot do (`docs/landing.md` has the detail).
+
+**Auto-merge is allowed, and it is not a landing.** `gh pr merge --auto --squash <n>` merges the
+PR once CI is green, from the operator's account or the agent's, with no review and no bypass.
+Use it when the merge should not wait on your session. Then run the command above as usual:
+`--arm-merge` on a merged PR is a no-op, and the landing deploys the merge commit.
 
 **A stale base costs one branch update first.** Before the merge, `land.sh` asks whether master
 changed any path since the PR's merge base. When it did, it merges master into the PR branch
@@ -67,13 +72,15 @@ landing.
 
 Both are about the command's TEXT, not what it does. Keep prose out of the command string.
 
-**Open the PR with `--fill`, then replace the body.** `gh pr create --title "…"` is refused
+**Open the PR with `--fill` and a body file.** `gh pr create --title "…"` is refused
 whenever the title carries `git`, `cd`, `worktree`, `write` or a construct the containment check
-cannot parse, and a title here routinely names one.
+cannot parse, and a title here routinely names one. `--fill` takes the title from the commit, and
+gh lets `--body-file` override the body it would fill. Write the file to
+`.github/pull_request_template.md`'s sections first: `block-footguns` denies a create or edit
+whose body skips one of its `## ` headings, and a bare `--fill` with it.
 
 ```bash
-gh pr create --fill                 # title + body from the commit
-gh pr edit <n> --body-file <path>   # then replace the body
+gh pr create --fill --body-file <path>   # title from the commit, body from the file
 ```
 
 **A body's only closing keyword must be its own `Closes #N` line.** `--arm-merge` refuses
@@ -90,7 +97,7 @@ pre-squash commits, so the follow-up PR opens CONFLICTING and GitHub runs no che
 ## Reading the verdict
 
 The `VERDICT:` line is the last line of the log. `land.sh --help` lists the closed vocabulary;
-`land_lib/outcome.py:Verdict` is where it is defined. Four of them need a decision from you:
+`land_lib/outcome.py:Verdict` is where it is defined. Six of them need a decision from you:
 
 | Verdict | What to do |
 |---|---|
@@ -98,6 +105,8 @@ The `VERDICT:` line is the last line of the log. `land.sh --help` lists the clos
 | `needs-manual-apply` | **Read every remediation line, not the first.** One PR can reach two, and each prints its own. |
 | `deferred` | Nothing is wrong; the next tick applies it. Re-run only if the line says this run stopped watching a tick mid-apply. |
 | `tip-outran-retries` | A resume point, not a fault in your change: master merged faster than one tick-and-deploy cycle. Re-run the same command. |
+| `refused` | The landing stopped before it deployed anything, and the detail says why: the landing policy, a closed PR, changes requested, a read that failed. Fix what it names, then re-run. |
+| `handoff-timeout` | The lander unit outlived land.sh's wait and may still be running. Re-run the same command; it waits on the unit again rather than starting a second landing. |
 
 `deploy-failed` has one variant that is **not** a resume point — `a playbook task failed AFTER
 applying; some changes are live`. Every other `deploy-failed`, and every give-up

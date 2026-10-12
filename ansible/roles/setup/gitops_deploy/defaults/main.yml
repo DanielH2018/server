@@ -70,11 +70,15 @@ gitops_deploy_expected_ruleset_contexts:
   - prek (lint + validate + tests + secrets)
   - pull + boot changed images
   - renovate config validator
-# Nobody merges past the CI gate. land.sh's direct merge relies on that: the REST merge endpoint
-# applies a bypass, so an actor added here could merge an un-CI'd PR. Each entry is
-# `<actor_type>:<actor_id>:<bypass_mode>`, the form gitops_deploy_review_ruleset_bypass_actors
-# below spells out.
+# Nobody merges past the CI gate. A bypass actor added here could merge an un-CI'd PR, through
+# land.sh's REST merge or any other merge call it makes. Each entry is
+# `<actor_type>:<actor_id>:<bypass_mode>`, as the rulesets API names them.
 gitops_deploy_ruleset_bypass_actors: []
+# The CI gate's pull_request rule: every change to master arrives as a PR, and none needs an
+# approving review. GitHub's auto-merge never applies a bypass, so a non-zero count leaves every
+# auto-merged PR BLOCKED. The operator chose on 2026-10-11 that PRs from the operator's account
+# and the agent's account both auto-merge once CI is green.
+gitops_deploy_ruleset_required_approvals: 0
 
 # The branch-protection ruleset ("Default": `deletion` + `non_fast_forward` on every ref, admin
 # bypass only) must exclude Renovate's branches, or GitHub refuses the app's post-merge delete
@@ -84,31 +88,17 @@ gitops_deploy_ruleset_bypass_actors: []
 gitops_deploy_branch_ruleset_id: 17358590
 gitops_deploy_branch_ruleset_renovate_exclude: refs/heads/renovate/**
 
-# The review ruleset ("master review gate", created 2026-10-05): a PR to master needs one
-# approving review, and stale approvals are dismissed on push. The agent's GitHub account is a
-# write collaborator and not a bypass actor, so its PRs reach master only through the lander,
-# which merges as the operator. The drift check alerts when any of the values below differs
-# from the live ruleset, and above all when an actor joins the bypass list.
-gitops_deploy_review_ruleset_id: 24514824
-gitops_deploy_review_ruleset_ref: refs/heads/master
-gitops_deploy_review_ruleset_approvals: 1
-# `<actor_type>:<actor_id>:<bypass_mode>`, as the rulesets API names them. `pull_request` mode
-# bypasses only when merging a PR, never on a direct push.
-gitops_deploy_review_ruleset_bypass_actors:
-  # The repository admin role: the operator, and land.sh's direct merge under the operator's token.
-  - RepositoryRole:5:pull_request
-  # The Renovate GitHub App, so its own merge of an automerge-eligible PR needs no review.
-  - Integration:2740:pull_request
-
 # The fence ruleset ("agent branch fence", created 2026-10-05): creating, updating and deleting
 # a branch is restricted everywhere except the exclusions below. The agent's GitHub account is
 # not a bypass actor, so it cannot push onto a branch an operator session or Renovate opened,
-# where land.sh's admin merge would carry its commit to master unreviewed. An exclusion added to
+# where the next landing of that branch would carry its commit to master. An exclusion added to
 # the live ruleset is a branch the agent can push to, so the drift check compares the list
-# exactly. The review ruleset's require_last_push_approval closes the other half: a pusher
-# cannot approve its own push.
+# exactly. Master is excluded so that the agent's account can merge a PR, by auto-merge or
+# otherwise. The CI gate's pull_request rule still stops it pushing to master without a PR.
 gitops_deploy_fence_ruleset_id: 24517167
 gitops_deploy_fence_ruleset_exclude:
+  # Master is open to the agent only through a merged PR: see gitops_deploy_ruleset_required_approvals.
+  - refs/heads/master
   # EnterWorktree names a `claude/<slug>` worktree's branch `worktree-claude+<slug>`: it
   # replaces `/` with `+` (observed 2026-10-05). `worktree-claude-*` would also match operator
   # branches such as worktree-claude-agent-github-identity.

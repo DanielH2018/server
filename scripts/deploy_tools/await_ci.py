@@ -18,7 +18,6 @@ Exit codes:
 Run: uv run python scripts/deploy_tools/await_ci.py <sha>
 """
 
-import argparse
 import os
 import subprocess
 import sys
@@ -28,6 +27,8 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.cli_help import ArgumentParser
+from lib.exit_codes import CI_DISARMED
 from lib.git import git, git_stdout
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
@@ -257,7 +258,7 @@ def main(argv: list[str] | None = None) -> int:
     Exits with the code `wait` returns (see the module docstring's Exit codes), or 2
     when the required-context gate is disarmed.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("sha", help="the commit to wait on")
     parser.add_argument(
         "--timeout", type=int, default=900, help="wait budget in seconds"
@@ -270,7 +271,7 @@ def main(argv: list[str] | None = None) -> int:
         code, msg = wait(ns.sha, ns.timeout, ns.interval)
     except DisarmedGateError as e:
         print(f"await_ci: {e}", file=sys.stderr)
-        return 2
+        return CI_DISARMED
     print(msg)
     return code
 

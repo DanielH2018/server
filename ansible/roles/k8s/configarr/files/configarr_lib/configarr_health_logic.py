@@ -17,7 +17,7 @@ process-only healthcheck missed the 2026-06-10 v8 breakage because every failing
 
 from __future__ import annotations
 
-import configarr_status as cs
+from configarr_lib import configarr_status as cs
 
 # A Job the CronJob controller created but which has neither succeeded nor failed yet. Excluded
 # from the verdict rather than reported: a run in progress says nothing about whether the LAST one

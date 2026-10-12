@@ -57,11 +57,12 @@ def test_moved_atom_fails_status_naming_the_section(tmp_path, capsys):
     assert main(["status", "--repo", str(repo)]) == 1
     out = capsys.readouterr().out
     assert "CLAUDE.md#Gate" in out and "moved" in out
+    assert out.splitlines()[-1].startswith("fix: edit the section")
 
 
 def test_verify_unknown_unit_is_usage_error(tmp_path, capsys):
     repo = _repo(tmp_path)
-    assert main(["verify", "--repo", str(repo), "CLAUDE.md#Nope"]) == 2
+    assert main(["verify", "--repo", str(repo), "CLAUDE.md#Nope"]) == 64
     assert "no section" in capsys.readouterr().err
 
 
@@ -109,6 +110,7 @@ def test_lint_changed_since_scopes_to_edited_sections(tmp_path, capsys):
     assert main(["lint", "--repo", str(repo), "--changed-since", "HEAD"]) == 1
     out = capsys.readouterr().out
     assert "CLAUDE.md#Style" in out and "CLAUDE.md#Gate" not in out
+    assert out.splitlines()[-1].startswith("fix: .claude/rules/facts.md")
 
 
 def test_lint_with_unresolvable_ref_is_usage_error(tmp_path, capsys):
@@ -154,7 +156,7 @@ def test_verify_unverified_leaves_a_moved_atom_out(tmp_path, capsys):
 
 def test_verify_with_no_unit_and_no_flag_is_usage_error(tmp_path, capsys):
     repo = _repo(tmp_path)
-    assert main(["verify", "--repo", str(repo)]) == 2
+    assert main(["verify", "--repo", str(repo)]) == 64
     assert "--unverified" in capsys.readouterr().err
 
 
@@ -183,7 +185,9 @@ def test_reverify_refuses_a_moved_atom(tmp_path, capsys):
     capsys.readouterr()
 
     assert main(["reverify", "--repo", str(repo), "--changed-since", "HEAD"]) == 1
-    assert "moved" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "moved" in err
+    assert err.splitlines()[-1].startswith("fix: edit the section")
     assert main(["status", "--repo", str(repo)]) == 1
 
 
@@ -197,7 +201,7 @@ def test_reverify_is_quiet_when_nothing_changed(tmp_path, capsys):
 
 def test_reverify_with_unresolvable_ref_is_usage_error(tmp_path, capsys):
     repo = _repo(tmp_path)
-    assert main(["reverify", "--repo", str(repo), "--changed-since", "nope"]) == 2
+    assert main(["reverify", "--repo", str(repo), "--changed-since", "nope"]) == 64
     assert "cannot resolve" in capsys.readouterr().err
 
 

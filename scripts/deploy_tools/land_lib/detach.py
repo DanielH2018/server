@@ -59,10 +59,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from lib.detach_fork import (  # noqa: F401 -- the record readers are this module's API too
+    START_GRACE_S,
     alive,
     close_inherited,
     fork_detached,
     leave_unit_cgroup,
+    never_started,
     pid_path,
     rc_path,
     record_code,
@@ -79,7 +81,7 @@ LOG_DIR_ENV = "CLAUDE_JOB_DIR"
 FALLBACK_LOG_DIR = Path("/tmp/homelab-landings")
 
 _VERDICT_LINE = re.compile(r"^VERDICT:.*$", re.MULTILINE)
-# `Landing.die` without a verdict (a landing-policy refusal) writes only this stderr message.
+# `Landing.die` without a verdict (bad arguments, 64) writes only this stderr message.
 _ERROR_LINE = re.compile(r"^land: ", re.MULTILINE)
 # A line that cannot belong to a `land:` message: the next phase header or a verdict.
 _NOT_A_CONTINUATION = re.compile(r"^(== |VERDICT:)", re.MULTILINE)

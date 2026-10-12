@@ -99,8 +99,9 @@ class Subject:
         return self._text
 
 
-# The repo-relative paths a row censuses.
-Files = Callable[[], Iterable[str]]
+# The repo-relative paths a row censuses, or the subjects themselves when a subject is not one
+# file (a family of sibling modules, say).
+Files = Callable[[], Iterable[str | Subject]]
 
 # One entry per hit, [] when the subject holds. An entry is what the report prints after the
 # path: a line number, a quoted line, a call name.

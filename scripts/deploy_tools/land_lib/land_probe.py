@@ -28,7 +28,6 @@ it from a resume point without reading the verdict text. A `deferred` whose log 
 hold cannot be ruled out, and the remedy is to re-run land.sh.
 """
 
-import argparse
 import json
 import re
 import sys
@@ -37,7 +36,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import detach
 from deploy_tools.land_lib.outcome import ABANDONED_WATCH_NOTE, Verdict
-from lib.cli_help import refuse_help_under_describe
+from lib.cli_help import ArgumentParser, refuse_help_under_describe
 
 # land.sh's exit code -> the state that ends the wait. Every code land.sh documents is here.
 _STATE_BY_RC = {0: "landed", 1: "failed", 64: "bad-arguments", 75: "gave-up"}
@@ -87,7 +86,7 @@ def describe(log: Path) -> dict:
     return {"terminal": TERMINAL, "watch": [str(log.parent)], "interval_s": 10}
 
 
-def read(log: Path) -> dict:
+def read(log: Path, now: float | None = None) -> dict:
     """The landing's state: terminal once it recorded a code, or once it died without one."""
     code = detach.recorded_code(log)
     if code is None:
@@ -102,9 +101,16 @@ def read(log: Path) -> dict:
                     "detail": f"the landing (pid {pid}) died without recording an exit code; "
                     f"read {log}",
                 }
+        # No pid and no code past the start grace: nothing will ever write the code (#4513).
+        if pid is None and detach.never_started(log, now):
+            return {
+                "state": "died",
+                "detail": f"the landing recorded neither a pid nor an exit code and its log has "
+                f"not changed for {detach.START_GRACE_S}s: it never started; read {log}",
+            }
     if code is not None:
-        # A refusal that names no verdict (`Landing.die` from the landing policy) leaves its
-        # reason only on the `land:` line, so that line is the detail before the bare fallback.
+        # A stop that names no verdict (bad arguments, 64) leaves its reason only on the
+        # `land:` line, so that line is the detail before the bare fallback.
         error = detach.error_in(log)
         verdict = (
             detach.verdict_in(log)
@@ -132,9 +138,7 @@ def _is_plain_deferral(log: Path, verdict: str) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="land_probe.py", description=__doc__.splitlines()[0]
-    )
+    parser = ArgumentParser(prog="land_probe.py", description=__doc__.splitlines()[0])
     parser.add_argument("--describe", action="store_true")
     parser.add_argument("pr")
     where = parser.add_mutually_exclusive_group()

@@ -49,6 +49,7 @@ from pathlib import Path
 # test, a REPL) finds only this module's own directory, and `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.deploy_lib import under_locks as locked
+from deploy_tools.deploy_lib.messages import PROG, say_error
 from deploy_tools.deploy_lib.playbook import annotate, discharge_owed_k8s, run_playbook
 from lib.detach_fork import (
     close_inherited,
@@ -92,8 +93,8 @@ def take_tree_lock_now() -> int:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         os.close(fd)
-        locked.say(
-            f"deploy --detach: could not take {path} right now -- nothing was deployed.",
+        say_error(
+            f"--detach: could not take {path} right now -- nothing was deployed.",
             *locked.TREE_LOCK_HOLDERS,
             f"  --detach fails fast on contention rather than queuing for {locked.LOCK_WAIT}s --",
             "  retry shortly, or drop --detach to queue normally.",
@@ -105,7 +106,7 @@ def take_tree_lock_now() -> int:
         raise locked.Refused(DEPLOY_LOCK_UNAVAILABLE) from None
     # Always 0s by construction: a non-blocking flock takes the lock at once or refuses. Printed
     # anyway, so the log shape does not depend on the mode and land.py books the same field.
-    locked.say("deploy: lock acquired after 0s")
+    locked.say("deploy.sh: lock acquired after 0s")
     return fd
 
 
@@ -273,8 +274,8 @@ def run(
             tools.take_service_locks(state, full_run_tags)
         except locked.Refused as refused:
             if refused.code == DEPLOY_LOCK_BUSY:
-                locked.say(
-                    "deploy --detach: a deploy of one of these services held its lock for the",
+                say_error(
+                    "--detach: a deploy of one of these services held its lock for the",
                     f"  full {locked.lock_wait()}s -- nothing was deployed. Retry.",
                 )
             raise
@@ -295,7 +296,7 @@ def run(
     if state.owner_fd is not None:
         os.close(state.owner_fd)
     state.service_fds, state.owner_fd, state.snapshot = [], None, None
-    print(f"deploy --detach: running in background (pid {pid}).")
+    print(f"{PROG}: --detach: running in background (pid {pid}).")
     print(f"  log:  {log}")
     print(f"  wait: {wait_command(tags, log)}")
     print(

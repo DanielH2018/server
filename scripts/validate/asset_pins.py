@@ -49,11 +49,16 @@ Usage:
 Exit codes: 0 every checked pin matched, or every refreshed pin was rewritten or already
 current; 1 at least one pin failed (the report names each); 64 a `--only` or `--refresh` name
 the census does not carry.
+
+A run that exits 0 prints its report on stdout. Any other run prints it on stderr and prints
+nothing on stdout, so the report arrives when the run ends rather than pin by pin. Each
+`[FAIL]` line reaches stderr as its pin fails.
 """
 
 import argparse
 import dataclasses
 import hashlib
+import io
 import json
 import re
 import sys
@@ -70,6 +75,8 @@ from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import jinja2
+
+from lib.cli_help import ArgumentParser
 
 from lib import yaml_fast
 from lib.renovate_annotations import annotations_in, is_annotation_manager
@@ -381,18 +388,27 @@ def refresh_pin(
     return True, f"{pin.algorithm} {pin.digest} -> {actual}"
 
 
-def check_pins(pins: Iterable[Pin], fetcher: Fetcher = fetch, out=sys.stdout) -> int:
-    """Check each pin, print one line per pin, and return the count that failed."""
+def check_pins(
+    pins: Iterable[Pin], fetcher: Fetcher = fetch, out=sys.stdout, verbose: bool = False
+) -> int:
+    """Check each pin, print a line per failure, and return the count that failed.
+
+    A failing pin prints a `FAIL` status line on `out` and the `[FAIL] <source>: <name>:
+    <reason>` line every validator shares on stderr (#4480).
+
+    A pin that matches prints an `ok` line only when `verbose` is set, matching the template
+    validators' `-v` (#4448).
+    """
     failures = 0
     for pin in pins:
         reason = check_pin(pin, fetcher)
         if reason is None:
-            print(f"ok    {pin.name}  {pin.url}", file=out)
+            if verbose:
+                print(f"ok    {pin.name}  {pin.url}", file=out)
         else:
             failures += 1
-            print(
-                f"FAIL  {pin.name}  {pin.url}\n      {reason}  ({pin.source})", file=out
-            )
+            print(f"FAIL  {pin.name}  {pin.url}", file=out)
+            print(f"[FAIL] {pin.source}: {pin.name}: {reason}", file=sys.stderr)
     return failures
 
 
@@ -404,12 +420,18 @@ def _name_set(value: str | None) -> set[str]:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--list", action="store_true", help="print the census and exit")
     parser.add_argument(
         "--only", help="comma-separated pin names to check (default: all)"
     )
     parser.add_argument("--skip", help="comma-separated pin names to leave out")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="also print a line per matching pin",
+    )
     parser.add_argument(
         "--refresh",
         help="comma-separated Renovate depNames or pin names: fetch each pin and rewrite "
@@ -421,7 +443,11 @@ def _build_parser() -> argparse.ArgumentParser:
 def refresh_pins(
     pins: Iterable[Pin], fetcher: Fetcher = fetch, root: _Path = REPO, out=sys.stdout
 ) -> int:
-    """Refresh each pin, print one line per pin, and return the count that failed."""
+    """Refresh each pin, print one line per pin, and return the count that failed.
+
+    A failed refresh also prints `[FAIL] <source>: <name>: <reason>` on stderr, as
+    `check_pins` does.
+    """
     failures = 0
     for pin in pins:
         ok, message = refresh_pin(pin, fetcher, root)
@@ -429,7 +455,8 @@ def refresh_pins(
             print(f"ok    {pin.name}  {message}  ({pin.source})", file=out)
         else:
             failures += 1
-            print(f"FAIL  {pin.name}  {pin.url}\n      {message}", file=out)
+            print(f"FAIL  {pin.name}  {pin.url}", file=out)
+            print(f"[FAIL] {pin.source}: {pin.name}: {message}", file=sys.stderr)
     return failures
 
 
@@ -444,12 +471,41 @@ def main(
 ) -> int:
     """The CLI.
 
+    The report goes to `out` when the run exits 0, and to stderr when it exits non-zero or
+    raises, so a run that fails prints nothing on `out`. A pin's `ok` line is printed before
+    the run knows whether a later pin fails, so the report is held until the run ends. The
+    `[FAIL]` lines `check_pins` and `refresh_pins` print reach stderr as each pin fails.
+
     `fetcher`, `discover`, `known`, `root` and `annotated` are the seams a test hands fakes to.
     """
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.refresh and (args.only or args.skip or args.list):
         parser.error("--refresh takes its own names; drop --only, --skip and --list")
+    report = io.StringIO()
+    # sys.stderr is read here, not bound as a default like `out`, so a test that swaps it
+    # for capsys's stream receives the report.
+    try:
+        code = _run(args, report, fetcher, discover, known, root, annotated)
+    except BaseException:
+        # A download that dies mid-body raises out of the run. The report still names
+        # every digest `--refresh` rewrote before it.
+        sys.stderr.write(report.getvalue())
+        raise
+    (out if code == 0 else sys.stderr).write(report.getvalue())
+    return code
+
+
+def _run(
+    args: argparse.Namespace,
+    out,
+    fetcher: Fetcher,
+    discover: Callable[[], tuple[list[Pin], list[str]]],
+    known: frozenset[str],
+    root: _Path,
+    annotated: Callable[[], set[str]],
+) -> int:
+    """Run the parsed command, print its report on `out`, and return the exit code."""
     pins, unpaired = discover()
     names = {pin.name for pin in pins}
     missing_known = known - names
@@ -499,7 +555,7 @@ def main(
         for key in unpaired:
             print(f"unpaired digest (URL not in defaults): {key}", file=out)
         return 0
-    failures = check_pins(chosen, fetcher, out)
+    failures = check_pins(chosen, fetcher, out, verbose=args.verbose)
     for key in unpaired:
         print(f"unpaired digest (URL not in defaults): {key}", file=out)
     print(f"{len(chosen) - failures}/{len(chosen)} pin(s) match", file=out)

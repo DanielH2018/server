@@ -21,6 +21,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from diagnostics.probe_lib.core import Unreadable
 from lib.kubectl import DEFAULT_CLUSTER, kubectl
 from lib.repo_paths import HOST_LIB_FILES, K3S_FILES
 
@@ -43,7 +44,7 @@ def volume_shard_labels(cluster=DEFAULT_CLUSTER, _run=None):
         "json",
     )
     if out.returncode != 0:
-        raise SystemExit("kubectl failed: " + out.stderr.strip()[:300])
+        raise Unreadable("kubectl failed: " + out.stderr.strip()[:300])
     shards = {}
     for item in json.loads(out.stdout).get("items", []):
         for key in item.get("metadata", {}).get("labels", {}):
@@ -64,7 +65,7 @@ def volume_owned_backup_counts(cluster=DEFAULT_CLUSTER, _run=None):
     run = _run or (lambda *args: kubectl(cluster, *args))
     out = run("-n", "longhorn-system", *longhorn_backups.LIST_ARGS)
     if out.returncode != 0:
-        raise SystemExit("kubectl failed: " + out.stderr.strip()[:300])
+        raise Unreadable("kubectl failed: " + out.stderr.strip()[:300])
     owners = {}
     items = json.loads(out.stdout).get("items", [])
     for backup in longhorn_backups.from_items(items):

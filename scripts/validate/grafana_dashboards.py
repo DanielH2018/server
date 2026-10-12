@@ -7,7 +7,8 @@ exactly the stale-uid class the grafana role CLAUDE.md warns about (the lingerin
 uid). This guard is deterministic over all provisioned dashboards.
 
 Run directly (`python3 scripts/validate/grafana_dashboards.py`) or via the
-`validate-grafana-dashboards` prek hook. Exits non-zero on any unresolved datasource uid.
+`validate-grafana-dashboards` prek hook. Exits non-zero on any unresolved datasource uid, and
+a run that exits non-zero prints every line on stderr.
 """
 
 import json
@@ -153,7 +154,8 @@ def duplicate_dashboard_uids(boards: dict[str, list[str]]) -> list[str]:
     for uid, paths in sorted(boards.items()):
         if len(paths) > 1:
             errors.append(
-                f"dashboard uid {uid!r} is claimed by {len(paths)} files ({', '.join(paths)}) "
+                f"{paths[0]}: dashboard uid {uid!r} is claimed by {len(paths)} files "
+                f"({', '.join(paths)}) "
                 f"— Grafana disables provisioning writes for EVERY board when it sees a "
                 f"duplicate uid, so this freezes the whole estate. Delete all but one."
             )
@@ -190,16 +192,20 @@ def validate(
 
 
 def main() -> int:
-    """Run `validate` and print its errors, if any.
+    """Run `validate` and print its errors, if any, on stderr.
 
     Returns:
         0 if `validate` found no errors, 1 otherwise.
     """
     errors = validate()
     if errors:
-        print("Grafana dashboard datasource validation FAILED:")
+        # Each error opens with the dashboard's path, so this is `[FAIL] <path>: <reason>`.
         for error in errors:
-            print(f"  - {error}")
+            print(f"  [FAIL] {error}", file=sys.stderr)
+        print(
+            f"Grafana dashboard datasource validation FAILED: {len(errors)} error(s)",
+            file=sys.stderr,
+        )
         return 1
     print("Grafana dashboard datasources OK")
     return 0

@@ -18,13 +18,25 @@ the prune deleting every live object that file used to declare.
 Only `metadata.labels` changes. A Deployment's `spec.selector` and pod-template labels stay as
 rendered, so labelling a workload rolls no pods and touches no Service selector.
 
-No Ansible import, so the tests call the same function the playbook runs. Ansible wraps a
-filter's `ValueError` in its own error, which fails the render task before any apply.
+No Ansible import at load time, so the tests call the same function the playbook runs.
+`FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
+`AnsibleFilterError("homelab_role_label: ...")` and fails the render task before any apply
+(#4505).
 """
 
 import re
 
 import yaml
+
+import sys as _sys
+from pathlib import Path as _Path
+
+# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
+# once this directory is on the path (#4527).
+if str(_Path(__file__).resolve().parent) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+
+from filter_errors import _as_filter
 
 ROLE_LABEL = "homelab/role"
 
@@ -104,7 +116,7 @@ def homelab_role_label(text: str, role: str) -> str:
     hand that object to another role's prune.
     """
     if not role:
-        raise ValueError("homelab_role_label needs the role name to stamp")
+        raise ValueError("needs the role name to stamp")
     # ansible-core passes a templated value as a tagged `str` subclass, which SafeDumper
     # refuses to represent ("cannot represent an object").
     role = str(role)
@@ -142,4 +154,4 @@ def homelab_role_label(text: str, role: str) -> str:
 
 class FilterModule:
     def filters(self):
-        return {"homelab_role_label": homelab_role_label}
+        return {"homelab_role_label": _as_filter(homelab_role_label)}

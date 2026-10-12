@@ -39,7 +39,7 @@ from deployer_lib import deploy_io
 from deployer_lib import deploy_narrow
 from deployer_lib import deploy_release
 from deployer_lib import deploy_setup_roles
-from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_config import WARNING, Config, log
 from deployer_lib.deploy_git import ci_verdict
 from host_lib import discord_post, flush_discord_spool, github_get, github_token
 
@@ -100,7 +100,10 @@ def fetch_ci_verdict(
             user_agent="gitops-deploy",
         )
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
-        log(f"CI status unavailable for {sha[:8]} ({e}) — deferring this tick")
+        log(
+            f"ci: status unavailable for {sha[:8]} ({e}) — deferring this tick",
+            level=WARNING,
+        )
         return "pending"
     return ci_verdict(payload.get("check_runs", []), contexts)
 
@@ -125,7 +128,8 @@ def _ci_unconfigured(sha: str) -> str:
     `default_tools`, and the CI gate's whole contract is that an unknown verdict defers.
     """
     log(
-        f"CI verdict for {sha[:8]} requested from an unconfigured DeployTools — deferring"
+        f"ci: verdict for {sha[:8]} requested from an unconfigured DeployTools — deferring",
+        level=WARNING,
     )
     return "pending"
 

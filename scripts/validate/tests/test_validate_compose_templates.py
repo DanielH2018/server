@@ -138,8 +138,15 @@ def test_non_watchtower_label_without_equals_is_ignored():
 # networks.yml.j2) would slip past CI entirely.
 
 
-def test_real_templates_render_clean():
+def test_real_templates_render_clean(capsys):
     assert vct.main() == 0
+    # A clean template prints nothing by default, so a [FAIL] is not buried in a list (#4448).
+    assert "[ok]" not in capsys.readouterr().out
+
+
+def test_verbose_lists_each_clean_template(capsys):
+    assert vct.main(["-v"]) == 0
+    assert "  [ok]   wg-easy\n" in capsys.readouterr().out
 
 
 # Every service should drop ALL capabilities (defense in depth), adding back only what it

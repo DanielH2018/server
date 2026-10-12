@@ -20,10 +20,15 @@ injection is idempotent by name as well, and a board that already declares an an
 this name is left exactly as it is.
 """
 
-import argparse
 import json
 import sys
 from pathlib import Path
+
+# Reach `lib` (scripts/): a directly-invoked script gets only its own directory on
+# sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 # The name is the idempotency key. Renaming it re-injects alongside the old one rather than
 # replacing it, so treat this as a fixed identifier rather than a label to tune.
@@ -99,7 +104,7 @@ def main() -> int:
     Exits 1 if `--src` isn't a directory or if the copy produced no dashboards at all
     (an empty `--dest` would otherwise remove every board from Grafana).
     """
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = ArgumentParser(description=__doc__)
     parser.add_argument("--src", required=True, type=Path)
     parser.add_argument("--dest", required=True, type=Path)
     parser.add_argument(

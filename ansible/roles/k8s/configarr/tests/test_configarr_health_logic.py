@@ -1,4 +1,4 @@
-from configarr_health_logic import (
+from configarr_lib.configarr_health_logic import (
     decide,
     finished_at,
     latest_finished,

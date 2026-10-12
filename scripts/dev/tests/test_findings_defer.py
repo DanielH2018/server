@@ -171,14 +171,14 @@ def test_defer_cli_clear_exits_3_when_nothing_is_deferred(capsys, make_tools):
     tools, calls = make_tools(Fakes(view=make_issue(1288)))
     assert findings.main(["defer", "1288", "--clear"], tools) == 3
     assert not calls.gh
-    assert "not deferred" in capsys.readouterr().out
+    assert "not deferred" in capsys.readouterr().err
 
 
 def test_defer_cli_rejects_a_date_that_is_not_a_date(make_tools):
     tools, _ = make_tools(Fakes(view=make_issue(1288)))
     with pytest.raises(SystemExit) as exc:
         findings.main(["defer", "1288", "--until", "tomorrow"], tools)
-    assert exc.value.code == 2
+    assert exc.value.code == 64
 
 
 def test_open_cli_with_not_before_creates_the_label_before_the_issue(

@@ -71,6 +71,7 @@ from diagnostics.probe_lib.releases_format import (  # noqa: E402
 # The one rule that has to read a diff rather than a path lives in its own module, for the
 # reason the renderers do: this one is at the 600-line cap.
 from diagnostics.probe_lib.releases_diff import drop_check_mode_only  # noqa: E402
+from diagnostics.probe_lib.releases_diff import drop_comment_only_defaults  # noqa: E402
 
 # Which services a shared role's bytes reach, and so which paths decide one service's staleness.
 # Its own module for the reason above; that module's docstring says what it reuses and why.
@@ -318,6 +319,7 @@ def _changed_files(commit, paths, repo_root, ref, deploy_time_roles=frozenset())
         return None
     changed = {line.strip() for line in result.stdout.splitlines() if line.strip()}
     real = sorted(p for p in changed if _is_real_change(p, deploy_time_roles))
+    real = drop_comment_only_defaults(real, commit, repo_root, ref)
     return drop_check_mode_only(
         real, commit, repo_root, ref, K8S_ROLES_PREFIX, MANIFEST_RENDERER
     )

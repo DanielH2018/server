@@ -9,6 +9,8 @@ OnCalendar={{ kuma_check_on_calendar }}
 # tile then stays red until the next slot because nothing pushed a fresh verdict. A stamped
 # timer runs the check once at boot instead. That run can land before k3s and Kuma are ready
 # and push a false down; the service's Restart=on-failure bounds that to one RestartSec.
+# Persistent=true catches up only a slot that never fired. A check that went red before a reboot
+# already fired its slot, so kuma-check-{{ kuma_check_name }}-boot.service reruns it instead (#4495).
 Persistent=true
 Unit=kuma-check-{{ kuma_check_name }}.service
 

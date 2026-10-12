@@ -85,7 +85,7 @@ def test_a_dotfiles_launch_pinned_to_another_host_is_refused(tmp_path, capsys):
     tools, run = fake_tools(issues=[issue])
     other = _another_host()
     argv = ["--repo", "DanielH2018/dotfiles", "--host", other, "--batch", "763"]
-    assert _launch(tools, tmp_path, *argv) == 1
+    assert _launch(tools, tmp_path, *argv) == 64
     assert not run.calls and not run.issue_fetches
     assert "runs on this host" in capsys.readouterr().err
 

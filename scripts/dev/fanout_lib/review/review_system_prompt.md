@@ -29,8 +29,8 @@ Give every `test` finding a `subkind`:
   line of the implementation.
 - `missing-coverage`: a behaviour the change adds has no test.
 
-A `vacuous` or `scaffold` finding reaches the fix round at any severity, so report one even
-when it reads as minor. Two kinds of test are never either, however trivial they read: the
+A `vacuous` finding reaches the fix round at any severity, so report one even when it reads
+as minor. A `scaffold` finding is held to the severity floor like any other. Two kinds of test are never either, however trivial they read: the
 rejecting half of a red-proof pair (`..._is_flagged`, `..._is_rejected`), which is the only
 evidence its check can go red, and a non-vacuity assertion (`assert len(found) >= n`, a
 frozenset of names a census must contain), which stops a glob-driven guard passing over

@@ -27,10 +27,21 @@ monitor (#3985). The pusher then gets HTTP 404 and nothing pages. uptime-kuma's 
 over it so the deploy fails instead.
 
 No Ansible import, so `probe_lib/kuma_table_loop.py` and the status-page census read the same
-function the playbook runs. Ansible wraps a filter's `ValueError` in its own error.
+function the playbook runs. `FilterModule` registers each filter through `_as_filter`, so a
+refusal reaches the operator as `AnsibleFilterError("<filter>: ...")` (#4505).
 """
 
 import re
+
+import sys as _sys
+from pathlib import Path as _Path
+
+# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
+# once this directory is on the path (#4527).
+if str(_Path(__file__).resolve().parent) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+
+from filter_errors import _as_filter
 
 # The keys a `kuma:` mapping may carry. A misspelt one would otherwise be ignored and the
 # tile would keep its derived identity, which reads as the override having worked.
@@ -104,6 +115,6 @@ def kuma_malformed_push_tokens(declarations):
 class FilterModule:
     def filters(self):
         return {
-            "kuma_ingress_monitors": kuma_ingress_monitors,
-            "kuma_malformed_push_tokens": kuma_malformed_push_tokens,
+            "kuma_ingress_monitors": _as_filter(kuma_ingress_monitors),
+            "kuma_malformed_push_tokens": _as_filter(kuma_malformed_push_tokens),
         }

@@ -6,12 +6,15 @@ which is every interactive session and renovate-agent's lander:
 - `LAND_REQUIRE_BRANCH_PREFIX`: the head branch must be in this repo, start with the prefix,
   and target master. The agent's GitHub account can push only under its own prefix ("agent
   branch fence", ruleset 24517167), so this keeps the lander to the branches the fence gives
-  the agent.
+  the agent. The policy binds only a landing: the agent's account can also arm GitHub's
+  auto-merge, which skips it, by the operator's choice on 2026-10-11.
 - `LAND_APPROVAL_PATHS`: a file of path prefixes, one per line. A PR changing a path under one
   of them is refused. Those are the paths that widen the agent's own authority: its roles, its
   credentials, the rulesets' drift checks and this code. A PR changing a module this landing
   process has imported is refused the same way, and so is a new file that would shadow one
-  and any compiled module file; see `gate_hits`.
+  and any compiled module file; see `gate_hits`. So is a change that can run code on import
+  with no import line of its own, such as a non-empty `__init__.py` or a symlink; see
+  `shape_hits`.
 - `LAND_APPROVER`: a GitHub login. A PR the approval list refuses lands anyway when this
   login's latest review is an approval of the head SHA the checks read. A later
   changes-requested or a dismissal undoes it, and so does a push: the approval then names an
@@ -27,6 +30,7 @@ names `scripts/deploy_tools/land`, so a PR that weakens these checks needs the o
 approval as well.
 """
 
+import posixpath
 import subprocess
 import sys as _sys
 from importlib import machinery
@@ -64,6 +68,11 @@ STARTUP_MODULES = frozenset({"sitecustomize", "usercustomize"})
 COMPILED_SUFFIXES = tuple(
     s for s in machinery.all_suffixes() if s not in machinery.SOURCE_SUFFIXES
 )
+# The blob id git gives an empty file, which is the only `__init__.py` an agent lands alone.
+EMPTY_BLOB = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+SYMLINK_MODE = "120000"
+# The listing statuses that bring a path into the tree under a name it did not have.
+ARRIVING = ("added", "renamed", "copied")
 
 
 def is_compiled_module(path: str) -> bool:
@@ -175,6 +184,125 @@ def _runs_in_gate(
     return False
 
 
+def import_roots(checkout: _Path, search_dirs: Iterable[str]) -> list[str]:
+    """The directories on `search_dirs` inside `checkout`, as repo-relative paths, in order.
+
+    `search_dirs` is `sys.path` once land.py has imported its modules, so the roots are the
+    lander's own inserts rather than a list kept by hand. The checkout root itself is left
+    out: it is on `sys.path` only under `python -c` or pytest, never when land.py runs.
+    """
+    roots: list[str] = []
+    for entry in search_dirs:
+        path = _Path(entry or ".").resolve()
+        if path.is_relative_to(checkout) and path != checkout:
+            root = path.relative_to(checkout).as_posix()
+            if root not in roots:
+                roots.append(root)
+    return roots
+
+
+def _holds_python(tree: Mapping[str, str], directory: str) -> bool:
+    prefix = f"{directory}/" if directory else ""
+    return any(p.startswith(prefix) and p.endswith(".py") for p in tree)
+
+
+def shape_hits(
+    files: list[PrFile], tree: Mapping[str, str], roots: list[str]
+) -> list[str]:
+    """Each change that can run code on import with no import line of its own, in order.
+
+    `gate_hits` sees only the modules this landing has already loaded. Code that runs on
+    import without being imported by name stays invisible to it while nothing loads it, and a
+    later PR the operator approves can then pull it into the closure without showing it. Each
+    hit names a path and the rule it broke:
+
+    - a listed `__init__.py` whose blob is not empty, which a SHA comparison decides without
+      reading the file;
+    - an `__init__.py` that leaves its directory, removed or renamed away, while the
+      directory still holds a `.py` file at any depth. Deleting or moving the whole package
+      leaves no `.py` behind, so it passes;
+    - a listed path that is a symlink at the head, or that the head tree lacks;
+    - an added `__main__.py`;
+    - a module added or renamed in beside a directory of the same name, at any depth;
+    - a module added or renamed in at the top of one import root whose name matches a
+      directory or a module at the top of another root.
+
+    Args:
+        files: the PR's REST file listing.
+        tree: every path at the PR head the policy pinned, to its git mode.
+        roots: the repo-relative `sys.path` directories, from `import_roots`.
+    """
+    dirs = {posixpath.dirname(p) for p in tree}
+    for d in list(dirs):
+        while d:
+            d = posixpath.dirname(d)
+            dirs.add(d)
+    hits: list[str] = []
+
+    def hit(path: str, why: str) -> None:
+        line = f"{path} ({why})"
+        if line not in hits:
+            hits.append(line)
+
+    for entry in files:
+        status, name = entry.get("status", ""), entry.get("filename", "")
+        previous = entry.get("previous_filename", "")
+        base = posixpath.basename(name)
+        if status != "removed":
+            if base == "__init__.py" and entry.get("sha") != EMPTY_BLOB:
+                hit(name, "a non-empty __init__.py")
+            if base == "__main__.py":
+                hit(name, "a __main__.py")
+            if name not in tree:
+                hit(name, "missing from the head tree")
+            elif tree[name] == SYMLINK_MODE:
+                hit(name, "a symlink")
+        leaving = name if base == "__init__.py" and status == "removed" else ""
+        if previous != name and posixpath.basename(previous) == "__init__.py":
+            leaving = previous
+        if leaving and _holds_python(tree, posixpath.dirname(leaving)):
+            hit(
+                leaving, "an __init__.py left a directory that still holds Python files"
+            )
+        if status not in ARRIVING or not name.endswith(".py"):
+            continue
+        module = name.removesuffix(".py")
+        if module in dirs:
+            hit(name, "a module beside a same-named directory")
+        parent, stem = posixpath.split(module)
+        if parent not in roots:
+            continue
+        for other in roots:
+            for shadowed in (f"{other}/{stem}", f"{other}/{stem}.py"):
+                if other != parent and (shadowed in dirs or shadowed in tree):
+                    hit(name, f"shadows {shadowed} in another import root")
+    return hits
+
+
+def head_tree(ln: Landing, head: str) -> dict[str, str]:
+    """Every path at `head` to its git mode, or die refusing when the tree cannot be read.
+
+    The primary checkout fetches the PR's pull ref first, because it holds only master. The
+    tree is then read at the pinned `head` rather than at what the fetch returned, so a push
+    since the checks began cannot change it. `ls-tree` has no truncation limit, which the REST
+    tree endpoint has. A failed fetch is not itself a refusal: a head fetched earlier still
+    reads.
+    """
+    ln.git(
+        "fetch", "-q", "--no-write-fetch-head", "origin", f"refs/pull/{ln.opts.pr}/head"
+    )
+    listed = ln.git("ls-tree", "-r", "-z", "--full-tree", head)
+    tree: dict[str, str] = {}
+    if listed.returncode == 0:
+        for record in listed.stdout.split("\0"):
+            meta, _, path = record.partition("\t")
+            if path:
+                tree[path] = meta.split(" ", 1)[0]
+    if not tree:
+        _refuse(ln, f"could not read the tree at the PR head {head[:8]}")
+    return tree
+
+
 def approval_problem(reviews: list[PrReview], approver: str, head: str) -> str:
     """Why `approver` has not approved `head`; empty when their latest verdict approves it."""
     theirs = sorted(
@@ -228,8 +356,8 @@ def _list[T](ln: Landing, what: str, parse: Callable[[JsonObject], T]) -> list[T
         _refuse(ln, f"could not list the PR's {what}: {exc.stderr.strip()}")
     except subprocess.TimeoutExpired:
         _refuse(ln, f"could not list the PR's {what}: gh timed out")
-    except ValueError:
-        _refuse(ln, f"could not list the PR's {what}: unparseable gh output")
+    except ValueError as exc:
+        _refuse(ln, f"could not list the PR's {what}: unparseable gh output: {exc}")
 
 
 def check(ln: Landing) -> str:
@@ -271,6 +399,9 @@ def check(ln: Landing) -> str:
             for path in gate_hits(files, CHECKOUT, _sys.modules, _sys.path)
             if path not in hits
         ]
+        hits += shape_hits(
+            files, head_tree(ln, head), import_roots(CHECKOUT, _sys.path)
+        )
         if hits:
             why = (
                 f"it changes paths that need the operator's approval: {', '.join(hits)}"

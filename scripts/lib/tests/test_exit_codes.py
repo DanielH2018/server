@@ -10,12 +10,15 @@ and a set that quietly gained one are both invisible from a `<=` assertion alone
 Run: uv run pytest scripts/lib/tests/test_exit_codes.py
 """
 
+import ast
 from pathlib import Path
 
 import pytest
+from _row_table import Census, Subject, check, proof_problems, tracked
 
 
 from lib import exit_codes as ec
+from lib.repo_paths import REPO
 
 
 def test_the_no_verdict_set_is_exactly_the_refusals_by_name():
@@ -138,6 +141,11 @@ def test_the_importers_take_their_values_from_here():
         ("LAND_GAVE_UP", "TEMP_FAIL"),
         ("TICK_STILL_RUNNING", "TEMP_FAIL"),
         ("CI_PENDING", "TEMP_FAIL"),
+        ("FANOUT_PLACE_BAD_ARGS", "USAGE_ERROR"),
+        ("FANOUT_PLACE_UNREAD", "TEMP_FAIL"),
+        ("FINDINGS_BAD_ARGS", "USAGE_ERROR"),
+        ("SECRET_ROTATION_BAD_ARGS", "USAGE_ERROR"),
+        ("B2_DRAIN_BAD_ARGS", "USAGE_ERROR"),
     ],
 )
 def test_each_family_takes_its_usage_and_temp_fail_from_the_spine(name, spine):
@@ -172,6 +180,18 @@ def _declared_values(prefix):
         ("scripts/deploy_tools/land.sh", "LAND_"),
         ("scripts/deploy_tools/gitops_tick.sh", "TICK_"),
         ("scripts/deploy_tools/await_ci.py", "CI_"),
+        ("scripts/deploy_tools/narrow_setup.py", "NARROW_SETUP_"),
+        ("scripts/diagnostics/probe.py", "PROBE_"),
+        ("scripts/dev/fanout_lib/place.py", "FANOUT_PLACE_"),
+        ("scripts/docs/build_docs.py", "BUILD_DOCS_"),
+        ("scripts/dev/findings.py", "FINDINGS_"),
+        ("scripts/dev/fact_status.py", "FACT_STATUS_"),
+        ("scripts/deploy_tools/runbook_gates.py", "RUNBOOK_GATES_"),
+        ("scripts/secrets_mgmt/secret_rotation.py", "SECRET_ROTATION_"),
+        ("scripts/backup/b2_drain.py", "B2_DRAIN_"),
+        ("scripts/infra_map/gen_infra_map.py", "INFRA_MAP_"),
+        ("scripts/dev/renovate_rebase.py", "RENOVATE_REBASE_"),
+        ("scripts/dev/renovate_branch_sweep.py", "RENOVATE_SWEEP_"),
     ],
 )
 def test_every_declared_code_has_a_contract_row(entry_point, prefix):
@@ -181,6 +201,8 @@ def test_every_declared_code_has_a_contract_row(entry_point, prefix):
     bare integer while every prose copy of the table still listed seven.
     """
     rows = {code.value for code in ec.contract(entry_point)}
+    # Non-vacuity: a family with neither constants nor a row would compare two empty sets.
+    assert rows, f"{entry_point} has no contract row"
     assert _declared_values(prefix) == rows
 
 
@@ -213,3 +235,137 @@ def test_every_no_verdict_code_carries_a_remedy():
     """A resume point with no next step is the `Exit code N` an operator had to look up."""
     rows = {c.value: c for c in ec.contract("scripts/deploy.sh")}
     assert all(rows[value].remedy for value in ec.DEPLOY_SH_NO_VERDICT)
+
+
+def test_every_contract_key_is_a_tracked_file():
+    """A key naming a moved script is a contract nothing renders and `describe` never finds."""
+    assert [key for key in ec.CONTRACTS if not (REPO / key).is_file()] == []
+
+
+def test_the_place_docstring_lists_every_code_its_contract_declares():
+    """`fanout.py place --help` prints the docstring, so a code missing from it is unexplained."""
+    from fanout_lib import place
+
+    doc = place.__doc__ or ""
+    missing = [
+        code.value
+        for code in ec.contract("scripts/dev/fanout_lib/place.py")
+        if f"- {code.value}: " not in doc
+    ]
+    assert missing == []
+
+
+# -- die ------------------------------------------------------------------------------------
+
+
+def test_die_prints_the_detail_and_the_codes_meaning_then_exits_with_it(capsys):
+    with pytest.raises(SystemExit) as exc:
+        ec.die(
+            "scripts/backup/b2_drain.py", ec.B2_DRAIN_BAD_ARGS, "no volumes were named"
+        )
+    assert exc.value.code == 64
+    err = capsys.readouterr().err.splitlines()
+    assert err[0] == "b2_drain.py: error: no volumes were named"
+    assert err[1].startswith("B2_DRAIN_BAD_ARGS (64): ")
+
+
+def test_die_prints_no_meaning_for_a_code_outside_the_contract(capsys):
+    with pytest.raises(SystemExit) as exc:
+        ec.die("scripts/nothing.py", 9, "boom")
+    assert exc.value.code == 9
+    assert capsys.readouterr().err == "nothing.py: error: boom\n"
+
+
+# -- the census: argparse's 2 and bare 2s stay out of entry points -------------------------
+
+
+def _is_two(args) -> bool:
+    return bool(args) and isinstance(args[0], ast.Constant) and args[0].value == 2
+
+
+def _usage_two_offence(subject: Subject) -> list[str]:
+    """A bare `argparse.ArgumentParser(...)`, a `return 2`, or a `sys.exit(2)`/`SystemExit(2)`."""
+    try:
+        tree = ast.parse(subject.text)
+    except SyntaxError:
+        return []
+    hits = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Return) and _is_two([node.value]):
+            hits.append(f"line {node.lineno}: return 2")
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if (
+            isinstance(func, ast.Name)
+            and func.id == "SystemExit"
+            and _is_two(node.args)
+        ):
+            hits.append(f"line {node.lineno}: SystemExit(2)")
+        elif (
+            isinstance(func, ast.Attribute)
+            and func.attr == "exit"
+            and _is_two(node.args)
+        ):
+            hits.append(f"line {node.lineno}: exit(2)")
+        elif (
+            isinstance(func, ast.Attribute)
+            and func.attr == "ArgumentParser"
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "argparse"
+        ):
+            hits.append(f"line {node.lineno}: argparse.ArgumentParser(")
+    return hits
+
+
+USAGE_IS_64 = Census(
+    name="entry-points-exit-64-on-a-usage-error",
+    reason=(
+        "argparse exits 2 on a usage error, and entry points here also return 2 as an outcome "
+        "(CI_DISARMED, PUBLISH_PUSHED_NO_PR, DEPLOY_TAG_MISS), so a mistyped flag read as a "
+        "result (#4443). Build parsers with `lib.cli_help.ArgumentParser`, which exits 64, and "
+        "return a named `lib.exit_codes` constant rather than a literal 2."
+    ),
+    files=lambda: [rel for rel in tracked("scripts/*.py") if "/tests/" not in rel],
+    offence=_usage_two_offence,
+    red=(
+        Subject("a.py", "import argparse\np = argparse.ArgumentParser()\n"),
+        Subject("b.py", "def main():\n    return 2\n"),
+        Subject("c.py", "import sys\nsys.exit(2)\n"),
+        Subject("d.py", "raise SystemExit(2)\n"),
+    ),
+    green=(
+        Subject(
+            "a.py", "from lib.cli_help import ArgumentParser\np = ArgumentParser()\n"
+        ),
+        Subject("b.py", "def main():\n    return USAGE_ERROR\n"),
+        Subject(
+            "c.py", "import argparse\nclass P(argparse.ArgumentParser):\n    pass\n"
+        ),
+        Subject("d.py", '"""argparse exits 2: `sys.exit(2)`."""\n'),
+    ),
+    min_matches=200,
+    must_find=frozenset({"scripts/dev/fanout_lib/place.py", "scripts/lib/cli_help.py"}),
+)
+
+
+def test_no_entry_point_exits_2_for_a_usage_error_or_an_unnamed_outcome():
+    problems = check(USAGE_IS_64)
+    assert not problems, "\n".join(problems)
+
+
+def test_the_usage_census_flags_its_red_subjects_and_passes_its_green_ones():
+    assert proof_problems(USAGE_IS_64) == []
+
+
+def test_lib_argument_parser_exits_64_on_a_bad_flag_and_in_a_subparser(capsys):
+    from lib.cli_help import ArgumentParser
+
+    parser = ArgumentParser(prog="tool")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("run").add_argument("--n", type=int)
+    for argv in (["--bogus"], [], ["run", "--n", "x"]):
+        with pytest.raises(SystemExit) as exc:
+            parser.parse_args(argv)
+        assert exc.value.code == ec.USAGE_ERROR, argv
+    assert "tool: error:" in capsys.readouterr().err

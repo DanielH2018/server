@@ -157,7 +157,7 @@ def _recv_exact_from(sock):
         while len(buf) < n:
             chunk = sock.recv(4096)
             if not chunk:
-                raise SystemExit("HA websocket closed unexpectedly")
+                raise core.Unreadable("HA websocket closed unexpectedly")
             buf.extend(chunk)
         out = bytes(buf[:n])
         del buf[:n]
@@ -317,7 +317,7 @@ def ha_trace(host, token, automation_id, timeout=DEFAULT_TIMEOUT, connect_ip=Non
         _ws_recv_json(recv_exact)  # auth_required
         _ws_send(sock, {"type": "auth", "access_token": token})
         if _ws_recv_json(recv_exact).get("type") != "auth_ok":
-            raise SystemExit("HA websocket auth failed (check claude_ha_token)")
+            raise core.Unreadable("HA websocket auth failed (check claude_ha_token)")
         _ws_send(
             sock,
             {
@@ -440,6 +440,16 @@ def ha_get(url, token, resolve=None):
     return config_get(url, ha_curl_config(token), resolve=resolve)
 
 
+def ha_get_json(url, token, resolve=None):
+    """`ha_get` parsed as JSON. curl has no `--fail` here, so a 401 arrives as the body."""
+    return core.parse_json(url, ha_get(url, token, resolve=resolve))
+
+
+def ha_states(token):
+    """Every live entity's state, from HA's `/api/states`."""
+    return ha_get_json(ha_get_url(ha_base(), "states"), token, resolve=ha_resolve())
+
+
 def _ha_url(ip, ns):
     if ns.ha_cmd == "state":
         return ha_state_url(ip, ns.entity_id)
@@ -469,9 +479,7 @@ def run_ha(ns):
             )
             return 0
         token = ha_token()
-        states = json.loads(
-            ha_get(ha_get_url(ha_base(), "states"), token, resolve=ha_resolve())
-        )
+        states = ha_states(token)
         m = match_automation(states, ns.query)
         if m is None:
             print(
@@ -495,9 +503,7 @@ def run_ha(ns):
                 + f"   # + Bearer; compare attributes.id against ids in {AUTOMATIONS_DIR}/*.yaml"
             )
             return 0
-        states = json.loads(
-            ha_get(ha_get_url(ha_base(), "states"), ha_token(), resolve=ha_resolve())
-        )
+        states = ha_states(ha_token())
         live = [s for s in states if s.get("entity_id", "").startswith("automation.")]
         expected = expected_automation_ids(automations_source_text())
         errs = automation_load_errors(expected, live)
@@ -514,9 +520,7 @@ def run_ha(ns):
                 + f"   # + Bearer; compare live entity_ids against {EXTERNAL_ENTITIES_YAML}"
             )
             return 0
-        states = json.loads(
-            ha_get(ha_get_url(ha_base(), "states"), ha_token(), resolve=ha_resolve())
-        )
+        states = ha_states(ha_token())
         with open(EXTERNAL_ENTITIES_YAML, encoding="utf-8") as f:
             snapshot = snapshot_entity_ids(f.read())
         gone = vanished_snapshot_entities(
@@ -539,19 +543,20 @@ def run_ha(ns):
             + "   # + Authorization: Bearer <redacted> (via --config stdin)"
         )
         return 0
-    body = ha_get(_ha_url(ha_base(), ns), ha_token(), resolve=ha_resolve())
+    url = _ha_url(ha_base(), ns)
+    body = ha_get(url, ha_token(), resolve=ha_resolve())
     if ns.ha_cmd == "get":
         print(core.redact_log_secrets(body), end="")  # #3015: see redact_log_secrets
         return 0
     if ns.ha_cmd == "state":
+        try:  # parsed even for --json, which would otherwise pass an error page as 0
+            obj = json.loads(body)
+        except json.JSONDecodeError:  # an error page: the entity was never read (#4468)
+            body = core.redact_log_secrets(body.strip())
+            raise core.Unreadable(f"HA answered {url} with non-JSON:\n{body}") from None
         if ns.json:
             print(body)
             return 0
-        try:
-            obj = json.loads(body)
-        except json.JSONDecodeError:
-            print(body.strip())
-            return 1
         # A missing entity returns {"message": "Entity not found."}.
         if not isinstance(obj, dict) or "entity_id" not in obj:
             msg = obj.get("message") if isinstance(obj, dict) else body.strip()
@@ -560,7 +565,7 @@ def run_ha(ns):
         print(format_ha_state(obj))
         return 0
     # automation
-    m = match_automation(json.loads(body), ns.query)
+    m = match_automation(core.parse_json(url, body), ns.query)
     if m is None:
         print(f"automation '{ns.query}' not found (by entity_id, id, or alias-slug)")
         return 1
@@ -574,8 +579,6 @@ def run_ha_state(ns):
     Args:
         ns: The parsed argparse namespace for the `ha state` subcommand.
     """
-    import json
-
     # DECIDED: deferred — `ha state` needs build_model(); ha_state_model.py:434 needs
     # this module's ha_get/ha_token for `refresh`. Pinned in ALLOWED_CYCLES.
     from home_assistant import ha_state_model
@@ -586,8 +589,7 @@ def run_ha_state(ns):
             + "   # + Bearer (stdin)"
         )
         return 0
-    body = ha_get(ha_get_url(ha_base(), "states"), ha_token(), resolve=ha_resolve())
-    states = json.loads(body)
+    states = ha_states(ha_token())
     model = ha_state_model.build_model(ha_state_model.load_role())
     print(ha_state_rows(states, model))
     if ns.inventory:

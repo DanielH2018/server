@@ -37,6 +37,7 @@ keeps working.
 """
 
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -46,6 +47,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from validate.validate_lib.ok_lines import ok_printer
 from lib.ansible_inventory import K8S_HOST_VARS
 from lib.k8s_context import resolve_vars
 from lib.render_context import UnresolvedVarsError, render_context
@@ -173,7 +175,7 @@ def role_names(k8s_roles: Path) -> list[str]:
     return [d.name for d in role_dirs(k8s_roles, exclude=SKIP_ROLES)]
 
 
-def main() -> int:
+def main(argv: Sequence[str] = ()) -> int:
     """Render every k8s role's manifest templates and validate them against the k3s schemas.
 
     Renders each role's `templates/*.j2` manifests with a real (unstubbed) group_vars/host_vars
@@ -181,9 +183,14 @@ def main() -> int:
     against `K8S_SCHEMA_VERSION` (or a vendored CRD schema), and cross-references every declared
     PersistentVolumeClaim against every `claimName` reference across all roles.
 
+    Args:
+        argv: The command-line arguments. `-v` or `--verbose` also lists each clean
+            template as an `[ok]` line; by default only failures and the summary print.
+
     Returns:
         0 if every template rendered, parsed and schema-checked clean; 1 otherwise.
     """
+    ok = ok_printer(argv)
     entries = k8s_entries()
 
     roles = role_names(K8S_ROLES)
@@ -290,7 +297,7 @@ def main() -> int:
             for doc in docs:
                 pvc_names.update(find_pvc_names(doc))
             parsed_templates.append((rel, docs))
-            print(f"  [ok]   {rel}")
+            ok(f"  [ok]   {rel}")
         # A role's `k8s_claims`: one shared template, rendered once per entry the way the
         # deploy's render task loops it, so the claims reach the schema pass and the claimName
         # cross-reference below like any template the role ships.
@@ -305,7 +312,7 @@ def main() -> int:
             for doc in docs:
                 pvc_names.update(find_pvc_names(doc))
             parsed_templates.append((rel, docs))
-            print(f"  [ok]   {rel}")
+            ok(f"  [ok]   {rel}")
 
     # WARNING ONLY, deliberately — not folded into `failures`. This is new and unproven against
     # the real tree; a false positive here must not be able to block a deploy the way a `[FAIL]`
@@ -401,4 +408,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

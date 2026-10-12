@@ -11,10 +11,16 @@ Run: uv run pytest ansible/tests/k8s/test_priority_class_is_derived_from_tier.py
 import re
 
 import pytest
+from ansible.errors import AnsibleFilterError
 
 from _helpers import K8S_ROLES
 from _k8s_render import k8s_entries
-from service_tier import SERVICE_TIERS, in_service_tier, tier_priority_class
+from service_tier import (
+    SERVICE_TIERS,
+    FilterModule,
+    in_service_tier,
+    tier_priority_class,
+)
 
 # The class each tiered role's pods ran at when the literals were replaced. A tier edit that
 # moves one of these is a priority change, and should fail here before it reaches the cluster.
@@ -101,3 +107,34 @@ def test_every_tier_names_a_declared_priority_class():
     from test_pod_template_hygiene import _homelab_tiers
 
     assert set(SERVICE_TIERS.values()) <= _homelab_tiers()
+
+
+@pytest.mark.parametrize(
+    ("name", "args"),
+    [
+        (
+            "in_service_tier",
+            ([{"name": "a", "tier": "home-edge"}], "b", "home-critical"),
+        ),
+        (
+            "in_service_tier",
+            ([{"name": "a", "tier": "home-edge"}], "a", "no-such-tier"),
+        ),
+        ("tier_priority_class", ([{"name": "a", "tier": "platform"}], "b")),
+        ("tier_priority_class", ([{"name": "a"}], "a")),
+        ("tier_backup_claims", ([{"name": "a"}], "no-such-tier", "ns")),
+    ],
+    ids=[
+        "in-tier-missing",
+        "in-tier-unknown-tier",
+        "class-missing",
+        "class-untiered",
+        "claims-unknown-tier",
+    ],
+)
+def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter(name, args):
+    """A render failure names the filter that refused, through the filter Ansible calls (#4480)."""
+    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+        FilterModule().filters()[name](*args)
+    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
+    assert str(caught.value).startswith(f"{name}: "), str(caught.value)

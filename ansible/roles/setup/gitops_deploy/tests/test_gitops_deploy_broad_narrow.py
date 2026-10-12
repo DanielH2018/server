@@ -102,13 +102,19 @@ def test_a_range_that_moves_no_rendered_output_applies_nothing(
 def test_a_failed_narrowed_apply_holds_the_tags_it_tried(
     gitops_deploy, tick, state_dir, state
 ):
-    """The hold names the narrowed plane, so only an apply covering those tags clears it."""
+    """The hold names the narrowed plane, so only an apply covering those tags clears it.
+
+    The fix-forward deploy of those tags is that apply. It guards the plane's playbook against
+    drifting from the one `Hold.cover_services` clears by, which would leave the hold forever.
+    """
     tick.paths = [GROUP_VARS]
     tick.narrow = (0, "sonarr")
     tick.playbook_outcomes = [RuntimeError("boom")]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert (state_dir / "hold_sha").read_text() == ORIGIN
     assert state.hold_plane == "ansible/deploy.yml sonarr"
+    state.clear_service_hold({"sonarr"})
+    assert not (state_dir / "hold_sha").exists()
 
 
 def test_the_setup_plane_never_consults_the_deploy_plane_narrowing(
@@ -293,7 +299,7 @@ def test_a_refused_range_logs_the_digest_shadow_and_defers_the_plane(
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == []
     assert (
-        "narrow shadow: render digest at 22222222 would apply radarr (current 1; "
+        "narrow-shadow: render digest at 22222222 would apply radarr (current 1; "
         "unknown: render is of another commit 2); the narrowing chose to defer the plane"
     ) in capsys.readouterr().out
 
@@ -313,6 +319,6 @@ def test_a_digest_diff_that_raises_leaves_the_narrowed_apply_alone(
     assert _playbook_argv(tick)[-1:] == ["radarr,sonarr"]
     assert tick.merges == [ORIGIN]
     assert (
-        "narrow shadow: no digest diff (OSError: permission denied)"
+        "narrow-shadow: no digest diff (OSError: permission denied)"
         in capsys.readouterr().out
     )

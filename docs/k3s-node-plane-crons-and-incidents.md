@@ -187,7 +187,21 @@ To back the pin out, empty `k3s_node_static_link` and run the same tag. That run
 file and re-applies netplan, so the link returns to the installer's DHCP.
 
 daniel-server pins its address too (#3891), on `enp88s0`. The gateway reserves 10.0.0.161 for
-that NIC, and wlo1's DHCP route at metric 600 stays as the fallback. The join play cannot
+that NIC, and wlo1's DHCP route at metric 600 stays as the fallback. `ignore-carrier` keeps
+the pinned metric-100 routes installed when the cable drops. By default, IPv4 still routes
+over a link that has lost carrier. The same task file therefore sets
+`ignore_routes_with_linkdown = 1` for both `net.ipv4.conf.<link>` and `net.ipv6.conf.<link>` in
+`/etc/sysctl.d/90-homelab-static-link.conf`, so route lookups skip the link while it has no
+carrier and wlo1 wins (#4510). To check it, unplug `enp88s0` and run `ip route get 1.1.1.1`,
+`ip route get 10.0.0.215` and `ip -6 route get 2606:4700:4700::1111`; all three must name `wlo1`.
+
+The IPv6 default route arrives by router advertisement, not from the pin. `systemd-networkd` gives an RA
+route the link's `[DHCP] RouteMetric`, or 1024 when there is none. netplan 1.1.2 has no
+`ra-overrides` metric key and writes `[DHCP]` only while a DHCP client is on. `dhcp4: false`
+therefore dropped enp88s0's RA route to 1024, behind wlo1's 600, and IPv6 egress took wlo1
+(#4561). The template sets `dhcp6: true` with `dhcp6-overrides: {route-metric: 100}`. That adds
+no client in practice: the gateway's RA sets the M flag, so `systemd-networkd` already ran DHCPv6 on the
+link. With both links up, `ip -6 route get 2606:4700:4700::1111` must name `enp88s0`. The join play cannot
 apply the pin: it reaches daniel-server over SSH through a dynamic `include_role`, which
 `--tags node-address` cannot select, and a `netplan apply` there would reconfigure the link
 the session uses. A separate opt-in play imports the same task file statically and runs on

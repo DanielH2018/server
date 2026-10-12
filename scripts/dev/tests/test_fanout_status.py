@@ -309,15 +309,37 @@ def test_a_health_read_timeout_surfaces_in_the_brief(tmp_path):
     assert "session-health read failed (timed out)" in _brief(run)
 
 
-def test_cli_status_reports_a_read_timeout_as_exit_1_not_a_traceback(tmp_path, capsys):
+def test_cli_status_reports_a_read_timeout_as_exit_75_not_a_traceback(tmp_path, capsys):
     batch = Batch("1", "daniel-box", "/w/1", "worktree-fanout-1", "fanout-1", [1], "t")
     run = Manifest("20260101T000000Z", "o", [batch])
     save(run, root=tmp_path)
     tools, fake_run = fake_tools()
     fake_run.answers_by_call = [subprocess.TimeoutExpired(cmd="ssh", timeout=30.0)]
     code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
-    assert code == 1
+    assert code == 75
     assert "1 on daniel-box: status read timed out" in capsys.readouterr().out
+
+
+def test_cli_status_ranks_a_failed_batch_over_another_hosts_read_timeout(
+    tmp_path, capsys
+):
+    # 75 is numerically larger than 5, so a `max` over the tiers would report "read again
+    # later" for a run with a failed batch in it (#4452).
+    timed_out = Batch(
+        "2", "daniel-server", "/w/2", "worktree-fanout-2", "fanout-2", [2], "t"
+    )
+    run = Manifest("20260101T000003Z", "o", [B, timed_out])
+    save(run, root=tmp_path)
+    tools, fake_run = fake_tools()
+    fake_run.answers_by_call = [
+        ok(FAILED),
+        subprocess.TimeoutExpired(cmd="ssh", timeout=30.0),
+    ]
+    code = main(["status", run.run_id, "--manifest-root", str(tmp_path)], tools)
+    out = capsys.readouterr().out
+    assert "2 on daniel-server: status read timed out" in out
+    assert "b on daniel-box: failed" in out
+    assert code == 5
 
 
 def test_cli_status_prints_exit_unknown_for_a_vanished_unit(tmp_path, capsys):

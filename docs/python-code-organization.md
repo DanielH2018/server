@@ -93,6 +93,16 @@ not `scripts/` alone. `ansible/tests` is a root too, so `deploy`, `k8s`, `longho
 ls -d scripts/*/ scripts/*/*/ ansible/tests/*/ ansible/roles/k8s/monitor-bridge/files/*/
 ```
 
+For an agent PR, the landing policy enforces the rule. `land_lib/policy.py:shape_hits` needs
+the operator's approval for a module added beside a directory of the same name, at any depth.
+It also needs approval for a module at the top of one `sys.path` root that `land.py` inserts
+when it shadows a directory or module at the top of another. It reads those roots from
+`land.py`'s own inserts, not from `pythonpath`: the refusal protects what `land.py` imports,
+and `pythonpath` applies only under pytest. Across the `pythonpath` roots, the
+`no-two-import-roots-share-a-module-basename` row of `ansible/tests/repo/test_census_rows_python.py`
+catches two roots that hold the same module name. No test catches a module that shadows a
+directory in another root.
+
 ### Per-module `sys.path` bootstraps, not `python -m`
 
 A directly run script gets only its own directory as `sys.path[0]` ([sys.path
@@ -151,6 +161,24 @@ close with `if __name__ == "__main__": sys.exit(main())`. The function returns a
 not call `sys.exit` itself, so a test can call it. Reference:
 `ansible/roles/k8s/uptime-kuma/files/render_status_page.py`. Google's style guide gives the
 same shape ([Google Python style, main][google]).
+
+**A module family lives in a package behind one entrypoint.** A family is three or more
+sibling modules whose filenames share a first or last `_`-word, such as `land_*.py` or
+`*_gates.py`, where at least one module is an entrypoint. The entrypoint stays where it is,
+and the other modules move into a `<prefix>_lib/` namespace package beside it. A reader
+listing the directory then sees one program rather than several. The operator ruled on
+2026-10-10 that this navigation gain is reason enough on its own. References:
+`scripts/deploy_tools/land.py` with `land_lib/`, `scripts/diagnostics/probe.py` with
+`probe_lib/`, and `ansible/roles/setup/fake_remux/files/fake_remux.py` with
+`fake_remux_lib/`. A forwarding shim at an old path does not count. A shim holds only
+imports and a `__main__` guard whose one statement calls the entrypoint of its own family. Shipped code
+or an older checkout still runs such a path, so the consolidation leaves a shim there
+(`scripts/dev/fanout_place.py`). The
+`module-families-live-in-a-package` row of `ansible/tests/repo/test_census_rows_layout.py`
+enforces the rule for a `scripts/` subdirectory and a role's `files/`. Its `allow` names each
+family that stays flat, with the reason. Two stay flat by design: the
+`scripts/validate/*_templates.py` checks, each its own prek hook, and the deployer's
+`gitops_*` modules, which other roles copy by path.
 
 **I/O behind one injectable object.** Every subprocess, HTTP, git and filesystem boundary a
 program crosses lives in one frozen dataclass whose fields default to the real implementation.

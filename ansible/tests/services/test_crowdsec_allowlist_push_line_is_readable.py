@@ -62,6 +62,26 @@ def test_a_kuma_json_404_is_read_as_rejected(tmp_path):
     assert parsed == (TAG, "daniel-box", "rejected", "down", "http=404 rc=22 by=kuma")
 
 
+def test_kumas_own_reason_precedes_the_failure_line_with_the_token_redacted(tmp_path):
+    # ACCEPT (#4481): Kuma answers 404 for any exception, so its `msg` is logged on its own
+    # line. `--fail-with-body` writes one body per attempt before the `-w` line.
+    body = '{"ok":false,"msg":"SQLITE_BUSY near \'secret-token\'"}'
+    reply = body + body + "\n404 application/json; charset=utf-8"
+    lines = _run_push(tmp_path, reply, 22)
+    assert lines == [
+        "push rejected by kuma (http=404): SQLITE_BUSY near '<token>'",
+        "push failed (http=404 rc=22 by=kuma) (status=down: home allowlist: v6 prefix rotated)",
+    ]
+    assert parse_push_line(_as_syslog(lines[0])) is None
+    assert parse_push_line(_as_syslog(lines[1])) == (
+        TAG,
+        "daniel-box",
+        "rejected",
+        "down",
+        "http=404 rc=22 by=kuma",
+    )
+
+
 def test_a_traefik_text_404_is_read_as_swallowed_not_rejected(tmp_path):
     # REJECT (the pair): the edge's no-router 404 is text/plain, so no `by=kuma`, and the
     # reader files it as a swallowed push rather than a rejection.

@@ -26,7 +26,7 @@ from deployer_lib import deploy_k8s_owed
 from deployer_lib import deploy_locks
 from deployer_lib import deploy_narrow
 from deployer_lib.deploy_changes import setup_tags_for, setup_role_tag
-from deployer_lib.deploy_config import CHICAGO, Config, log
+from deployer_lib.deploy_config import CHICAGO, ERR, WARNING, Config, log
 from deployer_lib.deploy_git import (
     dirty_alert_slot,
     dirty_summary,
@@ -63,7 +63,7 @@ def handle_dirty(
     # modified — which is why the line names the paths rather than just the state. Unthrottled at
     # 48 lines/day only while parked, which is exactly when they are wanted.
     log(
-        "working tree dirty — skipping (git status --porcelain counts untracked files): "
+        "tick: working tree dirty — skipping (git status --porcelain counts untracked files): "
         + dirty_summary(target.status)
     )
     # Healthy skip (operator mid-edit). Throttle the page to twice a day at ~08:00 and ~20:00 CT
@@ -95,7 +95,7 @@ def handle_ci_failed(
 ) -> int:
     """Master is red and no ancestor of it is green: stay on `local`, page once per SHA."""
     alert_red_tip(tools, state, config, target)
-    log(f"origin {target.origin[:8]}: CI failed — not deploying")
+    log(f"ci: origin {target.origin[:8]} failed — not deploying", level=WARNING)
     return 0
 
 
@@ -131,11 +131,11 @@ def log_pi_changes(cs) -> None:
     """
     if cs.services:
         log(
-            f"merged Docker role change(s) this host does not deploy: {sorted(cs.services)}"
+            f"docker: merged Docker role change(s) this host does not deploy: {sorted(cs.services)}"
         )
     if cs.pi_shared:
         log(
-            "merged a roles/containers/common change this host does not deploy; "
+            "docker: merged a roles/containers/common change this host does not deploy; "
             "apply it with `./scripts/deploy.sh -e target=daniel-pi`"
         )
 
@@ -254,7 +254,7 @@ def handle_broad(
             deploy_defer.unrecord(state, origin, recorded)
             return deploy_defer.for_contention(tools, state, config, target, exc)
         except Exception as exc:
-            log(f"broad apply failed ({playbook} {tags}): {exc}")
+            log(f"broad: apply failed ({playbook} {tags}): {exc}", level=ERR)
             # `broad.held`, not `tags`: a narrowed setup apply holds each block tag with the
             # role it narrowed from, so that role's whole-role apply clears the hold. The
             # property carries the derivation.
@@ -370,7 +370,10 @@ def _rollback_k8s(
     # Hold BEFORE the reset: a hung rollback redeploy would otherwise
     # be SIGTERMed before the marker is written, stranding the bad commit into a per-tick
     # redeploy loop.
-    log(f"k8s deploy failed for {sorted(cs.k8s_deploy)}: {exc}; rolling back")
+    log(
+        f"k8s-deploy: failed for {sorted(cs.k8s_deploy)}: {exc}; rolling back",
+        level=ERR,
+    )
     state.write_hold(origin)
     tools.run(["git", "reset", "--hard", local], cwd=config.repo)
     rollback_failed: Exception | None = None
@@ -396,7 +399,10 @@ def _rollback_k8s(
         )
     except Exception as exc2:
         rollback_failed = exc2
-        log(f"k8s rollback redeploy of the prior version also failed: {exc2}")
+        log(
+            f"k8s-deploy: rollback redeploy of the prior version also failed: {exc2}",
+            level=ERR,
+        )
     # Read from the tree AFTER the reset above, matching what roles/k8s/manifests itself reads
     # for the claim list — the failed commit may have added or renamed a claim, and that version
     # is exactly what must NOT decide this note.

@@ -3,7 +3,9 @@
 
 Invoke it as ``./scripts/deploy_tools/land.sh``, which execs this file; every doc, skill
 and hook names the shim. The implementation is the ``land_lib`` package beside it, one
-module per phase; this file is the docstring ``--help`` prints and ``main``.
+module per phase; this file holds ``main`` and the docstring ``--help`` prints from.
+``--help`` prints the summary line above and everything from ``Usage::`` on. The sections
+between are rationale for whoever edits this file, so they print nowhere (#4448).
 
 WHY ONE INVOCATION RATHER THAN A CHAIN. A session cannot write this sequence inline: shell
 control flow and command substitution defeat the worktree containment check, which refuses with
@@ -34,7 +36,7 @@ does the same, but ``> "$CLAUDE_JOB_DIR/tmp/land<n>.log" 2>&1`` is still the who
 exit -- see ``_prepare_stdio``.
 
 WITH ``LAND_HANDOFF_UNIT`` SET, THIS SCRIPT LANDS NOTHING ITSELF. The ``claude`` agent user's
-profile sets it: that user cannot merge or deploy, so land.sh starts ``<unit>@<pr>.service``,
+profile sets it: that user cannot deploy, so land.sh starts ``<unit>@<pr>.service``,
 which lands the PR as the operator under the landing policy, and reports that landing's verdict
 and exit code as its own. ``--detach && cc-wait land <pr>`` works unchanged; ``--tags``,
 ``--since`` and ``--subject`` are refused. The mechanics are ``land_lib/handoff.py``.
@@ -68,7 +70,7 @@ Exit codes:
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 blocked | needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
-ci-red | ci-timeout | lock-busy | tip-outran-retries.
+ci-red | ci-timeout | lock-busy | tip-outran-retries | refused | handoff-timeout.
 
 `blocked` is not a failure of this PR -- something else in the incoming range needs an
 operator, and nothing was deployed. `needs-manual-apply` means this PR reaches something
@@ -78,6 +80,11 @@ beyond the one the tick just ran on, so it is landed but not live everywhere.
 tick does it -- UNLESS the verdict says this run stopped watching a tick that was still
 applying, in which case the deployer's markers were read mid-apply and a hold cannot be
 ruled out. Re-run land.sh then; no later tick crosses a hold.
+`refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
+changes requested, a read or a fetch that failed. The `land:` line on stderr, repeated in the
+verdict's detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
+still running (`LAND_HANDOFF_UNIT` below); a re-run waits on it again. Bad arguments (64) print
+no verdict.
 `merge-conflict` and `pr-ci-red` are the merge wait ending early on the two states an armed
 auto-merge never recovers from. `pr-ci-red` is the PR's CI before the merge; `ci-red` is
 master's after it.
@@ -104,7 +111,7 @@ from deploy_tools.land_lib import detach, handoff, pipeline
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.ledger import annotation_line
 from deploy_tools.land_lib.options import HANDOFF_ENV, Options, parse_args
-from deploy_tools.land_lib.outcome import write_verdict_file
+from deploy_tools.land_lib.outcome import Outcome, write_verdict_file
 from deploy_tools.land_lib.tools import Classifier, Tools
 
 
@@ -129,6 +136,17 @@ def _prepare_stdio() -> None:
             sys.stdout.reconfigure(line_buffering=True)
 
 
+def help_text(doc: str) -> str:
+    """The part of `doc` that `--help` prints: its summary line, then the `Usage::` line onward.
+
+    A docstring without a line starting `Usage::` comes back whole.
+    """
+    start = doc.find("\nUsage::")
+    if start < 0:
+        return doc
+    return f"{doc.splitlines()[0]}\n{doc[start:]}"
+
+
 def main(
     argv: list[str] | None = None,
     tools: Tools | None = None,
@@ -149,7 +167,7 @@ def main(
     # -- so `land.sh` alone answered a bad command line with a different number from every
     # other entry point here. `LAND_BAD_ARGS` is the shared 64.
     try:
-        opts = parse_args(argv, __doc__ or "")
+        opts = parse_args(argv, help_text(__doc__ or ""))
     except SystemExit as exc:
         raise SystemExit(LAND_BAD_ARGS if exc.code == 2 else exc.code) from None
     unit = os.environ.get(HANDOFF_ENV)
@@ -231,6 +249,16 @@ def _land(opts: Options, tools: Tools, classifier: Classifier | None) -> int:
         rc = outcome.rc
         outcome.emit()
         line = outcome.file_line()
+    except Exception as exc:
+        # Still one VERDICT line, as every exit-1 end prints (#4451), and the same verdict a
+        # crash reaches through the handoff unit's STOPPED line. The traceback follows, and
+        # the annotation below stays `aborted`, so the board keeps a crash apart from a
+        # refusal.
+        reason = " ".join(f"{type(exc).__name__}: {exc}".split())
+        crashed = Outcome(1, f"PR #{opts.pr} — the landing raised {reason}")
+        crashed.emit()
+        line = crashed.file_line()
+        raise
     finally:
         if opts.verdict_file:
             with contextlib.suppress(OSError):

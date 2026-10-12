@@ -47,6 +47,11 @@ color:var(--crust)}
 /* Derived, not declared: hollow rather than filled, so a guess never reads as a statement. */
 .chip-derived{background:transparent;border:1px dashed var(--overlay0);color:var(--subtext0)}
 .tagrow{margin-top:8px}
+/* The star sits beside the card's link, not inside it, so clicking it never opens the page. */
+.row{position:relative}.row .card{padding-right:44px}
+.star{position:absolute;top:10px;right:10px;background:none;border:0;padding:4px 6px;
+font-size:18px;line-height:1;color:var(--overlay0);cursor:pointer}
+button.star:hover,.star.on{color:var(--yellow)}span.star{cursor:default}
 mark{background:var(--yellow);color:var(--crust);border-radius:2px}
 .empty{color:var(--overlay0);padding:40px 0;text-align:center}
 footer{color:var(--overlay0);font-size:12px;padding:0 24px 30px;max-width:1100px;margin:0 auto}
@@ -64,6 +69,7 @@ footer{color:var(--overlay0);font-size:12px;padding:0 24px 30px;max-width:1100px
       <option value="title">Title A-Z</option>
       <option value="host">Host</option>
     </select>
+    <label class="chk"><input type="checkbox" id="starred"> starred only</label>
     <label class="chk"><input type="checkbox" id="dupes"> show .md duplicates</label>
   </div>
 </header>
@@ -111,9 +117,10 @@ function render() {
   const status = $("status").value;
   const sort = $("sort").value;
   const dupes = $("dupes").checked;
+  const starredOnly = $("starred").checked;
   let items = DATA.artifacts.filter(a =>
     (!host || a.host === host) && (!category || a.category === category) &&
-    (!status || a.status === status) &&
+    (!status || a.status === status) && (!starredOnly || a.starred) &&
     (dupes || !a.companion_html) && matches(a, terms));
   items.sort((x, y) => sort === "title" ? x.title.localeCompare(y.title)
            : sort === "host" ? (x.host + x.title).localeCompare(y.host + y.title)
@@ -134,7 +141,15 @@ function render() {
     const svcs = (a.services || []).map(s =>
       `<span class="chip chip-svc${der("services")}"${derTitle("services")}>${esc(s)}</span>`).join(" ");
     const tags = (a.tags || []).map(t => `<span class="chip chip-tag">${esc(t)}</span>`).join(" ");
-    return `<a class="card" href="${esc(a.url)}" target="_blank" rel="noopener">
+    // Where the server cannot write the star list, a starred artifact still shows its star,
+    // as plain text rather than as a button that would only fail.
+    const star = DATA.star_writable
+      ? `<button type="button" class="star${a.starred ? " on" : ""}" data-host="${esc(a.host)}"
+           data-path="${esc(a.path)}" aria-pressed="${a.starred}"
+           title="${a.starred ? "Starred: never pruned. Click to unstar." : "Star to keep it from being pruned"}"
+           >${a.starred ? "★" : "☆"}</button>`
+      : a.starred ? `<span class="star on" title="Starred: never pruned">★</span>` : "";
+    return `<div class="row"><a class="card" href="${esc(a.url)}" target="_blank" rel="noopener">
       <h2>${highlight(a.title, terms)}</h2>
       ${a.summary ? `<p>${highlight(a.summary, terms)}</p>` : ""}
       <div class="meta">
@@ -145,8 +160,24 @@ function render() {
         <span>${fmtSize(a.size)}</span>
         ${slices}
       </div>
-      ${svcs || tags ? `<div class="meta tagrow">${svcs} ${tags}</div>` : ""}</a>`;
+      ${svcs || tags ? `<div class="meta tagrow">${svcs} ${tags}</div>` : ""}</a>${star}</div>`;
   }).join("") : `<div class="empty">No artifact matches that search.</div>`;
+}
+async function toggleStar(btn) {
+  const a = DATA.artifacts.find(x => x.host === btn.dataset.host && x.path === btn.dataset.path);
+  if (!a) return;
+  btn.disabled = true;
+  try {
+    const res = await fetch("/api/star", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({host: a.host, path: a.path, starred: !a.starred})});
+    if (!res.ok) throw new Error(res.status + " " + (await res.text()).trim());
+    a.starred = (await res.json()).starred;
+    render();
+  } catch (err) {
+    btn.disabled = false;
+    $("foot").textContent = "Could not change the star on " + a.name + ": " + err.message;
+  }
 }
 async function load() {
   const res = await fetch("/api/index.json", {cache: "no-store"});
@@ -159,11 +190,15 @@ async function load() {
   fill("category", "All categories", DATA.categories);
   fill("status", "Any status", DATA.statuses);
   $("foot").textContent = "Indexed " + fmtDate(DATA.generated) +
-    " - artifacts are pruned 30 days after their last update.";
+    " - starred artifacts are kept; the rest are pruned 30 days after their last update.";
   render();
 }
-["q", "host", "category", "status", "sort", "dupes"].forEach(
+["q", "host", "category", "status", "sort", "starred", "dupes"].forEach(
   id => $(id).addEventListener("input", render));
+$("list").addEventListener("click", e => {
+  const btn = e.target.closest("button.star");
+  if (btn) toggleStar(btn);
+});
 load();
 </script>
 </body></html>

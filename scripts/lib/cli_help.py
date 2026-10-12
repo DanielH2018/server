@@ -25,9 +25,22 @@ Help on stdout with exit 0 reached cc-wait as a malformed description (#4376).
 `refuse_help_under_describe` makes that a usage error instead, which cc-wait prints. A probe
 asked for `--help` alone still answers with exit 0.
 
+A USAGE ERROR EXITS 64. argparse's own `error()` exits 2, which many entry points here also
+return as an outcome (`CI_DISARMED`, `PUBLISH_PUSHED_NO_PR`, `DEPLOY_TAG_MISS`), so a mistyped
+flag read as a real result. `ArgumentParser` below is argparse's with `error()` exiting
+`lib.exit_codes.USAGE_ERROR`. Subparsers inherit it, because `add_subparsers` defaults its
+`parser_class` to the parent's class. `scripts/lib/tests/test_exit_codes.py`'s census refuses a
+bare `argparse.ArgumentParser(` in an entry point.
+
+MESSAGES carry argparse's prefix. `warn` and `error` print `<prog>: warning: ...` and
+`<prog>: error: ...` on stderr, the shape `parser.error` already gives a bad argument, so one
+grep pattern finds every complaint a script makes and the line names the script it came from.
+A helper module in `lib/` uses them too: it has no name of its own worth printing, and the
+running script's name is the one an operator can act on (#4447).
+
 Typical usage example:
 
-    from lib.cli_help import answer_help
+    from lib.cli_help import ArgumentParser, answer_help
 
     def main(argv=None):
         answer_help(__doc__, argv)
@@ -35,7 +48,15 @@ Typical usage example:
 """
 
 import argparse
+import os
 import sys
+from pathlib import Path as _Path
+from typing import NoReturn
+
+# Reach `lib` from a caller that put only its own directory on sys.path.
+sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+
+from lib.exit_codes import USAGE_ERROR
 
 HELP_FLAGS = ("-h", "--help")
 
@@ -57,16 +78,58 @@ def answer_help(doc: str | None, argv: list[str] | None = None) -> None:
         raise SystemExit(0)
 
 
+class ArgumentParser(argparse.ArgumentParser):
+    """argparse's parser, except that a usage error exits `USAGE_ERROR` (64) rather than 2."""
+
+    def error(self, message: str) -> NoReturn:
+        self.print_usage(sys.stderr)
+        self.exit(USAGE_ERROR, f"{self.prog}: error: {message}\n")
+
+
 def refuse_help_under_describe(
     parser: argparse.ArgumentParser, argv: list[str] | None = None
 ) -> None:
-    """Exit 2 with `parser`'s usage on stderr when `argv` asks for help beside `--describe`.
+    """Exit 64 with `parser`'s usage on stderr when `argv` asks for help beside `--describe`.
 
     A cc-wait probe calls this ahead of `parser.parse_args`. cc-wait keeps only the last 400
     characters of a refused probe's stderr, so this prints the usage line, not the full help.
     """
     argv = sys.argv[1:] if argv is None else argv
     if "--describe" in argv and wants_help(argv):
-        parser.error(
-            "--describe answers cc-wait in JSON, so it takes no --help; run without --describe"
+        parser.print_usage(sys.stderr)
+        parser.exit(
+            USAGE_ERROR,
+            f"{parser.prog}: error: --describe answers cc-wait in JSON, so it takes no "
+            "--help; run without --describe\n",
         )
+
+
+def prog() -> str:
+    """The running script's name, derived as argparse derives its default `prog`.
+
+    Read at call time, so a test that sets `sys.argv` sees its own value.
+    """
+    return os.path.basename(sys.argv[0]) if sys.argv and sys.argv[0] else "python"
+
+
+# `warn` and `error` take a `prog` keyword that shadows the function.
+_derived_prog = prog
+
+
+def warn(message: str, *, prog: str | None = None) -> None:
+    """Print `<prog>: warning: <message>` on stderr.
+
+    `prog` overrides the derived name for a script reached through a wrapper: `deploy.sh`
+    execs `deploy_cli.py`, and the operator typed the first.
+    """
+    print(f"{prog or _derived_prog()}: warning: {message}", file=sys.stderr, flush=True)
+
+
+def error(message: str, *, prog: str | None = None) -> None:
+    """Print `<prog>: error: <message>` on stderr, and return.
+
+    Unlike `parser.error`, this does not exit: the caller returns its own exit code, which is
+    how a script keeps distinct codes for distinct failures. `prog` overrides the derived name,
+    as for `warn`.
+    """
+    print(f"{prog or _derived_prog()}: error: {message}", file=sys.stderr, flush=True)

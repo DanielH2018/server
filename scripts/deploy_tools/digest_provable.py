@@ -28,7 +28,6 @@ WHO CALLS IT. `deploy_narrow.digest_provable`, as a subprocess for the reason
 Usage: digest_provable.py [--repo PATH] ROLE [ROLE ...]
 """
 
-import argparse
 import json
 import sys
 from pathlib import Path
@@ -36,6 +35,8 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
 
 from lib import yaml_fast
 
@@ -123,13 +124,22 @@ def digest_provable(role: Path) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("roles", nargs="+", help="role directories under roles/k8s/")
     parser.add_argument(
         "--repo", default=".", help="the checkout to read (default: the cwd)"
     )
     args = parser.parse_args(argv)
     k8s = Path(args.repo) / "ansible" / "roles" / "k8s"
+    # A role with no directory still reads `false` and exits 0: a pending `k8s_unapplied` line
+    # can name a role a later range deleted, and a non-zero exit makes the deployer read every
+    # role in the call as not provable (`deploy_k8s_owed._digest_provable`).
+    # The stderr line is what tells a typo apart from a role that acts outside its digest.
+    for role in args.roles:
+        if not (k8s / role).is_dir():
+            print(
+                f"digest_provable: no role directory at {k8s / role}", file=sys.stderr
+            )
     print(json.dumps({r: digest_provable(k8s / r) for r in args.roles}, sort_keys=True))
     return 0
 

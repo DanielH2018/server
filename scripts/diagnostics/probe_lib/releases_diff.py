@@ -1,4 +1,9 @@
-"""The one staleness question a path cannot answer: did this `tasks/` diff move any bytes?
+"""The staleness questions a path cannot answer: did this `tasks/` diff move any bytes?
+
+A second, smaller one sits at the end of the module. `drop_comment_only_defaults` drops a
+service role's `defaults/` file whose change is comments only, with the deployer's own reader,
+so the census and the tick agree about that edit (#4460). The rest of this docstring is about
+the `tasks/` rule.
 
 `releases._is_real_change` is a path predicate, and that is enough for every rule but one. A
 k8s SERVICE role's own `tasks/main.yml` passes the vars its render include reads (an
@@ -70,6 +75,12 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.git import git as _git
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+# The comment-only read of a k8s role's defaults is the deployer's own, so a path the tick
+# drops as no change cannot read stale here (#4460).
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from deployer_lib.deploy_k8s import comment_only_k8s_defaults
 
 # A changed line, stripped of its diff marker and indentation, that a real run cannot see on
 # its own. The `when:` forms are NOT here: they are conditions, and the comparison below is
@@ -274,3 +285,26 @@ def drop_check_mode_only(paths, commit, repo_root, ref, roles_prefix, renderer):
         return list(paths)
     inert = _check_mode_only_files(commit, candidates, repo_root, ref)
     return [p for p in paths if p not in inert]
+
+
+def drop_comment_only_defaults(paths, commit, repo_root, ref):
+    """`paths` minus every k8s role `defaults/` file whose `commit..ref` change is comments only.
+
+    The deployer drops the same files before it classifies a tick
+    (`deploy_k8s.comment_only_k8s_defaults`), so it never defers or deploys a role for one.
+    Left counting here, the role would read stale with nothing able to clear it but the no-op
+    deploy #4460 exists to avoid. The two ends are compared whole, not per hunk: a
+    `_hunk_is_inert` read would call a `#` line inside a block scalar a comment.
+
+    Returns:
+        A list in the order given. A side git cannot read keeps the path counting.
+    """
+
+    def show(ref_: str, path: str) -> str:
+        try:
+            return _git("show", f"{ref_}:{path}", cwd=repo_root, timeout=15).stdout
+        except subprocess.SubprocessError as exc:
+            raise RuntimeError(f"git show {ref_}:{path}: {exc}") from exc
+
+    quiet = comment_only_k8s_defaults(paths, commit, ref, show)
+    return [p for p in paths if p not in quiet]

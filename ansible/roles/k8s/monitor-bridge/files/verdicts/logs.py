@@ -148,9 +148,12 @@ _SWALLOWED_RE = re.compile(
     r"status=(?P<status>up|down):\s*(?P<msg>.*?)\)?$"
 )
 # The word kuma-push-lib.sh appends when the response was `application/json`: Kuma's push
-# route answered, and what it said was `Monitor not found or not active.` — no live monitor
-# holds the token the cron pushed. Traefik's no-router 404 is `text/plain` and carries nothing.
+# route answered. Traefik's no-router 404 is `text/plain` and carries nothing. Kuma answers 404
+# for ANY exception in its push handler, so the word does not say why: `Monitor not found or
+# not active.` (a token no live monitor holds) and a DB error read the same here (#4481). The
+# library logs Kuma's own `msg` on the line before, prefixed KUMA_REASON_PREFIX.
 KUMA_REJECTED = "by=kuma"
+KUMA_REASON_PREFIX = "push rejected by kuma"
 
 
 def parse_push_line(line: str) -> tuple[str, str, str, str, str] | None:
@@ -222,13 +225,14 @@ def swallowed_verdicts(
     which is a wrong diagnosis but not a hidden finding, and the library's retry (#1010) is the
     mechanism sized for that case.
 
-    A REJECTED push — Kuma itself answered `Monitor not found or not active.`, `by=kuma` on
-    the line — is counted whatever its status and whether or not a sibling landed (#1803).
-    Kuma answering means the edge and Kuma are both up, so no other tile pages; and a token no
-    live monitor holds has no tile to go red at its deadline, so the deadline backstop above
-    does not exist for it. The cause is the cron and the static monitors carrying different
-    tokens — a static-monitors re-mint deployed ahead of the cron's re-render, or a tile
-    paused by hand — and it stays until one side is redeployed. A fleet-wide rejection
+    A REJECTED push — Kuma itself answered, `by=kuma` on the line — is counted whatever its
+    status and whether or not a sibling landed (#1803). Kuma answering means the edge and Kuma
+    are both up, so no other tile pages. Kuma answers 404 for any exception, so the cause is
+    one of two, and only Kuma's `msg` on the library's reason line tells them apart (#4481).
+    A token no live monitor holds (a static-monitors re-mint deployed ahead of the cron's
+    re-render, or a tile paused by hand) has no tile to go red at its deadline, and it stays
+    until one side is redeployed. A Kuma-side error, such as the 2026-10-11
+    `SQLITE_CONSTRAINT` on `stat_hourly`, matched the token and survived a redeploy. A fleet-wide rejection
     (every token gone — Kuma restored from an old backup) takes this tile's own token with
     it; the three HC_ROUTED_TAGS crons page that case through healthchecks.io within their
     own cycle, which is why they stay excluded here too. A rejection wins the message over
@@ -258,9 +262,12 @@ def swallowed_verdicts(
             for tag, v in sorted(rejected.items())
         )
         return False, (
-            "Kuma rejected the push for %s in %s — no live monitor holds the token the cron "
-            "pushes, so its verdicts reach nobody and no tile goes red; redeploy whichever of "
-            "the cron and uptime-kuma's static monitors is behind" % (named, window)
+            "Kuma rejected the push for %s in %s, so its verdicts reach nobody. Kuma answers "
+            "404 for any error, so read its reason on the '%s' line before the failure "
+            "(`journalctl -t <tag>` on a host, the pod log for pi-peer-backup): "
+            "`Monitor not found or not active.` means the cron and uptime-kuma's static "
+            "monitors carry different tokens (redeploy whichever is behind); anything else "
+            "is Kuma failing on its own side" % (named, window, KUMA_REASON_PREFIX)
         )
     swallowed = {
         t: v

@@ -16,6 +16,7 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 import sys
 
 import pytest
@@ -233,3 +234,118 @@ def test_a_payload_with_cwd_does_not_read_the_process_cwd(
         },
     )
     assert out is None
+
+
+# ── which checkout's derivation runs, whatever the payload's `cwd` (#4431) ───────────
+#
+# These run the hook as its own process because the import under test is cached: once any
+# test in this process has imported `secret_bearing_host_paths`, a wrong `sys.path` entry
+# still finds it in `sys.modules` and the defect cannot show.
+
+_DECOY_MODULE = """
+import pathlib
+
+DECOY = "/usr/local/bin/decoy-from-the-second-checkout.sh"
+
+
+def secret_bearing_host_paths(*args, **kwargs):
+    pathlib.Path(__file__).with_name("imported").write_text("yes")
+    return {DECOY: ["decoy_token"]}
+"""
+
+
+def _second_checkout(tmp_path):
+    """A checkout that is not the hook's, and the file its own module writes on import.
+
+    It has its own `.git`, the real Ansible tree as data, and a `secret_bearing_host_paths`
+    that records being imported and derives only a decoy path.
+    """
+    root = tmp_path / "second-checkout"
+    secrets_mgmt = root / "scripts" / "secrets_mgmt"
+    secrets_mgmt.mkdir(parents=True)
+    (secrets_mgmt / "secret_bearing_host_paths.py").write_text(_DECOY_MODULE)
+    (root / ".git").write_text("gitdir: /nonexistent\n")
+    (root / "ansible").symlink_to(os.path.join(_REPO, "ansible"))
+    (root / "docs").mkdir()
+    return root, secrets_mgmt / "imported"
+
+
+def _run_hook_process(command, cwd):
+    """The hook's decision for a Bash payload carrying `cwd`, from a fresh interpreter."""
+    assert not os.path.exists(_mod._HELD_PATHS), (
+        "a held set beside the hook bypasses the derivation these tests exercise"
+    )
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    proc = subprocess.run(
+        [sys.executable, os.path.join(_HERE, "block-protected-bash.py")],
+        input=json.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(cwd)}
+        ),
+        capture_output=True,
+        text=True,
+        cwd=_REPO,
+        env=env,
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = proc.stdout.strip()
+    return json.loads(out)["hookSpecificOutput"] if out else None
+
+
+def test_a_payload_cwd_in_a_second_checkout_runs_the_hooks_own_derivation(tmp_path):
+    """The second checkout's module must not run, and the hook's own must derive a set that
+    still holds the incident file."""
+    root, imported = _second_checkout(tmp_path)
+    out = _run_hook_process(f"cat {INCIDENT}", root)
+    assert not imported.exists(), "the hook imported the second checkout's module"
+    assert out and out["permissionDecision"] == "deny", out
+    assert INCIDENT in out["permissionDecisionReason"]
+
+
+def test_a_payload_cwd_in_a_second_checkouts_subdirectory_still_derives_a_set(tmp_path):
+    """From a subdirectory `<cwd>/scripts/secrets_mgmt` does not exist, and the guard must not
+    fall back to an empty set that checks nothing."""
+    root, imported = _second_checkout(tmp_path)
+    out = _run_hook_process(f"cat {INCIDENT}", root / "docs")
+    assert not imported.exists(), "the hook imported the second checkout's module"
+    assert out and out["permissionDecision"] == "deny", out
+    assert INCIDENT in out["permissionDecisionReason"]
+
+
+def test_a_payload_cwd_in_another_checkout_derives_from_that_checkouts_tree(tmp_path):
+    """The cwd's checkout is data: its Ansible tree and registry decide the set, while the
+    code that walks them comes from the hook's checkout. This checkout carries no
+    `scripts/` at all, so only the hook's own module can derive anything here."""
+    root = tmp_path / "data-only-checkout"
+    role_dir = root / "ansible" / "roles" / "demo"
+    (role_dir / "tasks").mkdir(parents=True)
+    (role_dir / "templates").mkdir()
+    (role_dir / "templates" / "thing.sh.j2").write_text("TOKEN={{ demo_push_token }}\n")
+    dest = "/usr/local/bin/only-in-the-data-checkout.sh"
+    (role_dir / "tasks" / "main.yml").write_text(
+        "- name: Install thing\n"
+        "  ansible.builtin.template:\n"
+        "    src: thing.sh.j2\n"
+        f"    dest: {dest}\n"
+    )
+    (root / "ansible" / "secret_rotation.yml").write_text(
+        "entries:\n  demo_push_token:\n    tier: auto\n    last_rotated: '2026-01-01'\n"
+    )
+    (root / ".git").write_text("gitdir: /nonexistent\n")
+    out = _run_hook_process(f"cat {dest}", root)
+    assert out and out["permissionDecision"] == "deny", out
+    assert dest in out["permissionDecisionReason"]
+
+
+def test_a_payload_cwd_in_a_subdirectory_of_the_hooks_checkout_still_derives_a_set():
+    out = _run_hook_process(f"cat {INCIDENT}", os.path.join(_REPO, "ansible", "roles"))
+    assert out and out["permissionDecision"] == "deny", out
+    assert INCIDENT in out["permissionDecisionReason"]
+
+
+def test_a_payload_cwd_in_no_checkout_derives_from_the_hooks_own_tree(tmp_path):
+    """A cwd with no Ansible tree above it walks the hook's own tree, not an empty one."""
+    out = _run_hook_process(f"cat {INCIDENT}", tmp_path)
+    assert out and out["permissionDecision"] == "deny", out
+    assert INCIDENT in out["permissionDecisionReason"]

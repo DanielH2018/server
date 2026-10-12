@@ -65,7 +65,8 @@ def test_view_dies_when_a_field_has_the_wrong_type(landing):
     ln.tools.gh_json = lambda *a, **k: {"headRefOid": ["not", "a", "sha"]}
     with pytest.raises(Outcome) as exc:
         ln.view("headRefOid")
-    assert exc.value.rc == 1 and "unparseable gh output" in exc.value.error
+    # The field name is the one detail that says what broke (#4516).
+    assert exc.value.rc == 1 and "headRefOid: expected a string" in exc.value.error
 
 
 def test_git_runs_in_the_primary_checkout_without_raising(landing):
@@ -196,3 +197,13 @@ def test_an_in_flock_wait_never_overwrites_a_holder_already_named(landing):
     ln.note_in_flock_wait(9, "somebody else")
     assert ln.ledger.lock_waited == 69
     assert ln.ledger.lock_holder == "42 flock deploy"
+
+
+def test_die_takes_no_default_exit_code():
+    """A default of 2 collided with three other meanings of 2 (#4451): every caller names one."""
+    import inspect
+
+    from deploy_tools.land_lib.landing import Landing
+
+    rc = inspect.signature(Landing.die).parameters["rc"]
+    assert rc.default is inspect.Parameter.empty

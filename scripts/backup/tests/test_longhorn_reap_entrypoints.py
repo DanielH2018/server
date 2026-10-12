@@ -43,16 +43,16 @@ def test_snapshots_entrypoint_resolves_its_sibling_imports_when_run_directly(tmp
 # ── the dispatcher refuses before either reaper runs ─────────────────────────────────────
 
 
-def test_no_subcommand_exits_2_with_usage_and_no_kubectl_call(tmp_path):
+def test_no_subcommand_exits_64_with_usage_and_no_kubectl_call(tmp_path):
     proc, calls = _run(BACKUPS_ENTRY[0], [], {"volumes": []}, tmp_path)
-    assert proc.returncode == 2, proc.stderr
+    assert proc.returncode == 64, proc.stderr
     assert "backups" in proc.stderr and "snapshots" in proc.stderr
     assert calls == []
 
 
-def test_an_unknown_subcommand_exits_2_and_names_both_reapers(tmp_path):
+def test_an_unknown_subcommand_exits_64_and_names_both_reapers(tmp_path):
     proc, calls = _run(BACKUPS_ENTRY[0], ["--apply"], {"volumes": []}, tmp_path)
-    assert proc.returncode == 2, proc.stderr
+    assert proc.returncode == 64, proc.stderr
     assert "unknown subcommand: --apply (expected one of: backups, snapshots)" in (
         proc.stderr
     )
@@ -172,7 +172,7 @@ def test_snapshots_aborts_cleanly_on_a_non_integral_min_age_days(tmp_path):
         tmp_path,
         extra_env={"LONGHORN_REAP_MIN_AGE_DAYS": "3.5"},
     )
-    assert proc.returncode == 2
+    assert proc.returncode == 64
     assert "LONGHORN_REAP_MIN_AGE_DAYS expects an integer, got: 3.5" in proc.stderr
     assert "Traceback" not in proc.stderr, proc.stderr
     assert calls == []
@@ -186,7 +186,7 @@ def test_snapshots_aborts_cleanly_on_a_non_integral_kubectl_timeout(tmp_path):
         tmp_path,
         extra_env={"LONGHORN_REAP_KUBECTL_TIMEOUT_S": "30.5"},
     )
-    assert proc.returncode == 2
+    assert proc.returncode == 64
     assert (
         "LONGHORN_REAP_KUBECTL_TIMEOUT_S expects an integer, got: 30.5" in proc.stderr
     )

@@ -47,6 +47,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
+from deploy_tools.deploy_lib.messages import PROG
+from lib.cli_help import ArgumentParser, error, warn
 from lib.git import git, git_stdout
 
 from lib.render_guard import (
@@ -60,7 +62,7 @@ from lib.render_guard import (
     landing_hosts_for_tags,
     service_tags_at_or_none,
 )
-from lib.exit_codes import DEPLOY_BROAD
+from lib.exit_codes import DEPLOY_BROAD, DEPLOY_TAG_MISS
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 
@@ -233,7 +235,7 @@ def validate(tags: list[str], at: str = "", host_vars: Path = HOST_VARS) -> int:
     if not bad:
         return 0
     for tag in bad:
-        print(f"deploy: no service or block tag named '{tag}'.", file=sys.stderr)
+        error(f"no service or block tag named '{tag}'.", prog=PROG)
         matches = suggest(tag, host_vars, at)
         if matches:
             print(f"  Did you mean: {', '.join(matches)}?", file=sys.stderr)
@@ -243,7 +245,7 @@ def validate(tags: list[str], at: str = "", host_vars: Path = HOST_VARS) -> int:
         "--skip-tag-check bypasses this.",
         file=sys.stderr,
     )
-    return 2
+    return DEPLOY_TAG_MISS
 
 
 def _cmd_list(_args: argparse.Namespace) -> int:
@@ -304,6 +306,13 @@ def range_paths(old_ref: str, new_ref: str, cwd: Path = REPO) -> list[str]:
     return _git_diff_names(f"{old_ref}..{new_ref}", cwd=cwd)
 
 
+# The parser's prog, named once so a failure line can carry it without the parser in hand.
+_TAGS_PROG = "deploy_cli.py tags"
+# DECIDED: the four `blockers` report lines are status, not complaints, so they open with this bare
+# prefix rather than `error:`/`warning:`. land.sh reads only the exit code (#4498).
+_BLOCKERS_STATUS = f"{_TAGS_PROG} blockers"
+
+
 def _cmd_blockers(args: argparse.Namespace) -> int:
     """Exit 3 if a `_BROAD_MANUAL_PREFIXES` path sits between HEAD and `ref`.
 
@@ -320,14 +329,13 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     try:
         paths = _incoming_paths(args.ref)
     except subprocess.CalledProcessError as exc:
-        print(
-            f"deploy blockers: `git diff HEAD..{args.ref}` failed: {exc.stderr.strip()}",
-            file=sys.stderr,
+        error(
+            f"`git diff HEAD..{args.ref}` failed: {exc.stderr.strip()}", prog=_TAGS_PROG
         )
         return 1
 
     if not paths:
-        print(f"deploy blockers: nothing incoming from {args.ref}.", file=sys.stderr)
+        print(f"{_BLOCKERS_STATUS}: nothing incoming from {args.ref}.", file=sys.stderr)
         return 0
 
     # Same read the tick makes, so a comment-only edit to a bring-up playbook that the tick
@@ -335,7 +343,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     quiet = comment_only_paths(paths, "HEAD", args.ref)
     if quiet:
         print(
-            f"deploy blockers: comment-only change in {', '.join(sorted(quiet))} — the "
+            f"{_BLOCKERS_STATUS}: comment-only change in {', '.join(sorted(quiet))} — the "
             "tick crosses it.",
             file=sys.stderr,
         )
@@ -343,14 +351,14 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     cs = loud.changes
     if not loud.manual:
         print(
-            f"deploy blockers: {len(loud.loud)} incoming file(s) from {args.ref}, none "
+            f"{_BLOCKERS_STATUS}: {len(loud.loud)} incoming file(s) from {args.ref}, none "
             "needing a hand — the tick can fast-forward.",
             file=sys.stderr,
         )
         return 0
 
     print(
-        f"deploy blockers: {args.ref} carries a change the deployer will never apply itself, "
+        f"{_BLOCKERS_STATUS}: {args.ref} carries a change the deployer will never apply itself, "
         "so the tick cannot fast-forward past it and any deploy after it is refused as stale:",
         file=sys.stderr,
     )
@@ -372,8 +380,14 @@ def _cmd_narrow(args: argparse.Namespace) -> int:
     return narrow_cmd(args.old, args.new)
 
 
-def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]:
-    """The broad-plane paths whose diff between two refs carries no content change.
+def comment_only_paths(
+    paths: list[str], old_ref: str, new_ref: str, show=None
+) -> set[str]:
+    """The broad-plane and k8s `defaults/` paths whose diff between two refs carries no content change.
+
+    The k8s half is the read the tick makes before it would defer a role (#4460), so a
+    landing does not run a no-op deploy for an edit the tick treats as no change. `show`
+    replaces `_git_show`, for a test.
 
     Public because `land_tags` asks the same question for its plane note, and two
     derivations that disagree about one commit is the defect this module's shared imports
@@ -385,9 +399,13 @@ def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]
     explicit refs. Worktrees share the object store with the checkout they were made from,
     so a ref fetched in the primary is readable from a worktree that never fetched it.
     """
+    from deployer_lib.deploy_k8s import comment_only_k8s_defaults
     from deployer_lib.deploy_logic import comment_only_broad_changes
 
-    return comment_only_broad_changes(paths, old_ref, new_ref, _git_show)
+    show = show or _git_show
+    return comment_only_broad_changes(
+        paths, old_ref, new_ref, show
+    ) | comment_only_k8s_defaults(paths, old_ref, new_ref, show)
 
 
 def changed(
@@ -409,25 +427,25 @@ def changed(
     try:
         paths = (git_diff or _git_diff_paths)(ref, cwd)
     except subprocess.CalledProcessError as exc:
-        print(
-            f"deploy --changed: `git diff {ref}...HEAD` failed: {exc.stderr.strip()}",
-            file=sys.stderr,
+        error(
+            f"--changed: `git diff {ref}...HEAD` failed: {exc.stderr.strip()}",
+            prog=PROG,
         )
         return 1
 
     if not paths:
-        print(f"deploy --changed: no files differ from {ref}.", file=sys.stderr)
+        print(f"{PROG}: --changed: no files differ from {ref}.", file=sys.stderr)
         return 0
 
     cs = reach(paths).changes
 
     if cs.broad:
-        print(
-            f"deploy --changed: refusing. {len(paths)} file(s) changed vs {ref} include "
+        error(
+            f"--changed: refusing. {len(paths)} file(s) changed vs {ref} include "
             "a broad path (shared template, inventory, or setup-plane) --changed cannot scope "
             "to a service list — guessing which services that touches would be worse than "
             "asking.",
-            file=sys.stderr,
+            prog=PROG,
         )
         print(
             f"  Run manually instead: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks)}",
@@ -436,18 +454,18 @@ def changed(
         return DEPLOY_BROAD
 
     if cs.tasks:
-        print(
-            "deploy --changed: structural change (tasks/defaults/vars/handlers) in "
+        warn(
+            "--changed: structural change (tasks/defaults/vars/handlers) in "
             f"{sorted(cs.tasks)} — not auto-deployed and not captured by a tag; review and "
             "deploy by hand if it needs to go out.",
-            file=sys.stderr,
+            prog=PROG,
         )
     if cs.secrets:
-        print(
-            "deploy --changed: ansible/vars/secrets.yml changed — a new value only reaches a "
+        warn(
+            "--changed: ansible/vars/secrets.yml changed — a new value only reaches a "
             "service on THAT service's own deploy, so confirm the consuming service's tag is "
             "in the list below.",
-            file=sys.stderr,
+            prog=PROG,
         )
 
     tags, shared = split_shared_roles(cs.k8s | cs.services)
@@ -455,11 +473,11 @@ def changed(
         # Emitting these as tags makes deploy.sh refuse the whole list (exit 2), so the
         # shared roles leave the tag list and become an instruction that can actually
         # apply them.
-        print(
-            f"deploy --changed: {', '.join(shared)} "
+        warn(
+            f"--changed: {', '.join(shared)} "
             f"{'is a shared role' if len(shared) == 1 else 'are shared roles'} with no "
             f"containers_list entry. {k8s_remediation(set(shared), service_tags())}",
-            file=sys.stderr,
+            prog=PROG,
         )
         if not tags:
             # Exit 3, the documented "broad, maps to no single service" refusal. Returning 0
@@ -468,13 +486,13 @@ def changed(
             return DEPLOY_BROAD
     if not tags:
         print(
-            f"deploy --changed: no deployable service changed vs {ref}.",
+            f"{PROG}: --changed: no deployable service changed vs {ref}.",
             file=sys.stderr,
         )
         return 0
 
     print(
-        f"deploy --changed: {len(tags)} service(s) changed vs {ref}: {', '.join(tags)}",
+        f"{PROG}: --changed: {len(tags)} service(s) changed vs {ref}: {', '.join(tags)}",
         file=sys.stderr,
     )
     print(",".join(tags))
@@ -512,9 +530,7 @@ def main(
 
     `git_diff` replaces the diff `changed` reads; None keeps `_git_diff_paths`.
     """
-    parser = argparse.ArgumentParser(
-        prog="deploy_cli.py tags", description=__doc__.splitlines()[0]
-    )
+    parser = ArgumentParser(prog=_TAGS_PROG, description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
 
     v = sub.add_parser("validate", help="exit 2 if any tag matches no service")

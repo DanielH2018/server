@@ -27,6 +27,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 # DECIDED: imported as `dev.findings_lib.<leaf>`, never as bare siblings — see the marker in findings.py.
+from lib.exit_codes import FINDINGS_BAD_ARGS
 from dev.findings_lib.claim import (
     another_claim_blocks,
     claim_is_live,
@@ -89,7 +90,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             "would be written and the trailer would then fail to parse on read-back, which "
             "reported a race against nobody (#1284).\n"
         )
-        return 2
+        return FINDINGS_BAD_ARGS
     facts = tools.worktree_facts()
     trees, dirty, merged, ok = facts
     if ok:
@@ -152,7 +153,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
                 today=today_utc(),
             )
         except ClaimRefused as exc:
-            print(f"#{number} refused: {exc.reason}")
+            print(f"#{number} refused: {exc.reason}", file=sys.stderr)
             refused = True
             continue
         already_mine = current_claim(issue) == args.worktree
@@ -201,7 +202,7 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
     bad = validate_worktree_name(args.worktree)
     if bad:
         sys.stderr.write(f"release: --worktree `{args.worktree}` {bad}\n")
-        return 2
+        return FINDINGS_BAD_ARGS
     # The same label sync `cmd_claim` makes, for the mirror-image reason: `gh issue
     # edit --remove-label` fails on a label the repo does not have, and a claim can arrive
     # with the label never created — hand-posted, or after an `--add-label` that failed.
@@ -209,7 +210,7 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
     # the claim released in the fold and the label standing.
     if bool(args.numbers) == args.all:
         sys.stderr.write("release: give issue numbers or --all, not both or neither\n")
-        return 2
+        return FINDINGS_BAD_ARGS
     run(plan_sync_labels(_existing_labels(tools)), args.dry_run, tools)
     # `--all` is the bulk way out of `claims --worktree` (#3925): an orchestrator's claims
     # sit under a branch that stays live, so `reap` never clears them.
@@ -231,7 +232,7 @@ def cmd_release(args: argparse.Namespace, tools: FindingsTools) -> int:
                 issue, worktree=args.worktree, when=now_iso(), reason=args.reason
             )
         except ClaimRefused as exc:
-            print(f"#{number} refused: {exc.reason}")
+            print(f"#{number} refused: {exc.reason}", file=sys.stderr)
             refused = True
             continue
         run(plans, args.dry_run, tools)
@@ -296,7 +297,7 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
     trees, dirty, merged, ok = tools.worktree_facts()
     if not ok:
         # Must not read a git failure as "every worktree is gone" and release everything.
-        print("reap: could not read git; refusing to release anything")
+        print("reap: could not read git; refusing to release anything", file=sys.stderr)
         return 1
     # Same reason as `cmd_release`: a `--remove-label` on a label the repo lacks fails after
     # the release comment is already posted, leaving the reap half-applied.

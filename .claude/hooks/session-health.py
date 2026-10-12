@@ -409,6 +409,7 @@ def other_live_sessions(cwd, *, run=None, git_dirty=None):
     # are running".
     sys.path.insert(0, os.path.join(REPO, "scripts"))
     try:
+        from lib.worktree_label import with_label
         from lib.worktrees import parse_worktree_list, session_is_alive
 
         if git_dirty is None:
@@ -444,8 +445,33 @@ def other_live_sessions(cwd, *, run=None, git_dirty=None):
             shown += f", +{len(paths) - 4} more"
         if dirty:
             shown += " (+ uncommitted)"
-        lines.append(f"  • {tree.branch or os.path.basename(tree.path)} — {shown}")
+        name = with_label(tree.branch or os.path.basename(tree.path), tree.path)
+        lines.append(f"  • {name} — {shown}")
     return lines
+
+
+def unlabelled_worktree_lines(cwd, *, run=None):
+    """A prompt to label this session's worktree when Claude Code named it and nothing has.
+
+    A Remote Control session starts in `bridge-<sessionId>` before it knows its task, so the
+    banner asks it to say what it works on once it does. Empty for any other tree.
+
+    `run` defaults to `_run`; a test passes a fake.
+    """
+    run = run or _run
+    sys.path.insert(0, os.path.join(REPO, "scripts"))
+    try:
+        from lib.worktree_label import has_generated_name, read_label
+    except ImportError as exc:
+        return [f"  ⚠ worktree-label check is broken: {exc}"]
+    top = run(["git", "-C", cwd, "rev-parse", "--show-toplevel"], 5).stdout.strip()
+    if not top or not has_generated_name(top) or read_label(top):
+        return []
+    return [
+        f"WARN: this worktree's name ({os.path.basename(top)}) was generated. Once you "
+        "know the task, label it: `uv run python scripts/dev/label_worktree.py <issue>...` "
+        'or `--text "<what you are doing>"`.'
+    ]
 
 
 # Well inside the 15s budget settings.json kills this hook at (this file's gen-hooks
@@ -472,7 +498,7 @@ def format_banner(problems, landing=False):
     """
     if not problems:
         return ""
-    out = ["\U0001f3e0 Homelab health check — issues detected:"]
+    out = ["WARN: homelab health check found issues:"]
     out.extend(problems)
     commands = [f"{PROBE} targets", f"{PROBE} health <svc>"]
     if landing:
@@ -488,6 +514,7 @@ def main(
     master_moved_problems=master_moved_problems,
     parked_deployer_problems=parked_deployer_problems,
     other_live_sessions=other_live_sessions,
+    unlabelled_worktree_lines=unlabelled_worktree_lines,
     stale_worktree_lines=stale_worktree_lines,
     remote_fanout_lines=remote_fanout_lines,
 ):
@@ -520,7 +547,7 @@ def main(
     if banner:
         print(banner)
     elif os.environ.get("SESSION_HEALTH_VERBOSE"):
-        print("\U0001f3e0 Homelab health: all scrape targets up.")
+        print("Homelab health: all scrape targets up.")
 
     # Printed independently of health: another session's open work is information this
     # session needs even when everything is green.
@@ -529,9 +556,15 @@ def main(
     except Exception:
         sessions = []
     if sessions:
-        print("\U0001f500 Other Claude sessions in this repo:")
+        print("Other Claude sessions in this repo:")
         for line in sessions:
             print(line)
+    try:
+        unlabelled = unlabelled_worktree_lines(os.getcwd())
+    except Exception:
+        unlabelled = []
+    for line in unlabelled:
+        print(line)
 
     # A kill at the hook's timeout discards what Python still buffers, so everything above
     # reaches the pipe before the slow, GitHub-bound worktree read starts.

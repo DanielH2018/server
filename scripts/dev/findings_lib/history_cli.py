@@ -42,6 +42,7 @@ from dev.findings_lib.issue_model import (
     settled_reason,
 )
 from lib.json_types import as_object
+from lib.exit_codes import FINDINGS_BAD_ARGS
 
 # `plan_close` writes this comment on `close --fixed --pr N`. A close that way leaves
 # `closedByPullRequestsReferences` empty, because no closing keyword in a PR closed the issue.
@@ -145,11 +146,11 @@ def cmd_history(args: argparse.Namespace, tools: FindingsTools) -> int:
         tools: the process boundaries the search goes through.
 
     Returns:
-        2 if neither search terms nor ``--file`` were given, 0 otherwise.
+        64 if neither search terms nor ``--file`` were given, 0 otherwise.
     """
     if not args.terms and not args.file:
         sys.stderr.write("history: need search terms, --file, or both\n")
-        return 2
+        return FINDINGS_BAD_ARGS
     path = _LINE_SUFFIX.sub("", args.file.strip()) if args.file else None
     query = " ".join([*args.terms, *([f'"{path}"'] if path else [])])
     hits = search_register(query, tools, limit=args.limit)

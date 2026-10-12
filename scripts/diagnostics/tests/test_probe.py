@@ -17,6 +17,7 @@ from diagnostics.probe_lib import metrics
 from diagnostics.probe_lib import monitors
 from diagnostics.probe_lib import cli_parser
 from diagnostics.probe_lib import core
+from lib.exit_codes import PROBE_UNREADABLE
 
 
 def test_prom_query_url_encodes_promql():
@@ -191,9 +192,9 @@ def test_format_monitor_status_labels_pending_and_maintenance_as_not_up():
     assert code == 1
 
 
-def test_format_monitor_status_empty_result_fails():
+def test_format_monitor_status_empty_result_is_unreadable():
     text, code = monitors.format_monitor_status({"data": {"result": []}})
-    assert code == 1
+    assert code == PROBE_UNREADABLE
     assert "no monitor_status series" in text
 
 
@@ -398,6 +399,18 @@ def test_get_reports_curl_failure_as_status_zero(monkeypatch):
 
     stub_curl(monkeypatch, lambda *a, **kw: Result())
     assert core.get_status("http://x") == (0, "connection refused")
+
+
+def test_get_reports_output_without_a_status_line_as_status_zero(monkeypatch):
+    # A trailing line that is not digits raised ValueError out of every caller.
+    class Result:
+        returncode = 0
+        stdout = '{"a": 1}'
+        stderr = ""
+
+    stub_curl(monkeypatch, lambda *a, **kw: Result())
+    status, body = core.get_status("http://x")
+    assert status == 0 and "not an HTTP status" in body
 
 
 def test_get_reports_a_curl_that_never_returns_as_status_zero(monkeypatch):

@@ -11,6 +11,9 @@ THE RED GATE reads the test author's commit range `base..red`. It refuses the ra
 - it changes a file that is not a test: code, a `conftest.py`, a pytest config file at any
   depth or the `leakguard` plugin could make the tests fail for a reason the fix never
   touches. An untracked or ignored config file, which no diff shows, is refused too;
+- it adds a type-checker suppression that a fix leaves unused, such as a `# ty: ignore` on
+  the import of a module the fix creates. The `ty` hook then fails the fix's commit on a file
+  the fix may not edit (#4439); `red_tests.stale_suppressions` says which comments count;
 - it adds no test node, collected at `red` but not at `base`;
 - running only the new nodes does not exit 1 with every node reported `FAILED`. Exit 2 is a
   collection error, such as a module-level ImportError of a module the fix will create, and a
@@ -26,15 +29,17 @@ refs and the settings that move or skip a reset do not apply (#3871).
 
 THE GREEN GATE runs after the implementer and again after every fix round. The working tree
 must match HEAD, because the PR ships HEAD: an uncommitted edit to a red test or to the code
-would otherwise pass a gate the pushed head fails (#3821). Every pytest config file, the
-`leakguard` plugin and any red data file must be unchanged since `red`. A red `test_*.py` may
-only gain appended tests, which `red_tests.append_only` defines (#4214). No untracked config file may
-exist, and every red node must pass in a fresh clone of HEAD, in every one of the pipeline's
-`RUNS` runs. The clone is what makes the
-verdict HEAD's: the implementer controls the worktree's index and git config, so a
-skip-worktree entry, an `info/exclude` line or `status.showUntrackedFiles=no` each hides an
-edit from `git status`. The clone reads none of that repo's config or `info/attributes`, so a
-smudge filter cannot rewrite a test on checkout either, and it is a repository, so a red test
+would otherwise pass a gate the pushed head fails (#3821). Every pytest config file but a
+`conftest.py`, the `leakguard` plugin and any red data file must be unchanged since `red`. A
+`conftest.py` may only lose what no red test requests (`red_tests.forbidden_conftest_change`,
+#4542). In a red `test_*.py`, what the red commits wrote and what it reaches must be unchanged,
+and anything else may only be a test, a helper, a fixture, an import or a constant;
+`red_tests.forbidden_change` defines both (#4214, #4517). No untracked config file may exist, and every red node must pass in a fresh clone of
+HEAD, in every one of the pipeline's `RUNS` runs. The clone is what makes the verdict HEAD's:
+the implementer controls the worktree's index and git config, so a skip-worktree entry, an
+`info/exclude` line or `status.showUntrackedFiles=no` each hides an edit from `git status`.
+The clone reads none of that repo's config or `info/attributes`, so a smudge filter cannot
+rewrite a test on checkout either, and it is a repository, so a red test
 that runs `git ls-files` passes there as it would in CI (#3837). Its `origin/master` is the
 SHA the red gate read, so a test that diffs against it sees the same base at both gates
 (#3845). It shares the worktree's
@@ -49,7 +54,6 @@ Every process goes through the pipeline's `Runner`, so the tests script pytest's
 
 import json
 import re
-import sys
 import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -61,9 +65,16 @@ from pathlib import Path, PurePosixPath
 import sys as _sys
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+# `scripts/lib` sits three levels up, for `lib.cli_help`.
+_sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from fanout_lib.brief import fence_for
-from fanout_lib.review.red_tests import append_only, red_by_absence
+from fanout_lib.review.red_tests import (
+    forbidden_change,
+    forbidden_conftest_change,
+    red_by_absence,
+    stale_suppressions,
+)
 
 from fanout_lib.review.hardened_runs import (
     ORIGIN_MASTER,
@@ -79,6 +90,7 @@ from fanout_lib.review.hardened_runs import (
 # The label an issue carries to get a red phase. `findings.py open` applies it to a finding
 # whose every cited path is code the suite runs (`findings_lib.red_green`).
 from findings_lib.red_green import RED_GREEN_LABEL
+from lib.cli_help import warn
 
 # What the implementer may not change once the red commit exists, besides the red files.
 # The `file` of the finding a failed green gate becomes, which no real path can equal.
@@ -136,6 +148,9 @@ class Gate:
     origin: str = ""
     # The nodes that failed on a missing name rather than an assertion (`red_tests.red_by_absence`, #4023).
     absent: list[str] = field(default_factory=list)
+    # The commit the red commits start from, "" when unknown. The green gate reads each red
+    # file there to tell what the red commits wrote from what the file already held (#4517).
+    base: str = ""
 
     @property
     def passed(self) -> bool:
@@ -162,10 +177,9 @@ def review_flags(
         return review, False
     if review and not red_skip_reason(labels, server):
         return review, True
-    print(
-        f"launch: batch {batch} runs without a red phase: it needs --review, this repo, "
-        f"and the `{RED_GREEN_LABEL}` label on every issue",
-        file=sys.stderr,
+    warn(
+        f"batch {batch} runs without a red phase: it needs --review, this repo, "
+        f"and the `{RED_GREEN_LABEL}` label on every issue"
     )
     return review, False
 
@@ -249,21 +263,73 @@ def judge_green(returncode: int, output: str, nodes: list[str]) -> str:
 def _red_file_change(
     run: Runner, worktree: Path, red: str, path: str, gate: Gate
 ) -> str:
-    """How the fix changed `path` beyond what `red_tests.append_only` allows, or "" when it only appended.
+    """How the fix changed `path` beyond what `red_tests` allows, or "".
 
-    A red `test_*.py` may gain tests (#4214). A red data file, a pytest config file and the
-    `leakguard` plugin may not change at all, and neither may a red file be deleted.
+    A red `test_*.py` may gain tests (#4214), and what the red tests do not reach in it may
+    change (#4517). A `conftest.py` may lose what no red test requests (#4542). A red data
+    file, any other pytest config file and the `leakguard` plugin may not change at all, and
+    neither may a red file be deleted.
     """
-    if path not in gate.files or not path.endswith(".py"):
+    conftest = PurePosixPath(path).name == "conftest.py"
+    if not conftest and (path not in gate.files or not path.endswith(".py")):
         return path
-    blobs = [
-        worktree_git(run, worktree, "cat-file", "blob", f"{rev}:{path}")
-        for rev in (red, "HEAD")
-    ]
-    if any(b.returncode for b in blobs):
-        return f"{path} deleted"
-    problem = append_only(blobs[0].stdout, blobs[1].stdout)
+    blobs = [_blob(run, worktree, rev, path) for rev in (red, "HEAD")]
+    if None in blobs:
+        return f"{path} {'added' if blobs[0] is None else 'deleted'}"
+    red_src, head_src = blobs[0] or "", blobs[1] or ""
+    tests = [f for f in gate.files if f.endswith(".py")]
+    if conftest:
+        red_files = [_blob(run, worktree, red, f) or "" for f in tests]
+        conftests = _conftests(run, worktree, red, tests)
+        problem = forbidden_conftest_change(red_src, head_src, red_files, conftests)
+    else:
+        base_src = _blob(run, worktree, gate.base, path) if gate.base else ""
+        names = _red_names(gate.nodes, path)
+        conftests = _conftests(run, worktree, red, [path])
+        problem = forbidden_change(base_src or "", red_src, head_src, names, conftests)
     return f"{path} {problem}" if problem else ""
+
+
+def _blob(run: Runner, worktree: Path, rev: str, path: str) -> str | None:
+    """`path` as `rev` has it, or None when `rev` has no such file."""
+    proc = worktree_git(run, worktree, "cat-file", "blob", f"{rev}:{path}")
+    return None if proc.returncode else proc.stdout
+
+
+def _conftests(run: Runner, worktree: Path, rev: str, paths: list[str]) -> list[str]:
+    """Every `conftest.py` pytest loads for a test in `paths`, as `rev` has it (#4543).
+
+    Conftests are green-protected, so the copy at the red commit is the one HEAD runs, less
+    what `red_tests.forbidden_conftest_change` let the fix delete.
+    """
+    dirs = sorted({d for p in paths for d in PurePosixPath(p).parents})
+    found = [_blob(run, worktree, rev, (d / "conftest.py").as_posix()) for d in dirs]
+    return [src for src in found if src is not None]
+
+
+def _red_names(nodes: list[str], path: str) -> set[str]:
+    """The top-level names the red nodes in `path` are collected from: `f` of `path::f[x]`."""
+    prefix = f"{path}::"
+    return {
+        n.removeprefix(prefix).split("::")[0].split("[")[0]
+        for n in nodes
+        if n.startswith(prefix)
+    }
+
+
+def _stale_suppressions(
+    run: Runner, worktree: Path, base: str, red: str, paths: list[str]
+) -> list[str]:
+    """Each suppression `base..red` adds to `paths` that a fix would leave unused (#4439)."""
+    found = []
+    for path in paths:
+        before, after = (
+            worktree_git(run, worktree, "cat-file", "blob", f"{rev}:{path}")
+            for rev in (base, red)
+        )
+        old = "" if before.returncode else before.stdout
+        found += [f"{path} {s}" for s in stale_suppressions(old, after.stdout)]
+    return found
 
 
 def stray_config(run: Runner, worktree: Path) -> list[str]:
@@ -311,6 +377,14 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str, runs: int = 1) ->
             f"the red commits change files that are not tests: {', '.join(others)}"
         )
     test_py = [f for f in files if f.endswith(".py") and (worktree / f).is_file()]
+    stale = _stale_suppressions(run, worktree, base, red, test_py)
+    if stale:
+        return Gate(
+            "the red commits add a type-checker suppression that the fix would leave "
+            f"unused, in a file the fix may not edit: {', '.join(stale)}. Reach a module "
+            "or name the fix adds through `importlib.import_module` instead",
+            files,
+        )
     existed = worktree_git(
         run, worktree, "ls-tree", "--name-only", base, "--", *test_py
     )
@@ -342,7 +416,7 @@ def red_gate(run: Runner, worktree: Path, base: str, red: str, runs: int = 1) ->
             f"flaky: {reason}"
         )
     out = procs[0].stdout
-    return Gate(reason, files, nodes, origin, red_by_absence(out, nodes))
+    return Gate(reason, files, nodes, origin, red_by_absence(out, nodes), base)
 
 
 def green_gate(run: Runner, worktree: Path, red: str, gate: Gate, runs: int = 1) -> str:
@@ -412,7 +486,15 @@ tracked files with `git ls-files` and assert on what they contain.
 A gate then runs your new tests on the unchanged code and refuses them unless every one
 reports FAILED. A test that errors, skips or xfails proves nothing, and neither does a
 collection error. Where the fix will add a module or a function that does not exist yet,
-import it inside the test body, never at module level.
+reach it inside the test body, never at module level, and with no `# ty: ignore` or
+`# type: ignore` comment. The `ty` hook that runs at `git commit` refuses an import it cannot
+resolve. A suppression comment passes it today, but once the fix adds the name the same hook
+fails on the comment as unused, and the fix may not edit your file, so the gate refuses a
+commit that adds one. Reach a new module as `importlib.import_module("<module>")` and use its
+attributes: ty checks nothing on a module that does not exist, and checks it fully once it
+does. Reach a new name in a module that exists already as
+`getattr(importlib.import_module("<module>"), name)`, with `name` held in a variable: ruff
+rewrites a `getattr` with a literal name into the attribute access ty refuses.
 
 A test that asserts on a stub, on source text or on a mock's calls says nothing about the
 behaviour. {anti or "Load the `test-scenario-hygiene` skill and read its Anti-patterns first."}
@@ -435,10 +517,15 @@ def red_section(red: str, gate: Gate) -> str:
     return f"""## Red tests
 A separate session wrote failing tests for these issues from the issue text alone, committed
 as {red} on this branch. A gate proved they fail on the code as it stands. Your change must
-make them pass. Do not change them, anything else already in their files, any `conftest.py`
-or `pyproject.toml`: a gate after your session runs them again and refuses the PR if you did.
-You may append new test functions, fixtures, helpers and imports to a red test file. Where a
-red test is wrong, say why in the PR body instead. The red nodes:
+make them pass. Do not change them, anything in their files they call or request, or
+`pyproject.toml`: a gate after your session runs them again and refuses the PR if you did. You
+may append new test functions, fixtures, helpers, imports and constants to a red test file. A
+test that was in a red file before the red commit, and that no red test calls, is yours to
+update like any other test, for example where your change drops a parameter it passes. So is a
+constant bound to literal data that was there before and that only such older code reads, not
+a red test itself. You may delete from a `conftest.py` a fixture no red test requests, and the
+helpers, constants and imports only it used, but change nothing else there. Where a red test
+is wrong, say why in the PR body instead. The red nodes:
 {fence}
 {nodes}
 {fence}

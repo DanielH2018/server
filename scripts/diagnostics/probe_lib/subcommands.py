@@ -173,7 +173,32 @@ SUBCOMMANDS = [
 # invocation of them streams through `plan()`.
 ROUTED_IN_MAIN = frozenset({"health", "targets", "metric", "loki-query"})
 
+# The subcommands that judge something, flagged "verdict": `main()` ends their output with one
+# `PROBE-VERDICT:` line derived from the exit code (#4454). `targets` judges only with `--pi`,
+# and `ha` only through `VERDICT_HA_SUBCOMMANDS`; `probe.verdict_path` applies both.
+VERDICT_SUBCOMMANDS = frozenset(
+    {
+        "targets",
+        "monitors",
+        "kuma-drift",
+        "alerts",
+        "b2-longhorn",
+        "b2-budget",
+        "b2-deletions",
+        "readonly-rbac",
+        "vip-placement",
+        "pi",
+        "health",
+        "ha",
+        "landing",
+        "gitops-state",
+    }
+)
+VERDICT_HA_SUBCOMMANDS = frozenset({"verify-automations", "verify-entities"})
+
 REGISTRY = Registry("probe")
 for _name, _description, _module, _func in SUBCOMMANDS:
     _flags = ("handler",) if _func is not None and _name not in ROUTED_IN_MAIN else ()
+    if _name in VERDICT_SUBCOMMANDS:
+        _flags += ("verdict",)
     REGISTRY.add(_name, _func, _description, module=_module, flags=_flags)

@@ -284,9 +284,12 @@ def refresh_feed(key, url, processor=None):
                 cached_ics[key] = processor(text)
                 print(f"Calendar {key} refreshed successfully")
             else:
-                print(f"Calendar {key}: failed to fetch, HTTP {r.status_code}")
+                print(
+                    f"Calendar {key}: failed to fetch, HTTP {r.status_code}",
+                    file=sys.stderr,
+                )
     except Exception as e:
-        print(f"Calendar {key}: error fetching — {e}")
+        print(f"Calendar {key}: error fetching — {e}", file=sys.stderr)
 
 
 def refresh_loop():

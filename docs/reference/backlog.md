@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-10 18:17 UTC
-generated_sha: 3db073ded
+generated_at: 2026-10-11 18:17 UTC
+generated_sha: 9bb5e8c08
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,33 +16,29 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#4052](https://github.com/DanielH2018/server/issues/4052) | high | improvement | container | Drop the redundant manifests_prune: true lines and copied Live-prune comments from k8s/manifests callers | 2026-10-09 | 0 | - | ✓ |
-| [#3944](https://github.com/DanielH2018/server/issues/3944) | medium | gap | security | Fan-out PRs that change the landing policy's imports merge without operator approval when run as ubuntu — **escalated** | 2026-10-09 | 2 | - | ✓ |
-| [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 1 | - | ✓ |
-| [#3734](https://github.com/DanielH2018/server/issues/3734) | medium | improvement | cicd | Make setup-role placement one inventory list read by initial_setup.yml and the deployer | 2026-10-09 | 0 | - | ✓ |
-| [#4053](https://github.com/DanielH2018/server/issues/4053) | medium | improvement | container | Default k8s/manifests manifests_service to the calling role's name | 2026-10-09 | 0 | - | ✓ |
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 0 | - | ✓ |
-| [#4271](https://github.com/DanielH2018/server/issues/4271) | medium | gap | cicd | findings.py crashes on import inside a dotfiles batch's .fanout/server snapshot | 2026-10-10 | 1 | worktree-fanout-orchestrator-wave2 | ✓ |
-| [#4282](https://github.com/DanielH2018/server/issues/4282) | medium | gap | cicd | land_tags --plane with --range names initial_setup.yml --tags <role> for a k3s-bringup.yml change | 2026-10-10 | 0 | - | ✓ |
-| [#4284](https://github.com/DanielH2018/server/issues/4284) | medium | gap | network | Apply PR #4283's daniel-server address pin by hand (k3s-bringup.yml node-address) | 2026-10-10 | 0 | - | ✓ |
+| [#4331](https://github.com/DanielH2018/server/issues/4331) | medium | gap | backup-observability | Drill the etcd-first Longhorn recovery order that DR step 4 describes | 2026-10-10 | 0 | - | - |
+| [#4443](https://github.com/DanielH2018/server/issues/4443) | medium | improvement | cicd | Make entry points exit with lib.exit_codes names instead of private integers | 2026-10-11 | 0 | - | ✓ |
+| [#4445](https://github.com/DanielH2018/server/issues/4445) | medium | gap | cicd | Stop scripts exiting 0 when the operation failed or was skipped | 2026-10-11 | 0 | - | ✓ |
+| [#4446](https://github.com/DanielH2018/server/issues/4446) | medium | improvement | backup-observability | Send script error lines to stderr and give the deployer log a journald priority | 2026-10-11 | 0 | - | ✓ |
+| [#4451](https://github.com/DanielH2018/server/issues/4451) | medium | gap | cicd | Make every land.sh result exit with a documented code and print a VERDICT line | 2026-10-11 | 0 | worktree-fanout-orchestrator-wave5 | ✓ |
+| [#4452](https://github.com/DanielH2018/server/issues/4452) | medium | gap | cicd | Give fanout place launch distinct exit codes for nothing launched and partly launched | 2026-10-11 | 0 | - | ✓ |
+| [#4455](https://github.com/DanielH2018/server/issues/4455) | medium | gap | cicd | Extend the stdlib-only import set to role scripts the hosts run under uv run --no-project | 2026-10-11 | 0 | - | ✓ |
+| [#4461](https://github.com/DanielH2018/server/issues/4461) | medium | gap | cicd | Stop an agent's .claude/scratch/ draft keeping a merged fan-out tree out of clean | 2026-10-11 | 0 | - | ✓ |
+| [#4471](https://github.com/DanielH2018/server/issues/4471) | medium | gap | - | Stop probe.main reporting usage and config errors as unreadable (exit 75) | 2026-10-11 | 0 | worktree-fanout-orchestrator-wave5 | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
-| [#3661](https://github.com/DanielH2018/server/issues/3661) | low | improvement | cicd | Decide whether the 600-line module cap should force splits that leave conjoined modules | 2026-10-08 | 0 | - | ✓ |
-| [#3662](https://github.com/DanielH2018/server/issues/3662) | low | improvement | container | Narrow the k8s/manifests caller interface so a new role needs one include | 2026-10-08 | 0 | - | ✓ |
 | [#3675](https://github.com/DanielH2018/server/issues/3675) | low | improvement | cicd | Decide from slice-1 data whether fan-out review becomes the default | 2026-10-08 | 0 | - | - |
-| [#3691](https://github.com/DanielH2018/server/issues/3691) | low | improvement | container | Derive Homepage tiles and their widget NetworkPolicy edges from the containers_list entry | 2026-10-09 | 0 | - | ✓ |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
 | [#3963](https://github.com/DanielH2018/server/issues/3963) | low | improvement | cicd | Find which check forces fan-out PR body rewrites, then render the fixed parts of the body — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
 | [#3966](https://github.com/DanielH2018/server/issues/3966) | low | improvement | cicd | Set an explicit effort level for the fan-out reviewer and compare two settings | 2026-10-09 | 0 | - | ✓ |
-| [#4021](https://github.com/DanielH2018/server/issues/4021) | low | gap | - | A claude-uid worktree removal cannot see an ubuntu process inside the agent clone | 2026-10-09 | 0 | - | ✓ |
-| [#4092](https://github.com/DanielH2018/server/issues/4092) | low | improvement | container | Remove the orphaned /usr/local/lib/state-lib.sh from daniel-server | 2026-10-09 | 0 | - | ✓ |
-| [#4259](https://github.com/DanielH2018/server/issues/4259) | low | improvement | docs | Measure which CLAUDE.md sections change agent outcomes by ablating them in the eval sweep | 2026-10-10 | 0 | - | ✓ |
-| [#4264](https://github.com/DanielH2018/server/issues/4264) | low | improvement | network | Move authelia's NetworkPolicy onto the callers model now its one rule fits it | 2026-10-10 | 0 | - | ✓ |
-| [#4265](https://github.com/DanielH2018/server/issues/4265) | low | improvement | cicd | Measure whether a looped include_role keeps initial_setup.yml's role and block tags, before #3734 | 2026-10-10 | 0 | - | ✓ |
-| [#4272](https://github.com/DanielH2018/server/issues/4272) | low | gap | security | A newline in another uid's CLAUDE_PROJECT_DIR stops the worktree holder helper's caller from pruning | 2026-10-10 | 0 | - | ✓ |
-| [#4279](https://github.com/DanielH2018/server/issues/4279) | low | improvement | docs | Correct prometheus.yaml.j2's stale claim that k8s_bridge_client_ip is a literal | 2026-10-10 | 0 | - | ✓ |
 | [#4280](https://github.com/DanielH2018/server/issues/4280) | low | improvement | cicd | Widen the red-green label once fanout_review_stats.py shows the red phase catches defects | 2026-10-10 | 0 | - | ✓ |
-| [#4273](https://github.com/DanielH2018/server/issues/4273) | - | - | - | Record each eval sweep's total cost in evals/history.json | 2026-10-10 | 0 | - | - |
+| [#4314](https://github.com/DanielH2018/server/issues/4314) | low | improvement | docs | Run the ADR-0019 retirement test on facts.lock after 60 days | 2026-10-10 | 0 | - | ✓ |
+| [#4404](https://github.com/DanielH2018/server/issues/4404) | low | gap | cicd | Derive the stdlib-only import set for hooks and no-venv callers, and check it statically and at runtime | 2026-10-11 | 0 | - | ✓ |
+| [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
+| [#4447](https://github.com/DanielH2018/server/issues/4447) | low | improvement | cicd | Standardise script messages on a <prog>: error: prefix | 2026-10-11 | 0 | - | ✓ |
+| [#4464](https://github.com/DanielH2018/server/issues/4464) | low | improvement | cicd | Name a disarmed CI gate in land.sh instead of 'await_ci failed (exit 2)' | 2026-10-11 | 0 | - | ✓ |
+| [#4468](https://github.com/DanielH2018/server/issues/4468) | low | gap | - | Move probe.py's remaining could-not-read exits from 1 to 75 | 2026-10-11 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -93,6 +89,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#2903](https://github.com/DanielH2018/server/issues/2903) | refuted | probe.py health holds no roll expectation for pihole-2 | Duplicate of #2902, filed seconds earlier for the same gap — findings.py dedup is blind past gh's 1000-issue list cap (the warning this run printed), so the same body filed twice. #2902 is the live one. |
 | [#2933](https://github.com/DanielH2018/server/issues/2933) | accepted | Decide whether the 4-shard pytest matrix is worth keeping now that no Actions minutes are billed | Operator ruling 2026-09-30: keep the 4-shard matrix because it cuts wall-clock time. The #2245 spike measured an 80s pole shard against 267s for a single job, about 3.3x, and ADR-0018 leaves no Actions bill for collapsing it to save. |
 | [#2979](https://github.com/DanielH2018/server/issues/2979) | accepted | Finish #2865: single-importer test helpers blocked by the length ratchet, release_bin_groups pinned by a k3s path | Operator decision 2026-09-29: keep the three test helpers split out; #762 and #768 split them to bring their test modules under the 500-line cap, and inlining would recreate three ~700-line modules. The release_bin_groups move is folded into #2978, which needs the same attended k3s apply. The step-2 claim was stale: both modules have production importers. |
+| [#3045](https://github.com/DanielH2018/server/issues/3045) | accepted | Narrow a refused broad deploy by render digest, shadow mode first | Operator decision 2026-10-10: superseded by PR #4342 (#4333). A deploy-plane range the narrowing refuses now defers its services as k8s_unapplied instead of running a full deploy.yml, so the refused-range case this issue would have narrowed by render digest no longer ends in a hold. PR #4342 also removed the shadow measurement this issue was deferred to read. |
 | [#3055](https://github.com/DanielH2018/server/issues/3055) | refuted | Fold 18 single-role render test files into the pod hygiene and security-context tables | A sweep of ansible/tests/ for every table column found 26 files: 11 are the fleet-wide censuses, 4 are rollout gates, and each remaining single-role file asserts what neither table can express (mount paths, probe timeouts, a positive automount, specific capabilities, an upstream-manifest patch). The one real overlap, exportarr's readiness assertion, was folded in PR #3065. Per-file list is in this thread. |
 | [#3130](https://github.com/DanielH2018/server/issues/3130) | accepted | Rule on the three test folds #3108 measured as not worth doing | Each group tests distinct rules, and a fold exceeds TEST_CAP: crowdsec 654 lines over four incidents, built-image 834 over four rules with no shared table, Vale 553 across three suites. The crowdsec function-extractor duplicate is filed separately. |
 | [#3270](https://github.com/DanielH2018/server/issues/3270) | refuted | Move the two one-file test directories next to the code they test | Operator decision 2026-10-03. The .claude/tests half was fixed in PR #3297. The scripts/z2m half rested on a wrong premise: the directory holds set_device_option.sh, which the z2m-device-setting skill and the home-assistant-engineer agent call by that path, and its test already sits in a tests/ sibling. |
@@ -143,6 +140,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 |---|---|---|---|
 | [#1744](https://github.com/DanielH2018/server/issues/1744) | accepted | Decide whether the gitops_deploy Discord webhook rotates after its three-week residue on daniel-server | Operator decision 2026-09-11: no rotation. The file was 0600 and owned by the same user that owns the deployer on daniel-box, on a LAN-only host, and nothing in the journal shows a read of it. The residue itself is gone — the teardown from PR #1745 removed /opt, /var/lib and /etc/gitops-deploy on daniel-server at 01:01 UTC, verified absent. |
 | [#1954](https://github.com/DanielH2018/server/issues/1954) | accepted | karakeep /api/trpc/ still exposes apiKeys.exchange (password → key) with only the app throttle in front | Operator decision 2026-09-17: karakeep's /api/trpc/ public procedures (incl. apiKeys.exchange) stay reachable behind the app's own throttle; DISABLE_PASSWORD_AUTH would also remove the web login, which this deployment relies on. Revisit if karakeep gains an OIDC login. |
+| [#3944](https://github.com/DanielH2018/server/issues/3944) | accepted | Fan-out PRs that change the landing policy's imports merge without operator approval when run as ubuntu | Operator ruling 2026-10-10: a fan-out launched as ubuntu runs on the operator's own authority, so its PRs need no separate approval to change land.py's import set. The import-set approval applies only to PRs from the claude agent user. |
 | [#3973](https://github.com/DanielH2018/server/issues/3973) | accepted | Derive Authelia's OIDC client list from an oidc: block on each consuming service's containers_list entry | Operator decision 2026-10-10: no third OIDC client is planned for a while. With two clients, the existing agreement tests already catch drift, so a derived client list does not justify itself yet. |
 
 ### home-assistant

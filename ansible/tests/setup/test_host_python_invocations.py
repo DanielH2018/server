@@ -15,7 +15,8 @@ import re
 from _helpers import REPO as _REPO, load_tasks, walk_tasks
 from _role_census import task_files
 
-from lib.repo_paths import ALL_VARS
+from lib import role_installs
+from lib.repo_paths import ALL_VARS, ROLES
 
 
 # The same export the root crons' templates carry (cron_checks.py enforces it there). A task
@@ -274,3 +275,62 @@ def test_hook_wrappers_pin_the_same_version_as_ansible():
         f"these request an interpreter other than the Ansible pin ({pin}, from "
         "ansible/inventory/group_vars/all.yml):\n  " + "\n  ".join(offenders)
     )
+
+
+# A command word: the start of a line that does not continue the one above, or what follows a
+# substitution, a pipe, a list operator, `exec`, a systemd ExecStart= or a cron `job:`.
+_COMMAND_POSITION = (
+    r"""(?:^(?<!\\\n)|\$\(|<\(|[;|&]|\bexec\s|ExecStart=[-@+!:]*|\bjob:\s*["']?)\s*"""
+)
+
+
+def _shebang_runs(text: str, installed: list[str]) -> list[str]:
+    """The installed `.py` paths `text` runs as a command word rather than as uv's argument.
+
+    A path `role_installs` reads as a `--no-project` command's script is uv's argument, so a
+    YAML folded scalar that puts the path at the start of its own line is not a command word.
+    """
+    if not installed:
+        return []
+    pattern = re.compile(
+        _COMMAND_POSITION + "(" + "|".join(map(re.escape, installed)) + r")(?![\w.-])",
+        re.MULTILINE,
+    )
+    through_uv = set(role_installs.no_project_spans(text))
+    return [m.group(1) for m in pattern.finditer(text) if m.span(1) not in through_uv]
+
+
+def test_no_installed_script_runs_by_its_shebang():
+    """A role script's `#!/usr/bin/env python3` is the host's system 3.12, so running it by path
+    escapes the pin the tests above enforce on command strings. #4489 was one:
+    manifest-prune-check ran manifest-declares.py by path, behind `2>/dev/null`."""
+    installed = sorted(live for live in role_installs.install_map() if "{{" not in live)
+    # Non-vacuous: the script #4489 named must be in the census this scans for.
+    assert "/usr/local/bin/manifest-declares.py" in installed
+    offenders = [
+        f"{path.relative_to(_REPO)}: {live}"
+        for path in sorted(ROLES.rglob("*"))
+        if path.suffix in _SUFFIXES
+        and path.is_file()
+        and "tests" not in path.relative_to(ROLES).parts
+        for live in _shebang_runs(role_installs.command_text(path), installed)
+    ]
+    assert not offenders, (
+        "these run an installed role script by path, so its shebang picks the host's system "
+        "Python. Run it through `/usr/local/bin/uv run --no-project --no-python-downloads "
+        "--python {{ host_python_version }} <path>`:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_a_script_run_by_path_is_flagged():
+    text = 'done < <(/usr/local/bin/x.py "$ROOT" 2>/dev/null)'
+    assert _shebang_runs(text, ["/usr/local/bin/x.py"]) == ["/usr/local/bin/x.py"]
+
+
+def test_a_script_run_through_uv_is_clean():
+    folded = (
+        "    cmd: >-\n"
+        "      /usr/local/bin/uv run --no-project --no-python-downloads --python 3.14.6\n"
+        "      /usr/local/bin/x.py\n"
+    )
+    assert _shebang_runs(folded, ["/usr/local/bin/x.py"]) == []

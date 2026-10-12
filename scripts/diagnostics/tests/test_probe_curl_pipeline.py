@@ -17,6 +17,7 @@ from typing import Any, Callable, cast
 import pytest
 
 from diagnostics.probe_lib import cli_parser, core, curl_pipeline
+from lib.exit_codes import USAGE_ERROR
 from lib.proc_testing import run
 
 
@@ -200,8 +201,10 @@ def test_plan_refuses_claude_code_selector_at_explicit_homelab_store(fake_k8s_en
 )
 def test_pick_loki_store_is_flagged(logql):
     assert core.pick_loki_store(logql, None)[0] == "observability"
-    with pytest.raises(SystemExit):
+    # A contradiction in the arguments: a retry can never clear it, so it exits 64 (#4471).
+    with pytest.raises(core.UsageError) as exc:
         core.pick_loki_store(logql, "homelab")
+    assert exc.value.code == USAGE_ERROR
 
 
 @pytest.mark.parametrize(

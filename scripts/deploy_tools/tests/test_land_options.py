@@ -12,7 +12,7 @@ from lib import exit_codes
 def test_pr_is_required():
     with pytest.raises(SystemExit) as exc:
         options.parse_args(["--arm-merge"], "desc")
-    assert exc.value.code == 2
+    assert exc.value.code == 64
 
 
 def test_flags_land_on_the_options():
@@ -88,7 +88,7 @@ def test_an_abbreviated_flag_is_rejected_rather_than_silently_resolved():
     resolve `--su` to `--subject` and `--sin` to `--since`."""
     with pytest.raises(SystemExit) as exc:
         options.parse_args(["--pr", "7", "--su", "text"], "d")
-    assert exc.value.code == 2
+    assert exc.value.code == 64
 
 
 def test_the_full_flag_still_works():
@@ -107,6 +107,18 @@ def test_main_renumbers_argparses_two_onto_the_shared_usage_error():
     with pytest.raises(SystemExit) as exc:
         land.main(["--arm-merge"])
     assert exc.value.code == exit_codes.LAND_BAD_ARGS == 64
+
+
+def test_help_opens_on_the_summary_and_usage_not_the_rationale(capsys):
+    """`--help` skips the module docstring's rationale sections (#4448)."""
+    import land
+
+    with pytest.raises(SystemExit):
+        land.main(["--help"])
+    out = capsys.readouterr().out
+    assert "Follow a merged PR through to a verified deploy" in out
+    assert "Usage::" in out and "Verdicts printed on stdout" in out
+    assert "WHY ONE INVOCATION" not in out
 
 
 def test_main_leaves_helps_zero_alone():

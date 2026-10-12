@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from lib.cli_help import ArgumentParser
 from lib.repo_paths import GITOPS_DEPLOY_FILES, PRIMARY_CHECKOUT
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
@@ -117,7 +118,7 @@ class Options:
 
 def parse_args(argv: list[str] | None, description: str) -> Options:
     """The command line as Options; argparse exits 2 on a bad one, and prints `description` for --help."""
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         prog="land.sh",
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter,

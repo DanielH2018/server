@@ -39,6 +39,28 @@ def test_a_filter_only_a_role_template_calls_narrows_to_that_role(tree: Tree):
     assert tree.narrow(*_refs(tree)) == {"sonarr"}
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        '"""Upper-cases a name."""\n' + _plugin(),
+        _plugin().replace("    return x", '    """Shout it."""\n    return x'),
+        "# shout upper-cases a name\n" + _plugin().replace("\n\n\n", "\n\n"),
+    ],
+    ids=["module-docstring", "function-docstring", "comment-and-layout"],
+)
+def test_an_edit_to_comments_or_docstrings_alone_reaches_no_caller(
+    tree: Tree, text: str
+):
+    """#4412: a docstring line in `longhorn_manager.py` fanned out to 56 services."""
+    tree.write(PLUGIN, text)
+    assert tree.narrow(*_refs(tree)) == set()
+
+
+def test_a_docstring_edit_beside_a_code_edit_still_reaches_the_callers(tree: Tree):
+    tree.write(PLUGIN, '"""Upper-cases a name."""\n' + _plugin(body="x.lower()"))
+    assert tree.narrow(*_refs(tree)) == {"sonarr"}
+
+
 def test_an_added_plugin_narrows_to_the_roles_that_call_it(tree: Tree):
     """A regression guard for behaviour `narrow_filters` already had before #4333.
 
@@ -147,3 +169,11 @@ def test_the_real_py_table_plugin_reaches_its_two_callers():
         "monitor-bridge",
         "uptime-kuma",
     }
+
+
+def test_the_real_docstring_edit_of_4410_reaches_nothing():
+    """The issue's own range: PR #4410 changed one docstring line in `longhorn_manager.py`,
+    and every caller of its filters was deferred to `k8s_unapplied`."""
+    ctx = narrow_broad.context_for("1b67246bc", REPO)
+    path = "ansible/filter_plugins/longhorn_manager.py"
+    assert narrow_broad.broad_path_tags(path, "1b67246bc^", ctx) == set()

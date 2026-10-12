@@ -1,6 +1,6 @@
 ---
 name: issue-fanout
-description: Dispatch parallel Opus agents at a batch of open GitHub issues, one worktree and one PR each, claiming every issue before any agent starts. Use when asked to work through the backlog, clear the open findings, or fan out on issues. A single issue nobody needs to steer can launch as a batch of one with `--review`, which gets the independent reviewer and red gate a solo session lacks; claim and work an issue directly only when you will steer it.
+description: Dispatch parallel Opus agents at a batch of open GitHub issues, one worktree and one PR each, claiming every issue before any agent starts. Use when asked to work through the backlog, clear the open findings, or fan out on issues. A single issue nobody needs to steer can launch as a batch of one, which gets the independent reviewer and red gate a solo session lacks; claim and work an issue directly only when you will steer it.
 allowed-tools: Bash, Read, Grep, Glob, Agent
 ---
 
@@ -108,8 +108,8 @@ claim under it stays live for the whole fan-out.
 A refused claim — the issue is closed, `manual`, deferred, held by another worktree, or lost a
 race — drops that issue from its batch, and `launch` prints `<batch>: dropped #<n>: claim
 refused …`. The batch is renamed from the issues it kept, and a batch that kept none is not
-launched. `launch` then exits 3 even though the other batches started; name every dropped
-issue out loud. A batch whose launch fails releases the claims it took.
+launched. `launch` then exits 7, because the other batches started; it exits 3 only when every
+claim was refused and nothing launched. Name every dropped issue out loud. A batch whose launch fails releases the claims it took.
 
 Done when: `launch` printed `claims held under <branch>`, and every `dropped` line is named
 in the report.
@@ -133,8 +133,10 @@ that name a role or host the batch's issues cite, the rest as a count, and, for 
 deploy tag and the test files the cited paths imply, which `findings.py show <n> --brief`
 prints for a solo session) and starts a headless
 Opus agent as a transient user service in a fresh worktree on whichever host has the
-most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means a dropped
-claim (step 2) or one of three placement refusals, which claim nothing: neither host has a
+most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means nothing
+was placed: every claim was refused (step 2), or one of three placement refusals fired, which
+claim nothing. Exit 7 is a launch that started batches but dropped a refused claim. The
+placement refusals: neither host has a
 reservation's worth of headroom; the placement would put more
 than three batches on one remote host in this run (the ssh budget); or it would leave a host
 holding more than three LIVE batches counting every earlier run not yet cleaned (the memory
@@ -143,7 +145,9 @@ Narrow the fan-out, do not queue. For the third, `clean <run-id>` the finished r
 uncleaned worktree counts against its host. `--host daniel-box` pins a batch that must land in
 the same run or that only daniel-box can verify.
 
-**`--review` adds a separate review to every batch in the run.** The unit runs
+**Every batch gets a separate review unless `launch` is given `--no-review`** (the default
+since #3675, whose judged records found 0.65 real findings per PR at about $2.60 of review
+spend each). The unit runs
 `scripts/dev/fanout.py review` in place of one `claude -p`, the batch worktree's copy, so a host
 whose primary checkout lags `origin/master` still runs the current one. Another repo's batch
 runs the copy in its own snapshot of this repo's `origin/master`, which `launch` archives into
@@ -151,8 +155,8 @@ the batch's `.fanout/server`. The snapshot also supplies that batch's system pro
 `fanout-stop` hook.
 The agent stops at its PR on every host. A fresh reviewer then reads only the issue text and the diff, and returns findings with
 a severity and a confidence. A finding of severity medium or worse, or a test the reviewer
-marks vacuous or scaffold at any severity, resumes the agent for one fix round when its
-confidence is 0.6 or more, and a second reviewer reads only the fix. A finding of
+marks vacuous at any severity, resumes the agent for one fix round when its
+confidence is 0.5 or more, and a second reviewer reads only the fix. A finding of
 severity medium or worse at confidence 0.8 or more that survives the fix round holds the PR:
 the batch ends `needs input:`, naming the finding, and nothing lands it. Otherwise, on
 daniel-box, the pipeline runs `land.sh` itself. It resumes the agent only for an `unhealthy`,
@@ -166,7 +170,7 @@ the PR comment counts them.
 stay with the implementer; only the slow model review moves out. The fallback `Agent(...)`
 path below has no review phase.
 
-**A `--review` batch whose every issue carries the `red-green` label also gets a red phase.**
+**A reviewed batch whose every issue carries the `red-green` label also gets a red phase.**
 `findings.py open` applies the label when every path a finding cites is code this repo's suite
 runs: Python under `scripts/`, the filter plugins and the hooks, and a role's `files/` when the
 role has its own `tests/`, such as monitor-bridge's registry and the HA Jinja macros. Add or
@@ -174,8 +178,11 @@ remove it by hand where that rule is wrong. Before the implementer starts, a sep
 writes one failing test per claim in each issue's `## Verify-by`, and per stated behaviour
 those miss, from the issue text alone. `scripts/dev/fanout_lib/review/red_gate.py` proves each new
 test fails on the unchanged code. A batch that runs no red phase records why, as
-`red_skipped`. The implementer gets that commit and may not edit it, but may append tests to
-its files (`fanout_lib/review/red_tests.py` says what counts as appending). A refused red commit is
+`red_skipped`. The implementer gets that commit and may not edit it or what its tests call, but
+may append tests to its files and update a test that was already there and that no red test
+reaches. It may also change a literal constant that only such older code reads, and delete a
+`conftest.py` fixture that no red test requests (`fanout_lib/review/red_tests.py` says what is
+locked). A refused red commit is
 dropped and the batch runs as usual. A PR that still fails the green gate after the fix round
 is not landed. Once it passes, each hunk of the fix is reverted on its own under the red tests,
 and the record names the hunks no red test noticed (`scripts/dev/fanout_lib/review/hunk_check.py`).
@@ -208,7 +215,8 @@ appended when the agent hit classifier denials). `done` requires a PR URL in the
 text. A clean finish without one reads `needs-input` when the text names a blocker line
 (`needs input:` or `failed:`) and `no-pr` otherwise. `no-pr` means the agent stopped on a
 progress report and the Stop hook's three continuations ran out. Both print the final text
-and exit 1, because no PR exists to land. A daniel-server batch reports `done <PR URL>` and stops there: land that
+and exit 1, because no PR exists to land. A host whose read timed out reads `unread` and exits 75
+unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` and stops there: land that
 PR from this session with `land.sh`.
 
 **`no-verdict` is a daniel-box batch that opened its PR and never finished landing it.** On
@@ -362,6 +370,9 @@ Each agent starts with none of this conversation's context, so its brief must ca
   `gh issue comment <n> --body 'Worked by \`<its own branch>\`'`, in single quotes so the
   shell does not run the backticks. Only this path needs it: `launch` posts the comment
   itself once a batch is running.
+- That it then labels its worktree with its issues, so the session banner and
+  `prune_worktrees.py` print what the `agent-<hash>` tree works on:
+  `uv run python scripts/dev/label_worktree.py <n>...`.
 
 - That `land.sh` (the `land-after-merge` skill) is the landing path, and that hand-polling CI
   is not.

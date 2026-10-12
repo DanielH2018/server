@@ -84,7 +84,7 @@ def test_backups_apply_without_admin_kubeconfig_refuses_and_deletes_nothing(tmp_
 
 def test_backups_unknown_flag_is_rejected(tmp_path):
     proc, calls = _run(BACKUPS_ENTRY, ["--bogus"], {"volumes": []}, tmp_path)
-    assert proc.returncode == 2
+    assert proc.returncode == 64
     assert calls == []
 
 
@@ -331,7 +331,7 @@ def test_backups_max_deletions_without_a_count_is_rejected(tmp_path):
     proc, calls = _run(
         BACKUPS_ENTRY, ["--apply", "--max-deletions"], {"volumes": []}, tmp_path
     )
-    assert proc.returncode == 2
+    assert proc.returncode == 64
     assert calls == []
 
 
@@ -339,7 +339,7 @@ def test_backups_max_deletions_with_a_non_integer_count_is_rejected(tmp_path):
     proc, calls = _run(
         BACKUPS_ENTRY, ["--apply", "--max-deletions", "lots"], {"volumes": []}, tmp_path
     )
-    assert proc.returncode == 2
+    assert proc.returncode == 64
     assert calls == []
 
 

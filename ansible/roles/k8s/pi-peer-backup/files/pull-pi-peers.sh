@@ -60,7 +60,10 @@ GATE_RUN=0
 # prefix (`verdicts/logs.py`). Alloy labels this container's stdout `{container="pi-peer-backup"}`, not
 # `{job="syslog"}`, and the check reads that stream too (#1943); until 2026-09-18 it logged
 # `kuma push failed (...)` here, so a push Kuma rejected — a token no live tile holds — was
-# invisible. `by=kuma` is a fixed word derived from the content type, never the body.
+# invisible. `by=kuma` is a fixed word derived from the content type. Kuma answers 404 for ANY
+# exception in its push handler (#4481), so a `by=kuma` failure is preceded by the library's
+# `push rejected by kuma (http=<code>): <msg>` line carrying Kuma's own `msg`, token redacted —
+# in this pod's log, since there is no journal.
 # busybox `date` has no `-Is`, hence the explicit format.
 report() { # line
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ${HOSTNAME:-pi-peer-backup} pi-peer-backup: $1"
@@ -73,18 +76,32 @@ push() { # status msg
   fi
 
   report "status=$1 $2"
-  local reply http_code curl_rc ctype by
+  local reply meta body http_code curl_rc ctype by re kuma_msg token
+  # The body comes first and the `-w` line last, as in kuma-push-lib.sh.
   reply=$(curl -sS -m 10 --get "$KUMA_PUSH_URL" \
     --data-urlencode "status=$1" --data-urlencode "msg=$2" \
-    -o /dev/null -w '%{http_code} %{content_type}') && curl_rc=0 || curl_rc=$?
-  http_code=${reply%% *}
+    -w '\n%{http_code} %{content_type}') && curl_rc=0 || curl_rc=$?
+  meta=${reply##*$'\n'}
+  body=""
+  case "$reply" in *$'\n'*) body=${reply%$'\n'*} ;; esac
+  http_code=${meta%% *}
   ctype=""
-  case "$reply" in *" "*) ctype=${reply#* } ;; esac
+  case "$meta" in *" "*) ctype=${meta#* } ;; esac
   by=""
   case "$ctype" in application/json*) by=" by=kuma" ;; esac
   case "$curl_rc/$http_code" in
     0/2??) ;;
-    *) report "push failed (http=${http_code} rc=${curl_rc}${by}) (status=$1: $2)" >&2 ;;
+    *)
+      # kuma-push-lib.sh's `_kuma_reply_msg`, inline because the image carries only this script.
+      re='"msg"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)"'
+      if [[ -n "$by" && $body =~ $re ]]; then
+        kuma_msg=${BASH_REMATCH[1]}
+        token=${KUMA_PUSH_URL##*/}
+        [[ -z "$token" ]] || kuma_msg=${kuma_msg//"$token"/<token>}
+        report "push rejected by kuma (http=${http_code}): ${kuma_msg:0:300}" >&2
+      fi
+      report "push failed (http=${http_code} rc=${curl_rc}${by}) (status=$1: $2)" >&2
+      ;;
   esac
 
   # Kuma resolves to a Service in this cluster, so a cluster outage silences the push above and

@@ -21,10 +21,11 @@ a key. The filter refuses any group the module does not define, so a typo fails 
 same way a key would, and the task still reads as the label it writes (#3946).
 
 Each raises `ValueError` on a group or shard the module does not define, so a typo fails the
-render instead of writing a label no RecurringJob selects. Ansible wraps the `ValueError` in
-its own error.
+render instead of writing a label no RecurringJob selects. `FilterModule` registers each
+filter through `_as_filter`, which re-raises the `ValueError` as
+`AnsibleFilterError("<filter>: ...")` (#4505).
 
-No Ansible import, so the tests call the same functions the playbook runs.
+No Ansible import at load time, so the tests call the same functions the playbook runs.
 """
 
 import sys as _sys
@@ -39,6 +40,12 @@ for _files in (_ROLES / "common" / "files", _ROLES / "k3s" / "files"):
         _sys.path.insert(0, str(_files))
 
 from longhorn_lib import longhorn_backups  # noqa: E402
+
+# `filter_errors` sits beside this plugin, which Ansible loads by file path (#4527).
+if str(_Path(__file__).resolve().parent) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+
+from filter_errors import _as_filter  # noqa: E402
 
 _SHARDS = range(longhorn_backups.WEEKLY_SHARDS)
 KNOWN_GROUPS = frozenset(
@@ -55,7 +62,7 @@ def backup_group_label(group: str) -> str:
     """The label key that puts a volume in `group`, refusing a group the module does not name."""
     if group not in KNOWN_GROUPS:
         raise ValueError(
-            f"backup_group_label: {group!r} is not a Longhorn backup group; "
+            f"{group!r} is not a Longhorn backup group; "
             f"known: {', '.join(sorted(KNOWN_GROUPS))}"
         )
     return longhorn_backups.group_label(group)
@@ -64,9 +71,7 @@ def backup_group_label(group: str) -> str:
 def weekly_backup_group(shard: int) -> str:
     """The group name of weekly shard `shard`, refusing a shard outside 0 to 6."""
     if int(shard) not in _SHARDS:
-        raise ValueError(
-            f"weekly_backup_group: shard {shard!r} is outside 0-{len(_SHARDS) - 1}"
-        )
+        raise ValueError(f"shard {shard!r} is outside 0-{len(_SHARDS) - 1}")
     return longhorn_backups.weekly_shard_group(int(shard))
 
 
@@ -76,7 +81,7 @@ def weekly_backup_shard(pvc: str, weekly_volumes: dict) -> int:
     Raises `ValueError` when `pvc` is not in the map, as the list lookup this replaced did.
     """
     if pvc not in weekly_volumes:
-        raise ValueError(f"weekly_backup_shard: {pvc!r} is not a weekly-tier volume")
+        raise ValueError(f"{pvc!r} is not a weekly-tier volume")
     return weekly_volumes[pvc]
 
 
@@ -106,11 +111,11 @@ def longhorn_weekly_claims(containers_list, namespace: str) -> dict:
                 or shard not in _SHARDS
             ):
                 raise ValueError(
-                    f"longhorn_weekly_claims: {pvc} declares shard {shard!r}, "
+                    f"{pvc} declares shard {shard!r}, "
                     f"not an integer 0-{len(_SHARDS) - 1}"
                 )
             if pvc in found:
-                raise ValueError(f"longhorn_weekly_claims: {pvc} is declared twice")
+                raise ValueError(f"{pvc} is declared twice")
             found[pvc] = int(shard)
     return found
 
@@ -142,8 +147,7 @@ def longhorn_backup_name(key: str) -> str:
     """The name `key` stands for in `NAMES`, refusing a key it does not list."""
     if key not in NAMES:
         raise ValueError(
-            f"longhorn_backup_name: {key!r} is not a Longhorn backup name; "
-            f"known: {', '.join(sorted(NAMES))}"
+            f"{key!r} is not a Longhorn backup name; known: {', '.join(sorted(NAMES))}"
         )
     return NAMES[key]
 
@@ -153,10 +157,10 @@ class FilterModule:
 
     def filters(self):
         return {
-            "backup_group_label": backup_group_label,
-            "weekly_backup_group": weekly_backup_group,
-            "weekly_backup_shard": weekly_backup_shard,
-            "longhorn_weekly_claims": longhorn_weekly_claims,
-            "longhorn_nobackup_claims": longhorn_nobackup_claims,
-            "longhorn_backup_name": longhorn_backup_name,
+            "backup_group_label": _as_filter(backup_group_label),
+            "weekly_backup_group": _as_filter(weekly_backup_group),
+            "weekly_backup_shard": _as_filter(weekly_backup_shard),
+            "longhorn_weekly_claims": _as_filter(longhorn_weekly_claims),
+            "longhorn_nobackup_claims": _as_filter(longhorn_nobackup_claims),
+            "longhorn_backup_name": _as_filter(longhorn_backup_name),
         }

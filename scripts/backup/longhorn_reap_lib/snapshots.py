@@ -65,6 +65,7 @@ from lib.repo_paths import FILTER_PLUGINS
 sys.path.insert(0, str(FILTER_PLUGINS))
 from longhorn_manager import ready_manager_ip
 from lib.cli_help import answer_help
+from lib.exit_codes import USAGE_ERROR
 from longhorn_reap_lib import logic
 
 NAMESPACE = "longhorn-system"
@@ -204,7 +205,7 @@ def main(argv: list[str], now: float | None = None) -> int:
     unknown = [a for a in argv if a != "--apply"]
     if unknown:
         print("unknown argument: %s (expected --apply)" % unknown[0], file=sys.stderr)
-        return 2
+        return USAGE_ERROR
 
     refusal = logic.readonly_kubeconfig_refusal(apply, READONLY_KUBECONFIG, "--apply")
     if refusal:
@@ -214,13 +215,13 @@ def main(argv: list[str], now: float | None = None) -> int:
     timeout, err = logic.parse_int_env("LONGHORN_REAP_KUBECTL_TIMEOUT_S", _TIMEOUT_RAW)
     if err:
         print("ABORT: %s" % err, file=sys.stderr)
-        return 2
+        return USAGE_ERROR
     min_age_days, err = logic.parse_int_env(
         "LONGHORN_REAP_MIN_AGE_DAYS", _MIN_AGE_DAYS_RAW
     )
     if err:
         print("ABORT: %s" % err, file=sys.stderr)
-        return 2
+        return USAGE_ERROR
 
     kubeconfig, err = logic.resolve_kubeconfig(
         needs_admin=apply,

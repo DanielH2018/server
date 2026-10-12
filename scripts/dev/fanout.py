@@ -4,7 +4,7 @@
 Usage::
 
     fanout.py place read
-    fanout.py place launch --batch 1345,1386 [--batch 1288] [--host daniel-box] [--review]
+    fanout.py place launch --batch 1345,1386 [--batch 1288] [--host daniel-box] [--no-review]
     fanout.py place status <run-id>
     fanout.py probe [--describe] <run-id>...
     fanout.py review --batch 1345-1386 --repo DanielH2018/server [--red-green] < .fanout/brief.md
@@ -23,6 +23,14 @@ batches, older checkouts and `fanout_lib.clean`'s remote leg still name them.
 import argparse
 import importlib
 import sys
+from pathlib import Path
+
+# Reach `lib` (scripts/): a directly-invoked script gets only its own directory on
+# sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import ArgumentParser
+from lib.exit_codes import USAGE_ERROR
 
 COMMANDS = {
     "place": "fanout_lib.place",
@@ -40,7 +48,7 @@ _HELP = {
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
+    p = ArgumentParser(
         prog="fanout.py",
         description=__doc__.splitlines()[0],
         allow_abbrev=False,
@@ -54,9 +62,9 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     if not argv or argv[0] not in COMMANDS:
-        # `--help` exits 0 with the command list; anything else is a usage error, exit 2.
+        # `--help` exits 0 with the command list; anything else is a usage error, exit 64.
         _parser().parse_args(argv[:1])
-        return 2
+        return USAGE_ERROR
     return importlib.import_module(COMMANDS[argv[0]]).main(argv[1:])
 
 

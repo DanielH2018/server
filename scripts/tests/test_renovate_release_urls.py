@@ -36,7 +36,7 @@ _RELEASE_URL_CORPUS_FLOOR = frozenset(
 # Files that hold a release-download URL no manager scans, and legitimately so. Two rules,
 # not a skip list — a new entry needs a reason of the same shape:
 #   * Markdown is prose. A release URL in a doc is a citation, nothing renders or executes it,
-#     and pointing a manager at a .md file would be the bug (docs/anilist-integration.md
+#     and pointing a manager at a .md file would be the bug (docs/archive/anilist-integration.md
 #     names the ani-sync releases 11 times while discussing them).
 #   * A file whose "URLs" are matchString regexes rather than pins: renovate.json itself, and
 #     this module, whose release URLs are the synthetic fixtures of the red proofs below.

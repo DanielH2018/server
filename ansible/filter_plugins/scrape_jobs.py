@@ -35,8 +35,19 @@ key raises rather than being ignored, so a `basic_auth:` written here fails the 
 rendering a job without it.
 
 No Ansible import, so the render harnesses register the same function the playbook runs.
-Ansible wraps a filter's `ValueError` in its own error.
+`FilterModule` re-raises a function's `ValueError` as `AnsibleFilterError` prefixed with the
+filter's name.
 """
+
+import sys as _sys
+from pathlib import Path as _Path
+
+# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
+# once this directory is on the path (#4527).
+if str(_Path(__file__).resolve().parent) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+
+from filter_errors import _as_filter
 
 _REQUIRED = ("job",)
 _OPTIONAL = ("port", "service", "path", "interval", "params", "replicas_var")
@@ -157,7 +168,7 @@ def entry_port(containers_list, name):
 class FilterModule:
     def filters(self):
         return {
-            "scrape_jobs": scrape_jobs,
-            "metrics_port": metrics_port,
-            "entry_port": entry_port,
+            "scrape_jobs": _as_filter(scrape_jobs),
+            "metrics_port": _as_filter(metrics_port),
+            "entry_port": _as_filter(entry_port),
         }

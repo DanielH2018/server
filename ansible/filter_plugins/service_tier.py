@@ -14,8 +14,19 @@ services is derived from it (#3389). Four consumers read it:
   registered filter.
 
 No Ansible import, so `scripts/lib/service_tiers.py` and the docs generators read the same
-function the playbook runs. Ansible wraps a filter's `ValueError` in its own error.
+function the playbook runs. `FilterModule` re-raises a function's `ValueError` as
+`AnsibleFilterError` prefixed with the filter's name.
 """
+
+import sys as _sys
+from pathlib import Path as _Path
+
+# Ansible loads a plugin by file path, so `filter_errors` beside it imports by bare name only
+# once this directory is on the path (#4527).
+if str(_Path(__file__).resolve().parent) not in _sys.path:
+    _sys.path.insert(0, str(_Path(__file__).resolve().parent))
+
+from filter_errors import _as_filter
 
 # The tiers an entry's `tier` may name, each with the PriorityClass its pods run at. One tier
 # maps to exactly one class, which is why the house's services split in two: the edge and SSO
@@ -143,7 +154,7 @@ def tier_priority_class(containers_list, name):
 class FilterModule:
     def filters(self):
         return {
-            "in_service_tier": in_service_tier,
-            "tier_backup_claims": tier_backup_claims,
-            "tier_priority_class": tier_priority_class,
+            "in_service_tier": _as_filter(in_service_tier),
+            "tier_backup_claims": _as_filter(tier_backup_claims),
+            "tier_priority_class": _as_filter(tier_priority_class),
         }

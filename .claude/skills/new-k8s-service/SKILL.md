@@ -182,7 +182,7 @@ that disagrees with its own config and disarms image-pin auto-deploy for **every
 just the new one, logging to `journalctl -u gitops-deploy.service`:
 
 ```
-k8s auto-deploy disarmed — stale denylist (denied at origin but not in config: ['<name>'])
+denylist: k8s auto-deploy disarmed — stale (denied at origin but not in config: ['<name>'])
 ```
 
 `changed=0` on the *Write deployer config* task means the host was already current. Render

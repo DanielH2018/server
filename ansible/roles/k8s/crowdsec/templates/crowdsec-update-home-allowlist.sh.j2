@@ -112,25 +112,43 @@ PUSH_URL="https://uptime-kuma.local.{{ domain }}/api/push/{{ monitor_bridge_home
 # monitor-bridge's swallowed-verdicts reader (`verdicts/logs.py`, `_SWALLOWED_RE`) sees this
 # cron the way it sees the library's callers. Until then it logged `kuma push failed (...)`,
 # which matched nothing, so a push Kuma rejected here (a token no live tile holds, #1803)
-# stayed invisible for as long as the two sides disagreed. `-f` is kept for the retry:
-# `--retry-all-errors` only counts an HTTP error as an error under `-f`, and `-w` still
-# prints the code and content type after a failed transfer (measured on curl 8.5.0:
+# stayed invisible for as long as the two sides disagreed. `--fail-with-body` is kept for the
+# retry: `--retry-all-errors` only counts an HTTP error as an error under a `--fail` flag, and
+# `-w` still prints the code and content type after a failed transfer (measured on curl 8.5.0:
 # `404 application/json; charset=utf-8`, exit 22). `by=kuma` is the fixed word the library
-# derives from an `application/json` content type — Kuma's own rejection — never the body.
+# derives from an `application/json` content type.
+#
+# Kuma answers 404 for ANY exception in its push handler, a DB error as well as an unknown token
+# (#4481), so on a `by=kuma` failure this also logs Kuma's own `msg` on the library's
+# `push rejected by kuma (http=<code>): <msg>` line, token redacted. `--fail-with-body` rather
+# than `-f` is what keeps the body: each retried attempt appends its body to stdout, the `-w`
+# line comes last, and the first `msg` found is the one logged (measured on curl 8.5.0).
 push() { # up|down msg
-  local reply http_code curl_rc ctype by
+  local reply meta body http_code curl_rc ctype by re kuma_msg token
   reply=$(
     printf 'url = "%s"\n' "$PUSH_URL" |
-      curl -fsS --max-time 10 --retry 6 --retry-all-errors --retry-max-time 60 -G -K - \
+      curl --fail-with-body -sS --max-time 10 --retry 6 --retry-all-errors --retry-max-time 60 -G -K - \
         --data-urlencode "status=$1" --data-urlencode "msg=$2" \
-        -o /dev/null -w '%{http_code} %{content_type}'
+        -w '\n%{http_code} %{content_type}'
   ) && curl_rc=0 || curl_rc=$?
   [ "$curl_rc" -eq 0 ] && return 0
-  http_code=${reply%% *}
+  meta=${reply##*$'\n'}
+  body=""
+  case "$reply" in *$'\n'*) body=${reply%$'\n'*} ;; esac
+  http_code=${meta%% *}
   ctype=""
-  case "$reply" in *" "*) ctype=${reply#* } ;; esac
+  case "$meta" in *" "*) ctype=${meta#* } ;; esac
   by=""
   case "$ctype" in application/json*) by=" by=kuma" ;; esac
+  # The same extraction as kuma-push-lib.sh's `_kuma_reply_msg`, inline because this script
+  # sources nothing (block above).
+  re='"msg"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)"'
+  if [ -n "$by" ] && [[ $body =~ $re ]]; then
+    kuma_msg=${BASH_REMATCH[1]}
+    token=${PUSH_URL##*/}
+    [ -z "$token" ] || kuma_msg=${kuma_msg//"$token"/<token>}
+    logger -t crowdsec-home-allowlist "push rejected by kuma (http=${http_code}): ${kuma_msg:0:300}"
+  fi
   logger -t crowdsec-home-allowlist "push failed (http=${http_code} rc=${curl_rc}${by}) (status=$1: $2)"
 }
 # The `status=down` prefix is load-bearing: `probe.py alerts` reconstructs host-cron episodes

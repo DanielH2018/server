@@ -199,8 +199,8 @@ auto-generated `agent-a0291ece…` name and keeps it.
 
 **What this costs, and what it does not.** Issue-to-session attribution is unaffected: the
 claim comment records whatever worktree name the agent reports, auto-generated or not, and
-`claims` renders the mapping. Session-to-issue attribution loses the readable branch name, so
-the `session-health.py` banner keeps printing `worktree-agent-a0291ece…`.
+`claims` renders the mapping. Session-to-issue attribution loses the readable branch name, and
+a `.claim` label restores it (see *Labels for worktrees Claude Code named* below).
 
 **An orchestrator reads its own claims with `claims --worktree <its branch>`.** The filter keeps
 the claims that branch holds and adds the branch of every standing batch a `fanout.py place
@@ -212,9 +212,34 @@ it drops rather than hiding them, so an empty result does not read as a register
 A session an operator drives can still name its own worktree `issue-1132`, because it has no
 cwd override. Only the fan-out is constrained.
 
-The banner improvement is recoverable later with a gitignored `.claim` marker file written into
-the worktree root, which `session-health.py` could read with no network call. That is not in
-scope here.
+### Labels for worktrees Claude Code named
+
+Claude Code names a worktree itself on two paths, and neither takes a name from the caller.
+An `Agent` call with `isolation: "worktree"` gets `agent-<agentId>`. A Remote Control session
+gets `bridge-<sessionId>`, created before the phone sends its first prompt, so no description
+exists to name it from. No `worktree.*` setting changes either name.
+
+A session in such a tree runs `scripts/dev/label_worktree.py`, which writes a one-line `.claim`
+at the worktree root. The root deny in `.gitignore` keeps the file out of every commit, and it
+is removed with the tree. The script refuses a checkout outside `.claude/worktrees/`, because
+one untracked file in the primary checkout parks the deployer. Three places print the label
+beside the name, with no network call:
+
+- `session-health.py`'s other-live-sessions list.
+- `prune_worktrees.py`, in both `--brief` and the long report.
+- `session-health.py`'s own-tree prompt. A session that starts in an unlabelled `agent-` or
+  `bridge-` tree is told to label it once it knows its task, which is how a Remote Control
+  session learns to do it.
+
+The local fan-out brief makes the label the agent's first act, beside the `Worked by` comment.
+
+`DECIDED:` the names stay generated, and a label sits beside them. A `WorktreeCreate` hook can
+choose the directory, but it replaces worktree creation for every session in every repo. It
+would have to redo what `worktree.baseRef: fresh` does, keep the `worktree-<name>` branch shape
+that `lib/worktree_owner.py` and `prune_worktrees.py` parse, and delete its own branches,
+which Claude Code never does for a hook-created worktree. Its input carries only `name`,
+`session_id`, `transcript_path` and `cwd` (Claude Code 2.1.296), so it cannot tell which of
+several parallel `Agent` calls a given `agent-<id>` belongs to.
 
 ## Placement across hosts
 

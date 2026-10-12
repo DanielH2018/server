@@ -8,6 +8,7 @@ how a deployment narrows that registry.
 from dataclasses import replace
 
 import os
+from pathlib import Path
 
 
 import bridge.common
@@ -123,6 +124,63 @@ def test_run_once_with_only_filter_touches_no_gate(cfg):
     check.run_once(cfg, FakeSources(), checks, probes, sink)
     assert set(evaluated) == SUBSET_ONLY
     assert len(sink.pushes) == len(SUBSET_ONLY)
+
+
+def _quiet_cycle(cfg, checks, capsys, **kwargs):
+    """One run_once over `checks` with every gate up; returns what it logged."""
+    cfg = replace(cfg, CHECKS_ONLY=frozenset(), CHECKS_SKIP=frozenset())
+    ran = []
+    probes = Gates(
+        probe_prometheus=mk(ran, "prometheus"),
+        probe_loki=mk(ran, "loki_reachable"),
+        probe_b2=mk(ran, "b2_reachable"),
+        probe_wan=mk(ran, "wan_reachable"),
+    )
+    check.run_once(cfg, FakeSources(), checks, probes, FakeSink(), **kwargs)
+    return capsys.readouterr().out
+
+
+def test_a_cycle_logs_down_verdicts_and_one_summary_not_each_up(cfg, capsys):
+    """The pod's ~50 OK lines per cycle buried the DOWN ones (#4448)."""
+    first, second = [
+        e for e in registry.build_checks() if e.name not in check.LOGGED_WHEN_UP
+    ][:2]
+    out = _quiet_cycle(
+        cfg,
+        [
+            replace(first, fn=mk([], first.name)),
+            replace(second, fn=lambda _cfg, _src: (False, "over threshold")),
+        ],
+        capsys,
+    )
+    assert "OK  " not in out
+    assert f"DOWN {second.name} - over threshold" in out
+    assert "CYCLE 1 up, 1 down, 0 skipped" in out
+
+
+def test_a_dry_run_still_logs_each_up_verdict(cfg, capsys):
+    entry = registry.build_checks()[0]
+    out = _quiet_cycle(
+        cfg, [replace(entry, fn=mk([], entry.name))], capsys, dry_run=True
+    )
+    assert f"OK   {entry.name} - {entry.name} ok" in out
+    assert "OK   prometheus" in out
+
+
+def test_every_dashboard_parsed_check_is_logged_when_up(cfg, capsys):
+    """The Longhorn Storage B2 panels regex b2_storage's up line out of this pod's log."""
+    board = (
+        Path(__file__).resolve().parents[2]
+        / "observability/files/dashboards/Infrastructure/longhorn-storage.json"
+    ).read_text()
+    assert '{container=\\"monitor-bridge\\"} |= \\"B2 storage\\"' in board
+    entry = next(e for e in registry.build_checks() if e.name == "b2_storage")
+    out = _quiet_cycle(
+        cfg,
+        [replace(entry, fn=lambda _cfg, _src: (True, "B2 storage 1.0 GB of 10.0 GB"))],
+        capsys,
+    )
+    assert "OK   b2_storage - B2 storage 1.0 GB of 10.0 GB" in out
 
 
 # ── check_pvc_fullness ──────────────────────────────────────────────────────

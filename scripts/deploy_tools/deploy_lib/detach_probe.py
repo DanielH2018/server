@@ -23,10 +23,11 @@ callers, and `Run.label` cuts a long list short.
 THE EXIT CODE IS THE AUTHORITY. The detached child records the notifier's exit code beside the
 log (`deploy_detach.child`): 0 when the health gate settled, 1 when the playbook or the gate
 failed. The notifier's `deploy --detach settled|FAILED (...)` headline is the detail. A child
-that died without recording a code is `died`, through the pid the parent recorded.
+that died without recording a code is `died`, through the pid the parent recorded. A log with
+neither a pid nor a code that has not changed for `detach_fork.START_GRACE_S` is `died` too:
+the parent never recorded a child, so nothing will ever write the code (#4513).
 """
 
-import argparse
 import json
 import os
 import pwd
@@ -35,8 +36,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
-from lib.cli_help import refuse_help_under_describe
-from lib.detach_fork import alive, recorded_code, recorded_pid
+from lib.cli_help import ArgumentParser, error, refuse_help_under_describe
+from lib.detach_fork import (
+    START_GRACE_S,
+    alive,
+    never_started,
+    recorded_code,
+    recorded_pid,
+)
 
 # `deploy_detach.LOG_DIR`, restated: that module imports the deploy machinery, and this probe
 # runs under a bare interpreter with no project environment. A test holds the two equal.
@@ -106,7 +113,7 @@ def _verdict_detail(text: str, log: Path) -> str:
     return f"no verdict line; read {log}"
 
 
-def read(log: Path) -> dict:
+def read(log: Path, now: float | None = None) -> dict:
     """The deploy's state: terminal once it recorded a code, or once it died without one."""
     code = recorded_code(log)
     if code is None:
@@ -121,6 +128,12 @@ def read(log: Path) -> dict:
                     "detail": f"the deploy (pid {pid}) died without recording an exit code; "
                     f"read {log}",
                 }
+        if pid is None and never_started(log, now):
+            return {
+                "state": "died",
+                "detail": f"the deploy recorded neither a pid nor an exit code and its log has "
+                f"not changed for {START_GRACE_S}s: it never started; read {log}",
+            }
     text = log.read_text(errors="replace")
     if code is not None:
         detail = _verdict_detail(text, log)
@@ -132,7 +145,7 @@ def read(log: Path) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
+    parser = ArgumentParser(
         prog="deploy_cli.py probe", description=__doc__.splitlines()[0]
     )
     parser.add_argument("--describe", action="store_true")
@@ -145,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         log = find_log(ns.tags, ns.log, ns.log_dir)
     except NoDeploy as exc:
-        print(f"deploy_probe: {exc}", file=sys.stderr)
+        error(str(exc), prog=parser.prog)
         return 1
     print(json.dumps(describe(log) if ns.describe else read(log)))
     return 0

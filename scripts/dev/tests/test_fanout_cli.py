@@ -211,7 +211,7 @@ def test_status_json_prints_one_row_per_batch_with_its_state(tmp_path, capsys):
     tools, run = fake_tools()
     run.answers_by_call = [subprocess.TimeoutExpired("ssh", 30)]
     argv = ["status", manifest.run_id, "--json", "--manifest-root", str(tmp_path)]
-    assert main(argv, tools) == 1
+    assert main(argv, tools) == 75
     rows = json.loads(capsys.readouterr().out)
     assert [(r["batch"], r["host"], r["state"]) for r in rows] == [
         ("1", "daniel-box", "cleaned"),
@@ -395,7 +395,7 @@ def test_one_issue_in_two_batches_is_refused_and_a_repeated_batch_is_placed_once
     tmp_path, capsys
 ):
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
-    assert _launch(tools, tmp_path, "--batch", "1,2", "--batch", "2") == 1
+    assert _launch(tools, tmp_path, "--batch", "1,2", "--batch", "2") == 64
     assert not run.host_calls
     assert "issue 2 appears in more than one --batch" in capsys.readouterr().err
 
@@ -413,7 +413,7 @@ def test_one_issue_in_two_batches_is_refused_and_a_repeated_batch_is_placed_once
 
 def test_a_within_spec_duplicate_issue_gets_its_own_message(tmp_path, capsys):
     tools, run = fake_tools(answers={"daniel-box": ok(HEADROOM)}, issues=CLAIMED)
-    assert _launch(tools, tmp_path, "--batch", "1,1") == 1
+    assert _launch(tools, tmp_path, "--batch", "1,1") == 64
     assert not run.host_calls  # refused before the first ssh
     assert "issue 1 is listed twice in --batch 1,1" in capsys.readouterr().err
 
@@ -477,7 +477,7 @@ def test_an_unknown_run_id_is_one_line_rather_than_a_traceback(tmp_path, capsys)
     tools, calls = fake_tools()
     for command in ("status", "stop", "clean"):
         assert (
-            main([command, "nosuchrun", "--manifest-root", str(tmp_path)], tools) == 1
+            main([command, "nosuchrun", "--manifest-root", str(tmp_path)], tools) == 64
         )
         assert not calls.calls  # refused before any host is touched
         assert (

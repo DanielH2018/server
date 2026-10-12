@@ -54,14 +54,15 @@ def test_launch_claims_each_issue_under_head_before_its_batch_starts(tmp_path):
 
 @pytest.mark.parametrize("head", ["HEAD", "master"])
 def test_a_detached_head_or_the_base_branch_is_refused_before_any_call(
-    tmp_path, capsys, head
+    tmp_path, capsys, monkeypatch, head
 ):
+    monkeypatch.setattr("sys.argv", ["fanout.py"])
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES, head=head
     )
     assert _launch(tools, tmp_path, "1") == 1
     assert run.calls == []
-    assert f"HEAD is {head!r}" in capsys.readouterr().err
+    assert f"fanout.py: error: HEAD is {head!r}" in capsys.readouterr().err
 
 
 def test_a_refused_issue_is_dropped_and_the_batch_renamed_from_what_it_kept(
@@ -70,7 +71,8 @@ def test_a_refused_issue_is_dropped_and_the_batch_renamed_from_what_it_kept(
     tools, run = fake_tools(
         answers={"daniel-box": ok(HEADROOM)}, issues=ISSUES, refused_claims={2}
     )
-    assert _launch(tools, tmp_path, "1,2") == 3
+    # 7, not 3: batch 1 is running, and 3 says nothing was placed (#4452).
+    assert _launch(tools, tmp_path, "1,2") == 7
     launch_call = run.host_calls[-1][1]
     assert "fanout-1 " in launch_call and "fanout-1-2" not in launch_call
     assert "body two" not in (run.host_calls[-1][2] or "")
@@ -104,13 +106,14 @@ def test_a_failed_launch_releases_the_claims_it_took(tmp_path, capsys):
     assert "released #1, #2" in capsys.readouterr().err
 
 
-def test_claim_takes_every_batch_and_exits_3_naming_a_refusal(capsys):
+def test_claim_takes_every_batch_and_exits_3_naming_a_refusal(capsys, monkeypatch):
+    monkeypatch.setattr("sys.argv", ["fanout.py"])
     tools, run = fake_tools(refused_claims={3})
     assert main(["claim", "--batch", "1,2", "--batch", "3"], tools) == 3
     assert _findings(run) == [f"claim {n} --worktree worktree-orch" for n in (1, 2, 3)]
     out = capsys.readouterr()
     assert "#1 claimed by `worktree-orch`" in out.out
-    assert "#3: claim refused (3)" in out.err
+    assert "fanout.py: error: #3: claim refused (3)" in out.err
     assert [host for host, _, _ in run.calls] == ["findings"] * 3
 
 

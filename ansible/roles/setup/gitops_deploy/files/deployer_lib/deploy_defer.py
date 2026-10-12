@@ -57,7 +57,7 @@ from deployer_lib.deploy_changes import (
     tag_selects_an_off_host_role,
     tick_applies_setup_role,
 )
-from deployer_lib.deploy_config import Config, log
+from deployer_lib.deploy_config import WARNING, Config, log
 from deployer_lib.deploy_remediation import (
     broad_park_reason,
     broad_remediation,
@@ -108,7 +108,7 @@ def for_contention(
         target.origin, getattr(exc, "lock", ""), time.time()
     )
     log(
-        f"{exc} — deferring to the next tick (consecutive deferral {entry.count}, "
+        f"contention_since: {exc} — deferring to the next tick (consecutive deferral {entry.count}, "
         f"first at {int(entry.first_seen)})"
     )
     tools.run(["git", "reset", "--hard", target.local], cwd=config.repo)
@@ -153,14 +153,17 @@ def drop_deleted_setup_roles(
             cwd=config.repo,
         )
     except Exception as exc:
-        log(f"could not list the setup roles at {origin[:8]} ({exc}) — dropping none")
+        log(
+            f"manual_plane: could not list the setup roles at {origin[:8]} ({exc}) — dropping none",
+            level=WARNING,
+        )
         return cs
     present = setup_roles_listed(listing)
     deleted = cs.setup_roles - present if present else set()
     if not deleted:
         return cs
     log(
-        f"{', '.join(sorted(deleted))}: setup role directory deleted at {origin[:8]} — "
+        f"manual_plane: {', '.join(sorted(deleted))}: setup role directory deleted at {origin[:8]} — "
         "nothing left to apply, so no manual_plane line"
     )
 
@@ -192,12 +195,15 @@ def drop_deleted_manual_plane(
             cwd=config.repo,
         )
     except Exception as exc:
-        log(f"could not list the setup roles at HEAD ({exc}) — dropping none")
+        log(
+            f"manual_plane: could not list the setup roles at HEAD ({exc}) — dropping none",
+            level=WARNING,
+        )
         return set()
     gone = keys_naming_no_role(keys, setup_roles_listed(listing))
     for key in sorted(gone):
         state.clear_manual_plane(key)
-        log(f"manual_plane dropped for {key}: setup role deleted at HEAD")
+        log(f"manual_plane: dropped for {key}: setup role deleted at HEAD")
     return gone
 
 
@@ -242,7 +248,7 @@ def park(
     # comment-only path, which read as the cause and was not (#1467). An operator reads this
     # journal when `land.sh` exits 4, and a page they already received an hour ago is not there.
     log(
-        f"origin {origin[:8]}: parked, nothing merged — {broad_park_reason(cs)}. "
+        f"park: origin {origin[:8]}: parked, nothing merged — {broad_park_reason(cs)}. "
         f"Apply by hand: {remediation}"
     )
     # A park doesn't ff-merge, so it re-evals next tick — the per-SHA marker (inside
@@ -263,6 +269,11 @@ def narrow_tags_for(
     tools: DeployTools, config: Config, target: TickTarget, role: str
 ) -> frozenset[str] | None:
     """The narrowest tags `role`'s own change needs, or None when nothing could narrow it.
+
+    An EMPTY set is the derivation's answer that the range reaches no host through `role`
+    (#4361), and `record` writes no line for it (#4408). It takes both halves of the answer,
+    exit `NARROW_SETUP_NOTHING_EXIT` and stdout `NARROWED_TO_NOTHING`, for the reason
+    `deploy_narrow._one_setup_role` gives: the script and this copy can be different ages.
 
     The role tag applies far more than any one change to it needs: `--tags k3s` reapplies
     MetalLB, Longhorn, the crons, CoreDNS and the node config and arms three gated
@@ -295,8 +306,16 @@ def narrow_tags_for(
             deploy_narrow.NARROW_SETUP_TIMEOUT_S,
         )
     except Exception as exc:
-        log(f"narrow-setup: {role} not narrowed ({type(exc).__name__}: {exc})")
+        log(
+            f"narrow-setup: {role} not narrowed ({type(exc).__name__}: {exc})",
+            level=WARNING,
+        )
         return None
+    if (
+        rc == deploy_narrow.NARROW_SETUP_NOTHING_EXIT
+        and out == deploy_narrow.NARROWED_TO_NOTHING
+    ):
+        return frozenset()
     if rc != 0:
         return None
     return frozenset(tag for tag in out.split(",") if tag) or None
@@ -348,6 +367,13 @@ def record(
 
     The journal line names only what this tick ADDED: `main()` logs the whole pending set.
 
+    A role the range reaches no host through (`narrow_tags_for` answers an empty set) gets no
+    line, no tags and no page, so no marker asks a human to apply nothing (#4408). The
+    derivation therefore runs before anything is written. Its receipt row is
+    `NARROWED_TO_NOTHING`, the token the `applied` half already uses for "no play ran": an
+    empty row there means "no derivation could narrow it", so `land.sh` would print the
+    whole-role tag and a clear command for a line that does not exist.
+
     Returns:
         A `Recorded` carrying each half of what this tick did, because they need different
         reverses (#2320). The lines it appended are dropped outright. The rows it WIDENED
@@ -357,6 +383,28 @@ def record(
     """
     now = time.time()
     origin = target.origin
+    narrowed = {
+        setup_role_tag(role): narrow_tags_for(tools, config, target, role)
+        for role in roles
+    }
+    idle = [role for role in roles if narrowed[setup_role_tag(role)] == frozenset()]
+    if idle:
+        log(
+            f"manual_plane: {', '.join(idle)} needs no tag over this range, so not recording it"
+        )
+    state.record_receipt(
+        origin,
+        target.local,
+        manual={
+            tag: tags
+            if tags != frozenset()
+            else frozenset({deploy_narrow.NARROWED_TO_NOTHING})
+            for tag, tags in narrowed.items()
+        },
+    )
+    roles = [role for role in roles if role not in idle]
+    if not roles:
+        return nothing_recorded()
     before = state.manual_plane_tags_pending()
     tags_before = {
         setup_role_tag(role): before.get(setup_role_tag(role)) for role in roles
@@ -372,16 +420,13 @@ def record(
             setup_role_host(role),
         )
     ]
-    narrowed = {}
     for role in roles:
         tag = setup_role_tag(role)
-        narrowed[tag] = narrow_tags_for(tools, config, target, role)
         state.record_manual_plane_tags(tag, narrowed[tag], role not in recorded)
-    state.record_receipt(origin, target.local, manual=narrowed)
     narrow = state.manual_plane_tags_pending()
     if recorded:
         log(
-            f"manual_plane recorded: {', '.join(recorded)} — merged, not applied; "
+            f"manual_plane: recorded {', '.join(recorded)} — merged, not applied; "
             + manual_plane_remediation(set(recorded), narrow)
         )
     deploy_alerts.alert_once(
@@ -476,7 +521,7 @@ def clear_applied(state: DeployerState, playbook: str, tags: list[str]) -> None:
             cleared.append(e.role)
     for role in cleared:
         log(
-            f"manual_plane cleared for {role}: this tick applied {playbook} --tags {role}"
+            f"manual_plane: cleared for {role}: this tick applied {playbook} --tags {role}"
         )
 
 
@@ -495,6 +540,6 @@ def log_pending(state: DeployerState) -> None:
     if not roles:
         return
     log(
-        f"manual_plane pending: {', '.join(roles)} — apply by hand: "
+        f"manual_plane: pending {', '.join(roles)} — apply by hand: "
         + manual_plane_remediation(set(roles), state.manual_plane_tags_pending())
     )

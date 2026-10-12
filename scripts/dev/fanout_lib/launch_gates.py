@@ -26,6 +26,7 @@ from findings_lib.issue_model import cited_paths
 from findings_lib.solo_only import fanout_tooling_paths
 from findings_lib.tracked_paths import resolve_fragments
 from lib.ansible_inventory import GITOPS_HOST
+from lib.cli_help import error, warn
 
 # The host `fanout.py place` normally runs on; its launches go over `bash -c`, never ssh, so the
 # per-host ssh budget below doesn't apply to it. The orchestrator runs on the deploy host, which
@@ -52,11 +53,10 @@ def over_ssh_budget(placed: list[tuple[str, str]]) -> bool:
     over = False
     for host, n in counts.items():
         if host != LOCAL_HOST and n > MAX_BATCHES_PER_REMOTE_HOST:
-            print(
-                f"launch: {n} batches would land on {host}, more than "
+            error(
+                f"{n} batches would land on {host}, more than "
                 f"{MAX_BATCHES_PER_REMOTE_HOST} fits the ssh budget there — split the "
-                "fan-out",
-                file=sys.stderr,
+                "fan-out"
             )
             over = True
     return over
@@ -95,12 +95,11 @@ def over_live_batch_cap(placed: list[tuple[str, str]], root: Path) -> bool:
         if len(standing) + n <= MAX_LIVE_BATCHES_PER_HOST:
             continue
         held = ", ".join(sorted(standing)) or "none"
-        print(
-            f"launch: {host} already holds {len(standing)} live batch(es) ({held}) and this "
+        error(
+            f"{host} already holds {len(standing)} live batch(es) ({held}) and this "
             f"run would place {n} more, over the {MAX_LIVE_BATCHES_PER_HOST} that host's "
             "memory cap fits — run `clean <run-id>` on the finished ones, or split the "
-            "fan-out",
-            file=sys.stderr,
+            "fan-out"
         )
         over = True
     return over
@@ -135,10 +134,9 @@ def live_elsewhere(batches: dict[str, list[int]], root: Path, repo: str) -> bool
             if not overlap:
                 continue
             shared = ", ".join(f"#{n}" for n in overlap)
-            print(
-                f"launch: batch {spec} shares {shared} with batch {b.batch}, live in "
-                f"run {run_id} on {b.host}; run clean {run_id} first",
-                file=sys.stderr,
+            error(
+                f"batch {spec} shares {shared} with batch {b.batch}, live in "
+                f"run {run_id} on {b.host}; run clean {run_id} first"
             )
             refused = True
             break
@@ -195,18 +193,16 @@ def refuse_shared_files(
     refused = False
     for path, names in collisions:
         if path in allowed:
-            print(
-                f"launch: batches {', '.join(names)} all cite {path} — allowed by "
-                "--allow-shared-file",
-                file=sys.stderr,
+            warn(
+                f"batches {', '.join(names)} all cite {path} — allowed by "
+                "--allow-shared-file"
             )
             continue
         refused = True
-        print(
-            f"launch: batches {', '.join(names)} all cite {path} — two agents editing one "
+        error(
+            f"batches {', '.join(names)} all cite {path} — two agents editing one "
             "file is the #1798 conflict; regroup them into one batch, or pass "
-            f"--allow-shared-file {path} if the citation is context rather than an edit",
-            file=sys.stderr,
+            f"--allow-shared-file {path} if the citation is context rather than an edit"
         )
     return refused
 
@@ -229,10 +225,9 @@ def refuse_solo_only(
             if not cited:
                 continue
             refused = True
-            print(
-                f"launch: batch {batch}: #{number} cites the fan-out tooling "
+            error(
+                f"batch {batch}: #{number} cites the fan-out tooling "
                 f"({', '.join(cited)}) — it is solo-only (#3959); drop it from the batch "
-                "and work it in a session of its own",
-                file=sys.stderr,
+                "and work it in a session of its own"
             )
     return refused

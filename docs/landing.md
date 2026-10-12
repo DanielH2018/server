@@ -57,10 +57,11 @@ added there appears here without an edit.
 
 ## Arming the merge, and the two command shapes the classifier refuses
 
-**`--arm-merge` readies the merge inside the script.** A bare `gh pr merge` sits on the
-ask list (`Bash(gh pr merge:*)`), and auto mode suspends the allow list — an unattended session
-has nobody to answer that prompt, and it times out as a denial. Three attempts, three denials,
-on 2026-09-03 (issue #979). `land.sh --arm-merge` is not that command: its own text never
+**`--arm-merge` readies the merge inside the script.** A bare `gh pr merge` once sat on the
+ask list (`Bash(gh pr merge:*)`), and an unattended session has nobody to answer that prompt, so
+it timed out as a denial. Three attempts, three denials, on 2026-09-03 (issue #979). Since
+2026-10-11 `gh pr merge --auto` is allowed, so a session may arm GitHub's auto-merge; a plain
+`gh pr merge` still asks. `land.sh --arm-merge` is not that command: its own text never
 contains `gh pr merge`, so it reaches the classifier as the single script invocation the
 worktree-containment check already accepts.
 
@@ -68,21 +69,23 @@ The arm is idempotent, so re-running after a `merge-conflict` or `merge-timeout`
 cleanly. `--subject` overrides the squash commit's subject; the PR's own title is used
 otherwise.
 
-**Every PR is merged directly, never armed for GitHub's auto-merge.** Every PR into master
-needs a ruleset bypass, and auto-merge never applies one (github/docs#45265). A PR reads
-`REVIEW_REQUIRED` until it is approved, and approving needs the bypass for the master review
-gate (ruleset 24514824). An `APPROVED` PR still needs the bypass for the agent branch fence
-(ruleset 24517167), which restricts updates to every branch except `worktree-claude+**`, master
-included. An armed approved agent PR sat `BLOCKED` until a hand merge (#3911), so the arm path
-was removed (#4001).
+**`land.sh` merges every PR directly, never arming GitHub's auto-merge.** The direct merge is
+pinned to the head SHA that `await_ci` read green and the landing policy checked. Auto-merge
+merges whatever head is green when CI finishes. The arm path was removed in #4001, when the
+agent branch fence still covered master and an armed PR sat `BLOCKED` because auto-merge never
+applies a bypass (#3911). Since 2026-10-11 the fence excludes master and no rule needs a
+review, so a PR armed for auto-merge by hand, from either account, merges once CI is green.
 
-`--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because the direct merge
-would apply the operator's bypass to it. `--await-merge` merges the PR through the REST merge
-endpoint on the first poll where `await_ci` reads its head green, pinned to that head SHA. The
-REST endpoint applies the bypass, and a ruleset with no bypass actor, such as the master CI gate,
-still refuses the call until its checks pass. A refused merge is printed once and the wait
-continues, so a caller who cannot bypass ends at `merge-timeout`. The direct merge needs both
-flags in one run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
+**A PR armed for auto-merge still needs a landing.** Auto-merge merges the PR and nothing
+more. Run the usual `land.sh --pr <n> --arm-merge --await-merge` afterwards: the arm is a no-op
+on a merged PR, and a PR still open is left for whichever merge fires first.
+
+`--arm-merge` refuses a `CHANGES_REQUESTED` PR before any merge call, because someone asked for
+it to change. `--await-merge` merges the PR through the REST merge endpoint on the first poll
+where `await_ci` reads its head green, pinned to that head SHA. The master CI gate still refuses
+the call until its checks pass. A refused merge is printed once and the wait continues, so a
+merge GitHub keeps refusing ends at `merge-timeout`. The direct merge needs both flags in one
+run: without `--await-merge` the arm dies, and `--await-merge` alone only polls.
 
 **Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a PR by any other author.**
 `renovate-agent-land@.service` sets it to `app/renovate`, so the unattended agent can only merge
@@ -95,7 +98,15 @@ variable unset and never sees this.
 `land_lib/policy.py` owns the rules, and two settings switch them on.
 `LAND_REQUIRE_BRANCH_PREFIX` requires a head branch in this repo, under the prefix, targeting
 `master`. `LAND_APPROVAL_PATHS` names a file of path prefixes, and a PR changing a path under
-one is refused, renamed files included. `LAND_APPROVER` names a GitHub login whose latest
+one is refused, renamed files included. The same setting refuses a PR that changes a module the
+landing process has imported. It also refuses a change that can run code on import with no import
+line of its own: a non-empty `__init__.py`, an `__init__.py` leaving a directory that still holds
+Python files, a symlink, an added `__main__.py`, a module beside a directory of the same name, and
+a module at the top of one `sys.path` root that `land.py` inserts when it shadows a name in
+another root.
+Such code can enter `land.py`'s imports through a later approved PR whose diff never shows it.
+`land_lib/policy.py:shape_hits` reads these from the file listing and from the tree at the pinned
+head. `LAND_APPROVER` names a GitHub login whose latest
 review, if it approves the head SHA, lifts that refusal. With either of the first two set, a non-empty `hold_sha` also refuses,
 and every merge path is pinned to the head SHA the checks read. A push after the checks fails
 the landing, and a re-run checks the new head. `--verdict-file <path>` writes `PENDING`, then
@@ -114,19 +125,22 @@ The refusal prints the offending line: `gh pr edit <n> --body-file` with the ref
 body another session wrote, since the fan-out agent opens the PR and a daniel-box session lands
 it.
 
-**Open the PR with `--fill`, then replace the body — the same evasion, one command earlier.**
+**Open the PR with `--fill` and a body file — the same evasion, one command earlier.**
 The worktree-containment check judges a command on its TEXT, so `gh pr create --title "…"` is
 refused whenever the title carries `git`, `cd`, `worktree`, `write` or a construct the check
 cannot parse — and a title here routinely names one, since it becomes the squash commit subject
 and has to name the outcome. Rewording the title does not reliably help.
 
 ```
-gh pr create --fill                 # title + body from the commit; no prose in the command text
-gh pr edit <n> --body-file <path>   # then replace the body
+gh pr create --fill --body-file <path>   # title from the commit, body from the file
 ```
 
 `--fill` takes the title from the commit subject, so the command line carries no title text to
-judge, and `--body-file` carries no body text either. The class of false refusals narrowed after
+judge, and `--body-file` carries no body text either. gh lets `--body-file` override the body
+`--fill` would take from the commits. The file has to carry every `## ` heading of
+`.github/pull_request_template.md`. The `block-footguns` hook denies a create or edit whose body
+skips one, and a bare `--fill`, because rewriting the body after the PR opened was the
+avoidable PR body rewrite in #3963. The class of false refusals narrowed after
 Claude Code 2.1.257 (it fixed loops and heredocs that never touch git) and is not gone: a
 `for … do gh issue comment …; done` was refused on its comment text on 2026-09-10 (issue #1431).
 The rule generalises: keep the prose out of the command string and inside a file or a script.
@@ -149,9 +163,8 @@ base moving under a PR flips it for one poll.
 
 **A PR whose own CI is red ends the wait too**, exit `LAND_FAILED` with `VERDICT: pr-ci-red`, quoting what
 `await_ci.py` said. GitHub reports it only as `mergeStateStatus: BLOCKED`, the same word it
-uses while the checks are still running. The master review gate also holds a PR until it is
-approved, but that state reads `REVIEW_REQUIRED` and the direct merge applies the bypass, so
-the wait treats `BLOCKED` as a question about checks. The wait keeps going
+uses while the checks are still running. No other rule blocks a PR into master, so the wait
+treats `BLOCKED` as a question about checks. The wait keeps going
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
 
@@ -287,9 +300,12 @@ one exception being a primary that already contains the commit.
 A failed gate is asked once more whether a later deploy re-rolled the workload. The landing's
 deploy releases the service lock before the gate runs, so another landing or a tick can deploy
 the same service under the gate's one sample. A `Recreate` workload then reads `0/1 ready`
-mid-roll (#3812). `land.sh` counts a tag as re-rolled when its service lock (or `all`) is held,
-or its release record was stamped after step 5 ended. It waits for that deploy to finish and
-gates again. The verdict line then reads `re-gated after a later deploy of <tags>`, and a change
+mid-roll (#3812). `land.sh` counts a tag as re-rolled on one of two signals, and neither counts
+on its own (#4514). A held service lock (or `all`) counts only when one of the tag's workloads
+changed `metadata.generation` while the lock was held. A release record stamped after step 5
+ended counts only when it queued a restart or names manifests that differ from the record
+before it. A deploy that rolled nothing leaves the failed gate standing. On a re-roll, `land.sh`
+waits for that deploy to finish and gates again. The verdict line then reads `re-gated after a later deploy of <tags>`, and a change
 that is still broken fails the second gate as well. A healthy second gate settles only when the
 commit in that deploy's release record contains the merge commit. The tick's rollback
 redeploys an older pin, and its healthy pods say nothing about this change.

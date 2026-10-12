@@ -9,7 +9,6 @@ Usage::
     fanout.py review --batch 1345-1386 --repo DanielH2018/server [--red-green] < .fanout/brief.md
 """
 
-import argparse
 import json
 import os
 import stat
@@ -20,14 +19,22 @@ from pathlib import Path
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from fanout_lib.review.api import Pipeline
 from fanout_lib.target import resolve
 from fanout_lib.transport import this_host
+from lib.cli_help import ArgumentParser
+from lib.exit_codes import FAILED, OK
 
 
 def main(argv=None) -> int:
-    p = argparse.ArgumentParser(
+    """Run the batch's phases and write the last phase's report.
+
+    Exits 1 when that report carries `is_error`, so the unit's own result agrees with the
+    report `status` reads instead of recording a failed batch as a clean exit.
+    """
+    p = ArgumentParser(
         prog="fanout.py review", description=__doc__.splitlines()[0], allow_abbrev=False
     )
     p.add_argument("--batch", required=True)
@@ -46,8 +53,14 @@ def main(argv=None) -> int:
         sys.stdin.read(),
         red_green=args.red_green,
     )
-    write_report(pipeline.run_all(), sys.stdout, Path(".fanout") / "report.json")
-    return 0
+    report = pipeline.run_all()
+    write_report(report, sys.stdout, Path(".fanout") / "report.json")
+    return exit_code(report)
+
+
+def exit_code(report: dict) -> int:
+    """1 for a report carrying `is_error`, which `status` reads as a failed batch; else 0."""
+    return FAILED if report.get("is_error") else OK
 
 
 def write_report(report: dict, out: TextIO, path: Path | None = None) -> None:

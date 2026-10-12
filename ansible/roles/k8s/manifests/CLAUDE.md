@@ -27,8 +27,8 @@ read it when you change one.
 saying `secret` renders 0600 under `no_log`. `manifests_exclude_files` drops one, reason at the
 include; a passed list wins whole.
 
-Optional and empty by default: `manifests_extra_rollouts` (`{name, image}` per extra Deployment
-this role should roll), `manifests_self_rollouts` (`{name, kind, image?, namespace?,
+Optional and empty by default: `manifests_extra_rollouts` (`{name, image?, restart_on?}` per
+extra Deployment to wait on and roll), `manifests_self_rollouts` (`{name, kind, image?, namespace?,
 rolled_by_role?}`, for a role restarting its own workloads afterwards),
 `manifests_rollout_timeout` (default `manifests_rollout_timeout_default`, `600s`), `k8s_autodeploy_snapshot_pvcs` (declared in the
 caller's own `defaults/main.yml`, snapshotted before the apply), `k8s_claims` (below), and the

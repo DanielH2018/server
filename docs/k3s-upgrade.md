@@ -49,7 +49,8 @@ uv run python scripts/deploy_tools/runbook_gates.py k3s-upgrade
 
 Exit 0 means all four passed. Exit 1–4 is the gate that failed, and the script prints what it
 found. Exit 69 means the cluster could not be asked: no readable kubeconfig, or a kubectl that
-serves the staging cluster (`scripts/lib/kubectl.py` refuses that rather than grading it).
+serves the staging cluster (`scripts/lib/kubectl.py` refuses that rather than grading it). It
+also means a deployer marker exists and could not be read, which is not a hold.
 
 1. **No degraded Longhorn volume.** A degraded volume plus a node restart is how the last good
    replica goes. `detached`/`unknown` is normal for an idle volume; `degraded` (or `faulted`)

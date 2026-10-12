@@ -13,7 +13,7 @@ templates under the ungated `initial_setup` role would otherwise read as reachin
 that one of its tasks copies out of the checkout.
 `remaining_setup_hosts_note` is the string land.sh prints and the verdict hangs on.
 
-The path-to-tag mappers live in `reach.py`. `setup_role_chains.py` reads a role's `tasks/` tree,
+The path-to-tag mappers live in `reach.py`. `setup_lib/setup_role_chains.py` reads a role's `tasks/` tree,
 and what a PR range changed in it, for those gates; this one evaluates the chains it returns.
 """
 
@@ -36,18 +36,19 @@ from deployer_lib.deploy_logic import (
     setup_role_tag,
     tick_applies_setup_role,
 )
+from gitops_markers import PLAYBOOK_CMD
 
 import narrow_setup
 from deploy_tools.narrow_lib.setup_index import RoleIndex
 from reach import reach
-from setup_gates import (  # noqa: F401  (`_eval_when` and `_HOSTS` are read as land_reach's)
+from deploy_tools.setup_lib.setup_gates import (  # noqa: F401  (`_eval_when` and `_HOSTS` are read as land_reach's)
     HOMESERVERS as _HOMESERVERS,
     HOSTS as _HOSTS,
     _eval_when,
     _host_vars,
 )
 import setup_routing
-from setup_role_chains import (
+from deploy_tools.setup_lib.setup_role_chains import (
     SHIPPED_DIRS,
     VARS_DIRS,
     deleted_in,
@@ -363,14 +364,14 @@ def _setup_apply_command(role: str, host: str, local_host: str = "") -> str:
     """
     tag = setup_role_tag(role)
     if host == local_host:
-        return f"`ansible-playbook ansible/initial_setup.yml --tags {tag}`"
+        return f"`{PLAYBOOK_CMD} ansible/initial_setup.yml --tags {tag}`"
     if host in _LOCAL_CONNECTION_HOSTS:
         return (
             # The remote host's operator checkout, not this host's: the path is daniel-server's.
             f'`ssh {host} "cd /home/ubuntu/server && git pull --ff-only && '
-            f'ansible-playbook ansible/initial_setup.yml --tags {tag}"`'
+            f'{PLAYBOOK_CMD} ansible/initial_setup.yml --tags {tag}"`'
         )
-    return f"`ansible-playbook ansible/initial_setup.yml --tags {tag} -e target={host}`"
+    return f"`{PLAYBOOK_CMD} ansible/initial_setup.yml --tags {tag} -e target={host}`"
 
 
 def remaining_setup_hosts_note(

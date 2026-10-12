@@ -156,8 +156,13 @@ class Fakes:
     repo: dict[str, Any] = field(default_factory=lambda: {"visibility": "public"})
     # What the REST `pulls/<n>/files` listing answers, as one page: the landing policy's input.
     pr_files: list[dict[str, Any]] = field(
-        default_factory=lambda: [{"filename": "docs/landing.md"}]
+        default_factory=lambda: [{"status": "modified", "filename": "docs/landing.md"}]
     )
+    # `git ls-tree -r <head>`: path -> mode at the PR head the policy pinned. None answers
+    # every listed path but a removed one as a regular file, so a PR that sets no tree reads
+    # as having no symlink and no path missing from its head.
+    head_tree: dict[str, str] | None = None
+    ls_tree_rc: int = 0
     # What the REST `pulls/<n>/reviews` listing answers, as one page.
     pr_reviews: list[dict[str, Any]] = field(default_factory=list)
     # What `gh api compare/<head>...master` answers, one entry per call: the paths master
@@ -212,7 +217,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         self_applied=lambda paths, quiet=(): f.self_applied,
         self_applied_command=lambda paths, quiet=(): f.self_applied_command,
         remaining_setup_hosts=remaining_setup_hosts,
-        derive=lambda paths, changed, declared=None: Derivation(
+        derive=lambda files, changed_files, declared=None, quiet=(): Derivation(
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
         quiet_paths=lambda paths, range_: set(),
@@ -274,6 +279,17 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(0, "prhead\n")
         if args[0] == "diff":
             return _cp(f.diff_rc, "\n".join(f.diff_paths) + "\n")
+        if args[0] == "ls-tree":
+            tree = f.head_tree
+            if tree is None:
+                tree = {
+                    e["filename"]: "100644"
+                    for e in f.pr_files
+                    if isinstance(e.get("filename"), str)
+                    and e.get("status") != "removed"
+                }
+            rows = (f"{mode} blob {'0' * 40}\t{path}\0" for path, mode in tree.items())
+            return _cp(f.ls_tree_rc, "".join(rows))
         if args[0] == "merge-base" and "--is-ancestor" in args:
             if args[-1] == "HEAD":
                 return _cp(f.merge_applied_rc)

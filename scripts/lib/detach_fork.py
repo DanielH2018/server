@@ -25,7 +25,8 @@ THE RUN RECORDS ITS OWN PID AND EXIT CODE BESIDE ITS LOG. A grandchild cannot be
 whoever waits on it, so the caller writes `<log stem>.pid` and the run writes `<log stem>.rc`
 after flushing its last line (`record_code`). A cc-wait probe (`land_probe.py`,
 `deploy_lib/detach_probe.py`) reads the code first and the log second, and reads a dead pid with no code
-as a run that was killed.
+as a run that was killed. A log with neither file that has sat unchanged for `START_GRACE_S`
+is a run that never recorded its start, and reads as killed too (`never_started`).
 """
 
 import contextlib
@@ -41,6 +42,11 @@ from pathlib import Path
 MOVE_WAIT_S = 5.0
 MOVE_POLL_S = 0.05
 BUSCTL_TIMEOUT_S = 10
+
+# How long a log may sit unchanged with neither a pid nor a code beside it before a probe reads
+# the run as dead. The caller writes the pid milliseconds after it touches the log, so a run
+# past this never forked, or its caller died before writing the pid (issue #4513).
+START_GRACE_S = 60
 
 # The cgroup v2 line of a process inside a user manager's service, and that service's name.
 _USER_SERVICE = re.compile(r"^0::/.*/user@\d+\.service/(?:.+/)?([^/]+\.service)$")
@@ -249,3 +255,17 @@ def alive(pid: int) -> bool:
         return False
     # The state is the first field after the parenthesised command name.
     return stat.rpartition(")")[2].split()[0] not in ("Z", "X")
+
+
+def never_started(log: Path, now: float | None = None) -> bool:
+    """Whether `log` has neither a pid nor a code beside it and is older than `START_GRACE_S`.
+
+    The age is the log's mtime, so a run that writes its log without a pid file stays live.
+    """
+    if recorded_pid(log) is not None or recorded_code(log) is not None:
+        return False
+    try:
+        mtime = log.stat().st_mtime
+    except OSError:
+        return False
+    return (time.time() if now is None else now) - mtime > START_GRACE_S

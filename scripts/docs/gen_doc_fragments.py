@@ -52,7 +52,6 @@ Usage::
     uv run python scripts/docs/gen_doc_fragments.py --fix  # write, exit 1 if any was stale
 """
 
-import argparse
 import sys as _sys
 from collections.abc import Callable
 from pathlib import Path as _Path
@@ -90,6 +89,7 @@ from fragments_lib import (
     fragments_hosts,
     fragments_storage,
 )
+from lib.cli_help import ArgumentParser
 from lib.docs_provenance import write_if_body_changed
 from lib.ansible_inventory import K8S_HOST, K8S_HOST_VARS, PI_HOST, PI_HOST_VARS
 from lib.estate import Estate
@@ -285,7 +285,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         0, or 1 under `--fix` when a fragment was stale and has been rewritten.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
         "--out-dir", default=DEFAULT_OUT_DIR, help="where the fragments go"
     )

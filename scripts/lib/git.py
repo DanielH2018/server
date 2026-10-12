@@ -22,8 +22,11 @@ def git(
     cwd: str | Path | None = None,
     check: bool = True,
     timeout: float | None = None,
+    input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run ``git <args>`` in ``cwd`` and return the completed process.
+
+    ``input`` is written to git's stdin, for a ``--stdin``/``--batch`` command.
 
     ``check=True`` raises ``CalledProcessError`` on a non-zero exit, the way most callers
     want a failed ``rev-parse`` to surface. Pass ``check=False`` to read ``returncode``
@@ -43,6 +46,7 @@ def git(
         text=True,
         check=check,
         timeout=timeout,
+        input=input,
     )
 
 

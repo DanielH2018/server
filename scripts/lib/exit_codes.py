@@ -37,6 +37,9 @@ Typical usage example:
 """
 
 import dataclasses
+import sys
+from pathlib import PurePosixPath
+from typing import NoReturn
 
 # -- the spine every family below reuses ------------------------------------------------
 # sysexits.h's EX_USAGE and EX_TEMPFAIL, plus the two verdict codes. A family names these
@@ -145,6 +148,106 @@ UNLANDED_NOTHING = OK
 UNLANDED_ORIGIN_UNREADABLE = FAILED
 UNLANDED_PR_OPEN = 2
 UNLANDED_NO_PR = 3
+
+# -- scripts/deploy_tools/narrow_setup.py -----------------------------------------------
+# Which `--tags` value a setup-role range needs. 0 prints the tags; 1 is a refusal, after which
+# the caller keeps the whole-role tag. `NARROW_SETUP_NOTHING` says the role needs no tag at all,
+# printed beside `narrowed-to-nothing` on stdout. It is 5, not 3, because `narrow_cmd` exits
+# `DEPLOY_BROAD` (3) for the opposite answer, "cannot narrow" (#4453), and not 2, because
+# argparse exits 2 on a bad command line. The deployer's copy of the value is
+# `deployer_lib/deploy_narrow.py:NARROW_SETUP_NOTHING_EXIT`, which cannot import this module.
+NARROW_SETUP_NARROWED = OK
+NARROW_SETUP_REFUSED = FAILED
+NARROW_SETUP_NOTHING = 5
+
+# -- scripts/diagnostics/probe.py -------------------------------------------------------
+# Every verdict subcommand: 0 and 1 are what the probe observed, and 75 means it observed
+# nothing because it could not read its source (a curl, an ssh or a kubectl read that failed,
+# or a read that came back empty). A caller retries on 75 and investigates on 1 (#4444). 64 is
+# an argument the probe cannot act on, such as `--since 3x`: no retry can succeed, and nothing
+# was observed, so it names no verdict (#4471).
+PROBE_OK = OK
+PROBE_FAILED = FAILED
+PROBE_USAGE_ERROR = USAGE_ERROR
+PROBE_UNREADABLE = TEMP_FAIL
+
+# -- scripts/dev/fanout_lib/place.py (`fanout.py place`) --------------------------------
+# `launch` and `status` share one vocabulary. 3 is "nothing was placed" and nothing else, so a
+# launch that started batches while dropping a refused claim exits 7 instead (#4452). A
+# `status` read that timed out is 75, but only when no batch reports something worse: a failed
+# batch (5) or one that needs a hand (1) outranks "read again later" (`status.exit_tier`).
+FANOUT_PLACE_OK = OK
+FANOUT_PLACE_FAILED = FAILED
+FANOUT_PLACE_NOTHING_PLACED = 3
+FANOUT_PLACE_NO_HOST_READABLE = 4
+FANOUT_PLACE_BATCH_FAILED = 5
+FANOUT_PLACE_NO_SIGNING_HOST = 6
+FANOUT_PLACE_PARTLY_LAUNCHED = 7
+FANOUT_PLACE_BAD_ARGS = USAGE_ERROR
+FANOUT_PLACE_UNREAD = TEMP_FAIL
+
+# -- scripts/docs/build_docs.py ---------------------------------------------------------
+# 2 and 3 name which half failed, because `docs-refresh.sh` answers them oppositely: stale
+# pages behind a fresh site against a stale site. 1 is an uncaught crash.
+BUILD_DOCS_OK = OK
+BUILD_DOCS_CRASHED = FAILED
+BUILD_DOCS_GENERATOR_FAILED = 2
+BUILD_DOCS_SITE_FAILED = 3
+BUILD_DOCS_BAD_ARGS = USAGE_ERROR
+
+# -- scripts/dev/findings.py ------------------------------------------------------------
+# 3 is the register refusing the write, which `fanout_lib.abandon` reads as "the claim was
+# already gone". A bad command line was 2 until #4443.
+FINDINGS_OK = OK
+FINDINGS_FAILED = FAILED
+FINDINGS_REFUSED = 3
+FINDINGS_BAD_ARGS = USAGE_ERROR
+
+# -- scripts/dev/fact_status.py ---------------------------------------------------------
+FACT_STATUS_OK = OK
+FACT_STATUS_OUT = FAILED
+FACT_STATUS_BAD_ARGS = USAGE_ERROR
+
+# -- scripts/deploy_tools/runbook_gates.py ----------------------------------------------
+# A failed gate exits its own number, 1..N, which each runbook's `--help` lists; those are per
+# runbook and so are not rows here. 69 is sysexits' EX_UNAVAILABLE: the cluster could not be
+# asked, so no gate graded anything.
+RUNBOOK_GATES_OK = OK
+RUNBOOK_GATES_BAD_ARGS = USAGE_ERROR
+RUNBOOK_GATES_UNAVAILABLE = 69
+
+# -- scripts/secrets_mgmt/secret_rotation.py --------------------------------------------
+# A refused argument (a record-tier name for `rotate`, a future date for `record`, a key the
+# registry lacks) and a missing SECRET_ROTATION_KUMA were 2 until #4443; both are usage.
+SECRET_ROTATION_OK = OK
+SECRET_ROTATION_FAILED = FAILED
+SECRET_ROTATION_SOPS_FAILED = 3
+SECRET_ROTATION_BAD_ARGS = USAGE_ERROR
+
+# -- scripts/backup/b2_drain.py ---------------------------------------------------------
+# `prune_backups/tasks/b2-drain.yml` fails the play on anything but 0 and 1, so a refused
+# volume reports while a usage error or a mid-run B2 failure stops the run.
+B2_DRAIN_OK = OK
+B2_DRAIN_REFUSED = FAILED
+B2_DRAIN_ERRORED = 2
+B2_DRAIN_BAD_ARGS = USAGE_ERROR
+
+# -- scripts/infra_map/gen_infra_map.py -------------------------------------------------
+INFRA_MAP_OK = OK
+INFRA_MAP_LIVE_UNREADABLE = 2
+INFRA_MAP_BAD_ARGS = USAGE_ERROR
+
+# -- scripts/dev/renovate_rebase.py -----------------------------------------------------
+RENOVATE_REBASE_OK = OK
+RENOVATE_REBASE_NO_CHECKBOX = FAILED
+RENOVATE_REBASE_GH_FAILED = 2
+RENOVATE_REBASE_SOAKING = 3
+RENOVATE_REBASE_BAD_ARGS = USAGE_ERROR
+
+# -- scripts/dev/renovate_branch_sweep.py -----------------------------------------------
+RENOVATE_SWEEP_OK = OK
+RENOVATE_SWEEP_GH_FAILED = 2
+RENOVATE_SWEEP_BAD_ARGS = USAGE_ERROR
 
 
 # -- the renderable copy ----------------------------------------------------------------
@@ -384,6 +487,275 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "`unlanded`: the branch is on origin with no PR.",
         ),
     ),
+    "scripts/deploy_tools/narrow_setup.py": (
+        _c(
+            NARROW_SETUP_NARROWED,
+            "NARROW_SETUP_NARROWED",
+            "printed the comma-separated tags the range needs from the role.",
+        ),
+        _c(
+            NARROW_SETUP_REFUSED,
+            "NARROW_SETUP_REFUSED",
+            "refused to narrow, so the caller applies the whole role tag.",
+            "stderr names the path or tag that made the derivation uncertain.",
+        ),
+        _c(
+            NARROW_SETUP_NOTHING,
+            "NARROW_SETUP_NOTHING",
+            "the range reaches no host through the role, so the role needs no tag at all; "
+            "stdout is `narrowed-to-nothing`.",
+        ),
+    ),
+    "scripts/diagnostics/probe.py": (
+        _c(
+            PROBE_OK,
+            "PROBE_OK",
+            "the probe read its source and observed nothing wrong.",
+            verdict="ok",
+        ),
+        _c(
+            PROBE_FAILED,
+            "PROBE_FAILED",
+            "the probe read its source and observed a bad verdict.",
+            "The lines above the verdict name what failed.",
+            verdict="fail",
+        ),
+        _c(
+            PROBE_USAGE_ERROR,
+            "PROBE_USAGE_ERROR",
+            "an argument the probe cannot act on, so it read nothing.",
+            "stderr names the argument and the forms it accepts. Fix the invocation; a retry "
+            "of the same one never succeeds.",
+        ),
+        _c(
+            PROBE_UNREADABLE,
+            "PROBE_UNREADABLE",
+            "the probe could not read its source, so it observed nothing.",
+            "stderr carries the failed read. Retry once the source answers; this is not a "
+            "verdict about the thing probed.",
+            verdict="unreadable",
+        ),
+    ),
+    "scripts/dev/fanout_lib/place.py": (
+        _c(
+            FANOUT_PLACE_OK,
+            "FANOUT_PLACE_OK",
+            "`launch`: every batch launched with every issue claimed. `status`: every batch "
+            "is running, done, landed or cleaned.",
+        ),
+        _c(
+            FANOUT_PLACE_FAILED,
+            "FANOUT_PLACE_FAILED",
+            "`launch`: refused before placing (a claim holder, a live batch, an issue fetch or "
+            "label, a solo-only or shared-file issue), or a batch failed to launch. `status`: "
+            "a batch needs a hand (needs-input, no-pr, no-verdict, no-report).",
+            "stderr names the refusal; for `status`, read the batch's line.",
+        ),
+        _c(
+            FANOUT_PLACE_NOTHING_PLACED,
+            "FANOUT_PLACE_NOTHING_PLACED",
+            "`launch` placed nothing: no host had headroom, the ssh budget or the live-batch "
+            "cap refused, or every issue's claim was refused.",
+        ),
+        _c(
+            FANOUT_PLACE_NO_HOST_READABLE,
+            "FANOUT_PLACE_NO_HOST_READABLE",
+            "no host's headroom could be read.",
+        ),
+        _c(
+            FANOUT_PLACE_BATCH_FAILED,
+            "FANOUT_PLACE_BATCH_FAILED",
+            "`status`: a batch failed: its unit exited non-zero or its session set is_error.",
+            "Read the stderr tail on the batch's line.",
+        ),
+        _c(
+            FANOUT_PLACE_NO_SIGNING_HOST,
+            "FANOUT_PLACE_NO_SIGNING_HOST",
+            "no candidate host signs commits GitHub verifies, or the registered signing keys "
+            "could not be read.",
+        ),
+        _c(
+            FANOUT_PLACE_PARTLY_LAUNCHED,
+            "FANOUT_PLACE_PARTLY_LAUNCHED",
+            "`launch` started batches, but at least one issue's claim was refused and dropped.",
+            "Each `dropped` line on stderr names an issue no batch carries.",
+        ),
+        _c(
+            FANOUT_PLACE_BAD_ARGS,
+            "FANOUT_PLACE_BAD_ARGS",
+            "the command line is wrong: a malformed --batch, an unregistered --repo, or a "
+            "run-id with no manifest.",
+        ),
+        _c(
+            FANOUT_PLACE_UNREAD,
+            "FANOUT_PLACE_UNREAD",
+            "`status`: a host's read timed out and no batch reported anything worse.",
+            "Run `status` again; the batches on that host may still be running.",
+        ),
+    ),
+    "scripts/docs/build_docs.py": (
+        _c(BUILD_DOCS_OK, "BUILD_DOCS_OK", "every generator ran and the site built."),
+        _c(BUILD_DOCS_CRASHED, "BUILD_DOCS_CRASHED", "build_docs itself crashed."),
+        _c(
+            BUILD_DOCS_GENERATOR_FAILED,
+            "BUILD_DOCS_GENERATOR_FAILED",
+            "one or more generators failed, so the published pages are incomplete. It wins "
+            "over 3 when both halves fail.",
+        ),
+        _c(
+            BUILD_DOCS_SITE_FAILED,
+            "BUILD_DOCS_SITE_FAILED",
+            "every generator ran but the site build failed, so the docs site still serves its "
+            "previous build.",
+        ),
+        _c(BUILD_DOCS_BAD_ARGS, "BUILD_DOCS_BAD_ARGS", "the command line is wrong."),
+    ),
+    "scripts/dev/findings.py": (
+        _c(FINDINGS_OK, "FINDINGS_OK", "done."),
+        _c(
+            FINDINGS_FAILED,
+            "FINDINGS_FAILED",
+            "gh failed, or `reap` refused a git read failure rather than call it "
+            '"nothing is claimed".',
+        ),
+        _c(
+            FINDINGS_REFUSED,
+            "FINDINGS_REFUSED",
+            "nothing was written because the issue refuses it: closed, manual, deferred, "
+            "outside the register, held by another worktree, not claimed, or lost a race.",
+        ),
+        _c(
+            FINDINGS_BAD_ARGS,
+            "FINDINGS_BAD_ARGS",
+            "the command line is wrong, including a --worktree name the claim trailer could "
+            "not carry.",
+        ),
+    ),
+    "scripts/dev/fact_status.py": (
+        _c(
+            FACT_STATUS_OK,
+            "FACT_STATUS_OK",
+            "every section read is IN, or the write is done.",
+        ),
+        _c(
+            FACT_STATUS_OUT,
+            "FACT_STATUS_OUT",
+            "a section is OUT, a lint finding is blocking, or `reverify` wrote the lock and "
+            "the commit must stage it.",
+        ),
+        _c(FACT_STATUS_BAD_ARGS, "FACT_STATUS_BAD_ARGS", "the command line is wrong."),
+    ),
+    "scripts/deploy_tools/runbook_gates.py": (
+        _c(RUNBOOK_GATES_OK, "RUNBOOK_GATES_OK", "every gate run passed."),
+        _c(
+            RUNBOOK_GATES_BAD_ARGS,
+            "RUNBOOK_GATES_BAD_ARGS",
+            "the command line is wrong, including a missing or unknown runbook.",
+        ),
+        _c(
+            RUNBOOK_GATES_UNAVAILABLE,
+            "RUNBOOK_GATES_UNAVAILABLE",
+            "the cluster could not be asked, so no gate graded anything.",
+            "Check that kubectl is installed and the kubeconfig names the production "
+            "cluster, then re-run.",
+        ),
+    ),
+    "scripts/secrets_mgmt/secret_rotation.py": (
+        _c(SECRET_ROTATION_OK, "SECRET_ROTATION_OK", "done."),
+        _c(
+            SECRET_ROTATION_FAILED,
+            "SECRET_ROTATION_FAILED",
+            "the registry is out of sync under --check, --push pushed down, or a --deploy "
+            "redeploy failed after the new tokens were written.",
+        ),
+        _c(
+            SECRET_ROTATION_SOPS_FAILED,
+            "SECRET_ROTATION_SOPS_FAILED",
+            "a `sops set` failed or timed out partway through the rotate batch.",
+        ),
+        _c(
+            SECRET_ROTATION_BAD_ARGS,
+            "SECRET_ROTATION_BAD_ARGS",
+            "the command line is wrong: a name or date the subcommand refuses, or --push "
+            "without SECRET_ROTATION_KUMA set.",
+        ),
+    ),
+    "scripts/backup/b2_drain.py": (
+        _c(B2_DRAIN_OK, "B2_DRAIN_OK", "every requested volume drained, or would be."),
+        _c(
+            B2_DRAIN_REFUSED,
+            "B2_DRAIN_REFUSED",
+            "at least one requested volume was refused, for example because it is still live.",
+        ),
+        _c(
+            B2_DRAIN_ERRORED,
+            "B2_DRAIN_ERRORED",
+            "the drain or a B2 API call failed mid-run, including a failed post-delete "
+            "verification.",
+        ),
+        _c(
+            B2_DRAIN_BAD_ARGS,
+            "B2_DRAIN_BAD_ARGS",
+            "the command line is wrong: a missing credential, an unreadable input file, or "
+            "no volumes named.",
+        ),
+    ),
+    "scripts/infra_map/gen_infra_map.py": (
+        _c(
+            INFRA_MAP_OK, "INFRA_MAP_OK", "the map was written, or was already current."
+        ),
+        _c(
+            INFRA_MAP_LIVE_UNREADABLE,
+            "INFRA_MAP_LIVE_UNREADABLE",
+            "live collection lacked a required tool, so the previous map was left in place.",
+        ),
+        _c(INFRA_MAP_BAD_ARGS, "INFRA_MAP_BAD_ARGS", "the command line is wrong."),
+    ),
+    "scripts/dev/renovate_rebase.py": (
+        _c(
+            RENOVATE_REBASE_OK,
+            "RENOVATE_REBASE_OK",
+            "ticked, already ticked, or reticked.",
+        ),
+        _c(
+            RENOVATE_REBASE_NO_CHECKBOX,
+            "RENOVATE_REBASE_NO_CHECKBOX",
+            "the PR body carries no rebase checkbox.",
+        ),
+        _c(
+            RENOVATE_REBASE_GH_FAILED,
+            "RENOVATE_REBASE_GH_FAILED",
+            "`gh` failed; its stderr is printed.",
+        ),
+        _c(
+            RENOVATE_REBASE_SOAKING,
+            "RENOVATE_REBASE_SOAKING",
+            "the PR is still soaking, or under --retick its soak status does not read "
+            "SUCCESS, so nothing was written.",
+        ),
+        _c(
+            RENOVATE_REBASE_BAD_ARGS,
+            "RENOVATE_REBASE_BAD_ARGS",
+            "the arguments are not one PR number and an optional --retick.",
+        ),
+    ),
+    "scripts/dev/renovate_branch_sweep.py": (
+        _c(
+            RENOVATE_SWEEP_OK,
+            "RENOVATE_SWEEP_OK",
+            "the report printed; an empty orphan set is the healthy answer.",
+        ),
+        _c(
+            RENOVATE_SWEEP_GH_FAILED,
+            "RENOVATE_SWEEP_GH_FAILED",
+            "`gh` or `git` failed, or no open Dependency Dashboard was found.",
+        ),
+        _c(
+            RENOVATE_SWEEP_BAD_ARGS,
+            "RENOVATE_SWEEP_BAD_ARGS",
+            "the command line is wrong.",
+        ),
+    ),
 }
 
 
@@ -403,6 +775,9 @@ VERDICT_PREFIXES = {
     "scripts/deploy.sh": "DEPLOY-VERDICT",
     "scripts/deploy_tools/gitops_tick.sh": "TICK-VERDICT",
     "scripts/deploy_tools/land.sh": "VERDICT",
+    # A landing runs `probe.py health` and its stdout can reach the landing's log, so the probe
+    # takes its own prefix for the reason the DECIDED note above gives.
+    "scripts/diagnostics/probe.py": "PROBE-VERDICT",
 }
 
 
@@ -436,3 +811,19 @@ def describe(entry_point: str, rc: int) -> str | None:
             tail = f" {code.remedy}" if code.remedy else ""
             return f"{code.const} ({code.value}): {code.meaning}{tail}"
     return None
+
+
+def die(entry_point: str, rc: int, detail: str) -> NoReturn:
+    """Print `<prog>: error: <detail>` and the code's meaning to stderr, then exit `rc`.
+
+    `<prog>` is the entry point's file name. The second line is `describe(entry_point, rc)`,
+    left out when the contract has no row for `rc`.
+
+    Raises:
+        SystemExit: always, with `rc` as its code.
+    """
+    print(f"{PurePosixPath(entry_point).name}: error: {detail}", file=sys.stderr)
+    note = describe(entry_point, rc)
+    if note:
+        print(note, file=sys.stderr)
+    raise SystemExit(rc)

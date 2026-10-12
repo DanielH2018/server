@@ -24,6 +24,7 @@ from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     HOLD_CLEAR_CMD,
     MARKERS,
+    PLAYBOOK_CMD,
     ManualPlaneEntry,
     by_hand,
     k8s_deferred_deploy_cmd,
@@ -66,7 +67,8 @@ def _apply_and_clear(pending, narrow) -> str:
         entry = oldest[role]
         selected = narrow.get(role) or {role}
         warning = maximal_apply_warning(role, selected)
-        how = by_hand(entry.playbook) or "apply `%s --tags %s%s` by hand%s" % (
+        how = by_hand(entry.playbook) or "apply `%s %s --tags %s%s` by hand%s" % (
+            PLAYBOOK_CMD,
             entry.playbook,
             ",".join(sorted(selected)),
             target_arg(entry.host),

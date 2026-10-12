@@ -20,11 +20,13 @@ import subprocess
 import time
 from typing import Callable, NamedTuple
 
-from deployer_lib.deploy_config import log
+from deployer_lib.deploy_config import WARNING, log
+from deployer_lib.deploy_release import CURRENT, DRIFTED
 
 # The playbook the setup arm runs, and the one `narrow_setup.py` derives reachability against.
 from deployer_lib.deploy_setup_roles import INITIAL_SETUP
 from gitops_hold import held_tag
+from gitops_markers import DEPLOY_PLAYBOOK
 
 # What the tick's receipt records as a plane's tags when a deploy-plane range moves no
 # rendered output at all — a comment-only inventory edit, a variable nothing reads, a macro
@@ -47,8 +49,10 @@ NARROW_SETUP_SCRIPT = "scripts/deploy_tools/narrow_setup.py"
 # The exit code `narrow_setup.py` answers "this role needs no tag" with, beside
 # `NARROWED_TO_NOTHING` on stdout (#4361). The script cannot be imported here, so it holds
 # the same pair as `NOTHING_EXIT` and `NOTHING_OUT`; `scripts/deploy_tools/tests/
-# test_narrow_setup.py` drives its CLI with this module's argv and pins the two together.
-NARROW_SETUP_NOTHING_EXIT = 3
+# test_narrow_setup.py` drives its CLI with this module's argv and pins the two together. The
+# value is `lib/exit_codes.py:NARROW_SETUP_NOTHING`, which the deployer cannot import. It is 5
+# rather than 3 because `narrow_cmd` exits 3 for "cannot narrow" (#4453).
+NARROW_SETUP_NOTHING_EXIT = 5
 
 # What the whole setup-narrowing LOOP gets, across every role one range touches. The per-role
 # budget bounds one child; nothing bounds how many roles a range carries, and `plan` runs
@@ -139,7 +143,7 @@ def narrow_deploy_plane(
     )
     for line in r.stderr.splitlines():
         if line.strip():
-            log(line.strip())
+            log(f"narrow: {line.strip().removeprefix('narrow: ')}")
     return r.returncode, r.stdout.strip()
 
 
@@ -208,7 +212,7 @@ def narrow_setup_role(
     )
     for line in r.stderr.splitlines():
         if line.strip():
-            log(line.strip())
+            log(f"narrow-setup: {line.strip().removeprefix('narrow-setup: ')}")
     return r.returncode, r.stdout.strip()
 
 
@@ -259,7 +263,7 @@ def _role_json(repo: str, argv: list[str]) -> dict:
     )
     for line in r.stderr.splitlines():
         if line.strip():
-            log(line.strip())
+            log(f"k8s_unapplied: {line.strip()}")
     r.check_returncode()
     out = json.loads(r.stdout)
     if not isinstance(out, dict):
@@ -353,8 +357,8 @@ def _one_setup_role(
     reaches no host through the role, so the role is dropped from the run. It takes both
     halves because the script runs from the pre-merge checkout while this code is the copy
     under /opt, so either can be the older one: a deployer that predates the answer reads the
-    non-zero exit as a refusal, and an exit 3 from anything else lacks the stdout. Exit 0 with
-    empty output stays doubt.
+    non-zero exit as a refusal, and the same exit code from anything else lacks the stdout.
+    Exit 0 with empty output stays doubt.
     """
     try:
         rc, out = narrow_setup(
@@ -464,9 +468,12 @@ def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
     try:
         verdicts = digest_diff(origin)
     except Exception as exc:
-        log(f"narrow shadow: no digest diff ({type(exc).__name__}: {exc})")
+        log(
+            f"narrow-shadow: no digest diff ({type(exc).__name__}: {exc})",
+            level=WARNING,
+        )
         return
-    drifted = verdicts.get("drifted", [])
+    drifted = verdicts.get(DRIFTED, [])
     unknown = ", ".join(
         f"{key.split(': ', 1)[1]} {len(names)}"
         for key, names in sorted(verdicts.items())
@@ -479,8 +486,8 @@ def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
     else:
         chose = ",".join(deploy.tags)
     log(
-        f"narrow shadow: render digest at {origin[:8]} would apply "
-        f"{','.join(drifted) or 'nothing'} (current {len(verdicts.get('current', []))}; "
+        f"narrow-shadow: render digest at {origin[:8]} would apply "
+        f"{','.join(drifted) or 'nothing'} (current {len(verdicts.get(CURRENT, []))}; "
         f"unknown: {unknown or 'none'}); the narrowing chose {chose}"
     )
 
@@ -491,7 +498,7 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
     Whichever it is, `config.k8s_autodeploy_denylist` does not subtract from it — see
     `denylisted_in` and the DECIDED marker on it.
     """
-    playbook = "ansible/deploy.yml"
+    playbook = DEPLOY_PLAYBOOK
     try:
         rc, out = narrow(config.repo, target.local, target.origin, NARROW_TIMEOUT_S)
     except Exception as exc:

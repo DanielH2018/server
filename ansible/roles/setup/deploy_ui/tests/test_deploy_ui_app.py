@@ -8,7 +8,7 @@ import urllib.parse
 import pytest
 
 import deploy_ui
-import deploy_ui_reads as reads
+from deploy_ui_lib import deploy_ui_reads as reads
 from deployer_lib.deploy_locks import TREE_LOCK
 
 TREE_LOCK_NAME = pathlib.PurePath(TREE_LOCK).name

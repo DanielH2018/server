@@ -65,7 +65,14 @@ from diagnostics.probe_lib.health_kubectl import (
 )
 from diagnostics.probe_lib.health_rollout import format_k8s_health, unrolled_reason
 
-from lib.kubectl import DEFAULT_CLUSTER, cluster_refusal, kubectl_json, served_cluster
+from lib.exit_codes import PROBE_UNREADABLE
+from lib.kubectl import (
+    DEFAULT_CLUSTER,
+    DEFAULT_TOOLS,
+    cluster_refusal,
+    kubectl,
+    served_cluster,
+)
 from lib.repo_paths import K8S_ROLES, REPO
 
 _RENDER_CONTEXT = None
@@ -251,17 +258,47 @@ def format_role_health(role, checked, now, expected_restarts=None):
     return "\n".join([head, *lines]), 0
 
 
-def _fetch_workload(name, namespace, cluster):
+def _read(cluster, args, tools=DEFAULT_TOOLS):
+    """`kubectl <args>` parsed as a JSON object, or None when the object does not exist.
+
+    Only kubectl's own `(NotFound)` answer means absent. Any other failure (a timeout, an
+    apiserver that did not answer, a Forbidden, output that is not JSON) means the probe did
+    not see the cluster, and reading it as None printed MISSING for a workload nobody looked
+    at, or the no-Deployment line `detach_notify` counts as a skip (#4444).
+
+    Raises:
+        core.Unreadable: the read failed for any reason but NotFound.
+    """
+    what = f"kubectl {' '.join(args)}"
+    try:
+        proc = kubectl(cluster, *args, tools=tools)
+    except subprocess.TimeoutExpired as exc:
+        raise core.Unreadable(f"{what} timed out after {exc.timeout}s") from None
+    if proc.returncode != 0:
+        if "(NotFound)" in proc.stderr:
+            return None
+        raise core.Unreadable(f"{what} failed: {proc.stderr.strip()[:300]}")
+    try:
+        doc = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        doc = None
+    if not isinstance(doc, dict):
+        raise core.Unreadable(f"{what} returned output that is not a JSON object")
+    return doc
+
+
+def _fetch_workload(name, namespace, cluster, tools=DEFAULT_TOOLS):
     """(workload doc or None, pods doc or None) for one name, tried across WORKLOAD_KINDS.
 
-    Asking for the wrong kind just returns non-zero, so the fallback costs one extra call only
-    for the DaemonSets and for a name that matches nothing.
+    Asking for the wrong kind answers NotFound, so the fallback costs one extra call only
+    for the DaemonSets and for a name that matches nothing. Any other failed read raises
+    `core.Unreadable` through `_read`.
     """
     for kind in WORKLOAD_KINDS.values():
-        workload = kubectl_json(cluster, *k8s_deploy_args(name, namespace, kind=kind))
+        workload = _read(cluster, k8s_deploy_args(name, namespace, kind=kind), tools)
         if workload:
-            pods = kubectl_json(
-                cluster, *k8s_pods_args(name, namespace, pod_selector(workload))
+            pods = _read(
+                cluster, k8s_pods_args(name, namespace, pod_selector(workload)), tools
             )
             return workload, pods
     return None, None
@@ -322,16 +359,14 @@ def release_expected_restarts(record):
     }
 
 
-def _fetch_cronjob(name, namespace, cluster):
+def _fetch_cronjob(name, namespace, cluster, tools=DEFAULT_TOOLS):
     """(CronJob doc or None, its latest owned Job or None, that Job's pods doc or None)."""
-    cronjob = kubectl_json(cluster, *k8s_cronjob_args(name, namespace))
-    latest_job = latest_owned_job(
-        kubectl_json(cluster, *k8s_jobs_args(namespace)), name
-    )
+    cronjob = _read(cluster, k8s_cronjob_args(name, namespace), tools)
+    latest_job = latest_owned_job(_read(cluster, k8s_jobs_args(namespace), tools), name)
     pods = None
     if latest_job:
         job_name = (latest_job.get("metadata") or {}).get("name")
-        pods = kubectl_json(cluster, *k8s_job_pods_args(job_name, namespace))
+        pods = _read(cluster, k8s_job_pods_args(job_name, namespace), tools)
     return cronjob, latest_job, pods
 
 
@@ -369,21 +404,37 @@ def format_role_cronjob_health(role, checked, now):
 _UNSET = object()
 
 
-def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
+def run_health(
+    container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET, tools=DEFAULT_TOOLS
+):
     """k8s workload health by default, the Pi's Docker container with --docker.
 
-    k8s first because that is where ~50 of the ~55 services live.
+    k8s first because that is where ~50 of the ~55 services live. `tools` is the kubectl
+    boundary of the k8s reads, injectable so a test can fail them without patching.
     """
     if docker:
         # daniel-pi is the only Docker host left, and probe.py runs on daniel-box, so this is
         # necessarily remote. The ssh is internal to the script, so it is covered by probe.py's
         # own allow-list entry and never reaches the Bash classifier.
+        # A failed ssh or an unparseable inspect is a read that did not happen, not an absent
+        # container: reporting it as `[]` printed "MISSING — the deploy did not create it"
+        # for a Pi that was only unreachable (#4444).
         argv = ["ssh", PI_HOST] + inspect_argv(container)
         out = subprocess.run(argv, capture_output=True, text=True)
+        if out.returncode != 0:
+            print(
+                f"ssh {PI_HOST} docker inspect {container} failed: {out.stderr.strip()}",
+                file=_sys.stderr,
+            )
+            return PROBE_UNREADABLE
         try:
-            data = json.loads(out.stdout) if out.returncode == 0 else []
+            data = json.loads(out.stdout)
         except json.JSONDecodeError:
-            data = []
+            print(
+                f"ssh {PI_HOST} docker inspect {container} returned unparseable output",
+                file=_sys.stderr,
+            )
+            return PROBE_UNREADABLE
         text, code = format_health(data, container, declared=declared_on_pi(container))
         print(text)
         return code
@@ -396,8 +447,10 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
     served_name = served_cluster() if served is _UNSET else cast("str | None", served)
     refusal = cluster_refusal(cluster, served_name)
     if refusal:
-        print(f"{container}: {refusal}")
-        return 1
+        # No workload was looked at, so this is a read that did not happen, not a verdict
+        # about the container (#4468).
+        print(f"{container}: {refusal}", file=_sys.stderr)
+        return PROBE_UNREADABLE
 
     ns = core.k8s_namespace()
     try:
@@ -412,7 +465,7 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
     if targets is None:
         # Not a k8s role, so the tag is the only name available. A miss here means "this tag
         # is not a k8s workload name", which is exactly what lets --docker take over.
-        workload, pods = _fetch_workload(container, ns, cluster)
+        workload, pods = _fetch_workload(container, ns, cluster, tools)
         text, code = format_k8s_health(
             workload, pods, container, datetime.now(timezone.utc)
         )
@@ -439,7 +492,7 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
                 (
                     namespace,
                     name,
-                    *_fetch_cronjob(name, namespace, cluster),
+                    *_fetch_cronjob(name, namespace, cluster, tools),
                     deploy_applied_at,
                 )
                 for namespace, name in cronjob_targets
@@ -465,7 +518,7 @@ def run_health(container, docker=False, cluster=DEFAULT_CLUSTER, served=_UNSET):
 
     now = datetime.now(timezone.utc)
     checked = [
-        (namespace, kind, name, *_fetch_workload(name, namespace, cluster))
+        (namespace, kind, name, *_fetch_workload(name, namespace, cluster, tools))
         for namespace, kind, name in targets
     ]
     text, code = format_role_health(

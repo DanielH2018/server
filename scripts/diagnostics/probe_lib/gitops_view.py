@@ -19,8 +19,11 @@ on daniel-box sees the files exist and cannot open them, and every other host ha
 at all. `deployer_park`'s readers fold both into "absent", which here would print "no hold".
 This reports each marker as set, absent or unreadable instead.
 
-Exit code: 0 when every marker was read (absent counts as read), 1 when the directory or any
-marker could not be. The exit says nothing about what the markers hold.
+Exit code: 0 when every marker was read (absent counts as read), `PROBE_UNREADABLE` (75) when
+the directory or any marker could not be, with what was missed on stderr. The exit says nothing
+about what the markers hold, so this subcommand never exits 1, the `fail` verdict (#4468). An
+absent directory is 75 too: off the deploy host nothing was read, and a caller must not take
+that for a deployer with nothing to report.
 """
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
@@ -36,6 +39,7 @@ import time
 from pathlib import Path
 
 from lib.deployer_park import _age_phrase
+from lib.exit_codes import PROBE_UNREADABLE
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 # The deployer's own modules, so each format and each clear command is its own.
@@ -52,6 +56,7 @@ from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     HOLD_CLEAR_CMD,
     MARKERS,
+    PLAYBOOK_CMD,
     by_hand,
     STATE_DIR,
     k8s_deferred_deploy_cmd,
@@ -93,7 +98,7 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
         selected = narrow.get(e.role) or frozenset({e.role})
         apply = (
             by_hand(e.playbook)
-            or f"{e.playbook} --tags {','.join(sorted(selected))}{target_arg(e.host)}"
+            or f"{PLAYBOOK_CMD} {e.playbook} --tags {','.join(sorted(selected))}{target_arg(e.host)}"
         )
         warning = maximal_apply_warning(e.role, selected)
         rows[OWED_MANUAL_PLANE].append(
@@ -326,10 +331,23 @@ def format_text(snap: dict) -> str:
 def run_gitops_state(
     ns, state_dir: str | Path = STATE_DIR, now: float | None = None
 ) -> int:
-    """Print the snapshot, as text or with `--json` as one document; exit 1 on an unread marker.
+    """Print the snapshot, as text or with `--json` as one document; exit 75 on an unread marker.
 
+    What could not be read also goes to stderr, so a `--json` caller sees it without parsing.
     `state_dir` and `now` exist for a test; `probe.py` passes neither.
     """
     snap = collect(state_dir, now)
     print(json.dumps(snap) if ns.json else format_text(snap))
-    return 1 if snap["directory"] == ABSENT or snap["unreadable"] else 0
+    if snap["directory"] == ABSENT:
+        print(
+            f"gitops-state: no state directory at {snap['state_dir']}", file=_sys.stderr
+        )
+        return PROBE_UNREADABLE
+    if snap["unreadable"]:
+        print(
+            f"gitops-state: could not read {', '.join(snap['unreadable'])} under "
+            f"{snap['state_dir']}",
+            file=_sys.stderr,
+        )
+        return PROBE_UNREADABLE
+    return 0

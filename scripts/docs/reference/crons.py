@@ -23,7 +23,6 @@ Usage::
     uv run python scripts/docs/reference/crons.py --out docs/reference/crons.md
 """
 
-import argparse
 import re
 from pathlib import Path
 
@@ -35,6 +34,8 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from lib.cli_help import ArgumentParser
 
 from lib import yaml_fast
 from lib.docs_provenance import md_cell
@@ -277,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         The exit code from `finish_generator` (0 on success, non-zero on a write failure).
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     parser.add_argument("--roles", type=Path, default=ROLES)
     args = parser.parse_args(argv)

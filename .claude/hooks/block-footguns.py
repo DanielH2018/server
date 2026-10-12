@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: an arm of bash-pretool.py, which run-hook.sh runs through `uv run python`
-"""PreToolUse(Bash) guard: six commands that fail silently on this machine.
+"""PreToolUse(Bash) guard: seven commands that fail silently or cost a second write here.
 
 Usage: `bash-pretool.py` loads this file as an arm on PreToolUse:Bash, and it also runs
 standalone. It reads the hook JSON payload on stdin. It prints a `deny` (or `ask`) decision JSON
@@ -48,6 +48,11 @@ a gate the repo requires, so nothing downstream notices either way.
      does not merge same-named runs across check suites. So one red dispatch run sits beside
      the green push run and pins that master SHA's verdict to fail, which stops the GitOps
      deployer's walk at it. The dispatch itself reports nothing wrong.
+
+  7. `gh pr create` or `gh pr edit` with a body that skips a `## ` heading of
+     `.github/pull_request_template.md`. Nothing fails: the PR opens, and the agent reads the
+     template afterwards and rewrites the body to fit it, which was 40 of the PR body edits
+     read for #3963. Denying the create moves the fit to before the PR exists.
 
 Rules that key on a host tool or on GitHub rather than on this repo live in
 `claude_guard.footguns`, which every repo's PreToolUse hook runs.
@@ -129,13 +134,17 @@ def rollout_restart_problem(stage: list[str]) -> str | None:
 
 
 @functools.cache
-def _ssh_hosts() -> tuple[str, ...]:
+def _ssh_hosts() -> tuple[str, ...] | None:
     """Every host `hosts.ini` declares, read through the one parser `scripts/lib` shares.
 
     Derived rather than listed: a hand-kept tuple here still named daniel-stage weeks after its
     retirement (#3705). Deferred to the first `ssh` stage so the hot path never pays for the
-    import, and fail-open like every guard in front of Bash: no hosts means the rule is inert,
-    never that a session cannot run anything.
+    import.
+
+    Returns:
+        The host names, or None when `scripts/lib` or the inventory cannot be read beside this
+        file. None is distinct from an empty inventory: `remote_git_problem` then matches every
+        ssh host rather than none.
     """
     if str(_SCRIPTS) not in sys.path:
         sys.path.insert(0, str(_SCRIPTS))
@@ -144,26 +153,53 @@ def _ssh_hosts() -> tuple[str, ...]:
 
         return host_names()
     except Exception:
-        return ()
+        return None
+
+
+def _remote_command(stage: list[str], hosts: tuple[str, ...] | None) -> str | None:
+    """The command an `ssh` stage runs on the far side, or None when it names no known host.
+
+    The remote command is one argument after the host, so the git call is inside a single
+    token rather than split across the stage. With no inventory (`hosts` None) the host cannot
+    be picked out, so the command starts at the first word that is a git call.
+    """
+    words = stage[1:]
+    if hosts is not None:
+        if not any(host in words for host in hosts):
+            return None
+        return " ".join(word for word in words if word not in hosts)
+    starts = (i for i, w in enumerate(words) if w.lstrip().startswith("git "))
+    start = next(starts, None)
+    return None if start is None else " ".join(words[start:])
 
 
 def remote_git_problem(stage: list[str]) -> str | None:
-    """`ssh daniel-<host> '<git ...>'` with no cd into the repo."""
+    """`ssh daniel-<host> '<git ...>'` with no cd into the repo.
+
+    With no inventory the rule fails closed for this one shape (#4420). A review pipeline's held
+    hook copy once had no `scripts/` beside it, so the inventory import failed, and the rule
+    went inert without a word. Matching every host instead keeps the rule live. Nothing becomes
+    unrunnable, because a remote git that cds into the repo still passes.
+    """
     if not stage or stage[0] != "ssh":
         return None
     hosts = _ssh_hosts()
-    if not any(host in stage for host in hosts):
-        return None
-    # The remote command is one argument after the host, so the git call is inside a single
-    # token rather than split across the stage.
-    remote = " ".join(word for word in stage[1:] if word not in hosts)
-    if not remote.lstrip().startswith("git "):
+    remote = _remote_command(stage, hosts)
+    if remote is None or not remote.lstrip().startswith("git "):
         return None
     if _REPO_PATH in remote or remote.lstrip().startswith("cd "):
         return None
+    unread = (
+        ""
+        if hosts is not None
+        else (
+            f" This guard could not read the inventory through {_SCRIPTS}/lib, so it "
+            "matched this git command on any ssh host rather than only the homelab's."
+        )
+    )
     return (
         "A non-interactive ssh starts in $HOME, not the repo, so this git command runs "
-        f"somewhere else. Prefix it: `cd {_REPO_PATH}; <git ...>`."
+        f"somewhere else. Prefix it: `cd {_REPO_PATH}; <git ...>`." + unread
     )
 
 
@@ -306,6 +342,115 @@ def ci_dispatch_on_master_problem(stage: list[str]) -> str | None:
     )
 
 
+_OWN_REPO = "danielh2018/server"
+_PR_TEMPLATE = Path(".github") / "pull_request_template.md"
+_HEADING_RE = re.compile(r"^##[ \t]+(.+?)[ \t]*$", re.MULTILINE)
+_BODY_FLAGS = ("--body", "-b")
+_BODY_FILE_FLAGS = ("--body-file", "-F")
+_FILL_FLAGS = ("--fill", "-f", "--fill-first", "--fill-verbose")
+
+
+def template_headings(root: Path) -> list[str]:
+    """The `## ` headings of the PR template under `root`, in order, or [] when it has none."""
+    try:
+        text = (root / _PR_TEMPLATE).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    return _HEADING_RE.findall(text)
+
+
+def _flag_value(words: list[str], flags: tuple[str, ...]) -> str | None:
+    """The value of the last of `flags` in `words`, in either `--flag X` or `--flag=X` form."""
+    value = None
+    for i, word in enumerate(words):
+        if word in flags and i + 1 < len(words):
+            value = words[i + 1]
+        for flag in flags:
+            if flag.startswith("--") and word.startswith(flag + "="):
+                value = word[len(flag) + 1 :]
+    return value
+
+
+def _repo_root(start: Path) -> Path | None:
+    """The nearest directory at or above `start` holding a `.git` entry, or None."""
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def _names_another_repo(words: list[str]) -> bool:
+    """True when the stage aims at a repo other than this one, by flag or by PR URL."""
+    repo = gh_repo(words)
+    if repo is not None and not repo.lower().rstrip("/").endswith(_OWN_REPO):
+        return True
+    urls = [w for w in words if w.startswith("https://github.com/")]
+    return any(f"github.com/{_OWN_REPO}/" not in w.lower() for w in urls)
+
+
+def pr_body_problem(stage: list[str], cwd: Path, command: str) -> str | None:
+    """`gh pr create`/`gh pr edit` with a body that skips a heading of the PR template.
+
+    Agents opened the PR first and read `.github/pull_request_template.md` after, then rewrote
+    the body to fit it: 40 of the PR body edits in the transcripts read for #3963. Refusing the
+    create moves that fit to before the PR exists, where it costs a file edit rather than a
+    second write to GitHub. The edit is held to the same headings so it is no way around them.
+
+    The headings are read from the template of the repo `cwd` is in, so a repo with no
+    template is never judged. The rule fails open where the body cannot be read: a relative
+    `--body-file` that does not resolve (gh refuses that itself), a stage aimed at another repo
+    with `--repo` or a PR URL, and a create or edit that passes no body at all. `--body-file -`
+    reads the here-document, which the splitter drops, so that case judges the raw command
+    text. `--fill` with no body fills from the commits and skips the template, so it is denied.
+
+    Args:
+        stage: The stage's words, shell keywords stripped.
+        cwd: The directory the stage runs in, after any `cd` earlier in the command.
+        command: The raw command text, for a body read from stdin.
+    """
+    create = invokes(stage, ("gh", "pr", "create"))
+    if not (create or invokes(stage, ("gh", "pr", "edit"))):
+        return None
+    if _names_another_repo(stage):
+        return None
+    root = _repo_root(cwd)
+    if root is None:
+        return None
+    headings = template_headings(root)
+    if not headings:
+        return None
+    body = _flag_value(stage, _BODY_FLAGS)
+    body_file = _flag_value(stage, _BODY_FILE_FLAGS)
+    if body_file == "-":
+        body = command
+    elif body_file is not None:
+        try:
+            body = (cwd / body_file).read_text(encoding="utf-8")
+        except OSError:
+            return None
+    if body is None:
+        if not (create and any(word in _FILL_FLAGS for word in stage)):
+            return None
+        return (
+            "`gh pr create --fill` with no body takes the body from the commits and skips "
+            f"{root / _PR_TEMPLATE}, so the body gets rewritten after the PR opens (#3963). "
+            "Write the template's sections to a file and pass it as well: "
+            "`gh pr create --fill --body-file <path>`. gh keeps the commit title and uses the "
+            "file for the body."
+        )
+    present = {heading.strip() for heading in _HEADING_RE.findall(body)}
+    missing = [heading for heading in headings if heading not in present]
+    if not missing:
+        return None
+    names = ", ".join(f"`## {heading}`" for heading in missing)
+    return (
+        f"This PR body skips {len(missing)} section(s) of {root / _PR_TEMPLATE}: {names}. "
+        "Fit the body to the template before the PR opens rather than rewriting it after "
+        "(#3963). Keep every `## ` heading verbatim and fill or delete the comments under "
+        "each, then rerun the same command."
+    )
+
+
 _RULES = (
     rollout_restart_problem,
     remote_git_problem,
@@ -350,20 +495,36 @@ def problem(command: str) -> str | None:
     keep the call — it is idempotent, and a rule that only works when its caller strips first
     is a trap for whoever reuses it.
     """
-    return _first_problem(split_stages(command))
+    return _first_problem(split_stages(command), command=command)
 
 
-def _first_problem(stages: list[list[str]]) -> str | None:
+def _first_problem(
+    stages: list[list[str]], cwd: str | None = None, command: str = ""
+) -> str | None:
+    """The first footgun across `stages`, or None.
+
+    `cwd` is where the command starts, the hook payload's own. A `cd <dir>` stage moves it for
+    the stages after it, which is what `pr_body_problem` resolves a relative body file against.
+    """
+    here = Path(cwd or Path.cwd())
     for stage in stages:
         words = strip_shell_keywords(stage)
+        if len(words) == 2 and words[0] == "cd":
+            here = here / Path(words[1]).expanduser()
+            continue
         for rule in _RULES:
             found = rule(words)
             if found:
                 return found
+        found = pr_body_problem(words, here, command)
+        if found:
+            return found
     return None
 
 
-def decide(command: str, split=split_stages) -> tuple[str, str] | tuple[None, None]:
+def decide(
+    command: str, split=split_stages, cwd: str | None = None
+) -> tuple[str, str] | tuple[None, None]:
     """The (decision, reason) pair for `command`, or (None, None).
 
     A `deny` carries what `problem` found. An `ask` is emitted where the splitter cannot read
@@ -390,7 +551,7 @@ def decide(command: str, split=split_stages) -> tuple[str, str] | tuple[None, No
             f"block-footguns cannot read this command ({exc.status}), so none of its rules "
             f"ran. Fix the quoting, or review the command against the rules yourself.",
         )
-    found = _first_problem(stages)
+    found = _first_problem(stages, cwd=cwd, command=command)
     if found:
         return "deny", found
     return None, None
@@ -405,7 +566,7 @@ def decision(payload) -> tuple[str, str] | None:
     command = (payload.get("tool_input") or {}).get("command", "")
     if not command:
         return None
-    verdict, reason = decide(command)
+    verdict, reason = decide(command, cwd=payload.get("cwd"))
     return (verdict, reason) if verdict and reason else None
 
 

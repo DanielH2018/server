@@ -12,6 +12,7 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import gitops_view as view
+from lib.exit_codes import PROBE_UNREADABLE
 
 SHA = "2d25ced3" + "0" * 32
 NOW = 1_800_000_000.0
@@ -97,7 +98,10 @@ def test_an_unreadable_marker_is_named_unreadable_not_none(tmp_path, capsys):
     _state(tmp_path, hold=SHA)
     (tmp_path / "hold_sha").chmod(0o000)
     try:
-        assert view.run_gitops_state(SimpleNamespace(json=True), tmp_path, NOW) == 1
+        assert (
+            view.run_gitops_state(SimpleNamespace(json=True), tmp_path, NOW)
+            == PROBE_UNREADABLE
+        )
     finally:
         (tmp_path / "hold_sha").chmod(0o600)
     snap = json.loads(capsys.readouterr().out)
@@ -122,10 +126,10 @@ def test_an_unreadable_marker_names_the_acl_not_a_sudo_the_agent_lacks(tmp_path)
     assert "getfacl /var/lib/gitops-deploy" in out and "--tags claude_code" in out
 
 
-def test_no_state_directory_exits_one_and_says_where_it_lives(tmp_path, capsys):
+def test_no_state_directory_exits_unreadable_and_says_where_it_lives(tmp_path, capsys):
     """Off daniel-box there is no directory, which must not read as a clean deployer."""
     ns = SimpleNamespace(json=False)
-    assert view.run_gitops_state(ns, tmp_path / "missing", NOW) == 1
+    assert view.run_gitops_state(ns, tmp_path / "missing", NOW) == PROBE_UNREADABLE
     out = capsys.readouterr().out
     assert "no state directory here" in out
     assert "hold_sha" not in out
@@ -140,3 +144,22 @@ def test_reading_writes_nothing(tmp_path):
     view.collect(tmp_path, NOW)
     after = {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in tmp_path.iterdir()}
     assert after == before
+
+
+def test_the_manual_plane_apply_names_the_pinned_playbook_command(tmp_path):
+    """The `do:` line printed `<playbook> --tags <tags>`, naming no program (#4413)."""
+    _state(
+        tmp_path,
+        owed=_owed(
+            "manual_plane",
+            "optimize_pi",
+            playbook="ansible/initial_setup.yml",
+            tags=[],
+            host="daniel-pi",
+        ),
+    )
+    out = view.format_text(view.collect(tmp_path, NOW))
+    assert (
+        "do:   uv run ansible-playbook ansible/initial_setup.yml --tags optimize_pi"
+        " -e target=daniel-pi" in out
+    ), out

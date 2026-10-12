@@ -51,11 +51,15 @@ def test_a_view_field_of_the_wrong_type_is_refused(obj):
         parse_view(obj)
 
 
-def test_a_rename_keeps_its_old_path():
-    assert parse_file({"filename": "b", "previous_filename": "a", "status": "x"}) == {
-        "filename": "b",
-        "previous_filename": "a",
-    }
+def test_a_rename_keeps_its_old_path_status_and_blob():
+    entry = {"filename": "b", "previous_filename": "a", "status": "renamed", "sha": "e"}
+    assert parse_file({**entry, "patch": "@@"}) == entry
+
+
+def test_a_file_entry_without_a_status_is_refused():
+    """A guessed status could skip an import-shape check, so none is guessed."""
+    with pytest.raises(ValueError, match=r"^status"):
+        parse_file({"filename": "b"})
 
 
 def test_a_review_by_a_deleted_account_has_no_user():

@@ -5,7 +5,7 @@ The runner takes a `lib.kubectl.Tools`, so the cluster reads are answered from c
 keyed on the kubectl arguments and nothing touches a live API server. The hold marker is
 read from a `tmp_path` state directory through `GITOPS_STATE_DIR`'s override.
 
-Run: uv run pytest scripts/deploy_tools/tests/test_k3s_upgrade_gates.py
+Run: uv run pytest scripts/deploy_tools/tests/test_runbook_gates_k3s_upgrade.py
 """
 
 import io
@@ -254,8 +254,11 @@ def test_the_runbook_calls_the_script_and_it_runs():
     assert proc.returncode == 64, proc.stderr
 
 
-def test_an_unreadable_ledger_refuses_rather_than_reading_as_no_hold(state_dir):
-    """The snapshot reads `hold_sha` and the ledger together, so either one unreadable refuses."""
+def test_an_unreadable_ledger_raises_rather_than_reading_as_no_hold(state_dir):
+    """The snapshot reads `hold_sha` and the ledger together, so either one unreadable raises.
+
+    A placeholder offender would make the runner exit with the hold gate's number (#4468).
+    """
     (state_dir / MARKERS["owed"]).mkdir()
-    found = gates.held_sha(state_dir)
-    assert len(found) == 1 and "cannot read" in found[0]
+    with pytest.raises(gates.Unreadable, match="cannot read"):
+        gates.held_sha(state_dir)

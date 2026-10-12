@@ -19,12 +19,17 @@ from fanout_lib.review.review_prompts import is_held
 from fanout_lib.status import BLOCKER, NO_PR
 
 ACTIONABLE_SEVERITIES = frozenset({"critical", "high", "medium"})
-CONFIDENCE_FLOOR = 0.6
+# DECIDED: 0.5, not 0.6 (#3675). Judged against 86 batches' records, 5 of the 6 medium findings
+# at 0.5-0.55 were material defects the fix round never saw; at 0.45 it was 3 of 7.
+CONFIDENCE_FLOOR = 0.5
+REVIEW_EFFORT = "medium"
 HOLD_CONFIDENCE = 0.8
-# The `test` findings the fix round takes at any severity: a test that checks nothing, or one
-# with no durable value. The severity floor dropped 46 of the reviewer's 50 test findings,
-# these anti-patterns among them (#4023). A missing-coverage finding keeps the floor.
-ACTED_ON_TEST_SUBKINDS = frozenset({"vacuous", "scaffold"})
+# The `test` findings the fix round takes at any severity: a test that checks nothing. The
+# severity floor dropped 46 of the reviewer's 50 test findings, these among them (#4023).
+# `scaffold` was acted on too until #3675 judged it: 1 of 7 actionable scaffold findings was
+# real, the rest mostly a duplicate of a stronger test, while all 9 vacuous ones were real. A
+# scaffold or missing-coverage finding keeps the severity floor.
+ACTED_ON_TEST_SUBKINDS = frozenset({"vacuous"})
 
 
 @dataclass
@@ -53,6 +58,10 @@ class Record:
 
     batch: str
     pr: str = ""
+    # The `--effort` every reviewer call passes, read from here so the record names what ran
+    # and actionable findings per PR can be compared between settings (#3966). A record
+    # written before this field existed has no key.
+    review_effort: str = REVIEW_EFFORT
     costs: dict[str, float] = field(default_factory=dict)
     review_error: str = ""
     findings: list[dict] = field(default_factory=list)
@@ -108,8 +117,7 @@ def outcome(report: dict, has_pr: bool) -> str:
 def actionable(findings: Sequence[dict]) -> list[dict]:
     """The findings the fix round acts on, all at or above the confidence floor.
 
-    A finding of medium severity or worse, or a vacuous or scaffold `test` finding at any
-    severity.
+    A finding of medium severity or worse, or a vacuous `test` finding at any severity.
     """
     return [
         f
@@ -128,7 +136,7 @@ def actionable(findings: Sequence[dict]) -> list[dict]:
 def blocking(findings: Sequence[dict]) -> list[dict]:
     """The leftovers that hold a PR instead of landing it: medium or worse, confidence 0.8+.
 
-    Above the fix round's 0.6 floor on purpose, so only a confident leftover stops a landing
+    Above the fix round's 0.5 floor on purpose, so only a confident leftover stops a landing
     (#3951). Across 68 batches, 10 medium-or-worse findings survived the fix round and all 9
     of their PRs merged, three of them later named broken by a follow-up.
     """
@@ -194,7 +202,7 @@ def comment_body(record: Record) -> str:
     held = sum(1 for f in record.findings if is_held(f))
     lines.append(
         f"{len(record.findings)} findings, {len(record.actionable)} actionable "
-        f"(severity medium or worse, or a vacuous or scaffold test, at confidence "
+        f"(severity medium or worse, or a vacuous test, at confidence "
         f"{CONFIDENCE_FLOOR} or more), "
         f"{len(record.remaining)} left after the fix round."
     )

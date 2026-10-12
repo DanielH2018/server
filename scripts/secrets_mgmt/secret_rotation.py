@@ -73,6 +73,8 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from lib.cli_help import ArgumentParser, error
+from lib.exit_codes import SECRET_ROTATION_BAD_ARGS
 from secrets_mgmt.consumers import consumer_commands, consumer_tags, tree_consumers
 from secrets_mgmt.git_dates import (
     RENAMED_FROM,
@@ -183,7 +185,7 @@ def audit_summary(res: dict, missing: list, stale: list) -> str:
 def cmd_audit(args, tools: RotationTools) -> int:
     """Print each secret's rotation status, push the summary to Kuma, and gate on drift.
 
-    Exits 2 when `--push` is given without SECRET_ROTATION_KUMA set, 1 when `--check` is
+    Exits 64 when `--push` is given without SECRET_ROTATION_KUMA set, 1 when `--check` is
     given and the registry is out of sync with secrets.yml, and 1 when `--push` pushed
     `down` — the daily audit runs under a systemd timer whose `Restart=on-failure` reruns it
     every 30 min until it exits 0 (roles/setup/common/tasks/kuma_check_timer.yml). Without
@@ -245,8 +247,8 @@ def cmd_audit(args, tools: RotationTools) -> int:
     if args.push:
         url = os.environ.get("SECRET_ROTATION_KUMA")
         if not url:
-            print("--push set but SECRET_ROTATION_KUMA env missing", file=sys.stderr)
-            return 2
+            error("--push set but SECRET_ROTATION_KUMA env missing")
+            return SECRET_ROTATION_BAD_ARGS
         # `stale` too (a registry row for a since-removed secret), so the daily Kuma push and
         # the CI `--check` gate below agree on registry drift — otherwise a `stale`-only drift
         # fails CI while the monitor stays green.
@@ -265,10 +267,9 @@ def cmd_audit(args, tools: RotationTools) -> int:
     # commit on a due-for-rotation secret would be wrong), and NOT on push-token shape (see the
     # arm above). Read-only (no decrypt), CI-safe.
     if getattr(args, "check", False) and (missing or stale):
-        print(
-            "secret_rotation: registry out of sync with secrets.yml — run "
-            "`uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit.",
-            file=sys.stderr,
+        error(
+            "registry out of sync with secrets.yml — run "
+            "`uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit."
         )
         return 1
     return 0
@@ -289,7 +290,7 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     """Rotate `args.name`, or every coming-due auto-tier secret, and optionally redeploy.
 
     Dry-run by default; `--commit` writes new values via `sops set`. Due-ness is judged from
-    the registry dates advanced to git's (skipped with `--no-derive`). Exits 2 when
+    the registry dates advanced to git's (skipped with `--no-derive`). Exits 64 when
     `args.name` names a non-auto-tier secret, 3 when a `sops set` fails or times out partway
     through the batch, 1 when `--deploy` is given and the redeploy fails (the new tokens are written but
     their consumers are not), 0 otherwise.
@@ -311,16 +312,12 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     res = audit(selection, now, tools.tier_days)
     if args.name:
         if is_record(reg, args.name):
-            print(record_refusal(args.name), file=sys.stderr)
-            return 2
+            error(record_refusal(args.name))
+            return SECRET_ROTATION_BAD_ARGS
         targets = [r for r in res["all"] if r[0] == args.name]
         if targets and targets[0][1] != "auto":
-            print(
-                "refusing: %s is tier '%s', not auto-rotatable"
-                % (args.name, targets[0][1]),
-                file=sys.stderr,
-            )
-            return 2
+            error("%s is tier '%s', not auto-rotatable" % (args.name, targets[0][1]))
+            return SECRET_ROTATION_BAD_ARGS
     else:
         # Unattended path: auto-tier, coming due (unless --all), AND with a single-redeploy
         # consumer. Tokens with no consumer_tag (cross-host / self-referential) are reported
@@ -377,12 +374,11 @@ def cmd_rotate(args, tools: RotationTools) -> int:
             # `sops_set` captures neither.
             if written:
                 tools.save_registry(reg)
-            print(
+            error(
                 "ROTATION FAILED writing %s (%s). Already written to secrets.yml: %s. "
                 "Consumers were NOT deployed — revert the working tree (`git checkout -- "
                 "ansible/vars/secrets.yml ansible/secret_rotation.yml`) or finish by hand."
-                % (name, exc, ", ".join(written) or "nothing"),
-                file=sys.stderr,
+                % (name, exc, ", ".join(written) or "nothing")
             )
             return 3
         reg["entries"][name]["last_rotated"] = now.isoformat()
@@ -395,17 +391,19 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     tools.save_registry(reg)
     if args.deploy and tags:
         if tools.deploy(sorted(tags)) != 0:
-            print(
-                "DEPLOY FAILED — new tokens written to secrets.yml but consumers NOT updated; "
-                "the caller should revert the working tree",
-                file=sys.stderr,
+            error(
+                "DEPLOY FAILED for tags %s — new tokens written to secrets.yml but consumers "
+                "NOT updated. Revert the working tree (`git checkout -- "
+                "ansible/vars/secrets.yml ansible/secret_rotation.yml`) or finish by hand."
+                % ",".join(sorted(tags))
             )
             return 1
     elif not args.deploy:
+        # deploy.sh deploys HEAD, not the working tree, so the rotated values reach no
+        # consumer until they are committed.
         print(
-            "\nNext: redeploy the consumer(s): "
-            "uv run ansible-playbook ansible/deploy.yml --tags %s"
-            % ",".join(sorted(tags))
+            "\nNext: commit secrets.yml and secret_rotation.yml, then redeploy the "
+            "consumer(s): `./scripts/deploy.sh --tags %s`" % ",".join(sorted(tags))
         )
     return 0
 
@@ -427,11 +425,8 @@ def cmd_record(args, tools: RotationTools) -> int:
     reg = tools.load_registry()
     entries = reg.setdefault("entries", {})
     if args.last_rotated > tools.today():
-        print(
-            "refusing: %s is after today (%s)" % (args.last_rotated, tools.today()),
-            file=sys.stderr,
-        )
-        return 2
+        error("%s is after today (%s)" % (args.last_rotated, tools.today()))
+        return SECRET_ROTATION_BAD_ARGS
     moved_from = None
     was = RENAMED_FROM.get(args.key)
     if was is not None and was in entries:
@@ -440,13 +435,12 @@ def cmd_record(args, tools: RotationTools) -> int:
         entries[args.key] = entries.pop(was)
         moved_from = was
     if args.key not in entries:
-        print(
-            "refusing: %s is not in the registry — run `secret_rotation.py sync` first, or "
+        error(
+            "%s is not in the registry — run `secret_rotation.py sync` first, or "
             "add it to RENAMED_FROM (scripts/secrets_mgmt/git_dates.py) if this is a rename"
-            % args.key,
-            file=sys.stderr,
+            % args.key
         )
-        return 2
+        return SECRET_ROTATION_BAD_ARGS
     old = entries[args.key].get("last_rotated")
     entries[args.key]["last_rotated"] = args.last_rotated.isoformat()
     tools.save_registry(reg)
@@ -464,7 +458,7 @@ def cmd_record(args, tools: RotationTools) -> int:
 
 def main(argv=None) -> int:
     """Dispatch to the `sync`/`consumers`/`audit`/`rotate`/`record` subcommand and return its exit code."""
-    p = argparse.ArgumentParser(
+    p = ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     sub = p.add_subparsers(dest="cmd", required=True)

@@ -29,12 +29,12 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-import argparse
 import json
 from pathlib import Path
 
 from deploy_tools.narrow_lib.broad import context_for
 from deploy_tools.render_targets import render_targets
+from lib.cli_help import ArgumentParser
 from lib.render_guard import HOSTS_LAND_SH_NEVER_DEPLOYS
 from lib.repo_paths import HOST_VARS, K8S_ROLES
 
@@ -201,7 +201,7 @@ def expand_shared_tags(
 # `grep -rL k8s/manifests ansible/roles/k8s/*/tasks/main.yml` against the declared entries
 # re-derives whether one has.
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("roles", nargs="+", help="role directories under roles/k8s/")
     parser.add_argument(
         "--repo", default=".", help="the checkout to read (default: the cwd)"

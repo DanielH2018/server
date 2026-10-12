@@ -64,8 +64,11 @@
 
 - name: Schedule the daily secret-rotation audit (gitops host only)
   tags: [crons, secret-rotation]
-  # 08:00 — after the Sunday 07:30 reboot + 07:15 CrowdSec-hub jobs settle; clear of the
-  # 06:xx redeploy window. Pushes the "Secret Rotation" Kuma monitor (uptime-kuma role).
+  # 08:30 — after the Sunday reboot's Kuma maintenance window (07:25-08:15, #2802) closes. Kuma
+  # records a push inside that window as MAINTENANCE and discards its verdict, so an 08:00 slot
+  # left the tile MAINTENANCE for a day every Sunday (#4540). Clear of the 06:xx redeploy window.
+  # Pushes the "Secret Rotation" Kuma monitor (uptime-kuma role). ENFORCED:
+  # ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py::test_no_kuma_check_timer_fires_inside_the_window
   #
   # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
   # verdict reruns every 30 min until it clears rather than sitting on the tile for a day. The
@@ -77,7 +80,7 @@
     kuma_check_description: Daily secret rotation audit (Kuma push)
     kuma_check_exec: /usr/local/bin/secret-rotation-audit.sh
     kuma_check_user: "{{ sys_user }}"
-    kuma_check_on_calendar: "*-*-* 08:00:00"
+    kuma_check_on_calendar: "*-*-* 08:30:00"
     kuma_check_restart_sec: 30min
     kuma_check_cron_name: "Daily secret rotation audit"
 
@@ -100,7 +103,7 @@
 
 - name: Schedule the weekly secret rotation (gitops host only)
   tags: [crons, secret-rotation]
-  # Sunday 09:00 — after the 07:30 reboot, the 06:xx redeploys, and the 08:00 daily audit
+  # Sunday 09:00 — after the 07:30 reboot, the 06:xx redeploys, and the 08:30 daily audit
   # have all settled; quiet window minimises any clash with a concurrent operator session.
   #
   # `2>&1 | logger -t secret-rotate` FOR THE REASON EVERY CRON BELOW CARRIES ONE. cron
@@ -150,7 +153,7 @@
   become: true
 
 - name: Create the Healthchecks.io credential directory
-  tags: [crons, prune, weekly-restart]
+  tags: [crons, prune, weekly-restart, worktree-sweep]
   # The same path, mode and owner as the k3s role's task, so the two writers agree on
   # daniel-box. This role writes it too because its two pinging crons run on every host, and
   # the k3s role reaches neither daniel-pi nor, for this file, daniel-server.
@@ -163,12 +166,12 @@
   become: true
 
 - name: Deploy the Healthchecks.io ping key
-  tags: [crons, prune, weekly-restart]
+  tags: [crons, prune, weekly-restart, worktree-sweep]
   # Byte-identical to the k3s role's `Deploy the Healthchecks.io ping key`, which carries the
   # reasoning: the project ping key can hold every check green, so it lives in a 0640 file the
   # crons source at run time, never in a crontab line. cron logs each command it runs to the
   # journal, and the journal ships to Loki. root owns it for the reboot cron, and the group is
-  # {{ sys_user }} for the prune cron.
+  # {{ sys_user }} for the prune and worktree-sweep crons.
   ansible.builtin.copy:
     content: "HC_PING_KEY='{{ healthchecks_ping_key | default('') }}'\n"
     dest: /etc/healthchecks/ping.env
@@ -538,7 +541,8 @@
   # Several Claude sessions branch, commit and retire worktrees in this checkout every day, and
   # each removal leaves that branch's objects unreachable. `prune_worktrees.py --prune --brief`
   # removes the merged worktrees, deletes the orphan `worktree-*` branches whose content is on
-  # origin/master, then drops the unreachable objects older than a day and clears a stale
+  # origin/master, deletes the unregistered directories under .claude/worktrees/ whose every
+  # file a ref already reaches (dev/worktree_orphans.py, #4425), then drops the unreachable objects older than a day and clears a stale
   # gc.log — see repair_object_store for why the grace period is not `now`.
   #
   # THIS IS THE ARM THAT REMOVES; the SessionStart banner only reports. The reasoning is the
@@ -553,14 +557,21 @@
   #
   # daniel-box only: the primary checkout and every worktree under it live there.
   #
+  # IT PINGS HEALTHCHECKS.IO WITH ITS EXIT CODE (#4482). `prune_worktrees.py` exits 1 when a
+  # removal or a branch deletion failed (#4445), but the pipe into `logger` makes the job's
+  # exit status logger's, so nothing read it. `$rc` on the ping URL is Healthchecks.io's
+  # exit-status endpoint: 0 is a success ping and anything else is a failure, so a failed
+  # sweep pages at once and a cron that never ran pages on silence. The key is sourced as the
+  # reboot's is, `[ -r ] &&` guarding the `.`.
+  #
   # Keep the cron `name:`: `cron_file` entries are tracked by that comment, so renaming one
   # adds a second entry beside the first rather than replacing it.
   when: inventory_hostname == ops_cron_host
   ansible.builtin.cron:
     name: "Weekly git object-store repair"
-    minute: "20"
-    hour: "4"
-    weekday: "0" # 0 is Sunday
+    minute: "{{ initial_setup_worktree_sweep_cron_minute }}"
+    hour: "{{ initial_setup_worktree_sweep_cron_hour }}"
+    weekday: "{{ initial_setup_worktree_sweep_cron_weekday }}"
     # PATH explicitly: cron inherits neither /usr/local/bin nor the user's ~/.local/bin, so a
     # bare `uv` is not found and the job fails silently on stderr nothing reads.
     #
@@ -568,7 +579,7 @@
     # above: a week that removes anything prints a line per removal, and mailing those
     # is the spool problem. Braced, because `|` binds
     # tighter than the `&&` before it.
-    job: "{ cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --prune --brief; } 2>&1 | logger -t worktree-sweep"
+    job: "{ cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --prune --brief; rc=$?; [ -r /etc/healthchecks/ping.env ] && . /etc/healthchecks/ping.env; [ -n \"$HC_PING_KEY\" ] && curl -fs -m 10 --retry 3 \"https://hc-ping.com/$HC_PING_KEY/{{ inventory_hostname }}-worktree-sweep/$rc\" >/dev/null 2>&1; } 2>&1 | logger -t worktree-sweep"
     user: "{{ sys_user }}"
     cron_file: git-object-store-repair
   become: true
@@ -715,8 +726,9 @@
 - name: Schedule the setup-plane drift check
   tags: [crons, setup_drift]
   # Daily rather than hourly: the setup plane changes only when someone runs a play by hand, so
-  # a shorter period would re-read the same answer all day. 07:50 sits after the Sunday 07:30
-  # reboot has settled and before the 08:00 secret-rotation audit. Root, because the
+  # a shorter period would re-read the same answer all day. 08:20 sits after the Sunday reboot's
+  # Kuma maintenance window (07:25-08:15, #2802) closes, since a push inside it is recorded as
+  # MAINTENANCE (#4540), and before the 08:30 secret-rotation audit. Root, because the
   # deployed-code arm compares live artifacts under /usr/local that are not all world-readable.
   #
   # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
@@ -730,7 +742,7 @@
     kuma_check_description: Setup-plane drift check (Kuma push)
     kuma_check_exec: /usr/local/bin/setup-drift-check.sh
     kuma_check_user: root
-    kuma_check_on_calendar: "*-*-* 07:50:00"
+    kuma_check_on_calendar: "*-*-* 08:20:00"
     kuma_check_restart_sec: 30min
     kuma_check_cron_name: "Setup-plane drift check"
 

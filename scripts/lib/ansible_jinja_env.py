@@ -37,8 +37,8 @@ from pathlib import Path
 from jinja2 import Environment
 
 from lib.k8s_yaml import to_json_stub
+from lib.repo_paths import FILTER_PLUGINS
 from lib.render_guard import (
-    ANSIBLE,
     SHARED_TPL,
     StubUndefined,
     make_env,
@@ -110,8 +110,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     Undefined passes through it and is judged by name as usual.
 
     ``filter_by_platform``, ``authelia_service_rules`` and ``tier_priority_class`` are this
-    repo's own filter plugins: pihole's ConfigMap derives its dnsmasq override records through
-    the first, and authelia's config Secret derives its per-service access_control rules
+    repo's own filter plugins: ``deploy.yml`` splits each host's entries by platform through the
+    first, and authelia's config Secret derives its per-service access_control rules
     through the second, which raises on a ``use_authelia: true`` entry with no ``auth_tier``.
     A tiered role's pods take their PriorityClass from the third, which raises on an entry
     with no ``tier``. uptime-kuma's static monitors ask ``in_service_tier`` whether a service's
@@ -121,7 +121,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     ``metrics`` item. Its hand-written jobs read their entry's own port through ``entry_port``,
     which raises on an entry name it cannot find. uptime-kuma's ingress tiles derive from
     ``kuma_ingress_monitors``, which raises on a malformed ``kuma`` key. Every caller fence
-    reads its callers through ``netpol_callers``. homepage's tiles build their links and
+    reads its callers through ``netpol_callers``, and netpol-baseline's fences come from
+    ``netpol_caller_fences``. artifacts, monitor-bridge, pihole and uptime-kuma collect names,
+    ports and hostnames through ``entry_fields``' filters. homepage's tiles build their links and
     ClusterIP widget URLs through ``homepage_href`` and ``homepage_widget_url``, which raise on
     an entry that lacks the route or the ``homepage_widget`` key.
     ``py_table`` reads monitor-bridge's check table out of its Python source, for the
@@ -137,20 +139,16 @@ def register_ansible_filters(env: Environment) -> Environment:
     """
     # The heavy tier: imported here rather than at the top so the light tier above stays
     # free of ansible-core (see the module docstring).
-    if str(ANSIBLE / "filter_plugins") not in _sys.path:
-        _sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
+    if str(FILTER_PLUGINS) not in _sys.path:
+        _sys.path.insert(0, str(FILTER_PLUGINS))
     from authelia_access import authelia_service_rules
-    from homepage_tiles import homepage_href, homepage_widget_url, netpol_callers
-    from kuma_monitors import kuma_ingress_monitors
-    from longhorn_groups import (
-        backup_group_label,
-        longhorn_backup_name,
-        weekly_backup_group,
-        weekly_backup_shard,
-    )
-    from py_table import py_table
-    from scrape_jobs import entry_port, metrics_port, scrape_jobs
-    from service_tier import in_service_tier, tier_priority_class
+    from entry_fields import entry_names, lan_hostnames, published_ports
+    import homepage_tiles
+    import kuma_monitors
+    import longhorn_groups
+    import py_table
+    import scrape_jobs
+    import service_tier
     from toposort import filter_by_platform
 
     from ansible.plugins.filter.core import (
@@ -172,20 +170,34 @@ def register_ansible_filters(env: Environment) -> Environment:
     env.filters["to_json"] = to_json_stub
     env.filters["filter_by_platform"] = filter_by_platform
     env.filters["authelia_service_rules"] = authelia_service_rules
-    env.filters["tier_priority_class"] = tier_priority_class
-    env.filters["in_service_tier"] = in_service_tier
-    env.filters["scrape_jobs"] = scrape_jobs
-    env.filters["metrics_port"] = metrics_port
-    env.filters["entry_port"] = entry_port
-    env.filters["py_table"] = py_table
-    env.filters["kuma_ingress_monitors"] = kuma_ingress_monitors
-    env.filters["netpol_callers"] = netpol_callers
-    env.filters["homepage_widget_url"] = homepage_widget_url
-    env.filters["homepage_href"] = homepage_href
-    env.filters["backup_group_label"] = backup_group_label
-    env.filters["weekly_backup_group"] = weekly_backup_group
-    env.filters["weekly_backup_shard"] = weekly_backup_shard
-    env.filters["longhorn_backup_name"] = longhorn_backup_name
+    # Through FilterModule, as Ansible loads them, so a refusal carries the filter's name.
+    service_tier_filters = service_tier.FilterModule().filters()
+    env.filters["tier_priority_class"] = service_tier_filters["tier_priority_class"]
+    env.filters["in_service_tier"] = service_tier_filters["in_service_tier"]
+    scrape_filters = scrape_jobs.FilterModule().filters()
+    env.filters["scrape_jobs"] = scrape_filters["scrape_jobs"]
+    env.filters["metrics_port"] = scrape_filters["metrics_port"]
+    env.filters["entry_port"] = scrape_filters["entry_port"]
+    env.filters["py_table"] = py_table.FilterModule().filters()["py_table"]
+    env.filters["kuma_ingress_monitors"] = kuma_monitors.FilterModule().filters()[
+        "kuma_ingress_monitors"
+    ]
+    homepage_filters = homepage_tiles.FilterModule().filters()
+    env.filters["netpol_callers"] = homepage_filters["netpol_callers"]
+    env.filters["netpol_caller_fences"] = homepage_filters["netpol_caller_fences"]
+    env.filters["entry_names"] = entry_names
+    env.filters["published_ports"] = published_ports
+    env.filters["lan_hostnames"] = lan_hostnames
+    env.filters["homepage_widget_url"] = homepage_filters["homepage_widget_url"]
+    env.filters["homepage_href"] = homepage_filters["homepage_href"]
+    longhorn_filters = longhorn_groups.FilterModule().filters()
+    for name in (
+        "backup_group_label",
+        "weekly_backup_group",
+        "weekly_backup_shard",
+        "longhorn_backup_name",
+    ):
+        env.filters[name] = longhorn_filters[name]
     env.tests["search"] = search
     return env
 

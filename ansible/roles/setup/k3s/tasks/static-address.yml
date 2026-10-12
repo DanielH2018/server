@@ -31,6 +31,39 @@
   when: k3s_node_static_link | length == 0
   register: k3s_node_static_netplan_removed
 
+# The template's `ignore-carrier: true` keeps the pinned default routes installed with the cable
+# out, and with the kernel default (0) the kernel still routes over a linkdown route. The pinned
+# metric-100 routes would then beat the metric-600 routes of daniel-server's wifi fallback: the
+# static IPv4 route (#4510), and the RA-learned IPv6 route until its lifetime runs out (#4561).
+# This key makes route lookups skip the link's routes while it has no carrier. The address stays
+# assigned and the local table is not affected, so k3s still binds server_ip.
+# The key is per link, not `all`, so cni0, flannel.1 and the VM bridge keep the default.
+# A per-link key in sysctl.d persists across a reboot even when the NIC appears after
+# systemd-sysctl.service: udev's 99-systemd.rules re-runs systemd-sysctl with the
+# `net/ipv{4,6}/conf/<link>` prefix on every net device add.
+- name: Stop routing over the pinned link while it has no carrier
+  tags: [node-address]
+  ansible.posix.sysctl:
+    name: "net.{{ item }}.conf.{{ k3s_node_static_link }}.ignore_routes_with_linkdown"
+    value: "1"
+    sysctl_file: /etc/sysctl.d/90-homelab-static-link.conf
+    sysctl_set: true
+    state: present
+    reload: true
+  loop: [ipv4, ipv6]
+  become: true
+  when: k3s_node_static_link | length > 0
+
+# The link's name is gone by the time this runs, so the live value stays 1 until the next
+# reboot. That is harmless: back on DHCP, networkd drops the link's routes on carrier loss.
+- name: Remove the linkdown sysctl when no link is named
+  tags: [node-address]
+  ansible.builtin.file:
+    path: /etc/sysctl.d/90-homelab-static-link.conf
+    state: absent
+  become: true
+  when: k3s_node_static_link | length == 0
+
 # Split from the apply for the reason node.yml splits the DNS override's: `generate` parses
 # and merges every /etc/netplan/*.yaml and fails without touching the running configuration,
 # so a bad merge stops here rather than reconfiguring the node's only uplink.

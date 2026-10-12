@@ -15,7 +15,8 @@ import pytest
 
 from _k8s_render import host_context, render_role_template
 from _kuma_entities import entities_with
-from kuma_monitors import kuma_ingress_monitors
+from ansible.errors import AnsibleFilterError
+from kuma_monitors import FilterModule, kuma_ingress_monitors
 
 _NEW = {"name": "newsvc", "platform": "k8s", "hostname": "newsvc", "port": 8080}
 
@@ -112,3 +113,20 @@ def test_kuma_ingress_monitors_is_flagged_on_a_malformed_kuma_key(kuma):
 def test_kuma_ingress_monitors_is_clean_on_an_override_and_forces_the_suffix():
     [tile] = kuma_ingress_monitors([{**_NEW, "kuma": {"id": "other", "name": "N"}}])
     assert (tile["id"], tile["name"]) == ("other-k8s", "N")
+
+
+# ── error shape (#4505) ─────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "kuma",
+    ["yes", {"id": "x", "colour": "red"}],
+    ids=["not-a-mapping", "unknown-key"],
+)
+def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter(kuma):
+    """A render failure names the filter that refused, through the filter Ansible calls."""
+    entries = [{"name": "svc", "hostname": "svc", "kuma": kuma}]
+    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+        FilterModule().filters()["kuma_ingress_monitors"](entries)
+    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
+    assert str(caught.value).startswith("kuma_ingress_monitors: "), str(caught.value)

@@ -1,6 +1,12 @@
 """Each test builds a scratch git repository whose `.gitignore` opens with `/*`, like the real one."""
 
+import re
+import shutil
+import sys
+from pathlib import Path
+
 from lib.git_testing import init_repo
+from lib import proc_testing
 from validate import root_ignored_files
 
 GITIGNORE = "/*\n!/kept.md\n!/.gitignore\n.pytest_cache/\n"
@@ -43,3 +49,28 @@ def test_the_real_gitignore_still_opens_with_the_deny_all():
     """The check keys on the literal `/*` line; if it changes, this check matches nothing."""
     gitignore = root_ignored_files.REPO / ".gitignore"
     assert root_ignored_files.DENY_ALL in gitignore.read_text().splitlines()
+
+
+def test_main_prints_each_hidden_entry_as_a_fail_line_on_stderr(tmp_path):
+    """`[FAIL] <path>: <reason>` on stderr, the shape every validator shares (#4480).
+
+    The script finds its repo from its own location, so a copy of `scripts/lib` and
+    `scripts/validate` runs
+    unpatched in a scratch repository holding one hidden root file.
+    """
+    repo = _repo(tmp_path, "stray.txt")
+    (repo / ".gitignore").write_text(GITIGNORE + "!/scripts/\n", encoding="utf-8")
+    scripts = Path(root_ignored_files.__file__).resolve().parents[1]
+    for package in ("lib", "validate"):
+        shutil.copytree(
+            scripts / package,
+            repo / "scripts" / package,
+            ignore=shutil.ignore_patterns("tests", "__pycache__"),
+        )
+    script = repo / "scripts/validate/root_ignored_files.py"
+
+    run = proc_testing.run([sys.executable, str(script)])
+    assert run.returncode == 1, run.stdout + run.stderr
+    assert re.search(r"^\s*\[FAIL\] stray\.txt: \S", run.stderr, re.M), (
+        run.stdout + run.stderr
+    )

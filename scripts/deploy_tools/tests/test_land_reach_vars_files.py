@@ -18,7 +18,11 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_vars_files.py
 import pytest
 import yaml
 
+from deployer_lib import deploy_cross_role
 from deploy_tools.land_lib import land_reach
+
+from _narrow_fixtures import _refs
+from _setup_role_fixtures import ROLE, build
 
 from lib.repo_paths import REPO as REPO_ROOT
 
@@ -207,3 +211,73 @@ def test_an_initial_setup_default_claude_code_reads_still_names_its_other_host()
         _INITIAL_SETUP_DEFAULTS, "daniel-box", pr_range="abf8d0d4a^..acb3513b0"
     )
     assert "`claude_code` also reaches daniel-server" in note
+
+
+# The pair above reaches the note through the live tree, where the read-a-key half refuses
+# (`tasks/agent_access.yml` is not statically imported), so it never reaches the branch where
+# the derivation answers with tags (#4411). This synthetic tree does: `demo` statically
+# renders a key of `owner`'s defaults, the shape of `test_narrow_setup_vars_walk.py`'s
+# `reads` fixture, so `foreign_key_tags` returns `alpha` for one key and nothing for the
+# other.
+_FOREIGN = "ansible/roles/setup/owner/defaults/main.yml"
+_FOREIGN_DEFAULTS = "---\nowner_group: holders\nowner_other: unread\n"
+
+
+@pytest.fixture
+def _reads_tree(tmp_path, monkeypatch):
+    """`demo` and `owner` in a gateless `initial_setup.yml`, with demo declared a reader."""
+    monkeypatch.setitem(
+        deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
+        _FOREIGN,
+        frozenset({"demo"}),
+    )
+    tree = build(tmp_path)
+    tree.write(
+        "ansible/initial_setup.yml",
+        yaml.safe_dump(
+            [
+                {
+                    "name": "Setup",
+                    "hosts": "all",
+                    "roles": [
+                        {"role": "owner", "tags": ["owner"]},
+                        {"role": "demo", "tags": ["demo"]},
+                    ],
+                }
+            ]
+        ),
+    )
+    tree.write("ansible/inventory/group_vars/all.yml", "---\nhas_gitops: false\n")
+    tree.write("ansible/inventory/host_vars/daniel-box.yml", "---\nhas_gitops: true\n")
+    tree.write(
+        "ansible/roles/setup/owner/tasks/main.yml",
+        "---\n- name: Own the group\n  ansible.builtin.group:\n"
+        "    name: '{{ owner_group }}'\n  tags: [owner-group]\n",
+    )
+    tree.write(_FOREIGN, _FOREIGN_DEFAULTS)
+    tree.write(
+        f"{ROLE}/templates/alpha.conf.j2",
+        "mode = {{ demo_alpha_mode }}\ngroup = {{ owner_group }}\n",
+    )
+    tree.commit("demo reads the owner's group")
+    return tree
+
+
+def _note_over(tree, old_value, new_value):
+    tree.write(_FOREIGN, _FOREIGN_DEFAULTS.replace(old_value, new_value))
+    old, new = _refs(tree)
+    return land_reach.remaining_setup_hosts_note(
+        [_FOREIGN], "daniel-box", pr_range=f"{old}..{new}", repo=tree.root
+    )
+
+
+def test_a_foreign_key_the_role_reads_keeps_its_hosts_in_the_note(_reads_tree):
+    """The unsafe direction: dropping demo here omits a host that owes a hand-run."""
+    assert "`demo` also reaches daniel-server" in _note_over(
+        _reads_tree, "holders", "renamed"
+    )
+
+
+def test_a_foreign_key_the_role_never_reads_drops_it_from_the_note(_reads_tree):
+    """The other half, over the same tree, so the pair isolates the key read."""
+    assert "`demo`" not in _note_over(_reads_tree, "unread", "changed")

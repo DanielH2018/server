@@ -74,6 +74,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
+from lib.cli_help import ArgumentParser
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
 # The deployer's own modules, so this reads and rewrites the marker through the code that
@@ -262,7 +263,7 @@ def clear_manual_plane(
     journal: Journal | None = None,
     applied: frozenset[str] = frozenset(),
 ) -> int:
-    """Drop `role`'s pending line. Exit 0 whether or not there was one to drop.
+    """Drop `role`'s pending line. Exit 0, or 1 when `applied` could not clear it.
 
     Args:
       lock_path: the tree lock to serialise the rewrite against. None reads
@@ -302,17 +303,17 @@ def clear_manual_plane(
         # The row is empty or missing, so the WHOLE role is pending: a later range's
         # derivation refused after this command was printed. No narrowed apply covers that.
         # The whole-role apply this sends the operator to is the one `maximal_apply_warning`
-        # exists for: every other surface printing that command carries the warning,
-        # and this one printed it bare.
+        # exists for, and every other surface printing that command carries the warning.
         warning = maximal_apply_warning(key, frozenset({key}))
         print(
             f"kept {role} in {state.path('owed')}: its line names no narrow tags, "
             "so the whole role is "
             f"pending, not just {','.join(sorted(applied))}. Apply the whole role"
             + (f" (WARNING: {warning})" if warning else "")
-            + f", then clear it without --applied: `{owed_clear_cmd(OWED_MANUAL_PLANE, key)}`"
+            + f", then clear it without --applied: `{owed_clear_cmd(OWED_MANUAL_PLANE, key)}`",
+            file=sys.stderr,
         )
-        return 0
+        return 1
     if remaining:
         print(
             f"cleared {','.join(sorted(applied))} from {role}'s tags in "
@@ -522,9 +523,8 @@ def main(
         its own, because a real `logger` line from a test reads as an operator's clear.
       hold_journal: the same for a `clear-hold`. None reads `journal_hold_clear`.
     """
-    parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+    parser = ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument(
         "--state-dir",

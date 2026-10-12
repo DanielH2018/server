@@ -234,11 +234,13 @@ def test_explicit_tags_skip_derivation_but_not_the_self_applied_half(landing):
 
 
 def test_a_truncated_file_list_without_since_is_a_usage_error(landing):
+    from lib.exit_codes import LAND_BAD_ARGS
+
     ln, _ = landing(Fakes(derived=([], "fallback")))
     ln.merge_sha = MERGE_SHA
     with pytest.raises(Outcome) as exc:
         classify.classify(ln)
-    assert exc.value.rc == 2 and "--since" in exc.value.error
+    assert exc.value.rc == LAND_BAD_ARGS and "--since" in exc.value.error
 
 
 def test_a_truncated_file_list_with_since_defers_derivation(landing, capsys):
@@ -381,3 +383,24 @@ def test_an_unreadable_merge_commit_keeps_the_checkouts_tables(
     assert (
         "classifying with this checkout's cross-role tables" in capsys.readouterr().out
     )
+
+
+def test_a_truncated_file_list_without_since_exits_as_bad_arguments(landing):
+    """It is a usage error, so it takes land.sh's documented usage code, 64 (#4451)."""
+    from lib.exit_codes import LAND_BAD_ARGS
+
+    ln, _ = landing(Fakes(derived=([], "fallback")))
+    ln.merge_sha = MERGE_SHA
+    with pytest.raises(Outcome) as exc:
+        classify.classify(ln)
+    assert "--since" in exc.value.error
+    assert exc.value.rc == LAND_BAD_ARGS
+
+
+def test_land_sh_exits_64_on_a_truncated_file_list_without_since(land_run):
+    """64 is in the handoff's LAND_CODES, so the same refusal exits 64 direct and handed off."""
+    from lib.exit_codes import LAND_BAD_ARGS
+
+    rc, _, err, *_ = land_run([], Fakes(derived=([], "fallback")))
+    assert "--since" in err
+    assert rc == LAND_BAD_ARGS
