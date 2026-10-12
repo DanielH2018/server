@@ -19,7 +19,6 @@ Run: uv run pytest ansible/tests/setup/test_alert_unit.py
 import json
 import os
 import re
-import time
 from pathlib import Path
 
 import jinja2
@@ -333,8 +332,8 @@ def test_a_delivered_page_silences_the_alert_for_the_quiet_period(
     stamp.parent.mkdir()
     stamp.touch()
     assert gate_exit(command, tmp_path) == 1, "a page inside the window must be skipped"
-    old = time.time() - 361 * 60
-    os.utime(stamp, (old, old))
+    # A fixed instant long before any run, so the test reads no clock of its own.
+    os.utime(stamp, (1_759_276_800, 1_759_276_800))  # 2025-10-01 00:00 UTC
     assert gate_exit(command, tmp_path) == 0, "a page after the window must go out"
 
 
