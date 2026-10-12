@@ -114,8 +114,6 @@ PENDING_DIGEST_PINS = {
     "karakeep_k8s_meili_image": "meilisearch manual-upgrade branch, Monday schedule",
     # "Pending Status Checks": a Docker Hub version bump soaks 7 days.
     "observability_k8s_collector_image": "otel collector version bump, 7-day soak",
-    # "Awaiting Schedule".
-    "observability_k8s_tempo_image": "grafana/tempo version bump, awaiting schedule",
 }
 
 
