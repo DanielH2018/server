@@ -1563,8 +1563,10 @@ refuted. Each finding was checked against the tree at `70591c307` before the fix
   narrows the restart to the Secret each workload reads. Confirmed in
   `ansible/roles/k8s/observability/tasks/main.yml` ("Restart the telemetry workloads whose
   secret changed") and `release_stamp.yml`. The design pairs results by position because the
-  render task is `no_log`, and uses `rolled_by_role` with `rollout_amend.yml` so the shared
-  role stays unchanged.
+  render task is `no_log`, and uses `rollout_amend.yml` so the shared role stays unchanged.
+  This round's design also gave the three entries `rolled_by_role`. The orchestrator ruling of
+  2026-10-12 (*Restart, PR 5*) replaced that with `restart_on: []`, because the marker drops
+  an entry from the pod-template fingerprints and brings back #3115's double roll.
 - **M1-R1-03, medium.** The netpol probe row has no `policy` key, which the refused leg
   dereferences. **Fixed**: the row carries
   `policy: networkpolicy-observability.yaml.j2`, and PR 1 adds a test that every refused row

@@ -239,15 +239,23 @@ def test_observability_skips_its_private_restart_of_a_workload_the_apply_rolled(
     assert not render_expr("{{ " + clause + " }}", **rolled)
     assert render_expr("{{ " + clause + " }}", **held)
     assert render_expr("{{ " + clause + " }}", **unseen)
-    # And the record agrees, so `probe.py health` expects no `restartedAt` of the skip: the
-    # stamp says false, and the amend runs only for the restart's results that were not skipped.
-    rollouts = _observability_rollouts(
-        manifests_render={"changed": False},
-        manifests_secret_render={"changed": True},
-        manifests_apply={"stdout": "deployment.apps/grafana configured"},
-        manifests_rolled_by_apply={"grafana": True},
+    # And the record agrees, so `probe.py health` expects no `restartedAt` of the skip. The
+    # stamp says `restart: false` for every entry, so the agreement is the amend's: it loops the
+    # restart's register minus its skip results, and the skip above is one of those.
+    amend = task_named(
+        load_tasks(OBSERVABILITY / "tasks/main.yml"),
+        "Record the telemetry workloads the secret restart rolled",
     )
-    assert rollouts["grafana"]["restart"] is False
+    register = _observability_private_restart()["register"]
+
+    def amended(grafana_result):
+        results = [{"changed": True, "item": {"name": "prometheus"}}, grafana_result]
+        looped = render_expr(amend["loop"], **{register: {"results": results}})
+        return {r["item"]["name"] for r in looped}
+
+    skipped = {"changed": False, "skipped": True, "item": item}
+    assert amended(skipped) == {"prometheus"}
+    assert amended({"changed": True, "item": item}) == {"prometheus", "grafana"}
 
 
 def test_pihole_an_image_bump_expects_instance_one_to_roll():
