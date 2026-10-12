@@ -10,6 +10,9 @@ PR 3, the `notice` subcommand: #4719 (issue #4713).
 
 PR 4, the replay and the parity table: #4727 (issue #4724).
 
+PR 5, the CI steps: #4732 (issue #4731). `<ts>` is 2026-10-12T21:14:44Z, the merge of #4732,
+so the soak's 30 days end on 2026-11-11. Step 6, the soak checks, is issue #4738.
+
 Depends on: none
 
 Unblocks: [G2](g2-retire-lock.md), and through G2 [G3](g3-freshness-reviewer.md) and
