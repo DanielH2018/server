@@ -190,15 +190,28 @@ def test_a_queued_actions_suite_is_not_a_dropped_push():
     assert not await_ci._push_was_dropped([], [_actions_suite("queued")], REQUIRED)
 
 
-def test_green_descendant_takes_the_nearest_green_commit():
+def test_descendant_verdict_skips_a_pending_commit_for_a_green_one():
     green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
     runs_by_sha = {"near": [], "middle": green, "tip": green}
-    found = await_ci.green_descendant(
+    found = await_ci.descendant_verdict(
         "old",
         fetch=lambda s: runs_by_sha[s],
         descendants=lambda _s: ["near", "middle", "tip"],
     )
-    assert found == "middle"
+    assert found == ("middle", "pass")
+
+
+def test_descendant_verdict_stops_at_a_red_commit_before_a_green_one():
+    """The reject half: a later green commit may carry the fix the merge commit lacks."""
+    red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
+    green = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
+    runs_by_sha = {"near": [], "broken": red, "fixed": green}
+    found = await_ci.descendant_verdict(
+        "old",
+        fetch=lambda s: runs_by_sha[s],
+        descendants=lambda _s: ["near", "broken", "fixed"],
+    )
+    assert found == ("broken", "fail")
 
 
 def _wait_on_dropped(suites, descendant_runs, late_runs=None):
@@ -260,3 +273,10 @@ def test_a_late_push_whose_run_registers_after_the_grace_keeps_its_own_verdict()
     code, msg = _wait_on_dropped([], green, late_runs=running)
     assert code == 75
     assert msg.startswith("old:") and "never ran CI" not in msg
+
+
+def test_wait_on_a_dropped_push_ends_red_when_its_nearest_descendant_is_red():
+    red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
+    code, msg = _wait_on_dropped([], red)
+    assert code == 1
+    assert msg.startswith("next: CI RED") and "never ran CI for old" in msg

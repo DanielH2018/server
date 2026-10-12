@@ -230,3 +230,19 @@ def test_step_3_hand_deploy_names_the_tip_not_an_older_green_commit(
     assert tip[:8] in detail, detail
     assert f"deploy.sh --at {middle[:8]}" not in detail, detail
     assert "deploy.sh" in detail, detail
+
+
+def test_step_3_accepts_the_green_middle_commit_when_the_tip_has_no_run_either(
+    landing, tmp_path, monkeypatch, capsys
+):
+    """#4621's second recurrence through the accept path: the verdict is the middle commit's.
+
+    The run-less tip stays unaccepted, and the step-3 line names the commit it trusted.
+    """
+    (_, middle, tip), ended = _step_3_over_master(
+        landing, tmp_path, monkeypatch, [False, True, False]
+    )
+    assert ended is None
+    out = capsys.readouterr().out
+    assert f"{middle[:8]}: CI green" in out, out
+    assert f"{tip[:8]}: CI green" not in out, out

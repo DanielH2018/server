@@ -16,7 +16,7 @@ Exit codes:
   75  the wait budget elapsed with no verdict (matches deploy.sh's use of 75)
 
 A SHA GitHub never ran CI for at all reads green through its nearest green descendant on
-master; `green_descendant` has the rule and why it is safe (#4621).
+master; `descendant_verdict` has the rule and why it is safe (#4621).
 
 Run: uv run python scripts/deploy_tools/await_ci.py <sha>
 """
@@ -253,24 +253,29 @@ def _push_was_dropped(runs: list[dict], suites: list[dict], required) -> bool:
     return not any((s.get("app") or {}).get("slug") == "github-actions" for s in suites)
 
 
-def green_descendant(sha: str, fetch=fetch_check_runs, descendants=_descendants) -> str:
-    """The nearest descendant of `sha` on master whose CI is green, or "" when none is yet.
+def descendant_verdict(
+    sha: str, fetch=fetch_check_runs, descendants=_descendants
+) -> tuple[str, str]:
+    """(descendant, verdict) for the nearest descendant of `sha` whose CI has finished.
 
     Called only for a SHA GitHub never ran CI for. Asks about at most `DESCENDANT_LIMIT`
-    commits, nearest first, and stops at the first green one.
+    commits, nearest first, skips the ones still pending, and stops at the first `pass` or
+    `fail`. ("", "pending") when none has finished yet.
     """
-    # DECIDED: a green descendant stands in for a merge commit GitHub never ran CI for. The
-    # descendant's run tested a tree that contains every change in the merge commit, which is
-    # the rule the tick already deploys by (it fast-forwards to the newest green ancestor of
-    # the tip). What it does not prove is the merge commit's own tree, the one land.sh
-    # deploys with `deploy.sh --at`. Nothing can prove that once the push event is gone, and
-    # the alternative is a landing no re-run converges (#4621). The nearest green descendant
-    # is the closest tree to that one, so the walk goes nearest first.
+    # DECIDED: the nearest finished descendant's verdict stands in for a merge commit GitHub
+    # never ran CI for. That descendant's run tested a tree that contains every change in the
+    # merge commit, which is the rule the tick already deploys by (it fast-forwards to the
+    # newest green ancestor of the tip). What it does not prove is the merge commit's own
+    # tree, the one land.sh deploys with `deploy.sh --at`. Nothing can prove that once the
+    # push event is gone, and the alternative is a landing no re-run converges (#4621).
+    # A RED one ends the walk rather than being stepped over: a later green commit may hold
+    # the fix the merge commit lacks, so its green says nothing about the tree deployed.
     required = required_contexts()
     for candidate in descendants(sha)[:DESCENDANT_LIMIT]:
-        if verdict_for(candidate, fetch=fetch, required=required) == "pass":
-            return candidate
-    return ""
+        verdict = verdict_for(candidate, fetch=fetch, required=required)
+        if verdict != "pending":
+            return candidate, verdict
+    return "", "pending"
 
 
 def wait(
@@ -286,7 +291,7 @@ def wait(
     """(exit code, message). Polls until pass/fail or the budget elapses.
 
     A SHA with no Actions suite after `DROPPED_PUSH_GRACE_S` is a push GitHub dropped, and
-    its verdict comes from `green_descendant` instead. Until one goes green it keeps waiting,
+    its verdict comes from `descendant_verdict` instead. Until one goes green it keeps waiting,
     and a timeout says why.
     """
     started = clock()
@@ -327,11 +332,18 @@ def wait(
             # A push that was only late, not dropped: its own run now carries the verdict.
             dropped = False
         if dropped:
-            green = green_descendant(target, fetch=fetch, descendants=descendants)
-            if green:
+            nearest, verdict = descendant_verdict(
+                target, fetch=fetch, descendants=descendants
+            )
+            if verdict == "pass":
                 return 0, (
-                    f"{green[:8]}: CI green (GitHub never ran CI for {target[:8]}; "
-                    f"{green[:8]} descends from it)"
+                    f"{nearest[:8]}: CI green (GitHub never ran CI for {target[:8]}; "
+                    f"{nearest[:8]} descends from it)"
+                )
+            if verdict == "fail":
+                return 1, (
+                    f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
+                    f"{nearest[:8]} is its nearest descendant with a verdict)"
                 )
         if now >= deadline:
             if dropped:
