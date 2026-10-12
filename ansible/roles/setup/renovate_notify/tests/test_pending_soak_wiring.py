@@ -47,11 +47,12 @@ CHURN_DASHBOARD = {
 }
 
 
-def _wire(monkeypatch, tmp_path, posts, now, dashboard=DASHBOARD):
+def _wire(monkeypatch, tmp_path, posts, now, dashboard=DASHBOARD, closed=()):
     """Point main() at a fake GitHub + Discord and a state dir under tmp_path.
 
-    `dashboard` selects which captured body the fake GitHub returns. Patching it here rather
-    than re-patching `get` in a wrapper keeps the module's monkeypatch count where
+    `dashboard` selects which captured body the fake GitHub returns, and `closed` the
+    closed-pulls list. Patching them here rather than re-patching `get` in a wrapper keeps the
+    module's monkeypatch count where
     `test_no_test_module_patches_more_modules_than_its_allowlist_entry` holds it.
     """
     monkeypatch.setattr(
@@ -64,7 +65,17 @@ def _wire(monkeypatch, tmp_path, posts, now, dashboard=DASHBOARD):
         },
     )
     monkeypatch.setattr(rn, "github_token", lambda *_a, **_k: None)
-    monkeypatch.setattr(rn, "get", lambda url: [dashboard] if "/issues" in url else [])
+    monkeypatch.setattr(
+        rn,
+        "get",
+        lambda url: (
+            [dashboard]
+            if "/issues" in url
+            else list(closed)
+            if "state=closed" in url
+            else []
+        ),
+    )
     monkeypatch.setattr(
         rn, "discord", lambda hook, content: posts.append(content) or True
     )
@@ -260,3 +271,22 @@ def test_a_re_pushed_branch_inside_the_churn_allowance_stays_silent(
     _wire(monkeypatch, tmp_path, posts, now, dashboard=CHURN_DASHBOARD)
     assert rn.main() == 0
     assert posts == []
+
+
+def test_an_autoclosed_pr_reaches_discord(monkeypatch, tmp_path):
+    """#4630: the autoclosed arm is folded into the post, not only into the fingerprint."""
+    posts = []
+    now = 1_000_000.0
+    pr = {
+        "number": 4586,
+        "title": "Update grafana/promtail Docker tag to v3.6.11 - autoclosed",
+        "html_url": "https://github.com/o/r/pull/4586",
+        "head": {"ref": "renovate/promtail"},
+        "user": {"login": "renovate[bot]"},
+        "closed_at": "1970-01-12T12:00:00Z",  # half a day before `now`
+        "merged_at": None,
+    }
+    _wire(monkeypatch, tmp_path, posts, now, closed=[pr])
+    assert rn.main() == 0
+    assert len(posts) == 1
+    assert "#4586 Update grafana/promtail Docker tag to v3.6.11" in posts[0]

@@ -24,20 +24,24 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from notify_logic import (
     PR,
     actionable,
+    autoclosed_fingerprint,
     ci_rollup,
     dashboard_body,
     dashboard_headers_unrecognized,
     dashboard_stale,
     find_dashboard,
+    find_autoclosed,
     find_dashboard_problems,
     fingerprint,
     parse_automerge,
     problems_fingerprint,
+    render_autoclosed,
     render_digest,
     render_problems,
     should_notify,
@@ -292,6 +296,18 @@ def main() -> int:
     # A tag re-pushed faster than its own soak + grace resets the dwell above forever, so the
     # branch clock is the floor under it (#3076).
     churning = churning_pending(seen, pending, now)
+    # An autoclosed PR is no longer open, so the digest drops it, and its update sits on the
+    # dashboard as an ordinary awaiting row (#4630). Sorted by `updated` so a recent close of an
+    # old PR stays on the first page.
+    closed = get(
+        "repos/%s/pulls?state=closed&sort=updated&direction=desc&per_page=100" % repo
+    )
+    autoclosed = find_autoclosed(
+        [p for p in closed if is_renovate(p)],
+        {(p.get("head") or {}).get("ref", "") for p in pulls},
+        body or "",
+        now=datetime.fromtimestamp(now, timezone.utc),
+    )
     cur_fp = (
         fingerprint(items)
         + ("|dashboard-stale" if stale else "")
@@ -299,6 +315,7 @@ def main() -> int:
         + ("|problems:" + problems_fingerprint(problems) if problems else "")
         + ("|pending:" + pending_fingerprint(stuck_pending) if stuck_pending else "")
         + ("|pending-churn:" + churn_fingerprint(churning) if churning else "")
+        + ("|autoclosed:" + autoclosed_fingerprint(autoclosed) if autoclosed else "")
         # Keyed on the date the clocks become usable, so the same loss pages once. The run
         # after this one rewrites the file, the component drops, and the fingerprint moves
         # again — so expect one follow-up digest (or CLEARED_MSG) the next day. That is the
@@ -309,7 +326,7 @@ def main() -> int:
     notify, kind = should_notify(prev_fp, cur_fp)
     log(
         "actionable=%d dashboard_stale=%s problems=%d pending=%d stuck_pending=%d "
-        "churning=%d unparseable=%s pending_reset=%s fp=%r prev=%r -> %s"
+        "churning=%d autoclosed=%d unparseable=%s pending_reset=%s fp=%r prev=%r -> %s"
         % (
             len(items),
             stale,
@@ -317,6 +334,7 @@ def main() -> int:
             len(pending),
             len(stuck_pending),
             len(churning),
+            len(autoclosed),
             unparseable,
             pending_reset,
             cur_fp,
@@ -331,6 +349,7 @@ def main() -> int:
             or problems
             or stuck_pending
             or churning
+            or autoclosed
             or unparseable
             or pending_reset
         ):
@@ -347,6 +366,8 @@ def main() -> int:
                 parts.append(render_pending(stuck_pending))
             if churning:
                 parts.append(render_churning(churning))
+            if autoclosed:
+                parts.append(render_autoclosed(autoclosed))
             content = "\n\n".join(parts)
             if items:
                 content += "\n\n" + render_digest(items)

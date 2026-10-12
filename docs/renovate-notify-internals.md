@@ -1,7 +1,7 @@
 # renovate_notify internals — the sandbox, the parsers and the module layout
 
 `ansible/roles/setup/renovate_notify/CLAUDE.md` is the role doc, and it keeps the operating
-rules: the four arms, the fingerprint gate, the two ways the stuck-pending clock goes inert.
+rules: the five arms, the fingerprint gate, the two ways the stuck-pending clock goes inert.
 This page is the working-out behind them — why the unit's sandbox needs two overrides, how the
 dashboard parsers were measured, where the logic lives and what a dry run does not prove. A
 session reads it when it edits that code, not on every touch of the role (#2989).
@@ -81,9 +81,27 @@ The role doc names both shapes; these are the measurements behind them.
   `DECIDED:` comment beside it accepts a grouped VERSION bump paging four days early as the cost.
 
 **A reset posts once, then posts again the next day.** The reset rides the same fingerprint as
-the other three arms; the following run rewrites the state file, so the component drops and the
+the other four arms; the following run rewrites the state file, so the component drops and the
 fingerprint moves a second time. The follow-up digest (or `CLEARED_MSG`) is the cost of one
-dedupe for all four arms.
+dedupe for all five arms.
+
+## The autoclosed arm needs three facts to agree
+
+Renovate autoclosed #4586 nine hours after opening it, inside the same schedule, and its update
+returned to "Awaiting Schedule" for a week (#4630). The PR is no longer open, so the digest
+drops it, and an awaiting row is neither a problem nor a pending item. `find_autoclosed` in
+`files/notify_logic.py` reports a PR when three facts agree:
+
+- Renovate closed it unmerged and appended ` - autoclosed` to its title within the last
+  `AUTOCLOSED_LOOKBACK_DAYS` (8) days.
+- A dashboard row marker still names its branch. The match takes any `<prefix>-branch=`
+  marker, because Renovate renamed one prefix before (`approvePr-` to `unpend-`).
+- No open PR carries its branch, so a reopened or re-raised PR clears the item.
+
+The lookback bound exists because Renovate reuses a branch name for the next update of the
+same dependency. Without it, an old autoclose would page for every later update that waits for
+its schedule on that branch. The shell lists closed PRs sorted by `updated`, so a recent close
+of an older PR stays on the first page of 100.
 
 ## Where the logic lives
 
