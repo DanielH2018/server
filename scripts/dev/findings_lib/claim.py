@@ -25,6 +25,7 @@ from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
+from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.issue_model import (
     _CLAIM_RE,
     _RELEASE_RE,
@@ -41,13 +42,13 @@ from lib.worktrees import REMOVABLE, Worktree, classify
 # subprocess itself, and a git that ran but exited non-zero surfaces as CalledProcessError.
 _UNREADABLE = (OSError, subprocess.SubprocessError)
 
-# `(stale issue numbers) -> {issue: reason}` for the ones a running fan-out batch still works,
+# `(stale issue numbers) -> {issue: BatchHold}` for the ones a running fan-out batch still works,
 # `fanout_lib.batch_holds.running_batch_holds` bound to a register. Asked only about claims the
 # worktree already calls stale, so a register with none reads no unit and opens no ssh.
-BatchHolds = Callable[[Collection[int]], Mapping[int, str]]
+BatchHolds = Callable[[Collection[int]], Mapping[int, BatchHold]]
 
 
-def _no_batch_holds(_issues: Collection[int]) -> Mapping[int, str]:
+def _no_batch_holds(_issues: Collection[int]) -> Mapping[int, BatchHold]:
     return {}
 
 
@@ -197,7 +198,8 @@ def claim_states(
     exact day count cannot straddle a midnight while the suite runs.
 
     A claim the worktree calls stale reads live, under the batch's reason, while
-    ``batch_holds`` names its issue. It is called once, with every stale issue, and not at
+    ``batch_holds`` names its issue. The reason says when the claim's holder is not the branch
+    the batch claimed under (#4688). It is called once, with every stale issue, and not at
     all when none is stale.
     """
     states = []
@@ -214,7 +216,9 @@ def claim_states(
     stale = [s.number for s in states if not s.live]
     holds = batch_holds(stale) if stale else {}
     return [
-        replace(s, live=True, reason=holds[s.number]) if s.number in holds else s
+        replace(s, live=True, reason=holds[s.number].reason_for(s.worktree))
+        if s.number in holds
+        else s
         for s in states
     ]
 

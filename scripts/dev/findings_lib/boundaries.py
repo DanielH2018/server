@@ -33,7 +33,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.fanout_lib.batch_holds import running_batch_holds
+from dev.fanout_lib.batch_holds import BatchHold, running_batch_holds
 from dev.fanout_lib.manifest import branches_launched_by
 from lib.worktrees import worktree_facts as read_worktree_facts
 from lib.gh import gh, gh_json
@@ -72,14 +72,14 @@ class FindingsTools:
     # `claims --worktree` adds to the branches it keeps. A field so a test never reads the
     # real `~/.claude/fanout`.
     launched_branches: Callable[[str, str], set[str]] = branches_launched_by
-    # `(repo, stale issue numbers) -> {issue: reason}` for the issues a still-running fan-out
+    # `(repo, stale issue numbers) -> {issue: BatchHold}` for the issues a still-running fan-out
     # batch works, which keeps their claims live after the orchestrator's session dies (#4601).
     # None is this repo, as for `repo` above.
-    running_batch_holds: Callable[[str | None, Collection[int]], Mapping[int, str]] = (
-        running_batch_holds
-    )
+    running_batch_holds: Callable[
+        [str | None, Collection[int]], Mapping[int, BatchHold]
+    ] = running_batch_holds
 
-    def batch_holds(self, issues: Collection[int]) -> Mapping[int, str]:
+    def batch_holds(self, issues: Collection[int]) -> Mapping[int, BatchHold]:
         """`running_batch_holds` aimed at this register, as `claim_states` takes it."""
         return self.running_batch_holds(self.repo, issues)
 
