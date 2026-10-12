@@ -78,6 +78,10 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "aide_daniel_box_push_token",
         "aide_daniel_server_push_token",
         "aide_daniel_pi_push_token",
+        # The weekly rkhunter scan: the same shape as the AIDE tokens above.
+        "rkhunter_daniel_box_push_token",
+        "rkhunter_daniel_server_push_token",
+        "rkhunter_daniel_pi_push_token",
         # daniel-SERVER cron (setup/hypervisor, applied by `initial_setup.yml --tags hypervisor`
         # on that host) + a k8s/uptime-kuma tile deployed from daniel-box: two hosts, no single
         # redeploy moves both halves. The tile is the only alarm on the full etcd restore drill.

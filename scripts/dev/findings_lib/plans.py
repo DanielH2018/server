@@ -302,7 +302,8 @@ def plan_open(
         title: issue title.
         body: issue body, before the verify-by section and the fingerprint/source trailer
             are appended.
-        labels: labels to apply on create.
+        labels: labels to apply on create. Of these, only `review-leftover` is also added
+            to a matched issue that lacks it.
         fp: the finding's fingerprint.
         source: the review or session that produced this finding.
         verify_by: prose describing how to check whether the finding is fixed, which
@@ -342,6 +343,12 @@ def plan_open(
         # chose to live with it. Either way re-filing it would reopen a decision already made,
         # so the caller gets exit 3 and no writes are planned.
         return terminal[0], 3, []
+    # A review leftover is usually re-filed against the fix round's own issue, so it lands
+    # here rather than on the create path, and `next` would rank it as fresh (#4622).
+    leftover = "review-leftover" in labels and "review-leftover" not in names
+    relabel = (
+        [["issue", "edit", n, "--add-label", "review-leftover"]] if leftover else []
+    )
     if existing.get("state") == "CLOSED":
         return (
             "reopened",
@@ -355,9 +362,10 @@ def plan_open(
                     "--body",
                     f"{_REOBSERVED} by {source} after it was closed as fixed: treat as a regression.",
                 ],
+                *relabel,
             ],
         )
-    return "touched", 0, plan_touch(existing, source)
+    return "touched", 0, plan_touch(existing, source) + relabel
 
 
 def plan_close(

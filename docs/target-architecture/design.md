@@ -446,9 +446,14 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
    fast-forward to its squash SHA after a `git rev-list HEAD..<sha>` check, as R4's PR 6
    does. Who makes the general fix, and when, is open.
 1. **An installable `scripts/` package**
-   ([#4435](https://github.com/DanielH2018/server/issues/4435)). Resolution: decide it before
-   R1 fixes the renderer's import path, or defer it until after D6, so that the path changes
-   once.
+   ([#4435](https://github.com/DanielH2018/server/issues/4435)). Resolved on 2026-10-12: the
+   operator deferred it until after H7. R1 creates `scripts/renderer/` in the flat layout, as
+   C1 states. The migration deletes much of what packaging would move: H7 removes the setup
+   roles, `release_bin.yml` and most of `scripts/deploy_tools/`, D6 the k8s arms of
+   `land_lib`, R4 `render_targets.py`, and G2 `docs/facts.lock`. Packaging after H7 moves a
+   smaller tree once, and decides then whether `hosts/lib/` and `scripts/renderer/` join it.
+   [The deferral comment on #4435](https://github.com/DanielH2018/server/issues/4435#issuecomment-6127558154)
+   carries the slice-by-slice citations.
 
 ## Review log
 
@@ -520,6 +525,7 @@ The round also changed three things here that follow from contracts.md:
 - Cross-slice note from R4: Open questions gains *The hand fast-forward after a park*.
   `docs/gitops-pipeline.md` describes the pipeline at `70591c307` and is not edited here.
 - Open questions gains [#4435](https://github.com/DanielH2018/server/issues/4435), the installable `scripts/` package.
+- The operator resolved that question on 2026-10-12 by deferring #4435 until after H7.
 
 ### Pillar review fold (2026-10-12)
 

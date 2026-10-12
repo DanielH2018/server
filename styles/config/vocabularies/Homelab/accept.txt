@@ -638,3 +638,7 @@ logfmt
 
 # Reviewer domain label (scripts/dev/findings_lib/issue_model.py DOMAINS)
 cicd
+
+# Renovate PR states (docs/renovate-notify-internals.md, the autoclosed arm)
+[Aa]utoclosed?
+[Uu]nmerged
