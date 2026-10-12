@@ -1,7 +1,7 @@
 # The Flux deploy plane
 
 Flux's source controller, Kustomize controller and notification controller run in the
-`flux-system` namespace on daniel-box. They follow no source yet, so Flux applies nothing, and
+`flux-system` namespace. They follow no source yet, so Flux applies nothing, and
 the GitOps deployer and Ansible still deploy every service, Flux included. The plan that takes
 Flux from here to owning the cluster is [slice D1](target-architecture/deploy/d1-flux-installed.md)
 and the slices after it, and the decision it proposes is
