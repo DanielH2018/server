@@ -1,6 +1,12 @@
 """fact_status.py: exit codes and the text a CI failure prints."""
 
+import importlib.util
 import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
 
 from fact_status import _USAGE, main
 from lib.git_testing import git, init_repo
@@ -266,3 +272,65 @@ def test_report_json_ranks_the_sections_not_in(tmp_path, capsys):
         ("CLAUDE.md#Gate", "UNVERIFIED"),
         ("CLAUDE.md#Style", "CONVENTION"),
     ]
+
+
+_HOOKS = Path(__file__).resolve().parents[3] / ".claude" / "hooks"
+
+
+def _hook_log_env():
+    """The variable `_hook_common` reads to send the instructions log to a scratch file."""
+    spec = importlib.util.spec_from_file_location(
+        "_hook_common_for_report", _HOOKS / "_hook_common.py"
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.INSTRUCTIONS_LOG_ENV
+
+
+def _load(log, path, session_id, memory_type):
+    """Log one InstructionsLoaded event through the real log-instructions.py hook."""
+    payload = {
+        "hook_event_name": "InstructionsLoaded",
+        "session_id": session_id,
+        "cwd": str(path.parent),
+        "file_path": str(path),
+        "load_reason": "session_start",
+        "memory_type": memory_type,
+    }
+    subprocess.run(
+        [sys.executable, str(_HOOKS / "log-instructions.py")],
+        input=json.dumps(payload),
+        text=True,
+        check=True,
+        timeout=30,
+        env={**os.environ, _hook_log_env(): str(log)},
+    )
+
+
+def _total_on_session_line(out, sid, total):
+    """Whether one line of ``out`` names session ``sid`` and the byte count ``total``."""
+    number = r"(?<![\d,])" + "{:,}".format(total).replace(",", ",?") + r"(?![\d,])"
+    return any(sid in line and re.search(number, line) for line in out.splitlines())
+
+
+def test_report_prints_each_sessions_total_instruction_bytes(tmp_path, capsys):
+    # #4610: the bytes of instructions a session loads, summed per session from the sizes
+    # log-instructions.py records. A user-level file outside the repo counts too: most of
+    # the always-loaded context is ~/.claude/CLAUDE.md and MEMORY.md, not a repo doc.
+    repo = _repo(tmp_path / "repo")
+    doc = repo / "CLAUDE.md"
+    head = doc.read_bytes()
+    doc.write_bytes(head + b"x" * (3000 - len(head)))
+    user = tmp_path / "home" / "CLAUDE.md"
+    user.parent.mkdir()
+    user.write_bytes(b"u" * 5000)
+    log = tmp_path / "instructions.log"
+    _load(log, doc, "aaaaaaaa-1", "Project")
+    _load(log, user, "aaaaaaaa-1", "User")
+    _load(log, doc, "bbbbbbbb-2", "Project")
+
+    assert main(["report", "--repo", str(repo), "--log", str(log)]) == 0
+    out = capsys.readouterr().out
+    assert _total_on_session_line(out, "aaaaaaaa", 8000), out
+    assert _total_on_session_line(out, "bbbbbbbb", 3000), out

@@ -8,7 +8,10 @@ built under tmp_path with a linked worktree, through `lib.git_testing`, so the c
 Run: uv run pytest .claude/hooks/tests/test_log_instructions.py
 """
 
+import json
 import os
+import re
+import subprocess
 import sys
 import tempfile
 
@@ -87,3 +90,47 @@ def test_an_override_naming_another_file_is_neither_written_nor_rotated_is_flagg
     log = os.path.join(primary, ".claude", "logs", "instructions.log")
     with open(log, encoding="utf-8") as fh:
         assert "session_start" in fh.read()
+
+
+def _thousands(n):
+    """A regex matching `n` alone, written with or without thousands separators."""
+    return r"(?<![\d,])" + "{:,}".format(n).replace(",", ",?") + r"(?![\d,])"
+
+
+def _load(log, path, session_id):
+    """Run log-instructions.py on one InstructionsLoaded payload, appending to `log`."""
+    payload = {
+        "hook_event_name": "InstructionsLoaded",
+        "session_id": session_id,
+        "cwd": str(path.parent),
+        "file_path": str(path),
+        "load_reason": "session_start",
+        "memory_type": "Project",
+    }
+    subprocess.run(
+        [sys.executable, os.path.join(_HERE, "log-instructions.py")],
+        input=json.dumps(payload),
+        text=True,
+        check=True,
+        timeout=30,
+        env={**os.environ, INSTRUCTIONS_LOG_ENV: str(log)},
+    )
+
+
+def test_each_load_row_carries_the_byte_size_of_the_file_it_loaded(tmp_path):
+    # #4610: nothing recorded how much instruction context a session loads. Two files of
+    # different sizes, so a row carrying a running sum or the other file's size fails.
+    log = tmp_path / "instructions.log"
+    big = tmp_path / "big" / "CLAUDE.md"
+    small = tmp_path / "small" / "CLAUDE.md"
+    big.parent.mkdir()
+    small.parent.mkdir()
+    big.write_bytes(b"b" * 98765)
+    small.write_bytes(b"s" * 4321)
+    _load(log, big, "sessiona-x")
+    _load(log, small, "sessiona-x")
+
+    rows = log.read_text().splitlines()
+    assert len(rows) == 2
+    for row, size in zip(rows, (98765, 4321), strict=True):
+        assert re.search(_thousands(size), row), row
