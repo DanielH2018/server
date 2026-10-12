@@ -61,6 +61,7 @@ def test_every_discovered_input_gets_its_tool_check(tmp_path):
         ["promtool", "check", "config", "--syntax-only", str(config)],
         ["promtool", "check", "rules", str(rules / "meta.yaml")],
         ["promtool", "test", "rules", str(tests / "meta.test.yaml")],
+        ["pint", *alert_rules.PINT_ARGS, str(rules)],
     ]
 
 
@@ -190,6 +191,7 @@ def test_every_proof_names_fixtures_that_exist():
         ("promtool", "test", "rules"),
         ("amtool", "check-config"),
         ("promtool", "check", "config", "--syntax-only"),
+        ("pint", *alert_rules.PINT_ARGS),
     }
     for proof in alert_rules.PROOFS:
         assert (alert_rules.FIXTURES / proof.good).is_file(), proof.good
@@ -215,8 +217,8 @@ def test_the_tree_rules_meet_every_convention_is_clean():
     groups, keys = alert_rules.rendered_rule_keys()
     # Non-vacuity: the floor and the list name the group, and the file holds its five alerts.
     assert "alerting-meta" in alert_conventions.GROUP_FLOOR
-    assert groups == ["alerting-meta", "workload-service"]
-    assert keys == {"alerting-meta.yaml", "workload-service.yaml"}
+    assert groups == ["alerting-meta", "workload-service", "k8s-workloads"]
+    assert keys == {"alerting-meta.yaml", "workload-service.yaml", "k8s-workloads.yaml"}
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()
     )
@@ -239,3 +241,18 @@ def test_a_placeholder_in_the_rendered_alertmanager_config_is_clean():
     assert "${email}" in found["alertmanager.yml"]
     problems = alert_rules.check_tree(run=lambda argv: (0, ""), render=lambda: found)
     assert problems == []
+
+
+def test_the_live_pint_config_names_the_pinned_prometheus_address():
+    """live.hcl reaches Prometheus by its pinned ClusterIP, so the two must stay one value."""
+    defaults = yaml_fast.safe_load(
+        (REPO / "ansible/roles/k8s/observability/defaults/main.yml").read_text()
+    )
+    live = (alert_rules.PINT_OFFLINE.parent / "live.hcl").read_text()
+    uris = re.findall(r'^\s*uri\s*=\s*"([^"]+)"', live, re.M)
+    assert uris == [f"http://{defaults['observability_prometheus_cluster_ip']}:9090"], (
+        uris
+    )
+    assert re.search(r"^\s*required\s*=\s*true\s*$", live, re.M), (
+        "live.hcl must set required = true, or an unreachable Prometheus is only a warning"
+    )

@@ -156,6 +156,44 @@ def test_a_shadow_alert_is_clean(tmp_path):
     assert _rule_problems(*_rule_tree(tmp_path, edit_rules=shadow)) == []
 
 
+# M2's join shape, as k8s-workloads.yaml writes it.
+_MAPPED_EXPR = """
+(
+    (kube_deployment_status_replicas_unavailable > 0)
+  * on(namespace, deployment) group_left(service)
+    homelab:deployment_service:info
+)
+or
+label_replace(
+    (kube_deployment_status_replicas_unavailable > 0)
+  unless on(namespace, deployment)
+    homelab:deployment_service:info,
+  "service", "unmapped", "", ""
+)
+"""
+
+
+def _take_service_from(expr):
+    def edit(rules):
+        rule = _reload_rule(rules)
+        rule["expr"] = expr
+        del rule["labels"]["service"]
+
+    return edit
+
+
+def test_an_alert_taking_service_from_the_mapping_join_is_clean(tmp_path):
+    edit = _take_service_from(_MAPPED_EXPR)
+    assert _rule_problems(*_rule_tree(tmp_path, edit_rules=edit)) == []
+
+
+def test_a_mapping_join_with_no_unmapped_fallback_is_flagged(tmp_path):
+    join_only = _MAPPED_EXPR.split("\nor\n")[0]
+    edit = _take_service_from(join_only)
+    problems = _rule_problems(*_rule_tree(tmp_path, edit_rules=edit))
+    assert any('no service="unmapped" fallback' in p for p in problems), problems
+
+
 def test_a_group_not_named_like_its_file_is_flagged(tmp_path):
     def rename(rules):
         rules["groups"][0]["name"] = "meta"

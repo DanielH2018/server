@@ -8,8 +8,11 @@ Prometheus. `rule_problems` holds the role's rule files to the conventions in
 - the stems in `files/rules/`, `observability_rule_groups` and the rendered `prometheus-rules`
   ConfigMap's keys are one set, because a file the list does not name never reaches the
   ConfigMap. `GROUP_FLOOR` names the groups the run must find;
-- every alert carries a literal `severity` from `SEVERITIES` and a `service`, and `shadow` is
-  absent or `"true"`;
+- every alert carries a literal `severity` from `SEVERITIES`, and `shadow` is absent or
+  `"true"`;
+- every alert carries a literal `service`, or takes it from its expression through M2's join
+  shape (`service_from_mapping`): a `group_left(service)` join to a workload-service recording
+  rule, with a `label_replace` that maps a workload the join misses to `service="unmapped"`;
 - exactly one rule is named `Watchdog`, in `alerting-meta`, with the expression `vector(1)`.
   The C7 health gate excludes that name, so a second one would be hidden from every gate, and
   with none nothing pings the `alertmanager-watchdog` check on Healthchecks.io. Every other
@@ -51,6 +54,15 @@ GROUP_FLOOR = frozenset({"alerting-meta"})
 RULE_TEST_SUFFIX = ".test.yaml"
 
 SEVERITIES = frozenset({"critical", "warning", "info"})
+
+# M2's join shape, from docs/target-architecture/monitoring/m2-first-bridge-family.md, "The
+# rules": the join that takes `service` from a workload-service recording rule, and the
+# fallback that keeps an alert whose workload the join misses. A join with no fallback drops
+# the alert whenever its mapping is missing.
+SERVICE_JOIN = re.compile(
+    r"group_left\s*\(\s*service\s*\)\s*homelab:(?:deployment|daemonset|pod)_service:info\b"
+)
+SERVICE_FALLBACK = re.compile(r'"service"\s*,\s*"unmapped"\s*,\s*""\s*,\s*""')
 WATCHDOG = "Watchdog"
 WATCHDOG_GROUP = "alerting-meta"
 WATCHDOG_EXPR = "vector(1)"
@@ -105,6 +117,23 @@ def names_a_metric(expr: str) -> bool:
         not call and name.lower() not in PROMQL_KEYWORDS
         for name, call in PROMQL_IDENTIFIER.findall(text)
     )
+
+
+def service_from_mapping(expr: str) -> str | None:
+    """Why an alert with no literal `service` fails to take one from its expression, or None.
+
+    Read lexically, like `names_a_metric`: the expression must join a workload-service
+    recording rule with `group_left(service)` and map what the join misses to
+    `service="unmapped"`.
+    """
+    if not SERVICE_JOIN.search(expr):
+        return "carries no service label, so no health gate reads it"
+    if not SERVICE_FALLBACK.search(expr):
+        return (
+            'takes service from a workload-service join with no service="unmapped" '
+            "fallback, so a missing mapping silences it"
+        )
+    return None
 
 
 def _load_yaml(path: Path) -> tuple[object, str | None]:
@@ -179,9 +208,9 @@ def rule_file_problems(stem: str, doc: object) -> list[str]:
                 f"{sorted(SEVERITIES)}"
             )
         if not labels.get("service"):
-            problems.append(
-                f"{stem}/{name}: carries no service label, so no health gate reads it"
-            )
+            reason = service_from_mapping(str(rule.get("expr", "")))
+            if reason:
+                problems.append(f"{stem}/{name}: {reason}")
         if "shadow" in labels and labels["shadow"] != "true":
             problems.append(
                 f'{stem}/{name}: shadow is {labels["shadow"]!r}; it is absent or "true"'

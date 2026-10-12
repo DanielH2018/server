@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""The GPU extended-resource name is written out in three places that must agree.
+"""The GPU extended-resource name is written out in four places that must agree.
 
 `devic.es/dri` is what the dri-device-plugin DaemonSet advertises, what jellyfin and tdarr
-request in their pod specs, and what monitor-bridge watches for deregistration. Those are three
-independent string literals in three roles that happen to match — tdarr's comment calls the pair
-a lockstep, which it is not.
+request in their pod specs, and what monitor-bridge watches for deregistration. observability's
+`K8sExtendedResourceMissing` rule watches it too, in the sanitised form kube-state-metrics gives
+the `resource` label, `devic_es_dri`. Those are independent string literals in four roles that
+happen to match.
 
 A single Ansible variable cannot cover all three: monitor-bridge's is a Python default inside a
 container image, reachable only through `K8S_EXTENDED_RESOURCES`, which the env-secret does not
@@ -19,7 +20,8 @@ role's CLAUDE.md as a false alarm.
 The plugin's and the consumers' names are read from the rendered manifests, not from a role's
 defaults or a template's text. A pod spec that stopped using its `*_dri_resource` variable, or a
 plugin whose `--device` config changed while a comment still said `devic.es/dri`, would both pass
-a source scan. monitor-bridge's name stays a source read, because config.py is not a template.
+a source scan. monitor-bridge's name stays a source read, because config.py is not a template, and so does the
+rule's, because the rule file is carried verbatim.
 
 Run: uv run pytest ansible/tests/services/test_dri_resource_name_agrees.py
 """
@@ -41,6 +43,8 @@ _PLUGIN_ROLE = "dri-device-plugin"
 _PLUGIN_DEFAULT_DOMAIN = "devic.es"
 
 _BRIDGE_CHECK = K8S_ROLES / "monitor-bridge" / "files" / "bridge/config.py"
+_RULES = K8S_ROLES / "observability" / "files" / "rules" / "k8s-workloads.yaml"
+_RULE = "K8sExtendedResourceMissing"
 
 
 def extended_resources(doc: dict) -> set[str]:
@@ -133,6 +137,65 @@ def test_the_bridge_watches_the_name_the_consumers_request():
         f"{consumer_name!r} the GPU workloads request. Its arm would report that resource as "
         f"advertised by no node on a perfectly healthy cluster."
     )
+
+
+def ksm_label(resource: str) -> str:
+    """A resource name as kube-state-metrics writes its `resource` label: every character
+    outside [a-zA-Z0-9_] becomes `_`."""
+    return re.sub(r"[^a-zA-Z0-9_]", "_", resource)
+
+
+def test_ksm_label_sanitises_the_domain_and_the_slash():
+    assert ksm_label("devic.es/dri") == "devic_es_dri"
+    assert ksm_label("squat.ai/dri") == "squat_ai_dri"
+
+
+def _rule_watched(rules_text: str) -> set[str]:
+    """The `resource` values the extended-resource rule's expression matches."""
+    doc = yaml_fast.safe_load(rules_text)
+    exprs = [
+        str(rule.get("expr", ""))
+        for group in doc["groups"]
+        for rule in group["rules"]
+        if rule.get("alert") == _RULE
+    ]
+    assert exprs, f"{_RULES} holds no {_RULE} rule; point this test at its new home"
+    return set(re.findall(r'resource="([^"]+)"', exprs[0]))
+
+
+def _plugin_advertised() -> set[str]:
+    advertised: set[str] = set()
+    for role, _tpl, doc in rendered_docs():
+        if role == _PLUGIN_ROLE and doc.get("kind") == "DaemonSet":
+            for container in pod_spec(doc).get("containers") or []:
+                advertised |= advertised_resources(container.get("args") or [])
+    return advertised
+
+
+def rule_problems(watched: set[str], advertised: set[str]) -> list[str]:
+    """A problem unless the rule watches exactly the sanitised names the plugin advertises."""
+    want = {ksm_label(name) for name in advertised}
+    if watched != want:
+        return [
+            f"{_RULE} matches resource={sorted(watched)}, and kube-state-metrics labels what "
+            f"the plugin advertises as {sorted(want)}. The rule would read a healthy cluster "
+            f"as a deregistered plugin."
+        ]
+    return []
+
+
+def test_the_rule_watches_the_sanitised_name_the_plugin_advertises_is_clean():
+    advertised = _plugin_advertised()
+    assert advertised, f"the rendered {_PLUGIN_ROLE} DaemonSet advertises nothing"
+    assert rule_problems(_rule_watched(_RULES.read_text()), advertised) == []
+
+
+def test_a_rule_watching_the_unsanitised_name_is_flagged():
+    text = _RULES.read_text().replace(
+        'resource="devic_es_dri"', 'resource="devic.es/dri"'
+    )
+    problems = rule_problems(_rule_watched(text), _plugin_advertised())
+    assert len(problems) == 1 and "devic.es/dri" in problems[0], problems
 
 
 def test_the_plugin_advertises_the_name_the_consumers_request():

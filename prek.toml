@@ -192,24 +192,25 @@ pass_filenames = false
 files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/roles/k8s/observability/templates/grafana\\.yaml\\.j2|scripts/validate/grafana_dashboards\\.py|scripts/lib/repo_paths\\.py)$"
 
 # Check the alert plane's inputs with the tools that load them. promtool checks the rendered
-# prometheus.yml, every rule file and every rule test; amtool checks the Alertmanager config.
-# scripts/validate/alert_tools.sh provisions both at the observability role's image tags into
-# alert-tools/ under the git common dir, shared by every worktree of the clone. CI's
-# `alert_rules.py --prove-red` step is the tools' red proof.
+# prometheus.yml, every rule file and every rule test; amtool checks the Alertmanager config;
+# pint lints the rule files offline under scripts/validate/pint/offline.hcl.
+# scripts/validate/alert_tools.sh provisions promtool and amtool at the observability role's
+# image tags, and pint at its own pin, into alert-tools/ under the git common dir, shared by
+# every worktree of the clone. CI's `alert_rules.py --prove-red` step is the tools' red proof.
 #
 # The `files` regex names every input the hook reads, because a PR run skips a hook no
 # changed file matches: the role's rule, rule-test and Alertmanager sources and the templates
-# that render them; its defaults, whose image tags set the tool versions; the inventory and
+# that render them; the pint configs; its defaults, whose image tags set the tool versions; the inventory and
 # the scrape_jobs filter, which feed prometheus.yml's loops; and the render's import closure,
 # as validate-k8s-manifests names it. pass_filenames = false, so prek runs one instance and
 # never races two provisions.
 [[repos.hooks]]
 id = "validate-alert-rules"
-name = "Validate the alert plane with promtool and amtool"
+name = "Validate the alert plane with promtool, amtool and pint"
 entry = "uv run --frozen python scripts/validate/alert_rules.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager)/.*|ansible/roles/k8s/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|ansible/roles/k8s/observability/defaults/main\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/filter_plugins/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema)\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(ansible/roles/k8s/observability/(files/rules|tests/rules|files/alertmanager)/.*|ansible/roles/k8s/observability/templates/(prometheus|prometheus-rules|alertmanager|alertmanager-secret)\\.yaml\\.j2|ansible/roles/k8s/observability/defaults/main\\.yml|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|ansible/filter_plugins/[^/]+\\.py|scripts/validate/alert_.*|scripts/validate/pint/.*|scripts/validate/k8s_manifests\\.py|scripts/validate/validate_lib/(ok_lines|k8s_net_rules|k8s_schema)\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # Same render-then-parse guard as validate-compose-templates above, for the k8s manifests.
 # Also parses the YAML *embedded* in ConfigMap/Secret values — the manifest wrapping Traefik's

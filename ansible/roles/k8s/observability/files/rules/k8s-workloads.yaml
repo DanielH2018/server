@@ -1,0 +1,317 @@
+# The Kubernetes arms of monitor-bridge's k8s_workloads check, as rules. Plain YAML, never
+# Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
+# docs/target-architecture/monitoring/m2-first-bridge-family.md, "The rules".
+#
+# EVERY ALERT HERE IS SHADOW. Each carries shadow="true", which Alertmanager routes to the
+# blackhole receiver, because the bridge's "k3s Workload Health" tile still pages this family.
+# M2's PR 4b drops the label once PR 4a has narrowed the bridge, so the family never pages
+# from both sides.
+#
+# THE JOIN SHAPE. A per-workload alert takes its C7 `service` label from workload-service's
+# recording rules. Each one is written as
+#
+#   (EXPR * on(namespace, <kind>) group_left(service) <mapping>)
+#   or
+#   label_replace(EXPR unless on(namespace, <kind>) <mapping>, "service", "unmapped", "", "")
+#
+# so a missing or failed mapping changes the alert's service to `unmapped` and never removes
+# the alert. The mapping series have value 1, so the product keeps EXPR's value.
+#
+# `for:` IS N x 300s, the reading bridge/config_cluster.py gives each streak of N cycles at
+# INTERVAL=300. An arm the bridge pages on one sample has N = 1. The bridge pages on its Nth bad
+# sample, (N - 1) x 300s after the first, so a rule at N x 300s drops an episode shorter than
+# that, which is the bridge's measured noise. The crash-loop arm has no `for:`, because its 1h
+# and 30m windows already hold it.
+#
+# ansible/tests/services/test_k8s_workloads_rule_literals.py holds every literal the bridge
+# also carries to the bridge's value: the floors, the holds and the crash-loop windows.
+groups:
+  - name: k8s-workloads
+    rules:
+      # The bridge's streak counts any non-empty offender set, so two workloads in successive
+      # cycles add up to one page. A `for:` is per series, so this pages only a workload that
+      # stayed unavailable for the whole hold.
+      - alert: K8sDeploymentReplicasUnavailable
+        expr: |
+          (
+              (kube_deployment_status_replicas_unavailable > 0)
+            * on(namespace, deployment) group_left(service)
+              homelab:deployment_service:info
+          )
+          or
+          label_replace(
+              (kube_deployment_status_replicas_unavailable > 0)
+            unless on(namespace, deployment)
+              homelab:deployment_service:info,
+            "service", "unmapped", "", ""
+          )
+        for: 15m
+        labels:
+          severity: warning
+          shadow: "true"
+        annotations:
+          summary: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has unavailable replicas.
+          description: >-
+            {{ $labels.deployment }} has had {{ $value }} unavailable replicas for 15 minutes. The
+            hold is per Deployment, where the bridge's streak counted any workload.
+      - alert: K8sDeploymentZeroAvailable
+        expr: |
+          (
+              (
+                  kube_deployment_status_replicas_available == 0
+                and on(namespace, deployment)
+                  kube_deployment_spec_replicas > 0
+              )
+            * on(namespace, deployment) group_left(service)
+              homelab:deployment_service:info
+          )
+          or
+          label_replace(
+              (
+                  kube_deployment_status_replicas_available == 0
+                and on(namespace, deployment)
+                  kube_deployment_spec_replicas > 0
+              )
+            unless on(namespace, deployment)
+              homelab:deployment_service:info,
+            "service", "unmapped", "", ""
+          )
+        for: 10m
+        labels:
+          severity: warning
+          shadow: "true"
+        annotations:
+          summary: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has no available replica.
+          description: >-
+            {{ $labels.deployment }} wants replicas and has had none available for 10 minutes.
+      - alert: K8sDeploymentRolloutStalled
+        expr: |
+          (
+              (
+                  kube_deployment_status_replicas_updated
+                < on(namespace, deployment)
+                  kube_deployment_spec_replicas
+              )
+            * on(namespace, deployment) group_left(service)
+              homelab:deployment_service:info
+          )
+          or
+          label_replace(
+              (
+                  kube_deployment_status_replicas_updated
+                < on(namespace, deployment)
+                  kube_deployment_spec_replicas
+              )
+            unless on(namespace, deployment)
+              homelab:deployment_service:info,
+            "service", "unmapped", "", ""
+          )
+        for: 15m
+        labels:
+          severity: warning
+          shadow: "true"
+        annotations:
+          summary: The rollout of {{ $labels.namespace }}/{{ $labels.deployment }} has stalled.
+          description: >-
+            {{ $labels.deployment }} has had fewer updated replicas than it wants for 15 minutes.
+      # The 1h window is the evidence and the 30m window the recency gate: a pod that crash
+      # looped and then recovered stops firing about 30 minutes after its last restart. A pod
+      # outside homelab:pod_service:info's domain, such as a Job's pod, fires with
+      # service="unmapped", which WorkloadServiceUnmapped does not flag.
+      - alert: K8sContainerCrashLooping
+        expr: |
+          (
+              (
+                  increase(kube_pod_container_status_restarts_total[1h]) > 3
+                and
+                  increase(kube_pod_container_status_restarts_total[30m]) > 0
+              )
+            * on(namespace, pod) group_left(service)
+              homelab:pod_service:info
+          )
+          or
+          label_replace(
+              (
+                  increase(kube_pod_container_status_restarts_total[1h]) > 3
+                and
+                  increase(kube_pod_container_status_restarts_total[30m]) > 0
+              )
+            unless on(namespace, pod)
+              homelab:pod_service:info,
+            "service", "unmapped", "", ""
+          )
+        labels:
+          severity: warning
+          shadow: "true"
+        annotations:
+          summary: Container {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} is crash looping.
+          description: >-
+            {{ $labels.container }} restarted more than 3 times in the last hour, at least once in
+            the last 30 minutes. Readiness can pass between restarts, so the replica alerts may
+            stay quiet.
+      # The bridge pages this arm on one bad sample, which spans up to 300s. 5m keeps that span
+      # and does not page a DaemonSet rollout, which a 1-minute evaluation would.
+      - alert: K8sDaemonSetUnavailable
+        expr: |
+          (
+              (kube_daemonset_status_number_unavailable > 0)
+            * on(namespace, daemonset) group_left(service)
+              homelab:daemonset_service:info
+          )
+          or
+          label_replace(
+              (kube_daemonset_status_number_unavailable > 0)
+            unless on(namespace, daemonset)
+              homelab:daemonset_service:info,
+            "service", "unmapped", "", ""
+          )
+        for: 5m
+        labels:
+          severity: warning
+          shadow: "true"
+        annotations:
+          summary: DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset }} has unavailable pods.
+          description: >-
+            {{ $labels.daemonset }} has had {{ $value }} unavailable pods for 5 minutes. The bridge
+            paged this on one 300s sample, and the hold keeps that span.
+      # The census floors. Every per-workload rule above is silent over an empty vector, so
+      # these page the input instead. 5 is a sanity floor that mirrors no count. A dead
+      # kube-state-metrics fires this, K8sDaemonSetSeriesMissing, K8sNodeAllocatableMissing and
+      # K8sStateSeriesMissing, all with service="observability", in place of the bridge's
+      # prometheus gate.
+      - alert: K8sDeploymentSeriesMissing
+        expr: |
+          absent(kube_deployment_status_replicas_unavailable)
+          or
+          count(kube_deployment_status_replicas_unavailable) < 5
+        for: 5m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: Prometheus holds fewer than 5 Deployments from kube-state-metrics.
+          description: >-
+            The Deployment alerts in k8s-workloads read too little to be trusted. 5 is a fixed sanity
+            floor, held 5 minutes where the bridge paged one sample. Check that kube-state-metrics
+            is up and collects deployments.
+      # 11 mirrors the estate's DaemonSet count: the ones the roles in containers_list render,
+      # plus longhorn-manager, longhorn-csi-plugin, Longhorn's engine-image DaemonSet and
+      # MetalLB's speaker. The rule-literal test derives that count and fails when it moves.
+      - alert: K8sDaemonSetSeriesMissing
+        expr: |
+          absent(kube_daemonset_status_number_unavailable)
+          or
+          count(kube_daemonset_status_number_unavailable) < 11
+        for: 5m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: Prometheus holds fewer than 11 DaemonSets from kube-state-metrics.
+          description: >-
+            11 is the estate's DaemonSet count, fixed in the rule, so a DaemonSet has gone or
+            kube-state-metrics stopped collecting daemonsets. Held 5 minutes where the bridge paged
+            one sample.
+      # kube-state-metrics sanitises a resource name into its label: devic.es/dri arrives as
+      # resource="devic_es_dri", and the unsanitised name matches nothing.
+      # ansible/tests/services/test_dri_resource_name_agrees.py holds this literal to the
+      # name dri-device-plugin advertises. The bridge reports INERT when no allocatable series
+      # exists at all; K8sNodeAllocatableMissing pages that case instead.
+      - alert: K8sExtendedResourceMissing
+        expr: |
+          absent(kube_node_status_allocatable{resource="devic_es_dri"} > 0)
+          and on()
+          count(kube_node_status_allocatable) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: dri-device-plugin
+          shadow: "true"
+        annotations:
+          summary: No node advertises the devic.es/dri GPU resource.
+          description: >-
+            No node reports allocatable resource="devic_es_dri" above 0 for 5 minutes, so jellyfin
+            and tdarr cannot schedule. Check the dri-device-plugin DaemonSet.
+      - alert: K8sNodeAllocatableMissing
+        expr: absent(kube_node_status_allocatable)
+        for: 5m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: Prometheus holds no kube_node_status_allocatable series.
+          description: >-
+            kube-state-metrics is not collecting nodes, so K8sExtendedResourceMissing cannot see the
+            GPU resource. The bridge read this as INERT; this rule pages it.
+      # One series per missing input family, tagged with a literal `family` label so the `or`
+      # keeps each one. kube_statefulset_labels is left out: no StatefulSet exists, so its
+      # absent() would fire forever.
+      - alert: K8sStateSeriesMissing
+        expr: |
+          label_replace(absent(kube_deployment_spec_replicas), "family", "kube_deployment_spec_replicas", "", "")
+          or label_replace(absent(kube_deployment_status_replicas_available), "family", "kube_deployment_status_replicas_available", "", "")
+          or label_replace(absent(kube_deployment_status_replicas_updated), "family", "kube_deployment_status_replicas_updated", "", "")
+          or label_replace(absent(kube_pod_container_status_restarts_total), "family", "kube_pod_container_status_restarts_total", "", "")
+          or label_replace(absent(kube_pod_owner), "family", "kube_pod_owner", "", "")
+          or label_replace(absent(kube_replicaset_owner), "family", "kube_replicaset_owner", "", "")
+          or label_replace(absent(kube_deployment_labels), "family", "kube_deployment_labels", "", "")
+          or label_replace(absent(kube_daemonset_labels), "family", "kube_daemonset_labels", "", "")
+        for: 5m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: Prometheus holds no {{ $labels.family }} series.
+          description: >-
+            An alert or mapping in k8s-workloads that reads {{ $labels.family }} evaluates to
+            nothing. Check kube-state-metrics' --resources and its scrape job's
+            metric_relabel_configs.
+      # Two clauses. The first is any mapping series with service="unmapped": a workload no
+      # resolution step could name. The second is a workload in a base family with no mapping
+      # series at all, which happens when a mapping rule stops evaluating. For pods it leaves
+      # out the pods outside homelab:pod_service:info's domain, the Job-owned and ownerless
+      # pods outside the add-on namespaces. The `service` label below replaces the
+      # expression's `unmapped`, because the fix lives in workload-service.yaml.
+      #
+      # A healthy cluster has never held a service="unmapped" series, so pint's live
+      # promql/series check would report the first clause's selector as a query on a series that
+      # does not exist. The next line tells pint that value is expected to be missing.
+      # pint rule/set promql/series ignore/label-value service
+      - alert: WorkloadServiceUnmapped
+        expr: |
+          {__name__=~"homelab:(deployment|daemonset|pod)_service:info", service="unmapped"}
+          or
+          (
+              kube_deployment_status_replicas_unavailable
+            unless on(namespace, deployment)
+              homelab:deployment_service:info
+          )
+          or
+          (
+              kube_daemonset_status_number_unavailable
+            unless on(namespace, daemonset)
+              homelab:daemonset_service:info
+          )
+          or
+          (
+              max by (namespace, pod) (kube_pod_container_status_restarts_total)
+            unless on(namespace, pod)
+              homelab:pod_service:info
+            unless on(namespace, pod)
+              kube_pod_owner{owner_kind!~"ReplicaSet|DaemonSet|StatefulSet", namespace!~"kube-system|longhorn-system|metallb-system"}
+          )
+        for: 30m
+        labels:
+          severity: warning
+          service: observability
+          shadow: "true"
+        annotations:
+          summary: A workload in {{ $labels.namespace }} has no deploy tag in workload-service.
+          description: >-
+            {{ with $labels.deployment }}Deployment {{ . }}{{ end }}{{ with $labels.daemonset }}DaemonSet {{ . }}{{ end }}{{ with $labels.pod }}Pod {{ . }}{{ end }}
+            has had no deploy tag for 30 minutes, so its alerts carry service="unmapped". Add
+            it to the override table in workload-service.yaml, or label it.
