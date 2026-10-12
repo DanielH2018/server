@@ -15,12 +15,16 @@ the play's `| default(...)` would give it.
 Run: uv run pytest ansible/tests/services/test_karakeep_chrome_rollout.py
 """
 
-from _helpers import ANSIBLE, render_expr, task_named
-from _release_expectation import MAIN, extra_restarts, include_role_vars, rollouts
+from _helpers import ANSIBLE
+from _release_expectation import (
+    extra_restarts,
+    include_role_vars,
+    queued_extras,
+    rollouts,
+)
 
 KARAKEEP = ANSIBLE / "roles/k8s/karakeep"
 CHROME = "karakeep-chrome"
-_QUEUE = task_named(MAIN, "Queue the batch drain for the extra rollouts")
 
 # A ConfigMap edit to the app: every manifest signal fires, and no pod template moves.
 _UNRELATED_EDIT = dict(
@@ -40,23 +44,13 @@ def _extras() -> list[dict]:
 def test_a_chrome_image_bump_queues_chrome_for_the_drain():
     """The verify-by of #4564: the apply rolled chrome, so the drain must wait on it and the
     stabilisation gate must soak it."""
-    queued = []
-    for item in _extras():
-        queued = render_expr(
-            _QUEUE["ansible.builtin.set_fact"]["k8s_pending_rollouts"],
-            k8s_pending_rollouts=queued,
-            item=item,
-            k8s_namespace="homelab",
-            manifests_rollout_kind="deploy",
-            manifests_rollout_timeout_default="600s",
-            manifests_render={"changed": True},
-            manifests_secret_render={"changed": False},
-            manifests_apply={
-                "changed": True,
-                "stdout": f"deployment.apps/{CHROME} configured",
-            },
-            k8s_rebuilt_images=[],
-        )
+    queued = queued_extras(
+        _extras(),
+        manifests_apply={
+            "changed": True,
+            "stdout": f"deployment.apps/{CHROME} configured",
+        },
+    )
     chrome = [r for r in queued if r["name"] == CHROME]
     assert chrome, (
         f"{CHROME} is not queued for the drain, so a chrome bump lands unwaited"

@@ -254,10 +254,6 @@
     # Deployment and Service survive that — `kubectl apply` does not prune — which is the
     # intent: flipping the lever back on does not have to recreate them.
     #
-    # `authelia-redis` is deliberately NOT in manifests_extra_rollouts. That list rolls a
-    # Deployment on every change to THIS role's manifests, which is several times a day, and
-    # rolling the session store on that cadence would destroy the sessions it exists to keep.
-    #
     # networkpolicy-redis.yaml rides the same lever as the pair above, and it is listed HERE
     # rather than in netpol-baseline on purpose. Authelia cannot start without its
     # session store, so the policy admitting it to redis is part of this workload rather than
@@ -281,6 +277,17 @@
       {{ ['config-secret.yaml']
          + (['crowdsec-secret.yaml'] if authelia_k8s_manage_crowdsec | bool else [])
          + (['redis-secret.yaml'] if authelia_k8s_redis_sessions | bool else []) }}
+    # `authelia-redis` is listed so the batch drain WAITS on its rollout, never so this role
+    # restarts it (#4564). A redis image bump rolls it through the apply, and under Recreate SSO
+    # has no session store until the new pod is up, so a landing that did not wait read
+    # `settled` mid-pull. `restart_on: []` is the load-bearing half: without it the shared
+    # extra restart rolls redis on every change to THIS role's manifests, several times a day,
+    # and destroys the sessions it exists to keep. Gated on the lever like the pair above: with
+    # it off on a cluster that never ran redis, `rollout status` on a Deployment that does not
+    # exist would fail the drain.
+    manifests_extra_rollouts: >-
+      {{ [{'name': 'authelia-redis', 'restart_on': []}]
+         if authelia_k8s_redis_sessions | bool else [] }}
 
 # TOTP registrations live in Authelia's SQLite database, not in the rendered
 # users_database.yml, so `claude-ui`'s second factor cannot be templated with the rest of

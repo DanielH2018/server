@@ -14,13 +14,14 @@ real rendered manifests behind a non-vacuity assertion:
 - **The three ports agree at 6379.** The containerPort, the Service port and the
   NetworkPolicy's port are written in three files across two roles. Any two of them agreeing is
   not enough — a policy on the wrong port renders, applies, and silently drops the traffic.
-- **`authelia-redis` is not in `manifests_extra_rollouts`.** That list rolls a Deployment on
-  every change to the authelia role's manifests, which is several times a day. Adding redis to
-  it would destroy the sessions this setup exists to keep, and would read as a tidy-up.
+- **Nothing restarts `authelia-redis` with the portal.** It is in `manifests_extra_rollouts`
+  so the drain waits on its roll (#4564), and only with `restart_on: []`. Any restart signal
+  there rolls it on every change to the authelia role's manifests, several times a day, which
+  would destroy the sessions this setup exists to keep, and would read as a tidy-up.
 """
 
 import pytest
-from _helpers import REPO
+from _helpers import REPO, render_expr
 from _role_census import manifests_service_of
 from _k8s_render import rendered_docs
 from lib import yaml_fast
@@ -41,13 +42,16 @@ def sessions_are_stored_in_redis(session):
 
 
 def the_session_store_is_not_rolled_with_the_portal(extra_rollouts):
-    """True when no entry rolls the redis Deployment.
+    """True when no entry restarts the redis Deployment.
 
-    `manifests_extra_rollouts` is keyed on a workload NAME, so this reads the names rather than
-    the whole entry — an entry may also carry an `image`.
+    An entry naming redis is allowed only with an explicit empty `restart_on`: that queues it
+    for the drain and turns off every signal the shared extra restart fires on. An entry with
+    no `restart_on` gets all three signals by default.
     """
     return not any(
-        (entry or {}).get("name") == REDIS_SERVICE for entry in extra_rollouts or []
+        (entry or {}).get("name") == REDIS_SERVICE
+        and (entry or {}).get("restart_on") != []
+        for entry in extra_rollouts or []
     )
 
 
@@ -82,6 +86,15 @@ def test_no_extra_rollouts_is_clean():
 def test_rolling_redis_with_the_portal_is_flagged():
     assert not the_session_store_is_not_rolled_with_the_portal(
         [{"name": REDIS_SERVICE, "image": "redis:7.4-alpine"}]
+    )
+    assert not the_session_store_is_not_rolled_with_the_portal(
+        [{"name": REDIS_SERVICE, "restart_on": ["secret"]}]
+    )
+
+
+def test_waiting_on_redis_without_restarting_it_is_clean():
+    assert the_session_store_is_not_rolled_with_the_portal(
+        [{"name": REDIS_SERVICE, "restart_on": []}]
     )
 
 
@@ -154,12 +167,28 @@ def test_the_role_does_not_roll_redis_with_the_portal():
         f"expected exactly one task deploying the authelia manifests, found {len(deploys)} — "
         f"this guard reads that task's vars and would pass vacuously over none"
     )
-    extra = (deploys[0].get("vars") or {}).get("manifests_extra_rollouts")
-    assert the_session_store_is_not_rolled_with_the_portal(extra), (
-        f"{REDIS_SERVICE} must not be in manifests_extra_rollouts; got {extra!r}. That list "
-        f"rolls on every manifest change to this role, which would destroy the sessions redis "
-        f"is here to keep"
-    )
+    declared = (deploys[0].get("vars") or {}).get("manifests_extra_rollouts", [])
+    for lever in (True, False):
+        extra = render_expr(declared, authelia_k8s_redis_sessions=lever)
+        assert the_session_store_is_not_rolled_with_the_portal(extra), (
+            f"{REDIS_SERVICE} is in manifests_extra_rollouts without `restart_on: []`; got "
+            f"{extra!r}. Any restart signal rolls it on every manifest change to this role, "
+            f"which would destroy the sessions redis is here to keep"
+        )
+
+
+def test_the_drain_waits_on_redis_only_while_the_lever_deploys_it():
+    """A redis image bump rolls it through the apply, and only a queued entry makes the deploy
+    wait on that roll (#4564). With the lever off a cluster may have no redis Deployment, and
+    `rollout status` on a missing one fails the drain."""
+    tasks = yaml_fast.safe_load(AUTHELIA_TASKS.read_text())
+    (deploy,) = [
+        task for task in tasks if manifests_service_of(task, "authelia") == "authelia"
+    ]
+    declared = deploy["vars"]["manifests_extra_rollouts"]
+    waited = render_expr(declared, authelia_k8s_redis_sessions=True)
+    assert [e["name"] for e in waited] == [REDIS_SERVICE], waited
+    assert render_expr(declared, authelia_k8s_redis_sessions=False) == []
 
 
 # --- the policy ships with the workload it lets start ---------------------------------
