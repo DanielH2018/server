@@ -472,6 +472,7 @@
         "ansible/roles/k8s/crowdsec/defaults/main.yml",
         "ansible/roles/k8s/deploy-ui/defaults/main.yml",
         "ansible/roles/k8s/dri-device-plugin/defaults/main.yml",
+        "ansible/roles/k8s/flux/defaults/main.yml",
         "ansible/roles/k8s/game-stats/defaults/main.yml",
         "ansible/roles/k8s/image-builder/defaults/main.yml",
         "ansible/roles/k8s/janitorr/defaults/main.yml",
@@ -678,6 +679,23 @@
         "maxlerebourg/crowdsec-bouncer-traefik-plugin"
       ],
       "groupName": "crowdsec bouncer plugin (manual \u2014 needs traefik redeploy; k8s_autodeploy: false)",
+      "rebaseWhen": "conflicted",
+      "schedule": [
+        "before 6am on monday"
+      ],
+      "updateNotScheduled": false,
+      "groupSingleUpdates": true,
+      "automerge": false
+    },
+    {
+      "description": "Flux, the deploy controller (roles/k8s/flux). `flux_version` is a github-releases pin in the role's defaults, and a bump is not finished by rewriting it: files/gotk-components.yaml must be regenerated at the new release with the pipeline its first line names, which Renovate's hosted app cannot run. The `manual — k8s_autodeploy: false` rule above is scoped to container images, so it never sees this pin, and the non-major automerge rule names no datasource and would merge it. Own group, no automerge, so the bump opens as a manual PR, and the `k8s_autodeploy: false` marker in its title keeps the unattended renovate_agent off it (issue #1963). ansible/tests/k8s/test_flux_role.py fails a bump that skipped the regeneration, because the vendored header still names the old release. The flux CLI and the controllers move together, so a release that drops Kubernetes support for the cluster's version is the operator's call, not a soak's.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "fluxcd/flux2"
+      ],
+      "groupName": "flux (manual \u2014 regenerate files/gotk-components.yaml; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"

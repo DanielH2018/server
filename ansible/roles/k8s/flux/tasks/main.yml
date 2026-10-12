@@ -1,0 +1,95 @@
+---
+# Flux's source-, kustomize- and notification-controller in flux-system. They own nothing yet:
+# Ansible deploys every service, this one included (docs/flux-deploy-plane.md).
+
+- name: Render and apply the Flux controllers
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    # Every namespaced document lives in flux-system, so the armed apply and its prune run
+    # there. The CRDs and the cluster RBAC are cluster-scoped and ignore the namespace.
+    manifests_prune_namespace: "{{ flux_namespace }}"
+    # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three, in
+    # another namespace. Skip its wait and wait below.
+    manifests_rollout: ''
+    # ...but tell the release record which workloads this role owns, so `probe.py health flux`
+    # reads them, and so the shared role fingerprints their pod templates in flux-system.
+    # restart_on: [] on each entry keeps the record from expecting a restart nothing issues
+    # (defaults/main.yml has why).
+    manifests_self_rollouts: >-
+      {{ flux_controllers | map('combine', {'namespace': flux_namespace}) | list }}
+
+- name: Wait for the Flux controllers to roll out
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ flux_namespace }} rollout status
+      {{ item.kind }}/{{ item.name }} --timeout=300s
+  loop: "{{ flux_controllers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  changed_when: false
+  # A dry run applies nothing, and before the first install flux-system does not exist, so a
+  # wait there would fail on objects the run never meant to create.
+  when: not k8s_no_mutate
+
+# This role skips the shared role's wait (manifests_rollout: ''), so it opts into the
+# end-of-play stabilisation gate itself, as observability does. The wait above cannot see a
+# liveness failure after readiness.
+- name: Snapshot the Flux controllers' restart counts for the end-of-play gate
+  tags: [deploy]
+  # AFTER the wait above, never before: a read while the old pod is still terminating captures
+  # the outgoing pod's counts, and the gate's `after <= before` comparison then always passes.
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ flux_namespace }} get pods
+      -l app={{ item.name }}
+      -o jsonpath={.items[*].status.containerStatuses[*].restartCount}
+  loop: "{{ flux_controllers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: flux_restarts_before
+  become: true
+  changed_when: false
+  when:
+    - not k8s_no_mutate
+    # The render AND the apply's own verdict, as observability's snapshot reads them (#3133):
+    # a comment-only edit moves the rendered bytes and rolls no pod.
+    - (manifests_render is changed and manifests_apply is changed)
+      or manifests_secret_render is changed
+
+- name: Fail if a Flux controller selector matched no pods
+  tags: [deploy]
+  # A selector matching nothing reports zero restarts and passes every comparison. Upstream
+  # labels each controller's pods `app: <controller>`; assert it rather than assume it.
+  ansible.builtin.assert:
+    that: item.stdout | trim | length > 0
+    fail_msg: >-
+      No pods matched `-l app={{ item.item.name }}` in namespace {{ flux_namespace }}, so the
+      stabilisation gate has nothing to watch.
+    quiet: true
+  # A skipped task still sets its register, to a result with no `stdout`. Filter to what the
+  # snapshot actually ran rather than mirroring its `when:`.
+  loop: "{{ flux_restarts_before.results | default([]) | rejectattr('skipped', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: not k8s_no_mutate
+
+- name: Hand the Flux controllers to the end-of-play stabilisation gate
+  tags: [deploy]
+  # noqa var-naming[no-role-prefix] — k8s_stabilise_watch is play-scoped by design, an
+  # accumulator post_tasks/k8s_stabilise_gate.yml drains.
+  ansible.builtin.set_fact:
+    k8s_stabilise_watch: >-
+      {{ (k8s_stabilise_watch | default([]))
+         + [{
+              'name': item.item.name,
+              'namespace': flux_namespace,
+              'kind': item.item.kind,
+              'restarts_before': item.stdout,
+            }] }}
+  loop: "{{ flux_restarts_before.results | default([]) | rejectattr('skipped', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when: not k8s_no_mutate

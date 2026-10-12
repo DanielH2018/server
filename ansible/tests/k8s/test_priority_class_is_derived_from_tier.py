@@ -33,6 +33,7 @@ _CLASS_AT_DERIVATION = {
     "monitor-bridge": "homelab-critical",
     "nut": "homelab-critical",
     "wg-easy": "homelab-critical",
+    "flux": "homelab-critical",
     "mosquitto": "homelab-automation",
     "zigbee2mqtt": "homelab-automation",
     "home-assistant": "homelab-automation",

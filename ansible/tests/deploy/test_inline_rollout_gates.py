@@ -355,6 +355,7 @@ _GATE_BUDGETS = {
         "default; gates the claude-ui TOTP seeding, which execs into the running pod",
     ),
     "cloudflare-ddns": (300, "default"),
+    "flux": (300, "default; one looped gate covering the three Flux controllers"),
     "crowdsec": (300, "default"),
     "dri-device-plugin": (
         180,

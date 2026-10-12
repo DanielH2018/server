@@ -27,6 +27,7 @@ from _role_census import role_dirs
 from _helpers import (
     ROLES,
     jinja_env,
+    load_defaults,
     load_tasks,
     render_expr,
     task_named,
@@ -420,10 +421,11 @@ def _foreign_namespaces(text: str, namespace: str) -> list[tuple[str, str, str]]
     ]
 
 
-def _prune_namespace(vars_: dict) -> str:
-    """The namespace an armed include's apply passes as `-n`, resolved against group_vars."""
+def _prune_namespace(role: str, vars_: dict) -> str:
+    """The namespace an armed include passes as `-n`, over its role defaults and group_vars."""
+    defaults = load_defaults(ROLES / "k8s" / role)
     expr = vars_.get("manifests_prune_namespace", "{{ k8s_namespace }}")
-    return render_expr(str(expr), **_group_vars())
+    return render_expr(str(expr), **{**defaults, **_group_vars()})
 
 
 def test_an_armed_role_renders_nothing_outside_the_prune_namespace() -> None:
@@ -436,7 +438,7 @@ def test_an_armed_role_renders_nothing_outside_the_prune_namespace() -> None:
     in observability (#3575). headlamp is the named member, because it is the armed role whose
     render reaches another namespace at all, through its deferred file.
     """
-    armed = {role: _prune_namespace(vars_) for role, vars_ in _armed_roles().items()}
+    armed = {role: _prune_namespace(role, v) for role, v in _armed_roles().items()}
     checked, offenders = set(), []
     for role, name, text in rendered_texts():
         if role not in armed or name not in _staged_templates(role):
@@ -460,9 +462,9 @@ def test_each_role_armed_outside_homelab_names_its_own_namespace() -> None:
 
     Checked against `homelab`, the check above refuses it.
     """
-    armed = _armed_roles()
-    assert _prune_namespace(armed["observability"]) == "observability"
-    assert _prune_namespace(armed["dri-device-plugin"]) == "kube-system"
+    armed = {role: _prune_namespace(role, v) for role, v in _armed_roles().items()}
+    assert armed["observability"] == "observability"
+    assert armed["dri-device-plugin"] == "kube-system"
     text = render_role_template("observability", "loki.yaml.j2")
     assert _foreign_namespaces(text, load_yaml_namespace())
     assert not _foreign_namespaces(text, "observability")
