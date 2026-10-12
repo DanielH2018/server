@@ -642,6 +642,10 @@ where that rule applies.
       provision step runs before "Run hooks". Every later commit in a provisioned worktree
       fails the same way.
 
+  **HISTORY —** #4705 moved the cache to `alert-tools/` under the git common dir, so every
+  worktree of a clone shares one provision. Neither reader above sees it, and `.cache` left
+  `LOCAL_ONLY`.
+
   The script reads the versions from `observability_k8s_prometheus_image` and
   `observability_k8s_alertmanager_image` rather than pinning its own. A Renovate image bump
   therefore moves the tool in the same PR, and no agreement test can go red between two

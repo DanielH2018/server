@@ -186,7 +186,8 @@ files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/ro
 # Check the alert plane's inputs with the tools that load them. promtool checks the rendered
 # prometheus.yml, every rule file and every rule test; amtool checks the Alertmanager config.
 # scripts/validate/alert_tools.sh provisions both at the observability role's image tags into
-# .cache/alert-tools/. CI's `alert_rules.py --prove-red` step is the tools' red proof.
+# alert-tools/ under the git common dir, shared by every worktree of the clone. CI's
+# `alert_rules.py --prove-red` step is the tools' red proof.
 #
 # The `files` regex names every input the hook reads, because a PR run skips a hook no
 # changed file matches: the role's rule, rule-test and Alertmanager sources and the templates
@@ -515,8 +516,9 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 
 # Eight static test modules that turned more PRs red than any other test the author's own code
 # did not break. The first four were 24 of 154 failed CI runs from 2026-08-30 to 2026-10-05
-# (#3605). The role CLAUDE.md size check and the three census-row modules failed 6 PRs between
-# them after that, to 2026-10-09 (#4008). Each failure names its own repair, so finding it at
+# (#3605). The three census-row modules and the role CLAUDE.md check failed 6 PRs between them
+# after that, to 2026-10-09 (#4008). Three of those were the role check's size arm, which the
+# operator retired on 2026-10-12 (#2826). The module still runs its existence and tag checks. Each failure names its own repair, so finding it at
 # commit time saves a CI round trip and a fix commit. The first four ran in 3.4s on daniel-box
 # and 7.5s on daniel-server; all eight measured 10.7-12.6s on daniel-server against 8.1-8.8s
 # for the four, back to back on 2026-10-09. The whole suite left prek on 2026-10-02 because it
