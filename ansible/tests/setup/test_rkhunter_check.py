@@ -20,7 +20,6 @@ Run: uv run pytest ansible/tests/setup/test_rkhunter_check.py
 """
 
 import os
-import time
 
 from lib.proc_testing import fake_bin, run, write_exec
 from _helpers import ROLES, load_tasks, walk_tasks
@@ -44,6 +43,8 @@ TILES = {
     "daniel-pi": ("rkhunter-daniel-pi.json", "rkhunter_daniel_pi_push_token"),
 }
 WEEK_S = 7 * 24 * 3600
+# 2026-09-30 02:02:01 UTC, the run the stale log below records.
+LAST_WEEK = 1790733721
 
 REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 REAL_ENV = "/etc/homelab/rkhunter-kuma-push.env"
@@ -92,7 +93,7 @@ def _run_check(
     """Render rkhunter-check.sh and run it with rkhunter stubbed.
 
     The stub prints `stdout`, writes `log` to the log path when it is not None, and exits `rc`.
-    `stale_log` is a log already on disk an hour old, the one a failed run leaves behind. Only
+    `stale_log` is a log already on disk from the previous week's run, the one a failed run leaves behind. Only
     absolute paths are repointed. Returns (exit code, pushed lines or None, logged lines,
     whether rkhunter ran).
     """
@@ -114,8 +115,7 @@ def _run_check(
     log_path = tmp_path / "rkhunter.log"
     if stale_log is not None:
         log_path.write_text(stale_log)
-        an_hour_ago = time.time() - 3600
-        os.utime(log_path, (an_hour_ago, an_hour_ago))
+        os.utime(log_path, (LAST_WEEK, LAST_WEEK))
     (tmp_path / "stdout").write_text(stdout)
     write_log = ""
     if log is not None:
