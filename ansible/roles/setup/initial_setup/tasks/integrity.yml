@@ -38,6 +38,37 @@
     line: 'APT_AUTOGEN="true"'
   become: true
 
+- name: Read whether the main sshd_config sets PermitRootLogin, for rkhunter
+  tags: [rkhunter]
+  # rkhunter reads this one file and none of its drop-ins, so rkhunter.conf.local below expects
+  # a line here only where one exists. Read on every run rather than set per host: daniel-box
+  # hardens a drop-in, yet its main file carries the line, and daniel-pi's main file does not.
+  # The pattern is the one rkhunter 1.4.6 greps with.
+  ansible.builtin.command: grep -qiE '^[[:space:]]*PermitRootLogin[[:space:]=]' /etc/ssh/sshd_config
+  register: initial_setup_rkhunter_sshd_root_login
+  changed_when: false
+  failed_when: initial_setup_rkhunter_sshd_root_login.rc > 1
+  check_mode: false
+  become: true
+
+- name: Allowlist the warnings rkhunter raises every week from benign causes
+  tags: [rkhunter]
+  # rkhunter-check.sh pages on any warning (#4638), so a routine warning left out of this file
+  # turns the tile red every Wednesday. A regular file, not a link: rkhunter skips a symlinked
+  # .local file.
+  ansible.builtin.template:
+    src: rkhunter.conf.local.j2
+    dest: /etc/rkhunter.conf.local
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    # `unset` accepts only an absent line, so a PermitRootLogin of any value later added to the
+    # main file still warns.
+    initial_setup_rkhunter_allow_ssh_root_user: >-
+      {{ 'no' if initial_setup_rkhunter_sshd_root_login.rc == 0 else 'unset' }}
+  become: true
+
 - name: Create the rkhunter scan credentials directory
   tags: [rkhunter]
   # Same owner and mode as the AIDE, setup-drift and Loki-witness tasks that also create it, so
@@ -100,6 +131,7 @@
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2
       - ansible/roles/setup/initial_setup/templates/rkhunter-kuma-push.env.j2
+      - ansible/roles/setup/initial_setup/templates/rkhunter.conf.local.j2
 
 - name: Set default umask to 027 in /etc/login.defs
   tags: [login-defs]

@@ -444,3 +444,95 @@ DASHBOARD_UNPARSEABLE_MSG = (
     "header or an item marker, which leaves the Repository-Problems and stuck-pending "
     "checks silently inert. Check https://github.com/%s/issues/3"
 )
+
+
+# Renovate closes a PR whose branch it no longer wants and appends this to the title (#4630).
+AUTOCLOSED_SUFFIX = " - autoclosed"
+# One weekly schedule window ("before 6am on monday") plus a day of slack. Renovate reuses a
+# branch name for the next update of the same dependency, so an older autoclose on a branch
+# that is legitimately awaiting its schedule again would otherwise page forever.
+AUTOCLOSED_LOOKBACK_DAYS = 8
+# Every dashboard row carries its branch in an HTML comment: `unschedule-branch=` under Awaiting
+# Schedule, `unpend-branch=` under Pending Status Checks, and so on. Matched on any prefix,
+# because Renovate has renamed one of these before (approvePr- -> unpend-, see PENDING_MARKERS).
+_BRANCH_MARKER = re.compile(r"<!-- [A-Za-z]+-branch=(\S+) -->")
+
+
+def dashboard_branches(body: str) -> set[str]:
+    """Every branch named by a row marker anywhere in the dashboard body."""
+    return set(_BRANCH_MARKER.findall(body or ""))
+
+
+@dataclass(frozen=True)
+class Autoclosed:
+    """One Renovate PR closed unmerged by Renovate whose update the dashboard still lists."""
+
+    number: int
+    title: str
+    url: str
+    branch: str
+
+
+def find_autoclosed(
+    closed_pulls: list[dict],
+    open_branches: set[str],
+    body: str,
+    now: datetime | None = None,
+    lookback_days: int = AUTOCLOSED_LOOKBACK_DAYS,
+) -> list[Autoclosed]:
+    """Autoclosed Renovate PRs whose update went back onto the dashboard (issue #4630).
+
+    Renovate autoclosed #4586 nine hours after opening it, inside the same schedule, and its
+    update returned to "Awaiting Schedule" for a week. None of the other arms can see that: the
+    PR is no longer open, the dashboard keeps updating, and an awaiting item is not a problem.
+    A PR is reported when Renovate closed it unmerged with the autoclosed title inside the
+    lookback window, the dashboard still names its branch, and no open PR carries that branch.
+
+    Args:
+        closed_pulls: entries from the closed-pulls list payload.
+        open_branches: `head.ref` of every open PR; a reopened or re-raised PR clears the item.
+        body: the dashboard issue body.
+        now: the reference time, injectable for tests.
+        lookback_days: how recently the PR must have closed.
+    """
+    now = now or datetime.now(timezone.utc)
+    listed = dashboard_branches(body)
+    out = []
+    for pr in closed_pulls:
+        title = (pr.get("title") or "").strip()
+        branch = (pr.get("head") or {}).get("ref", "")
+        closed_at = pr.get("closed_at") or ""
+        if (
+            (pr.get("user") or {}).get("login") != "renovate[bot]"
+            or pr.get("merged_at")
+            or not title.endswith(AUTOCLOSED_SUFFIX)
+            or not closed_at
+            or branch not in listed
+            or branch in open_branches
+        ):
+            continue
+        closed = datetime.fromisoformat(closed_at.replace("Z", "+00:00"))
+        if (now - closed).total_seconds() > lookback_days * 86400:
+            continue
+        out.append(Autoclosed(pr["number"], title, pr.get("html_url", ""), branch))
+    return sorted(out, key=lambda a: a.number)
+
+
+def autoclosed_fingerprint(items: list[Autoclosed]) -> str:
+    """Dedupe key: the PR numbers, so a standing autoclose pages once and a new one re-pages."""
+    return ",".join("#%d" % a.number for a in items)
+
+
+AUTOCLOSED_HEADER = (
+    "\U0001f6aa Renovate autoclosed these PRs unmerged, and their updates are back on the "
+    "dashboard. Renovate re-raises them only in the rule's schedule window. Land the bump by "
+    "hand, or tick its dashboard checkbox:"
+)
+
+
+def render_autoclosed(items: list[Autoclosed]) -> str:
+    lines = [AUTOCLOSED_HEADER] + [
+        " • #%d %s — %s" % (a.number, a.title.removesuffix(AUTOCLOSED_SUFFIX), a.url)
+        for a in items
+    ]
+    return "\n".join(lines)

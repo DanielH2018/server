@@ -68,7 +68,8 @@ def repo(tmp_path, monkeypatch):
 
 
 def _build(repo, command, session="sess-a"):
-    return _mod.build_context(command, str(repo), session)
+    context, chosen = _mod.build_context(command, str(repo), session)
+    return context, [(doc, trigger) for doc, trigger, _ in chosen]
 
 
 # ── the red-proof pair the issue asks for ────────────────────────────────────────────
@@ -238,7 +239,7 @@ def test_a_subagent_is_flagged_for_a_doc_its_parent_already_got(repo):
         "sess-a",
         agent_id="a1b2c3",
     )
-    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _, _ in chosen]
 
 
 def test_a_second_command_in_the_same_subagent_is_clean(repo):

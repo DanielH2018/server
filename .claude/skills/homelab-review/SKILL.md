@@ -250,6 +250,47 @@ reviewer (security, backup/observability, CI/CD) gets `model: opus`; everything 
 `model: sonnet`. A weaker refuter plus an explicit refute-bias is a path for real findings to die in
 the appendix, and the appendix is never re-read.
 
+- **DECIDED: no skeptic cap and no `maxTurns` on `skeptic`** (#4615). Measured from Loki on
+  2026-10-12 over 2026-09-16 to 10-12: 57 skeptic runs took p50 18, p90 28, max 47 tool uses, and
+  the four full reviews dispatched 7, 13, 7 and 9 skeptics, one per verified finding. The run with
+  the longest skeptics (2026-09-24) produced the most refutations and downgrades, so no length
+  cost quality that the data shows. A cap at the guide's 20 would stop up to 18 of 57 skeptics
+  before their verdict. Revisit if one review dispatches more than 20 skeptics or skeptic p90
+  passes 50.
+- **`implementer` is measured but undecided: too few red outcomes** (#4652). Measured on
+  2026-10-12 over 2026-09-16 to 10-12. Loki holds 142 implementer `subagent_completed` events,
+  with p50 51, p90 160 and max 332 tool uses. Transcripts survive for 94 of them. The quartiles
+  use the transcript's tool-use count, which covers the whole run. A resumed agent emits one
+  event per resumption, which is why 10 of the 94 transcripts equal no single event. The join
+  takes each run's PR from the last non-`master` branch in its transcript. The PR's verdict
+  comes from the check runs on its head commit when it opened, and `cancelled` counts as no
+  verdict. The join drops 48 runs with no transcript, 12 that worked on `master`, 7 that
+  started after their PR opened (conflict and review fix-ups) and 9 whose PR had no verdict.
+  That leaves 66 runs on 21 PRs, and runs on one PR are not independent: 22 of them share one.
+  By tool-use quartile (14-29, 29-42, 42-69, 71-332), 0, 0, 1 and 0 runs went red, and the
+  one red PR (#3113) came from a 66-tool-use run. The top quartile is not redder, but one red
+  PR in 21 cannot show an effect in either direction. A cap waits on a sample with enough red
+  PRs to compare.
+- **Workflow subagents are measured but undecided** (#4651). They emit no `subagent_completed`
+  event, and their `api_request` events carry no per-agent id. Loki labels a Workflow agent's
+  requests `agent:builtin:workflow-subagent` only when the script names no agent type. An agent
+  given a type, such as `Explore`, is labelled with that type and is distinguishable only by
+  `workflow_run_id`. The window holds four Workflow runs in two sessions. Three are
+  target-architecture runs in one session, whose 20,234 `workflow-subagent` requests share 14
+  prompt ids and 4 trace ids. The fourth is a fan-out verify run of 3 `Explore` agents (#3123's
+  session, 2026-10-01). The per-agent transcripts under
+  `~/.claude/projects/<project>/<session>/subagents/workflows/<run>/` do separate the agents,
+  and the three target-architecture runs' distinct request ids total 18,838 against Loki's
+  20,234. Their 384 agents with a request took p50 43, p90 87 and max 171 requests (p50 53,
+  p90 103 and max 184 tool uses), and a `maxTurns` of 20 would stop 341 of them. The six
+  Author-phase agents ran longest, at p50 146 requests. The 3 `Explore` verify agents took 33,
+  44 and 44 requests. Of all 387 agents, 308 are target-architecture Review-phase agents, so
+  the distribution describes those workflows rather than Workflow use in general. No outcome
+  was measured, so a cap waits on one.
+- **Every other agent type is undecided, not uncapped by decision.** Over the same window the
+  p90 tool uses were general-purpose 101, deep-review 96, security-review 51 and Explore 46, but
+  no outcome was measured for them.
+
 **Merged history is not the whole history.** Several sessions work this repo at once, one branch
 each, so a fix can be real and not yet on master. The skeptic checks `gh pr list` itself; what it
 cannot see is the SessionStart banner, so pass it the other live worktrees' changed paths when they

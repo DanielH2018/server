@@ -114,8 +114,10 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
 - **`rkhunter-check.sh` reads completion from `/var/log/rkhunter.log`, not from the exit code**
   (#4598). rkhunter exits 1 on a warning and on an error alike, so a scan completed only if this
   run rewrote the log and the log holds its summary. It pushes one "rkhunter Scan" tile per host:
-  DOWN on a scan that did not complete or on a possible rootkit, UP with the warning count
-  otherwise, because every host warns every week. Paging on a warning is #4638.
+  DOWN on a scan that did not complete, and DOWN on any warning, suspect file or possible
+  rootkit (#4638). `/etc/rkhunter.conf.local` exempts the warnings every host raised every
+  week, so a healthy week has none. Its `ALLOW_SSH_ROOT_USER` follows whether the main
+  `sshd_config` sets `PermitRootLogin`, because rkhunter reads no drop-in.
 - **Postfix binds `inet_interfaces = loopback-only`** and needs `notify: Restart Postfix`: a
   reload does not rebind the socket, so the `0.0.0.0:25` listener would survive it.
 - **The Pi's swap file is bring-up, not tuning.** It is gated on `has_low_memory_board` and the
