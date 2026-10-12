@@ -240,7 +240,7 @@ each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
 - **A setup role that calls a filter is outside both runs**, because `deploy.yml` applies no
   setup role. The deployer reads those callers from
   `deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS`, a static table that
-  `ansible/tests/setup/test_setup_cross_role_files.py` holds to the tree. A plugin change joins
+  `ansible/tests/setup/test_setup_cross_role_reads.py` holds to the tree. A plugin change joins
   the setup plane beside the deploy plane. The tick applies an `initial_setup.yml` caller such as
   `gitops_deploy`, and records a `k3s-bringup.yml` caller such as `k3s` as a `manual_plane` line.
   `narrow_setup.plugin_tags` narrows each caller to the readers of the vars key whose value calls

@@ -121,9 +121,16 @@
   # IFS= (not bare `read -r pw`) so a leading/trailing space in the password isn't
   # stripped — `read` trims IFS whitespace by default, which would silently hash the
   # wrong string while still producing a well-formed $argon2id$ hash.
+  #
+  # The pod name carries a per-run suffix, and so do the two hash pods below. `kubectl run`
+  # refuses a name that already exists, and `--rm` deletes the pod only while this kubectl client
+  # lives. With a fixed name, a controller killed mid-hash leaves a pod that fails every later
+  # rehash, and the read-only ServiceAccount cannot delete it (#4566). The suffix is inline in
+  # `cmd` because Ansible templates a task's args once, where a `vars:` entry holding `random`
+  # would yield a new value on every reference.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} run authelia-hash
+      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-{{ 4294967295 | random }}
       --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
       sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
       --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
@@ -158,7 +165,7 @@
   # when one of them is malformed.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-claude
+      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-claude-{{ 4294967295 | random }}
       --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
       sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
       --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
@@ -189,7 +196,7 @@
   # digests into one registered result.
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-agent
+      k3s kubectl -n {{ k8s_namespace }} run authelia-hash-agent-{{ 4294967295 | random }}
       --rm -i --attach --quiet --restart=Never --image={{ authelia_k8s_image }} --command --
       sh -c 'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw"
       --iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'
@@ -247,10 +254,6 @@
     # Deployment and Service survive that — `kubectl apply` does not prune — which is the
     # intent: flipping the lever back on does not have to recreate them.
     #
-    # `authelia-redis` is deliberately NOT in manifests_extra_rollouts. That list rolls a
-    # Deployment on every change to THIS role's manifests, which is several times a day, and
-    # rolling the session store on that cadence would destroy the sessions it exists to keep.
-    #
     # networkpolicy-redis.yaml rides the same lever as the pair above, and it is listed HERE
     # rather than in netpol-baseline on purpose. Authelia cannot start without its
     # session store, so the policy admitting it to redis is part of this workload rather than
@@ -274,6 +277,17 @@
       {{ ['config-secret.yaml']
          + (['crowdsec-secret.yaml'] if authelia_k8s_manage_crowdsec | bool else [])
          + (['redis-secret.yaml'] if authelia_k8s_redis_sessions | bool else []) }}
+    # `authelia-redis` is listed so the batch drain WAITS on its rollout, never so this role
+    # restarts it (#4564). A redis image bump rolls it through the apply, and under Recreate SSO
+    # has no session store until the new pod is up, so a landing that did not wait read
+    # `settled` mid-pull. `restart_on: []` is the load-bearing half: without it the shared
+    # extra restart rolls redis on every change to THIS role's manifests, several times a day,
+    # and destroys the sessions it exists to keep. Gated on the lever like the pair above: with
+    # it off on a cluster that never ran redis, `rollout status` on a Deployment that does not
+    # exist would fail the drain.
+    manifests_extra_rollouts: >-
+      {{ [{'name': 'authelia-redis', 'restart_on': []}]
+         if authelia_k8s_redis_sessions | bool else [] }}
 
 # TOTP registrations live in Authelia's SQLite database, not in the rendered
 # users_database.yml, so `claude-ui`'s second factor cannot be templated with the rest of

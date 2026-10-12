@@ -56,6 +56,9 @@ loop to auto-tag bookmarks.
   `KARAKEEP_PYTHON_API_KEY` are env vars, injected once at container start, so a key rotation
   that doesn't also roll these two sidecars leaves them on the old value while `karakeep`
   itself gets the new one.
+- `karakeep-chrome` is listed too, with `restart_on: []` (#4564). The drain waits on the roll
+  a `karakeep_k8s_chrome_image` bump makes, and no karakeep edit restarts chrome mid-crawl.
+  `ansible/tests/services/test_karakeep_chrome_rollout.py` pins both.
 - **The time-tagger's image is built in-cluster**, from `templates/Dockerfile.j2`, since #2672
   — one `chown` layer over the pinned `ghcr.io/astral-sh/uv` digest, plus `UV_CACHE_DIR=/uv-cache`.
   It exists only so the tagger can run as uid 1000. Two paths blocked that from the manifest

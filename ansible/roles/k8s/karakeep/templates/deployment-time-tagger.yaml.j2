@@ -10,6 +10,8 @@ metadata:
   namespace: {{ k8s_namespace }}
 spec:
 {{ spec_shell('RollingUpdate') }}
+  # The same budget as the drain's wait. See karakeep_k8s_rollout_timeout in defaults/main.yml.
+  progressDeadlineSeconds: {{ karakeep_k8s_rollout_timeout[:-1] | int }}
   replicas: 1
   selector:
     matchLabels:

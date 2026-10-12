@@ -116,6 +116,25 @@ def _ephemeral_offence(role: str, volume: dict) -> str | None:
     return f"the clone cache is not an emptyDir: {volume}"
 
 
+TDARR_ENV_PINS = {"TDARR_ENGINE": "rust", "auth": "false"}
+
+
+def _tdarr_container(role: str, tpl: str, doc: dict):
+    if role != "tdarr" or doc.get("kind") != "Deployment":
+        return
+    for container in pod_spec(doc).get("containers", []):
+        if container.get("name") == "tdarr":
+            yield "tdarr", container
+
+
+def _tdarr_env_offence(role: str, container: dict) -> str | None:
+    env = {e["name"]: e.get("value") for e in container.get("env", [])}
+    wrong = {k: env.get(k) for k, v in TDARR_ENV_PINS.items() if env.get(k) != v}
+    if not wrong:
+        return None
+    return f"env {wrong} is not pinned to {TDARR_ENV_PINS}"
+
+
 PROPERTIES = (
     (
         Property(
@@ -156,7 +175,17 @@ PROPERTIES = (
             # census, since every role at the default budget passes on the default deadline.
             # Re-derive the set if `_DEFAULT_DEADLINE_S` or a role's budget moves.
             must_find=frozenset(
-                {"prowlarr", "flaresolverr", "valheim", "sonarr", "radarr"}
+                {
+                    "prowlarr",
+                    "flaresolverr",
+                    "valheim",
+                    "sonarr",
+                    "radarr",
+                    "karakeep",
+                    "karakeep-chrome",
+                    "karakeep-meilisearch",
+                    "karakeep-time-tagger",
+                }
             ),
         ),
         Property(
@@ -214,6 +243,37 @@ PROPERTIES = (
             ),
             green=("configarr", {"name": CONFIGARR_CACHE_VOLUME, "emptyDir": {}}),
             must_find=frozenset({CONFIGARR_CACHE_VOLUME}),
+        ),
+        Property(
+            name="tdarr-pins-engine-and-auth",
+            reason=(
+                "A 2.x Tdarr server picks its engine from upstream's rollout API on every start "
+                "unless TDARR_ENGINE is set. The Rust engine migrated this install's library DB "
+                "out of the NodeJS engine's DB2/ tree, so a rollback to a 2.x tag that drew NodeJS "
+                "would see files already transcoded as untranscoded, and tdarr rewrites media in "
+                "place. 3.x enables Tdarr's own auth on a fresh tdarr-configs claim, which would "
+                "put an account form behind Authelia and lock out the internal node. #4555 has "
+                "the evidence; templates/deployment.yaml.j2 carries the reasoning at each entry."
+            ),
+            select=_tdarr_container,
+            offence=_tdarr_env_offence,
+            red=("tdarr", {"env": [{"name": "auth", "value": "false"}]}),
+            green=(
+                "tdarr",
+                {"env": [{"name": k, "value": v} for k, v in TDARR_ENV_PINS.items()]},
+            ),
+            more_red=(
+                (
+                    "tdarr",
+                    {
+                        "env": [
+                            {"name": "TDARR_ENGINE", "value": "rust"},
+                            {"name": "auth", "value": "true"},
+                        ]
+                    },
+                ),
+            ),
+            must_find=frozenset({"tdarr"}),
         ),
     )
     + CONFIG_PROPERTIES

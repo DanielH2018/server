@@ -7,10 +7,11 @@
 # lives in this role rather than in netpol-baseline precisely so a `--tags authelia` deploy
 # ships the two together (#1609).
 #
-# NOT in `manifests_extra_rollouts`, and this is the one thing here not to change. That list
-# rolls a Deployment whenever the ROLE's manifests change, which for authelia is several times
-# a day. Rolling redis on that cadence would destroy the sessions this workload exists to keep,
-# so redis rolls only when its own template changes and `kubectl apply` notices.
+# In `manifests_extra_rollouts` with `restart_on: []` only, and that empty list is the one thing
+# here not to change. Any restart signal there rolls this Deployment whenever the ROLE's
+# manifests change, which for authelia is several times a day. Rolling redis on that cadence
+# would destroy the sessions this workload exists to keep, so redis rolls only when its own
+# template changes and `kubectl apply` notices; the entry makes the deploy wait on that roll.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
