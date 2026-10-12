@@ -3,7 +3,8 @@
 Claude Code fires no InstructionsLoaded event for the auto-memory `MEMORY.md` or for the
 active output style, so `log-instructions.py` never rows them and `fact_status.py report`
 under-counts each session's at-start bytes (#4656). session-health.py calls
-`log_unevented_loads` once per session open to write those two rows itself.
+`log_unevented_loads` once per session open to write those two rows itself, and once per
+compaction to row `MEMORY.md` again (#4668).
 
 Split out of session-health.py, which sits at its 600-line cap. Package name is `hooklib`,
 not `lib`, for the reason `worktree_lines.py` gives.
@@ -98,21 +99,27 @@ def output_style_path(cwd):
     return None
 
 
-def log_unevented_loads(payload):
+def log_unevented_loads(payload, reason="session_start"):
     """Row `MEMORY.md` and the output style in the instructions log, each with `bytes=`.
 
     `payload` is the SessionStart hook payload; its `session_id` keys the rows and its `cwd`
     picks the checkout. A payload with no session id writes nothing, and neither does a
     file that does not exist.
+
+    `reason` is the row's load reason. A `compact` call rows `MEMORY.md` only. Claude Code
+    2.1.288's post-compact cleanup clears its memory-file cache, so the next turn re-reads
+    every file in it, `MEMORY.md` included, and fires InstructionsLoaded with
+    `load_reason=compact` for all of them except `MEMORY.md`. The output style is part of
+    the system prompt rather than that list, so a compaction does not re-inject it.
     """
     session = payload.get("session_id")
     if not session:
         return
     cwd = payload.get("cwd") or os.getcwd()
-    for mtype, path in (
-        ("AutoMem", memory_md_path(cwd)),
-        ("Style", output_style_path(cwd)),
-    ):
+    loads = [("AutoMem", memory_md_path(cwd))]
+    if reason != "compact":
+        loads.append(("Style", output_style_path(cwd)))
+    for mtype, path in loads:
         if not path:
             continue
         try:
@@ -120,5 +127,5 @@ def log_unevented_loads(payload):
         except OSError:
             continue
         append_instructions_row(
-            "session_start", mtype, path, session, f" bytes={size}", start=cwd
+            reason, mtype, path, session, f" bytes={size}", start=cwd
         )

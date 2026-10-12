@@ -120,7 +120,9 @@ carries the row is the squash commit that wrote its hash into the lock, and
   `bytes=` field `log-instructions.py` ends each row with. A user-level file such as
   `~/.claude/CLAUDE.md` counts. A subagent's row and a row without the field do not. The
   harness fires no InstructionsLoaded event for the auto-memory `MEMORY.md` or the output
-  style, so `session-health.py` writes a `session_start` row for each at SessionStart.
+  style, so `session-health.py` writes a `session_start` row for each at SessionStart. A
+  compaction reloads `MEMORY.md` without the event as well, so the hook writes a `compact` row
+  for it then. The output style sits in the system prompt and gets no `compact` row.
   `--json` prints the same as one object.
 
 The lock is kept only while its content atoms pay for it. When `fact_status.py report

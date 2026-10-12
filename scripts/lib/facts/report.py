@@ -220,7 +220,8 @@ def session_bytes(log: Path, since: datetime) -> list[SessionBytes]:
     Every row counts whatever doc it names, so a user-level file such as ``~/.claude/CLAUDE.md``
     is in the total. The harness fires no InstructionsLoaded event for the auto-memory
     ``MEMORY.md`` or the output style, so ``session-health.py`` writes a ``session_start`` row
-    for each at SessionStart (#4656). ``total`` also counts ``compact`` reloads and
+    for each at SessionStart (#4656), and a ``compact`` row for ``MEMORY.md`` at each
+    compaction (#4668). ``total`` also counts ``compact`` reloads and
     path-scoped loads, so it is what entered context, not what a session started with;
     ``start`` is that.
 

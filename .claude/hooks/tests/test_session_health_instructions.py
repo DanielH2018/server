@@ -50,7 +50,9 @@ def _memory_file(home, checkout):
     return home / ".claude" / "projects" / _slug(checkout) / "memory" / "MEMORY.md"
 
 
-def _session(tmp_path, monkeypatch, memory_bytes=4000, style_bytes=1500):
+def _session(
+    tmp_path, monkeypatch, memory_bytes=4000, style_bytes=1500, source="startup"
+):
     """A scratch HOME holding MEMORY.md for the primary checkout and the configured style.
 
     Returns (home, log, memory, style). The session's cwd is this checkout, which is a linked
@@ -80,7 +82,7 @@ def _session(tmp_path, monkeypatch, memory_bytes=4000, style_bytes=1500):
     monkeypatch.setenv(INSTRUCTIONS_LOG_ENV, str(log))
     cwd = str(_HOOKS.parents[1])
     monkeypatch.chdir(cwd)
-    payload = {"source": "startup", "session_id": _SESSION, "cwd": cwd}
+    payload = {"source": source, "session_id": _SESSION, "cwd": cwd}
     assert (
         _mod.main(
             read_payload=lambda: payload,
@@ -97,15 +99,15 @@ def _session(tmp_path, monkeypatch, memory_bytes=4000, style_bytes=1500):
     return home, log, memory, style
 
 
-def _start_rows_for(log, target):
-    """The `bytes=` values of this session's session_start rows whose path resolves to `target`."""
+def _start_rows_for(log, target, reason="session_start"):
+    """The `bytes=` values of this session's `reason` rows whose path resolves to `target`."""
     text = log.read_text(encoding="utf-8") if log.exists() else ""
     sizes = []
     for line in text.splitlines():
         fields = line.split()
         if len(fields) < 4 or fields[1] != f"[{_SESSION[:8]}]":
             continue
-        if fields[2] != "session_start":
+        if fields[2] != reason:
             continue
         # The memory-type column may be blank, so the path is field 3 or 4.
         paths = [f for f in fields[3:] if "=" not in f]
@@ -115,11 +117,8 @@ def _start_rows_for(log, target):
     return sizes
 
 
-def test_report_counts_memory_and_output_style_in_the_session_start_total(
-    tmp_path, monkeypatch
-):
-    # Verify-by of #4656: fact_status.py report's at-start total includes both files.
-    _home, log, memory, style = _session(tmp_path, monkeypatch)
+def _report_sessions(tmp_path, log):
+    """`fact_status.py report --json`'s sessions over `log`, keyed by the 8-char session id."""
     repo = init_repo(tmp_path / "repo")
     (repo / "CLAUDE.md").write_text("## Style\nwhy, not what.\n")
     (repo / "docs").mkdir()
@@ -134,9 +133,33 @@ def test_report_counts_memory_and_output_style_in_the_session_start_total(
         timeout=60,
         check=True,
     ).stdout
-    sessions = {s["session"]: s for s in json.loads(out)["sessions"]}
+    return {s["session"]: s for s in json.loads(out)["sessions"]}
+
+
+def test_report_counts_memory_and_output_style_in_the_session_start_total(
+    tmp_path, monkeypatch
+):
+    # Verify-by of #4656: fact_status.py report's at-start total includes both files.
+    _home, log, memory, style = _session(tmp_path, monkeypatch)
+    sessions = _report_sessions(tmp_path, log)
     expected = memory.stat().st_size + style.stat().st_size
     assert sessions.get(_SESSION[:8], {}).get("start_bytes") == expected, sessions
+
+
+def test_a_compaction_rows_memory_md_alone_and_the_report_totals_it(
+    tmp_path, monkeypatch
+):
+    # Verify-by of #4668: a compaction reloads MEMORY.md with no InstructionsLoaded event,
+    # so the hook rows it under `compact`. The output style is in the system prompt and is
+    # not re-injected, so it gets no row, and neither file counts as an at-start load.
+    _home, log, memory, style = _session(tmp_path, monkeypatch, source="compact")
+    assert _start_rows_for(log, memory.resolve(), "compact") == [memory.stat().st_size]
+    assert _start_rows_for(log, style.resolve(), "compact") == []
+    session = _report_sessions(tmp_path, log).get(_SESSION[:8], {})
+    assert (session.get("start_bytes"), session.get("total_bytes")) == (
+        0,
+        memory.stat().st_size,
+    ), session
 
 
 def test_session_start_rows_memory_md_with_its_byte_size(tmp_path, monkeypatch):

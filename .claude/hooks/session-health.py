@@ -525,7 +525,7 @@ def main(
 ):
     """Print the SessionStart health banner for a genuine session open, then exit 0.
 
-    Skips a mid-session compaction event. Combines container, Prometheus-target and
+    Prints nothing for a mid-session compaction. Combines container, Prometheus-target and
     stale-branch problems into one banner, then separately prints other live sessions in
     this repo, worktrees ready to remove, and fan-out worktrees running on another host —
     all three regardless of health status.
@@ -537,16 +537,18 @@ def main(
     machine's worktrees, `.claude/fanout`) that would make an assertion depend on the host.
     """
     payload = read_payload() or {}
-    # Don't re-banner on mid-session compaction — only on a genuine open/resume/clear.
-    if payload.get("source") == "compact":
-        return 0
+    compact = payload.get("source") == "compact"
     try:
-        # Imported here so a broken module costs these two rows, never the banner.
+        # Imported here so a broken module costs these rows, never the banner. A compaction
+        # reloads MEMORY.md with no InstructionsLoaded event, so it rows that too (#4668).
         from hooklib.instruction_rows import log_unevented_loads
 
-        log_unevented_loads(payload)
+        log_unevented_loads(payload, "compact" if compact else "session_start")
     except Exception:  # noqa: S110 -- a failed row must never cost the banner
         pass
+    # Don't re-banner on mid-session compaction — only on a genuine open/resume/clear.
+    if compact:
+        return 0
 
     targets = target_problems()
     master_moved = master_moved_problems()
