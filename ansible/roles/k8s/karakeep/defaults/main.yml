@@ -78,9 +78,9 @@ karakeep_k8s_tagger_mem_request: 64Mi
 karakeep_k8s_pruner_schedule: "15 5 * * *"
 karakeep_k8s_pruner_screenshot_days: 30
 karakeep_k8s_pruner_delete_days: 90
-# Off until the operator has read a dry run's log and approved what it lists. With this false
-# the job logs what it would do and changes nothing.
-karakeep_k8s_pruner_apply: false
+# The operator read the dry runs' logs and turned this on on 2026-10-12. With it false the
+# job logs what it would do and changes nothing, which is the way to pause it.
+karakeep_k8s_pruner_apply: true
 # A ceiling on deletions per run, so a bad clock or a misread response cannot empty the
 # library in one night.
 karakeep_k8s_pruner_max_deletes: 50
