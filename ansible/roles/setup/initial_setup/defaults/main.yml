@@ -22,7 +22,7 @@
 # URL leaves the digest unpaired — the finish an unattended renovate_agent run could not do
 # without a raw `curl` (#2301).
 # renovate: datasource=github-releases depName=astral-sh/uv
-initial_setup_uv_version: "0.12.22"
+initial_setup_uv_version: "0.12.23"
 initial_setup_uv_installer_url: "https://astral.sh/uv/{{ initial_setup_uv_version }}/install.sh"
 initial_setup_uv_installer_sha256: 58488ae8dbd0773134c92c85e901430e33f99d975bd7f929d26aa9ab0c2f9390
 
