@@ -147,7 +147,7 @@ def volume_blocks(text: str) -> list[tuple[str, int, list[str]]]:
             # every entry after it would look undeclared. Skip the tag, keep scanning. A YAML
             # comment ends nothing either, and in an indentless block it can sit at the key's
             # own column.
-            if line.lstrip().startswith(("{%", "#")):
+            if line.lstrip().startswith(("{%", "{#", "#")):
                 j += 1
                 continue
             column = len(line) - len(line.lstrip())
@@ -234,6 +234,7 @@ def test_volume_names_name_their_workload(key: str) -> None:
 
 _CONDITIONAL_VOLUMES = """\
       volumes:
+{# acme storage is only needed when Traefik manages certificates #}
 {% if manage_acme %}
         - name: traefik-acme
           emptyDir: {}
@@ -244,7 +245,8 @@ _CONDITIONAL_VOLUMES = """\
 
 
 def test_the_scanner_reads_past_a_jinja_tag() -> None:
-    """A conditional volume must not end the block, or every entry after it reads undeclared."""
+    """A conditional volume or a Jinja comment must not end the block, or every entry after it
+    reads undeclared."""
     assert volume_names(_CONDITIONAL_VOLUMES)["volumes"] == {
         "traefik-acme",
         "traefik-tmp",
