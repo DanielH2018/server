@@ -49,11 +49,19 @@ def _flux_version() -> str:
 
 
 def header_names_version(text: str, version: str) -> bool:
-    """Whether the vendored file's first line is a pipeline generating `version`."""
+    """Whether the vendored file was generated at `version`, by every mark it carries.
+
+    Line 1, the pipeline, is hand-copied, so a bump that edited it and skipped the regeneration
+    would still match it. `flux install` itself writes `# Flux Version: <v>` and stamps
+    `app.kubernetes.io/version: <v>` on every object, so those must name `version` too.
+    """
     first = text.split("\n", 1)[0]
+    stamped = set(re.findall(r"^\s+app\.kubernetes\.io/version: (\S+)$", text, re.M))
     return (
         first.startswith("# flux install --export ")
         and f" --version={version} " in first
+        and re.findall(r"^# Flux Version: (\S+)$", text, re.M) == [version]
+        and stamped == {version}
     )
 
 
@@ -63,8 +71,18 @@ def test_header_names_version_is_clean_on_the_vendored_file():
 
 def test_header_names_version_is_flagged_on_a_bump_that_skipped_regeneration():
     """The red half: Renovate rewrote `flux_version`, and the file still says the old one."""
-    stale = "# flux install --export --components=x --version=v2.9.5 | gawk\n---\n"
-    assert not header_names_version(stale, "v2.9.6")
+    stale = VENDORED.read_text().replace(" --version=v", " --version=old-v", 1)
+    assert not header_names_version(stale, _flux_version())
+
+
+def test_header_names_version_is_flagged_on_a_hand_edited_pipeline_line():
+    """The red half the pipeline line alone misses: line 1 says the new release, and the body
+    flux generated still says the old one."""
+    version = _flux_version()
+    first, body = VENDORED.read_text().split("\n", 1)
+    edited = first.replace(f"--version={version}", "--version=v99.0.0") + "\n" + body
+    assert " --version=v99.0.0 " in edited.split("\n", 1)[0]
+    assert not header_names_version(edited, "v99.0.0")
 
 
 # --- The images are pinned by digest ----------------------------------------------------
