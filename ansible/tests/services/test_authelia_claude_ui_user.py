@@ -15,10 +15,12 @@ So the rules here are about the two users staying distinct. Each is a
 rendered manifests, with a non-vacuity assertion that the users database was found at all.
 """
 
+import jinja2
 import pytest
 from lib import yaml_fast
-from _helpers import K8S_ROLES
+from _helpers import K8S_ROLES, load_tasks
 from _k8s_render import render_role_template, rendered_docs
+from lib.ansible_jinja_env import make_ansible_env
 from lib.render_context import render_context
 
 OPERATOR_PLACEHOLDER = "$argon2id$v=19$m=65536,t=3,p=4$operator"
@@ -241,3 +243,34 @@ def test_the_hash_read_back_is_keyed_by_username():
     assert "authelia_k8s_existing_users.get(authelia_user" in tasks
     assert "authelia_k8s_existing_users.get(authelia_k8s_claude_user" in tasks
     assert "authelia_k8s_existing_users.get(authelia_k8s_agent_user" in tasks
+
+
+def test_a_dry_run_with_no_digest_renders_a_placeholder_instead_of_failing():
+    """A no-mutation run skips the hash pods (#4569), so a missing digest must not reach the assert.
+
+    Failing there stopped the hourly render-records dry run at authelia, leaving every later
+    service unrecorded, whenever a user was newly managed or a rehash was asked for.
+    """
+    tasks = load_tasks(ROLE / "tasks" / "main.yml")
+    names = [str(t.get("name", "")) for t in tasks]
+    stand_in = names.index(
+        "Stand in a placeholder digest for each user a dry run could not hash"
+    )
+    assert stand_in < names.index("Fail if no password hash could be obtained")
+    task = tasks[stand_in]
+    assert task["when"] == "k8s_no_mutate | bool"
+
+    facts = task["ansible.builtin.set_fact"]
+    env = make_ansible_env(undefined_cls=jinja2.Undefined)
+    missing = {k: env.from_string(v).render() for k, v in facts.items()}
+    assert all(v.startswith("dry-run-placeholder-") for v in missing.values()), missing
+    assert len(set(missing.values())) == len(missing), (
+        "users must not share a placeholder"
+    )
+
+    known = {
+        k: env.from_string(v).render(**{k: "$argon2id$live"}) for k, v in facts.items()
+    }
+    assert set(known.values()) == {"$argon2id$live"}, (
+        "a read-back digest was overwritten"
+    )
