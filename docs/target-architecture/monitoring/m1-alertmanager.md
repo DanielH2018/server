@@ -1,6 +1,6 @@
 # M1 — Alertmanager and its watcher
 
-Status: PLANNED
+Status: IN PROGRESS
 
 Depends on: —
 

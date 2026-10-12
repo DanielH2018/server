@@ -1,0 +1,9 @@
+# Rejected by `promtool check rules`: the expression ends after its operator.
+groups:
+  - name: fixture
+    rules:
+      - alert: FixtureTargetDown
+        expr: up ==
+        labels:
+          severity: warning
+          service: fixture

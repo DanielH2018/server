@@ -1,0 +1,12 @@
+# Accepted by `promtool check rules`, and the rule file both rule-test fixtures load.
+groups:
+  - name: fixture
+    rules:
+      - alert: FixtureTargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: warning
+          service: fixture
+        annotations:
+          summary: A fixture target is down.

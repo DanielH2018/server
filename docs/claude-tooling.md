@@ -469,6 +469,21 @@ The two_factor session also gets its own state file and is never a fallback for 
 `ui_mcp.sh` loads a jar unconditionally, so promoting it would put a shell as the repo user
 (code-server) and volume deletion (longhorn) behind every page load.
 
+## `promtool` and `amtool` (`scripts/validate/alert_tools.sh`)
+
+The `validate-alert-rules` prek hook (`scripts/validate/alert_rules.py`) checks the alert
+plane with Prometheus's and Alertmanager's own parsers. It renders the observability role and
+runs `promtool check config --syntax-only` on the rendered `prometheus.yml`, `promtool check
+rules` and `promtool test rules` on the role's rule files and their tests, and `amtool
+check-config` on the Alertmanager config.
+
+`scripts/validate/alert_tools.sh` provisions both tools at the tags of the role's
+`observability_k8s_prometheus_image` and `observability_k8s_alertmanager_image` pins, into
+`.cache/alert-tools/`. The first run in a worktree downloads about 150 MB. To run a tool by
+hand, pass it through the script: `scripts/validate/alert_tools.sh promtool test rules
+<file>`. CI's `hooks` job provisions the tools, then runs `alert_rules.py --prove-red`, which
+shows each tool rejecting its bad fixture under `scripts/validate/tests/fixtures/alert_rules/`.
+
 ## The deck mod (`.claude/plugins/deck/`)
 
 The deck is a Claude Code mod: a plugin of function hooks, which needs Claude Code 2.1.287 or

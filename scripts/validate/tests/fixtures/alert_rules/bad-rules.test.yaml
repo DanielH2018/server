@@ -1,0 +1,13 @@
+# Failed by `promtool test rules`: the alert fires, and the case expects silence.
+rule_files:
+  - good-rules.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'up{job="fixture"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FixtureTargetDown
+        exp_alerts: []

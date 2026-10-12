@@ -1,0 +1,5 @@
+# Rejected by `amtool check-config`: the route names a receiver nothing defines.
+route:
+  receiver: missing
+receivers:
+  - name: blackhole

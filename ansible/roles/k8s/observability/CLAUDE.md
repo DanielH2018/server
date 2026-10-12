@@ -10,15 +10,15 @@ Claude Code runs on the **host**, not in a container, and exports to `127.0.0.1:
 and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another host process.
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
-The working-out lives in `docs/observability-dashboards.md`: the boards, the OIDC measurements,
-idle versus broken and the verification commands.
+The working-out lives in `docs/observability-dashboards.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
 - **Deploy tag:** `--tags "observability"`
 - **Images:** `otel/opentelemetry-collector-contrib` (`observability_k8s_collector_image`),
   `grafana/loki` (`observability_k8s_loki_image`), `prom/prometheus`
-  (`observability_k8s_prometheus_image`), `grafana/grafana`
+  (`observability_k8s_prometheus_image`), `prom/alertmanager`
+  (`observability_k8s_alertmanager_image`), `grafana/grafana`
   (`observability_k8s_grafana_image`), `registry.k8s.io/kube-state-metrics/kube-state-metrics`
   (`observability_k8s_kube_state_metrics_image`), `grafana/tempo`
   (`observability_k8s_tempo_image`)

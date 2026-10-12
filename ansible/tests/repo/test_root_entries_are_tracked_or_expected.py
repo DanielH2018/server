@@ -28,6 +28,7 @@ EXPECTED_IGNORED = frozenset(
         ".mkdocs-strict-check",
         ".mypy_cache",
         ".superpowers",  # SDD task specification directories
+        ".cache",  # promtool and amtool, from scripts/validate/alert_tools.sh
     }
 )
 
