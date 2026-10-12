@@ -639,7 +639,10 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
     - `prod`: `decide` fetches `prod`'s manifest from GHCR and reads its
       `org.opencontainers.image.revision` annotation. HTTP 404, or the registry error code
       `MANIFEST_UNKNOWN`, is absent. That is the first run, and it promotes the newest
-      eligible commit. Any other status, an auth failure, a timeout, or a manifest without
+      eligible commit. With no `prod` to stop at, its walk examines at most
+      `scripts/deploy_tools/promote.py:FIRST_RUN_WALK_MAX` commits from master's tip and
+      reports `current` past them, so a run with nothing eligible does not send one `HEAD`
+      per commit back to master's root (#4708). Any other status, an auth failure, a timeout, or a manifest without
       the annotation is an error.
     - Each candidate C's tag: one `HEAD` request for the manifest `sha-<C>`. 200 is present.
       404 is absent, which makes C ineligible, and the walk moves on. Any other status or a

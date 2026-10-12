@@ -24,6 +24,8 @@ The rules for each read are in docs/target-architecture/deploy/d1-flux-installed
     The value must be a non-empty list of non-empty strings. `ci_verdict` reads an empty set
     as `pass`, and a string would stall every candidate at `pending` with no error.
   - `prod` absent from the registry is the first run, and promotes the newest eligible commit.
+    Its walk has no `prod` to stop at, so it examines at most FIRST_RUN_WALK_MAX commits from
+    master's tip and reports `current` past them.
   - A `sha-<C>` HEAD that returns 404 makes C ineligible. A CI verdict of pending or fail
     does too. A failed signature check is an error, so a Sigstore outage stops promotion
     rather than skipping to an older commit.
@@ -75,6 +77,12 @@ CI_CONTEXTS_KEY = "gitops_deploy_ci_contexts"
 HOLD_VARIABLE = "DEPLOY_HOLD"
 PROD_TAG = "prod"
 MASTER_REF = "origin/master"
+
+# How many commits a first run's walk examines, newest first. Without `prod` the walk would
+# otherwise reach master's root, at one `HEAD` and up to one check-runs read per commit. At about
+# 124 merges a day (gitops_deploy_ci_ancestor_walk_max's comment) 50 is several hours of merges,
+# and `publish` pushes each one, so the commit that triggered the run is well inside it.
+FIRST_RUN_WALK_MAX = 50
 
 # `flux push artifact --revision master@sha1:<sha>` writes this annotation on the manifest.
 REVISION_ANNOTATION = "org.opencontainers.image.revision"
@@ -141,7 +149,8 @@ def decide(reads: Reads) -> Decision:
     """Pick the commit `prod` moves to, reading each fact only when the decision needs it.
 
     The walk stops at the first eligible candidate, so a run reads one `sha-<C>` digest per
-    candidate it examines and lists no tags.
+    candidate it examines and lists no tags. A first run, with no `prod`, examines at most
+    FIRST_RUN_WALK_MAX candidates.
     """
     try:
         hold = reads.hold()
@@ -164,7 +173,10 @@ def decide(reads: Reads) -> Decision:
                 reason=f"prod's commit {prod} is not in master's history at {tip}",
             )
 
-        for candidate in reads.walk(prod, tip):
+        candidates = reads.walk(prod, tip)
+        if prod is None:
+            candidates = candidates[:FIRST_RUN_WALK_MAX]
+        for candidate in candidates:
             digest = reads.tag(candidate)
             if digest is None:
                 continue
@@ -184,7 +196,11 @@ def decide(reads: Reads) -> Decision:
     except READ_ERRORS as err:
         return Decision("error", reason=str(err))
 
-    since = f"after prod's commit {prod}" if prod else "on master"
+    since = (
+        f"after prod's commit {prod}"
+        if prod
+        else f"among master's newest {FIRST_RUN_WALK_MAX}, the first run's limit,"
+    )
     return Decision(
         "current", reason=f"no commit {since} is published, green and signed"
     )

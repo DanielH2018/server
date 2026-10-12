@@ -185,6 +185,30 @@ def test_a_candidate_with_a_failed_check_run_is_refused(world, monkeypatch, caps
     )
 
 
+def test_a_first_run_stops_its_walk_at_the_limit_and_is_refused(
+    tmp_path, monkeypatch, capsys
+):
+    """With no prod, the walk examines the newest FIRST_RUN_WALK_MAX commits and no more.
+
+    Master is one commit longer than the limit, and its root is published and green, so only
+    the limit stops the walk from promoting it.
+    """
+    limit = promote.FIRST_RUN_WALK_MAX
+    world = World(tmp_path, size=limit + 1)
+    world.publish(world.commits[0])
+    _assert_refused(
+        world.decide(monkeypatch, capsys),
+        "current",
+        f"no commit among master's newest {limit}, the first run's limit, is published",
+    )
+    heads = [
+        path for method, path in world.transport.registry_requests() if method == "HEAD"
+    ]
+    assert [path.rsplit("/", 1)[1] for path in heads] == [
+        f"sha-{sha}" for sha in reversed(world.commits[1:])
+    ]
+
+
 def test_an_ancestry_check_that_exits_128_is_refused(world, monkeypatch, capsys):
     """prod names a commit this checkout lacks, as a shallow clone would."""
     world.set_prod("f" * 40)
