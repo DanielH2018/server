@@ -20,7 +20,8 @@ the checkout root, and every `.claude/rules/*.md` whose `paths:` frontmatter mat
 doc is returned as PreToolUse `additionalContext` ONCE per session, and once more per
 subagent (its payload's `agent_id`), whose context starts empty. Every injection is logged
 to `instructions.log` with reason `bash_path_match`, so the same log that measured the gap
-grades the fix. The root `CLAUDE.md` is never injected: it loads at session start.
+grades the fix. Each row ends in `bytes=<n>`, the UTF-8 size of the block injected for its
+doc. The root `CLAUDE.md` is never injected: it loads at session start.
 
 ONLY DOCS THIS HOOK CHOSE ARE EVER READ. A path lifted from the command selects a directory;
 the files opened are `CLAUDE.md` at an ancestor of that directory and the rule files under
@@ -481,7 +482,7 @@ def render(root, doc, trigger, budget_chars, budget_lines, facts=None):
 
 
 def build_context(command, cwd, session_id, log_path=None, agent_id=None):
-    """(context_text, [(doc, trigger)]) for this command, or ("", []) when nothing is new.
+    """(context_text, [(doc, trigger, block)]) for this command, or ("", []) when nothing is new.
 
     Docs that fit whole are rendered before any doc injected as its head, in the order
     `named_paths` and `docs_for` give. A head that spent the payload first would defer a
@@ -537,12 +538,12 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
         remaining = max(0, remaining - len(block) - 1)
         remaining_lines = max(0, remaining_lines - block.count("\n") - 1)
         blocks.append(block)
-        chosen.append((doc, rel))
+        chosen.append((doc, rel, block))
     if not chosen:
         if already:
             remember(key, already)
         return "", []
-    remember(key, already | {d for d, _ in chosen})
+    remember(key, already | {d for d, _, _ in chosen})
     return _PREAMBLE + "\n".join(blocks), chosen
 
 
@@ -565,9 +566,11 @@ def context(payload):
     if not chosen:
         return None
     tag = f" {AGENT_FIELD}{agent_id}" if agent_id else ""
-    for doc, trigger in chosen:
+    for doc, trigger, block in chosen:
+        # The block, not the file: `fact_status.py report` totals what entered context (#4653).
+        size = f" bytes={len(block.encode('utf-8'))}"
         append_instructions_row(
-            REASON, "Project", doc, session_id, " trigger=" + trigger + tag
+            REASON, "Project", doc, session_id, " trigger=" + trigger + tag + size
         )
     return text
 

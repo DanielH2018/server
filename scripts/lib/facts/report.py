@@ -12,8 +12,9 @@ Three measurements, none kept in a store of its own.
   is worked in the order agents read it. The log has one row per loaded doc, so a section
   inherits its doc's count.
 - **The instruction bytes each session loaded.** ``log-instructions.py`` ends each row with
-  ``bytes=<n>``, the loaded file's size, and the report sums them per session id, user-level
-  files outside the repo included (#4610). That is the always-loaded context's trend, which
+  ``bytes=<n>``, the loaded file's size, and ``inject-nested-docs.py`` ends each
+  ``bash_path_match`` row with the size of the block it injected (#4653). The report sums them
+  per session id, user-level files outside the repo included (#4610). That is the always-loaded context's trend, which
   otherwise shows only when someone runs ``wc -c`` by hand.
 """
 
@@ -224,8 +225,9 @@ def session_bytes(log: Path, since: datetime) -> list[SessionBytes]:
 
     Two kinds of row are left out. A row tagged ``agent=`` is a subagent's load into its own
     context window, though it carries its parent's session id. A row with no ``bytes=`` field
-    predates the field or came from ``inject-nested-docs.py``, which records no size, and a
-    session with no sized row at all is not listed rather than listed as 0.
+    predates the field, and a session with no sized row at all is not listed rather than
+    listed as 0. A ``bash_path_match`` row counts the block the hook injected, which for a doc
+    over its budget is the head rather than the whole file.
     """
     cutoff = since.strftime("%Y-%m-%dT%H:%M:%SZ")
     by_session: dict[str, SessionBytes] = {}
