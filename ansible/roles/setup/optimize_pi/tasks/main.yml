@@ -456,6 +456,10 @@
   # 2 MiB still holds a day. The count includes the two active files, which journald never
   # vacuums. The 30 archives left are about 15 days at two archives a day, which keeps one
   # weekly AIDE and rkhunter report in the journal until the next one is written.
+  #
+  # Applying this cap does not bring a log2ram that already refused to start back up. The
+  # drop-in notifies only `Restart systemd-journald`, which trims the on-card journal, and
+  # log2ram mounts its tmpfs only at boot. Reboot the Pi by hand after the apply.
   ansible.builtin.copy:
     dest: /etc/systemd/journald.conf.d/60-homelab-pi.conf
     content: |

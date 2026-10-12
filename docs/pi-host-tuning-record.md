@@ -79,6 +79,13 @@ starts. The empty `/var/hdd.log` and a start that exited after 1.1s with status 
 guard. `systemctl status` dated the failure 2026-07-28, which is the Pi's clock before NTP sync,
 not the real date. The fix is a file-count cap in the journald drop-in, described below.
 
+**Recovering from a refused start takes a reboot.** Applying `--tags log2ram` restarts
+journald, which trims the journal on the card, but nothing in the role starts the failed
+`log2ram.service`. log2ram mounts its tmpfs only at boot, and the role's `Reboot Pi` handler
+fires only when the package or `/etc/log2ram.conf` changes. Reboot the Pi by hand after the
+apply. Then check that `systemctl is-active log2ram` prints `active` and that
+`findmnt /var/log` shows a tmpfs.
+
 ## Watchdog and debloat
 
 The hardware watchdog is `dtparam=watchdog=on` plus the `watchdog` daemon, which reboots the
