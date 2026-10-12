@@ -175,7 +175,7 @@ C5's package rules bound both.
 
 ### Docs guard: generate or point, and retire facts.lock
 
-**Decision.** Facts move into generated blocks, `docs/reference/`, `DECIDED:` markers and
+**Decision.** Facts move into generated blocks, `docs/reference/`, `DECIDED` markers and
 `--help` text, and `CLAUDE.md` keeps directives and pointers. `docs/facts.lock`, the verify and
 reverify commands of `scripts/dev/fact_status.py` and the hash test are deleted; lint stays. A
 deterministic, non-blocking CI notice lists the sections that cite atoms a PR moved, and size

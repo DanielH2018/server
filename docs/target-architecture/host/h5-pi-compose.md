@@ -836,7 +836,7 @@ adds one service to the package. The PR body records the output of
         - Point `compose_templates.py`, `decisions.py:_PLANES`, `pins.py:_COMPOSE_FILES`
           and `scripts/infra_map/inventory.py:load_roles` at
           `hosts/components/pi-compose/services/` as well as `roles/containers`. Each tool
-          asserts a named member: `pi-canary`'s template, the autoheal marker `DECIDED:
+          asserts a named member: `pi-canary`'s template, the autoheal marker `DECIDED
           autoheal runs with NO healthcheck`, alloy's `image:` line, and `pi-canary` as an
           owner in the role index.
         - **Operator-only:** run `host_secrets.py sync` and commit the Pi file, which then

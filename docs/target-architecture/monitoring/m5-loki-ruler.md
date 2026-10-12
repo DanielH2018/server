@@ -157,7 +157,7 @@ Each selector also matched a live stream when its rule landed.
           of `gates.loki_dependent` while it is down.
         - The docstring of `files/bridge/types.py:PushCheck` names it among the gates.
         - Comments name it in `files/check_table.py`'s module docstring,
-          `files/bridge/config.py`, the `DECIDED:` marker in `files/checks/service.py` and
+          `files/bridge/config.py`, the `DECIDED` marker in `files/checks/service.py` and
           `netpol-baseline/templates/networkpolicy-loki.yaml.j2`.
         - Tests name it: `tests/_check_gate_helpers.py`, `test_check_table.py:_GATES`,
           `test_check_gate_dependents.py`, `test_check_gates.py`, `test_check.py`,
@@ -279,7 +279,7 @@ threshold (the same 10m).
 ### The cross-namespace grant
 
 `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-alertmanager.yaml.j2` is a new
-bespoke policy. It opens with a `DECIDED:` marker naming its shape: a cross-namespace peer,
+bespoke policy. It opens with a `DECIDED` marker naming its shape: a cross-namespace peer,
 which the callers model cannot express. The `bespoke-netpol-says-why-it-is-not-a-callers-fence`
 census row requires that marker. The policy admits `app: loki-homelab` from the `homelab`
 namespace to `app: alertmanager` on 9093, and it is added to the role's deferred observability
@@ -464,7 +464,7 @@ stays until M6's A7, and `test_loki_selectors_use_real_stream_labels` stays with
 ~  files/bridge/types.py                  PushCheck's docstring lists three gates
 ~  files/bridge/config_io.py              six Config fields and their loads removed
 ~  files/bridge/config.py                 comment lists three gates
-~  files/checks/service.py                the DECIDED: marker no longer names LOKI_DEPENDENT
+~  files/checks/service.py                the DECIDED marker no longer names LOKI_DEPENDENT
 ~  templates/env-secret.yaml.j2           the same six keys removed
 ~  tests/_check_gate_helpers.py           loki_result, loki_dependent and probe_loki removed
 ~  tests/test_check_*.py                  ten files: the Loki gate's arguments and assertions

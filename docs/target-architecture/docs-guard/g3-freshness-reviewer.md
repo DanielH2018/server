@@ -83,8 +83,8 @@ tier.
     - `bash-pretool.py:collect` takes a `load` parameter. Its docstring says the tests hand
       it a loader that returns a real arm with parts redirected, because each arm is loaded
       fresh with `exec_module` and cannot be monkeypatched from outside.
-- **The dispatcher's `DECIDED:` block forbids a silent arm.** The module docstring's block
-  that begins `DECIDED: every arm runs under its own` says: "What it must never become is
+- **The dispatcher's `DECIDED` block forbids a silent arm.** The module docstring's block
+  that begins `DECIDED every arm runs under its own` says: "What it must never become is
   silent: the traceback goes to stderr named by arm". `collect` sends an arm's exception to
   `_report`, which names the arm on stderr.
 - **`inject-nested-docs` does not swallow errors inside the dispatcher.**
@@ -202,7 +202,7 @@ failure class 3.
 Every other exception propagates to `collect`. That includes `Unsplittable` with `missing`,
 an `ImportError` from `lib.facts`, and any error raised inside `moved_sections`. `_report`
 then names `freshness-notice` on stderr, and every other arm's output stands. This honours
-the `DECIDED:` block in `bash-pretool.py`'s docstring that begins `DECIDED: every arm runs
+the `DECIDED` block in `bash-pretool.py`'s docstring that begins `DECIDED every arm runs
 under its own`.
 
 **What the arm costs a Bash call.** The `sys.path` insert of the arm's own checkout's
@@ -416,7 +416,7 @@ points the arm misses, from *Risks*, because the replay counts every PR.
 - **PR 4** is a revert. The reviewer returns to the G2 tier order.
 - **A partial failure.** If the arm raises, `collect` reports it on stderr, names
   `freshness-notice`, and drops its context. Every other arm's output stands, per the
-  dispatcher's `DECIDED:` block. This path is live, because the arm lets every unexpected
+  dispatcher's `DECIDED` block. This path is live, because the arm lets every unexpected
   error propagate.
 
 ## Risks
@@ -539,12 +539,12 @@ Raised: ten findings, three high and seven medium. All ten were fixed, and none 
   Design, Risks and the measurement say so. The confirmed fact is that
   `homelab-review/SKILL.md` dispatches the reviewer with no base ref. A cross-slice note
   proposes renaming the slice.
-- **G3-R1-02 (high).** *Swallowing every error contradicts the dispatcher's `DECIDED:` marker.*
+- **G3-R1-02 (high).** *Swallowing every error contradicts the dispatcher's `DECIDED` marker.*
   Fixed. The arm returns None only in the listed no-op cases. It returns one line for an
   unresolved base, which goes one step past the requested None, toward visibility. Every
   other error propagates to `collect`. The broken-checkout test became a pair: an
   unresolvable base, and a stubbed `moved_sections` that raises and is named on stderr.
-  Failure class 3 and the `DECIDED:` block are named. The finding's claim about
+  Failure class 3 and the `DECIDED` block are named. The finding's claim about
   `inject-nested-docs.py:context` checks out at `70591c307`.
 - **G3-R1-03 (high).** *The arm diffs the working tree, but the PR carries the committed
   head.* Fixed. The arm passes `head="HEAD"`. The live check commits on a throwaway branch

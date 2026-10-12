@@ -72,7 +72,7 @@ else.
       `observability_stabilise_workloads` ("The six telemetry workloads", "would restart all
       six", "ANY of this role's eight manifests"), and `k8s_autodeploy_reason` ("six
       sub-images"), which feeds the generated *At a glance* block.
-    - The comment "Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED:
+    - The comment "Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED
       observability tiers`" in five templates: `collector`, `grafana`, `kube-state-metrics`,
       `loki` and `tempo` `.yaml.j2`. `prometheus.yaml.j2`'s own tier-1 comment stays true.
     - `ansible/roles/k8s/netpol-baseline/templates/networkpolicy-observability.yaml.j2`: "all
@@ -452,7 +452,7 @@ M2 to M6 build on these rules and do not restate them.
   `policy`. The table passes it at `70591c307`, so the test is in place before PR 2 adds
   the row.
 - **Eviction tier.** `homelab-critical`, beside Prometheus, because it is the paging path.
-  That amends the `DECIDED: observability tiers` marker in the role's `CLAUDE.md`, and
+  That amends the `DECIDED observability tiers` marker in the role's `CLAUDE.md`, and
   *Open questions* asks the operator to confirm it.
 - **Resources.** A 10m CPU request and a 64Mi memory request; limits of 200m and 128Mi. A
   week after PR 2 deploys, measure
@@ -507,7 +507,7 @@ A resolved notification would count as a ping and hide the outage. Its `payload`
 - `--config.auto-reload` (interval 30s) reloads a changed rule file without rolling the pod.
   Rolling the `Recreate` Prometheus would leave an evaluation gap and replay the WAL, and a
   rule edit should cost neither. The ConfigMap therefore carries no checksum annotation. The
-  role's `CLAUDE.md` gets a `DECIDED: rules reload in place` marker at the mount, and
+  role's `CLAUDE.md` gets a `DECIDED rules reload in place` marker at the mount, and
   `_CONFIGMAP_DATA_KEYS` exempts `prometheus-rules` by name, with a positive assertion in its
   place. If Prometheus mounts `prometheus-rules`, its args must carry `--config.auto-reload`.
   `prometheus.yml` keeps its checksum and still rolls the pod.
@@ -783,7 +783,7 @@ and those edits must land with the workload.
   set instead: "these workloads", "the workloads that read one", "this role's manifests".
   `k8s_autodeploy_reason` loses "six sub-images", and the `regen-role-glance` hook rewrites
   the *At a glance* block from it in the same commit. The five tier comments say "Tier 4;
-  `DECIDED: observability tiers` names the tier-1 exceptions", and `alertmanager.yaml.j2`
+  `DECIDED observability tiers` names the tier-1 exceptions", and `alertmanager.yaml.j2`
   carries its own tier-1 comment that cites the marker. The tier comments sit in pod specs
   outside any value, so `homelab_role_label` strips them and they move no staged bytes.
   netpol-baseline's observability policy is a deferred render, so its comment edit moves
@@ -843,7 +843,7 @@ and those edits must land with the workload.
   and every range window at least four scrape intervals (4m).
 - Add the Python phase of `alert_rules.py` with its `..._is_clean` / `..._is_flagged` pairs.
   Exempt `prometheus-rules` in `_CONFIGMAP_DATA_KEYS` with the positive assertion, and add the
-  `DECIDED: rules reload in place` marker.
+  `DECIDED rules reload in place` marker.
 - Two-writer check: no check gains a second pager. No Kuma tile watches Prometheus's rule
   reloads or Alertmanager's sends. A failed Alertmanager scrape is the one overlap the rules
   could have made: `check_cluster_targets` pages it from PR 2 on. `AlertmanagerMetricsMissing`
@@ -1216,7 +1216,7 @@ Each risk names its class from `docs/failure-classes.md`.
       `test_observability_stabilise_coverage.py` and
       `test_observability_config_rolls_one_workload.py` go (*Baseline*).
     - Docs: the observability role's `CLAUDE.md` gains an *Alert plane* paragraph and the
-      amended `DECIDED: observability tiers` marker. Beside the marker, the five tier-4
+      amended `DECIDED observability tiers` marker. Beside the marker, the five tier-4
       comments in `collector`, `grafana`, `kube-state-metrics`, `loki` and `tempo`
       `.yaml.j2` stop calling `prometheus.yaml.j2` "the one exception", and
       `alertmanager.yaml.j2` carries its own tier-1 comment. The `regen-role-glance` hook
@@ -1298,7 +1298,7 @@ Each risk names its class from `docs/failure-classes.md`.
 1. **Alertmanager's eviction tier.** The proposal is `homelab-critical`. Until M6's batch A3,
    Kuma's `Cluster Scrape Targets` tile pages an evicted Alertmanager 10 to 15 minutes in.
    From A3 on, only the Watchdog pages it, after up to 30 minutes. Resolution: the
-   operator confirms or rejects the amended `DECIDED: observability tiers` marker in PR 2
+   operator confirms or rejects the amended `DECIDED observability tiers` marker in PR 2
    (**operator-only**, since it reverses a recorded decision).
 2. **Silences before a route exists.** M1 adds no route, so until one exists a silence is an
    `amtool silence add` run inside the pod

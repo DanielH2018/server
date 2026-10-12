@@ -144,7 +144,7 @@ Two shared helpers live inside modules G2 deletes:
   leaves out.
 
 **Generated pages that carry rows from the lock's code.** `docs/reference/decisions.md`
-holds `path:line` rows for the `DECIDED:` markers in `scripts/lib/facts/evidence.py`,
+holds `path:line` rows for the `DECIDED` markers in `scripts/lib/facts/evidence.py`,
 `scripts/lib/facts/lock.py` and `.claude/hooks/inject-nested-docs.py` (the facts-line
 marker). The line-numbered-path test in `test_documented_paths_exist.py` still checks those
 rows. Precedent such as `343f5414d` regenerates the page in the PR that moves a
@@ -197,7 +197,7 @@ whole.
 **Open work this slice must not trip over.** `ansible/roles/setup/common/tasks/agent_user.yml`
 names `facts-reverify-changed` in a comment. Per that role's `CLAUDE.md`, any edit to a
 `tasks/*.yml` there re-applies the setup roles that import it, so G2 leaves the comment
-alone. `scripts/deploy_tools/land_lib/merge.py` names `docs/facts.lock` in a `DECIDED:`
+alone. `scripts/deploy_tools/land_lib/merge.py` names `docs/facts.lock` in a `DECIDED`
 comment about #2266. That comment is history and stays.
 
 ## Design
@@ -243,7 +243,7 @@ the lock is retired*.
       from now on, and G3 is the escalation path if the yield falls.
     - Reversing the decision means restoring the lock from git history and re-verifying every
       section that moved since. *Rollback* in this slice gives the order.
-- *Governs.* One marker: `# DECIDED: the notice never blocks a merge (ADR-0020)`, added in
+- *Governs.* One marker: `# DECIDED the notice never blocks a merge (ADR-0020)`, added in
   the same PR to the notice step's comment in `.github/workflows/ci.yml`. The frontmatter
   lists `.github/workflows/ci.yml#the notice never blocks a merge`.
   `test_adr_links.py` then holds the marker and the record to each other.
@@ -259,7 +259,7 @@ stores nothing. It blocks on more than citation resolution, and the choice is de
 Four rules can turn it red from a diff that edits no `CLAUDE.md`:
 
 - `unresolved-atom`: the diff deletes or renames what a section cites.
-- `ambiguous-marker`: the diff adds a second `DECIDED:` marker that a cited prefix matches.
+- `ambiguous-marker`: the diff adds a second `DECIDED` marker that a cited prefix matches.
 - `retired-host`: the diff removes a host from `ansible/inventory/hosts.ini`. No slice in
   the index retires a host. H7 keeps `ansible/inventory/` as renderer data, so the rule
   stays live.
@@ -365,7 +365,7 @@ The pre-flip PR therefore takes the label PR 2b.
     - Run `uv run python scripts/dev/fact_status.py report --days 60` and paste its output
       into the ADR's *Context*. `precision` still exists here, because PR 2 deletes it.
     - Write the ADR with `status: Proposed`, and its *Status* section reading *Proposed*.
-    - Add the `DECIDED:` marker to the notice step's comment in `ci.yml`.
+    - Add the `DECIDED` marker to the notice step's comment in `ci.yml`.
     - Add a paragraph to ADR-0019's *Status* section. Its wording depends on the figure:
         - two or more actual content moves: *Amended by ADR-0020. The lock is retired by a
           measured replacement, not by this record's criterion.*
@@ -481,7 +481,7 @@ The pre-flip PR therefore takes the label PR 2b.
     - Delete `.claude/hooks/_facts_line.py` and `.claude/hooks/tests/test_facts_line.py`.
     - In `inject-nested-docs.py`, remove the import and the `facts=` parameter of `render`.
       Remove the `facts_line(...)` element that `build_context` adds to each candidate, the
-      `DECIDED:` marker on the facts line, and the docstring paragraph.
+      `DECIDED` marker on the facts line, and the docstring paragraph.
     - Keep `facts.md` in `READ_RULES`, because it still governs the citations a
       `CLAUDE.md` read leans on.
     - Delete the paragraph in `docs/claude-tooling.md`.
@@ -786,7 +786,7 @@ Each risk is checked against `docs/failure-classes.md`.
     - ADR-0020, about 80 lines, and its nav line;
     - the whole-tree lint test, about 40 lines;
     - `lock-retired` and its pair, about 40 lines;
-    - one `DECIDED:` marker.
+    - one `DECIDED` marker.
 - **Moved, not added:** `repo_citations` and `Citations` into `citations.py`, and
   `_source_at` too if G1 imports it.
 
@@ -806,7 +806,7 @@ Each risk is checked against `docs/failure-classes.md`.
   `gh pr list --state open --search "created:<<flip date>"` returns nothing, or 60 days
   after the flip, whichever is later.
 - **Who owns the one-time rewrite of the 87 `CLAUDE.md` files?** The area design moves facts
-  into generated blocks, `docs/reference/`, `DECIDED:` markers and `--help` text. No slice
+  into generated blocks, `docs/reference/`, `DECIDED` markers and `--help` text. No slice
   in the index owns that rewrite. Resolution: report it as a contract gap. `report`'s
   ranking of sections that cite nothing, by reads, is the work queue for whichever slice
   takes it.

@@ -947,7 +947,7 @@ turns Kuma's Cluster Scrape Targets tile red and fires `BlackboxExporterDown`.
    `ingress-probes` route groups by `alertname` alone, giving one message that lists every
    failed service.
 3. **`file_sd_configs` for probe targets.** That would stop an added hostname from rolling
-   Prometheus. It is a second exempted ConfigMap, under M1's `DECIDED: rules reload in place`
+   Prometheus. It is a second exempted ConfigMap, under M1's `DECIDED rules reload in place`
    reasoning. Resolution: adopt it only if Prometheus rolls become a measured cost.
 4. **Contract gap, the slice index.** contracts.md says M4 depends on M1 alone. This plan's
    PR 3 also needs M2's PR 3, for two reasons:

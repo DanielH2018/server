@@ -105,7 +105,7 @@ The exit criterion has three parts:
   read-only kubeconfig (measured 2026-10-11).
 - **Backup health's channels.** The shim calls `boot_grace_active {{ k3s_health_cron_boot_grace_s }}`
   and then pings two Healthchecks.io slugs, `longhorn-backup-health` and `uptime-kuma-alive`.
-  It carries `DECIDED: a host cron, not a monitor-bridge check (#3287)`.
+  It carries `DECIDED a host cron, not a monitor-bridge check (#3287)`.
 - **Backup health bakes its arming and schedule inputs.** `longhorn-backup-health.sh.j2`
   exports `LONGHORN_BACKUP_ARMED`, `LONGHORN_R2_ARMED`, `LONGHORN_BACKUP_CRON` and
   `LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR` from the `k3s_longhorn_*` keys at template time. It
@@ -319,7 +319,7 @@ The exit criterion has three parts:
   `_changed_half` maps a range's edited `ansible/roles/k8s/<role>/` paths to the role's tag,
   because `deploy_changes.py` puts the whole role directory, `tasks/` included, in `cs.k8s`.
   The tick applies the union as a broad deploy-plane apply, and every broad arm is
-  forward-only. The marker `deploy_narrow.py:DECIDED: the broad plane ignores` means
+  forward-only. The marker `deploy_narrow.py:DECIDED the broad plane ignores` means
   `K8S_AUTODEPLOY_DENYLIST` does not stop that apply. uptime-kuma, monitor-bridge, pihole,
   crowdsec, janitorr and qbittorrent each set `k8s_autodeploy: false` in
   `defaults/main.yml`. artifacts, configarr and netpol-baseline set `true`.
@@ -328,7 +328,7 @@ The exit criterion has three parts:
   longer renders. It never deletes a Role, RoleBinding, Secret or PVC.
 - **`k8s/cronjob-gate`** runs a caller's CronJob once at deploy time. Its `CLAUDE.md` requires
   the job to be idempotent under one extra out-of-band run.
-- **The default backup group.** `longhorn-recurringjob.yaml.j2` carries `DECIDED: groups:
+- **The default backup group.** `longhorn-recurringjob.yaml.j2` carries `DECIDED groups:
   [default]`. Longhorn adds a volume to `default` only when the volume has no recurring job of
   its own.
 - **Readers that treat every group label as a tier.** Each of these reads any
@@ -701,8 +701,8 @@ in that role's `k8s_host_files` task file instead (*Who writes each change at me
 ### Native trim
 
 - **The job.** A Longhorn RecurringJob named `trim` in `longhorn` with `task: filesystem-trim`,
-  `cron: "10 6 * * *"`, `concurrency: 1` and `groups: []`. H2.2a writes a `# DECIDED:` marker
-  at `groups: []` that gives the reason below, beside the backup jobs' `DECIDED: groups:
+  `cron: "10 6 * * *"`, `concurrency: 1` and `groups: []`. H2.2a writes a `# DECIDED` marker
+  at `groups: []` that gives the reason below, beside the backup jobs' `DECIDED groups:
   [default]`.
 - **A per-job label, not a group label.** A volume joins the trim through Longhorn's per-job
   label, `recurring-job.longhorn.io/trim: enabled`, called *the trim label* below. It never
@@ -1164,7 +1164,7 @@ This is a decision, and *Open questions* 3 records the condition that reopens it
   files. Its two Healthchecks.io slugs and its boot grace are host-shaped. It already reads the
   cluster through the read-only kubeconfig, whose grants cover every new read this slice adds:
   the trim Job and its pod log, the stamp ConfigMap and `ETCDSnapshotFile`. Its marker
-  `DECIDED: a host cron, not a monitor-bridge check (#3287)` stands.
+  `DECIDED a host cron, not a monitor-bridge check (#3287)` stands.
 - **It bakes no key whose other reader Flux renders.** The decision rests on H1.7a: backup
   health reads the armed state from each BackupTarget's `backupTargetURL` and the schedules
   from the RecurringJobs' `cron` at run time, so a disarm made in the cluster changes the
@@ -1246,7 +1246,7 @@ change at merge time*).
     - Confirm that none of the six roles carries `owner: flux`, and quote the grep in the PR
       body.
 2. **H2.2a Native trim, one canary (Flux).** This PR needs H1.5a and H1.6.
-    - Add the `trim` RecurringJob, with `groups: []` and its `DECIDED:` marker, to
+    - Add the `trim` RecurringJob, with `groups: []` and its `DECIDED` marker, to
       `longhorn`. Add the trim-label and explicit-`default` arms to the
       `longhorn-reconcile` role, `ansible/roles/k8s/longhorn-reconcile/`, with their unit
       tests and the reconcile-RBAC subset test in its `tests/`. The arm writes
@@ -1343,7 +1343,7 @@ change at merge time*).
     - Turn `Longhorn restore drill` into an absent arm with no schedule fields, with an
       absent arm for `/usr/local/bin/longhorn-restore-drill.sh`, and drop the template from
       `k3s_render_stamp_groups`. Hand apply: `--tags backup-health` (**operator-only**).
-    - Move the drill's contract and its `DECIDED:` markers into the `longhorn-restore-drill`
+    - Move the drill's contract and its `DECIDED` markers into the `longhorn-restore-drill`
       role's `CLAUDE.md`.
     - Most of the diff is moves. The new lines are the CronJob, the three RBAC objects and
       the tests.
@@ -2552,7 +2552,7 @@ stands without it. H1 needs changes, handed over as cross-slice notes.
   proofs, *Rollback* H2.2a and H2.2b, *Risks*, the tests list and *Complexity* follow. The
   finding's fixtures (a) and (b) land in H2.1, before H2.2a, each with a red half that uses
   the group form. They come with a `snapshot_owner_map` sentinel case and a reconcile case
-  that refuses an arm writing the group form. The trim RecurringJob carries a `DECIDED:`
+  that refuses an arm writing the group form. The trim RecurringJob carries a `DECIDED`
   marker at `groups: []`.
     - **Refuted sub-claim:** `scripts/infra_map/live.py` is not a group-label reader. Its only
       label partition, in `parse_kubectl_nodes`, compares the `node-role.kubernetes.io` group,
@@ -2629,7 +2629,7 @@ The H1 and D2 parts go in cross-slice notes.
   Fixed. Confirmed in code: `scripts/deploy_tools/narrow_lib/broad.py:_containers_list_tags`
   returns the entry's own tags from `containers.py:entry_change_tags` together with
   `broad.py:_list_reader_tags`, and `broad.py:narrow` adds `broad.py:_changed_half`, which
-  maps the edited k8s role through `cs.k8s`. The marker `deploy_narrow.py:DECIDED: the broad
+  maps the edited k8s role through `cs.k8s`. The marker `deploy_narrow.py:DECIDED the broad
   plane ignores` keeps `K8S_AUTODEPLOY_DENYLIST` out of that apply. Measured by calling
   those functions on an in-memory copy of `daniel-box.yml` with one label appended to an
   entry's `netpol_from`. uptime-kuma's edit gives `uptime-kuma` plus artifacts,

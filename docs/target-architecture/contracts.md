@@ -312,6 +312,12 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   what it asserts and the directory it joins.
 - **Citations of existing code.** Cite by path and symbol (`deploy_git.py:ci_verdict`), not by
   line number.
+- **Decision markers.** Write a marker without its colon, as `DECIDED <text>`, both for a
+  planned marker and when citing an existing one. `scripts/docs/reference/decisions.py`
+  indexes every tracked line that carries the marker with its colon. With the colon, a
+  planned marker would be published as a settled decision, and a pointer to an ADR that does
+  not exist yet turns CI red. The slice that adds the marker writes it with the colon in
+  code.
 - **Links.** Markdown links point only at docs that exist under `docs/`. Write repo files as
   inline code, never as links.
 - **Security.** The repo is public. Describe no security weakness that is not already public.

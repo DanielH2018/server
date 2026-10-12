@@ -90,7 +90,7 @@ The exit criterion has five parts, all observed together:
 - **The watchdog script.** `ups-secondary-health.sh.j2` sources
   `/usr/local/lib/kuma-push-lib.sh` and exits 1 if it is missing. It reads its token from
   `/etc/nut/kuma-push.env` and exits 0 without a push when the token is empty. It takes the
-  upsd endpoint from `/etc/nut/upsmon.conf`. The `DECIDED:` marker on the task that installs
+  upsd endpoint from `/etc/nut/upsmon.conf`. The `DECIDED` marker on the task that installs
   it explains the 0700 mode: `scripts/secrets_mgmt/secret_bearing_host_paths.py` derives the
   path from role tasks, and `scripts/secrets_mgmt/tests/test_secret_bearing_host_paths.py`
   pins it.
@@ -604,7 +604,7 @@ itself (H5), declared outputs through `homelab-secrets`. These rules change C1 a
 
 - The role deletes its three udev tasks.
 - Its first task becomes `ansible.builtin.meta: end_role` with
-  `when: inventory_hostname == ups_host`, under a `# DECIDED:` marker. The marker says why
+  `when: inventory_hostname == ups_host`, under a `# DECIDED` marker. The marker says why
   the exclusion lives in the role: an `initial_setup.yml` edit is in
   `_BROAD_MANUAL_PREFIXES` and parks every session's landing.
 - The role defaults keep the `127.0.0.1` branch of `nut_host_upsd_host`, because the

@@ -340,7 +340,7 @@ The exit criterion is six observations:
 - **ufw.** 15 `community.general.ufw` tasks across five roles write rules.
     - `initial_setup/tasks/network.yml` sets `deny incoming` and `allow outgoing`, leaves the
       routed default alone, and adds the uncommented SSH rules. Its task "Configure UFW
-      firewall - allow SSH from the LAN without rate-limiting" carries `DECIDED: the LAN is
+      firewall - allow SSH from the LAN without rate-limiting" carries `DECIDED the LAN is
       exempt from SSH rate-limiting, and this rule must sort ABOVE the `limit` rule below`.
     - `k3s/tasks/node.yml` and `k3s/tasks/agent.yml` add uncommented inter-node and
       forwarder-scrape rules.
@@ -521,7 +521,7 @@ and holds every other session's landing (Baseline). A play that names a missing 
 to parse, so deleting a role would force that edit.
 
 - **Emptying.** The PR that moves a role's last component reduces its `tasks/main.yml` to one
-  `ansible.builtin.meta: end_role` task with no `when:`, under a `# DECIDED:` marker that
+  `ansible.builtin.meta: end_role` task with no `when:`, under a `# DECIDED` marker that
   names H7.20a and the park. H4.3b2's reader in `scripts/deploy_tools/setup_gates.py`
   evaluates a leading `end_role` guard per host, and an unconditional one applies to no host,
   so H3.2's two-writer census and H7.2f's setup census both read the role as empty. The
@@ -649,7 +649,7 @@ overwrite", which stops every later update, so no package ships an owned path. E
     - `/etc/default/sysstat` (1) and the Pi's `/etc/hosts` (1);
     - the Pi's firmware `config.txt` (2), with `activate: reboot`.
 - **A homelab copy, for an owned file that is not a conffile (at most 1 edit).** This is
-  `/usr/local/bin/log2ram`'s `--sparse` patch, whose `DECIDED:` marker moves with it. If
+  `/usr/local/bin/log2ram`'s `--sparse` patch, whose `DECIDED` marker moves with it. If
   H7.3 finds the file unowned, it takes the line arm. If the log2ram package owns it, the Pi
   package ships the patched script as `/usr/lib/homelab/log2ram`, and a drop-in for
   `log2ram.service` resets `ExecStart=`, `ExecStop=` and `ExecReload=` to that path. The
@@ -707,7 +707,7 @@ arm keys only on what it labelled or recorded, and every deleting arm has a floo
     2. It adds each missing declared rule. A `position: first` rule is inserted at position
        1, with the same empty-list fallback the Ansible task uses. Other rules are appended.
     3. It checks every `before:` relation in `ufw status numbered`. The LAN SSH allow rule
-       declares `before: ssh-limit`, and the design cites the marker `DECIDED: the LAN is
+       declares `before: ssh-limit`, and the design cites the marker `DECIDED the LAN is
        exempt from SSH rate-limiting`. A violated relation fails the run and is never
        repaired by deleting a `keep` rule.
     4. Only when steps 1 to 3 succeeded, it deletes each Ansible-era legacy rule whose
@@ -1060,7 +1060,7 @@ H7.19b.
 - **The CI gate stays.** The deployer's contract never applies "a red or unfinished CI
   verdict". The checkout timers that H7.10 packages run the tree's code as `sys_user`, so
   checkout-sync keeps that gate, and it keeps the deployer's choice of commit too. The
-  docstring of `deploy_git.py:ci_walk_candidates` records it as "DECIDED: the gate chooses
+  docstring of `deploy_git.py:ci_walk_candidates` records it as "DECIDED the gate chooses
   the NEWEST GREEN ANCESTOR, the walk is bounded, and a red ancestor is never chosen".
   checkout-sync grades the fetched tip over `ci_required_contexts` with `ci_verdict` from
   `hosts/lib/ci_verdict.py` (H7.2e). If the tip is not green, it lists `git rev-list
@@ -3079,7 +3079,7 @@ Four findings. Every one was checked against the tree at `70591c307` before it w
   moves out.
 - **H7-C1-02 (medium) checkout-sync grades only the tip, which narrows the deployer's
   newest-green-ancestor gate without recording it.** Fixed with option A. Confirmed:
-  `deploy_git.py:ci_walk_candidates` carries the `DECIDED:` marker, and `deploy_git.py`
+  `deploy_git.py:ci_walk_candidates` carries the `DECIDED` marker, and `deploy_git.py`
   imports nothing. H7.2e moves `ci_walk_candidates` with `ci_verdict`, and checkout-sync
   merges `--ff-only` to the newest green first-parent ancestor. A red proof covers a
   pending tip with a green parent, and a red ancestor is never chosen. Exit 5, its expected
@@ -3116,7 +3116,7 @@ confirmed against the tree at `70591c307` before it was fixed.
       reads of the tick's markers in `classify.py` and `no_tag_outcome`.
     - Root `CLAUDE.md`'s *After a PR Merges* and *When to wait*, the `gitops-tick` and
       `land-after-merge` skills and `docs/landing.md` move from H7.19b into that PR.
-    - The start-checkout-sync option was rejected. `tick.py:rearm_tick`'s `DECIDED:` note
+    - The start-checkout-sync option was rejected. `tick.py:rearm_tick`'s `DECIDED` note
       records that the polkit rule admits `start` on `gitops-deploy.service` alone, so that
       option needs a new polkit rule, and C6's host wait already covers a tagless host PR.
     - *Verification* gains a test with a red half. The red half runs a tagless host PR,

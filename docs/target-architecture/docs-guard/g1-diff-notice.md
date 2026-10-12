@@ -755,7 +755,7 @@ the reader:
   that adds a file, or adds a function to an existing file, together with a section that
   cites it, lists nothing. `..._changed_symbol_body_is_listed` is the half in which the atom
   exists at the base.
-- `..._ambiguous_marker_is_listed`: a commit that makes a cited `DECIDED:` marker prefix match
+- `..._ambiguous_marker_is_listed`: a commit that makes a cited `DECIDED` marker prefix match
   two lines lists the section as `ambiguous`. Its pair, `..._changed_marker_is_listed_moved`,
   edits the one matching line and lists `moved`.
 - Reader tests, in PR 1:

@@ -123,7 +123,7 @@ push-token secret remains.
       `checks/host_edge.py:check_pi_pressure` ends in `with_pi_ports`, which TCP-connects from
       the bridge to each of the Pi's published ports (`PI_PUBLISHED_PORTS`, rendered from
       `pi_publishers` in `templates/env-secret.yaml.j2`) under a down streak. Its marker reads
-      `DECIDED: TCP connect is the whole signal`. No PromQL rule expresses that arm.
+      `DECIDED TCP connect is the whole signal`. No PromQL rule expresses that arm.
       Its test `test_dead_port_is_named_with_the_recreate_hint`, in `test_check_pi.py`, is the
       detector for row 6 of `docs/failure-classes.md`.
     - **15 read other sources:**
@@ -908,7 +908,7 @@ Kuma still pages for every unmigrated batch until C-1, so it keeps a watcher unt
     6. **A6-8, the row fields (~150 lines).** It deletes `token`, `kuma_id`, `display` and
        `status_group`, and moves each `description` into its rule's `description` annotation.
        It updates `bridge/types.py`, `fragments_bridge.py`'s `bridge-checks` table and their
-       tests, and deletes the `check_table.py` `DECIDED:` marker on spelled-out tokens with
+       tests, and deletes the `check_table.py` `DECIDED` marker on spelled-out tokens with
        what it governs. `LOKI_URL` and the Loki helpers in `bridge/net.py` stay: at the
        baseline, `checks/logs.py` reads `cfg.LOKI_URL` outside `with_log_errors` too, for
        `swallowed_verdicts`. C-7 deletes them with that row.
@@ -937,7 +937,7 @@ and changes nothing a pager sees:
   reads as up, which is how `_gate` treats it today, so `--check discord` alone needs no
   expansion. The unknown-name check moves into `cli.py`.
 - **Deleted with `gates.py`:** the `Gates` value; `down_exporters`, `EXPORTER_DEPENDENT` and
-  the `DECIDED:` marker on exporter suppression in `check.py`, whose members A1 and B8 have
+  the `DECIDED` marker on exporter suppression in `check.py`, whose members A1 and B8 have
   removed; and `PROM_DEPENDENT`, empty after A1 to A5. The `prometheus` row runs as an
   ordinary row and pushes until A6-7a deletes it. `docs/reference/decisions.md` regenerates
   without the marker.
@@ -976,7 +976,7 @@ reach A6-7a, fail the bijection test and lose its only pager.
   `critical` flag and `service: k3s`, the value M2's cluster-wide k8s-workloads rules carry.
   `monitor-bridge` would name a component that stops evaluating the check at Cutover-a. The
   soak starts only after M2's PR 4a, because the "Workload Log Errors" tile it compares
-  against exists only from then. The `DECIDED: stays at 20` marker moves into
+  against exists only from then. The `DECIDED stays at 20` marker moves into
   the rule file as a `#` comment, so `docs/reference/decisions.md` keeps its row. It deploys
   `loki-homelab`, which restarts Loki and the Alloy DaemonSet (M5 *Baseline*).
 - **M5's three costs apply.** Its alert never reaches Prometheus `ALERTS`, so the health gate
@@ -1256,7 +1256,7 @@ here. C-1 waits for the operator's acceptance.
     - **The health gate.** `land.sh`'s gate for `uptime-kuma` passes, half by half:
         - The rollout half reports nothing to gate. `health.py` treats a role with no
           Deployment, DaemonSet or StatefulSet that way
-          (`scripts/diagnostics/probe_lib/health.py:DECIDED: exit 0, a pass with a note`).
+          (`scripts/diagnostics/probe_lib/health.py:DECIDED exit 0, a pass with a note`).
         - The alert half finds nothing that gates. `KumaDown` went in the earlier
           `observability` deploy. M5's `KumaNotificationDropped` is `critical` with
           `service: uptime-kuma`, but it is a loki-homelab rule, so it never reaches
@@ -1323,7 +1323,7 @@ here. C-1 waits for the operator's acceptance.
           `grep -rl kuma-push-lib /usr/local/bin /usr/local/lib /opt` lists only the library
           itself: locally on daniel-box, and over `ssh` on daniel-server and the Pi.
         - **The host file.** `initial_setup/tasks/crons.yml`'s copy task is `tags: [always]`
-          behind a `DECIDED:` marker, and it runs on every host. C-3a replaces it with an
+          behind a `DECIDED` marker, and it runs on every host. C-3a replaces it with an
           `always`-tagged `state: absent` task for `/usr/local/lib/kuma-push-lib.sh`, and
           drops the `stamp_deployed` record task for `kuma-push-lib`. The tick applies it on
           daniel-box. On daniel-server it is the hand run `land.sh`'s note names, run on that
@@ -1914,7 +1914,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
   routing test. The same test gains the cases for task 6's inhibits in the PR that lands
   each, A1's included, and loses `KumaDown`'s in C-1.
 - **A7.** The shadow PR: the census entry in `test_loki_stream_labels.py` and the moved
-  `DECIDED: stays at 20` marker. Cutover-a: `test_check_loki.py`'s `workload_log_errors` test
+  `DECIDED stays at 20` marker. Cutover-a: `test_check_loki.py`'s `workload_log_errors` test
   and the `LOG_ERROR_*` cases go with their subject, and `docs/monitor-bridge-checks.md` and
   `docs/monitor-bridge-internals.md` lose the row.
 - **A6-7a.** `scripts/docs/tests/test_fragments_bridge.py`,
@@ -2346,7 +2346,7 @@ Raised: 1 critical, 2 high, 4 medium. Fixed: 7. Refuted: 0.
   list names deleted templates and the drain would wait on a pruned Deployment. It quotes a
   `--dry-run`, and the guard runs in a dry run. `land.sh`'s health gate passes the emptied
   role: the rollout half reports nothing to gate, since `health.py` exits 0 for a role with no workload
-  (`scripts/diagnostics/probe_lib/health.py:DECIDED: exit 0, a pass with a note`). B-1's
+  (`scripts/diagnostics/probe_lib/health.py:DECIDED exit 0, a pass with a note`). B-1's
   probe half skips a tag whose rendered entry has no route, with a fixture, so the probe
   series that stops when C-1 drops the route does not fail that gate either. The
   claims, the Secrets and the tombstone go in an **operator-only** delete after C-2b.

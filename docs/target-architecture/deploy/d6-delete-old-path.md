@@ -733,7 +733,7 @@ So the mode never reads or writes the primary's working tree, index or HEAD:
     - **The scratch parent is pinned to `/tmp`.** The mode passes it as `dir`, the way
       `land_lib/tools.py:gate_snapshot` pins `GATE_TMP_ROOT`. The default honours `TMPDIR`,
       which `printenv TMPDIR` shows as `/tmp/user/1000` on daniel-box, so a leaked directory
-      would sit where *Rollback* does not look. `gate_snapshot`'s marker `DECIDED: the
+      would sit where *Rollback* does not look. `gate_snapshot`'s marker `DECIDED the
       parent directory is PINNED to GATE_TMP_ROOT` records the same trap. An override
       variable, `MOVED_TAGS_TMPDIR`, moves the parent, and only the no-write test sets it.
     - `.gitattributes` sets no `export-ignore`, so the archive holds every tracked file.
@@ -786,7 +786,7 @@ So the mode never reads or writes the primary's working tree, index or HEAD:
 - **Rejected: `git worktree add --detach`, as `deploy.sh --at` and `land.sh`'s health gate
   lay out their snapshots.** Such a worktree needs no tree lock.
   `land_lib/tools.py:gate_snapshot` adds one of the merge commit from `land.sh`, and its
-  marker `DECIDED: NO tree lock is taken` records that the add writes nothing in the
+  marker `DECIDED NO tree lock is taken` records that the add writes nothing in the
   primary's working tree. The cost is the registration under the primary's
   `.git/worktrees`. The same docstring records that "A SIGKILL or a host reboot still leaks
   the registration". Recovering it takes a `git worktree prune` in the primary, which
@@ -824,7 +824,7 @@ two host-plane pages (Baseline). So D6.1 first moves those calls into `deploy_ha
     - a new tail of `handle_broad`, after the plan loop, in place of `return
       deploy_broad_k8s.apply_broad_k8s(...)`. The tail fires the tasks page and then
       `alert_secrets_deferred`, and returns 0.
-- **The contention arms still send nothing.** The `DECIDED:` in `handle_broad`'s failure arm
+- **The contention arms still send nothing.** The `DECIDED` in `handle_broad`'s failure arm
   (#2459) keeps the secrets page off the arm that resets the tree. The new tail is reached
   only with `local == origin`, as `apply_broad_k8s`'s last exit was.
 - **The annotation goes.** `emit_deploy_annotation` annotated only k8s services (Baseline).
@@ -1410,7 +1410,7 @@ The PRs merge in this order.
         - the docstrings in `deploy_defer.py`, `deploy_inventory.py`, `deploy_state.py` and
           `deploy_alert_text.py`, and `deploy_alerts.py`'s module docstring, which names
           "the tasks/meta/k8s channels";
-        - in `handle_broad`, the `DECIDED:` comment of the failure arm (#2459), which names
+        - in `handle_broad`, the `DECIDED` comment of the failure arm (#2459), which names
           "the two in `apply_broad_k8s`", and the `broad.deferred` comment, which names
           `apply_broad_k8s`. The decision itself stays: the secrets page rides every exit
           that leaves the range merged, and no contention arm;
@@ -3032,7 +3032,7 @@ D6-C3-01 is refuted with evidence. Each claim was re-measured at `70591c307` bef
     - **Fix.** The Baseline names the two modules as mixed. A new design section, *The
       host-plane pages after D6.1*, moves the three calls into `deploy_handlers.py` and
       deletes the k8s arm with `declared_k8s`, `k8s_deferred_alert` and `k8s_remediation`
-      (moved from D6.4). D6.1 deletes `handle_k8s` and rewrites the `DECIDED:` and
+      (moved from D6.4). D6.1 deletes `handle_k8s` and rewrites the `DECIDED` and
       `broad.deferred` comments that name `apply_broad_k8s`. Two tick tests in
       `test_gitops_deploy_main_branches.py` pin the tasks page and the secrets page, the
       second over the success exit and the failure arm. D6.5 expects one secrets page on its
@@ -3277,7 +3277,7 @@ Nothing is refuted.
 - **D6-F1-02 (medium): the scratch parent followed `TMPDIR`.** Fixed.
     - **Confirmed.** `printenv TMPDIR` prints `/tmp/user/1000` on daniel-box.
       `land_lib/tools.py:gate_snapshot` pins `GATE_TMP_ROOT = "/tmp"` with the override
-      `LAND_GATE_TMPDIR`, under the marker `DECIDED: the parent directory is PINNED to
+      `LAND_GATE_TMPDIR`, under the marker `DECIDED the parent directory is PINNED to
       GATE_TMP_ROOT`, for this trap.
     - **Fix.** The mode pins its parent to `/tmp`, with the override variable
       `MOVED_TAGS_TMPDIR`, which only the no-write test sets. That test also points `TMPDIR`
@@ -3285,7 +3285,7 @@ Nothing is refuted.
       `/tmp/moved-tags-redproof` to show the count go to 1. *Cleanup* and *Rollback* name
       `/tmp/moved-tags-*`.
     - **The rejected worktree option is restated.** It cites `gate_snapshot` and its marker
-      `DECIDED: NO tree lock is taken`. `git archive` is chosen because a killed run leaves no
+      `DECIDED NO tree lock is taken`. `git archive` is chosen because a killed run leaves no
       registration to prune, which the docstring's "A SIGKILL or a host reboot still leaks
       the registration" shows a worktree does.
 - **D6-F1-03 (medium): the commit input had no gate before D6.1.** Fixed.

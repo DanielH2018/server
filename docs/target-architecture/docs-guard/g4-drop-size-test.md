@@ -133,9 +133,9 @@ worked case in *Verification*.
       check to retire on one of two conditions: its subject is gone, or a census or schema
       check covers it. Neither holds for the size arm. Role-doc size still exists, and no
       other check covers it.
-    - A ruling with a code site is recorded as a `# DECIDED:` marker there (root
+    - A ruling with a code site is recorded as a `# DECIDED` marker there (root
       `CLAUDE.md`, *Review & Memory Hygiene*). The `homelab-review` skill's step 3 tells
-      each reviewer to run `grep -rn '# DECIDED:'` before flagging. The docs-refresh cron
+      each reviewer to run `grep -rn '# DECIDED'` before flagging. The docs-refresh cron
       regenerates `docs/reference/decisions.md` from those markers with
       `scripts/docs/reference/decisions.py`.
 - **The ratchet reached its aim.**
@@ -192,7 +192,7 @@ worked case in *Verification*.
       `ansible/tests/repo/module_length_allowlist.txt` has no entry for the hook.
     - `tracked_python_files` in `ansible/tests/_ratchet_census.py` counts every tracked
       `.py`, hook files included.
-    - The `DECIDED:` header of `module_length_allowlist.txt` (#3661) says to split a module
+    - The `DECIDED` header of `module_length_allowlist.txt` (#3661) says to split a module
       over the cap when each piece reads alone, and to use a `conjoined:` reason only when
       every split leaves a piece conjoined with its parent.
     - `.claude/hooks/tests/test_inject_nested_docs.py` is 456 lines against
@@ -345,7 +345,7 @@ beside the `< 8000` assertion:
 
 The hook comment "Pinned by `test_inject_nested_docs.py`" then becomes true.
 
-**The ruling is written where the gate stood.** PR 2 adds a `# DECIDED:` comment block to
+**The ruling is written where the gate stood.** PR 2 adds a `# DECIDED` comment block to
 `test_role_claude_md.py`, above `_doc_problems`. Its first sentence says that role-doc size
 has no CI gate, by the operator's ruling on #2826. The block names the ruling's issue and
 says that `.claude/hooks/inject-nested-docs.py --report` prints each doc's margin. A reviewer
@@ -394,7 +394,7 @@ who runs the `homelab-review` grep finds it before flagging the missing gate.
    repo/test_role_claude_md.py
 -    MAX_CHARS ceiling arm, over_ceiling, warn_band, RoleDocNearCeiling,
 -    the ceiling fixtures, the hook-arithmetic tests
-+    a # DECIDED: block: no CI size gate, by operator ruling
++    a # DECIDED block: no CI size gate, by operator ruling
  pyproject.toml
 -  "always::_doc_size.RoleDocNearCeiling"
  docs/claude-tooling.md
@@ -419,7 +419,7 @@ budget, and the report reads the hook's own constants.
       rule in the same command (*Design*). PR 2 becomes effectively one-way once docs grow
       past 7,070, because its revert must trim them (*Rollback*).
     - On a yes, the operator records the ruling on #2826 and #2584. The accepted reason on
-      #2584 then no longer rests on a CI threshold. PR 2's `# DECIDED:` block links that
+      #2584 then no longer rests on a CI threshold. PR 2's `# DECIDED` block links that
       record.
     - On a no, PR 2 does not open. PRs 1a and 1b stay as a report beside the CI test.
     - PRs 1a and 1b do not wait on this step.
@@ -457,7 +457,7 @@ budget, and the report reads the hook's own constants.
     - Delete the `"always::_doc_size.RoleDocNearCeiling"` entry, and the comment above it,
       from `pyproject.toml`.
     - Remove the size arms and tests listed in *Design* from `test_role_claude_md.py`, and
-      rewrite its module docstring. Add the `# DECIDED:` block that *Design* describes.
+      rewrite its module docstring. Add the `# DECIDED` block that *Design* describes.
     - Add the budget pin to `.claude/hooks/tests/test_inject_nested_docs.py`, as *Design*
       describes.
     - Change `_notice` to state the doc's own budget. Add its paired tests to
@@ -479,7 +479,7 @@ budget, and the report reads the hook's own constants.
       `.claude/rules/python-layout.md` (*A check retires when its subject does*). State
       that it rests on the operator ruling from step 0, and link that ruling.
     - Do not edit `docs/reference/decisions.md`. The docs-refresh cron regenerates it and
-      picks up the `# DECIDED:` block.
+      picks up the `# DECIDED` block.
 4. **PR 3 (optional): a read-weighted report** (about 100 lines, half of them tests). This PR
    lands after G2's PR 2.
     - Add ` form=head` to the row tail in `inject-nested-docs.py:context`, found as *Design*
@@ -633,7 +633,7 @@ Each risk is checked against `docs/failure-classes.md`.
   states 7,500 and 7,272, and no check reads that page for them. PR 1b replaces both figures
   with a pointer to the report's first line, which computes them. PR 2 moves the pin on the
   hook's constants into the hook's own tests rather than dropping it.
-- **A later review re-flags the missing gate.** PR 2's `# DECIDED:` block sits where the
+- **A later review re-flags the missing gate.** PR 2's `# DECIDED` block sits where the
   gate stood, and the `homelab-review` grep finds it. `.claude/rules/python-layout.md` is
   not amended. It is a head at 10,448 characters, its retirement section is past the cut,
   and a one-off ruling belongs at its code site.
@@ -665,7 +665,7 @@ Each risk is checked against `docs/failure-classes.md`.
     - the report's paragraph in `docs/claude-tooling.md`, and the pointer that replaces the
       7,500 and 7,272 figures.
 - **PR 2:**
-    - `test_role_claude_md.py`, its docstring and its `# DECIDED:` block;
+    - `test_role_claude_md.py`, its docstring and its `# DECIDED` block;
     - `pyproject.toml`'s `filterwarnings`;
     - `inject-nested-docs.py`'s `_notice` and docstring;
     - the notice pair in `test_inject_nested_docs_head.py`;
@@ -692,7 +692,7 @@ Each risk is checked against `docs/failure-classes.md`.
       It holds `inline_margins` and the `--report` walk;
     - the `--report` dispatch and the `_notice` change in the hook, about 15 lines;
     - about 110 lines of tests, including the pin, the exit-status pair and the notice pair;
-    - one `# DECIDED:` block;
+    - one `# DECIDED` block;
     - optionally, a log field and a ranking of about 100 lines.
 - **Not added:** a module-length allowlist line. The hook stays under 600 lines.
 
@@ -807,8 +807,8 @@ was refuted. Each was checked against the tree at `70591c307` before the fix.
   runs without a pipe. Paired subprocess tests cover a fixture checkout (exit 0) and a
   directory outside git (non-zero).
 - **G4-R2-05 (medium): the operator ruling is never written into the tree.** Fixed in part.
-  PR 2 adds a `# DECIDED:` block to `test_role_claude_md.py` above `_doc_problems`. The
-  `homelab-review` skill's step 3 greps `'# DECIDED:'`, so a comment block is used rather
+  PR 2 adds a `# DECIDED` block to `test_role_claude_md.py` above `_doc_problems`. The
+  `homelab-review` skill's step 3 greps `'# DECIDED'`, so a comment block is used rather
   than a docstring line. Two parts of the required fix were declined.
     - `.claude/rules/python-layout.md` is not amended. It is a head at 10,448 characters,
       and a one-off ruling belongs at its code site.

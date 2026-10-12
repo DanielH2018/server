@@ -131,7 +131,7 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   also `NoReturn`.
     - `_STEPS` runs `_step_resolve` first and `_step_ci` ("waiting for master CI") third.
       `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:tables_in`
-      carries `DECIDED: parse the copy rather than exec it`, because `land.sh` reads the
+      carries `DECIDED parse the copy rather than exec it`, because `land.sh` reads the
       merge commit's copy before it waits on master CI.
     - `no_tag_outcome` ends `needs-manual-apply` when the PR carries a plane. Otherwise it
       ends `nothing-to-deploy` when nothing is self-applied, and reads the tick's state when
@@ -1306,7 +1306,7 @@ says otherwise.
         1. `pipeline.py:_step_resolve` sets `ln.host_candidate` when a changed path falls
            under a member of `HOST_INPUTS`. It runs no renderer. Resolve reads the merge
            commit before master CI, and `deploy_cross_role.py:tables_in` records, in
-           `DECIDED: parse the copy rather than exec it`, why nothing at that point may run
+           `DECIDED parse the copy rather than exec it`, why nothing at that point may run
            the merge commit's code.
         2. `shortcut_if_nothing` treats `ln.host_candidate` like a resolved tag, so a
            hosts-only PR never finishes `nothing-to-deploy` before CI.
@@ -1754,7 +1754,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
 - **`EXPORTER_DEPENDENT` suppresses the whole row.** With `host_packages` under `node` and
   `node-pi`, a dead exporter on any host hides every arm, the other hosts' hold arms
   included, until that exporter answers. The exporter's own page fires meanwhile. That is
-  the bridge's rule for every exporter-dependent row (the `DECIDED:` marker at the probe in
+  the bridge's rule for every exporter-dependent row (the `DECIDED` marker at the probe in
   `ansible/roles/k8s/monitor-bridge/files/check.py`). In the rule form, a dead exporter
   silences only the rules that read its series.
 - **H3.5c and M6 can merge in either order.** H3 waits only on R1, and no slice-index edge
@@ -2203,7 +2203,7 @@ reason is given.
       commit would make every render differ and defeat publish-on-change.
 - **H3-R10-03 (high) H3.9 rendered the merge commit's code before master CI.** Fixed, without
   overriding the marker. Confirmed: `pipeline.py:_STEPS` runs `_step_resolve` before
-  `_step_ci`, and `deploy_cross_role.py:tables_in` carries `DECIDED: parse the copy rather
+  `_step_ci`, and `deploy_cross_role.py:tables_in` carries `DECIDED parse the copy rather
   than exec it`. Resolve now sets `ln.host_candidate` by a path test against the renderer's
   `HOST_INPUTS` and runs nothing. `_step_ci` renders only after `ci.wait_master_ci` returns
   green, in `tools.py:gate_snapshot` worktrees that set `UV_PROJECT_ENVIRONMENT`.

@@ -911,7 +911,7 @@ bullet).
           until a revert;
     - read the volume's `spec.snapshotMaxSize` and the snapshot space in use, and fail, naming
       the cap, the space in use and the headroom, only when the numbers say the cap is full.
-      The read fails open, as `claim.yml`'s `DECIDED:` marker on this gate explains: an empty
+      The read fails open, as `claim.yml`'s `DECIDED` marker on this gate explains: an empty
       or `"0"` cap reads as uncapped. The Job script carries that marker with its reasoning.
       A reached cap latches, because Longhorn refuses new snapshots rather than pruning, so
       without this check every later revision of that role would hold on a bare timeout;
@@ -3483,7 +3483,7 @@ Fixed:
   migration first. jellyfin's cap becomes a Job whose Role covers every Longhorn volume,
   stated as the trade. A re-run rule and the `homelab/rerun-safe` census apply to every
   mutation Job.
-- D5-R2-19: the snapshot Job keeps the fail-open cap read with its `DECIDED:` reasoning, the
+- D5-R2-19: the snapshot Job keeps the fail-open cap read with its `DECIDED` reasoning, the
   headroom check and the listing check. Two red halves cover them, and the runbook's third
   branch is the hand recovery.
 - D5-R2-20: converted rules default to `warning` with `verify="true"`, which the soak reads.

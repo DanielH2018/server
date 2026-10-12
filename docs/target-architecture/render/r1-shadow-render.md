@@ -181,7 +181,7 @@ a shadow, and Ansible stays the only writer to the cluster.
     - `scripts/deploy_tools/narrow_lib/broad.py:broad_path_tags` maps a filter plugin first,
       through `_filter_tags`, to the roles that name its filters. It raises `CannotNarrow` for
       any other play prefix.
-    - `deployer_lib/deploy_narrow.py:_deploy_plane` then returns `_deferred`. Its `DECIDED: a
+    - `deployer_lib/deploy_narrow.py:_deploy_plane` then returns `_deferred`. Its `DECIDED a
       deferral on any doubt, never the whole play (#4333)` explains why. The tick
       fast-forwards and runs no playbook. It records a `k8s_unapplied` line for every declared
       service and writes no receipt, so `land.sh` reports `needs-manual-apply`.

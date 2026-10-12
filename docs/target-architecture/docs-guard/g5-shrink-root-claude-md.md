@@ -80,7 +80,7 @@ section line spans, taken from `grep -n '^#' CLAUDE.md`, are:
   `claude --setting-sources user` (`scripts/dev/fanout_lib/review/review.py:Pipeline._held_settings`).
   The reviewer, the implement phase that follows a red phase, and every phase that resumes
   it get the start-time root as text (`Pipeline._reviewer`, `Pipeline._red_claude_md`).
-- The `DECIDED:` marker in the `held_hooks.py` module docstring that starts *in this repo's
+- The `DECIDED` marker in the `held_hooks.py` module docstring that starts *in this repo's
   batch, every phase that starts after the implementer ran* records a probe from
   2026-10-09. The flag drops the project `CLAUDE.md` and the project skills from a fresh
   session, and those phases lose `.claude/rules/` as well. Text that G5 moves into a rule or
@@ -325,7 +325,7 @@ in the tree.
 - **Claude Tooling**: 12 → 7.
     - Moves: probe usage, to `docs/claude-tooling.md`.
 - **Review & Memory Hygiene**: 29 → 11.
-    - Stays: the `# DECIDED:` directive with its `.claude/skills/homelab-review/SKILL.md`
+    - Stays: the `# DECIDED` directive with its `.claude/skills/homelab-review/SKILL.md`
       citation; the artifact rule as one line keeping `docs/adr/` and
       `docs/claude-agent-user.md`; the file-a-finding rule.
     - Moves: the marker form and the grep example, to `docs/adr/index.md`.
@@ -718,7 +718,7 @@ Raised: 3 high, 7 medium. Fixed: all 10. Refuted: one claim inside G5-R1-03.
   destination per moved paragraph, or "cut" with the owner. The PR-body `git grep` must print
   exactly one hit and is named as the one-home proof.
 - **G5-R1-06 (medium)**: implementer phases also get only the root as text. **Fixed.** The
-  first point is answered by the `held_hooks.py` `DECIDED:` marker: held phases lose project
+  first point is answered by the `held_hooks.py` `DECIDED` marker: held phases lose project
   skills and `.claude/rules/`. The second is labelled as an inference with a check before
   PR 0. PR 0 decides the resolution before any text moves, with a red-proof pair. The
   implement phase after a red phase gets every rule, because `base..red` holds only tests

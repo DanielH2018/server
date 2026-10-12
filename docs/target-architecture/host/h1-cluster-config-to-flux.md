@@ -243,7 +243,7 @@ The exit criterion has two parts:
 - **`probe.py health` reads only templates.**
   `scripts/diagnostics/probe_lib/health.py:_role_kind_targets` globs the role's
   `templates/*.j2`. `run_health` passes a role that declares no rollout-checkable workload,
-  with exit 0, under a `DECIDED:` marker (#3596).
+  with exit 0, under a `DECIDED` marker (#3596).
 - **Rollout timeouts are per role, through include vars.**
   `ansible/roles/k8s/manifests/defaults/main.yml:manifests_rollout_timeout_default` is `600s`.
   sonarr, radarr, tdarr, valheim and prowlarr pass `manifests_rollout_timeout` as an
@@ -284,7 +284,7 @@ The exit criterion has two parts:
       `k3s control plane (manual — plan the upgrade, mind Longhorn's version skips)`, and its
       description says "the PR is a SIGNAL to plan an upgrade, and the operator drives it".
 - **A standing decision on groups.** The template `longhorn-recurringjob.yaml.j2` carries
-  `DECIDED: groups: [default], and no recurringJobSelector on the StorageClass`. It records
+  `DECIDED groups: [default], and no recurringJobSelector on the StorageClass`. It records
   that a PVC-level label would be inert, because Longhorn reads labels on its Volume CRs.
 - **Live-state reconciliation.** These tasks read live PVCs and Volumes and relabel or
   retarget them:
@@ -302,7 +302,7 @@ The exit criterion has two parts:
   read-only kubeconfig` in `ansible/roles/setup/claude_code/tasks/agent.yml` describes "The
   homelab-readonly ServiceAccount the k3s role writes".
   `ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2` carries
-  `DECIDED: a floor, not every path that widens the agent's authority`.
+  `DECIDED a floor, not every path that widens the agent's authority`.
 - **`containers_list` is everywhere.**
     - It is in `ansible/inventory/host_vars/daniel-box.yml` (56 entries),
       `daniel-server.yml` (empty) and `daniel-pi.yml` (4 entries, which H5 moves). The
@@ -795,7 +795,7 @@ moves a key runs `git grep -l <key>` for it and lists every reader it repoints i
         - The legacy weekly label migration.
         - The CSI sidecar memory requests.
         - From H1.7a, each Volume's `spec.backupTargetName`.
-    - **What it keeps.** It keeps the `DECIDED: groups: [default]` decision: labels go on
+    - **What it keeps.** It keeps the `DECIDED groups: [default]` decision: labels go on
       Volume CRs, exactly as the tasks wrote them.
     - **Contract.** The reconcile actuator's part of the `## Autonomous-role contract` moves
       from `ansible/roles/setup/k3s/CLAUDE.md` into the `longhorn-reconcile` role's

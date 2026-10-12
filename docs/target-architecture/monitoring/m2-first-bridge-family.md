@@ -63,7 +63,7 @@ can join its own soak rule to the same workload-service recording rules.
       `bridge/config_cluster.py`).
     - Crash loop: `increase(kube_pod_container_status_restarts_total[1h]) > 3 and
       increase(...[30m]) > 0` (`K8S_RESTART_WINDOW`, `K8S_RESTART_MAX`,
-      `K8S_RESTART_RECENT_WINDOW`), with no hold. The `DECIDED: 30m` marker in
+      `K8S_RESTART_RECENT_WINDOW`), with no hold. The `DECIDED 30m` marker in
       `bridge/config_cluster.py` records why the recency window is 30m.
     - DaemonSet unavailable: `kube_daemonset_status_number_unavailable > 0`, with no hold.
     - Census floors: `count(kube_deployment_status_replicas_unavailable)` against
@@ -83,7 +83,7 @@ can join its own soak rule to the same workload-service recording rules.
     - `LOG_ERROR_SELECTOR` covers the cluster pod streams and daniel-pi's container streams.
     - `LOG_ERROR_PATTERN` is `(?i)(panic:|fatal|traceback|out of memory)`.
     - `LOG_ERROR_WINDOW` is `1h`, and `LOG_ERROR_MAX` is 20.
-    - The `DECIDED: stays at 20` marker at `LOG_ERROR_MAX` records two home-assistant bursts
+    - The `DECIDED stays at 20` marker at `LOG_ERROR_MAX` records two home-assistant bursts
       that "held k3s Workload Health red for 46 and 43 minutes".
 
   The arm reads `LOKI_URL`, which is loki-homelab. It fails open on a Loki error, and its
@@ -398,9 +398,9 @@ M5 builds. M2 therefore does not port it. PR 4a narrows the row to that arm:
   M5 takes off that gate, so it empties at M5's PR 4a, as M5 says.
 - The cost of `startup_grace` is one held cycle: the row pages on its second consecutive bad
   cycle, 300s later than the arm pages today. A burst stays inside the 1h window far longer
-  than that. The two bursts the `DECIDED: stays at 20` marker records held the tile red for
+  than that. The two bursts the `DECIDED stays at 20` marker records held the tile red for
   46 and 43 minutes, so the hold would have dropped neither.
-- The `LOG_ERROR_*` keys and their `DECIDED: stays at 20` marker stay as they are.
+- The `LOG_ERROR_*` keys and their `DECIDED stays at 20` marker stay as they are.
 
 **Who ports the arm.** M6 ports it, as its batch A7. M6's A6-7 deletes the push path and
 every bridge tile, so a narrowed row with no port would lose its only pager there. Open
@@ -654,7 +654,7 @@ one-commit rule, and the bound is stated under PR 4a.
   fails if a path is left behind.
 - Move two pieces of reasoning into `k8s-workloads.yaml` as `#` comments, so they outlive the
   bridge code:
-    - The `DECIDED: 30m` marker from `bridge/config_cluster.py`, placed at the crash-loop rule.
+    - The `DECIDED 30m` marker from `bridge/config_cluster.py`, placed at the crash-loop rule.
       `scripts/docs/reference/decisions.py` reads `#` lines from every tracked file, so the
       marker keeps its row in `docs/reference/decisions.md`.
     - The *Traps* item on sanitised resource names from the monitor-bridge `CLAUDE.md`, placed
@@ -955,7 +955,7 @@ branch that adds the file back.
           bring (`longhorn-manager`, `longhorn-csi-plugin`, the engine-image DaemonSet by name
           prefix, and `speaker`). It names `dri-device-plugin` as a rendered member it must
           find.
-        - The crash-loop recency window is at least 30m, the floor the `DECIDED: 30m` marker
+        - The crash-loop recency window is at least 30m, the floor the `DECIDED 30m` marker
           derives from 15-19 minute restart spacing, and shorter than the evidence window.
     - `test_dri_resource_name_agrees.py` reads the rule's `devic_es_dri` as well.
     - The comment in the tdarr defaults. The crowdsec script template's comment stays, and M6's
@@ -1050,7 +1050,7 @@ branch that adds the file back.
    another slice's text adopts three things:** a LogQL rule for the arm on loki-homelab,
    shadow until the row is gone; the deletion of the `workload_log_errors` row with
    `check_workload_log_errors`, `with_log_errors`, `verdicts/cluster.py:log_error_verdict`
-   and the `LOG_ERROR_*` keys, with the `DECIDED: stays at 20` marker moved into the rule
+   and the `LOG_ERROR_*` keys, with the `DECIDED stays at 20` marker moved into the rule
    file; and the retirement of `monitor_bridge_k8s_workloads_push_token` a week after the
    rule pages. Resolution: M6 adopts all three as its batch A7 (M6 *Open questions* 10), and
    that adoption meets the gate. M5 declined (M5 *Open questions* 6). M5's PR 5 retires three
@@ -1072,7 +1072,7 @@ Findings raised, and what happened to each. None was refuted.
 
 - **M2-R1-01 (critical): The log-pattern arm is a paging arm, and PR 4 deletes it with no
   replacement.** Fixed. Confirmed against `checks/logs.py:with_log_errors`, which returns
-  `False` on a burst, and the `DECIDED: stays at 20` marker. *Baseline* now names it as an arm.
+  `False` on a burst, and the `DECIDED stays at 20` marker. *Baseline* now names it as an arm.
   The fix takes option (a): PR 4 narrows the row to `workload_log_errors` on the same token and
   `kuma_id`, and M5 ports it. All of M5's PR 4 follows M2's PR 4, because it deletes the
   `loki_reachable` gate the narrowed row names. PR 5's token retirement moves to M5. The soak
@@ -1109,7 +1109,7 @@ Findings raised, and what happened to each. None was refuted.
   no rule firing is a Kuma DOWN minute.
 - **M2-R1-08 (medium): PR 4 breaks tests the plan does not list.** Fixed. *Tests and docs*
   lists each one, and the rule-literal pytest pins `devic_es_dri`, `1h`, `30m` and `3` from PR
-  2 on. The `DECIDED: 30m` marker moves into the rule file.
+  2 on. The `DECIDED 30m` marker moves into the rule file.
 - **M2-R1-09 (medium): Exit criterion 4 cannot show that every Deployment is mapped.** Fixed.
   Exit criterion 4 and *Verification* now gate on three coverage queries returning nothing.
 - **M2-R1-10 (medium): Soak query 1 counts the tile's lag after recovery as missed minutes.**

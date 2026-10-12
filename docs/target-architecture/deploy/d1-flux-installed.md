@@ -215,7 +215,7 @@ and upstream facts through `gh`.
   `broad.py:narrow` refuses only a list covering more than half the declared services, so
   this range narrows and does not refuse.
 - **That plane ignores `k8s_autodeploy`.** The marker
-  `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py:DECIDED: the broad plane ignores`
+  `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py:DECIDED the broad plane ignores`
   records it, and `_deploy_plane` logs denied tags as "applied here regardless". traefik,
   authelia and pihole are among the 23 readers and declare `k8s_autodeploy: false`. Every
   broad arm is forward-only: a failure writes `hold_sha` and a `hold_plane` entry naming
