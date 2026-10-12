@@ -2,8 +2,8 @@
 
 The role sets `manifests_rollout: ''`, so `k8s/manifests` neither waits nor restarts for it,
 and the role does both itself. A restart gated on `manifests_render is changed` would be a
-per-ROLE signal that fires when ANY of the role's eight manifests changed, restarting Loki,
-Tempo, kube-state-metrics, the collector and Grafana for an edit none of them reads.
+per-ROLE signal that fires when ANY of the role's manifests changed, restarting every workload
+for an edit only one of them reads.
 
 The role rolls per workload instead, and this module guards the ways that goes quiet:
 
@@ -36,9 +36,17 @@ _ROLE = "observability"
 # The census must find these. A renamed template or a moved role would otherwise leave every
 # loop below iterating nothing, and an `all(...)` over nothing passes.
 _EXPECTED_WORKLOADS = frozenset(
-    {"loki", "prometheus", "kube-state-metrics", "tempo", "otel-collector", "grafana"}
+    {
+        "loki",
+        "prometheus",
+        "kube-state-metrics",
+        "tempo",
+        "otel-collector",
+        "grafana",
+        "alertmanager",
+    }
 )
-_EXPECTED_SECRET_READERS = frozenset({"prometheus", "grafana"})
+_EXPECTED_SECRET_READERS = frozenset({"prometheus", "grafana", "alertmanager"})
 
 # How many `data:` keys each role-rendered ConfigMap has, and so how much of it the pod
 # template's hash covers. Adding a key to any but grafana-provisioning needs the template's
@@ -135,9 +143,13 @@ def test_a_workload_mounting_a_role_configmap_carries_the_checksum_annotation():
             "rollout-restart, so a ConfigMap edit would reach the object and never the pod, "
             "with the deploy fully green."
         )
-    assert set(checked) >= _EXPECTED_WORKLOADS - {"kube-state-metrics"}, (
-        f"only {sorted(checked)} were checked. kube-state-metrics is the one workload here "
-        "that renders no ConfigMap; any other absence means the mount was not recognised."
+    assert set(checked) >= _EXPECTED_WORKLOADS - {
+        "kube-state-metrics",
+        "alertmanager",
+    }, (
+        f"only {sorted(checked)} were checked. kube-state-metrics renders no ConfigMap, and "
+        "alertmanager reads its whole config from a Secret, so neither mounts a role "
+        "ConfigMap; any other absence means the mount was not recognised."
     )
 
 

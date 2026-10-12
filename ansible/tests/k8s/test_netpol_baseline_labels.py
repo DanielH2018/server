@@ -82,8 +82,8 @@ BORN_FENCED_ROLES = {
 
 LABEL = ("netpol-baseline", "enforced")
 
-# Slice 3: the observability namespace. Named per WORKLOAD, not per role — all six render
-# from the single observability role.
+# Slice 3: the observability namespace, plus the workloads the role has gained since. Named per
+# WORKLOAD, not per role — every one renders from the single observability role.
 SLICE_3_WORKLOADS = {
     ("observability", "grafana"),
     ("observability", "prometheus"),
@@ -91,6 +91,8 @@ SLICE_3_WORKLOADS = {
     ("observability", "tempo"),
     ("observability", "kube-state-metrics"),
     ("observability", "otel-collector"),
+    # The M1 alert plane's Alertmanager (docs/target-architecture/monitoring/m1-alertmanager.md).
+    ("observability", "alertmanager"),
 }
 
 SLICE_3_ROLES = {role for role, _name in SLICE_3_WORKLOADS}

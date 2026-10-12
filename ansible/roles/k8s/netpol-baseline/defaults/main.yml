@@ -159,6 +159,10 @@ netpol_baseline_probe_targets:
   # homelab namespace cannot exercise. They are gated so the observability plane is proved up.
   - {service: prometheus, plane: observability, port: 9090, expect: refused, policy: networkpolicy-prometheus.yaml.j2}
   - {service: loki, plane: observability, port: 3100, expect: refused, policy: networkpolicy-loki.yaml.j2}
+  # Alertmanager has no bespoke policy, so this is the one refused row against the observability
+  # baseline itself: it admits traefik, its own namespace and the node CIDRs, and the probe pod
+  # is none of them.
+  - {service: alertmanager, plane: observability, port: 9093, expect: refused, policy: networkpolicy-observability.yaml.j2}
   - {service: grafana, plane: observability}
   - {service: tempo, plane: observability}
   # The infra tier.

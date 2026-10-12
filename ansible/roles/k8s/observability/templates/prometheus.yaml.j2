@@ -57,6 +57,12 @@ data:
 {% set observability_prometheus_config %}
     global:
       scrape_interval: 15s
+    # The role's own Alertmanager (alertmanager.yaml.j2), by its in-namespace Service name. Until
+    # a rule file loads, nothing fires and nothing is sent.
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets: ['alertmanager:9093']
     scrape_configs:
       # Prometheus scraping itself. Added in slice 3 B3, and not cosmetic: until now this
       # instance had no self-scrape at all, so its own ingestion rate, TSDB footprint and
@@ -561,6 +567,16 @@ data:
           - targets: ['tempo.{{ k8s_observability_namespace }}.svc:3200']
             labels:
               instance_role: observability
+      # Alertmanager's own metrics: alertmanager_notifications_total, its _failed_total twin
+      # and alertmanager_alerts. Alertmanager has no route, so this job is how every reader
+      # sees whether it is up and delivering. It carries NO `origin` label on purpose:
+      # monitor-bridge's check_cluster_targets selects `up{origin!="daniel-server"}`, so Kuma's
+      # Cluster Scrape Targets tile pages a failed scrape here, and is that condition's one
+      # pager until the M1 slice plan's successor rule takes it over.
+      - job_name: alertmanager
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['alertmanager:9093']
       # Per-pod CPU/memory from each kubelet's cAdvisor, dialed directly at the kubelet's
       # :10250 rather than through the API server's /proxy/ path. `role: node` discovery
       # already defaults __address__ to the node's kubelet endpoint (host:10250), so no

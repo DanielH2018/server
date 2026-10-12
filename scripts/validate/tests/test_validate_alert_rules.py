@@ -27,15 +27,18 @@ def _proof_runner(bad_code: int, bad_output: str, good_code: int = 0):
 
 def test_the_render_produces_every_floor_file_is_clean():
     found = alert_rules.rendered_files()
-    # Non-vacuity: the floor names a concrete file, so an emptied FLOOR fails here.
-    assert "prometheus.yml" in alert_rules.FLOOR
+    # Non-vacuity: the floor names concrete files, so an emptied FLOOR fails here.
+    assert {"prometheus.yml", "alertmanager.yml", "homelab.tmpl"} <= alert_rules.FLOOR
     assert "scrape_configs:" in found["prometheus.yml"]
+    assert "receivers:" in found["alertmanager.yml"]
+    assert '{{ define "homelab.title" }}' in found["homelab.tmpl"]
     assert alert_rules.floor_problems(found) == []
 
 
 def test_a_render_missing_a_floor_file_is_flagged():
-    problems = alert_rules.floor_problems({})
-    assert problems and "prometheus.yml" in problems[0], problems
+    problems = alert_rules.floor_problems({"prometheus.yml": "scrape_configs: []\n"})
+    assert any("alertmanager.yml" in p for p in problems), problems
+    assert not any("prometheus.yml" in p for p in problems), problems
 
 
 def test_every_discovered_input_gets_its_tool_check(tmp_path):
@@ -46,10 +49,14 @@ def test_every_discovered_input_gets_its_tool_check(tmp_path):
     (rules / "meta.yaml").write_text("groups: []\n")
     (tests / "meta.test.yaml").write_text("tests: []\n")
     config = tmp_path / "prometheus.yml"
+    am_config = tmp_path / "alertmanager.yml"
 
-    checks = alert_rules.tool_checks({"prometheus.yml": config}, rules, tests)
+    checks = alert_rules.tool_checks(
+        {"prometheus.yml": config, "alertmanager.yml": am_config}, rules, tests
+    )
 
     assert checks == [
+        ["amtool", "check-config", str(am_config)],
         ["promtool", "check", "config", "--syntax-only", str(config)],
         ["promtool", "check", "rules", str(rules / "meta.yaml")],
         ["promtool", "test", "rules", str(tests / "meta.test.yaml")],
@@ -65,6 +72,92 @@ def test_a_tool_rejecting_the_rendered_config_is_flagged():
     config = [p for p in problems if "check config --syntax-only" in p]
     assert len(config) == 1, problems
     assert "FAILED: bad field" in config[0]
+
+
+def test_a_rejected_alertmanager_config_is_flagged():
+    problems = alert_rules.check_tree(
+        run=lambda argv: (1, "undefined receiver") if argv[0] == "amtool" else (0, "")
+    )
+    assert len(problems) == 1, problems
+    assert "amtool check-config" in problems[0] and "undefined receiver" in problems[0]
+
+
+def _alertmanager_render() -> tuple[str, str, str]:
+    """The real Secret template's text, its rendered `alertmanager.yml` and `homelab.tmpl`."""
+    found = alert_rules.rendered_files()
+    return (
+        alert_rules.ALERTMANAGER_SOURCE.read_text(),
+        found["alertmanager.yml"],
+        found["homelab.tmpl"],
+    )
+
+
+def test_go_templates_that_survive_the_render_are_clean():
+    source, rendered, templates = _alertmanager_render()
+    # Non-vacuity: named members of both inputs, so a renamed template or an emptied raw
+    # block fails here rather than leaving the check with nothing to require.
+    assert '{{ template "homelab.title" . }}' in alert_rules.RAW_BLOCK.findall(source)
+    assert set(alert_rules.TEMPLATE_DEFINE.findall(templates)) == {
+        "homelab.title",
+        "homelab.message",
+    }
+    assert alert_rules.go_template_problems(source, rendered, templates) == []
+
+
+def test_a_parseable_go_expression_the_render_consumed_is_flagged():
+    """The case amtool cannot see. The message reference is rewritten outside its raw block
+    in a form Jinja parses, so the source no longer holds it and the render drops it. The
+    `define` in homelab.tmpl still requires it."""
+    source, rendered, templates = _alertmanager_render()
+    reference = "'{% raw %}{{ template \"homelab.message\" . }}{% endraw %}'"
+    assert source.count(reference) == 2, "the fixture edit no longer matches the source"
+    edited = source.replace(reference, "'{{ template_message | default(\"\") }}'")
+    consumed = rendered.replace('{{ template "homelab.message" . }}', "")
+    problems = alert_rules.go_template_problems(edited, consumed, templates)
+    assert len(problems) == 1 and 'template "homelab.message"' in problems[0], problems
+
+
+def test_a_raw_block_the_render_lost_is_flagged():
+    source, rendered, templates = _alertmanager_render()
+    consumed = rendered.replace(alert_rules.WATCHDOG_STATUS, "")
+    problems = alert_rules.go_template_problems(source, consumed, templates)
+    assert any(alert_rules.WATCHDOG_STATUS in p for p in problems), problems
+
+
+def test_a_template_with_its_raw_blocks_removed_does_not_render(tmp_path):
+    """Jinja refuses the Go expressions outright, through the validator's own environment."""
+    from validate import k8s_manifests as validator
+
+    stripped = tmp_path / alert_rules.ALERTMANAGER_SOURCE.name
+    stripped.write_text(
+        alert_rules.ALERTMANAGER_SOURCE.read_text()
+        .replace("{% raw %}", "")
+        .replace("{% endraw %}", "")
+    )
+    ctx = validator.render_context(
+        alert_rules.ROLE_DIR,
+        overrides={"container_item": validator.k8s_entries()[alert_rules.ROLE]},
+    )
+    env = validator.template_env(tmp_path)
+    env.globals["lookup"] = validator.make_lookup(ctx)
+
+    rendered, err = validator.render_or_error(env, stripped.name, ctx)
+
+    assert rendered is None and err, rendered
+
+
+def test_a_render_that_fails_is_flagged_rather_than_raised():
+    def fail() -> dict[str, str]:
+        raise RuntimeError("observability/alertmanager-secret.yaml.j2 failed to render")
+
+    problems = alert_rules.check_tree(run=lambda argv: (0, ""), render=fail)
+    assert problems == ["observability/alertmanager-secret.yaml.j2 failed to render"]
+
+
+def test_a_homelab_tmpl_that_defines_nothing_is_flagged():
+    source, rendered, _ = _alertmanager_render()
+    problems = alert_rules.go_template_problems(source, rendered, "")
+    assert problems and "defines no template" in problems[0], problems
 
 
 def test_tools_that_accept_good_and_reject_bad_fixtures_are_clean():

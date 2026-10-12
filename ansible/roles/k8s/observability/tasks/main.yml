@@ -20,7 +20,7 @@
     manifests_prune_namespace: "{{ k8s_observability_namespace }}"
     # The entry's `port` is Grafana's, whose Service grafana.yaml renders itself.
     manifests_exclude_files: [service.yaml]
-    # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three,
+    # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has several,
     # in a different namespace. Skip its wait and roll our own below.
     manifests_rollout: ''
     # ...but tell the release record which workloads that private restart targets, so
@@ -29,7 +29,7 @@
     # `restart` from the same facts that loop gates on. The shared role neither restarts nor
     # drains these; it does fingerprint each one's pod template across the apply, so the loop
     # below can skip a workload the apply already rolled. `namespace` is load-bearing
-    # for that: the fingerprints default to k8s_namespace, and these six live in
+    # for that: the fingerprints default to k8s_namespace, and these workloads live in
     # k8s_observability_namespace -- without it both reads fail, every entry reads "not
     # rolled", and an image bump rolls each workload twice.
     manifests_self_rollouts: >-
@@ -44,11 +44,11 @@
   #
   # Each ConfigMap is hashed into its OWN pod template (`checksum/config`), so a ConfigMap edit
   # moves that one pod template and the apply rolls that one pod. Restarting on
-  # `manifests_render is changed` instead would restart all six on a per-ROLE signal, for an
-  # edit none of them read. What the annotation cannot cover is a Secret — hashing one into a
+  # `manifests_render is changed` instead would restart all of them on a per-ROLE signal, for
+  # an edit none of them read. What the annotation cannot cover is a Secret — hashing one into a
   # world-readable annotation would open a read path over it — so this task runs for exactly
-  # the two workloads that read one, selected by `restart_on` rather than by a second
-  # hand-written list.
+  # the workloads that read one, selected by `restart_on` rather than by a second hand-written
+  # list.
   #
   # Skipped for a Deployment this run created — its pods are already on the new config, and
   # `rollout restart` races the initial rollout. Skipped too for a workload the apply itself
@@ -95,6 +95,7 @@
     - { kind: deploy, name: tempo }
     - { kind: daemonset, name: otel-collector }
     - { kind: deploy, name: grafana }
+    - { kind: deploy, name: alertmanager }
   loop_control:
     label: "{{ item.name }}"
   become: true
@@ -106,10 +107,10 @@
 #
 # The play-level window in post_tasks/k8s_stabilise_gate.yml does the observing, so this role
 # carries no `pause` of its own. That is STRICTER than a fixed 60s pause: the gate observes
-# these six for the remainder of the run.
+# these workloads for the remainder of the run.
 #
 # Roles on the normal path get this snapshot from roles/k8s/manifests/tasks/drain.yml, which never sees these
-# six because nothing queued them into k8s_pending_rollouts. Queueing them there instead is not
+# workloads because nothing queued them into k8s_pending_rollouts. Queueing them there instead is not
 # an option: the drain runs at the END of the batch, and "Sync the live Grafana admin password"
 # below `kubectl exec`s into deploy/grafana, so it needs the rollout above to have already
 # finished. The wait stays; only the pause moves.
@@ -149,7 +150,7 @@
 - name: Fail if a telemetry pod selector matched no pods
   tags: [deploy]
   # This is the one way the gate could go quietly false-green: a selector matching nothing reports zero restarts and passes every comparison.
-  # All six carry the repo-wide `app: <workload-name>` label; assert it rather than assume it.
+  # Each carries the repo-wide `app: <workload-name>` label; assert it rather than assume it.
   ansible.builtin.assert:
     that: item.stdout | trim | length > 0
     fail_msg: >-
@@ -176,7 +177,7 @@
   # accumulator post_tasks/k8s_stabilise_gate.yml drains. Same reasoning as k8s_pending_rollouts
   # in roles/k8s/manifests.
   #
-  # `namespace` is carried per entry because the gate reads it per item — these six are the only
+  # `namespace` is carried per entry because the gate reads it per item — these are the only
   # workloads in the run that do not live in k8s_namespace.
   ansible.builtin.set_fact:
     k8s_stabilise_watch: >-

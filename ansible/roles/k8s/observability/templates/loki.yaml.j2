@@ -91,8 +91,8 @@ spec:
         app: loki
         netpol-baseline: enforced
     spec:
-      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: observability tiers`
-      # in this role's CLAUDE.md.
+      # Tier 4; `DECIDED: observability tiers` in this role's CLAUDE.md names the tier-1
+      # exceptions.
 {{ pod_shell('homelab-best-effort', run_as_user=10001, run_as_group=10001, fs_group=10001) }}
       containers:
         - name: loki
