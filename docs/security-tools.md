@@ -59,7 +59,7 @@ Every `aide` command needs `--config=/etc/aide/aide.conf`. AIDE 0.18 has no defa
 
 No push for a week and 6 hours also reads DOWN, which means the cron stopped running or the scan never finished.
 
-Differences read UP on purpose. Unattended-upgrades installs packages on every host every week, and AIDE reports every file a package touched, so a DOWN on differences would be red every Monday. An UP tile therefore means that AIDE completed a check, not that nothing changed. Read the counts in the tile's message, and read the list in the journal. The `DECIDED:` marker in `ansible/roles/setup/initial_setup/templates/aide-check.sh.j2` holds the evidence.
+Differences read UP on purpose. Unattended-upgrades installs packages on every host every week, and AIDE reports every file a package touched, so a DOWN on differences would be red every Monday. An UP tile therefore means that AIDE completed a check, not that nothing changed. Read the counts in the tile's message, and read the list in the journal. No alert fires on a changed file, however sensitive. Paging on a change that no package upgrade explains is tracked in #4599. The counts are cumulative: they grow every week until someone updates the baseline (below). The `DECIDED:` marker in `ansible/roles/setup/initial_setup/templates/aide-check.sh.j2` holds the evidence.
 
 The script logs at most 2000 report lines. A longer report ends with a `report truncated` line. To see the rest, run the check by hand. Its verdict goes to syslog tagged `aide-check` as `status=<up|down> <message>`.
 

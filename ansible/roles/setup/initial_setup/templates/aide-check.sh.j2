@@ -77,8 +77,11 @@ summary_count() {
 # daniel-server, July to October 2026: no week without an upgrade), and AIDE reports each file a
 # package touched. A DOWN on differences would be red every Monday on every host, and a tile that
 # is always red is a signal nobody reads, which is the fault this script exists to fix. The
-# counts still land on the tile's heartbeat and in the journal. Paging on a difference needs a way
-# to tell an unexplained change from a package upgrade first.
+# counts still land on the tile's heartbeat and in the journal. They are cumulative: nothing
+# advances the baseline (aideinit runs only when aide.db is absent), so each week's counts include
+# every earlier week's until someone runs `aide --update` by hand. So this check pages when AIDE
+# fails, not when it finds a changed file. Paging on a change needs a way to tell an unexplained
+# change from a package upgrade, and #4599 tracks that.
 if ((RC == 0)); then
   STATUS=up
   MSG="no differences from the baseline (run ${RUN_TIME})"
