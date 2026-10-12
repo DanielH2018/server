@@ -263,6 +263,45 @@ nav:
           # access. It is the entry point that links to every runbook above rather than one more
           # subsystem-specific procedure, so it sits after all of them.
           - Break glass: break-glass.md
+  # The planned migration to Flux, one alert plane, per-host packages and generated facts.
+  # Every page is a plan with Status: PLANNED, not a description of what runs. A slice moves
+  # to archive/ once it ships, the way the k3s migration's slices did.
+  - Target architecture:
+      - Design: target-architecture/design.md
+      - Contracts: target-architecture/contracts.md
+      - Renderer:
+          - R1 Shadow render: target-architecture/render/r1-shadow-render.md
+          - R2 Secret placeholders: target-architecture/render/r2-secret-placeholders.md
+          - R3 Remove live reads: target-architecture/render/r3-remove-live-reads.md
+          - R4 Delete the k8s Ansible path: target-architecture/render/r4-delete-k8s-ansible-path.md
+      - Cluster deploy plane:
+          - D1 Flux installed: target-architecture/deploy/d1-flux-installed.md
+          - D2 First leaf: target-architecture/deploy/d2-first-leaf.md
+          - D3 Secrets: target-architecture/deploy/d3-secrets.md
+          - D4 Ordering: target-architecture/deploy/d4-ordering.md
+          - D5 Bulk move: target-architecture/deploy/d5-bulk-move.md
+          - D6 Delete the old path: target-architecture/deploy/d6-delete-old-path.md
+      - Monitoring:
+          - M1 Alertmanager: target-architecture/monitoring/m1-alertmanager.md
+          - M2 First bridge family: target-architecture/monitoring/m2-first-bridge-family.md
+          - M3 Textfile timer: target-architecture/monitoring/m3-textfile-timer.md
+          - M4 Blackbox ingress probes: target-architecture/monitoring/m4-blackbox-ingress.md
+          - M5 Loki ruler: target-architecture/monitoring/m5-loki-ruler.md
+          - M6 Retire Kuma: target-architecture/monitoring/m6-retire-kuma.md
+      - Host plane:
+          - H1 Cluster config to Flux: target-architecture/host/h1-cluster-config-to-flux.md
+          - H2 Shrink the host plane: target-architecture/host/h2-shrink-host-plane.md
+          - H3 Pi pilot: target-architecture/host/h3-pi-pilot.md
+          - H4 Secrets unit: target-architecture/host/h4-secrets-unit.md
+          - H5 Pi Compose: target-architecture/host/h5-pi-compose.md
+          - H6 k3s upgrades: target-architecture/host/h6-k3s-suc.md
+          - H7 Delete Ansible: target-architecture/host/h7-delete-ansible.md
+      - Docs guard:
+          - G1 Diff notice: target-architecture/docs-guard/g1-diff-notice.md
+          - G2 Retire the lock: target-architecture/docs-guard/g2-retire-lock.md
+          - G3 Freshness reviewer: target-architecture/docs-guard/g3-freshness-reviewer.md
+          - G4 Drop the size test: target-architecture/docs-guard/g4-drop-size-test.md
+          - G5 Shrink root CLAUDE.md: target-architecture/docs-guard/g5-shrink-root-claude-md.md
   # Work that shipped, a spike that concluded and an incident that closed: kept as the record,
   # not as instructions. Operations holds only pages that describe the lab as it runs.
   # The archive index lists every archived plan and names where its live documentation went,
