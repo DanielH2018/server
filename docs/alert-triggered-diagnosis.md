@@ -1,10 +1,12 @@
 # Alert-triggered diagnostic agent — design note and no-go (#4616)
 
-**Recommendation: do not build it now.** Over the 13 days of alert history the probe could read,
-1 of 17 incidents had a cause that an automatic first diagnosis could have found before the
-operator did. The role would retire nothing, and on 2026-09-28 the operator asked for
-complexity to stay flat. The note records the design so that a later reopening starts from it,
-and it names the measurement that would reopen it.
+**Recommendation: do not build it now.** Over the 31 days of alert history that Loki keeps,
+11 of 70 incidents passed every gate an alert-triggered run needs and paged without naming
+their cause. Those 11 come down to 6 causes. Six of the incidents were one recurring Home
+Assistant log fault, which #2781 diagnosed and fixed. Two were service outages where a first
+diagnosis could have saved time. The role would retire nothing, and on 2026-09-28 the operator
+asked for complexity to stay flat. The note records the design so that a later reopening
+starts from it, and it names the measurement that would reopen it.
 
 Arming any such role is the operator's decision. This page decides nothing on its own.
 
@@ -25,11 +27,14 @@ toolkit, and the `homelab-network-diagnostician` agent is a read-only diagnostic
 
 ### What the history covers
 
-`probe.py alerts` reads monitor-bridge's DOWN lines from the `loki-homelab` store. Loki keeps 744h
+`probe.py alerts` reads the DOWN lines from two streams in the `loki-homelab` store:
+monitor-bridge's checks, and the host crons that push to Kuma through syslog. Loki keeps 744h
 (`loki_homelab_retention` in `ansible/roles/k8s/loki-homelab/defaults/main.yml`), so **the
-issue's 90-day question cannot be answered from Loki at all.** Inside those 31 days, the probe
-hits Loki's 5000-line `max_entries_limit_per_query` and keeps the newest lines. The readable
-window was 2026-09-30 11:01 UTC to 2026-10-12, about 13 days:
+issue's 90-day question cannot be answered from Loki at all.** A 90-day figure below is an
+extrapolation from 31 days.
+
+One `probe.py alerts --days 30` call does not reach 31 days either. Loki returns at most 5000
+lines per query (`max_entries_limit_per_query`), and the probe keeps the newest lines:
 
 ```text
 $ uv run python scripts/diagnostics/probe.py alerts --days 30 --limit 30000 --json
@@ -38,33 +43,64 @@ $ uv run python scripts/diagnostics/probe.py alerts --days 30 --limit 30000 --js
 cut off at its OLDEST end, so only 2026-09-29 18:18 UTC onwards is covered. Narrow --days.)
 ```
 
-A per-day `count_over_time` over 30 days returned between 8 and 873 DOWN lines a day, with
-no visible step at 2026-09-30. The 13 days are therefore a truncated sample, not a quiet
-month. A 90-day figure below is an extrapolation from them.
+To read the whole window, the count called `fetch_alert_streams` in
+`scripts/diagnostics/probe_lib/alerts.py` 32 times on 2026-10-12, one day per call, moving its
+`now` argument back a day each time. It removed duplicate lines at the day boundaries, and
+then built episodes with the probe's own `alert_episodes`. 63 of the 64 stream-days fitted
+under the cap. The syslog stream for the day ending about 2026-10-09 17:00 UTC still hit
+5000 lines, which was the 2026-10-08 recovery burst, so that one day is counted short.
 
 ### Episodes and incidents
 
-The probe returned 210 episodes. 102 of them lasted one cycle. To group episodes into
-incidents, the count merged any episode that started within 30 minutes of the running
-incident's end. That gave 17 incidents.
+The walk returned 941 episodes from 2026-09-11 16:26 UTC on. 560 of them lasted one
+cycle. To group episodes into incidents, the count merged any episode that started within
+30 minutes of the running incident's end. That gave 70 incidents.
 
-Each incident was then put through the four filters that any alert-triggered run would need:
+Each incident went through the gates the design below requires, in this order:
 
-| Class | Incidents | Why a first diagnosis does not shorten it |
+| Class | Incidents | Rule |
 |---|---|---|
-| Noise: one cycle, or cleared before a session could finish | 8 | Three `traefik_404` edge spikes, a one-cycle `release-staleness-check`, `gitops_status` and `cert`, and two `memory` episodes about a retired uid. Each cleared by itself. |
-| The alert text already names the cause or the fix | 5 | `gitops_status` tells the operator to apply `ansible/k3s-bringup.yml` with the unapplied tags. `pvc_fullness` names the PVC that reports nothing. `swallowed_verdicts` names the cron whose push token Kuma rejects. |
-| No WAN | 1 | 2026-10-03 21:29 and 2026-10-05 21:43, `wan_reachable` down for 1.2h and 1.7h, merged into one incident by the long `arr_queue` and `speedtest` episodes around them. A `claude -p` session cannot reach the Anthropic API without WAN, so the agent cannot run during the outage class that lasts longest. |
-| A deploy is held or failed | 2 | Both Home Assistant outages (2026-10-10 04:10 and 2026-10-11 00:43) coincide with `gitops_status` reporting a held deploy. The hold message already tells the operator to revert the offending PR. The issue's own gate (no run while `hold_sha` is non-empty) suppresses both. |
-| daniel-box itself was down | 1 | 2026-10-08 21:55: 24 checks fired at once with the k3s API refusing connections and the deployer last run 4334 minutes earlier. The agent runs on daniel-box, so it was down for the same outage and woke into the recovery burst. |
+| Noise | 19 | Every episode lasted one cycle, or the incident cleared within 30 minutes with no episode past two cycles. |
+| No WAN | 1 | `wan_reachable` fired (2026-10-03 to 2026-10-05). A `claude -p` session cannot reach the Anthropic API without WAN, so the agent cannot run during the outage class that lasts longest. |
+| A deploy is held | 5 | `gitops_status` reported a held deploy. The hold message already tells the operator to revert the offending PR, and the `hold_sha` gate suppresses the run. |
+| Monitoring or daniel-box was down | 5 | `loki_reachable`, `prometheus` or `gitops_alive` fired. These are the recovery bursts, such as 2026-10-08 21:55, when the k3s API refused connections and the agent's own host had been down. |
+| The alert names its cause or fix | 29 | Every episode past one cycle came from a check whose message names its cause or fix. Examples: `gitops_status` names the playbook and tags to apply, `manifest-prune-check` names the stale file, `release-staleness-check` names the service, and `arr_queue` names the item and why it needs review. This class also holds `otel-sweep-watch`, which counts Claude session API errors rather than a service failure, and `speedtest`, whose cause is the ISP. |
+| Candidate | 11 | An episode past one cycle came from a check whose message does not name the cause: `k8s_workloads`, `ha_heartbeat`, `cluster_targets`, `etcd-restore-drill-vm`, `shipper_dropped` or `traefik_404`. |
 
-The one remaining incident is the candidate: `longhorn-backup-health` from
-2026-10-09 10:40, which names stale volumes but not why their backups stopped. That alert recurs (69 episodes in the
-window) and is a slow condition, not an outage, so a diagnosis minutes after the first page
-saves little over the operator's next session.
+The first four rows are mechanical. The split between the last two depends on judgement about
+which messages name their cause.
 
-**Result: about 1 incident a diagnosis could shorten per 13 days, so roughly 2
-per 30 days and about 7 per 90 days by extrapolation.** None of them was an outage where minutes mattered.
+### The 11 candidates
+
+The 11 candidates come down to 6 causes:
+
+- **Six incidents are one fault.** On 2026-09-19, 2026-09-21 (twice) and 2026-09-23 (three
+  times), `k8s_workloads` paged on about 22 fatal log lines an hour from Home Assistant.
+  #2781 traced them to `pychromecast` stack traces and closed on 2026-09-27, and none recur after
+  that. An agent would have run six times for one cause, because the storm limit is per
+  incident.
+- **Home Assistant down for 11 hours, from 2026-09-24 03:00 UTC.** Home Assistant had no
+  available replica. The incident began about 80 minutes after the Renovate bump to
+  Home Assistant 2026.9.3 (#2337) merged, and Home Assistant is eligible for auto-deploy.
+  Of the 11 candidates, this is the clearest case where a first diagnosis could have saved
+  time, though a read-only agent could only point at the bump.
+- **The Pi and outbound network, 2026-09-26 13:42, 3.1 hours.** The four daniel-pi scrape
+  targets went down, and the Discord and `ipify` lookups failed, while `wan_reachable` stayed up.
+- **A failed etcd restore drill, 2026-09-11 16:26.** The drill's scratch server never became
+  ready. A drill failure is not an outage.
+- **Loki fatal log lines, 2026-09-11 20:16, 0.9 hours.**
+- **The edge answering 404 for 94% of traffic, 2026-09-30 11:01.** The alert cites #1322 for
+  the known cause.
+
+**Result: in 31 days, 2 service outages (the 2026-09-24 and 2026-09-26 incidents) could have
+had a useful first diagnosis.** Scaled to 90 days, that is about 6 outages, and about 32
+incidents that pass every gate. Neither outage would have been fixed by the agent itself:
+it is read-only, so the operator still acts on its diagnosis.
+
+**The 13-day sample in the first version of this note understated the benefit.** That sample
+held 17 incidents, and it misses the syslog stream before 2026-10-08. It recorded 1 candidate,
+and the 31-day walk finds no candidate after 2026-09-30 that the sample missed. The rate is
+higher in the second half of September, when #2781's fault was live.
 
 ## The cost, measured
 
@@ -84,12 +120,15 @@ magnitude.
 
 | Trigger policy | Runs per 30 days | Spend per 30 days |
 |---|---|---|
-| Every incident, no filters | about 39 | about $34 |
-| After the four filters | about 2 | about $2 |
+| Every incident, no gates | about 68 | about $60 |
+| After the mechanical gates (noise, WAN, hold, monitoring down) | about 39 | about $34 |
+| Only checks whose message does not name the cause | about 11 | about $9 |
+
+The last row needs a list of checks in the wrapper, which is one more thing to keep current.
 
 Money is not the binding cost. The binding cost is a new autonomous role: a unit, a timer, an
 agent identity, a prompt, a contract, a Discord digest, an alive tile, and the tests that pin
-each. The filters that make the spend small are also the code a reviewer has to keep correct.
+each. The gates that make the spend small are also code a reviewer has to keep correct.
 
 ## The design, if it is ever built
 
@@ -110,7 +149,7 @@ day.
 
 - `wan_reachable` is up.
 - The deployer's `hold_sha` is empty, and no tick or `deploy.sh` holds the deploy lock.
-- The incident has lasted at least two cycles, which removes the 102 one-cycle episodes.
+- The incident has lasted at least two cycles, which removes the 560 one-cycle episodes.
 - The host has been up past monitor-bridge's startup grace, which removes the recovery burst.
 
 **Read-only by construction, not by prompt.** A new profile in
@@ -138,8 +177,8 @@ recommendation.
 
 ## The zero-complexity alternatives
 
-- **Make the alert name the cause.** Five of the 17 incidents needed no diagnosis because the
-  check's message already carried the fix. When an alert pages without naming its cause,
+- **Make the alert name the cause.** 29 of the 70 incidents needed no diagnosis because the
+  check's message already carried the cause or the fix. When an alert pages without naming its cause,
   improving that check's message helps every future occurrence for no new role.
 - **Start the diagnosis on demand.** From the phone, a `claude-rc.service` session can dispatch
   `homelab-network-diagnostician` or run `probe.py monitors`. The operator already pays the
@@ -148,7 +187,13 @@ recommendation.
 
 ## When to reopen
 
-Reopen this when the post-filter count reaches 4 or more incidents in 30 days whose alert text
-does not name the cause, or when the operator expects to be away from the phone for days at a
-time. Re-run the classification above first. Narrow `probe.py alerts --days` to get under the
-5000-line cap, and walk the window in pieces.
+Reopen this when 4 or more service outages in 30 days pass the gates above and page without
+naming their cause, or when the operator expects to be away from the phone for days at a time.
+
+Count causes, not incidents. The first version of this note set the threshold at 4 incidents,
+and the 31-day walk measures 11. That count is inflated by one recurring fault that a single
+diagnosis settled (#2781), and by a drill and two causes the alert already pointed to. The
+measured rate of service outages is 2 in 31 days.
+
+To re-run the count, walk the window one day at a time as described above, because one
+30-day call stops at the 5000-line cap.
