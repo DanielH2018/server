@@ -414,3 +414,24 @@ def test_a_run_less_tip_after_a_red_descendant_offers_the_dispatch_route():
     )
     assert code != 75, msg
     assert "gh workflow run ci.yml --ref master" in msg, msg
+
+
+def test_a_run_less_tip_after_a_red_descendant_ends_ci_unproven():
+    """#4667: dispatching CI is the way out, so the wait ends on CI_UNPROVEN, not CI_RED."""
+    red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
+    code, msg, _elapsed = _wait_past_reds(
+        {"d1": red}, {"d1": [_actions_suite("completed")]}, ["d1", "d2"]
+    )
+    assert code == await_ci.CI_UNPROVEN, msg
+
+
+def test_a_tip_with_an_actions_suite_after_a_red_descendant_ends_red_at_the_deadline():
+    """The reject half: a tip whose CI is queued may still settle, so it is no dispatch case."""
+    red = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
+    code, msg, _elapsed = _wait_past_reds(
+        {"d1": red},
+        {"d1": [_actions_suite("completed")], "d2": [_actions_suite("queued")]},
+        ["d1", "d2"],
+    )
+    assert code == await_ci.CI_RED, msg
+    assert "gh workflow run" not in msg, msg
