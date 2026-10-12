@@ -1413,10 +1413,12 @@ here. C-1 waits for the operator's acceptance.
       to `homelab-check-<name>`, its variables `kuma_check_name`, `kuma_check_on_calendar` and
       `kuma_check_state` to `check_timer_name`, `check_timer_on_calendar` and
       `check_timer_state` at every importer, and `test_kuma_check_timer.py` with them. Without
-      the variable rename, every importer fails the census row. The present arm
+      the variable rename, every importer fails the census row. The task file
       gains a legacy-unit removal, mirroring its legacy-cron removal: stop, disable and delete
-      `kuma-check-<name>.{service,timer}`, so the old and new timers never both run. A test
-      case asserts it. The removal names `kuma-check-`, which exit criterion 3 forbids, so
+      `kuma-check-<name>.{service,timer}`, so the old and new timers never both run. The
+      removal runs in both arms, not only the present arm. An absent import must also remove
+      the old name, or a `kuma-check-*` unit that a hand apply has not yet removed outlives
+      the rename (*When D6.5 or D6.5b has landed first*). A test case asserts each arm. The removal names `kuma-check-`, which exit criterion 3 forbids, so
       C-6 deletes it once a read-only `systemctl list-unit-files 'kuma-check-*'` lists nothing
       on daniel-box, daniel-server and the Pi. Update `SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, `narrow_setup.py`,
       `setup_role_chains.py` and `test_setup_cross_role_files.py`, unless D6 has deleted them.
@@ -1450,6 +1452,13 @@ here. C-1 waits for the operator's acceptance.
           are not installed. The named-member case therefore excludes the two k3s imports.
           It asserts that initial_setup yields `homelab-check-setup-drift.timer` instead. The
           `k3s` hand apply stays `--tags "manifest-prune,live-drift"`.
+        - If D6.5 has merged but its hand apply has not run, C-3b can still merge first.
+          D6.5's apply then runs on a tree that holds C-3b's rename, so the k3s absent arm
+          is the renamed one. That arm removes the legacy `kuma-check-<name>` units as well
+          as the `homelab-check-<name>` ones, so the apply still stops
+          `kuma-check-manifest-prune` and `kuma-check-live-drift`. An absent arm that removed
+          only `homelab-check-*` would leave both old units running behind a green recap,
+          and nothing would catch them before D6.5b's step 4 (#4636).
         - If D6.5b has deleted the two timer imports, C-3b renames no k3s import and has no
           `k3s` hand apply. Its named-member case asserts the same initial_setup timer.
         - C-3a's `k3s` hand apply stays `--tags "backup-health,live-drift"` until D6.5b
@@ -1789,8 +1798,8 @@ M4's rules.
 - B5: the unit-flag-and-directory test, red on a unit that keeps `--no-collector.textfile`.
 - The B-6a render test: `alertmanager.local.<domain>` resolves to `two_factor` at first
   match, and it fails if the rule sits behind the `*.local` wildcard.
-- C-3b: a test case in which a host carries a `kuma-check-<name>` unit and the present arm
-  removes it, and the glance case that fails when `timer_units` finds no
+- C-3b: two test cases in which a host carries a `kuma-check-<name>` unit, one per arm.
+  The present arm removes it, and so does the absent arm. Also the glance case that fails when `timer_units` finds no
   `homelab-check-*` timer in the k3s role.
 - A0: the named-member floor refuses an empty index and accepts the five survivors, and
   A0's PR quotes a green `--dry-run --tags uptime-kuma` on the real render.
@@ -2839,6 +2848,16 @@ claim was checked at `70591c307` before the edit.
   across the rename and keeps `timer_units`'s skip of a literal `absent`. Its named member
   excludes those imports. The PR body's grep adds `kuma_check_state`, so it shows which
   case applies. The B1 row and *Other producers* say that D6.5 disarms the checks.
+
+- **#4636 (medium): C-3b could merge between D6.5's merge and D6.5's hand apply.** The
+  apply then ran on the renamed task file, whose absent arm removed only `homelab-check-*`
+  units. The `kuma-check-manifest-prune` and `kuma-check-live-drift` units kept running after
+  a green apply, until D6.5b's step 4 or C-6's `systemctl list-unit-files 'kuma-check-*'`
+  caught them. A merge gate on C-3b was rejected: it depends on a session reading
+  `gitops_state.py` at the right moment, and it still misses an apply that runs late.
+  **Fixed.** C-3b's legacy-unit removal runs in both arms, with a test case per arm, and
+  *When D6.5 or D6.5b has landed first* names the ordering. C-6 deletes the removal on the
+  same `systemctl list-unit-files 'kuma-check-*'` evidence as before.
 
 ### Pillar review fold (2026-10-12)
 

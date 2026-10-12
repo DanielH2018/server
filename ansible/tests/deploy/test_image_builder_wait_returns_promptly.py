@@ -92,11 +92,11 @@ def test_the_poll_still_spans_the_configured_timeout():
     """Retries x delay must still cover image_builder_timeout, at the default and above it.
 
     Rendered from the role rather than restated, so a hardcoded retry count — which would cap
-    every caller at one budget and silently shorten code-server's 1800s — fails here.
+    every caller at one budget and silently shorten code-server's 3600s — fails here.
     """
     task = _wait_task()
     delay = int(task["delay"])
-    for timeout in (900, 1800):
+    for timeout in (900, 1800, 3600):
         templar = Templar(loader=None, variables={"image_builder_timeout": timeout})
         retries = int(templar.template(trust_as_template(str(task["retries"]))))
         assert retries * delay >= timeout, (

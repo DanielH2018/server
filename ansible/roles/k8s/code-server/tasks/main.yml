@@ -11,19 +11,24 @@
     # The one file the Dockerfile COPYs (flat — ConfigMap keys cannot contain '/').
     image_builder_context:
       "{{ playbook_dir }}/roles/k8s/code-server/files/extensions.sh": extensions.sh
-    # MEASURED, and the measurement says leave it. This value is the Job's
-    # `activeDeadlineSeconds` (image-builder/templates/build-job.yaml.j2), so exceeding it
-    # kills the build rather than just failing the wait. A cold build with no layer cache
-    # takes 1291 s end to end, 72% of this deadline. Where it goes, from
-    # the BuildKit log: 690 s pulling the linuxserver base from lscr.io, 247 s building the
-    # pip venv, 197 s fetching the Anthropic.claude-code VSIX from the MS marketplace, 45 s
-    # for Pylance, ~30 s for the rest. The default 900 s would have killed it during the venv.
+    # MEASURED. This value is the Job's `activeDeadlineSeconds`
+    # (image-builder/templates/build-job.yaml.j2), so exceeding it kills the build rather than
+    # just failing the wait. A cold build with no layer cache took 1291 s end to end before
+    # Rust was added. Where it went, from the BuildKit log: 690 s pulling the linuxserver base
+    # from lscr.io, 247 s building the pip venv, 197 s fetching the Anthropic.claude-code VSIX
+    # from the MS marketplace, 45 s for Pylance, ~30 s for the rest.
     #
-    # Pinning every input fixes WHAT a build fetches, not how fast the mirrors serve
-    # it: the base pull alone is a third of this budget and is the term that varies. Lower
-    # this only after a cold build measured under ~900 s. A build that hits the registry
-    # layer cache re-runs only the steps below the first changed one and never approaches it.
-    image_builder_timeout: 1800
+    # 1800 s stopped being enough when Rust joined the build (#4661). Its first build on
+    # 2026-10-12 hit the deadline: the base pull alone ran ~1100 s, and the Rust tarball
+    # (210 MB) and the CodeLLDB VSIX (55 MB) were still to come. That day static.rust-lang.org
+    # served daniel-box at ~0.35 MB/s and GitHub at ~0.4 MB/s, while Cloudflare served it at
+    # 17 MB/s, so the slow term is the upstream CDN path, which nothing here controls. 3600 s
+    # covers a cold build at those rates with headroom.
+    #
+    # Pinning every input fixes WHAT a build fetches, not how fast the mirrors serve it. Lower
+    # this only after a cold build measured well under the new figure. A build that hits the
+    # registry layer cache re-runs only the steps below the first changed one.
+    image_builder_timeout: 3600
 
 # Both claims are `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
 # ahead of the workload (#3387). The initContainer cannot start without the workspace claim.
