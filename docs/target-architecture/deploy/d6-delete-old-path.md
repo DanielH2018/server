@@ -59,7 +59,7 @@ artifact, and marks [ADR-0010](../../adr/0010-pull-based-gitops-over-argo-and-fl
     - The two host-plane pages that rode the k8s modules still fire. A Pi container role's
       `tasks/` change pages the tasks channel once, and a broad setup range that carries
       `ansible/vars/secrets.yml` pages the secrets alert once. D6.1's two tick tests pin
-      both, and D6.5's merge tick sends one secrets page.
+      both. D6.5 changes no secret, so its merge tick sends no page (#4609).
 3. **The ADR is accepted.** ADR-0010's status names its successor.
    `ansible/tests/repo/test_adr_links.py` passes, and the `mkdocs.yml` nav lists the new ADR.
 4. **The docs describe the Flux path.**
@@ -2096,9 +2096,6 @@ journalctl -t setup-drift-check --since today | tail -3   # status=up, on each h
 # Exit 2, the two host-plane pages, from D6.1 on: the two tick tests pass.
 uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_main_branches.py \
   -k 'tasks or secrets'
-# Exit 2, on D6.5's merge tick: the session quotes the one Discord secrets post, which
-# names the merge commit, in the PR thread. probe.py gitops-state prints no alert slot,
-# so the post is the observable.
 
 # D6.5 and D6.5b, on the PR before merge: the tags the tick records for setup/k3s.
 uv run python scripts/deploy_tools/narrow_setup.py k3s <merge-base> <PR head> \
@@ -2107,10 +2104,11 @@ uv run python scripts/deploy_tools/narrow_setup.py k3s <merge-base> <PR head> \
 # no hold_sha, no deploy.yml hold_plane entry, no k8s line, no k3s manual_plane line.
 uv run python scripts/diagnostics/probe.py gitops-state
 # After D6.1's first tick, on daniel-box: the stamp fragment names no deleted module (0),
-# and the manifest-prune-check tile stays up.
+# and manifest-prune-check still reports. M6's B1 made it a textfile check, and Kuma is
+# gone before D6 opens, so the observable is the series, not a tile.
 grep -c -e deploy_k8s -e deploy_broad_k8s -e deploy_release \
   /var/lib/homelab/setup-deployed-manifest.d/gitops-deploy   # 0
-uv run python scripts/diagnostics/probe.py monitors | grep -i 'manifest prune'
+uv run python scripts/diagnostics/probe.py metric 'homelab_check_success{check="manifest-prune"}'
 # D6.1, before merge: the four landing tests. The red half of the first three runs on the
 # tree before the PR.
 uv run pytest scripts/deploy_tools/tests
@@ -2259,13 +2257,14 @@ The deletions have red proofs of their own:
   `initial_setup` on daniel-box, and the task's `kuma_check_state` follows the list, so the
   box loses the timer. daniel-server needs the same operator-attended apply on itself as the
   forward PR.
-- **D6.5 and D6.5b.** D6.5 removed host units and tiles. To restore them, revert D6.5b first,
+- **D6.5 and D6.5b.** D6.5 removed host units, B1's six rules and the `.prom` files. To
+  restore them, revert D6.5b first,
   then D6.5. The revert of D6.5b restores files that no task names at its head, so it lands
   a whole-role line, which the session clears by D6.5b's procedure. The revert of D6.5
   narrows to the six tags of `tasks/health-crons.yml`, which the session applies and clears
-  as D6.5 does. The tokens come back only through a new
-  **operator-only** `sops` edit and `cluster_vars.py write`, because the revert restores the
-  registry rows but not the deleted values. D6.5 alone reverts cleanly while D6.5b is not
+  as D6.5 does. Flux re-applies the six rules at the revert's merge, and the restored crons
+  write the `.prom` files again on their next run. No token or tile comes back, because M6's
+  B1 retired them and D6.5 never held them (#4609). D6.5 alone reverts cleanly while D6.5b is not
   merged, because the code is still in the tree.
 - **D6.7a.** The job touches no cluster and no host, so a revert removes the job, the drill
   script and the fixture tree, and leaves nothing live. While D6.7 is live, the job is the
@@ -2295,8 +2294,9 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
   clean). `deploy_k8s_owed.py` and `deploy_broad_k8s.py` carry the tasks page and the
   broad-range secrets page. Deleting them with their call sites would ff-merge a Pi role's
   `tasks/` change, or a rotated secret beside a setup change, with no page. D6.5 is such a
-  range. Mitigation: D6.1 moves the three calls into `deploy_handlers.py` first, its two
-  tick tests pin both pages, and D6.5's merge tick is checked for its one secrets page.
+  range. Mitigation: D6.1 moves the three calls into `deploy_handlers.py` first, and its two
+  tick tests pin both pages. D6.5 no longer changes a secret, so its merge tick checks
+  nothing here (#4609).
 - **A dashboard with no deploy markers looks like a quiet week** (class 3: empty is read as
   clean). `test_deploy_annotations.py`'s docstring names this: a query that matches
   nothing renders like one with no deploys. After D6, a cluster deploy draws a marker only

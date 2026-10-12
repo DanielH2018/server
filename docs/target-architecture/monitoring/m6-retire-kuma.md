@@ -1436,6 +1436,17 @@ here. C-1 waits for the operator's acceptance.
       The rerun-while-red contract stays,
       because it still sets how fast a red check clears. The `k3s` hand apply is
       `--tags "manifest-prune,live-drift"`, the tags on its two timer imports.
+    - **When D6.5 has landed first.** D6 opens after C-2b, so D6.5 can land before C-3a or
+      C-3b. D6.5 owns the two k3s timers and the live-drift check, and deletes them
+      (#4609). Each PR therefore reads the k3s role at its base:
+        - If the two timer imports are gone, C-3b renames no k3s import and has no `k3s`
+          hand apply. Its named-member case asserts that initial_setup yields
+          `homelab-check-setup-drift.timer` instead.
+        - If the live-drift tasks are gone, C-3a's `k3s` hand apply is
+          `--tags "backup-health"` alone.
+
+      The PR body quotes `git grep -n -E 'kuma_check_timer|live-drift' ansible/roles/setup/k3s/tasks/`
+      at its base to show which case applies.
 4. **C-4, the names**, in two PRs:
     - **C-4a.** Add `ansible/filter_plugins/ingress_probes.py` with `ingress_probe_targets`,
       rename the `kuma:` key on `containers_list` entries to `probe:`, switch M4's probe job to
@@ -2800,7 +2811,9 @@ claim was checked at `70591c307` before the edit.
   (*When D5 flips a role M6 edits*), so D6.5 cannot remove them first. B1 therefore keeps
   all three, and the B1 row and *Other producers* name D6.5 and D6.5b as the slices that
   delete the checks. D6.5 deletes B1's `<Check>Failed` and `<Check>NotReporting` rules for
-  them in the PR that disarms their crons.
+  them in the PR that disarms their crons. D6.5 can also land before C-3a or C-3b. C-3b
+  therefore gains *When D6.5 has landed first*: each PR reads the k3s role at its base, and
+  C-3b's named member falls back to initial_setup's setup-drift timer.
 
 ### Pillar review fold (2026-10-12)
 
