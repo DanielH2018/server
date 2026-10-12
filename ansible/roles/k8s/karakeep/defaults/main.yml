@@ -71,6 +71,31 @@ karakeep_k8s_tagger_mem_limit: 512Mi
 karakeep_k8s_tagger_cpu_request: "50m"
 karakeep_k8s_tagger_mem_request: 64Mi
 
+# The archive pruner (cronjob-archive-pruner.yaml.j2, files/karakeep_archive_pruner.py). A
+# bookmark's age is days since its `modifiedAt`, which Karakeep sets when it is archived.
+# After the first threshold the job detaches the screenshot; after the second it deletes the
+# bookmark unless it is favourited, has a note or highlights, or carries a manually attached tag.
+karakeep_k8s_pruner_schedule: "15 5 * * *"
+karakeep_k8s_pruner_screenshot_days: 30
+karakeep_k8s_pruner_delete_days: 90
+# Off until the operator has read a dry run's log and approved what it lists. With this false
+# the job logs what it would do and changes nothing.
+karakeep_k8s_pruner_apply: false
+# A ceiling on deletions per run, so a bad clock or a misread response cannot empty the
+# library in one night.
+karakeep_k8s_pruner_max_deletes: 50
+# Tags Karakeep records as `attachedBy: human` that no person attached. The time-tagger attaches
+# through the REST API, whose default is `human`, and its script uses two sets of names: the
+# `TIME_TAGS` list and what `estimate_reading_time` returns. tests/test_archive_pruner.py
+# keeps this list equal to the union. A tag a rules-engine `addTag` attaches is `human` too;
+# add it here if a dry run shows it protecting bookmarks.
+karakeep_k8s_pruner_auto_tags: ["0-1m", "1-5m", "0-5m", "5-10m", "10-15m", "15-30m", "30m+"]
+# The first API call retries for this long, covering kube-router's lag in admitting a new
+# pod's source IP and a karakeep pod that is mid-restart when the deploy gate fires.
+karakeep_k8s_pruner_connect_budget_seconds: 300
+# Below cronjob-gate's 660s timeout, which must exceed it (test_cronjob_gate_decision.py).
+karakeep_k8s_pruner_deadline_seconds: 600
+
 # 487M — the bookmark library, archived page snapshots and db.db. On `longhorn` (backed up)
 # because it holds the only copy of the library.
 karakeep_k8s_claim: karakeep-data

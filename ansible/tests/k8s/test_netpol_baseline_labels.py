@@ -125,6 +125,7 @@ SLICE_45A_WORKLOADS = {
     ("karakeep", "karakeep"),
     ("karakeep", "karakeep-meilisearch"),
     ("karakeep", "karakeep-time-tagger"),
+    ("karakeep", "karakeep-archive-pruner"),
     ("scrutiny", "scrutiny-web"),
     ("scrutiny", "scrutiny-influxdb"),
     ("scrutiny", "scrutiny-collector"),

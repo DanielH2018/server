@@ -552,6 +552,9 @@ containers_list:
       # census missed it because it excluded karakeep's own role: read a role's own templates
       # for init containers and wait loops (`grep -rn 'create_connection\|nc -z'`) too.
       - karakeep-time-tagger
+      # The archive pruner CronJob (karakeep/templates/cronjob-archive-pruner.yaml.j2) calls
+      # the REST API at karakeep:3000.
+      - karakeep-archive-pruner
     # The backends `wait-for-deps` (karakeep/templates/deployment.yaml.j2) dials in an unbounded
     # loop. Each fence ships with this role, rendered by its templates/networkpolicy-<backend>
     # template, so `--tags karakeep` never stages a pod that waits in Init forever (#1620).

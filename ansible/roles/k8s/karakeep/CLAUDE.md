@@ -34,8 +34,6 @@ loop to auto-tag bookmarks.
   deliberately unseeded and unbacked-up: it's rebuildable from `db.db` by reindexing.
 - **Secrets (SOPS keys, not values):** `karakeep_meili_master_key`, `karakeep_gemini_api_key`
   (as `OPENAI_API_KEY`), `karakeep_python_api_key` (the tagger's).
-- **Any one of the three denylist reasons above would justify it alone.** The probe-less
-  `time-tagger` one means `rollout status` proves nothing for that sub-deployment.
 
 ## Notable
 - **The two backend NetworkPolicies ship in THIS role, not in netpol-baseline** (#1620).
@@ -77,6 +75,8 @@ loop to auto-tag bookmarks.
 - `files/karakeep-time-tagger.py` is vendored (not fetched at render time) because CI renders
   every template on a machine that has never deployed; `test_karakeep_time_tagger_script.py`
   pins it to the commit URL and sha256 the retired Docker role verified.
+- **`karakeep-archive-pruner`** (CronJob) prunes archived bookmarks by age, and only logs a
+  dry run while `karakeep_k8s_pruner_apply` is false. Rules: `files/karakeep_archive_pruner.py`.
 - The snapshot/revert pair (`k8s/volume-snapshot`/`k8s/volume-revert`) covers `karakeep-data`
   only — reverting it alone desyncs the search index until a manual reindex.
 - `karakeep-chrome` runs on a read-only root, so every path headless chromium writes needs its
