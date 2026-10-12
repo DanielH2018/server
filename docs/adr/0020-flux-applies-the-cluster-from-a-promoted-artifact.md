@@ -70,5 +70,4 @@ two-writer rule (C4).
 
 ## Governs
 
-Nothing yet. The flux role that D1's later PRs add carries the first marker that cites this
-record, and adds it to `governs:` in the same PR.
+No line in the tree enforces this decision yet, so `governs:` is empty.
