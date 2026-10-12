@@ -195,7 +195,9 @@ def hash_commands():
         cmd = (task.get("ansible.builtin.command") or {}).get("cmd", "")
         if not isinstance(cmd, str) or _MARKER not in cmd:
             continue
-        pod = re.search(r"\brun\s+(\S+)", cmd)
+        # The name's fixed prefix, without the per-run `-{{ ... | random }}` suffix the task
+        # appends, which is all a reader of the untemplated command can see.
+        pod = re.search(r"\brun\s+([a-z0-9-]*[a-z0-9])", cmd)
         found[pod.group(1) if pod else task.get("name", "?")] = cmd
     assert set(found) >= HASH_TASK_PODS, (
         "a hash-generation task this guard compares is gone from the authelia role, so its "
