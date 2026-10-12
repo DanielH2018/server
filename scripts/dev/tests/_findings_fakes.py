@@ -22,6 +22,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from dev.findings_lib.issue_model import LABELS
+from dev.fanout_lib.batch_holds import BatchHold
 from dev.findings_lib.boundaries import FindingsTools
 from lib.worktrees import Worktree
 
@@ -147,9 +148,9 @@ class Fakes:
     # What the run manifests answer, keyed by (orchestrator branch, repo). Empty by default,
     # so no test reads the real `~/.claude/fanout`.
     launched: dict[tuple[str, str], set[str]] = field(default_factory=dict)
-    # What the running-batch read answers, `{issue: reason}`, filtered to the issues asked
+    # What the running-batch read answers, `{issue: BatchHold}`, filtered to the issues asked
     # about. Empty by default, so no test reads a real unit or opens an ssh connection.
-    batch_holds: dict[int, str] = field(default_factory=dict)
+    batch_holds: dict[int, BatchHold] = field(default_factory=dict)
     gh_errors: dict[str, BaseException] = field(default_factory=dict)
     # Keyed by the same `issue list` / `label list` / `issue view` pair `gh_json` dispatches
     # on, so a test can fail the issue read while the label read still answers.

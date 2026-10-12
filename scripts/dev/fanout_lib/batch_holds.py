@@ -15,6 +15,7 @@ unreadable worktree.
 
 import subprocess
 from collections.abc import Callable, Collection
+from dataclasses import dataclass
 from pathlib import Path
 
 # Reach the sibling package: a directly-invoked script gets only its own directory on
@@ -36,6 +37,34 @@ IS_ACTIVE_TIMEOUT_S = 10.0
 # read as "cannot tell".
 _RUNNING = frozenset({"active", "activating", "reloading", "deactivating"})
 _FINISHED = frozenset({"inactive", "failed"})
+
+
+@dataclass(frozen=True)
+class BatchHold:
+    """Why a running batch keeps an issue's claim live, and the branch `launch` claimed it under.
+
+    Attributes:
+        reason: the running batch, or "cannot tell" with what failed.
+        claimed_under: the branch `launch` wrote the claim with. A batch in this repo is
+            claimed under the orchestrator's branch, and another repo's under its own.
+    """
+
+    reason: str
+    claimed_under: str
+
+    def reason_for(self, holder: str) -> str:
+        """The reason a `claims` row prints for a claim ``holder`` holds on this issue.
+
+        A holder other than ``claimed_under`` still keeps the hold, because the batch is
+        working the issue whoever holds the claim, and releasing it would offer the issue to a
+        third session. The reason says so, rather than reading as if the batch held the claim.
+        """
+        if holder == self.claimed_under:
+            return self.reason
+        return (
+            f"{self.reason}, which claimed it as `{self.claimed_under}`; "
+            f"this claim by `{holder}` is held only because that batch is working the issue"
+        )
 
 
 def _host_states(
@@ -71,7 +100,7 @@ def running_batch_holds(
     issues: Collection[int],
     root: Path = MANIFEST_DIR,
     run: Callable[..., subprocess.CompletedProcess] = run_command,
-) -> dict[int, str]:
+) -> dict[int, BatchHold]:
     """Each of ``issues`` a standing batch in ``repo`` names, mapped to why its claim is held.
 
     A batch is consulted only when it has no `removed_at`, works ``repo``, and names one of
@@ -86,20 +115,24 @@ def running_batch_holds(
             seam, so no test reads a real unit or opens an ssh connection.
 
     Returns:
-        `{issue: reason}`, the reason in the words a `claims` row prints: the running batch,
-        or "cannot tell" with what failed.
+        `{issue: BatchHold}`. Its reason is in the words a `claims` row prints: the running
+        batch, or "cannot tell" with what failed.
     """
     repo = repo or SERVER
     wanted = set(issues)
-    by_host: dict[str, list[Batch]] = {}
+    by_host: dict[str, list[tuple[str, Batch]]] = {}
     for manifest in all_runs(root):
         for b in manifest.batches:
             if not b.removed_at and b.repo == repo and wanted & set(b.issues):
-                by_host.setdefault(b.host, []).append(b)
-    holds: dict[int, str] = {}
-    for host, batches in by_host.items():
-        states = _host_states(host, [b.unit for b in batches], run)
-        for i, b in enumerate(batches):
+                # The branch `launch` claimed under, as `fanout_lib.claims` documents it.
+                claimed_under = (
+                    manifest.orchestrator_branch if b.repo == SERVER else b.branch
+                )
+                by_host.setdefault(b.host, []).append((claimed_under, b))
+    holds: dict[int, BatchHold] = {}
+    for host, entries in by_host.items():
+        states = _host_states(host, [b.unit for _, b in entries], run)
+        for i, (claimed_under, b) in enumerate(entries):
             if isinstance(states, str):
                 reason = (
                     f"cannot tell whether fan-out batch {b.batch} on {host} is running "
@@ -117,5 +150,5 @@ def running_batch_holds(
                     f"(unit state `{states[i]}`); held"
                 )
             for n in wanted & set(b.issues):
-                holds.setdefault(n, reason)
+                holds.setdefault(n, BatchHold(reason, claimed_under))
     return holds
