@@ -277,6 +277,10 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
   last MiB of the console log. The newest 8 sweeps stay. Read these before editing a case that
   fell below its threshold; `history.json` holds only the scores and each sweep's
   total cost (#4019, #4273).
+- **A failed suite or commit keeps its own log** at `/var/lib/homelab/eval-run.d/failure-<UTC
+  start>.log`, and the script prunes all but the newest five. A red suite pushes pytest's count
+  line and failing node ids. The code is docs-refresh's, and a test holds the two copies
+  identical (#4764).
 - **A REGRESSED case still gets committed** — the data is real — but reports the push DOWN with
   the regression named, matching autofix-bridge's "act, but do not launder the result" pattern
   rather than silently dropping the regression or silently blocking the commit.

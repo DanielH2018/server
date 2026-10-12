@@ -26,6 +26,7 @@ the test can go red:
 import re
 import shlex
 import subprocess
+from datetime import datetime
 from pathlib import Path
 
 from _helpers import ANSIBLE
@@ -322,9 +323,8 @@ def test_the_alert_falls_back_to_the_plain_tail_when_no_hook_failed(tmp_path):
     assert "gpg failed to sign the data" in alert, alert
 
 
-# A failing run under cron: no tty, so a node id wider than 80 columns loses its ` - reason`. A
-# captured-log `ERROR` line precedes the block; the shutdown traceback that was the whole pushed
-# message on 2026-10-12 18:20 follows it, and say_failure's `Failed` token matches it.
+# Cron has no tty, so an id wider than 80 columns loses its ` - reason`. A captured-log `ERROR`
+# line precedes the block; the 2026-10-12 18:20 shutdown traceback, which `Failed` matches, follows.
 SUITE_LOG = (
     "____________________________ test_bad ____________________________\n"
     "------------------------- Captured log call -------------------------\n"
@@ -383,40 +383,41 @@ def test_the_failure_log_is_kept_outside_the_repo(tmp_path):
     assert "gen-doc-fragments" in (stamp / FAILURE_LOG_NAME).read_text()
     assignment = SCRIPT[SCRIPT.index("STAMP_DIR=") :].split("\n")[0]
     assert "$REPO" not in assignment and STAMP_DIR in assignment, assignment
-    # Named by the run's start time: a fixed name is the one overwritten file again.
-    assert '\nFAILURE_LOG="$STAMP_DIR/failure-$(date -u' in SCRIPT
 
 
-def _keep_runs(names: list[str], tmp_path: Path) -> Path:
-    """Run keep_failure_log once per name, each as its own run with its own FAILURE_LOG."""
+NAMING = next(line for line in SCRIPT.splitlines() if line.startswith("FAILURE_LOG="))
+
+
+def _keep_runs(starts: list[str], tmp_path: Path) -> tuple[Path, list[str]]:
+    """Run the script's FAILURE_LOG= line and keep_failure_log per start, `date` pinned to it."""
     stamp = tmp_path / "stamp"
     stamp.mkdir(exist_ok=True)
     (stamp / "commit-failed").write_text("suite failed at T\n")
-    log = tmp_path / "suite.log"
+    log = shlex.quote(str(tmp_path / "suite.log"))
     script = ""
-    for name in names:
+    for start in starts:
+        epoch = int(datetime.fromisoformat(f"{start}+00:00").timestamp())
         script += (
-            f"printf '%s' {shlex.quote(name)} >{shlex.quote(str(log))}; "
-            f"FAILURE_LOG={shlex.quote(str(stamp / name))} "
-            f"keep_failure_log {shlex.quote(str(log))}\n"
+            f'date() {{ command date -d @{epoch} "$@"; }}; {NAMING}; printf %s {start} >{log}; '
+            f'keep_failure_log {log}; echo "${{FAILURE_LOG##*/}}"\n'
         )
-    _bash(script, tmp_path, stamp).check_returncode()
-    return stamp
+    return stamp, _bash(script, tmp_path, stamp).stdout.split()
 
 
 def test_two_failing_runs_leave_two_logs(tmp_path):
     """ACCEPT: the 18:17 failure no longer overwrites the 06:17 one's traceback."""
-    first, second = "failure-20261012T061700Z.log", "failure-20261012T181700Z.log"
-    stamp = _keep_runs([first, second], tmp_path)
-    assert [(stamp / name).read_text() for name in (first, second)] == [first, second]
+    starts = ["2026-10-12T06:17:00", "2026-10-12T18:17:00"]
+    stamp, names = _keep_runs(starts, tmp_path)
+    assert [(stamp / name).read_text() for name in names] == starts, names
 
 
 def test_the_prune_keeps_only_the_newest_logs(tmp_path):
-    """Past FAILURE_LOGS_KEPT the oldest go; the stamp stays, as the prune globs `failure-`."""
-    names = [f"failure-2026101{day}T061700Z.log" for day in range(7)]
-    stamp = _keep_runs(names, tmp_path)
-    kept = sorted(p.name for p in stamp.glob("failure-*.log"))
-    assert kept == names[2:], kept
+    """REJECT a stamp that is not fixed-width (`%s`, `%-m`), which the prune's sort relies on."""
+    starts = ["2001-09-09T01:46:39", "2001-09-09T01:46:40", "2026-09-30T23:59:59"]
+    starts += [f"2026-10-0{day}T06:17:00" for day in range(1, 5)]
+    stamp, names = _keep_runs(starts, tmp_path)
+    assert sorted(names) == names, names
+    assert sorted(p.name for p in stamp.glob("failure-*.log")) == names[2:]
     assert (stamp / "commit-failed").exists()
 
 
