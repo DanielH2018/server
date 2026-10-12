@@ -8,7 +8,11 @@ YAML" pointing at a perfectly good template.
 Run: uv run pytest scripts/lib/tests/test_k8s_context.py
 """
 
+import jinja2
+import pytest
+
 from lib.k8s_context import resolve_vars
+from lib.render_guard import StrictChainableUndefined
 
 
 # --- resolve_vars: values nested inside lists and dicts ---
@@ -94,3 +98,22 @@ def test_resolve_vars_bool_filter_reads_the_string_false_as_false():
 
 def test_resolve_vars_bool_filter_reads_the_string_true_as_true():
     assert resolve_vars({"flag": "{{ raw | bool }}"}, {"raw": "true"})["flag"] is True
+
+
+# --- resolve_vars: an undefined name inside a value ---
+#
+# homelab-render resolves with a strict class, because the default turns an undefined name
+# into `STUB` inside text and into None as a whole value, and either reaches a manifest.
+
+
+def test_resolve_vars_by_default_renders_an_undefined_name_as_stub_or_none_is_clean():
+    resolved = resolve_vars({"text": "a-{{ nope }}", "alias": "{{ nope }}"}, {})
+    assert resolved == {"text": "a-STUB", "alias": None}
+
+
+@pytest.mark.parametrize("value", ["a-{{ nope }}", "{{ nope }}"])
+def test_resolve_vars_under_a_strict_class_raises_on_an_undefined_name_is_flagged(
+    value,
+):
+    with pytest.raises(jinja2.UndefinedError, match="nope"):
+        resolve_vars({"v": value}, {}, undefined_cls=StrictChainableUndefined)

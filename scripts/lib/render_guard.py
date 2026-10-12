@@ -27,7 +27,7 @@ import sys
 from pathlib import Path
 
 import yaml
-from jinja2 import ChainableUndefined, Environment, FileSystemLoader
+from jinja2 import ChainableUndefined, Environment, FileSystemLoader, StrictUndefined
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -54,6 +54,7 @@ __all__ = [
     "INVENTORY",
     "REPO",
     "SHARED_TPL",
+    "StrictChainableUndefined",
     "StubUndefined",
     "containers_entries",
     "containers_entries_at",
@@ -133,6 +134,15 @@ class StubUndefined(ChainableUndefined):
 
     def __radd__(self, other):
         return str(other) + self._FILL
+
+
+class StrictChainableUndefined(ChainableUndefined, StrictUndefined):
+    """An undefined that raises when it is printed, iterated or tested, as Ansible's does.
+
+    It stays chainable, so `hostvars['x'].missing | default('y')` still renders its default,
+    as it does under Ansible. `homelab-render` renders with it, where the guards keep
+    `StubUndefined`.
+    """
 
 
 def load_yaml(path: Path) -> dict:

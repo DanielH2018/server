@@ -15,8 +15,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import re
 
+from jinja2 import StrictUndefined, Undefined
+
 from lib.ansible_jinja_env import ansible_bool
-from lib.render_guard import SHARED_TPL, make_env
+from lib.render_guard import SHARED_TPL, StubUndefined, make_env
 
 __all__ = [
     "resolve_vars",
@@ -27,7 +29,9 @@ __all__ = [
 _PURE_TEMPLATE = re.compile(r"^\{\{\s*(?P<expr>[^{}]+?)\s*\}\}$")
 
 
-def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
+def resolve_vars(
+    values: dict, context: dict, passes: int = 5, undefined_cls=StubUndefined
+) -> dict:
     """Expand ``{{ ... }}`` inside variable VALUES, the way Ansible does before templating.
 
     Ansible resolves a variable's value recursively, so a role default like
@@ -40,8 +44,12 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
 
     Bounded rather than looped-to-fixpoint so a self-referential value fails the render with a
     recursion the operator can see, instead of hanging CI.
+
+    ``undefined_cls`` decides what an undefined name inside a value becomes. The default
+    ``StubUndefined`` renders ``STUB`` inside text and None as a whole value. A strict class
+    such as ``render_guard.StrictChainableUndefined`` raises in both places instead.
     """
-    env = make_env([SHARED_TPL])
+    env = make_env([SHARED_TPL], undefined_cls=undefined_cls)
     # `bool` is an Ansible filter, not a Jinja builtin, so a group_var that uses it renders
     # here as "No filter named 'bool'" — a render failure pointing at a variable that is
     # perfectly valid under Ansible. Every render guard registers the real filter through
@@ -79,7 +87,14 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
                 return node
             pure = _PURE_TEMPLATE.match(node.strip())
             if pure:
-                return env.compile_expression(pure.group("expr"))(**ctx)
+                # `compile_expression` would turn an undefined result into None, which a
+                # strict caller must see raise instead.
+                value = env.compile_expression(
+                    pure.group("expr"), undefined_to_none=False
+                )(**ctx)
+                if isinstance(value, StrictUndefined):
+                    value._fail_with_undefined_error()
+                return None if isinstance(value, Undefined) else value
             return env.from_string(node).render(ctx)
         if isinstance(node, list):
             return [expand(n, ctx) for n in node]
