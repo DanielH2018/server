@@ -273,6 +273,7 @@
  "ansible/tests/deploy/test_setup_render_manifest.py": 5.22,
  "ansible/tests/deploy/test_toposort.py": 0.0,
  "ansible/tests/deploy/test_tree_lock_single_definition.py": 0.0,
+ "ansible/tests/k8s/test_aggregated_clusterroles.py": 1.82,
  "ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py": 1.46,
  "ansible/tests/k8s/test_arr_deployments_share_one_macro.py": 0.0,
  "ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py": 0.36,
