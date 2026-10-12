@@ -216,21 +216,42 @@ observability_rule_groups:
 # The shared default `[config, secret, image]` would restart all of them for one workload's
 # edit: `manifests_render is changed` fires when ANY of this role's manifests changed.
 #
-# `[]` means nothing this role renders needs a restart TASK for that workload. Its ConfigMap is
-# hashed into its own pod template (`checksum/config`), so the apply moves the pod template and
-# rolls the pod by itself; kube-state-metrics renders no ConfigMap at all, and every input it
-# does have already lives in the pod template. `[secret]` is the one case the annotation cannot
-# cover: prometheus file-mounts `prometheus-scrape-credentials`, grafana reads `grafana-admin`
-# through `env.valueFrom`, and alertmanager file-mounts `alertmanager-config`, its whole config.
-# Hashing a Secret's bytes into a world-readable annotation would open a read path over it.
-# Those three restart on a secret render, which is one register over every secret manifest the
-# role renders — so rotating grafana's password also restarts prometheus and alertmanager, and an
-# alertmanager config edit restarts all three.
+# Every entry is `[]`: nothing the shared role decides needs a restart for any of them. A
+# ConfigMap is hashed into its own pod template (`checksum/config`), so the apply moves the pod
+# template and rolls the pod by itself; kube-state-metrics renders no ConfigMap at all, and every
+# input it does have already lives in the pod template.
+#
+# `restart_secrets` is the one case the annotation cannot cover: the rendered Secret files a
+# workload's pod reads. prometheus file-mounts `prometheus-scrape-credentials`, grafana reads
+# `grafana-admin` through `env.valueFrom`, and alertmanager file-mounts `alertmanager-config`,
+# its whole config. Hashing a Secret's bytes into a world-readable annotation would open a read
+# path over it, so tasks/main.yml restarts an entry whose `restart_secrets` names a file whose
+# render changed, and nothing else: an alertmanager config edit restarts alertmanager alone.
+# `origin-pull-secret.yaml` restarts nothing, because only a Traefik middleware reads it.
+#
+# DECIDED: no rolled_by_role on these entries, though the release record's `restart` comes
+# from the role's own amend after its private restart, as pihole-2's does. The shared role drops
+# every entry carrying `rolled_by_role` from the pod-template fingerprints (the task "List the
+# workloads whose pod template is fingerprinted" in roles/k8s/manifests/tasks/main.yml). These
+# workloads are applied BY the shared apply, so their fingerprints are right and the restart's
+# "the apply already rolled it" skip needs them: without it, an image bump and a Secret edit in
+# one deploy roll a Recreate pod twice, deleting it mid-pull (#3115). `restart_on: []` gets the
+# stamp's `restart: false` instead. The M1 plan
+# (docs/target-architecture/monitoring/m1-alertmanager.md), PR 5, has the ruling.
 observability_stabilise_workloads:
   - { kind: deploy, name: loki, restart_on: [] }
-  - { kind: deploy, name: prometheus, restart_on: [secret] }
+  - kind: deploy
+    name: prometheus
+    restart_on: []
+    restart_secrets: [scrape-credentials-secret.yaml]
   - { kind: deploy, name: kube-state-metrics, restart_on: [] }
   - { kind: deploy, name: tempo, restart_on: [] }
   - { kind: daemonset, name: otel-collector, restart_on: [] }
-  - { kind: deploy, name: grafana, restart_on: [secret] }
-  - { kind: deploy, name: alertmanager, restart_on: [secret] }
+  - kind: deploy
+    name: grafana
+    restart_on: []
+    restart_secrets: [grafana-secret.yaml]
+  - kind: deploy
+    name: alertmanager
+    restart_on: []
+    restart_secrets: [alertmanager-secret.yaml]

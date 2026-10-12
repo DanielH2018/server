@@ -21,11 +21,12 @@ fails on both sides and reads as "not rolled", which is the double roll.
 pihole's gate sits on the restart task inside roll_one.yml rather than on the include, so the
 sibling check and the rollout wait still follow a roll the apply started.
 
-Observability's declaration is also narrowed per SIGNAL rather than per
-workload. Each entry carries `restart_on`, so the record decides `restart` from the same key
-the private restart selects its targets with. Those that read no Secret never restart for a
-changed render at all — their ConfigMaps are hashed into their own pod templates — and a record that
-still expected one would fail `probe.py health` as NOT ROLLED.
+Observability's entries all declare `restart_on: []`, so the record stamps `restart: false`
+for each. Its ConfigMaps are hashed into their own pod templates, so the apply rolls those, and
+a Secret edit restarts only the workloads whose `restart_secrets` names the changed file. The
+role raises the record for those through `rollout_amend.yml` after its wait;
+test_observability_secret_restarts.py pins that half. The entries carry no `rolled_by_role`,
+which would drop them from the fingerprints the restart's skip reads.
 
 The shared apply carries `deployment.yaml`, which holds `pihole` alone: `pihole-2` is applied
 later, by tasks/apply_instance_2.yml, and the record is written before that task runs -- so a
@@ -143,19 +144,19 @@ def test_observability_a_changed_render_expects_nothing_to_roll():
 
 
 def test_observability_a_changed_secret_expects_only_its_secret_readers_to_roll():
-    """The green half. A Secret's bytes are not hashed into a pod template, so the private
-    restart survives for the workloads that read one, and the record expects exactly those
-    to carry a fresh `restartedAt`."""
+    """The stamp leaves a Secret's restart to the role. `manifests_secret_render` changes for
+    any one Secret file, so a stamp that decided from it would hold every reader to a roll
+    that an Alertmanager config edit never made. Every entry is stamped `restart: false`, and
+    the role's amend raises the readers of the changed file alone, which
+    test_observability_secret_restarts.py pins."""
     rollouts = _observability_rollouts(
         manifests_render={"changed": False},
         manifests_secret_render={"changed": True},
         manifests_apply={"stdout": "deployment.apps/grafana configured"},
     )
-    assert {n for n, r in rollouts.items() if r["restart"]} == {
-        "prometheus",
-        "grafana",
-        "alertmanager",
-    }
+    assert set(rollouts) >= {"prometheus", "grafana", "alertmanager"}, rollouts
+    assert not any(r["restart"] for r in rollouts.values()), rollouts
+    assert not any("rolled_by_role" in r for r in rollouts.values()), rollouts
 
 
 def test_observability_an_unchanged_render_expects_nothing_to_roll():
@@ -163,21 +164,6 @@ def test_observability_an_unchanged_render_expects_nothing_to_roll():
     rollouts = _observability_rollouts(manifests_render={"changed": False})
     assert rollouts["grafana"]["restart"] is False
     assert not any(r["restart"] for r in rollouts.values()), rollouts
-
-
-def test_observability_a_created_workload_is_not_expected_to_roll():
-    """The private loop's guard is `.apps/<name> created`, kind-agnostic; the record's is per
-    kind, so the prefix has to resolve or the record would expect a restart of a workload the
-    loop skipped. Driven by a secret change, because that is the only signal that still reaches
-    this role's restart task — `restart_on: []` decides the others before the `created`
-    clause is consulted, which is why the DaemonSet no longer exercises this branch."""
-    rollouts = _observability_rollouts(
-        manifests_render={"changed": False},
-        manifests_secret_render={"changed": True},
-        manifests_apply={"stdout": "deployment.apps/grafana created"},
-    )
-    assert rollouts["grafana"]["restart"] is False
-    assert rollouts["prometheus"]["restart"] is True
 
 
 def test_observability_declares_the_same_workloads_its_private_restart_rolls():
@@ -199,24 +185,27 @@ def test_observability_declares_the_same_workloads_its_private_restart_rolls():
 
 
 def test_observability_private_restart_reads_the_same_facts_as_the_record():
+    """The restart skips what the record skips: a workload the apply created or rolled. It
+    selects its targets by the changed Secret FILE, which the record cannot read, so every
+    entry leaves the record's decision to the amend with `restart_on: []`."""
     when = " ".join(_observability_private_restart()["when"])
-    for ingredient in (
-        "manifests_secret_render is changed",
-        "manifests_rolled_by_apply.get(",
-    ):
-        assert ingredient in when, ingredient
-        assert ingredient in FACT_EXPR, ingredient
+    ingredient = "manifests_rolled_by_apply.get("
+    assert ingredient in when and ingredient in FACT_EXPR
     assert " created" in when
     assert "manifests_rolled_by_apply.get(item.name, false)" in when
-    # The narrowing is the other half of the same agreement: the task selects its
-    # targets by `restart_on` and the record decides `restart` from the same key, so a
-    # workload the task skips is a workload the record expects nothing from.
-    assert "'secret' in item.restart_on" in when
-    assert "'secret' in manifests_target_triggers" in FACT_EXPR
-    assert "manifests_render is changed" not in when, (
-        "the restart task is back on the per-ROLE render signal, which restarts every workload for "
-        "one workload's edit — the regression #2858 fixed."
-    )
+    assert "item.restart_secrets" in when
+    assert "observability_changed_secret_files" in when
+    assert {e["name"]: e["restart_on"] for e in observability_self_rollouts()} == {
+        e["name"]: [] for e in observability_self_rollouts()
+    }
+    for per_role in (
+        "manifests_render is changed",
+        "manifests_secret_render is changed",
+    ):
+        assert per_role not in when, (
+            f"the restart task is back on `{per_role}`, a per-ROLE signal that restarts every "
+            "reader for one file's edit — the regressions #2858 and M1 PR 5 fixed."
+        )
 
 
 def test_observability_declares_the_namespace_the_fingerprints_must_read():
@@ -235,7 +224,7 @@ def test_observability_declares_the_namespace_the_fingerprints_must_read():
 
 def test_observability_skips_its_private_restart_of_a_workload_the_apply_rolled():
     """The accept/reject pair, rendered through the private restart's own `when`:
-    the template moved (an image bump) skips the restart; a ConfigMap-only change, where the
+    the template moved (an image bump) skips the restart; a Secret-only change, where the
     template held, still fires it."""
     # The new clause alone: the `created` clause beside it carries a `\.apps/` regex
     # escape that Ansible's templar accepts and plain Jinja rejects, and the ingredient test
@@ -250,15 +239,23 @@ def test_observability_skips_its_private_restart_of_a_workload_the_apply_rolled(
     assert not render_expr("{{ " + clause + " }}", **rolled)
     assert render_expr("{{ " + clause + " }}", **held)
     assert render_expr("{{ " + clause + " }}", **unseen)
-    # And the record agrees, so `probe.py health` expects no `restartedAt` of the skip.
-    rollouts = _observability_rollouts(
-        manifests_render={"changed": False},
-        manifests_secret_render={"changed": True},
-        manifests_apply={"stdout": "deployment.apps/grafana configured"},
-        manifests_rolled_by_apply={"grafana": True},
+    # And the record agrees, so `probe.py health` expects no `restartedAt` of the skip. The
+    # stamp says `restart: false` for every entry, so the agreement is the amend's: it loops the
+    # restart's register minus its skip results, and the skip above is one of those.
+    amend = task_named(
+        load_tasks(OBSERVABILITY / "tasks/main.yml"),
+        "Record the telemetry workloads the secret restart rolled",
     )
-    assert rollouts["grafana"]["restart"] is False
-    assert rollouts["prometheus"]["restart"] is True
+    register = _observability_private_restart()["register"]
+
+    def amended(grafana_result):
+        results = [{"changed": True, "item": {"name": "prometheus"}}, grafana_result]
+        looped = render_expr(amend["loop"], **{register: {"results": results}})
+        return {r["item"]["name"] for r in looped}
+
+    skipped = {"changed": False, "skipped": True, "item": item}
+    assert amended(skipped) == {"prometheus"}
+    assert amended({"changed": True, "item": item}) == {"prometheus", "grafana"}
 
 
 def test_pihole_an_image_bump_expects_instance_one_to_roll():

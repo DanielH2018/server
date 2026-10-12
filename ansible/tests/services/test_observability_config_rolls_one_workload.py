@@ -11,9 +11,9 @@ The role rolls per workload instead, and this module guards the ways that goes q
     annotation and the edit reaches the ConfigMap and never the pod, with the deploy fully
     green — the exact failure the restart task was written for in the first place.
   * **A Secret edit still needs the restart task**, because hashing a Secret's bytes into a
-    world-readable annotation would open a read path over it. The workloads that read one
-    declare `restart_on: [secret]`; a workload that gains a Secret input and does not is
-    silently never restarted for a rotation.
+    world-readable annotation would open a read path over it. Each workload that reads one
+    names the Secret's rendered file in `restart_secrets`; a workload that gains a Secret input
+    and does not name its file is silently never restarted for a rotation.
   * **The annotation hashes less than the ConfigMap.** Each template captures ONE `data:` key's
     body into the variable it hashes, except grafana's, which captures the whole `data:` block.
     A second key added to one of the other four lands outside the capture: the ConfigMap
@@ -25,9 +25,11 @@ The role rolls per workload instead, and this module guards the ways that goes q
     ConfigMap as a whole directory; without either, a rule edit reaches the ConfigMap and never
     the evaluation. `_rules_reload_problems` pins both in place of the key count.
 
-`restart_on` also decides what the release record expects (`rollouts[].restart`,
-`k8s/manifests/tasks/release_stamp.yml`), so a wrong value fails `probe.py health observability`
-with NOT ROLLED rather than going quiet. That half is the loud one; these two are not.
+`restart_on` decides what the release record expects (`rollouts[].restart`,
+`k8s/manifests/tasks/release_stamp.yml`). Every entry declares `[]`: a `secret` trigger there
+would hold a reader to a roll that another Secret file's edit never made, and `probe.py health
+observability` would fail it as NOT ROLLED. The role's amend raises the record for the
+workloads its restart rolled.
 """
 
 import copy
@@ -125,12 +127,52 @@ def _workloads():
     }
 
 
-def _restart_on():
+def _declared():
     declared = load_defaults(REPO / "ansible/roles/k8s" / _ROLE)
     return {
-        entry["name"]: entry.get("restart_on")
-        for entry in declared["observability_stabilise_workloads"]
+        entry["name"]: entry for entry in declared["observability_stabilise_workloads"]
     }
+
+
+def _secret_files():
+    """Each role Secret's name, mapped to the rendered file that carries it."""
+    return {
+        doc["metadata"]["name"]: template.removesuffix(".j2")
+        for role, template, doc in rendered_docs()
+        if role == _ROLE and doc and doc.get("kind") == "Secret"
+    }
+
+
+def _restart_declaration_problems(workloads, declared, secret_files):
+    """Why a workload's restart declaration disagrees with the Secrets its pod reads."""
+    problems = []
+    for name, workload in sorted(workloads.items()):
+        entry = declared.get(name)
+        if entry is None:
+            problems.append(
+                f"{name} is not in observability_stabilise_workloads, so nothing restarts it "
+                "for a Secret edit and the play gate never soaks it."
+            )
+            continue
+        if entry.get("restart_on") != []:
+            problems.append(
+                f"{name} declares restart_on: {entry.get('restart_on')}. Every entry needs []: "
+                "the shared role's signals are per ROLE, so any trigger restarts it, or holds "
+                "the release record to a restart, for another workload's edit."
+            )
+        reads = sorted(
+            secret_files[secret]
+            for secret in _secret_inputs(workload)
+            if secret in secret_files
+        )
+        names = sorted(entry.get("restart_secrets", []))
+        if names != reads:
+            problems.append(
+                f"{name} reads the Secret files {reads} and its restart_secrets names {names}. "
+                "A file it reads and does not name never restarts it for a rotation; a file it "
+                "names and does not read restarts it for another workload's edit."
+            )
+    return problems
 
 
 def test_the_census_finds_every_workload_the_role_renders():
@@ -165,41 +207,36 @@ def test_a_workload_mounting_a_role_configmap_carries_the_checksum_annotation():
     )
 
 
-def test_every_workload_reading_a_role_secret_declares_restart_on_secret():
+def test_every_workload_reading_a_role_secret_names_its_file_in_restart_secrets():
     # fact: ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart
-    docs = _role_docs()
-    own_secrets = _names_of_kind(docs, "Secret")
-    assert own_secrets, "observability renders no Secret — the census is vacuous."
+    workloads = _workloads()
+    secret_files = _secret_files()
+    assert secret_files, "observability renders no Secret — the census is vacuous."
 
     readers = {
         name
-        for name, workload in _workloads().items()
-        if _secret_inputs(workload) & own_secrets
+        for name, workload in workloads.items()
+        if _secret_inputs(workload) & set(secret_files)
     }
     assert readers == _EXPECTED_SECRET_READERS, (
         f"the workloads reading a observability Secret are {sorted(readers)}, not "
-        f"{sorted(_EXPECTED_SECRET_READERS)}. Update restart_on and this set together."
+        f"{sorted(_EXPECTED_SECRET_READERS)}. Update restart_secrets and this set together."
     )
+    assert _restart_declaration_problems(workloads, _declared(), secret_files) == []
 
-    restart_on = _restart_on()
-    for name in sorted(_workloads()):
-        triggers = restart_on.get(name)
-        assert triggers is not None, (
-            f"{name} has no restart_on in observability_stabilise_workloads, so it falls back to "
-            "all three signals and the role restarts it for any manifest change again."
-        )
-        if name in readers:
-            assert "secret" in triggers, (
-                f"{name} reads {sorted(_secret_inputs(_workloads()[name]) & own_secrets)} and "
-                f"declares restart_on: {triggers}. A Secret's bytes are not hashed into the "
-                "pod template, so nothing else would restart it for a rotation."
-            )
-        else:
-            assert triggers == [], (
-                f"{name} reads no Secret this role renders but declares restart_on: "
-                f"{triggers}. Its ConfigMap is hashed into its own pod template, so the apply "
-                "rolls it; a restart trigger here restarts it for another workload's edit."
-            )
+
+def test_a_reader_whose_restart_secrets_omits_its_file_is_flagged():
+    declared = copy.deepcopy(_declared())
+    declared["alertmanager"]["restart_secrets"] = []
+    problems = _restart_declaration_problems(_workloads(), declared, _secret_files())
+    assert len(problems) == 1 and "alertmanager-secret.yaml" in problems[0], problems
+
+
+def test_a_secret_trigger_in_restart_on_is_flagged():
+    declared = copy.deepcopy(_declared())
+    declared["grafana"]["restart_on"] = ["secret"]
+    problems = _restart_declaration_problems(_workloads(), declared, _secret_files())
+    assert len(problems) == 1 and "restart_on" in problems[0], problems
 
 
 def test_no_role_configmap_grew_a_key_the_annotation_does_not_hash():

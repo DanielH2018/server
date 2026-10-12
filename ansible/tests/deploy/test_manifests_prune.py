@@ -181,7 +181,7 @@ def test_the_forbidden_kind_check_actually_fires() -> None:
 
 
 def _manifests_includes() -> dict[str, list[dict]]:
-    """The `vars:` of each role's `include_role: k8s/manifests` tasks, keyed by role."""
+    """The `vars:` of each role's render include, `k8s/manifests` without `tasks_from`, by role."""
     found: dict[str, list[dict]] = {}
     for role in role_dirs():
         main = role / "tasks" / "main.yml"
@@ -189,7 +189,7 @@ def _manifests_includes() -> dict[str, list[dict]]:
             continue
         for task in walk_tasks(load_tasks(main)):
             include = task.get("ansible.builtin.include_role") or {}
-            if include.get("name") == "k8s/manifests":
+            if include.get("name") == "k8s/manifests" and "tasks_from" not in include:
                 found.setdefault(role.name, []).append(task.get("vars") or {})
     return found
 
