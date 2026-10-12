@@ -81,10 +81,10 @@
     name: "Weekly rkhunter malware scan"
     minute: "0"
     hour: "2"
-    # Wednesday, staggered off the Monday AIDE check: both scans run >1h on the
-    # Pi's 4 slow cores and would overlap (rkhunter 02:00 still running when
-    # AIDE starts at 03:00). The script runs rkhunter nice/ionice-idle so a scan
-    # can never starve containers.
+    # Wednesday, staggered off the Monday AIDE check, which runs for over an hour
+    # on the Pi. The two once overlapped there at full priority; an rkhunter scan
+    # takes two to three minutes. The script runs rkhunter nice/ionice-idle so a
+    # scan can never starve containers.
     weekday: "3"
     # The script logs the warnings and its verdict itself; this routes anything else it prints,
     # such as a bash error, to the journal rather than to root's unread mail spool.
