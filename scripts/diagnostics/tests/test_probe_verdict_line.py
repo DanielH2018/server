@@ -1,6 +1,6 @@
 """Every probe.py verdict subcommand ends with one `PROBE-VERDICT:` line (#4454).
 
-The line comes from `lib.exit_codes.verdict_line`, so its verdict token is derived from the exit
+The line comes from `lib.exit_messages.verdict_line`, so its verdict token is derived from the exit
 code rather than from each subcommand's own vocabulary. The oracle for the token is the probe's
 entry in `CONTRACTS`, not a string copied from the subcommand. Each run stubs only the transport
 under the subcommand (`subprocess.run`) and drives `probe.main`, which is where an exit code becomes a line.
@@ -23,7 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import probe
 from diagnostics.probe_lib.cli_parser import _build_parser
-from lib.exit_codes import FAILED, OK, TEMP_FAIL, contract, verdict_line
+from lib.exit_codes import FAILED, OK, TEMP_FAIL, contract
+from lib.exit_messages import verdict_line
 
 PROBE = "scripts/diagnostics/probe.py"
 VERDICT_LINE = re.compile(r"^PROBE-VERDICT: (\S+) \((.+)\)$")

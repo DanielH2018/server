@@ -52,9 +52,8 @@ from lib.exit_codes import (
     DEPLOY_BAD_FLAGS,
     DEPLOY_STALE,
     DEPLOY_TAG_MISS,
-    describe as describe_exit,
-    verdict_line,
 )
+from lib.exit_messages import describe as describe_exit, verdict_line
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_VARS, REPO
 

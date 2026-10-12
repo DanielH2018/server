@@ -33,7 +33,7 @@ response is to retry rather than to investigate the thing probed (#4444). Each v
 subcommand's `--help` states what 0 and 1 mean for it.
 
 A verdict subcommand's last stdout line is `PROBE-VERDICT: <ok|fail|unreadable> (<detail>)`.
-`main()` prints it from the exit code through `lib.exit_codes.verdict_line`, so every subcommand
+`main()` prints it from the exit code through `lib.exit_messages.verdict_line`, so every subcommand
 shares one vocabulary (#4454). `--json` and `--dry-run` print no verdict line, because a trailing
 line would break a JSON document or a command list. The prefix is not bare `VERDICT:`, because a
 landing's log carries `probe.py health` output and is grepped for `^VERDICT:`.

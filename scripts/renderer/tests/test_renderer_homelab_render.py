@@ -41,12 +41,17 @@ def test_cluster_without_secret_stubs_exits_2_and_writes_nothing(out, capsys):
 
 
 def test_cluster_renders_littlelink_in_the_c1_layout(out, stub_file):
-    assert _cluster(out, "--secret-stubs", str(stub_file)) == 0
+    assert _cluster(out, "--secret-stubs", str(stub_file), "--role", "littlelink") == 0
 
     assert sorted(p.name for p in (out / "cluster").iterdir()) == ["littlelink"]
     tag = out / "cluster" / "littlelink"
     files = sorted(p.name for p in tag.iterdir())
-    assert files == ["deployment.yaml", "kustomization.yaml"]
+    assert files == [
+        "deployment.yaml",
+        "ingressroute.yaml",
+        "kustomization.yaml",
+        "service.yaml",
+    ]
     kustomization = yaml_fast.safe_load((tag / "kustomization.yaml").read_text())
     assert kustomization["kind"] == "Kustomization"
     assert kustomization["resources"] == [f for f in files if f != "kustomization.yaml"]
@@ -68,7 +73,7 @@ def test_a_stub_file_missing_a_key_is_flagged(out, stub_file, tmp_path, capsys):
 
 
 def test_a_tag_that_does_not_render_yet_is_flagged(out, stub_file, capsys):
-    assert _cluster(out, "--secret-stubs", str(stub_file), "--role", "authelia") == 2
+    assert _cluster(out, "--secret-stubs", str(stub_file), "--role", "n8n") == 2
     assert "do not render yet" in capsys.readouterr().err
     assert list(out.iterdir()) == []
 
