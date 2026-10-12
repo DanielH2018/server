@@ -774,6 +774,7 @@
  "scripts/deploy_tools/tests/test_narrow_setup_plugins.py": 0.81,
  "scripts/deploy_tools/tests/test_narrow_setup_task_file_kinds.py": 0.37,
  "scripts/deploy_tools/tests/test_narrow_setup_vars_walk.py": 0.76,
+ "scripts/deploy_tools/tests/test_promote_prune.py": 0.08,
  "scripts/deploy_tools/tests/test_prune_releases.py": 0.02,
  "scripts/deploy_tools/tests/test_publish_pr.py": 0.27,
  "scripts/deploy_tools/tests/test_publish_pr_unlanded.py": 0.0,

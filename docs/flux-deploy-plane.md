@@ -116,11 +116,50 @@ A dispatch of the workflow from master with the input `verify_drill` pushes the 
 unsigned to the tag `verify-drill`, for the flux role's signature drill. It skips `promote`
 and `tag`, so it never moves `prod`.
 
+## Retention of old artifact versions
+
+The `prune-artifacts` workflow, `.github/workflows/prune-artifacts.yml`, runs
+`promote.py prune` once a day. It deletes a version of the artifact only when the version is
+older than 14 days and is one of these:
+
+- a version whose only tag is `sha-<commit>`, where the commit is a strict ancestor of
+  `prod`'s commit, so no promotion can choose it again;
+- an untagged version whose manifest has no `subject`, such as a `verify-drill` bundle that a
+  later drill replaced;
+- a signature of a digest that this run deletes or that the listing no longer holds.
+
+Every other version stays, however old. That covers the versions tagged `prod`, `last-good`
+and `verify-drill`, and every `sha-<commit>` version whose commit descends from `prod`'s.
+
+The signatures are why the rule reads manifests rather than ages. cosign v3 stores a
+signature as a bundle, which is an untagged package version whose manifest `subject` names
+the signed digest. On a registry without the OCI referrers API, cosign also
+writes an index tagged `sha256-<hex>`, named after the signed digest. A prune that deleted
+every untagged version past 14 days would strip the signature from `prod`. Every later
+verification of that digest would then fail, and the deletion cannot be undone. So `prune`
+deletes a bundle or an index only when the digest it signs is gone.
+
+`prune` deletes nothing when `prod` does not exist, or when any listing, manifest or ancestry
+read fails. A listing that does not hold `prod`'s or `last-good`'s version counts as a failed
+read. After its deletes, `prune` runs `cosign verify` on `prod`'s digest, and on
+`last-good`'s when that tag exists. A failed verify fails the run, so a wrong selection
+shows as a red run on the day it happens. `prune` waits one second before each delete,
+because GitHub rate-limits bursts of writes with a 403 that reads like a permission error.
+The run's last line counts the versions it listed, the untagged ones among them, the untagged
+versions whose manifest has a `subject`, and the versions it selected, deleted and verified.
+
+The first run shows whether the workflow's `GITHUB_TOKEN` may list and delete versions of a
+package that the user account owns. If the run logs an HTTP 403, the operator grants this
+repository the Admin role in the package's Actions access settings (**operator-only**).
+Until then the prune deletes nothing, which costs storage only.
+
 ## Tokens
 
 No agent token ever carries the `write:packages` scope. Pushing an artifact, signing it and
 moving its `prod` tag belong only to the code-free `publish` and `tag` jobs, under each job's
-own `GITHUB_TOKEN`.
+own `GITHUB_TOKEN`. The `prune` job's `GITHUB_TOKEN` also holds `packages: write`, for its
+deletes. That job runs only master's copy of `promote.py`, because it refuses any ref but
+`refs/heads/master`.
 
 The repository secret `PROMOTE_TOKEN` is a fine-grained token with Variables read and write
 on this repository and a 90-day expiry. `promote` reads `DEPLOY_HOLD` with it, and `tag`

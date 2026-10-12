@@ -7,7 +7,8 @@ fact it reads from outside the checkout comes through this module:
   fetch and the manifest `HEAD`. It lists no tags, so a run's request count does not grow
   with the number of published versions.
 - `GitHub` reads a repository variable through `gh variable get` and a commit's check-runs
-  through the REST API.
+  through the REST API. For `promote.py prune` it also lists the artifact's package versions
+  and deletes one, through the Packages API.
 - `Cosign` runs `cosign verify` under the identity the cluster's OCIRepository checks.
 
 Each read returns a value, returns None for "absent", or raises `ForgeError`. What absent and
@@ -26,6 +27,7 @@ import base64
 import json
 import re
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -35,6 +37,18 @@ from typing import Protocol
 REPOSITORY = "DanielH2018/server"
 REGISTRY = "ghcr.io"
 ARTIFACT = "danielh2018/homelab-manifests"
+
+# The artifact as the Packages API names it: a container package owned by the user account,
+# not by the repository, so its path starts at /users.
+PACKAGE_VERSIONS_URL = "https://api.github.com/users/DanielH2018/packages/container/homelab-manifests/versions"
+# The API's largest page. A listing longer than VERSION_PAGES_MAX pages is an error rather than
+# a truncation, because `prune` reads a digest missing from the listing as deleted.
+VERSIONS_PER_PAGE = 100
+VERSION_PAGES_MAX = 300
+# Seconds between two deletes. GitHub's REST best practices ask for at least one second between
+# mutating requests, and a burst trips the secondary rate limit as a 403 that reads like a
+# permission error.
+DELETE_PAUSE_S = 1.0
 
 # The keyless identity the `promote` workflow signs under, and the one the OCIRepository
 # `homelab` checks. A signature from any other workflow or ref does not verify.
@@ -209,6 +223,19 @@ class Registry:
         return digest
 
 
+def _api_message(response: Response) -> str:
+    """`: <message>` from a GitHub API error body, or nothing when it carries none.
+
+    A 403 means either a missing permission or a rate limit, and only the message tells which.
+    """
+    try:
+        body = json.loads(response.body)
+    except ValueError:
+        return ""
+    message = body.get("message") if isinstance(body, dict) else None
+    return f": {message}" if isinstance(message, str) and message else ""
+
+
 def _error_codes(response: Response) -> set[str]:
     """The `code` of each entry in an OCI error body, or nothing when the body has none."""
     try:
@@ -222,7 +249,7 @@ def _error_codes(response: Response) -> set[str]:
 
 
 class GitHub:
-    """Reads from one GitHub repository: a variable through `gh`, check-runs through REST."""
+    """One GitHub repository: a variable through `gh`, check-runs and packages through REST."""
 
     def __init__(
         self,
@@ -230,20 +257,26 @@ class GitHub:
         token: str | None,
         run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
         repository: str = REPOSITORY,
+        versions_per_page: int = VERSIONS_PER_PAGE,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         """Holds the two ways in.
 
         Args:
             transport: sends each REST request.
-            token: the bearer token for REST reads. The variable read does not use it,
+            token: the bearer token for REST calls. The variable read does not use it,
                 because `gh` reads `GH_TOKEN` from its own environment.
             run: starts the `gh` subprocess.
             repository: the `owner/name` slug.
+            versions_per_page: the page size of the package listing.
+            sleep: waits DELETE_PAUSE_S before each delete.
         """
         self._transport = transport
         self._token = token
         self._run = run
         self.repository = repository
+        self._versions_per_page = versions_per_page
+        self._sleep = sleep
 
     def variable(self, name: str) -> str | None:
         """The value of repository variable `name`, or None when the variable does not exist.
@@ -277,13 +310,7 @@ class GitHub:
             f"https://api.github.com/repos/{self.repository}/commits/{sha}/check-runs"
             "?per_page=100"
         )
-        headers = {
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        }
-        if self._token:
-            headers["Authorization"] = f"Bearer {self._token}"
-        response = self._transport("GET", url, headers)
+        response = self._transport("GET", url, self._rest_headers())
         if response.status != 200:
             raise ForgeError(f"check-runs for {sha}: HTTP {response.status}")
         body = _json(response, f"check-runs for {sha}")
@@ -291,6 +318,71 @@ class GitHub:
         if not isinstance(runs, list):
             raise ForgeError(f"check-runs for {sha}: the body has no check_runs list")
         return runs
+
+    def package_versions(self) -> list[dict]:
+        """Every version of the artifact's package, as the Packages API returns each one.
+
+        Reads page after page until one comes back empty, so the list is the whole listing or
+        an error, never a prefix of it.
+
+        Raises:
+            ForgeError: any status but 200 on any page, a page that is not a JSON list, more
+                than VERSION_PAGES_MAX pages, or no answer.
+        """
+        versions = []
+        for page in range(1, VERSION_PAGES_MAX + 1):
+            url = (
+                f"{PACKAGE_VERSIONS_URL}?per_page={self._versions_per_page}&page={page}"
+            )
+            response = self._transport("GET", url, self._rest_headers())
+            if response.status != 200:
+                raise ForgeError(
+                    f"package versions page {page}: HTTP {response.status}"
+                    f"{_api_message(response)}"
+                )
+            body = _json(response, f"package versions page {page}")
+            if not isinstance(body, list):
+                raise ForgeError(
+                    f"package versions page {page}: the body is not a list"
+                )
+            if not body:
+                return versions
+            versions.extend(body)
+        raise ForgeError(
+            f"package versions: more than {VERSION_PAGES_MAX} pages of "
+            f"{self._versions_per_page}"
+        )
+
+    def delete_package_version(self, version_id: int) -> bool:
+        """Delete one version of the artifact's package.
+
+        Returns:
+            True when the version was deleted, False when the API no longer holds it.
+
+        Raises:
+            ForgeError: any status but 204 or 404, or no answer. A token without the
+                package's Admin role gets a 403 here.
+        """
+        url = f"{PACKAGE_VERSIONS_URL}/{version_id}"
+        self._sleep(DELETE_PAUSE_S)
+        response = self._transport("DELETE", url, self._rest_headers())
+        if response.status == 204:
+            return True
+        if response.status == 404:
+            return False
+        raise ForgeError(
+            f"delete package version {version_id}: HTTP {response.status}"
+            f"{_api_message(response)}"
+        )
+
+    def _rest_headers(self) -> dict[str, str]:
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+        if self._token:
+            headers["Authorization"] = f"Bearer {self._token}"
+        return headers
 
 
 class Cosign:
@@ -353,7 +445,7 @@ def connect(
     transport: Transport = urllib_transport,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> Forge:
-    """The live clients, with `GITHUB_TOKEN` from `env` for the registry and REST reads.
+    """The live clients, with `GITHUB_TOKEN` from `env` for the registry and REST calls.
 
     `gh` reads `GH_TOKEN` from the environment it inherits, which the workflow sets to
     `PROMOTE_TOKEN` on the step that runs `promote.py decide`.

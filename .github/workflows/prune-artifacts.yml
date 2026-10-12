@@ -1,0 +1,63 @@
+name: prune-artifacts
+
+# Deletes the old versions of the manifest artifact that the `promote` workflow publishes, once a
+# day. `promote.py prune` selects them: it deletes a version only when it is older than 14 days
+# and no promotion or rollback can reach it, together with the signatures of the digests it
+# deletes. It then runs `cosign verify` on `prod`'s digest, and on `last-good`'s, so a wrong
+# selection shows as a red run on the day it happens. The plan is
+# docs/target-architecture/deploy/d1-flux-installed.md (*Decisions*, *Old artifact versions are
+# pruned daily*), and the operator's view is docs/flux-deploy-plane.md.
+#
+# ansible/tests/repo/test_promote_workflow.py holds this file's guard, permissions and
+# concurrency group, and holds its cosign installer step equal to promote.yml's.
+
+on:
+  schedule:
+    - cron: "37 5 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  prune:
+    # A dispatch from a branch would run that branch's copy with a token that can delete.
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-26.04
+    # Deletes are paced one a second (forge.py:DELETE_PAUSE_S), about 370 on a normal day. A
+    # backlog that outlasts this is cut off between deletes. Signatures go last, so what is left
+    # is what the next run selects again, never a kept version's missing signature.
+    timeout-minutes: 60
+    # Not `promote`: a job queued in that group would evict a pending promote job.
+    concurrency:
+      group: prune
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0  # each ancestry read needs master's history back past every sha-<C>
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+
+      # `cosign verify` passes no credentials of its own and reads the docker config, and the
+      # package is private until the operator makes it public.
+      - name: Log in to GHCR
+        env:
+          GH_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+
+      # GITHUB_TOKEN lists and deletes package versions through the Packages API, and reads
+      # each untagged manifest from GHCR.
+      - name: Prune
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run --frozen python scripts/deploy_tools/promote.py prune

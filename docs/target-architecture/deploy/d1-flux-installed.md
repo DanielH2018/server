@@ -6,6 +6,8 @@ D1.1, the Flux schemas and the proposal: [#4697](https://github.com/DanielH2018/
 D1.2, the flux role and its controllers: [#4734](https://github.com/DanielH2018/server/pull/4734).
 D1.2b, guards on the Flux read access `view` aggregation grants: [#4751](https://github.com/DanielH2018/server/pull/4751).
 D1.3, the promotion decision: [#4709](https://github.com/DanielH2018/server/pull/4709).
+D1.4, the promote workflow: [#4759](https://github.com/DanielH2018/server/pull/4759).
+D1.7, retention for old artifact versions: [#4770](https://github.com/DanielH2018/server/pull/4770).
 
 Depends on: none
 
@@ -382,6 +384,7 @@ and upstream facts through `gh`.
 + .github/workflows/promote.yml     name: promote; jobs render, publish, promote and tag
 + .github/workflows/prune-artifacts.yml   daily retention of old sha-* versions (D1.7)
 + scripts/deploy_tools/promote.py   decide and prune, called by the two workflows
++ scripts/deploy_tools/artifact_retention.py   prune's pure selection (D1.7)
 + scripts/deploy_tools/forge.py     the forge adapter: every GitHub and GHCR call promote.py makes
   .claude/hooks/block-footguns.py   denies agents the two variable writes and the tag moves (D1.4)
   scripts/secrets_mgmt/secret_rotation.py   a 90-day tier for PROMOTE_TOKEN's copy (D1.4)
