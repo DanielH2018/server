@@ -969,8 +969,9 @@ daniel-box to `setup_drift_check_hosts` before D6.5 disarms manifest-prune-check
   daniel-box fires as soon as `promote` applies it, unless the box has already written a
   sample inside the deadline, and the timer runs once a day. So D6.5a arms the box and
   checks its series, and D6.5 adds the box's arm once that series exists. Between the two,
-  B1's manifest-prune rules still page drift on the box, so the box keeps one paging
-  detector throughout.
+  the box's setup-drift verdict pages nothing, because no rule names its `origin`. Arms 2
+  and 3 of manifest-prune-check read the same host-plane stamps on the box, and B1's
+  manifest-prune rules page them, so the box keeps one paging detector throughout.
 - Both checkers run on the box between D6.5a and D6.5. The `group_vars` comment calls that
   redundancy "the safe direction".
 
@@ -1801,10 +1802,11 @@ The PRs merge in this order.
       until that holds, because D6.5's `NotReporting` arm for the box needs a sample inside
       its deadline.
     - **The red proof** is the fixture pair in `ansible/tests/deploy/test_setup_drift_check.py`
-      that runs the same `setup-drift-lib.sh` (a red verdict on a live host would page through
-      B2's rule):
+      that runs the same `setup-drift-lib.sh`:
       `test_a_stale_deployed_copy_is_reported` and `test_a_changed_template_is_reported_stale`.
-      A red push on the live tile would page.
+      A red verdict on a live host is not the proof. On daniel-server it would page through
+      B2's rule. On daniel-box it would page nothing, because no rule names the box's
+      `origin` until D6.5.
 8. **D6.5 — Disarm the drift checks** (about 200 lines changed). It removes every unit and
    alert rule and keeps every line of the checks' code, because the release-staleness cron
    runs `probe.py releases` from the primary checkout until this PR's hand apply removes it
@@ -1885,7 +1887,9 @@ The PRs merge in this order.
       the three kept heartbeat families, whose sources D6.5 does not change. The session
       quotes the recap and names every `changed` task in the PR thread.
     - **The setup-drift check stays green.** After the apply, the box's setup-drift check,
-      which M6's B2 made a textfile check, still reads green. A fragment left behind would
+      which M6's B2 made a textfile check, still reads green:
+      `homelab_check_success{check="setup-drift-check",origin="daniel-box"}` is 1 after the
+      box's next scheduled run, and D6.5's new arm for the box does not fire. A fragment left behind would
       read as drift (failure class 5). D6.5 changes no source that a remaining fragment
       stamps.
 9. **D6.5b — Delete the drift checks' code and the absent tasks** (about 2,700 lines
@@ -1923,7 +1927,8 @@ The PRs merge in this order.
            '*-check-manifest-prune*' '*-check-live-drift*'` lists no unit under either
            timer name (before or after M6's C-3b rename), `/etc/cron.d` and root's crontab
            hold no release-staleness entry, the four fragments and the three `.prom` files are
-           absent, and the setup-drift check reads green.
+           absent, and `homelab_check_success{check="setup-drift-check",origin="daniel-box"}`
+           reads 1.
         5. It clears the line with a bare `gitops_state.py clear-owed manual_plane k3s`.
     - **The bare clear is an exception to "apply, then clear".** The rule exists so that a
       clear never drops work that is merged and unapplied. D6.5b removes only files that no
