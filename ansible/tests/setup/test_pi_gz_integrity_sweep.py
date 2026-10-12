@@ -226,7 +226,9 @@ def test_the_heartbeat_pushes_down_on_a_down_verdict(tmp_path):
 
 
 def test_the_heartbeat_stays_up_on_an_up_verdict(tmp_path):
-    """The RED half of the test above: without this, a check wired to always push down passes."""
+    """The RED half of the test above: without this, a check wired to always push down passes.
+    The harness's findmnt stub reports a tmpfs on /var/log, so this is also the green half of
+    the mount probe below."""
     state = _verdict_file(tmp_path, "up", "107 rotated .gz pass gzip -t")
 
     status, msg, _, _ = _heartbeat(tmp_path, state)
@@ -254,3 +256,26 @@ def test_a_stale_verdict_reads_down(tmp_path):
 
     assert status == "down", msg
     assert "older than" in msg, msg
+
+
+# -- the heartbeat's log2ram mount probe (#4583) ---------------------------------------------
+
+
+@pytest.mark.parametrize("fstype", ["", "ext4"])
+def test_a_var_log_that_is_not_log2rams_tmpfs_reads_down(tmp_path, fstype):
+    """log2ram's boot guard can refuse to start and leave /var/log on the SD card. Nothing
+    reported that directly until the daily sweep found /var/hdd.log empty. `""` is no mount at
+    all; `ext4` is a mount, but not log2ram's tmpfs."""
+    state = _verdict_file(tmp_path, "up", "107 rotated .gz pass gzip -t")
+
+    status, msg, _, _ = run(
+        "pi-sd-health",
+        tmp_path,
+        counter="0",
+        jinja_vars={"optimize_pi_gz_integrity_state_file": str(state)},
+        log_fstype=fstype,
+    )
+
+    assert status == "down", msg
+    assert "not log2ram's tmpfs" in msg, msg
+    assert f"fstype '{fstype or 'none'}'" in msg, msg

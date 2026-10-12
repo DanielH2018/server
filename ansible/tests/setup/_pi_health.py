@@ -96,6 +96,15 @@ printf '%s\\n' "$*" >> "$JOURNALCTL_CALLS"
 printf '%b' "$STUB_JOURNAL"
 """
 
+# findmnt, answering pi-sd-health's `/var/log` mount probe with $STUB_LOG_FSTYPE. The real one
+# would read THIS host's mount table, where /var/log is no tmpfs, and every run would push down.
+# An empty value is no mount at all: the real findmnt prints nothing and exits 1.
+FINDMNT_STUB = """\
+#!/usr/bin/env bash
+[ -n "$STUB_LOG_FSTYPE" ] || exit 1
+echo "$STUB_LOG_FSTYPE"
+"""
+
 # pi-sd-health reads the ext4 error counter from a sysfs path it builds itself; point it at
 # a temp file by substituting the assignment's value.
 SD_COUNTER = "/sys/fs/ext4/mmcblk0p2/errors_count"
@@ -157,9 +166,11 @@ def run(
     daemon_back=False,
     gone="",
     journal="",
+    log_fstype="tmpfs",
 ):
     """Run a health cron; return (status, msg, still_running, health_log_lines).
 
+    `log_fstype` is what pi-sd-health's findmnt probe reads for /var/log; `""` is no mount.
     `journal` is what the journalctl stub answers, `\\n`-separated; `journalctl_calls(tmp_path)`
     reads back every invocation the script made.
 
@@ -180,7 +191,12 @@ def run(
         counter_file.write_text(counter)
         script.write_text(script.read_text().replace(SD_COUNTER, str(counter_file)))
 
-    bin_dir = fake_bin(tmp_path / "bin", docker=DOCKER_STUB, journalctl=JOURNALCTL_STUB)
+    bin_dir = fake_bin(
+        tmp_path / "bin",
+        docker=DOCKER_STUB,
+        journalctl=JOURNALCTL_STUB,
+        findmnt=FINDMNT_STUB,
+    )
 
     state = tmp_path / "running"
     state.write_text("".join(f"{c}\n" for c in running))
@@ -200,6 +216,7 @@ def run(
             "STUB_DAEMON_BACK": "1" if daemon_back else "0",
             "STUB_GONE": gone,
             "STUB_JOURNAL": journal,
+            "STUB_LOG_FSTYPE": log_fstype,
             "JOURNALCTL_CALLS": str(tmp_path / "journalctl.calls"),
             "KUMA_PUSH_OUT": str(out),
         },

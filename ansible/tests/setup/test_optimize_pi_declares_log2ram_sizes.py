@@ -111,6 +111,61 @@ def test_the_declared_tmpfs_is_larger_than_the_journald_cap_beside_it():
         )
 
 
+def _journald_dropins() -> list[str]:
+    """The `content` of every journald drop-in the role writes."""
+    return [
+        str(spec.get("content", ""))
+        for task in walk_tasks(load_tasks(TASKS))
+        if isinstance(spec := task.get("ansible.builtin.copy"), dict)
+        and str(spec.get("dest", "")).startswith("/etc/systemd/journald.conf.d/")
+    ]
+
+
+def _journal_sd_worst_case_mb(content: str) -> float:
+    """SystemMaxFiles x SystemMaxFileSize: what the journal can occupy on the SD card.
+
+    `--sparse` is patched out of log2ram's rsync, so every archive lands there at its full
+    size. SystemMaxUse does not bound that, because journald counts allocated blocks in the
+    tmpfs, where its archives are mostly holes. Without SystemMaxFiles the count defaults to
+    100, so a drop-in that omits it is read as unbounded rather than as some default.
+    """
+    files = re.search(r"^SystemMaxFiles=(\d+)$", content, re.M)
+    size = re.search(r"^SystemMaxFileSize=(\d+[KMG])$", content, re.M)
+    assert files and size, (
+        "the journald drop-in must set both SystemMaxFiles and SystemMaxFileSize; together "
+        "they are the only bound on the journal's SD copy"
+    )
+    return int(files.group(1)) * _mb(size.group(1))
+
+
+def test_the_journals_sd_copy_leaves_half_the_tmpfs_for_the_other_logs():
+    """log2ram's boot guard `du`s the SD copy of /var/log against SIZE and refuses to start
+    when it is over (#4583). The journal may take half; auditd, pacct and sysstat share the
+    rest."""
+    size_mb = _mb(DEFAULTS["optimize_pi_log2ram_size"])
+    dropins = _journald_dropins()
+    assert dropins, "no journald drop-in found in the role -- section 7 moved"
+    for content in dropins:
+        worst = _journal_sd_worst_case_mb(content)
+        assert worst <= size_mb / 2, (
+            f"the journal can occupy {worst:g} MiB on the SD card against a "
+            f"{DEFAULTS['optimize_pi_log2ram_size']} tmpfs; log2ram's boot guard trips first"
+        )
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "SystemMaxUse=32M\nSystemMaxFileSize=8M\n",  # the drop-in before #4583
+        "SystemMaxUse=32M\nSystemMaxFileSize=8M\nSystemMaxFiles=100\n",  # journald's default
+    ],
+)
+def test_the_journal_bound_reads_red_without_a_file_cap(content):
+    """The RED half: the drop-in that let the SD copy outgrow the guard must fail the budget."""
+    with pytest.raises(AssertionError):
+        assert _journal_sd_worst_case_mb(content) <= _mb("128M") / 2
+
+
 def test_the_size_reader_rejects_a_unit_it_does_not_know():
     """The RED half: without this, a typo'd `128MB` would read as some number and compare true."""
     with pytest.raises(AssertionError):

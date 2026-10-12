@@ -173,6 +173,11 @@
   # already-corrupt trailers stay corrupt until they rotate out, and their content is intact
   # (`zcat` recovers every byte). No handler — the script is re-read on every invocation, and
   # restarting log2ram unmounts /var/log.
+  # The cost this choice carries: without `--sparse`, every hole in a journald archive is
+  # written to the SD card as real zeros, so an archive holding a few hundred KB of entries
+  # occupies its full 8 MiB there. log2ram's boot guard `du`s that SD copy against SIZE and
+  # refuses to start when it is over, which kept log2ram down from the 2026-10-11 boot
+  # (#4583). `SystemMaxFiles=` in the journald drop-in below is what bounds it.
   ansible.builtin.replace:
     path: /usr/local/bin/log2ram
     regexp: '^(\s*rsync -aXv) --sparse( --inplace)'
@@ -435,14 +440,30 @@
   tags: [log2ram]
   # 60-homelab-pi sorts after initial_setup's 50-homelab.conf, so this wins.
   # journald vacuums archived journals down to the cap on restart.
+  #
+  # SystemMaxUse alone does not bound the SD copy, so SystemMaxFiles caps the file count too
+  # (#4583). journald measures SystemMaxUse in allocated blocks, and its archives in the tmpfs
+  # are mostly holes. log2ram's daily write runs `journalctl --rotate`, which adds two archives
+  # a day, and it copies each one to the SD card at its full 8 MiB, because `--sparse` is
+  # patched out (section 4). Measured on daniel-pi 2026-10-12: journald reported 32.5M while the
+  # same files took 48 MiB of apparent size. The synced tree grew from 71 MB on 2026-10-05 to
+  # 143 MB on 2026-10-09 with no archive vacuumed. At the next boot log2ram's guard `du`ed the
+  # SD copy, found it over SIZE, and left /var/log on the card.
+  #
+  # 8 files x SystemMaxFileSize 8 MiB = 64 MiB worst case, half the tmpfs. The other half holds
+  # auditd's 12 MB ceiling, three pacct generations and two days of sysstat with headroom.
+  # The count includes the two active files, which journald never vacuums. That leaves six
+  # archives, about three days of history at two archives a day.
   ansible.builtin.copy:
     dest: /etc/systemd/journald.conf.d/60-homelab-pi.conf
     content: |
       # Managed by Ansible (optimize_pi role) — edits here are overwritten.
       # /var/log is a 128 MB log2ram tmpfs (= RAM); the 1G default would overflow it.
+      # SystemMaxFiles bounds the SD copy, where each archive is written at its full size.
       [Journal]
       SystemMaxUse=32M
       SystemMaxFileSize=8M
+      SystemMaxFiles=8
     mode: "0644"
   become: true
   notify: Restart systemd-journald
