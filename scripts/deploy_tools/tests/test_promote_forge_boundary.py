@@ -10,6 +10,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_promote_forge_boundary.py
 import ast
 from pathlib import Path
 
+import pytest
+
 import forge
 import promote
 from _promote_fakes import World, digest_of
@@ -17,8 +19,27 @@ from _promote_fakes import World, digest_of
 PROMOTE = Path(promote.__file__)
 
 # The modules that would let promote.py make a forge call without the adapter. `subprocess`
-# is here because `gh` and `cosign` are forge calls too; git goes through `lib.git`.
-FORBIDDEN = ("urllib", "http", "requests", "httpx", "urllib3", "socket", "subprocess")
+# and `pty` are here because `gh` and `cosign` are forge calls too.
+FORBIDDEN = (
+    "urllib",
+    "http",
+    "requests",
+    "httpx",
+    "urllib3",
+    "socket",
+    "subprocess",
+    "pty",
+)
+
+# The `lib` modules promote.py may import. An allowlist rather than a denylist, because several
+# `lib` modules start subprocesses of their own (`lib.gh` runs `gh`, `lib.kubectl` and `lib.b2`
+# reach other services), and a new one would pass a denylist unseen. `lib.git` runs only git.
+ALLOWED_LIB = frozenset(
+    {"lib.cli_help", "lib.exit_codes", "lib.git", "lib.repo_paths", "lib.yaml_fast"}
+)
+
+# The `os` functions that start a process, which promote.py's `import os` would reach.
+_OS_EXEC = ("system", "popen", "exec", "spawn", "posix_spawn", "fork")
 
 # The adapter itself: the one member the census must find, so a rename that leaves promote.py
 # importing nothing cannot pass as "imports nothing forbidden".
@@ -26,20 +47,58 @@ ADAPTER = "forge"
 
 
 def imported_modules(source: str) -> set[str]:
-    """Every module name an `import` or `from ... import` in `source` names."""
+    """Every module name an `import` or `from ... import` in `source` names.
+
+    `from lib import yaml_fast` names `lib.yaml_fast`, so the `lib` allowlist sees the module
+    rather than the package.
+    """
     names = set()
     for node in ast.walk(ast.parse(source)):
         if isinstance(node, ast.Import):
             names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module == "lib":
+            names.update(f"lib.{alias.name}" for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
             names.add(node.module)
     return names
 
 
+def _os_exec_uses(source: str) -> set[str]:
+    """Each `os.<exec>` attribute and `from os import <exec>` name in `source`."""
+    found = set()
+    for node in ast.walk(ast.parse(source)):
+        if (
+            isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "os"
+        ):
+            name = node.attr
+        elif isinstance(node, ast.ImportFrom) and node.module == "os":
+            found.update(
+                f"os.{alias.name}"
+                for alias in node.names
+                if alias.name.startswith(_OS_EXEC)
+            )
+            continue
+        else:
+            continue
+        if name.startswith(_OS_EXEC):
+            found.add(f"os.{name}")
+    return found
+
+
 def forbidden_imports(source: str) -> set[str]:
-    return {
-        name for name in imported_modules(source) if name.split(".")[0] in FORBIDDEN
-    }
+    """Every import or `os` call in `source` that could reach a forge without the adapter."""
+    modules = imported_modules(source)
+    return (
+        {name for name in modules if name.split(".")[0] in FORBIDDEN}
+        | {
+            name
+            for name in modules
+            if name.split(".")[0] == "lib" and name not in ALLOWED_LIB
+        }
+        | _os_exec_uses(source)
+    )
 
 
 def test_promote_imports_the_adapter_and_no_http_library_is_clean():
@@ -58,6 +117,28 @@ def test_a_module_starting_gh_itself_is_flagged():
         "import forge\nfrom subprocess import run\n\nrun(['gh', 'variable', 'get'])\n"
     )
     assert forbidden_imports(source) == {"subprocess"}
+
+
+@pytest.mark.parametrize(
+    "source, flagged",
+    [
+        ("from lib.gh import gh\n", "lib.gh"),
+        ("from lib import gh\n", "lib.gh"),
+        ("import lib.kubectl\n", "lib.kubectl"),
+        ("import os\n\nos.system('gh variable get DEPLOY_HOLD')\n", "os.system"),
+        ("from os import popen\n", "os.popen"),
+    ],
+    ids=["from-lib-gh", "from-lib-import-gh", "lib-kubectl", "os-system", "os-popen"],
+)
+def test_a_module_reaching_gh_through_lib_or_os_is_flagged(source, flagged):
+    assert flagged in forbidden_imports("import forge\n" + source)
+
+
+def test_the_allowed_lib_imports_are_found_in_promote():
+    """Non-vacuity for the allowlist: promote.py's own `lib` imports are each recognised."""
+    modules = imported_modules(PROMOTE.read_text(encoding="utf-8"))
+    assert {"lib.git", "lib.yaml_fast"} <= modules
+    assert {name for name in modules if name.startswith("lib.")} <= ALLOWED_LIB
 
 
 # -- request count -------------------------------------------------------------------------
