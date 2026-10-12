@@ -57,12 +57,16 @@ data:
 {% set observability_prometheus_config %}
     global:
       scrape_interval: 15s
-    # The role's own Alertmanager (alertmanager.yaml.j2), by its in-namespace Service name. Until
-    # a rule file loads, nothing fires and nothing is sent.
+    # The role's own Alertmanager (alertmanager.yaml.j2), by its in-namespace Service name.
     alerting:
       alertmanagers:
         - static_configs:
             - targets: ['alertmanager:9093']
+    # The prometheus-rules ConfigMap (prometheus-rules.yaml.j2), mounted as a directory below.
+    # --config.auto-reload hashes every file this glob matches, so a new or edited rule file
+    # reloads without rolling the pod.
+    rule_files:
+      - /etc/prometheus-rules/*.yaml
     scrape_configs:
       # Prometheus scraping itself. Added in slice 3 B3, and not cosmetic: until now this
       # instance had no self-scrape at all, so its own ingestion rate, TSDB footprint and
@@ -128,13 +132,18 @@ data:
       # (measured 2026-08-31) and was still filling. Re-measure rather than trusting either figure.
       #
       # Safe because nothing reads these at sub-minute resolution — checked, not assumed:
-      # no recording or alerting rules exist (no `rule_files` in this role, no Grafana alert
-      # provisioning); no `irate()` anywhere in files/dashboards/; the only boards touching these
+      # no rule in files/rules/ reads these four jobs' families (alerting-meta reads only
+      # Prometheus's and Alertmanager's own metrics), and Grafana provisions no alert; no
+      # `irate()` anywhere in files/dashboards/; the only boards touching these
       # families use fixed [5m] windows or the daniel-server datasource, which already declares
       # timeInterval 1m (grafana.yaml.j2). monitor-bridge's `check_k8s_workloads` reads
       # kube_deployment_/kube_daemonset_/kube_node_ as instant vectors on a 300s cycle, and its
       # restart arm reads increase(kube_pod_container_status_restarts_total[1h]) — a COUNTER, so
       # a 1m scrape loses no restart event, only its timing to within 60s against a 30m/1h window.
+      #
+      # A RULE THAT READS ONE OF THESE FOUR JOBS' FAMILIES MUST KEEP THAT TRUE: no `irate()` over
+      # them, and every range window at least four scrape intervals (4m), so a missed scrape
+      # still leaves the window enough samples.
       - job_name: kube-state-metrics
         scrape_interval: 1m
         static_configs:
@@ -803,6 +812,10 @@ spec:
 {{ hardened_security_context(non_root=true) }}
           args:
             - --config.file=/etc/prometheus/prometheus.yml
+            # Checks prometheus.yml and every rule file every 30s (the interval flag's default)
+            # and reloads on a change. This is what lets a rule edit skip the pod roll; see the
+            # DECIDED marker at the prometheus-rules mount below.
+            - --config.auto-reload
             - --storage.tsdb.path=/prometheus
             - --storage.tsdb.retention.time={{ observability_prometheus_retention }}
             # A SECOND cap, on bytes. The time cap alone does not bound the PVC: retention.time
@@ -830,6 +843,18 @@ spec:
           volumeMounts:
             - name: prometheus-config
               mountPath: /etc/prometheus
+            # DECIDED: rules reload in place. A rule edit reaches the pod through this mount and
+            # --config.auto-reload, and the prometheus-rules ConfigMap carries no checksum
+            # annotation, so the edit never rolls Prometheus. A roll of this Recreate pod costs
+            # an evaluation gap and a WAL replay, and every monitoring slice edits rules.
+            # prometheus.yml keeps its checksum and still rolls the pod. Two things hold it:
+            # the mount is a whole directory, because a subPath mount never sees a ConfigMap
+            # update, and it sits beside /etc/prometheus, which is the prometheus-config
+            # volume. test_observability_config_rolls_one_workload.py fails if Prometheus
+            # mounts the rules without the reload flag.
+            - name: prometheus-rules
+              mountPath: /etc/prometheus-rules
+              readOnly: true
             - name: prometheus-data
               mountPath: /prometheus
             # /etc, not /run/secrets (the ServiceAccount-token-shadow guard); 0444 because
@@ -865,6 +890,9 @@ spec:
         - name: prometheus-config
           configMap:
             name: prometheus-config
+        - name: prometheus-rules
+          configMap:
+            name: prometheus-rules
         - name: prometheus-data
           persistentVolumeClaim:
             claimName: prometheus-data

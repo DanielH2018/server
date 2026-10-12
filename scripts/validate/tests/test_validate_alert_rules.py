@@ -9,8 +9,9 @@ Run: uv run pytest scripts/validate/tests/test_validate_alert_rules.py
 
 import re
 
+from lib import yaml_fast
 from lib.repo_paths import REPO
-from validate import alert_rules
+from validate import alert_conventions, alert_rules
 
 
 def _proof_runner(bad_code: int, bad_output: str, good_code: int = 0):
@@ -208,3 +209,30 @@ def test_ci_provisions_the_tools_then_runs_the_red_proof():
         r'entry = "uv run --frozen python scripts/validate/alert_rules\.py"',
         (REPO / "prek.toml").read_text(),
     )
+
+
+def test_the_tree_rules_meet_every_convention_is_clean():
+    groups, keys = alert_rules.rendered_rule_keys()
+    # Non-vacuity: the floor and the list name the group, and the file holds its three alerts.
+    assert "alerting-meta" in alert_conventions.GROUP_FLOOR
+    assert groups == ["alerting-meta"] and keys == {"alerting-meta.yaml"}
+    doc = yaml_fast.safe_load(
+        (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()
+    )
+    assert {rule["alert"] for rule in doc["groups"][0]["rules"]} == {
+        "PrometheusRuleReloadFailed",
+        "AlertmanagerNotificationsFailing",
+        "AlertmanagerMetricsMissing",
+    }
+    assert alert_rules.rule_problems(groups, keys) == []
+
+
+def test_a_placeholder_in_the_rendered_alertmanager_config_is_clean():
+    """C1 renders `email` as `${email}` once R2 lands; only the sources are refused."""
+    found = alert_rules.rendered_files()
+    found["alertmanager.yml"] = found["alertmanager.yml"].replace(
+        "smtp_from:", "smtp_from: ${email} #", 1
+    )
+    assert "${email}" in found["alertmanager.yml"]
+    problems = alert_rules.check_tree(run=lambda argv: (0, ""), render=lambda: found)
+    assert problems == []
