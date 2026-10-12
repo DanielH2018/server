@@ -35,7 +35,7 @@ def test_help_exits_zero():
 
 def test_cluster_without_secret_stubs_exits_2_and_writes_nothing(out, capsys):
     assert _cluster(out) == 2
-    # argparse also exits 2, on a usage error, so the message is what proves the refusal.
+    # Every refusal exits 2, so the message is what proves it is this one.
     assert "placeholder mode" in capsys.readouterr().err
     assert list(out.iterdir()) == []
 
