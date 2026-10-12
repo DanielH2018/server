@@ -1359,6 +1359,8 @@ than writing a second.
 - scripts/diagnostics/probe_lib/releases{,_render,_diff,_format,_consumers,_retired}.py
   scripts/diagnostics/probe_lib/health.py           - release_expected_restarts
   ansible/inventory/group_vars/all.yml              setup_drift_check_hosts + daniel-box
+  ansible/roles/k8s/observability/files/rules/host-checks.yaml
+                                                    + daniel-box's setup-drift arm (D6.5)
   scripts/renderer/                                 deletionPolicy default for <tag> except flux;
                                                     prune marker on PersistentVolume, StorageClass;
                                                     + the drill script and its prune-drill fixture tree
@@ -1785,10 +1787,11 @@ The PRs merge in this order.
       `deploy_changes.services_from_changed_paths` reads that pair as `broad=True,
       broad_deploy=True` with no setup role, so the tick applies nothing on the box
       (D6-R1-05's correction). After the merge tick has fast-forwarded, the session runs
-      `uv run ansible-playbook ansible/initial_setup.yml --tags setup_drift > /tmp/d6-5a.log 2>&1 < /dev/null`
-      on daniel-box, **operator-attended**, and quotes the recap. If the tick records an
-      `initial_setup` line in `manual_plane` instead, the session runs the apply that the
-      line names and clears it.
+      `flock /var/lock/server-git-tree.lock uv run ansible-playbook ansible/initial_setup.yml --tags setup_drift > /tmp/d6-5a.log 2>&1 < /dev/null`
+      on daniel-box, **operator-attended**, and quotes the recap.
+      `gitops-deploy.service` holds that lock around its whole `ExecStart`, so the hand apply
+      and a later tick's `initial_setup` apply never run at once. A bare `ansible-playbook`
+      takes no lock, which is why the earlier draft refused one.
     - **daniel-server owes nothing.** Its armed state and its render of
       `setup-drift-check.sh.j2` do not change, so its reader reads nothing stale.
     - **The check before D6.5.** On both hosts the setup-drift timer is active, under either
@@ -2509,6 +2512,8 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     - the k3s role's `CLAUDE.md` (*Autonomous-role contract*, *Notable*, and its generated
       `## At a glance` block), with their `facts.lock` rows;
     - `docs/k3s-node-plane-crons-and-incidents.md`, for the units it removes;
+    - observability's `files/rules/host-checks.yaml` and `tests/rules/host-checks.test.yaml`,
+      for daniel-box's arm in B2's setup-drift rules;
     - `scripts/secrets_mgmt/` tests for `CROSS_HOST_PUSH_TOKENS`, `ansible/secret_rotation.yml`
       and D3's cluster file.
 - **D6.5b:**
