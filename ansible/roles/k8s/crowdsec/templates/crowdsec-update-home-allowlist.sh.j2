@@ -244,12 +244,13 @@ if ip -6 addr show scope global 2>/dev/null | grep -q inet6; then
   if ! CURRENT_IP6=$(curl -sf --max-time 10 --retry 3 --retry-all-errors https://api6.ipify.org); then
     V6_STATUS=down
     V6_MSG="host has global IPv6 but failed to resolve public IPv6 from ipify"
-  # Validate AND mask to the /64 in one step; ip_network raises on junk, so a bad value fails
-  # loudly instead of becoming an allowlist entry. It runs on the pinned uv interpreter, not
-  # PATH's python3 (#4605). The message carries the last line of the combined output, so a
-  # Python `ValueError` reads differently from uv failing to find its interpreter. On success
-  # that last line is the prefix, after anything uv printed first.
-  elif ! V6_OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} python -c 'import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1] + "/64", strict=False))' "$CURRENT_IP6" 2>&1); then
+  # Validate AND mask to the /64 in one step; ipv6_prefix.py rejects junk with status 1, so a bad
+  # value fails loudly instead of becoming an allowlist entry. It runs on the pinned uv
+  # interpreter, not PATH's python3 (#4605). It is a shipped file, not an inline `python -c`, so
+  # that lib.stdlib_only can walk its imports. The message carries the last line of the combined
+  # output, so the module's own error reads differently from uv failing to find its
+  # interpreter. On success that last line is the prefix, after anything uv printed first.
+  elif ! V6_OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/crowdsec-home-allowlist/ipv6_prefix.py "$CURRENT_IP6" 2>&1); then
     V6_STATUS=down
     V6_MSG="cannot mask IPv6 from ipify ($CURRENT_IP6) to a /64: ${V6_OUT##*$'\n'}"
   else

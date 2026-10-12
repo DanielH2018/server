@@ -388,8 +388,10 @@ def test_no_host_invocation_runs_a_bare_python3():
     )
     assert not offenders, (
         "these run `python3` by name, which resolves to the host's system Python (Ubuntu "
-        "24.04's 3.12) under cron's PATH. Run it through `/usr/local/bin/uv run --no-project "
-        "--no-python-downloads --python {{ host_python_version }} python …`:\n  "
+        "24.04's 3.12) under cron's PATH. Ship the code as a `.py` in the role's `files/` and "
+        "run it by path through `/usr/local/bin/uv run --no-project --no-python-downloads "
+        "--python {{ host_python_version }} /opt/<dir>/<name>.py`. An inline `python -c` "
+        "fails the stdlib-only census (scripts/lib/role_installs.py):\n  "
         + "\n  ".join(offenders)
     )
 
