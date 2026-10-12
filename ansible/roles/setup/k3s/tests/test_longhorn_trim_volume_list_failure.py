@@ -117,3 +117,60 @@ def test_check_9_flags_a_failed_volume_list(failed_list_run):
     assert any("longhorn-trim aborted" in text for _, text in problems), (
         f"check 9 read {messages!r} as {problems!r}"
     )
+
+
+# The accept half of the guard: a volume list that succeeds, one attached+healthy row.
+K3S_STUB_OK = r"""
+case "$*" in
+  *"get pods -l app=longhorn-manager"*) cat "$TRIM_STUB_PODS" ;;
+  *"get volumes.longhorn.io"*) printf 'pvc-1|attached|healthy|data\n' ;;
+  *) : ;;
+esac
+"""
+
+
+def test_a_successful_volume_list_trims_and_logs_the_summary(
+    tmp_path: Path, logger_calls: Path
+):
+    pods = tmp_path / "pods.json"
+    pods.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "spec": {"nodeName": NODE},
+                        "status": {
+                            "phase": "Running",
+                            "podIP": "10.42.0.9",
+                            "containerStatuses": [{"ready": True}],
+                        },
+                    }
+                ]
+            }
+        )
+    )
+    stamps = tmp_path / "stamps"
+    stamps.mkdir()
+    script = tmp_path / "longhorn-trim-volumes.sh"
+    script.write_text(
+        render_shell_script(
+            "setup",
+            "k3s",
+            "longhorn-trim-volumes.sh.j2",
+            overrides={"k3s_cron_fired_stamp_dir": str(stamps)},
+        )
+    )
+    proc = launch(
+        ["bash", str(script)],
+        env={
+            **os.environ,
+            "TRIM_STUB_PODS": str(pods),
+            "BASH_FUNC_k3s%%": f"() {{ {K3S_STUB_OK} }}",
+            "BASH_FUNC_curl%%": "() { return 0; }",
+            "BASH_FUNC_hostname%%": f"() {{ echo {NODE}; }}",
+        },
+    )
+    assert proc.returncode == 0, (proc.stdout, proc.stderr)
+    assert "trim  data" in proc.stdout
+    logged = logger_calls.read_text()
+    assert "-t longhorn-trim trimmed 1 volume(s), 0 skipped, 0 failed" in logged, logged
