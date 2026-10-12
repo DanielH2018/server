@@ -37,7 +37,13 @@ from lib.estate import (
     role_defaults,
 )
 from lib.k8s_context import resolve_vars
-from lib.render_guard import ANSIBLE, BASE_CONTEXT, host_files, load_yaml
+from lib.render_guard import (
+    ANSIBLE,
+    BASE_CONTEXT,
+    StubUndefined,
+    host_files,
+    load_yaml,
+)
 
 __all__ = [
     "PLANE_HOSTS",
@@ -73,6 +79,7 @@ def render_context(
     inventory: Inventory = REPO_INVENTORY,
     host_vars: dict | None = None,
     base: dict = BASE_CONTEXT,
+    undefined_cls=StubUndefined,
 ) -> dict:
     """The resolved context a template under `path` renders with in a deploy, `overrides` on top.
 
@@ -94,6 +101,10 @@ def render_context(
         base: The stubs under every file layer. A guard keeps ``BASE_CONTEXT``, so a name no
             file holds still renders. ``homelab-render`` passes ``{}``, because a stub such as
             ``k8s_built_image_tags`` would fill in an input its strict render must refuse.
+        undefined_cls: What an undefined name inside a variable's value becomes. The default
+            renders ``STUB``, or None for a whole-value alias. A strict class raises instead,
+            and the variable is left undefined, so a template that reads it raises in turn.
+            With `strict`, it is reported in `UnresolvedVarsError`.
 
     Returns:
         A fresh dict, safe for the caller to extend.
@@ -115,9 +126,13 @@ def render_context(
         "hostvars": _hostvars(inventory),
         **overrides,
     }
-    resolved, dropped = _resolve(raw)
+    resolved, dropped = _resolve(raw, undefined_cls)
     if dropped and strict:
         raise UnresolvedVarsError(dropped)
+    # Under a strict class a dropped key needs no note: a template that reads it stops the
+    # render, as Ansible's lazy evaluation fails only the task that reads the variable.
+    if undefined_cls is not StubUndefined:
+        dropped = {}
     for key, reason in sorted(dropped.items()):
         note = f"{key} left undefined, renders as STUB: {reason}"
         # Once per process: every template of a role shares its defaults, so the same drop
@@ -170,7 +185,7 @@ def _holds_jinja(value) -> bool:
     return False
 
 
-def _resolve(raw: dict) -> tuple[dict, dict[str, str]]:
+def _resolve(raw: dict, undefined_cls=StubUndefined) -> tuple[dict, dict[str, str]]:
     """`raw` expanded against itself, and each key dropped because its expansion raised.
 
     Whole-dict first, which is the common case and one pass. Three setup defaults need the
@@ -185,7 +200,7 @@ def _resolve(raw: dict) -> tuple[dict, dict[str, str]]:
     the render exists to remove, so they must never arrive from the context.
     """
     try:
-        return resolve_vars(raw, raw), {}
+        return resolve_vars(raw, raw, undefined_cls=undefined_cls), {}
     except Exception:
         resolved: dict = {}
     dropped: dict[str, str] = {}
@@ -198,7 +213,9 @@ def _resolve(raw: dict) -> tuple[dict, dict[str, str]]:
             if key in dropped:
                 continue
             try:
-                resolved |= resolve_vars({key: value}, {**raw, **resolved})
+                resolved |= resolve_vars(
+                    {key: value}, {**raw, **resolved}, undefined_cls=undefined_cls
+                )
             except Exception as exc:
                 dropped[key] = str(exc)
                 resolved.pop(key, None)

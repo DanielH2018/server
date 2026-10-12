@@ -24,12 +24,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from pathlib import Path
 
+import jinja2
+
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST, inventory_hosts
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.k8s_context import resolve_vars
 from lib.render_context import render_context
-from lib.render_guard import load_yaml
+from lib.render_guard import StrictChainableUndefined, load_yaml
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
@@ -68,24 +70,29 @@ def play_context(
         inventory: Where the inventory files live; the repo's own unless a test says not.
 
     Raises:
-        UnresolvedVarsError: A variable's value will not expand.
+        ValueError: Another host's `hostvars` entry will not resolve.
     """
-    # No BASE_CONTEXT: its stubs would fill in a name no file holds, which the strict render
-    # must refuse instead.
-    first = render_context(
-        role_dir, host, stubs, strict=True, inventory=inventory, base={}
-    )
+
+    # No BASE_CONTEXT: its stubs would fill in a name no file holds. Under the strict class a
+    # variable whose value names an undefined one is left undefined rather than resolved to
+    # STUB or None, so a template that reads it stops the render. Not `strict=True`: three
+    # group_vars name variables only setup roles or Ansible itself define
+    # (`ansible_check_mode` among them), and Ansible fails only a task that reads one.
+    def resolve(overrides: dict) -> dict:
+        return render_context(
+            role_dir,
+            host,
+            overrides,
+            inventory=inventory,
+            base={},
+            undefined_cls=StrictChainableUndefined,
+        )
+
+    first = resolve(stubs)
     # The play's view goes in as an override, as `set_fact` outranks every file layer, so a
     # default that reads `containers_list` resolves against the view too.
     view = play_containers_list(first["containers_list"])
-    ctx = render_context(
-        role_dir,
-        host,
-        {**stubs, "containers_list": view},
-        strict=True,
-        inventory=inventory,
-        base={},
-    )
+    ctx = resolve({**stubs, "containers_list": view})
     ctx["inventory_hostname"] = host
     ctx["hostvars"] = play_hostvars(ctx, host, stubs, inventory)
     return ctx
@@ -102,7 +109,8 @@ def play_hostvars(
     against `group_vars/all.yml`, those two layers and the stubs.
 
     Raises:
-        ValueError: A host's value still holds Jinja, or an undefined name, after resolution.
+        ValueError: A host's value names an undefined variable, or still holds Jinja after
+            resolution.
     """
     group = load_yaml(inventory.all_vars)
     hostvars = {}
@@ -111,11 +119,15 @@ def play_hostvars(
             hostvars[host] = {k: v for k, v in ctx.items() if k != "hostvars"}
             continue
         own = {**entry.settings, **load_yaml(inventory.host_vars / f"{entry.name}.yml")}
-        resolved = resolve_vars(own, {**group, **own, **stubs})
-        # `resolve_vars` renders an undefined name as `STUB` rather than raising.
-        unresolved = sorted(
-            k for k, v in resolved.items() if "{{" in str(v) or "STUB" in str(v)
-        )
+        try:
+            resolved = resolve_vars(
+                own,
+                {**group, **own, **stubs},
+                undefined_cls=StrictChainableUndefined,
+            )
+        except jinja2.TemplateError as exc:
+            raise ValueError(f"hostvars[{entry.name!r}]: {exc}") from exc
+        unresolved = sorted(k for k, v in resolved.items() if "{{" in str(v))
         if unresolved:
             raise ValueError(f"hostvars[{entry.name!r}]: {unresolved} will not expand")
         hostvars[entry.name] = resolved

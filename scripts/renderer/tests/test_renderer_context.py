@@ -5,13 +5,14 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_context.py
 
 import jinja2
 import pytest
+import yaml
 
 from lib.ansible_inventory import inventory_hosts
 from lib.ansible_jinja_env import template_env
-from lib.render_guard import load_yaml
+from lib.estate import Inventory
+from lib.render_guard import StrictChainableUndefined, host_files, load_yaml
 from lib.repo_paths import ANSIBLE, HOST_VARS, HOSTS_INI, K8S_ROLES
 from renderer import shadow_diff
-from renderer.renderer_lib.cluster import StrictChainableUndefined
 from renderer.renderer_lib.context import play_containers_list, play_context
 from toposort import build_k8s_dep_map, filter_by_platform, toposort_containers
 
@@ -82,3 +83,51 @@ def test_a_name_no_layer_supplies_is_flagged(ctx):
     # The render guards' BASE_CONTEXT stubs this name, and the renderer's context must not.
     with pytest.raises(jinja2.UndefinedError, match="k8s_built_image_tags"):
         _render(ctx, "{{ k8s_built_image_tags }}")
+
+
+def _inventory(tmp_path, **edits):
+    """The real inventory with each host_vars file named in `edits` passed through its edit."""
+    host_vars = tmp_path / "host_vars"
+    host_vars.mkdir()
+    for path in host_files(HOST_VARS):
+        layer = load_yaml(path)
+        edit = edits.get(path.stem.replace("-", "_"))
+        (host_vars / path.name).write_text(
+            yaml.safe_dump(edit(layer) if edit else layer)
+        )
+    return Inventory(host_vars=host_vars)
+
+
+def test_play_context_installs_the_play_view_over_a_reordered_list(tmp_path):
+    def reverse(layer):
+        return {**layer, "containers_list": layer["containers_list"][::-1]}
+
+    inventory = _inventory(tmp_path, daniel_box=reverse)
+    reordered = reverse(load_yaml(HOST_VARS / "daniel-box.yml"))["containers_list"]
+    ctx = play_context(ROLE, shadow_diff.stub_vars(), inventory=inventory)
+
+    expected = _names(play_containers_list(reordered))
+    assert expected != _names(reordered)
+    assert _names(ctx["containers_list"]) == expected
+    assert _names(ctx["hostvars"]["daniel-box"]["containers_list"]) == expected
+
+
+def test_a_value_naming_an_undefined_variable_is_flagged(tmp_path):
+    def add(layer):
+        return {**layer, "zz": "a-{{ no_such_name }}", "yy": "{{ no_such_name }}"}
+
+    inventory = _inventory(tmp_path, daniel_box=add)
+    ctx = play_context(ROLE, shadow_diff.stub_vars(), inventory=inventory)
+    for name in ("zz", "yy"):
+        # Left undefined rather than resolved to STUB or None, so reading it stops a render.
+        with pytest.raises(jinja2.UndefinedError, match=name):
+            _render(ctx, f"{{{{ {name} }}}}")
+
+
+def test_a_pi_host_without_its_server_ip_is_flagged(tmp_path):
+    def drop(layer):
+        return {k: v for k, v in layer.items() if k != "server_ip"}
+
+    inventory = _inventory(tmp_path, daniel_pi=drop)
+    with pytest.raises(ValueError, match=r"daniel-pi.*server_ip"):
+        play_context(ROLE, shadow_diff.stub_vars(), inventory=inventory)

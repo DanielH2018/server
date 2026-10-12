@@ -96,6 +96,13 @@ The render guards under `scripts/validate/` print `STUB` instead, and lay stub v
 `k8s_built_image_tags` under every layer; the renderer does neither. An undefined attribute
 still takes its `| default(...)`, as it does under Ansible.
 
+The same rule holds one level down. A variable whose value names an undefined variable, such
+as `x: "{{ no_such_name }}"`, is left undefined rather than resolved to `STUB` or `None`, so a
+template that reads `x` stops the render. One that nothing reads costs nothing, as under
+Ansible's lazy evaluation. That matters because three `group_vars/all.yml` values name
+variables that only setup roles or Ansible itself define. Another host's `hostvars` entry is
+stricter: a value there that does not resolve stops the render at once.
+
 ### What renders so far
 
 Target slice R1 widens the renderer one PR at a time, and

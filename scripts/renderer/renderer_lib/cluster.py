@@ -28,6 +28,7 @@ from lib.ansible_inventory import K8S_HOST
 from lib.ansible_jinja_env import template_env
 from lib.k8s_roles import resolved_manifest_files
 from lib.k8s_yaml import make_lookup
+from lib.render_guard import StrictChainableUndefined
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.context import play_context
 
@@ -36,14 +37,6 @@ from renderer.renderer_lib.context import play_context
 RENDERABLE = frozenset({"littlelink"})
 
 KUSTOMIZATION = "kustomization.yaml"
-
-
-class StrictChainableUndefined(jinja2.ChainableUndefined, jinja2.StrictUndefined):
-    """An undefined that raises when it is printed, iterated or tested, as Ansible's does.
-
-    It stays chainable, so `hostvars['x'].missing | default('y')` still renders its default,
-    as it does under Ansible.
-    """
 
 
 class RenderRefused(ValueError):
