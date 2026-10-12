@@ -176,7 +176,7 @@ def _rendered():
             continue
         if (
             role == "observability"
-            and "prometheus" in str(template)
+            and template == "prometheus.yaml.j2"
             and doc.get("kind") == "ConfigMap"
         ):
             jobs = yaml_fast.safe_load(doc["data"]["prometheus.yml"])["scrape_configs"]

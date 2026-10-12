@@ -340,7 +340,8 @@ def test_homepage_kubernetes_widget_wiring_holds_together():
 
 
 def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
-    """`view` covers no CRDs and nothing aggregates into it, so a group missing from the
+    """`view` covers no CRD group except Flux's six, which `flux-view-flux-system` aggregates
+    into it (`test_aggregated_clusterroles.py` pins them). Any other group missing from the
     list degrades silently: the kubeconfig still works, that one `kubectl get` says
     Forbidden, and the caller falls back to sudo."""
     groups = set(K3S_DEFAULT_VALUES["k3s_readonly_crd_api_groups"])

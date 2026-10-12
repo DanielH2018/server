@@ -294,7 +294,7 @@ def _scrape_jobs() -> list[dict]:
     so a keep rule there is a keep rule.
     """
     for role, template, doc in rendered_docs():
-        if role != "observability" or "prometheus" not in str(template):
+        if role != "observability" or template != "prometheus.yaml.j2":
             continue
         if doc.get("kind") != "ConfigMap":
             continue

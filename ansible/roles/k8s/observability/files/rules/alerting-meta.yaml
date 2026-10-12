@@ -1,0 +1,76 @@
+# The alert plane's own health: whether Prometheus loaded its rules, and whether Alertmanager
+# delivers and is still visible to Prometheus. Plain YAML, never Jinja: prometheus-rules.yaml.j2
+# carries this file verbatim, so the Go templates in the annotations reach Prometheus intact.
+# The conventions every rule file here follows are in
+# docs/target-architecture/monitoring/m1-alertmanager.md.
+groups:
+  - name: alerting-meta
+    rules:
+      # Always fires. Alertmanager routes it to the alertmanager-watchdog check on
+      # Healthchecks.io every 60s, so a silent Alertmanager, or a Prometheus that stopped
+      # sending it alerts, pages off-site. The C7 health gate excludes it by name, and
+      # alert_conventions.py holds the repo to exactly one rule of that name.
+      - alert: Watchdog
+        expr: vector(1)
+        labels:
+          severity: info
+          service: observability
+        annotations:
+          summary: The alert pipeline is alive. This alert always fires.
+      # prometheus_config_last_reload_successful covers the rule files as well as
+      # prometheus.yml: a rule file that fails to load fails the whole reload, and Prometheus
+      # keeps evaluating the last good set.
+      - alert: PrometheusRuleReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: observability
+        annotations:
+          summary: Prometheus failed to reload its config or rule files.
+          description: >-
+            {{ $labels.instance }} has reported a failed reload for 10 minutes, so it still
+            evaluates the last rule set it loaded. Its log names the file it refused.
+      # Kuma's counterpart is the Kuma Notification Delivery tile. Critical, so it routes to
+      # Discord and email both, and a dropped Discord send still reaches the operator.
+      - alert: AlertmanagerNotificationsFailing
+        expr: >-
+          sum by (integration)
+          (increase(alertmanager_notifications_failed_total{job="alertmanager"}[30m])) > 0
+        labels:
+          severity: critical
+          service: observability
+        annotations:
+          summary: Alertmanager failed to deliver through {{ $labels.integration }}.
+          description: >-
+            Alertmanager's {{ $labels.integration }} integration failed at least one send in
+            the last 30 minutes. Read alertmanager_notifications_failed_total by reason, and
+            the alertmanager pod's log.
+      # This family's zero-series alert. Without it, lost Alertmanager metrics would leave
+      # AlertmanagerNotificationsFailing evaluating to nothing.
+      #
+      # A FAILED SCRAPE IS NOT THIS RULE'S TO PAGE. The job is configured and up{job="alertmanager"}
+      # reads 0. Until M6's batch A3, Kuma's Cluster Scrape Targets tile pages that condition,
+      # because monitor-bridge's check_cluster_targets selects every up series without an
+      # `origin` label. From A3 on, A3's scrape-target rule pages it, and that rule must cover
+      # job alertmanager with service="observability" and no exemption: this rule's second arm
+      # requires up == 1, so an exemption would leave the failed scrape with no pager.
+      # The second arm is conjoined with up == 1 so that this rule does not page the tile's
+      # condition a second time.
+      - alert: AlertmanagerMetricsMissing
+        expr: >-
+          absent(up{job="alertmanager"})
+          or
+          (absent(alertmanager_notifications_failed_total{job="alertmanager"})
+          and on() (up{job="alertmanager"} == 1))
+        for: 10m
+        labels:
+          severity: warning
+          service: observability
+        annotations:
+          summary: Prometheus has lost Alertmanager's scrape job or its delivery counter.
+          description: >-
+            Either no up{job="alertmanager"} series exists, so the alertmanager job is gone from
+            prometheus.yml, or the scrape works and alertmanager_notifications_failed_total is
+            gone, as after an upgrade that renamed it. AlertmanagerNotificationsFailing cannot
+            fire until the series is back.

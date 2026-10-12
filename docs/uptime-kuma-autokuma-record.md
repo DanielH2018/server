@@ -80,9 +80,9 @@ separates a pending tile from a missing one.
 
 Two directions #1779 floated, rejected: shortening the 25h intervals buys nothing for detection (it
 was never blind) and tightens the dead-man on producers that genuinely run daily; a Prometheus
-`absent()` rule has no delivery path here — `prometheus.yaml.j2` records that no `rule_files`
-exist, and monitor-bridge is this estate's alerting — and would page after every replacement for a
-window in which detection is live.
+`absent()` rule had no delivery path then — `prometheus.yaml.j2` loaded no `rule_files` until the
+M1 slice's rules pipeline, and monitor-bridge was this estate's alerting — and would page after
+every replacement for a window in which detection is live.
 
 ## A fleet-wide `push failed (http=404)` burst is the edge, not the tokens
 

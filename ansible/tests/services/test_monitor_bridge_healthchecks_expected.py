@@ -28,6 +28,7 @@ WIRED_SLUGS = frozenset(
         "longhorn-backup-health",
         "daniel-box-disk-health",
         "uptime-kuma-alive",
+        "alertmanager-watchdog",
         "manifest-prune-check",
         "etcd-snapshot-offbox",
         "pi-peer-backup",
@@ -41,6 +42,8 @@ WIRED_SLUGS = frozenset(
 )
 
 _EVERY_N_MINUTES = re.compile(r"^\*/(\d+) \* \* \* \*$")
+# A sender that is not a cron, such as Alertmanager's Watchdog repeat, pings every N seconds.
+_EVERY_N_SECONDS = re.compile(r"^every (\d+)s$")
 
 
 def _expected() -> dict[str, dict]:
@@ -54,11 +57,23 @@ def _crons() -> dict[str, str]:
 
 
 def cron_mismatches(expected: dict[str, dict], crons: dict[str, str]) -> list[str]:
-    """Every slug whose expected period or cron expression differs from its cron variable."""
+    """Every slug whose expected period or cron expression differs from its cron variable.
+
+    A Simple check fed by a `*/N` minute cron must have a period of exactly N minutes. One fed
+    `every <N>s` must have a period above N, so a single late send cannot page; its period is
+    the slug's `timeout`, not N.
+    """
     out = []
     for slug, want in expected.items():
         cron = crons.get(slug)
         if want["kind"] == "simple":
+            if m := _EVERY_N_SECONDS.match(cron or ""):
+                if int(m.group(1)) >= want["timeout"]:
+                    out.append(
+                        "%s: Simple %ss against a send every %ss"
+                        % (slug, want["timeout"], m.group(1))
+                    )
+                continue
             m = _EVERY_N_MINUTES.match(cron or "")
             if not m or int(m.group(1)) * 60 != want["timeout"]:
                 out.append(
@@ -76,6 +91,24 @@ def test_the_expectations_cover_exactly_the_wired_slugs():
 
 def test_every_expectation_matches_the_cron_that_pings_it_is_clean():
     assert cron_mismatches(_expected(), _crons()) == []
+
+
+def test_a_send_every_n_seconds_under_the_period_is_clean():
+    # The live row: the Watchdog repeats every 60s against the check's 600s period.
+    assert _crons()["alertmanager-watchdog"] == "every 60s"
+    assert (
+        cron_mismatches(
+            {"alertmanager-watchdog": _expected()["alertmanager-watchdog"]}, _crons()
+        )
+        == []
+    )
+
+
+def test_a_send_every_n_seconds_at_the_period_is_flagged():
+    expected = {"alertmanager-watchdog": _expected()["alertmanager-watchdog"]}
+    assert cron_mismatches(expected, {"alertmanager-watchdog": "every 600s"}) == [
+        "alertmanager-watchdog: Simple 600s against a send every 600s"
+    ]
 
 
 def test_a_cron_moved_without_the_expectation_is_flagged():

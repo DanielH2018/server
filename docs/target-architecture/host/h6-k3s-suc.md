@@ -158,10 +158,10 @@ The exit criterion is three observations, in order:
 - **These grants move before H6 runs.** H1.2 moves `readonly-rbac.yaml.j2` and
   `k3s_readonly_crd_api_groups` into the Flux-owned `cluster-base` role by git mv (H1, the
   tag table), and `kubeconfig.yml` keeps only its host half. `cluster-base` renders
-  `prune: false` (H1, *Plumbing tags are never pruned*). D1.2b appends
-  `source.toolkit.fluxcd.io`, `kustomize.toolkit.fluxcd.io` and
-  `notification.toolkit.fluxcd.io` to the list. So every grant this slice gives the
-  read-only account lands in `cluster-base`, through promote.
+  `prune: false` (H1, *Plumbing tags are never pruned*). The list gains no Flux group: the
+  read-only account reads the Flux kinds through `view`, into which the vendored
+  `flux-view-flux-system` aggregates (D1 *Baseline*, corrected on 2026-10-12). So every
+  grant this slice gives the read-only account lands in `cluster-base`, through promote.
 
 **What moves when k3s restarts.** Measured on daniel-box on 2026-10-11, read-only.
 
@@ -718,8 +718,8 @@ Each run does these steps:
     - **The server-restart guard**, on daniel-server only. It reads the controller-manager
       Lease.
     - The read-only account reads the Plans and the Lease through the grants H6.3b adds to
-      `cluster-base`, the Jobs through `view`, and the Flux objects through D1.2b's grant
-      (Baseline).
+      `cluster-base`, and the Jobs and the Flux objects through `view` (Baseline; Flux's
+      vendored view role aggregates into it, as D1's *Baseline* records).
     - The gates need the API, and daniel-box hosts the only API server. So the unit
       cannot recover a k3s that a failed restart left down. That recovery is an
       operator step (*Rollback*, H6.4b).

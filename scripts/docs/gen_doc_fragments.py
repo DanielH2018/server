@@ -108,6 +108,7 @@ SECRET_ROTATION = REPO / "scripts/secrets_mgmt/secret_rotation.py"
 SECRET_REGISTRY = REPO / "ansible/secret_rotation.yml"
 PI_PEER_ROLE = K8S_ROLES / "pi-peer-backup"
 REGISTRY_ROLE = K8S_ROLES / "registry"
+OBSERVABILITY_ROLE = K8S_ROLES / "observability"
 INITIAL_SETUP_ROLE = ROLES / "setup" / "initial_setup"
 FAIL2BAN_CONF = INITIAL_SETUP_ROLE / "templates" / "fail2ban_homelab.conf.j2"
 TRAEFIK_ROLE = K8S_ROLES / "traefik"
@@ -173,8 +174,8 @@ def _traefik_ports() -> tuple[str, list[str]]:
 
 def deadman_inputs(
     estate: Estate | None = None,
-) -> tuple[dict, dict, dict, dict, dict, dict[str, bool]]:
-    """The six arguments `deadman_crons` takes, read from the tree.
+) -> tuple[dict, dict, dict, dict, dict, dict[str, bool], dict]:
+    """The arguments `deadman_crons` takes, read from the tree.
 
     Shared with the monitor-bridge expectations test, so the fragment and the test cannot read
     different sources.
@@ -187,6 +188,7 @@ def deadman_inputs(
         estate.group_vars,
         estate.role_vars(INITIAL_SETUP_ROLE),
         host_has_docker(estate),
+        estate.role_vars(OBSERVABILITY_ROLE),
     )
 
 
@@ -195,6 +197,7 @@ def _deadman() -> tuple[str, list[str]]:
         "ansible/roles/setup/k3s/defaults/main.yml",
         "ansible/roles/k8s/pi-peer-backup/defaults/main.yml",
         "ansible/roles/k8s/registry/defaults/main.yml",
+        "ansible/roles/k8s/observability/defaults/main.yml",
         "ansible/roles/setup/initial_setup/defaults/main.yml",
         "ansible/inventory/group_vars/all.yml",
         "ansible/inventory/hosts.ini",
