@@ -85,8 +85,8 @@ spec:
         app: tempo
         netpol-baseline: enforced
     spec:
-      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: observability tiers`
-      # in this role's CLAUDE.md.
+      # Tier 4; `DECIDED: observability tiers` in this role's CLAUDE.md names the tier-1
+      # exceptions.
       # No init container chowns /var/tempo: the kubelet applies fsGroup ownership to the
       # volume at mount time, which is what Tempo's non-root uid 10001 needs.
       #

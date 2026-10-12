@@ -12,6 +12,11 @@ governs: []
 
 Accepted. Evaluated 2026-08-21; no controller is installed and none is scheduled.
 
+2026-10-12: [ADR-0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md) proposes
+that Flux apply the cluster. From slice D1.2 on, Flux's three controllers run in `flux-system`
+owning nothing, and Ansible still deploys every service, so this decision stands until
+ADR-0020 is accepted.
+
 ## Context
 
 The homelab deploys by pulling: a timer on `daniel-box` fetches, gates on CI, fast-forwards

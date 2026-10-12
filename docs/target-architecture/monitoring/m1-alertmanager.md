@@ -3,6 +3,7 @@
 Status: IN PROGRESS
 
 PR 1, the promtool and amtool provisioning and its red proof: [#4703](https://github.com/DanielH2018/server/pull/4703).
+PR 2, Alertmanager with its receivers: [#4728](https://github.com/DanielH2018/server/pull/4728).
 
 Depends on: —
 
@@ -400,8 +401,10 @@ M2 to M6 build on these rules and do not restate them.
   Jinja template, because it reads `email` and, after M2, the `weekly_reboot_*` variables.
   Every Go expression in it sits inside `{% raw %}` … `{% endraw %}`: the Watchdog's
   `payload` (`{{ .Status }}`) and the Discord and email `title` and `message` references
-  (`{{ template "homelab.title" . }}`). Without the raw block, Jinja consumes them. The
-  rendered file then still passes amtool, but sends empty titles and an empty payload.
+  (`{{ template "homelab.title" . }}`). Without the raw block, Jinja refuses both forms as a
+  `TemplateSyntaxError`, so that render fails outright. A Go expression that Jinja can parse
+  is consumed instead, and the rendered file still passes amtool while it sends an empty
+  field. The survival check in `alert_rules.py` catches that second case.
 - **Restart, PR 2.** Alertmanager reloads its config only on SIGHUP or a request to
   `/-/reload` (`cmd/alertmanager/main.go` at v0.34.1), and nothing in the pod sends either. The
   pod reads a role Secret, so `observability_stabilise_workloads` gains

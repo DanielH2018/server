@@ -70,7 +70,16 @@ _RECREATE = {
     ): "TSDB holds an exclusive lock on its data directory",
     ("observability", "loki"): "single-writer index on a filesystem store",
     ("observability", "tempo"): "single-writer trace store",
+    (
+        "observability",
+        "alertmanager",
+    ): "silences and notification log on a ReadWriteOnce claim; one replica, gossip off",
     ("loki-homelab", "loki-homelab"): "single-writer index on a filesystem store",
+    (
+        "flux",
+        "source-controller",
+    ): "upstream's own strategy, kept: it holds the artifact store on an emptyDir and serves it "
+    "to kustomize-controller, so two pods would each serve a different store",
     (
         "scrutiny",
         "scrutiny-influxdb",

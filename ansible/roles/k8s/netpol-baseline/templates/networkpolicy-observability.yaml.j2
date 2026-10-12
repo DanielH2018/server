@@ -22,7 +22,7 @@ spec:
   podSelector:
 {% if netpol_baseline_obs_scope == 'namespace' %}
     # Same opt-out selector as the homelab baseline, on this namespace's own scope variable.
-    # Nothing here is exempt today: all seven pods carry the opt-in label already, and the rule
+    # Nothing here is exempt today: every pod carries the opt-in label already, and the rule
     # below admits `podSelector: {}` — the whole namespace — so being selected changes nothing
     # for a pod that exists. What it changes is a pod added LATER, which is unfenced by default
     # under label scope and fenced by default under this one.

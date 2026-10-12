@@ -61,7 +61,8 @@ autofix_fake_remux_policy:
 # (authelia) and LAN DNS (pihole); `home-automation` is the automation chain (mosquitto,
 # zigbee2mqtt, home-assistant). Together they are the `home-critical` group, the services the
 # house and SSO stop working without. `platform` is critical without being home-critical: the
-# registry, the alert bridge, the UPS primary and the remote-access tunnel. Each tier names one
+# registry, the alert bridge, the UPS primary, the remote-access tunnel and the deploy
+# controller. Each tier names one
 # PriorityClass, and a tiered role's templates take it from `tier_priority_class` rather than
 # writing it (#3452). A home-critical entry's `backup_claims` names its Longhorn
 # volumes worth a daily backup; the k3s role's `k3s_longhorn_r2_volumes` is those claims, and
@@ -889,6 +890,12 @@ containers_list:
     # homepage's Scrutiny widget dials the ClusterIP, because scrutiny's route is Authelia-gated.
     # This key adds homepage to the callers above and is its only grant.
     homepage_widget: true
+  # Flux's three controllers in flux-system, owning nothing until D2 of the target
+  # architecture (docs/flux-deploy-plane.md). No port and no hostname: nothing dials the
+  # controllers from outside their namespace but Prometheus, and the role fences that itself.
+  - name: flux
+    platform: k8s
+    tier: platform
   # LAST on purpose, and it must NOT sit in traefik's rollout batch.
   #
   # Not for the usual "after traefik" reason — this role renders no Traefik CRDs, and a

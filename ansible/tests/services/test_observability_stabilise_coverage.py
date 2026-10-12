@@ -2,18 +2,18 @@
 
 observability is the one k8s role that rolls its own workloads. It sets `manifests_rollout: ''`,
 so the shared `k8s/manifests` role neither waits nor queues anything, and the role restarts and
-waits on six workloads of its own in a different namespace.
+waits on workloads of its own in a different namespace.
 
 The role snapshots restart counts itself and appends to `k8s_stabilise_watch`, so the
-play-level gate in `post_tasks/k8s_stabilise_gate.yml` soaks these six alongside everything
+play-level gate in `post_tasks/k8s_stabilise_gate.yml` soaks these workloads alongside everything
 else, with no second soak of its own.
 
 Three things can silently break that, and none of them fails a deploy:
 
   * **The lists drift.** The role spells its workloads out twice — the wait loop, and
     `observability_stabilise_workloads` in defaults, which the restart loop and the stabilisation
-    tasks read. Add a seventh workload to the wait loop and forget the variable and the gate
-    watches six of seven, reporting green for the one that crashloops.
+    tasks read. Add a workload to the wait loop and forget the variable and the gate watches
+    every workload but that one, reporting green for the one that crashloops.
   * **The inline wait gets queued into the drain.** It looks like the obvious next speedup —
     it is 54s of serial waiting that `k8s/manifests/tasks/drain.yml` would collapse to a max(). It cannot
     move: "Sync the live Grafana admin password" `kubectl exec`s into `deploy/grafana`, and the
@@ -109,7 +109,7 @@ def test_the_restart_snapshot_is_taken_after_the_wait() -> None:
 
     assert snapshot >= 0, (
         "observability no longer snapshots restart counts, so post_tasks/k8s_stabilise_gate.yml "
-        "has no `restarts_before` to compare against for these six workloads."
+        "has no `restarts_before` to compare against for these workloads."
     )
     assert wait < snapshot, (
         f"restart counts are snapshotted at task {snapshot}, before the rollout wait at task "
@@ -125,7 +125,7 @@ def test_the_role_feeds_the_play_level_gate() -> None:
         if "k8s_stabilise_watch" in str(task.get("ansible.builtin.set_fact", ""))
     ]
     assert appends, (
-        "observability does not append to k8s_stabilise_watch. Its six workloads are the only "
+        "observability does not append to k8s_stabilise_watch. Its workloads are the only "
         "ones outside k8s_namespace and nothing else queues them, so the play gate would skip "
         "them entirely — the 2026-08-07 kube-state-metrics crashloop goes unseen again."
     )
