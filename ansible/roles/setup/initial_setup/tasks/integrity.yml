@@ -38,20 +38,68 @@
     line: 'APT_AUTOGEN="true"'
   become: true
 
+- name: Create the rkhunter scan credentials directory
+  tags: [rkhunter]
+  # Same owner and mode as the AIDE, setup-drift and Loki-witness tasks that also create it, so
+  # they never fight over it.
+  ansible.builtin.file:
+    path: /etc/homelab
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Deploy the rkhunter scan push credentials
+  tags: [rkhunter]
+  # 0600 root: the scan runs as root and nothing else reads this file. A push token is enough to
+  # forge or suppress the heartbeat.
+  ansible.builtin.template:
+    src: rkhunter-kuma-push.env.j2
+    dest: /etc/homelab/rkhunter-kuma-push.env
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true  # renders a Kuma push token
+
+- name: Deploy the weekly rkhunter scan
+  tags: [rkhunter]
+  # The script runs rkhunter, reads whether the scan completed from its log, and pushes the
+  # verdict to this host's Kuma tile; its header has why the exit code alone cannot say (#4598).
+  ansible.builtin.template:
+    src: rkhunter-check.sh.j2
+    dest: /usr/local/bin/rkhunter-check.sh
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: Schedule weekly rkhunter scan
   tags: [rkhunter]
   ansible.builtin.cron:
     name: "Weekly rkhunter malware scan"
     minute: "0"
     hour: "2"
-    # Wednesday, staggered off the Monday AIDE check: both scans run >1h on the
-    # Pi's 4 slow cores and would overlap (rkhunter 02:00 still running when
-    # AIDE starts at 03:00). nice/ionice-idle so a scan can never starve
-    # containers.
+    # Wednesday, staggered off the Monday AIDE check, which runs for over an hour
+    # on the Pi. The two once overlapped there at full priority; an rkhunter scan
+    # takes two to three minutes. The script runs rkhunter nice/ionice-idle so a
+    # scan can never starve containers.
     weekday: "3"
-    job: "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/rkhunter --check --nocolors --skip-keypress --report-warnings-only 2>&1 | /usr/bin/logger -t rkhunter"
+    # The script logs the warnings and its verdict itself; this routes anything else it prints,
+    # such as a bash error, to the journal rather than to root's unread mail spool.
+    job: "/usr/local/bin/rkhunter-check.sh 2>&1 | /usr/bin/logger -t rkhunter-check"
     user: root
   become: true
+
+- name: Record the rendered rkhunter scan
+  tags: [rkhunter]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: rkhunter-check
+    stamp_render_templates:
+      - ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2
+      - ansible/roles/setup/initial_setup/templates/rkhunter-kuma-push.env.j2
 
 - name: Set default umask to 027 in /etc/login.defs
   tags: [login-defs]
