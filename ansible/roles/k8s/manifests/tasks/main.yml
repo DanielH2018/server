@@ -857,11 +857,18 @@
 
 # Everything above handles ONE Deployment per role. A role that renders several (freshrss:
 # freshrss-feed-cache; prowlarr: flaresolverr; n8n: n8n-runners; karakeep: karakeep-meilisearch)
-# names the others here as {name, image} pairs, where `image` is the k8s/image-builder name
-# whose rebuild should roll it. Optional and empty by default. Every current extra is kind: Deployment; an entry can set its own
+# names the others here as {name, image?, kind?, restart_on?} entries, where `image` is the
+# k8s/image-builder name whose rebuild should roll it. Optional and empty by default. Every current extra is kind: Deployment; an entry can set its own
 # `kind` and falls back to manifests_rollout_kind, same as the primary rollout, when it omits
 # one. observability is the precedent for one role legitimately rolling both kinds together, though
 # it does so via its own private loop rather than manifests_extra_rollouts.
+#
+# Every entry is queued for the batch drain below, whatever its `restart_on`. That is how a role
+# makes the deploy WAIT on a Deployment without restarting it: `restart_on: []` drops all three
+# signals from this task, so the workload rolls only when the apply changes its pod template
+# (an image-pin bump), and the drain waits on that roll. karakeep-chrome is the case (#4564):
+# the per-role `config` signal would otherwise restart chrome, and drop any crawl in flight, on
+# every unrelated karakeep manifest edit.
 - name: Roll the extra deployments after a config or image change for {{ manifests_service }}
   tags: [deploy]
   ansible.builtin.command:
@@ -873,12 +880,20 @@
   loop: "{{ manifests_extra_rollouts | default([]) }}"
   loop_control:
     label: "{{ item.name }}"
+  vars:
+    # Templated per iteration, and the same expression release_stamp.yml reads for the
+    # record's `restart`: two readers that disagree leave `probe.py health` expecting a
+    # restart this task skipped, or skipping one it issued.
+    manifests_target_triggers: "{{ item.get('restart_on', manifests_restart_triggers_default) }}"
   when:
     - not k8s_dry_run | bool
-    # Same apply-changed conjunction as the primary rollout above.
-    - (manifests_render is changed and manifests_apply is changed)
-      or manifests_secret_render is changed
-      or (item.image | default(item.name)) in (k8s_rebuilt_images | default([]))
+    # Same apply-changed conjunction as the primary rollout above, each signal gated on the
+    # entry's own `restart_on`.
+    - ('config' in manifests_target_triggers
+       and manifests_render is changed and manifests_apply is changed)
+      or ('secret' in manifests_target_triggers and manifests_secret_render is changed)
+      or ('image' in manifests_target_triggers
+          and (item.image | default(item.name)) in (k8s_rebuilt_images | default([])))
     # Same apply-rolled-it guard as the primary rollout above — karakeep-meilisearch and
     # freshrss-feed-cache are Recreate too.
     - not manifests_rolled_by_apply.get(item.name, false)

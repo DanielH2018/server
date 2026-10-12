@@ -18,12 +18,13 @@ Two ways that goes quiet, both guarded here:
     dropped signal silently stops restarting every role that does not narrow.
 
 What a narrowed entry then DOES is rendered through Ansible's own filters in
-`ansible/tests/k8s/test_self_rollouts_follow_the_apply.py`, over the harness in
-`ansible/tests/_release_expectation.py`. This module covers the two failures that harness
+`ansible/tests/k8s/test_self_rollouts_follow_the_apply.py` for a self rollout, and in
+`ansible/tests/k8s/test_release_stamp_rollout_expectation.py` for an extra one, over the harness
+in `ansible/tests/_release_expectation.py`. This module covers the two failures that harness
 cannot see, because both leave every rendered branch intact.
 """
 
-from _helpers import REPO, load_defaults, load_tasks
+from _helpers import REPO, load_defaults, load_tasks, task_named, walk_tasks
 from _role_census import role_dirs
 
 
@@ -31,8 +32,9 @@ _MANIFESTS = REPO / "ansible/roles/k8s/manifests"
 _SIGNALS = frozenset({"config", "secret", "image"})
 
 # Roles known to narrow. Keeps the census below non-vacuous: a renamed variable would leave it
-# iterating nothing and passing.
-_EXPECTED_NARROWERS = frozenset({"observability"})
+# iterating nothing and passing. observability narrows in its defaults, karakeep in the vars of
+# its include (karakeep-chrome, #4564), so each names one of the two places the census reads.
+_EXPECTED_NARROWERS = frozenset({"observability", "karakeep"})
 
 _TRIGGERS_VAR = "manifests_target_triggers"
 
@@ -41,13 +43,25 @@ def _default_triggers():
     return load_defaults(_MANIFESTS)["manifests_restart_triggers_default"]
 
 
+def _declared_values(role_dir):
+    """Every value a role declares in its defaults or hands to `include_role: k8s/manifests`."""
+    yield from (load_defaults(role_dir) or {}).values()
+    tasks = role_dir / "tasks" / "main.yml"
+    if not tasks.is_file():
+        return
+    for task in walk_tasks(load_tasks(tasks)):
+        include = task.get("ansible.builtin.include_role")
+        if isinstance(include, dict) and include.get("name") == "k8s/manifests":
+            yield from (task.get("vars") or {}).values()
+
+
 def _narrowing_roles():
     """{role: {workload name: restart_on}} for every k8s role that narrows an entry."""
     found = {}
     for role_dir in role_dirs():
         narrowed = {
             entry["name"]: entry["restart_on"]
-            for value in (load_defaults(role_dir) or {}).values()
+            for value in _declared_values(role_dir)
             if isinstance(value, list)
             for entry in value
             if isinstance(entry, dict) and "name" in entry and "restart_on" in entry
@@ -78,7 +92,8 @@ def test_every_narrowed_entry_names_only_real_signals():
     narrowers = _narrowing_roles()
     assert set(narrowers) >= _EXPECTED_NARROWERS, (
         f"no restart_on found for {sorted(_EXPECTED_NARROWERS - set(narrowers))}. The census "
-        "reads role defaults; a renamed variable leaves it checking nothing."
+        "reads role defaults and k8s/manifests include vars; a renamed variable leaves it "
+        "checking nothing."
     )
     for role, entries in sorted(narrowers.items()):
         for name, triggers in sorted(entries.items()):
@@ -97,4 +112,25 @@ def test_release_stamp_gates_each_signal_on_the_entrys_triggers():
             f"the release record's restart clause no longer gates the {signal!r} signal on the "
             "entry's own triggers, so a narrowed entry still expects a restart it never gets — "
             "probe.py health reads that as NOT ROLLED."
+        )
+
+
+def test_the_extra_restart_gates_each_signal_on_the_entrys_triggers():
+    """The shared extra restart reads `restart_on` the way the record does. A task that
+    ignored it would restart a `restart_on: []` entry the record expects no restart of, and
+    karakeep-chrome would drop its crawls on every unrelated karakeep edit again (#4564)."""
+    task = task_named(
+        load_tasks(_MANIFESTS / "tasks" / "main.yml"), "Roll the extra deployments"
+    )
+    record = _stamp_rollouts_task()["vars"][_TRIGGERS_VAR]
+    assert task["vars"][_TRIGGERS_VAR] == record.replace(
+        "manifests_release_target", "item"
+    ), (
+        "the extra restart and the release record resolve an entry's triggers differently"
+    )
+    when = " ".join(task["when"])
+    for signal in sorted(_SIGNALS):
+        assert f"'{signal}' in {_TRIGGERS_VAR}" in when, (
+            f"the extra restart no longer gates the {signal!r} signal on the entry's own "
+            "triggers, so a narrowed extra entry restarts on it anyway."
         )

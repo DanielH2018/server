@@ -31,7 +31,15 @@
     # this line a rotated KARAKEEP_PYTHON_API_KEY lands in the Secret while the tagger keeps
     # calling the API with the old key.
     #
-    # chrome is absent: it mounts no role-rendered config at all.
+    # chrome is listed so the batch drain WAITS on it, never so it restarts (#4564). Its one
+    # input that moves is `karakeep_k8s_chrome_image`, which Renovate bumps every few weeks: a
+    # bump changes chrome's pod template, so the apply rolls it, and before this entry nothing
+    # waited on that roll and the landing read `VERDICT: settled` mid-pull. `restart_on: []`
+    # keeps the shared extra restart off it. chrome mounts no role-rendered config, reads no
+    # Secret and runs no built image, so all three signals would only restart it on an
+    # unrelated karakeep edit and drop any crawl in flight. It stays LAST in this list:
+    # ansible/tests/deploy/_autodeploy_rollout.py reads the names with a regex that stops at
+    # the first line that is not `- name:`.
     #
     # ACCEPTED COST: the restart is gated on the render changing, not on the SECRET changing, so
     # any karakeep manifest edit also rolls time-tagger, and this extra rollout is queued for
@@ -45,6 +53,8 @@
     manifests_extra_rollouts:
       - name: karakeep-meilisearch
       - name: karakeep-time-tagger
+      - name: karakeep-chrome
+        restart_on: []
     # networkpolicy-chrome.yaml and networkpolicy-meilisearch.yaml render from THIS role's
     # templates rather than netpol-baseline's on purpose, as for authelia's redis policy. The
     # `wait-for-deps` initContainer in deployment.yaml.j2 retries karakeep-chrome:9222 and

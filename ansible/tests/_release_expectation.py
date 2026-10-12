@@ -1,9 +1,12 @@
 """The release record's rollout expectation, rendered the way Ansible renders it.
 
-Shared by the two test modules that pin `release_stamp.yml`'s `rollouts[]` decision:
-`k8s/test_release_stamp_rollout_expectation.py` (the shared restart) and
-`k8s/test_self_rollouts_follow_the_apply.py` (the two roles that roll their own workloads). The expression is rendered through Ansible's own filters and tests against
-fake registers, one append per loop target, exactly as the play accumulates it.
+Shared by the test modules that pin `release_stamp.yml`'s `rollouts[]` decision:
+`k8s/test_release_stamp_rollout_expectation.py` (the shared restart),
+`k8s/test_self_rollouts_follow_the_apply.py` (the two roles that roll their own workloads) and
+`services/test_karakeep_chrome_rollout.py` (an extra entry the role waits on and never
+restarts). The expression is rendered through Ansible's own filters and tests against fake
+registers, one append per loop target, exactly as the play accumulates it. `extra_restarts`
+renders the shared extra restart task's own `when` the same way.
 """
 
 from _helpers import ANSIBLE, load_tasks, load_yaml, render_expr, task_named, walk_tasks
@@ -59,6 +62,28 @@ def rollouts(**over):
             **ctx,
         )
     return {r["name"]: r for r in acc}
+
+
+EXTRA_RESTART = task_named(MAIN, "Roll the extra deployments")
+
+
+def extra_restarts(item: dict, **over) -> bool:
+    """Whether the shared extra restart fires for one `manifests_extra_rollouts` entry.
+
+    Its `vars:` are rendered for that iteration first, then every `when` clause as one
+    conjunction, the way Ansible runs the task. The record's half is `rollouts` above; the
+    two must agree on every entry, or `probe.py health` expects a restart that never ran.
+    """
+    ctx = {**BASE, "k8s_dry_run": False, **over, "item": item}
+    triggers = render_expr(EXTRA_RESTART["vars"]["manifests_target_triggers"], **ctx)
+    return all(
+        render_expr(
+            "{{ " + " ".join(clause.split()) + " }}",
+            manifests_target_triggers=triggers,
+            **ctx,
+        )
+        for clause in EXTRA_RESTART["when"]
+    )
 
 
 def include_role_vars(role_dir):
