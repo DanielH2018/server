@@ -260,8 +260,10 @@ def test_wait_does_not_take_a_descendant_while_an_actions_suite_is_queued():
     assert msg.startswith("old:") and "never ran CI" not in msg
 
 
-def test_a_dropped_push_with_no_green_descendant_times_out_saying_why():
-    code, msg = _wait_on_dropped([], [])
+def test_a_dropped_push_whose_descendant_ci_is_in_flight_times_out_saying_why():
+    """The reject half of CI_UNPROVEN (#4641): a run on its way makes a re-run converge."""
+    running = [_run("prek (lint + validate + tests + secrets)", "in_progress", None)]
+    code, msg = _wait_on_dropped([], running)
     assert code == 75
     assert "GitHub never ran CI" in msg and "re-run converges" in msg
 

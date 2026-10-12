@@ -61,6 +61,11 @@ class Verdict(StrEnum):
     MERGE_TIMEOUT = "merge-timeout"
     CI_RED = "ci-red"
     CI_TIMEOUT = "ci-timeout"
+    # GitHub never ran CI for the merge commit, and no later master commit stands in for it:
+    # none has run CI either, or the nearest is red with a green one after it. No re-run
+    # converges on its own, so this is not a resume point. The detail names the tip and the
+    # way out. See `await_ci.wait` (#4641, #4649).
+    CI_UNPROVEN = "ci-unproven"
     LOCK_BUSY = "lock-busy"
     # Every stale retry lost the same race: master merged faster than one
     # tick-and-deploy cycle. Nothing was deployed and re-running is safe, which is the

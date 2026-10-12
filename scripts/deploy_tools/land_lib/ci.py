@@ -9,7 +9,14 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED, DEPLOY_BROAD
+from lib.exit_codes import (
+    CI_DISARMED,
+    CI_GREEN,
+    CI_PENDING,
+    CI_RED,
+    CI_UNPROVEN,
+    DEPLOY_BROAD,
+)
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, disarmed, say
 
@@ -64,6 +71,16 @@ def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
             f"no CI verdict{where} inside {ln.opts.ci_timeout}s — nothing deployed",
             75,
             Verdict.CI_TIMEOUT,
+        )
+    if rc == CI_UNPROVEN:
+        # Exit 1, not 75: 75 is the resume point, and no re-run converges here until the
+        # operator dispatches CI or deploys the tip by hand. `line` names the tip and the
+        # command; a resolved tag list fills in its `<service>`.
+        tags = f" (this PR's tags: {ln.tags_csv})" if ln.tags_csv else ""
+        ln.die(
+            f"no CI verdict can arrive{where}: {line}{tags} — nothing deployed",
+            1,
+            Verdict.CI_UNPROVEN,
         )
     if rc == CI_DISARMED:
         ln.die(disarmed(where, "nothing deployed"), 1)

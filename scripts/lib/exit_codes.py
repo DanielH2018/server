@@ -123,6 +123,7 @@ TICK_STILL_RUNNING = TEMP_FAIL
 CI_GREEN = OK
 CI_RED = FAILED
 CI_DISARMED = 2
+CI_UNPROVEN = 4
 CI_PENDING = TEMP_FAIL
 
 # -- scripts/deploy_tools/land.sh -------------------------------------------------------
@@ -387,7 +388,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             LAND_FAILED,
             "LAND_FAILED",
-            "CI red, blocked by a change needing a hand, the deploy failed, the health gate "
+            "CI red or unproven, blocked by a change needing a hand, the deploy failed, the health gate "
             "failed, or the PR was closed without merging, conflicts with master, or its own CI is red.",
         ),
         _c(LAND_BAD_ARGS, "LAND_BAD_ARGS", "the command line is wrong."),
@@ -457,11 +458,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
     "scripts/deploy_tools/await_ci.py": (
         _c(CI_GREEN, "CI_GREEN", "every required check on the SHA concluded green."),
         _c(CI_RED, "CI_RED", "a required check concluded red."),
-        _c(
-            CI_DISARMED,
-            "CI_DISARMED",
-            "the CI gate is disarmed, so no verdict was formed.",
-        ),
+        _c(CI_DISARMED, "CI_DISARMED", "the CI gate is disarmed; no verdict formed."),
+        _c(CI_UNPROVEN, "CI_UNPROVEN", "no CI verdict can ever arrive for the SHA."),
         _c(CI_PENDING, "CI_PENDING", "the budget elapsed with checks still running."),
     ),
     "scripts/deploy_tools/publish_pr.py": (

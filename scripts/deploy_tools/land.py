@@ -70,7 +70,7 @@ Exit codes:
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 blocked | needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
-ci-red | ci-timeout | lock-busy | tip-outran-retries | refused | handoff-timeout.
+ci-red | ci-timeout | ci-unproven | lock-busy | tip-outran-retries | refused | handoff-timeout.
 
 `blocked` is not a failure of this PR -- something else in the incoming range needs an
 operator, and nothing was deployed. `needs-manual-apply` means this PR reaches something

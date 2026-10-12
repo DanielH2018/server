@@ -13,6 +13,8 @@ Exit codes:
   0   the SHA is green
   1   the SHA is red
   2   the gate could not be armed (no required contexts) -- nothing was checked
+  4   no verdict can arrive: GitHub never ran CI for the SHA, and no later master commit
+      stands in for it -- the line names the tip and the way out (#4641, #4649)
   75  the wait budget elapsed with no verdict (matches deploy.sh's use of 75)
 
 A SHA GitHub never ran CI for at all reads green through its nearest green descendant on
@@ -31,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser
-from lib.exit_codes import CI_DISARMED
+from lib.exit_codes import CI_DISARMED, CI_RED, CI_UNPROVEN
 from lib.git import git, git_stdout
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
@@ -270,12 +272,73 @@ def descendant_verdict(
     # push event is gone, and the alternative is a landing no re-run converges (#4621).
     # A RED one ends the walk rather than being stepped over: a later green commit may hold
     # the fix the merge commit lacks, so its green says nothing about the tree deployed.
+    # Neither verdict changes once both exist, so `wait` ends that case on CI_UNPROVEN, not
+    # on CI_RED: CI_RED's resume is a re-run, and every re-run reads the same red (#4649).
+    # `green_after` finds the later green, and the CI_UNPROVEN line says to deploy the tip.
     required = required_contexts()
     for candidate in descendants(sha)[:DESCENDANT_LIMIT]:
         verdict = verdict_for(candidate, fetch=fetch, required=required)
         if verdict != "pending":
             return candidate, verdict
     return "", "pending"
+
+
+def green_after(
+    sha: str, red: str, fetch=fetch_check_runs, descendants=_descendants
+) -> str:
+    """The first green descendant of `sha` after its red one `red`, or "" when none is green.
+
+    Searches the same `DESCENDANT_LIMIT` window as `descendant_verdict`.
+    """
+    window = descendants(sha)[:DESCENDANT_LIMIT]
+    if red not in window:
+        return ""
+    required = required_contexts()
+    for candidate in window[window.index(red) + 1 :]:
+        if verdict_for(candidate, fetch=fetch, required=required) == "pass":
+            return candidate
+    return ""
+
+
+def run_less_tip(
+    sha: str,
+    fetch=fetch_check_runs,
+    fetch_suites=fetch_check_suites,
+    descendants=_descendants,
+    fetch_tip=_fetch_tip,
+) -> str:
+    """The master tip, when GitHub registered no CI for `sha` or any commit after it; else "".
+
+    `sha` itself is already known to be a dropped push. A descendant with a required run or
+    an Actions suite, even one still queued, returns "": its verdict is on its way, and a
+    re-run converges once it lands. So does a window past `DESCENDANT_LIMIT` or a failed read.
+    A commit merged in the last seconds of the wait also reads as run-less. The way out the
+    caller prints (dispatch CI on the tip, then re-run) converges in that case too.
+    """
+    chain = descendants(sha)
+    if not chain:
+        # Either `sha` is the tip, or it is not on master at all, which says nothing.
+        try:
+            return sha if fetch_tip() == sha else ""
+        except subprocess.CalledProcessError, OSError:
+            return ""
+    if len(chain) > DESCENDANT_LIMIT:
+        return ""
+    required = required_contexts()
+    for candidate in chain:
+        try:
+            runs = fetch(candidate)
+            if not _push_was_dropped(runs, fetch_suites(candidate), required):
+                return ""
+        except urllib.error.URLError, TimeoutError, ValueError, OSError:
+            return ""
+    return chain[-1]
+
+
+def _tip_of(sha: str, descendants) -> str:
+    """The newest commit in `sha`'s descendant chain, or `sha` when it has none."""
+    chain = descendants(sha)
+    return chain[-1] if chain else sha
 
 
 def wait(
@@ -287,12 +350,15 @@ def wait(
     fetch=fetch_check_runs,
     fetch_suites=fetch_check_suites,
     descendants=_descendants,
+    fetch_tip=_fetch_tip,
 ) -> tuple[int, str]:
     """(exit code, message). Polls until pass/fail or the budget elapses.
 
     A SHA with no Actions suite after `DROPPED_PUSH_GRACE_S` is a push GitHub dropped, and
     its verdict comes from `descendant_verdict` instead. Until one goes green it keeps waiting,
-    and a timeout says why.
+    and a timeout says why. Two shapes end on CI_UNPROVEN instead, because no re-run of the
+    wait converges on them: a red nearest descendant with a green one after it, and a budget
+    spent with no CI registered for any commit from the SHA to the tip.
     """
     started = clock()
     deadline = started + timeout_s
@@ -341,11 +407,48 @@ def wait(
                     f"{nearest[:8]} descends from it)"
                 )
             if verdict == "fail":
-                return 1, (
+                fixed = green_after(
+                    target, nearest, fetch=fetch, descendants=descendants
+                )
+                if fixed:
+                    tip = _tip_of(target, descendants)
+                    return CI_UNPROVEN, (
+                        f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
+                        f"its nearest descendant {nearest[:8]} is RED and {fixed[:8]} after "
+                        f"it is green, and neither verdict changes on a re-run. The tip "
+                        f"{tip[:8]} contains {target[:8]}: deploy it by hand with "
+                        f"`./scripts/deploy.sh --tags <service> --at {tip[:8]}`"
+                        + (f" once {tip[:8]} is green" if tip != fixed else "")
+                    )
+                return CI_RED, (
                     f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
                     f"{nearest[:8]} is its nearest descendant with a verdict)"
                 )
         if now >= deadline:
+            tip = (
+                run_less_tip(
+                    target,
+                    fetch=fetch,
+                    fetch_suites=fetch_suites,
+                    descendants=descendants,
+                    fetch_tip=fetch_tip,
+                )
+                if dropped
+                else ""
+            )
+            if tip:
+                after = (
+                    "and it is the master tip"
+                    if tip == target
+                    else f"nor for any master commit after it up to the tip {tip[:8]}"
+                )
+                return CI_UNPROVEN, (
+                    f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
+                    f"{after}, so no re-run converges until something runs CI. Run it on "
+                    f"the tip {tip[:8]} with `gh workflow run ci.yml --ref master`, then "
+                    "re-run; or deploy the tip without CI by hand with "
+                    f"`./scripts/deploy.sh --tags <service> --at {tip[:8]}`"
+                )
             if dropped:
                 return 75, (
                     f"{target[:8]}: no verdict after {timeout_s}s — GitHub never ran CI "

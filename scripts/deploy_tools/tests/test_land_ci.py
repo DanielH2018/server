@@ -293,3 +293,24 @@ def test_step_3_does_not_end_red_for_good_once_a_later_descendant_is_green(
     assert tip[:8] in detail, detail
     if ended.verdict == "ci-red":
         assert "deploy.sh" in detail, detail
+
+
+@pytest.mark.parametrize(
+    "label, where", [(None, ""), ("the tip def456", " on the tip def456")]
+)
+def test_an_unproven_merge_commit_ends_ci_unproven_and_names_the_way_out(
+    landing, label, where
+):
+    """#4641/#4649: exit 1, not the 75 resume point, carrying await_ci's line and the tags."""
+    from lib.exit_codes import CI_UNPROVEN
+
+    line = "abc12345: no verdict can arrive — run `gh workflow run ci.yml --ref master`"
+    ln, _ = landing(Fakes(await_ci=[(CI_UNPROVEN, line)]))
+    ln.resolved_tags = ["grafana", "loki"]
+    with pytest.raises(Outcome) as exc:
+        ci.wait_master_ci(ln, "abc123", label)
+    assert (exc.value.rc, exc.value.verdict) == (1, "ci-unproven")
+    assert exc.value.error == (
+        f"no CI verdict can arrive{where}: {line} (this PR's tags: grafana,loki) "
+        "— nothing deployed"
+    )
