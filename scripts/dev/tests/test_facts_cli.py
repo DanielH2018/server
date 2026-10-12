@@ -336,3 +336,23 @@ def test_report_prints_each_sessions_total_instruction_bytes(tmp_path, capsys):
     out = capsys.readouterr().out
     assert _total_on_session_line(out, "aaaaaaaa", 8000), out
     assert _total_on_session_line(out, "bbbbbbbb", 3000), out
+
+
+def test_notice_exits_zero_with_rows_and_with_an_unparsable_row(tmp_path, capsys):
+    """A row is a notice, never a failure: the exit code carries no finding."""
+    repo = _repo(tmp_path)
+    (repo / "t" / "m.py").write_text("LIMIT = 90\nOTHER = 1\n")
+    git(repo, "commit", "-qam", "move", "--no-gpg-sign")
+    args = ["notice", "--repo", str(repo), "--since", "HEAD~1", "--head", "HEAD"]
+    assert main(args) == 0
+    out = capsys.readouterr().out
+    assert "moved CLAUDE.md#Gate t/m.py:LIMIT (prose unchanged)" in out
+    (repo / "t" / "m.py").write_text("LIMIT = (\n")
+    assert main(["notice", "--repo", str(repo), "--since", "HEAD"]) == 0
+    assert "unparsable CLAUDE.md#Gate t/m.py:LIMIT" in capsys.readouterr().out
+
+
+def test_notice_with_an_unresolvable_ref_exits_2(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    assert main(["notice", "--repo", str(repo), "--since", "origin/nope"]) == 2
+    assert "no merge base of 'origin/nope'" in capsys.readouterr().err

@@ -12,7 +12,9 @@ heading is a new unit, and the old row cannot be hand-deleted without tripping t
 own checksum. ``lint`` reports citations that cannot be support. ``report`` measures the
 lock from git and the instructions log: potential against actual moves per atom form, the
 sections not IN ranked by how often their doc loads, and the instruction bytes each session
-loaded (``--json`` for a cron or an agent).
+loaded (``--json`` for a cron or an agent). ``notice`` lists every section citing an atom
+that the diff from the merge base of ``--since`` to ``--head``, or to the working tree, moved.
+It exits 0 with rows or without, and 2 only when git cannot resolve the merge base.
 """
 
 import sys as _sys
@@ -26,7 +28,7 @@ from pathlib import Path
 
 from lib.cli_help import ArgumentParser
 
-from lib.exit_codes import FACT_STATUS_BAD_ARGS
+from lib.exit_codes import FACT_STATUS_BAD_ARGS, FACT_STATUS_BAD_REF
 
 from lib.facts.lint import changed_units, first_cited_units, lint_sections
 from lib.facts.lock import (
@@ -39,6 +41,8 @@ from lib.facts.lock import (
     reverify_benign,
     verify_units,
 )
+from lib.facts.notice import FORMATS, resolve_base, scan
+from lib.facts.notice import render as render_notice
 from lib.facts.relations import derive, status_of
 from lib.facts.report import build, default_log, render
 from lib.git import git_stdout
@@ -213,6 +217,21 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_notice(args: argparse.Namespace) -> int:
+    repo = Path(args.repo)
+    base = resolve_base(repo, args.since, args.head or "HEAD")
+    if base is None:
+        print(
+            f"no merge base of {args.since!r} and {args.head or 'HEAD'!r}; "
+            "is the ref fetched?",
+            file=_sys.stderr,
+        )
+        return FACT_STATUS_BAD_REF
+    rows, summary = scan(repo, base, args.head)
+    print(render_notice(rows, summary, args.format))
+    return 0
+
+
 def _add_common(sp: argparse.ArgumentParser) -> None:
     """Add ``--repo``/``--store`` to a subparser.
 
@@ -265,6 +284,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     rp.add_argument("--json", action="store_true", help="print one JSON object")
     rp.set_defaults(fn=cmd_report)
+    nt = sub.add_parser("notice")
+    _add_common(nt)
+    nt.add_argument(
+        "--since",
+        default="origin/master",
+        help="diff from the merge base of this ref and the head",
+    )
+    nt.add_argument(
+        "--head",
+        default=None,
+        help="the revision to read as the head (default: the working tree)",
+    )
+    nt.add_argument("--format", choices=FORMATS, default="text")
+    nt.set_defaults(fn=cmd_notice)
     args = p.parse_args(argv)
     return args.fn(args)
 
