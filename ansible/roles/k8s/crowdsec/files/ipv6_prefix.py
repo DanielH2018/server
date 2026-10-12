@@ -15,7 +15,7 @@ Usage:
 `crowdsec-update-home-allowlist.sh` runs it as root on daniel-box and reads the last line of
 its combined output. Exit 0 prints the /64 network, such as `2001:db8:1:2::/64`, to stdout.
 Exit 1 means the argument is not an IPv6 address, and one stderr line says why. Exit 2 means
-the argument count was wrong.
+the argument count was wrong. `-h` and `--help` print this text and exit 0.
 """
 
 import ipaddress
@@ -28,6 +28,9 @@ def prefix64(address: str) -> str:
 
 
 def main(argv: list[str]) -> int:
+    if argv in (["-h"], ["--help"]):
+        print(__doc__)
+        return 0
     if len(argv) != 1:
         print("usage: ipv6_prefix.py <ipv6-address>", file=sys.stderr)
         return 2
