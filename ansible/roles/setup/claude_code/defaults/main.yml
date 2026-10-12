@@ -70,6 +70,15 @@ claude_code_rc_capacity: 10
 # Raise both together, or the cap depends on how the session started.
 claude_code_rc_pytest_workers: 4
 
+# DECIDED: one crash page per 6 hours, not one per exit. claude-rc.service runs Restart=always
+# with RestartSec=10, and systemd 255 fires OnFailure= on every exit of that loop, so a host
+# that cannot start paged about every 10 seconds: 1,540-1,686 alert runs a day from
+# 2026-10-05 to 2026-10-08 (#4676). After a delivered page the alert skips for this many
+# minutes, so a loop that lasts days pages four times a day as a reminder. The cost is that a
+# second, separate crash inside the window is not paged; the page text says so. 0 restores a
+# page per exit.
+claude_code_rc_alert_quiet_minutes: 360
+
 # ── The fleet bound ─────────────────────────────────────────────────────────────────────
 # The Claude fleet occupies TWO cgroups on this box: claude-rc.service's own, and
 # the user-<uid>.slice of each login uid for a session started from an interactive shell. They are

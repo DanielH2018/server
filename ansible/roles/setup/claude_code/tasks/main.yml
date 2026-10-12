@@ -175,18 +175,20 @@
     mode: "0750"
   become: true
 
-# OnFailure target, which pages Discord if the host dies, and on every exit of the restart loop
-# a login that is dead at start causes. What it CANNOT catch is a login that dies while the host
-# is registered: systemd keeps reporting `active` while every session fails, so no OnFailure=
-# fires. docs/claude-code-rc-caps.md has that gap (#4618).
+# OnFailure target, which pages Discord if the host dies, and once per
+# claude_code_rc_alert_quiet_minutes through the restart loop a login that is dead at start
+# causes (#4676). What it CANNOT catch is a login that dies while the host is registered:
+# systemd keeps reporting `active` while every session fails, so no OnFailure= fires.
+# docs/claude-code-rc-caps.md has that gap (#4618).
 - name: Install the Remote Control failure alert
   tags: [claude_code]
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
   vars:
     alert_unit_name: claude-rc
     alert_unit_description: Alert when the Claude Code Remote Control host fails
-    alert_unit_message: "🚨 claude-rc unit failed on {{ inventory_hostname }} — Remote Control sessions cannot be started from the phone. Check `journalctl -u claude-rc`."
+    alert_unit_message: "🚨 claude-rc unit failed on {{ inventory_hostname }} — Remote Control sessions cannot be started from the phone. Check `journalctl -u claude-rc`. Further failures in the next {{ claude_code_rc_alert_quiet_minutes }} minutes are not paged."
     alert_unit_env_dir: /etc/claude-rc
+    alert_unit_quiet_minutes: "{{ claude_code_rc_alert_quiet_minutes }}"
 
 # Both states are driven from the one var so the service has a way out as well as a way in:
 # false stops AND disables it, which is the rollback if a phone-reachable session on the
