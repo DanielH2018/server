@@ -198,6 +198,7 @@ nav:
           # keeps the skill short.
           - Landing a merged PR: landing.md
           - The GitOps pipeline: gitops-pipeline.md
+          - The homelab-render shadow renderer: homelab-render.md
           - Secret rotation: secret-rotation.md
       - Monitoring and alerting:
           - Healthchecks.io deadman: healthchecks-io-deadman.md
