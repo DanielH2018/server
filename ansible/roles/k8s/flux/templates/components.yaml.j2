@@ -1,0 +1,9 @@
+{#
+  The vendored Flux install (files/gotk-components.yaml), passed through the flux_components
+  filter (ansible/filter_plugins/flux_components.py). The filter merges flux_pod_patch into each
+  Deployment, states RollingUpdate where upstream leaves the strategy implicit, renames the
+  generic volumes, and sets each pod's class from the `flux` entry's tier. The class is never a
+  literal here (#3452), and this call makes the role a reader of containers_list.
+#}
+{{ lookup('file', playbook_dir + '/roles/k8s/flux/files/gotk-components.yaml')
+   | flux_components(flux_pod_patch, containers_list | tier_priority_class('flux'), flux_volume_suffixes) }}
