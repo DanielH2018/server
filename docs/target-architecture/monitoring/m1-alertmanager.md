@@ -839,8 +839,13 @@ and those edits must land with the workload.
 
 - Add `templates/alertmanager.yaml.j2` with the pod shell in *The Alertmanager workload*,
   `templates/alertmanager-secret.yaml.j2` (`stringData`), `files/alertmanager/homelab.tmpl`,
-  the image pin, the `alertmanager-data` claim,
-  `observability_alertmanager_watchdog_repeat_seconds: 60` and the stabilise entry.
+  the `alertmanager-data` claim, `observability_alertmanager_watchdog_repeat_seconds: 60` and
+  the stabilise entry. The image pin `observability_k8s_alertmanager_image` landed in PR 1,
+  because `alert_tools.sh` reads amtool's version from it.
+- Make room in the observability role's `CLAUDE.md` first. After PR 1 it is 7065 characters
+  against the 7070-character ceiling that `ansible/tests/repo/test_role_claude_md.py` enforces.
+  The new claim grows the generated *At a glance* block, and the *Alert plane* paragraph adds
+  more, so move text to `docs/observability-dashboards.md` before adding either.
 - Correct the one-register prose for the new Secret reader: the comment above
   `observability_stabilise_workloads` and the role `CLAUDE.md`'s *One config change, one
   restart* section, as *Tests and docs that change in the same PR* lists. The stabilise entry

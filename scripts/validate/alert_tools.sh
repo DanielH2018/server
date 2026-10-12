@@ -95,8 +95,9 @@ provision() {
   mkdir -p "$cache"
   exec 9<"$cache"
   # -w rather than an indefinite block: a wedged commit with no output is worse than a loud
-  # failure. The holder fetches one tarball, 112 MB for Prometheus v3.15.0.
-  if ! flock -w 300 9; then
+  # failure. The holder fetches one tarball, 112 MB for Prometheus v3.15.0, and that fetch
+  # took about 6 minutes on daniel-box on 2026-10-12, so the bound sits well above it.
+  if ! flock -w 1200 9; then
     echo "alert_tools.sh: timed out waiting for the $cache lock" >&2
     return 1
   fi
@@ -104,8 +105,10 @@ provision() {
   if [[ "$(cat "$stamp" 2>/dev/null || true)" != "$base" ]]; then
     rm -rf "$dir"
     tmp="$(mktemp -d "$cache/.fetch.XXXXXX")"
-    curl -fsSL -o "$tmp/$base.tar.gz" "$url/$base.tar.gz"
-    curl -fsSL -o "$tmp/sha256sums.txt" "$url/sha256sums.txt"
+    # The speed bound aborts a connection that stalls below 1 KB/s for a minute. Without it a
+    # hung fetch blocks a local commit with no output and no end.
+    curl -fsSL --speed-limit 1024 --speed-time 60 -o "$tmp/$base.tar.gz" "$url/$base.tar.gz"
+    curl -fsSL --speed-limit 1024 --speed-time 60 -o "$tmp/sha256sums.txt" "$url/sha256sums.txt"
     want="$(awk -v f="$base.tar.gz" '$2 == f {print $1}' "$tmp/sha256sums.txt")"
     got="$(sha256sum "$tmp/$base.tar.gz" | cut -d' ' -f1)"
     if [[ -z "$want" || "$want" != "$got" ]]; then
