@@ -79,6 +79,15 @@ tests:
       - eval_time: 40m
         alertname: PrometheusRuleReloadFailed
         exp_alerts: []
+      # The Watchdog fires whatever the input, and vector(1) carries no job or instance.
+      - eval_time: 40m
+        alertname: Watchdog
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              service: observability
+            exp_annotations:
+              summary: The alert pipeline is alive. This alert always fires.
 
   # One failed Discord send. The alert fires per integration, and clears once the failure
   # leaves the 30-minute window.
