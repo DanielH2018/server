@@ -140,6 +140,26 @@ def test_a_person_s_mark_protects_the_bookmark_but_not_its_screenshot(
     assert api.deletes() == ["bookmarks/b/assets/s1"]
 
 
+@pytest.mark.parametrize(
+    "fields, shown",
+    [
+        ({"title": "Typed", "content": {"type": "link", "title": "Crawled"}}, "Typed"),
+        ({"title": None, "content": {"type": "link", "title": "Crawled"}}, "Crawled"),
+        (
+            {"title": None, "content": {"type": "link", "url": "https://x.test/a"}},
+            "https://x.test/a",
+        ),
+        ({"title": None, "content": {"type": "asset", "fileName": "a.pdf"}}, "a.pdf"),
+    ],
+    ids=["typed-title", "crawled-title", "url", "asset-file"],
+)
+def test_the_log_shows_the_title_karakeep_s_ui_shows(capsys, fields, shown):
+    b = bookmark("b", 120)
+    b.update(fields)
+    run(FakeKarakeep([b]))
+    assert f"would delete b (120d) '{shown}'" in capsys.readouterr().out
+
+
 def test_a_dry_run_sends_no_delete():
     api = FakeKarakeep(
         [bookmark("old", 120), bookmark("mid", 40, assets=[("s1", "screenshot")])]
