@@ -96,15 +96,33 @@ def _run_report(root):
 
 
 def test_doc_over_the_char_limit_reports_head_and_sorts_first(tmp_path):
+    # `z/` is listed after `a/` by `git ls-files`, so only the sort can put it first.
     rows = _rows(
         _checkout(
             tmp_path,
-            **{"a/CLAUDE.md": "x" * _mod.INLINE_MAX_CHARS, "b/CLAUDE.md": "short\n"},
+            **{"z/CLAUDE.md": "x" * _mod.INLINE_MAX_CHARS, "a/CLAUDE.md": "short\n"},
         )
     )
-    assert rows["a/CLAUDE.md"].form == "head"
-    assert rows["a/CLAUDE.md"].chars_left < 0
-    assert list(rows) == ["a/CLAUDE.md", "b/CLAUDE.md"]
+    assert rows["z/CLAUDE.md"].form == "head"
+    assert rows["z/CLAUDE.md"].chars_left < 0
+    assert list(rows) == ["z/CLAUDE.md", "a/CLAUDE.md"]
+
+
+def test_rows_sort_by_the_tighter_margin_as_a_fraction_of_its_limit(tmp_path):
+    # `z/` has 9 of 188 newlines left (5%) and thousands of chars. `m/` has 1,000 of 7,272
+    # chars left (14%). A sort on chars alone, or on raw counts, puts `z/` last.
+    rows = _rows(
+        _checkout(
+            tmp_path,
+            **{
+                "m/CLAUDE.md": _doc_with_chars_left("m/CLAUDE.md", 1000),
+                "z/CLAUDE.md": "x\n" * 178,
+            },
+        )
+    )
+    assert rows["z/CLAUDE.md"].lines_left == 9
+    assert rows["m/CLAUDE.md"].chars_left == 1000
+    assert list(rows) == ["z/CLAUDE.md", "m/CLAUDE.md"]
 
 
 def test_doc_under_the_budget_reports_whole(tmp_path):
@@ -157,14 +175,15 @@ def test_a_rule_matching_no_tracked_path_reports_none(tmp_path):
             tmp_path,
             **{
                 "a/CLAUDE.md": "short\n",
-                ".claude/rules/lost.md": rule.format("nowhere/**"),
+                # `a-lost.md` is listed before `found.md`, so only the sort puts it last.
+                ".claude/rules/a-lost.md": rule.format("nowhere/**"),
                 ".claude/rules/found.md": rule.format("a/**"),
             },
         )
     )
-    assert rows[".claude/rules/lost.md"].form == "none"
+    assert rows[".claude/rules/a-lost.md"].form == "none"
     assert rows[".claude/rules/found.md"].form == "whole"
-    assert list(rows)[-1] == ".claude/rules/lost.md"
+    assert list(rows)[-1] == ".claude/rules/a-lost.md"
 
 
 def test_root_claude_md_is_reported_by_lines_not_form(tmp_path):
