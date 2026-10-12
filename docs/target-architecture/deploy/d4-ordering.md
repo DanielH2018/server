@@ -131,25 +131,27 @@ the other. The second adds an edge in the same commit as a change to the depende
       ([ADR-0012](../../adr/0012-zero-downtime-deploys-gate-on-rollout-and-restarts.md)).
       The netpol-baseline role's `CLAUDE.md` says the same: "workload role first and
       netpol-baseline last".
-    - **Two append paths already break that position.**
+    - **One append path breaks that position.**
       `scripts/dev/new_k8s_service.py:append_entry` writes a new entry "after the last item
       of `containers_list`", which is netpol-baseline. Its docstring says that "the list's
-      order is not the deploy order", which is false for netpol-baseline until D4.1. D1.2
-      appends the `flux` entry the same way ("Append the entry `flux` with `platform: k8s`
-      only"). So from D1.2 on, at least one entry sits after netpol-baseline, and any role
-      scaffolded before D4.1 joins it.
+      order is not the deploy order", which is false for netpol-baseline until D4.1. Any
+      role scaffolded before D4.1 therefore lands after netpol-baseline. D1.2's text says to
+      "Append the entry `flux` with `platform: k8s` only", but D1.2 landed in `cfe3bfa43`
+      with `flux` inserted just before netpol-baseline. On `origin/master` at `09ba629f1`
+      (2026-10-12), netpol-baseline is still the last entry, and no entry sits after it.
     - **netpol-baseline's batch** matters as well as its position. Its entry comment says it
       "must NOT sit in traefik's rollout batch", because the drain runs at the end of a batch
       and the role's probe would fail on timing. The task "Fail if any probe target has no
       ready endpoint" reads `netpol_baseline_probe_targets`, which lists nut and scrutiny.
       With 56 k8s entries at `70591c307`, the last batch is netpol-baseline alone, by
-      arithmetic only. D1.2's `flux` entry makes the last batch netpol-baseline and flux.
-      D2.1 batches `containers_list | ansible_owned`, so from D2.7, with bento-pdf out of the
-      Ansible list, netpol-baseline is the 55th entry. Its batch is then nut, nut-exporter,
-      pi-peer-backup, scrutiny and netpol-baseline, and flux runs alone in a batch after it.
-      (The k8s names of `daniel-box.yml`'s `containers_list`, in order and without
-      bento-pdf, put netpol-baseline 55th, after nut, nut-exporter, pi-peer-backup and
-      scrutiny.) A roll of nut or scrutiny in that run fails netpol-baseline's readiness
+      arithmetic only. D1.2's `flux` entry makes 57, so at `09ba629f1` the last batch is
+      flux and netpol-baseline, in that order. D2.1 batches `containers_list |
+      ansible_owned`, so from D2.7, with bento-pdf out of the Ansible list, netpol-baseline
+      is the 56th entry and alone in its batch again. The batch before it is nut,
+      nut-exporter, pi-peer-backup, scrutiny and flux. (The k8s names of `daniel-box.yml`'s
+      `containers_list` at `09ba629f1`, in order and without bento-pdf, give that split.)
+      Any entry added or removed before then moves the boundary again. When nut or scrutiny
+      shares netpol-baseline's batch, a roll of either fails netpol-baseline's readiness
       check after its policies are applied. configarr has the same need and includes
       `drain.yml` itself before its reconcile. netpol-baseline does not.
     - **configarr**'s entry comment says it "Must follow sonarr and radarr", because it
@@ -313,7 +315,8 @@ map:
   `depends_on` is a named member the row must find in the set, and a template that reads
   `entry.depends_on` is the row's second red fixture.
 - **The hand-ordered list stays a topological order.** D4.1 moves every entry listed after
-  netpol-baseline, D1.2's `flux` among them, ahead of it. Without the move,
+  netpol-baseline ahead of it. At `09ba629f1` there is none, because D1.2 inserted `flux`
+  before netpol-baseline, but a role scaffolded before D4.1 lands there. Without the move,
   `toposort_containers` would reorder the live list and
   `test_derived_order_matches_todays_hand_ordered_list` would fail. The same test would fail
   after every later scaffold, so `append_entry` inserts a new entry before the first
@@ -340,11 +343,12 @@ netpol-baseline's writer until D5 moves it, so netpol-baseline needs its own dra
   in the batch then completes before netpol-baseline reads the exempt sets, applies its
   policies or runs its probe. For those roles this holds at any batch position.
 - **What the drain does not cover.** It waits only for roles that run earlier in the batch.
-  A role listed after netpol-baseline, such as D1.2's `flux` or a role scaffolded before
-  D4.1, runs after the policies apply. D4.1's edge is what moves such a role ahead, so the
-  drain alone does not protect it. For `flux` the gap is harmless: the armed apply passes
-  `-n homelab`, netpol-baseline renders no policy in `flux-system`, and the Flux controllers
-  run there.
+  A role listed after netpol-baseline, such as one scaffolded before D4.1, runs after the
+  policies apply. D4.1's edge is what moves such a role ahead, so the drain alone does not
+  protect it. D1.2's `flux` is not such a role: it sits just before netpol-baseline, in the
+  same last batch at `09ba629f1`. flux queues no rollout (`manifests_rollout: ''`) and waits
+  on each controller inside its own role, so its controllers have rolled before
+  netpol-baseline starts.
 - **A tagged run.** In a run of `--tags netpol-baseline` alone the queue is empty, and the
   drain does nothing.
 - **Cost.** The drain moves the batch's wait earlier but does not lengthen the batch. The role
@@ -635,7 +639,7 @@ conditions of dispatch runs.
   ansible/filter_plugins/toposort.py               + K8S_APPLIES_LAST, edges in build_k8s_dep_map
   ansible/inventory/host_vars/daniel-box.yml       netpol-baseline comment (D4.0);
                                                    configarr, jellyfin, tdarr depends_on,
-                                                   entries after netpol-baseline move ahead,
+                                                   any entry after netpol-baseline moves ahead,
                                                    header comment names K8S_APPLIES_LAST (D4.1);
                                                    texbrain owner: flux (D4.5);
                                                    texbrain depends_on (D4.6 to D4.8)
@@ -671,8 +675,11 @@ conditions of dispatch runs.
       does nothing, and the probe runs as before. The expected verdict is `settled`.
 2. **D4.1 — Position-only constraints become edges** (about 210 lines, with the comments
    and docs).
-    - Add `K8S_APPLIES_LAST` and the inventory `depends_on` lines. Move every entry listed
-      after netpol-baseline, D1.2's `flux` among them, ahead of it.
+    - Add `K8S_APPLIES_LAST` and the inventory `depends_on` lines.
+    - Re-derive which k8s entries sit after netpol-baseline in `containers_list` on the
+      branch's base, and move each ahead of it. At `09ba629f1` there were none: D1.2 put
+      `flux` just before netpol-baseline. Any role scaffolded since then by `append_entry`
+      sits after it. If the list is clean, the step moves nothing and the PR body says so.
     - Add `DEPLOY_MECHANICS_FIELDS` to `narrow_lib/containers.py`, holding `owner` and
       `depends_on`, and have the narrowing drop every member. Widen D2's `owner` row in
       `ansible/tests/repo/test_census_rows_roles.py` to read that set: no Jinja expression
@@ -977,8 +984,11 @@ uv run pytest scripts/validate/tests
 
 Each bound below says how long a PR can be reverted alone.
 
-- **D4.0.** Revert it only before D2.7. From D2.7 on, the drain is what keeps
-  netpol-baseline off a shared drain, so it stays even when D4.1 is reverted.
+- **D4.0.** Revert it only while no role that queues a rollout shares netpol-baseline's
+  batch. At `09ba629f1` that batch holds flux, which queues none, and after D2.7 it holds
+  netpol-baseline alone. Any entry added or removed can move a rollout-queuing role into
+  it. From then on the drain is what keeps netpol-baseline off a shared drain, so it stays
+  even when D4.1 is reverted.
 - **D4.1.** Revert the edges and the inventory lines, and keep D4.0's drain. The revert
   lands as `needs-manual-apply`, as D4.1 did, and discharges the same way. The revert is safe
   alone while netpol-baseline, configarr, jellyfin and tdarr are all Ansible-owned, because
@@ -1020,7 +1030,9 @@ Each bound below says how long a PR can be reverted alone.
   same time, so a new edge can miss its own revision. Mitigation: the rule in *Design*, the
   gate's second arm, and the drill landing its edge one commit before the break.
 - **A safety property held by batch arithmetic.** netpol-baseline stayed off a shared drain
-  only because 56 divides into batches that leave it alone. D1.2 and D2.7 break that.
+  only because 56 divides into batches that leave it alone. D1.2 broke that: at 57 entries
+  flux shares its batch, which is harmless only because flux queues no rollout. D2.7 leaves
+  it alone again, and every later entry added or removed moves the boundary.
   Mitigation: D4.0's drain and its test, for every role earlier in netpol-baseline's batch at
   any position, and D4.1's edge for a role listed after it.
 - **A position assumption in prose and in the scaffolder** (failure class 8, prose that
@@ -1162,7 +1174,9 @@ Each bound below says how long a PR can be reverted alone.
    cost when netpol-baseline moves in D5. Narrow the rule only with a census of selected pods
    and a test that names its members.
 3. **D4.0 lands before D2.7, though the slice index puts D4 after D2.** D4.0 depends on
-   nothing, and the hazard it closes opens at D2.7. Resolution: the contracts slice index
+   nothing. This plan first placed the hazard it closes at D2.7. On the order at `09ba629f1`,
+   D2.7 leaves netpol-baseline alone in its batch, so the hazard opens at whichever list
+   change next puts a rollout-queuing role there. Resolution: the contracts slice index
    notes that D4.0 has no dependency and is a precondition of D2.7, and D2.7's preconditions
    list it.
 4. **Which Kustomization holds a verifying Job?** Resolved by C3: a verifying Job lives in
