@@ -65,7 +65,9 @@ two identical fixes.
 `fanout*.py` or a file under `fanout_lib/`, and `launch` refuses a batch holding one before it
 touches a host. A batch that edits that code runs under its own edited reviewer, red gate and
 Stop hook, and those batches caused the most rework in 68 review records (#3959). Work it in a
-session of its own: claim it and fix it as usual.
+session of its own: claim it and fix it as usual. The gate covers this repo's register only:
+a `--repo DanielH2018/dotfiles` batch cannot edit this repo's pipeline, so a dotfiles issue
+that merely mentions `fanout.py` is ordinary batch work (#4624).
 
 Two shapes collide across roles as well, so they are bounded per wave rather than per role.
 Both were measured on the 2026-09-10 fan-outs:
