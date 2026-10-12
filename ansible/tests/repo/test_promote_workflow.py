@@ -45,6 +45,8 @@ RENDER_REF = "${{ github.event.workflow_run.head_sha || github.sha }}"
 PROMOTE_REF = "${{ github.sha }}"
 COSIGN_RELEASE = "v3.1.3"
 HEAD_SHA = "workflow_run.head_sha"
+# `tag` moves `prod` only when `decide` said so.
+VERDICT_GATE = "needs.promote.outputs.verdict == 'promote'"
 
 
 def _load(path) -> dict:
@@ -136,6 +138,10 @@ def _handoff_problems(jobs: dict) -> list[str]:
         tag.get("if", "")
     ):
         found.append(f"a step after decide reads github.event.{HEAD_SHA}")
+    # Without the gate a `held` or `current` verdict reaches `tag`, which then fails red on
+    # the empty target instead of skipping, and the hold rests on a shell check alone.
+    if VERDICT_GATE not in " ".join(str(tag.get("if", "")).split()):
+        found.append(f"tag: its `if` lacks the verdict gate {VERDICT_GATE}")
     return found
 
 
@@ -282,6 +288,11 @@ def _pull_request_trigger(wf):
     _triggers(wf)["pull_request"] = None
 
 
+def _tag_without_the_verdict_gate(wf):
+    job = wf["jobs"]["tag"]
+    job["if"] = job["if"].replace(VERDICT_GATE, "true")
+
+
 RED = {
     "a trigger guard removed": (
         _drop_guard,
@@ -312,6 +323,10 @@ RED = {
     "a pull_request trigger": (
         _pull_request_trigger,
         "the workflow triggers on pull_request",
+    ),
+    "tag without the verdict gate": (
+        _tag_without_the_verdict_gate,
+        "tag: its `if` lacks the verdict gate",
     ),
 }
 
