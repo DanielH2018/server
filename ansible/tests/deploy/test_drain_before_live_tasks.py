@@ -27,10 +27,11 @@ _K8S_ROLES = REPO / "ansible/roles/k8s"
 _DRAINS_FIRST = frozenset({"netpol-baseline"})
 
 # Modules that run on the controller and read nothing live, so one may precede the drain.
+# Not `meta`: `meta: flush_handlers` runs notified handlers, which can apply anything.
 _PURE_MODULES = frozenset(
     prefix + name
     for prefix in ("", "ansible.builtin.")
-    for name in ("assert", "fail", "debug", "set_fact", "meta")
+    for name in ("assert", "fail", "debug", "set_fact")
 )
 
 _INCLUDE_ROLE = ("ansible.builtin.include_role", "include_role")
@@ -78,6 +79,9 @@ def test_netpol_baseline_is_a_named_member_with_live_tasks():
     assert "netpol-baseline" in _DRAINS_FIRST
     tasks = _role_tasks("netpol-baseline")
     assert any(not _is_pure(t) and not _is_drain(t) for t in tasks)
+    # The plan pins the drain as the FIRST task, not merely ahead of the live ones: a pure
+    # module can still read the cluster through a lookup in its arguments.
+    assert _is_drain(tasks[0])
 
 
 @pytest.mark.parametrize("role", sorted(_DRAINS_FIRST))
