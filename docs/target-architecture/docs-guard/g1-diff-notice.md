@@ -8,6 +8,8 @@ PR 2, `moved_sections`: #4706 (issue #4702).
 
 PR 3, the `notice` subcommand: #4719 (issue #4713).
 
+PR 4, the replay and the parity table: #4727 (issue #4724).
+
 Depends on: none
 
 Unblocks: [G2](g2-retire-lock.md), and through G2 [G3](g3-freshness-reviewer.md) and
