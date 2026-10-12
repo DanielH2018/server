@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS
 
-PR 1, the revision reader, is the PR for issue #4691.
+PR 1, the revision reader: #4699 (issue #4691).
 
 Depends on: none
 
