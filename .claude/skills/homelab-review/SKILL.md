@@ -257,16 +257,27 @@ the appendix, and the appendix is never re-read.
   cost quality that the data shows. A cap at the guide's 20 would stop up to 18 of 57 skeptics
   before their verdict. Revisit if one review dispatches more than 20 skeptics or skeptic p90
   passes 50.
-- **`implementer` is measured but undecided: too few red outcomes** (#4652). Measured on
-  2026-10-12 over 2026-09-16 to 10-12. Loki holds 142 implementer `subagent_completed` events,
-  with p50 51, p90 160 and max 332 tool uses. Transcripts survive for 94 of them. The quartiles
-  use the transcript's tool-use count, which covers the whole run. A resumed agent emits one
-  event per resumption, which is why 10 of the 94 transcripts equal no single event. The join
-  takes each run's PR from the last non-`master` branch in its transcript. The PR's verdict
-  comes from the check runs on its head commit when it opened, and `cancelled` counts as no
-  verdict. The join drops 48 runs with no transcript, 12 that worked on `master`, 7 that
-  started after their PR opened (conflict and review fix-ups) and 9 whose PR had no verdict.
-  That leaves 66 runs on 21 PRs, and runs on one PR are not independent: 22 of them share one.
+- **`implementer` is measured but undecided: too few red outcomes** (#4652, #4665). Measured
+  on 2026-10-12 over 2026-09-16 to 10-12. Loki holds 142 implementer `subagent_completed`
+  events, and transcripts survive for 94 runs. An event is not a run: a resumed agent emits one
+  event per resumption, while its transcript holds the whole run. Each event is assigned to a
+  transcript in its session. A transcript takes at most 4 events, which must sum to its
+  tool-use count, each lie within 3 s of one of its messages, and include one at its last
+  message. The 142 events split three ways:
+  - 102 belong to 93 transcripts: 84 runs emitted one event and 9 resumed runs emitted two.
+  - 10 match no transcript in sessions that have transcripts.
+  - 30 come from 5 sessions with no transcript on either host.
+
+  The 94th transcript emitted no event, because it was stopped and re-dispatched. 40 events
+  therefore lack a transcript, and they are at most 40 runs of unmeasured length. A
+  transcript's tool-use count is its number of distinct `tool_use` ids, because one transcript
+  repeats 226 of its 487 `tool_use` entries. Over the 94 runs, tool uses are p50 47, p90 121
+  and max 332 (nearest rank); the 142 events read p50 51 and p90 160. The join takes each
+  run's PR from the last non-`master` branch in its transcript. The PR's verdict comes from
+  the check runs on its head commit when it opened, and `cancelled` counts as no verdict. Of
+  the 94 runs, the join drops 12 that worked on `master`, 7 that started after their PR opened
+  (conflict and review fix-ups) and 9 whose PR had no verdict. That leaves 66 runs on 21 PRs,
+  and runs on one PR are not independent: 22 of them share one.
   By tool-use quartile (14-29, 29-42, 42-69, 71-332), 0, 0, 1 and 0 runs went red, and the
   one red PR (#3113) came from a 66-tool-use run. The top quartile is not redder, but one red
   PR in 21 cannot show an effect in either direction. A cap waits on a sample with enough red

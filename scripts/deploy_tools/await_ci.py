@@ -285,13 +285,23 @@ def descendant_verdict(
 
 
 def green_after(
-    sha: str, red: str, fetch=fetch_check_runs, descendants=_descendants
+    sha: str,
+    red: str,
+    fetch=fetch_check_runs,
+    descendants=_descendants,
+    fetch_suites=fetch_check_suites,
 ) -> tuple[str, str]:
     """(green, pending) for the descendants of `sha` after its red one `red`.
 
     `green` is the first of them whose CI passed, or "". When none passed, `pending` is the
-    first with no verdict yet, or "" when every one is red too. Searches the same
-    `DESCENDANT_LIMIT` window as `descendant_verdict`.
+    first whose verdict may still arrive, or "" when every one is red or never gets one.
+    Searches the same `DESCENDANT_LIMIT` window as `descendant_verdict`.
+
+    A commit whose runs are only cancelled, or whose push was dropped too, stays `pending` to
+    `ci_verdict` for good. Counting it as pending held the wait to its deadline and then
+    printed a re-run hint no re-run satisfies (#4667), so it is skipped. The newest commit in
+    the window is the exception for a dropped push: a freshly merged tip has no Actions suite
+    for its first seconds either, and `wait` names the way out if it never gets one.
     """
     window = descendants(sha)[:DESCENDANT_LIMIT]
     if red not in window:
@@ -299,12 +309,40 @@ def green_after(
     required = required_contexts()
     pending = ""
     for candidate in window[window.index(red) + 1 :]:
-        verdict = verdict_for(candidate, fetch=fetch, required=required)
+        try:
+            runs = fetch(candidate)
+        except urllib.error.URLError, TimeoutError, ValueError, OSError:
+            runs = None
+        if runs is None:
+            verdict = "pending"
+        else:
+            verdict = verdict_for(
+                candidate, fetch=lambda _s, _r=runs: _r, required=required
+            )
         if verdict == "pass":
             return candidate, ""
-        if verdict == "pending" and not pending:
-            pending = candidate
+        if verdict != "pending" or pending:
+            continue
+        if runs is not None and _never_gets_a_verdict(
+            candidate, runs, fetch_suites, newest=candidate == window[-1]
+        ):
+            continue
+        pending = candidate
     return "", pending
+
+
+def _never_gets_a_verdict(
+    sha: str, runs: list[dict], fetch_suites, newest: bool
+) -> bool:
+    """True when `sha`'s CI finished with no verdict, or, unless `newest`, never ran at all."""
+    if _no_verdict_will_ever_arrive(sha, runs, fetch_suites):
+        return True
+    if newest:
+        return False
+    try:
+        return _push_was_dropped(runs, fetch_suites(sha), required_contexts())
+    except urllib.error.URLError, TimeoutError, ValueError, OSError:
+        return False
 
 
 def run_less_tip(
@@ -342,6 +380,14 @@ def run_less_tip(
     return chain[-1]
 
 
+def _is_run_less(sha: str, fetch, fetch_suites) -> bool:
+    """True when GitHub Actions registered nothing for `sha`; False when a read fails."""
+    try:
+        return _push_was_dropped(fetch(sha), fetch_suites(sha), required_contexts())
+    except urllib.error.URLError, TimeoutError, ValueError, OSError:
+        return False
+
+
 def _tip_of(sha: str, descendants) -> str:
     """The newest commit in `sha`'s descendant chain, or `sha` when it has none."""
     chain = descendants(sha)
@@ -363,9 +409,10 @@ def wait(
 
     A SHA with no Actions suite after `DROPPED_PUSH_GRACE_S` is a push GitHub dropped, and
     its verdict comes from `descendant_verdict` instead. Until one goes green it keeps waiting,
-    and a timeout says why. Two shapes end on CI_UNPROVEN instead, because no re-run of the
-    wait converges on them: a red nearest descendant with a green one after it, and a budget
-    spent with no CI registered for any commit from the SHA to the tip.
+    and a timeout says why. Three shapes end on CI_UNPROVEN instead, because no re-run of the
+    wait converges on them: a red nearest descendant with a green one after it, a red nearest
+    descendant followed by a tip GitHub never ran CI for, and a budget spent with no CI
+    registered for any commit from the SHA to the tip.
     """
     started = clock()
     deadline = started + timeout_s
@@ -415,7 +462,11 @@ def wait(
                 )
             if verdict == "fail":
                 fixed, unsettled = green_after(
-                    target, nearest, fetch=fetch, descendants=descendants
+                    target,
+                    nearest,
+                    fetch=fetch,
+                    descendants=descendants,
+                    fetch_suites=fetch_suites,
                 )
                 if fixed:
                     tip = _tip_of(target, descendants)
@@ -434,6 +485,16 @@ def wait(
                     )
                 # A later commit may still go green and stand in for the merge commit,
                 # which is the usual #4649 shape at merge time: the fix's CI is running.
+                if now >= deadline and _is_run_less(unsettled, fetch, fetch_suites):
+                    # Only the tip is left, and GitHub never ran CI for it either: no re-run
+                    # converges until something runs CI on it (#4667).
+                    return CI_UNPROVEN, (
+                        f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
+                        f"its nearest descendant {nearest[:8]} is RED, and GitHub never ran "
+                        f"CI for the tip {unsettled[:8]} after it. Run it on the tip with "
+                        "`gh workflow run ci.yml --ref master`, then re-run: a green tip "
+                        "ends ci-unproven and names the tip to deploy by hand"
+                    )
                 if now >= deadline:
                     return CI_RED, (
                         f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
