@@ -145,7 +145,14 @@ not hide it. The journal shows both halves. From 2026-10-05 21:54 to 2026-10-08 
 `claude-rc.service` exited with status 1 between 7,698 and 8,429 times a day, and
 `claude-rc-alert.service` ran between 1,540 and 1,686 times a day. That loop came from the
 network outage the alert template records (#3902), not from a login, and the same outage lost its
-pages. A token that is present but refused takes the same path: in the 2.1.296 bundle a 401 at
+pages.
+
+With the network up, that loop would have paged Discord every ten seconds. The alert therefore
+pages once and then skips for `claude_code_rc_alert_quiet_minutes` (360) after each delivered
+page (#4676). A loop that lasts days pages four times a day. A second, separate crash inside the
+window is not paged, and the page text says so. `RestartMode=direct` with a start limit on the
+host was rejected: it pages once by leaving the host `failed`, and the weekly `try-restart` never
+starts a failed unit, so the host would have stayed down after the #3902 outage cleared. A token that is present but refused takes the same path: in the 2.1.296 bundle a 401 at
 registration throws `BridgeFatalError`. That path was read from the bundle, not observed.
 
 **A login that dies while the host is registered pages nothing.** The bridge polls for work with
