@@ -1,6 +1,8 @@
 # R2 — Secret placeholders and CI secret checks
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR 1, placeholder mode and the round trip: [#4887](https://github.com/DanielH2018/server/pull/4887).
 
 Depends on: [R1](r1-shadow-render.md)
 
