@@ -311,7 +311,7 @@ def test_the_stale_repair_refuses_a_path_no_shard_runs():
 
 
 def test_no_mode_names_every_mode(capsys):
-    """The usage error lists all six modes, not the three it named before #4448."""
+    """The usage error lists all seven modes, not the three it named before #4448."""
     with pytest.raises(SystemExit) as exc:
         pytest_shard.main([])
     assert exc.value.code == 64
@@ -322,6 +322,36 @@ def test_no_mode_names_every_mode(capsys):
         "--record,",
         "--record-missing",
         "--record-files",
+        "--refresh-drifted",
         "--check-durations",
     ):
         assert mode in err.splitlines()[-1], mode
+
+
+# A serial `--durations=0` run on daniel-box on 2026-10-13 (#4888), per module. These are a
+# dated measurement, not a constant: a module that is later made faster and re-recorded lower
+# makes its row wrong, and the row then goes with the module's old cost.
+SERIAL_2026_10_13 = {
+    "scripts/lib/tests/test_script_classify_package_imports.py": 12.16,
+    ".claude/hooks/tests/test_block_protected_bash.py": 5.39,
+    "scripts/tests/test_script_bootstraps_present.py": 3.48,
+}
+
+# The Verify-by bound in #4888: a module recorded at 1s or more may measure up to this many
+# times its weight in a serial run on the recording host.
+SERIAL_DRIFT_RATIO = 1.5
+
+
+@pytest.mark.parametrize("path", sorted(SERIAL_2026_10_13))
+def test_a_recorded_weight_is_within_serial_drift_of_what_it_measured(path):
+    """`--record-missing` never refreshes a present entry, and the gate's under-recorded arm
+    starts at 20x, so a module that grew 1.5-2x past its weight stood unseen. Same-host serial
+    seconds are the oracle: the runner-scale noise both gate arms allow for is absent here."""
+    weights = pytest_shard.load_weights()
+    assert path in weights, f"{path} has no recorded weight"
+    assert weights[path] >= 1.0, f"{path} records {weights[path]}s, under the 1s floor"
+    measured = SERIAL_2026_10_13[path]
+    assert measured <= SERIAL_DRIFT_RATIO * weights[path], (
+        f"{path} measured {measured}s serially against a recorded {weights[path]}s, "
+        f"{measured / weights[path]:.2f}x"
+    )

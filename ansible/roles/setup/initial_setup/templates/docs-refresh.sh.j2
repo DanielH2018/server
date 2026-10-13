@@ -426,7 +426,8 @@ fi
 # --record-missing, NEVER --record. It runs pytest over only the files the table lacks, which is
 # seconds and usually no files at all, where --record re-measures the whole suite and rewrites
 # every weight — churning the table twice a day for measurement noise. It also writes the same
-# bytes back when nothing is missing, so an ordinary run leaves no diff to publish.
+# bytes back when nothing is missing, so an ordinary run leaves no diff to publish. The drifted
+# entries it leaves alone are the next step's job.
 #
 # IT RUNS BEFORE THE `git diff --cached --quiet` GATE BELOW. That is what lets a weights-only
 # change reach a PR: most runs regenerate no page at all, and a table written after the gate
@@ -457,12 +458,41 @@ if [ "$WEIGHTS_RC" -ne 0 ]; then
   GENERATORS_OK=0
 fi
 
-# The two generated trees, plus the shard-weights table the step above writes. Nothing else: a
+# REFRESH THE WEIGHTS THAT DRIFTED, one eighth of the table per run (#4888). The step above
+# never touches a present entry, and CI's under-recorded arm fires only at 20x, so a module that
+# grew 1.5-2x past its weight kept the old number and cost shard balance with nothing failing.
+# CI cannot catch drift that small, because its runner measures correctly recorded entries 1.1x
+# to 13x their weight. A serial run on this host can.
+#
+# --refresh-drifted 8 re-measures one hash slice of the table, so every entry is re-measured
+# every four days. The whole table took 9m36s serially on 2026-10-13, so a slice averages about
+# 72s; the hash split is uneven, and the heaviest slice holds about twice the recorded seconds
+# of the average one. Only an entry more than 1.5x from what it measured is rewritten, so noise
+# inside that band leaves no diff and a run does not churn the table.
+#
+# A LOWERED WEIGHT CAN FAIL THE SUITE GATE BELOW, BY DESIGN. SERIAL_2026_10_13 in
+# scripts/dev/tests/test_pytest_shard_durations.py pins three modules' 2026-10-13 serial seconds
+# against their weights. If one of them is made faster, this step rewrites its weight down, the
+# row fails, and the run restores the tree and reports DOWN without publishing anything. The
+# repair is to delete that row, as its comment says. The failure never reaches a PR.
+#
+# Same degrade-not-abort handling and its own `timeout`, for the reasons the step above gives.
+REFRESH_MSG="$(timeout 600 "$UV" run --frozen python scripts/dev/pytest_shard.py \
+  --refresh-drifted 8 2>&1)"
+REFRESH_RC=$?
+if [ "$REFRESH_RC" -ne 0 ]; then
+  alert "docs-refresh: refreshing drifted shard weights failed (exit ${REFRESH_RC}); $(printf '%s' \
+    "$REFRESH_MSG" | tr '\n' ' ' | tail -c 300)"
+  DEGRADED_MSG="refreshing drifted shard weights failed (exit ${REFRESH_RC})"
+  GENERATORS_OK=0
+fi
+
+# The two generated trees, plus the shard-weights table the steps above write. Nothing else: a
 # generator that wrote outside this list would otherwise be committed silently by a cron, which
 # is exactly the class of change that must go through a PR.
 #
 # THE WEIGHTS TABLE IS A SANCTIONED THIRD PATH, not a generated tree. It is derived output like
-# the pages are — `pytest_shard.py --record-missing` reproduces it — and staging it is what keeps
+# the pages are — the two `pytest_shard.py` steps above reproduce it — and staging it is what keeps
 # it out of the primary checkout as dirt. restore_generated_tree's per-tree check names the same
 # path for that reason.
 git add docs/reference docs/assets/generated scripts/dev/pytest_shard_weights.json
