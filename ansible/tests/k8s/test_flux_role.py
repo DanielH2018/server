@@ -11,7 +11,10 @@ filter. Each property here is one the fleet guards cannot see:
 - no NetworkPolicy in `flux-system` admits every namespace, which the two dropped upstream
   policies did;
 - a changed Secret render rolls no controller, because each `flux_controllers` entry declares
-  `restart_on: []`.
+  `restart_on: []` and no controller pod reads the notification Secrets;
+- `flux_sync_suspend` renders `suspend: true` or no `suspend` key, never `false`;
+- the `verify-drill` OCIRepository renders only with its lever on, and is no Discord source;
+- the OCIRepository admits exactly the signer `promote.py` verifies.
 
 Run: uv run pytest ansible/tests/k8s/test_flux_role.py
 """
@@ -19,12 +22,13 @@ Run: uv run pytest ansible/tests/k8s/test_flux_role.py
 import copy
 import re
 
+import forge
 import pytest
 from ansible.errors import AnsibleFilterError
 
 from _helpers import ROLES, load_defaults, render_expr
 from lib import yaml_fast
-from _k8s_render import rendered_docs
+from _k8s_render import render_role_template, rendered_docs
 from _release_expectation import include_role_vars, rollouts
 from flux_components import FilterModule
 from test_volume_names_descriptive import volume_names
@@ -269,3 +273,181 @@ def test_the_volume_name_guard_reads_the_renamed_volumes():
         "volumes": {"source-controller-cache"},
         "volumeMounts": {"source-controller-cache"},
     }, out
+
+
+# --- The suspend lever renders only `true`, never `false` -------------------------------
+
+_SUSPENDABLE = {("OCIRepository", "homelab"), ("Kustomization", "homelab")}
+
+
+def _sync_docs(**overrides) -> list[dict]:
+    text = render_role_template("flux", "sync.yaml.j2", overrides)
+    return [d for d in yaml_fast.safe_load_all(text) if isinstance(d, dict)]
+
+
+def suspend_offences(docs: list[dict], lever: bool) -> list[str]:
+    """`<kind>/<name>` for each suspendable object whose `spec.suspend` the lever does not explain.
+
+    Lever on: both objects must carry `suspend: true`. Lever off: neither may carry the key at
+    all, because the client-side apply would turn an explicit `false` into an undo of an
+    operator's hand suspend. A suspendable object missing from the render is an offence too,
+    so a renamed object cannot pass by absence.
+    """
+    found = {
+        (d["kind"], d["metadata"]["name"]): d["spec"]
+        for d in docs
+        if (d["kind"], d["metadata"]["name"]) in _SUSPENDABLE
+    }
+    offences = [f"{k}/{n} missing" for k, n in sorted(_SUSPENDABLE - set(found))]
+    for (kind, name), spec in sorted(found.items()):
+        if lever and spec.get("suspend") is not True:
+            offences.append(f"{kind}/{name} suspend={spec.get('suspend', '<absent>')}")
+        if not lever and "suspend" in spec:
+            offences.append(f"{kind}/{name} suspend={spec['suspend']}")
+    return offences
+
+
+def test_suspend_offences_is_clean_with_the_lever_off():
+    assert suspend_offences(_sync_docs(flux_sync_suspend=False), lever=False) == []
+
+
+def test_suspend_offences_is_clean_with_the_lever_on():
+    assert suspend_offences(_sync_docs(flux_sync_suspend=True), lever=True) == []
+
+
+def test_suspend_offences_is_flagged_on_an_explicit_false():
+    """The red half: `suspend: false` with the lever off undoes a hand suspend."""
+    docs = copy.deepcopy(_sync_docs(flux_sync_suspend=False))
+    for doc in docs:
+        if (doc["kind"], doc["metadata"]["name"]) in _SUSPENDABLE:
+            doc["spec"]["suspend"] = False
+    assert suspend_offences(docs, lever=False) == [
+        "Kustomization/homelab suspend=False",
+        "OCIRepository/homelab suspend=False",
+    ]
+
+
+# --- The verify drill is a lever, and never a Discord source -----------------------------
+
+
+def _names(docs: list[dict], kind: str) -> set[str]:
+    return {d["metadata"]["name"] for d in docs if d["kind"] == kind}
+
+
+def test_verify_drill_renders_only_while_its_lever_is_on():
+    assert _names(_sync_docs(flux_verify_drill=False), "OCIRepository") == {"homelab"}
+    assert _names(_sync_docs(flux_verify_drill=True), "OCIRepository") == {
+        "homelab",
+        "verify-drill",
+    }
+
+
+def test_deploy_errors_names_no_drill_source():
+    docs = _sync_docs(flux_verify_drill=True)
+    alert = next(
+        d
+        for d in docs
+        if d["kind"] == "Alert" and d["metadata"]["name"] == "deploy-errors"
+    )
+    sources = {(s["kind"], s["name"]) for s in alert["spec"]["eventSources"]}
+    assert sources == {("Kustomization", "*"), ("OCIRepository", "homelab")}, sources
+
+
+# --- The cluster and `promote.py` agree on what counts as signed -------------------------
+
+
+def identity_admits(docs: list[dict], subject: str, issuer: str) -> bool:
+    """Whether the OCIRepository `homelab` accepts a keyless signature from `subject`/`issuer`.
+
+    source-controller matches each field as a Go regular expression; these patterns use only
+    syntax that Python's `re` reads the same way.
+    """
+    repo = next(
+        d
+        for d in docs
+        if d["kind"] == "OCIRepository" and d["metadata"]["name"] == "homelab"
+    )
+    assert repo["spec"]["verify"]["provider"] == "cosign", repo["spec"]["verify"]
+    return any(
+        re.search(m["subject"], subject) and re.search(m["issuer"], issuer)
+        for m in repo["spec"]["verify"]["matchOIDCIdentity"]
+    )
+
+
+def test_identity_admits_the_signer_promote_verifies():
+    assert identity_admits(_sync_docs(), forge.SIGNER_IDENTITY, forge.SIGNER_ISSUER)
+
+
+@pytest.mark.parametrize(
+    "subject",
+    [
+        forge.SIGNER_IDENTITY.replace("promote.yml", "ci.yml"),
+        forge.SIGNER_IDENTITY.replace("refs/heads/master", "refs/heads/feature"),
+        forge.SIGNER_IDENTITY + "x",
+        forge.SIGNER_IDENTITY.replace("github.com/", "githubXcom/"),
+    ],
+    ids=["other-workflow", "other-ref", "suffix", "unescaped-dot"],
+)
+def test_identity_admits_is_flagged_on_another_signer(subject):
+    assert not identity_admits(_sync_docs(), subject, forge.SIGNER_ISSUER)
+
+
+# --- This PR's Secrets roll no controller -------------------------------------------------
+
+
+def pod_secret_refs(docs: list[dict]) -> dict[str, set[str]]:
+    """{Deployment name: Secret names its pod spec reads through env, envFrom or a volume}."""
+    found = {}
+    for doc in docs:
+        if doc.get("kind") != "Deployment":
+            continue
+        pod = doc["spec"]["template"]["spec"]
+        names = {
+            v["secret"]["secretName"] for v in pod.get("volumes", []) if "secret" in v
+        }
+        for c in pod.get("initContainers", []) + pod["containers"]:
+            names |= {
+                e["secretRef"]["name"] for e in c.get("envFrom", []) if "secretRef" in e
+            }
+            names |= {
+                e["valueFrom"]["secretKeyRef"]["name"]
+                for e in c.get("env", [])
+                if "secretKeyRef" in e.get("valueFrom", {})
+            }
+        found[doc["metadata"]["name"]] = names
+    return found
+
+
+def _rendered_secret_names() -> set[str]:
+    return {
+        d["metadata"]["name"]
+        for role, tpl, d in rendered_docs()
+        if role == "flux" and tpl == "secret.yaml.j2" and d["kind"] == "Secret"
+    }
+
+
+def test_no_controller_reads_the_notification_secrets_through_its_pod_spec():
+    """`secret.yaml.j2` moves the secret render on every rotation, and `restart_on: []` then
+    expects no roll. That holds only while no controller pod reads these Secrets, because
+    notification-controller reads them through the API on each event."""
+    secrets = _rendered_secret_names()
+    assert secrets == {"flux-github-status", "flux-discord"}, secrets
+    refs = pod_secret_refs(_flux_docs())
+    assert set(refs) == CONTROLLERS, refs
+    assert not any(names & secrets for names in refs.values()), refs
+    recorded = _flux_rollouts(load_defaults(FLUX)["flux_controllers"])
+    assert not any(r["restart"] for r in recorded.values()), recorded
+
+
+def test_pod_secret_refs_is_flagged_on_an_envfrom_secret():
+    docs = copy.deepcopy(_flux_docs())
+    deployment = next(
+        d
+        for d in docs
+        if d["kind"] == "Deployment"
+        and d["metadata"]["name"] == "notification-controller"
+    )
+    deployment["spec"]["template"]["spec"]["containers"][0].setdefault(
+        "envFrom", []
+    ).append({"secretRef": {"name": "flux-discord"}})
+    assert pod_secret_refs(docs)["notification-controller"] == {"flux-discord"}

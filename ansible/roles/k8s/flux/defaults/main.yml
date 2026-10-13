@@ -48,3 +48,31 @@ flux_volume_suffixes:
   data: data
   tmp: tmp
   temp: tmp
+
+# The artifact the `promote` workflow publishes, and the tag it moves to the newest published
+# master commit. The OCIRepository `homelab` follows that tag with no pull secret, so the
+# package must stay public (docs/flux-deploy-plane.md).
+flux_artifact_url: oci://ghcr.io/danielh2018/homelab-manifests
+flux_artifact_tag: prod
+
+# The keyless identity `promote` signs under, as Go regular expressions for the
+# OCIRepository's `matchOIDCIdentity`. scripts/deploy_tools/forge.py holds the same identity
+# as SIGNER_IDENTITY and SIGNER_ISSUER for `cosign verify`, and
+# ansible/tests/k8s/test_flux_role.py fails a drift between the two.
+flux_signer_subject: '^https://github\.com/DanielH2018/server/\.github/workflows/promote\.yml@refs/heads/master$'
+flux_signer_issuer: '^https://token\.actions\.githubusercontent\.com$'
+
+# The repository notification-controller posts commit statuses to.
+flux_github_repository_url: https://github.com/DanielH2018/server
+
+# The way out: true renders `suspend: true` on the OCIRepository `homelab` and the root
+# Kustomization, which stops all reconciliation and deletes nothing. False omits the field
+# rather than writing `suspend: false`, so a hand suspend survives the role's next run. A
+# suspend this lever wrote does not: the client-side apply's three-way merge removes a field
+# the last apply rendered and this one omits.
+flux_sync_suspend: false
+
+# The signature drill. True renders a second OCIRepository, `verify-drill`, that follows the
+# unsigned tag `promote.yml`'s `verify_drill` dispatch pushes and must read Ready=False. False
+# deletes it, because dropping a document from the render deletes nothing live.
+flux_verify_drill: false

@@ -187,7 +187,7 @@ survives it. Each has a different mechanism:
   Settings → General, `sops set` the new value, then redeploy monitor-bridge; setting SOPS
   alone breaks the checker with an HTTP 401 that reads as a monitoring fault.
 - `promote_token` — the GitHub `PROMOTE_TOKEN` repository secret holds the credential: a
-  fine-grained token on DanielH2018/server with Variables read and write, minted on the
+  fine-grained token on DanielH2018/server and DanielH2018/dotfiles with Variables read and write, minted on the
   operator's account with a 90-day expiry. Nothing in the tree reads the SOPS copy; it exists
   so the audit tracks the expiry on the `external-90d` tier. The operator re-mints the token
   and re-sets both the repository secret and the SOPS copy together.

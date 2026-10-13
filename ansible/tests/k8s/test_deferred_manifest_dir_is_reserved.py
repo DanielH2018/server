@@ -34,6 +34,7 @@ KNOWN_DEFERRED_DIRS = {
     "pihole-instance-2": "pihole",
     "headlamp-observability": "headlamp",
     "netpol-baseline-observability": "netpol-baseline",
+    "flux-sync": "flux",
 }
 
 

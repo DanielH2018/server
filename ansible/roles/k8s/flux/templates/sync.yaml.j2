@@ -1,0 +1,132 @@
+{#
+  What Flux follows, and where it reports. A deferred file (`manifests_deferred_files`): every
+  kind here is a Flux CRD that components.yaml.j2 installs, so the shared directory apply
+  would refuse these on a cluster that lacks the CRDs. tasks/main.yml waits for the CRDs to
+  be Established, then applies this file.
+
+  The artifact holds one empty root Kustomization, so the root `homelab` applies nothing and
+  Ansible still deploys every service.
+
+  `spec.suspend` renders only while flux_sync_suspend is true. The apply is client-side, so an
+  explicit `suspend: false` would undo an operator's hand suspend at the role's next run.
+#}
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: homelab
+  namespace: {{ flux_namespace }}
+spec:
+{% if flux_sync_suspend %}
+  suspend: true
+{% endif %}
+  interval: 1m
+  url: {{ flux_artifact_url }}
+  ref:
+    tag: {{ flux_artifact_tag }}
+  # An artifact that anything but the `promote` workflow on master signed fails here, and
+  # kustomize-controller never sees it.
+  verify:
+    provider: cosign
+    matchOIDCIdentity:
+      - issuer: '{{ flux_signer_issuer }}'
+        subject: '{{ flux_signer_subject }}'
+{% if flux_verify_drill %}
+---
+# The signature drill: the unsigned tag `promote.yml`'s `verify_drill` dispatch pushes, checked
+# against the same identity, so it must read Ready=False. No Kustomization reads it, and the
+# `deploy-errors` Alert does not name it as a source. tasks/main.yml deletes it while
+# flux_verify_drill is false.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  name: verify-drill
+  namespace: {{ flux_namespace }}
+spec:
+  interval: 1m
+  url: {{ flux_artifact_url }}
+  ref:
+    tag: verify-drill
+  verify:
+    provider: cosign
+    matchOIDCIdentity:
+      - issuer: '{{ flux_signer_issuer }}'
+        subject: '{{ flux_signer_subject }}'
+{% endif %}
+---
+# The root, contract C3's *Root* row. `wait: false` because it applies only Kustomization
+# objects, each of which reports its own health and status. Orphan means deleting the root
+# never cascades.
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: homelab
+  namespace: {{ flux_namespace }}
+spec:
+{% if flux_sync_suspend %}
+  suspend: true
+{% endif %}
+  interval: 10m
+  retryInterval: 1m
+  timeout: 5m
+  sourceRef:
+    kind: OCIRepository
+    name: homelab
+  path: ./flux
+  prune: true
+  wait: false
+  deletionPolicy: Orphan
+---
+# Commit statuses with the context `flux/<kustomization>`. notification-controller posts on the
+# commit the artifact's origin revision names, never on a trigger that commit superseded.
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: github-status
+  namespace: {{ flux_namespace }}
+spec:
+  type: github
+  address: {{ flux_github_repository_url }}
+  secretRef:
+    name: flux-github-status
+  commitStatusExpr: "'flux/' + event.involvedObject.name"
+---
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Provider
+metadata:
+  name: discord
+  namespace: {{ flux_namespace }}
+spec:
+  type: discord
+  secretRef:
+    name: flux-discord
+---
+# Severity info includes error events, so a failure reaches GitHub as a `failure` status too.
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: commit-status
+  namespace: {{ flux_namespace }}
+spec:
+  providerRef:
+    name: github-status
+  eventSeverity: info
+  eventSources:
+    - kind: Kustomization
+      name: '*'
+---
+# Two sources only. `verify-drill` is not one, so the signature drill posts nothing.
+apiVersion: notification.toolkit.fluxcd.io/v1beta3
+kind: Alert
+metadata:
+  name: deploy-errors
+  namespace: {{ flux_namespace }}
+spec:
+  providerRef:
+    name: discord
+  eventSeverity: error
+  eventSources:
+    - kind: Kustomization
+      name: '*'
+    - kind: OCIRepository
+      name: homelab
