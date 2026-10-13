@@ -4,6 +4,8 @@ Status: IN PROGRESS
 
 PR 2, the validator's third `service` source: [#4798](https://github.com/DanielH2018/server/pull/4798).
 
+PR 1, the blackbox-exporter role: [#4834](https://github.com/DanielH2018/server/pull/4834).
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before this slice's PR 3
 
 Unblocks: M6 (with M2, M3 and M5)
