@@ -3,11 +3,14 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_health_verdict.py
 """
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from _land_fakes import MERGE_SHA, Fakes, receipt
+from gitops_ledger import OWED_K8S_UNAPPLIED, owed_line
+from gitops_markers import MARKERS
 from deploy_tools.land_lib import health_verdict
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.landing import Classification
@@ -238,6 +241,75 @@ def test_an_apply_recorded_at_a_commit_without_this_pr_is_not_settled(landing):
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+
+
+# The tick's own deferral of a deploy plane it could not narrow (#4333): the range is
+# merged, no `deploy.yml` receipt entry is written, and each reachable service is owed.
+DEFERRED_AT = "d" * 40
+DEFERRED_PLANE = {
+    MARKERS["owed"]: "\n".join(
+        owed_line(OWED_K8S_UNAPPLIED, s, DEFERRED_AT, 1.0) for s in ("sonarr", "radarr")
+    )
+}
+# The remedy `land_tags.broad_remediation` derives for a deploy-plane path.
+DEPLOY_PLANE_COMMAND = (
+    "`git merge --ff-only origin/master` FIRST, then "
+    "`uv run ansible-playbook ansible/deploy.yml`"
+)
+
+
+def _deferred(landing, pr_path: str, **fakes):
+    """A converged tick with no receipt for a PR changing `pr_path`, the deferral recorded."""
+    ln, _ = _deployed(
+        landing,
+        Fakes(
+            self_applied=True,
+            self_applied_command=DEPLOY_PLANE_COMMAND,
+            state=DEFERRED_PLANE,
+            **fakes,
+        ),
+    )
+    ln.classification = replace(ln.classification, pr_paths=(pr_path,))
+    return ln
+
+
+def test_a_deploy_plane_the_tick_deferred_names_the_deferral_is_flagged(
+    landing, capsys
+):
+    """#4843: the ledger lines are the remedy, not a whole deploy.yml after an ff-merge."""
+    ln = _deferred(landing, "ansible/filter_plugins/toposort.py")
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    out = capsys.readouterr().out
+    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+    assert "deferred the plane: 2 k8s_unapplied line(s) are owed" in out
+    assert "probe.py gitops-state" in out
+    assert "Apply it:" not in out
+    assert "ff-only" not in out
+    assert "never see this range again" not in out
+
+
+@pytest.mark.parametrize(
+    "pr_path, fakes",
+    [
+        # The lines were recorded before this PR merged, so they are not its deferral.
+        ("ansible/filter_plugins/toposort.py", {"is_ancestor_of": {DEFERRED_AT: 1}}),
+        # A setup-plane PR owes `initial_setup.yml`; a later tick's line proves nothing.
+        ("ansible/roles/setup/renovate_agent/tasks/main.yml", {}),
+    ],
+    ids=["lines-predate-the-merge", "setup-plane-pr"],
+)
+def test_a_range_the_tick_did_not_defer_keeps_the_stranded_remedy_is_clean(
+    landing, capsys, pr_path, fakes
+):
+    ln = _deferred(landing, pr_path, **fakes)
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    out = capsys.readouterr().out
+    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+    assert "never see this range again" in out
+    assert f"Apply it: {DEPLOY_PLANE_COMMAND}" in out
+    assert "k8s_unapplied" not in out
 
 
 def test_an_unrecorded_apply_read_mid_tick_is_deferred_not_owed_to_a_hand(

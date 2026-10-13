@@ -26,6 +26,7 @@ from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.outcome import (
     ABANDONED_WATCH_NOTE,
     Outcome,
+    deferred_plane_note,
     hold_clear_hint,
     say,
     unrecorded_apply_note,
@@ -37,8 +38,8 @@ from lib.json_types import as_object
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_ledger import Receipt, parse_receipts
-from gitops_markers import MARKERS
+from gitops_ledger import Receipt, k8s_unapplied_entries, parse_receipts
+from gitops_markers import DEPLOY_PLAYBOOK, MARKERS
 
 BRANCH = "master"
 
@@ -412,10 +413,42 @@ class Landing:
         """
         if self.tick_watch_abandoned:
             return [ABANDONED_WATCH_NOTE]
+        deferred = self.deferred_plane_lines()
+        if deferred:
+            return [deferred_plane_note(deferred)]
         lines = [unrecorded_apply_note(self.state("behind_since"))]
         if self.classification.self_applied_command:
             lines.append(f"  Apply it: {self.classification.self_applied_command}")
         return lines
+
+    def deferred_plane_lines(self) -> int:
+        """How many `k8s_unapplied` lines a deferral of this PR's deploy plane left; 0 if none.
+
+        A tick that refuses to narrow a deploy plane still fast-forwards it, writes no
+        `ansible/deploy.yml` receipt entry, and owes each reachable service a `k8s_unapplied`
+        line at the origin it crossed to (#4333). A line counts when that origin contains the
+        merge commit, and only when the deploy plane is ALL the tick left unapplied: a later
+        tick re-recording an unrelated service also moves its line past the merge, which
+        would cost a setup-plane PR its `initial_setup.yml` command. 0 for no merge SHA, an
+        unreadable ledger and no matching line, so the caller prints the stranded-range note.
+        """
+        if not self.merge_sha:
+            return 0
+        try:
+            needed = land_tags.self_applied_playbooks(
+                list(self.classification.pr_paths), self.classification.quiet
+            )
+        except Exception:
+            return 0
+        receipt = self.receipt_for(self.merge_sha)
+        if needed - set(receipt.applied if receipt else ()) != {DEPLOY_PLAYBOOK}:
+            return 0
+        entries = k8s_unapplied_entries(self.state(MARKERS["owed"]))
+        contains = {
+            o: not self.git("merge-base", "--is-ancestor", self.merge_sha, o).returncode
+            for o in {e.origin for e in entries}
+        }
+        return sum(contains[e.origin] for e in entries)
 
     def tick_half_open_lines(self) -> list[str]:
         """What the deployer's own state still owes this landing, as printable lines.
