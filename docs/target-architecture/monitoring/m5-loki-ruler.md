@@ -2,6 +2,8 @@
 
 Status: IN PROGRESS
 
+PR 1, the Prometheus-side Loki rules and `loki-query --step`: [#4797](https://github.com/DanielH2018/server/pull/4797).
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover. Two
 contracts.md rows also gate PRs here: the row *Open questions* 2 requests gates PR 2a, and
 the row *Open questions* 1 requests gates PR 4b. contracts.md's *Requests on C7* holds both
