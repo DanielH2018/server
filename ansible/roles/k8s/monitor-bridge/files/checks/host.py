@@ -255,6 +255,7 @@ def with_claude_cgroups(
         cfg.CLAUDE_CGROUP_STALL_WINDOW,
         cfg.CLAUDE_CGROUP_EVENT_WINDOW,
         uid_procs,
+        expected_by_origin=cfg.CLAUDE_CGROUP_EXPECTED,
     )
     if arm_ok:
         src.state.down_streaks["claude_cgroups"] = 0
