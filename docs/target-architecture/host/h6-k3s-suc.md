@@ -860,9 +860,10 @@ that SUC re-creates after its TTL.
 
 `K3sConfigRestartMetricsAbsent` has one `absent()` term per host. A host whose textfile
 stops reaching Prometheus therefore fires, rather than reading as clean on the two restart
-alerts. The textfile hostPath has carried no metric before this slice
-(`ansible/roles/k8s/node-exporter/CLAUDE.md` calls it "an empty hook"). So the rule lands
-in H6.4a, after H6.3b's live query has shown both series.
+alerts. The collector already serves `claude_cgroup.prom` from this hostPath on both nodes
+(`ansible/roles/k8s/node-exporter/CLAUDE.md`), but that file carries no `host` label, so it
+proves the directory and the scrape and nothing about this writer's file or the label the
+alerts read. So the rule lands in H6.4a, after H6.3b's live query has shown both series.
 
 ### Autonomous-role contract
 
@@ -2249,8 +2250,10 @@ How each was fixed, with the evidence measured at `70591c307`:
     - The gap was real, because no PR owned the removal of the deployer-coupled checks.
       Every "until D6" now reads "until H7.19a", and *Open questions* 10 asks H7.19a to
       remove all seven items.
-- **C3-08.** Confirmed: `ansible/roles/k8s/node-exporter/CLAUDE.md` calls the textfile
-  hostPath "an empty hook".
+- **C3-08.** Confirmed: `ansible/roles/k8s/node-exporter/CLAUDE.md` called the textfile
+  hostPath "an empty hook". M3 PR 1
+  ([#4869](https://github.com/DanielH2018/server/pull/4869)) replaced that with the live
+  `claude_cgroup.prom` producer.
     - Every run, step 2 included, now writes all three series, through a temporary file
       whose name does not end in `.prom`.
     - Before H6.4a merges, H6.3b's verification queries `probe.py metric` for both hosts.
