@@ -173,7 +173,8 @@ class _Module:
         names: every name a top-level statement binds.
         imports: the names an import binds.
         callables: name -> the bodies a call to it can run, for a def, a class (its methods)
-          and a name bound to a lambda. A call to any other top-level name is opaque.
+          and a name bound to a lambda. A call to any other top-level name is opaque, and so
+          is one to a def or class that carries a decorator, a base or a metaclass.
     """
 
     def __init__(self, tree: ast.Module):
@@ -188,7 +189,17 @@ class _Module:
             elif isinstance(
                 stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
             ):
-                self.callables[stmt.name] = _bodies(stmt)
+                # A decorator replaces the body that runs, and a base or metaclass supplies
+                # `__init__` and `__new__` from code this never walks: both stay opaque.
+                if not any(
+                    n.decorator_list
+                    or (isinstance(n, ast.ClassDef) and (n.bases or n.keywords))
+                    for n in ast.walk(stmt)
+                    if isinstance(
+                        n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+                    )
+                ):
+                    self.callables[stmt.name] = _bodies(stmt)
             elif isinstance(stmt, (ast.Assign, ast.AnnAssign)) and isinstance(
                 stmt.value, ast.Lambda
             ):

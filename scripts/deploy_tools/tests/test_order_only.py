@@ -6,6 +6,8 @@ The rule's own accept and reject cases are rows of the case table in
 Run: uv run pytest scripts/deploy_tools/tests/test_order_only.py
 """
 
+import pytest
+
 from deploy_tools.narrow_lib import order_only
 from lib.git_testing import git_out
 from lib.repo_paths import REPO
@@ -71,3 +73,22 @@ def test_a_change_to_the_real_dep_map_that_writes_only_its_locals_stays_order_on
     assert order_only.order_only(path, real, with_body(adds))
     writes = "        operator.setitem(c, 'use_authelia', False)\n"
     assert not order_only.order_only(path, real, with_body(writes))
+
+
+@pytest.mark.parametrize(
+    "helper",
+    [
+        "import functools\n\n\n@functools.cache\ndef _h(c):\n    pass",
+        "import collections\n\n\nclass _h(collections.UserDict):\n    pass",
+    ],
+    ids=["decorated-def", "class-with-a-base"],
+)
+def test_a_callee_whose_running_code_is_not_its_body_keeps_the_line(helper):
+    """A decorator or a base runs code the check never walks, so a call handing it an entry is a write."""
+    path = "ansible/filter_plugins/toposort.py"
+    real = (REPO / path).read_text()
+    anchor = "        dep_map[name] = sorted(deps)\n"
+    after = real.replace(
+        "\nclass FilterModule", f"\n{helper}\n\n\nclass FilterModule"
+    ).replace(anchor, "        _h(c)\n" + anchor)
+    assert not order_only.order_only(path, real, after)
