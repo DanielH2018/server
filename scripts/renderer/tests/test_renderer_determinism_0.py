@@ -1,19 +1,41 @@
-"""R1's determinism check over the render targets at even positions, plus its red-proofs.
+"""R1's determinism check over the render targets at position 0, plus the check's red-proofs.
 
-The odd positions are `test_renderer_determinism_odd.py`. Two modules, because `--dist
-loadscope` keeps a module on one xdist worker, and one module rendering every tag twice would
-be the heaviest in the suite. `_render_audit.py` holds the check and says what it proves.
+Positions 1 to 3 are the sibling `test_renderer_determinism_<k>.py` modules. One module per
+position, because `--dist loadscope` keeps a module on one xdist worker, and only separate
+modules spread the cost of rendering every tag twice. `_render_audit.py` holds the check and
+says what it proves.
 
-Run: uv run pytest scripts/renderer/tests/test_renderer_determinism_even.py
+Run: uv run pytest scripts/renderer/tests/test_renderer_determinism_0.py
 """
 
-from _render_audit import check_half, run_step, tree_differences
+from pathlib import Path
+
+from _render_audit import (
+    MODULE_PREFIX,
+    PARTS,
+    check_part,
+    module_position,
+    run_step,
+    tree_differences,
+)
 from _render_audit_child import AUDIT_REFUSED
 from lib.repo_paths import REPO
 
 
-def test_even_positions_render_identically_and_read_only_the_repo(tmp_path):
-    check_half(0, tmp_path, "even positions")
+def test_its_positions_render_identically_and_read_only_the_repo(
+    tmp_path, record_property
+):
+    check_part(__file__, tmp_path, record_property)
+
+
+def test_one_module_checks_each_position():
+    # A missing module would drop its tags from the check, and every other module stays green.
+    here = Path(__file__).parent
+    positions = sorted(
+        module_position(p.name) for p in here.glob(f"{MODULE_PREFIX}*.py")
+    )
+    assert len(positions) >= 4, positions
+    assert positions == list(range(PARTS))
 
 
 def test_a_tree_differing_in_one_file_is_flagged(tmp_path):
