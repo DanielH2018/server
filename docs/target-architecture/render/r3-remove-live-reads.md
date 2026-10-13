@@ -4,6 +4,10 @@ Status: IN PROGRESS
 
 PR 1, pi-peer-backup's committed host key: [#4903](https://github.com/DanielH2018/server/pull/4903).
 
+PR 3, authelia's digest assert: [#4902](https://github.com/DanielH2018/server/pull/4902).
+
+Both PRs landed without their operator-only pre-merge checks under *Verification*. The orchestrator's briefs omitted them, and each check's property was read after the deploy instead. PR 3's assert ran unstubbed in the real deploy and returned `ok` on the live digests at 2026-10-13 18:12:00. PR 1's release records show the same `secret_digest`, `54b03051…`, before (`8a28ede4`) and after (`d98d8752`), so the Secret's bytes did not move. PR 4's checks stay pre-merge.
+
 Depends on: [R1](r1-shadow-render.md)
 
 Unblocks: D5, which moves every role to Flux and so needs every role to render from git alone
