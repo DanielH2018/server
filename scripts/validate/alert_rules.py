@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the alert plane's inputs with the tools that load them, promtool and amtool, and pint.
+"""Check the alert plane's inputs with promtool, amtool, pint and lokitool, the tools that load them.
 
 A `prometheus.yml` that Prometheus rejects at startup leaves the `Recreate` Deployment with no
 running Prometheus, and monitor-bridge reads that Prometheus every cycle. Neither `check-yaml`
@@ -22,6 +22,10 @@ the render `probe.py health` uses, with secrets stubbed. It extracts each render
   pint checks what promtool does not, such as a required label's value. `--offline` skips every
   check that queries a Prometheus, because CI cannot reach the cluster;
   `scripts/validate/pint/live.hcl` is the by-hand run that does.
+
+The script also renders the loki-homelab role's `loki-homelab-rules` ConfigMap and runs
+`lokitool rules lint --dry-run` on every rule file in that role's `files/rules/` (THE LOKI
+RULER, below).
 
 The rendered `prometheus.yml` holds no stubbed value, so the stubbing changes nothing promtool
 reads. The stubbed `alertmanager.yml` reads `email` as a placeholder address, which amtool
@@ -56,6 +60,22 @@ The script hands the rendered `prometheus.yml` to `rule_problems` for condition 
 aggregation whose firing case lists `service`, and promtool fails it because the fired alert
 carries none.
 
+THE LOKI RULER. loki-homelab's ruler evaluates LogQL rules from that role's `files/rules/`,
+which `templates/rules-configmap.yaml.j2` carries into the `loki-homelab-rules` ConfigMap one
+key per group in `loki_homelab_rule_groups`. Two checks cover them:
+
+- `lokitool rules lint --dry-run` parses each file's LogQL. Without `--dry-run` lint rewrites
+  the file, so `LOKITOOL_ARGS` carries the flag and no call site adds it.
+- `alert_conventions.group_list_problems`, with the loki-homelab names, fails when the rule
+  files' stems, `loki_homelab_rule_groups` and the rendered ConfigMap's keys are not one set.
+  A file the list does not name never reaches the ruler. `LOKI_GROUP_FLOOR` names the group a
+  run must find, so an emptied directory, list and ConfigMap fail rather than agree on nothing.
+
+Nothing else in `rule_problems` reads that directory, and pint does not lint it. LogQL has no
+`promtool test rules` counterpart, so the fires-in-a-test conventions cannot apply, and the
+directory's separation from the observability role's `files/rules/` is the exemption M5's slice
+plan names.
+
 THE GO-TEMPLATE SURVIVAL CHECK. `alertmanager.yml` is part of a Jinja template, and every Go
 template expression in it sits inside a Jinja raw block. Jinja refuses most Go expressions as
 syntax errors, and the hook reports that failed render. A Go expression that Jinja can parse
@@ -68,9 +88,10 @@ take away by rewriting the expression:
   rewritten outside its raw block is still required;
 - `{{ .Status }}`, the Watchdog's payload.
 
-THE TOOLS. `scripts/validate/alert_tools.sh` provisions promtool and amtool at the role's image
-tags, and pint at the version it pins, into `alert-tools/` under the git common dir, which
-every worktree of a clone shares. Every tool call goes through it.
+THE TOOLS. `scripts/validate/alert_tools.sh` provisions promtool and amtool at the observability
+role's image tags, lokitool at loki-homelab's, and pint at the version it pins, into
+`alert-tools/` under the git common dir, which every worktree of a clone shares. Every tool call
+goes through it.
 
 `--prove-red` runs each tool command against `PROOFS`, the fixtures in
 `scripts/validate/tests/fixtures/alert_rules/`. It exits 0 only when every tool accepts its
@@ -101,6 +122,7 @@ from validate.alert_conventions import (
     RULE_TESTS_DIR,
     RULES_CONFIGMAP,
     RULES_DIR,
+    group_list_problems,
     rule_problems,
 )
 
@@ -147,6 +169,19 @@ TEMPLATE_DEFINE = re.compile(r'\{\{-? define "([^"]+)" -?\}\}')
 
 # The template that renders the rule files' ConfigMap.
 RULES_TEMPLATE = "prometheus-rules.yaml.j2"
+
+# The loki-homelab ruler's LogQL rules: the role, its rule directory, the template that
+# renders their ConfigMap, that ConfigMap, the role default listing the groups, and the groups
+# a run must find.
+LOKI_ROLE = "loki-homelab"
+LOKI_ROLE_DIR = K8S_ROLES / LOKI_ROLE
+LOKI_RULES_DIR = LOKI_ROLE_DIR / "files" / "rules"
+LOKI_RULES_TEMPLATE = "rules-configmap.yaml.j2"
+LOKI_RULES_CONFIGMAP = "loki-homelab-rules"
+LOKI_RULE_GROUPS = "loki_homelab_rule_groups"
+LOKI_GROUP_FLOOR = frozenset({"homelab-logs"})
+# lokitool's arguments before the rule file. `--dry-run` keeps lint from rewriting the file.
+LOKITOOL_ARGS = ("rules", "lint", "--dry-run")
 
 
 # A tool run: the argv after `alert_tools.sh`, returning (exit code, combined output).
@@ -215,6 +250,13 @@ PROOFS = (
         "good-rules.yaml",
         "bad-pint-rules.yaml",
         "`severity` label is required",
+    ),
+    Proof(
+        "lokitool",
+        LOKITOOL_ARGS,
+        "good-loki-rules.yaml",
+        "bad-loki-rules.yaml",
+        "could not parse expression",
     ),
 )
 
@@ -302,36 +344,87 @@ def go_template_problems(source: str, rendered: str, templates: str) -> list[str
     ]
 
 
+def _rendered_group_keys(
+    role: str, template: str, configmap: str, list_name: str
+) -> tuple[list[str], set[str]]:
+    """A role's rule-group list and the data keys of the rules ConfigMap it renders.
+
+    Args:
+        role: The k8s role.
+        template: The template under the role's `templates/` that renders the ConfigMap.
+        configmap: The ConfigMap's name.
+        list_name: The role default that lists the groups.
+
+    Raises:
+        RuntimeError: the template failed to render.
+    """
+    from validate import k8s_manifests as validator
+
+    role_dir = K8S_ROLES / role
+    entries = validator.k8s_entries()
+    ctx = validator.render_context(
+        role_dir, overrides={"container_item": entries[role]}, strict=True
+    )
+    err, docs = validator.check_template(role, role_dir / "templates" / template, ctx)
+    if err:
+        raise RuntimeError(f"{role}/{template} failed to render: {err}")
+    keys = set()
+    for doc in docs:
+        if not isinstance(doc, dict) or doc.get("kind") != "ConfigMap":
+            continue
+        if doc.get("metadata", {}).get("name") == configmap:
+            keys |= set(doc.get("data") or {})
+    return list(ctx.get(list_name) or []), keys
+
+
 def rendered_rule_keys() -> tuple[list[str], set[str]]:
     """`observability_rule_groups` and the rendered `prometheus-rules` ConfigMap's data keys.
 
     Raises:
         RuntimeError: the rules template failed to render.
     """
-    from validate import k8s_manifests as validator
+    return _rendered_group_keys(
+        ROLE, RULES_TEMPLATE, RULES_CONFIGMAP, "observability_rule_groups"
+    )
 
-    entries = validator.k8s_entries()
-    ctx = validator.render_context(
-        ROLE_DIR, overrides={"container_item": entries[ROLE]}, strict=True
+
+def rendered_loki_rule_keys() -> tuple[list[str], set[str]]:
+    """`loki_homelab_rule_groups` and the rendered `loki-homelab-rules` ConfigMap's data keys.
+
+    Raises:
+        RuntimeError: the rules template failed to render.
+    """
+    return _rendered_group_keys(
+        LOKI_ROLE, LOKI_RULES_TEMPLATE, LOKI_RULES_CONFIGMAP, LOKI_RULE_GROUPS
     )
-    err, docs = validator.check_template(
-        ROLE, ROLE_DIR / "templates" / RULES_TEMPLATE, ctx
+
+
+def loki_group_problems(
+    groups: list[str], keys: set[str], rules_dir: Path = LOKI_RULES_DIR
+) -> list[str]:
+    """A problem for each group the Loki rule files, their list and their ConfigMap disagree on.
+
+    Args:
+        groups: `loki_homelab_rule_groups`.
+        keys: The rendered `loki-homelab-rules` ConfigMap's data keys.
+        rules_dir: The Loki rule files.
+    """
+    return group_list_problems(
+        {p.stem for p in rules_dir.glob("*.yaml")},
+        groups,
+        keys,
+        floor=LOKI_GROUP_FLOOR,
+        list_name=LOKI_RULE_GROUPS,
+        configmap=LOKI_RULES_CONFIGMAP,
+        rules_path=f"{LOKI_ROLE}/files/rules",
     )
-    if err:
-        raise RuntimeError(f"{ROLE}/{RULES_TEMPLATE} failed to render: {err}")
-    keys = set()
-    for doc in docs:
-        if not isinstance(doc, dict) or doc.get("kind") != "ConfigMap":
-            continue
-        if doc.get("metadata", {}).get("name") == RULES_CONFIGMAP:
-            keys |= set(doc.get("data") or {})
-    return list(ctx.get("observability_rule_groups") or []), keys
 
 
 def tool_checks(
     rendered: Mapping[str, Path],
     rules_dir: Path = RULES_DIR,
     tests_dir: Path = RULE_TESTS_DIR,
+    loki_rules_dir: Path = LOKI_RULES_DIR,
 ) -> list[list[str]]:
     """The tool invocations for every discovered input, as `alert_tools.sh` argv lists."""
     checks = []
@@ -355,6 +448,10 @@ def tool_checks(
         for p in sorted(tests_dir.glob("*.test.yaml"))
     ]
     checks.append(["pint", *PINT_ARGS, str(rules_dir)])
+    checks += [
+        ["lokitool", *LOKITOOL_ARGS, str(p)]
+        for p in sorted(loki_rules_dir.glob("*.yaml"))
+    ]
     return checks
 
 
@@ -364,6 +461,8 @@ def check_tree(
     render_rules: Callable[[], tuple[list[str], set[str]]] | None = None,
     rules_dir: Path = RULES_DIR,
     tests_dir: Path = RULE_TESTS_DIR,
+    render_loki_rules: Callable[[], tuple[list[str], set[str]]] | None = None,
+    loki_rules_dir: Path = LOKI_RULES_DIR,
 ) -> list[str]:
     """Render the role, apply the floors and the rule conventions, and run every tool check.
 
@@ -374,10 +473,14 @@ def check_tree(
             `rendered_rule_keys` unless a test passes another.
         rules_dir: The rule files.
         tests_dir: Their promtool tests.
+        render_loki_rules: Returns the Loki rule groups and the rendered Loki rule keys;
+            `rendered_loki_rule_keys` unless a test passes another.
+        loki_rules_dir: The Loki ruler's rule files.
     """
     try:
         found = (render or rendered_files)()
         groups, keys = (render_rules or rendered_rule_keys)()
+        loki_groups, loki_keys = (render_loki_rules or rendered_loki_rule_keys)()
     except RuntimeError as err:
         # A Go expression outside a raw block usually lands here, as a Jinja syntax error.
         return [str(err)]
@@ -388,6 +491,7 @@ def check_tree(
         tests_dir,
         prometheus_yml=found.get("prometheus.yml"),
     )
+    problems += loki_group_problems(loki_groups, loki_keys, loki_rules_dir)
     if "alertmanager.yml" in found and "homelab.tmpl" in found:
         problems += go_template_problems(
             ALERTMANAGER_SOURCE.read_text(),
@@ -399,7 +503,7 @@ def check_tree(
         for key, text in found.items():
             paths[key] = Path(tmp) / key
             paths[key].write_text(text)
-        for argv in tool_checks(paths, rules_dir, tests_dir):
+        for argv in tool_checks(paths, rules_dir, tests_dir, loki_rules_dir):
             code, output = run(argv)
             if code != 0:
                 problems.append(f"`{' '.join(argv)}` exited {code}:\n{output.rstrip()}")

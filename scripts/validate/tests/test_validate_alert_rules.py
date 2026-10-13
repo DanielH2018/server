@@ -1,8 +1,9 @@
 """`scripts/validate/alert_rules.py`'s Python phase, with the tools faked.
 
-The pytest shards install no promtool or amtool, so every tool call here goes through a fake
-runner. What the tools themselves reject is proven by CI's `alert_rules.py --prove-red` step,
-which runs the real binaries against the fixtures under `fixtures/alert_rules/`.
+The pytest shards install no promtool, amtool, pint or lokitool, so every tool call here goes
+through a fake runner. What the tools themselves reject is proven by CI's `alert_rules.py
+--prove-red` step, which runs the real binaries against the fixtures under
+`fixtures/alert_rules/`.
 
 Run: uv run pytest scripts/validate/tests/test_validate_alert_rules.py
 """
@@ -47,15 +48,21 @@ def test_a_render_missing_a_floor_file_is_flagged():
 def test_every_discovered_input_gets_its_tool_check(tmp_path):
     rules = tmp_path / "rules"
     tests = tmp_path / "tests"
+    loki_rules = tmp_path / "loki-rules"
     rules.mkdir()
     tests.mkdir()
+    loki_rules.mkdir()
     (rules / "meta.yaml").write_text("groups: []\n")
     (tests / "meta.test.yaml").write_text("tests: []\n")
+    (loki_rules / "logs.yaml").write_text("groups: []\n")
     config = tmp_path / "prometheus.yml"
     am_config = tmp_path / "alertmanager.yml"
 
     checks = alert_rules.tool_checks(
-        {"prometheus.yml": config, "alertmanager.yml": am_config}, rules, tests
+        {"prometheus.yml": config, "alertmanager.yml": am_config},
+        rules,
+        tests,
+        loki_rules,
     )
 
     assert checks == [
@@ -64,6 +71,7 @@ def test_every_discovered_input_gets_its_tool_check(tmp_path):
         ["promtool", "check", "rules", str(rules / "meta.yaml")],
         ["promtool", "test", "rules", str(tests / "meta.test.yaml")],
         ["pint", *alert_rules.PINT_ARGS, str(rules)],
+        ["lokitool", "rules", "lint", "--dry-run", str(loki_rules / "logs.yaml")],
     ]
 
 
@@ -76,6 +84,19 @@ def test_a_tool_rejecting_the_rendered_config_is_flagged():
     config = [p for p in problems if "check config --syntax-only" in p]
     assert len(config) == 1, problems
     assert "FAILED: bad field" in config[0]
+
+
+def test_a_lokitool_rejection_of_a_loki_rule_file_is_flagged():
+    problems = alert_rules.check_tree(
+        run=lambda argv: (
+            (1, "could not parse expression") if argv[0] == "lokitool" else (0, "")
+        )
+    )
+    assert len(problems) == 1, problems
+    assert "lokitool rules lint --dry-run" in problems[0], problems
+    assert (
+        problems[0].split("`")[1].endswith("loki-homelab/files/rules/homelab-logs.yaml")
+    )
 
 
 def test_a_rejected_alertmanager_config_is_flagged():
@@ -194,6 +215,7 @@ def test_every_proof_names_fixtures_that_exist():
         ("amtool", "check-config"),
         ("promtool", "check", "config", "--syntax-only"),
         ("pint", *alert_rules.PINT_ARGS),
+        ("lokitool", "rules", "lint", "--dry-run"),
     }
     # promtool test rules has two proofs, and the set above holds the command once. The
     # second shows condition 3 of the third `service` source rests on promtool.
@@ -248,6 +270,31 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "PrometheusRuleEvaluationFailures",
     }
     assert alert_rules.rule_problems(groups, keys) == []
+
+
+def test_the_loki_rule_files_their_list_and_their_configmap_agree_is_clean():
+    groups, keys = alert_rules.rendered_loki_rule_keys()
+    # Non-vacuity: the floor, the list and the ConfigMap all name the one group.
+    assert alert_rules.LOKI_GROUP_FLOOR == {"homelab-logs"}
+    assert groups == ["homelab-logs"]
+    assert keys == {"homelab-logs.yaml"}
+    assert alert_rules.loki_group_problems(groups, keys) == []
+
+
+def test_a_loki_rule_file_the_list_does_not_name_is_flagged(tmp_path):
+    for stem in ("homelab-logs", "stray"):
+        (tmp_path / f"{stem}.yaml").write_text("groups: []\n")
+
+    problems = alert_rules.check_tree(
+        run=lambda argv: (0, ""),
+        render_loki_rules=lambda: (["homelab-logs"], {"homelab-logs.yaml"}),
+        loki_rules_dir=tmp_path,
+    )
+
+    assert problems == [
+        "loki-homelab/files/rules/stray.yaml: loki_homelab_rule_groups does not name it, "
+        "so it never reaches the loki-homelab-rules ConfigMap. Add the group to the list."
+    ]
 
 
 def test_a_placeholder_in_the_rendered_alertmanager_config_is_clean():

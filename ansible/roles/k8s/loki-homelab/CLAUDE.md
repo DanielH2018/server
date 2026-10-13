@@ -37,6 +37,31 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` fails on either half. The stage is
   prospective: a record shipped before it still carries the token for the 744h retention window.
 
+## Ruler
+
+Loki's ruler evaluates the LogQL rules in `files/rules/` and sends each firing alert to
+Alertmanager in the observability namespace, on its Service at port 9093.
+
+- **The tenant directory is a ConfigMap mount.** `templates/rules-configmap.yaml.j2` renders
+  the `loki-homelab-rules` ConfigMap, one key per group in `loki_homelab_rule_groups`. The
+  Deployment mounts it at `/etc/loki-rules/fake`, because `fake` is the tenant Loki uses when
+  `auth_enabled` is false. The ruler's scratch copy, `rule_path`, sits on the claim.
+- **A new rule file joins the list in the same commit.** The template names each file rather
+  than globbing, so a file the list omits never reaches the ruler. The `validate-alert-rules`
+  hook fails when the files, the list and the rendered keys disagree, and it parses every
+  expression with `lokitool`.
+- **The group interval sets the query load.** `homelab-logs` evaluates every 5m, the
+  monitor-bridge `INTERVAL`, rather than Loki's 1m default. Each evaluation is a range query
+  on this Loki.
+- **Every rules edit restarts Loki and Alloy.** The rules ConfigMap is part of this role's
+  rendered manifests, so the shared rollout restarts the `Recreate` Loki Deployment and the
+  Alloy DaemonSet. Alloy resumes from its positions file, so a restart costs an ingestion
+  pause, not lost lines.
+- **The ruler's alerts never reach Prometheus.** It writes `ALERTS` only to a remote-write
+  target, and Prometheus runs without a remote-write receiver. So `probe.py health
+  loki-homelab` cannot see a log rule's alert; read the ruler's own `loki_prometheus_*`
+  metrics instead.
+
 ## A departed pod's logs survive it — an empty result is usually the query
 
 Loki keeps what a pod wrote after the pod is deleted, rescheduled or lost to a node reboot.

@@ -38,6 +38,12 @@ spec:
               mountPath: /etc/loki
             - name: loki-homelab-data
               mountPath: /loki
+            # The ruler's tenant directory (configmap.yaml.j2's ruler block). A whole-directory
+            # mount of its own, outside /etc/loki, so the config volume's atomic swap never
+            # touches it. Loki skips the mount's `..data` directories and loads each key.
+            - name: loki-homelab-rules
+              mountPath: /etc/loki-rules/fake
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /ready
@@ -58,6 +64,9 @@ spec:
             items:
               - key: loki.yaml
                 path: loki.yaml
+        - name: loki-homelab-rules
+          configMap:
+            name: loki-homelab-rules
         - name: loki-homelab-data
           persistentVolumeClaim:
             claimName: {{ loki_homelab_claim }}

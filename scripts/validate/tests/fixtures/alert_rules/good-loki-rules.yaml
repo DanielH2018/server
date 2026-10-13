@@ -1,0 +1,13 @@
+# Accepted by `lokitool rules lint --dry-run`. The expression is LogQL with a line filter,
+# which `promtool check rules` rejects, so the acceptance shows lokitool parsed it as LogQL.
+groups:
+  - name: fixture
+    interval: 5m
+    rules:
+      - alert: FixtureNotificationDropped
+        expr: count_over_time({container="fixture"} |= "Cannot send notification" [3h]) > 0
+        labels:
+          severity: critical
+          service: fixture
+        annotations:
+          summary: A fixture container logged a dropped notification.

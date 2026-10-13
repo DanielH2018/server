@@ -1,0 +1,25 @@
+# The Loki ruler's LogQL rules for the cluster log store. The ruler sends each firing alert to
+# Alertmanager in the observability namespace (templates/configmap.yaml.j2's ruler block).
+# `interval: 5m` matches monitor-bridge's INTERVAL, so the ruler issues the bridge's query
+# load rather than five times it under Loki's 1m default.
+#
+# lokitool parses every expression in the validate-alert-rules hook. LogQL has no counterpart
+# to `promtool test rules`, so nothing here is unit-tested into firing; M5's slice plan
+# (docs/target-architecture/monitoring/m5-loki-ruler.md, *The rules*) states what checks each
+# rule instead.
+groups:
+  - name: homelab-logs
+    interval: 5m
+    rules:
+      # Temporary. It fires on every evaluation so the ruler has something to send, which is
+      # how M5 PR 2a and PR 2b read the ruler's metrics and its path to Alertmanager. M5 PR 3
+      # replaces it with the log rules. Shadow, so Alertmanager routes it to the blackhole
+      # receiver.
+      - alert: LokiRulerSmoke
+        expr: vector(1)
+        labels:
+          severity: info
+          service: loki-homelab
+          shadow: "true"
+        annotations:
+          summary: The loki-homelab ruler evaluates its rules and sends to Alertmanager.

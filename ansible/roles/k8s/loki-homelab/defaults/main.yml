@@ -26,6 +26,14 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 
 loki_homelab_retention: 744h
 
+# The Loki ruler's rule groups, one file each under files/rules/, carried into the
+# loki-homelab-rules ConfigMap by templates/rules-configmap.yaml.j2. The list names each file
+# because the offline renderer has no fileglob, so a file it does not name never reaches the
+# ruler. scripts/validate/alert_rules.py fails when the files, this list and the rendered
+# ConfigMap's keys disagree.
+loki_homelab_rule_groups:
+  - homelab-logs
+
 loki_homelab_cpu_limit: "1"
 loki_homelab_mem_limit: 1024Mi
 loki_homelab_cpu_request: "100m"

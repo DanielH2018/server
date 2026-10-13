@@ -1,12 +1,12 @@
-"""`scripts/validate/alert_tools.sh` unpacks only a verified tarball, and trusts only a stamp.
+"""`scripts/validate/alert_tools.sh` unpacks only a verified archive, and trusts only a stamp.
 
 `curl` is faked on PATH, ahead of leakguard's recording shim, so no test reaches GitHub. The
-fake serves fixture tarballs and sums files from a temporary directory, keyed by the project
+fake serves fixture archives and sums files from a temporary directory, keyed by the project
 and file name in the URL, and logs every fetch. That log is what tells "reused the cache"
 apart from "fetched it again".
 
 Each case runs the real script from a throwaway git repository whose observability defaults
-pin both images. The script puts its cache under the git common dir, so every run gets
+pin both Prometheus images and whose loki-homelab defaults pin the Loki image. The script puts its cache under the git common dir, so every run gets
 `scrubbed_env()`: an inherited `GIT_DIR` from a commit hook would otherwise point it at the
 real clone's `.git/alert-tools/`.
 
@@ -19,6 +19,7 @@ import platform
 import re
 import shutil
 import tarfile
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,8 @@ from lib.repo_paths import REPO
 SCRIPT = REPO / "scripts" / "validate" / "alert_tools.sh"
 ARCH = {"x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}[platform.machine()]
 VERSIONS = {"prometheus": ("3.15.0", "promtool"), "alertmanager": ("0.34.1", "amtool")}
+# Loki's image tag carries no leading `v`, unlike Prometheus's.
+LOKI_VERSION = "3.7.8"
 # pint's version is the literal in the script, which Renovate bumps.
 _PINT_PIN = re.search(r'^pint_version="([^"]+)"$', SCRIPT.read_text(), re.M)
 assert _PINT_PIN, f"{SCRIPT} pins no pint_version"
@@ -39,6 +42,9 @@ DEFAULTS = """\
 observability_k8s_prometheus_image: prom/prometheus:v3.15.0@sha256:{0}
 observability_k8s_alertmanager_image: prom/alertmanager:v0.34.1@sha256:{0}
 """.format("0" * 64)
+LOKI_DEFAULTS = (
+    f"loki_homelab_k8s_image: grafana/loki:{LOKI_VERSION}@sha256:{'0' * 64}\n"
+)
 
 FAKE_CURL = """#!/usr/bin/env bash
 set -euo pipefail
@@ -57,9 +63,14 @@ cp "$RELEASES/$project/${url##*/}" "$out"
 """
 
 
+def _script(binary: str) -> bytes:
+    """An executable's body that echoes `binary` and its args."""
+    return f"#!/bin/sh\necho {binary} $*\n".encode()
+
+
 def _tarball(member: str, binary: str) -> bytes:
     """A release tarball holding one executable at `member` that echoes `binary` and its args."""
-    body = f"#!/bin/sh\necho {binary} $*\n".encode()
+    body = _script(binary)
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         info = tarfile.TarInfo(member)
@@ -82,7 +93,10 @@ def checkout(tmp_path):
     commit(
         repo,
         "pin the images",
-        **{"ansible/roles/k8s/observability/defaults/main.yml": DEFAULTS},
+        **{
+            "ansible/roles/k8s/observability/defaults/main.yml": DEFAULTS,
+            "ansible/roles/k8s/loki-homelab/defaults/main.yml": LOKI_DEFAULTS,
+        },
     )
     # Prometheus's projects nest the binary under a versioned directory and list sums in
     # sha256sums.txt. pint's tarball holds `pint-linux-<arch>` at its root, beside checksums.txt.
@@ -113,6 +127,17 @@ def checkout(tmp_path):
         (served / sums).write_text(
             f"{hashlib.sha256(data).hexdigest()}  {base}.tar.gz\n"
         )
+    # Loki ships lokitool as a zip holding `lokitool-linux-<arch>` at its root, beside
+    # SHA256SUMS. The zip records no mode, so the script's install sets the executable bit.
+    served = tmp_path / "releases" / "loki"
+    served.mkdir(parents=True)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as archive:
+        archive.writestr(f"lokitool-linux-{ARCH}", _script("lokitool"))
+    (served / f"lokitool-linux-{ARCH}.zip").write_bytes(buf.getvalue())
+    (served / "SHA256SUMS").write_text(
+        f"{hashlib.sha256(buf.getvalue()).hexdigest()}  lokitool-linux-{ARCH}.zip\n"
+    )
     fake_bin(tmp_path / "bin", curl=FAKE_CURL)
     return repo
 
@@ -202,3 +227,16 @@ def test_pint_unpacks_from_a_tarball_with_no_top_directory_is_clean(checkout):
     assert (tool_dir / ".provisioned").read_text().strip() == (
         f"pint-{PINT_VERSION}-linux-{ARCH}"
     )
+
+
+def test_lokitool_unpacks_from_a_zip_at_the_loki_image_tag_is_clean(checkout):
+    result = _run(checkout, "lokitool", "rules", "lint", "--dry-run", "x.yaml")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "lokitool rules lint --dry-run x.yaml"
+    assert any(
+        f"/grafana/loki/releases/download/v{LOKI_VERSION}/" in url
+        for url in _fetches(checkout)
+    ), _fetches(checkout)
+    tool_dir = checkout / ".git" / "alert-tools" / f"loki-{LOKI_VERSION}"
+    assert (tool_dir / ".provisioned").read_text().strip() == f"lokitool-linux-{ARCH}"
