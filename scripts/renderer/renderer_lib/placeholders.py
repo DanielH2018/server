@@ -27,6 +27,12 @@ set. Flux types a substituted standalone value by its text, so the standalone-va
 checks those keys' values where they are decrypted. `PlaceholderRender.standalone` holds the
 sets, and `scripts/renderer/standalone_map.py` projects them into the guard's committed map.
 
+A template a role lists in the defaults variable `render_sops_manifests` renders a Secret of a
+multi-line key, which no placeholder can carry. Placeholder mode emits no document for it, and
+drops it before pass 2, so its key counts in no key set and no standalone set. Stub mode still
+renders it. `PlaceholderRender.sops_manifests` keeps each dropped file's sentinel render for the
+`sops-manifest-entries` check in `sops_entries.py`.
+
 `docs/homelab-render.md` is the operator's page, and
 `docs/target-architecture/render/r2-secret-placeholders.md` the plan.
 """
@@ -39,8 +45,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 import enum
 import json
 import re
-from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -48,24 +54,27 @@ import yaml
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
 from lib.repo_paths import K8S_ROLES
-from renderer.renderer_lib.cluster import DEFERRED_SUFFIX, RenderedTag, render_tag
+from renderer.renderer_lib.cluster import (
+    DEFERRED_SUFFIX,
+    KUSTOMIZATION,
+    RenderedTag,
+    kustomization_text,
+    render_tag,
+)
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS, PinnedFact
 
 SENTINEL_PREFIX = "HOMELAB_SECRET__"
 SENTINEL_SUFFIX = "__END"
 
-# The tags placeholder mode skips. Stub mode renders every tag, and the summary line of a
-# placeholder render names each tag it skipped. R2's PR 5 empties the set, and R2's exit
-# criterion requires it empty.
-PLACEHOLDER_DEFERRED = frozenset(
-    {
-        # templates/config/secrets.yaml.j2 parses `google_assistant_service_account` with
-        # `from_json`, which raises on a sentinel. R2's PR 5 moves the key into a Secret of
-        # its own and drops the parse.
-        "home-assistant",
-    }
-)
+# The tags placeholder mode skips, each with its reason. Stub mode renders every tag, and the
+# summary line of a placeholder render names each tag it skipped. R2's exit criterion requires
+# the set empty. R2's PR 5 removed its last member, home-assistant, whose `from_json` parse
+# raised on a sentinel.
+PLACEHOLDER_DEFERRED: frozenset[str] = frozenset()
+
+# The role defaults variable listing the manifests a placeholder render leaves out.
+SOPS_MANIFESTS_VAR = "render_sops_manifests"
 
 # The keys with a standalone use that the guard does not check, each with its reason. The
 # guard's map leaves them out, and the round trip's second pass keeps their R1 stub. R2's PR
@@ -89,6 +98,36 @@ GUARD_MAP = K8S_ROLES / "manifests" / "files" / "standalone_secret_keys.json"
 def read_guard_map(path: Path = GUARD_MAP) -> dict[str, list[str]]:
     """The guard's map at `path`."""
     return json.loads(path.read_text())
+
+
+def sops_manifests(tag: str, roles: Path = K8S_ROLES) -> list[str]:
+    """The manifest basenames `tag`'s role lists in `render_sops_manifests`, from its defaults."""
+    defaults = roles / tag / "defaults" / "main.yml"
+    if not defaults.is_file():
+        return []
+    values = yaml_fast.safe_load(defaults.read_text()) or {}
+    return [str(name) for name in values.get(SOPS_MANIFESTS_VAR) or []]
+
+
+def exclude_sops_manifests(
+    rendered: RenderedTag, names: Iterable[str]
+) -> tuple[RenderedTag, dict[str, str | None]]:
+    """`rendered` without the files `names`, and each name mapped to the text it dropped.
+
+    The kustomization is rebuilt without the dropped files. A name the render wrote no file
+    for maps to None. The deferred directory is left as it is.
+    """
+    names = set(names)
+    if not names:
+        return rendered, {}
+    dropped = {name: rendered.files.get(name) for name in sorted(names)}
+    kept = {
+        name: text
+        for name, text in rendered.files.items()
+        if name not in names and name != KUSTOMIZATION
+    }
+    kept[KUSTOMIZATION] = kustomization_text(list(kept))
+    return RenderedTag(rendered.tag, kept, rendered.deferred), dropped
 
 
 class Mode(enum.Enum):
@@ -296,12 +335,16 @@ class PlaceholderRender:
         standalone: Each directory name mapped to its standalone key set, the subset of its
             key set whose placeholder is the whole value of a scalar.
         skipped: The requested tags in `PLACEHOLDER_DEFERRED`, which were not rendered.
+        sops_manifests: Each rendered tag with `render_sops_manifests` entries, mapped to
+            each entry's sentinel render, which no directory holds; None where the role
+            rendered no such file.
     """
 
     tags: list[RenderedTag]
     key_sets: dict[str, frozenset[str]]
     standalone: dict[str, frozenset[str]]
     skipped: list[str]
+    sops_manifests: dict[str, dict[str, str | None]] = field(default_factory=dict)
 
     def substituting(self) -> list[str]:
         """The sorted names of the directories that substitute."""
@@ -309,9 +352,15 @@ class PlaceholderRender:
 
 
 def apply_placeholders(
-    rendered: list[RenderedTag], keys: Iterable[str], skipped: Iterable[str] = ()
+    rendered: list[RenderedTag],
+    keys: Iterable[str],
+    skipped: Iterable[str] = (),
+    sops: dict[str, dict[str, str | None]] | None = None,
 ) -> PlaceholderRender:
     """Run passes 2 and 3 over sentinel renders, directory by directory, and find standalone uses.
+
+    `sops` is the `render_sops_manifests` files already dropped from `rendered`, passed
+    through to `PlaceholderRender.sops_manifests`.
 
     Raises:
         RenderError: A file of a directory that substitutes does not parse after pass 3.
@@ -330,23 +379,35 @@ def apply_placeholders(
                 standalone[name] = frozenset()
         deferred = finished.get(tag.tag + DEFERRED_SUFFIX, {})
         tags.append(RenderedTag(tag.tag, finished[tag.tag], deferred))
-    return PlaceholderRender(tags, key_sets, standalone, sorted(skipped))
+    return PlaceholderRender(tags, key_sets, standalone, sorted(skipped), sops or {})
 
 
 def render_placeholders(
-    tags: list[str], keys: list[str], host: str = K8S_HOST
+    tags: list[str],
+    keys: list[str],
+    host: str = K8S_HOST,
+    deferred: frozenset[str] = PLACEHOLDER_DEFERRED,
+    entries: Callable[[str], list[str]] = sops_manifests,
 ) -> PlaceholderRender:
-    """Render `tags` in placeholder mode, skipping those in `PLACEHOLDER_DEFERRED`.
+    """Render `tags` in placeholder mode, skipping those in `deferred`.
+
+    Each tag's `render_sops_manifests` files, as `entries` reads them, are dropped before
+    pass 2. A test passes its own `deferred` and `entries`.
 
     Raises:
         RenderError: A template fails to render.
         ValueError: A pinned fact shares a name with a secret key.
     """
     overrides = placeholder_vars(keys)
-    skipped = [tag for tag in tags if tag in PLACEHOLDER_DEFERRED]
-    rendered = [
-        render_tag(tag, overrides, host)
-        for tag in tags
-        if tag not in PLACEHOLDER_DEFERRED
-    ]
-    return apply_placeholders(rendered, keys, skipped)
+    skipped = [tag for tag in tags if tag in deferred]
+    rendered, sops = [], {}
+    for tag in tags:
+        if tag in deferred:
+            continue
+        kept, dropped = exclude_sops_manifests(
+            render_tag(tag, overrides, host), entries(tag)
+        )
+        rendered.append(kept)
+        if dropped:
+            sops[tag] = dropped
+    return apply_placeholders(rendered, keys, skipped, sops)

@@ -11,6 +11,11 @@ PR 1c, the standalone-value guard: [#4914](https://github.com/DanielH2018/server
 PR 2, the five rules and the round trip over every tag:
 [#4928](https://github.com/DanielH2018/server/pull/4928).
 
+PR 5, Home Assistant's service account: [#4933](https://github.com/DanielH2018/server/pull/4933).
+It landed ahead of PR 2 ([#4918](https://github.com/DanielH2018/server/issues/4918)), so its
+`sops-manifest-entries` check carries the first two clauses only. The third clause, which
+reads `KNOWN_VIOLATIONS`, is [#4930](https://github.com/DanielH2018/server/issues/4930).
+
 Depends on: [R1](r1-shadow-render.md)
 
 Unblocks: D2 and D3. D2's publish job renders bento-pdf, whose IngressRoute holds `domain`,

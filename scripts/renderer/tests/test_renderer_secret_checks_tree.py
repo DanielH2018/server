@@ -139,7 +139,9 @@ FIXTURE_FACTS = {
 
 def _cluster(tmp_path, owned: set[str], facts: dict) -> int:
     out = tmp_path / "out"
-    return homelab_render.cluster(out, ["bento-pdf"], None, lambda: owned, facts)
+    return homelab_render.cluster(
+        out, ["bento-pdf"], None, flux_owned=lambda: owned, pinned=facts
+    )
 
 
 def test_a_flux_owned_tag_reading_a_pinned_fact_is_flagged(tmp_path, capsys):

@@ -26,13 +26,18 @@ it stands alone in a field. A key in the guard's map under any tag, or in `GUARD
 covered, so a difference in the second pass marks a standalone use the renderer's detection
 missed.
 
-Two things are left out of the comparison, each named and counted, and nothing else:
+Three things are left out of the comparison, each named and counted, and nothing else:
 
 - The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names, such as a Secret that still
   carries a multi-line key. Each entry whose directory was built must drop exactly one object.
 - The annotations `UNCOMPARED_ANNOTATIONS` names. Each hashes a rendered config that holds
   placeholders on one side and stub values on the other, so the two hashes differ by
   construction. The count must equal the template calls that write them.
+- A role's `render_sops_manifests` files, which are in neither build. Placeholder mode emits no
+  document for them, and `render_sides` drops the same files from each stub render. Each pass
+  counts the documents it dropped there, and fails unless the count equals the number of
+  entries in the tags it built, so an entry that hides more than its one Secret cannot read as
+  clean.
 
 `roundtrip` needs the pinned flux CLI. Where `flux` is not on `PATH`, it refuses and never
 reports a pass. `docs/homelab-render.md` is the operator's page.
@@ -66,7 +71,9 @@ from renderer.renderer_lib.environment import renderer_env
 from renderer.renderer_lib.placeholders import (
     GUARD_DEFERRED,
     PlaceholderRender,
+    exclude_sops_manifests,
     render_placeholders,
+    sops_manifests,
 )
 from renderer.renderer_lib.secret_checks import (
     KNOWN_VIOLATIONS,
@@ -359,6 +366,8 @@ class Report:
             exclusion whose count is wrong.
         documents: The documents left out for `KNOWN_VIOLATIONS`, as `dir: Kind/name`.
         annotations: The annotations left out for `UNCOMPARED_ANNOTATIONS`.
+        sops_entries: The `render_sops_manifests` entries of the tags built.
+        sops_documents: The documents the stub render dropped for those entries.
     """
 
     label: str
@@ -370,10 +379,18 @@ class Report:
     differences: list[str] = field(default_factory=list)
     documents: list[str] = field(default_factory=list)
     annotations: list[str] = field(default_factory=list)
+    sops_entries: int = 0
+    sops_documents: int = 0
 
     def lines(self) -> list[str]:
         deferred = sum(d.endswith(DEFERRED_SUFFIX) for d in self.directories)
         lines = list(self.differences)
+        if self.sops_documents != self.sops_entries:
+            lines.append(
+                f"roundtrip: dropped {self.sops_documents} documents for "
+                f"{self.sops_entries} render_sops_manifests entries; each entry is one "
+                "document"
+            )
         if self.skipped:
             lines.append(
                 f"roundtrip: skipped, in PLACEHOLDER_DEFERRED: {', '.join(self.skipped)}"
@@ -383,12 +400,15 @@ class Report:
             f"{len(self.substituting)} substituting, {self.objects} objects, "
             f"{len(self.documents)} documents in KNOWN_VIOLATIONS and "
             f"{len(self.annotations)} annotations in UNCOMPARED_ANNOTATIONS left out, "
-            f"{len(self.differences)} differences, with {self.label}"
+            f"{len(self.differences)} differences, {self.sops_documents} documents in "
+            f"render_sops_manifests, with {self.label}"
         )
         return lines
 
     def exit_code(self) -> int:
-        return SHADOW_DIFFERENT if self.differences else SHADOW_OK
+        if self.differences or self.sops_documents != self.sops_entries:
+            return SHADOW_DIFFERENT
+        return SHADOW_OK
 
 
 @dataclass(frozen=True)
@@ -399,20 +419,33 @@ class Sides:
         root: The directory every render and the throwaway Kustomizations live under.
         placeholder: The placeholder render, whose key sets decide `postBuild`.
         tags: The tags rendered in every mode.
+        sops_entries: The `render_sops_manifests` entries of `tags`.
+        sops_documents: Each pass's name mapped to the documents its stub render dropped
+            for those entries.
     """
 
     root: Path
     placeholder: PlaceholderRender
     tags: list[str]
+    sops_entries: int = 0
+    sops_documents: dict[str, int] = field(default_factory=dict)
 
     def cluster(self, side: str) -> Path:
         return self.root / side / "cluster"
 
 
 def render_sides(
-    root: Path, tags: list[str], keys: list[str], passes: list[StubPass]
+    root: Path,
+    tags: list[str],
+    keys: list[str],
+    passes: list[StubPass],
+    stub_render: Callable[[str, dict], RenderedTag] = render_tag,
 ) -> Sides:
     """Render `tags` under `root`: `placeholder/`, and one stub render per pass.
+
+    Each stub render drops the `render_sops_manifests` files, as placeholder mode does, and
+    counts the documents it dropped. `stub_render` renders one tag in stub mode; a test
+    passes one that changes the render.
 
     Raises:
         RenderError: A template fails to render.
@@ -421,13 +454,24 @@ def render_sides(
     """
     placeholder = render_placeholders(tags, keys)
     rendered = [t.tag for t in placeholder.tags]
-    stub_renders: dict[str, list[RenderedTag]] = {
-        p.name: [render_tag(tag, p.values) for tag in rendered] for p in passes
-    }
+    entries = {tag: sops_manifests(tag) for tag in rendered}
+    stub_renders: dict[str, list[RenderedTag]] = {}
+    dropped_documents: dict[str, int] = {}
+    for p in passes:
+        renders, count = [], 0
+        for tag in rendered:
+            kept, dropped = exclude_sops_manifests(
+                stub_render(tag, p.values), entries[tag]
+            )
+            renders.append(kept)
+            count += sum(len(documents(text)) for text in dropped.values() if text)
+        stub_renders[p.name] = renders
+        dropped_documents[p.name] = count
     write_cluster(placeholder.tags, root / PLACEHOLDER)
     for name, renders in stub_renders.items():
         write_cluster(renders, root / name)
-    return Sides(root, placeholder, rendered)
+    total = sum(len(names) for names in entries.values())
+    return Sides(root, placeholder, rendered, total, dropped_documents)
 
 
 def compare_sides(
@@ -448,7 +492,13 @@ def compare_sides(
         known: The ratchet whose output-side entries name the documents to leave out.
         annotations: The annotations to leave out, by directory.
     """
-    report = Report(stub_pass.label, sides.tags, sides.placeholder.skipped)
+    report = Report(
+        stub_pass.label,
+        sides.tags,
+        sides.placeholder.skipped,
+        sops_entries=sides.sops_entries,
+        sops_documents=sides.sops_documents.get(stub_pass.name, 0),
+    )
     kdir = sides.root / KUSTOMIZATIONS
     kdir.mkdir(parents=True, exist_ok=True)
     for name, keys in sorted(sides.placeholder.key_sets.items()):

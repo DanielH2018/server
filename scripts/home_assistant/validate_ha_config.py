@@ -121,13 +121,22 @@ class HAConfigLoader(yaml.SafeLoader):
         return super().construct_mapping(node, deep=deep)
 
 
+# The !include targets the repo holds no copy of: the init container installs each at run time
+# from a Secret, as it does secrets.yaml. The Google service account is a multi-line credential
+# with a Secret of its own (templates/google-sa-secret.yaml.j2), so like a `!secret` value it
+# loads as a placeholder here. Any other missing target is still an error.
+RUNTIME_INCLUDES = frozenset({"google_service_account.json"})
+
 # Tracks the !include files currently being loaded, so a cyclic include (a -> b -> a) raises a
 # clear error instead of blowing the stack with an uncaught RecursionError.
 _INCLUDE_STACK: set[Path] = set()
 
 
 def _construct_include(loader: HAConfigLoader, node: yaml.Node):
-    target = (loader._root / loader.construct_scalar(node)).resolve()
+    name = loader.construct_scalar(node)
+    if name in RUNTIME_INCLUDES:
+        return f"<include {name}>"
+    target = (loader._root / name).resolve()
     mark = node.start_mark
     if not target.is_file():
         raise HAConfigError(

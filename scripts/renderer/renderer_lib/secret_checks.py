@@ -24,6 +24,9 @@ tag is in the render, and a `KNOWN_VIOLATIONS` entry of theirs counts as stale o
 tag was rendered. Rule 5 scans the whole tree, so its floor, its named members and its stale
 entries hold on every run.
 
+`sops-manifest-entries`, the check on each role's `render_sops_manifests` list, lives in
+`sops_entries.py` and is importable from here.
+
 `docs/homelab-render.md` is the operator's page, and
 `docs/target-architecture/render/r2-secret-placeholders.md` the plan.
 """
@@ -54,6 +57,10 @@ from renderer.renderer_lib.jinja_uses import (
     rule5_templates,
     scan,
     template_tag,
+)
+from renderer.renderer_lib.sops_entries import (
+    SOPS_MANIFEST_KEYS,
+    sops_manifest_entries as sops_manifest_entries,
 )
 from renderer.renderer_lib.placeholders import (
     SENTINEL_PREFIX,
@@ -94,20 +101,6 @@ PASSTHROUGH_FILTERS = frozenset(
 # addresses. A key that may leave a Secret for one kind only is a `(key, kind)` pair, never a
 # member here.
 PLACEHOLDER_ANYWHERE = frozenset({"domain", "email"})
-
-# The keys no placeholder may carry. Flux deletes every newline from a substitution value, so
-# a multi-line value cannot pass through a placeholder at all. R2's PRs 5 to 7 move each into
-# a dedicated Secret that D3 ships as a SOPS-encrypted manifest.
-SOPS_MANIFEST_KEYS = frozenset(
-    {
-        # pi-peer-backup's SSH private key, a PEM block.
-        "pi_peer_backup_ssh_key",
-        # Authelia's OIDC signing key, a PEM block under `jwks`.
-        "authelia_oidc_rsa_key_content",
-        # Home Assistant's Google service account, a JSON document.
-        "google_assistant_service_account",
-    }
-)
 
 # A case-insensitive fragment of the sentinel `HOMELAB_SECRET__K__END`. A transform that only
 # partly alters a sentinel, such as `lower`, leaves it in the output.
@@ -184,8 +177,8 @@ _AUTHELIA_KEY, _PPB_KEY = "authelia_oidc_rsa_key_content", "pi_peer_backup_ssh_k
 KNOWN_VIOLATIONS = frozenset(
     {
         # Rule 4: the two multi-line keys still interpolated with `indent`. R2's PRs 6 and 7
-        # move each into a dedicated Secret. home-assistant's from_json key is in a
-        # PLACEHOLDER_DEFERRED tag, so no placeholder render reaches it.
+        # move each into a dedicated Secret. home-assistant's key already sits in its own
+        # Secret, listed in `render_sops_manifests` (R2's PR 5).
         _rule4(
             "authelia", "config-secret.yaml", "Secret/authelia-config", _AUTHELIA_KEY
         ),
@@ -193,20 +186,6 @@ KNOWN_VIOLATIONS = frozenset(
         # Rule 5, the indent on each multi-line key, at the same two sites.
         _rule5("authelia", "config-secret.yaml.j2", "filter indent", _AUTHELIA_KEY),
         _rule5("pi-peer-backup", "secret.yaml.j2", "filter indent", _PPB_KEY),
-        # Rule 5: HA's from_json parse of the service account, and the Secret that embeds
-        # its multi-line output through `indent`. R2's PR 5 drops both.
-        _rule5(
-            "home-assistant",
-            "config/secrets.yaml.j2",
-            "filter from_json",
-            "google_assistant_service_account",
-        ),
-        _rule5(
-            "home-assistant",
-            "secret.yaml.j2",
-            "embeds through indent",
-            "google_assistant_service_account",
-        ),
         # Rule 5: the two trims in qbittorrent and mosquitto's split. R2's PR 4 drops them.
         _rule5("qbittorrent", "secret.yaml.j2", "filter trim", "mullvad_account"),
         _rule5(

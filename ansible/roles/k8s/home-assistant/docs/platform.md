@@ -40,6 +40,18 @@ automations do.
   `/config/custom_components/` or `/config/www/`, which are PVC state — the repo has no init
   pattern that declares one, so every HACS package here is a one-time dashboard action and
   survives only because the Longhorn PVC does. Record any such install in this file.
+- **Two files reach `/config` from Secrets, not from git.** The `config-install` init container
+  installs `secrets.yaml` from the `home-assistant-secrets` Secret, which
+  `templates/config/secrets.yaml.j2` renders, and `google_service_account.json` from the
+  `home-assistant-google-sa` Secret, which `templates/google-sa-secret.yaml.j2` renders from
+  the SOPS key `google_assistant_service_account`. Both Secrets mount at `/sec` through one
+  projected volume. `configuration.yaml` reads the second with `service_account: !include
+  google_service_account.json`, the form HA documents, and the integration ignores the JSON's
+  fields other than `client_email` and `private_key`. `project_id` comes from its own SOPS
+  key, `google_assistant_project_id`, through `secrets.yaml`. The service account has a Secret
+  of its own because the value is multi-line, and a Flux placeholder cannot carry a newline
+  (target slice R2, PR 5). `validate_ha_config.py` loads the include as a placeholder, as it
+  does a `!secret` value, because the repo holds no copy of the file.
 
 - **`logger:` silences `pychromecast.controllers` at `critical` (2026-09-27, issue #2781).**
   pychromecast's homeassistant controller hands the Nest Hub Max HA's `external_url`, the

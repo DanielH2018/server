@@ -16,6 +16,7 @@ import pytest
 
 from lib.proc_testing import fake_bin
 from renderer import homelab_render, shadow_diff
+from renderer.renderer_lib.cluster import render_tag
 from renderer.renderer_lib.flux_probe import RESOLVER_CORPUS, TYPES_FIXTURE_MANIFEST
 from renderer.renderer_lib import roundtrip
 from renderer.renderer_lib.placeholders import read_guard_map
@@ -113,9 +114,11 @@ def test_roundtrip_over_equal_renders_is_clean(flux_on_path, tmp_path, capsys):
         assert summary.startswith(
             "roundtrip: 1 tags, 0 deferred directories, 1 substituting,"
         )
-    assert first.endswith(" 0 differences, with each key's R1 stub")
+    assert first.endswith(
+        " 0 differences, 0 documents in render_sops_manifests, with each key's R1 stub"
+    )
     assert second.endswith(
-        " 0 differences, with every key outside the standalone guard 0123"
+        " 0 differences, 0 documents in render_sops_manifests, with every key outside the standalone guard 0123"
     )
 
 
@@ -166,10 +169,12 @@ def test_a_standalone_use_outside_the_map_is_flagged_in_the_0123_pass(
     args = ("--role", "homepage", "--guard-map", str(tmp_path / "empty.json"))
     assert _main("roundtrip", "--out", str(out), *args) == 1
     printed = capsys.readouterr().out.splitlines()
-    assert printed[0].endswith(" 0 differences, with each key's R1 stub")
+    assert printed[0].endswith(
+        " 0 differences, 0 documents in render_sops_manifests, with each key's R1 stub"
+    )
     assert printed[1] == "homepage: IngressRoute/homelab/homepage differs"
     assert printed[2].endswith(
-        " 1 differences, with every key outside the standalone guard 0123"
+        " 1 differences, 0 documents in render_sops_manifests, with every key outside the standalone guard 0123"
     )
 
 
@@ -332,3 +337,43 @@ def test_fluxprobe_where_the_resolver_and_the_cli_disagree_is_flagged(
     assert len(failed) == 1, failed
     assert failed[0].startswith(f"FAIL resolver {value!r}: ")
     assert failure in failed[0]
+
+
+def test_roundtrip_drops_one_document_per_sops_manifest_entry_is_clean(
+    flux_on_path, tmp_path, capsys
+):
+    # home-assistant's render_sops_manifests names google-sa-secret.yaml, which placeholder
+    # mode never emits, so the stub side drops it too and counts its one Secret.
+    out = tmp_path / "rt"
+    assert _main("roundtrip", "--out", str(out), "--role", "home-assistant") == 0
+    printed = capsys.readouterr().out
+    assert printed.count(" 0 differences, 1 documents in render_sops_manifests, ") == 2
+    assert not (
+        out / "stub" / "cluster" / "home-assistant" / "google-sa-secret.yaml"
+    ).exists()
+
+
+def test_roundtrip_dropping_a_document_more_than_the_entries_is_flagged(
+    flux_on_path, tmp_path
+):
+    def two_documents(tag, values):
+        rendered = render_tag(tag, values)
+        extra = rendered.files["google-sa-secret.yaml"]
+        rendered.files["google-sa-secret.yaml"] += "---\n" + extra.replace(
+            "home-assistant-google-sa", "home-assistant-hidden"
+        )
+        return rendered
+
+    keys = homelab_render.secret_keys()
+    passes = stub_passes(shadow_diff.stub_vars(), keys, guarded_keys(read_guard_map()))
+    sides = render_sides(
+        tmp_path / "rt", ["home-assistant"], keys, passes, two_documents
+    )
+
+    report = compare_sides(sides, passes[0], flux_on_path)
+    assert report.differences == []
+    assert report.exit_code() == 1
+    assert (
+        "roundtrip: dropped 2 documents for 1 render_sops_manifests entries; each entry "
+        "is one document"
+    ) in report.lines()

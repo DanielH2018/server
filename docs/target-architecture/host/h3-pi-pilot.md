@@ -4,6 +4,8 @@ Status: IN PROGRESS
 
 PR H3.1, the renderer's host and package modes: [#4911](https://github.com/DanielH2018/server/pull/4911).
 PR H3.2a, the updater package: [#4917](https://github.com/DanielH2018/server/pull/4917).
+PR H3.2b, the reconcile unit: [#4927](https://github.com/DanielH2018/server/pull/4927).
+PR H3.2c, the censuses and the unit validator: [#4935](https://github.com/DanielH2018/server/pull/4935).
 
 Depends on: R1
 Unblocks: H4, H5

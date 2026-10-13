@@ -9,9 +9,11 @@ cluster.
 Without `--secret-stubs`, `cluster` renders in placeholder mode (target slice R2): every secret
 reference renders as `${<key>}`, and a directory whose render holds one escapes every other `$`
 Flux would read as syntax. `renderer_lib/placeholders.py` holds the passes and the per-directory
-key sets, and placeholder mode skips the tags in its `PLACEHOLDER_DEFERRED`. Before it writes
-anything, a placeholder render refuses a tag marked `owner: flux` that reads a pinned live-read
-fact, and runs the five secret rules of `renderer_lib/secret_checks.py`.
+key sets, and placeholder mode skips the tags in its `PLACEHOLDER_DEFERRED`. Placeholder mode
+leaves out each role's `render_sops_manifests` files, and the `sops-manifest-entries` check of
+`renderer_lib/sops_entries.py` holds those lists before anything is written. Before it writes
+anything, a placeholder render also refuses a tag marked `owner: flux` that reads a pinned
+live-read fact, and runs the five secret rules of `renderer_lib/secret_checks.py`.
 
 `host --host NAME` renders `hosts/NAME/package.yml` into `DIR/hosts/NAME/`, and `package --name
 PKG` renders the shared package `hosts/packages/PKG/` into `DIR/packages/PKG/`. Each writes
@@ -34,9 +36,9 @@ Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-rend
 """
 
 import os
-from collections.abc import Callable
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 import sys as _sys
@@ -59,9 +61,11 @@ from renderer.renderer_lib.cluster import (
 )
 from renderer.renderer_lib.context import load_stubs
 from renderer.renderer_lib.host import render_host, render_package, write_packages
+from renderer.renderer_lib.sops_entries import sops_manifest_entries
 from renderer.renderer_lib.task_inputs import PinnedFact
 from renderer.renderer_lib.placeholders import (
     Mode,
+    PlaceholderRender,
     pinned_fact_refusals,
     render_placeholders,
     select_mode,
@@ -93,6 +97,7 @@ def cluster(
     out: Path,
     roles: list[str] | None,
     secret_stubs: Path | None,
+    render: Callable[[list[str], list[str]], PlaceholderRender] = render_placeholders,
     flux_owned: Callable[[], set[str]] = flux_owned_tags,
     pinned: dict[str, PinnedFact] | None = None,
     known: frozenset[secret_checks.Violation] = secret_checks.KNOWN_VIOLATIONS,
@@ -103,13 +108,14 @@ def cluster(
         out: The directory to write.
         roles: The tags to render, or None for every render target.
         secret_stubs: The stub file of a stub-mode render, or None for placeholder mode.
+        render: The placeholder render; a test replaces it with one over fixture sets.
         flux_owned: Returns the tags marked `owner: flux`; a test passes fixture tags.
         pinned: The pinned live-read facts the refusal reads, `PINNED_LIVE_FACTS` when None.
         known: The ratchet the secret checks hold the render to; a test passes another.
     """
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
         return _stub_cluster(out, roles, secret_stubs)
-    return _placeholder_cluster(out, roles, flux_owned, pinned, known)
+    return _placeholder_cluster(out, roles, render, flux_owned, pinned, known)
 
 
 def _stub_cluster(out: Path, roles: list[str] | None, secret_stubs: Path) -> int:
@@ -141,6 +147,7 @@ def _stub_cluster(out: Path, roles: list[str] | None, secret_stubs: Path) -> int
 def _placeholder_cluster(
     out: Path,
     roles: list[str] | None,
+    render: Callable[[list[str], list[str]], PlaceholderRender],
     flux_owned: Callable[[], set[str]],
     pinned: dict[str, PinnedFact] | None,
     known: frozenset[secret_checks.Violation],
@@ -158,11 +165,14 @@ def _placeholder_cluster(
                 )
             return RENDER_FAILED
         keys = secret_keys()
-        result = render_placeholders(tags, keys)
+        result = render(tags, keys)
         if not result.tags:
             raise RenderRefused(
                 f"every requested tag is in PLACEHOLDER_DEFERRED: {result.skipped}"
             )
+        problems = sops_manifest_entries(result, keys)
+        if problems:
+            raise RenderError("\n".join(problems))
         report = secret_checks.check(result, keys, known)
         if not report.ok():
             print("\n".join(report.lines()), file=sys.stderr)
