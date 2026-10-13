@@ -233,9 +233,16 @@ def handle_broad(
     for broad in plans:
         playbook, tags = broad.playbook, broad.tags
         if broad.deferred:
-            # Nothing ran, so no receipt, no hold cleared and no line cleared: an empty tag
-            # list in the receipt reads as "the whole play ran" to land.sh (#4333).
-            # `apply_broad_k8s` records what it owes.
+            # Nothing ran, so no `applied` entry, no hold cleared and no line cleared: an
+            # empty tag list there reads as "the whole play ran" to land.sh (#4333).
+            # `apply_broad_k8s` records what it owes in the ledger. The receipt records the
+            # same set under `deferred`, scoped to this range, so land.sh can tell this
+            # deferral from a range something else fast-forwarded, and can still tell once
+            # every line has discharged (#4843).
+            owed = deploy_broad_k8s.deferred_owed(broad, plan.k8s_services)
+            state.record_receipt(
+                origin, target.local, deferred={playbook: sorted(owed)}
+            )
             continue
         try:
             if broad.apply:

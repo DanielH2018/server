@@ -35,7 +35,9 @@ RECEIPTS = MARKERS["receipts"]
 RECEIPT_BASE = "b" * 40
 
 
-def receipt(applied: dict[str, list[str]], manual=None, origin: str = "f" * 40) -> dict:
+def receipt(
+    applied: dict[str, list[str]], manual=None, origin: str = "f" * 40, deferred=None
+) -> dict:
     """A `state` holding the receipt of the tick that crossed the merge commit.
 
     Args:
@@ -43,9 +45,11 @@ def receipt(applied: dict[str, list[str]], manual=None, origin: str = "f" * 40) 
         manual: setup role tag -> its narrowest tags, for each role left to a hand.
         origin: the SHA the tick crossed to; `Fakes.is_ancestor_rc` decides whether it
             contains the merge commit.
+        deferred: playbook -> the services a refused narrowing owed instead (#4843).
     """
     line = {"origin": origin, "base": RECEIPT_BASE, "applied": applied}
-    return {RECEIPTS: json.dumps({**line, "manual": manual or {}})}
+    line |= {"manual": manual or {}, "deferred": deferred or {}}
+    return {RECEIPTS: json.dumps(line)}
 
 
 # A real directory, because the pipeline refuses a primary checkout that is not one. Made

@@ -240,7 +240,7 @@ def unrecorded_apply_note(behind_since: str | None) -> str:
     )
 
 
-def deferred_plane_note(lines: int) -> str:
+def deferred_plane_note(owed: int | None) -> str:
     """What "no broad apply covers this PR" means when the tick deferred the deploy plane.
 
     The tick fast-forwarded this PR itself, could not narrow its deploy plane, and recorded
@@ -252,15 +252,16 @@ def deferred_plane_note(lines: int) -> str:
     state, so they cannot drift.
 
     Args:
-      lines: how many `k8s_unapplied` lines the deferral left, counted from the PR's merge
-        commit onwards.
+      owed: how many of the deferred services still hold a ledger line, or None when the
+        ledger could not be read.
     """
+    count = "an unknown number" if owed is None else str(owed)
     return (
         "  The tick fast-forwarded this PR but could not narrow its deploy plane, so it "
-        f"deferred the plane: {lines} k8s_unapplied line(s) are owed instead of a whole "
-        "ansible/deploy.yml run.\n"
-        "  Each line discharges once a `./scripts/deploy.sh --tags <service>` deploy or the "
-        "render proof covers it. List them with "
+        f"deferred the plane to the k8s_unapplied ledger: {count} of its services are still "
+        "owed, instead of a whole ansible/deploy.yml run.\n"
+        "  Each discharges once a `./scripts/deploy.sh --tags <service>` deploy or the "
+        "render proof covers it, and the plane is applied when none is left. List them with "
         "`uv run python scripts/diagnostics/probe.py gitops-state`."
     )
 

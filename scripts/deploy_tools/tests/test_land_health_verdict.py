@@ -244,11 +244,13 @@ def test_an_apply_recorded_at_a_commit_without_this_pr_is_not_settled(landing):
 
 
 # The tick's own deferral of a deploy plane it could not narrow (#4333): the range is
-# merged, no `deploy.yml` receipt entry is written, and each reachable service is owed.
-DEFERRED_AT = "d" * 40
-DEFERRED_PLANE = {
+# merged, its receipt applies nothing and records the owed services under `deferred`, and
+# each of them holds a `k8s_unapplied` line until a deploy or the render proof covers it.
+OWED = ("sonarr", "radarr")
+DEFERRED_RECEIPT = receipt({}, deferred={"ansible/deploy.yml": list(OWED)})
+OWED_LINES = {
     MARKERS["owed"]: "\n".join(
-        owed_line(OWED_K8S_UNAPPLIED, s, DEFERRED_AT, 1.0) for s in ("sonarr", "radarr")
+        owed_line(OWED_K8S_UNAPPLIED, s, "d" * 40, 1.0) for s in OWED
     )
 }
 # The remedy `land_tags.broad_remediation` derives for a deploy-plane path.
@@ -256,17 +258,15 @@ DEPLOY_PLANE_COMMAND = (
     "`git merge --ff-only origin/master` FIRST, then "
     "`uv run ansible-playbook ansible/deploy.yml`"
 )
+DEPLOY_PLANE_PATH = "ansible/filter_plugins/toposort.py"
 
 
-def _deferred(landing, pr_path: str, **fakes):
-    """A converged tick with no receipt for a PR changing `pr_path`, the deferral recorded."""
+def _deferred(landing, state: dict, pr_path: str = DEPLOY_PLANE_PATH):
+    """A converged tick, the deployer's markers `state`, for a PR changing `pr_path`."""
     ln, _ = _deployed(
         landing,
         Fakes(
-            self_applied=True,
-            self_applied_command=DEPLOY_PLANE_COMMAND,
-            state=DEFERRED_PLANE,
-            **fakes,
+            self_applied=True, self_applied_command=DEPLOY_PLANE_COMMAND, state=state
         ),
     )
     ln.classification = replace(ln.classification, pr_paths=(pr_path,))
@@ -277,33 +277,61 @@ def test_a_deploy_plane_the_tick_deferred_prints_the_deferral_not_deploy_yml(
     landing, capsys
 ):
     """#4843: the ledger lines are the remedy, not a whole deploy.yml after an ff-merge."""
-    ln = _deferred(landing, "ansible/filter_plugins/toposort.py")
+    ln = _deferred(landing, DEFERRED_RECEIPT | OWED_LINES)
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     out = capsys.readouterr().out
     assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
-    assert "deferred the plane: 2 k8s_unapplied line(s) are owed" in out
+    assert "k8s_unapplied ledger: 2 of its services are still owed" in out
     assert "probe.py gitops-state" in out
     assert "Apply it:" not in out
     assert "ff-only" not in out
     assert "never see this range again" not in out
 
 
+def test_a_deferred_plane_whose_services_all_discharged_is_settled(landing):
+    """The receipt outlives the lines, so a re-run after the render proof reads applied."""
+    ln = _deferred(landing, DEFERRED_RECEIPT)
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (0, "settled")
+
+
+def test_a_deferred_plane_with_an_unreadable_ledger_still_names_the_deferral(
+    landing, capsys
+):
+    """An unread count proves nothing either way: not settled, and not stranded either."""
+    ln = _deferred(landing, DEFERRED_RECEIPT)
+    ln.tools.read_state = lambda root, name: (
+        None if name == MARKERS["owed"] else DEFERRED_RECEIPT.get(name, "")
+    )
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    out = capsys.readouterr().out
+    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+    assert "an unknown number of its services are still owed" in out
+    assert "Apply it:" not in out
+
+
 @pytest.mark.parametrize(
-    "pr_path, fakes",
+    "state, pr_path",
     [
-        # The lines were recorded before this PR merged, so they are not its deferral.
-        ("ansible/filter_plugins/toposort.py", {"is_ancestor_of": {DEFERRED_AT: 1}}),
-        # A setup-plane PR owes `initial_setup.yml`; a later tick's line proves nothing.
-        ("ansible/roles/setup/renovate_agent/tasks/main.yml", {}),
+        # Another session's ff-merge crossed the PR, so no receipt; a later tick owes
+        # unrelated services at origins past the merge. That is not this PR's deferral.
+        (OWED_LINES, DEPLOY_PLANE_PATH),
+        # A setup-plane PR owes `initial_setup.yml`, whatever its range's receipt deferred.
+        (
+            DEFERRED_RECEIPT | OWED_LINES,
+            "ansible/roles/setup/renovate_agent/tasks/main.yml",
+        ),
     ],
-    ids=["lines-predate-the-merge", "setup-plane-pr"],
+    ids=["no-receipt-later-lines", "setup-plane-pr"],
 )
 def test_a_range_the_tick_did_not_defer_keeps_the_stranded_remedy(
-    landing, capsys, pr_path, fakes
+    landing, capsys, state, pr_path
 ):
-    """A `k8s_unapplied` line past the merge is not evidence of THIS PR's deferral."""
-    ln = _deferred(landing, pr_path, **fakes)
+    """Only the receipt of the range that crossed the merge names this PR's deferral."""
+    ln = _deferred(landing, state, pr_path)
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     out = capsys.readouterr().out

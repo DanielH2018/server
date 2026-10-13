@@ -49,19 +49,29 @@ def covered_by_plane(plans, bumps: set[str]) -> set[str]:
     return set()
 
 
+def deferred_owed(broad, declared: set[str]) -> set[str]:
+    """The services a deferred deploy plane owes; empty for a plan that was not deferred.
+
+    The refusal's own tags when it named them, else every declared service, because the
+    derivation could rule none out. Intersected with `declared`, the entries this host
+    deploys: a Pi service has no deploy here to discharge its line. `fold_deferred` records
+    this set in the ledger and `handle_broad` in the range's receipt, so the two agree.
+    """
+    if not broad.deferred:
+        return set()
+    return (set(broad.owed) or set(declared)) & declared
+
+
 def fold_deferred(cs: ChangeSet, plans, declared: set[str]) -> ChangeSet:
     """`cs` with the services a deferred deploy plane owes added to `cs.k8s` (#4333).
 
     A refused narrowing applies nothing, so what it may reach joins the k8s roles this tick
     merged and did not apply, and `alert_and_record_deferred` records and pages them as one
-    set. The refusal's own tags when it named them, else every declared service, because
-    the derivation could rule none out. Intersected with `declared`, the entries this host
-    deploys: a Pi service has no deploy here to discharge its line.
+    set.
     """
     owed: set[str] = set()
     for broad in plans:
-        if broad.deferred:
-            owed |= (set(broad.owed) or set(declared)) & declared
+        owed |= deferred_owed(broad, declared)
     if not owed:
         return cs
     log(

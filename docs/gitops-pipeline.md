@@ -218,9 +218,11 @@ under `uv run --no-project`. The journal names the outcome on every tick:
   until a hand cleared it. A refusal now fast-forwards and records each service it may reach
   as a `k8s_unapplied` line, which names the `--tags` command and discharges itself once a
   deploy carries the change. The fleet-coverage refusal prints the tags it reached beside its
-  exit 3, so only those are recorded; any other refusal records every declared service. No
-  receipt is written for the plane, so `land.sh` reports `needs-manual-apply` rather than
-  reading it as applied.
+  exit 3, so only those are recorded; any other refusal records every declared service. The
+  receipt applies nothing for the plane and records the same services under `deferred`.
+  `land.sh` reads that key, scoped to the range that crossed the PR. While any of those
+  services still holds a ledger line it reports `needs-manual-apply` and names the deferral
+  rather than a whole `deploy.yml`. Once none does, it reads the plane as applied (#4843).
 
 `narrow` is read-only and can be run by hand against any range. The rules it applies, and what
 each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
