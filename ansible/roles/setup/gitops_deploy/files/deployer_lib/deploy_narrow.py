@@ -68,6 +68,8 @@ SHARED_CALLERS_TIMEOUT_S = 30.0
 SHARED_CALLERS_SCRIPT = "scripts/deploy_tools/shared_role_callers.py"
 # Which own roles a render digest can prove (#3110); one YAML walk per role, same budget.
 DIGEST_PROVABLE_SCRIPT = "scripts/deploy_tools/digest_provable.py"
+# Which ranges a render covers for a role that is not provable (#4781); nine took 0.65s.
+DIGEST_COVERS_SCRIPT = "scripts/deploy_tools/digest_covers.py"
 
 
 class BroadPlan(NamedTuple):
@@ -249,6 +251,17 @@ def digest_provable(repo: str, roles) -> set[str]:
 def digest_provable_argv(roles) -> list[str]:
     """The command `digest_provable` runs, split out for the reason `narrow_setup_argv` is."""
     return ["uv", "run", "--frozen", "python", DIGEST_PROVABLE_SCRIPT, *sorted(roles)]
+
+
+def digest_covers(repo: str, items) -> set[str]:
+    """Which `ROLE:BASE:HEAD` items a render covers (#4781), raising what `digest_provable` does."""
+    out = _role_json(repo, digest_covers_argv(items))
+    return {item for item, ok in out.items() if ok is True}
+
+
+def digest_covers_argv(items) -> list[str]:
+    """The command `digest_covers` runs, split out for the reason `narrow_setup_argv` is."""
+    return ["uv", "run", "--frozen", "python", DIGEST_COVERS_SCRIPT, *sorted(items)]
 
 
 def _role_json(repo: str, argv: list[str]) -> dict:
