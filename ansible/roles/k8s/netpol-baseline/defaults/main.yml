@@ -69,8 +69,11 @@ netpol_baseline_obs_enforced: true
 netpol_baseline_obs_scope: namespace
 
 # Observability's expected exempt set, reconciled against the cluster by the same gate the
-# homelab baseline gets. Empty, and empty deliberately: nothing in this namespace has a bespoke
-# policy to be fenced by, so a pod carrying `netpol-baseline-exempt` here is fenced by NOTHING.
+# homelab baseline gets. Empty, and empty deliberately. Most workloads here have no bespoke
+# policy, so exempting one leaves it fenced by NOTHING. The three that do (prometheus, loki,
+# alertmanager) carry additive grants to named homelab callers, so exempting one of them drops
+# the baseline's traefik, intra-namespace and node-CIDR peers and cuts its in-namespace callers.
+# tasks/main.yml has the long form above the observability exempt-set read.
 # Declared as a variable rather than hardcoding `== []` in the assert so that adding an
 # observability exemption is one edit in the same place as the homelab one, and so the failure
 # message can name what was expected.
