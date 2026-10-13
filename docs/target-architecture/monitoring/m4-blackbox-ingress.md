@@ -310,10 +310,13 @@ only when all three conditions hold:
    matching with `on()`.
 
 Conditions 1 and 2 tie the real input series to `service`. Condition 3 proves the expression
-keeps it. M1 convention 2 already asks each firing case to assert `service`, but no check in
-M1's `alert_rules.py` list enforces that. PR 2 enforces it for this source only. *Open
-questions* item 5 raises the matching gaps in M1 convention 3 and C7, and asks M1 to enforce
-convention 2 for every alert.
+keeps it. M1 convention 2 asks each firing case to assert `service`. M1 enforces a weaker
+form: `scripts/validate/alert_conventions.py:rule_test_problems` flags an alert only when no
+firing case lists both `service` and `severity` in every `exp_alerts` entry, so one asserting
+case passes the alert however many other cases omit `service`. PR 2 requires every
+`exp_alerts` entry to list `service`, for this source only. *Open questions* item 5 raises the
+matching gaps in M1 convention 3 and C7, and asks whether M1 should require every entry for
+every alert.
 
 ### The rules
 
@@ -964,10 +967,13 @@ turns Kuma's Cluster Scrape Targets tile red and fires `BlackboxExporterDown`.
    convention 3 names two sources: a literal, or a join to M2's recording rules. A scrape
    target's label is a third, and PR 2 adds it to `alert_rules.py`. M6 raises the same gap for
    its exporters ([M6](m6-retire-kuma.md), *Open questions* item 2). M1 convention 2 asks each
-   firing case to assert `service`, and no check in M1's `alert_rules.py` enforces it.
+   firing case to assert `service`. M1's `rule_test_problems` enforces it for SOME firing
+   case: an alert passes once one case lists `service` and `severity` in every `exp_alerts`
+   entry. It does not require every `exp_alerts` entry of every case to list `service`.
    Resolution: C7 and M1 convention 3 add "a target label that the scrape config sets on
-   every target of the job". M1's `alert_rules.py` then checks every alert's firing case for
-   `service` in `exp_labels`, which PR 2 checks for the third source only.
+   every target of the job". The open question is whether M1's `alert_rules.py` then
+   requires `service` in every `exp_alerts` entry for every alert, the rule PR 2 applies to
+   the third source only.
 6. **M1 convention 5 and the single cutover commit.** The convention says the cutover drops
    `shadow` and deletes the Kuma producer in the same commit. One landing cannot order the two
    deploys (Baseline), so this plan cuts over in two PRs. Resolution: M1 amends convention 5 to

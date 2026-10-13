@@ -16,8 +16,9 @@ deploy that adds a tile — so a reconcile that compared only the list would loo
 forever and cover a shrinking set.
 
 The window is DERIVED from the reboot cron, never written twice. `window.json` carries the
-four `weekly_reboot_*` values out of group_vars/all.yml plus this role's lead and recovery
-allowance; the cron expression and the duration below are computed from them, so moving the
+four `weekly_reboot_*` values out of group_vars/all.yml plus the lead and recovery allowance,
+`weekly_reboot_mute_lead_minutes` and `weekly_reboot_mute_recovery_minutes`, from the same
+file; Alertmanager's `weekly-reboot` mute reads those two as well. The cron expression and the duration below are computed from them, so moving the
 reboot moves the window.
 
 `--out` is written ONLY when the live window differs from the derived one, and the apply
