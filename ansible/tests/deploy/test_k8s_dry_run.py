@@ -36,6 +36,7 @@ from _role_census import role_dirs, role_task_files
 # The `when:`-coverage scanners, shared with test_k8s_dry_run_host_writes.py beside this file.
 from _k8s_guards import (
     _GUARD_FACT,
+    _chunk_mutates,
     _guard_covered_files,
     _role_with_tasks,
     _task_chunks,
@@ -207,43 +208,6 @@ def test_dry_run_defaults_off() -> None:
         "k8s_dry_run must default false — it is opt-in. A default-true would stop every real "
         "deploy, including gitops-deploy.service, while reporting success."
     )
-
-
-# Mutating verbs, as they appear after `kubectl` (optionally after `-n <ns>`). `create` and
-# `delete` need the trailing space so `--create-annotation` and the like do not match.
-#
-# `run` schedules a pod, `--rm` or not (#4569). It is anchored to the subcommand position,
-# right after `kubectl` and an optional `-n <ns>`, because a chunk keeps its comments and
-# "a dry run" is common prose in a task that only calls `kubectl get`.
-_MUTATES = re.compile(
-    r"kubectl\b[^\n]*?\b(apply|create |delete |replace|scale |rollout restart|exec -i|patch )"
-    r"|kubectl\s+(?:-n\s+(?:\{\{[^}]*\}\}|\S+)\s+)?run\s"
-)
-
-# A plain `kubectl exec <pod> -- <cmd>` (no `-i`) is only a mutation if <cmd> itself writes.
-# `exec` alone also covers read probes (tdarr's/jellyfin's device checks, VAAPI encodes to
-# /dev/null, `id`/`ls`/`cat`/curl GETs, janitorr's reachability check) that must not trip this.
-# Curated from what the repo's exec payloads actually do, not a bare filesystem-verb scan:
-# touch/mkdir/ln/mv/cp/tee/chmod/chown/dd write to a mounted volume (tdarr's write probe,
-# janitorr's leaving-soon symlink); a bare `rm` does too, but needs a word boundary so it can't
-# match inside `warm`/`germ`-shaped tokens; `cscli … create|delete|add|remove` and `pihole -g`
-# write to the tool's own state (crowdsec's allowlists, pihole's gravity rebuild).
-_EXEC_WRITE = re.compile(
-    r"\b(touch|mkdir|ln -s\w*|rm|mv|cp|tee|chmod|chown|dd)\b"
-    r"|cscli \S+ (create|delete|add|remove)\b"
-    r"|pihole -g\b"
-)
-
-# A plain `exec` (not `-i`) that isn't already caught by _MUTATES.
-_BARE_EXEC = re.compile(r"kubectl\b[^\n]*\bexec\s+(?!-i\b)\S")
-
-
-def _chunk_mutates(chunk: str) -> bool:
-    if "--dry-run=client" in chunk:
-        return False
-    if _MUTATES.search(chunk):
-        return True
-    return bool(_BARE_EXEC.search(chunk) and _EXEC_WRITE.search(chunk))
 
 
 def _mutates_outside_manifests(role: Path) -> bool:
