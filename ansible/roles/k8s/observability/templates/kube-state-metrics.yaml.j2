@@ -28,12 +28,13 @@ metadata:
   namespace: {{ k8s_observability_namespace }}
 automountServiceAccountToken: true
 ---
-# Scoped to the resource types --resources= below actually collects, rather than the
-# upstream manifest's blanket grant across ~20 API groups. kube-state-metrics reads object
-# SPEC and STATUS cluster-wide, so every resource added here is a resource it can enumerate;
-# a Secret or ConfigMap grant would let it read their contents. Keep this list and the
-# --resources flag in step — a grant without a matching flag is unused privilege, and a flag
-# without a grant makes the collector log list/watch RBAC errors every resync.
+# Scoped to the resource types --resources= below actually collects, plus the Flux kinds
+# --custom-resource-state-config reads, rather than the upstream manifest's blanket grant
+# across ~20 API groups. kube-state-metrics reads object SPEC and STATUS cluster-wide, so every
+# resource added here is a resource it can enumerate; a Secret or ConfigMap grant would let it
+# read their contents. Keep this list in step with both arguments — a grant without a matching
+# argument is unused privilege, and an argument without a grant makes the collector log
+# list/watch RBAC errors every resync.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -58,6 +59,19 @@ rules:
   # material; this is spec+status on a cluster-scoped resource the readonly SA already lists.
   - apiGroups: [""]
     resources: [nodes]
+    verbs: [list, watch]
+  # The two Flux kinds in observability_ksm_flux_resource_state (defaults/main.yml), for
+  # gotk_resource_info. The custom-resource-state collector also watches the CRDs themselves, to
+  # start a kind's reflector once its CRD exists, so it needs customresourcedefinitions too. A CRD
+  # is a schema, and the read-only kubectl identity already lists them.
+  - apiGroups: [kustomize.toolkit.fluxcd.io]
+    resources: [kustomizations]
+    verbs: [list, watch]
+  - apiGroups: [source.toolkit.fluxcd.io]
+    resources: [ocirepositories]
+    verbs: [list, watch]
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
     verbs: [list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -97,14 +111,19 @@ spec:
         - name: kube-state-metrics
           image: {{ observability_k8s_kube_state_metrics_image }}
           args:
-            # Must match the ClusterRole above. Restricting the set also drops the metric
-            # cardinality this stack has no use for.
+            # Must match the ClusterRole above, as must --custom-resource-state-config below.
+            # Restricting the set also drops the metric cardinality this stack has no use for.
             - --resources=pods,deployments,replicasets,statefulsets,daemonsets,nodes
             # homelab/role and kustomize.toolkit.fluxcd.io/name name the deploy tag that applied
             # a Deployment or DaemonSet. They reach Prometheus as label_homelab_role and
             # label_kustomize_toolkit_fluxcd_io_name on kube_<kind>_labels, which the
             # workload-service recording rules read.
             - --metric-labels-allowlist=pods=[app],deployments=[app,homelab/role,kustomize.toolkit.fluxcd.io/name],daemonsets=[homelab/role,kustomize.toolkit.fluxcd.io/name]
+            # gotk_resource_info for the Flux kinds. Inline rather than a ConfigMap, so the config
+            # sits in the pod template and a change to it rolls this Deployment through the apply.
+            # Quoted as one JSON string, because to_json emits `": "`, which a plain YAML scalar
+            # cannot hold. The kinds are added to the collected set whatever --resources says.
+            - {{ ('--custom-resource-state-config=' ~ (observability_ksm_flux_resource_state | to_json)) | to_json }}
           ports:
             - name: metrics
               containerPort: 8080

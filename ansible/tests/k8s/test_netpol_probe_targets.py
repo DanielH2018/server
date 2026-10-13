@@ -27,9 +27,8 @@ TASK_CODE = "\n".join(
     line for line in TASKS.splitlines() if not line.lstrip().startswith("#")
 )
 PROBE_TEMPLATE = "netpol-probe-job.yaml.j2"
-TARGETS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())[
-    "netpol_baseline_probe_targets"
-]
+DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
+TARGETS = DEFAULTS["netpol_baseline_probe_targets"]
 OBS_NAMESPACE = yaml_fast.safe_load(ALL_VARS.read_text())["k8s_observability_namespace"]
 
 # traefik is the control leg: open to every source by design, so it needs no gate.
@@ -37,15 +36,16 @@ _UNGATED_BY_DESIGN = {"traefik"}
 _DIAL = re.compile(r"nc -w (\d+) -z (\S+) (\d+)")
 
 
-def _job(enforced: bool = True, obs_enforced: bool = True) -> dict:
-    text = render_role_template(
-        "netpol-baseline",
-        PROBE_TEMPLATE,
-        {
-            "netpol_baseline_enforced": enforced,
-            "netpol_baseline_obs_enforced": obs_enforced,
-        },
-    )
+def _job(
+    enforced: bool = True, obs_enforced: bool = True, targets: list[dict] | None = None
+) -> dict:
+    overrides = {
+        "netpol_baseline_enforced": enforced,
+        "netpol_baseline_obs_enforced": obs_enforced,
+    }
+    if targets is not None:
+        overrides["netpol_baseline_probe_targets"] = targets
+    text = render_role_template("netpol-baseline", PROBE_TEMPLATE, overrides)
     return yaml_fast.safe_load(text)
 
 
@@ -144,8 +144,53 @@ def test_each_lever_renders_only_its_own_plane() -> None:
     assert homelab <= _dialled_services(only_homelab)
 
 
+def test_the_flux_system_rows_run_with_both_levers_off() -> None:
+    """The flux role owns flux-system's fence, so neither of this role's levers turns its rows
+    off. With both off, the Job dials the flux-system rows and nothing else in the table."""
+    flux = {r["service"] for r in TARGETS if r["plane"] == "flux-system"}
+    assert flux >= {"source-controller", "notification-controller", "webhook-receiver"}
+
+    dialled = _dialled_services(_script(_job(enforced=False, obs_enforced=False)))
+    others = {
+        r["service"] for r in TARGETS if r["plane"] != "flux-system" and "expect" in r
+    }
+    assert flux <= dialled
+    assert not others & dialled, f"rows ran with their lever off: {others & dialled}"
+
+
+def test_every_plane_names_a_namespace() -> None:
+    """The gate reads a row's EndpointSlice in `netpol_baseline_probe_namespaces[plane]`, so a
+    plane missing from the map fails the deploy at the gate rather than in a render."""
+    assert "netpol_baseline_probe_namespaces[item.plane]" in TASK_CODE
+    planes = {r["plane"] for r in TARGETS}
+    assert planes == {"homelab", "observability", "flux-system"}
+    assert planes <= set(DEFAULTS["netpol_baseline_probe_namespaces"])
+
+
+def _dials(script: str) -> set[tuple[str, str]]:
+    return {(host, port) for _w, host, port in _DIAL.findall(script)}
+
+
+def test_a_service_port_row_dials_the_service_port() -> None:
+    """The flux-system Services map port 80 to a different pod port. A leg dialling the pod
+    port reaches no Service port at all, fails `nc`, and so passes as `isolated` whether or not
+    the fence holds."""
+    dials = _dials(_script(_job()))
+    for row in (r for r in TARGETS if "service_port" in r):
+        host = f"{row['service']}.flux-system"
+        assert (host, str(row["service_port"])) in dials, row
+        assert (host, str(row["port"])) not in dials, row
+    # The check above can go red: without `service_port`, the same row dials its pod port.
+    row = next(r for r in TARGETS if r["service"] == "source-controller")
+    bare = {k: v for k, v in row.items() if k != "service_port"}
+    rest = [r for r in TARGETS if r is not row]
+    assert ("source-controller.flux-system", "9090") in _dials(
+        _script(_job(targets=[*rest, bare]))
+    )
+
+
 def test_every_lever_combination_renders_valid_sh() -> None:
-    for enforced, obs in [(True, True), (True, False), (False, True)]:
+    for enforced, obs in [(True, True), (True, False), (False, True), (False, False)]:
         result = subprocess.run(
             ["sh", "-n"],
             input=_script(_job(enforced, obs)),

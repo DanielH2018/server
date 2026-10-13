@@ -118,6 +118,18 @@ pod mapping leaves out Job-owned and ownerless pods outside the add-on namespace
 only while every rendered Job runs under `restartPolicy: Never`, which the
 `job-restart-policy-is-never` row of `ansible/tests/k8s/test_rendered_properties.py` enforces.
 
+## Flux in the metrics plane
+
+The `flux` scrape job reads the three Flux controllers' `http-prom` port and drops every
+`_bucket` series. kube-state-metrics exports `gotk_resource_info` for Kustomizations and
+OCIRepositories from the config in
+`ansible/roles/k8s/observability/defaults/main.yml:observability_ksm_flux_resource_state`.
+That config travels as the `--custom-resource-state-config` argument, not a ConfigMap, so a
+change to it rolls kube-state-metrics through the apply and adds no key for the rolls-one-workload
+guard to track. A kind added to the config needs `list` and `watch` in the ClusterRole beside it;
+`ansible/tests/services/test_ksm_flux_resource_state.py` fails a kind with no grant.
+`docs/flux-deploy-plane.md` has the labels, and why `suspended` is absent rather than `"false"`.
+
 ## Grafana logs in through Authelia (OIDC), and the admin form stays on
 
 Grafana is an OIDC client of the Authelia portal: client `grafana` in

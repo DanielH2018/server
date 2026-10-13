@@ -28,6 +28,63 @@ observability_k8s_grafana_image: grafana/grafana:13.2.3@sha256:b28bae15e219c998f
 # kube_deployment_status_* — the only readiness signal the seven routeless workloads have.
 observability_k8s_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0@sha256:42cfe3723a5f058171c627537fb57a3ea0f26e4380fa18555a95cb1a1b4cfc5b
 
+# kube-state-metrics' custom-resource-state config for the Flux kinds. It produces
+# gotk_resource_info, one series per Kustomization and OCIRepository, which the Flux
+# controllers do not export themselves (docs/flux-deploy-plane.md).
+#
+# kube-state-metrics.yaml.j2 passes it inline as --custom-resource-state-config through
+# to_json, not as a ConfigMap. The config then lives in the pod template, so a change here
+# rolls kube-state-metrics through the apply, and the role gains no ConfigMap key for
+# test_observability_config_rolls_one_workload.py to track.
+#
+# The metric name, the labels and `exported_namespace` follow fluxcd/flux2-monitoring-example,
+# so upstream Flux boards and rules read these series unchanged, with one exception: a
+# Kustomization's `revision` reads status.lastAppliedOriginRevision (`master@sha1:<sha>`), the
+# field contracts.md C6 names, where upstream reads lastAppliedRevision (`prod@sha256:<digest>`),
+# which names no commit.
+#
+# kube-state-metrics drops a label whose path is absent. The flux role omits spec.suspend
+# unless its suspend lever is on, so `suspended` is absent rather than "false" on an object
+# Flux is reconciling, and a rule reading it matches suspended="true".
+#
+# Each kind here needs list and watch in the ClusterRole in kube-state-metrics.yaml.j2.
+observability_ksm_flux_resource_state:
+  kind: CustomResourceStateMetrics
+  spec:
+    resources:
+      - groupVersionKind: {group: kustomize.toolkit.fluxcd.io, version: v1, kind: Kustomization}
+        metricNamePrefix: gotk
+        metrics:
+          - name: resource_info
+            help: The current state of a Flux Kustomization.
+            each:
+              type: Info
+              info:
+                labelsFromPath:
+                  name: [metadata, name]
+            labelsFromPath:
+              exported_namespace: [metadata, namespace]
+              ready: [status, conditions, "[type=Ready]", status]
+              suspended: [spec, suspend]
+              revision: [status, lastAppliedOriginRevision]
+              source_name: [spec, sourceRef, name]
+      - groupVersionKind: {group: source.toolkit.fluxcd.io, version: v1, kind: OCIRepository}
+        metricNamePrefix: gotk
+        metrics:
+          - name: resource_info
+            help: The current state of a Flux OCIRepository.
+            each:
+              type: Info
+              info:
+                labelsFromPath:
+                  name: [metadata, name]
+            labelsFromPath:
+              exported_namespace: [metadata, namespace]
+              ready: [status, conditions, "[type=Ready]", status]
+              suspended: [spec, suspend]
+              revision: [status, artifact, revision]
+              url: [spec, url]
+
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the Claude Code telemetry stack (collector/Loki/Prometheus/Grafana/Tempo/
 # kube-state-metrics/Alertmanager) — a broken deploy blinds this whole diagnostic surface with nothing else

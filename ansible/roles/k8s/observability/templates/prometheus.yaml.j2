@@ -155,6 +155,39 @@ data:
           - source_labels: [__name__]
             action: drop
             regex: kube_replicaset_(annotations|created|labels|metadata_generation|spec_replicas|status_fully_labeled_replicas|status_observed_generation|status_ready_replicas|status_replicas|status_terminating_replicas)
+      # The three Flux controllers' own metrics, on the `http-prom` container port (8080). No
+      # Service exposes that port, so this job discovers the pods, and scrape_jobs.py leaves a
+      # job needing pod discovery hand-written. The flux role's flux-allow-prometheus policy
+      # admits this Prometheus to 8080 and nothing else does. `flux-system` is a literal because
+      # flux_namespace is a flux role default, which this role cannot read.
+      #
+      # Every `_bucket` series is dropped, whatever the family. No rule or board here reads a
+      # Flux histogram, and controller-runtime's workqueue, REST-client and reconcile-time
+      # histograms make up most of what the controllers export. `_count` and `_sum` survive,
+      # so rates and averages stay available. gotk_resource_info, the per-object series the
+      # Flux rules read, comes from the kube-state-metrics job above, not from here.
+      #
+      # `app` and `pod` name the target. Not `controller`, `name`, `kind` or `namespace`: the
+      # controllers' own series carry those, and a target label of the same name would rename
+      # theirs to exported_*.
+      - job_name: flux
+        scrape_interval: 1m
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [flux-system]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            action: keep
+            regex: http-prom
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+        metric_relabel_configs:
+          - source_labels: [__name__]
+            action: drop
+            regex: .+_bucket
       # The plain exporters: a static `<service>.<namespace>.svc:<port>` target with no auth or
       # relabeling. Each is a `metrics` item on its containers_list entry, which is where the
       # port is defined; the owning role reads it back with `metrics_port`, so its Service and

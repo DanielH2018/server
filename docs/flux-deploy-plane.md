@@ -43,6 +43,41 @@ the controllers' metrics port. Upstream's `allow-scraping` and `allow-webhooks` 
 every namespace, so the filter that generates the vendored file drops both. No Receiver exists, so nothing needs the
 webhook port.
 
+netpol-baseline's probe Job tests the fence live on every netpol-baseline deploy. It dials
+source-controller, notification-controller and webhook-receiver from the `homelab` namespace,
+and each connection must be refused. Each of those Services maps port 80 to a named pod port,
+so the probe dials 80. The table row also names the pod port behind it, 9090 for the two
+controllers and 9292 for webhook-receiver. `ansible/roles/k8s/netpol-baseline/CLAUDE.md` has
+the table.
+
+## Metrics
+
+Two sources put Flux in the metrics plane, both in `ansible/roles/k8s/observability/`.
+
+- **The `flux` scrape job** reads each controller's `http-prom` port (8080) every minute. It
+  finds the pods by discovery, because no Service exposes that port. It drops every series
+  whose name ends in `_bucket`, because no rule or board reads a Flux histogram. `_count`
+  and `_sum` survive. `up{job="flux"}` is 1 for each of the three controllers while the scrape
+  works.
+- **kube-state-metrics exports `gotk_resource_info`**, one series per Kustomization and
+  `OCIRepository`, with the labels `name`, `exported_namespace`, `ready`, `suspended` and
+  `revision`. The controllers do not export this series themselves. A Kustomization's
+  `revision` reads `status.lastAppliedOriginRevision`, so it carries `master@sha1:<sha>`, the
+  field [contracts.md C6](target-architecture/contracts.md) names. An `OCIRepository`'s `revision` reads
+  `status.artifact.revision`, the digest form. The config is a defaults variable,
+  `observability_ksm_flux_resource_state`, passed to kube-state-metrics as one argument, so a
+  change to it rolls kube-state-metrics.
+
+**`suspended` is absent, not `"false"`, on an object Flux is reconciling.** kube-state-metrics
+drops a label whose field is absent, and the flux role writes `spec.suspend` only while
+`flux_sync_suspend` is true. A rule about suspension therefore matches `suspended="true"`.
+
+**Series.** The plan estimated under 1,000 series for the `flux` job after the bucket drop.
+`gotk_resource_info` holds one live series per Flux object, two in D1, and each promotion
+adds one short-lived series per object through the `revision` label. Both count against M1's
+fleet budget of 140,000 head series. The measured counts are recorded after the landing
+([#4802](https://github.com/DanielH2018/server/issues/4802)).
+
 ## A `containers_list` change reaches Flux
 
 The flux role reads `containers_list`, because each controller's priority class derives from
