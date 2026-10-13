@@ -1,6 +1,8 @@
 # M3 — One host timer to the textfile collector
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR 1, the textfile collector's live producer named: [#4869](https://github.com/DanielH2018/server/pull/4869) (issue #4855).
 
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover
 
