@@ -842,7 +842,7 @@
  "scripts/deploy_tools/tests/test_shared_role_smoke_caller.py": 0.37,
  "scripts/deploy_tools/tests/test_wrapper_lock_wait_lines.py": 6.1,
  "scripts/dev/tests/test_facts_cli.py": 0.22,
- "scripts/dev/tests/test_fanout_abandon.py": 9.66,
+ "scripts/dev/tests/test_fanout_abandon.py": 2.91,
  "scripts/dev/tests/test_fanout_base_check.py": 1.36,
  "scripts/dev/tests/test_fanout_batch_holds.py": 0.0,
  "scripts/dev/tests/test_fanout_brief.py": 0.0,
