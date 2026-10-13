@@ -264,6 +264,7 @@ observability_rule_groups:
   - k8s-workloads
   - loki-homelab
   - flux
+  - ingress-probes
 
 # The telemetry workloads, as the {kind, name} pairs post_tasks/k8s_stabilise_gate.yml reads.
 # A variable rather than a second inline copy of the list: tasks/main.yml still spells it out

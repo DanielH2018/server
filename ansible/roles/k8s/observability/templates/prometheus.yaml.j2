@@ -245,6 +245,45 @@ data:
           credentials_file: /etc/prometheus-scrape-creds/ha_token
         static_configs:
           - targets: ['home-assistant.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('home-assistant') }}']
+      # The ingress probes (docs/target-architecture/monitoring/m4-blackbox-ingress.md): one
+      # target per tile Kuma's ingress loop renders, from the same `kuma_ingress_monitors`
+      # filter, so an entry with a `hostname` gets a probe with no edit here and `kuma: false`
+      # opts it out of both. The target is the exact URL Kuma's tile probes, and the rewrite
+      # below keeps it as `instance`, which the soak queries join on.
+      #
+      # Each target sets `service` (the entry, which is its deploy tag), so the
+      # ingress-probes rules take `service` from this job rather than from a literal.
+      # scripts/validate/alert_rules.py refuses those rules if any target here loses
+      # `service`, or if a relabel rule below rewrites `service` or `job`. `page_tier`
+      # selects which of the two per-target rules fires, so severity stays a literal.
+      #
+      # No `timeout` on either module: the exporter probes within this job's scrape timeout,
+      # less its offset, so a slow backend reads probe_success 0 instead of failing the
+      # scrape. A failed scrape would set that target's `up` to 0 and Kuma's Cluster Scrape
+      # Targets tile would page the same failure a second time.
+      - job_name: blackbox-ingress
+        scrape_interval: 1m
+        metrics_path: /probe
+        static_configs:
+{% for tile in containers_list | kuma_ingress_monitors %}
+          - targets: ['https://{{ tile.hostname }}.local.{{ domain }}']
+            labels:
+              service: {{ tile.entry }}
+              module: {{ 'http_sso_302' if tile.behind_sso else 'http_2xx' }}
+              page_tier: {{ 'critical' if containers_list | in_service_tier(tile.entry, 'home-critical') else 'warning' }}
+{% endfor %}
+        # The standard blackbox multi-target rewrite: the target becomes the probe's `target`
+        # parameter and the series' `instance`, the `module` label becomes the `module`
+        # parameter, and the scrape goes to the exporter's Service.
+        relabel_configs:
+          - source_labels: [__address__]
+            target_label: __param_target
+          - source_labels: [module]
+            target_label: __param_module
+          - source_labels: [__param_target]
+            target_label: instance
+          - target_label: __address__
+            replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('blackbox-exporter') }}'
       # GPU utilization on each node, through gpu-exporter (roles/k8s/gpu-exporter). The
       # dri-device-plugin advertises the render node as `devic.es/dri` and jellyfin and tdarr
       # both request it, but nothing turned the resulting load into a series — a slow transcode

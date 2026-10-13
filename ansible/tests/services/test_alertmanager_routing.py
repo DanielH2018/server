@@ -1,14 +1,23 @@
-"""Every route an alert from the M2 family reaches carries the `weekly-reboot` mute.
+"""Every alert set reaches the routes its expected outcome names: `muted` or `blackhole`.
 
 `test_alertmanager_reboot_mute.py` proves the interval covers the reboot. This module proves
 the alerts reach it: it walks the rendered routing tree of `alertmanager.yml` the way
 Alertmanager does, children in order, stopping at the first match unless `continue: true`,
-and reads `mute_time_intervals` on each route the walk ends on. The label sets stand for the
-k8s-workloads alerts once they drop `shadow`; later families add theirs to `PAGING`.
+and reads each route the walk ends on. Each label set carries one expected outcome:
 
-Two rejecting halves. A paging route stripped of its mute must come back flagged, which is
-what `test_every_route_a_paging_alert_reaches_is_muted` exists to catch. The `Watchdog` route
-never takes the mute, so walking the `Watchdog` set must come back flagged too.
+- `muted` (`PAGING`): every route the set reaches carries the `weekly-reboot` mute. The
+  k8s-workloads sets stand for those alerts once they drop `shadow`, and M4's
+  `IngressProbesMissing` pages from the start.
+- `blackhole` (`SHADOW`): every route the set reaches has the `blackhole` receiver. A rule
+  that runs in parallel with a Kuma tile carries `shadow="true"`, and this is the proof that
+  it pages nobody. M4's two `IngressProbeFailed*` sets move to `PAGING` in its PR 5, and
+  `BlackboxExporterDown` moves in M6's batch A3.
+
+One predicate, "blackhole or muted", would pass a meta alert routed to the blackhole, which is
+a pager that never pages. Hence one outcome per set, each with a rejecting half. A paging
+route stripped of its mute must come back flagged, and so must the `Watchdog` set, whose route
+never takes the mute. For `blackhole`, the `IngressProbesMissing` set carries no `shadow`, so
+it reaches the paging routes and must come back flagged.
 
 Run: uv run pytest ansible/tests/services/test_alertmanager_routing.py
 """
@@ -20,6 +29,7 @@ from lib import yaml_fast
 from _k8s_render import render_role_template
 
 MUTE = "weekly-reboot"
+BLACKHOLE = "blackhole"
 # Only the equality matcher appears in the tree. Any other operator raises in `_matches`
 # rather than reading as no match, which would silently skip a route.
 EQUALITY = re.compile(r'^(\w+)="([^"]*)"$')
@@ -42,6 +52,36 @@ PAGING = {
         },
         ["discord", "email"],
     ),
+    "ingress-probes-missing": (
+        {
+            "alertname": "IngressProbesMissing",
+            "severity": "warning",
+            "service": "observability",
+        },
+        ["discord"],
+    ),
+}
+# The shadow sets, as M4's ingress-probes rules ship them. A per-target alert takes `service`
+# from its probe target, so any probed service stands in.
+SHADOW = {
+    "ingress-probe-failed": {
+        "alertname": "IngressProbeFailed",
+        "severity": "warning",
+        "service": "homepage",
+        "shadow": "true",
+    },
+    "ingress-probe-failed-critical": {
+        "alertname": "IngressProbeFailedCritical",
+        "severity": "critical",
+        "service": "authelia",
+        "shadow": "true",
+    },
+    "blackbox-exporter-down": {
+        "alertname": "BlackboxExporterDown",
+        "severity": "critical",
+        "service": "blackbox-exporter",
+        "shadow": "true",
+    },
 }
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
 
@@ -88,6 +128,28 @@ def test_every_route_a_paging_alert_reaches_is_muted(severity):
     labels, receivers = PAGING[severity]
     assert [r["receiver"] for r in reached(route_tree(), labels)] == receivers
     assert unmuted(labels) == []
+
+
+def not_blackholed(labels: dict[str, str], tree: dict | None = None) -> list[str]:
+    """The receivers of the routes `labels` reaches in `tree`, the rendered one by default,
+    other than the blackhole."""
+    return [
+        route["receiver"]
+        for route in reached(tree or route_tree(), labels)
+        if route["receiver"] != BLACKHOLE
+    ]
+
+
+@pytest.mark.parametrize("name", sorted(SHADOW))
+def test_every_route_a_shadow_alert_reaches_is_the_blackhole(name):
+    labels = SHADOW[name]
+    assert [r["receiver"] for r in reached(route_tree(), labels)] == [BLACKHOLE]
+    assert not_blackholed(labels) == []
+
+
+def test_a_paging_alert_expected_as_blackhole_is_flagged():
+    labels, receivers = PAGING["ingress-probes-missing"]
+    assert not_blackholed(labels) == receivers
 
 
 def test_a_paging_route_without_the_mute_is_flagged():
