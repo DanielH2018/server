@@ -8,8 +8,18 @@ body names a secret key, or a variable derived from one, and requires one of fou
 
 - a `k8s_dry_run`, `k8s_no_mutate` or `homelab_secret_stubs` guard on its `when:`, on an
   enclosing block's, or at the include that pulled its file in;
-- a side-effect-free module: `set_fact`, `assert`, `debug` or an include;
+- a side-effect-free module: `set_fact`, `debug` or an include;
 - an entry in `EXEMPT`, keyed by task, with a reason.
+
+An `assert` or a `fail` is held to a stricter guard. It sends nothing, but it can refuse a stub
+value, so only the `homelab_secret_stubs` sentinel credits it: an ordinary dry run holds the real
+values and is meant to check them. An exemption for one says why it passes on any stub value.
+
+A derived variable comes from two places. `derived_variables` reads role defaults and inventory
+vars. `role_derived_facts` reads the role's own `set_fact` tasks: a fact whose value names a
+secret-bearing name, or looks up a role template whose Jinja names one, is derived too. That is
+how uptime-kuma's `kuma_declarations`, a parse of a template embedding every push token, reaches
+the push-token assert (#4850).
 
 A guard counts only negated (`not k8s_no_mutate`), because `when: k8s_dry_run | bool` runs the
 task under a dry run alone. It is read from the parsed `when:`, so a guard word in a command
@@ -19,14 +29,14 @@ The exemptions are per task, which is why this is its own module: a `Census` row
 is keyed by file and would exempt all of authelia's `tasks/main.yml`.
 
 A second check covers the tasks a stub makes fail rather than act. `STUB_REFUSING` names each,
-and each must carry the `homelab_secret_stubs` guard itself: the census credits an `assert` as
-side-effect free, and it cannot see a value read out of a rendered template, so it passed
-uptime-kuma's push-token assert, which stopped the first shadow dry run.
+and each must carry the `homelab_secret_stubs` guard itself. It predates the assert rule above.
+The census selects uptime-kuma's push-token assert on its own, but not sonarr's two asserts: they
+read a register, which no derivation follows.
 """
 
 import json
 import re
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 
 from lib import yaml_fast
@@ -36,18 +46,32 @@ from secret_stubs import homelab_stub_keys
 from _helpers import ANSIBLE
 from _k8s_guards import K8S_ROLES, _guard_covered_files
 from _role_census import role_dirs, role_task_files
+from _secret_derivation import (
+    _STUB_GUARD,
+    _body,
+    _tasks,
+    _word_pattern,
+    derived_variables,
+    role_derived_facts,
+)
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
 
-_STUB_GUARD = re.compile(
-    r"\bnot\s*\(?\s*(?:k8s_no_mutate|k8s_dry_run|homelab_secret_stubs)\b"
-)
+# The sentinel alone. A `not k8s_dry_run` guard would also skip a stub-refusing task on an
+# ordinary dry run, which holds the real values and is meant to check them.
+_SENTINEL_GUARD = re.compile(r"\bnot\s*\(?\s*homelab_secret_stubs\b")
+
+# Send nothing, but fail on a value that does not check out: a stub is such a value.
+_STUB_REFUSING_MODULES = {
+    module
+    for name in ("assert", "fail")
+    for module in (name, f"ansible.builtin.{name}")
+}
 
 _SIDE_EFFECT_FREE = {
     module
     for name in (
         "set_fact",
-        "assert",
         "debug",
         "include_tasks",
         "import_tasks",
@@ -57,10 +81,25 @@ _SIDE_EFFECT_FREE = {
     for module in (name, f"ansible.builtin.{name}")
 }
 
-# "<role>/<task file>::<task name>" -> why the task may act under a stub file.
-# Empty: authelia's three hashing tasks, the plan's only exemptions, gained a
+# "<role>/<task file>::<task name>" -> why the task may act under a stub file. For an `assert` or
+# `fail`, why it passes on any stub value. A stub is `homelab_secret_stub`'s label, never empty.
+# authelia's three hashing tasks, the plan's only exemptions, gained a
 # `not (k8s_no_mutate | bool)` guard in 5883ef610 and pass on that.
-EXEMPT: dict[str, str] = {}
+EXEMPT: dict[str, str] = {
+    "authelia/main.yml::Fail if the claude-ui credentials are missing": (
+        "checks only that each value is non-empty, and a stub is never empty"
+    ),
+    "authelia/main.yml::Fail if the claude-agent credential is missing": (
+        "checks only that the value is non-empty, and a stub is never empty"
+    ),
+    "authelia/main.yml::Fail if no password hash could be obtained": (
+        "checks only that each digest is non-empty; a stubbed run reads the live digest back "
+        "or stands in a placeholder"
+    ),
+    "uptime-kuma/main.yml::Check the declaration index is populated": (
+        "counts the parsed declarations, and a stub token changes no count"
+    ),
+}
 
 # Must be selected, because it names `sonarr_api_key`, and must pass on its guard.
 MUST_FIND_GUARDED = "sonarr/verify.yml::Read the cluster copy's root folders"
@@ -76,80 +115,40 @@ def _var_files() -> list[Path]:
     ]
 
 
-def _word_pattern(names: set[str]) -> re.Pattern[str]:
-    return re.compile(r"\b(?:" + "|".join(sorted(map(re.escape, names))) + r")\b")
-
-
-# A value references a variable only inside a Jinja expression. A bare word does not count:
-# headlamp's scopes string "profile,email,groups" holds the secret key name `email`.
-_JINJA = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
-
-
-def derived_variables(secret_keys: set[str], var_files: list[Path]) -> set[str]:
-    """The variables in `var_files` whose value references a secret key, transitively."""
-    values: dict[str, str] = {}
-    for path in var_files:
-        for name, value in (yaml_fast.safe_load(path.read_text()) or {}).items():
-            expressions = " ".join(_JINJA.findall(json.dumps(value)))
-            values[str(name)] = values.get(str(name), "") + " " + expressions
-    derived: set[str] = set()
-    while True:
-        pattern = _word_pattern(secret_keys | derived)
-        found = {
-            name
-            for name, text in values.items()
-            if name not in secret_keys and name not in derived and pattern.search(text)
-        }
-        if not found:
-            return derived
-        derived |= found
-
-
-def _when_text(task: dict) -> str:
-    when = task.get("when", "")
-    return " and ".join(map(str, when)) if isinstance(when, list) else str(when)
-
-
-def _tasks(
-    tasks: object, guarded: bool = False, guard: re.Pattern[str] = _STUB_GUARD
-) -> Iterator[tuple[dict, bool]]:
-    """Each task with whether it or an enclosing block carries `guard` on its `when:`."""
-    if not isinstance(tasks, list):
-        return
-    for task in tasks:
-        if not isinstance(task, dict):
-            continue
-        here = guarded or bool(guard.search(_when_text(task)))
-        yield task, here
-        for key in ("block", "rescue", "always"):
-            yield from _tasks(task.get(key), here, guard)
-
-
-def _body(task: dict) -> str:
-    """The task's text minus its name and its nested tasks, which are checked on their own."""
-    rest = {
-        k: v for k, v in task.items() if k not in ("name", "block", "rescue", "always")
-    }
-    return json.dumps(rest, default=str)
-
-
 def census(
     role: Path, names: re.Pattern[str], exempt: Mapping[str, str] = EXEMPT
 ) -> tuple[list[str], list[str]]:
-    """Every task in `role` whose body matches `names`, and those of them that fail all four tests.
+    """Every task in `role` whose body names a secret value, and those not covered.
+
+    `names` is widened by `role_derived_facts`. An `assert` or `fail` is covered only by the
+    sentinel guard or an exemption; any other task by a stub guard, a side-effect-free module or
+    an exemption.
 
     Returns:
         The selected task ids, then the offending ones, each `<role>/<file>::<task name>`.
     """
+    facts = role_derived_facts(role, names)
+    if facts:
+        names = re.compile(f"{names.pattern}|{_word_pattern(facts).pattern}")
     covered = _guard_covered_files(role, guard=_STUB_GUARD)
+    sentinel_covered = _guard_covered_files(role, guard=_SENTINEL_GUARD)
     selected, offenders = [], []
     for task_file in role_task_files(role):
-        for task, guarded in _tasks(yaml_fast.safe_load(task_file.read_text())):
+        tasks = yaml_fast.safe_load(task_file.read_text())
+        for (task, guarded), (_, sentinel) in zip(
+            _tasks(tasks), _tasks(tasks, guard=_SENTINEL_GUARD), strict=True
+        ):
             if not names.search(_body(task)):
                 continue
             key = f"{role.name}/{task_file.name}::{task.get('name')}"
             selected.append(key)
-            if guarded or task_file.name in covered or key in exempt:
+            if key in exempt:
+                continue
+            if _STUB_REFUSING_MODULES & task.keys():
+                if not (sentinel or task_file.name in sentinel_covered):
+                    offenders.append(key)
+                continue
+            if guarded or task_file.name in covered:
                 continue
             if _SIDE_EFFECT_FREE & task.keys():
                 continue
@@ -207,10 +206,6 @@ STUB_REFUSING = (
     "sonarr/verify.yml::Fail if a root folder does not resolve inside the pod",
     "sonarr/verify.yml::Fail if the cluster library is not intact",
 )
-
-# The sentinel alone. A `not k8s_dry_run` guard would also skip these tasks on an ordinary dry
-# run, which holds the real values and is meant to check them.
-_SENTINEL_GUARD = re.compile(r"\bnot\s*\(?\s*homelab_secret_stubs\b")
 
 
 def stub_refusers_without_the_guard(roles: Path, task_ids: Iterable[str]) -> list[str]:
@@ -428,3 +423,44 @@ def test_an_exemption_for_a_guarded_or_missing_task_is_stale(tmp_path: Path) -> 
         "widget/main.yml::Gone",
         "widget/main.yml::Post the token when not stubbed",
     ]
+
+
+def test_a_double_quoted_template_lookup_derives_its_fact(tmp_path: Path) -> None:
+    role = _role(
+        tmp_path,
+        **{
+            "templates/t.j2": 'token: "{{ alpha_token }}"\n',
+            "tasks/main.yml": """
+- name: Read the template
+  ansible.builtin.set_fact:
+    decl: '{{ lookup("template", "t.j2") | from_yaml }}'
+- name: Check the token
+  ansible.builtin.assert:
+    that: decl.token | length == 32
+""",
+        },
+    )
+    _, offenders = census(role, _word_pattern({"alpha_token"}))
+    assert offenders == ["widget/main.yml::Check the token"]
+
+
+def test_a_template_naming_a_derived_fact_is_secret_bearing(tmp_path: Path) -> None:
+    role = _role(
+        tmp_path,
+        **{
+            "templates/t.j2": 'token: "{{ tok }}"\n',
+            "tasks/main.yml": """
+- name: Encode the token
+  ansible.builtin.set_fact:
+    tok: "{{ alpha_token | b64encode }}"
+- name: Read the template
+  ansible.builtin.set_fact:
+    decl: "{{ lookup('template', 't.j2') | from_yaml }}"
+- name: Check the token
+  ansible.builtin.assert:
+    that: decl.token | length == 32
+""",
+        },
+    )
+    _, offenders = census(role, _word_pattern({"alpha_token"}))
+    assert offenders == ["widget/main.yml::Check the token"]
