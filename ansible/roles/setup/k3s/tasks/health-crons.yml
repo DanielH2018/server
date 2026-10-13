@@ -347,6 +347,22 @@
     cron_file: longhorn-restore-drill
   become: true
 
+# node-exporter's textfile collector reads this directory through a hostPath with no `type`, so
+# the kubelet created it root 0755 on first start. disk-health.sh runs as {{ sys_user }} and
+# writes disk-health.prom here, so the group gets write access; setgid keeps that group on new
+# files. The files are written 0644, which node_exporter (uid 65534) reads. The root-run
+# claude-cgroup-metrics writer is unaffected. The metric contract a file here follows is in
+# docs/target-architecture/monitoring/m3-textfile-timer.md (*The producer metric contract*).
+- name: Let the deploy-user health crons write to the node_exporter textfile directory
+  tags: [disk-health]
+  ansible.builtin.file:
+    path: /var/lib/node-exporter-textfile
+    state: directory
+    owner: root
+    group: "{{ sys_user }}"
+    mode: "2775"
+  become: true
+
 - name: Deploy the root-disk headroom heartbeat as a versioned release
   tags: [disk-health]
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"

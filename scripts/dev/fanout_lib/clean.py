@@ -240,7 +240,9 @@ _HOLDER_AWK = (
 )
 
 
-def live_process_scan(wt: str, sock: str = WORKTREE_HOLDERS_SOCKET) -> str:
+def live_process_scan(
+    wt: str, sock: str = WORKTREE_HOLDERS_SOCKET, proc_root: str = "/proc"
+) -> str:
     """Shell that sets `busy` to the first pid whose cwd or `CLAUDE_PROJECT_DIR` is in `wt`.
 
     `lib.worktrees.processes_using` in shell, for the chains that run before or without an
@@ -263,6 +265,10 @@ def live_process_scan(wt: str, sock: str = WORKTREE_HOLDERS_SOCKET) -> str:
     Args:
         wt: the worktree path.
         sock: the helper's socket. A test seam.
+        proc_root: the directory the `/proc` loop walks, one entry per pid. A test seam: the
+            loop forks `readlink`, `tr` and `grep` per pid, so a test that needs only the
+            chain around the scan points this at an empty directory rather than pay for the
+            host's process count (#4876).
     """
     escaped = shlex.quote(escape_holder(wt))
     return (
@@ -274,14 +280,14 @@ def live_process_scan(wt: str, sock: str = WORKTREE_HOLDERS_SOCKET) -> str:
         f"else echo \"warning: cannot connect to {sock}, so another uid's process outside "
         'this login slice is invisible to the in-use check (#4170)" >&2; fi; '
         'if [ -z "$busy" ]; then '
-        "for p in /proc/[0-9]*; do "
+        f"for p in {proc_root}/[0-9]*; do "
         'c=$(readlink "$p/cwd" 2>/dev/null); '
-        f'case "$c" in "{wt}"|"{wt}"/*) busy=${{p#/proc/}}; break;; esac; '
+        f'case "$c" in "{wt}"|"{wt}"/*) busy=${{p#{proc_root}/}}; break;; esac; '
         'if tr "\\0" "\\n" < "$p/environ" 2>/dev/null '
         f'| grep -q -F -x -e "CLAUDE_PROJECT_DIR={wt}" '
         f'|| tr "\\0" "\\n" < "$p/environ" 2>/dev/null '
         f'| grep -q -F -e "CLAUDE_PROJECT_DIR={wt}/"; '
-        "then busy=${p#/proc/}; break; fi; done; fi; "
+        f"then busy=${{p#{proc_root}/}}; break; fi; done; fi; "
     )
 
 
