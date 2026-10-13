@@ -211,7 +211,7 @@ files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/ro
 # never races two provisions.
 [[repos.hooks]]
 id = "validate-alert-rules"
-name = "Validate the alert plane with promtool, amtool and pint"
+name = "Validate the alert plane with promtool, amtool, pint and lokitool"
 entry = "uv run --frozen python scripts/validate/alert_rules.py"
 language = "system"
 pass_filenames = false
