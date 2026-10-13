@@ -248,9 +248,9 @@ def test_the_hash_read_back_is_keyed_by_username():
 def test_a_dry_run_with_no_digest_stands_in_a_placeholder_before_the_digest_assert():
     """A no-mutation run skips the hash pods (#4569), so a missing digest gets a placeholder.
 
-    Before the digest assert, an empty digest failed the hourly render-records dry run at
-    authelia whenever a user was newly managed or a rehash was asked for. The placeholder is
-    not PHC-shaped, so the digest assert after it still refuses it on an unstubbed dry run.
+    Failing the assert stopped the hourly render-records dry run at authelia, leaving every
+    later service unrecorded, whenever a user was newly managed or a rehash was asked for.
+    `test_authelia_digest_assert.py` holds that the digest assert passes the placeholders.
     """
     tasks = load_tasks(ROLE / "tasks" / "main.yml")
     names = [str(t.get("name", "")) for t in tasks]
@@ -264,7 +264,7 @@ def test_a_dry_run_with_no_digest_stands_in_a_placeholder_before_the_digest_asse
     facts = task["ansible.builtin.set_fact"]
     env = make_ansible_env(undefined_cls=jinja2.Undefined)
     missing = {k: env.from_string(v).render() for k, v in facts.items()}
-    assert all(v.startswith("dry-run-placeholder-") for v in missing.values()), missing
+    assert all("dryrunplaceholder" in v for v in missing.values()), missing
     assert len(set(missing.values())) == len(missing), (
         "users must not share a placeholder"
     )

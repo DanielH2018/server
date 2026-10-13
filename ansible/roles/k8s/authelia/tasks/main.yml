@@ -228,14 +228,15 @@
   tags: [config]
   # Hashing starts a pod, so a no-mutation run skips it (#4569). The read-back still covers the
   # common case. A user with no digest in the live Secret, or any user under
-  # `-e authelia_k8s_rehash_passwords=true`, reaches here undefined. The placeholder renders as
-  # a changed password, which is what the real run would apply. It is not an argon2 digest, so
-  # the digest assert below refuses it on an unstubbed dry run: such a run fails at authelia
-  # rather than rendering a value no real run could apply. Only a stubbed run skips that assert.
+  # `-e authelia_k8s_rehash_passwords=true`, reaches here undefined. Failing the digest assert
+  # below would stop the hourly render-records dry run at authelia and leave every later
+  # service unrecorded, so each placeholder is PHC-shaped and distinct: the assert passes it,
+  # and its guard stays the stub sentinel alone. The placeholder renders as a changed password,
+  # which is what the real run would apply. No real run sets it, because a real run hashes.
   ansible.builtin.set_fact:
-    authelia_password_hash: "{{ authelia_password_hash | default('dry-run-placeholder-operator', true) }}"
-    authelia_claude_password_hash: "{{ authelia_claude_password_hash | default('dry-run-placeholder-claude-ui', true) }}"
-    authelia_agent_password_hash: "{{ authelia_agent_password_hash | default('dry-run-placeholder-claude-agent', true) }}"
+    authelia_password_hash: "{{ authelia_password_hash | default('$argon2id$v=19$m=65536,t=3,p=4$dryrunplaceholdersaltA$dryrunplaceholderoperatorAAAAAAAAAAAAAAAAAA', true) }}"
+    authelia_claude_password_hash: "{{ authelia_claude_password_hash | default('$argon2id$v=19$m=65536,t=3,p=4$dryrunplaceholdersaltA$dryrunplaceholderclaudeuiAAAAAAAAAAAAAAAAAA', true) }}"
+    authelia_agent_password_hash: "{{ authelia_agent_password_hash | default('$argon2id$v=19$m=65536,t=3,p=4$dryrunplaceholdersaltA$dryrunplaceholderclaudeagentAAAAAAAAAAAAAAA', true) }}"
   when: k8s_no_mutate | bool
   no_log: true
 

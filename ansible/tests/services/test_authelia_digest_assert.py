@@ -23,6 +23,9 @@ from _helpers import ROLES
 
 _TASKS = ROLES / "k8s" / "authelia" / "tasks" / "main.yml"
 _NAME = "Fail if a stored Authelia digest is malformed"
+_PLACEHOLDER_TASK = (
+    "Stand in a placeholder digest for each user a dry run could not hash"
+)
 
 
 def _digest(seed: int, m: int = 65536) -> str:
@@ -119,6 +122,30 @@ def test_a_disabled_users_digest_is_not_checked():
     """The render leaves a disabled user out, so its value, even a stub, must not fail."""
     assert _passes(
         claude="stub-anything", agent=None, manage_claude=False, manage_agent=False
+    )
+
+
+def _dry_run_placeholders() -> dict[str, str]:
+    """The digests the no-mutation placeholder task sets when no user's digest was read back."""
+    tasks = yaml_fast.safe_load(_TASKS.read_text())
+    found = [t for t in tasks if t.get("name") == _PLACEHOLDER_TASK]
+    assert len(found) == 1, (
+        f"expected one task named {_PLACEHOLDER_TASK!r}, found {len(found)}"
+    )
+    templar = Templar(loader=DataLoader(), variables={})
+    return {
+        name: templar.template(trust_as_template(expr))
+        for name, expr in found[0]["ansible.builtin.set_fact"].items()
+    }
+
+
+def test_the_dry_run_placeholders_pass():
+    """An unstubbed dry run that read no digest back must not stop at this assert (#4569)."""
+    placeholders = _dry_run_placeholders()
+    assert _passes(
+        operator=placeholders["authelia_password_hash"],
+        claude=placeholders["authelia_claude_password_hash"],
+        agent=placeholders["authelia_agent_password_hash"],
     )
 
 
