@@ -17,11 +17,16 @@ or a comment is not credited.
 
 The exemptions are per task, which is why this is its own module: a `Census` row's `allow` map
 is keyed by file and would exempt all of authelia's `tasks/main.yml`.
+
+A second check covers the tasks a stub makes fail rather than act. `STUB_REFUSING` names each,
+and each must carry the `homelab_secret_stubs` guard itself: the census credits an `assert` as
+side-effect free, and it cannot see a value read out of a rendered template, so it passed
+uptime-kuma's push-token assert, which stopped the first shadow dry run.
 """
 
 import json
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
 
 from lib import yaml_fast
@@ -105,17 +110,19 @@ def _when_text(task: dict) -> str:
     return " and ".join(map(str, when)) if isinstance(when, list) else str(when)
 
 
-def _tasks(tasks: object, guarded: bool = False) -> Iterator[tuple[dict, bool]]:
-    """Each task with whether it or an enclosing block carries a stub guard."""
+def _tasks(
+    tasks: object, guarded: bool = False, guard: re.Pattern[str] = _STUB_GUARD
+) -> Iterator[tuple[dict, bool]]:
+    """Each task with whether it or an enclosing block carries `guard` on its `when:`."""
     if not isinstance(tasks, list):
         return
     for task in tasks:
         if not isinstance(task, dict):
             continue
-        here = guarded or bool(_STUB_GUARD.search(_when_text(task)))
+        here = guarded or bool(guard.search(_when_text(task)))
         yield task, here
         for key in ("block", "rescue", "always"):
-            yield from _tasks(task.get(key), here)
+            yield from _tasks(task.get(key), here, guard)
 
 
 def _body(task: dict) -> str:
@@ -191,6 +198,105 @@ def test_every_exemption_names_a_task_the_census_would_flag() -> None:
     """A stale exemption would hide the removal of a guard the task later gains."""
     _, offenders = _live_census(exempt={})
     assert stale_exemptions(EXEMPT, offenders) == []
+
+
+# "<role>/<task file>::<task name>" of each task that FAILS on a stub value: a format check on a
+# token, or an assert on a register that a guarded read left empty.
+STUB_REFUSING = (
+    "uptime-kuma/main.yml::Check every push token is in the format AutoKuma accepts",
+    "sonarr/verify.yml::Fail if a root folder does not resolve inside the pod",
+    "sonarr/verify.yml::Fail if the cluster library is not intact",
+)
+
+# The sentinel alone. A `not k8s_dry_run` guard would also skip these tasks on an ordinary dry
+# run, which holds the real values and is meant to check them.
+_SENTINEL_GUARD = re.compile(r"\bnot\s*\(?\s*homelab_secret_stubs\b")
+
+
+def stub_refusers_without_the_guard(roles: Path, task_ids: Iterable[str]) -> list[str]:
+    """The ids in `task_ids` that a stubbed run would still evaluate.
+
+    An id is `<role>/<task file>::<task name>`, resolved under `roles`. The sentinel guard
+    counts on the task, on an enclosing block, or at the include that pulled its file in. An id
+    that names no task is returned too, so a rename cannot empty the check.
+    """
+    flagged = []
+    for task_id in task_ids:
+        location, name = task_id.split("::", 1)
+        role_name, file_name = location.split("/", 1)
+        role = roles / role_name
+        task_file = role / "tasks" / file_name
+        tasks = (
+            yaml_fast.safe_load(task_file.read_text()) if task_file.is_file() else []
+        )
+        guarded = [
+            here
+            for task, here in _tasks(tasks, guard=_SENTINEL_GUARD)
+            if task.get("name") == name
+        ]
+        covered = file_name in _guard_covered_files(role, guard=_SENTINEL_GUARD)
+        if not guarded:
+            flagged.append(f"{task_id} (no such task)")
+        elif not (covered or all(guarded)):
+            flagged.append(task_id)
+    return flagged
+
+
+def test_every_stub_refusing_task_is_skipped_under_stubs() -> None:
+    # fact: ansible/roles/k8s/uptime-kuma/CLAUDE.md#Traps
+    assert stub_refusers_without_the_guard(K8S_ROLES, STUB_REFUSING) == [], (
+        "these tasks fail on a stub value, so a shadow dry run stops at them. Give each "
+        "`when: not (homelab_secret_stubs | default(false) | bool)`, never a k8s_dry_run guard"
+    )
+
+
+_PUSH_TOKEN_CHECK = "Check every push token is in the format AutoKuma accepts"
+
+
+def _push_token_role(tmp_path: Path, when: str | None) -> Path:
+    """A role holding uptime-kuma's real push-token assert, with `when` replacing its guard."""
+    tasks = yaml_fast.safe_load((K8S_ROLES / "uptime-kuma/tasks/main.yml").read_text())
+    task = {
+        k: v
+        for k, v in next(t for t in tasks if t.get("name") == _PUSH_TOKEN_CHECK).items()
+        if k != "when"
+    }
+    if when is not None:
+        task["when"] = when
+    return _role(tmp_path, **{"tasks/main.yml": json.dumps([task])})
+
+
+def test_the_guarded_push_token_check_is_clean(tmp_path: Path) -> None:
+    role = _push_token_role(
+        tmp_path, "not (homelab_secret_stubs | default(false) | bool)"
+    )
+    assert (
+        stub_refusers_without_the_guard(
+            role.parent, [f"widget/main.yml::{_PUSH_TOKEN_CHECK}"]
+        )
+        == []
+    )
+
+
+def test_the_unguarded_push_token_check_is_flagged(tmp_path: Path) -> None:
+    role = _push_token_role(tmp_path, None)
+    task_id = f"widget/main.yml::{_PUSH_TOKEN_CHECK}"
+    assert stub_refusers_without_the_guard(role.parent, [task_id]) == [task_id]
+
+
+def test_a_dry_run_guard_on_a_stub_refusing_task_is_flagged(tmp_path: Path) -> None:
+    role = _push_token_role(tmp_path, "not k8s_dry_run | bool")
+    task_id = f"widget/main.yml::{_PUSH_TOKEN_CHECK}"
+    assert stub_refusers_without_the_guard(role.parent, [task_id]) == [task_id]
+
+
+def test_a_stub_refusing_id_that_names_no_task_is_flagged(tmp_path: Path) -> None:
+    role = _push_token_role(
+        tmp_path, "not (homelab_secret_stubs | default(false) | bool)"
+    )
+    assert stub_refusers_without_the_guard(role.parent, ["widget/main.yml::Gone"]) == [
+        "widget/main.yml::Gone (no such task)"
+    ]
 
 
 def _role(tmp_path: Path, **files: str) -> Path:
