@@ -574,17 +574,17 @@ Each subprocess runs `scripts/renderer/tests/_render_audit_child.py`, which inst
 hook before it imports the renderer. The hook ends the process on any file open outside the
 repo, the output directory, the stub file, ansible-core's local temp directory and the
 interpreter's prefixes, and on any `socket.connect`. `/dev/null` is the one device it allows.
-The test points `ANSIBLE_LOCAL_TEMP` into its own directory, because ansible-core creates that
-directory on import and its default is under the user's home. The hook lives in a subprocess
-because Python cannot remove an audit hook, and one installed in an xdist worker would outlive
-the test.
-
-What the hook does not see: ansible-core's import runs `ldconfig -p` and `ip link` as child
-processes, to find the C library and to read a MAC address for `uuid.getnode`. A child
-process reads the host without an `open` in the process the hook watches. No template reads
-either result, and a
-rendered byte that depended on one would differ between the CI runner's digest lines and
-daniel-box's.
+It also ends the process on any program start but two: `ip link` and `ldconfig -p`, which
+ansible-core's import runs to read a MAC address for `uuid.getnode` and to find the C library.
+A child process reads the host without an `open` in the process the hook watches, so the hook
+names these two in `scripts/renderer/tests/_render_audit_child.py:IMPORT_PROBES` and refuses
+the rest. No template reads either result, and a rendered byte that depended on one would
+differ between the CI runner's digest lines and daniel-box's. The test points
+`ANSIBLE_LOCAL_TEMP` into its own directory, because ansible-core creates that directory on
+import and its default is under the user's home. The hook lives in a subprocess because Python
+cannot remove an audit hook, and one installed in an xdist worker would outlive the test. The
+CLI sets `ANSIBLE_LOCAL_TEMP` to the system temp directory when the caller has not set it, so
+`homelab_render.py cluster` writes nothing under the home directory either.
 
 In CI, each module writes one `digest_line` per directory it rendered to two places. The job
 log carries each as a line `render digest at <sha> (position <k> of 4): <line>`, which
