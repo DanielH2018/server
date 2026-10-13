@@ -465,8 +465,9 @@ fi
 # to 13x their weight. A serial run on this host can.
 #
 # --refresh-drifted 8 re-measures one hash slice of the table, so every entry is re-measured
-# every four days. A slice costs about 63s, and 132s for the heaviest one, measured against the
-# table on 2026-10-13. Only an entry more than 1.5x from what it measured is rewritten, so noise
+# every four days. The whole table took 9m36s serially on 2026-10-13, so a slice averages about
+# 72s; the hash split is uneven, and the heaviest slice holds about twice the recorded seconds
+# of the average one. Only an entry more than 1.5x from what it measured is rewritten, so noise
 # inside that band leaves no diff and a run does not churn the table.
 #
 # Same degrade-not-abort handling and its own `timeout`, for the reasons the step above gives.
