@@ -12,7 +12,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Classification, Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-from deploy_tools.land_lib.land_tags import DeriveSource
+from deploy_tools.land_lib.land_tags import DeriveSource, guard_map_rows
 from lib.exit_codes import LAND_BAD_ARGS
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
@@ -256,6 +256,22 @@ def classify(ln: Landing) -> None:
             plane_paths,
             declared,
         )
+        # A change confined to the standalone-guard map reaches only the callers whose row
+        # moved (#4932); None keeps every caller.
+        rows = _classified(
+            ln,
+            "guard-map row narrowing",
+            guard_map_rows,
+            plane_paths,
+            recorded,
+            ln.git,
+        )
+        if rows is not None and "manifests" in reached:
+            reached["manifests"] &= rows
+            say(
+                "`manifests` changed only its standalone-guard map; deploying the "
+                f"{len(reached['manifests'])} caller(s) whose row moved"
+            )
         smoke = _classified(
             ln,
             "shared-role smoke narrowing",
@@ -273,7 +289,7 @@ def classify(ln: Landing) -> None:
                     f"{', '.join(sorted(role_tags))} as a smoke test, and its other callers "
                     "take the new task logic on their own next deploy"
                 )
-            elif role_tags:
+            elif role_tags and not (role == "manifests" and rows is not None):
                 say(
                     f"`{role}` has no deploy tag of its own; deploying the "
                     f"{len(role_tags)} service(s) that run it"
