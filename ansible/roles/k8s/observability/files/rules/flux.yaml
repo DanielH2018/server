@@ -1,0 +1,95 @@
+# The Flux controllers and the objects they reconcile. Plain YAML, never Jinja:
+# prometheus-rules.yaml.j2 carries this file verbatim. The design is
+# docs/target-architecture/deploy/d1-flux-installed.md, "Flux pages through the alert plane".
+# The controllers' series come from the `flux` scrape job; gotk_resource_info comes from
+# kube-state-metrics' custom-resource-state config (observability_ksm_flux_resource_state).
+# notification-controller's Discord alerts stay as a second channel beside these.
+groups:
+  - name: flux
+    rules:
+      # SHADOW UNTIL M6's A3 DROPS THE LABEL. Kuma's Cluster Scrape Targets tile already pages
+      # up == 0 for this job, because monitor-bridge's check_cluster_targets selects every up
+      # series without an `origin` label, and the flux job carries none. M1 convention 5 allows
+      # one pager, so this rule routes to the blackhole receiver. It shares its name with the
+      # rule below so that the soak and A3 read one alert for "a controller is down".
+      - alert: FluxControllerDown
+        expr: up{job="flux"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: flux
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape a Flux controller.
+          description: >-
+            {{ $labels.pod }} has failed its scrape for 5 minutes, so {{ $labels.app }} is down
+            or unreachable from Prometheus. Read its pod's events and log in the flux-system
+            namespace.
+      # The family's zero-series alert, and what no Kuma tile sees. Pod discovery finds no
+      # target for a controller with no pod, so a Deployment at 0 replicas or a pod that never
+      # schedules leaves no up series at all. One absent() per controller, because a job-wide
+      # absent(up{job="flux"}) waits for all three to vanish. The names mirror the flux role's
+      # flux_controllers, and ansible/tests/services/test_flux_rule_literals.py holds them
+      # equal. The last arm pages a scrape that works but carries no controller-runtime
+      # series, as after an upgrade that renamed them. It is conjoined with up == 1, so this
+      # rule never pages the tile's condition a second time.
+      - alert: FluxControllerDown
+        expr: >-
+          absent(up{job="flux", app="source-controller"})
+          or absent(up{job="flux", app="kustomize-controller"})
+          or absent(up{job="flux", app="notification-controller"})
+          or
+          ((up{job="flux"} == 1)
+          unless on(app) count by (app) (controller_runtime_reconcile_total{job="flux"}))
+        for: 5m
+        labels:
+          severity: critical
+          service: flux
+        annotations:
+          summary: A Flux controller has no pod, or Prometheus lost its metrics.
+          description: >-
+            For 5 minutes {{ $labels.app }} has either had no scrape target, so its pod is
+            gone or the flux scrape job is missing from prometheus.yml, or it has been scraped
+            with no controller_runtime_reconcile_total series. Read the Deployment in the
+            flux-system namespace.
+      # The max by() drops the labels that change while an object stays unhealthy. A failing
+      # Kustomization's Ready flips between False and Unknown on every retry, and a label change
+      # starts a new series, which would restart the 15-minute hold each time. The
+      # OCIRepository arm names `homelab`, so the drill's verify-drill, which is meant to read
+      # Ready=False, never fires it. An absent `ready` label, before the first condition is
+      # written, also reads as not Ready.
+      - alert: FluxNotReady
+        expr: >-
+          max by (customresource_kind, exported_namespace, name) (
+            gotk_resource_info{customresource_kind="Kustomization", ready!="True"}
+            or gotk_resource_info{customresource_kind="OCIRepository", name="homelab", ready!="True"}
+          )
+        for: 15m
+        labels:
+          severity: warning
+          service: flux
+        annotations:
+          summary: A Flux object has not been Ready for 15 minutes.
+          description: >-
+            The {{ $labels.customresource_kind }} {{ $labels.name }} in
+            {{ $labels.exported_namespace }} has had a Ready condition other than True for 15
+            minutes. Its status conditions name the failing step.
+      # kube-state-metrics drops a label whose field is absent, and the flux role writes
+      # spec.suspend only while flux_sync_suspend is true, so suspension matches
+      # suspended="true". flux_sync_suspend and a hand suspend both count. The max by() keeps
+      # the hold across a change of the other labels.
+      - alert: FluxSuspended
+        expr: >-
+          max by (customresource_kind, exported_namespace, name) (
+            gotk_resource_info{customresource_kind="Kustomization", suspended="true"}
+          )
+        for: 24h
+        labels:
+          severity: warning
+          service: flux
+        annotations:
+          summary: A Flux Kustomization has been suspended for more than 24 hours.
+          description: >-
+            The Kustomization {{ $labels.name }} in {{ $labels.exported_namespace }} has been
+            suspended for 24 hours, so Flux applies nothing it owns. If flux_sync_suspend is
+            true, set it back and run the flux role; otherwise the suspend was made by hand.

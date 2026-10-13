@@ -252,12 +252,14 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "workload-service",
         "k8s-workloads",
         "loki-homelab",
+        "flux",
     ]
     assert keys == {
         "alerting-meta.yaml",
         "workload-service.yaml",
         "k8s-workloads.yaml",
         "loki-homelab.yaml",
+        "flux.yaml",
     }
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()
