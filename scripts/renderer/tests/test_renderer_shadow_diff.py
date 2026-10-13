@@ -237,6 +237,41 @@ def test_compare_withholds_a_file_lacking_a_stub_token_is_flagged(trees, run):
     assert "@@" not in out
 
 
+def test_compare_withholds_a_file_keeping_a_stub_at_only_one_site_is_flagged(
+    trees, run
+):
+    ansible, c1 = trees
+    two_sites = "kind: ConfigMap\na: x.stub-domain\nb: y.stub-domain\n"
+    _write_c1(c1, {"pihole/configmap.yaml": two_sites})
+    _write_ansible(
+        ansible,
+        {
+            "pihole/configmap.yaml": "kind: ConfigMap\na: x.stub-domain\nb: y.example-real\n"
+        },
+    )
+    code, out, _ = run("compare", ansible, c1)
+    assert code == 1
+    assert f"{shadow.STUB_CHECK} (1):" in out.splitlines()
+    assert "example-real" not in out
+    stub_code, stub_out, _ = run("stubcheck", ansible, c1)
+    assert stub_code == 1
+    assert "pihole/configmap.yaml: lacks stub-domain" in stub_out.splitlines()
+
+
+def test_compare_withholds_a_hunk_on_a_line_with_a_stub_is_flagged(trees, run):
+    ansible, c1 = trees
+    (ansible / "traefik/deployment.yaml").write_text(
+        "kind: Deployment\nhostname: traefik.local.stub-domain\n"
+    )
+    code, out, _ = run("compare", ansible, c1)
+    assert code == 1
+    assert (
+        "traefik/deployment.yaml: differs on a line with a stub; hunk withheld"
+        in out.splitlines()
+    )
+    assert "hostname" not in out
+
+
 def test_compare_withholds_the_hunk_of_a_differing_secret_is_flagged(trees, run):
     ansible, c1 = trees
     extra = base64.b64encode(b"stub-jellyfin-api-key and more").decode()

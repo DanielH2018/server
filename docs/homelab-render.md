@@ -303,12 +303,16 @@ ignored, because Ansible writes none.
   stub token. The report is meant for posting, so it prints no stub or secret value. A file
   that fails `stubcheck`'s rule is named and its content withheld. A file holding a `kind:
   Secret` document is named without a hunk, because its `data` is base64 that redaction
-  cannot read. Every other hunk carries each stub token as `<stub>`.
+  cannot read. A file that differs on a line where the C1 render holds a stub token is named
+  without a hunk too, because the Ansible line beside it sits at a stub site. Every other hunk
+  carries each stub token as `<stub>`.
 
 `shadow_diff.py stubcheck ANSIBLE C1` checks the Ansible tree's stub values against the C1
-render. For each file both trees hold, every stub token in the C1 file must also appear in
-the Ansible file, with the `data` of each Secret decoded on both sides. A stub token is
-`stub-` followed by lower-case letters, digits and hyphens, and tokens compare whole. It
+render. For each file both trees hold, every stub token in the C1 file must appear in the
+Ansible file at least as often, with the `data` of each Secret decoded on both sides. The
+count matters: a file that keeps a token at one site and holds another value at a second
+site fails. A stub token is `stub-` followed by lower-case letters, digits and hyphens, and
+tokens compare whole. It
 names each failing file with the tokens it lacks, never the file's content, and exits 1. A
 file only one side holds, or one whose C1 render holds no token, passes unchecked: the
 manifests role's shadow-dir assert is its guard.

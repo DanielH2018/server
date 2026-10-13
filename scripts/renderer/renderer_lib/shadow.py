@@ -20,6 +20,7 @@ import difflib
 import hashlib
 import os
 import re
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
@@ -147,21 +148,41 @@ def _secret_data_values(text: str) -> Iterable[str]:
                 continue
 
 
-def stub_tokens(data: bytes) -> set[str]:
-    """Every stub token in a file, with the `data` of its Secret documents decoded first."""
+def stub_tokens(data: bytes) -> Counter[str]:
+    """How often each stub token occurs in a file, with its Secret documents' `data` decoded."""
     text = data.decode("utf-8", errors="replace")
-    tokens = set(STUB_TOKEN.findall(text))
+    tokens = Counter(STUB_TOKEN.findall(text))
     for value in _secret_data_values(text):
         tokens.update(STUB_TOKEN.findall(value))
     return tokens
 
 
 def lacking_stubs(ansible: bytes, c1: bytes) -> list[str]:
-    """The stub tokens the C1 file holds and the Ansible file does not, sorted.
+    """The stub tokens the C1 file holds more often than the Ansible file does, sorted.
 
-    Tokens compare as whole matches, so `stub-domain` inside `stub-domain-x` does not count.
+    Occurrences count, not just presence: a file that keeps a token at one site and holds
+    another value at a second site lacks it. Tokens compare as whole matches, so
+    `stub-domain` inside `stub-domain-x` does not count.
     """
-    return sorted(stub_tokens(c1) - stub_tokens(ansible))
+    ansible_tokens = stub_tokens(ansible)
+    return sorted(t for t, n in stub_tokens(c1).items() if ansible_tokens[t] < n)
+
+
+def changes_a_stub_line(ansible: bytes, c1: bytes) -> bool:
+    """Whether a line the two files do not share holds a stub token on the C1 side.
+
+    Such a hunk sits at a stub site, so the Ansible line beside it is withheld.
+    """
+    c1_lines = c1.decode("utf-8", errors="replace").splitlines()
+    matcher = difflib.SequenceMatcher(
+        None, ansible.decode("utf-8", errors="replace").splitlines(), c1_lines, False
+    )
+    return any(
+        STUB_TOKEN.search(line)
+        for op, _, _, j1, j2 in matcher.get_opcodes()
+        if op != "equal"
+        for line in c1_lines[j1:j2]
+    )
 
 
 def stubcheck(ansible: Tree, c1: Tree) -> dict[str, list[str]]:
@@ -327,8 +348,9 @@ def compare(
     side's flux-owned directories are ignored, and an Ansible side's are reported as extra.
     Two C1 trees are compared over all of `targets`.
 
-    The report withholds the content of a file that fails `stubcheck`'s rule and of one that
-    holds a Secret, and prints the stub tokens of every other hunk as `<stub>`.
+    The report withholds the content of a file that fails `stubcheck`'s rule, of one that
+    holds a Secret, and of one that differs on a line where the C1 render holds a stub token.
+    It prints the stub tokens of every other hunk as `<stub>`.
     """
     names = _side_names(first, second)
     targets, flux = set(targets), set(flux_owned) & set(targets)
@@ -371,6 +393,8 @@ def compare(
             two.decode("utf-8", "replace")
         ):
             report.hunks.append(f"{key}: holds a Secret; hunk withheld")
+        elif mixed and changes_a_stub_line(ansible, c1):
+            report.hunks.append(f"{key}: differs on a line with a stub; hunk withheld")
         else:
             report.hunks += hunk(key, one, two, names)
 
