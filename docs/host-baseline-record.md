@@ -229,6 +229,14 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
   packed at the suite median of 0.0s — so without the cron the split is un-skewed rather than
   measured. `--record-missing`, never `--record`: it measures only the files the table lacks,
   and writes the same bytes back when there are none, so an ordinary run leaves no diff.
+- **Why it also refreshes present weights (#4888).** `--record-missing` never touches an entry
+  the table holds, and the gate's under-recorded arm fires only at `UNDER_WEIGHT_RATIO` (20x).
+  Three modules measured 1.66x to 1.98x their weights in a serial run on 2026-10-13 and nothing
+  noticed. A lower CI ratio cannot catch that, because the runner measures correctly recorded
+  entries 1.1x to 13x their weight. So the cron runs `--refresh-drifted 8`, which re-measures
+  one hash slice of the table serially on this host, and every entry once in four days. It
+  rewrites only an entry more than `DRIFT_RATIO` (1.5x) from what it measured, so noise inside
+  that band leaves no diff.
 - **A red suite is not a case degradation saves**: the script runs the suite before its commit
   and exits 1 on a failure, because no prek hook runs the suite: #2827 moved the `pytest` hook
   to pre-push, and it was removed on 2026-10-02. What degradation saves is the suite being fine and the measurement alone

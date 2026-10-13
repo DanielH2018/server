@@ -311,7 +311,7 @@ def test_the_stale_repair_refuses_a_path_no_shard_runs():
 
 
 def test_no_mode_names_every_mode(capsys):
-    """The usage error lists all six modes, not the three it named before #4448."""
+    """The usage error lists all seven modes, not the three it named before #4448."""
     with pytest.raises(SystemExit) as exc:
         pytest_shard.main([])
     assert exc.value.code == 64
@@ -322,6 +322,7 @@ def test_no_mode_names_every_mode(capsys):
         "--record,",
         "--record-missing",
         "--record-files",
+        "--refresh-drifted",
         "--check-durations",
     ):
         assert mode in err.splitlines()[-1], mode
