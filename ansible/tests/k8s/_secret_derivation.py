@@ -1,36 +1,27 @@
 """Which tasks and variables carry a secret value, for the secret-key task census.
 
-`derived_variables` reads role defaults and inventory vars. `role_derived_facts` reads one role's
-`set_fact` tasks, including a fact parsed out of a secret-bearing `lookup('template', ...)`, and
-`tree_derived_facts` reads every role under one roles directory the same way, because a fact is
-play-scoped and one role can read what another sets. `file_registers` follows a value through a
-`register:` within one task file. `_tasks` walks a task file with whether a guard covers each task.
+`derived_variables` reads role defaults and inventory vars. `role_derived_facts` reads the
+`set_fact` and `register:` tasks of every role beside one role, including a fact parsed out of a
+secret-bearing `lookup('template', ...)`. `_tasks` walks a task file with whether a guard covers
+each task.
 """
 
-import functools
 import json
 import re
-from collections.abc import Iterable, Iterator, Set
+from collections.abc import Iterator
 from pathlib import Path
 
 from lib import yaml_fast
 
-from _role_census import role_task_files
+from _role_census import role_dirs, role_task_files
 
 _STUB_GUARD = re.compile(
     r"\bnot\s*\(?\s*(?:k8s_no_mutate|k8s_dry_run|homelab_secret_stubs)\b"
 )
 
 
-def _word_pattern(names: Set[str]) -> re.Pattern[str]:
+def _word_pattern(names: set[str]) -> re.Pattern[str]:
     return re.compile(r"\b(?:" + "|".join(sorted(map(re.escape, names))) + r")\b")
-
-
-def widen(names: re.Pattern[str], more: Set[str]) -> re.Pattern[str]:
-    """`names`, also matching each word in `more`."""
-    return (
-        re.compile(f"{names.pattern}|{_word_pattern(more).pattern}") if more else names
-    )
 
 
 # A value references a variable only inside a Jinja expression. A bare word does not count:
@@ -117,81 +108,50 @@ def _looked_up_templates(role: Path, text: str) -> Iterator[Path]:
 
 
 def role_derived_facts(role: Path, names: re.Pattern[str]) -> set[str]:
-    """The `set_fact` keys in `role` that carry a secret value, transitively.
+    """The fact and register names that carry a secret value into `role`, transitively.
 
-    A fact is derived when its task's Jinja names a match of `names` or an already derived fact,
-    or when the task looks up a role template whose own Jinja does.
+    A `set_fact` key or a `register:` name is derived when its task names a match of `names` or
+    an already derived name, or when a `set_fact` looks up a role template whose own Jinja does.
+    Both are play-scoped, so every role beside `role` is read too: a fact one role sets is read
+    in another, and a role reads the register of a role it includes (#4862).
     """
-    return _derived_facts([role], names)
-
-
-@functools.cache
-def tree_derived_facts(roles_dir: Path, names: re.Pattern[str]) -> frozenset[str]:
-    """The `set_fact` keys any role under `roles_dir` derives from `names`, transitively.
-
-    A fact set in one role is readable in every later role of the play, so a role's census reads
-    the facts its siblings derive too. Cached because the census calls it once per role with the
-    same tree and names.
-    """
-    roles = sorted(p for p in roles_dir.iterdir() if (p / "tasks").is_dir())
-    return frozenset(_derived_facts(roles, names))
-
-
-def _derived_facts(roles: Iterable[Path], names: re.Pattern[str]) -> set[str]:
-    facts: list[tuple[set[str], str, list[Path]]] = []
-    for role in roles:
-        for task_file in role_task_files(role):
+    # (names the task writes, the text it reads, the templates it looks up)
+    writes: list[tuple[set[str], str, list[Path]]] = []
+    for sibling in role_dirs(role.parent):
+        for task_file in role_task_files(sibling):
             for task, _ in _tasks(yaml_fast.safe_load(task_file.read_text())):
+                body = _body(task)
+                if isinstance(task.get("register"), str):
+                    writes.append(({task["register"]}, body, []))
                 module = next((k for k in _SET_FACT if k in task), None)
                 if module is None or not isinstance(task[module], dict):
                     continue
                 keys = {str(k) for k in task[module] if k != "cacheable"}
                 # `_body` is JSON, which escapes a double quote; the lookup pattern reads it bare.
-                text = " ".join(_JINJA.findall(_body(task))).replace('\\"', '"')
-                facts.append((keys, text, list(_looked_up_templates(role, text))))
+                text = " ".join(_JINJA.findall(body)).replace('\\"', '"')
+                writes.append((keys, text, list(_looked_up_templates(sibling, text))))
     templates = {
         path: " ".join(_JINJA.findall(path.read_text()))
-        for _, _, paths in facts
+        for _, _, paths in writes
         for path in paths
         if path.is_file()
     }
     derived: set[str] = set()
     while True:
-        secret = widen(names, derived)
+        secret = (
+            re.compile(f"{names.pattern}|{_word_pattern(derived).pattern}")
+            if derived
+            else names
+        )
         # Recomputed each pass: a template naming a fact derived last pass is secret-bearing now.
         secret_templates = {p for p, text in templates.items() if secret.search(text)}
         found = {
             key
-            for keys, text, paths in facts
+            for keys, text, paths in writes
             if not keys <= derived
             and (secret.search(text) or secret_templates.intersection(paths))
             for key in keys
         } - derived
-        if not found:
-            return derived
-        derived |= found
-
-
-def file_registers(tasks: object, names: re.Pattern[str]) -> set[str]:
-    """The `register:` names in one task file that hold a secret value, transitively.
-
-    A register is derived when its task's body names a match of `names` or an already derived
-    register. It is scoped to the file: sonarr's asserts read the registers of the guarded,
-    secret-reading `uri` tasks just above them (#4862).
-    """
-    registers = [
-        (task["register"], _body(task))
-        for task, _ in _tasks(tasks)
-        if isinstance(task.get("register"), str)
-    ]
-    derived: set[str] = set()
-    while True:
-        secret = widen(names, derived)
-        found = {
-            name
-            for name, body in registers
-            if name not in derived and secret.search(body)
-        }
         if not found:
             return derived
         derived |= found

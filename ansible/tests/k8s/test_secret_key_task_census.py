@@ -15,13 +15,12 @@ An `assert` or a `fail` is held to a stricter guard. It sends nothing, but it ca
 value, so only the `homelab_secret_stubs` sentinel credits it: an ordinary dry run holds the real
 values and is meant to check them. An exemption for one says why it passes on any stub value.
 
-A derived variable comes from three places. `derived_variables` reads role defaults and inventory
-vars. `tree_derived_facts` reads the `set_fact` tasks of every role beside this one, since a fact
-is play-scoped: a fact whose value names a secret-bearing name, or looks up a role template whose
-Jinja names one, is derived too. That is how uptime-kuma's `kuma_declarations`, a parse of a
-template embedding every push token, reaches the push-token assert (#4850). `file_registers` adds
-the `register:` of a selected task, scoped to its task file, which is how sonarr's asserts on its
-API reads' registers are selected (#4862).
+A derived variable comes from two places. `derived_variables` reads role defaults and inventory
+vars. `role_derived_facts` reads the `set_fact` and `register:` tasks of every role beside this
+one, since both are play-scoped: a name whose task names a secret-bearing name, or looks up a role
+template whose Jinja names one, is derived too. That is how uptime-kuma's `kuma_declarations`, a
+parse of a template embedding every push token, reaches the push-token assert (#4850), and how
+sonarr's asserts on its API reads' registers are selected (#4862).
 
 A guard counts only negated (`not k8s_no_mutate`), because `when: k8s_dry_run | bool` runs the
 task under a dry run alone. It is read from the parsed `when:`, so a guard word in a command
@@ -32,7 +31,7 @@ is keyed by file and would exempt all of authelia's `tasks/main.yml`.
 
 A second check covers the tasks a stub makes fail rather than act. `STUB_REFUSING` names each,
 and each must carry the `homelab_secret_stubs` guard itself. It predates the assert rule above,
-which selects every task it named, so it is a backstop for a derivation that regresses.
+which selects every task it names, so it backs up a derivation that regresses.
 """
 
 import json
@@ -53,9 +52,7 @@ from _secret_derivation import (
     _tasks,
     _word_pattern,
     derived_variables,
-    file_registers,
-    tree_derived_facts,
-    widen,
+    role_derived_facts,
 )
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
@@ -102,16 +99,6 @@ EXEMPT: dict[str, str] = {
     "uptime-kuma/main.yml::Check the declaration index is populated": (
         "counts the parsed declarations, and a stub token changes no count"
     ),
-    # Selected through a register since #4862. A stub file is refused outside a k8s dry run, so
-    # a dry-run guard skips each on every stubbed run.
-    "arr-notification/main.yml::Report what the notification seed decided for "
-    "{{ arr_notification_app }}": (
-        "reads the seed's register and carries `not k8s_dry_run`, so a stubbed run skips it"
-    ),
-    "crowdsec/verify.yml::Name why the edge did not enforce the ban": (
-        "reads the ban gate's registers, and main.yml imports verify.yml on `not k8s_no_mutate`, "
-        "so a stubbed run skips it"
-    ),
 }
 
 # Must be selected, because it names `sonarr_api_key`, and must pass on its guard.
@@ -133,25 +120,25 @@ def census(
 ) -> tuple[list[str], list[str]]:
     """Every task in `role` whose body names a secret value, and those not covered.
 
-    `names` is widened by the facts any role beside `role` derives, then per task file by the
-    registers its selected tasks fill. An `assert` or `fail` is covered only by the
+    `names` is widened by `role_derived_facts`. An `assert` or `fail` is covered only by the
     sentinel guard or an exemption; any other task by a stub guard, a side-effect-free module or
     an exemption.
 
     Returns:
         The selected task ids, then the offending ones, each `<role>/<file>::<task name>`.
     """
-    names = widen(names, tree_derived_facts(role.parent, names))
+    facts = role_derived_facts(role, names)
+    if facts:
+        names = re.compile(f"{names.pattern}|{_word_pattern(facts).pattern}")
     covered = _guard_covered_files(role, guard=_STUB_GUARD)
     sentinel_covered = _guard_covered_files(role, guard=_SENTINEL_GUARD)
     selected, offenders = [], []
     for task_file in role_task_files(role):
         tasks = yaml_fast.safe_load(task_file.read_text())
-        here = widen(names, file_registers(tasks, names))
         for (task, guarded), (_, sentinel) in zip(
             _tasks(tasks), _tasks(tasks, guard=_SENTINEL_GUARD), strict=True
         ):
-            if not here.search(_body(task)):
+            if not names.search(_body(task)):
                 continue
             key = f"{role.name}/{task_file.name}::{task.get('name')}"
             selected.append(key)

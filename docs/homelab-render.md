@@ -256,8 +256,8 @@ key before the load, so neither assert fires.
 A census in `ansible/tests/k8s/test_secret_key_task_census.py` covers the tasks that would
 act on a stub under an allowed run. It reads every k8s role task whose body names a secret
 key, or a variable derived from one. A derived variable is a role default or inventory var
-built from a secret key, a `set_fact` any role builds from one, or the `register:` of such a
-task within its task file. Each such task must be skipped under a stubbed dry run, use a
+built from a secret key, or a `set_fact` key or `register:` name whose task in any k8s role
+names one. Each such task must be skipped under a stubbed dry run, use a
 side-effect-free module, or carry a per-task exemption with a reason. An `assert` or a `fail`
 can refuse a stub value, so the census credits only the `homelab_secret_stubs` guard on it.
 sonarr's API reads, and its two asserts on the reads' registers, pass on that guard.
