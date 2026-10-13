@@ -1,0 +1,20 @@
+# Failed by `promtool test rules`: `max` aggregates `service` away, so the fired alert lacks the
+# label its firing case lists. This is the alert validator's condition 3 for the third `service`
+# source: a firing case that lists `service` catches an expression that drops it.
+rule_files:
+  - job-service-rules.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="fixture",service="fixture"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FixtureProbesAggregated
+        exp_alerts:
+          - exp_labels:
+              service: fixture
+              severity: warning
+            exp_annotations:
+              summary: Every fixture probe failed.

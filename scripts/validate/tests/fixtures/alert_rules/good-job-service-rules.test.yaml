@@ -1,0 +1,19 @@
+# Passed by `promtool test rules`: the alert keeps its series' labels, `service` among them.
+rule_files:
+  - job-service-rules.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="fixture",service="fixture"}'
+        values: '0x5'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: FixtureProbeFailed
+        exp_alerts:
+          - exp_labels:
+              job: fixture
+              service: fixture
+              severity: warning
+            exp_annotations:
+              summary: A fixture probe failed.

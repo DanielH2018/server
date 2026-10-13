@@ -32,6 +32,28 @@ THE RULE CONVENTIONS. `scripts/validate/alert_conventions.py:rule_problems` hold
 files to the conventions promtool does not check, before the tools run. This script supplies
 the rule groups and the rendered `prometheus-rules` keys from the role's render.
 
+THE THIRD `service` SOURCE. An alert carries `service` as a literal, through M2's
+workload-service join, or from its scrape job's targets. The third source is for an alert like
+`probe_success{job="x"} == 0`, whose series carry `service` because every target of the job
+sets it. `alert_conventions.service_from_job` and `rule_test_problems` accept an alert with no
+literal `service` on this source only when all three conditions hold:
+
+1. Every vector selector in its expression carries a `job` matcher by equality, and all of them
+   name the same job. A regex matcher, a selector with no `job` matcher, or two jobs fail.
+2. Every target of that job in the rendered `prometheus.yml` sets `service` in its `labels`.
+   A job that discovers its targets sets no static label, so it fails, and so does a job with
+   one target that lacks `service`.
+3. Every `exp_alerts` entry for the alert in its promtool test lists `service` in
+   `exp_labels`. promtool compares whole label sets, so an expression that drops `service`
+   fails that case in the tool phase. An aggregation whose `by` omits it, a `without
+   (service)`, an `absent()` and vector matching with `on()` all fail there, without a lexical
+   check having to name each shape.
+
+The script hands the rendered `prometheus.yml` to `rule_problems` for condition 2. The second
+`promtool test rules` proof shows condition 3 rests on promtool: its bad fixture is an
+aggregation whose firing case lists `service`, and promtool fails it because the fired alert
+carries none.
+
 THE GO-TEMPLATE SURVIVAL CHECK. `alertmanager.yml` is part of a Jinja template, and every Go
 template expression in it sits inside a Jinja raw block. Jinja refuses most Go expressions as
 syntax errors, and the hook reports that failed render. A Go expression that Jinja can parse
@@ -48,7 +70,7 @@ THE TOOLS. `scripts/validate/alert_tools.sh` provisions promtool and amtool at t
 tags, and pint at the version it pins, into `alert-tools/` under the git common dir, which
 every worktree of a clone shares. Every tool call goes through it.
 
-`--prove-red` runs each tool against `PROOFS`, the fixtures in
+`--prove-red` runs each tool command against `PROOFS`, the fixtures in
 `scripts/validate/tests/fixtures/alert_rules/`. It exits 0 only when every tool accepts its
 good fixture and rejects its bad one with the expected message. The accepting half proves the
 tool ran at all: a missing binary also exits non-zero, and without the good fixture it would
@@ -163,6 +185,13 @@ PROOFS = (
         "good-rules.test.yaml",
         "bad-rules.test.yaml",
         "alertname: FixtureTargetDown, time: 3m",
+    ),
+    Proof(
+        "promtool",
+        ("test", "rules"),
+        "good-job-service-rules.test.yaml",
+        "bad-job-service-rules.test.yaml",
+        "alertname: FixtureProbesAggregated, time: 3m",
     ),
     Proof(
         "amtool",
@@ -331,6 +360,8 @@ def check_tree(
     run: Runner = run_tool,
     render: Callable[[], dict[str, str]] | None = None,
     render_rules: Callable[[], tuple[list[str], set[str]]] | None = None,
+    rules_dir: Path = RULES_DIR,
+    tests_dir: Path = RULE_TESTS_DIR,
 ) -> list[str]:
     """Render the role, apply the floors and the rule conventions, and run every tool check.
 
@@ -339,6 +370,8 @@ def check_tree(
         render: Returns the rendered files; `rendered_files` unless a test passes another.
         render_rules: Returns the rule groups and the rendered rule keys;
             `rendered_rule_keys` unless a test passes another.
+        rules_dir: The rule files.
+        tests_dir: Their promtool tests.
     """
     try:
         found = (render or rendered_files)()
@@ -346,7 +379,13 @@ def check_tree(
     except RuntimeError as err:
         # A Go expression outside a raw block usually lands here, as a Jinja syntax error.
         return [str(err)]
-    problems = floor_problems(found) + rule_problems(groups, keys)
+    problems = floor_problems(found) + rule_problems(
+        groups,
+        keys,
+        rules_dir,
+        tests_dir,
+        prometheus_yml=found.get("prometheus.yml"),
+    )
     if "alertmanager.yml" in found and "homelab.tmpl" in found:
         problems += go_template_problems(
             ALERTMANAGER_SOURCE.read_text(),
@@ -358,7 +397,7 @@ def check_tree(
         for key, text in found.items():
             paths[key] = Path(tmp) / key
             paths[key].write_text(text)
-        for argv in tool_checks(paths):
+        for argv in tool_checks(paths, rules_dir, tests_dir):
             code, output = run(argv)
             if code != 0:
                 problems.append(f"`{' '.join(argv)}` exited {code}:\n{output.rstrip()}")

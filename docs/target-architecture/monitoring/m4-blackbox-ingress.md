@@ -1,6 +1,7 @@
 # M4 — blackbox_exporter for the ingress probes
 
-Status: PLANNED
+Status: IN PROGRESS
+PR 2 (the validator's third `service` source): issue #4796.
 
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before this slice's PR 3
 
