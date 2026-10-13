@@ -13,8 +13,8 @@ same pinned binary, and a bump of the pin that changes one fails here first:
 - `${HOME}` in a directory with no `postBuild` comes back unchanged;
 - a placeholder for a variable absent from `postBuild.substitute` fails the build under
   `--strict-substitute`;
-- a `stringData` value written `"${n}"`, built once with `n=0123` and once with `n=true`,
-  comes back as the YAML type `EXPECTED_TYPES` records.
+- a `stringData` value written `"${probe_n}"`, built once with `probe_n=0123` and once with
+  `probe_n=true`, comes back as the YAML type `EXPECTED_TYPES` records.
 
 `--red-proof` adds one expected output that no fixture yields, so a working probe must fail.
 The values are fixture strings, never a secret. `docs/homelab-render.md` records the measured
@@ -62,7 +62,7 @@ PLAIN_CASES = {"literal-reference": ("${HOME}", "${HOME}")}
 # The key `--red-proof` expects and no fixture holds.
 RED_PROOF_KEY = "red-proof-absent"
 
-# The type each `n` value comes back as, measured against the pinned CLI on this branch's CI
+# The type each `probe_n` value comes back as, measured against the pinned CLI on this branch's CI
 # and recorded in docs/homelab-render.md. None measures without asserting.
 EXPECTED_TYPES: dict[str, str | None] = {"0123": None, "true": None}
 
@@ -79,8 +79,11 @@ def _configmap(name: str, data: dict[str, str]) -> str:
 
 TYPES_SECRET = (
     "apiVersion: v1\nkind: Secret\nmetadata:\n  name: probe-types\n  namespace: probe\n"
-    'type: Opaque\nstringData:\n  n: "${n}"\n'
+    'type: Opaque\nstringData:\n  probe_n: "${probe_n}"\n'
 )
+# Not the plan's bare `n`: Go's YAML 1.1 reader takes the unquoted key `n` in
+# `postBuild.substitute` for the boolean false, so the build found no variable `n` at all.
+TYPE_VAR = "probe_n"
 
 
 def write_fixtures(root: Path) -> None:
@@ -183,22 +186,24 @@ def probe(
         )
 
     for value, expected in EXPECTED_TYPES.items():
-        result = _built(root, TYPES, {"n": value}, flux, run)
+        result = _built(root, TYPES, {TYPE_VAR: value}, flux, run)
         if result.returncode != 0:
             report.fail(
-                f"{TYPES} n={value}: flux build exited {result.returncode}: {result.stderr}"
+                f"{TYPES} {TYPE_VAR}={value}: flux build exited {result.returncode}: {result.stderr}"
             )
             continue
         line = next(
             (
                 ln.strip()
                 for ln in result.stdout.splitlines()
-                if ln.strip().startswith("n:")
+                if ln.strip().startswith(f"{TYPE_VAR}:")
             ),
-            "(no n line)",
+            "(no such line)",
         )
-        got = type(_data(result.stdout, "Secret").get("n")).__name__
-        measured = f"{TYPES} n={value}: comes back as {got}, from the line `{line}`"
+        got = type(_data(result.stdout, "Secret").get(TYPE_VAR)).__name__
+        measured = (
+            f"{TYPES} {TYPE_VAR}={value}: comes back as {got}, from the line `{line}`"
+        )
         if expected is None:
             report.lines.append(f"measured {measured}")
         elif got != expected:
