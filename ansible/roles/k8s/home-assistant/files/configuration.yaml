@@ -266,15 +266,15 @@ lovelace:
 # https://home-assistant.<domain>/api/google_assistant (Authelia is off on this route, so no bypass
 # needed). report_state pushes live state to Google's HomeGraph, signed by the service account;
 # re-sync exposed devices with the google_assistant.request_sync service (no api_key needed).
-# Secrets come from HA's secrets.yaml (Ansible-generated from the SOPS google_assistant_service_account
-# JSON): project_id + the service account's client_email/private_key. Exposure is CURATED —
+# project_id comes from HA's secrets.yaml (Ansible-generated from SOPS). service_account is the
+# whole downloaded JSON key, which the init container installs as google_service_account.json from
+# the home-assistant-google-sa Secret; the integration reads client_email and private_key from it
+# and allows the JSON's other fields. Exposure is CURATED —
 # expose_by_default is off, so ONLY the entities flagged `expose: true` below are visible to Google.
 # Add a device = another entity_config entry with `expose: true`, then say "Hey Google, sync my devices".
 google_assistant:
   project_id: !secret google_assistant_project_id
-  service_account:
-    client_email: !secret google_assistant_sa_client_email
-    private_key: !secret google_assistant_sa_private_key
+  service_account: !include google_service_account.json
   report_state: true
   expose_by_default: false
   entity_config:

@@ -9,7 +9,9 @@ cluster.
 Without `--secret-stubs`, `cluster` renders in placeholder mode (target slice R2): every secret
 reference renders as `${<key>}`, and a directory whose render holds one escapes every other `$`
 Flux would read as syntax. `renderer_lib/placeholders.py` holds the passes and the per-directory
-key sets, and placeholder mode skips the tags in its `PLACEHOLDER_DEFERRED`.
+key sets, and placeholder mode skips the tags in its `PLACEHOLDER_DEFERRED`. Placeholder mode
+leaves out each role's `render_sops_manifests` files, and the `sops-manifest-entries` check of
+`renderer_lib/secret_checks.py` holds those lists before anything is written.
 
 `host --host NAME` renders `hosts/NAME/package.yml` into `DIR/hosts/NAME/`, and `package --name
 PKG` renders the shared package `hosts/packages/PKG/` into `DIR/packages/PKG/`. Each writes
@@ -34,6 +36,7 @@ Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-rend
 import os
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 import sys as _sys
@@ -54,8 +57,10 @@ from renderer.renderer_lib.cluster import (
 )
 from renderer.renderer_lib.context import load_stubs
 from renderer.renderer_lib.host import render_host, render_package, write_packages
+from renderer.renderer_lib.secret_checks import sops_manifest_entries
 from renderer.renderer_lib.placeholders import (
     Mode,
+    PlaceholderRender,
     render_placeholders,
     select_mode,
 )
@@ -82,11 +87,19 @@ def unstubbed(stubs: dict, secrets: Path = SECRETS) -> list[str]:
     return homelab_unstubbed_keys(secret_keys(secrets), stubs)
 
 
-def cluster(out: Path, roles: list[str] | None, secret_stubs: Path | None) -> int:
-    """Render `roles`, or every renderable tag, into `out`; return the exit code."""
+def cluster(
+    out: Path,
+    roles: list[str] | None,
+    secret_stubs: Path | None,
+    render: Callable[[list[str], list[str]], PlaceholderRender] = render_placeholders,
+) -> int:
+    """Render `roles`, or every renderable tag, into `out`; return the exit code.
+
+    `render` is the placeholder render, which a test replaces with one over fixture sets.
+    """
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
         return _stub_cluster(out, roles, secret_stubs)
-    return _placeholder_cluster(out, roles)
+    return _placeholder_cluster(out, roles, render)
 
 
 def _stub_cluster(out: Path, roles: list[str] | None, secret_stubs: Path) -> int:
@@ -115,14 +128,22 @@ def _stub_cluster(out: Path, roles: list[str] | None, secret_stubs: Path) -> int
     return RENDER_OK
 
 
-def _placeholder_cluster(out: Path, roles: list[str] | None) -> int:
+def _placeholder_cluster(
+    out: Path,
+    roles: list[str] | None,
+    render: Callable[[list[str], list[str]], PlaceholderRender],
+) -> int:
     try:
         tags = select_tags(roles)
-        result = render_placeholders(tags, secret_keys())
+        keys = secret_keys()
+        result = render(tags, keys)
         if not result.tags:
             raise RenderRefused(
                 f"every requested tag is in PLACEHOLDER_DEFERRED: {result.skipped}"
             )
+        problems = sops_manifest_entries(result, keys)
+        if problems:
+            raise RenderError("\n".join(problems))
         written = write_cluster(result.tags, out)
     except RenderRefused as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)

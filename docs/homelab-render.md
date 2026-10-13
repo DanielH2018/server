@@ -60,11 +60,6 @@ stub instead, which the filter `homelab_secret_stub` builds:
 - A key `K` becomes `stub-` plus `K` with underscores turned to hyphens, such as
   `stub-domain`. That shape is a valid DNS label, so a stubbed host name still passes
   `kubectl apply --dry-run=server`.
-- `google_assistant_service_account` is the one key a template parses. home-assistant's
-  `templates/config/secrets.yaml.j2` runs it through `from_json` and reads `project_id`,
-  `client_email` and `private_key`. Its stub is a JSON object holding exactly those three
-  fields, each valued `stub-google-assistant-service-account-<field>`, serialised with
-  sorted keys.
 - `become_password` never takes a stub. It is the one name in `NEVER_STUB`, because
   `ansible/pre_tasks/load_secrets.yml` hands it to privilege escalation and no template
   reads it.
@@ -261,14 +256,41 @@ substitute.
 ### Tags placeholder mode skips
 
 `PLACEHOLDER_DEFERRED` in `placeholders.py` names the tags placeholder mode cannot render
-yet, each with its reason. It holds `home-assistant`, whose `templates/config/secrets.yaml.j2`
-runs `from_json` on `google_assistant_service_account`, which raises on a sentinel. R2's PR 5
-empties the set. Placeholder mode skips a member and names it in the summary line, as
-`skipped, in PLACEHOLDER_DEFERRED: home-assistant`. A `--role` list that names only members
-renders nothing, so `cluster` refuses it with exit 2. Stub mode renders every tag.
+yet, each with its reason. It is empty. Its last member was `home-assistant`, whose
+`from_json` parse of `google_assistant_service_account` raised on a sentinel until R2's PR 5
+moved that key into a Secret of its own. Placeholder mode skips a member and names it in the
+summary line, as `skipped, in PLACEHOLDER_DEFERRED: <tag>`. A `--role` list that names only
+members renders nothing, so `cluster` refuses it with exit 2. Stub mode renders every tag.
 
 This set is a different thing from a `<tag>-deferred` directory, which holds the files a role
 passes as `manifests_deferred_files`.
+
+### Manifests placeholder mode leaves out
+
+A multi-line key cannot pass through a placeholder, because Flux deletes every newline from a
+substituted value. Each such key moves into a small Secret of its own, which D3 ships as a
+SOPS-encrypted manifest. The role lists that Secret's manifest in the defaults variable
+`render_sops_manifests`, and placeholder mode emits no document for it. It drops the file
+before pass 2 and rebuilds the directory's `kustomization.yaml` without it, so its key counts
+in no key set and in no standalone set. Stub mode still renders it, and Ansible renders and
+applies it like any other secret file.
+
+| Role | Entry | Secret | Key |
+|---|---|---|---|
+| `home-assistant` | `google-sa-secret.yaml` | `home-assistant-google-sa` | `google_assistant_service_account` |
+
+A wrong entry would hide a whole Secret from the publish and from the round trip, so the
+`sops-manifest-entries` check in `renderer_lib/secret_checks.py` holds the lists on every
+placeholder render. `cluster` exits 1 and writes nothing when an entry:
+
+- names a file the role does not render;
+- renders anything but exactly one document, of kind `Secret`;
+- names a secret key outside `SOPS_MANIFEST_KEYS`, or no key in it.
+
+The check reads the keys from the entry's sentinel render, so a key reached through an alias
+counts. A `--role` render checks only the tags it rendered. R2's plan adds a third clause once
+PR 2's `KNOWN_VIOLATIONS` ratchet exists: every template outside the lists that names a
+`SOPS_MANIFEST_KEYS` key must carry a live entry there.
 
 ### Filters that only interpolate a secret
 
@@ -323,8 +345,10 @@ It runs two passes:
    committed one, so `{}` sets every key to `0123` again.
 
 Each pass prints a summary line, such as `roundtrip: 2 tags, 0 deferred directories, 2
-substituting, 4 objects, 0 differences, with each key's R1 stub`. `roundtrip` exits 0 only
-when both passes find no difference.
+substituting, 4 objects, 0 differences, 0 documents in render_sops_manifests, with each key's
+R1 stub`. Each stub render drops the tags' `render_sops_manifests` files, as placeholder mode
+does, and counts the documents it dropped. `roundtrip` exits 0 only when both passes find no
+difference and each dropped exactly one document per entry.
 
 It needs the pinned flux CLI. daniel-box has none, so it runs in CI's `flux_roundtrip` job.
 Where `flux` is not on `PATH`, it exits 2 and reports no pass. It also exits 2 when a render
@@ -335,11 +359,12 @@ job runs it that way too, and fails unless it does:
 
 ```bash
 uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip \
-  --role configarr --role janitorr
+  --role configarr --role janitorr --role home-assistant
 ```
 
 The CI job round-trips `configarr` and `janitorr`, whose Secrets embed whole app configs with
-several placeholders in a block scalar. R2's PR 2 widens it to every tag outside
+several placeholders in a block scalar, and `home-assistant`, which carries the first
+`render_sops_manifests` entry. R2's PR 2 widens it to every tag outside
 `PLACEHOLDER_DEFERRED`. The job also round-trips `homepage` with the guard's map read as
 empty, and fails unless that run exits 1 and names `IngressRoute/homelab/homepage`. That proves
 the second pass still sees a standalone use the map does not cover:
