@@ -95,6 +95,10 @@ the fixed `authelia_claude_totp_secret` every deploy.
 - **Rotating either password needs `-e authelia_k8s_rehash_passwords=true`.** The role reuses each
   user's existing argon2 digest from the live Secret, so `sops set authelia_password` plus an
   ordinary deploy changes nothing while the recap reads green.
+- **"Fail if a stored Authelia digest is malformed" stops the deploy before the apply.** It
+  requires each managed user's digest to be the hashing block's argon2id PHC form, and no two to
+  be equal. Only a stubbed shadow run skips it, so an ordinary dry run checks the live digests.
+  ENFORCED: `ansible/tests/services/test_authelia_digest_assert.py`.
 - **The hashing block must render the nested form with `variant: argon2id`** — the legacy flat form
   multiplied `memory` by 1024 and passed validation silently (#1621). ENFORCED:
   `ansible/tests/services/test_authelia_config_schema.py`.

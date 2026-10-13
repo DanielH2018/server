@@ -9,6 +9,11 @@ algorithm and parameters back off each stored digest's own `$argon2id$` PHC pref
 the config block says and a deploy is green either way. Under the legacy flat spelling the two
 copies stand 1024x apart on `memory`; this guard keeps them agreeing.
 
+A third copy is the digest assert in the same task file, "Fail if a stored Authelia digest is
+malformed". Its PHC pattern spells `m`, `t` and `p`, and its two base64 lengths encode the salt
+and key sizes, so a parameter change that misses it fails every deploy before the apply. The
+pattern is compared with the rendered block too.
+
 The flag-to-key mapping is NOT identity — `--salt-size` is `salt_length` and `--key-size` is
 `key_length` — which is itself the reason it is pinned here rather than left to a reader.
 
@@ -55,6 +60,13 @@ IGNORED_FLAGS = frozenset({"--password"})
 # name says which task went missing, and an empty parse can no longer read as agreement.
 HASH_TASK_PODS = frozenset({"authelia-hash", "authelia-hash-claude"})
 
+# The digest assert, the third copy of the parameters. Named, so a rename fails here rather
+# than leaving its pattern unchecked.
+DIGEST_ASSERT_TASK = "Fail if a stored Authelia digest is malformed"
+
+# The PHC fields the digest assert's pattern spells, and the config key each one encodes.
+PHC_TO_CONFIG_KEY = {"m": "memory", "t": "iterations", "p": "parallelism"}
+
 # There is no `--variant` flag on either command, so there is nothing to compare it against.
 # It is pinned to a literal instead: `argon2id`, the long spelling the published v4.39 schema's
 # enum carries and the value the template's own comment settles on.
@@ -98,6 +110,50 @@ def mismatches(config_argon2: dict, flags: dict[str, str]) -> list[str]:
     return out
 
 
+def b64_length(n_bytes: int) -> int:
+    """Characters in the unpadded base64 of `n_bytes` bytes, as a PHC string writes a salt or key."""
+    return -(-4 * n_bytes // 3)
+
+
+def pattern_mismatches(config_argon2: dict, pattern: str) -> list[str]:
+    """Where the digest assert's PHC pattern and the config block disagree.
+
+    The pattern carries `$argon2id$v=19$m=<memory>,t=<iterations>,p=<parallelism>$` and then two
+    `{n}` quantifiers, the salt's base64 length and the key's.
+    """
+    out = []
+    variant = re.search(r"argon2[a-z]*", pattern)
+    if (variant.group(0) if variant else None) != config_argon2.get("variant"):
+        out.append(
+            f"variant={config_argon2.get('variant')!r} but the pattern names "
+            f"{variant.group(0) if variant else None!r}"
+        )
+    fields = dict(re.findall(r"\b([mtp])=(\d+)", pattern))
+    for field, key in PHC_TO_CONFIG_KEY.items():
+        if field not in fields:
+            out.append(
+                f"{field}= missing from the pattern ({key}={config_argon2.get(key)!r})"
+            )
+        elif str(config_argon2.get(key)) != fields[field]:
+            out.append(
+                f"{key}={config_argon2.get(key)!r} but the pattern has {field}={fields[field]}"
+            )
+    lengths = [int(n) for n in re.findall(r"\{(\d+)\}", pattern)]
+    if len(lengths) != 2:
+        return [
+            *out,
+            f"expected a salt and a key length in the pattern, found {lengths}",
+        ]
+    for key, chars in zip(("salt_length", "key_length"), lengths, strict=True):
+        want = b64_length(int(config_argon2.get(key, 0)))
+        if chars != want:
+            out.append(
+                f"{key}={config_argon2.get(key)!r} encodes as {want} base64 characters, "
+                f"but the pattern expects {chars}"
+            )
+    return out
+
+
 # --- the predicates, each with a passing and a rejecting input -----------------------
 
 GOOD_CONFIG = {
@@ -113,6 +169,10 @@ GOOD_CMD = (
     "--restart=Never --image=authelia:4.39.21 --command -- "
     'sh -c \'IFS= read -r pw; authelia crypto hash generate argon2 --password "$pw" '
     "--iterations 3 --memory 65536 --parallelism 4 --salt-size 16 --key-size 32'"
+)
+
+GOOD_PATTERN = (
+    r"^[$]argon2id[$]v=19[$]m=65536,t=3,p=4[$][A-Za-z0-9+/]{22}[$][A-Za-z0-9+/]{43}\Z"
 )
 
 
@@ -152,6 +212,23 @@ def test_an_unrecognised_parameter_flag_is_flagged():
     """A `--variant` (or anything else) added to the command has nothing comparing it."""
     extended = GOOD_CMD.replace("--iterations 3", "--variant argon2i --iterations 3")
     assert unexpected_flags(argon2_flags(extended)) == {"--variant"}
+
+
+def test_an_agreeing_pattern_is_clean():
+    assert pattern_mismatches(GOOD_CONFIG, GOOD_PATTERN) == []
+
+
+def test_a_changed_pattern_field_is_flagged():
+    assert pattern_mismatches(GOOD_CONFIG, GOOD_PATTERN.replace("t=3", "t=2"))
+
+
+def test_a_changed_pattern_length_is_flagged():
+    """`{43}` is a 32-byte key; `{22}` there would accept a 16-byte one."""
+    assert pattern_mismatches(GOOD_CONFIG, GOOD_PATTERN.replace("{43}", "{22}"))
+
+
+def test_a_changed_key_length_is_flagged_against_the_pattern():
+    assert pattern_mismatches({**GOOD_CONFIG, "key_length": 64}, GOOD_PATTERN)
 
 
 # --- applied to the real rendered manifest and the real task file --------------------
@@ -244,3 +321,40 @@ def test_a_mutated_real_command_is_flagged(rendered_argon2, hash_commands):
         "the comparison passed a command whose --memory is 1024x off, which is the exact "
         "#1621 defect — the guard is not reading one of the two sides"
     )
+
+
+@pytest.fixture(scope="module")
+def digest_pattern():
+    """The digest assert's PHC pattern, out of the real task file."""
+    tasks = yaml_fast.safe_load(TASKS.read_text()) or []
+    found = [
+        t for t in tasks if isinstance(t, dict) and t.get("name") == DIGEST_ASSERT_TASK
+    ]
+    assert len(found) == 1, (
+        f"expected one task named {DIGEST_ASSERT_TASK!r} in the authelia role, found "
+        f"{len(found)}, so its pattern is no longer checked against the config"
+    )
+    pattern = (found[0].get("vars") or {}).get("authelia_k8s_digest_pattern")
+    assert isinstance(pattern, str) and pattern, (
+        f"{DIGEST_ASSERT_TASK!r} carries no authelia_k8s_digest_pattern var to compare"
+    )
+    return pattern
+
+
+def test_the_digest_assert_agrees_with_the_rendered_config(
+    rendered_argon2, digest_pattern
+):
+    bad = pattern_mismatches(rendered_argon2, digest_pattern)
+    assert bad == [], (
+        f"the digest assert's pattern disagrees with the rendered config block: {bad}. Every "
+        f"deploy would then refuse the digests the hashing block mints"
+    )
+
+
+def test_a_mutated_real_pattern_is_flagged(rendered_argon2, digest_pattern):
+    """Red proof on the real pattern: the #1621 memory drift, in the third copy."""
+    mutated = digest_pattern.replace("m=65536", "m=64")
+    assert mutated != digest_pattern, (
+        "the digest assert's pattern carries no m=65536 to mutate"
+    )
+    assert pattern_mismatches(rendered_argon2, mutated)
