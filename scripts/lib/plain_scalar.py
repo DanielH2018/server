@@ -84,8 +84,11 @@ def go_yaml_v2_types(text: str) -> bool:
 
 def yaml_1_1_keeps(text: str) -> bool:
     """Whether PyYAML's `safe_load` reads the bare text `text` back as exactly `text`."""
+    # libyaml's parser takes an exact `str` and refuses a subclass, which is what Ansible
+    # hands a filter, so the text is copied out first.
+    plain = str.__str__(text)
     try:
-        return yaml.load(text, Loader=_LOADER) == text
+        return yaml.load(plain, Loader=_LOADER) == plain
     except yaml.YAMLError:
         return False
 

@@ -55,6 +55,7 @@ def _run(tmp_path: Path, hosts: dict[str, dict], guard_map=_MAP) -> dict[str, di
             "dest": "{{ playbook_dir }}/results/{{ inventory_hostname }}.json",
             "content": (
                 "{{ {'find_failed': find_result.failed | default(false),"
+                " 'find_msg': find_result.msg | default(''),"
                 " 'refused': manifests_standalone_refused | default(None),"
                 " 'refuse': refuse_result} | to_json }}"
             ),
@@ -128,7 +129,7 @@ def test_a_mapped_value_flux_keeps_is_clean(tmp_path: Path) -> None:
         },
     )
     for host, recorded in results.items():
-        assert recorded["refused"] == [], host
+        assert recorded["refused"] == [], (host, recorded)
         assert not recorded["refuse"].get("failed"), (host, recorded["refuse"])
 
 
