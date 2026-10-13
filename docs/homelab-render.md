@@ -806,6 +806,9 @@ unit the host package drops a `50-homelab.conf` into, each with its policy or `{
 `enable_links` lists each unit the host package installs under a
 `/usr/lib/systemd/system/<target>.wants/` directory. `legacy` holds the rendered entries, and
 `reconcilers` is empty until H4. A spec file entry may not install the manifest's path.
+The render refuses any manifest that `homelab-reconcile:parse_manifest` would refuse: an enable
+link for a unit no package installs or drops in on, or a drop-in on a unit that is not a
+service, timer, socket or path.
 
 A host package's context is the host's inventory layers, as
 `scripts/lib/render_context.py:render_context` builds them, with `inventory_hostname` set to

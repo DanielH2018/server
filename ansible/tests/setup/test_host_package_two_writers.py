@@ -328,16 +328,42 @@ def test_a_role_still_installing_a_legacy_cron_is_flagged(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("entry", "key"),
+    ("task", "legacy", "key"),
     [
-        ({"path": "/usr/local/bin/x.sh"}, ("path", "/usr/local/bin/x.sh")),
-        ({"cron_file": "pi-health"}, ("path", "/etc/cron.d/pi-health")),
-        ({"unit": "x.service"}, ("path", "/etc/systemd/system/x.service")),
-        ({"cron": "X", "user": "ubuntu"}, ("cron", "ubuntu", "X")),
+        pytest.param(
+            "- ansible.builtin.template:\n"
+            "    src: pi-sd-health.sh.j2\n"
+            "    dest: /usr/local/bin/pi-sd-health.sh\n",
+            "  - {path: /usr/local/bin/pi-sd-health.sh}\n",
+            "path /usr/local/bin/pi-sd-health.sh",
+            id="path",
+        ),
+        pytest.param(
+            "- ansible.builtin.cron:\n"
+            "    name: Pi SD-card health heartbeat\n"
+            "    cron_file: pi-health\n"
+            "    user: root\n"
+            "    job: /usr/local/bin/pi-sd-health.sh\n",
+            "  - {cron_file: pi-health}\n",
+            "path /etc/cron.d/pi-health",
+            id="cron_file",
+        ),
+        pytest.param(
+            "- ansible.builtin.template:\n"
+            "    src: pi-sd-health.service.j2\n"
+            "    dest: /etc/systemd/system/pi-sd-health.service\n",
+            "  - {unit: pi-sd-health.service}\n",
+            "path /etc/systemd/system/pi-sd-health.service",
+            id="unit",
+        ),
     ],
 )
-def test_each_legacy_kind_keys_as_the_write_it_retires(entry, key):
-    assert legacy_key(entry) == key
+def test_a_role_still_writing_a_legacy_path_is_flagged(tmp_path, task, legacy, key):
+    found = collisions(*_fixture(tmp_path, task, legacy=legacy))
+    assert found == [
+        f"daniel-pi: {key} is written by ['optimize_pi'] "
+        "and shipped by ['homelab-daniel-pi (legacy)']"
+    ]
 
 
 @pytest.mark.parametrize(

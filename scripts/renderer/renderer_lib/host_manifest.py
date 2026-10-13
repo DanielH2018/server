@@ -65,7 +65,9 @@ def manifest(package: Package, updater: Package | None) -> dict:
     """The manifest `homelab-reconcile` reads, for a host package and the updater beside it.
 
     Raises:
-        RenderRefused: A policy names a unit neither package installs or drops in on.
+        RenderRefused: A policy or an enable link names a unit neither package installs or
+            drops in on, or a drop-in target is a unit kind reconcile does not manage.
+            `homelab-reconcile:parse_manifest` refuses each, which would fail every run.
     """
     shared_units = updater.units() if updater else []
     managed = set(package.units() + package.dropin_targets() + shared_units)
@@ -76,12 +78,25 @@ def manifest(package: Package, updater: Package | None) -> dict:
             f"{package.name}: units {stray} have a policy, but no package installs them "
             "or drops in on them"
         )
+    unmanaged = sorted(unit for unit in managed if not _UNIT_NAME.fullmatch(unit))
+    if unmanaged:
+        raise RenderRefused(
+            f"{package.name}: drop-ins target {unmanaged}, which are not a service, "
+            "timer, socket or path unit"
+        )
+    links = package.enable_links()
+    unlisted = sorted(set(links) - managed)
+    if unlisted:
+        raise RenderRefused(
+            f"{package.name}: enable links name {unlisted}, which no package installs "
+            "or drops in on"
+        )
     return {
         "units": {
             unit: {"policy": policies[unit]} if unit in policies else {}
             for unit in sorted(managed)
         },
-        "enable_links": package.enable_links(),
+        "enable_links": links,
         "legacy": package.legacy,
         # H4 adds the first reconciler kind; reconcile fails a run that lists an unknown one.
         "reconcilers": [],

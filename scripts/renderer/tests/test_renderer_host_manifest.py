@@ -119,10 +119,25 @@ def test_a_shared_package_ships_no_manifest(hosts):
             "daniel-pi",
             "no package installs them",
         ),
+        (
+            {
+                "files": [
+                    {"src": "u", "dst": f"{UNITS}/multi-user.target.wants/ssh.service"}
+                ]
+            },
+            "daniel-pi",
+            r"enable links name \['ssh.service'\]",
+        ),
+        (
+            {"files": [{"src": "u", "dst": f"{UNITS}/foo.mount.d/50-homelab.conf"}]},
+            "daniel-pi",
+            r"drop-ins target \['foo.mount'\]",
+        ),
     ],
 )
 def test_a_manifest_entry_no_package_backs_is_flagged(hosts, package, where, message):
     root = hosts(package, where=where)
+    (root / where / "u").write_text("")
     render = host_mode.render_host if where == "daniel-pi" else host_mode.render_package
     with pytest.raises(RenderRefused, match=message):
         render(where.rsplit("/", 1)[-1], root)
