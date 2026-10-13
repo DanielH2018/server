@@ -450,6 +450,8 @@
  "ansible/tests/repo/test_uptime_robot_keywords.py": 0.0,
  "ansible/tests/repo/test_vale_matches_the_ci_pin.py": 0.0,
  "ansible/tests/services/test_alert_history_board_parses_the_bridge_down_line.py": 0.0,
+ "ansible/tests/services/test_alertmanager_reboot_mute.py": 0.42,
+ "ansible/tests/services/test_alertmanager_routing.py": 0.13,
  "ansible/tests/services/test_alloy_pi_config_labels.py": 0.0,
  "ansible/tests/services/test_alloy_pi_gomemlimit_headroom.py": 0.0,
  "ansible/tests/services/test_alloy_pi_http_surface.py": 0.0,

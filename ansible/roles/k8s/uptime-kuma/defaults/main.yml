@@ -271,11 +271,9 @@ uptime_kuma_k8s_maintenance_window_description: >-
   Declared from Ansible by the kuma-maintenance-sync CronJob (roles/k8s/uptime-kuma), derived
   from the weekly_reboot_* schedule in group_vars/all.yml. It covers every monitor that is not
   already DOWN when it opens, so a real outage that starts inside it is silent until it closes.
-# How long before the reboot cron fires the window opens. The hosts do not go down until
-# `shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}`, so this is not the time to the
-# outage — it is slack for a monitor that flips in the seconds around the cron, and for a
-# heartbeat window that was already half-spent when the shutdown landed.
-uptime_kuma_k8s_maintenance_window_lead_minutes: 5
+# The window's lead and recovery allowance are `weekly_reboot_mute_lead_minutes` and
+# `weekly_reboot_mute_recovery_minutes` in group_vars/all.yml, because Alertmanager's
+# `weekly-reboot` mute in the observability role derives from the same two values.
 # The window's timezone, which must be the reboot cron's clock — `weekly_reboot_timezone`, UTC.
 # It cannot be spelled `UTC`. kuma-client parses the identifier against its own 424-entry
 # timezones.json (kuma-client/build.rs generates the enum from it) and that list carries neither
@@ -285,14 +283,6 @@ uptime_kuma_k8s_maintenance_window_lead_minutes: 5
 # +00:00 in winter only and would drift an hour every summer.
 # `test_the_window_is_declared_on_the_reboot_cron_s_clock` holds the offset.
 uptime_kuma_k8s_maintenance_window_timezone: Atlantic/Reykjavik
-# How long after the reboot itself the window stays open. Measured: daniel-server
-# was down 07:35 to 07:48:25 and Kuma was Ready again at ~07:51, and the status-page sync
-# records ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room
-# for a slow boot (07:38 and 07:41 on the two preceding Sundays) and for the bridge-fed tiles,
-# whose 1200s window means a tile can flip DOWN up to 20 minutes after the last missed push.
-# With the 5-minute lead and the 5-minute shutdown delay this is a 50-minute window: 07:25 to
-# 08:15 at the committed schedule. render_maintenance.py does that sum; nothing here repeats it.
-uptime_kuma_k8s_maintenance_recovery_allowance_minutes: 40
 # How far ahead of the window's opening a sync run leaves out the monitors already DOWN (#3506).
 # Kuma pages `MAINTENANCE -> DOWN`, so a monitor carried DOWN through the window pages again
 # when it closes. One sync period exactly: only the :20 run five minutes before the 07:25

@@ -4,6 +4,7 @@ Status: IN PROGRESS
 
 PR 1, the workload-service mapping: [#4777](https://github.com/DanielH2018/server/pull/4777).
 PR 2, the k8s-workloads rules in shadow: [#4779](https://github.com/DanielH2018/server/pull/4779). Its soak starts at its deploy, and PR 4a waits 7 days from that time.
+PR 3, the weekly-reboot mute: [#4793](https://github.com/DanielH2018/server/pull/4793). PR 4a waits until it records the three Alertmanager series after its deploy.
 
 Depends on: M1
 
