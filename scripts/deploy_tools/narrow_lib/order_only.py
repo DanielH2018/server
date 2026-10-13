@@ -233,12 +233,15 @@ def _writes_outside_itself(fn: _Body, module: _Module, seen: set[str]) -> bool:
 
     Taint starts at the parameters of `fn` and of every function nested in it, and at every
     top-level name, and flows through every assignment, loop and comprehension whose source
-    names a tainted value, unless a `_FRESH_CALLS` call wraps it. A write is any of these:
+    names a tainted value, unless a `_FRESH_CALLS` call wraps it. A clean local that an item
+    or attribute assignment or a `_MUTATORS` call stores a tainted value into is a holder: a
+    value read from it is tainted too. A write is any of these:
     - an item or attribute assignment, a `del`, an augmented assignment to a tainted name or
-      a `_MUTATORS` call, each allowed only on a clean name `fn` binds itself;
+      a `_MUTATORS` call, each allowed only on a clean name `fn` binds itself, and on a
+      holder only one level deep (`h[k] = v`, never `h[k][j] = v` or `h[k] += v`);
     - `global`, `nonlocal`, `setattr`, `delattr` or a dunder method call, outright;
-    - a call that hands a tainted value, as an argument or as its receiver, to a callee this
-      cannot read (#4842). It reads `_PURE_CALLS`, `_PURE_DOTTED`, a read-mode `open()`,
+    - a call that hands a tainted value, as an argument, as its receiver or as the callee
+      itself, to a callee this cannot read (#4842). It reads `_PURE_CALLS`, `_PURE_DOTTED`, a read-mode `open()`,
       `_READ_METHODS`, a function nested in `fn`, and the module's own `callables`.
     A top-level callable `fn` names, called or passed, is checked the same way, once per name
     in `seen`, so a helper it calls or hands to another call cannot write either.
@@ -262,6 +265,7 @@ def _writes_outside_itself(fn: _Body, module: _Module, seen: set[str]) -> bool:
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n is not fn
     }
     tainted = params | module.names
+    holders: set[str] = set()
     bound: set[str] = set()
 
     def names(target) -> set[str]:
@@ -274,9 +278,12 @@ def _writes_outside_itself(fn: _Body, module: _Module, seen: set[str]) -> bool:
             and value.func.id in _FRESH_CALLS
         ):
             return False
-        return bool(names(value) & tainted)
+        return bool(names(value) & (tainted | holders))
 
     flows = []
+    # (the container a value goes into, the value): an item or attribute store, or a
+    # `_MUTATORS` call's argument.
+    stores = []
     for node in ast.walk(fn):
         if isinstance(node, (ast.Global, ast.Nonlocal)):
             return True
@@ -286,12 +293,24 @@ def _writes_outside_itself(fn: _Body, module: _Module, seen: set[str]) -> bool:
             isinstance(node, (ast.AnnAssign, ast.AugAssign)) and node.value is not None
         ):
             flows.append((node.target, node.value))
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in _MUTATORS
+        ):
+            stores += [
+                (node.func.value, v)
+                for v in [*node.args, *(k.value for k in node.keywords)]
+            ]
         elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
             flows.append((node.target, node.iter))
         elif isinstance(node, ast.withitem) and node.optional_vars is not None:
             flows.append((node.optional_vars, node.context_expr))
         elif isinstance(node, ast.NamedExpr):
             flows.append((node.target, node.value))
+    stores += [
+        (t, v) for t, v in flows if isinstance(t, (ast.Subscript, ast.Attribute))
+    ]
     for target, _ in flows:
         if isinstance(target, (ast.Name, ast.Tuple, ast.List)):
             bound |= names(target)
@@ -302,24 +321,38 @@ def _writes_outside_itself(fn: _Body, module: _Module, seen: set[str]) -> bool:
             if isinstance(target, (ast.Name, ast.Tuple, ast.List)) and taints(value)
             for n in names(target)
         } - tainted
-        if not grown:
+        filled = {
+            root
+            for target, value in stores
+            if (root := _root(target)) is not None and taints(value)
+        } - holders
+        if not grown and not filled:
             break
         tainted |= grown
+        holders |= filled
     local = bound | params | nested
 
     def clean_local(node) -> bool:
         root = _root(node)
         return root is not None and root in bound and root not in tainted
 
+    def writes_into(target, augmented: bool = False) -> bool:
+        """Whether a store or mutation of `target` can reach an object `fn` did not create."""
+        if not clean_local(target):
+            return True
+        return _root(target) in holders and (
+            augmented or not isinstance(target, ast.Name)
+        )
+
     def callee_writes(call: ast.Call) -> bool:
         func = call.func
         if isinstance(func, ast.Attribute) and func.attr.startswith("__"):
             return True
         if isinstance(func, ast.Attribute) and func.attr in _MUTATORS:
-            return not clean_local(func.value)
+            return writes_into(func.value)
         inputs = [*call.args, *(k.value for k in call.keywords)]
-        if not isinstance(func, ast.Name):
-            inputs.append(func.value if isinstance(func, ast.Attribute) else func)
+        # The callee counts too: `f = c.update; f(x=1)` hands no tainted argument.
+        inputs.append(func.value if isinstance(func, ast.Attribute) else func)
         if not any(taints(v) for v in inputs):
             return False
         if isinstance(func, ast.Name):
@@ -348,8 +381,8 @@ def _writes_outside_itself(fn: _Body, module: _Module, seen: set[str]) -> bool:
         elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
             targets = [node.target]
         for target in targets:
-            if isinstance(target, (ast.Subscript, ast.Attribute)) and not clean_local(
-                target
+            if isinstance(target, (ast.Subscript, ast.Attribute)) and writes_into(
+                target.value, augmented=isinstance(node, ast.AugAssign)
             ):
                 return True
             if isinstance(node, ast.AugAssign) and not clean_local(target):
