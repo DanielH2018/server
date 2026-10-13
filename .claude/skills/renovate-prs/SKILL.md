@@ -138,6 +138,7 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 | `ansible/roles/k8s/*/templates/Dockerfile*.j2` | in-cluster-built image | merge, land, then verify the pod took the rebuild |
 | `prek.toml`, `.github/workflows/*` | tooling | merge; CI is the only consumer |
 | `.github/workflows/*`, title `CI runner image` | CI runner image | the PR run proves almost nothing about it — sweep the branch first, §3 *A runner-image bump* |
+| `.github/workflows/promote.yml` and `prune-artifacts.yml`, title or branch `cosign (manual — …)` | the cosign binary that signs the promoted artifact | not CI-only: Flux's source-controller verifies the signatures this release writes, and the PR run signs nothing. Leave it open for a person, as *When to stop and say so* describes; a bump the controller cannot verify stops every promotion (#4767) |
 | anything else | read the rule | see below |
 
 **Read the title and the branch together**, with `gh pr list --author app/renovate --json
