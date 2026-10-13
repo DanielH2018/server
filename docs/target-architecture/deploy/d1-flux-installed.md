@@ -835,8 +835,8 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
       Ready condition other than `True` for 15 minutes. The rule names `homelab`, so the
       drill's `verify-drill`, which is meant to read Ready=False, never fires it. It also
       fires when kube-state-metrics is up but exports no `gotk_resource_info` series for the
-      root Kustomization, so a lost series cannot leave this rule and `FluxSuspended` quiet
-      (#4809).
+      root Kustomization. That loss would otherwise leave this rule and `FluxSuspended` quiet
+      ([#4809](https://github.com/DanielH2018/server/issues/4809)).
     - `FluxSuspended`, `warning`: a Kustomization has been suspended for more than 24
       hours. `flux_sync_suspend` and a hand suspend both count.
 

@@ -67,7 +67,9 @@ groups:
       # a ClusterRole that loses list/watch on a Flux kind, or a Flux CRD version the config no
       # longer matches leaves both readiness arms and FluxSuspended with no series, so they stay
       # quiet. The kube-state-metrics job carries no `origin` label, so Kuma's Cluster Scrape
-      # Targets tile pages its up == 0, and M1 convention 5 conjoins the arm with up == 1. It
+      # Targets tile pages its up == 0, and M1 convention 5 conjoins the arm with up == 1. A
+      # failed kube-state-metrics scrape therefore returns nothing from this arm for that
+      # evaluation and restarts its hold, as with M1's AlertmanagerMetricsMissing. The arm
       # names the root Kustomization alone, the one object that exists whenever Flux is
       # installed. Its alert carries no exported_namespace, which is how the annotations tell
       # the two cases apart.
