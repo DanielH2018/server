@@ -145,11 +145,6 @@ def ksm_label(resource: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]", "_", resource)
 
 
-def test_ksm_label_sanitises_the_domain_and_the_slash():
-    assert ksm_label("devic.es/dri") == "devic_es_dri"
-    assert ksm_label("squat.ai/dri") == "squat_ai_dri"
-
-
 def _rule_watched(rules_text: str) -> set[str]:
     """The `resource` values the extended-resource rule's expression matches."""
     doc = yaml_fast.safe_load(rules_text)

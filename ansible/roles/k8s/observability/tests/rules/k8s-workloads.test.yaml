@@ -236,6 +236,45 @@ tests:
         eval_time: 31m
         exp_alerts: []
 
+  # The DaemonSet and pod mapping rules yield nothing: node-exporter and a ReplicaSet-owned
+  # pod sit in their base families with no mapping series. WorkloadServiceUnmapped's second
+  # clause fires for each after its 30m hold, and the pod clause reads only (namespace, pod).
+  - interval: 1m
+    input_series:
+      - series: 'kube_daemonset_status_number_unavailable{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", daemonset="node-exporter"}'
+        values: '0x40'
+      - series: 'kube_pod_container_status_restarts_total{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="valheim-7c9d-k2m4q", uid="u1", container="valheim"}'
+        values: '0x40'
+      - series: 'kube_pod_owner{job="kube-state-metrics", instance="kube-state-metrics:8080", namespace="homelab", pod="valheim-7c9d-k2m4q", uid="u1", owner_kind="ReplicaSet", owner_name="valheim-7c9d", owner_is_controller="true"}'
+        values: '1x40'
+    alert_rule_test:
+      - alertname: WorkloadServiceUnmapped
+        eval_time: 29m
+        exp_alerts: []
+      - alertname: WorkloadServiceUnmapped
+        eval_time: 31m
+        exp_alerts:
+          - exp_labels:
+              job: kube-state-metrics
+              instance: kube-state-metrics:8080
+              namespace: homelab
+              daemonset: node-exporter
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: A workload in homelab has no deploy tag in workload-service.
+              description: DaemonSet node-exporter has had no deploy tag for 30 minutes, so its alerts carry service="unmapped". Add it to the override table in workload-service.yaml, or label it.
+          - exp_labels:
+              namespace: homelab
+              pod: valheim-7c9d-k2m4q
+              service: observability
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: A workload in homelab has no deploy tag in workload-service.
+              description: Pod valheim-7c9d-k2m4q has had no deploy tag for 30 minutes, so its alerts carry service="unmapped". Add it to the override table in workload-service.yaml, or label it.
+
   # The GPU resource: advertised at 0 for ten minutes, then at 1. The cpu series keeps
   # kube_node_status_allocatable present throughout, so this is the resource going away, not
   # the collector.
