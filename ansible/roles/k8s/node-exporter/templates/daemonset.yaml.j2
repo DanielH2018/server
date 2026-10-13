@@ -155,8 +155,8 @@ spec:
         - name: node-exporter-rootfs
           hostPath:
             path: /
-        # Host cron scripts may drop *.prom gauges here (the kopia-era B2-usage pattern);
-        # empty today, kept as the hook so a future host gauge needs no exporter change.
+        # The textfile collector directory. This role's CLAUDE.md names its producers and the
+        # contract a new *.prom file follows.
         - name: node-exporter-textfile
           hostPath:
             path: /var/lib/node-exporter-textfile

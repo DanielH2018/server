@@ -30,8 +30,35 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
   can catch a wedged collector (a dead NFS mount). Readiness instead hits `/` (200, no
   collector work) at the usual 10s, since it only needs to prove the listener is up before
   `rollout status` calls the DaemonSet ready.
-- **`node-exporter-textfile` hostPath is an empty hook**, not yet used — a spot for a future
-  host cron to drop `*.prom` gauges without a role change.
+
+## The textfile collector directory
+
+The `node-exporter-textfile` hostPath, `/var/lib/node-exporter-textfile` on each node, is
+mounted at `/textfile` and read by `--collector.textfile.directory`. A host producer drops a
+`*.prom` file there, and Prometheus scrapes it with no change to this role.
+
+- **One live producer: `claude_cgroup.prom`.** The `setup/claude_code` role installs
+  `ansible/roles/setup/claude_code/files/claude-cgroup-metrics.sh` and
+  `claude-cgroup-metrics.timer`, which runs it as root every 30s on both nodes (every host
+  with `has_claude_code: true`). The script writes a `mktemp` file in the same directory,
+  sets it to 0644 and moves it over `claude_cgroup.prom`, so the collector never reads a
+  partial file.
+- **monitor-bridge pages on it.**
+  `ansible/roles/k8s/monitor-bridge/files/checks/host.py:with_claude_cgroups` folds the
+  series into `check_mem`, and
+  `ansible/roles/k8s/monitor-bridge/files/verdicts/host_cgroups.py:claude_cgroup_verdict`
+  fails when an expected cgroup stops reporting. Arm 4 takes `expected_by_origin`, which
+  pairs each host with the cgroups that host must report, so it judges each host on its own
+  list. The check fills it from `CLAUDE_CGROUP_EXPECTED` in monitor-bridge's env-secret
+  template, which expects `claude-rc` only on a host that runs the RC unit. A writer that
+  stops on one node therefore pages from Kuma while the other node still reports, and so
+  does a file that is missing or malformed on one host.
+- **M3's producer metric contract governs every file here**
+  (`docs/target-architecture/monitoring/m3-textfile-timer.md`, *The producer metric
+  contract*). A *check file* carries a verdict and follows the whole contract. A *gauge set*,
+  such as `claude_cgroup.prom`, carries measurements only. It is exempt from the
+  `homelab_check_*` series, because the check that reads it owns its absence, and it still
+  follows the atomic write and the 0644 mode.
 
 ## Editing
 `templates/daemonset.yaml.j2` (all the tuning history lives in its comments).

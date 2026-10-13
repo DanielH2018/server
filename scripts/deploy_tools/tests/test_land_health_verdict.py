@@ -297,6 +297,21 @@ def test_a_deferred_plane_whose_services_all_discharged_is_settled(landing):
     assert (exc.value.rc, exc.value.verdict) == (0, "settled")
 
 
+def test_a_deferred_plane_that_owed_no_service_is_not_settled(landing, capsys):
+    """#4865: an empty set counted 0 owed and read as discharged, for a plane nothing ran.
+
+    A deployer before #4865 wrote one when host_vars was unreadable, so the remedy is the
+    stranded-range note and the deploy.yml command, not the ledger lines.
+    """
+    ln = _deferred(landing, receipt({}, deferred={"ansible/deploy.yml": []}))
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    out = capsys.readouterr().out
+    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+    assert f"Apply it: {DEPLOY_PLANE_COMMAND}" in out
+    assert "k8s_unapplied ledger" not in out
+
+
 def test_a_deferred_plane_with_an_unreadable_ledger_still_names_the_deferral(
     landing, capsys
 ):

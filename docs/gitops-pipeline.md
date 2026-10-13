@@ -220,6 +220,8 @@ under `uv run --no-project`. The journal names the outcome on every tick:
   deploy carries the change. The fleet-coverage refusal prints the tags it reached beside its
   exit 3, so only those are recorded; any other refusal records every declared service. The
   receipt applies nothing for the plane and records the same services under `deferred`.
+  The tick writes that entry only after the ledger lines, so a read mid-tick never counts 0
+  owed (#4866), and writes none for a plane that owes no service this host declares (#4865).
   `land.sh` reads that key, scoped to the range that crossed the PR. While any of those
   services still holds a ledger line it reports `needs-manual-apply` and names the deferral
   rather than a whole `deploy.yml`. Once none does, it reads the plane as applied (#4843).
