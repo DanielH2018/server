@@ -6,20 +6,73 @@
 # lokitool parses every expression in the validate-alert-rules hook. LogQL has no counterpart
 # to `promtool test rules`, so nothing here is unit-tested into firing; M5's slice plan
 # (docs/target-architecture/monitoring/m5-loki-ruler.md, *The rules*) states what checks each
-# rule instead.
+# rule instead. ansible/tests/services/test_loki_stream_labels.py holds every selector to the
+# labels and values Alloy emits, and holds each silence rule to its side of the Pi boundary.
+#
+# Every selector is a literal copied from `loki_streams` in group_vars/all.yml, because this
+# file is never rendered. No annotation templates a log line's text, so no line content
+# reaches Discord or email.
+#
+# SHADOW UNTIL M5's PR 4b. monitor-bridge's Loki Log Ingestion and Kuma Notification Delivery
+# tiles page these conditions until M5's PR 4a deletes them, and M1 convention 5 allows one
+# pager, so each alert routes to the blackhole receiver.
 groups:
   - name: homelab-logs
     interval: 5m
     rules:
-      # Temporary. It fires on every evaluation so the ruler has something to send, which is
-      # how M5 PR 2a and PR 2b read the ruler's metrics and its path to Alertmanager. M5 PR 3
-      # replaces it with the log rules. Shadow, so Alertmanager routes it to the blackhole
-      # receiver.
-      - alert: LokiRulerSmoke
-        expr: vector(1)
+      # The host file-tail arm. The `machine` matcher keeps daniel-pi's syslog stream out: a
+      # Pi stream in this union would hold the count above zero through a total cluster
+      # outage, and the rule would never fire (#3739).
+      - alert: LokiHostLogsSilent
+        expr: absent_over_time({job=~"authlog|syslog", machine!="daniel-pi"}[3h])
         labels:
-          severity: info
+          severity: warning
           service: loki-homelab
           shadow: "true"
         annotations:
-          summary: The loki-homelab ruler evaluates its rules and sends to Alertmanager.
+          summary: The cluster hosts' syslog and authlog have shipped nothing to loki-homelab in 3 hours.
+          description: >-
+            No authlog or syslog line from daniel-box or daniel-server reached loki-homelab in
+            3 hours, so the Alloy file-tail pipeline is down. Read the alloy DaemonSet's pods
+            and their log in the homelab namespace.
+      # The pod arm. Every pod's stdout is the busiest stream, so 30 minutes of silence is
+      # already a fault.
+      - alert: LokiPodLogsSilent
+        expr: absent_over_time({job="k8s"}[30m])
+        labels:
+          severity: warning
+          service: loki-homelab
+          shadow: "true"
+        annotations:
+          summary: No pod log has reached loki-homelab in 30 minutes.
+          description: >-
+            No line from any cluster pod reached loki-homelab in 30 minutes, so the Alloy
+            pod-log pipeline is down. Read the alloy DaemonSet's pods and their log in the
+            homelab namespace.
+      - alert: LokiPiLogsSilent
+        expr: absent_over_time({job="pi"}[3h])
+        labels:
+          severity: warning
+          service: daniel-pi
+          shadow: "true"
+        annotations:
+          summary: daniel-pi's containers have shipped nothing to loki-homelab in 3 hours.
+          description: >-
+            No container log line from daniel-pi reached loki-homelab in 3 hours. Read the
+            alloy container on daniel-pi with `probe.py pi containers`.
+      # Kuma logs one "Cannot send notification to <name>" line per dropped notification. Its
+      # reason lines carry no drop, so the filter keeps only the drop half of
+      # monitor-bridge's KUMA_NOTIFY_FAILURES_LOGQL. `sum` makes one alert of the streams
+      # the window holds, which a pod restart inside 3h would otherwise split.
+      - alert: KumaNotificationDropped
+        expr: sum(count_over_time({container="uptime-kuma"} |= "Cannot send notification" [3h])) > 0
+        labels:
+          severity: critical
+          service: uptime-kuma
+          shadow: "true"
+        annotations:
+          summary: Uptime Kuma dropped a notification in the last 3 hours.
+          description: >-
+            Uptime Kuma logged {{ $value }} "Cannot send notification" lines in the last 3
+            hours, so a page it raised reached no one. Read the uptime-kuma pod's log in the
+            homelab namespace for the reason line beside each drop.

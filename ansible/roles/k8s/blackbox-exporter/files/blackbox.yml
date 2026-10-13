@@ -1,0 +1,29 @@
+---
+# blackbox_exporter modules. Carried verbatim into the cluster by templates/configmap.yaml.j2.
+#
+# Both modules send `Accept: */*`. Authelia answers an SSO-gated name with 302 only when the
+# request's Accept header admits it, and with 401 when there is none; blackbox sends no Accept
+# unless a module sets one, and Go's net/http adds none. Kuma's tiles draw the 302, so this
+# header is what makes a probe see the status Kuma sees.
+# ansible/tests/services/test_blackbox_exporter_modules.py pins it on every http module.
+modules:
+  # The ingress names without SSO. Kuma's default for those tiles: a 2xx, reached through
+  # redirects. TLS is verified (no insecure_skip_verify).
+  http_2xx:
+    prober: http
+    http:
+      method: GET
+      headers:
+        Accept: "*/*"
+      follow_redirects: true
+  # The ingress names behind Authelia. Kuma accepts only 302 with max_redirects: 0. The 302
+  # proves the edge and the middleware answer, not that the backend is up
+  # (docs/failure-classes.md, authelia-302-does-not-prove-the-backend).
+  http_sso_302:
+    prober: http
+    http:
+      method: GET
+      headers:
+        Accept: "*/*"
+      follow_redirects: false
+      valid_status_codes: [302]

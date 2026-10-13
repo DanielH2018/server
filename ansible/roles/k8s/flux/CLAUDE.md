@@ -146,6 +146,18 @@ a verification error. The `deploy-errors` Alert does not name it, so it posts no
 Discord. The way out is the lever set back to `false`: dropping the document deletes nothing,
 so a task deletes `ocirepository/verify-drill` by name on every run with the lever off.
 
+**The drill ran on 2026-10-13.** The first dispatch was a false green: `verify-drill` read
+Ready=True with its signature verified (#4820). `publish` pushes with `--reproducible`, and
+the drill ran at the commit `prod` already carried, so its digest equalled `prod`'s signed
+digest. #4826 fixed that. The drill push carries the annotation
+`io.homelab.verify-drill=true`, so no signed push carries its digest, and the dispatch fails
+unless `cosign verify` refuses that digest with cosign's no-signature error. The re-dispatch
+pushed `sha256:5bac820c…bb97` unsigned. At 04:45:39Z `verify-drill` read Ready=False with
+"failed to verify the signature using provider 'cosign keyless': no signatures found", and
+`homelab` stayed Ready. `deploy-errors` posted nothing to Discord, because it names only the
+OCIRepository `homelab`. `FluxNotReady` stayed quiet for the same reason, and
+`ALERTS{alertname=~"Flux.*"}` returned no data. The lever then went back to `false`.
+
 ## Tokens
 
 - **No agent token ever carries `write:packages`.** Pushing an artifact, signing it and moving

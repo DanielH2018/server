@@ -11,6 +11,9 @@ D1.7, retention for old artifact versions: [#4770](https://github.com/DanielH201
 D1.5, Flux follows prod: [#4787](https://github.com/DanielH2018/server/pull/4787).
 D1.6, Flux in the metrics plane: [#4803](https://github.com/DanielH2018/server/pull/4803).
 D1.6b, the `flux` rule group: [#4813](https://github.com/DanielH2018/server/pull/4813).
+The signature drill, lever on: [#4816](https://github.com/DanielH2018/server/pull/4816).
+The signature drill's own digest: [#4826](https://github.com/DanielH2018/server/pull/4826).
+The signature drill, lever off: [#4832](https://github.com/DanielH2018/server/pull/4832).
 
 Depends on: none
 
@@ -832,7 +835,10 @@ daniel-box:   source-controller polls :prod every minute and verifies the signat
         - A3's cutover commit drops the shadow.
     - `FluxNotReady`, `warning`: a Kustomization, or the OCIRepository `homelab`, has had a
       Ready condition other than `True` for 15 minutes. The rule names `homelab`, so the
-      drill's `verify-drill`, which is meant to read Ready=False, never fires it.
+      drill's `verify-drill`, which is meant to read Ready=False, never fires it. It also
+      fires when kube-state-metrics is up but exports no `gotk_resource_info` series for the
+      root Kustomization. That loss would otherwise leave this rule and `FluxSuspended` quiet
+      ([#4809](https://github.com/DanielH2018/server/issues/4809)).
     - `FluxSuspended`, `warning`: a Kustomization has been suspended for more than 24
       hours. `flux_sync_suspend` and a hand suspend both count.
 
@@ -1103,6 +1109,10 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       `publish` pushes `sha-X` and signs it. `promote` runs `promote.py decide`, and `tag`
       moves `prod` and writes `PROD_DIGEST`. A `workflow_dispatch` input, `verify_drill`,
       pushes an unsigned bundle to the tag `verify-drill` and skips `promote` and `tag`.
+      The drill push carries the annotation `io.homelab.verify-drill=true`, so its digest
+      differs from every signed `sha-X` digest. The same dispatch then runs `cosign verify`
+      on the drill digest under `promote`'s identity, and the run fails if that verification
+      succeeds.
     - Add the rule from *Decisions* to `.claude/hooks/block-footguns.py`, with its cases in
       `.claude/hooks/tests/test_block_footguns.py`. The must-deny case is
       `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server`, and each other denied
@@ -1130,7 +1140,12 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       checks out `head_sha`, one whose cosign installer step omits `cosign-release`, one
       whose `render` lacks the ancestry check, one whose `publish` checks out the
       repository, one whose `tag` sits outside the `promote` group, and one whose flux CLI
-      version differs from `flux_version`.
+      version differs from `flux_version`. The drill path's checks sit in
+      `ansible/tests/repo/test_promote_drill_workflow.py`. Its red fixtures are a drill push
+      without the annotation, a signed push that carries it, a drill path without the
+      must-fail `cosign verify`, a verify step that passes on a refusal, one that accepts
+      any cosign failure rather than cosign's no-signature error, one that skips the digest
+      form check, and a verify step under an identity other than `forge.py:SIGNER_IDENTITY`.
     - **Operator-only after the first run:** set the `homelab-manifests` package to public,
       matching the texbrain package and ADR-0018 (Open question 2). D1.5 does not merge
       before this, and its *Gates before merge* checks it.
@@ -1353,7 +1368,13 @@ fails. Exit 2 shows that the same object was read and reconciled.
   that pushes the bundle to the tag `verify-drill` without signing it and never touches
   `prod`. The flux role's lever `flux_verify_drill: true` renders a second OCIRepository,
   `verify-drill`, which follows that tag with the same `spec.verify` and which no
-  Kustomization reads. Its Ready condition must be `False` with a verification error. No
+  Kustomization reads. The drill push carries the annotation `io.homelab.verify-drill=true`,
+  so no signed push carries its digest. The dispatch's own `cosign verify` under `promote`'s
+  identity must fail on that digest with cosign's no-signature error. The run fails if the
+  verification succeeds or fails for any other reason. Read the lever only
+  after that step has refused the digest. Without the annotation the drill verified, because
+  its digest equalled `prod`'s signed digest ([#4820](https://github.com/DanielH2018/server/issues/4820)). Its Ready condition must be `False`
+  with a verification error. No
   Discord post follows, because `deploy-errors` does not name `verify-drill` as a source.
   Set the lever back to `false` in the same session and land that PR with
   `land.sh --tags flux`. The role's delete task then removes the object, and
@@ -1362,8 +1383,8 @@ fails. Exit 2 shows that the same object was read and reconciled.
   check can go red. A Forbidden would prove no deletion. The read-only identity reads
   OCIRepository through `view` aggregation (*Baseline*, corrected), so a Forbidden here means
   that aggregation is gone.
-- *The workflow guard test.* Each of its eleven fixtures fails, and so does D1.7's
-  prune-workflow fixture. The fixtures for the ancestry check, a checkout in `publish`, a
+- *The workflow guard test.* Each of its fixtures fails, and so do the drill path's fixtures
+  and D1.7's prune-workflow fixtures. The fixtures for the ancestry check, a checkout in `publish`, a
   `tag` outside the `promote` group and a drifted flux CLI version are the red halves of
   the render and sign split.
 - *The agent hook.* The must-deny case
@@ -2248,3 +2269,18 @@ Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-st
   descriptions that match `domain`.
 - **Coordinator notes.** *Decisions* states the `fetch-depth: 0` that D2.6c's trailer read
   needs, and Open question 13 points at D2's count.
+
+### Drill fix (2026-10-13)
+
+- **[#4820](https://github.com/DanielH2018/server/issues/4820), the signature drill read Ready=True.** Measured after
+  [#4816](https://github.com/DanielH2018/server/pull/4816) set `flux_verify_drill: true`: the
+  OCIRepository `verify-drill` stored `verify-drill@sha256:796e9e3e…7762` with
+  `SourceVerified` True, and that is `prod`'s signed digest. `publish` pushes with
+  `--reproducible`, so one commit gives one digest, and the drill was dispatched at the
+  commit `prod` already carried. cosign v3 stores a signature as a referrer of the digest,
+  so every tag on a signed digest verifies. Fixed: the drill push carries the annotation
+  `io.homelab.verify-drill=true`, and the dispatch fails unless `cosign verify` under
+  `promote`'s identity refuses the drill digest with its no-signature error. A refusal for
+  any other reason, such as a registry or Sigstore error, also fails the run
+  ([#4828](https://github.com/DanielH2018/server/issues/4828)). *The signature check* reads the lever only
+  after that refusal.

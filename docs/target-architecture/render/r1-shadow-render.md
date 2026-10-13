@@ -745,18 +745,27 @@ updates `docs/homelab-render.md` for what it adds.
       stub edit moves no byte of a real render, so the lines clear the same way. R2's and
       R3's edits to the plugin inherit this landing (*Risks*).
     - **How the lines clear.** Each service's line drops on that service's next deploy.
-      `manifests` and every role that `digest_provable.py` accepts drop through the render
-      proof within about an hour, because no rendered byte moves. The PR's author lists the
-      lines still open a day after the merge on the PR. The operator decides whether to let
-      them discharge on later deploys or to run `gitops_state.py clear-owed k8s_unapplied
-      <svc>`. Root `CLAUDE.md`, *When to wait*, applies: an executor stops at
-      `needs-manual-apply` and never runs an unscoped `deploy.sh` to follow through.
+      Otherwise a line drops through the render proof within about an hour, once the hourly
+      render matches the service's applied bytes. A role that `digest_provable.py` accepts
+      needs only that match. Any other role also needs `digest_covers.py` to find that the
+      range from its applied commit to the render changed nothing outside the digest
+      (#4781). An assert-only preamble edit and a comment-only plugin edit pass that rule.
+      A line whose render does not match stays until that service is deployed, because the
+      render shows a real difference. The PR's author lists the lines still open a day after
+      the merge on the PR. The operator decides whether to let them discharge on later
+      deploys or to run `gitops_state.py clear-owed k8s_unapplied <svc>`. Root `CLAUDE.md`,
+      *When to wait*, applies: an executor stops at `needs-manual-apply` and never runs an
+      unscoped `deploy.sh` to follow through.
 6. **Keep a stubbed dry-run render** (about 120 lines). `manifests_shadow_dir`, its assert,
    the owner switch and the discard guard, with a `manifests_shadow_dir` bullet in
    `ansible/roles/k8s/manifests/CLAUDE.md`. The assert recomputes the stub check with PR 1a's
    filters, so it needs no plugin edit. The change touches the shared `manifests` role, so
    the deployer records one `k8s_unapplied` line for `manifests`. With the variable unset no
-   rendered byte moves, so the render proof discharges that line within about an hour.
+   rendered byte moves, so the render proof discharges that line within about an hour of the
+   last caller's render matching its applied bytes. A caller whose render differs for an
+   unrelated reason holds the line until that caller is deployed. On 2026-10-13
+   `homelab-mcp` held #4818's comment-only `manifests` line this way, behind an
+   `obs_api.py` edit that changed its image build context.
 7. **Compare the two renders, then close the diffs** (about 190 lines, then one PR per
    class of diff). `shadow_diff.py compare`, `stubcheck` and `digest`. The operator runs
    the shadow pair at a master SHA X (*Verification*), posts the report and hands the agent a

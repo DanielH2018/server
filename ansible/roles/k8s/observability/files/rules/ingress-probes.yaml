@@ -1,0 +1,79 @@
+# The ingress probes: blackbox_exporter's probe of every ingress URL Kuma's generated tiles
+# probe, read from the `blackbox-ingress` scrape job. Plain YAML, never Jinja:
+# prometheus-rules.yaml.j2 carries this file verbatim. The design is
+# docs/target-architecture/monitoring/m4-blackbox-ingress.md, "The rules".
+#
+# The two per-target rules carry no literal `service`. Each series takes it from the scrape
+# target that `prometheus.yaml.j2` renders per tile, and scripts/validate/alert_rules.py
+# accepts that only while every selector names this one job and every target sets `service`.
+# `page_tier` on the target picks which of the two rules fires, so severity stays a literal.
+groups:
+  - name: ingress-probes
+    rules:
+      # SHADOW UNTIL M4's PR 5. Kuma's generated ingress tile pages the same failure until
+      # M4's PR 4 deletes it. `for: 2m` at the job's 60s interval matches the tile's
+      # three-strikes timing (interval 60, maxretries 2).
+      - alert: IngressProbeFailedCritical
+        expr: probe_success{job="blackbox-ingress", page_tier="critical"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          shadow: "true"
+        annotations:
+          summary: The ingress probe of {{ $labels.service }} is failing.
+          description: >-
+            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed
+            for 2 minutes. {{ $labels.service }} is home-critical. A probe behind SSO expects
+            Authelia's 302, which proves the edge and the middleware answer, not that the
+            backend is up, so a pass there does not clear the backend. Read
+            probe_http_status_code for this instance, then the Traefik and Authelia logs.
+      # SHADOW UNTIL M4's PR 5, as above, for every service outside home-critical.
+      - alert: IngressProbeFailed
+        expr: probe_success{job="blackbox-ingress", page_tier="warning"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          shadow: "true"
+        annotations:
+          summary: The ingress probe of {{ $labels.service }} is failing.
+          description: >-
+            blackbox_exporter's {{ $labels.module }} probe of {{ $labels.instance }} has failed
+            for 2 minutes. A probe behind SSO expects Authelia's 302, which proves the edge and
+            the middleware answer, not that the backend is up, so a pass there does not clear
+            the backend. Read probe_http_status_code for this instance, then the Traefik and
+            Authelia logs.
+      # This family's zero-series alert. A job dropped from prometheus.yml leaves both rules
+      # above evaluating to nothing. Kuma's Cluster Scrape Targets tile fails on a member at 0,
+      # and a removed job leaves no member, so no Kuma check watches this and it pages without
+      # a shadow label.
+      - alert: IngressProbesMissing
+        expr: absent(up{job="blackbox-ingress"})
+        for: 10m
+        labels:
+          severity: warning
+          service: observability
+        annotations:
+          summary: Prometheus has lost the blackbox-ingress scrape job.
+          description: >-
+            No up{job="blackbox-ingress"} series exists, so the blackbox-ingress job is gone
+            from prometheus.yml or renders no target. No ingress probe can fire until the
+            series is back.
+      # SHADOW UNTIL M6's BATCH A3. Every target at 0 at once means the exporter itself is down
+      # or unreachable, not one ingress. The job's up series carry no `origin` label, so Kuma's
+      # Cluster Scrape Targets tile already pages this, and M1 convention 5 allows one pager.
+      # A3 drops the shadow in the commit that cuts that tile over. A single target at 0 is a
+      # failed scrape, which the tile pages alone.
+      - alert: BlackboxExporterDown
+        expr: max(up{job="blackbox-ingress"}) == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: blackbox-exporter
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape blackbox_exporter for any ingress probe.
+          description: >-
+            Every blackbox-ingress target has failed its scrape for 5 minutes, so the exporter
+            is down or unreachable from Prometheus and no ingress probe runs. The per-service
+            ingress alerts go quiet while it lasts. Read the blackbox-exporter pod's events and
+            log in the homelab namespace.

@@ -78,6 +78,12 @@ BORN_FENCED_ROLES = {
     # kind — it reads the kernel through a read-only /host/sys mount, so unlike its two
     # exporter neighbours it needs no podSelector added anywhere.
     "gpu-exporter",
+    # The ingress probes (docs/target-architecture/monitoring/m4-blackbox-ingress.md). It
+    # departs from this set's preamble twice. Traefik never calls it, since it has no route;
+    # its only caller is the prometheus pod, which the baseline already admits. And it dials
+    # every ingress name, but the baseline fences ingress only, so the label does not touch
+    # those probes. From M4's PR 3, up{job="blackbox-ingress"} shows the caller gets through.
+    "blackbox-exporter",
 }
 
 LABEL = ("netpol-baseline", "enforced")
@@ -456,43 +462,4 @@ def test_no_workload_is_both_labelled_and_exempt() -> None:
     assert not both, (
         f"workloads carry BOTH the baseline label and the exemption: {both}\n"
         "Pick one: the baseline fences it, or its own policy does."
-    )
-
-
-#
-# Both baselines are namespace-scoped, i.e. opt-out. Under opt-out the
-# exempt set IS the boundary, so who carries the label stops being bookkeeping and becomes the
-# fence itself. Only `homelab` got a cluster-side reconcile; the observability baseline ran opt-out
-# with nothing checking who had opted out.
-#
-# Everything in this file is a TEMPLATE-side guard, and template-side guards are precisely what
-# stay green when the drift is in the cluster. So this
-# asserts the existence of the runtime gate rather than duplicating its logic.
-
-_ROLE = K8S_ROLES / "netpol-baseline"
-TASKS = (_ROLE / "tasks" / "main.yml").read_text()
-
-
-def test_each_namespace_scope_lever_has_a_live_exempt_gate():
-    """A namespace-scoped baseline without a live gate is an unenforced invariant."""
-    for scope_var, ns_var in (
-        ("netpol_baseline_scope", "k8s_namespace"),
-        ("netpol_baseline_obs_scope", "k8s_observability_namespace"),
-    ):
-        assert f"{scope_var} == 'namespace'" in TASKS, (
-            f"{scope_var} has no live exempt-set gate — under namespace scope the exempt "
-            "label is the only way out of the fence, so nothing reconciles it against the cluster"
-        )
-        assert f"-n {{{{ {ns_var} }}}} get pods -l netpol-baseline-exempt" in TASKS, (
-            f"the gate for {scope_var} must read {ns_var}, not another namespace — "
-            "homelab's gate was scoped to k8s_namespace and silently covered nothing else"
-        )
-
-
-def test_observability_expects_an_empty_exempt_set():
-    """Nothing in observability has a bespoke policy, so an exemption there fences nothing."""
-    defaults = (_ROLE / "defaults" / "main.yml").read_text()
-    assert "netpol_baseline_obs_exempt_workloads: []" in defaults, (
-        "observability's expected exempt set must be empty and explicit — an exemption in a "
-        "namespace with no bespoke policies is a pod fenced by nothing at all"
     )

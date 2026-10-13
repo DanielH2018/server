@@ -896,9 +896,15 @@ containers_list:
   - name: flux
     platform: k8s
     tier: platform
-  # LAST on purpose: every workload role must finish before this role fences the namespace
-  # (docs/networkpolicy-slice-answers.md). Nothing but list position keeps it last; no
-  # depends_on edge says so yet.
+  # The ingress probes' exporter (docs/target-architecture/monitoring/m4-blackbox-ingress.md).
+  # No depends_on: the plan states no order against observability.
+  - name: blackbox-exporter
+    platform: k8s
+    port: 9115
+  # Deploys LAST: every workload role must finish before this role fences the namespace
+  # (docs/networkpolicy-slice-answers.md). K8S_SORTS_LAST in filter_plugins/toposort.py gives
+  # it an edge onto every other entry, so it sorts last wherever it sits in this list, and an
+  # entry appended after it still deploys before it (#4833).
   #
   # Not for the usual "after traefik" reason — this role renders no Traefik CRDs, and a
   # NetworkPolicy peer podSelector is a label match evaluated at connection time, so
@@ -908,7 +914,7 @@ containers_list:
   # batch, so a role sharing this role's batch may still be rolling when it runs. The role's
   # first task drains them itself, so its exempt-set reads, its policy applies and its probe
   # all run against settled workloads, never against a shared end-of-batch drain. That drain
-  # waits only for roles listed BEFORE this entry, which is why it stays last.
+  # waits only for roles deployed BEFORE this one, which is why it sorts last.
   - name: netpol-baseline
     platform: k8s
 # False until this host's first manual initial_setup.yml + deploy.yml run finishes green

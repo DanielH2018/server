@@ -357,6 +357,8 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         release_commit=scripted.release_commit,
         # A subprocess over the real tree; no tick test discharges by an own-role digest.
         digest_provable=lambda _repo, _roles: set(),
+        # The same, for the per-range answer a role that is not provable takes (#4781).
+        digest_covers=lambda _repo, _items: set(),
         emit_deploy_annotation=scripted.emit_deploy_annotation,
         now=scripted.now,
     )

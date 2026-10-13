@@ -271,6 +271,7 @@ def _resolve_setting(
     datasource: str,
     rules: list[dict] = _PACKAGE_RULES,
     dep_type: str | None = None,
+    manager: str = "custom.regex",
 ):
     """The value of `field` Renovate would resolve for a dep, walking packageRules in order.
 
@@ -279,11 +280,12 @@ def _resolve_setting(
     `enabled`. Rule ORDER is what this reads, which is why a guard on a rule that overrides an
     earlier one asserts through here rather than against the rule's own body. `dep_type` is
     the manager's `depTypeTemplate`; a rule with `matchDepTypes` matches only a dep carrying
-    one of them.
+    one of them. `manager` is the manager that extracts the dep; it defaults to custom.regex,
+    which extracts every dep the other guards ask about.
     """
     value = None
     for rule in rules:
-        if "matchManagers" in rule and "custom.regex" not in rule["matchManagers"]:
+        if "matchManagers" in rule and manager not in rule["matchManagers"]:
             continue
         if "matchDepTypes" in rule and dep_type not in rule["matchDepTypes"]:
             continue

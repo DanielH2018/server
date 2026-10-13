@@ -25,7 +25,9 @@ write these classes.
 "Digest provable" has one definition. `deploy_narrow.digest_provable` is the transport: it
 runs `scripts/deploy_tools/digest_provable.py` and decodes its answer. `_digest_provable`
 here is the policy that reads a failure of that transport as "no role is", which keeps the
-line.
+line. "Digest covers" is the per-range answer for the other roles (#4781), split the same
+way: `deploy_narrow.digest_covers` runs `scripts/deploy_tools/digest_covers.py`, and
+`_digest_covers` reads a failure as "no range is".
 
 Reach `deploy_alerts` qualified, never by from-import.
 """
@@ -215,6 +217,15 @@ def discharge_k8s_unapplied(
     the bytes the digest covers, as `scripts/deploy_tools/digest_provable.py` derives it. The
     derivation runs only for a line its record did not already drop, and a failure reads as
     "no role is", which keeps the line.
+
+    ANY OTHER ROLE TAKES THE RENDER PROOF PER RANGE (#4781). A matching render at C vouches
+    for the bytes, and the role's record at R says when its other effects last ran, so the
+    proof holds when nothing in `R..C` that could have written this line changes what the role
+    does outside its digest. `scripts/deploy_tools/digest_covers.py` holds that rule and its
+    case table. The range runs from the record, not from the line's origin: `record_owed`
+    moves a line's origin to each newer change, so a change that DID reach the role's own
+    tasks stays inside `R..C` after an assert-only change has moved the origin past it. One
+    subprocess per call judges every range, and a failure reads as "no range is covered".
     """
     pending = state.owed_pending(OWED_K8S_UNAPPLIED)
     records = {e.service: tools.release_commit(e.service) for e in pending}
@@ -223,12 +234,23 @@ def discharge_k8s_unapplied(
     def descends(commit: str | None, origin: str) -> bool:
         return _record_carries(tools, config, commit, origin)
 
-    def carries(service: str, origin: str, by_digest: bool) -> bool:
-        if service not in records:
-            records[service] = tools.release_commit(service)
-        if descends(records[service], origin):
+    def evidence(service: str, tag: str, origin: str, by_digest: bool) -> bool | str:
+        """Whether `tag` carries the change at `origin`.
+
+        Returns:
+            True or False, or the `ROLE:BASE:HEAD` range that carries it only if
+            `digest_covers` says the render digest covers that range.
+        """
+        if tag not in records:
+            records[tag] = tools.release_commit(tag)
+        if descends(records[tag], origin):
             return True
-        return by_digest and descends(tools.render_proof(service), origin)
+        render = tools.render_proof(tag)
+        if not descends(render, origin):
+            return False
+        if by_digest:
+            return True
+        return f"{service}:{records[tag]}:{render}" if records[tag] else False
 
     provable = _digest_provable(
         tools,
@@ -239,13 +261,19 @@ def discharge_k8s_unapplied(
             if records[e.service] and not descends(records[e.service], e.origin)
         },
     )
-    discharged = []
+    # The ranges each line still waits on, judged together below.
+    waiting: dict[str, set[str]] = {}
     for entry in pending:
         own = bool(records[entry.service])
         tags = {entry.service} if own else callers.get(entry.service)
         by_digest = entry.service in (provable if own else DIGEST_PROVABLE_ROLES)
-        if tags and all(carries(t, entry.origin, by_digest) for t in tags):
-            discharged.append(entry.service)
+        found = [
+            evidence(entry.service, t, entry.origin, by_digest) for t in tags or ()
+        ]
+        if found and False not in found:
+            waiting[entry.service] = {e for e in found if isinstance(e, str)}
+    covered = _digest_covers(tools, config, set().union(*waiting.values()))
+    discharged = [s for s, ranges in waiting.items() if ranges <= covered]
     if discharged:
         state.clear_owed(OWED_K8S_UNAPPLIED, discharged)
         log(
@@ -255,7 +283,7 @@ def discharge_k8s_unapplied(
     return sorted(discharged)
 
 
-# DECIDED: only `manifests` discharges on a render digest among SHARED roles (#3057); a
+# DECIDED: only `manifests` discharges on a render digest alone among SHARED roles (#3057); a
 # service's own role is derived, not listed (#3110, `scripts/deploy_tools/digest_provable.py`).
 # A digest match proves the bytes `manifests_digest` and `secret_digest` cover, and nothing a
 # role does outside them. `manifests` renders those bytes, so most of its changes either move
@@ -267,8 +295,9 @@ def discharge_k8s_unapplied(
 # deploy was the defect (#2643), so the gap is accepted. Every other shared role acts outside
 # the digest: `image-builder`'s `build-job.yaml.j2` is outside it, `arr-notification`
 # writes an app's database over its API, and `cronjob-gate`, `longhorn-api`,
-# `volume-snapshot` and `volume-revert` render nothing at all, so they keep the record-only
-# rule.
+# `volume-snapshot` and `volume-revert` render nothing at all. Those, like an own role that
+# is not provable, take a render only for a range `scripts/deploy_tools/digest_covers.py`
+# says moved nothing outside the digest (#4781): a comment edit, never a changed task.
 DIGEST_PROVABLE_ROLES = RENDER_PROOF_SHARED_ROLES
 
 
@@ -302,6 +331,24 @@ def _shared_callers(
             level=WARNING,
         )
         return {}
+
+
+def _digest_covers(tools: DeployTools, config: Config, items: set[str]) -> set[str]:
+    """`tools.digest_covers` for `items`, or none of them when it fails.
+
+    None is the safe reading for the reason `_shared_callers` gives: it keeps every line.
+    """
+    if not items:
+        return set()
+    try:
+        return tools.digest_covers(config.repo, items)
+    except Exception as exc:
+        log(
+            f"k8s_unapplied: could not judge which of {len(items)} ranges a render digest "
+            f"covers ({type(exc).__name__}: {exc}) — keeping their lines",
+            level=WARNING,
+        )
+        return set()
 
 
 def _digest_provable(

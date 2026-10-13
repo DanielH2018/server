@@ -5,7 +5,8 @@
 # applies and its probe's readiness gate would then all see the half-rolled cluster: a
 # Recreate workload such as traefik has no pod at all mid-roll. Draining here waits for every
 # rollout queued earlier in the batch, so the batch this role lands in no longer matters. The
-# drain cannot wait for a role listed after this one; list order covers that. In a run of
+# drain cannot wait for a role deployed after this one; K8S_SORTS_LAST in
+# filter_plugins/toposort.py sorts this role after every other k8s entry. In a run of
 # `--tags netpol-baseline` alone the queue is empty and the drain does nothing. configarr
 # includes the same drain before its reconcile, for the same reason.
 - name: Wait for the rollouts queued earlier in this batch before reading or fencing anything
@@ -92,9 +93,16 @@
 # covered (test_netpol_baseline_labels.py pins the exempt set across ALL rendered docs, not just
 # homelab's), but a test reads the templates, and the drift is in the cluster.
 #
-# The expected set is empty, so this reads as "assert nothing here is exempt". That is the whole
-# point — in a namespace with no bespoke policies, an exemption is not a narrower fence, it is no
-# fence.
+# The expected set is empty, so this reads as "assert nothing here is exempt". An exemption here
+# is always a widening or a breakage, never the narrower fence it is in homelab. Most workloads
+# here have no policy of their own, so exempting one leaves it fenced by nothing. prometheus,
+# loki and alertmanager do have one each (`prometheus-callers`, `loki-callers`,
+# `alertmanager-callers`), but those are additive grants to named homelab callers, not tighter
+# replacements for the baseline. Exempting one of the three drops the baseline's traefik,
+# intra-namespace and node-CIDR peers from it, and each loses an in-namespace caller:
+#   - prometheus: Grafana's queries, plus otelq and Headlamp's proxy over the node-CIDR peer.
+#   - loki: Grafana's queries and Prometheus's `loki-internal` scrape.
+#   - alertmanager: Prometheus's alert delivery to `alertmanager:9093`, which is the paging path.
 - name: Read the workloads live-exempt from the observability baseline
   tags: [deploy]
   when:
@@ -122,9 +130,10 @@
       this role expects, so the observability baseline must not be applied yet.
       live: {{ netpol_baseline_obs_live_exempt.stdout.split() | unique | sort | to_json }},
       expected: {{ netpol_baseline_obs_exempt_workloads | sort | to_json }}.
-      Nothing in this namespace carries a bespoke policy, so a name in `live` is a pod fenced by
-      nothing at all — remove its `netpol-baseline-exempt` label, or add it here together with
-      the policy that covers it.
+      A name in `live` is either a pod fenced by nothing at all or, for prometheus, loki and
+      alertmanager, a pod left with only its cross-namespace caller grant, which cuts its
+      in-namespace callers. Remove its `netpol-baseline-exempt` label, or add it here together
+      with a policy that admits every caller the baseline admitted.
     quiet: true
 
 # No Deployment, so manifests_rollout is empty — there is nothing to wait on. The policy takes

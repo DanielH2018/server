@@ -74,6 +74,20 @@ K8S_CRD_EDGE_EXEMPT = {
 }
 
 
+# Roles the derived map sorts after every other k8s entry, each with the reason it must run
+# last. An edge onto every other entry, not list position: the scaffolder appends a new entry
+# after the list's last item, and a hand-added one goes wherever its author puts it, so a
+# position-held "last" lasted only until the next role was added after it (#4833). A role
+# that declares `depends_on:` onto one of these makes a cycle, and toposort_containers raises.
+K8S_SORTS_LAST = {
+    "netpol-baseline": (
+        "its first task drains the rollouts queued earlier in its batch, then fences the "
+        "namespace and probes the fence. The drain cannot wait for a role deployed after it, "
+        "so every workload role must come before it (docs/networkpolicy-slice-answers.md)."
+    ),
+}
+
+
 def _entry_is_routed(container):
     """Whether a containers_list entry declares a Traefik route.
 
@@ -124,6 +138,9 @@ def build_k8s_dep_map(containers_list, playbook_dir):
     declared data instead: an explicit `depends_on:` list on the containers_list entry,
     unioned in below.
 
+    Each K8S_SORTS_LAST role also depends on every other entry outside that set, so it sorts
+    last wherever the list puts it.
+
     Takes the FULL containers_list, never a tag-narrowed one. The k8s play applies `--tags`
     per-role inside a single loop rather than narrowing the list before dependency
     resolution, so building this map from a tagged subset would leave every role outside that subset with an empty dep
@@ -131,9 +148,12 @@ def build_k8s_dep_map(containers_list, playbook_dir):
     most likely to append one after.
     """
     dep_map = {}
+    names = [c["name"] for c in containers_list]
     for c in containers_list:
         name = c["name"]
         deps = set(c.get("depends_on", []))
+        if name in K8S_SORTS_LAST:
+            deps.update(n for n in names if n not in K8S_SORTS_LAST)
         if c.get("use_authelia") and name != "authelia":
             deps.add("authelia")
         if name != "traefik" and name not in K8S_CRD_EDGE_EXEMPT:

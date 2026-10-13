@@ -11,7 +11,9 @@ name: promote
 #   render   contents: read. Checks out the triggering commit, refuses one that is not on
 #            master, builds the bundle and scans it, and hands `out/` on as an artifact.
 #   publish  packages: write, id-token: write. Checks out nothing. Pushes `sha-<X>` and signs
-#            it with cosign keyless under this workflow's identity.
+#            it with cosign keyless under this workflow's identity. A `verify_drill` dispatch
+#            instead pushes an annotated bundle to `verify-drill` unsigned, and fails unless
+#            `cosign verify` refuses it.
 #   promote  read-only. Checks out this workflow's own commit and runs `promote.py decide`,
 #            which walks master from its tip and picks the commit `prod` moves to.
 #   tag      packages: write. Checks out nothing. Moves `prod` to the commit `decide` picked
@@ -142,10 +144,13 @@ jobs:
         with:
           cosign-release: v3.1.3
 
+      # `--reproducible` fixes the created timestamp, so pushing one commit twice yields one
+      # digest. The revision is the form promote.py's REVISION_ANNOTATION parser reads.
       - name: Push and sign the bundle
+        id: push
+        if: ${{ !inputs.verify_drill }}
         env:
           SHA: ${{ needs.render.outputs.sha }}
-          DRILL: ${{ inputs.verify_drill || false }}
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -156,15 +161,7 @@ jobs:
           fi
           printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
           repo=ghcr.io/danielh2018/homelab-manifests
-          # The drill pushes an unsigned bundle to its own tag. It never writes sha-<X>, because
-          # an unsigned sha-<X> makes `decide` report an error for that commit.
-          tag="sha-$SHA"
-          if [ "$DRILL" = "true" ]; then
-            tag=verify-drill
-          fi
-          # --reproducible fixes the created timestamp, so pushing one commit twice yields one
-          # digest. The revision is the form promote.py's REVISION_ANNOTATION parser reads.
-          digest="$(flux push artifact "oci://$repo:$tag" \
+          digest="$(flux push artifact "oci://$repo:sha-$SHA" \
             --path=out \
             --source="https://github.com/$GITHUB_REPOSITORY" \
             --revision="master@sha1:$SHA" \
@@ -174,12 +171,80 @@ jobs:
             echo "::error::flux push printed digest '$digest'"
             exit 1
           fi
-          echo "pushed $repo:$tag at $digest"
-          if [ "$DRILL" = "true" ]; then
-            echo "verify drill: left unsigned"
-            exit 0
-          fi
+          echo "pushed $repo:sha-$SHA at $digest"
           cosign sign --yes "$repo@$digest"
+
+      # The drill pushes an unsigned bundle to its own tag. It never writes sha-<X>, because an
+      # unsigned sha-<X> makes `decide` report an error for that commit. The annotation gives
+      # the drill bundle a digest that no signed push carries. Without it, --reproducible makes
+      # the drill's digest equal sha-<X>'s, and cosign v3 stores a signature as a referrer of
+      # the digest, so `verify-drill` verified against promote's signature (#4820).
+      - name: Push the drill bundle unsigned
+        id: drill-push
+        if: ${{ inputs.verify_drill }}
+        env:
+          SHA: ${{ needs.render.outputs.sha }}
+          GH_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$SHA" | grep -Eqx '[0-9a-f]{40}'; then
+            echo "::error::render handed on sha '$SHA', not 40 lowercase hex"
+            exit 1
+          fi
+          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          repo=ghcr.io/danielh2018/homelab-manifests
+          digest="$(flux push artifact "oci://$repo:verify-drill" \
+            --path=out \
+            --source="https://github.com/$GITHUB_REPOSITORY" \
+            --revision="master@sha1:$SHA" \
+            --annotations=io.homelab.verify-drill=true \
+            --reproducible \
+            --output=json | jq -r .digest)"
+          if ! printf '%s' "$digest" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
+            echo "::error::flux push printed digest '$digest'"
+            exit 1
+          fi
+          echo "pushed $repo:verify-drill at $digest, left unsigned"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      # The drill's red half, proven on every dispatch: `cosign verify` under the identity the
+      # OCIRepository checks must refuse the drill digest. A pass means a signature reaches the
+      # drill bundle, so `verify-drill` would read Ready and prove nothing. The identity is
+      # scripts/deploy_tools/forge.py's SIGNER_IDENTITY and SIGNER_ISSUER, and the workflow test
+      # fails a drift. cosign reads the registry login the push step wrote to the docker config.
+      - name: Refuse a drill bundle that verifies
+        id: drill-refuses
+        if: ${{ inputs.verify_drill }}
+        env:
+          DIGEST: ${{ steps.drill-push.outputs.digest }}
+          IDENTITY: https://github.com/DanielH2018/server/.github/workflows/promote.yml@refs/heads/master
+          ISSUER: https://token.actions.githubusercontent.com
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
+            echo "::error::the drill push handed on digest '$DIGEST'"
+            exit 1
+          fi
+          repo=ghcr.io/danielh2018/homelab-manifests
+          err="$RUNNER_TEMP/drill-verify.err"
+          if cosign verify \
+            --certificate-identity "$IDENTITY" \
+            --certificate-oidc-issuer "$ISSUER" \
+            "$repo@$DIGEST" 2> "$err"; then
+            echo "::error::cosign verified the drill digest $DIGEST under promote's identity"
+            exit 1
+          fi
+          cat "$err" >&2
+          # cosign v3.1.3 prints the first message on its bundle path and the second on its
+          # legacy path, each only after the registry answered and held no signature. Any
+          # other failure, such as a registry 401 or 429 or a Sigstore outage, proves nothing
+          # about the signature, so it fails the run rather than reading as a refusal.
+          if ! grep -Eq 'no valid bundles exist in registry|no signatures found' "$err"; then
+            echo "::error::cosign failed on the drill digest for a reason other than a missing signature"
+            exit 1
+          fi
+          echo "cosign found no signature on the drill digest $DIGEST, as the drill requires"
 
   promote:
     needs: publish

@@ -11,7 +11,6 @@ zero — the freshness analogue of the SMART and restore-drill checks.
 
 import io
 import json
-import re
 
 from dataclasses import fields, replace
 
@@ -21,10 +20,16 @@ import bridge.config
 import bridge.net
 import checks.logs
 
-from lib.repo_paths import REPO as _REPO
 from _bridge_env import bridge_env
 from _fake_sources import FakeSources
-from _helpers import ALL_VARS, load_yaml
+from _loki_streams import (
+    LOKI_STREAM_LABELS,
+    LOKI_STREAMS,
+    _PI_STREAMS,
+    _alloy_relabel_targets,
+    _selector_labels,
+    _selector_matches,
+)
 
 # ── HA ip_ban arm ───────────────────────────────────────────────────────────────────────────
 # HA's ban middleware keys on the peer address, so a burst of bad /api/ calls can ban the node's
@@ -34,45 +39,9 @@ from _helpers import ALL_VARS, load_yaml
 #   1. It reads each selector off the `cfg` fixture, which since #3659 is the rendered
 #      env-secret, so the deployed LOKI_STREAM is what is checked. A selector built at runtime
 #      from other values is not.
-#   2. The vocabulary below came from one k8s pod stream. LOKI_STREAM selects file-tail streams,
+#   2. The vocabulary in ansible/tests/_loki_streams.py came from one k8s pod stream. LOKI_STREAM selects file-tail streams,
 #      which may legitimately carry labels this set does not list. Widen the set against a live
 #      stream if a genuine selector ever fails — do not delete the guard.
-# The k8s pod stream vocabulary, read off a live Loki stream. `app` is NOT in it — a
-# selector with app="home-assistant" matches no stream and reports "no ip_ban events" forever. A fail-open arm cannot tell "nothing to report" from "wrong question",
-# so the selector label has to be checked by something other than the check's own verdict.
-# Transcribed from a live stream. Kept as a FLOOR rather than the whole answer:
-# `filename`, `stream` and `service_name` are added by Alloy/Loki itself and appear in no
-# config, so deriving alone would under-count and reject a valid selector.
-_LOKI_STREAM_LABELS_OBSERVED = frozenset(
-    {
-        "container",
-        "filename",
-        "job",
-        "machine",
-        "namespace",
-        "pod",
-        "service_name",
-        "stream",
-    }
-)
-
-
-def _alloy_relabel_targets():
-    """`target_label = "…"` values from the Alloy config — the labels it actually sets.
-
-    Derived rather than transcribed because the transcription cannot follow a rename: renaming a
-    relabel target leaves the frozenset above listing a label nothing emits, so a selector using
-    the NEW name is rejected while one using the dead name passes — the guard reporting the
-    opposite of the truth. Internal `__foo__` labels are dropped; they never reach a stream.
-    """
-    cfg = (
-        _REPO / "ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2"
-    ).read_text()
-    found = set(re.findall(r'target_label\s*=\s*"([^"]+)"', cfg))
-    return {label for label in found if not label.startswith("__")}
-
-
-LOKI_STREAM_LABELS = _LOKI_STREAM_LABELS_OBSERVED | _alloy_relabel_targets()
 
 
 def test_the_alloy_config_is_actually_readable():
@@ -82,12 +51,6 @@ def test_the_alloy_config_is_actually_readable():
         "the expected target_label values did not parse from the Alloy config — the path or "
         "the config shape changed, and the derived half of LOKI_STREAM_LABELS is now inert"
     )
-
-
-def _selector_labels(selector):
-    """Label names in a LogQL stream selector — the `foo` of `{foo="bar",baz=~"qux"}`."""
-    head = selector.split("}", 1)[0]
-    return set(re.findall(r"(\w+)\s*(?:=~|!~|!=|=)", head))
 
 
 def _logql_selector_names(cfg):
@@ -190,36 +153,6 @@ def test_deployed_loki_selectors_use_real_stream_labels():
 # Arms 1 and 2 of Loki Log Ingestion go down when the CLUSTER stops shipping. A daniel-pi stream
 # they also match keeps their count above zero through a total cluster outage, so neither arm can
 # fire (#3739). The label sets come from the `loki_streams` owner both Alloy configs render from.
-_LOKI_STREAMS = load_yaml(ALL_VARS)["loki_streams"]
-_PI_STREAMS = {
-    role: {**labels, "container": "wg-easy"} if role == "pi_containers" else labels
-    for role, labels in _LOKI_STREAMS.items()
-    if labels.get("machine") == "daniel-pi"
-}
-
-
-def _selector_matches(selector, labels):
-    """Whether a LogQL stream selector matches a stream carrying `labels`.
-
-    Loki semantics: a matcher on an absent label compares against the empty string, so
-    `machine!="daniel-pi"` matches a stream with no `machine` label, and a regex is anchored.
-    """
-    head = selector.split("}", 1)[0]
-    for name, op, value in re.findall(r'(\w+)\s*(=~|!~|!=|=)\s*"([^"]*)"', head):
-        got = labels.get(name, "")
-        if op == "=":
-            ok = got == value
-        elif op == "!=":
-            ok = got != value
-        elif op == "=~":
-            ok = re.fullmatch(value, got) is not None
-        else:
-            ok = re.fullmatch(value, got) is None
-        if not ok:
-            return False
-    return True
-
-
 def test_both_pi_streams_are_in_the_census():
     assert set(_PI_STREAMS) == {"pi_containers", "pi_health"}
 
@@ -235,7 +168,7 @@ def test_both_pi_streams_are_in_the_census():
 def test_cluster_arm_counts_its_cluster_stream(cfg, key, cluster_role):
     """The other half: a selector that excluded everything would also exclude the Pi."""
     labels = {
-        **_LOKI_STREAMS[cluster_role],
+        **LOKI_STREAMS[cluster_role],
         "machine": "daniel-box",
         "container": "authelia",
     }
