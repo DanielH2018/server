@@ -232,14 +232,13 @@ one line per batch, `<batch> on <host>: <state> …`, where state is `running`, 
 <PR URL>`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
 (`permission_denials=N` is
 appended when the agent hit classifier denials). `done` requires a PR URL in the agent's final
-text. A clean finish without one reads `needs-input` when the text names a blocker line
-(`needs input:` or `failed:`) and `no-pr` otherwise. `no-pr` means the agent stopped on a
+text. A blocker line (`needs input:` or `failed:`) outranks a PR URL, so a held batch reads
+`needs-input` and carries its PR URL. A clean finish without a PR URL reads `no-pr`. `no-pr` means the agent stopped on a
 progress report and the Stop hook's three continuations ran out. Both print the final text
-and exit 1, because no PR exists to land. A host whose read timed out reads `unread` and exits 75
+and exit 1, because there is no PR to land, or the PR is held. A host whose read timed out reads `unread` and exits 75
 unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` once its PR's CI has passed, so land that
 PR from this session with `land.sh`. A daniel-server batch whose CI stayed red after its one
-resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Its
-text gives the PR without `https://`, because `status` reads a full PR URL as `done`. Read the
+resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Read the
 failure, then fix the branch or re-run the CI before landing.
 
 **`no-verdict` is a daniel-box batch that opened its PR and never finished landing it.** On
