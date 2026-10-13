@@ -64,17 +64,16 @@ def test_a_host_whose_writer_reports_nothing_is_flagged(cfg):
 
 
 def test_a_cgroup_missing_on_one_host_is_flagged_and_named(cfg):
-    """The missing set is per host: daniel-server lacking claude-rc pages though daniel-box has it."""
+    """daniel-server missing fleet pages though daniel-box reports it."""
     cfg = replace(cfg, CLAUDE_CGROUP_CONSECUTIVE=1)
     stalls = [
         _stall("daniel-box", "claude-rc"),
         _stall("daniel-box", "fleet"),
-        _stall("daniel-server", "fleet"),
     ]
     ok, msg = _last_cycle(cfg, stalls)
     assert not ok, msg
     assert "daniel-server" in msg
-    assert "claude-rc" in msg
+    assert "fleet" in msg
 
 
 def test_claude_rc_missing_where_its_unit_runs_is_flagged(cfg):
