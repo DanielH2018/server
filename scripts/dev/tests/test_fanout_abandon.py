@@ -11,8 +11,12 @@ Run: uv run pytest scripts/dev/tests/test_fanout_abandon.py
 import dataclasses
 import json
 import subprocess
+from functools import partial
+from unittest import mock
 
+from fanout_lib import abandon
 from fanout_lib.abandon import remote_abandon_command
+from fanout_lib.clean import live_process_scan
 from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
 from fanout_lib.place import main
 from lib.git_testing import git, init_repo, scrubbed_env
@@ -39,8 +43,16 @@ def _scratch_with_an_unmerged_locked_worktree(tmp_path):
     return repo, worktree
 
 
-def _run_chain(tmp_path, repo, worktree, unit_active=False):
-    """Run the chain under bash with a `systemctl` stub, so no real user manager is reached."""
+def _run_chain(tmp_path, repo, worktree, unit_active=False, proc_root=None):
+    """Run the chain under bash with a `systemctl` stub, so no real user manager is reached.
+
+    `proc_root` is the directory the chain's in-use scan walks. It defaults to an empty one,
+    because the scan forks per pid and the host's process count then sets the test's cost
+    (#4876). Only a test that needs the scan to find a live process passes `/proc`.
+    """
+    if proc_root is None:
+        proc_root = tmp_path / "proc"
+        proc_root.mkdir()
     bin_dir = tmp_path / "bin"
     rc = 0 if unit_active else 3
     fake_bin(
@@ -51,7 +63,10 @@ def _run_chain(tmp_path, repo, worktree, unit_active=False):
         ),
     )
     batch = Batch("x", "h", str(worktree), BRANCH, UNIT, [1], "t")
-    cmd = remote_abandon_command(batch, repo=str(repo))
+    # `remote_abandon_command` takes no proc-root seam, so the scan it calls is wrapped here.
+    scan = partial(live_process_scan, proc_root=str(proc_root))
+    with mock.patch.object(abandon, "live_process_scan", scan):
+        cmd = remote_abandon_command(batch, repo=str(repo))
     assert str(repo) in cmd and "/home/ubuntu/server" not in cmd
     env = scrubbed_env()
     env["PATH"] = path_with(str(bin_dir), env=env)
@@ -181,7 +196,7 @@ def test_a_tree_a_live_process_still_uses_is_kept(tmp_path):
     repo, worktree = _scratch_with_an_unmerged_locked_worktree(tmp_path)
     holder = subprocess.Popen(["sleep", "60"], cwd=worktree)
     try:
-        proc = _run_chain(tmp_path, repo, worktree)
+        proc = _run_chain(tmp_path, repo, worktree, proc_root="/proc")
     finally:
         holder.kill()
         holder.wait()
