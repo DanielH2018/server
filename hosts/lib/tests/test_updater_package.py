@@ -95,8 +95,13 @@ def test_an_updater_timeout_of_20_minutes_is_flagged(reconcile_unit):
     assert not timeout_holds("[Service]\nTimeoutStartSec=20min\n", reconcile_unit)
 
 
-def test_a_reconcile_timeout_raised_to_45_minutes_is_flagged(package):
-    raised = "[Service]\nTimeoutStartSec=45min\n"
+def test_a_reconcile_timeout_raised_to_45_minutes_is_flagged(package, reconcile_unit):
+    # The rendered unit with only its limit changed, so a unit that moved the directive
+    # elsewhere, or dropped it, fails the substitution rather than passing on a stand-in.
+    raised, count = re.subn(
+        r"^TimeoutStartSec=.+$", "TimeoutStartSec=45min", reconcile_unit, flags=re.M
+    )
+    assert count == 1
     assert not timeout_holds(package.files[SERVICE][0].decode(), raised)
 
 
