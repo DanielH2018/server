@@ -20,13 +20,15 @@ The census joins two sides per host:
   of 1353 `dest:` and `path:` fields across the three hosts; most name a home directory or
   `/etc/systemd/system/`, where no package installs.
 - **Packages.** Every host package under `hosts/<host>/` joins that host, and every shared
-  package under `hosts/packages/` joins every host. Each contributes the paths it installs.
+  package under `hosts/packages/` joins every host. Each contributes the paths it installs,
+  and a host package also contributes its legacy entries, rendered as its manifest lists them.
+  Reconcile retires a legacy entry, so a role still writing it is the same two-writer fault:
+  each run of either side undoes the other. A `path` entry keys as that path, a
+  `cron_file` as `/etc/cron.d/<name>`, a `unit` as `/etc/systemd/system/<unit>`, the file
+  `homelab-reconcile:retire_unit` removes, and a `cron` as its `(user, name)`.
 
 A role reaches the hosts `land_reach.setup_role_hosts` names. A role that function cannot
 place, such as `common`, whose task files other roles import, reaches every host.
-
-The package side holds rendered paths only. Legacy entries join it once the renderer emits the
-manifest that lists them; until then no package carries one (#4924).
 
 Run: uv run pytest ansible/tests/setup/test_host_package_two_writers.py
 """
@@ -87,8 +89,10 @@ _ENV = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
 
 # A write: ("path", "/abs/path") or ("cron", "<user>", "<name>"). A cron's `cron_file:` is a
 # path, so it joins a package's installed files. The `(user, name)` key can meet only a legacy
-# entry, which the package side gains with #4934.
+# entry.
 Key = tuple[str, ...]
+# Where an Ansible-era unit a legacy entry names lives.
+ETC_UNITS = PurePosixPath("/etc/systemd/system")
 
 
 @cache
@@ -166,10 +170,25 @@ def ansible_writes(
     return by_host
 
 
+def legacy_key(entry: dict[str, str]) -> Key:
+    """The census key of the write a legacy entry retires."""
+    if "cron" in entry:
+        return ("cron", entry["user"], entry["cron"])
+    if "cron_file" in entry:
+        return ("path", str(CRON_D / entry["cron_file"]))
+    if "unit" in entry:
+        return ("path", str(ETC_UNITS / entry["unit"]))
+    return ("path", entry["path"])
+
+
 def package_writes(
     hosts_root: Path, hosts: tuple[str, ...]
 ) -> dict[str, dict[Key, set[str]]]:
-    """Per host, each path its packages install, mapped to the packages installing it."""
+    """Per host, each path its packages install or retire, mapped to the packages doing so.
+
+    A retiring package is named `<package> (legacy)`, so a collision line says which side the
+    package is on.
+    """
     by_host: dict[str, dict[Key, set[str]]] = defaultdict(lambda: defaultdict(set))
     shared = [
         host_mode.render_package(spec.parent.name, hosts_root=hosts_root)
@@ -182,6 +201,8 @@ def package_writes(
         for package in packages:
             for dst in package.files:
                 by_host[host][("path", dst)].add(package.name)
+            for entry in package.legacy:
+                by_host[host][legacy_key(entry)].add(f"{package.name} (legacy)")
     return by_host
 
 
@@ -228,8 +249,13 @@ def test_the_package_side_finds_its_named_packages():
 SD_HEALTH = "/usr/lib/homelab/pi-sd-health"
 
 
-def _fixture(tmp_path: Path, task: str, shipped: str = SD_HEALTH) -> tuple[dict, dict]:
-    """A fixture `optimize_pi` running `task` and a daniel-pi package shipping `shipped`."""
+def _fixture(
+    tmp_path: Path, task: str, shipped: str = SD_HEALTH, legacy: str = ""
+) -> tuple[dict, dict]:
+    """A fixture `optimize_pi` running `task`, and a daniel-pi package shipping `shipped`.
+
+    `legacy` is the YAML of the package's `legacy:` list, empty for none.
+    """
     role = tmp_path / "roles" / "setup" / "optimize_pi"
     (role / "tasks").mkdir(parents=True)
     task_file = role / "tasks" / "main.yml"
@@ -240,6 +266,7 @@ def _fixture(tmp_path: Path, task: str, shipped: str = SD_HEALTH) -> tuple[dict,
     (hosts / "daniel-pi" / "pi-sd-health").write_text("#!/bin/sh\n")
     (hosts / "daniel-pi" / "package.yml").write_text(
         f"files:\n  - {{src: pi-sd-health, dst: {shipped}, mode: '0755'}}\n"
+        + (f"legacy:\n{legacy}" if legacy else "")
     )
     ansible: dict = {"daniel-pi": defaultdict(set)}
     ctx = _role_context(SETUP / "optimize_pi", "daniel-pi")
@@ -278,6 +305,39 @@ def test_a_role_cron_file_a_package_ships_is_flagged(tmp_path):
         "daniel-pi: path /etc/cron.d/pi-health is written by ['optimize_pi'] "
         "and shipped by ['homelab-daniel-pi']"
     ]
+
+
+HEARTBEAT_CRON = (
+    "- name: Schedule the SD-card health heartbeat\n"
+    "  ansible.builtin.cron:\n"
+    "    name: Pi SD-card health heartbeat\n"
+    "    user: '{{ sys_user }}'\n"
+    "    job: /usr/local/bin/pi-sd-health.sh\n"
+)
+
+
+def test_a_role_still_installing_a_legacy_cron_is_flagged(tmp_path):
+    # H3.8b's entry: the package retires the cron while optimize_pi still schedules it.
+    legacy = "  - {cron: Pi SD-card health heartbeat, user: '{{ sys_user }}'}\n"
+    found = collisions(*_fixture(tmp_path, HEARTBEAT_CRON, legacy=legacy))
+    user = _role_context(SETUP / "optimize_pi", "daniel-pi")["sys_user"]
+    assert found == [
+        f"daniel-pi: cron {user} Pi SD-card health heartbeat is written by "
+        "['optimize_pi'] and shipped by ['homelab-daniel-pi (legacy)']"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("entry", "key"),
+    [
+        ({"path": "/usr/local/bin/x.sh"}, ("path", "/usr/local/bin/x.sh")),
+        ({"cron_file": "pi-health"}, ("path", "/etc/cron.d/pi-health")),
+        ({"unit": "x.service"}, ("path", "/etc/systemd/system/x.service")),
+        ({"cron": "X", "user": "ubuntu"}, ("cron", "ubuntu", "X")),
+    ],
+)
+def test_each_legacy_kind_keys_as_the_write_it_retires(entry, key):
+    assert legacy_key(entry) == key
 
 
 @pytest.mark.parametrize(

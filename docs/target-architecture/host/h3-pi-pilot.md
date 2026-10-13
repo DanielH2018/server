@@ -1098,6 +1098,7 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
   ansible/roles/setup/optimize_pi/templates/node_exporter.service.j2  (textfile collector on)
   scripts/lib/render_context.py                        (component defaults layer)
   scripts/renderer/homelab_render.py                   (R1's path; + HOST_INPUTS)
++ scripts/renderer/renderer_lib/host_manifest.py       (units, legacy and manifest.json, H3.2d)
   scripts/validate/shell_templates.py                  (+ hosts/components/*/templates/)
   scripts/validate/unit_templates.py                   (+ every unit and drop-in the host renderer emits)
   prek.toml                                            (unit and shell selectors gain hosts/)
@@ -1137,7 +1138,7 @@ says otherwise.
     - Add `!/hosts` to `.gitignore`, and add `hosts/lib/tests` to `testpaths` in
       `pyproject.toml`.
     - Two-writer check: none, because nothing ships yet.
-2. **H3.2 Shared scripts and the censuses.** This step is three PRs, in order. "H3.2"
+2. **H3.2 Shared scripts and the censuses.** This step is four PRs, in order. "H3.2"
    names them together, and other slices' "H3.2 census" is H3.2c's.
     - **H3.2a, the updater.** Add `hosts/lib/homelab-updater`,
       `hosts/packages/homelab-updater/` (its units and `homelab.sources`),
@@ -1172,6 +1173,26 @@ says otherwise.
             - Its named members at H3.2c are the three `optimize_pi` cron names on the Ansible
               side and `homelab-updater` on the package side. PR H3.6 adds
               `homelab-daniel-pi`.
+            - At H3.2c the package side holds installed paths only. H3.2d adds legacy
+              entries.
+    - **H3.2d, the manifest emitter.** It lands before H3.6, whose first Pi install
+      runs reconcile, and before H3.8b, whose legacy entries need it.
+        - The renderer gains two spec keys, in `package.yml` and `component.yml`:
+          `units:` maps a unit to its `manual` or `windowed` policy, and `legacy:` lists
+          the four entry kinds of *The host handoff rule*. Each legacy value renders with
+          the host's context, so H3.8b's `user: "{{ sys_user }}"` reaches the manifest as a
+          user name.
+        - `render_host` writes `/usr/lib/homelab/manifest.json` into every host package,
+          in the schema `hosts/lib/homelab-reconcile` documents. `units` lists the units
+          the host package and `homelab-updater` install, and each unit the host package
+          drops in on. `enable_links` lists each unit the package installs under a
+          `<target>.wants/` directory. `reconcilers` stays empty until H4. A shared package
+          ships no manifest and refuses a legacy entry.
+        - A fixture host package's manifest is parsed by reconcile's own `parse_manifest`.
+        - The two-writer census adds each legacy entry to the package side, keyed as the
+          write it retires: a `path` and a `cron_file` as paths, a `unit` as its file under
+          `/etc/systemd/system/`, and a `cron` as its `(user, name)`. A fixture whose legacy
+          cron a role still installs fails it.
 3. **H3.3 CI job.** This step is two PRs, in order.
     - **H3.3a, the job skeleton.** Add the `host_packages` job to `ci.yml` with *CI* steps 1
       to 3 and 6: the render diff, the nfpm build, the two lints and the job summary. Add the
@@ -1877,7 +1898,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
 
 ## Rollback
 
-- **H3.1, H3.2a to H3.2c, H3.3a and H3.3b:** revert each on its own, in reverse order. They
+- **H3.1, H3.2a to H3.2d, H3.3a and H3.3b:** revert each on its own, in reverse order. They
   change no host. Reverting H3.2c drops the host units from the unit validator and the
   censuses, which nothing ships yet. Reverting H3.3b leaves H3.3a's render diff and lints in
   the gate.
@@ -2128,6 +2149,12 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - `scripts/validate/unit_templates.py`'s test gains the host-render pair and the named
       member, and its module docstring names the host renders beside `ansible/roles/`;
     - the `validate-unit-templates` selector in `prek.toml`.
+- **H3.2d:**
+    - `scripts/renderer/tests/test_renderer_host_manifest.py` holds the manifest cases, one
+      parsed by reconcile's `parse_manifest`;
+    - the two-writer census gains the legacy join and its red fixture;
+    - `docs/homelab-render.md`'s host-mode section documents `units:`, `legacy:` and the
+      manifest.
 - **H3.3a:** `KNOWN_JOBS` in `ansible/tests/repo/test_every_ci_job_is_gated.py` gains
   `host_packages`.
 - **H3.3b:** none beyond the job, whose cases are the tests on both release legs, the

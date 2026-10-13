@@ -789,6 +789,24 @@ outside `root/`, and `nfpm.yaml`'s `scripts:` names it. Only a host package may 
 `hosts/lib/tests/test_maintainer_scripts.py` holds each rendered script to the line shapes H3's
 *Package rules* allow.
 
+A package spec or a component may also carry `units:` and `legacy:`, which feed the manifest.
+
+- `units:` maps a unit to `{policy: manual}` or `{policy: windowed}`. Reconcile does not
+  restart a unit with a policy when its file changes. The unit must be one the host package
+  or `homelab-updater` installs, or one the host package drops in on.
+- `legacy:` lists the Ansible-era entries reconcile retires: `{path: ...}`, `{cron: NAME,
+  user: USER}`, `{cron_file: NAME}` or `{unit: NAME}`. Each value renders with the
+  package's context, so `user: "{{ sys_user }}"` becomes the user's name. A shared package
+  refuses a legacy entry, because reconcile reads only the host package's manifest.
+
+Host mode writes `/usr/lib/homelab/manifest.json`, mode 0644, into every host package. It is
+the manifest `hosts/lib/homelab-reconcile` reads, in the schema that script's docstring
+documents. `units` lists every unit the host package and `homelab-updater` install, and every
+unit the host package drops a `50-homelab.conf` into, each with its policy or `{}`.
+`enable_links` lists each unit the host package installs under a
+`/usr/lib/systemd/system/<target>.wants/` directory. `legacy` holds the rendered entries, and
+`reconcilers` is empty until H4. A spec file entry may not install the manifest's path.
+
 A host package's context is the host's inventory layers, as
 `scripts/lib/render_context.py:render_context` builds them, with `inventory_hostname` set to
 the host. A shared package's context has no host_vars layer. The component's `defaults:` map
