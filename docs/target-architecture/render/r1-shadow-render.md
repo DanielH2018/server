@@ -18,6 +18,8 @@ PR 6, a stubbed dry-run render kept under `manifests_shadow_dir`: [#4788](https:
 
 PR 7, the comparison tooling `shadow_diff.py compare`, `stubcheck` and `digest`: [#4794](https://github.com/DanielH2018/server/pull/4794).
 
+PR 7, the trailing-newline class, rendered with the template module's final newline: [#4851](https://github.com/DanielH2018/server/pull/4851).
+
 Depends on: none
 
 Unblocks: [R2](r2-secret-placeholders.md), [R3](r3-remove-live-reads.md) and H3 (the host
