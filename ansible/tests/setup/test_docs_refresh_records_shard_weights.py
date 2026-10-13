@@ -163,6 +163,21 @@ def _shard_script_arguments(text: str) -> list[str]:
     return arguments
 
 
+def _flags(text: str, arguments: str) -> set[str]:
+    """The flags in `arguments`, and in every assignment to a variable it expands.
+
+    `ci.yml` passes its mode as `"${mode[@]}"`, so a cron that picks its mode the same way
+    names no flag after the script itself.
+    """
+    flags = set(re.findall(r"--[a-z][a-z-]*", arguments))
+    for name in re.findall(r"\$\{?(\w+)", arguments):
+        assigned = re.compile(rf"(?:^|[\s;&|(]){name}\+?=(.*)")
+        for line in _code_lines(text):
+            if match := assigned.search(line):
+                flags |= set(re.findall(r"--[a-z][a-z-]*", match.group(1)))
+    return flags
+
+
 def test_the_cron_also_refreshes_weights_that_are_present():
     """#4888: `--record-missing` never touches a present entry, so a module that grew 1.5-2x
     past its weight keeps the old number. The cron is the one place that measures serially on
@@ -173,9 +188,10 @@ def test_the_cron_also_refreshes_weights_that_are_present():
     """
     arguments = _shard_script_arguments(SCRIPT)
     assert arguments, f"{TEMPLATE.name} never runs {SHARD_SCRIPT}"
-    flags = {flag for args in arguments for flag in re.findall(r"--[a-z][a-z-]*", args)}
+    flags = set().union(*(_flags(SCRIPT, args) for args in arguments))
     refreshing = flags - _NON_REFRESHING_FLAGS
     assert refreshing, (
         f"{TEMPLATE.name} runs {SHARD_SCRIPT} only with {sorted(flags)}, none of which "
-        "re-measures an entry the table already holds"
+        "re-measures an entry the table already holds. The mode must appear after the "
+        "script on its command line, or in an assignment to a variable that line expands"
     )
