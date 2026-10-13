@@ -37,7 +37,8 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   `networkpolicy-observability`, `-prometheus`, `-loki` and `-alertmanager` render into
   `netpol-baseline-observability/`, and `tasks/main.yml` applies that directory itself, before
   the probes. The prune never selects them, and a `--dry-run` never shows them to the API
-  server.
+  server. So a new template rendering outside `k8s_namespace` must join that list, and
+  `ansible/tests/k8s/test_netpol_baseline_deferred_files.py` fails when one is missing.
 
 ## Notable
 - **Both boolean levers coerce oddly.** They go through `| bool` on both the template `if`
