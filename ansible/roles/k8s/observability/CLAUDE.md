@@ -96,6 +96,15 @@ expression in it sits in a Jinja raw block. Each rule group is a plain-YAML file
 `observability_rule_groups` names it. The routing tree, the receivers and the rule conventions
 are in `docs/target-architecture/monitoring/m1-alertmanager.md`.
 
+**The weekly reboot mutes every paging route, never the Watchdog.** The `weekly-reboot` time
+interval derives from the reboot cron's `weekly_reboot_*` values and the mute's lead and
+recovery allowance in `group_vars/all.yml`, which Kuma's maintenance window also reads. A
+schedule written here as a literal would stop following the reboot.
+`ansible/tests/services/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute_with_kumas_window`
+holds the two windows equal, and
+`ansible/tests/services/test_alertmanager_routing.py::test_every_route_a_paging_alert_reaches_is_muted`
+walks the routing tree to prove the alerts reach the mute.
+
 **A per-workload alert takes its `service` label from a recording rule.**
 `ansible/roles/k8s/observability/files/rules/workload-service.yaml` records one series per
 Deployment, DaemonSet and pod, each carrying the deploy tag as `service`. kube-state-metrics
