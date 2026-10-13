@@ -428,6 +428,12 @@ def _prune_namespace(role: str, vars_: dict) -> str:
     return render_expr(str(expr), **{**defaults, **_group_vars()})
 
 
+DEFERRED_FILES = {
+    "headlamp": "rbac-observability.yaml.j2",
+    "netpol-baseline": "networkpolicy-alertmanager.yaml.j2",
+}
+
+
 def test_an_armed_role_renders_nothing_outside_the_prune_namespace() -> None:
     """The armed apply passes `-n <manifests_prune_namespace>`, and kubectl refuses a document
     placed elsewhere.
@@ -435,8 +441,7 @@ def test_an_armed_role_renders_nothing_outside_the_prune_namespace() -> None:
     The refusal reads `the namespace from the provided object "observability" does not match
     the namespace "homelab"`, and only a server-side dry run or a real deploy raised it: arming
     headlamp passed pytest and prek while its rbac.yaml still carried the Prometheus proxy Role
-    in observability (#3575). headlamp is the named member, because it is the armed role whose
-    render reaches another namespace at all, through its deferred file.
+    in observability (#3575). DEFERRED_FILES names the roles that reach another namespace.
     """
     armed = {role: _prune_namespace(role, v) for role, v in _armed_roles().items()}
     checked, offenders = set(), []
@@ -447,7 +452,7 @@ def test_an_armed_role_renders_nothing_outside_the_prune_namespace() -> None:
         offenders += [
             (role, name, *found) for found in _foreign_namespaces(text, armed[role])
         ]
-    assert {"headlamp", "observability", "dri-device-plugin"} <= checked
+    assert set(DEFERRED_FILES) | {"observability", "dri-device-plugin"} <= checked
     assert not offenders, (
         f"armed roles render documents outside their prune namespace: {offenders}. The armed "
         "apply passes `-n <manifests_prune_namespace>`, so kubectl refuses the whole directory. "
@@ -470,18 +475,12 @@ def test_each_role_armed_outside_homelab_names_its_own_namespace() -> None:
     assert not _foreign_namespaces(text, "observability")
 
 
-def test_the_foreign_namespace_check_finds_headlamps_deferred_rbac() -> None:
-    """Control: the real render of headlamp's deferred file is what the check above refuses.
-
-    It also proves the staged set leaves that file out, so the check passes on headlamp because
-    the file is deferred rather than because the reader saw no namespace at all.
-    """
-    name = "rbac-observability.yaml.j2"
-    assert name not in _staged_templates("headlamp")
-    text = render_role_template("headlamp", name)
-    assert {found[2] for found in _foreign_namespaces(text, load_yaml_namespace())} == {
-        "observability"
-    }
+@pytest.mark.parametrize(("role", "name"), DEFERRED_FILES.items())
+def test_the_foreign_namespace_check_finds_each_deferred_file(role, name) -> None:
+    """Control: the check above refuses this file's render, and passes only as it is unstaged."""
+    assert name not in _staged_templates(role)
+    found = _foreign_namespaces(render_role_template(role, name), load_yaml_namespace())
+    assert {namespace for _kind, _name, namespace in found} == {"observability"}
 
 
 def _group_vars() -> dict:
