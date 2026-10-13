@@ -62,9 +62,13 @@ PLAIN_CASES = {"literal-reference": ("${HOME}", "${HOME}")}
 # The key `--red-proof` expects and no fixture holds.
 RED_PROOF_KEY = "red-proof-absent"
 
-# The type each `probe_n` value comes back as, measured against the pinned CLI on this branch's CI
-# and recorded in docs/homelab-render.md. None measures without asserting.
-EXPECTED_TYPES: dict[str, str | None] = {"0123": None, "true": None}
+# The type each `probe_n` value comes back as, measured against the pinned CLI v2.9.6 on CI
+# run 38426501907 and recorded in docs/homelab-render.md. Flux substitutes into a resource it
+# has already serialised without the template's quotes, so `0123` comes back as the YAML 1.1
+# octal integer 83 and `true` as a boolean. The round trip's second pass exists because of
+# this. A pin bump that keeps the quotes fails here, and that pass can then go. None measures
+# without asserting.
+EXPECTED_TYPES: dict[str, str | None] = {"0123": "int", "true": "bool"}
 
 
 def _configmap(name: str, data: dict[str, str]) -> str:

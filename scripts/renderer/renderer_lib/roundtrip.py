@@ -1,10 +1,10 @@
 """The round trip: build each placeholder directory and its stub twin with `flux build`, then compare.
 
-`shadow_diff.py roundtrip` renders both modes into one directory, `DIR/placeholder/` and
-`DIR/stub/`, each in C1's layout. For every directory under `cluster/` it writes two
-throwaway Flux Kustomizations under `DIR/kustomizations/` that differ only in `postBuild`, and
-runs `flux build kustomization <dir> --dry-run --kustomization-file <file> --path <dir>` once
-per mode:
+`shadow_diff.py roundtrip` renders both modes into one directory, each in C1's layout:
+`DIR/placeholder/`, and a stub render per pass. For every directory under `cluster/` it writes
+two throwaway Flux Kustomizations under `DIR/kustomizations/` that differ only in `postBuild`,
+and runs `flux build kustomization <dir> --dry-run --kustomization-file <file> --path <dir>`
+once per mode:
 
 - **Placeholder side, a directory that substitutes.** The file carries every key's R1 stub
   value inline in `postBuild.substitute`, and the command adds `--strict-substitute`.
@@ -17,6 +17,11 @@ Which directories substitute comes from the render's own key sets
 controller's own `SubstituteVariables` per resource and serialises both sides with the same
 code, so the outputs compare byte for byte, and the report names the first object that
 differs. It prints no file content: every value on either side is a stub.
+
+It runs two passes, `stub_passes`. The first substitutes each key's R1 stub, a plain-safe
+string. The second sets every key to `TYPE_HOSTILE_STUB` on both sides, because the pinned
+CLI drops the template's quotes around a substituted value, so a value such as `0123` changes
+type where it stands alone in a field.
 
 `roundtrip` needs the pinned flux CLI. Where `flux` is not on `PATH`, it refuses and never
 reports a pass. `docs/homelab-render.md` is the operator's page.
@@ -159,11 +164,56 @@ def first_difference(placeholder: str, stub: str) -> str | None:
     return "the outputs differ outside any object"
 
 
-@dataclass
-class Report:
-    """The verdict of one round trip.
+# The value every key takes in the second pass. The pinned CLI substitutes into a resource it
+# has already serialised, and it drops the template's quotes: measured on CI, a `stringData`
+# value written `"${n}"` came back as the integer 83 for n=0123 and as a boolean for n=true
+# (docs/homelab-render.md, *What the pinned flux CLI does*). An all-digit stub with a leading
+# zero therefore shows every site where substitution would change a value's type.
+TYPE_HOSTILE_STUB = "0123"
+
+
+@dataclass(frozen=True)
+class StubPass:
+    """One stub value set a round trip compares the placeholder render against.
 
     Attributes:
+        name: The directory under the round trip's root that holds this pass's stub render.
+        label: How the summary line names the pass.
+        values: The stub-mode render's overrides, as a stub file would hold them.
+        substitute: Each secret key mapped to the value the placeholder side substitutes.
+    """
+
+    name: str
+    label: str
+    values: dict
+    substitute: dict[str, str]
+
+
+def stub_passes(stubs: dict, keys: list[str]) -> list[StubPass]:
+    """The two passes: each key's R1 stub, then every key `TYPE_HOSTILE_STUB`.
+
+    The second pass's stub side is a stub-mode render with every key set to the hostile stub,
+    so Jinja writes the template's quotes around it there. Flux does not on the placeholder
+    side, so a value whose YAML type substitution changes shows as a difference.
+    """
+    hostile = dict.fromkeys(keys, TYPE_HOSTILE_STUB)
+    return [
+        StubPass(STUB, "each key's R1 stub", stubs, {k: str(stubs[k]) for k in keys}),
+        StubPass(
+            f"{STUB}-{TYPE_HOSTILE_STUB}",
+            f"every key {TYPE_HOSTILE_STUB}",
+            {**stubs, **hostile},
+            hostile,
+        ),
+    ]
+
+
+@dataclass
+class Report:
+    """The verdict of one pass of a round trip.
+
+    Attributes:
+        label: The pass's label, from `StubPass.label`.
         tags: The tags rendered on both sides.
         skipped: The requested tags placeholder mode skipped, from `PLACEHOLDER_DEFERRED`.
         directories: Every directory compared.
@@ -172,6 +222,7 @@ class Report:
         differences: One line per directory whose two builds differ or fail.
     """
 
+    label: str
     tags: list[str]
     skipped: list[str]
     directories: list[str] = field(default_factory=list)
@@ -189,7 +240,7 @@ class Report:
         lines.append(
             f"roundtrip: {len(self.tags)} tags, {deferred} deferred directories, "
             f"{len(self.substituting)} substituting, {self.objects} objects, "
-            f"{len(self.differences)} differences"
+            f"{len(self.differences)} differences, with {self.label}"
         )
         return lines
 
@@ -199,12 +250,12 @@ class Report:
 
 @dataclass(frozen=True)
 class Sides:
-    """The two renders a round trip compares, written under one directory.
+    """The renders a round trip compares, written under one directory.
 
     Attributes:
-        root: The directory both sides and the throwaway Kustomizations live under.
+        root: The directory every render and the throwaway Kustomizations live under.
         placeholder: The placeholder render, whose key sets decide `postBuild`.
-        tags: The tags rendered on both sides.
+        tags: The tags rendered in every mode.
     """
 
     root: Path
@@ -215,8 +266,10 @@ class Sides:
         return self.root / side / "cluster"
 
 
-def render_sides(root: Path, tags: list[str], keys: list[str], stubs: dict) -> Sides:
-    """Render `tags` in both modes under `root`: `placeholder/` and `stub/`.
+def render_sides(
+    root: Path, tags: list[str], keys: list[str], passes: list[StubPass]
+) -> Sides:
+    """Render `tags` under `root`: `placeholder/`, and one stub render per pass.
 
     Raises:
         RenderError: A template fails to render.
@@ -225,28 +278,30 @@ def render_sides(root: Path, tags: list[str], keys: list[str], stubs: dict) -> S
     """
     placeholder = render_placeholders(tags, keys)
     rendered = [t.tag for t in placeholder.tags]
-    stub: list[RenderedTag] = [render_tag(tag, stubs) for tag in rendered]
+    stub_renders: dict[str, list[RenderedTag]] = {
+        p.name: [render_tag(tag, p.values) for tag in rendered] for p in passes
+    }
     write_cluster(placeholder.tags, root / PLACEHOLDER)
-    write_cluster(stub, root / STUB)
+    for name, renders in stub_renders.items():
+        write_cluster(renders, root / name)
     return Sides(root, placeholder, rendered)
 
 
 def compare_sides(
     sides: Sides,
-    substitute: Mapping[str, str],
+    stub_pass: StubPass,
     flux: str,
     run: Runner = subprocess.run,
 ) -> Report:
-    """Build every directory on both sides and compare the outputs.
+    """Build every directory of the placeholder render and of one pass's stub render, and compare.
 
     Args:
-        sides: The two renders, from `render_sides`.
-        substitute: Each secret key mapped to the value the placeholder side substitutes,
-            its R1 stub for a round trip that must come out equal.
+        sides: The renders, from `render_sides`.
+        stub_pass: The pass whose stub render and substitute values to use.
         flux: The flux binary.
         run: The subprocess call; a test passes a stand-in.
     """
-    report = Report(sides.tags, sides.placeholder.skipped)
+    report = Report(stub_pass.label, sides.tags, sides.placeholder.skipped)
     kdir = sides.root / KUSTOMIZATIONS
     kdir.mkdir(parents=True, exist_ok=True)
     for name, keys in sorted(sides.placeholder.key_sets.items()):
@@ -254,11 +309,11 @@ def compare_sides(
         if keys:
             report.substituting.append(name)
         outputs = {}
-        for side in (PLACEHOLDER, STUB):
+        for side in (PLACEHOLDER, stub_pass.name):
             substitutes = side == PLACEHOLDER and bool(keys)
-            kfile = kdir / f"{name}.{side}.yaml"
+            kfile = kdir / f"{name}.{stub_pass.name}.{side}.yaml"
             kfile.write_text(
-                kustomization_file(name, substitute if substitutes else None)
+                kustomization_file(name, stub_pass.substitute if substitutes else None)
             )
             path = sides.cluster(side) / name
             result = build(flux, name, path, kfile, substitutes, run)
@@ -271,8 +326,8 @@ def compare_sides(
                 break
             outputs[side] = result.stdout
         else:
-            report.objects += len(documents(outputs[STUB]))
-            difference = first_difference(outputs[PLACEHOLDER], outputs[STUB])
+            report.objects += len(documents(outputs[stub_pass.name]))
+            difference = first_difference(outputs[PLACEHOLDER], outputs[stub_pass.name])
             if difference:
                 report.differences.append(f"{name}: {difference}")
     return report

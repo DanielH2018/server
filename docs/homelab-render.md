@@ -2,11 +2,13 @@
 
 `homelab-render` renders the k8s manifests from the git tree alone, as a shadow of the
 Ansible manifests role. Target slice R1 builds it and proves it byte-identical to Ansible for
-the same stub inputs. Ansible stays the only writer to the cluster: the renderer writes only
-to the directory it is given.
+the same stub inputs. Target slice R2 adds placeholder mode, which renders each secret
+reference as Flux's `${<key>}`. Ansible stays the only writer to the cluster: the renderer
+writes only to the directory it is given.
 
-The plan is [R1, shadow render with zero diff](target-architecture/render/r1-shadow-render.md).
-C1 in [the contracts](target-architecture/contracts.md) defines the interface. R1 lands in
+The plans are [R1, shadow render with zero diff](target-architecture/render/r1-shadow-render.md)
+and [R2, secret placeholders](target-architecture/render/r2-secret-placeholders.md). C1 in
+[the contracts](target-architecture/contracts.md) defines the interface. Each slice lands in
 steps, and this page describes each piece once its PR has merged.
 
 ## What is in place
@@ -35,6 +37,11 @@ steps, and this page describes each piece once its PR has merged.
   hook (*The render is deterministic and reads only the repo*).
 - A census row names every role task file that writes a cluster object itself, which the
   render does not cover (*What the render does not cover*).
+- `scripts/renderer/renderer_lib/placeholders.py` holds placeholder mode: the mode call, the
+  three passes, the per-directory key sets and `PLACEHOLDER_DEFERRED` (*Placeholder mode*).
+- `scripts/renderer/shadow_diff.py roundtrip` builds the placeholder render and the stub render
+  with the pinned flux CLI and compares them, and `fluxprobe` checks that CLI on fixtures
+  first. CI's `flux_roundtrip` job runs both (*The round trip*).
 
 ## The stub form
 
@@ -60,6 +67,17 @@ whose value is not exactly its stub. It returns names only, never a value.
 
 ## Render the cluster tree
 
+`cluster` has two modes, and `--secret-stubs` alone selects between them (C1 *Modes*):
+
+- Without `--secret-stubs`, the render is in placeholder mode (*Placeholder mode*):
+
+  ```bash
+  uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-render
+  ```
+
+- With `--secret-stubs FILE`, the render is in stub mode, R1's shadow mode. Every R1 command
+  on this page passes it, so each still renders stubs.
+
 To render the tags in stub mode, write a stub file for the commit and pass it to `cluster`:
 
 ```bash
@@ -80,10 +98,10 @@ else, and `DIR/flux/` belongs to a later slice.
 
 `cluster` exits 2 and writes nothing in four cases:
 
-- `--secret-stubs` is missing. Without it the render is placeholder mode, which target slice
-  R2 adds. A bare `cluster` call in a publish job therefore fails rather than publishing.
-- The stub file does not stub every key of `ansible/vars/secrets.yml`. The message names the
-  keys, never a value. Write a fresh stub file for the commit.
+- In stub mode, the stub file does not stub every key of `ansible/vars/secrets.yml`. The
+  message names the keys, never a value. Write a fresh stub file for the commit.
+- In placeholder mode, every requested tag is in `PLACEHOLDER_DEFERRED`, so nothing would
+  render.
 - A `--role` names a tag that is not a k8s render target of daniel-box.
 - A directory it would write under `DIR/cluster/` already holds files from an earlier
   render.

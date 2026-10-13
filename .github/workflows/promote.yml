@@ -137,7 +137,10 @@ jobs:
       # Equal to flux_version in ansible/roles/k8s/flux/defaults/main.yml, so the CLI and the
       # controllers move together. The workflow test fails a drift. The `# renovate:` comment
       # is what renovate.json's custom manager reads, and it puts this input, the action's pin
-      # and flux_version in one PR.
+      # and flux_version in one PR. The `flux_roundtrip` job in ci.yml installs the same action
+      # at the same pin and version, so the CLI that proves target slice R2's round trip is the
+      # CLI that publishes. The same manager reads its input, so one bump moves all three steps,
+      # and scripts/tests/test_renovate_flux_cli.py fails a drift in either workflow.
       - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
         with:
           # renovate: datasource=github-releases depName=fluxcd/flux2

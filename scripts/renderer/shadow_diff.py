@@ -23,8 +23,9 @@ side.
   functions.
 - `roundtrip --out DIR` (target slice R2) renders each tag in placeholder mode and in stub
   mode, builds every directory of both with `flux build kustomization`, substituting each
-  key's stub where a directory substitutes, and compares the outputs byte for byte. Its
-  library is `renderer_lib/roundtrip.py`.
+  key's stub where a directory substitutes, and compares the outputs byte for byte. A second
+  pass does the same with every key `0123`, which shows a value whose YAML type substitution
+  changes. Its library is `renderer_lib/roundtrip.py`.
 - `fluxprobe --out DIR` builds small fixtures with the flux CLI and fails unless each escape
   comes back as the round trip relies on. Its library is `renderer_lib/flux_probe.py`.
 
@@ -48,6 +49,7 @@ Run: uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
      uv run pytest scripts/renderer/tests
 """
 
+import dataclasses
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -70,9 +72,12 @@ from renderer.renderer_lib.cluster import RenderError, RenderRefused, select_tag
 from renderer.renderer_lib.flux_probe import probe
 from renderer.renderer_lib.roundtrip import (
     FluxMissing,
+    Sides,
+    StubPass,
     compare_sides,
     find_flux,
     render_sides,
+    stub_passes,
 )
 from renderer.renderer_lib.shadow import (
     TreeRefused,
@@ -189,10 +194,8 @@ def _digest(root: Path) -> int:
     return SHADOW_OK
 
 
-def red_proof_substitute(
-    sides, substitute: dict[str, str]
-) -> tuple[str, dict[str, str]]:
-    """`substitute` with one key's value changed by one byte, and that key.
+def red_proof(stub_pass: StubPass, sides: Sides) -> tuple[str, StubPass]:
+    """`stub_pass` with one key's substitute value changed by one byte, and that key.
 
     The key is the first, in sorted order, of the first directory that substitutes, so a
     working round trip must report that directory.
@@ -202,35 +205,36 @@ def red_proof_substitute(
     """
     for name in sides.placeholder.substituting():
         key = sorted(sides.placeholder.key_sets[name])[0]
-        value = substitute[key]
+        value = stub_pass.substitute[key]
         changed = value[:-1] + ("y" if value.endswith("x") else "x")
-        return key, {**substitute, key: changed}
+        substitute = {**stub_pass.substitute, key: changed}
+        return key, dataclasses.replace(stub_pass, substitute=substitute)
     raise ValueError(
         "no rendered directory substitutes, so --red-proof has no value to change"
     )
 
 
-def _roundtrip(out: Path, roles: list[str] | None, red_proof: bool) -> int:
+def _roundtrip(out: Path, roles: list[str] | None, with_red_proof: bool) -> int:
     try:
         flux = find_flux()
     except FluxMissing as exc:
         return _refused("roundtrip", str(exc))
     keys = homelab_stub_keys(yaml_fast.safe_load(SECRETS.read_text()))
-    stubs = stub_vars()
-    substitute = {key: str(stubs[key]) for key in keys}
+    passes = stub_passes(stub_vars(), keys)
     try:
-        sides = render_sides(out, select_tags(roles), keys, stubs)
-        if red_proof:
-            key, substitute = red_proof_substitute(sides, substitute)
+        sides = render_sides(out, select_tags(roles), keys, passes)
+        if with_red_proof:
+            key, passes[0] = red_proof(passes[0], sides)
             print(f"roundtrip: red proof: {key}'s substitute value changed by one byte")
     except RenderRefused as exc:
         return _refused("roundtrip", str(exc))
     except (RenderError, ValueError) as exc:
         print(f"shadow_diff roundtrip: {exc}", file=sys.stderr)
         return SHADOW_DIFFERENT
-    report = compare_sides(sides, substitute, flux)
-    print("\n".join(report.lines()))
-    return report.exit_code()
+    reports = [compare_sides(sides, p, flux) for p in passes]
+    for report in reports:
+        print("\n".join(report.lines()))
+    return max(report.exit_code() for report in reports)
 
 
 def _fluxprobe(out: Path, red_proof: bool) -> int:

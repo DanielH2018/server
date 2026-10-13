@@ -14,7 +14,7 @@ import pytest
 
 from lib.proc_testing import fake_bin
 from renderer import homelab_render, shadow_diff
-from renderer.renderer_lib.roundtrip import compare_sides, render_sides
+from renderer.renderer_lib.roundtrip import compare_sides, render_sides, stub_passes
 
 FAKE_FLUX = """#!{python}
 import pathlib, re, sys, yaml
@@ -58,23 +58,25 @@ def _main(*args):
 def test_roundtrip_over_equal_renders_is_clean(flux_on_path, tmp_path, capsys):
     out = tmp_path / "rt"
     assert _main("roundtrip", "--out", str(out), "--role", "configarr") == 0
-    summary = capsys.readouterr().out.splitlines()[-1]
-    assert summary.startswith(
-        "roundtrip: 1 tags, 0 deferred directories, 1 substituting,"
-    )
-    assert summary.endswith(" 0 differences")
+    first, second = capsys.readouterr().out.splitlines()
+    for summary in (first, second):
+        assert summary.startswith(
+            "roundtrip: 1 tags, 0 deferred directories, 1 substituting,"
+        )
+    assert first.endswith(" 0 differences, with each key's R1 stub")
+    assert second.endswith(" 0 differences, with every key 0123")
 
 
 def test_a_one_byte_edit_to_a_secret_value_is_flagged(flux_on_path, tmp_path):
     keys = homelab_render.secret_keys()
-    stubs = shadow_diff.stub_vars()
-    sides = render_sides(tmp_path / "rt", ["configarr"], keys, stubs)
+    passes = stub_passes(shadow_diff.stub_vars(), keys)
+    sides = render_sides(tmp_path / "rt", ["configarr"], keys, passes)
     secret = sides.cluster("placeholder") / "configarr" / "config-secret.yaml"
     text = secret.read_text()
     assert "api_key: ${" in text
     secret.write_text(text.replace("api_key: ${", "api_kez: ${", 1))
 
-    report = compare_sides(sides, {k: str(stubs[k]) for k in keys}, flux_on_path)
+    report = compare_sides(sides, passes[0], flux_on_path)
     assert report.exit_code() == 1
     assert report.differences == ["configarr: Secret/homelab/configarr-config differs"]
 
@@ -89,6 +91,20 @@ def test_a_substitute_value_changed_by_one_byte_is_flagged(
     printed = capsys.readouterr().out
     assert "changed by one byte" in printed
     assert "configarr: Secret/homelab/configarr-config differs" in printed
+
+
+def test_a_value_alone_in_a_quoted_field_differs_in_the_0123_pass(
+    flux_on_path, tmp_path, capsys
+):
+    # ical-proxy's Secret holds `GOOGLE_ICS_URL: "{{ calendar_1 }}"`, a key alone in a quoted
+    # field. Substituted, an all-digit value loses the template's quotes and changes type,
+    # which the R1 stubs never show.
+    out = tmp_path / "rt"
+    assert _main("roundtrip", "--out", str(out), "--role", "ical-proxy") == 1
+    printed = capsys.readouterr().out.splitlines()
+    assert printed[0].endswith(" 0 differences, with each key's R1 stub")
+    assert printed[1].startswith("ical-proxy: ") and printed[1].endswith(" differs")
+    assert printed[2].endswith(" 1 differences, with every key 0123")
 
 
 def test_roundtrip_without_flux_on_path_exits_2(tmp_path, monkeypatch, capsys):

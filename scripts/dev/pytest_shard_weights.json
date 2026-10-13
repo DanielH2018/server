@@ -1061,6 +1061,8 @@
  "scripts/renderer/tests/test_renderer_file_rules.py": 15.77,
  "scripts/renderer/tests/test_renderer_homelab_render.py": 0.32,
  "scripts/renderer/tests/test_renderer_pinned_live_facts.py": 0.15,
+ "scripts/renderer/tests/test_renderer_placeholders.py": 0.23,
+ "scripts/renderer/tests/test_renderer_roundtrip.py": 1.05,
  "scripts/renderer/tests/test_renderer_secret_stubs.py": 0.0,
  "scripts/renderer/tests/test_renderer_shadow_diff.py": 0.0,
  "scripts/renderer/tests/test_renderer_stub_file.py": 0.02,
