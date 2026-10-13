@@ -16,6 +16,8 @@ PR 5, the refusal of a misplaced or incomplete stub file: [#4753](https://github
 
 PR 6, a stubbed dry-run render kept under `manifests_shadow_dir`: [#4788](https://github.com/DanielH2018/server/pull/4788).
 
+PR 7, the comparison tooling `shadow_diff.py compare`, `stubcheck` and `digest`: [#4794](https://github.com/DanielH2018/server/pull/4794).
+
 Depends on: none
 
 Unblocks: [R2](r2-secret-placeholders.md), [R3](r3-remove-live-reads.md) and H3 (the host
