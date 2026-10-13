@@ -19,6 +19,7 @@ _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from fanout_lib.brief import APPLY_OWED, fence_for
 
 if TYPE_CHECKING:
+    from fanout_lib.review.review_ci import Failure
     from fanout_lib.review.review_record import Record
 
 FINDINGS_SCHEMA = {
@@ -219,6 +220,28 @@ with `gh pr edit`.
 Do not merge or land.
 
 {_as_data("The unresolved findings", public)}
+
+End your final message with the PR URL.
+"""
+
+
+def ci_fix_prompt(pr: str, line: str, failures: "Sequence[Failure]") -> str:
+    """The prompt that resumes the implementer after its PR's CI went red (`review_ci`).
+
+    The pipeline waited for CI, so this session never saw it. It gets each failed check's name
+    and the end of its job's log, as data: a log can echo text a PR author wrote.
+    """
+    failed = [{"check": f.name, "log_tail": f.tail} for f in failures]
+    return f"""CI ran on {pr} after the review, and it is red:
+
+{line}
+
+{_as_data("The failed checks", failed)}
+
+Reproduce each failure locally with the command the failed job ran, fix the cause, commit and
+push. Run the checks that cover what you change. A failure that the log shows is unrelated to
+this PR (a flaky service, a runner fault) needs no fix: say so in one sentence. Do not merge,
+land or close anything.
 
 End your final message with the PR URL.
 """

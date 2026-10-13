@@ -62,6 +62,13 @@ class FakeRunner:
         self.verdict = "VERDICT: settled (deployed)"
         self.land_rc = 0
         self.waits = [0]
+        # The CI wait a batch that does not land runs: each `cc-wait gh-ci` command, the
+        # (exit code, output) it answers with in order (the last repeats), the PR's
+        # `statusCheckRollup`, and each failed job's log by job id.
+        self.ci_calls = []
+        self.ci = [(0, "WAIT: passed abcd1234: 20 check runs passed\n")]
+        self.rollup = []
+        self.job_logs = {}
 
     def __call__(self, argv, stdin):
         argv = unprefixed(argv)
@@ -76,6 +83,12 @@ class FakeRunner:
             return subprocess.CompletedProcess(argv, 0, out + "\n", "")
         if argv[:3] == ["gh", "issue", "view"]:
             return subprocess.CompletedProcess(argv, 0, json.dumps(self.labels), "")
+        if argv[:3] == ["gh", "pr", "view"]:
+            out = json.dumps({"statusCheckRollup": self.rollup})
+            return subprocess.CompletedProcess(argv, 0, out, "")
+        if argv[:3] == ["gh", "run", "view"]:
+            log = self.job_logs.get(argv[4], "")
+            return subprocess.CompletedProcess(argv, 0, log, "")
         if argv[0] == "gh":
             self.comments.append(stdin)
             return subprocess.CompletedProcess(argv, 0, "", "")
@@ -90,6 +103,10 @@ class FakeRunner:
 
     def _landing(self, argv):
         command = argv[argv.index("land") + 1 :]
+        if "gh-ci" in command:
+            self.ci_calls.append(command)
+            rc, out = self.ci.pop(0) if len(self.ci) > 1 else self.ci[0]
+            return subprocess.CompletedProcess(argv, rc, out, "")
         self.lands.append(command)
         if command[0].endswith("land.sh"):
             if self.land_rc == 0:
@@ -112,6 +129,7 @@ def _pipeline(
     target=SERVER_TARGET,
     base_check=None,
     hunk_check=None,
+    sleep=None,
 ):
     (tmp_path / ".fanout").mkdir()
     brief = render_brief(ISSUES, host, "1345", "worktree-orch", [], review=True)
@@ -129,5 +147,6 @@ def _pipeline(
         gates=gates or Gates(),
         base_check=base_check or (lambda *_: BaseCheck()),
         hunk_check=hunk_check or (lambda *_: HunkCheck()),
+        sleep=sleep or (lambda _: None),
     )
     return pipeline, run
