@@ -197,6 +197,65 @@ def test_a_static_src_outside_the_component_is_flagged(hosts, tmp_path, src):
         host_mode.render_host("daniel-pi", root)
 
 
+def _link_in_beat(hosts, tmp_path, target, src="files/k.j2", text="x\n"):
+    """A `hosts/` tree whose `beat` component lists `src`, a symlink to `target`."""
+    root = hosts(*_one("files/in.j2", text))
+    link = root / "components" / "beat" / src
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(target)
+    spec = {"files": [{"src": src, "dst": "/x"}]}
+    (root / "components" / "beat" / "component.yml").write_text(yaml.safe_dump(spec))
+    return root
+
+
+def test_a_template_src_symlinked_out_of_the_component_is_flagged(hosts, tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("AGE-SECRET-KEY-not-a-real-key\n")
+    root = _link_in_beat(hosts, tmp_path, outside)
+    with pytest.raises(RenderRefused, match="is outside the component") as caught:
+        host_mode.render_host("daniel-pi", root)
+    assert "AGE-SECRET-KEY" not in str(caught.value)
+
+
+def test_a_template_src_symlinked_within_the_component_is_clean(hosts, tmp_path):
+    root = hosts(*_one("files/real.j2", "{{ 1 + 1 }}\n"))
+    inside = root / "components" / "beat" / "files" / "real.j2"
+    _link_in_beat(hosts, tmp_path, inside)
+    assert _rendered(host_mode.render_host("daniel-pi", root), "/x") == "2\n"
+
+
+def test_an_include_symlinked_out_of_the_component_is_flagged(hosts, tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("AGE-SECRET-KEY-not-a-real-key\n")
+    root = hosts(*_one("files/main.j2", "{% include 'files/part.j2' %}\n"))
+    (root / "components" / "beat" / "files" / "part.j2").symlink_to(outside)
+    with pytest.raises(RenderRefused, match="is outside the component") as caught:
+        host_mode.render_host("daniel-pi", root)
+    assert "AGE-SECRET-KEY" not in str(caught.value)
+
+
+def test_an_include_inside_the_component_is_clean(hosts):
+    root = hosts(*_one("files/main.j2", "a {% include 'files/part.j2' %}\n"))
+    (root / "components" / "beat" / "files" / "part.j2").write_text("b")
+    assert _rendered(host_mode.render_host("daniel-pi", root)) == "a b\n"
+
+
+@pytest.mark.parametrize("mode", ["4755", "2755", "1777", "07777"])
+def test_a_mode_with_a_special_bit_is_flagged(hosts, mode):
+    component = {"files": [{"src": "a", "dst": "/x", "mode": mode}]}
+    root = hosts({"components": ["beat"]}, {"beat": component}, {"a": ""})
+    with pytest.raises(RenderRefused, match="bits above 0o777"):
+        host_mode.render_host("daniel-pi", root)
+
+
+@pytest.mark.parametrize("mode", ["0644", "0755"])
+def test_a_mode_with_no_special_bit_is_clean(hosts, mode):
+    component = {"files": [{"src": "a", "dst": "/x", "mode": mode}]}
+    root = hosts({"components": ["beat"]}, {"beat": component}, {"a": ""})
+    package = host_mode.render_host("daniel-pi", root)
+    assert package.files["/x"][1] == int(mode, 8)
+
+
 def test_a_host_without_a_package_is_flagged_and_writes_nothing(tmp_path, capsys):
     out = tmp_path / "out"
     argv = ["host", "--host", "no-such-host", "--out", str(out)]

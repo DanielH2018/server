@@ -36,11 +36,13 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from typing import cast
 
 import jinja2
 import yaml
 
 from lib import yaml_fast
+from lib.ansible_jinja_env import SHARED_TPL
 from lib.estate import REPO_INVENTORY, Inventory
 from lib.render_context import UnresolvedVarsError, render_context
 from lib.render_guard import StrictChainableUndefined, load_yaml
@@ -213,6 +215,7 @@ def _render_unit(
         return
     ctx, reasons = host_context(host, spec.get("defaults") or {}, inventory, withheld)
     env = renderer_env(directory)
+    env.loader = _ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
     for entry in files:
         if not {"src", "dst"} <= set(entry):
             raise RenderRefused(f"{directory}: file entry {entry} lacks src or dst")
@@ -225,25 +228,55 @@ def _render_unit(
         if dst in package.files:
             raise RenderRefused(f"{package.name}: two files install {dst}")
         mode = _mode(entry.get("mode", "0644"), directory, dst)
+        source = _confined(directory, src)
         if src.endswith(".j2"):
             content = _render_template(env, src, ctx, reasons, directory).encode()
         else:
-            content = _static(directory, src)
+            content = source.read_bytes()
         package.files[dst] = (content, mode)
 
 
-def _static(directory: Path, src: str) -> bytes:
-    """The bytes of a static `src`, which must resolve to a file inside `directory`.
+def _confined(directory: Path, src: str) -> Path:
+    """`src` resolved through any symlink, which must be a file inside `directory`.
 
-    The path is resolved through any symlink first, so neither an absolute path, a `..` nor
-    a link out of the component can copy a file of the rendering machine into a package.
+    Both branches of a file entry call this before they read: a static `src` is read from the
+    result, and a `.j2` `src` is checked here and then loaded by name. Neither an absolute
+    path, a `..` nor a link out of the component can put a file of the rendering machine into
+    a package. The refusal names the component and the `src`, never the target.
     """
     path = (directory / src).resolve()
     if not path.is_relative_to(directory.resolve()):
         raise RenderRefused(f"{directory}: src {src!r} is outside the component")
     if not path.is_file():
         raise RenderRefused(f"{directory}: src {src!r} does not exist")
-    return path.read_bytes()
+    return path
+
+
+class _ConfinedLoader(jinja2.BaseLoader):
+    """The renderer's loader, refusing a template that resolves outside its search roots.
+
+    `{% include %}`, `{% import %}` and `{% extends %}` load by name through the loader, and
+    jinja's `FileSystemLoader` follows a symlink there. A link in the component to a file
+    outside it would otherwise be read into the package. The roots are the component
+    directory and the shared `ansible/templates/` the environment also searches. Nothing else
+    in host mode reads a file a component names: `lookup` is registered only when the
+    environment is given a context, and `_render_unit` does not give it one.
+    """
+
+    def __init__(self, inner: jinja2.BaseLoader, directory: Path) -> None:
+        self.inner = inner
+        self.directory = directory
+        self.roots = [directory.resolve(), SHARED_TPL.resolve()]
+
+    def get_source(self, environment, template):
+        source, filename, uptodate = self.inner.get_source(environment, template)
+        if filename is not None and not any(
+            Path(filename).resolve().is_relative_to(root) for root in self.roots
+        ):
+            raise RenderRefused(
+                f"{self.directory}: template {template!r} is outside the component"
+            )
+        return source, filename, uptodate
 
 
 def _mode(value: object, directory: Path, dst: str) -> int:
@@ -256,7 +289,18 @@ def _mode(value: object, directory: Path, dst: str) -> int:
         raise RenderRefused(
             f"{directory}: {dst} mode {value!r} is not a quoted octal string such as '0644'"
         )
-    return int(value, 8)
+    mode = int(value, 8)
+    special = mode & ~0o777
+    if special:
+        names = {0o4000: "setuid", 0o2000: "setgid", 0o1000: "sticky"}
+        bits = ", ".join(
+            f"{bit:#o} {name}" for bit, name in names.items() if special & bit
+        )
+        raise RenderRefused(
+            f"{directory}: {dst} mode {value!r} sets bits above 0o777 ({bits}); "
+            "no package installs a special bit"
+        )
+    return mode
 
 
 def host_context(
