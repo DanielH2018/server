@@ -729,12 +729,14 @@ render_records_minute: 17
 # a stopped producer unread for longer than the records it last wrote stay useful.
 render_records_push_interval_s: 7200
 # ── weekly reboot ──────────────────────────────────────────────────────────────────────────
-# When every host in the play restarts itself. TWO roles read this: initial_setup installs the
-# `Weekly system restart` cron from it (roles/setup/initial_setup/tasks/crons.yml), and
-# uptime-kuma derives the Kuma maintenance window that keeps the restart from paging Discord
-# (roles/k8s/uptime-kuma/defaults/main.yml). It lives here rather than in either role's
-# defaults because a schedule written twice drifts: a reboot moved without the window is a
-# Sunday morning of DOWN messages, and a window moved without the reboot suppresses nothing.
+# When every host in the play restarts itself. THREE roles read this: initial_setup installs the
+# `Weekly system restart` cron from it (roles/setup/initial_setup/tasks/crons.yml), uptime-kuma
+# derives the Kuma maintenance window that keeps the restart from paging Discord
+# (roles/k8s/uptime-kuma/templates/maintenance-sync-configmap.yaml.j2), and observability
+# derives Alertmanager's `weekly-reboot` mute from the same values
+# (roles/k8s/observability/templates/alertmanager-secret.yaml.j2). It lives here rather than in
+# any role's defaults because a schedule written twice drifts: a reboot moved without the window
+# is a Sunday morning of DOWN messages, and a window moved without the reboot suppresses nothing.
 weekly_reboot_minute: 30
 weekly_reboot_hour: 7
 # Cron day-of-week, 0 = Sunday.
@@ -749,6 +751,20 @@ weekly_reboot_shutdown_delay_minutes: 5
 # or six hours, so a maintenance window derived from these values in `tz` would open at an
 # arbitrary Sunday midday and page straight through the reboot.
 weekly_reboot_timezone: UTC
+# How long before the reboot cron fires the mute opens, in both Kuma and Alertmanager. The hosts
+# do not go down until `shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}`, so this is not
+# the time to the outage — it is slack for a monitor that flips in the seconds around the cron,
+# and for a heartbeat window that was already half-spent when the shutdown landed.
+weekly_reboot_mute_lead_minutes: 5
+# How long after the reboot itself the mute stays open. Measured: daniel-server
+# was down 07:35 to 07:48:25 and Kuma was Ready again at ~07:51, and the status-page sync
+# records ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room
+# for a slow boot (07:38 and 07:41 on the two preceding Sundays) and for the bridge-fed tiles,
+# whose 1200s window means a tile can flip DOWN up to 20 minutes after the last missed push.
+# With the 5-minute lead and the 5-minute shutdown delay this is a 50-minute window: 07:25 to
+# 08:15 at the committed schedule. uptime-kuma's render_maintenance.py and observability's
+# alertmanager-secret.yaml.j2 each do that sum; nothing here repeats it.
+weekly_reboot_mute_recovery_minutes: 40
 # Whether this host runs its own gitops_deploy pull-based auto-deployer. FALSE by default:
 # daniel-box is the one deployer, and a host nobody has thought about yet gets the teardown arm
 # rather than a timer that deploys to production on its own. Arming a host is `has_gitops: true` in its host_vars plus

@@ -84,7 +84,13 @@ every monitor, so the Sunday reboot stops paging Discord for the ~85 tiles it ta
 The operator accepted the cost on 2026-09-28: an outage in the window is silent.
 
 - **Derived from the reboot cron, never written twice** — the four `weekly_reboot_*` values in
-  `group_vars/all.yml` drive both the cron and this window: `25 7 * * 0`, 50 minutes.
+  `group_vars/all.yml` drive both the cron and this window: `25 7 * * 0`, 50 minutes. The lead
+  and the recovery allowance sit beside them as
+  `ansible/inventory/group_vars/all.yml:weekly_reboot_mute_lead_minutes` and
+  `ansible/inventory/group_vars/all.yml:weekly_reboot_mute_recovery_minutes`, because
+  Alertmanager's `weekly-reboot` mute in the observability role reads the same six values.
+  ENFORCED:
+  `ansible/tests/services/test_alertmanager_reboot_mute.py::test_the_mute_equals_kumas_window_at_the_committed_schedule`.
 - **The timezone cannot be spelled `UTC`.** The clock is the host's, and kuma-client's own list
   carries neither `UTC` nor `Etc/UTC`, so `uptime_kuma_k8s_maintenance_window_timezone` is
   `Atlantic/Reykjavik`. In `tz` the window opens five hours late.
