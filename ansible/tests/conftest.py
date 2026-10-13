@@ -1,8 +1,30 @@
 """Fixtures shared across the guards in this directory."""
 
+import sys
 from pathlib import Path
 
 import pytest
+
+
+# DECIDED: the per-worker k8s render leaves `--durations`, on purpose. `rendered_docs()` caches
+# per process, and under xdist each worker builds it once: ~1.9s here and ~7.5s on a CI runner,
+# charged to whichever module asks first on that worker. That module varies from run to run,
+# and the serial `--record` run charges a different one again. On the master run in #4873,
+# eleven modules recorded near 0s measured 5-7.7s in CI for that reason alone. Charging every
+# reader instead would add 1.9s to each of the 70-odd modules that read the render, against
+# about 24 builds CI actually pays (six shards of four workers). So the build is a per-worker
+# cost, and the shard weights in `scripts/dev/pytest_shard_weights.json` model each module's
+# own cost.
+def pytest_collection_finish(session: pytest.Session) -> None:
+    """Build the k8s render cache once per process, before any test's timed phases run.
+
+    The module is looked up, not imported: a run that collected nothing reading the render,
+    such as `scripts/` alone, pays nothing.
+    """
+    if session.config.option.collectonly:
+        return
+    if (k8s_render := sys.modules.get("_k8s_render")) is not None:
+        k8s_render.prebuild()
 
 
 @pytest.fixture

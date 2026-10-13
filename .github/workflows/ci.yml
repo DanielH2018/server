@@ -631,11 +631,12 @@ jobs:
       # separates a heavy module from a light one elsewhere. This step has the measurement,
       # because the shard just ran the file.
       #
-      # Two arms, and the second needs the measurement just as much: a recorded weight
+      # Three arms, and the other two need the measurement just as much: a recorded weight
       # far HIGHER than what the module measured here reserves shard time the file does not
-      # cost, and every static arm asks only whether a file is missing from the table. The
-      # complaint names its own repair, which differs per arm — `--record-missing` fills a gap
-      # and `--record-files` refreshes an entry that is merely wrong.
+      # cost, and one far LOWER packs a heavy module as free (#4873). Every static arm asks only
+      # whether a file is missing from the table. The complaint names its own repair, which
+      # differs per arm — `--record-missing` fills a gap and `--record-files` refreshes an
+      # entry that is merely wrong.
       #
       # A `run:` step and NOT a pytest test. The docs-refresh and eval-run crons commit with
       # the prek chain on and deselect exactly one ratchet node id; a second test that went red
