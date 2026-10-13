@@ -159,6 +159,13 @@ not rotated again by the weekly cron. Examples:
 --8<-- "assets/generated/fragments/node-agent-liveness.md"
 
 - `grafana_admin_password`, `*_password`: change in the app (or its env on first run).
+- `google_assistant_service_account`: create a new JSON key for the service account in the
+  Google Cloud console, then store the whole downloaded JSON with `sops set`. The value is
+  multi-line, so it has a Secret of its own, `home-assistant-google-sa`, rendered from
+  `ansible/roles/k8s/home-assistant/templates/google-sa-secret.yaml.j2`. A rotation changes
+  that one small Secret, and `--tags home-assistant` redeploys it. Delete the old key in the
+  console only after HA has restarted on the new one. `google_assistant_project_id` changes
+  only with a new Google project.
 - `authelia_secret` / `authelia_jwt`: rotating forces all users to re-login (not breaking).
 - `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the
   live OIDC client; beszel's client is provisioned but parked in `archive/`, re-pair only

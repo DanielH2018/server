@@ -49,6 +49,21 @@ def test_loader_missing_include_raises(tmp_path):
         _load(tmp_path / "a.yaml")
 
 
+def test_loader_runtime_include_is_clean(tmp_path):
+    _write(
+        tmp_path / "a.yaml", "service_account: !include google_service_account.json\n"
+    )
+    assert _load(tmp_path / "a.yaml") == {
+        "service_account": "<include google_service_account.json>"
+    }
+
+
+def test_loader_missing_include_beside_a_runtime_one_is_flagged(tmp_path):
+    _write(tmp_path / "a.yaml", "service_account: !include other_account.json\n")
+    with pytest.raises(HAConfigError, match="not found"):
+        _load(tmp_path / "a.yaml")
+
+
 def test_loader_secret_is_placeholder(tmp_path):
     _write(tmp_path / "a.yaml", "token: !secret my_token\n")
     assert _load(tmp_path / "a.yaml") == {"token": "<secret>"}

@@ -216,26 +216,29 @@ Home Developer Console — use that. Repo-specific values:
 ### 10c. Voice control — repo-side (Ansible) — IMPLEMENTED (2026-06-21)
 **Key constraint:** `configuration.yaml` is copied verbatim — it must contain **no** Ansible
 `{{ }}` (the `validate-ha-config` hook rejects it). So all templated/secret values go through HA's
-native `!secret` indirection backed by an Ansible-generated `secrets.yaml`.
+native `!secret` indirection backed by an Ansible-generated `secrets.yaml`, except the multi-line
+service account, which `configuration.yaml` reads with `!include` from a file the init container
+installs.
 
-1. **One SOPS secret** holds the whole downloaded JSON: `google_assistant_service_account`
-   (`sops ansible/vars/secrets.yml`; registered in `ansible/secret_rotation.yml`, tier `assisted`).
+1. **Two SOPS secrets.** `google_assistant_service_account` holds the whole downloaded JSON
+   key, and `google_assistant_project_id` the project id (`sops ansible/vars/secrets.yml`;
+   both registered in `ansible/secret_rotation.yml`, tier `assisted`).
    No `api_key` (skipped — `request_sync` works via the service account) and no `secure_devices_pin`
    (no locks/covers exposed).
-2. **`templates/config/secrets.yaml.j2`** (Ansible-rendered via the role's Secret →
-   `config/secrets.yaml`, mode 600) derives the
-   `!secret` values from that one JSON with `| from_json` / `| to_json` — the `to_json` flattens the
-   multi-line PEM key into one escaped scalar: `google_assistant_project_id`,
-   `google_assistant_sa_client_email`, `google_assistant_sa_private_key`, plus `external_url` /
-   `internal_url` (these need the `domain` var, which is why they can't live in configuration.yaml).
-3. **`configuration.yaml`** references them via `!secret` (curated exposure — `expose_by_default`
-   off, so ONLY entities flagged `expose: true` are visible to Google):
+2. **The JSON key has a Secret of its own.** `templates/google-sa-secret.yaml.j2` renders
+   Secret `home-assistant-google-sa`, and the init container installs it as
+   `config/google_service_account.json`, mode 600. It is multi-line, so a Flux placeholder
+   cannot carry it (target slice R2). **`templates/config/secrets.yaml.j2`** (Ansible-rendered
+   via the role's Secret → `config/secrets.yaml`, mode 600) carries `google_assistant_project_id`,
+   plus `external_url` / `internal_url` (these need the `domain` var, which is why they can't
+   live in configuration.yaml).
+3. **`configuration.yaml`** reads the project id via `!secret` and the JSON via `!include`
+   (curated exposure — `expose_by_default` off, so ONLY entities flagged `expose: true` are
+   visible to Google):
    ```yaml
    google_assistant:
      project_id: !secret google_assistant_project_id
-     service_account:
-       client_email: !secret google_assistant_sa_client_email
-       private_key: !secret google_assistant_sa_private_key
+     service_account: !include google_service_account.json
      report_state: true
      expose_by_default: false
      entity_config:

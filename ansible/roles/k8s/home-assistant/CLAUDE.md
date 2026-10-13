@@ -86,6 +86,9 @@ because a role doc is loaded on every task in this directory whether it is neede
 ## Editing
 - HA cfg: `files/` (shipped into the cluster by `roles/k8s/home-assistant`; only
   `templates/config/secrets.yaml.j2` is rendered)
+- The Google service account JSON has a Secret of its own,
+  `templates/google-sa-secret.yaml.j2`, which `configuration.yaml` reads through `!include`.
+  `docs/platform.md` has the wiring.
 - Deploy (from daniel-box): `./scripts/deploy.sh --tags "home-assistant"`
   — or `/ha-edit-automation` step 5, which adds the health + loaded-config gates
 
