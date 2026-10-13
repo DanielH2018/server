@@ -22,6 +22,8 @@ from pathlib import Path
 import pytest
 
 import checks.host
+from lib import yaml_fast
+from lib.repo_paths import HOST_VARS
 from _fake_sources import FakeSources
 from verdicts.host_cgroups import claude_cgroup_verdict
 
@@ -46,8 +48,12 @@ HEALTHY_MEMORY = [({"origin": "daniel-box"}, 30.0), ({"origin": "daniel-server"}
 
 @pytest.fixture
 def armed(cfg):
-    """A config with the arm switched on, as templates/env-secret.yaml.j2 switches it on."""
-    return replace(cfg, CLAUDE_CGROUPS=("claude-rc",))
+    """A config with the arm switched on, as templates/env-secret.yaml.j2 switches it on.
+
+    No `CLAUDE_CGROUP_ORIGINS`: these series carry no `origin` label, so arm 4 judges the cgroup
+    names alone. test_check_claude_cgroup_origins.py drives the per-host form.
+    """
+    return replace(cfg, CLAUDE_CGROUPS=("claude-rc",), CLAUDE_CGROUP_ORIGINS=())
 
 
 def _sources(stalls, events, uids=()):
@@ -241,6 +247,38 @@ def test_a_cgroup_reporting_from_either_host_is_not_missing():
     stalls = [({"origin": "daniel-server", "cgroup": "claude-rc"}, 0.0)]
     ok, msg = claude_cgroup_verdict(stalls, [], ["claude-rc"], 10.0, "5m", "10m")
     assert ok is True, msg
+
+
+def test_a_cgroup_missing_on_one_named_origin_is_flagged():
+    """With `origins` named, the other host's report no longer covers the silent one (#4870)."""
+    stalls = [({"origin": "daniel-box", "cgroup": "claude-rc"}, 0.0)]
+    origins = ("daniel-box", "daniel-server")
+    ok, msg = claude_cgroup_verdict(
+        stalls, [], ["claude-rc"], 10.0, "5m", "10m", origins=origins
+    )
+    assert ok is False
+    assert "daniel-server/claude-rc" in msg
+    assert "daniel-box/claude-rc" not in msg
+    stalls.append(({"origin": "daniel-server", "cgroup": "claude-rc"}, 0.0))
+    ok, msg = claude_cgroup_verdict(
+        stalls, [], ["claude-rc"], 10.0, "5m", "10m", origins=origins
+    )
+    assert ok is True, msg
+
+
+def test_claude_cgroup_origins_are_the_claude_code_hosts(cfg):
+    """The rendered host list is exactly the hosts whose host_vars set `has_claude_code: true`.
+
+    A literal in the env-secret, so this is what makes it follow the inventory: a host that
+    gains Claude Code without joining the list is a writer nothing checks.
+    """
+    claude_hosts = {
+        path.stem
+        for path in HOST_VARS.glob("*.yml")
+        if yaml_fast.safe_load(path.read_text()).get("has_claude_code") is True
+    }
+    assert claude_hosts >= {"daniel-box", "daniel-server"}
+    assert set(cfg.CLAUDE_CGROUP_ORIGINS) == claude_hosts
 
 
 def test_the_queries_group_by_origin():

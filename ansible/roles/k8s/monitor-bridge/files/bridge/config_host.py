@@ -74,6 +74,8 @@ class HostConfig:
     # The cgroups whose `claude_cgroup_*` textfile series MUST be reporting for the arm folded
     # into check_mem to mean anything. Empty disables the whole arm, like PI_ORIGIN.
     CLAUDE_CGROUPS: tuple[str, ...]
+    # The hosts that must each report every one of CLAUDE_CGROUPS (#4870).
+    CLAUDE_CGROUP_ORIGINS: tuple[str, ...]
     CLAUDE_CGROUP_STALL_WINDOW: str
     CLAUDE_CGROUP_STALL_MAX_PCT: float
     CLAUDE_CGROUP_EVENT_WINDOW: str
@@ -476,6 +478,9 @@ def host_config(
         # value is set in templates/env-secret.yaml.j2, beside the host it describes.
         CLAUDE_CGROUPS=tuple(
             c.strip() for c in _env("CLAUDE_CGROUPS").split(",") if c.strip()
+        ),
+        CLAUDE_CGROUP_ORIGINS=tuple(
+            o.strip() for o in _env("CLAUDE_CGROUP_ORIGINS").split(",") if o.strip()
         ),
         # PSI `full` stall rate window. The writer's timer samples cgroupfs every 30s, but the
         # BINDING sample interval is Prometheus's `job: node` scrape_interval of 1m

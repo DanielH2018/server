@@ -24,12 +24,14 @@ def claude_cgroup_verdict(
     stall_window: str,
     event_window: str,
     uid_procs: Sequence[tuple[dict, float]] = (),
+    *,
+    origins: Sequence[str] = (),
 ) -> tuple[bool, str]:
     """Pure: judge the `claude_cgroup_*` textfile series for the Claude Code cgroups.
 
     `stalls` is the PSI `full` stall rate as a PERCENT of wall time, per cgroup; `events` is the
     increase in each watched memory.events counter, per (cgroup, event). `expected` names the
-    cgroups whose absence is itself a fault.
+    cgroups whose absence is itself a fault, and `origins` the hosts that must report each one.
 
     Three arms, in the order an operator needs them:
 
@@ -46,7 +48,10 @@ def claude_cgroup_verdict(
     4. An expected cgroup is not reporting at all. Fails rather than passing, because an empty
        vector is exactly how a dead writer reads green forever — the failure the kopia
        `b2_billable_bytes` board took two weeks to notice, and the reason check_disk and
-       check_mem carry _host_origin_shortfall.
+       check_mem carry _host_origin_shortfall. The missing set is per (origin, cgroup) for each
+       of `origins` (#4870). Both session hosts report the same names, so a union across hosts
+       read daniel-server's dead writer as green while daniel-box still reported. An empty
+       `origins` judges that union, for a caller that names no host.
 
     Arm 4 is deliberately LAST, matching check_disk and check_mem: a cgroup that IS reporting and
     IS in trouble pages ahead of a complaint about the absent one.
@@ -85,8 +90,17 @@ def claude_cgroup_verdict(
             "claude running as a retired uid (start sessions with claude-agents): %s"
             % (", ".join(sorted(wrong_uid))),
         )
-    reporting = {m.get("cgroup") for m, _ in stalls}
-    missing = [c for c in expected if c not in reporting]
+    if origins:
+        reporting = {(m.get("origin"), m.get("cgroup")) for m, _ in stalls}
+        missing = [
+            "%s/%s" % (o, c)
+            for o in sorted(origins)
+            for c in expected
+            if (o, c) not in reporting
+        ]
+    else:
+        names = {m.get("cgroup") for m, _ in stalls}
+        missing = [c for c in expected if c not in names]
     if missing:
         return (
             False,
