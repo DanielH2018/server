@@ -6,8 +6,9 @@ Alertmanager does, children in order, stopping at the first match unless `contin
 and reads `mute_time_intervals` on each route the walk ends on. The label sets stand for the
 k8s-workloads alerts once they drop `shadow`; later families add theirs to `PAGING`.
 
-The `Watchdog` route never takes the mute, so walking the `Watchdog` set is the rejecting
-half: its route must come back flagged.
+Two rejecting halves. A paging route stripped of its mute must come back flagged, which is
+what `test_every_route_a_paging_alert_reaches_is_muted` exists to catch. The `Watchdog` route
+never takes the mute, so walking the `Watchdog` set must come back flagged too.
 
 Run: uv run pytest ansible/tests/services/test_alertmanager_routing.py
 """
@@ -71,11 +72,12 @@ def reached(route: dict, labels: dict[str, str]) -> list[dict]:
     return found or [route]
 
 
-def unmuted(labels: dict[str, str]) -> list[str]:
-    """The receivers of the routes `labels` reaches that do not carry the mute."""
+def unmuted(labels: dict[str, str], tree: dict | None = None) -> list[str]:
+    """The receivers of the routes `labels` reaches in `tree`, the rendered one by default,
+    that do not carry the mute."""
     return [
         route["receiver"]
-        for route in reached(route_tree(), labels)
+        for route in reached(tree or route_tree(), labels)
         if MUTE not in route.get("mute_time_intervals", [])
     ]
 
@@ -88,10 +90,21 @@ def test_every_route_a_paging_alert_reaches_is_muted(severity):
     assert unmuted(labels) == []
 
 
+def test_a_paging_route_without_the_mute_is_flagged():
+    tree = route_tree()
+    catch_all = tree["routes"][-1]
+    assert "matchers" not in catch_all, catch_all
+    del catch_all["mute_time_intervals"]
+    labels, _ = PAGING["warning"]
+    assert unmuted(labels, tree) == ["discord"]
+
+
 def test_the_watchdog_reaching_an_unmuted_route_is_flagged():
     assert unmuted(WATCHDOG) == ["healthchecks"]
 
 
 def test_a_matcher_the_walk_cannot_read_is_flagged():
+    """Guards the walk's own parser, not the rendered config: a matcher form it cannot read
+    must stop the walk rather than skip a route the tests above would then never check."""
     with pytest.raises(AssertionError, match="cannot read"):
         _matches('alertname=~"K8s.*"', {"alertname": "K8sDeploymentZeroAvailable"})
