@@ -33,11 +33,10 @@ def install_audit_hook(allowed: list[str]) -> None:
 
     The hook exits through `os._exit`, not by raising, so a caller that catches `OSError` and
     carries on cannot hide the read. A file descriptor passed to `open` is allowed, because
-    its path was checked when it was opened.
+    its path was checked when it was opened. The hook judges where a path resolves, never
+    where it is spelled, so a symlink inside the repo that points at a host file is refused.
     """
-    roots = sorted(
-        {os.path.realpath(p) for p in allowed} | {os.path.abspath(p) for p in allowed}
-    )
+    roots = sorted({os.path.realpath(p) for p in allowed})
 
     def refuse(what: str) -> None:
         os.write(2, f"render audit: refused {what}\n".encode())
@@ -51,9 +50,7 @@ def install_audit_hook(allowed: list[str]) -> None:
         path = os.fsdecode(args[0])
         if path in DEVICES:
             return
-        if not _under(os.path.abspath(path), roots) and not _under(
-            os.path.realpath(path), roots
-        ):
+        if not _under(os.path.realpath(path), roots):
             refuse(f"open of {path}")
 
     sys.addaudithook(hook)

@@ -42,6 +42,14 @@ def test_the_audit_hook_refuses_an_open_outside_the_repo():
     assert allowed.returncode == 0, allowed.stderr
 
 
+def test_the_audit_hook_refuses_a_symlink_out_of_an_allowed_root(tmp_path):
+    link = tmp_path / "hosts"
+    link.symlink_to("/etc/hostname")
+    refused = run_step({"allow": [str(tmp_path)], "step": "open", "path": str(link)})
+    assert refused.returncode == AUDIT_REFUSED
+    assert f"refused open of {link}" in refused.stderr
+
+
 def test_the_audit_hook_refuses_every_socket_connect():
     # The hook ends the process before the connect is attempted, so nothing need listen.
     refused = run_step(
