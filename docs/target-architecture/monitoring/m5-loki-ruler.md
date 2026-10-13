@@ -1,6 +1,6 @@
 # M5 — loki-homelab ruler
 
-Status: PLANNED
+Status: IN PROGRESS
 
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover. Two
 contracts.md rows also gate PRs here: the row *Open questions* 2 requests gates PR 2a, and

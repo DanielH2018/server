@@ -76,7 +76,9 @@ def plan(
         start, end = since_window_ns(getattr(ns, "since", None))
         return [
             curl_argv(
-                loki_query_url(base, ns.logql, ns.limit, start=start, end=end),
+                loki_query_url(
+                    base, ns.logql, ns.limit, start=start, end=end, step=ns.step
+                ),
                 resolve=pin,
             )
         ]

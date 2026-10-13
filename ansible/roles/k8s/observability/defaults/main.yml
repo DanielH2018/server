@@ -205,6 +205,7 @@ observability_rule_groups:
   - alerting-meta
   - workload-service
   - k8s-workloads
+  - loki-homelab
 
 # The telemetry workloads, as the {kind, name} pairs post_tasks/k8s_stabilise_gate.yml reads.
 # A variable rather than a second inline copy of the list: tasks/main.yml still spells it out
