@@ -43,3 +43,31 @@ def test_the_play_reads_the_ordering_filters_only_to_order_itself():
         '_k8s_container_deps_map: "{{ containers_list | build_k8s_dep_map(playbook_dir) }}"',
         'containers_list: "{{ containers_list | toposort_containers(_k8s_container_deps_map) }}"',
     }
+
+
+def test_a_change_to_the_real_dep_map_that_writes_only_its_locals_stays_order_only():
+    """The write check still reads every callee the real `build_k8s_dep_map` reaches (#4842).
+
+    Its body hands `playbook_dir` to `os.path.join` and `_role_renders_traefik_crd`, which
+    reaches `os.listdir`, `open` and `fh.read()`. A rule that read any of them as a write
+    would refuse every change here, the #4836 shape included, while the toy case table stayed
+    green. The same edit through `operator.setitem` on an entry is the red half.
+    """
+    path = "ansible/filter_plugins/toposort.py"
+    real = (REPO / path).read_text()
+    anchor = "        dep_map[name] = sorted(deps)\n"
+    assert anchor in real
+
+    def with_body(line: str) -> str:
+        return (
+            real.replace(
+                "\nclass FilterModule", "\nLAST = {'x'}\n\n\nclass FilterModule"
+            )
+            .replace("import heapq\n", "import heapq\nimport operator\n")
+            .replace(anchor, line + anchor)
+        )
+
+    adds = "        if name in LAST:\n            deps.update(n for n in dep_map if n not in LAST)\n"
+    assert order_only.order_only(path, real, with_body(adds))
+    writes = "        operator.setitem(c, 'use_authelia', False)\n"
+    assert not order_only.order_only(path, real, with_body(writes))
