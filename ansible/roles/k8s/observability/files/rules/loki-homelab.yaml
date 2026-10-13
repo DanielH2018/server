@@ -1,7 +1,11 @@
-# The homelab Loki's health, read from its Prometheus scrape job. Plain YAML, never Jinja:
-# prometheus-rules.yaml.j2 carries this file verbatim. The design is
-# docs/target-architecture/monitoring/m5-loki-ruler.md, "The rules". M5's PR 3 adds the
-# three alerts that watch the ruler itself, once PR 2a has recorded their metric names.
+# The homelab Loki's health and its ruler's, read from its Prometheus scrape job. Plain YAML,
+# never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
+# docs/target-architecture/monitoring/m5-loki-ruler.md, "The rules".
+#
+# The ruler's series exist only once a rule group loads. M5's PR 2a and PR 2b read their
+# names and labels from the live job on 2026-10-13: user="fake", and a rule_group that embeds
+# the ruler's rule_path. A renamed group or a moved rule_path changes that value, and
+# LokiRulerNotEvaluating's absent() arm is what fires on the stale name.
 groups:
   - name: loki-homelab
     rules:
@@ -38,3 +42,74 @@ groups:
             No up{job="loki-homelab"} series exists, so the loki-homelab job is gone from
             prometheus.yml or its target was renamed. No rule that reads the homelab Loki's
             metrics can fire until the series is back.
+      # SHADOW UNTIL M5's PR 4b. Each evaluation is a Loki query, so this also catches a Loki
+      # that answers its scrape but fails its queries. Kuma's Loki Reachable and Loki Log
+      # Ingestion tiles page that fault until M5's PR 4a deletes them. A one-off failure
+      # holds the 10m increase above zero for 10 minutes, less than the 15m hold, so only a
+      # recurring failure fires.
+      - alert: LokiRulerEvaluationFailing
+        expr: >-
+          increase(loki_prometheus_rule_evaluation_failures_total{job="loki-homelab", user="fake",
+          rule_group="/loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs"}[10m]) > 0
+        for: 15m
+        labels:
+          severity: warning
+          service: loki-homelab
+          shadow: "true"
+        annotations:
+          summary: The homelab Loki ruler keeps failing to evaluate its log rules.
+          description: >-
+            The homelab-logs group has failed an evaluation in each of the last 15 minutes'
+            10-minute windows, so its log rules are not being checked. Each evaluation is a
+            Loki query: read the loki-homelab pod's log for the query error.
+      # SHADOW UNTIL M5's PR 4b. The `up == 1` conjunct leaves a Loki outage to
+      # LokiHomelabDown. The last-evaluation gauge reads 0 from a Loki start until the
+      # group's first evaluation, which waits for the group's offset inside its 5m interval:
+      # 291s after the pod started on 2026-10-13, and at most one interval plus startup. The
+      # 10m hold, two intervals, outlasts that gap.
+      - alert: LokiRulerNotEvaluating
+        expr: >-
+          (
+            time() - loki_prometheus_rule_group_last_evaluation_timestamp_seconds{job="loki-homelab",
+            user="fake", rule_group="/loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs"} > 600
+            or
+            absent(loki_prometheus_rule_group_last_evaluation_timestamp_seconds{job="loki-homelab",
+            user="fake", rule_group="/loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs"})
+          )
+          and on() (up{job="loki-homelab"} == 1)
+        for: 10m
+        labels:
+          severity: warning
+          service: loki-homelab
+          shadow: "true"
+        annotations:
+          summary: The homelab Loki ruler has not evaluated its log rules in 10 minutes.
+          description: >-
+            The homelab Loki answers its scrape, but its homelab-logs group has not evaluated
+            in 10 minutes, or its rule_group series is gone. Read the loki-homelab pod's log for
+            the ruler, and compare `probe.py metric loki_prometheus_rule_group_rules` with the
+            rule_group this alert selects.
+      # Pages: no Kuma tile reads the ruler's sends. Loki v3.7.8 vendors Prometheus's notifier,
+      # whose sendLoop.sendAll adds the batch's alert count to the error counter on each
+      # failed send, so one refused batch steps it by however many alerts were firing. A threshold on its
+      # increase cannot tell one refused batch of four alerts from a broken path with one rule
+      # firing. `changes - resets` counts failed sends instead, and `resets` drops the step to
+      # 0 when Loki restarts. A broken path fails every 5m send, so a 15m window holds at least
+      # two. A new Loki pod's first send can be refused while kube-router admits the pod
+      # (ADR 0009), and one refused send never reaches two.
+      - alert: LokiRulerNotificationsFailing
+        expr: >-
+          changes(loki_prometheus_notifications_errors_total{job="loki-homelab", user="fake"}[15m])
+          - resets(loki_prometheus_notifications_errors_total{job="loki-homelab", user="fake"}[15m])
+          >= 2
+        for: 5m
+        labels:
+          severity: critical
+          service: loki-homelab
+        annotations:
+          summary: The homelab Loki ruler cannot deliver its alerts to Alertmanager.
+          description: >-
+            {{ $value }} sends from the homelab Loki ruler to {{ $labels.alertmanager }} failed
+            in the last 15 minutes, so every firing log rule reaches no one. Read the
+            loki-homelab pod's log for "Error sending alerts", and the alertmanager-callers
+            NetworkPolicy in the observability namespace.

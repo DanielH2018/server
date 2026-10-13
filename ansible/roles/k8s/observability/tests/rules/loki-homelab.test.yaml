@@ -68,3 +68,194 @@ tests:
       - eval_time: 30m
         alertname: LokiHomelabMetricsMissing
         exp_alerts: []
+
+  # The ruler fails an evaluation every 5m. The 10m increase never falls to zero, so
+  # LokiRulerEvaluationFailing fires once its 15m hold has passed.
+  - interval: 1m
+    input_series:
+      - series: 'loki_prometheus_rule_evaluation_failures_total{job="loki-homelab", instance="loki-homelab.homelab.svc:3100", user="fake", rule_group="/loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs"}'
+        values: '0x4 1x4 2x4 3x4 4x4 5x4 6x4 7x4'
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: LokiRulerEvaluationFailing
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: LokiRulerEvaluationFailing
+        exp_alerts:
+          - exp_labels:
+              job: loki-homelab
+              instance: loki-homelab.homelab.svc:3100
+              user: fake
+              rule_group: /loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs
+              severity: warning
+              service: loki-homelab
+              shadow: "true"
+            exp_annotations:
+              summary: The homelab Loki ruler keeps failing to evaluate its log rules.
+              description: >-
+                The homelab-logs group has failed an evaluation in each of the last 15 minutes'
+                10-minute windows, so its log rules are not being checked. Each evaluation is a
+                Loki query: read the loki-homelab pod's log for the query error.
+
+  # One failed evaluation holds the increase above zero for less than the 15m hold, so it
+  # never fires.
+  - interval: 1m
+    input_series:
+      - series: 'loki_prometheus_rule_evaluation_failures_total{job="loki-homelab", instance="loki-homelab.homelab.svc:3100", user="fake", rule_group="/loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs"}'
+        values: '0x9 1x40'
+    alert_rule_test:
+      - eval_time: 24m
+        alertname: LokiRulerEvaluationFailing
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: LokiRulerEvaluationFailing
+        exp_alerts: []
+
+  # A Loki restart: down at 20m, then the last-evaluation gauge reads 0 for five minutes until
+  # the group's first evaluation. The gap is shorter than the 10m hold, so
+  # LokiRulerNotEvaluating stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
+        values: '1x19 0 1x20'
+      - series: 'loki_prometheus_rule_group_last_evaluation_timestamp_seconds{job="loki-homelab", instance="loki-homelab.homelab.svc:3100", user="fake", rule_group="/loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs"}'
+        values: '0x4 300x4 600x4 900x4 _ 0x4 1560x4 1860x4 2160x4'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LokiRulerNotEvaluating
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: LokiRulerNotEvaluating
+        exp_alerts: []
+
+  # The group stopped evaluating at 10m while Loki answers its scrape. The gauge is older than
+  # 10 minutes from 21m, so the alert fires after its 10m hold.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
+        values: '1x40'
+      - series: 'loki_prometheus_rule_group_last_evaluation_timestamp_seconds{job="loki-homelab", instance="loki-homelab.homelab.svc:3100", user="fake", rule_group="/loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs"}'
+        values: '0x4 300x4 600x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LokiRulerNotEvaluating
+        exp_alerts: []
+      - eval_time: 32m
+        alertname: LokiRulerNotEvaluating
+        exp_alerts:
+          - exp_labels:
+              job: loki-homelab
+              instance: loki-homelab.homelab.svc:3100
+              user: fake
+              rule_group: /loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs
+              severity: warning
+              service: loki-homelab
+              shadow: "true"
+            exp_annotations:
+              summary: The homelab Loki ruler has not evaluated its log rules in 10 minutes.
+              description: >-
+                The homelab Loki answers its scrape, but its homelab-logs group has not evaluated
+                in 10 minutes, or its rule_group series is gone. Read the loki-homelab pod's log for
+                the ruler, and compare `probe.py metric loki_prometheus_rule_group_rules` with the
+                rule_group this alert selects.
+
+  # Loki answers its scrape and the group's series does not exist: no group loaded, or the
+  # rule_group value moved. The absent() arm fires after the 10m hold, labelled with the
+  # selector's equality matchers.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: LokiRulerNotEvaluating
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: LokiRulerNotEvaluating
+        exp_alerts:
+          - exp_labels:
+              job: loki-homelab
+              user: fake
+              rule_group: /loki/rules-scratch/fake/homelab-logs.yaml;homelab-logs
+              severity: warning
+              service: loki-homelab
+              shadow: "true"
+            exp_annotations:
+              summary: The homelab Loki ruler has not evaluated its log rules in 10 minutes.
+              description: >-
+                The homelab Loki answers its scrape, but its homelab-logs group has not evaluated
+                in 10 minutes, or its rule_group series is gone. Read the loki-homelab pod's log for
+                the ruler, and compare `probe.py metric loki_prometheus_rule_group_rules` with the
+                rule_group this alert selects.
+
+  # Loki is down, so the ruler's series are gone. That is LokiHomelabDown's condition, and the
+  # `up == 1` conjunct keeps LokiRulerNotEvaluating from paging it a second time.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: LokiRulerNotEvaluating
+        exp_alerts: []
+
+  # A broken delivery path with one alert firing: each 5m send fails and adds 1, the step
+  # M5's PR 2a measured live. The second failed send crosses the threshold at 10m, and the
+  # alert fires after its 5m hold.
+  - interval: 1m
+    input_series:
+      - series: 'loki_prometheus_notifications_errors_total{job="loki-homelab", instance="loki-homelab.homelab.svc:3100", user="fake", alertmanager="http://alertmanager.observability.svc:9093/api/v2/alerts"}'
+        values: '0x4 1x4 2x4 3x4 4x4 5x4 6x4'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: LokiRulerNotificationsFailing
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: LokiRulerNotificationsFailing
+        exp_alerts:
+          - exp_labels:
+              job: loki-homelab
+              instance: loki-homelab.homelab.svc:3100
+              user: fake
+              alertmanager: http://alertmanager.observability.svc:9093/api/v2/alerts
+              severity: critical
+              service: loki-homelab
+            exp_annotations:
+              summary: The homelab Loki ruler cannot deliver its alerts to Alertmanager.
+              description: >-
+                3 sends from the homelab Loki ruler to
+                http://alertmanager.observability.svc:9093/api/v2/alerts failed in the last 15
+                minutes, so every firing log rule reaches no one. Read the loki-homelab pod's log
+                for "Error sending alerts", and the alertmanager-callers NetworkPolicy in the
+                observability namespace.
+
+  # One refused send carrying four alerts, as a new Loki pod's first send can be while
+  # kube-router admits it. The counter steps by 4 at once, which is one change, so the alert
+  # stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'loki_prometheus_notifications_errors_total{job="loki-homelab", instance="loki-homelab.homelab.svc:3100", user="fake", alertmanager="http://alertmanager.observability.svc:9093/api/v2/alerts"}'
+        values: '0x9 4x30'
+    alert_rule_test:
+      - eval_time: 16m
+        alertname: LokiRulerNotificationsFailing
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: LokiRulerNotificationsFailing
+        exp_alerts: []
+
+  # A Loki restart drops the counter from 4 to 0, then the new pod's first send is refused.
+  # resets() cancels the drop, which leaves one failed send, so the alert stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'loki_prometheus_notifications_errors_total{job="loki-homelab", instance="loki-homelab.homelab.svc:3100", user="fake", alertmanager="http://alertmanager.observability.svc:9093/api/v2/alerts"}'
+        values: '4x9 0x4 1x30'
+    alert_rule_test:
+      # Both steps sit inside the 15m window from 15m to 24m, so without resets() the
+      # alert would be firing at 21m.
+      - eval_time: 21m
+        alertname: LokiRulerNotificationsFailing
+        exp_alerts: []
+      - eval_time: 24m
+        alertname: LokiRulerNotificationsFailing
+        exp_alerts: []

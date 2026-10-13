@@ -10,9 +10,16 @@ selectors from it. Neither direction is checked by the render alone, so this hol
   emits matches no stream, and a freshness or error arm reads that silence as health.
 
 Consumers that cannot render an Ansible var are read where they live: the Grafana dashboards'
-queries against loki-homelab, the deploy-annotation expr, and every module-level `*_LOGQL`
-constant in monitor-bridge and probe.py. The observability Loki is a separate store (decision
-KL1) with its own labels, so dashboard queries against it are out of scope.
+queries against loki-homelab, the deploy-annotation expr, every module-level `*_LOGQL`
+constant in monitor-bridge and probe.py, and every rule in loki-homelab's `files/rules/`. The
+observability Loki is a separate store (decision KL1) with its own labels, so dashboard queries
+against it are out of scope.
+
+The rule files get four more checks, because a `job` check passes a `container`, `machine` or
+`app` matcher unread, and a rule on a selector that matches nothing never fires: each label name
+is one the Alloy streams carry, each `machine` value is one `loki_streams` lists, each
+`container` value is a container a rendered template declares, and each silence rule stays on
+its side of the Pi boundary (#3739).
 """
 
 import ast
@@ -24,13 +31,22 @@ import pytest
 from _compose_render import rendered_text
 from _helpers import ALL_VARS, load_yaml
 from _k8s_render import render_role_template
+from _loki_streams import (
+    LOKI_STREAM_LABELS,
+    _PI_STREAMS,
+    _selector_labels,
+    _selector_matches,
+)
 from lib import yaml_fast
 from lib.repo_paths import REPO
 
 OWNER = load_yaml(ALL_VARS)["loki_streams"]
 OWNER_JOBS = {labels["job"] for labels in OWNER.values()}
 
+OWNER_MACHINES = {labels["machine"] for labels in OWNER.values() if "machine" in labels}
+
 _OBSERVABILITY = REPO / "ansible/roles/k8s/observability"
+_LOKI_RULES = REPO / "ansible/roles/k8s/loki-homelab/files/rules"
 _LOGQL_MODULE_ROOTS = (
     REPO / "ansible/roles/k8s/monitor-bridge/files",
     REPO / "scripts/diagnostics/probe_lib",
@@ -122,6 +138,17 @@ def _dashboard_queries() -> dict[str, str]:
     return found
 
 
+def _loki_rule_exprs() -> dict[str, str]:
+    """Each rule's `expr` in loki-homelab's rule files, keyed `<file> <rule name>`."""
+    found = {}
+    for path in sorted(_LOKI_RULES.glob("*.yaml")):
+        for group in load_yaml(path)["groups"]:
+            for rule in group["rules"]:
+                name = rule.get("alert") or rule.get("record")
+                found[f"{path.name} {name}"] = rule["expr"]
+    return found
+
+
 def _consumers() -> dict[str, str]:
     expr = load_yaml(_OBSERVABILITY / "defaults/main.yml")[
         "observability_deploy_annotation_expr"
@@ -130,6 +157,7 @@ def _consumers() -> dict[str, str]:
         **_monitor_bridge_selectors(),
         **_logql_constants(),
         **_dashboard_queries(),
+        **_loki_rule_exprs(),
         "observability_deploy_annotation_expr": expr,
     }
 
@@ -187,6 +215,7 @@ def test_the_consumer_census_finds_its_named_members():
         "logs.py SWALLOWED_VERDICTS_LOGQL",
         "alerts.py SYSLOG_ALERT_LOGQL",
         "observability_deploy_annotation_expr",
+        "homelab-logs.yaml LokiPodLogsSilent",
     ):
         assert name in consumers, f"{name} is no longer found, so it is unchecked"
     boards = {name.split(" #")[0] for name in _dashboard_queries()}
@@ -216,3 +245,186 @@ def test_a_consumer_on_owner_values_is_clean():
 def test_a_config_emitting_an_unlisted_job_is_flagged():
     config = 'rule {\n    target_label = "job"\n    replacement  = "docker"\n  }'
     assert _emitted_jobs(config) - OWNER_JOBS == {"docker"}
+
+
+# The rule-file checks. A selector reaches them through `_stream_selectors`, so a rule with two
+# selectors has both read.
+
+
+def _stream_selectors(expr: str) -> list[str]:
+    """Each `{...}` stream selector in a LogQL expression."""
+    return re.findall(r"\{[^{}]*\}", expr)
+
+
+def _label_values(expr: str, label: str) -> set[str]:
+    """The values an expression's selectors name for `label`, with any matcher.
+
+    A regex alternation is split into its members, so `=~"a|b"` names `a` and `b`, and a
+    pattern such as `.+` stays one value no owner lists.
+    """
+    values = set()
+    for selector in _stream_selectors(expr):
+        for name, op, value in re.findall(
+            r'(\w+)\s*(=~|!~|!=|=)\s*"([^"]*)"', selector
+        ):
+            if name == label:
+                values |= set(value.split("|")) if "~" in op else {value}
+    return values
+
+
+def _unknown_labels(exprs: dict[str, str]) -> dict[str, list[str]]:
+    found = {}
+    for name, expr in exprs.items():
+        labels = set().union(*(_selector_labels(s) for s in _stream_selectors(expr)))
+        if labels - LOKI_STREAM_LABELS:
+            found[name] = sorted(labels - LOKI_STREAM_LABELS)
+    return found
+
+
+def test_loki_rules_select_on_stream_labels_is_clean():
+    exprs = _loki_rule_exprs()
+    named = set().union(
+        *(_selector_labels(s) for e in exprs.values() for s in _stream_selectors(e))
+    )
+    assert {"job", "machine", "container"} <= named, (
+        f"the rule selectors name only {sorted(named)}, so this check reads too little"
+    )
+    assert not _unknown_labels(exprs), (
+        "a Loki rule selects on a label the Alloy streams do not carry, so it matches no "
+        "stream and its count reads zero forever"
+    )
+
+
+def test_a_loki_rule_on_an_app_label_is_flagged():
+    assert _unknown_labels({"r": 'count_over_time({app="uptime-kuma"}[3h])'}) == {
+        "r": ["app"]
+    }
+
+
+def _unknown_machines(exprs: dict[str, str]) -> dict[str, list[str]]:
+    return {
+        name: sorted(_label_values(expr, "machine") - OWNER_MACHINES)
+        for name, expr in exprs.items()
+        if _label_values(expr, "machine") - OWNER_MACHINES
+    }
+
+
+def test_loki_rules_name_owner_machines_is_clean():
+    exprs = _loki_rule_exprs()
+    named = set().union(*(_label_values(e, "machine") for e in exprs.values()))
+    assert "daniel-pi" in named, "no rule names a machine, so this check reads nothing"
+    assert not _unknown_machines(exprs), (
+        "a Loki rule names a machine no loki_streams stream carries; a `!=` on it excludes "
+        "nothing and an `=` on it matches nothing"
+    )
+
+
+def test_a_loki_rule_on_an_unknown_machine_is_flagged():
+    expr = 'absent_over_time({job="syslog", machine!="daniel-laptop"}[3h])'
+    assert _unknown_machines({"r": expr}) == {"r": ["daniel-laptop"]}
+
+
+# Each `container` value a Loki rule selects on, and the role template whose pod declares a
+# container by that name. A value with no entry here fails, so a new rule adds its mapping.
+_RULE_CONTAINERS = {"uptime-kuma": ("uptime-kuma", "deployment.yaml.j2")}
+
+
+def _declared_containers(role: str, template: str) -> set[str]:
+    names = set()
+    for doc in yaml_fast.safe_load_all(render_role_template(role, template)):
+        pod = ((doc or {}).get("spec") or {}).get("template", {}).get("spec") or {}
+        names |= {c["name"] for c in pod.get("containers", [])}
+    return names
+
+
+def _undeclared_containers(
+    exprs: dict[str, str], mapping: dict[str, tuple[str, str]] = _RULE_CONTAINERS
+) -> dict[str, list[str]]:
+    found = {}
+    for name, expr in exprs.items():
+        for value in sorted(_label_values(expr, "container")):
+            if value not in mapping:
+                found.setdefault(name, []).append(f"{value}: no template is mapped")
+            elif value not in _declared_containers(*mapping[value]):
+                role, template = mapping[value]
+                found.setdefault(name, []).append(
+                    f"{value}: {role}/{template} declares none"
+                )
+    return found
+
+
+def test_loki_rules_select_declared_containers_is_clean():
+    exprs = _loki_rule_exprs()
+    named = set().union(*(_label_values(e, "container") for e in exprs.values()))
+    assert "uptime-kuma" in named, (
+        "no rule names a container, so this check reads nothing"
+    )
+    assert not _undeclared_containers(exprs)
+
+
+def test_a_loki_rule_on_an_undeclared_container_is_flagged():
+    expr = 'count_over_time({container="uptime-kuma2"} |= "x" [3h])'
+    assert _undeclared_containers({"r": expr}) == {
+        "r": ["uptime-kuma2: no template is mapped"]
+    }
+    mapping = {"uptime-kuma2": ("uptime-kuma", "deployment.yaml.j2")}
+    assert _undeclared_containers({"r": expr}, mapping) == {
+        "r": ["uptime-kuma2: uptime-kuma/deployment.yaml.j2 declares none"]
+    }
+
+
+# Each silence rule, and the `loki_streams` roles whose silence it reports. A cluster rule that
+# also matched a Pi stream would keep its count above zero through a total cluster outage and
+# never fire, and the Pi rule must not be held up by the cluster either (#3739).
+_SILENCE_RULES = {
+    "homelab-logs.yaml LokiHostLogsSilent": {"host_syslog", "host_authlog"},
+    "homelab-logs.yaml LokiPodLogsSilent": {"cluster_pods"},
+    "homelab-logs.yaml LokiPiLogsSilent": {"pi_containers"},
+}
+
+
+def _stream_labels(role: str) -> dict[str, str]:
+    """A stream's labels: the owner's, plus the `machine` and `container` a live stream adds."""
+    if role in _PI_STREAMS:
+        return _PI_STREAMS[role]
+    return {**OWNER[role], "machine": "daniel-box", "container": "authelia"}
+
+
+def _pi_boundary_problems(
+    exprs: dict[str, str], rules: dict[str, set[str]] = _SILENCE_RULES
+) -> list[str]:
+    problems = []
+    for name, own in rules.items():
+        selectors = _stream_selectors(exprs.get(name, ""))
+        if len(selectors) != 1:
+            problems.append(f"{name}: {len(selectors)} stream selectors, not one")
+            continue
+        on_pi = own <= set(_PI_STREAMS)
+        for role in OWNER:
+            matches = _selector_matches(selectors[0], _stream_labels(role))
+            if role in own and not matches:
+                problems.append(f"{name}: misses its own {role} stream")
+            elif matches and (role in _PI_STREAMS) != on_pi:
+                problems.append(f"{name}: also matches {role}, across the Pi boundary")
+    return problems
+
+
+def test_the_silence_rules_are_the_absent_rules():
+    absent = {n for n, e in _loki_rule_exprs().items() if "absent_over_time" in e}
+    assert absent == set(_SILENCE_RULES), (
+        "every silence rule needs its streams in _SILENCE_RULES, or the Pi boundary goes "
+        f"unchecked for it: {sorted(absent ^ set(_SILENCE_RULES))}"
+    )
+
+
+def test_the_silence_rules_hold_the_pi_boundary_is_clean():
+    assert not _pi_boundary_problems(_loki_rule_exprs())
+
+
+def test_a_cluster_silence_rule_that_counts_a_pi_stream_is_flagged():
+    # The host selector as monitor-bridge deployed it before #3739.
+    expr = 'absent_over_time({job=~"authlog|syslog"}[3h])'
+    rules = {"r": {"host_syslog", "host_authlog"}}
+    assert _pi_boundary_problems({"r": expr}, rules) == [
+        "r: also matches pi_health, across the Pi boundary"
+    ]

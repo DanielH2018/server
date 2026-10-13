@@ -1253,9 +1253,10 @@ one.**
 
 Unit tests cannot catch this, because they mock the payload. Run the selector against live Loki
 over a window containing a KNOWN event, which is the only check that separates "nothing happened"
-from "nothing matched." A green first cycle is not evidence. `LOKI_STREAM_LABELS` and
-`test_loki_selectors_use_real_stream_labels` in `test_check_loki.py` pin the vocabulary for all
-three Loki selectors.
+from "nothing matched." A green first cycle is not evidence. `LOKI_STREAM_LABELS`, which
+`ansible/tests/_loki_streams.py` derives, and `test_loki_selectors_use_real_stream_labels` in
+`test_check_loki.py` pin the vocabulary for all three Loki selectors. The Loki ruler's rules
+are held to the same vocabulary by `ansible/tests/services/test_loki_stream_labels.py`.
 
 ### The runtime stamps the log lines; `bridge.common.log` does not
 `bridge.common.log` prints the bare message (`DOWN b2_reachable ...`) and the container runtime
