@@ -5,6 +5,11 @@ on the task, or on the include that pulled its whole file in. `test_k8s_dry_run.
 the cluster writes and `test_k8s_dry_run_host_writes.py` of the node writes, so the scanner
 lives here rather than in either. Each rule's reasoning stays with the function that carries
 it; both callers' module docstrings say what they are for.
+
+The cluster-write rule, `_chunk_mutates`, has two callers too. `test_k8s_dry_run.py` asks
+whether each write is guarded, and the `render-does-not-cover-role-writes` census row in
+`ansible/tests/repo/_out_of_render_row.py` lists every task file that writes, so both read one
+rule.
 """
 
 import re
@@ -16,6 +21,11 @@ K8S_ROLES = REPO / "ansible/roles/k8s"
 
 
 def _task_chunks(task_file: Path, strip_trailing_comments: bool = False) -> list[str]:
+    """`_text_chunks` of a task file's text."""
+    return _text_chunks(task_file.read_text(), strip_trailing_comments)
+
+
+def _text_chunks(text: str, strip_trailing_comments: bool = False) -> list[str]:
     """Join each task's (possibly multi-line, folded-scalar) body into one string.
 
     A raw per-line scan can't see `kubectl … exec pod --` and the write verb it pipes to when
@@ -32,7 +42,7 @@ def _task_chunks(task_file: Path, strip_trailing_comments: bool = False) -> list
     """
     chunks: list[str] = []
     current: list[str] = []
-    for line in task_file.read_text().splitlines():
+    for line in text.splitlines():
         stripped = line.strip()
         if re.match(r"^-\s*name:", stripped):
             if current:
@@ -100,6 +110,44 @@ def _guard_covered_files(role: Path, guard: re.Pattern[str] = _GUARD_FACT) -> se
             if m:
                 pending.append(m.group(1))
     return covered
+
+
+# Mutating verbs, as they appear after `kubectl` (optionally after `-n <ns>`). `create` and
+# `delete` need the trailing space so `--create-annotation` and the like do not match.
+#
+# `run` schedules a pod, `--rm` or not (#4569). It is anchored to the subcommand position,
+# right after `kubectl` and an optional `-n <ns>`, because a chunk keeps its comments and
+# "a dry run" is common prose in a task that only calls `kubectl get`.
+_MUTATES = re.compile(
+    r"kubectl\b[^\n]*?\b(apply|create |delete |replace|scale |rollout restart|exec -i|patch )"
+    r"|kubectl\s+(?:-n\s+(?:\{\{[^}]*\}\}|\S+)\s+)?run\s"
+)
+
+# A plain `kubectl exec <pod> -- <cmd>` (no `-i`) is only a mutation if <cmd> itself writes.
+# `exec` alone also covers read probes (tdarr's/jellyfin's device checks, VAAPI encodes to
+# /dev/null, `id`/`ls`/`cat`/curl GETs, janitorr's reachability check) that must not trip this.
+# Curated from what the repo's exec payloads actually do, not a bare filesystem-verb scan:
+# touch/mkdir/ln/mv/cp/tee/chmod/chown/dd write to a mounted volume (tdarr's write probe,
+# janitorr's leaving-soon symlink); a bare `rm` does too, but needs a word boundary so it can't
+# match inside `warm`/`germ`-shaped tokens; `cscli … create|delete|add|remove` and `pihole -g`
+# write to the tool's own state (crowdsec's allowlists, pihole's gravity rebuild).
+_EXEC_WRITE = re.compile(
+    r"\b(touch|mkdir|ln -s\w*|rm|mv|cp|tee|chmod|chown|dd)\b"
+    r"|cscli \S+ (create|delete|add|remove)\b"
+    r"|pihole -g\b"
+)
+
+# A plain `exec` (not `-i`) that isn't already caught by _MUTATES.
+_BARE_EXEC = re.compile(r"kubectl\b[^\n]*\bexec\s+(?!-i\b)\S")
+
+
+def _chunk_mutates(chunk: str) -> bool:
+    """Does this task chunk write to the cluster: apply, create, patch, run or an exec write?"""
+    if "--dry-run=client" in chunk:
+        return False
+    if _MUTATES.search(chunk):
+        return True
+    return bool(_BARE_EXEC.search(chunk) and _EXEC_WRITE.search(chunk))
 
 
 def _role_with_tasks(tmp_path: Path, **files: str) -> Path:
