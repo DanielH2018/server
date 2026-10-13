@@ -160,7 +160,7 @@ whose primary checkout lags `origin/master` still runs the current one. Another 
 runs the copy in its own snapshot of this repo's `origin/master`, which `launch` archives into
 the batch's `.fanout/server`. The snapshot also supplies that batch's system prompt and
 `fanout-stop` hook.
-The agent stops at its PR on every host. A fresh reviewer then reads only the issue text and the diff, and returns findings with
+The agent stops at its PR on every host, and the pipeline decides what happens next. A fresh reviewer then reads only the issue text and the diff, and returns findings with
 a severity and a confidence. A finding of severity medium or worse, or a test the reviewer
 marks vacuous at any severity, resumes the agent for one fix round when its
 confidence is 0.5 or more, and a second reviewer reads only the fix. A finding of
@@ -168,7 +168,14 @@ severity medium or worse at confidence 0.8 or more that survives the fix round h
 the batch ends `needs input:`, naming the finding, and nothing lands it. Otherwise, on
 daniel-box, the pipeline runs `land.sh` itself. It resumes the agent only for an `unhealthy`,
 `deploy-failed`, `needs-manual-apply` or `blocked` verdict, with the verdict and the end of the
-landing's log. Any other verdict ends the batch. The review's counts and costs go on the PR as
+landing's log. Any other verdict ends the batch. On daniel-server, where the orchestrator lands
+the PR, the pipeline instead waits for the PR's CI with `cc-wait gh-ci --pr` after the fix round
+(`scripts/dev/fanout_lib/review/review_ci.py`, #4737). A red verdict resumes the agent once, with
+each failed check's name and the end of its job's log, and the pipeline waits again on the new
+head. A batch whose CI is still red then ends `needs input:` naming the checks. A `cancelled` run
+is no verdict: the pipeline waits on it again, and a wait that spends its 15 minutes with no
+verdict also ends `needs input:`. Only this repo's daniel-server batches wait; another repo's
+batch does not. The review's counts and costs go on the PR as
 a comment, with only the actionable findings listed and security findings as a count only. The full record goes to `~/.local/state/fanout-review/`.
 Before the review, every batch of this repo runs the PR's new tests with its code changes
 taken out (`scripts/dev/fanout_lib/review/base_check.py`). The reviewer is told which still pass, and
@@ -229,8 +236,10 @@ text. A clean finish without one reads `needs-input` when the text names a block
 (`needs input:` or `failed:`) and `no-pr` otherwise. `no-pr` means the agent stopped on a
 progress report and the Stop hook's three continuations ran out. Both print the final text
 and exit 1, because no PR exists to land. A host whose read timed out reads `unread` and exits 75
-unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` and stops there: land that
-PR from this session with `land.sh`.
+unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` once its PR's CI has passed, so land that
+PR from this session with `land.sh`. A daniel-server batch whose CI stayed red after its one
+resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named and the
+PR URL. Read the failure, then fix the branch or re-run the CI before landing.
 
 **`no-verdict` is a daniel-box batch that opened its PR and never finished landing it.** On
 that host `done` needs a `VERDICT:` line too — in the final text, or in the batch's

@@ -25,6 +25,13 @@ THE PHASES, each one `claude -p` in the batch's worktree:
 5. land — on the deploy host, the pipeline runs `land.sh` itself (`review_land`) and resumes
    the implementer only for a verdict that needs a decision, as the `apply` phase. Before the
    landing, and on every other host instead of it, a session resumes to file what is left.
+5b. CI wait — on a host that does not land, for this repo's batch only (#4737), `review_ci`
+   waits for the PR's CI with `cc-wait gh-ci --pr` before the comment and before the filing
+   session. A red verdict resumes the implementer once, as the `ci-fix` phase, with each failed
+   check's name and log tail, and the wait runs again on the new head. A batch still red, or
+   given no verdict within `review_ci.CI_WAIT_S`, ends `needs input:` and nothing lands it. A
+   `cancelled` run is no verdict and is waited on again. The result goes in the record as
+   `ci_gate` and on the PR comment.
 
 DECIDED: a refused red commit does not stop the batch. The refusal means the test author's
 tests proved nothing, not that the issue is wrong, and the issue still deserves its fix. The
@@ -109,15 +116,17 @@ from fanout_lib.review.base_check import BaseCheck, unproven_tests
 from fanout_lib.review.git_state import GitState, changed, snapshot
 from fanout_lib.review.hunk_check import HunkCheck, red_detection
 from fanout_lib.review.processes import reaping, run_process
+from fanout_lib.review.review_ci import awaits_ci, ci_gate
 from fanout_lib.review.review_land import RESUME_VERDICTS, land
 from fanout_lib.review.review_land import report as landing_report
 from fanout_lib.review.review_record import (
     Phase,
     Record,
     actionable,
-    blocking,
     comment_body,
     findings_of,
+    held_for_findings,
+    held_for_green,
     issues_section,
     outcome,
 )
@@ -171,6 +180,7 @@ class Pipeline:
         gates: the red and green gates; tests pass scripted ones.
         base_check: which new tests pass without the PR's code changes; tests script it.
         hunk_check: which fix hunks the red tests notice reverted; tests script it.
+        sleep: the pause between CI waits that ended without a verdict; tests pass a fake.
     """
 
     def __init__(
@@ -187,6 +197,7 @@ class Pipeline:
         gates: Gates = GATES,
         base_check: Callable[..., BaseCheck] = unproven_tests,
         hunk_check: Callable[..., HunkCheck] = red_detection,
+        sleep: Callable[[float], None] = time.sleep,
     ):
         self.worktree = worktree
         self.batch = batch
@@ -201,6 +212,7 @@ class Pipeline:
         self.gates = gates
         self.base_check = base_check
         self.hunk_check = hunk_check
+        self.sleep = sleep
         # Read at start for the red author and every reviewer (#4023): the skill lives outside
         # the worktree, but one read keeps every phase on the same text.
         self.anti_patterns = anti_patterns()
@@ -570,11 +582,16 @@ class Pipeline:
 
         if red is not None and not green:
             self._detection(red)
+        final = (
+            held_for_green(self.record, green)
+            if green
+            else held_for_findings(self.record, self.state_dir)
+        )
+        if final is None and awaits_ci(self.host, self.target):
+            # Before the comment, so the comment carries the CI gate beside the others.
+            last, final = ci_gate(self, last)
         self._comment()
-        if green:
-            final = self._held_for_green(green)
-        else:
-            final = self._held_for_findings() or self._finish(last)
+        final = final or self._finish(last)
         self.record.outcome = outcome(final, has_pr=True)
         self._save()
         held = sum(1 for f in self.record.remaining if is_held(f))
@@ -591,39 +608,6 @@ class Pipeline:
             ["gh", "pr", "comment", self.record.pr, "--body-file", "-"],
             comment_body(self.record),
         )
-
-    def _held_for_findings(self) -> dict | None:
-        """A `needs input:` report holding the open PR on a confident leftover, else None.
-
-        On every host: a daniel-server batch's PR is landed by the orchestrator from `status`'s
-        `done` line, which would land it just the same. A security finding is counted rather
-        than named, because this text reaches `status` and the orchestrator's transcript.
-        """
-        left = blocking(self.record.remaining)
-        if not left:
-            return None
-        named = [f"{f.get('title')} ({f.get('file')})" for f in left if not is_held(f)]
-        held = len(left) - len(named)
-        if held:
-            named.append(f"{held} security findings in {self.state_dir}")
-        return {
-            "type": "result",
-            "is_error": False,
-            "result": (
-                "needs input: the review left a confident medium-or-worse finding after the "
-                f"fix round, so the PR was not landed: {'; '.join(named)}.\n{self.record.pr}"
-            ),
-        }
-
-    def _held_for_green(self, reason: str) -> dict:
-        return {
-            "type": "result",
-            "is_error": False,
-            "result": (
-                f"needs input: the PR fails the green gate, so it was not landed: {reason}."
-                f"\n{self.record.pr}"
-            ),
-        }
 
     def _finish(self, last: Phase) -> dict:
         if lands(self.host, self.target.repo):
