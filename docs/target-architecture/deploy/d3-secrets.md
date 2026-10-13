@@ -209,11 +209,13 @@ delivery path, which D5 uses when their roles move.
     - `templates/secret.yaml.j2` renders `peanut-secrets` with three secret references:
       `peanut_username`, `peanut_password` and `nut_ha_password`. The pod reads the first two
       through `secretKeyRef` and mounts `settings.yml`.
-- **R2 hands D3 three documents.** Each is listed in a role's `render_sops_manifests` and
-  holds one key from `SOPS_MANIFEST_KEYS`: `pi_peer_backup_ssh_key`,
-  `authelia_oidc_rsa_key_content` and `google_assistant_service_account`. Placeholder mode
+- **R2 hands D3 four documents.** Each is listed in a role's `render_sops_manifests` and
+  holds one key from `SOPS_MANIFEST_KEYS`: the three multi-line keys
+  `pi_peer_backup_ssh_key`, `authelia_oidc_rsa_key_content` and
+  `google_assistant_service_account`, and, from R2's PR 7b, `mullvad_account`, whose
+  all-digit value cannot pass through a placeholder (R2 Open question 13). Placeholder mode
   emits no document for them, and stub mode still renders them. D3 supplies each as a
-  SOPS-encrypted manifest. R2's round trip excludes these three.
+  SOPS-encrypted manifest. R2's round trip excludes all four.
 - **The Ansible prune list names no Secret.**
   `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist` holds no
   `core/v1/Secret`, so dropping a Secret's template leaves the live Secret in place.
@@ -710,8 +712,11 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
     - Draft the ADR-0003 amendment: the cluster decrypts the cluster file with its own key,
       and never `secrets.yml`. If H4's amendment has already landed, extend it instead.
       Approving it is **operator-only**.
-2. **D3.2a — `cluster_vars.py` and its guards** (about 260 lines). Inert: no tree file and no
-   tree gate. The guards land in the same PR as the allowlist that relies on them.
+2. **D3.2a — `cluster_vars.py` and its guards** (about 300 lines, over the guide because the
+   guards must land in the same PR as the allowlist that relies on them). Inert: no tree
+   file and no tree gate. The 40 lines beyond the earlier estimate are C3's standalone value
+   refusal in `write`, which imports R2's resolver, and `check`'s `type:str` assertion on
+   manifest values, each with its pair under *Verification*.
     - Add the script, with its tests in `scripts/secrets_mgmt/tests/`. The tests are
       `_is_clean` and `_is_flagged` pairs for each `check` assertion. They run `write`
       against a throwaway age key in `tmp_path`, never a real one, and assert that a
@@ -830,11 +835,15 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
           fixtures under *Restart triggers*.
     - R1's shadow comparison covers Ansible-owned tags only from D2.7 on, because a
       flux-owned tag has no Ansible render.
-    - **The in-cluster proof that an all-digit value stays a string** (R2's cross-slice
-      note). R2 PR 7b moves `mullvad_account`, whose real value is all digits, into a
-      dedicated Secret that this path delivers. Nobody has measured what kustomize-controller
-      does with a decrypted all-digit value in a quoted `stringData` field. D3.3c adds a CI
-      job, `sops-manifest-type-proof`, that measures it in C8's throwaway kind cluster.
+    - **Inert for the cluster:** bento-pdf and texbrain name no ConfigMap or Secret, and no
+      role with a SOPS manifest is flux-owned.
+    - **D3.3d — The in-cluster proof that an all-digit value stays a string** (about 100
+      lines: the CI job, its fixture tree and its red half), after D3.3c, whose manifest
+      copy and `decryption` field it exercises. It is R2's cross-slice note. R2 PR 7b moves
+      `mullvad_account`, whose real value is all digits, into a dedicated Secret that this
+      path delivers. Nobody has measured what kustomize-controller does with a decrypted
+      all-digit value in a quoted `stringData` field. D3.3d adds a CI job,
+      `sops-manifest-type-proof`, that measures it in C8's throwaway kind cluster.
         - The job creates the cluster, installs the pinned Flux controllers, and creates
           `sops-age` from an age key it generates. `write`'s manifest code, run on a fixture
           tree encrypted to that key, builds one SOPS-encrypted Secret whose quoted
@@ -854,8 +863,6 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
       value under `data:`, base64-encoded, and `check`'s structure assertion compares
       data-key names across `data` and `stringData`. R2 *`mullvad_account` becomes a
       dedicated Secret* gives the reason the remedy holds.
-    - **Inert for the cluster:** bento-pdf and texbrain name no ConfigMap or Secret, and no
-      role with a SOPS manifest is flux-owned.
 9. **D3.4 — Rotation runbooks and the Flux-side wait** (about 150 lines).
     - Change `consumers.py` and `land-wait` as *Rotating a value read by both planes* says.
       Tests, each a pair:
@@ -980,7 +987,7 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   passes the same values for a fixture key whose placeholder sits inside other text.
   `check` flags a fixture manifest whose value carries `type:int`.
 - The `sops-manifest-type-proof` job's red half must fail to apply a Secret encrypted from
-  an int (D3.3c).
+  an int (D3.3d).
 - D3.2d's refusals go red on the fixtures listed under that step: a digest minted with
   `t=2`, two equal digests and `user:$7$abc` each fail `write`. Their clean halves, a
   distinct well-formed set and `$7$abc`, pass. The parameter-agreement test fails when the
@@ -1036,6 +1043,9 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   produced.
 - **D3.3c.** Revert D3.6 first if peanut is flux-owned, because without the annotation a
   rotated value would not restart it. Otherwise the revert changes no live object.
+- **D3.3d** adds only a CI job, whose kind cluster and age key are throwaway and die with
+  the run. A revert changes no live object. It also removes the proof that D5's qbittorrent
+  flip waits on, so that flip cannot merge until the job is restored.
 - **D3.3b.** Revert D3.6 first if peanut is flux-owned, then D2.7 (D2's handback), because
   D2.7's preconditions name D3.3b. Without the edge, a substituting tag can reconcile before
   `cluster-vars` applies a rotated value. On a rebuilt cluster its build fails until
@@ -1138,7 +1148,7 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   uses (R2 *Baseline*). A SOPS manifest value encrypted from an int decrypts as an int.
   Mitigation: `write` refuses a value of a key with a standalone use that R2's resolver
   types, as C3's standalone value rule requires. `check` requires `type:str` on every
-  manifest value. D3.3c's `sops-manifest-type-proof` job shows in a kind cluster that an
+  manifest value. D3.3d's `sops-manifest-type-proof` job shows in a kind cluster that an
   all-digit value in a quoted field of a SOPS-encrypted Secret applies as a string.
 - **Host recipients drift between the three rules** (failure class 4). Mitigation: `check`
   compares each cluster file's recipients with its own rule's full list, and the runbooks
@@ -1179,6 +1189,10 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   `docs/flux-deploy-plane.md` gains the substitution predicate and the `cluster-vars` edge.
 - D3.3c: tests in `scripts/renderer/tests/`. `docs/flux-deploy-plane.md` gains
   `checksum/restart` and the SOPS manifest path.
+- D3.3d: `.github/workflows/ci.yml` gains the `sops-manifest-type-proof` job, with its
+  fixture tree beside the `cluster_vars.py` tests in `scripts/secrets_mgmt/tests/`.
+  `docs/flux-deploy-plane.md` records the measured result on the SOPS manifest path, and
+  which remedy applies if the job ever goes red.
 - D3.4: `docs/secret-rotation.md`, `docs/break-glass.md`,
   `.claude/skills/add-secret/SKILL.md`, and tests in `scripts/secrets_mgmt/tests/` and
   `scripts/deploy_tools/tests/`.
@@ -1193,6 +1207,12 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   one pre-commit hook, two lint exclusions, and one operator-only key rotation procedure.
   D3.2d adds two per-key refusals to `write` (about 60 lines with their tests) and one
   member to the argon2 parameter-agreement test. `{{` joins D3.2a's character set.
+- **Added for R2's standalone value rule (R2 Open question 13):** about 40 lines in D3.2a
+  for the standalone value refusal in `write` and `check`'s `type:str` assertion, with their
+  pairs. The resolver itself is R2's, imported, not counted here. D3.3d adds one CI job,
+  `sops-manifest-type-proof`, at about 100 lines with its fixture and red half. It costs
+  one kind cluster per run, and it runs only when the flux pin, the sops pin,
+  `cluster_vars.py` or the job changes.
 - **Not added:** a key set in D2.6c's source gate. D2 declines it, and `check` with R2's
   rules covers it. D3 also adds no second writer of cluster manifests. Open question 8
   proposes one, `seal`, at about 120 lines with its tests.
@@ -1562,8 +1582,11 @@ and moves `mullvad_account` to a dedicated SOPS Secret (R2 Open question 13). Ap
   C3's standalone value rule. It lands in D3.2a, with a fixture pair.
 - `check` requires `type:str` on every SOPS manifest value, so a manifest encrypted from
   `mullvad_account`'s `type:int` value fails in CI without a key.
-- D3.3c adds the `sops-manifest-type-proof` job: in a kind cluster, an all-digit value in a
-  quoted `stringData` field of a SOPS-encrypted Secret applies as a string, and a value
-  encrypted from an int does not. D5's flip of qbittorrent waits on it, and the remedy if it
-  fails is a base64 `data:` value.
-- The SOPS manifests count four, with qbittorrent's.
+- D3.3d, after D3.3c, adds the `sops-manifest-type-proof` job: in a kind cluster, an
+  all-digit value in a quoted `stringData` field of a SOPS-encrypted Secret applies as a
+  string, and a value encrypted from an int does not. D5's flip of qbittorrent waits on it,
+  and the remedy if it fails is a base64 `data:` value.
+- The SOPS manifests count four, with qbittorrent's, in the summary, the *Baseline* and the
+  tree diff.
+- D3.2a's estimate grows to about 300 lines. D3.3d has its own size, rollback entry, tests
+  and docs entry and *Complexity delta* line, so the work R2 hands over is counted here.
