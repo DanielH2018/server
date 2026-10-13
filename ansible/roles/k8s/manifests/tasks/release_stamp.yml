@@ -99,11 +99,16 @@
   #
   # `manifests_self_rollouts` is the third source: the workloads a role with
   # `manifests_rollout: ''` restarts through a PRIVATE task after this role returns
-  # (observability's loop, pihole's roll_one.yml). Those tasks gate on the same three facts, so
-  # the record can hold the expectation for them; appending from the private task itself is
-  # too late, since the record is written here, before that task runs. An entry here reaches
-  # `rollouts[]` and nothing else -- not the shared restart, not the batch drain -- which is
-  # exactly what those roles opted out of.
+  # (observability's loop, pihole's roll_one.yml). Where that task gates on the same three facts,
+  # as pihole's restart of its first instance does, the record can hold the expectation for it;
+  # appending from the private task itself is too late, since the record is written here, before
+  # that task runs. Where it gates on something this task cannot read, the entry is stamped
+  # `restart: false` and the role raises it afterwards through tasks/rollout_amend.yml.
+  # Observability's restart gates on the per-file `observability_changed_secret_files`, so every
+  # one of its entries declares `restart_on: []`; pihole marks pihole-2 `rolled_by_role: true`,
+  # above. Flux's entries declare `restart_on: []` too, because nothing restarts them. An entry
+  # here reaches `rollouts[]` and nothing else -- not the shared restart, not the batch drain --
+  # which is exactly what those roles opted out of.
   ansible.builtin.set_fact:
     manifests_release_rollouts: >-
       {{ manifests_release_rollouts + [{
