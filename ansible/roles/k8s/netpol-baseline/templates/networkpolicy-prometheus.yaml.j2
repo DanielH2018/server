@@ -5,8 +5,8 @@
    peers, and its header rules out growing it to absorb another shape. Census: #3701.
 #}
 ---
-# prometheus is one of two observability workloads (with loki) that need a per-workload grant
-# for an in-cluster, cross-namespace caller: monitor-bridge, homelab-mcp and homepage all run in
+# prometheus is one of three observability workloads (with loki and alertmanager) that need a
+# per-workload grant for an in-cluster, cross-namespace caller: monitor-bridge, homelab-mcp and homepage all run in
 # {{ k8s_namespace }} and reach it over the network (PROMETHEUS_URL on monitor-bridge and on
 # homelab-mcp, and the Headlamp tile's customapi widget URL on
 # homepage — roles/k8s/homepage/templates/config/services.yaml.j2). prometheus itself is ALSO read on host loopback

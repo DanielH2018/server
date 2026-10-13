@@ -134,18 +134,19 @@
     name: k8s/manifests
   vars:
     manifests_rollout: ""
-    # The observability namespace's baseline and its two caller policies, which the armed
+    # The observability namespace's baseline and its three caller policies, which the armed
     # apply's `-n homelab` refuses (#3575). The shared role renders, prunes and digests them in
     # their own directory, and the task below applies them.
     manifests_deferred_files:
       - networkpolicy-observability.yaml
       - networkpolicy-prometheus.yaml
       - networkpolicy-loki.yaml
+      - networkpolicy-alertmanager.yaml
     manifests_deferred_dir_name: netpol-baseline-observability
 
 # No --prune and no -n: each document names its own namespace. Applied before the probes,
 # because the slice-3 probe tests these exact policies. A dry run skips this apply, so the
-# server-side dry run never sees these three documents, the same gap headlamp's observability
+# server-side dry run never sees these four documents, the same gap headlamp's observability
 # RBAC has.
 - name: Apply the observability namespace's policies
   when: not k8s_no_mutate

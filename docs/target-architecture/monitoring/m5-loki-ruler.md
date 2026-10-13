@@ -6,6 +6,8 @@ PR 1, the Prometheus-side Loki rules and `loki-query --step`: [#4797](https://gi
 
 PR 2a, the ruler with its smoke rule and the lokitool phase: [#4805](https://github.com/DanielH2018/server/pull/4805).
 
+PR 2b, the grant that admits the ruler to Alertmanager: [#4812](https://github.com/DanielH2018/server/pull/4812).
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover. Two
 contracts.md rows also gate PRs here: the row *Open questions* 2 requests gates PR 2a, and
 the row *Open questions* 1 requests gates PR 4b. contracts.md's *Requests on C7* holds both

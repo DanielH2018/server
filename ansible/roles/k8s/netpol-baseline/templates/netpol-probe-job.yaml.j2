@@ -53,8 +53,9 @@ spec:
   template:
     metadata:
       labels:
-        # No caller list in the repo names this label. Checked against prometheus-callers and
-        # loki-callers too, which admit monitor-bridge, homelab-mcp and homepage.
+        # No caller list in the repo names this label. Checked against prometheus-callers,
+        # loki-callers and alertmanager-callers too, which admit monitor-bridge, homelab-mcp,
+        # homepage and loki-homelab.
         app: netpol-baseline-probe
         # Admits this pod to the sentinel (speedtest:80) and nothing else.
         netpol-probe: control
