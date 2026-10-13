@@ -74,11 +74,30 @@ class HostConfig:
     # The cgroups whose `claude_cgroup_*` textfile series MUST be reporting for the arm folded
     # into check_mem to mean anything. Empty disables the whole arm, like PI_ORIGIN.
     CLAUDE_CGROUPS: tuple[str, ...]
+    # (host, cgroups that host must report) pairs (#4870); empty judges CLAUDE_CGROUPS by name.
+    CLAUDE_CGROUP_EXPECTED: tuple[tuple[str, tuple[str, ...]], ...]
     CLAUDE_CGROUP_STALL_WINDOW: str
     CLAUDE_CGROUP_STALL_MAX_PCT: float
     CLAUDE_CGROUP_EVENT_WINDOW: str
     CLAUDE_CGROUP_EVENTS: str
     CLAUDE_CGROUP_CONSECUTIVE: int
+
+
+def _host_cgroups(
+    raw: str, problems: list[str]
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """`host=a+b,host2=c` as ((host, (a, b)), (host2, (c,))); an entry without a cgroup is a problem."""
+    pairs = []
+    for item in filter(None, (i.strip() for i in raw.split(","))):
+        host, _, cgroups = item.partition("=")
+        names = tuple(c.strip() for c in cgroups.split("+") if c.strip())
+        if not host.strip() or not names:
+            problems.append(
+                "CLAUDE_CGROUP_EXPECTED: %r is not host=cgroup+cgroup" % item
+            )
+            continue
+        pairs.append((host.strip(), names))
+    return tuple(pairs)
 
 
 def host_config(
@@ -477,6 +496,7 @@ def host_config(
         CLAUDE_CGROUPS=tuple(
             c.strip() for c in _env("CLAUDE_CGROUPS").split(",") if c.strip()
         ),
+        CLAUDE_CGROUP_EXPECTED=_host_cgroups(_env("CLAUDE_CGROUP_EXPECTED"), problems),
         # PSI `full` stall rate window. The writer's timer samples cgroupfs every 30s, but the
         # BINDING sample interval is Prometheus's `job: node` scrape_interval of 1m
         # (observability/templates/prometheus.yaml.j2) — the extra timer tick only guarantees the
