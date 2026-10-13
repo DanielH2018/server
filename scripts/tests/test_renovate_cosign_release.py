@@ -24,6 +24,7 @@ from lib import yaml_fast
 
 from _renovate import (
     _MANAGERS,
+    _PACKAGE_RULES,
     _REPO,
     _file_pattern_to_regex,
     _resolve_setting,
@@ -86,21 +87,36 @@ def test_a_cosign_bump_is_manual_and_never_digest_pinned(
     assert (resolve("groupName") or "").startswith("cosign (manual")
 
 
-def test_the_installer_action_keeps_its_digest_pin() -> None:
-    """The rule's exact package name must not reach the action's own `uses:` pin."""
-    for rel_path in COSIGN_WORKFLOWS:
-        assert (
-            _resolve_setting(
-                "pinDigests",
-                "sigstore/cosign-installer",
-                rel_path,
-                "pinDigest",
-                "github-tags",
-                dep_type="action",
-                manager="github-actions",
-            )
-            is not False
+@pytest.mark.parametrize("rel_path", sorted(COSIGN_WORKFLOWS))
+def test_the_cosign_rule_does_not_reach_the_installer_action(rel_path: str) -> None:
+    """Only the exact package name keeps the rule off the action's own commit-SHA pin.
+
+    The rule is walked alone, and the installer dep is given the rule's own datasource, so
+    a datasource mismatch cannot keep it out. The real dep is github-tags. A `/sigstore\\/cosign/`
+    regex in `matchPackageNames` would reach it and turn its digest pin off, and fails
+    here. The walk does not model presets, so this checks the rule, not the
+    `helpers:pinGitHubActionDigests` preset that pins the action.
+    """
+    (rule,) = [
+        r
+        for r in _PACKAGE_RULES
+        if str(r.get("groupName", "")).startswith("cosign (manual")
+    ]
+
+    def walk(dep_name: str, dep_type: str):
+        return _resolve_setting(
+            "pinDigests",
+            dep_name,
+            rel_path,
+            "pinDigest",
+            DEP["datasource"],
+            rules=[rule],
+            dep_type=dep_type,
+            manager=DEP["manager"],
         )
+
+    assert walk(DEP["dep_name"], DEP["dep_type"]) is False
+    assert walk("sigstore/cosign-installer", "action") is None
 
 
 def test_no_custom_manager_also_extracts_the_cosign_release() -> None:
