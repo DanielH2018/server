@@ -37,6 +37,7 @@ sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_t
 # `service_tags_at` is re-exported rather than defined here: `narrow_broad` needs it too,
 # and importing this module for it would put a cycle through `deploy_tags`.
 from lib.cli_help import ArgumentParser
+from lib.git import git
 from lib.render_guard import (  # noqa: F401
     containers_entries_in,
     landing_hosts_for_tags,
@@ -70,6 +71,7 @@ from deploy_tools.land_lib.land_reach import remaining_setup_hosts_note
 # `test_land_tags_shared_mapper_agreement.py` keeps pinning `land_tags.role_for`.
 from deploy_tools.land_lib.land_shared import (  # noqa: F401  (`role_of` has an out-of-module reader)
     declared_tags,
+    guard_map_rows,
     is_role_test_path,
     role_for,
     role_of,
@@ -492,8 +494,13 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     )
     # The callers of what `--plane` stopped naming, as `classify` adds them.
     if source == DeriveSource.PR:
-        reached = shared_caller_tags(paths).values()
-        tags = sorted(set(tags).union(*reached))
+        reached = shared_caller_tags(paths)
+        rows = guard_map_rows(
+            paths, ns.range_, lambda *a: git(*a, cwd=repo, check=False)
+        )
+        if rows is not None and "manifests" in reached:
+            reached["manifests"] &= rows
+        tags = sorted(set(tags).union(*reached.values()))
     print(f"{source} {','.join(tags)}")
     return 0
 

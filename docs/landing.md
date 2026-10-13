@@ -400,6 +400,12 @@ Four things sit in that position:
   the ruling and the gap it accepts, and `deploy_k8s_owed.discharge_k8s_unapplied` still reads
   every caller, because its question is whether the change is applied rather than whether it
   runs.
+  **A change confined to `manifests`' standalone-guard map deploys only the rows that moved**
+  (#4932). The guard task reads one row of `files/standalone_secret_keys.json`, the one for
+  its own service, so `land_shared.guard_map_rows` diffs the map over the PR's range. The
+  landing then deploys only the callers whose row differs. It keeps every caller when the
+  map is added or removed, or fails to parse on either side, when the range does not cover it, or
+  when another `manifests` path changed beside it.
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so
   `ansible/vars/secrets.yml` derives zero tags however many roles consume it. Run
   `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a

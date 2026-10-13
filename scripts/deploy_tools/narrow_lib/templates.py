@@ -21,6 +21,7 @@ A third rule (#3459) asks whether the changed template renders differently at al
 less their comments, so an edit to a `{# ... #}` comment reaches no render and narrows to
 nothing. It refuses on doubt too: a lex error, a `#jinja2:` header or a stream that differs
 under either `trim_blocks` setting keeps the importer mapping.
+`comment_only_shared_templates` asks the same of a landing's file list (#4926).
 """
 
 import sys as _sys
@@ -29,6 +30,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 import re
+import subprocess
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
@@ -123,6 +125,34 @@ def comment_edit(
         return False
     explain(f"narrow: {path.split('/')[-1]} comment-only -> (nothing) via {path}")
     return True
+
+
+def comment_only_shared_templates(
+    paths: list[str], old_ref: str, new_ref: str, show
+) -> set[str]:
+    """The shared `ansible/templates/*.j2` paths whose edit sits wholly inside Jinja comments.
+
+    The deployer's YAML reader cannot answer this: in a `.j2` a `#` line is rendered content
+    and a `{# ... #}` block is the comment, so PR #4925's doc-block edit to
+    `checksum-annotation.yml.j2` read as a full `deploy.yml` (#4926). The tick already
+    narrows that edit to nothing (`narrow_lib/broad.py` through `comment_edit` above),
+    and this is the same lexer read, so the landing and the tick agree.
+
+    `deploy_tags.comment_only_paths` is the caller; `show(ref, path)` reads a side. Not in the
+    deployer's `comment_only_broad_changes`, which runs stdlib-only and so has no jinja2. A
+    path added, deleted or unreadable on either side stays loud.
+    """
+    quiet = set()
+    for p in paths:
+        if not (p.startswith("ansible/templates/") and p.endswith(".j2")):
+            continue
+        try:
+            before, after = show(old_ref, p), show(new_ref, p)
+        except RuntimeError, subprocess.CalledProcessError, OSError:
+            continue
+        if comment_only(before, after):
+            quiet.add(p)
+    return quiet
 
 
 def real_mentions(hits: Iterable[str], name: str, ref: str, cwd: Path) -> list[str]:

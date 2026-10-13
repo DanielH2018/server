@@ -15,6 +15,7 @@ from deployer_lib.deploy_changes import setup_roles_for
 from lib.repo_paths import REPO
 from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib import classify
+from deploy_tools.land_lib.land_shared import GUARD_MAP
 from deploy_tools.land_lib.landing import Classification
 from deploy_tools.land_lib.outcome import Outcome
 
@@ -77,6 +78,30 @@ def test_classify_deploys_the_callers_of_a_shared_role(landing):
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.tags_csv == "radarr,sonarr"
+
+
+def test_a_guard_map_row_change_deploys_only_the_callers_whose_row_moved(landing):
+    """#4932: `manifests` reaches every caller, but its guard map is read one row per caller."""
+    ln, _ = landing(
+        Fakes(
+            derived=([], "pr"),
+            shared_callers={"manifests": {"sonarr", "radarr"}},
+            gh_views={
+                "files,changedFiles": {
+                    "files": [{"path": GUARD_MAP}],
+                    "changedFiles": 1,
+                }
+            },
+            diff_paths=[GUARD_MAP],
+            show_at={
+                "prbase": '{"radarr": []}',
+                "prhead": '{"radarr": [], "sonarr": []}',
+            },
+        )
+    )
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert ln.tags_csv == "sonarr"
 
 
 def test_classify_records_which_tags_only_the_caller_graph_named(landing):

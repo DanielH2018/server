@@ -154,6 +154,9 @@ class Fakes:
     # The paths `tools.paths_a_hand_must_apply` drops: a shared role's change that moves no
     # rendered manifest. None leaves the list as the PR's own.
     plane_paths_dropped: frozenset[str] = frozenset()
+    # `git show <ref>:<path>` text by ref, for `land_shared.guard_map_rows`. An absent ref
+    # answers as a missing file.
+    show_at: dict[str, str] = field(default_factory=dict)
     lock_holder: list[str] = field(default_factory=lambda: ["42 flock deploy"])
     hostname: str = "daniel-box"
     # What `gh api repos/{owner}/{repo}` answers: the visibility --arm-merge refuses on.
@@ -294,6 +297,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
                 }
             rows = (f"{mode} blob {'0' * 40}\t{path}\0" for path, mode in tree.items())
             return _cp(f.ls_tree_rc, "".join(rows))
+        if args[0] == "show":
+            ref = args[1].split(":", 1)[0]
+            return _cp(0 if ref in f.show_at else 128, f.show_at.get(ref, ""))
         if args[0] == "merge-base" and "--is-ancestor" in args:
             if args[-1] == "HEAD":
                 return _cp(f.merge_applied_rc)
