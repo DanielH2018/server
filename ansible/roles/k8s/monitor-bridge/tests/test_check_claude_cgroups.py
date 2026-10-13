@@ -23,7 +23,9 @@ import pytest
 
 import checks.host
 from lib import yaml_fast
-from lib.repo_paths import HOST_VARS
+from lib.repo_paths import HOST_VARS, ROLES
+from _bridge_env import bridge_env
+from bridge.config import load_config
 from _fake_sources import FakeSources
 from verdicts.host_cgroups import claude_cgroup_verdict
 
@@ -50,10 +52,10 @@ HEALTHY_MEMORY = [({"origin": "daniel-box"}, 30.0), ({"origin": "daniel-server"}
 def armed(cfg):
     """A config with the arm switched on, as templates/env-secret.yaml.j2 switches it on.
 
-    No `CLAUDE_CGROUP_ORIGINS`: these series carry no `origin` label, so arm 4 judges the cgroup
-    names alone. test_check_claude_cgroup_origins.py drives the per-host form.
+    No `CLAUDE_CGROUP_EXPECTED`: these series carry no `origin` label, so arm 4 judges the
+    cgroup names alone. test_check_claude_cgroup_origins.py drives the per-host form.
     """
-    return replace(cfg, CLAUDE_CGROUPS=("claude-rc",), CLAUDE_CGROUP_ORIGINS=())
+    return replace(cfg, CLAUDE_CGROUPS=("claude-rc",), CLAUDE_CGROUP_EXPECTED=())
 
 
 def _sources(stalls, events, uids=()):
@@ -249,36 +251,60 @@ def test_a_cgroup_reporting_from_either_host_is_not_missing():
     assert ok is True, msg
 
 
-def test_a_cgroup_missing_on_one_named_origin_is_flagged():
-    """With `origins` named, the other host's report no longer covers the silent one (#4870)."""
-    stalls = [({"origin": "daniel-box", "cgroup": "claude-rc"}, 0.0)]
-    origins = ("daniel-box", "daniel-server")
+def test_each_origin_is_judged_on_its_own_cgroups():
+    """With `expected_by_origin`, the other host's report no longer covers the silent one (#4870).
+
+    daniel-server's list omits claude-rc, so its absence there passes while daniel-box's pages.
+    """
+    expected = (("daniel-box", ("claude-rc", "fleet")), ("daniel-server", ("fleet",)))
+    stalls = [
+        ({"origin": "daniel-box", "cgroup": "fleet"}, 0.0),
+        ({"origin": "daniel-server", "cgroup": "fleet"}, 0.0),
+    ]
     ok, msg = claude_cgroup_verdict(
-        stalls, [], ["claude-rc"], 10.0, "5m", "10m", origins=origins
+        stalls, [], ["claude-rc"], 10.0, "5m", "10m", expected_by_origin=expected
     )
     assert ok is False
-    assert "daniel-server/claude-rc" in msg
-    assert "daniel-box/claude-rc" not in msg
-    stalls.append(({"origin": "daniel-server", "cgroup": "claude-rc"}, 0.0))
+    assert "daniel-box/claude-rc" in msg
+    assert "daniel-server" not in msg
+    stalls.append(({"origin": "daniel-box", "cgroup": "claude-rc"}, 0.0))
     ok, msg = claude_cgroup_verdict(
-        stalls, [], ["claude-rc"], 10.0, "5m", "10m", origins=origins
+        stalls, [], ["claude-rc"], 10.0, "5m", "10m", expected_by_origin=expected
     )
     assert ok is True, msg
 
 
-def test_claude_cgroup_origins_are_the_claude_code_hosts(cfg):
-    """The rendered host list is exactly the hosts whose host_vars set `has_claude_code: true`.
+def test_a_malformed_expected_entry_is_a_config_problem():
+    good = load_config(bridge_env(CLAUDE_CGROUP_EXPECTED="daniel-box=claude-rc+fleet"))
+    assert good.CLAUDE_CGROUP_EXPECTED == (("daniel-box", ("claude-rc", "fleet")),)
+    assert good.CONFIG_PROBLEMS == ()
+    bad = load_config(
+        bridge_env(CLAUDE_CGROUP_EXPECTED="daniel-box,daniel-server=fleet")
+    )
+    assert bad.CLAUDE_CGROUP_EXPECTED == (("daniel-server", ("fleet",)),)
+    assert any("'daniel-box'" in p for p in bad.CONFIG_PROBLEMS), bad.CONFIG_PROBLEMS
+
+
+def test_claude_cgroup_expected_follows_the_inventory(cfg):
+    """Every `has_claude_code` host requires fleet, and claude-rc only where its RC unit runs.
 
     A literal in the env-secret, so this is what makes it follow the inventory: a host that
-    gains Claude Code without joining the list is a writer nothing checks.
+    gains Claude Code without joining the list is a writer nothing checks, and a host whose RC
+    unit is switched off would page for a cgroup it legitimately lacks.
     """
-    claude_hosts = {
-        path.stem
-        for path in HOST_VARS.glob("*.yml")
-        if yaml_fast.safe_load(path.read_text()).get("has_claude_code") is True
-    }
-    assert claude_hosts >= {"daniel-box", "daniel-server"}
-    assert set(cfg.CLAUDE_CGROUP_ORIGINS) == claude_hosts
+    rc_default = yaml_fast.safe_load(
+        (ROLES / "setup" / "claude_code" / "defaults" / "main.yml").read_text()
+    )["claude_code_rc_enabled"]
+    derived = {}
+    for path in HOST_VARS.glob("*.yml"):
+        host = yaml_fast.safe_load(path.read_text()) or {}
+        if host.get("has_claude_code") is True:
+            rc = host.get("claude_code_rc_enabled", rc_default)
+            derived[path.stem] = {"fleet"} | ({"claude-rc"} if rc else set())
+    assert derived["daniel-box"] == {"claude-rc", "fleet"}
+    assert derived["daniel-server"] == {"fleet"}
+    rendered = {host: set(cgroups) for host, cgroups in cfg.CLAUDE_CGROUP_EXPECTED}
+    assert rendered == derived
 
 
 def test_the_queries_group_by_origin():
