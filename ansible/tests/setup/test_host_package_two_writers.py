@@ -10,7 +10,8 @@ The census joins two sides per host:
 
 - **Ansible.** Every setup role's tasks, through `_role_census.task_files_by_role` and
   `_helpers.walk_tasks`. A writing module contributes its `dest:` or `path:`, a cron its
-  `(user, name)` and its `cron_file:`. A task whose `state:` renders `absent` is an absent
+  `(user, name)` and its `cron_file:`, which lands as the path `/etc/cron.d/<name>` when
+  relative, so a package shipping that file meets it in the same join. A task whose `state:` renders `absent` is an absent
   arm, which removes rather than writes, so it contributes nothing. Each value renders with
   the role's context for that host (`lib.render_context`), its loop items included when the
   loop is a literal list or one variable. A value that still does not render is skipped: one
@@ -33,7 +34,7 @@ Run: uv run pytest ansible/tests/setup/test_host_package_two_writers.py
 import re
 from collections import defaultdict
 from functools import cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import jinja2
 import pytest
@@ -66,6 +67,8 @@ WRITERS = frozenset(
     )
 )
 CRON = "ansible.builtin.cron"
+# Where the cron module writes a relative `cron_file:`. An absolute one replaces it on join.
+CRON_D = PurePosixPath("/etc/cron.d")
 
 # The Ansible-side members: the three Pi heartbeats PR H3.8b moves into a package.
 OPTIMIZE_PI_CRONS = frozenset(
@@ -82,7 +85,9 @@ _ONE_VARIABLE = re.compile(r"^\{\{\s*([A-Za-z_][\w.]*)\s*\}\}$")
 
 _ENV = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
 
-# A write: ("path", "/abs/path"), ("cron", "<user>", "<name>") or ("cron_file", "<name>").
+# A write: ("path", "/abs/path") or ("cron", "<user>", "<name>"). A cron's `cron_file:` is a
+# path, so it joins a package's installed files. The `(user, name)` key can meet only a legacy
+# entry, which the package side gains with #4934.
 Key = tuple[str, ...]
 
 
@@ -135,7 +140,7 @@ def task_writes(task: dict, ctx: dict) -> set[Key]:
             }
             if module == CRON:
                 if "cron_file" in fields:
-                    writes.add(("cron_file", fields["cron_file"]))
+                    writes.add(("path", str(CRON_D / fields["cron_file"])))
                 if "name" in fields:
                     writes.add(("cron", fields.get("user", "root"), fields["name"]))
                 continue
@@ -223,8 +228,8 @@ def test_the_package_side_finds_its_named_packages():
 SD_HEALTH = "/usr/lib/homelab/pi-sd-health"
 
 
-def _fixture(tmp_path: Path, task: str) -> tuple[dict, dict]:
-    """A fixture `optimize_pi` running `task` and a daniel-pi package shipping `SD_HEALTH`."""
+def _fixture(tmp_path: Path, task: str, shipped: str = SD_HEALTH) -> tuple[dict, dict]:
+    """A fixture `optimize_pi` running `task` and a daniel-pi package shipping `shipped`."""
     role = tmp_path / "roles" / "setup" / "optimize_pi"
     (role / "tasks").mkdir(parents=True)
     task_file = role / "tasks" / "main.yml"
@@ -234,7 +239,7 @@ def _fixture(tmp_path: Path, task: str) -> tuple[dict, dict]:
     (hosts / "daniel-pi").mkdir()
     (hosts / "daniel-pi" / "pi-sd-health").write_text("#!/bin/sh\n")
     (hosts / "daniel-pi" / "package.yml").write_text(
-        f"files:\n  - {{src: pi-sd-health, dst: {SD_HEALTH}, mode: '0755'}}\n"
+        f"files:\n  - {{src: pi-sd-health, dst: {shipped}, mode: '0755'}}\n"
     )
     ansible: dict = {"daniel-pi": defaultdict(set)}
     ctx = _role_context(SETUP / "optimize_pi", "daniel-pi")
@@ -255,6 +260,22 @@ def test_a_role_still_writing_a_packaged_path_is_flagged(tmp_path):
     found = collisions(*_fixture(tmp_path, task))
     assert found == [
         f"daniel-pi: path {SD_HEALTH} is written by ['optimize_pi'] "
+        "and shipped by ['homelab-daniel-pi']"
+    ]
+
+
+def test_a_role_cron_file_a_package_ships_is_flagged(tmp_path):
+    task = (
+        "- name: Pi SD-card health heartbeat\n"
+        "  ansible.builtin.cron:\n"
+        "    name: Pi SD-card health heartbeat\n"
+        "    user: root\n"
+        "    cron_file: pi-health\n"
+        "    job: /usr/lib/homelab/pi-sd-health\n"
+    )
+    found = collisions(*_fixture(tmp_path, task, shipped="/etc/cron.d/pi-health"))
+    assert found == [
+        "daniel-pi: path /etc/cron.d/pi-health is written by ['optimize_pi'] "
         "and shipped by ['homelab-daniel-pi']"
     ]
 
@@ -291,5 +312,5 @@ def test_a_cron_contributes_its_user_and_name_and_its_cron_file():
     ctx = _role_context(SETUP / "optimize_pi", "daniel-pi")
     assert task_writes(task, ctx) == {
         ("cron", ctx["sys_user"], "Pi SD-card health heartbeat"),
-        ("cron_file", "pi-health"),
+        ("path", "/etc/cron.d/pi-health"),
     }
