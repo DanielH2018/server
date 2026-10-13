@@ -13,6 +13,7 @@ import pytest
 import yaml
 
 from lib import render_context as rc
+from lib.render_guard import StrictChainableUndefined
 
 
 @pytest.fixture
@@ -187,3 +188,30 @@ def test_a_callers_hostvars_replaces_the_inventory_layer(tree):
     template, inv = tree({}, hosts={"box": {"server_ip": "10.0.0.1"}}, plane="k8s")
     ctx = rc.render_context(template, inventory=inv, overrides={"hostvars": {"x": {}}})
     assert ctx["hostvars"] == {"x": {}}
+
+
+def test_a_host_vars_value_beats_a_component_default(tree):
+    # As an override the default would win, and beat the disarm a host's host_vars carry.
+    _, inv = tree({}, hosts={"pi": {"armed": False}})
+    ctx = rc.render_context(
+        None, "pi", inventory=inv, component_defaults={"armed": True}
+    )
+    assert ctx["armed"] is False
+
+
+def test_a_component_default_with_no_inventory_key_of_its_name_survives(tree):
+    _, inv = tree({}, group={"ip": "10.0.0.2"})
+    ctx = rc.render_context(None, inventory=inv, component_defaults={"url": "{{ ip }}"})
+    assert ctx["url"] == "10.0.0.2"
+
+
+def test_a_withheld_name_and_a_value_reading_it_are_dropped(tree):
+    _, inv = tree({}, group={"token": "t", "header": "Bearer {{ token }}", "kept": "k"})
+    ctx = rc.render_context(
+        None,
+        inventory=inv,
+        base={},
+        undefined_cls=StrictChainableUndefined,
+        withhold=frozenset({"token"}),
+    )
+    assert ("token" in ctx, "header" in ctx, ctx["kept"]) == (False, False, "k")
