@@ -469,6 +469,7 @@
  "ansible/tests/services/test_autofix_bridge_modules.py": 0.0,
  "ansible/tests/services/test_autoheal_does_not_watch_itself.py": 0.0,
  "ansible/tests/services/test_autoheal_webhook_payload_key.py": 0.0,
+ "ansible/tests/services/test_blackbox_exporter_host_aliases.py": 0.13,
  "ansible/tests/services/test_blackbox_exporter_modules.py": 0.0,
  "ansible/tests/services/test_bridge_patch_boundary.py": 1.91,
  "ansible/tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py": 0.01,
