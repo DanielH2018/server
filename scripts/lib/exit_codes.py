@@ -771,8 +771,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             RENDER_FAILED,
             "RENDER_FAILED",
-            "a template failed to render, so nothing was written.",
-            "The message names the template and the undefined name or filter error.",
+            "a render, a secret check or the pinned-fact refusal failed; nothing was written.",
+            "The message names the template and the error, or the rule, tag, file and key.",
         ),
         _c(
             RENDER_REFUSED,

@@ -9,7 +9,9 @@ cluster.
 Without `--secret-stubs`, `cluster` renders in placeholder mode (target slice R2): every secret
 reference renders as `${<key>}`, and a directory whose render holds one escapes every other `$`
 Flux would read as syntax. `renderer_lib/placeholders.py` holds the passes and the per-directory
-key sets, and placeholder mode skips the tags in its `PLACEHOLDER_DEFERRED`.
+key sets, and placeholder mode skips the tags in its `PLACEHOLDER_DEFERRED`. Before it writes
+anything, a placeholder render refuses a tag marked `owner: flux` that reads a pinned live-read
+fact, and runs the five secret rules of `renderer_lib/secret_checks.py`.
 
 `host --host NAME` renders `hosts/NAME/package.yml` into `DIR/hosts/NAME/`, and `package --name
 PKG` renders the shared package `hosts/packages/PKG/` into `DIR/packages/PKG/`. Each writes
@@ -20,8 +22,8 @@ secret and keep every `${` literal (`renderer_lib/host.py`).
 `shadow_diff.py stubs` writes, and every secret renders as its stub. A stub render is a
 comparison input and is never published.
 
-Exit codes: 0 rendered; 1 a template failed to render; 2 refused before writing anything;
-64 a usage error.
+Exit codes: 0 rendered; 1 a template failed to render, a secret check failed, or a flux-owned
+tag reads a pinned live-read fact; 2 refused before writing anything; 64 a usage error.
 
 Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-render
      uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
@@ -32,6 +34,7 @@ Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-rend
 """
 
 import os
+from collections.abc import Callable
 import sys
 import tempfile
 from pathlib import Path
@@ -45,17 +48,21 @@ from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
+from renderer.renderer_lib import secret_checks
 from renderer.renderer_lib.cluster import (
     RenderError,
     RenderRefused,
+    flux_owned_tags,
     render_tag,
     select_tags,
     write_cluster,
 )
 from renderer.renderer_lib.context import load_stubs
 from renderer.renderer_lib.host import render_host, render_package, write_packages
+from renderer.renderer_lib.task_inputs import PinnedFact
 from renderer.renderer_lib.placeholders import (
     Mode,
+    pinned_fact_refusals,
     render_placeholders,
     select_mode,
 )
@@ -82,11 +89,25 @@ def unstubbed(stubs: dict, secrets: Path = SECRETS) -> list[str]:
     return homelab_unstubbed_keys(secret_keys(secrets), stubs)
 
 
-def cluster(out: Path, roles: list[str] | None, secret_stubs: Path | None) -> int:
-    """Render `roles`, or every renderable tag, into `out`; return the exit code."""
+def cluster(
+    out: Path,
+    roles: list[str] | None,
+    secret_stubs: Path | None,
+    flux_owned: Callable[[], set[str]] = flux_owned_tags,
+    pinned: dict[str, PinnedFact] | None = None,
+) -> int:
+    """Render `roles`, or every renderable tag, into `out`; return the exit code.
+
+    Args:
+        out: The directory to write.
+        roles: The tags to render, or None for every render target.
+        secret_stubs: The stub file of a stub-mode render, or None for placeholder mode.
+        flux_owned: Returns the tags marked `owner: flux`; a test passes fixture tags.
+        pinned: The pinned live-read facts the refusal reads, `PINNED_LIVE_FACTS` when None.
+    """
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
         return _stub_cluster(out, roles, secret_stubs)
-    return _placeholder_cluster(out, roles)
+    return _placeholder_cluster(out, roles, flux_owned, pinned)
 
 
 def _stub_cluster(out: Path, roles: list[str] | None, secret_stubs: Path) -> int:
@@ -115,14 +136,38 @@ def _stub_cluster(out: Path, roles: list[str] | None, secret_stubs: Path) -> int
     return RENDER_OK
 
 
-def _placeholder_cluster(out: Path, roles: list[str] | None) -> int:
+def _placeholder_cluster(
+    out: Path,
+    roles: list[str] | None,
+    flux_owned: Callable[[], set[str]],
+    pinned: dict[str, PinnedFact] | None,
+) -> int:
     try:
         tags = select_tags(roles)
-        result = render_placeholders(tags, secret_keys())
+        refusals = pinned_fact_refusals(tags, flux_owned(), pinned)
+        if refusals:
+            for tag, fact in refusals:
+                print(
+                    f"homelab-render: {tag} is marked owner: flux and reads the pinned "
+                    f"live-read fact {fact}, whose stand-in must never be published. "
+                    "Nothing was written.",
+                    file=sys.stderr,
+                )
+            return RENDER_FAILED
+        keys = secret_keys()
+        result = render_placeholders(tags, keys)
         if not result.tags:
             raise RenderRefused(
                 f"every requested tag is in PLACEHOLDER_DEFERRED: {result.skipped}"
             )
+        report = secret_checks.check(result, keys)
+        if not report.ok():
+            print("\n".join(report.lines()), file=sys.stderr)
+            print(
+                "homelab-render: the secret checks failed. Nothing was written.",
+                file=sys.stderr,
+            )
+            return RENDER_FAILED
         written = write_cluster(result.tags, out)
     except RenderRefused as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
@@ -138,7 +183,8 @@ def _placeholder_cluster(out: Path, roles: list[str] | None) -> int:
     print(
         f"homelab-render: placeholder mode, {len(result.tags)} tags, "
         f"{len(result.substituting())} of {len(result.key_sets)} directories substitute, "
-        f"{len(written)} files under {out / 'cluster'}{skipped}"
+        f"{len(written)} files under {out / 'cluster'}, the five secret rules pass with "
+        f"{len(report.violations)} known violations{skipped}"
     )
     return RENDER_OK
 

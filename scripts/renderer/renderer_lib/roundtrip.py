@@ -26,6 +26,14 @@ it stands alone in a field. A key in the guard's map under any tag, or in `GUARD
 covered, so a difference in the second pass marks a standalone use the renderer's detection
 missed.
 
+Two things are left out of the comparison, each named and counted, and nothing else:
+
+- The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names, such as a Secret that still
+  carries a multi-line key. Each entry whose directory was built must drop exactly one object.
+- The annotations `UNCOMPARED_ANNOTATIONS` names. Each hashes a rendered config that holds
+  placeholders on one side and stub values on the other, so the two hashes differ by
+  construction. The count must equal the template calls that write them.
+
 `roundtrip` needs the pinned flux CLI. Where `flux` is not on `PATH`, it refuses and never
 reports a pass. `docs/homelab-render.md` is the operator's page.
 """
@@ -42,19 +50,28 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+from jinja2 import nodes
 
 from lib import yaml_fast
 from lib.exit_codes import SHADOW_DIFFERENT, SHADOW_OK
+from lib.render_guard import SHARED_TPL
+from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.cluster import (
     DEFERRED_SUFFIX,
     RenderedTag,
     render_tag,
     write_cluster,
 )
+from renderer.renderer_lib.environment import renderer_env
 from renderer.renderer_lib.placeholders import (
     GUARD_DEFERRED,
     PlaceholderRender,
     render_placeholders,
+)
+from renderer.renderer_lib.secret_checks import (
+    KNOWN_VIOLATIONS,
+    OUTPUT_RULES,
+    Violation,
 )
 
 PLACEHOLDER, STUB = "placeholder", "stub"
@@ -171,6 +188,109 @@ def first_difference(placeholder: str, stub: str) -> str | None:
     return "the outputs differ outside any object"
 
 
+# The pod-template annotations the round trip leaves out, by directory. Each is written by
+# `checksum_annotation('<name>', ...)` in `ansible/templates/checksum-annotation.yml.j2` and
+# hashes a rendered config. In placeholder mode that config holds placeholders, and in stub
+# mode stub values, so the two hashes differ although substitution restores every value. R2
+# accepts this under *Risks*, *Restart triggers lose sight of secrets*: a rotated secret rolls
+# no pod, and D3 owns the restart mechanism.
+UNCOMPARED_ANNOTATIONS = {
+    # The five configs of the metrics and telemetry stack. Prometheus's holds the scrape
+    # credentials, so its Deployment's `checksum/config` is the one that must be found.
+    "observability": frozenset({"checksum/config"}),
+}
+UNCOMPARED_MEMBER = ("observability", "Deployment/prometheus", "checksum/config")
+CHECKSUM_MACRO = "checksum_annotation"
+
+
+def checksum_calls(directory: str, annotation: str, roles: Path = K8S_ROLES) -> int:
+    """How many `checksum_annotation` calls in `directory`'s role templates write `annotation`.
+
+    This counts the template source, so it is independent of the built output it checks.
+    """
+    name = annotation.removeprefix("checksum/")
+    env = renderer_env(SHARED_TPL)
+    return sum(
+        1
+        for path in sorted((roles / directory / "templates").glob("**/*.j2"))
+        for call in env.parse(path.read_text()).find_all(nodes.Call)
+        if isinstance(call.node, nodes.Name)
+        and call.node.name == CHECKSUM_MACRO
+        and call.args
+        and isinstance(call.args[0], nodes.Const)
+        and call.args[0].value == name
+    )
+
+
+def excluded_documents(
+    directory: str, known: frozenset[Violation] = KNOWN_VIOLATIONS
+) -> frozenset[str]:
+    """The `Kind/name` of each document in `directory` that an entry of rules 1 to 4 names."""
+    return frozenset(
+        v.site for v in known if v.rule in OUTPUT_RULES and v.tag == directory
+    )
+
+
+def _drop_annotations(obj: object, names: frozenset[str]) -> list[str]:
+    """Remove each annotation in `names` from every `annotations` mapping in `obj`.
+
+    Returns:
+        The name of each annotation removed, once per removal.
+    """
+    removed = []
+    if isinstance(obj, dict):
+        annotations = obj.get("annotations")
+        if isinstance(annotations, dict):
+            for name in sorted(names & annotations.keys()):
+                del annotations[name]
+                removed.append(name)
+        for value in obj.values():
+            removed.extend(_drop_annotations(value, names))
+    elif isinstance(obj, list):
+        for value in obj:
+            removed.extend(_drop_annotations(value, names))
+    return removed
+
+
+@dataclass(frozen=True)
+class Uncompared:
+    """One side's build of one directory, less what the round trip leaves out.
+
+    Attributes:
+        text: The build output without them.
+        documents: The `Kind/name` of each document removed.
+        annotations: `Kind/name annotation` for each annotation removed.
+    """
+
+    text: str
+    documents: tuple[str, ...]
+    annotations: tuple[str, ...]
+
+
+def leave_out(
+    output: str, sites: frozenset[str], annotations: frozenset[str]
+) -> Uncompared:
+    """`output` without the documents in `sites` and the annotations in `annotations`.
+
+    A document that loses an annotation is serialised again, by the same code on both sides.
+    """
+    if not sites and not annotations:
+        return Uncompared(output, (), ())
+    kept, dropped, stripped = [], [], []
+    for doc in documents(output):
+        obj = yaml_fast.safe_load(doc) or {}
+        site = f"{obj.get('kind')}/{(obj.get('metadata') or {}).get('name')}"
+        if site in sites:
+            dropped.append(site)
+            continue
+        removed = _drop_annotations(obj, annotations)
+        if removed:
+            stripped.extend(f"{site} {name}" for name in removed)
+            doc = yaml.safe_dump(obj, sort_keys=False, width=4096, allow_unicode=True)
+        kept.append(doc)
+    return Uncompared("---\n".join(kept), tuple(dropped), tuple(stripped))
+
+
 # The value every key takes in the second pass. The pinned CLI substitutes into a resource it
 # has already serialised, and it drops the template's quotes: measured on CI, a `stringData`
 # value written `"${n}"` came back as the integer 83 for n=0123 and as a boolean for n=true
@@ -235,7 +355,10 @@ class Report:
         directories: Every directory compared.
         substituting: The directories built with `postBuild`.
         objects: The objects the stub side built, summed over the directories.
-        differences: One line per directory whose two builds differ or fail.
+        differences: One line per directory whose two builds differ or fail, and one per
+            exclusion whose count is wrong.
+        documents: The documents left out for `KNOWN_VIOLATIONS`, as `dir: Kind/name`.
+        annotations: The annotations left out for `UNCOMPARED_ANNOTATIONS`.
     """
 
     label: str
@@ -245,6 +368,8 @@ class Report:
     substituting: list[str] = field(default_factory=list)
     objects: int = 0
     differences: list[str] = field(default_factory=list)
+    documents: list[str] = field(default_factory=list)
+    annotations: list[str] = field(default_factory=list)
 
     def lines(self) -> list[str]:
         deferred = sum(d.endswith(DEFERRED_SUFFIX) for d in self.directories)
@@ -256,6 +381,8 @@ class Report:
         lines.append(
             f"roundtrip: {len(self.tags)} tags, {deferred} deferred directories, "
             f"{len(self.substituting)} substituting, {self.objects} objects, "
+            f"{len(self.documents)} documents in KNOWN_VIOLATIONS and "
+            f"{len(self.annotations)} annotations in UNCOMPARED_ANNOTATIONS left out, "
             f"{len(self.differences)} differences, with {self.label}"
         )
         return lines
@@ -308,6 +435,8 @@ def compare_sides(
     stub_pass: StubPass,
     flux: str,
     run: Runner = subprocess.run,
+    known: frozenset[Violation] = KNOWN_VIOLATIONS,
+    annotations: Mapping[str, frozenset[str]] = UNCOMPARED_ANNOTATIONS,
 ) -> Report:
     """Build every directory of the placeholder render and of one pass's stub render, and compare.
 
@@ -316,6 +445,8 @@ def compare_sides(
         stub_pass: The pass whose stub render and substitute values to use.
         flux: The flux binary.
         run: The subprocess call; a test passes a stand-in.
+        known: The ratchet whose output-side entries name the documents to leave out.
+        annotations: The annotations to leave out, by directory.
     """
     report = Report(stub_pass.label, sides.tags, sides.placeholder.skipped)
     kdir = sides.root / KUSTOMIZATIONS
@@ -342,8 +473,72 @@ def compare_sides(
                 break
             outputs[side] = result.stdout
         else:
-            report.objects += len(documents(outputs[stub_pass.name]))
-            difference = first_difference(outputs[PLACEHOLDER], outputs[stub_pass.name])
+            compared = {
+                side: leave_out(
+                    output,
+                    excluded_documents(name, known),
+                    annotations.get(name, frozenset()),
+                )
+                for side, output in outputs.items()
+            }
+            stub, placeholder = compared[stub_pass.name], compared[PLACEHOLDER]
+            report.objects += len(documents(stub.text))
+            report.documents.extend(f"{name}: {site}" for site in stub.documents)
+            report.annotations.extend(f"{name}: {a}" for a in stub.annotations)
+            if (stub.documents, stub.annotations) != (
+                placeholder.documents,
+                placeholder.annotations,
+            ):
+                report.differences.append(
+                    f"{name}: the two sides left out different documents or annotations"
+                )
+            difference = first_difference(placeholder.text, stub.text)
             if difference:
                 report.differences.append(f"{name}: {difference}")
+    report.differences.extend(exclusion_problems(report, known, annotations))
     return report
+
+
+def exclusion_problems(
+    report: Report,
+    known: frozenset[Violation],
+    annotations: Mapping[str, frozenset[str]] = UNCOMPARED_ANNOTATIONS,
+) -> list[str]:
+    """Each way a pass left out other than exactly what it names, one line apiece.
+
+    Each `KNOWN_VIOLATIONS` document of a built directory is left out exactly once. The
+    annotations left out equal the `checksum_annotation` calls that write them, and
+    `UNCOMPARED_MEMBER` is among them whenever its directory was built.
+    """
+    problems = []
+    built = set(report.directories)
+    expected = sorted(
+        f"{v.tag}: {v.site}" for v in known if v.rule in OUTPUT_RULES and v.tag in built
+    )
+    if sorted(report.documents) != expected:
+        problems.append(
+            f"roundtrip: left out the documents {sorted(report.documents)}, "
+            f"where KNOWN_VIOLATIONS names {expected}"
+        )
+    for directory, names in sorted(annotations.items()):
+        for annotation in sorted(names):
+            want = checksum_calls(directory, annotation) if directory in built else 0
+            have = sum(
+                1
+                for a in report.annotations
+                if a.startswith(f"{directory}: ") and a.endswith(f" {annotation}")
+            )
+            if have != want:
+                problems.append(
+                    f"roundtrip: left out {have} {annotation} annotations in "
+                    f"{directory}, where its templates write {want}"
+                )
+    directory, site, annotation = UNCOMPARED_MEMBER
+    if (
+        directory in built
+        and f"{directory}: {site} {annotation}" not in report.annotations
+    ):
+        problems.append(
+            f"roundtrip: named member gone: {annotation} on {site} in {directory}"
+        )
+    return problems

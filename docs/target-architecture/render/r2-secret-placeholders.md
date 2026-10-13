@@ -834,7 +834,10 @@ two throwaway Flux `Kustomization` files and runs `flux build kustomization <nam
 - **Stub side.** A stub-mode render with the same values. The file has no `postBuild`, so
   nothing is substituted.
 
-It then compares the two outputs byte for byte and names the first differing object. It
+It then compares the two outputs byte for byte and names the first differing object. The
+comparison leaves out observability's `checksum_annotation('config', ...)` annotations, which
+the constant `UNCOMPARED_ANNOTATIONS` names and `roundtrip` counts, because each hashes a
+config holding placeholder text (*Risks*, *Restart triggers lose sight of secrets*). It
 runs two passes, each with its own summary line:
 
 1. Every key takes its R1 stub.

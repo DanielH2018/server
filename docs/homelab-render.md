@@ -254,7 +254,7 @@ are decided apart. A directory's key set is the keys whose sentinel its render h
 
 The key set is the one source for every reader that asks whether a directory substitutes,
 and each reads it in process from `PlaceholderRender.key_sets`: the escape, the round trip,
-and later the rules of R2's PR 2 and D2's `postBuild` writer. pihole substitutes, because its
+the five secret rules, and later D2's `postBuild` writer. pihole substitutes, because its
 Secret holds keys, and `pihole-deferred` does not. At `65b52ff2f`, 46 of the 61 directories
 substitute.
 
@@ -270,13 +270,55 @@ renders nothing, so `cluster` refuses it with exit 2. Stub mode renders every ta
 This set is a different thing from a `<tag>-deferred` directory, which holds the files a role
 passes as `manifests_deferred_files`.
 
+### The five secret rules
+
+`scripts/renderer/renderer_lib/secret_checks.py` runs five rules after every placeholder
+render, before anything is written. A violation makes `cluster` exit 1. Each line names the
+rule, the tag, the file, the document as `Kind/name` or the refused form, and the key.
+
+| Rule | Reads | Refuses |
+|---|---|---|
+| `known-key` | the output of a directory that substitutes | a `${NAME}` whose name is not a key of `ansible/vars/secrets.yml` |
+| `no-bare-dollar-brace` | the output, read as Flux reads it, each `$$` paired first | a `${` that is not a placeholder of pass 3, and a sentinel fragment in any directory |
+| `confined-to-secret` | the kind of each rendered document | a placeholder outside `kind: Secret`, except `domain` and `email` (`PLACEHOLDER_ANYWHERE`) |
+| `no-sops-manifest-key` | the output | a placeholder of a key in `SOPS_MANIFEST_KEYS`, the multi-line keys Flux cannot substitute |
+| `no-secret-expression` | the syntax tree of every `.j2` under the k8s roles' `templates/` and `ansible/templates/`, but `*.sh.j2` | any form of a secret key that could change its value |
+
+Rule 5 allows a key only bare, under `default`, `to_json` or `indent` (not for a
+`SOPS_MANIFEST_KEYS` key), inside a `~` concatenation, as the subject of `is defined`, as an
+argument to a member of `PASSTHROUGH_FILTERS`, or bound to a name or placed in a list, tuple
+or dict. It refuses every other filter, every attribute, subscript or method call, every
+comparison and every truthiness test, `{% if K | default('') %}` included. It reads a key
+reached through `lookup('vars', 'K')` as `K`. A non-literal `lookup('vars', X)` counts as a
+possible secret reference, held to bare, `default` and `to_json`, unless
+`NON_SECRET_VARS_LOOKUPS` names its site. That set holds one site, Prometheus's
+`lookup('vars', job.replicas_var) | int`, and the entry fails when any `containers_list`
+`replicas_var` names a secret key, or when the site has gone.
+
+`KNOWN_VIOLATIONS` holds every violation the first fleet render found: rule 4 on authelia's
+and pi-peer-backup's Secrets, and rule 5's 30 entries, which are the two `indent`s on those
+keys, HA's `from_json`, two `trim`s, mosquitto's `string`, and 24 truthiness tests. R2's PRs
+3 to 7 remove them, and an entry that no longer matches fails the check, so the set shrinks
+only through a fix.
+
+Each rule must find its named members, so a rule that stops matching cannot pass: rule 3
+`${domain}` in homepage's IngressRoute, rule 1 a placeholder in authelia's config Secret,
+rule 2 the escaped `$${` in qbittorrent's `qbittorrent-netns-reset` ConfigMap, rule 4 every
+`SOPS_MANIFEST_KEYS` key in `ansible/vars/secrets.yml`, and rule 5 at least 59 templates that
+name a key and four accepted uses. A `--role` render asserts a member of rules 1 to 4, and
+counts their `KNOWN_VIOLATIONS` entries stale, only for the tags it rendered. Rule 5 reads
+the whole tree on every run.
+
+`scripts/renderer/tests/test_renderer_secret_checks.py` holds each rule's `_is_clean` and
+`_is_flagged` pair, and `test_renderer_secret_checks_tree.py` the fleet render and the named
+members.
+
 ### Filters that only interpolate a secret
 
 `PASSTHROUGH_FILTERS` in `scripts/renderer/renderer_lib/secret_checks.py` names the repo
 filters that place an argument into their output unchanged. Its reader is rule 5, which
 accepts a secret key as an argument to a member and refuses it as an argument to any other
-filter. Rule 5 is not in place yet: R2's PR 2 adds it. The set is closed and holds two
-members, each passed `domain`:
+filter. The set is closed and holds two members, each passed `domain`:
 
 - `homepage_href`, from `ansible/filter_plugins/homepage_tiles.py:homepage_href`;
 - `authelia_service_rules`, from
@@ -322,9 +364,25 @@ It runs two passes:
    one (*The standalone-value guard*). `--guard-map FILE` reads another map than the
    committed one, so `{}` sets every key to `0123` again.
 
-Each pass prints a summary line, such as `roundtrip: 2 tags, 0 deferred directories, 2
-substituting, 4 objects, 0 differences, with each key's R1 stub`. `roundtrip` exits 0 only
-when both passes find no difference.
+Two things are left out of the comparison, by name and by count, and nothing else:
+
+- **The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names.** These are authelia's
+  `Secret/authelia-config` and pi-peer-backup's `Secret/pi-peer-backup-ssh`, which still
+  carry a multi-line key. Each entry whose directory was built must drop exactly one object.
+- **The annotations `UNCOMPARED_ANNOTATIONS` names**, in `renderer_lib/roundtrip.py`. It holds
+  observability's `checksum/config`, written by `checksum_annotation('config', ...)` on each
+  of five workloads. Each hashes a rendered config that holds placeholders on one side and
+  stub values on the other, so the two hashes differ although substitution restores every
+  value. R2 accepts this under *Restart triggers lose sight of secrets*: a rotated secret
+  rolls no pod, and target slice D3 owns the restart mechanism. The count left out must
+  equal the `checksum_annotation` calls that write the annotation in the role's templates,
+  and Prometheus's Deployment must be among them.
+
+A document that loses an annotation is serialised again on both sides, by the same code.
+Each pass prints a summary line, such as `roundtrip: 57 tags, 4 deferred directories, 46
+substituting, 450 objects, 2 documents in KNOWN_VIOLATIONS and 5 annotations in
+UNCOMPARED_ANNOTATIONS left out, 0 differences, with each key's R1 stub`. `roundtrip` exits 0
+only when both passes find no difference and each exclusion count holds.
 
 It needs the pinned flux CLI. daniel-box has none, so it runs in CI's `flux_roundtrip` job.
 Where `flux` is not on `PATH`, it exits 2 and reports no pass. It also exits 2 when a render
@@ -338,9 +396,9 @@ uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip 
   --role configarr --role janitorr
 ```
 
-The CI job round-trips `configarr` and `janitorr`, whose Secrets embed whole app configs with
-several placeholders in a block scalar. R2's PR 2 widens it to every tag outside
-`PLACEHOLDER_DEFERRED`. The job also round-trips `homepage` with the guard's map read as
+The CI job round-trips every tag outside `PLACEHOLDER_DEFERRED` in both passes, with no
+`--role`. Its red half runs on `configarr` and `janitorr` only, because one changed byte is
+all it has to show. The job also round-trips `homepage` with the guard's map read as
 empty, and fails unless that run exits 1 and names `IngressRoute/homelab/homepage`. That proves
 the second pass still sees a standalone use the map does not cover:
 
@@ -449,6 +507,14 @@ both halves: `authelia_password_hash`, `authelia_claude_password_hash` and
 A string stand-in carries the secret stubs' marker, such as `stub-authelia-password-hash`.
 Each entry also names its reader tags. A test in `scripts/renderer/tests/` holds those tags
 equal to a word grep of the templates, so a new reader fails the suite.
+
+**A placeholder render refuses a flux-owned reader.** A pinned value renders a valid object
+that fails logins or backups, and only a tag marked `owner: flux` (C4) is published. So
+`cluster` without `--secret-stubs` exits 1, before it renders, when a requested tag is marked
+`owner: flux` and reads a pinned fact. The message names the tag and the fact.
+`placeholders.py:pinned_fact_refusals` reads the reader tags `PINNED_LIVE_FACTS` records and
+derives them nowhere else, so R3's PRs shrink the refusal as they drop facts. The readers are
+`authelia` and `n8n`. R3's PR 5 deletes the refusal with the constant.
 
 ## Stub output is never published
 

@@ -39,7 +39,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 import enum
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -50,7 +50,7 @@ from lib.ansible_inventory import K8S_HOST
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.cluster import DEFERRED_SUFFIX, RenderedTag, render_tag
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS
+from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS, PinnedFact
 
 SENTINEL_PREFIX = "HOMELAB_SECRET__"
 SENTINEL_SUFFIX = "__END"
@@ -113,7 +113,7 @@ def placeholder_vars(keys: Iterable[str]) -> dict[str, object]:
 
     The pinned live-read facts take the values the stub file holds, so a round trip sees the
     same value on both sides. Until R3 deletes `PINNED_LIVE_FACTS`, no tag that reads one may
-    be published; R2's PR 2 adds that refusal.
+    be published, and `pinned_fact_refusals` refuses one marked `owner: flux`.
 
     Raises:
         ValueError: a pinned fact shares a name with a secret key, so one value would
@@ -125,6 +125,84 @@ def placeholder_vars(keys: Iterable[str]) -> dict[str, object]:
         raise ValueError(f"{clashes} are both secret keys and pinned live-read facts")
     overrides.update({name: fact.value for name, fact in PINNED_LIVE_FACTS.items()})
     return overrides
+
+
+def pinned_fact_readers(facts: dict[str, PinnedFact] | None = None) -> frozenset[str]:
+    """The tags that read a pinned live-read fact, as `PINNED_LIVE_FACTS` records them.
+
+    R1's reader test holds those records to the templates, so this set is derived nowhere
+    else.
+    """
+    facts = PINNED_LIVE_FACTS if facts is None else facts
+    return frozenset(tag for fact in facts.values() for tag in fact.readers)
+
+
+def pinned_fact_refusals(
+    tags: Iterable[str],
+    flux_owned: Iterable[str],
+    facts: dict[str, PinnedFact] | None = None,
+) -> list[tuple[str, str]]:
+    """Each `(tag, fact)` where a requested tag marked `owner: flux` reads a pinned fact.
+
+    A pinned value renders a valid object that fails logins or backups, and only a flux-owned
+    tag is published, so a placeholder render refuses that combination (R2 *Mode selection*).
+    R3's PR 5 deletes this refusal with `PINNED_LIVE_FACTS`.
+    """
+    facts = PINNED_LIVE_FACTS if facts is None else facts
+    owned = set(tags) & set(flux_owned)
+    return sorted(
+        (tag, name)
+        for name, fact in facts.items()
+        for tag in fact.readers
+        if tag in owned
+    )
+
+
+def references(text: str) -> Iterator[str]:
+    """The body of every `${...}` Flux reads as a reference in `text`.
+
+    Flux's parser treats `$$` as an escape and drops one `$`, and opens a reference only on
+    `${` (fluxcd/pkg `envsubst/parse`), so each `$$` pairs before a `${` is looked for.
+    """
+    i, end = 0, len(text)
+    while i < end:
+        if text[i] != "$":
+            i += 1
+        elif text.startswith("$$", i):
+            i += 2
+        elif text.startswith("${", i):
+            close = text.find("}", i + 2)
+            close = end if close < 0 else close
+            yield text[i + 2 : close]
+            i = close + 1
+        else:
+            i += 1
+
+
+def documents(text: str) -> list[tuple[str, str]]:
+    """Each YAML document of a rendered file as `(Kind/name, text)`, in order."""
+    pieces, current = [], []
+    for line in text.splitlines(keepends=True):
+        if line.rstrip() == "---":
+            pieces.append("".join(current))
+            current = []
+        else:
+            current.append(line)
+    pieces.append("".join(current))
+    found = []
+    for piece in pieces:
+        if not piece.strip():
+            continue
+        try:
+            obj = yaml_fast.safe_load(piece)
+        except yaml.YAMLError:
+            obj = None
+        if isinstance(obj, dict):
+            meta = obj.get("metadata") or {}
+            found.append((f"{obj.get('kind')}/{meta.get('name')}", piece))
+        else:
+            found.append(("no document", piece))
+    return found
 
 
 class Sentinels:
