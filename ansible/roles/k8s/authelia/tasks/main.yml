@@ -228,11 +228,10 @@
   tags: [config]
   # Hashing starts a pod, so a no-mutation run skips it (#4569). The read-back still covers the
   # common case. A user with no digest in the live Secret, or any user under
-  # `-e authelia_k8s_rehash_passwords=true`, reaches here undefined. Failing the assert below
-  # would stop the hourly render-records dry run at authelia and leave every later service
-  # unrecorded. The placeholder renders as a changed password, which is what the real run
-  # would apply. It is not an argon2 digest, so the server-side dry run is the only place
-  # it can reach.
+  # `-e authelia_k8s_rehash_passwords=true`, reaches here undefined. The placeholder renders as
+  # a changed password, which is what the real run would apply. It is not an argon2 digest, so
+  # the digest assert below refuses it on an unstubbed dry run: such a run fails at authelia
+  # rather than rendering a value no real run could apply. Only a stubbed run skips that assert.
   ansible.builtin.set_fact:
     authelia_password_hash: "{{ authelia_password_hash | default('dry-run-placeholder-operator', true) }}"
     authelia_claude_password_hash: "{{ authelia_claude_password_hash | default('dry-run-placeholder-claude-ui', true) }}"
@@ -240,22 +239,39 @@
   when: k8s_no_mutate | bool
   no_log: true
 
-- name: Fail if no password hash could be obtained
+- name: Fail if a stored Authelia digest is malformed
   tags: [config]
-  # Without this the template renders an empty password and Authelia starts with an account
-  # nobody can log into — a green deploy with a locked portal. Every managed user is asserted: a
-  # missing claude-ui digest locks out the headless UI tier the same way, and it would
-  # otherwise surface much later as a login the browser cannot complete.
+  # Every digest a managed user's `password:` line renders must be the PHC form of the hashing
+  # block in templates/config-secret.yaml.j2: argon2id, m=65536, t=3, p=4, a 16-byte salt (22
+  # base64 characters) and a 32-byte key (43). That refuses an empty value, a `Digest: ` prefix,
+  # surrounding whitespace, a pasted plaintext and a digest minted with other parameters, before
+  # the apply, so a bad value stops the play instead of breaking Authelia's load under
+  # `Recreate`. Two users sharing one digest share one password, so that fails too. `\Z`, not
+  # `$`, ends the pattern: Python's `$` also matches before a trailing newline.
+  # DECIDED: guarded on `homelab_secret_stubs` alone, never on `k8s_dry_run`. A stubbed shadow
+  # run feeds this `stub-` strings, which are not PHC-shaped. An ordinary dry run reads the live
+  # digests and is meant to check them, which is how the operator proves the pattern accepts
+  # them. docs/target-architecture/render/r3-remove-live-reads.md, Design, has the reasoning;
+  # ansible/tests/services/test_authelia_digest_assert.py holds the guard.
+  vars:
+    authelia_k8s_digest_pattern: '^[$]argon2id[$]v=19[$]m=65536,t=3,p=4[$][A-Za-z0-9+/]{22}[$][A-Za-z0-9+/]{43}\Z'
+    authelia_k8s_managed_digests: >-
+      {{ [authelia_password_hash | default('')]
+         + ([authelia_claude_password_hash | default('')]
+            if authelia_k8s_manage_claude_user | bool else [])
+         + ([authelia_agent_password_hash | default('')]
+            if authelia_k8s_manage_agent_user | bool else []) }}
   ansible.builtin.assert:
     that:
-      - authelia_password_hash | default('') | length > 0
-      - not authelia_k8s_manage_claude_user | bool
-        or authelia_claude_password_hash | default('') | length > 0
-      - not authelia_k8s_manage_agent_user | bool
-        or authelia_agent_password_hash | default('') | length > 0
+      - authelia_k8s_managed_digests | reject('match', authelia_k8s_digest_pattern) | list | length == 0
+      - authelia_k8s_managed_digests | unique | list | length == authelia_k8s_managed_digests | length
     fail_msg: >-
-      Could not read or generate an Authelia password hash. Check that the authelia-hash
-      pods could pull {{ authelia_k8s_image }}.
+      A stored Authelia digest is not an argon2id digest with the hashing block's parameters,
+      or two managed users share one. Check that the authelia-hash pods could pull
+      {{ authelia_k8s_image }}.
+    quiet: true
+  when: not (homelab_secret_stubs | default(false) | bool)
+  no_log: true
 
 # The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
 - name: Deploy Authelia to the cluster

@@ -245,18 +245,19 @@ def test_the_hash_read_back_is_keyed_by_username():
     assert "authelia_k8s_existing_users.get(authelia_k8s_agent_user" in tasks
 
 
-def test_a_dry_run_with_no_digest_renders_a_placeholder_instead_of_failing():
-    """A no-mutation run skips the hash pods (#4569), so a missing digest must not reach the assert.
+def test_a_dry_run_with_no_digest_stands_in_a_placeholder_before_the_digest_assert():
+    """A no-mutation run skips the hash pods (#4569), so a missing digest gets a placeholder.
 
-    Failing there stopped the hourly render-records dry run at authelia, leaving every later
-    service unrecorded, whenever a user was newly managed or a rehash was asked for.
+    Before the digest assert, an empty digest failed the hourly render-records dry run at
+    authelia whenever a user was newly managed or a rehash was asked for. The placeholder is
+    not PHC-shaped, so the digest assert after it still refuses it on an unstubbed dry run.
     """
     tasks = load_tasks(ROLE / "tasks" / "main.yml")
     names = [str(t.get("name", "")) for t in tasks]
     stand_in = names.index(
         "Stand in a placeholder digest for each user a dry run could not hash"
     )
-    assert stand_in < names.index("Fail if no password hash could be obtained")
+    assert stand_in < names.index("Fail if a stored Authelia digest is malformed")
     task = tasks[stand_in]
     assert task["when"] == "k8s_no_mutate | bool"
 
