@@ -164,7 +164,16 @@ def check_part(module_file: str, tmp_path: Path, record_property) -> None:
     assert set(tags) <= rendered, f"never rendered {sorted(set(tags) - rendered)}"
     assert not (differences := tree_differences(*outs)), "\n".join(differences)
 
-    lines = [digest_line(n, h) for n, h in directory_digests(outs[0]).items()]
+    report_digests(outs[0], module, record_property)
+
+
+def report_digests(root: Path, module: str, record_property) -> None:
+    """Write one digest line per directory under `root/cluster/` to CI's summary and log.
+
+    The job summary gets them when `GITHUB_STEP_SUMMARY` is set. When `GITHUB_SHA` is set,
+    `record_property` carries them to `log_digest_lines`, which prints them to the job log.
+    """
+    lines = [digest_line(n, h) for n, h in directory_digests(root).items()]
     write_summary(module, lines)
     if sha := os.environ.get("GITHUB_SHA"):
         record_property(DIGEST_PROPERTY, {"sha": sha, "module": module, "lines": lines})
