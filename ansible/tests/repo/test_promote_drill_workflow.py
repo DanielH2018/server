@@ -169,6 +169,7 @@ done
 case "$url" in
   *"/token?"*) key=TOKEN ;;
   *"/referrers/"*) key=REFERRERS ;;
+  *"/manifests/sha256:"*) key=SUBJECT ;;
   *.sig) key=SIG ;;
   *"/manifests/sha256-"*) key=FALLBACK ;;
   *) echo "fake curl: unexpected $url" >&2; exit 2 ;;
@@ -221,6 +222,10 @@ REGISTRY_CASES = {
         {"FAKE_SIG_STATUS": "401"},
         "answered HTTP 401",
     ),
+    "a token that cannot see the drill digest": (
+        {"FAKE_SUBJECT_STATUS": "404"},
+        "own manifest answered HTTP 404",
+    ),
     "a digest cosign verifies": (
         {"FAKE_COSIGN_RC": "0"},
         "cosign verified the drill digest",
@@ -244,6 +249,7 @@ def test_the_refusal_step_passes_only_on_a_registry_that_holds_no_signature(
         "GITHUB_TOKEN": "fake",
         "FAKE_TOKEN_STATUS": "200",
         "FAKE_TOKEN_BODY": '{"token":"fake"}',
+        "FAKE_SUBJECT_STATUS": "200",
         **answers,
     }
     run = _step(workflow["jobs"]["publish"], "drill-refuses")["run"]

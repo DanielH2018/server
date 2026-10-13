@@ -267,6 +267,14 @@ jobs:
           index=application/vnd.oci.image.index.v1+json
           hex="${DIGEST#sha256:}"
 
+          # Every 404 below reads as "nothing there", which is true only if this token can
+          # see the drill digest at all, so the step reads that first.
+          status="$(fetch "manifests/$DIGEST" application/vnd.oci.image.manifest.v1+json)"
+          if [ "$status" != 200 ]; then
+            echo "::error::the drill digest's own manifest answered HTTP $status, so a 404 below would prove nothing"
+            exit 1
+          fi
+
           status="$(fetch "referrers/$DIGEST" "$index")"
           where="the referrers API"
           if [ "$status" = 404 ]; then
