@@ -256,6 +256,47 @@
     quiet: true
   when: manifests_prune | bool
 
+# The standalone-value guard (target slice R2, docs/homelab-render.md). A key in this role's
+# row of `files/standalone_secret_keys.json` stands alone in a field of its render, as
+# `main: ${domain}` does. Under Flux such a value loses the template's quotes and is typed by
+# its text, so `0123`, `yes` or `1e3` would stop being a string. These two tasks refuse such a
+# value now, while Ansible still writes it, so the deploy stops before anything renders and
+# the live objects keep their old values. `scripts/renderer/standalone_map.py` writes the map,
+# and a test in scripts/renderer/tests/ holds it equal to the render.
+#
+# The first task reads the decrypted values, so it runs under `no_log` and keeps key names
+# only. A map that is missing or does not parse fails it, and so the deploy, with its error
+# censored. The second prints those names and never a value. Both are `always`, so no tag
+# selection renders past them. ENFORCED by ansible/tests/k8s/test_standalone_guard_tasks.py.
+- name: Find the standalone secret values Flux would retype for {{ manifests_service }}
+  tags: [always]
+  no_log: true
+  vars:
+    manifests_standalone_keys: >-
+      {{ (lookup('ansible.builtin.file',
+                 playbook_dir ~ '/roles/k8s/manifests/files/standalone_secret_keys.json')
+          | from_json).get(manifests_service, []) }}
+  ansible.builtin.set_fact:
+    # '' for an undefined key, which the filter refuses, so a key the loaded secrets lack is
+    # refused by name.
+    manifests_standalone_refused: >-
+      {{ manifests_standalone_keys | homelab_standalone_refused(
+         query('ansible.builtin.vars', *manifests_standalone_keys, default='')) }}
+
+- name: Refuse a standalone secret value that Flux would retype for {{ manifests_service }}
+  tags: [always]
+  ansible.builtin.assert:
+    that:
+      - (manifests_standalone_refused | length) == 0
+    fail_msg: >-
+      {{ manifests_service }} renders these secret keys alone in a field, and each value is
+      undefined or would not stay the same string under Flux's substitution:
+      {{ manifests_standalone_refused | join(', ') }}. Nothing was rendered or applied. As
+      R2's Open question 13 rules (docs/target-architecture/render/r2-secret-placeholders.md),
+      rotate each value to one that stays a string, or move the key into a SOPS-encrypted
+      Secret of its own; docs/homelab-render.md has the guard.
+    quiet: true
+
 - name: Create a throwaway render directory for {{ manifests_service }}
   # `always`, because manifests_dest_dir is read by BOTH config-tagged tasks (the renders) and
   # the deploy-tagged apply, and neither tag alone survives every documented invocation. Tags

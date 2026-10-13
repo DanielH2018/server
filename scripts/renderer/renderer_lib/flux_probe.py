@@ -14,9 +14,13 @@ same pinned binary, and a bump of the pin that changes one fails here first:
 - a placeholder for a variable absent from `postBuild.substitute` fails the build under
   `--strict-substitute`;
 - a `stringData` value written `"${probe_n}"`, built once with `probe_n=0123` and once with
-  `probe_n=true`, comes back as the YAML type `EXPECTED_TYPES` records.
+  `probe_n=true`, comes back as the YAML type `EXPECTED_TYPES` records;
+- the standalone-value guard's resolver, `scripts/lib/plain_scalar.py:refused`, refuses every
+  `RESOLVER_CORPUS` value that the same field does not return as the identical string. It
+  passes every other value but those in `FLUX_KEEPS_BUT_REFUSED`, which it refuses by design.
 
-`--red-proof` adds one expected output that no fixture yields, so a working probe must fail.
+`--red-proof` adds one expected output that no fixture yields, and reads
+`FLUX_KEEPS_BUT_REFUSED` as empty, so a working probe must fail twice.
 The values are fixture strings, never a secret. `docs/homelab-render.md` records the measured
 behaviours.
 """
@@ -30,8 +34,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from lib import yaml_fast
-
+from lib import plain_scalar, yaml_fast
 from lib.exit_codes import SHADOW_DIFFERENT, SHADOW_OK
 from renderer.renderer_lib.cluster import KUSTOMIZATION, kustomization_text
 from renderer.renderer_lib.roundtrip import (
@@ -70,6 +73,38 @@ RED_PROOF_KEY = "red-proof-absent"
 # without asserting.
 EXPECTED_TYPES: dict[str, str | None] = {"0123": "int", "true": "bool"}
 
+# The values the probe builds as a standalone `stringData` field to hold the guard's resolver
+# to the pinned CLI. The five values the plan measured, the integer, null and timestamp forms
+# around them, `08`, `1.e3` and `y`, which only the go-yaml port types, and three strings the
+# CLI keeps. Measured against v2.9.6 on daniel-server on 2026-10-13: `2001-12-14` comes back
+# as the string `2001-12-14T00:00:00Z`, so a value counts as kept only when it comes back as
+# the identical string, and `.inf` fails the build.
+RESOLVER_CORPUS = (
+    "0123",
+    "true",
+    "yes",
+    "1e3",
+    "null",
+    "0x1F",
+    "0o17",
+    "1:20",
+    "2001-12-14",
+    "~",
+    "on",
+    ".inf",
+    "",
+    "08",
+    "1.e3",
+    "y",
+    "abc",
+    "a.b-c.example",
+    "0123a",
+)
+# The corpus values the CLI keeps and the resolver still refuses. PyYAML's YAML 1.1 reader
+# types a sexagesimal number such as `1:20` as the integer 80, where go-yaml v2 reads a
+# string. The resolver refuses on the union of the two readers, so it fails closed here.
+FLUX_KEEPS_BUT_REFUSED = frozenset({"1:20"})
+
 
 def _configmap(name: str, data: dict[str, str]) -> str:
     # Written by hand, double-quoted, as a template writes them: no value holds a quote or a
@@ -81,7 +116,7 @@ def _configmap(name: str, data: dict[str, str]) -> str:
     )
 
 
-TYPES_SECRET = (
+TYPES_FIXTURE_MANIFEST = (
     "apiVersion: v1\nkind: Secret\nmetadata:\n  name: probe-types\n  namespace: probe\n"
     'type: Opaque\nstringData:\n  probe_n: "${probe_n}"\n'
 )
@@ -98,7 +133,7 @@ def write_fixtures(root: Path) -> None:
         ),
         PLAIN: _configmap(PLAIN, {k: v for k, (v, _) in PLAIN_CASES.items()}),
         STRICT: _configmap(STRICT, {"undefined": "${probe_undefined}"}),
-        TYPES: TYPES_SECRET,
+        TYPES: TYPES_FIXTURE_MANIFEST,
     }
     for name, text in fixtures.items():
         directory = root / name
@@ -214,4 +249,29 @@ def probe(
             report.fail(f"{measured}, not {expected}")
         else:
             report.ok(measured)
+
+    keeps_but_refused = frozenset() if red_proof else FLUX_KEEPS_BUT_REFUSED
+    for value in RESOLVER_CORPUS:
+        result = _built(root, TYPES, {TYPE_VAR: value}, flux, run)
+        got = (
+            _data(result.stdout, "Secret").get(TYPE_VAR, "(missing)")
+            if result.returncode == 0
+            else f"(build exited {result.returncode})"
+        )
+        kept = isinstance(got, str) and got == value
+        refused = plain_scalar.refused(value)
+        line = (
+            f"resolver {value!r}: the CLI returned {got!r}, the resolver "
+            f"{'refuses' if refused else 'passes'} it"
+        )
+        if not kept and not refused:
+            report.fail(f"{line}, so the guard would pass a value Flux retypes")
+        elif kept and refused and value not in keeps_but_refused:
+            report.fail(f"{line}, and it is not in FLUX_KEEPS_BUT_REFUSED")
+        elif not kept and value in keeps_but_refused:
+            report.fail(
+                f"{line}; the CLI no longer keeps it, so FLUX_KEEPS_BUT_REFUSED is stale"
+            )
+        else:
+            report.ok(line)
     return report

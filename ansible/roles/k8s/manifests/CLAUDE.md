@@ -114,3 +114,11 @@ honest: the apply and dry-run guards, the rollout gates, the prune opt-outs, the
 pruned-directory reservation, the checksum census and the stamp-ordering pair. A role rolling a
 workload outside this one (`observability`, `pihole`, `prowlarr`) is covered by the inline-gate
 test, not exempted.
+
+**The standalone-value guard runs before every render** (target slice R2). Its first task,
+under `no_log`, names each key in this service's row of
+`ansible/roles/k8s/manifests/files/standalone_secret_keys.json` whose value is undefined or
+would not stay the same string once Flux substitutes it. Its assert then fails the deploy and
+prints those names, never a value. Nothing has rendered or applied, so the live objects keep
+their old values. A map that is missing or does not parse also fails the first task, with its
+error censored. `docs/homelab-render.md` has the remedy and the command that regenerates the map.
