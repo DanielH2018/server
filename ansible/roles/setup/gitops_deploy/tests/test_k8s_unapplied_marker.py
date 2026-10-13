@@ -35,6 +35,7 @@ LATER = "c" * 40
 
 def _tools(**kwargs) -> DeployTools:
     kwargs.setdefault("digest_provable", lambda _repo, _roles: set())
+    kwargs.setdefault("digest_covers", lambda _repo, _items: set())
     # Not the host's records: a record write test reads one only where it scripts it.
     kwargs.setdefault("release_commit", lambda _svc: None)
     return DeployTools(discord_post=lambda _webhook, _content: True, **kwargs)

@@ -44,8 +44,9 @@ from lib import yaml_fast
 # to a host, the cluster or an API.
 PURE_MODULES = frozenset({"set_fact", "assert", "debug", "fail", "meta"})
 
-# Task keywords, which sit beside the one module key a task carries.
-_KEYWORDS = frozenset(
+# Task keywords, which sit beside the one module key a task carries. `digest_covers.py` reads
+# the same set to find a play file's assert, fail and debug tasks.
+TASK_KEYWORDS = frozenset(
     {
         "name", "when", "tags", "vars", "loop", "loop_control", "register", "no_log",
         "changed_when", "failed_when", "become", "become_user", "delegate_to", "run_once",
@@ -75,7 +76,7 @@ def _tasks_provable(tasks, tasks_dir: Path, seen: set[Path]) -> bool:
             ):
                 return False
             continue
-        modules = [k for k in task if k not in _KEYWORDS]
+        modules = [k for k in task if k not in TASK_KEYWORDS]
         if len(modules) != 1:
             return False
         key = modules[0]
