@@ -1,6 +1,6 @@
 # R1 — Shadow render with zero diff
 
-Status: IN PROGRESS
+Status: DONE
 
 PR 1a, the stub module and the stub file: [#4700](https://github.com/DanielH2018/server/pull/4700).
 
@@ -23,6 +23,8 @@ PR 7, the trailing-newline class, rendered with the template module's final newl
 PR 8, the out-of-render census row and the two determinism modules: [#4861](https://github.com/DanielH2018/server/pull/4861).
 
 PR 8b, the digest lines in the CI job log and the determinism check split by four: [#4872](https://github.com/DanielH2018/server/pull/4872).
+
+The exit criterion held on 2026-10-13 at X = `410a24fb1`. The operator's shadow pair printed `58 tags, 320 files, 0 differences`, and `stubcheck` printed `320 paired files, 0 lacking a stub token`. Master's push run [38418479795](https://github.com/DanielH2018/server/actions/runs/38418479795) passed the four determinism modules and the census row, and `shadow_diff.py digest` on daniel-box matched its 62 digest lines.
 
 Depends on: none
 
