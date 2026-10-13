@@ -107,8 +107,8 @@
   # Observability's restart gates on the per-file `observability_changed_secret_files`, so every
   # one of its entries declares `restart_on: []`; pihole marks pihole-2 `rolled_by_role: true`,
   # above. Flux's entries declare `restart_on: []` too, because nothing restarts them. An entry
-  # here reaches `rollouts[]` and nothing else -- not the shared restart, not the batch drain -- which is
-  # exactly what those roles opted out of.
+  # here reaches `rollouts[]` and nothing else -- not the shared restart, not the batch drain --
+  # which is exactly what those roles opted out of.
   ansible.builtin.set_fact:
     manifests_release_rollouts: >-
       {{ manifests_release_rollouts + [{
