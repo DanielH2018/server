@@ -252,6 +252,13 @@ are decided apart. A directory's key set is the keys whose sentinel its render h
   Flux applies it with no `postBuild`, so it never reads that `$` as syntax, and an escape
   there would reach the cluster as a literal `$${`.
 
+- **A document that opts out keeps its text, even in a directory that substitutes.**
+  Flux's Kustomize controller skips substitution on a resource whose label or annotation
+  `kustomize.toolkit.fluxcd.io/substitute` is `disabled`, so passes 2 and 3 skip it, and
+  rules 1 to 4 read none of its references. The Flux CRDs in the `flux` tag carry it, and
+  the Kustomization CRD's description holds a literal `${`. Escaped, that `${` came back
+  from the pinned CLI as `$${`. A sentinel left in such a document fails rule 2.
+
 The key set is the one source for every reader that asks whether a directory substitutes,
 and each reads it in process from `PlaceholderRender.key_sets`: the escape, the round trip,
 the five secret rules, and later D2's `postBuild` writer. pihole substitutes, because its
@@ -513,8 +520,8 @@ that fails logins or backups, and only a tag marked `owner: flux` (C4) is publis
 `cluster` without `--secret-stubs` exits 1, before it renders, when a requested tag is marked
 `owner: flux` and reads a pinned fact. The message names the tag and the fact.
 `placeholders.py:pinned_fact_refusals` reads the reader tags `PINNED_LIVE_FACTS` records and
-derives them nowhere else, so R3's PRs shrink the refusal as they drop facts. The readers are
-`authelia` and `n8n`. R3's PR 5 deletes the refusal with the constant.
+derives them nowhere else, so R3's PRs shrink the refusal as they drop facts. The one reader is
+`authelia`. R3's PR 5 deletes the refusal with the constant.
 
 ## Stub output is never published
 

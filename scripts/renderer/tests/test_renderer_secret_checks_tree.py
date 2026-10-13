@@ -112,7 +112,7 @@ def test_the_refusal_reads_the_reader_tags_pinned_live_facts_records():
     assert pinned_fact_readers() == readers
     assert readers if PINNED_LIVE_FACTS else not readers
     # The members at this commit. R3's PRs retire each as they drop its facts.
-    assert pinned_fact_readers() == {"authelia", "n8n"}
+    assert pinned_fact_readers() == {"authelia"}
 
 
 FIXTURE_FACTS = {

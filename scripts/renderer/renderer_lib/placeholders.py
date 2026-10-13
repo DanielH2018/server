@@ -179,6 +179,28 @@ def references(text: str) -> Iterator[str]:
             i += 1
 
 
+# A line that separates two YAML documents, kept whole by `re.split`.
+DOCUMENT_SEPARATOR = re.compile(r"(^---[ \t]*(?:\n|$))", re.MULTILINE)
+# kustomize-controller skips substitution on a resource whose label or annotation of this
+# name is `disabled`. The Flux CRDs in the `flux` tag carry it.
+SUBSTITUTE_OPT_OUT = "kustomize.toolkit.fluxcd.io/substitute"
+
+
+def substitution_disabled(doc: str) -> bool:
+    """Whether Flux skips substitution on the resource `doc`, by its label or annotation."""
+    if SUBSTITUTE_OPT_OUT not in doc:
+        return False
+    try:
+        obj = yaml_fast.safe_load(doc)
+    except yaml.YAMLError:
+        return False
+    meta = (obj.get("metadata") if isinstance(obj, dict) else None) or {}
+    return any(
+        (meta.get(field) or {}).get(SUBSTITUTE_OPT_OUT) == "disabled"
+        for field in ("labels", "annotations")
+    )
+
+
 def documents(text: str) -> list[tuple[str, str]]:
     """Each YAML document of a rendered file as `(Kind/name, text)`, in order."""
     pieces, current = [], []
@@ -256,10 +278,19 @@ class Sentinels:
         return frozenset(found)
 
     def finish(self, text: str) -> str:
-        """Passes 2 and 3 on one file of a directory that substitutes."""
-        escaped = self._escapable.sub("$$", text)
-        return self._sentinel.sub(
-            lambda m: "${" + self._key_of[m.group(0)] + "}", escaped
+        """Passes 2 and 3 on one file of a directory that substitutes.
+
+        A document Flux does not substitute keeps its text, because Flux would never read
+        an escape there. A sentinel left in it fails rule 2.
+        """
+        return "".join(
+            piece
+            if DOCUMENT_SEPARATOR.fullmatch(piece) or substitution_disabled(piece)
+            else self._sentinel.sub(
+                lambda m: "${" + self._key_of[m.group(0)] + "}",
+                self._escapable.sub("$$", piece),
+            )
+            for piece in DOCUMENT_SEPARATOR.split(text)
         )
 
 

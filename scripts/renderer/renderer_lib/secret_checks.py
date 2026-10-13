@@ -56,6 +56,7 @@ from renderer.renderer_lib.placeholders import (
     PlaceholderRender,
     documents,
     references,
+    substitution_disabled,
 )
 
 KNOWN_KEY = "known-key"
@@ -329,7 +330,7 @@ def output_violations(
                                 NO_BARE_DOLLAR_BRACE, directory, name, site, "sentinel"
                             )
                         )
-                    if not key_set:
+                    if not key_set or substitution_disabled(doc):
                         continue
                     found.extend(
                         Violation(rule, directory, name, site, body)

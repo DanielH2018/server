@@ -70,7 +70,12 @@ out = []
 for resource in resources:
     for doc in yaml.safe_load_all((path / resource).read_text()):
         text = yaml.safe_dump(doc, sort_keys=True, width=4096)
-        if values is not None:
+        meta = doc.get("metadata") or {{}}
+        opted_out = "disabled" in (
+            (meta.get("labels") or {{}}).get("kustomize.toolkit.fluxcd.io/substitute"),
+            (meta.get("annotations") or {{}}).get("kustomize.toolkit.fluxcd.io/substitute"),
+        )
+        if values is not None and not opted_out:
             def sub(m):
                 if m.group(0) == "$$":
                     return "$"
@@ -192,6 +197,16 @@ def test_observability_with_no_annotation_left_out_is_flagged(flux_on_path, tmp_
         ln.startswith("observability: Deployment/observability/") and "differs" in ln
         for ln in report.differences
     ), report.differences
+
+
+def test_the_flux_crds_that_opt_out_of_substitution_are_clean(
+    flux_on_path, tmp_path, capsys
+):
+    # The CRDs carry `kustomize.toolkit.fluxcd.io/substitute: disabled`, and the Kustomization
+    # CRD's description holds a literal `${`. An escape there would come back as `$${`.
+    out = tmp_path / "rt"
+    assert _main("roundtrip", "--out", str(out), "--role", "flux") == 0
+    assert capsys.readouterr().out.count(" 0 differences, ") == 2
 
 
 def test_a_known_violation_document_left_out_is_clean(flux_on_path, tmp_path, capsys):
