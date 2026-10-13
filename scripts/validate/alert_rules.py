@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the alert plane's inputs with the tools that load them: promtool and amtool.
+"""Check the alert plane's inputs with the tools that load them, promtool and amtool, and pint.
 
 A `prometheus.yml` that Prometheus rejects at startup leaves the `Recreate` Deployment with no
 running Prometheus, and monitor-bridge reads that Prometheus every cycle. Neither `check-yaml`
@@ -18,6 +18,10 @@ the render `probe.py health` uses, with secrets stubbed. It extracts each render
   which amtool does not open.
 - `promtool check rules` on every rule file in the role's `files/rules/`.
 - `promtool test rules` on every test file in the role's `tests/rules/`.
+- `pint --offline lint` on the role's `files/rules/`, with `scripts/validate/pint/offline.hcl`.
+  pint checks what promtool does not, such as a required label's value. `--offline` skips every
+  check that queries a Prometheus, because CI cannot reach the cluster;
+  `scripts/validate/pint/live.hcl` is the by-hand run that does.
 
 The rendered `prometheus.yml` holds no stubbed value, so the stubbing changes nothing promtool
 reads. The stubbed `alertmanager.yml` reads `email` as a placeholder address, which amtool
@@ -40,9 +44,9 @@ take away by rewriting the expression:
   rewritten outside its raw block is still required;
 - `{{ .Status }}`, the Watchdog's payload.
 
-THE TOOLS. `scripts/validate/alert_tools.sh` provisions both at the role's image tags into
-`alert-tools/` under the git common dir, which every worktree of a clone shares, and every
-tool call goes through it.
+THE TOOLS. `scripts/validate/alert_tools.sh` provisions promtool and amtool at the role's image
+tags, and pint at the version it pins, into `alert-tools/` under the git common dir, which
+every worktree of a clone shares. Every tool call goes through it.
 
 `--prove-red` runs each tool against `PROOFS`, the fixtures in
 `scripts/validate/tests/fixtures/alert_rules/`. It exits 0 only when every tool accepts its
@@ -80,6 +84,18 @@ ROLE = "observability"
 ROLE_DIR = K8S_ROLES / ROLE
 TOOLS = REPO / "scripts" / "validate" / "alert_tools.sh"
 FIXTURES = REPO / "scripts" / "validate" / "tests" / "fixtures" / "alert_rules"
+PINT_OFFLINE = REPO / "scripts" / "validate" / "pint" / "offline.hcl"
+# pint's arguments before the path it lints. INFO lines go to stderr and the colour codes would
+# land in the problem text, so the run is quiet and plain.
+PINT_ARGS = (
+    "--no-color",
+    "--log-level",
+    "warn",
+    "--offline",
+    "--config",
+    str(PINT_OFFLINE),
+    "lint",
+)
 
 # Each rendered file the tool phase checks: the template that renders it, and the kind, name
 # and data key of the object that carries it.
@@ -118,7 +134,7 @@ class Proof:
     """One tool's red proof: a fixture it must accept and one it must reject.
 
     Attributes:
-        tool: `promtool` or `amtool`.
+        tool: `promtool`, `amtool` or `pint`.
         args: The tool's arguments, ending before the fixture path.
         good: The fixture the tool must accept.
         bad: The fixture the tool must reject.
@@ -161,6 +177,13 @@ PROOFS = (
         "good-prometheus.yml",
         "bad-prometheus.yml",
         "not found in type",
+    ),
+    Proof(
+        "pint",
+        PINT_ARGS,
+        "good-rules.yaml",
+        "bad-pint-rules.yaml",
+        "`severity` label is required",
     ),
 )
 
@@ -300,6 +323,7 @@ def tool_checks(
         ["promtool", "test", "rules", str(p)]
         for p in sorted(tests_dir.glob("*.test.yaml"))
     ]
+    checks.append(["pint", *PINT_ARGS, str(rules_dir)])
     return checks
 
 

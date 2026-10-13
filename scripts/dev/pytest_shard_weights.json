@@ -496,6 +496,7 @@
  "ansible/tests/services/test_introskipper_install.py": 0.0,
  "ansible/tests/services/test_jellyfin_plugin_allowlist.py": 0.06,
  "ansible/tests/services/test_jellyfin_plugin_pins_hold_across_a_restart.py": 0.48,
+ "ansible/tests/services/test_k8s_workloads_rule_literals.py": 1.84,
  "ansible/tests/services/test_karakeep_backend_policies.py": 0.0,
  "ansible/tests/services/test_karakeep_public_bypass.py": 0.0,
  "ansible/tests/services/test_karakeep_time_tagger_script.py": 0.0,

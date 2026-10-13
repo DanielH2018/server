@@ -1,0 +1,12 @@
+# Rejected by `pint --offline lint` under scripts/validate/pint/offline.hcl: the alert carries
+# no severity label. promtool accepts it, so only pint can show the config rejects it.
+groups:
+  - name: fixture
+    rules:
+      - alert: FixtureTargetDown
+        expr: up == 0
+        for: 1m
+        labels:
+          service: fixture
+        annotations:
+          summary: A fixture target is down.
