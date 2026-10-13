@@ -174,12 +174,48 @@ def expression_jobs(expr: str) -> list[list[tuple[str, str]]]:
     return selectors
 
 
+# The labels the third `service` source reads from a job's series: `service` itself, and
+# `job`, which the expression's matcher compares with the job's name.
+JOB_SERVICE_LABELS = ("service", "job")
+RELABEL_SECTIONS = ("relabel_configs", "metric_relabel_configs")
+
+
+def relabel_problem(rule: object) -> str | None:
+    """Why one relabel rule can drop or rewrite `service` or `job`, or None.
+
+    Prometheus anchors a relabel regex, so `labeldrop` removes a label its regex matches whole
+    and `labelkeep` removes one it does not. `labelmap` writes labels whose names come from
+    the source label names, so it is refused whatever its regex. Any other action writes only
+    `target_label`.
+    """
+    if not isinstance(rule, dict):
+        return None
+    action = str(rule.get("action", "replace")).lower()
+    regex = str(rule.get("regex", "(.*)"))
+    try:
+        matches = {name: bool(re.fullmatch(regex, name)) for name in JOB_SERVICE_LABELS}
+    except re.error:
+        return f"has a {action} rule whose regex {regex!r} does not compile here"
+    if action == "labelmap":
+        return "has a labelmap rule, which can overwrite service or job"
+    if action == "labeldrop" and any(matches.values()):
+        return f"has a labeldrop rule whose regex {regex!r} drops service or job"
+    if action == "labelkeep" and not all(matches.values()):
+        return f"has a labelkeep rule whose regex {regex!r} drops service or job"
+    if rule.get("target_label") in JOB_SERVICE_LABELS:
+        return f"has a {action} rule that writes {rule['target_label']}"
+    return None
+
+
 def service_jobs(prometheus_yml: str | None) -> dict[str, str | None]:
     """Each scrape job in a rendered `prometheus.yml`, and why its targets fail to carry `service`.
 
     A job maps to None when it has static targets only and every `static_configs` item sets a
     non-empty `service` in its `labels`. A discovered target sets no static label, so a job
-    with any other `*_configs` discovery fails, as does one with no targets.
+    with any other `*_configs` discovery fails, as does one with no targets. A job fails too
+    when a rule in its `relabel_configs` or `metric_relabel_configs` can drop or rewrite
+    `service` or `job` (`relabel_problem`): the static label would not reach the series, and
+    promtool's synthetic input series in condition 3 would not show it.
     """
     try:
         config = yaml_fast.safe_load(prometheus_yml or "") or {}
@@ -197,8 +233,19 @@ def service_jobs(prometheus_yml: str | None) -> dict[str, str | None]:
         static = [
             item for item in job.get("static_configs") or [] if isinstance(item, dict)
         ]
+        relabelled = next(
+            (
+                f"{why} in {section}"
+                for section in RELABEL_SECTIONS
+                for rule in job.get(section) or []
+                if (why := relabel_problem(rule))
+            ),
+            None,
+        )
         if discovered:
             jobs[job["job_name"]] = f"discovers its targets through {discovered[0]}"
+        elif relabelled:
+            jobs[job["job_name"]] = relabelled
         elif not static:
             jobs[job["job_name"]] = "has no static targets"
         elif not all((item.get("labels") or {}).get("service") for item in static):

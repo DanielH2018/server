@@ -42,7 +42,9 @@ literal `service` on this source only when all three conditions hold:
    name the same job. A regex matcher, a selector with no `job` matcher, or two jobs fail.
 2. Every target of that job in the rendered `prometheus.yml` sets `service` in its `labels`.
    A job that discovers its targets sets no static label, so it fails, and so does a job with
-   one target that lacks `service`.
+   one target that lacks `service`. So does a job whose `relabel_configs` or
+   `metric_relabel_configs` can drop or rewrite `service` or `job`, because the static label
+   would then never reach the series.
 3. Every `exp_alerts` entry for the alert in its promtool test lists `service` in
    `exp_labels`. promtool compares whole label sets, so an expression that drops `service`
    fails that case in the tool phase. An aggregation whose `by` omits it, a `without

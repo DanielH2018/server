@@ -146,6 +146,35 @@ def test_an_alert_taking_service_from_its_scrape_job_is_clean(tmp_path):
         ),
         ({"kubernetes_sd_configs": [{"role": "pod"}]}, "through kubernetes_sd_configs"),
         ({"static_configs": []}, "has no static targets"),
+        (
+            {
+                "static_configs": _LABELLED_TARGETS,
+                "metric_relabel_configs": [{"action": "labeldrop", "regex": "serv.*"}],
+            },
+            "has a labeldrop rule whose regex 'serv.*' drops service or job in "
+            "metric_relabel_configs",
+        ),
+        (
+            {
+                "static_configs": _LABELLED_TARGETS,
+                "relabel_configs": [{"target_label": "service", "replacement": ""}],
+            },
+            "has a replace rule that writes service in relabel_configs",
+        ),
+        (
+            {
+                "static_configs": _LABELLED_TARGETS,
+                "relabel_configs": [{"action": "labelkeep", "regex": "job|instance"}],
+            },
+            "has a labelkeep rule whose regex 'job|instance' drops service or job",
+        ),
+        (
+            {
+                "static_configs": _LABELLED_TARGETS,
+                "relabel_configs": [{"action": "labelmap", "regex": "__meta_(.+)"}],
+            },
+            "has a labelmap rule",
+        ),
     ],
 )
 def test_a_job_with_a_target_that_sets_no_service_is_flagged(tmp_path, job, expected):
@@ -153,6 +182,21 @@ def test_a_job_with_a_target_that_sets_no_service_is_flagged(tmp_path, job, expe
     problems = _from_job_problems(tmp_path, job=job)
     assert len(problems) == 1 and expected in problems[0], problems
     assert "carries no service label" in problems[0], problems
+
+
+def test_a_blackbox_style_relabel_that_leaves_service_alone_is_clean(tmp_path):
+    """The multi-target rewrite M4's job needs writes only `__param_*`, `instance` and
+    `__address__`, and a labeldrop elsewhere leaves `service` and `job` in place."""
+    job = {
+        "static_configs": _LABELLED_TARGETS,
+        "relabel_configs": [
+            {"source_labels": ["__address__"], "target_label": "__param_target"},
+            {"source_labels": ["__param_target"], "target_label": "instance"},
+            {"target_label": "__address__", "replacement": "blackbox:9115"},
+        ],
+        "metric_relabel_configs": [{"action": "labeldrop", "regex": "pod|container"}],
+    }
+    assert _from_job_problems(tmp_path, job=job) == []
 
 
 @pytest.mark.parametrize(
