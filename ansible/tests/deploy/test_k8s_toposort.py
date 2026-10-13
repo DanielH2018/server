@@ -22,6 +22,9 @@ holds right up until someone appends a service in the obvious place. Two rules a
       middleware references at request time, not apply time -- so the deploy is green and
       the route 500s later, at whatever hour someone first opens it.
 
+A fourth rule is derived from no template either: each K8S_SORTS_LAST role (netpol-baseline)
+depends on every other entry, so it deploys last wherever the list puts it.
+
 A third edge is declared data, not derived: traefik `depends_on: [crowdsec]` in host_vars,
 because the LAPI machine-credential constraint isn't something a template carries. It is
 also the reverse of the first rule for crowdsec specifically -- crowdsec renders its own
@@ -47,6 +50,7 @@ from _helpers import ANSIBLE, HOST_VARS
 from _k8s_render import rendered_docs
 from toposort import (
     K8S_CRD_EDGE_EXEMPT,
+    K8S_SORTS_LAST,
     build_k8s_dep_map,
     toposort_containers,
 )
@@ -116,10 +120,15 @@ def _derived_traefik_edge(entries: list[dict]) -> set[str]:
 
     Read off the map the deploy builds rather than by re-asking its predicates: a test that
     reimplemented `_entry_is_routed or _role_renders_traefik_crd` would keep agreeing with
-    itself after the derivation changed.
+    itself after the derivation changed. A K8S_SORTS_LAST role depends on every entry,
+    traefik included, for a reason that is not a route, so it is left out.
     """
     dep_map = build_k8s_dep_map(entries, str(ANSIBLE))
-    return {name for name, deps in dep_map.items() if "traefik" in deps}
+    return {
+        name
+        for name, deps in dep_map.items()
+        if "traefik" in deps and name not in K8S_SORTS_LAST
+    }
 
 
 # Roles the derivation claims an edge for while the render shows no Traefik CRD in the role.
@@ -265,7 +274,8 @@ def test_shuffled_list_still_sorts_to_respect_every_edge(host):
 # `depends_on:` edge that carries it. Without the edge these hold by hand position alone,
 # which the stable sort preserves and nothing checks: dropping the edge, or moving the entry,
 # would pass every test above. The value names where the prose lives, so a reader of a red
-# failure knows which doc to reconcile.
+# failure knows which doc to reconcile. netpol-baseline's "after everything" is no pair, and
+# no entry declares it: test_a_sorts_last_role_listed_first_still_sorts_last guards it.
 DOCUMENTED_ORDERINGS = {
     ("mosquitto", "zigbee2mqtt"): "roles/k8s/mosquitto/CLAUDE.md",
     ("media-volume", "sonarr"): "roles/k8s/media-volume/CLAUDE.md",
@@ -314,3 +324,32 @@ def test_documented_pairwise_ordering_survives_an_adversarial_list(host, before,
         f"must not. The `depends_on:` on {after}'s containers_list entry is what carries "
         "that, and it is gone or points elsewhere."
     )
+
+
+def test_a_sorts_last_role_listed_first_still_sorts_last(host):
+    """A K8S_SORTS_LAST role at the head of the list, and a new entry after it, still sort it last.
+
+    The scaffolder appends a new role after the list's last item, which was netpol-baseline
+    (#4833). The hand-ordered list already ends with it and the sort is stable, so only the
+    derived edge can move it back from the head past an entry appended after it.
+    """
+    _path, entries, idx = host
+    last = [name for name in K8S_SORTS_LAST if name in idx]
+    if not last:
+        pytest.skip("host deploys no K8S_SORTS_LAST role")
+    by_name = {c["name"]: c for c in entries}
+    others = [c for c in entries if c["name"] not in K8S_SORTS_LAST]
+    scaffolded = {"name": "widget", "platform": "k8s", "port": 8080}
+    adversarial = [*(by_name[n] for n in last), *others, scaffolded]
+
+    order = _sorted_names(adversarial)
+    assert order[-len(last) :] == last, (
+        f"{last} did not sort last: the order ends {order[-3:]}. build_k8s_dep_map must give "
+        f"each K8S_SORTS_LAST role an edge onto every other entry; the reason is in toposort.py."
+    )
+
+
+def test_every_sorts_last_role_says_why():
+    assert "netpol-baseline" in K8S_SORTS_LAST
+    for name, reason in K8S_SORTS_LAST.items():
+        assert reason.strip(), f"{name} sorts last with no reason given"

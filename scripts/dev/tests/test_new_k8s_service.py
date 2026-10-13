@@ -199,6 +199,28 @@ def test_the_entry_lands_inside_containers_list(tmp_path):
     assert loaded["renovate_agent_enabled"] is True
 
 
+def test_the_entry_lands_ahead_of_a_sorts_last_role_and_its_comment(tmp_path):
+    """netpol-baseline sorts last, so an entry written after it breaks the hand-order test."""
+    box = tmp_path / "daniel-box.yml"
+    box.write_text(
+        "---\ncontainers_list:\n"
+        "  - name: alpha\n    platform: k8s\n"
+        "  # Deploys LAST.\n  - name: netpol-baseline\n    platform: k8s\n"
+        "has_gitops: true\n"
+    )
+    scaffold.append_entry(
+        box, scaffold.entry_lines("widget", 8080, "widget", None, False)
+    )
+    text = box.read_text()
+    loaded = yaml_fast.safe_load(text)
+    assert [c["name"] for c in loaded["containers_list"]] == [
+        "alpha",
+        "widget",
+        "netpol-baseline",
+    ]
+    assert "  # Deploys LAST.\n  - name: netpol-baseline\n" in text
+
+
 def test_appending_to_a_file_with_no_containers_list_is_refused(tmp_path):
     """Control: the walk needs its anchor, and a missing one is not "append at the end"."""
     box = tmp_path / "daniel-box.yml"
