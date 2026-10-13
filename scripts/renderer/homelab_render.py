@@ -95,6 +95,7 @@ def cluster(
     secret_stubs: Path | None,
     flux_owned: Callable[[], set[str]] = flux_owned_tags,
     pinned: dict[str, PinnedFact] | None = None,
+    known: frozenset[secret_checks.Violation] = secret_checks.KNOWN_VIOLATIONS,
 ) -> int:
     """Render `roles`, or every renderable tag, into `out`; return the exit code.
 
@@ -104,10 +105,11 @@ def cluster(
         secret_stubs: The stub file of a stub-mode render, or None for placeholder mode.
         flux_owned: Returns the tags marked `owner: flux`; a test passes fixture tags.
         pinned: The pinned live-read facts the refusal reads, `PINNED_LIVE_FACTS` when None.
+        known: The ratchet the secret checks hold the render to; a test passes another.
     """
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
         return _stub_cluster(out, roles, secret_stubs)
-    return _placeholder_cluster(out, roles, flux_owned, pinned)
+    return _placeholder_cluster(out, roles, flux_owned, pinned, known)
 
 
 def _stub_cluster(out: Path, roles: list[str] | None, secret_stubs: Path) -> int:
@@ -141,6 +143,7 @@ def _placeholder_cluster(
     roles: list[str] | None,
     flux_owned: Callable[[], set[str]],
     pinned: dict[str, PinnedFact] | None,
+    known: frozenset[secret_checks.Violation],
 ) -> int:
     try:
         tags = select_tags(roles)
@@ -160,7 +163,7 @@ def _placeholder_cluster(
             raise RenderRefused(
                 f"every requested tag is in PLACEHOLDER_DEFERRED: {result.skipped}"
             )
-        report = secret_checks.check(result, keys)
+        report = secret_checks.check(result, keys, known)
         if not report.ok():
             print("\n".join(report.lines()), file=sys.stderr)
             print(

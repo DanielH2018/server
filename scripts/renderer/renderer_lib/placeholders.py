@@ -127,16 +127,6 @@ def placeholder_vars(keys: Iterable[str]) -> dict[str, object]:
     return overrides
 
 
-def pinned_fact_readers(facts: dict[str, PinnedFact] | None = None) -> frozenset[str]:
-    """The tags that read a pinned live-read fact, as `PINNED_LIVE_FACTS` records them.
-
-    R1's reader test holds those records to the templates, so this set is derived nowhere
-    else.
-    """
-    facts = PINNED_LIVE_FACTS if facts is None else facts
-    return frozenset(tag for fact in facts.values() for tag in fact.readers)
-
-
 def pinned_fact_refusals(
     tags: Iterable[str],
     flux_owned: Iterable[str],

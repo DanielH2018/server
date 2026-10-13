@@ -19,11 +19,15 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import NamedTuple
 
 import jinja2
 from jinja2 import nodes
+
+from lib.repo_paths import ANSIBLE, K8S_ROLES, SHARED_TPL
 
 TRUTHINESS = "truthiness test in an if"
 CONTAINER = "container literal"
@@ -122,11 +126,7 @@ def judge(
         if isinstance(parent, nodes.Filter):
             if fname == "node":
                 form = f"filter {parent.name}"
-                if parent.name in IDENTITY_FILTERS or (
-                    parent.name == "indent"
-                    and key not in policy.multi_line
-                    and not dynamic
-                ):
+                if _keeps(parent.name, key, policy, dynamic):
                     forms.append(form)
                     continue
                 return Use(key, (*forms, form), True)
@@ -150,10 +150,54 @@ def judge(
             forms.append("container join")
             continue
         accepted = _terminal(parent, fname, macros, dynamic)
+        if accepted == "output":
+            return _through_blocks(key, [*forms, accepted], ancestors, policy, dynamic)
         if accepted:
             return Use(key, (*forms, accepted), False)
         return Use(key, (*forms, _refused_form(parent, fname)), True)
     return Use(key, (*forms, "template root"), True)
+
+
+def _keeps(name: str, key: str, policy: Policy, dynamic: bool) -> bool:
+    """Whether filter `name` leaves the value of `key` intact."""
+    return name in IDENTITY_FILTERS or (
+        name == "indent" and key not in policy.multi_line and not dynamic
+    )
+
+
+def block_filters(ancestors: list[tuple[nodes.Node, str]]) -> list[str]:
+    """The filters every enclosing `{% filter %}` block or filtered `{% set %}` block applies.
+
+    Such a block filters the text its body writes, so an output inside it passes through
+    each of them.
+    """
+    names = []
+    for parent, fname in reversed(ancestors):
+        chain = None
+        if fname == "body" and isinstance(
+            parent, nodes.FilterBlock | nodes.AssignBlock
+        ):
+            chain = parent.filter
+        while isinstance(chain, nodes.Filter):
+            names.append(chain.name)
+            chain = chain.node
+    return names
+
+
+def _through_blocks(
+    key: str,
+    forms: list[str],
+    ancestors: list[tuple[nodes.Node, str]],
+    policy: Policy,
+    dynamic: bool,
+) -> Use:
+    """An output's use, held to the filters of the blocks that enclose it."""
+    for name in block_filters(ancestors):
+        form = f"block filter {name}"
+        if not _keeps(name, key, policy, dynamic):
+            return Use(key, (*forms, form), True)
+        forms.append(form)
+    return Use(key, tuple(forms), False)
 
 
 def _terminal(
@@ -204,6 +248,21 @@ def _refused_form(parent: nodes.Node, fname: str) -> str:
     return type(parent).__name__
 
 
+class Embed(NamedTuple):
+    """An `{% include %}` or `lookup('template', ...)` of another template.
+
+    Attributes:
+        kind: `include` or `lookup`.
+        target: The include's name, or the lookup's path with `playbook_dir/` for that
+            variable. None when the target is not a literal, so it cannot be resolved.
+        use: The embed judged as a use of the keys its target names.
+    """
+
+    kind: str
+    target: str | None
+    use: Use
+
+
 @dataclass
 class TemplateScan:
     """Every use of a secret key in one template.
@@ -212,11 +271,139 @@ class TemplateScan:
         names_key: The tree names a secret key, as a loaded name or a literal `vars` lookup.
         uses: Every use, accepted or refused, in tree order.
         lookup_sites: The argument text of every non-literal `vars` lookup, allowlisted or not.
+        keys: The keys the tree names.
+        embeds: Every include and template lookup.
     """
 
     names_key: bool = False
     uses: list[Use] = field(default_factory=list)
     lookup_sites: list[str] = field(default_factory=list)
+    keys: set[str] = field(default_factory=set)
+    embeds: list[Embed] = field(default_factory=list)
+
+
+def _template_lookup(node: nodes.Node) -> tuple[str | None] | None:
+    """`(path,)` when `node` is `lookup('template', path)`, with `playbook_dir/` for that name."""
+    if not (
+        isinstance(node, nodes.Call)
+        and isinstance(node.node, nodes.Name)
+        and node.node.name == "lookup"
+        and len(node.args) > 1
+        and isinstance(node.args[0], nodes.Const)
+        and node.args[0].value == "template"
+    ):
+        return None
+    path = node.args[1]
+    if isinstance(path, nodes.Const):
+        return (str(path.value),)
+    if (
+        isinstance(path, nodes.Add | nodes.Concat)
+        and len(
+            parts := (
+                [path.left, path.right] if isinstance(path, nodes.Add) else path.nodes
+            )
+        )
+        == 2
+        and isinstance(parts[0], nodes.Name)
+        and parts[0].name == "playbook_dir"
+        and isinstance(parts[1], nodes.Const)
+    ):
+        return ("playbook_dir/" + str(parts[1].value).lstrip("/"),)
+    return (None,)
+
+
+def _embed(
+    node: nodes.Node, ancestors, macros: set[str], policy: Policy
+) -> Embed | None:
+    """The embed `node` is, judged with the forms its output passes through, or None."""
+    if isinstance(node, nodes.Include):
+        name = node.template.value if isinstance(node.template, nodes.Const) else None
+        use = _through_blocks(f"include {name}", ["include"], ancestors, policy, False)
+        return Embed("include", name, use)
+    lookup = _template_lookup(node)
+    if lookup is None:
+        return None
+    (target,) = lookup
+    return Embed(
+        "lookup", target, judge(f"template {target}", ancestors, macros, policy)
+    )
+
+
+def rule5_templates(roles: Path = K8S_ROLES, shared: Path = SHARED_TPL) -> list[Path]:
+    """Every template rule 5 reads: each `.j2` but `*.sh.j2` under the two template roots."""
+    paths = [*roles.glob("*/templates/**/*.j2"), *shared.glob("**/*.j2")]
+    return sorted(p for p in paths if not p.name.endswith(".sh.j2"))
+
+
+def template_tag(path: Path, roles: Path = K8S_ROLES) -> str:
+    """The role a template belongs to, or `shared` for `ansible/templates/`."""
+    return path.relative_to(roles).parts[0] if path.is_relative_to(roles) else "shared"
+
+
+def resolve_embed(
+    path: Path,
+    embed: Embed,
+    roles: Path = K8S_ROLES,
+    shared: Path = SHARED_TPL,
+    playbook_dir: Path = ANSIBLE,
+) -> Path | None:
+    """The template `embed` in `path` reads, as the renderer resolves it, or None.
+
+    An include searches the role's `templates/`, then the shared directory. A template
+    lookup reads `playbook_dir/<path>`, or a relative path under the role's `templates/`.
+    """
+    if embed.target is None:
+        return None
+    own = roles / template_tag(path, roles) / "templates"
+    if embed.kind == "include":
+        candidates = [own / embed.target, shared / embed.target]
+    elif embed.target.startswith("playbook_dir/"):
+        candidates = [playbook_dir / embed.target.removeprefix("playbook_dir/")]
+    else:
+        candidates = [own / embed.target]
+    return next((c for c in candidates if c.is_file()), None)
+
+
+def embed_refusals(
+    scans: dict[Path, TemplateScan],
+    resolve: Callable[[Path, Embed], Path | None],
+    multi_line: frozenset[str],
+) -> list[tuple[Path, str, str]]:
+    """`(template, key, form)` for each key an embed carries through a form that changes it.
+
+    The embedded template's uses are judged in its own file as if it stood alone, so the
+    filters its embedder applies are judged here. An embed of a template that names a key
+    is refused on a refused form, and on `indent` when the key is in `multi_line`. An embed
+    whose target is not a literal is refused on a refused form alone.
+    """
+    named: dict[Path, set[str]] = {}
+
+    def keys_of(path: Path, seen: frozenset[Path] = frozenset()) -> set[str]:
+        if path not in named:
+            found = set(scans[path].keys) if path in scans else set()
+            for embed in scans[path].embeds if path in scans else []:
+                target = resolve(path, embed)
+                if target is not None and target not in seen:
+                    found |= keys_of(target, seen | {path})
+            named[path] = found
+        return named[path]
+
+    refusals = []
+    for path, found in sorted(scans.items()):
+        for embed in found.embeds:
+            target = resolve(path, embed)
+            keys = keys_of(target) if target is not None else {embed.use.key}
+            form = embed.use.forms[-1]
+            if embed.use.refused:
+                refusals.extend(
+                    (path, key, f"embeds through {form}") for key in sorted(keys)
+                )
+            elif {"filter indent", "block filter indent"} & set(embed.use.forms):
+                refusals.extend(
+                    (path, key, "embeds through indent")
+                    for key in sorted(keys & multi_line)
+                )
+    return refusals
 
 
 def scan(
@@ -241,11 +428,15 @@ def scan(
     found = TemplateScan()
 
     def visit(node: nodes.Node, ancestors: list[tuple[nodes.Node, str]]) -> None:
+        embed = _embed(node, ancestors, macros, policy)
+        if embed is not None:
+            found.embeds.append(embed)
         argument = _vars_lookup(node)
         if argument is not None:
             if isinstance(argument, nodes.Const):
                 if argument.value in keys:
                     found.names_key = True
+                    found.keys.add(argument.value)
                     found.uses.append(judge(argument.value, ancestors, macros, policy))
             else:
                 text = lookup_argument(argument)
@@ -256,6 +447,7 @@ def scan(
             return
         if isinstance(node, nodes.Name) and node.ctx == "load" and node.name in keys:
             found.names_key = True
+            found.keys.add(node.name)
             found.uses.append(judge(node.name, ancestors, macros, policy))
             return
         for fname in node.fields:

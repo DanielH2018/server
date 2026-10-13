@@ -12,6 +12,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_secret_checks.py
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -21,6 +22,7 @@ from lib.repo_paths import K8S_ROLES
 from renderer import shadow_diff
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.context import play_context
+from renderer.renderer_lib.jinja_uses import Use, embed_refusals
 from renderer.renderer_lib.placeholders import apply_placeholders, sentinel
 from renderer.renderer_lib.secret_checks import (
     CONFINED_TO_SECRET,
@@ -29,10 +31,13 @@ from renderer.renderer_lib.secret_checks import (
     NO_SOPS_MANIFEST_KEY,
     PASSTHROUGH_FILTERS,
     RULE5_FLOOR,
+    SOPS_MANIFEST_KEYS,
+    NamedUse,
     Rule5,
     VarsLookupSite,
     Violation,
     check,
+    output_members,
     output_violations,
     rule5,
     rule5_members,
@@ -207,6 +212,8 @@ def _refused(source: str, **kwargs) -> list[tuple[str, str]]:
         "{{ pi_peer_backup_ssh_key | to_json }}",
         "{% for h in [('a.' ~ domain, 1)] + ([('b.' ~ domain, 2)] if x else []) %}"
         "{% endfor %}",
+        "{% filter indent(4) %}{{ fixture_key }}{% endfilter %}",
+        "{% set x %}{{ fixture_key }}{% endset %}",
     ],
 )
 def test_no_secret_expression_is_clean(source):
@@ -227,11 +234,100 @@ def test_no_secret_expression_is_clean(source):
         ("{% if fixture_key | length %}x{% endif %}", "filter length"),
         ("{% if fixture_key == 'x' %}x{% endif %}", "comparison"),
         ("{{ pi_peer_backup_ssh_key | indent(4) }}", "filter indent"),
+        # A block filter applies to the text its body writes.
+        ("{% filter trim %}{{ fixture_key }}{% endfilter %}", "block filter trim"),
+        ("{% filter lower %}{{ fixture_key }}{% endfilter %}", "block filter lower"),
+        ("{% set x | trim %}{{ fixture_key }}{% endset %}", "block filter trim"),
+        (
+            "{% filter indent(4) %}{{ pi_peer_backup_ssh_key }}{% endfilter %}",
+            "block filter indent",
+        ),
     ],
 )
 def test_no_secret_expression_is_flagged(source, form):
     (refused,) = _refused(source)
     assert refused[1] == form
+
+
+def _embed_refusals(includer: str, embedded: str) -> list[tuple[str, str]]:
+    """`(key, form)` refused when `includer` embeds a template whose source is `embedded`."""
+    names = frozenset(FIXTURE_KEYS)
+    scans = {
+        Path("a.j2"): scan_template(includer, names),
+        Path("b.j2"): scan_template(embedded, names),
+    }
+    found = embed_refusals(scans, lambda path, embed: Path("b.j2"), SOPS_MANIFEST_KEYS)
+    return [(key, form) for _, key, form in found]
+
+
+INCLUDE_TRIM = "{% filter trim %}{% include 'b.j2' %}{% endfilter %}"
+LOOKUP = "{{ lookup('template', playbook_dir + '/b.j2') | %s }}"
+
+
+@pytest.mark.parametrize(
+    ("includer", "embedded"),
+    [
+        (LOOKUP % "indent(4)", "{{ fixture_key }}"),
+        (INCLUDE_TRIM, "no key here"),
+        ("{% filter indent(4) %}{% include 'b.j2' %}{% endfilter %}", "{{ domain }}"),
+    ],
+)
+def test_an_embed_that_keeps_its_keys_intact_is_clean(includer, embedded):
+    assert _embed_refusals(includer, embedded) == []
+
+
+@pytest.mark.parametrize(
+    ("includer", "embedded", "refused"),
+    [
+        (INCLUDE_TRIM, "{{ fixture_key }}", (KEY, "embeds through block filter trim")),
+        (LOOKUP % "trim", "{{ fixture_key }}", (KEY, "embeds through filter trim")),
+        (
+            LOOKUP % "indent(4)",
+            "{{ pi_peer_backup_ssh_key | to_json }}",
+            (SOPS_KEY, "embeds through indent"),
+        ),
+    ],
+)
+def test_an_embed_that_transforms_its_keys_is_flagged(includer, embedded, refused):
+    assert _embed_refusals(includer, embedded) == [refused]
+
+
+def test_named_members_and_the_floor_found_are_clean():
+    member = NamedUse("t.j2", KEY, "filter default", 1)
+    use = Use(KEY, ("filter default", "output"), False)
+    result = Rule5(naming=["t.j2"] * RULE5_FLOOR, accepted=[("t.j2", use)])
+    assert rule5_members(result, FIXTURE_KEYS, frozenset(), (member,)) == []
+
+
+def test_a_rule5_result_under_the_floor_is_flagged():
+    result = Rule5(naming=["t.j2"] * (RULE5_FLOOR - 1))
+    (problem,) = rule5_members(result, FIXTURE_KEYS, frozenset(), ())
+    assert f"{RULE5_FLOOR - 1} templates name a secret key, under the floor" in problem
+
+
+def test_a_rule5_result_missing_a_named_use_is_flagged():
+    member = NamedUse("t.j2", KEY, "filter default", 1)
+    use = Use(KEY, ("output",), False)
+    result = Rule5(naming=["t.j2"] * RULE5_FLOOR, accepted=[("t.j2", use)])
+    (problem,) = rule5_members(result, FIXTURE_KEYS, frozenset(), (member,))
+    assert (
+        f"named member gone: 1 accepted uses of {KEY} through filter default" in problem
+    )
+
+
+def test_every_sops_manifest_key_in_the_secrets_file_is_clean():
+    render = _render(SECRET_DOC.format(sentinel(KEY)))
+    assert output_members(render, [*FIXTURE_KEYS, *SOPS_MANIFEST_KEYS]) == []
+
+
+def test_a_sops_manifest_key_absent_from_the_secrets_file_is_flagged():
+    render = _render(SECRET_DOC.format(sentinel(KEY)))
+    absent = sorted(SOPS_MANIFEST_KEYS - set(FIXTURE_KEYS))
+    assert output_members(render, FIXTURE_KEYS) == [
+        f"no-sops-manifest-key: {k} is in SOPS_MANIFEST_KEYS and not in "
+        "ansible/vars/secrets.yml"
+        for k in absent
+    ]
 
 
 def test_a_key_passed_to_a_filter_outside_the_set_is_flagged():

@@ -15,12 +15,13 @@ import pytest
 from renderer import homelab_render
 from renderer.renderer_lib.cluster import flux_owned_tags, select_tags
 from renderer.renderer_lib.placeholders import (
-    pinned_fact_readers,
     pinned_fact_refusals,
 )
 from renderer.renderer_lib.secret_checks import (
     KNOWN_VIOLATIONS,
+    NO_SECRET_EXPRESSION,
     NON_SECRET_VARS_LOOKUPS,
+    Violation,
     check,
     output_members,
     rule5,
@@ -107,12 +108,28 @@ def test_no_render_target_is_a_flux_owned_reader_of_a_pinned_fact_is_clean():
     assert pinned_fact_refusals(select_tags(None), flux_owned_tags()) == []
 
 
-def test_the_refusal_reads_the_reader_tags_pinned_live_facts_records():
-    readers = {tag for fact in PINNED_LIVE_FACTS.values() for tag in fact.readers}
-    assert pinned_fact_readers() == readers
-    assert readers if PINNED_LIVE_FACTS else not readers
-    # The members at this commit. R3's PRs retire each as they drop its facts.
-    assert pinned_fact_readers() == {"authelia"}
+def test_the_refusal_refuses_every_reader_pinned_live_facts_records():
+    # With every render target marked flux-owned, the refusal names each tag that reads a
+    # pinned fact. R1's reader test holds PINNED_LIVE_FACTS to the templates.
+    targets = select_tags(None)
+    refused = {tag for tag, _ in pinned_fact_refusals(targets, targets)}
+    assert refused == {tag for f in PINNED_LIVE_FACTS.values() for tag in f.readers}
+    # The member at this commit. R3's PRs retire each reader as they drop its facts.
+    assert refused == {"authelia"}
+
+
+def test_a_render_that_breaks_the_ratchet_exits_1_and_writes_nothing(tmp_path, capsys):
+    stale = Violation(
+        NO_SECRET_EXPRESSION, "shared", "gone.yaml.j2", "filter trim", "k"
+    )
+    out = tmp_path / "out"
+    known = KNOWN_VIOLATIONS | {stale}
+    code = homelab_render.cluster(out, ["bento-pdf"], None, known=known)
+    assert code == 1
+    err = capsys.readouterr().err
+    assert f"stale KNOWN_VIOLATIONS entry, remove it: {stale.line()}" in err
+    assert "the secret checks failed. Nothing was written." in err
+    assert not (out / "cluster").exists()
 
 
 FIXTURE_FACTS = {

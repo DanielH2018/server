@@ -302,9 +302,18 @@ possible secret reference, held to bare, `default` and `to_json`, unless
 `lookup('vars', job.replicas_var) | int`, and the entry fails when any `containers_list`
 `replicas_var` names a secret key, or when the site has gone.
 
+An output inside a `{% filter %}` block, or a `{% set %}` block with a filter, passes through
+that block's filters too, and rule 5 holds it to the same list. An `{% include %}` or a
+`lookup('template', ...)` counts as a use of every key its target names, and through its
+target's own embeds. Rule 5 resolves the target as the renderer does, then refuses the
+embed on a refused form, or on `indent` when the target names a `SOPS_MANIFEST_KEYS` key.
+Two embeds in image-builder name their target through a variable, so they cannot be
+resolved. They pass only `indent`, which rule 5 accepts on an unresolved embed.
+
 `KNOWN_VIOLATIONS` holds every violation the first fleet render found: rule 4 on authelia's
-and pi-peer-backup's Secrets, and rule 5's 30 entries, which are the two `indent`s on those
-keys, HA's `from_json`, two `trim`s, mosquitto's `string`, and 24 truthiness tests. R2's PRs
+and pi-peer-backup's Secrets, and rule 5's 31 entries. Those are the two `indent`s on those
+keys, HA's `from_json`, HA's Secret embedding that parse through `indent`, two `trim`s,
+mosquitto's `string`, and 24 truthiness tests. R2's PRs
 3 to 7 remove them, and an entry that no longer matches fails the check, so the set shrinks
 only through a fix.
 

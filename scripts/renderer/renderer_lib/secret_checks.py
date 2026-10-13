@@ -41,7 +41,7 @@ from typing import NamedTuple
 
 
 from lib.render_guard import containers_entries
-from lib.repo_paths import HOST_VARS, K8S_ROLES, REPO, SHARED_TPL
+from lib.repo_paths import HOST_VARS, REPO, SHARED_TPL
 from renderer.renderer_lib.environment import renderer_env
 from renderer.renderer_lib.jinja_uses import (
     DYNAMIC_LOOKUP,
@@ -49,7 +49,11 @@ from renderer.renderer_lib.jinja_uses import (
     Policy,
     TemplateScan,
     Use,
+    embed_refusals,
+    resolve_embed,
+    rule5_templates,
     scan,
+    template_tag,
 )
 from renderer.renderer_lib.placeholders import (
     SENTINEL_PREFIX,
@@ -189,11 +193,18 @@ KNOWN_VIOLATIONS = frozenset(
         # Rule 5, the indent on each multi-line key, at the same two sites.
         _rule5("authelia", "config-secret.yaml.j2", "filter indent", _AUTHELIA_KEY),
         _rule5("pi-peer-backup", "secret.yaml.j2", "filter indent", _PPB_KEY),
-        # Rule 5: HA's from_json parse of the service account. R2's PR 5 drops it.
+        # Rule 5: HA's from_json parse of the service account, and the Secret that embeds
+        # its multi-line output through `indent`. R2's PR 5 drops both.
         _rule5(
             "home-assistant",
             "config/secrets.yaml.j2",
             "filter from_json",
+            "google_assistant_service_account",
+        ),
+        _rule5(
+            "home-assistant",
+            "secret.yaml.j2",
+            "embeds through indent",
             "google_assistant_service_account",
         ),
         # Rule 5: the two trims in qbittorrent and mosquitto's split. R2's PR 4 drops them.
@@ -419,15 +430,6 @@ def output_members(render: PlaceholderRender, known_keys: Iterable[str]) -> list
 # -- rule 5: the template sources ----------------------------------------------------------
 
 
-def rule5_templates(roles: Path = K8S_ROLES, shared: Path = SHARED_TPL) -> list[Path]:
-    """Every template rule 5 reads: each `.j2` but `*.sh.j2` under the two template roots."""
-    paths = [*roles.glob("*/templates/**/*.j2"), *shared.glob("**/*.j2")]
-    return sorted(p for p in paths if not p.name.endswith(".sh.j2"))
-
-
-POLICY = Policy(PASSTHROUGH_FILTERS, SOPS_MANIFEST_KEYS)
-
-
 def scan_template(
     source: str,
     keys: frozenset[str],
@@ -439,11 +441,6 @@ def scan_template(
     env = env or renderer_env(SHARED_TPL)
     policy = Policy(passthrough, SOPS_MANIFEST_KEYS)
     return scan(env, source, keys, policy, non_secret)
-
-
-def template_tag(path: Path, roles: Path = K8S_ROLES) -> str:
-    """The role a template belongs to, or `shared` for `ansible/templates/`."""
-    return path.relative_to(roles).parts[0] if path.is_relative_to(roles) else "shared"
 
 
 @dataclass
@@ -469,31 +466,28 @@ def rule5(
     non_secret: frozenset[VarsLookupSite] = NON_SECRET_VARS_LOOKUPS,
     root: Path = REPO,
 ) -> Rule5:
-    """Run rule 5 over `paths`, by default every template it reads."""
+    """Run rule 5 over `paths`, by default every template it reads, embeds included."""
     keyset = frozenset(keys)
     env = renderer_env(SHARED_TPL)
-    result = Rule5()
+    result, scans = Rule5(), {}
     for path in rule5_templates() if paths is None else paths:
         rel = path.relative_to(root).as_posix()
         allowed = frozenset(s.argument for s in non_secret if s.template == rel)
-        scan = scan_template(path.read_text(), keyset, allowed, env=env)
+        scans[path] = scan = scan_template(path.read_text(), keyset, allowed, env=env)
         if scan.names_key:
             result.naming.append(rel)
         result.lookup_sites.update((rel, arg) for arg in scan.lookup_sites)
-        for use in scan.uses:
-            if use.refused:
-                result.violations.append(
-                    Violation(
-                        NO_SECRET_EXPRESSION,
-                        template_tag(path),
-                        rel,
-                        use.forms[-1],
-                        use.key,
-                    )
-                )
-            else:
-                result.accepted.append((rel, use))
+        refused = [(path, u.key, u.forms[-1]) for u in scan.uses if u.refused]
+        result.violations.extend(_rule5_violation(*r, root) for r in refused)
+        result.accepted.extend((rel, u) for u in scan.uses if not u.refused)
+    embeds = embed_refusals(scans, resolve_embed, SOPS_MANIFEST_KEYS)
+    result.violations.extend(_rule5_violation(*r, root) for r in embeds)
     return result
+
+
+def _rule5_violation(path: Path, key: str, form: str, root: Path) -> Violation:
+    rel = path.relative_to(root).as_posix()
+    return Violation(NO_SECRET_EXPRESSION, template_tag(path), rel, form, key)
 
 
 def rule5_members(
