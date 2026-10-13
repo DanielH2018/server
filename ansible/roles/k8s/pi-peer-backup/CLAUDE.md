@@ -17,8 +17,11 @@ replaced the retired Kopia scope for the Pi.
 - **Shape:** CronJob 23:00 (America/Chicago), built image (alpine + rsync/ssh/curl + the
   script), any node (post-re-plumb registry pulls work everywhere).
 - **Auth:** dedicated ed25519 key (`pi_peer_backup_ssh_key` in SOPS; public half
-  authorized on the Pi by this role). Host key pinned at deploy over Ansible's own
-  connection; the job runs `StrictHostKeyChecking=yes` — never TOFU.
+  authorized on the Pi by this role). The Pi's host key is pinned from the committed
+  `files/daniel-pi-ssh-host-ed25519.pub`, so the Secret renders from git alone (target slice
+  R3); the job runs `StrictHostKeyChecking=yes` — never TOFU. To re-pin after the Pi is
+  re-keyed, read the key over the operator's trusted connection with
+  `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub`, commit it, and deploy.
 - **The key is pinned to one operation.** sshd authorizes it with
   `restrict,command="/usr/local/bin/pi-peer-backup-shell <src dir>"`; the wrapper
   (`files/pi-peer-backup-shell.sh`, root-owned on the Pi) re-derives one
@@ -38,7 +41,10 @@ replaced the retired Kopia scope for the Pi.
 - **Alerting:** the job pushes "WG Pi Peer Backup" (Kuma push monitor, 2.5-day window)
   directly — up on success with the file count, down with the rsync error or the
   file-count-floor breach (>= 2 files required; no `--delete`, so an empty source can
-  never wipe the copy). It also pings an off-premises Healthchecks.io check
+  never wipe the copy). A host key that no longer matches the pin pushes down with
+  `daniel-pi host key differs from the committed pin` instead of the generic rsync error.
+  `ansible/tests/services/test_pi_peer_backup_host_key_failure.py` holds that branch apart
+  from an unreachable Pi, which also exits 255. The job also pings an off-premises Healthchecks.io check
   (`HC_PING_URL`, slug `pi-peer-backup`) when one is configured: Kuma resolves to a
   Service in this cluster, so a cluster outage silences both the push and the monitor
   waiting for it. See `docs/healthchecks-io-deadman.md`.
