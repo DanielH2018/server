@@ -96,6 +96,8 @@ def test_the_cli_writes_nothing_under_the_home_directory(out, tmp_path):
     # default is `~/.ansible/tmp`. The variable is dropped so the CLI's own choice is tested.
     home = tmp_path / "home"
     home.mkdir()
+    # Proves the glob sees the directory, so an empty result cannot pass vacuously.
+    (home / "sentinel").write_text("")
     env = {k: v for k, v in os.environ.items() if k != "ANSIBLE_LOCAL_TEMP"}
     script = REPO / "scripts/renderer/homelab_render.py"
     argv = [sys.executable, str(script), "cluster", "--out", str(out)]
@@ -103,4 +105,6 @@ def test_the_cli_writes_nothing_under_the_home_directory(out, tmp_path):
         [*argv, "--role", "littlelink"], cwd=REPO, env={**env, "HOME": str(home)}
     )
     assert done.returncode == 0, done.stderr
-    assert list(home.rglob("*")) == []
+    written = sorted(p.relative_to(home).as_posix() for p in home.rglob("*"))
+    assert len(written) == 1, written
+    assert written == ["sentinel"]
