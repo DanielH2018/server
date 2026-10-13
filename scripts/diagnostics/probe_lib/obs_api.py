@@ -33,7 +33,7 @@ def loki_labels_url(base):
     return f"{base}/loki/api/v1/labels"
 
 
-def loki_query_url(base, logql, limit, start=None, end=None, direction=None):
+def loki_query_url(base, logql, limit, start=None, end=None, direction=None, step=None):
     """Build a Loki `query_range` URL, omitting each optional param when it is unset.
 
     Args:
@@ -43,6 +43,8 @@ def loki_query_url(base, logql, limit, start=None, end=None, direction=None):
         start: Range start, in nanoseconds since epoch.
         end: Range end, in nanoseconds since epoch.
         direction: `forward` or `backward`.
+        step: Evaluation step of a metric query, as Loki parses it (`5m`, or seconds).
+            Unset, Loki picks `range / 250`, which a long range makes coarse.
     """
     params = {"query": logql, "limit": limit}
     if start is not None:
@@ -51,6 +53,8 @@ def loki_query_url(base, logql, limit, start=None, end=None, direction=None):
         params["end"] = end
     if direction is not None:
         params["direction"] = direction
+    if step is not None:
+        params["step"] = step
     return f"{base}/loki/api/v1/query_range?" + urlencode(params)
 
 

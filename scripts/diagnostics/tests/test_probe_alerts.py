@@ -78,6 +78,24 @@ def test_run_query_sends_the_since_window_to_loki(monkeypatch):
     assert abs(span_s - 3 * 86400) < 2
 
 
+def test_run_query_sends_the_step_to_loki(monkeypatch):
+    # The formatted path builds its own URL, apart from plan(), so a --step that reached only
+    # plan() would leave the default view at Loki's range/250 step with no warning.
+    seen = _capture_fetch(monkeypatch)
+    ns = cli_parser._build_parser().parse_args(
+        [
+            "loki-query",
+            'count_over_time({job="k8s"}[5m])',
+            "--since",
+            "7d",
+            "--step",
+            "5m",
+        ]
+    )
+    assert metrics.run_query(ns) == 0
+    assert _query_params(seen[0])["step"] == ["5m"]
+
+
 def test_run_query_without_since_sends_no_window():
     assert core.since_window_ns(None) == (None, None)
     assert core.since_window_ns("") == (None, None)

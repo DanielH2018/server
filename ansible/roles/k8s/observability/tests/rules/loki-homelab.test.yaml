@@ -1,0 +1,70 @@
+# promtool unit tests for files/rules/loki-homelab.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+rule_files:
+  - ../../files/rules/loki-homelab.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so the scrape job is missing from the config.
+  # LokiHomelabMetricsMissing fires once its 10m hold has passed, and not before.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: LokiHomelabMetricsMissing
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: LokiHomelabMetricsMissing
+        exp_alerts:
+          - exp_labels:
+              job: loki-homelab
+              severity: warning
+              service: loki-homelab
+            exp_annotations:
+              summary: Prometheus has lost the homelab Loki's scrape job.
+              description: >-
+                No up{job="loki-homelab"} series exists, so the loki-homelab job is gone from
+                prometheus.yml or its target was renamed. No rule that reads the homelab Loki's
+                metrics can fire until the series is back.
+
+  # A failed scrape. LokiHomelabDown fires in shadow after its 5m hold, and the job still
+  # exists, so LokiHomelabMetricsMissing stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
+        values: '1x5 0x15'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: LokiHomelabDown
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: LokiHomelabDown
+        exp_alerts:
+          - exp_labels:
+              job: loki-homelab
+              instance: loki-homelab.homelab.svc:3100
+              severity: warning
+              service: loki-homelab
+              shadow: "true"
+            exp_annotations:
+              summary: Prometheus cannot scrape the homelab Loki.
+              description: >-
+                loki-homelab.homelab.svc:3100 has failed its scrape for 5 minutes, so the
+                homelab Loki is down or unreachable from Prometheus. Read the loki-homelab
+                pod's events and log in the homelab namespace.
+      - eval_time: 20m
+        alertname: LokiHomelabMetricsMissing
+        exp_alerts: []
+
+  # Healthy: the scrape works, so neither alert fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="loki-homelab", instance="loki-homelab.homelab.svc:3100"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: LokiHomelabDown
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: LokiHomelabMetricsMissing
+        exp_alerts: []

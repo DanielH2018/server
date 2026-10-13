@@ -63,6 +63,21 @@ def test_plan_loki_query_with_limit(fake_k8s_endpoint):
     ]
 
 
+def test_plan_loki_query_step_reaches_the_url(fake_k8s_endpoint):
+    stages = curl_pipeline.plan(
+        ["loki-query", 'count_over_time({job="x"}[5m])', "--step", "5m"],
+        fake_k8s_endpoint,
+    )
+    assert "&step=5m" in stages[0][-1]
+
+
+def test_plan_loki_query_without_step_leaves_it_to_loki(fake_k8s_endpoint):
+    stages = curl_pipeline.plan(
+        ["loki-query", 'count_over_time({job="x"}[5m])'], fake_k8s_endpoint
+    )
+    assert "step=" not in stages[0][-1]
+
+
 def test_plan_scrutiny_uses_cluster_endpoint_with_vip_pin(fake_k8s_endpoint):
     stages = curl_pipeline.plan(["scrutiny"], fake_k8s_endpoint)
     assert stages == [
