@@ -92,6 +92,22 @@ flux-system` read source-controller at 16Mi, kustomize-controller at 18Mi and
 notification-controller at 24Mi, beside a 64Mi request each. That is the floor for a root
 that applies nothing. D5 re-measures it once Flux applies services.
 
+**Memory, following `prod`.** Later on 2026-10-13, three hours after D1.5 pointed the root at
+`prod`, the working set is higher. The three controllers request 192Mi in all, 64Mi each, and
+each is limited to 1Gi. The peak is the largest
+`container_memory_working_set_bytes{namespace="flux-system",container="manager"}` over those
+three hours:
+
+| Controller | `kubectl top` at 03:46Z | Three-hour peak |
+|---|---|---|
+| kustomize-controller | 63Mi | 70.1Mi |
+| source-controller | 24Mi | 29.8Mi |
+| notification-controller | 27Mi | 27.8Mi |
+
+kustomize-controller runs above its 64Mi request while it applies an empty root. The node
+has room, and the 1Gi limit is about fourteen times the peak, so D1 leaves the request alone. D5 sets
+the requests from its own measurement once Flux applies services.
+
 ## What Flux follows
 
 `templates/sync.yaml.j2` renders the OCIRepository `homelab` on `prod`, the root
