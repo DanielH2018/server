@@ -16,10 +16,11 @@ value, so only the `homelab_secret_stubs` sentinel credits it: an ordinary dry r
 values and is meant to check them. An exemption for one says why it passes on any stub value.
 
 A derived variable comes from two places. `derived_variables` reads role defaults and inventory
-vars. `role_derived_facts` reads the role's own `set_fact` tasks: a fact whose value names a
-secret-bearing name, or looks up a role template whose Jinja names one, is derived too. That is
-how uptime-kuma's `kuma_declarations`, a parse of a template embedding every push token, reaches
-the push-token assert (#4850).
+vars. `role_derived_facts` reads the `set_fact` and `register:` tasks of every role beside this
+one, since both are play-scoped: a name whose task names a secret-bearing name, or looks up a role
+template whose Jinja names one, is derived too. That is how uptime-kuma's `kuma_declarations`, a
+parse of a template embedding every push token, reaches the push-token assert (#4850), and how
+sonarr's asserts on its API reads' registers are selected (#4862).
 
 A guard counts only negated (`not k8s_no_mutate`), because `when: k8s_dry_run | bool` runs the
 task under a dry run alone. It is read from the parsed `when:`, so a guard word in a command
@@ -29,9 +30,8 @@ The exemptions are per task, which is why this is its own module: a `Census` row
 is keyed by file and would exempt all of authelia's `tasks/main.yml`.
 
 A second check covers the tasks a stub makes fail rather than act. `STUB_REFUSING` names each,
-and each must carry the `homelab_secret_stubs` guard itself. It predates the assert rule above.
-The census selects uptime-kuma's push-token assert on its own, but not sonarr's two asserts: they
-read a register, which no derivation follows.
+and each must carry the `homelab_secret_stubs` guard itself. It predates the assert rule above,
+which selects every task it names, so it backs up a derivation that regresses.
 """
 
 import json
@@ -199,12 +199,10 @@ def test_every_exemption_names_a_task_the_census_would_flag() -> None:
     assert stale_exemptions(EXEMPT, offenders) == []
 
 
-# "<role>/<task file>::<task name>" of each task that FAILS on a stub value: a format check on a
-# token, or an assert on a register that a guarded read left empty.
+# "<role>/<task file>::<task name>" of each task that FAILS on a stub value. sonarr's two asserts
+# on its API reads' registers left this list once the census followed a register (#4862).
 STUB_REFUSING = (
     "uptime-kuma/main.yml::Check every push token is in the format AutoKuma accepts",
-    "sonarr/verify.yml::Fail if a root folder does not resolve inside the pod",
-    "sonarr/verify.yml::Fail if the cluster library is not intact",
 )
 
 
@@ -464,3 +462,24 @@ def test_a_template_naming_a_derived_fact_is_secret_bearing(tmp_path: Path) -> N
     )
     _, offenders = census(role, _word_pattern({"alpha_token"}))
     assert offenders == ["widget/main.yml::Check the token"]
+
+
+def test_an_assert_on_a_register_a_secret_read_fills_is_flagged(tmp_path: Path) -> None:
+    # The assert names no secret key itself; only the register carries the value (#4862).
+    role = _role(
+        tmp_path,
+        **{
+            "tasks/main.yml": """
+- name: Read with the token
+  ansible.builtin.uri:
+    url: "https://example.invalid/?t={{ alpha_token }}"
+  register: widget_read
+  when: not (homelab_secret_stubs | default(false) | bool)
+- name: Fail if the read is empty
+  ansible.builtin.assert:
+    that: widget_read.json | length > 0
+"""
+        },
+    )
+    _, offenders = census(role, _word_pattern({"alpha_token"}), exempt={})
+    assert offenders == ["widget/main.yml::Fail if the read is empty"]

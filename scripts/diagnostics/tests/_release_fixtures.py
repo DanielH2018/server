@@ -1,14 +1,18 @@
-"""Fakes and git-repo fixtures shared by the two `probe.py releases` suites.
+"""Fakes and git-repo fixtures shared by the `probe.py releases` suites.
 
 `test_probe_releases.py` (the reader: flags, lookup, loading, missing_services) and
 `test_probe_releases_stale.py` (staleness over real git history) both build a release record,
-and the second needs throwaway repos. They live here rather than in a conftest because
-`scripts/conftest.py` covers every suite under `scripts/`, while these names are wanted by
-exactly two modules -- the same split `_probe_health_fixtures.py` makes beside them.
+and the second needs throwaway repos. `test_probe_releases_render.py` and
+`test_probe_releases_grace.py` both build the render records the digest verdict reads. They
+live here rather than in a conftest because `scripts/conftest.py` covers every suite under
+`scripts/`, while these names are wanted by these modules alone -- the same split
+`_probe_health_fixtures.py` makes beside them.
 
 Import by bare name: pytest puts a test's own directory on `sys.path`, so
 `from _release_fixtures import _record` resolves from any module in this directory.
 """
+
+import json
 
 from lib.git_testing import commit, git, init_repo
 
@@ -40,3 +44,41 @@ def _commit(repo, files, message):
 
 def _set_origin_master(repo, sha):
     git(repo, "update-ref", "refs/remotes/origin/master", sha)
+
+
+def _release(service, commit, secrets=(), host="daniel-box", secret_digest=None):
+    rec = _record(service, commit=commit)
+    rec["host"] = host
+    rec["secret_manifests"] = list(secrets)
+    if secret_digest is not None:
+        rec["secret_digest"] = secret_digest
+    return rec
+
+
+def _render(
+    service,
+    commit,
+    secrets=(),
+    digest="deadbeef",
+    dirty=False,
+    host="daniel-box",
+    secret_digest=None,
+):
+    rec = {
+        "service": service,
+        "commit": commit,
+        "tree_dirty": dirty,
+        "host": host,
+        "manifests_digest": digest,
+        "secret_manifests": list(secrets),
+    }
+    if secret_digest is not None:
+        rec["secret_digest"] = secret_digest
+    return rec
+
+
+def _write_renders(render_dir, *renders):
+    render_dir.mkdir()
+    for rec in renders:
+        (render_dir / f"{rec['service']}.json").write_text(json.dumps(rec))
+    return render_dir

@@ -571,7 +571,9 @@ def run_releases(ns):
         stale = compute_stale(
             records, grace_seconds=grace_seconds, pending=pending, hits_out=hits
         )
-        apply_digest_verdicts(stale, records, pending=pending, hits=hits)
+        apply_digest_verdicts(
+            stale, records, pending=pending, hits=hits, grace_seconds=grace_seconds
+        )
         missing = missing_services(records)
         write_counted_names(getattr(ns, "names_out", None), stale, missing)
         render = format_stale_kuma if getattr(ns, "kuma", False) else format_stale_only
