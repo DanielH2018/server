@@ -18,7 +18,12 @@ import re
 from jinja2 import StrictUndefined, Undefined
 
 from lib.ansible_jinja_env import ansible_bool
-from lib.render_guard import SHARED_TPL, StubUndefined, make_env
+from lib.render_guard import (
+    SHARED_TPL,
+    StubUndefined,
+    make_env,
+    pad_to_source_newlines,
+)
 
 __all__ = [
     "resolve_vars",
@@ -48,8 +53,13 @@ def resolve_vars(
     ``undefined_cls`` decides what an undefined name inside a value becomes. The default
     ``StubUndefined`` renders ``STUB`` inside text and None as a whole value. A strict class
     such as ``render_guard.StrictChainableUndefined`` raises in both places instead.
+
+    A value rendered as text ends in as many newlines as ansible-core gives it: Jinja drops the
+    source's last one, and ``pad_to_source_newlines`` adds back only those the render lacks. So
+    ``"p {{ x }}\\n"`` with ``x`` ending in a newline resolves to one newline, not two (#4853).
     """
     env = make_env([SHARED_TPL], undefined_cls=undefined_cls)
+    env.keep_trailing_newline = False
     # `bool` is an Ansible filter, not a Jinja builtin, so a group_var that uses it renders
     # here as "No filter named 'bool'" — a render failure pointing at a variable that is
     # perfectly valid under Ansible. Every render guard registers the real filter through
@@ -95,7 +105,7 @@ def resolve_vars(
                 if isinstance(value, StrictUndefined):
                     value._fail_with_undefined_error()
                 return None if isinstance(value, Undefined) else value
-            return env.from_string(node).render(ctx)
+            return pad_to_source_newlines(node, env.from_string(node).render(ctx))
         if isinstance(node, list):
             return [expand(n, ctx) for n in node]
         if isinstance(node, dict):
