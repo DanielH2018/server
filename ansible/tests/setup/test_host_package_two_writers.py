@@ -13,8 +13,11 @@ The census joins two sides per host:
   `(user, name)` and its `cron_file:`. A task whose `state:` renders `absent` is an absent
   arm, which removes rather than writes, so it contributes nothing. Each value renders with
   the role's context for that host (`lib.render_context`), its loop items included when the
-  loop is a literal list or one variable. A value that still does not render, such as one
-  reading a registered result, is skipped: the census reads what it can resolve.
+  loop is a literal list or one variable. A value that still does not render is skipped: one
+  reading a registered result, a `common` task file's caller `vars:` (`alert_unit.yml`,
+  `kuma_check_timer.yml`), or a loop over a registered list. On 2026-10-13 that skipped 147
+  of 1353 `dest:` and `path:` fields across the three hosts; most name a home directory or
+  `/etc/systemd/system/`, where no package installs.
 - **Packages.** Every host package under `hosts/<host>/` joins that host, and every shared
   package under `hosts/packages/` joins every host. Each contributes the paths it installs.
 
@@ -287,6 +290,6 @@ def test_a_cron_contributes_its_user_and_name_and_its_cron_file():
     )[0]
     ctx = _role_context(SETUP / "optimize_pi", "daniel-pi")
     assert task_writes(task, ctx) == {
-        ("cron", "ubuntu", "Pi SD-card health heartbeat"),
+        ("cron", ctx["sys_user"], "Pi SD-card health heartbeat"),
         ("cron_file", "pi-health"),
     }

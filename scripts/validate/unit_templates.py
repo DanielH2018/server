@@ -280,22 +280,22 @@ def host_unit_groups(
 
     Every host package is grouped with every shared package, so a host's drop-in over a
     shared unit, such as its `homelab-updater.timer` schedule, is verified over that unit.
-    The `shared` group holds the shared packages and every component no host package lists.
+    The `shared` group holds the shared packages and every component no package lists.
     """
+    shared_specs = sorted((hosts_root / "packages").glob("*/package.yml"))
     shared = [
         host_mode.render_package(spec.parent.name, hosts_root=hosts_root)
-        for spec in sorted((hosts_root / "packages").glob("*/package.yml"))
+        for spec in shared_specs
     ]
-    hosts = [
-        spec.parent.name
+    host_specs = [
+        spec
         for spec in sorted(hosts_root.glob("*/package.yml"))
         if spec.parent.name not in _NOT_A_HOST
     ]
     listed = {
         component
-        for host in hosts
-        for component in load_yaml(hosts_root / host / "package.yml").get("components")
-        or []
+        for spec in shared_specs + host_specs
+        for component in load_yaml(spec).get("components") or []
     }
     orphans = [
         render_component(spec.parent.name, hosts_root, scratch / spec.parent.name)
@@ -304,8 +304,11 @@ def host_unit_groups(
     ]
     groups = [("shared", shared + orphans)]
     groups += [
-        (host, shared + [host_mode.render_host(host, hosts_root=hosts_root)])
-        for host in hosts
+        (
+            spec.parent.name,
+            shared + [host_mode.render_host(spec.parent.name, hosts_root=hosts_root)],
+        )
+        for spec in host_specs
     ]
     return groups
 
