@@ -37,11 +37,13 @@ so a regeneration diffs as the pipeline plus upstream's change.
   ClusterRole, also fails `ansible/tests/k8s/test_aggregated_clusterroles.py`. Regenerating
   does not clear that failure: it widens `view` for every identity bound to it, so extend
   that module's lists only as a decision the PR states.
-  Renovate rewrites `flux_version` alone, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
-  rule) and the header test fails until the file is regenerated. Set the same release as the
-  `version:` of both `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, so the
-  CLI that pushes and tags the artifact moves with the controllers.
-  `ansible/tests/repo/test_promote_workflow.py` fails a drift.
+  Renovate cannot regenerate the file, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
+  rule) and the header test fails until the file is regenerated. The same PR moves the
+  `version:` of both `fluxcd/flux2/action` steps in `.github/workflows/promote.yml` and the
+  action's commit pin, so the CLI that pushes and tags the artifact moves with the
+  controllers. A `# renovate:` comment above each input is what Renovate reads, and
+  `scripts/tests/test_renovate_flux_cli.py` fails a step that lost it (#4822). For a bump by
+  hand, set all three yourself. `ansible/tests/repo/test_promote_workflow.py` fails a drift.
 
 ## How the render meets the fleet guards
 
@@ -151,7 +153,11 @@ Ready=True with its signature verified (#4820). `publish` pushes with `--reprodu
 the drill ran at the commit `prod` already carried, so its digest equalled `prod`'s signed
 digest. #4826 fixed that. The drill push carries the annotation
 `io.homelab.verify-drill=true`, so no signed push carries its digest, and the dispatch fails
-unless `cosign verify` refuses that digest with cosign's no-signature error. The re-dispatch
+unless `cosign verify` refuses that digest. The refusal alone proves nothing, because cosign
+v3.1.3 reads a registry error on its bundle probe as "no bundle" (#4829). The dispatch
+therefore also reads the registry itself, and fails unless it answers that the digest has no
+referrer and no legacy `.sig` tag. GHCR serves no referrers API, so cosign keeps a digest's
+bundle in the referrers tag `sha256-<hex>`. The re-dispatch
 pushed `sha256:5bac820c…bb97` unsigned. At 04:45:39Z `verify-drill` read Ready=False with
 "failed to verify the signature using provider 'cosign keyless': no signatures found", and
 `homelab` stayed Ready. `deploy-errors` posted nothing to Discord, because it names only the
