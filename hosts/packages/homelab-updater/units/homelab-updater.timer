@@ -1,0 +1,12 @@
+# Shipped by homelab-updater, with no enable link: each host package ships its own link, and a
+# host arms its updater by shipping it. A host package's drop-in overrides the schedule.
+[Unit]
+Description=Run homelab-updater every 5 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

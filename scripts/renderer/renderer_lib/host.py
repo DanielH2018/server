@@ -11,9 +11,15 @@ component's are. A component directory under `hosts/components/` holds a `compon
     defaults: {name: value}         # beneath group_vars/all.yml (H3, *Component variables*)
     files:
       - {src: templates/x.sh.j2, dst: /usr/lib/homelab/x, mode: "0755"}
+      - {lib: homelab-updater, dst: /usr/lib/homelab/homelab-updater, mode: "0755"}
 
 A `src` ending `.j2` renders through the renderer's strict environment. Any other `src` is
-copied byte for byte.
+copied byte for byte. A `lib` entry copies `hosts/lib/<name>`, a script several packages ship,
+byte for byte; it is the one source outside the component a file entry may name.
+
+A package spec may also list `maintainer_scripts`, each rendered from
+`hosts/lib/maintainer-scripts/<name>.j2` into the package's `scripts/`, outside `root/`, and
+named in `nfpm.yaml`'s `scripts:` (H3, *Package rules*).
 
 Host mode renders no secret, because no substitution step follows it (H3, *Host mode renders
 no secret*). The context withholds every top-level key of `ansible/vars/secrets.yml`, and
@@ -55,7 +61,9 @@ SECRETS = ANSIBLE / "vars" / "secrets.yml"
 
 # Every host package runs reconcile under /usr/bin/python3 (H3, *Package rules*).
 HOST_DEPENDS = ("python3 (>= 3.12)",)
-PACKAGE_KEYS = frozenset({"components", "defaults", "depends", "description", "files"})
+PACKAGE_KEYS = frozenset(
+    {"components", "defaults", "depends", "description", "files", "maintainer_scripts"}
+)
 COMPONENT_KEYS = frozenset({"defaults", "files"})
 # The builder exports the version (H3, *Package rules*). Kept out of the render, so a render
 # changes only when the package's content does, and nfpm expands it at build time.
@@ -66,6 +74,16 @@ VERSION_FIELD = "${HOMELAB_VERSION}"
 _PLAIN_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 _UNDEFINED = re.compile(r"'([^']+)' is undefined")
+
+# Each maintainer script a spec may list, and the nfpm `scripts:` key that installs it. `preinst`
+# refuses a hostname mismatch, so only a host package may list it.
+MAINTAINER_SCRIPTS = {
+    "preinst": "preinstall",
+    "postinst": "postinstall",
+    "prerm": "preremove",
+}
+UNIT_DIR = PurePosixPath("/usr/lib/systemd/system")
+UNIT_SUFFIXES = (".service", ".timer", ".socket", ".path")
 
 
 @dataclass
@@ -78,6 +96,7 @@ class Package:
         files: Each installed path mapped to its bytes and its octal mode.
         depends: The `Depends` entries, in the order the spec lists them.
         description: The package description.
+        scripts: Each maintainer script's name, such as `postinst`, mapped to its bytes.
     """
 
     name: str
@@ -85,6 +104,18 @@ class Package:
     files: dict[str, tuple[bytes, int]] = field(default_factory=dict)
     depends: list[str] = field(default_factory=list)
     description: str = ""
+    scripts: dict[str, bytes] = field(default_factory=dict)
+
+    def units(self) -> list[str]:
+        """The unit files the package installs under `/usr/lib/systemd/system/`, by name.
+
+        A drop-in and an enable link sit one directory deeper, so neither is listed.
+        """
+        return sorted(
+            PurePosixPath(dst).name
+            for dst in self.files
+            if PurePosixPath(dst).parent == UNIT_DIR and dst.endswith(UNIT_SUFFIXES)
+        )
 
     def nfpm_spec(self) -> str:
         """The `nfpm.yaml` the builder runs `nfpm package` on, from the package directory."""
@@ -101,6 +132,11 @@ class Package:
                 for dst, (_, mode) in sorted(self.files.items())
             ],
         }
+        if self.scripts:
+            spec["scripts"] = {
+                MAINTAINER_SCRIPTS[name]: f"scripts/{name}"
+                for name in sorted(self.scripts)
+            }
         return yaml.safe_dump(spec, sort_keys=False)
 
 
@@ -164,6 +200,12 @@ def write_packages(packages: list[Package], out: Path) -> list[Path]:
             path.write_bytes(content)
             path.chmod(mode)
             written.append(path)
+        for name, content in sorted(package.scripts.items()):
+            path = base / "scripts" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+            path.chmod(0o755)
+            written.append(path)
         (base / "nfpm.yaml").write_text(package.nfpm_spec())
         written.append(base / "nfpm.yaml")
     return written
@@ -184,15 +226,55 @@ def _render(
     spec = _load(spec_path, PACKAGE_KEYS)
     package.description = str(spec.get("description", ""))
     package.depends.extend(str(entry) for entry in spec.get("depends") or [])
-    _render_unit(package, spec_path.parent, spec, host, inventory, withheld)
+    lib = hosts_root / "lib"
+    _render_unit(package, spec_path.parent, spec, host, inventory, withheld, lib)
     for name in spec.get("components") or []:
         directory = hosts_root / "components" / _plain_name(name, "component")
         component = directory / "component.yml"
         if not component.is_file():
             raise RenderRefused(f"{spec_path} lists component {name!r}, which has none")
         unit = _load(component, COMPONENT_KEYS)
-        _render_unit(package, directory, unit, host, inventory, withheld)
+        _render_unit(package, directory, unit, host, inventory, withheld, lib)
+    _render_maintainer_scripts(
+        package, spec.get("maintainer_scripts") or [], host, inventory, withheld, lib
+    )
     return package
+
+
+def _render_maintainer_scripts(
+    package: Package,
+    names: list,
+    host: str | None,
+    inventory: Inventory,
+    withheld: frozenset[str],
+    lib: Path,
+) -> None:
+    """Render each listed maintainer script from `hosts/lib/maintainer-scripts/`.
+
+    Each template sees the host's context plus `package_units`, the units the package
+    installs, which is the list `prerm` stops.
+    """
+    directory = lib / "maintainer-scripts"
+    for name in names:
+        if name not in MAINTAINER_SCRIPTS:
+            raise RenderRefused(
+                f"{package.name}: maintainer script {name!r} is not one of "
+                f"{sorted(MAINTAINER_SCRIPTS)}"
+            )
+        if name == "preinst" and host is None:
+            raise RenderRefused(
+                f"{package.name}: preinst refuses a hostname mismatch, "
+                "so only a host package lists it"
+            )
+        src = f"{name}.j2"
+        _confined(directory, src)
+        ctx, reasons = host_context(host, {}, inventory, withheld)
+        ctx["package_units"] = package.units()
+        env = renderer_env(directory)
+        env.loader = _ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
+        package.scripts[name] = _render_template(
+            env, src, ctx, reasons, directory
+        ).encode()
 
 
 def _plain_name(name: object, kind: str) -> str:
@@ -221,8 +303,9 @@ def _render_unit(
     host: str | None,
     inventory: Inventory,
     withheld: frozenset[str],
+    lib: Path,
 ) -> None:
-    """Render the files `spec` lists from `directory` into `package`."""
+    """Render the files `spec` lists from `directory`, or `lib`, into `package`."""
     files = spec.get("files") or []
     if not files:
         return
@@ -230,9 +313,14 @@ def _render_unit(
     env = renderer_env(directory)
     env.loader = _ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
     for entry in files:
-        if not {"src", "dst"} <= set(entry):
+        sources = {"src", "lib"} & set(entry)
+        if "dst" not in entry or not sources:
             raise RenderRefused(f"{directory}: file entry {entry} lacks src or dst")
-        src, dst = str(entry["src"]), str(entry["dst"])
+        if len(sources) > 1:
+            raise RenderRefused(
+                f"{directory}: file entry {entry} names both src and lib"
+            )
+        dst = str(entry["dst"])
         destination = PurePosixPath(dst)
         if not destination.is_absolute() or ".." in destination.parts:
             raise RenderRefused(
@@ -241,6 +329,12 @@ def _render_unit(
         if dst in package.files:
             raise RenderRefused(f"{package.name}: two files install {dst}")
         mode = _mode(entry.get("mode", "0644"), directory, dst)
+        if "lib" in entry:
+            # A plain name has no `.j2` suffix, so a lib script is copied, never rendered.
+            source = _confined(lib, _plain_name(entry["lib"], "lib script"))
+            package.files[dst] = (source.read_bytes(), mode)
+            continue
+        src = str(entry["src"])
         source = _confined(directory, src)
         if src.endswith(".j2"):
             content = _render_template(env, src, ctx, reasons, directory).encode()

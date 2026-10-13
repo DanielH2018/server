@@ -1,0 +1,11 @@
+#!/bin/sh
+# Rendered by homelab-render from hosts/lib/maintainer-scripts/prerm.j2. An upgrade leaves every
+# unit running, so reconcile can apply its restart rules; only a removal stops them.
+{% if package_units %}
+if [ "$1" = remove ]; then
+{% for unit in package_units %}
+    systemctl stop {{ unit }} || true
+{% endfor %}
+fi
+{% endif %}
+exit 0

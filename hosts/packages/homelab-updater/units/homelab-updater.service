@@ -1,0 +1,15 @@
+# Shipped by homelab-updater. Reconcile marks this unit `manual`, so an upgrade never restarts
+# the run that installed it.
+[Unit]
+Description=Install the newest homelab packages and reconcile this host
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/homelab/homelab-updater
+Nice=10
+IOSchedulingClass=idle
+# Reconcile's 30 minutes, the install's 10-minute DPkg::Lock::Timeout, and 10 minutes for the
+# fetch and the unpack. hosts/lib/tests/test_updater_package.py holds the inequality.
+TimeoutStartSec=50min

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Rendered by homelab-render from hosts/lib/maintainer-scripts/preinst.j2. A host package
+# installs on its own host only.
+if [ "$(hostname)" != "{{ inventory_hostname }}" ]; then
+    echo "homelab-{{ inventory_hostname }} installs only on {{ inventory_hostname }}" >&2
+    exit 1
+fi
+exit 0

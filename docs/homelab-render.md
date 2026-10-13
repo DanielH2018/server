@@ -676,6 +676,20 @@ quoted string such as `"0755"`: YAML loads an unquoted `0755` as the integer 493
 renderer refuses an integer. A `src` that ends `.j2` renders through the strict environment
 cluster mode uses. Any other `src` is copied byte for byte.
 
+A file entry may name `lib: NAME` instead of a `src`. It copies `hosts/lib/NAME`, a script
+several packages ship, byte for byte. `NAME` is a plain name, and the file must resolve inside
+`hosts/lib/` through any symlink. It is the one source outside the component that an entry may
+name.
+
+A package spec may also list `maintainer_scripts`: any of `preinst`, `postinst` and `prerm`.
+Each renders from `hosts/lib/maintainer-scripts/<name>.j2` with the package's context plus
+`package_units`, the unit files the package installs directly under
+`/usr/lib/systemd/system/`. The render writes it to `DIR/<package>/scripts/<name>`, mode 0755,
+outside `root/`, and `nfpm.yaml`'s `scripts:` names it. Only a host package may list
+`preinst`, because it refuses a hostname mismatch. The maintainer-script lint in
+`hosts/lib/tests/test_maintainer_scripts.py` holds each rendered script to the line shapes H3's
+*Package rules* allow.
+
 A host package's context is the host's inventory layers, as
 `scripts/lib/render_context.py:render_context` builds them, with `inventory_hostname` set to
 the host. A shared package's context has no host_vars layer. The component's `defaults:` map

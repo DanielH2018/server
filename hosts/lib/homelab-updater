@@ -1,0 +1,295 @@
+#!/bin/sh
+# homelab-updater: install the newest homelab-updater and homelab-<host>, run reconcile, and
+# report the verdict reconcile recorded. The design is H3's *The updater* and *Host-plane
+# holds and stop levers* (docs/target-architecture/host/h3-pi-pilot.md); the step numbers
+# below are that section's.
+#
+# Usage:
+#   homelab-updater                                    a timer run
+#   homelab-updater --clear-hold                       rerun reconcile; clear the hold if it passes
+#   homelab-updater --clear-hold --install-newest      clear the hold, then run as a timer run
+#
+# Exit codes: 0 reconciled, or held on a timer run; 1 failed, with the reason on stderr;
+# 64 usage; 75 another apt or dpkg frontend holds dpkg's lock, so nothing changed.
+#
+# Every verdict comes from reconcile's record, /var/lib/homelab-reconcile/applied.json:
+#   {"result":  {"versions": {"<package>": "<version>", ...}, "ok": true, "finished": <epoch>},
+#    "last_ok": {the same fields, from the newest run that succeeded}}
+# The installed versions are reconciled when `result` names exactly the versions dpkg-query
+# reports for both packages and says the run succeeded.
+#
+# HOMELAB_ROOT prefixes every state path. Only the tests in hosts/lib/tests/ set it.
+
+set -u
+
+ROOT=${HOMELAB_ROOT:-}
+STATE=$ROOT/var/lib/homelab-updater
+HOLD=$STATE/hold
+LAST_SUCCESS=$STATE/last_success
+FULL_UPDATE_STAMP=$STATE/full-update
+RECORD=$ROOT/var/lib/homelab-reconcile/applied.json
+TEXTFILE_DIR=$ROOT/var/lib/node-exporter-textfile
+PROM=$TEXTFILE_DIR/homelab_host.prom
+
+# apt-helper lives in /usr/lib/apt. Appended, so an earlier PATH entry wins.
+PATH=$PATH:/usr/lib/apt
+DEBIAN_FRONTEND=noninteractive
+export PATH DEBIAN_FRONTEND
+
+HOST=$(hostname)
+UPDATER=homelab-updater
+HOST_PKG=homelab-$HOST
+# Step 3's restriction to the homelab source. The Ubuntu lists stay as apt-daily left them.
+HOMELAB_APT="-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0"
+INSTALL="apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=600"
+
+say() { echo "homelab-updater: $*" >&2; }
+
+# Set <PKG>_STATUS (dpkg's three-letter abbreviation, "" when dpkg knows no such package) and
+# <PKG>_VERSION for both packages.
+read_installed() {
+    installed=$(dpkg-query -W -f '${Package} ${db:Status-Abbrev}${Version}\n' \
+        "$UPDATER" "$HOST_PKG" 2>/dev/null)
+    UPDATER_STATUS=$(status_of "$UPDATER")
+    UPDATER_VERSION=$(version_of "$UPDATER")
+    HOST_STATUS=$(status_of "$HOST_PKG")
+    HOST_VERSION=$(version_of "$HOST_PKG")
+}
+status_of() { printf '%s\n' "$installed" | awk -v p="$1" '$1 == p { print substr($0, length(p) + 2, 3) }'; }
+version_of() { printf '%s\n' "$installed" | awk -v p="$1" '$1 == p { print substr($0, length(p) + 5) }'; }
+
+# absent: dpkg holds no installed copy. broken: an installed copy that is not "ii ", such as
+# one half-installed by a kill during unpack. ok: "ii ".
+state_of() {
+    case $1 in
+        "ii ") echo ok ;;
+        "" | ?n? | ?c?) echo absent ;;
+        *) echo broken ;;
+    esac
+}
+
+# Set RESULT_OK, RESULT_UPDATER, RESULT_HOST and LAST_OK_HOST from the record. A missing or
+# unreadable record reads as a failed run that names no version ("-").
+read_record() {
+    record=$(python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        record = json.load(f)
+except (OSError, ValueError):
+    record = {}
+if not isinstance(record, dict):
+    record = {}
+def run(name):
+    value = record.get(name)
+    return value if isinstance(value, dict) else {}
+def version(name, package):
+    versions = run(name).get("versions")
+    value = versions.get(package) if isinstance(versions, dict) else None
+    return value if isinstance(value, str) and value and value.isprintable() and " " not in value else "-"
+print("ok", 1 if run("result").get("ok") is True else 0)
+print("updater", version("result", sys.argv[2]))
+print("host", version("result", sys.argv[3]))
+print("last_ok", version("last_ok", sys.argv[3]))
+' "$RECORD" "$UPDATER" "$HOST_PKG") || record=""
+    RESULT_OK=$(field ok 0)
+    RESULT_UPDATER=$(field updater -)
+    RESULT_HOST=$(field host -)
+    LAST_OK_HOST=$(field last_ok -)
+}
+field() { printf '%s\n' "$record" | awk -v k="$1" -v d="$2" '$1 == k { v = $2 } END { print (v == "" ? d : v) }'; }
+
+# True when the record's result names the installed versions of both packages and succeeded.
+reconciled() {
+    [ "$RESULT_OK" = 1 ] &&
+        [ "$(state_of "$UPDATER_STATUS")" = ok ] && [ "$(state_of "$HOST_STATUS")" = ok ] &&
+        [ "$RESULT_UPDATER" = "$UPDATER_VERSION" ] && [ "$RESULT_HOST" = "$HOST_VERSION" ]
+}
+
+# Write homelab_host.prom with M3's write rule: mktemp in the directory, chmod 0644, mv. $1 is
+# homelab_host_reconcile_ok. The applied version is the record's last_ok, and the success
+# timestamp is the one last_success keeps.
+write_metrics() {
+    tmp=$(mktemp "$TEXTFILE_DIR/.homelab_host.prom.XXXXXX") || return 1
+    mismatches=$(dpkg --verify "$UPDATER" "$HOST_PKG" 2>/dev/null | awk 'END { print NR }')
+    {
+        if [ "$LAST_OK_HOST" != - ]; then
+            printf 'homelab_host_applied_info{host="%s",sha="%s",version="%s"} 1\n' \
+                "$HOST" "${LAST_OK_HOST##*+g}" "$LAST_OK_HOST"
+        fi
+        if [ -s "$LAST_SUCCESS" ]; then
+            printf 'homelab_host_update_success_timestamp_seconds{host="%s"} %s\n' \
+                "$HOST" "$(cat "$LAST_SUCCESS")"
+        fi
+        printf 'homelab_host_reconcile_ok{host="%s"} %s\n' "$HOST" "$1"
+        printf 'homelab_host_verify_mismatches{host="%s"} %s\n' "$HOST" "$mismatches"
+    } >"$tmp" && chmod 0644 "$tmp" && mv "$tmp" "$PROM" && return 0
+    rm -f "$tmp"
+    return 1
+}
+
+# A homelab writer never creates the textfile directory, so a host whose exporter is not set
+# up fails loudly.
+need_textfile_dir() {
+    [ -d "$TEXTFILE_DIR" ] && return 0
+    say "$TEXTFILE_DIR is missing; writing nothing"
+    exit 1
+}
+
+# Step 7. Its exit status is not the verdict; step 8 reads the record the run wrote.
+run_reconcile() {
+    systemctl start homelab-reconcile.service || say "homelab-reconcile.service failed"
+}
+
+# Step 8. Exits.
+verdict() {
+    need_textfile_dir
+    read_installed
+    read_record
+    if reconciled; then
+        date +%s >"$LAST_SUCCESS.tmp" && mv "$LAST_SUCCESS.tmp" "$LAST_SUCCESS"
+        rm -f "$HOLD"
+        write_metrics 1 || exit 1
+        exit 0
+    fi
+    printf '%s %s\n%s %s\n' "$UPDATER" "${UPDATER_VERSION:--}" "$HOST_PKG" "${HOST_VERSION:--}" >"$HOLD"
+    write_metrics 0
+    say "reconcile did not reconcile the installed versions; holding until --clear-hold"
+    exit 1
+}
+
+# Step 4's candidate: the highest Version: of each package in the homelab Packages list step 3
+# fetched. Sets CANDIDATE_UPDATER and CANDIDATE_HOST. Loads no apt cache.
+read_candidates() {
+    # shellcheck disable=SC2016,SC2086 # $(FILENAME) is apt's field; HOMELAB_APT is a list.
+    lists=$(apt-get indextargets $HOMELAB_APT --format '$(FILENAME)' 'Created-By: Packages') ||
+        lists=""
+    stanzas=""
+    for list in $lists; do
+        [ -e "$list" ] || continue
+        stanzas="$stanzas
+$(apt-helper cat-file "$list" | awk -v a="$UPDATER" -v b="$HOST_PKG" '
+            /^Package: / { p = $2 }
+            /^Version: / { if (p == a || p == b) print p, $2 }
+            /^$/ { p = "" }')"
+    done
+    CANDIDATE_UPDATER=$(highest "$UPDATER")
+    CANDIDATE_HOST=$(highest "$HOST_PKG")
+}
+highest() {
+    best=""
+    for v in $(printf '%s\n' "$stanzas" | awk -v p="$1" '$1 == p { print $2 }'); do
+        if [ -z "$best" ] || dpkg --compare-versions "$v" gt "$best"; then
+            best=$v
+        fi
+    done
+    printf '%s\n' "$best"
+}
+
+# True when the candidate is newer than what is installed, or nothing is installed.
+newer() {
+    [ "$(state_of "$1")" = absent ] || dpkg --compare-versions "$3" gt "$2"
+}
+
+# Steps 5 and 6. A Depends on an Ubuntu package can need fresher Ubuntu lists than step 3
+# fetched, so a failed install earns one full apt-get update and one retry, at most once a day
+# and never in the 04:00 to 05:59 hour that holds the apt timers.
+install_newest() {
+    $INSTALL "$UPDATER" "$HOST_PKG" && return 0
+    case $(date +%H) in
+        04 | 05)
+            say "install failed; no full apt-get update between 04:00 and 05:59"
+            return 1
+            ;;
+    esac
+    today=$(date +%F)
+    if [ "$(cat "$FULL_UPDATE_STAMP" 2>/dev/null)" = "$today" ]; then
+        say "install failed; the full apt-get update already ran today"
+        return 1
+    fi
+    printf '%s\n' "$today" >"$FULL_UPDATE_STAMP"
+    apt-get update || return 1
+    $INSTALL "$UPDATER" "$HOST_PKG"
+}
+
+# Steps 3 to 8. Exits.
+update() {
+    configured=$1
+    # shellcheck disable=SC2086 # HOMELAB_APT is a list of options.
+    if ! apt-get update --error-on=any $HOMELAB_APT; then
+        say "the homelab fetch failed; writing nothing"
+        exit 1
+    fi
+    read_installed
+    read_candidates
+    if [ -z "$CANDIDATE_UPDATER" ] || [ -z "$CANDIDATE_HOST" ]; then
+        say "the homelab Packages list names no $UPDATER or no $HOST_PKG; writing nothing"
+        exit 1
+    fi
+    broken=""
+    [ "$(state_of "$UPDATER_STATUS")" = broken ] && broken="$broken $UPDATER"
+    [ "$(state_of "$HOST_STATUS")" = broken ] && broken="$broken $HOST_PKG"
+    if [ -n "$broken" ]; then
+        # shellcheck disable=SC2086 # broken is a list of package names.
+        $INSTALL --reinstall $broken || exit 1
+    elif newer "$UPDATER_STATUS" "$UPDATER_VERSION" "$CANDIDATE_UPDATER" ||
+        newer "$HOST_STATUS" "$HOST_VERSION" "$CANDIDATE_HOST"; then
+        install_newest || exit 1
+    else
+        read_record
+        if [ "$configured" = 0 ] && reconciled; then
+            verdict
+        fi
+    fi
+    run_reconcile
+    verdict
+}
+
+case "$*" in
+    "") mode=timer ;;
+    --clear-hold) mode=clear ;;
+    "--clear-hold --install-newest" | "--install-newest --clear-hold") mode=newest ;;
+    *)
+        echo "usage: homelab-updater [--clear-hold [--install-newest]]" >&2
+        exit 64
+        ;;
+esac
+
+mkdir -p "$STATE" || exit 1
+
+case $mode in
+    clear)
+        # Rerun reconcile, which retries the actions that failed, and clear the hold only if
+        # the record then shows the installed versions reconciled. Installs nothing.
+        need_textfile_dir
+        run_reconcile
+        verdict
+        ;;
+    newest)
+        rm -f "$HOLD"
+        update 0
+        ;;
+esac
+
+# Step 1.
+if [ -e "$HOLD" ]; then
+    need_textfile_dir
+    read_installed
+    read_record
+    write_metrics 0 || exit 1
+    say "held since a failed reconcile (see $HOLD); run homelab-updater --clear-hold"
+    exit 0
+fi
+
+# Step 2. dpkg takes its frontend lock without waiting.
+if [ -n "$(dpkg --audit 2>/dev/null)" ]; then
+    if ! out=$(dpkg --configure -a 2>&1); then
+        printf '%s\n' "$out" >&2
+        case $out in
+            *"frontend lock"*) exit 75 ;;
+        esac
+        exit 1
+    fi
+    update 1
+fi
+update 0
