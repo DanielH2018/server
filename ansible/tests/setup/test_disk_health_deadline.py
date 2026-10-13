@@ -17,9 +17,14 @@ this same rendered value.
 
 import re
 
+from jinja2 import StrictUndefined
+
+from lib.ansible_jinja_env import template_env
+from lib.render_guard import render_or_error
 from lib.repo_paths import K3S_ROLE, ROLES
-from _shell_render import render_shell_script
+from _shell_render import render_shell_script, shell_template_path
 from lib.estate import role_defaults
+from validate.shell_templates import template_context
 
 TEMPLATE = ("setup", "k3s", "disk-health.sh.j2")
 K3S = role_defaults(K3S_ROLE)
@@ -75,8 +80,40 @@ def _violations(minute: str, deadline: int) -> list[str]:
     return found
 
 
+def _strict_render_error(minute: str) -> str | None:
+    """The render error at `minute` when an undefined name raises, as it does under Ansible.
+
+    The shared harness renders an undefined name as `STUB`, so the template's refusal of a
+    minute that is not `*/N` only shows under `StrictUndefined`. Ansible raises there too, with
+    the message the template hands `mandatory`.
+    """
+    path = shell_template_path(*TEMPLATE)
+    env = template_env(path.parent, undefined_cls=StrictUndefined)
+    _, err = render_or_error(
+        env, path.name, template_context(path, {MINUTE_VAR: minute})
+    )
+    return err
+
+
 def test_the_rendered_deadline_meets_all_three_relations_is_clean():
-    assert _violations(K3S[MINUTE_VAR], _rendered_deadline()) == []
+    # The minute the render context resolves: the role default with the inventory laid over
+    # it, so a group_vars or host_vars override is what gets checked.
+    minute = template_context(shell_template_path(*TEMPLATE))[MINUTE_VAR]
+    assert _violations(minute, _rendered_deadline()) == []
+
+
+def test_an_every_n_minute_renders_under_strict_undefined_is_clean():
+    assert _strict_render_error("*/10") is None
+
+
+def test_a_minute_with_no_single_period_fails_the_render_is_flagged():
+    # "0,30" would render 300 and an hourly "5" 900, both shorter than the real gap.
+    for minute in ("0,30", "5"):
+        err = _strict_render_error(minute)
+        assert err and "disk_health_cron_minute_not_every_n" in err, (minute, err)
+        assert "DEADLINE_S=" not in render_shell_script(
+            *TEMPLATE, overrides={MINUTE_VAR: minute}
+        )
 
 
 def test_a_cadence_the_dead_man_would_beat_is_flagged():

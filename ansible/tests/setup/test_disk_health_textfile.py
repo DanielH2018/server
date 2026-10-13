@@ -3,13 +3,12 @@
 The plan is docs/target-architecture/monitoring/m3-textfile-timer.md, *PR 2*: the producer metric
 contract's three `homelab_check_*` series, an atomic 0644 write, a missing Kuma token that skips
 only the pushes, and a boot-grace run that writes nothing. The real template is rendered and run
-under bash. Its push library and its two env files are repointed at stubs, and `df`, `curl` and
-`logger` are stubbed on PATH, so neither the runner's uptime nor its disk decides a case. The
-assertions read the file the run leaves in `TEXTFILE_DIR`.
+under bash. Its push library and its two env files are repointed at stubs, and `df`, `curl`,
+`logger` and `date` are stubbed on PATH, so neither the runner's uptime, its disk nor its clock
+decides a case. The assertions read the file the run leaves in `TEXTFILE_DIR`.
 """
 
 import re
-import time
 
 from lib.proc_testing import fake_bin, run, write_exec
 from _shell_render import render_shell_script
@@ -20,6 +19,8 @@ KUMA_ENV = "/etc/rancher/k3s/kuma-push.env"
 HC_ENV = "/etc/healthchecks/ping.env"
 PROM = "disk-health.prom"
 SEP = "\x1e"
+# What the stub `date +%s` prints, so the timestamp assertion reads no live clock.
+EPOCH = 1760000000
 
 # kuma_push records its status and message, and whether the textfile already existed when the
 # push ran. boot_grace_active answers what the case sets, never the runner's real uptime.
@@ -69,6 +70,7 @@ def _run(tmp_path, used_pct=40, token="stubtoken", boot_grace=False, textfile_di
         tmp_path / "bin",
         df=_df(used_pct),
         curl="exit 0\n",
+        date=f"echo {EPOCH}\n",
         logger=f'echo "$@" >> "{tmp_path / "logged"}"\n',
     )
     env = {
@@ -95,14 +97,12 @@ def _rendered_deadline() -> str:
 
 
 def test_an_up_run_writes_the_three_series_before_the_kuma_push(tmp_path):
-    before = int(time.time())
     textfile_dir, pushes = _run(tmp_path, used_pct=40)
-    after = int(time.time())
 
     series = _series(textfile_dir)
     assert series['homelab_check_success{check="disk-health"}'] == "1"
     stamp = int(series['homelab_check_last_run_timestamp_seconds{check="disk-health"}'])
-    assert before <= stamp <= after
+    assert stamp == EPOCH
     assert (
         series['homelab_check_deadline_seconds{check="disk-health"}']
         == _rendered_deadline()

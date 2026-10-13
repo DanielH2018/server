@@ -79,9 +79,16 @@ MAX_PCT={{ k3s_disk_max_pct }}
 # The longest legitimate gap between two textfile writes: two cron periods plus 300s. One period
 # is the normal gap, the second is the slot the boot grace skips, and the 300s covers cron start
 # jitter, the 1m `node` scrape and the 1m rule evaluation. Rendered from the cron's own minute,
-# read as `*/N`; ansible/tests/setup/test_disk_health_deadline.py refuses any other shape and
-# holds this under the Healthchecks.io dead-man's timeout plus grace.
-DEADLINE_S={{ 2 * 60 * (k3s_disk_health_cron_minute | replace('*/', '') | int) + 300 }}
+# read as `*/N`. Any other shape has no single period, so the render fails rather than publish
+# a deadline shorter than the real gap: `mandatory` on a name nothing defines is how a template
+# raises with a message. ansible/tests/setup/test_disk_health_deadline.py holds the value under
+# the Healthchecks.io dead-man's timeout plus grace, and proves the refusal.
+{% set _every_n = k3s_disk_health_cron_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+{% if _every_n.isdigit() and '*/' ~ _every_n == k3s_disk_health_cron_minute | string %}
+DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
+{% else %}
+{{ disk_health_cron_minute_not_every_n | mandatory('k3s_disk_health_cron_minute must be */N for disk-health.sh to derive DEADLINE_S, got ' ~ k3s_disk_health_cron_minute) }}
+{% endif %}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
 read -r USED_PCT AVAIL_KB < <(df -P / | awk 'NR==2 { sub("%","",$5); print $5, $4 }')
