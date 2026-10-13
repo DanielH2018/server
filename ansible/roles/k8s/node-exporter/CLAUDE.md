@@ -47,8 +47,9 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
   `ansible/roles/k8s/monitor-bridge/files/checks/host.py:with_claude_cgroups` folds the
   series into `check_mem`, and
   `ansible/roles/k8s/monitor-bridge/files/verdicts/host_cgroups.py:claude_cgroup_verdict`
-  fails when an expected cgroup stops reporting. A missing or malformed `claude_cgroup.prom`
-  therefore pages from Kuma.
+  fails when an expected cgroup stops reporting. Arm 4 checks the cgroup names across all
+  origins together, so it pages from Kuma only when the file is missing or malformed on every
+  host. A writer that stops on one node while the other still reports reads green.
 - **M3's producer metric contract governs every file here**
   (`docs/target-architecture/monitoring/m3-textfile-timer.md`, *The producer metric
   contract*). A *check file* carries a verdict and follows the whole contract. A *gauge set*,
