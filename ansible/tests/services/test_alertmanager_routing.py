@@ -35,6 +35,29 @@ BLACKHOLE = "blackhole"
 # rather than reading as no match, which would silently skip a route.
 EQUALITY = re.compile(r'^(\w+)="([^"]*)"$')
 
+INGRESS_RULES = (
+    ROLES / "k8s" / "observability" / "files" / "rules" / "ingress-probes.yaml"
+)
+# A per-target ingress alert takes `service` from its probe target, so a probed service
+# stands in for it.
+INGRESS_STAND_IN_SERVICE = "homepage"
+
+
+def ingress_set(alert: str) -> dict[str, str]:
+    """The labels `alert` reaches Alertmanager with, read from the shipped ingress-probes rule.
+
+    Reading the rule rather than copying it means a rule that gains or drops `shadow`, or
+    changes `severity`, moves its set to another route, and its expected outcome fails.
+    """
+    [group] = yaml_fast.safe_load(INGRESS_RULES.read_text())["groups"]
+    [rule] = [r for r in group["rules"] if r["alert"] == alert]
+    return {
+        "alertname": alert,
+        "service": INGRESS_STAND_IN_SERVICE,
+        **rule["labels"],
+    }
+
+
 # Each label set and the receivers Alertmanager sends it to.
 PAGING = {
     "warning": (
@@ -53,40 +76,14 @@ PAGING = {
         },
         ["discord", "email"],
     ),
-    "ingress-probes-missing": (
-        {
-            "alertname": "IngressProbesMissing",
-            "severity": "warning",
-            "service": "observability",
-        },
-        ["discord"],
-    ),
+    "ingress-probes-missing": (ingress_set("IngressProbesMissing"), ["discord"]),
 }
-# The shadow sets, as M4's ingress-probes rules ship them. A per-target alert takes `service`
-# from its probe target, so any probed service stands in.
+# The shadow sets, as M4's ingress-probes rules ship them.
 SHADOW = {
-    "ingress-probe-failed": {
-        "alertname": "IngressProbeFailed",
-        "severity": "warning",
-        "service": "homepage",
-        "shadow": "true",
-    },
-    "ingress-probe-failed-critical": {
-        "alertname": "IngressProbeFailedCritical",
-        "severity": "critical",
-        "service": "authelia",
-        "shadow": "true",
-    },
-    "blackbox-exporter-down": {
-        "alertname": "BlackboxExporterDown",
-        "severity": "critical",
-        "service": "blackbox-exporter",
-        "shadow": "true",
-    },
+    "ingress-probe-failed": ingress_set("IngressProbeFailed"),
+    "ingress-probe-failed-critical": ingress_set("IngressProbeFailedCritical"),
+    "blackbox-exporter-down": ingress_set("BlackboxExporterDown"),
 }
-INGRESS_RULES = (
-    ROLES / "k8s" / "observability" / "files" / "rules" / "ingress-probes.yaml"
-)
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
 
 
@@ -156,21 +153,12 @@ def test_a_paging_alert_expected_as_blackhole_is_flagged():
     assert not_blackholed(labels) == receivers
 
 
-def test_the_ingress_sets_carry_the_labels_their_rules_ship():
-    """The sets above stand for the ingress-probes rules only while they carry the rules'
-    routing labels. A rule that drops `shadow` must move its set, and its outcome, with it."""
-    sets = {labels["alertname"]: labels for labels, _ in PAGING.values()}
-    sets.update({labels["alertname"]: labels for labels in SHADOW.values()})
+def test_every_ingress_rule_has_an_expected_outcome():
+    """A rule added to ingress-probes.yaml without a set here would never be routed."""
     [group] = yaml_fast.safe_load(INGRESS_RULES.read_text())["groups"]
-    assert len(group["rules"]) == 4
-    for rule in group["rules"]:
-        labels = sets[rule["alert"]]
-        literal = rule["labels"]
-        assert labels.get("shadow") == literal.get("shadow"), rule["alert"]
-        assert labels["severity"] == literal["severity"], rule["alert"]
-        assert labels["service"] == literal.get("service", labels["service"]), rule[
-            "alert"
-        ]
+    covered = {labels["alertname"] for labels in SHADOW.values()}
+    covered |= {labels["alertname"] for labels, _ in PAGING.values()}
+    assert {rule["alert"] for rule in group["rules"]} <= covered
 
 
 def test_a_paging_route_without_the_mute_is_flagged():
