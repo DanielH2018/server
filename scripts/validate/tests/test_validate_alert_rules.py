@@ -9,6 +9,8 @@ Run: uv run pytest scripts/validate/tests/test_validate_alert_rules.py
 
 import re
 
+import yaml
+
 from lib import yaml_fast
 from lib.repo_paths import REPO
 from validate import alert_conventions, alert_rules
@@ -193,6 +195,12 @@ def test_every_proof_names_fixtures_that_exist():
         ("promtool", "check", "config", "--syntax-only"),
         ("pint", *alert_rules.PINT_ARGS),
     }
+    # promtool test rules has two proofs, and the set above holds the command once. The
+    # second shows condition 3 of the third `service` source rests on promtool.
+    assert [p.bad for p in alert_rules.PROOFS if p.args == ("test", "rules")] == [
+        "bad-rules.test.yaml",
+        "bad-job-service-rules.test.yaml",
+    ]
     for proof in alert_rules.PROOFS:
         assert (alert_rules.FIXTURES / proof.good).is_file(), proof.good
         assert (alert_rules.FIXTURES / proof.bad).is_file(), proof.bad
@@ -265,4 +273,70 @@ def test_the_live_pint_config_names_the_pinned_prometheus_address():
     )
     assert re.search(r"^\s*required\s*=\s*true\s*$", live, re.M), (
         "live.hcl must set required = true, or an unreachable Prometheus is only a warning"
+    )
+
+
+def _tree_with_a_job_service_alert(tmp_path, target_labels):
+    """`check_tree` over the real alerting-meta rules plus an alert that takes `service` from
+    job `x`, with the real render's `prometheus.yml` gaining that job.
+
+    Args:
+        target_labels: The labels job `x`'s one target sets.
+    """
+    rules_dir = tmp_path / "rules"
+    tests_dir = tmp_path / "tests"
+    rules_dir.mkdir()
+    tests_dir.mkdir()
+    rules = yaml_fast.safe_load(
+        (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()
+    )
+    tests = yaml_fast.safe_load(
+        (alert_rules.RULE_TESTS_DIR / "alerting-meta.test.yaml").read_text()
+    )
+    rules["groups"][0]["rules"].append(
+        {
+            "alert": "FixtureProbeFailed",
+            "expr": 'probe_success{job="x"} == 0',
+            "labels": {"severity": "warning"},
+        }
+    )
+    tests["tests"][0]["alert_rule_test"].append(
+        {
+            "eval_time": "1m",
+            "alertname": "FixtureProbeFailed",
+            "exp_alerts": [{"exp_labels": {"severity": "warning", "service": "a"}}],
+        }
+    )
+    (rules_dir / "alerting-meta.yaml").write_text(yaml.safe_dump(rules))
+    (tests_dir / "alerting-meta.test.yaml").write_text(yaml.safe_dump(tests))
+    found = alert_rules.rendered_files()
+    config = yaml_fast.safe_load(found["prometheus.yml"])
+    config["scrape_configs"].append(
+        {
+            "job_name": "x",
+            "static_configs": [
+                {"targets": ["https://a.example"], "labels": target_labels}
+            ],
+        }
+    )
+    found["prometheus.yml"] = yaml.safe_dump(config)
+    return alert_rules.check_tree(
+        run=lambda argv: (0, ""),
+        render=lambda: found,
+        render_rules=lambda: (["alerting-meta"], {"alerting-meta.yaml"}),
+        rules_dir=rules_dir,
+        tests_dir=tests_dir,
+    )
+
+
+def test_an_alert_whose_rendered_scrape_job_sets_service_is_clean(tmp_path):
+    """The rendered `prometheus.yml` reaches the third `service` source's condition 2."""
+    assert _tree_with_a_job_service_alert(tmp_path, {"service": "a"}) == []
+
+
+def test_an_alert_whose_rendered_scrape_job_sets_no_service_is_flagged(tmp_path):
+    problems = _tree_with_a_job_service_alert(tmp_path, {"origin": "daniel-box"})
+    assert len(problems) == 1, problems
+    assert (
+        "selects job 'x', which has a target whose labels set no service" in problems[0]
     )

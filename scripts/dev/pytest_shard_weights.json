@@ -1048,6 +1048,7 @@
  "scripts/validate/tests/test_shell_template_cron_rules.py": 0.78,
  "scripts/validate/tests/test_skip_roles_classes_hold.py": 0.01,
  "scripts/validate/tests/test_vale_sync_guard.py": 2.64,
+ "scripts/validate/tests/test_validate_alert_service_from_job.py": 0.13,
  "scripts/validate/tests/test_validate_asset_pins.py": 0.04,
  "scripts/validate/tests/test_validate_compose_templates.py": 0.07,
  "scripts/validate/tests/test_validate_grafana_dashboards.py": 0.08,

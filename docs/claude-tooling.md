@@ -480,8 +480,9 @@ with `scripts/validate/pint/offline.hcl`, which requires every alert to carry a 
 `critical`, `warning` or `info`. It also fails a render that lost a Go template
 expression from `alertmanager-secret.yaml.j2`, which `amtool` cannot see. Before the tools
 run, it holds the rule files to the conventions `promtool` does not check: each group listed
-in `observability_rule_groups`, a literal `severity`, a `service` that is either literal or
-taken from M2's workload-service join with its `unmapped` fallback, one `Watchdog` at most,
+in `observability_rule_groups`, a literal `severity`, a `service` that is literal, taken
+from M2's workload-service join with its `unmapped` fallback, or taken from one scrape job
+whose every target sets it, one `Watchdog` at most,
 no `${`, a test case firing every alert, and a zero-series case per rule file.
 `scripts/validate/alert_conventions.py` lists each rule in its docstring.
 

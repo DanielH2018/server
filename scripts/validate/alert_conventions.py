@@ -10,9 +10,16 @@ Prometheus. `rule_problems` holds the role's rule files to the conventions in
   ConfigMap. `GROUP_FLOOR` names the groups the run must find;
 - every alert carries a literal `severity` from `SEVERITIES`, and `shadow` is absent or
   `"true"`;
-- every alert carries a literal `service`, or takes it from its expression through M2's join
-  shape (`service_from_mapping`): a `group_left(service)` join to a workload-service recording
-  rule, with a `label_replace` that maps a workload the join misses to `service="unmapped"`;
+- every alert carries a `service` from one of three sources:
+    - a literal label;
+    - M2's join shape (`service_from_mapping`): a `group_left(service)` join to a
+      workload-service recording rule, with a `label_replace` that maps a workload the join
+      misses to `service="unmapped"`;
+    - its scrape job's targets (`service_from_job`). Every vector selector in the expression
+      names one job by equality, every target of that job in the rendered `prometheus.yml`
+      sets `service` in its `labels` (`service_jobs`), and every `exp_alerts` entry for the
+      alert lists `service` in `exp_labels`. promtool compares whole label sets, so the last
+      condition fails an expression that aggregates `service` away;
 - exactly one rule is named `Watchdog`, in `alerting-meta`, with the expression `vector(1)`.
   The C7 health gate excludes that name, so a second one would be hidden from every gate, and
   with none nothing pings the `alertmanager-watchdog` check on Healthchecks.io. Every other
@@ -26,7 +33,8 @@ Prometheus. `rule_problems` holds the role's rule files to the conventions in
   and stays quiet, and the Watchdog fires on any input, so it proves nothing about the family.
 
 `scripts/validate/alert_rules.py` runs `rule_problems` before its tool phase, with the rule
-groups and ConfigMap keys it reads from the role's render. This module renders nothing.
+groups, the ConfigMap keys and `prometheus.yml` it reads from the role's render. This module
+renders nothing.
 """
 
 import re
@@ -136,6 +144,151 @@ def service_from_mapping(expr: str) -> str | None:
     return None
 
 
+# What `expression_jobs` reads: the vector selectors of an expression, after its grouping and
+# matching label lists are gone. A string literal is matched whole so its text never reads as
+# a selector; a `{...}` block is kept, because it holds the `job` matcher.
+PROMQL_SELECTOR = re.compile(
+    r'(?P<string>"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|`[^`]*`)'
+    r"|(?P<range>\[[^\]]*\])"
+    r"|(?<![\w.:])(?P<name>[A-Za-z_:][\w:]*)\s*(?P<call>\()?(?P<matchers>\{[^}]*\})?"
+    r"|(?P<bare>\{[^}]*\})"
+)
+JOB_MATCHER = re.compile(r'(?<![\w.])job\s*(=~|!~|!=|=)\s*"((?:[^"\\]|\\.)*)"')
+
+
+def expression_jobs(expr: str) -> list[list[tuple[str, str]]]:
+    """The `job` matchers of each vector selector in a PromQL expression, read lexically.
+
+    Each item is one selector's `job` matchers as (operator, value) pairs; a selector with
+    none gives an empty list. A function call, a keyword and a string literal are not
+    selectors, and neither is a label inside `by`, `without`, `on` or `ignoring`.
+    """
+    selectors = []
+    for match in PROMQL_SELECTOR.finditer(PROMQL_LABEL_LIST.sub(" ", expr)):
+        if match["bare"]:
+            selectors.append(JOB_MATCHER.findall(match["bare"]))
+        elif match["name"] and not match["call"]:
+            if match["name"].lower() in PROMQL_KEYWORDS:
+                continue
+            selectors.append(JOB_MATCHER.findall(match["matchers"] or ""))
+    return selectors
+
+
+# The labels the third `service` source reads from a job's series: `service` itself, and
+# `job`, which the expression's matcher compares with the job's name.
+JOB_SERVICE_LABELS = ("service", "job")
+RELABEL_SECTIONS = ("relabel_configs", "metric_relabel_configs")
+
+
+def relabel_problem(rule: object) -> str | None:
+    """Why one relabel rule can drop or rewrite `service` or `job`, or None.
+
+    Prometheus anchors a relabel regex, so `labeldrop` removes a label its regex matches whole
+    and `labelkeep` removes one it does not. `labelmap` writes labels whose names come from
+    the source label names, so it is refused whatever its regex. Any other action writes only
+    `target_label`.
+    """
+    if not isinstance(rule, dict):
+        return None
+    action = str(rule.get("action", "replace")).lower()
+    regex = str(rule.get("regex", "(.*)"))
+    try:
+        matches = {name: bool(re.fullmatch(regex, name)) for name in JOB_SERVICE_LABELS}
+    except re.error:
+        return f"has a {action} rule whose regex {regex!r} does not compile here"
+    if action == "labelmap":
+        return "has a labelmap rule, which can overwrite service or job"
+    if action == "labeldrop" and any(matches.values()):
+        return f"has a labeldrop rule whose regex {regex!r} drops service or job"
+    if action == "labelkeep" and not all(matches.values()):
+        return f"has a labelkeep rule whose regex {regex!r} drops service or job"
+    if rule.get("target_label") in JOB_SERVICE_LABELS:
+        return f"has a {action} rule that writes {rule['target_label']}"
+    return None
+
+
+def service_jobs(prometheus_yml: str | None) -> dict[str, str | None]:
+    """Each scrape job in a rendered `prometheus.yml`, and why its targets fail to carry `service`.
+
+    A job maps to None when it has static targets only and every `static_configs` item sets a
+    non-empty `service` in its `labels`. A discovered target sets no static label, so a job
+    with any other `*_configs` discovery fails, as does one with no targets. A job fails too
+    when a rule in its `relabel_configs` or `metric_relabel_configs` can drop or rewrite
+    `service` or `job` (`relabel_problem`): the static label would not reach the series, and
+    promtool's synthetic input series in condition 3 would not show it.
+    """
+    try:
+        config = yaml_fast.safe_load(prometheus_yml or "") or {}
+    except yaml.YAMLError:
+        return {}
+    jobs = {}
+    for job in config.get("scrape_configs") or [] if isinstance(config, dict) else []:
+        if not isinstance(job, dict) or "job_name" not in job:
+            continue
+        discovered = sorted(
+            key
+            for key in job
+            if key.endswith("_sd_configs") and key != "static_configs"
+        )
+        static = [
+            item for item in job.get("static_configs") or [] if isinstance(item, dict)
+        ]
+        relabelled = next(
+            (
+                f"{why} in {section}"
+                for section in RELABEL_SECTIONS
+                for rule in job.get(section) or []
+                if (why := relabel_problem(rule))
+            ),
+            None,
+        )
+        if discovered:
+            jobs[job["job_name"]] = f"discovers its targets through {discovered[0]}"
+        elif relabelled:
+            jobs[job["job_name"]] = relabelled
+        elif not static:
+            jobs[job["job_name"]] = "has no static targets"
+        elif not all((item.get("labels") or {}).get("service") for item in static):
+            jobs[job["job_name"]] = "has a target whose labels set no service"
+        else:
+            jobs[job["job_name"]] = None
+    return jobs
+
+
+def service_from_job(
+    expr: str, jobs: Mapping[str, str | None]
+) -> tuple[str | None, str | None]:
+    """The job an alert with no literal `service` takes it from, or None and why it cannot.
+
+    Conditions 1 and 2 of the third `service` source: every vector selector names the same
+    job by equality, and every target of that job sets `service`. Condition 3 reads the rule
+    tests, so `rule_test_problems` checks it.
+
+    Args:
+        expr: The alert's expression.
+        jobs: `service_jobs` of the rendered `prometheus.yml`.
+    """
+    selectors = expression_jobs(expr)
+    if not selectors:
+        return None, "has no vector selector to take service from"
+    names = set()
+    for matchers in selectors:
+        if len(matchers) != 1 or matchers[0][0] != "=":
+            return None, (
+                "has a selector without exactly one job matcher by equality, so its series "
+                "need not come from a job whose targets set service"
+            )
+        names.add(matchers[0][1])
+    if len(names) > 1:
+        return None, f"selects from {len(names)} jobs {sorted(names)}, not one"
+    (job,) = names
+    if job not in jobs:
+        return None, f"selects job {job!r}, which prometheus.yml does not scrape"
+    if jobs[job]:
+        return None, f"selects job {job!r}, which {jobs[job]}"
+    return job, None
+
+
 def _load_yaml(path: Path) -> tuple[object, str | None]:
     """The parsed file, or None and the parse error."""
     try:
@@ -190,8 +343,16 @@ def group_list_problems(
     return problems
 
 
-def rule_file_problems(stem: str, doc: object) -> list[str]:
-    """A problem for each convention one parsed rule file breaks on its own."""
+def rule_file_problems(
+    stem: str, doc: object, jobs: Mapping[str, str | None] | None = None
+) -> list[str]:
+    """A problem for each convention one parsed rule file breaks on its own.
+
+    Args:
+        stem: The rule file's name without `.yaml`.
+        doc: The parsed rule file.
+        jobs: `service_jobs` of the rendered `prometheus.yml`; None reads as no job.
+    """
     groups = doc.get("groups") if isinstance(doc, dict) else None
     names = [g.get("name") for g in groups or [] if isinstance(g, dict)]
     problems = []
@@ -208,7 +369,15 @@ def rule_file_problems(stem: str, doc: object) -> list[str]:
                 f"{sorted(SEVERITIES)}"
             )
         if not labels.get("service"):
-            reason = service_from_mapping(str(rule.get("expr", "")))
+            expr = str(rule.get("expr", ""))
+            if SERVICE_JOIN.search(expr):
+                reason = service_from_mapping(expr)
+            else:
+                _job, why = service_from_job(expr, jobs or {})
+                reason = why and (
+                    "carries no service label, takes none from a workload-service join, "
+                    f"and cannot take it from its scrape job: the expression {why}"
+                )
             if reason:
                 problems.append(f"{stem}/{name}: {reason}")
         if "shadow" in labels and labels["shadow"] != "true":
@@ -264,13 +433,17 @@ def placeholder_problems(paths: list[Path]) -> list[str]:
     ]
 
 
-def rule_test_problems(stem: str, alerts: list[str], tests: object) -> list[str]:
+def rule_test_problems(
+    stem: str, alerts: list[str], tests: object, from_job: frozenset[str] = frozenset()
+) -> list[str]:
     """A problem for each alert no case fires, and for a family with no zero-series case.
 
     Args:
         stem: The rule file's name without `.yaml`.
         alerts: The alert names that rule file holds.
         tests: The parsed `<stem>.test.yaml`, or None when it is missing.
+        from_job: The alerts that take `service` from their scrape job. Every `exp_alerts`
+            entry for one of them must list `service`, not just one firing case.
     """
     if not alerts:
         return []
@@ -286,6 +459,7 @@ def rule_test_problems(stem: str, alerts: list[str], tests: object) -> list[str]
     ]
     fired = set()
     asserted = set()
+    unasserted_job_service = set()
     zero_series = False
     for case in cases:
         for check in case.get("alert_rule_test") or []:
@@ -293,6 +467,10 @@ def rule_test_problems(stem: str, alerts: list[str], tests: object) -> list[str]
             if not expected:
                 continue
             fired.add(check.get("alertname"))
+            if not all(
+                "service" in (alert.get("exp_labels") or {}) for alert in expected
+            ):
+                unasserted_job_service.add(check.get("alertname"))
             if all(
                 {"service", "severity"} <= set(alert.get("exp_labels") or {})
                 for alert in expected
@@ -307,6 +485,12 @@ def rule_test_problems(stem: str, alerts: list[str], tests: object) -> list[str]
         f"{stem}/{name}: no firing case asserts both its service and severity labels"
         for name in alerts
         if name in fired and name not in asserted
+    ]
+    problems += [
+        f"{stem}/{name}: takes service from its scrape job, and a firing case omits service "
+        "from exp_labels. Only that assertion catches an expression that drops the label."
+        for name in alerts
+        if name in from_job and name in unasserted_job_service
     ]
     if not zero_series:
         problems.append(
@@ -323,6 +507,7 @@ def rule_problems(
     rules_dir: Path = RULES_DIR,
     tests_dir: Path = RULE_TESTS_DIR,
     templates_file: Path = TEMPLATES_FILE,
+    prometheus_yml: str | None = None,
 ) -> list[str]:
     """A problem for each rule convention the role's rule files and their tests break.
 
@@ -332,6 +517,8 @@ def rule_problems(
         rules_dir: The rule files.
         tests_dir: Their promtool tests.
         templates_file: The Alertmanager template source, checked for `${` with the rules.
+        prometheus_yml: The rendered `prometheus.yml`, whose scrape jobs the third `service`
+            source reads. None leaves every job unknown, so no alert takes `service` from one.
     """
     rule_paths = sorted(rules_dir.glob("*.yaml"))
     test_paths = sorted(tests_dir.glob(f"*{RULE_TEST_SUFFIX}"))
@@ -363,8 +550,15 @@ def rule_problems(
             problems.append(err)
         else:
             tests[stem] = doc
+    jobs = service_jobs(prometheus_yml)
     for stem, doc in docs.items():
-        problems += rule_file_problems(stem, doc)
+        problems += rule_file_problems(stem, doc, jobs)
         alerts = [rule["alert"] for _group, rule in _alerts(doc)]
-        problems += rule_test_problems(stem, alerts, tests.get(stem))
+        from_job = frozenset(
+            rule["alert"]
+            for _group, rule in _alerts(doc)
+            if not (rule.get("labels") or {}).get("service")
+            and service_from_job(str(rule.get("expr", "")), jobs)[0]
+        )
+        problems += rule_test_problems(stem, alerts, tests.get(stem), from_job)
     return problems

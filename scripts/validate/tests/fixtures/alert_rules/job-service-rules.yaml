@@ -1,0 +1,20 @@
+# The rule file both job-service rule-test fixtures load. Neither alert carries a literal
+# `service`: each takes it from the scrape target, the alert validator's third source. The
+# aggregation drops it, which only promtool's whole-label-set comparison shows.
+groups:
+  - name: fixture
+    rules:
+      - alert: FixtureProbeFailed
+        expr: probe_success{job="fixture"} == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: A fixture probe failed.
+      - alert: FixtureProbesAggregated
+        expr: max(probe_success{job="fixture"}) == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Every fixture probe failed.
