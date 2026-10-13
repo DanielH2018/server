@@ -217,8 +217,18 @@ def test_the_tree_rules_meet_every_convention_is_clean():
     groups, keys = alert_rules.rendered_rule_keys()
     # Non-vacuity: the floor and the list name the group, and the file holds its five alerts.
     assert "alerting-meta" in alert_conventions.GROUP_FLOOR
-    assert groups == ["alerting-meta", "workload-service", "k8s-workloads"]
-    assert keys == {"alerting-meta.yaml", "workload-service.yaml", "k8s-workloads.yaml"}
+    assert groups == [
+        "alerting-meta",
+        "workload-service",
+        "k8s-workloads",
+        "loki-homelab",
+    ]
+    assert keys == {
+        "alerting-meta.yaml",
+        "workload-service.yaml",
+        "k8s-workloads.yaml",
+        "loki-homelab.yaml",
+    }
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()
     )
