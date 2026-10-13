@@ -188,15 +188,19 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
         elif props.get("Result") == "success" and final and not is_error:
             # A non-empty final text is not a finish: a turn that ends on "Next I will open
             # the PR" exits the process just as cleanly as one that opened it.
-            if m and lands(b.host, b.repo) and not landed:
+            if BLOCKER.search(final):
+                # Tested first, so a blocker line wins whatever URL follows it: the review
+                # holds (`held_for_findings`, `held_for_green`) end on the full PR URL, and
+                # read as `done` on daniel-server, where the URL alone is the finish (#4910).
+                # `m` still fills the line's PR url below, which the orchestrator needs.
+                state = NEEDS_INPUT
+            elif m and lands(b.host, b.repo) and not landed:
                 # The brief tells a landing-host batch to wait for `land.sh`'s VERDICT line.
                 # Without that, a PR URL only means `gh pr create` returned. Another repo's
                 # batch stops at the PR on every host, so its PR URL is the finish.
                 state = NO_VERDICT
             elif m:
                 state = "done"
-            elif BLOCKER.search(final):
-                state = NEEDS_INPUT
             else:
                 state = NO_PR
         elif (
