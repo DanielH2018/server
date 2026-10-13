@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-13 06:17 UTC
-generated_sha: 0ef579e1f
+generated_at: 2026-10-13 18:17 UTC
+generated_sha: b5b5f32a2
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,12 +19,15 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 0 | - | ✓ |
 | [#4599](https://github.com/DanielH2018/server/issues/4599) | medium | improvement | security | The AIDE check cannot page on an unexplained file change | 2026-10-12 | 0 | - | ✓ |
 | [#4738](https://github.com/DanielH2018/server/issues/4738) | medium | improvement | docs | Target architecture G1 step 6: run the 30-day diff-notice soak checks | 2026-10-12 | 0 | - | ✓ |
-| [#4781](https://github.com/DanielH2018/server/issues/4781) | medium | gap | cicd | A deploy-plane k8s_unapplied line never discharges for a role that is not digest-provable, though no rendered byte moved | 2026-10-13 | 0 | worktree-churn-plan-orchestrator-wave2 | ✓ |
 | [#4786](https://github.com/DanielH2018/server/issues/4786) | medium | addition | backup-observability | Target architecture M2: read the k8s-workloads shadow soak on days 3 and 7 before PR 4a | 2026-10-13 | 0 | - | ✓ |
 | [#4808](https://github.com/DanielH2018/server/issues/4808) | medium | gap | backup-observability | Flux's measured series push M1's 7-day head-series average over the 140,000 budget | 2026-10-13 | 0 | - | ✓ |
 | [#4824](https://github.com/DanielH2018/server/issues/4824) | medium | gap | backup-observability | Target architecture M5: read the log-rule shadow soak on day 7 before PR 4a | 2026-10-13 | 0 | - | ✓ |
-| [#4829](https://github.com/DanielH2018/server/issues/4829) | medium | gap | cicd | The drill's no-signature check trusts cosign's error text, which a referrers-API error also produces | 2026-10-13 | 0 | - | ✓ |
-| [#4833](https://github.com/DanielH2018/server/issues/4833) | medium | gap | cicd | The k8s scaffolder appends new roles after netpol-baseline, which must stay last | 2026-10-13 | 0 | worktree-churn-plan-orchestrator-wave2 | ✓ |
+| [#4839](https://github.com/DanielH2018/server/issues/4839) | medium | gap | backup-observability | Target architecture M4: read the ingress-probe shadow soak on day 3 and after the Sunday before PR 4 | 2026-10-13 | 0 | - | ✓ |
+| [#4884](https://github.com/DanielH2018/server/issues/4884) | medium | gap | cicd | Flux drops template quotes on substitution, so R2's 0123 round-trip pass flags every standalone key and mullvad_account breaks qbittorrent's Secret | 2026-10-13 | 0 | - | ✓ |
+| [#4895](https://github.com/DanielH2018/server/issues/4895) | medium | gap | docs | D5's qbittorrent flip does not name the mullvad_account SOPS manifest and D3's type proof as preconditions | 2026-10-13 | 0 | - | ✓ |
+| [#4899](https://github.com/DanielH2018/server/issues/4899) | medium | addition | security | Target architecture R2 PR 1c: refuse a standalone secret value that Flux would retype, before any render | 2026-10-13 | 0 | worktree-churn-plan-orchestrator-wave2 | ✓ |
+| [#4901](https://github.com/DanielH2018/server/issues/4901) | medium | gap | cicd | Dated serial-measurement test goes red when the cron does its job and lowers a weight | 2026-10-13 | 0 | - | ✓ |
+| [#4905](https://github.com/DanielH2018/server/issues/4905) | medium | addition | cicd | Target architecture H3.1: render a host's package and the shared packages from the tree | 2026-10-13 | 0 | worktree-churn-plan-orchestrator-wave2 | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
@@ -34,12 +37,17 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4660](https://github.com/DanielH2018/server/issues/4660) | low | gap | - | Workflow subagent run length has no measured outcome, so their cap stays undecided | 2026-10-12 | 0 | - | ✓ |
 | [#4663](https://github.com/DanielH2018/server/issues/4663) | low | gap | - | Implementer maxTurns decision needs a sample with enough red PRs | 2026-10-12 | 1 | - | ✓ |
 | [#4715](https://github.com/DanielH2018/server/issues/4715) | low | gap | docs | The backlog page shows #2584's retired accepted reason after G4 drops the role-doc size gate | 2026-10-12 | 0 | - | ✓ |
-| [#4737](https://github.com/DanielH2018/server/issues/4737) | low | improvement | cicd | daniel-server fan-out batches report done before their PR's CI runs, so CI-only guards turn red at landing | 2026-10-12 | 1 | - | ✓ |
 | [#4749](https://github.com/DanielH2018/server/issues/4749) | low | improvement | docs | Correct the k3s defaults comment that says nothing aggregates into view | 2026-10-12 | 0 | - | ✓ |
 | [#4750](https://github.com/DanielH2018/server/issues/4750) | low | improvement | backup-observability | Target architecture M1 Open question 9: read Prometheus retention over the week after PR 1 | 2026-10-12 | 0 | - | ✓ |
 | [#4756](https://github.com/DanielH2018/server/issues/4756) | low | improvement | backup-observability | M1's series budget counts head series, but the retention cap's bytes follow samples a second | 2026-10-12 | 0 | - | ✓ |
-| [#4760](https://github.com/DanielH2018/server/issues/4760) | low | improvement | docs | flux_components.py's docstring justifies _IndentedDumper by a scanner gap #4733 closed | 2026-10-12 | 0 | worktree-churn-plan-orchestrator-wave2 | ✓ |
-| [#4822](https://github.com/DanielH2018/server/issues/4822) | low | gap | cicd | Renovate does not move the flux CLI version input in promote.yml with flux_version | 2026-10-13 | 0 | - | ✓ |
+| [#4840](https://github.com/DanielH2018/server/issues/4840) | low | gap | cicd | A build-context edit outside a k8s role writes no k8s_unapplied line, and the release census names the wrong cause | 2026-10-13 | 0 | - | ✓ |
+| [#4846](https://github.com/DanielH2018/server/issues/4846) | low | gap | cicd | order_only's dynamic check cannot see a plugin side effect outside the entries it returns | 2026-10-13 | 0 | - | ✓ |
+| [#4875](https://github.com/DanielH2018/server/issues/4875) | low | gap | cicd | A red-phase test with a false premise strands a correct fix at the green gate | 2026-10-13 | 0 | - | ✓ |
+| [#4885](https://github.com/DanielH2018/server/issues/4885) | low | gap | cicd | Observability's checksum/config annotation hashes placeholder text, so R2's round trip cannot pass for observability | 2026-10-13 | 0 | - | ✓ |
+| [#4893](https://github.com/DanielH2018/server/issues/4893) | low | gap | cicd | ansible-core's local temp directories accumulate under ~/.ansible/tmp on daniel-box | 2026-10-13 | 0 | - | ✓ |
+| [#4906](https://github.com/DanielH2018/server/issues/4906) | low | gap | docs | docs-refresh.sh.j2 says static-ratchet-tests runs four files; it runs twelve | 2026-10-13 | 0 | - | ✓ |
+| [#4907](https://github.com/DanielH2018/server/issues/4907) | low | gap | cicd | Retiring a fan-out run's last batch deletes its manifest, so a live cc-wait fanout watch on that run fails | 2026-10-13 | 0 | - | ✓ |
+| [#4912](https://github.com/DanielH2018/server/issues/4912) | low | gap | cicd | R2's round trip finds flux's vendored Kustomization CRD different in the first pass, so PR 2's widened step cannot pass for flux | 2026-10-13 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
