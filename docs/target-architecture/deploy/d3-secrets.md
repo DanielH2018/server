@@ -18,7 +18,7 @@ key, yet proves the file is in step with `ansible/vars/secrets.yml`. A changed s
 restarts the pods that read it, through a checksum of ciphertext, never of plaintext. `peanut`
 is the first role with a Secret that Flux owns. Every routed flux-owned tag substitutes
 `${domain}` from the same Secret. Under C3's default, D2.7 flips bento-pdf only after D3.3b,
-so no tag ever substitutes from another source. R2's three SOPS-encrypted manifests get their
+so no tag ever substitutes from another source. R2's four SOPS-encrypted manifests get their
 delivery path, which D5 uses when their roles move.
 
 **Exit criterion.** Five checks, each under *Verification*:
@@ -313,7 +313,12 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
       plaintext metadata;
     - each manifest's plaintext structure equals the stub-mode render of its template:
       `apiVersion`, `kind`, `metadata` less that annotation, `type`, and the data-key names.
-      Placeholder mode renders no document for these templates, and stub mode does (R2).
+      Placeholder mode renders no document for these templates, and stub mode does (R2);
+    - every `data` or `stringData` value in a manifest is `ENC[...]` with `type:str`. SOPS
+      records each value's type in plaintext inside that string, and a value encrypted from
+      an int decrypts as an int. `mullvad_account` is `type:int` in `secrets.yml`, so
+      `write` must encrypt its manifest value as a string, and this assertion fails a
+      manifest where it did not.
 
   Every failure message names the operator's `cluster_vars.py write` as the only fix, and
   says that a hand edit of a cluster file breaks its MAC. Two narrower modes share the code.
@@ -333,6 +338,14 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
       template action in Authelia's configuration once R2's PR 7 enables its template
       filter, which parses the whole file. R2's deploy-time count of `{{` stops running when
       D5 moves authelia to Flux, so `write` is its successor. A single `{` passes.
+    - It refuses the value of a key with a standalone use, a placeholder that is the whole
+      scalar of a field, when R2's resolver in `scripts/lib/plain_scalar.py` types it as
+      anything but a string. That is C3's standalone value rule. Flux types such a value by
+      its text, whatever quotes the template wrote (R2 *The standalone-value guard*).
+      `write` reads R2's per-directory standalone key sets in process, as it reads the key
+      sets, and imports the same resolver as R2's deploy-path guard, so the two producers
+      cannot disagree. Like the other refusals, it names the key and never the value. D3.2a
+      adds it.
     - D3.2d adds two per-key refusals, each naming the key and never the value. Each is the
       successor of a deploy-time assert that stops running when D5 moves its role to Flux:
         - Each of R3's three `_argon2` keys that `write` places in the cluster file or a
@@ -410,7 +423,8 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
   it byte for byte into its role's `cluster/<tag>/`, refuses one that lacks the
   substitute-disabled annotation, and sets `decryption` on that role's Kustomization. C3
   lets a role vary three fields, and `decryption` is not one of them (Open question 6).
-  Nothing uses this until pi-peer-backup, authelia and home-assistant move in D5.
+  Nothing uses this until pi-peer-backup, authelia, home-assistant and qbittorrent move in
+  D5.
 - **The rotation cron keeps the file in step, from before the file exists.** D3.2b makes
   `secret_rotation.py:cmd_rotate` call `write` in process when a rotated key is
   cluster-referenced and the cluster file exists. It is a no-op while the file is absent.
@@ -651,7 +665,7 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
   ansible/roles/setup/sops_setup/CLAUDE.md   onboarding names all three rules
 + ansible/vars/cluster-vars.sops.env
 + ansible/vars/cluster-vars.source
-+ ansible/vars/cluster-manifests/            three SOPS-encrypted Secret manifests (R2's)
++ ansible/vars/cluster-manifests/            four SOPS-encrypted Secret manifests (R2's)
 + scripts/secrets_mgmt/cluster_vars.py       check (CI), --no-render, --ciphertext-only,
                                              and write (operator-only)
   scripts/secrets_mgmt/rotation_tools.py     sops_set takes a path
@@ -816,6 +830,30 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
           fixtures under *Restart triggers*.
     - R1's shadow comparison covers Ansible-owned tags only from D2.7 on, because a
       flux-owned tag has no Ansible render.
+    - **The in-cluster proof that an all-digit value stays a string** (R2's cross-slice
+      note). R2 PR 7b moves `mullvad_account`, whose real value is all digits, into a
+      dedicated Secret that this path delivers. Nobody has measured what kustomize-controller
+      does with a decrypted all-digit value in a quoted `stringData` field. D3.3c adds a CI
+      job, `sops-manifest-type-proof`, that measures it in C8's throwaway kind cluster.
+        - The job creates the cluster, installs the pinned Flux controllers, and creates
+          `sops-age` from an age key it generates. `write`'s manifest code, run on a fixture
+          tree encrypted to that key, builds one SOPS-encrypted Secret whose quoted
+          `stringData` fields hold `0123` and a 16-digit value.
+        - A Kustomization with `decryption` applies it. The Kustomization must reach Ready,
+          and each value in the live Secret's `data` must decode to exactly its digits.
+        - The red half applies the same Secret with its values encrypted from an int, so
+          SOPS records `type:int`. It must fail to apply or come back changed. If it passes,
+          the job cannot see the failure it exists to catch, and it fails.
+        - *Why kind suffices.* The question belongs to kustomize-controller's decryption and
+          to the API server's validation of `stringData`, not to k3s or Longhorn. The job
+          runs the same pinned controller images as the cluster.
+        - The job runs on a change to the flux pin, the sops pin, `cluster_vars.py` or the
+          job itself.
+
+      D5's flip of qbittorrent waits on a green run. If the proof fails, `write` emits that
+      value under `data:`, base64-encoded, and `check`'s structure assertion compares
+      data-key names across `data` and `stringData`. R2 *`mullvad_account` becomes a
+      dedicated Secret* gives the reason the remedy holds.
     - **Inert for the cluster:** bento-pdf and texbrain name no ConfigMap or Secret, and no
       role with a SOPS manifest is flux-owned.
 9. **D3.4 — Rotation runbooks and the Flux-side wait** (about 150 lines).
@@ -938,6 +976,11 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
 - `write` refuses a fixture value holding each forbidden character or `{{`, and passes one
   holding a single `{`. A test asserts that the refusal message names the key and not the
   value.
+- `write` refuses `0123`, `yes` and `1e3` for a fixture key with a standalone use, and
+  passes the same values for a fixture key whose placeholder sits inside other text.
+  `check` flags a fixture manifest whose value carries `type:int`.
+- The `sops-manifest-type-proof` job's red half must fail to apply a Secret encrypted from
+  an int (D3.3c).
 - D3.2d's refusals go red on the fixtures listed under that step: a digest minted with
   `t=2`, two equal digests and `user:$7$abc` each fail `write`. Their clean halves, a
   distinct well-formed set and `$7$abc`, pass. The parameter-agreement test fails when the
@@ -1090,6 +1133,13 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   criteria 1 and 3 are the in-cluster proof for peanut. D5 repeats exit 1 for each role it
   moves. A SOPS manifest is decrypted before substitution, so its annotation keeps a
   `${` in a key out of substitution.
+- **A value's YAML type changes on the way in** (failure class 2). On the pinned CLI, a
+  value substituted alone into a field loses its string type whatever quotes the template
+  uses (R2 *Baseline*). A SOPS manifest value encrypted from an int decrypts as an int.
+  Mitigation: `write` refuses a value of a key with a standalone use that R2's resolver
+  types, as C3's standalone value rule requires. `check` requires `type:str` on every
+  manifest value. D3.3c's `sops-manifest-type-proof` job shows in a kind cluster that an
+  all-digit value in a quoted field of a SOPS-encrypted Secret applies as a string.
 - **Host recipients drift between the three rules** (failure class 4). Mitigation: `check`
   compares each cluster file's recipients with its own rule's full list, and the runbooks
   name all three rules.
@@ -1501,3 +1551,19 @@ Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-st
 - **Contract sync, C6.** D3.4's `land-wait` rule for the cluster files is marked interim.
   C6 has `land.sh` derive no tags itself, and C1's `footprint` counts the cluster files for
   every substituting tag.
+
+### Cross-slice note from R2 (2026-10-13)
+
+R2's *Risks* said that D3 carries a cross-slice note on an all-digit value, but D3 did not.
+The operator ruled on 2026-10-13 that R2 guards standalone values where they are decrypted
+and moves `mullvad_account` to a dedicated SOPS Secret (R2 Open question 13). Applied here:
+
+- `write` refuses a value of a key with a standalone use that R2's shared resolver types,
+  C3's standalone value rule. It lands in D3.2a, with a fixture pair.
+- `check` requires `type:str` on every SOPS manifest value, so a manifest encrypted from
+  `mullvad_account`'s `type:int` value fails in CI without a key.
+- D3.3c adds the `sops-manifest-type-proof` job: in a kind cluster, an all-digit value in a
+  quoted `stringData` field of a SOPS-encrypted Secret applies as a string, and a value
+  encrypted from an int does not. D5's flip of qbittorrent waits on it, and the remedy if it
+  fails is a base64 `data:` value.
+- The SOPS manifests count four, with qbittorrent's.

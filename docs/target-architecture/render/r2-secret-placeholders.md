@@ -21,27 +21,38 @@ substitutes: it does when its render holds at least one placeholder. In a direct
 substitutes, the renderer escapes every other `$` that Flux would read as syntax. A directory
 that does not substitute gets no `postBuild` and no escape. CI refuses a render that names an
 unknown key, leaves a `${` unescaped in a directory that substitutes, puts a credential
-outside a `kind: Secret` document, or substitutes a multi-line key. CI also refuses a template
-that transforms a secret value beyond the identity, and a flux-owned tag that reads one of
-R1's pinned live-read facts. The templates that cannot survive raw substitution are
-restructured, and Ansible deploys the restructured templates with the same live behaviour.
-Ansible stays the only writer to the cluster throughout.
+outside a `kind: Secret` document, or substitutes a key in `SOPS_MANIFEST_KEYS`. CI also
+refuses a template that transforms a secret value beyond the identity, and a flux-owned tag
+that reads one of R1's pinned live-read facts. Where the real values are decrypted, a guard
+refuses a value that would lose its string type when its placeholder stands alone in a
+field. The templates that cannot survive raw substitution are restructured, and Ansible
+deploys the restructured templates with the same live behaviour. Ansible stays the only
+writer to the cluster throughout.
 
-**Exit criterion.** Four checks, all green at one master commit:
+**Exit criterion.** Five checks, all green at one master commit:
 
 1. **The round trip is exact.** For all 56 tags and the three deferred directories,
-   `roundtrip` builds each directory twice with `flux build kustomization --dry-run`.
-    - A directory that substitutes is built on the placeholder side with each key's R1 stub
-      value inline in `postBuild.substitute`, under `--strict-substitute`.
+   `roundtrip` builds each directory twice with `flux build kustomization --dry-run`, once
+   per pass.
+    - A directory that substitutes is built on the placeholder side with each key's value
+      inline in `postBuild.substitute`, under `--strict-substitute`.
     - A directory that does not substitute is built with no `postBuild` on both sides.
-    - The stub side is the R1 stub render, always built with no `postBuild`.
+    - The stub side is a stub-mode render with the same values, always built with no
+      `postBuild`.
 
-   The two outputs are equal byte for byte. Both pass through the same serialiser, so the
-   comparison is of the objects Flux would apply. The only documents excluded are the three
-   listed in `render_sops_manifests`, which D3 supplies as SOPS-encrypted manifests. The
-   `render_sops_manifests` check under *Multi-line keys become dedicated Secrets* holds that
-   list to exactly the three templates that name a multi-line key, and `roundtrip` fails
-   unless it excluded exactly one document per entry.
+   The first pass gives every key its R1 stub. The second gives `0123` to every key that the
+   standalone-value guard does not cover, and the R1 stub to every key it covers
+   (*The standalone-value guard*). The coverage test holds the guard's key map equal to the
+   keys the render uses standalone, so the second pass can pass: `${domain}`, which stands
+   alone 74 times, keeps its stub there.
+
+   In both passes the two outputs are equal byte for byte. Both pass through the same
+   serialiser, so the comparison is of the objects Flux would apply. The only documents
+   excluded are the four listed in `render_sops_manifests`, which D3 supplies as
+   SOPS-encrypted manifests. The `sops-manifest-entries` check under *Multi-line keys become
+   dedicated Secrets* holds that list to exactly the four templates that name a
+   `SOPS_MANIFEST_KEYS` key, and `roundtrip` fails unless it excluded exactly one document
+   per entry.
 2. **The five rules hold with no ratchet entries.** `renderer_lib/secret_checks.py` reports
    zero violations. Its `KNOWN_VIOLATIONS` set and the renderer's `PLACEHOLDER_DEFERRED` set
    are both empty. Rule 3's `PLACEHOLDER_ANYWHERE` is part of the rule, not an exemption
@@ -52,6 +63,10 @@ Ansible stays the only writer to the cluster throughout.
 4. **The restructured roles behave as before.** `uptime-kuma`, `qbittorrent`, `mosquitto`,
    `home-assistant`, `pi-peer-backup` and `authelia` are deployed. Each passes the check
    listed for it under Verification.
+5. **The standalone-value guard covers every standalone key.** The coverage test is green
+   and `GUARD_DEFERRED` is empty. In CI's flux probe, the guard's resolver refuses every
+   corpus value that the pinned CLI returns as something other than a string, and passes
+   every other one.
 
 ## Baseline at `70591c307`
 
@@ -206,6 +221,34 @@ Ansible stays the only writer to the cluster throughout.
       controller's `SubstituteVariables` with dry run set. Dry run skips only the
       `substituteFrom` fetch, so an inline `postBuild.substitute` and `--strict-substitute`
       still apply.
+- **Flux drops a standalone value's string type, measured after PR 1.** These runs postdate
+  `70591c307`, and each measured the pinned flux CLI v2.9.6.
+    - CI run [38426501907](https://github.com/DanielH2018/server/actions/runs/38426501907),
+      PR 1's flux probe: a `stringData` value written `"${probe_n}"` comes back as the
+      integer `83` for `0123` and as the boolean `true` for `true`. `docs/homelab-render.md`
+      records it.
+    - CI run [38432848015](https://github.com/DanielH2018/server/actions/runs/38432848015),
+      a throwaway probe that was not merged, measured four more source shapes.
+
+      | Source shape | `0123` | `true` | `yes` | `1e3` | `null` |
+      |---|---|---|---|---|---|
+      | `field: "${v}"` | int 83 | bool | bool | int 1000 | null |
+      | `field: '${v}'` | int 83 | bool | bool | int 1000 | null |
+      | `field: \|-` block | int 83 | bool | bool | int 1000 | null |
+      | `field: ${v}`, substitute value `'"…"'` | int 83 | bool | string | int 1000 | null |
+      | `field: "x-${v}"` | string | string | string | string | string |
+
+      No template shape keeps a standalone value a string. Only text around the placeholder
+      does, and that text changes the value.
+    - [#4884](https://github.com/DanielH2018/server/issues/4884), on a placeholder render
+      at `65b52ff2f`: 20 directories hold a placeholder that stands alone in a field.
+      `${domain}` stands alone 74 times, mostly as `tls.domains[].main` in each
+      IngressRoute. qbittorrent's Secret renders `account: ${mullvad_account}`, and
+      `mullvad_account`'s real value is all digits.
+    - PyYAML's `safe_load`, a YAML 1.1 reader, reads `1e3` as the string `1e3`, where the
+      pinned CLI returned the integer 1000. It reads `0123`, `true`, `yes`, `null`, `1:20` and
+      `2001-12-14` as an int, a bool, a bool, null, an int and a date. No single reader in
+      Python matches the CLI on every measured value.
 
 The commands behind the tree counts above, from the repo root at `70591c307`.
 `/tmp/keys.txt` holds key names only, written by the first command in
@@ -417,11 +460,15 @@ it empty.
    `PLACEHOLDER_ANYWHERE` whose comment gives the reason. A key that may leave a Secret for
    one kind only is a `(key, kind)` pair, never a member of `PLACEHOLDER_ANYWHERE`. H1 adds
    the first two pairs, for its BackupTargets (Open question 10).
-4. **`no-multiline-key`**: no key in `SOPS_MANIFEST_KEYS` appears as a placeholder. That set
-   holds `pi_peer_backup_ssh_key`, `authelia_oidc_rsa_key_content` and
-   `google_assistant_service_account`. Flux deletes every newline from a substitution value
-   (`LoadVariables`, under Baseline), so a multi-line value cannot pass through a
-   placeholder at all.
+4. **`no-sops-manifest-key`**: no key in `SOPS_MANIFEST_KEYS` appears as a placeholder. The
+   set's comment gives each member's reason.
+    - `pi_peer_backup_ssh_key`, `authelia_oidc_rsa_key_content` and
+      `google_assistant_service_account` are multi-line. Flux deletes every newline from a
+      substitution value (`LoadVariables`, under Baseline), so a multi-line value cannot
+      pass through a placeholder at all.
+    - `mullvad_account` joins in PR 7b. Its real value is all digits, and its one use
+      stands alone in a field, so a placeholder would turn it into an integer
+      (*`mullvad_account` becomes a dedicated Secret*).
 5. **`no-secret-expression`**: this rule reads template sources, not output. It parses each
    template with the renderer's Jinja environment and walks the syntax tree. Its scope is
    every `.j2` under `ansible/roles/k8s/*/templates/` and `ansible/templates/` except
@@ -530,7 +577,7 @@ vacuously:
 - Rule 2 must see `$${` in `qbittorrent`'s `qbittorrent-netns-reset` ConfigMap, which embeds
   `qbittorrent/files/netns-reset.sh`. The `qbittorrent` directory substitutes, because its
   Secret holds the WireGuard key.
-- Rule 4 asserts that its three keys exist in `secrets.yml`.
+- Rule 4 asserts that every key in `SOPS_MANIFEST_KEYS` exists in `secrets.yml`.
 - Rule 5 must find a secret key in the syntax tree of at least 59 in-scope templates, the
   count at `70591c307` (Baseline). The floor counts what the rule computes, not a text
   match. Its other named members:
@@ -569,7 +616,7 @@ The unfiltered render, in CI and in `scripts/renderer/tests/`, asserts every nam
 
 ### Multi-line keys become dedicated Secrets
 
-Each of the three keys moves into its own small Secret, rendered from its own template whose
+Each of the three multi-line keys moves into its own small Secret, rendered from its own template whose
 basename matches the `secret` file rule (`(^|-)secret[-.]`). Its consumer mounts it as a
 file. Ansible renders these templates from SOPS as it does today.
 
@@ -612,7 +659,8 @@ A `--role` render applies the first two bullets only to the tags it rendered. Th
 reads template sources, so it scans the whole tree on every run, like rule 5.
 
 `roundtrip` counts the documents it excluded and fails unless the count equals the number of
-entries in the tags it built: one after PR 5, two after PR 6 and three after PR 7.
+entries in the tags it built: one after PR 5, two after PR 6, three after PR 7 and four after
+PR 7b.
 
 D3 replaces each one with a SOPS-encrypted manifest that kustomize-controller decrypts,
 which needs the cluster's age recipient that D3 adds. This is a second delivery path beside
@@ -637,6 +685,125 @@ question 6).
   beside it. `project_id` comes from a separate SOPS variable, `google_assistant_project_id`, so
   the `from_json` parse goes.
 
+### The standalone-value guard
+
+A *standalone use* is a placeholder that is the whole scalar of a field, such as
+`main: ${domain}` or `account: "${mullvad_account}"`. Flux types a substituted standalone
+value by its text, whatever quotes or block style the template used (Baseline). A value that
+a YAML reader takes for an int, a float, a bool, null, a timestamp or a sexagesimal number
+therefore changes type. In a Secret's `stringData`, the apply then fails. Elsewhere the object
+changes meaning. Text around the placeholder keeps the type, but that text changes the value,
+so no template shape fixes a standalone use. The guard checks the values instead, where they
+are decrypted.
+
+**The renderer names each key's standalone uses.** After pass 3, `placeholders.py` parses each
+document of a directory that substitutes, and records each key whose `${K}` is the entire
+parsed value of a scalar, in any style. The result is a per-directory standalone key set, a
+subset of the directory's placeholder key set. It is computed in process from the render,
+like the key set. A placeholder inside a block scalar that holds more text, such as an app
+config in a Secret, is not standalone, because Flux types only the outer scalar.
+
+**The guard runs where the real values are decrypted.**
+
+- *On daniel-box, in the deploy path, from PR 1c.* The deploy path never runs the renderer,
+  so the renderer's standalone sets reach it as a projection. `standalone_map.py` under
+  `scripts/renderer/` writes the committed file
+  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. That file maps each
+  deploy tag to the sorted keys that stand alone in its directories, less `GUARD_DEFERRED`.
+  The script adds no flag to C1's `cluster` call. The shared `k8s/manifests` role gains two
+  tasks before it renders:
+    - The first, under `no_log`, sets as a fact the names of the role's mapped keys whose
+      value the resolver refuses, or which the loaded secrets do not define.
+    - The second is an `assert` without `no_log`. It fails the deploy unless that list is
+      empty, and its message prints key names only, never a value. The deploy stops before
+      the apply, so the live objects keep their old values.
+
+  The guard fails closed. A missing or unparsable map fails the `lookup`, and so the deploy.
+  A mapped key that the loaded secrets do not define is refused by name.
+- *In D3's `homelab-cluster-vars` producer, later.* `cluster_vars.py write` already reads
+  R2's placeholder key sets in process. It refuses a value of a key with a standalone use by
+  the same resolver, before its first `sops set` (D3 *Where the values come from*).
+
+**The resolver.** One function in `scripts/lib/plain_scalar.py` takes a value's text and
+refuses it when either of two readers types it as anything but a string. The guard's filter
+plugin and D3's `write` both import it, so the two producers cannot drift apart.
+
+- PyYAML's YAML 1.1 resolver types timestamps and sexagesimal numbers.
+- A port of go-yaml v2's plain-scalar rules types `1e3` as a number, as the pinned CLI did.
+  PyYAML's YAML 1.1 regex reads `1e3` as a string (Baseline). PR 1c confirms the reader from
+  the pinned CLI's module list before porting it.
+
+Refusing on the union fails closed where the two readers differ. The authority is the pinned
+CLI itself. CI's flux probe gains a corpus of values: the five measured ones, `0x1F`, `0o17`,
+`1:20`, `2001-12-14`, `~`, `on`, `.inf`, the empty value, and the strings `abc`,
+`a.b-c.example` and `0123a`. For each one, the probe builds a standalone `stringData` field
+with the pinned binary. It fails unless the resolver refuses exactly the values that come
+back as something other than a string. A pin bump that changes Flux's typing then fails CI,
+like the probe's other cases.
+
+**A digit regex is not enough.** The measured table types `yes` as a bool, `1e3` as the
+integer 1000 and `null` as null. None of them holds only digits.
+
+**This is the C3 value rule that PR 1's plan rejected, now scoped.** PR 1's plan ruled out a
+C3 value rule because `mullvad_account`'s real value is all digits, so a rule over every
+value would refuse it. Scoped to standalone uses, the rule meets `mullvad_account` at one
+site only, qbittorrent's Secret. PR 7b removes that site by moving the key to a dedicated
+SOPS Secret. Until then, the frozenset `GUARD_DEFERRED` holds `mullvad_account`, and its
+comment gives that reason. The operator ruled on 2026-10-13 for this pairing (Open
+question 13), and contracts.md C3 *Secrets* states the rule.
+
+**The coverage test.** A test in `scripts/renderer/tests/` renders the fleet in placeholder
+mode and holds the committed map equal to each tag's standalone keys less `GUARD_DEFERRED`.
+It fails on three more conditions: a key in both the map and `GUARD_DEFERRED`, a
+`GUARD_DEFERRED` member with no standalone use left, and a mapped key absent from
+`secrets.yml`. Its named members are `domain`, mapped under `homepage`, and, until PR 7b,
+`mullvad_account` in `GUARD_DEFERRED`. On a mismatch it prints the command that regenerates
+the map. CI's `pytest` job runs it, so the map cannot go stale on master.
+
+**The `0123` pass narrows.** PR 1's second pass sets every key to `0123`, so it flags every
+standalone use, `${domain}`'s 74 among them. From PR 1c it sets to `0123` only the keys that
+are neither mapped nor in `GUARD_DEFERRED`. Every other key keeps its R1 stub. A difference
+then means a standalone use that the renderer's own detection missed, which the map
+therefore does not guard. The pass is an independent check of that detection, through
+Flux's own typing. With the map complete, it flags nothing for `${domain}`.
+
+### `mullvad_account` becomes a dedicated Secret
+
+PR 7b moves `mullvad_account` out of qbittorrent's Secret by the pattern of the multi-line
+keys. Its value cannot pass through a placeholder, because its one use stands alone in a
+field and its real value is all digits.
+
+- `qbittorrent/templates/mullvad-account-secret.yaml.j2` renders Secret
+  `qbittorrent-mullvad-account`, holding `account`. Its basename matches the `secret` file
+  rule, and qbittorrent passes neither file list, so it joins the secret list by name.
+- The template writes `account: "{{ mullvad_account }}"`, a bare value inside the template's
+  quotes, and not `{{ K | to_json }}`. SOPS types this key `type:int`, so Ansible holds an
+  int, and `to_json` of an int emits unquoted digits that the API server refuses for a
+  `stringData` value. Rule 5 allows the bare form, and Jinja writes the quotes into the
+  applied text.
+- The pod's `qbittorrent-mullvad` volume becomes a projected volume of both Secrets at
+  `qbittorrent_k8s_secret_mount`, with `defaultMode: 0400`. `FILE__MULLVAD_ACCOUNT` still
+  reads `<mount>/account`, so the container's environment does not change.
+- `secret.yaml.j2` drops `account`, and `verify_secret_keys.yml` patches the dropped key out
+  of the old Secret on the deploy, as in PR 6.
+- qbittorrent's defaults gain `render_sops_manifests: [mullvad-account-secret.yaml]`.
+  `SOPS_MANIFEST_KEYS` gains `mullvad_account`, and `GUARD_DEFERRED` becomes empty.
+
+**Under Flux the move is unmeasured.** D3 ships the dedicated Secret as a SOPS-encrypted
+manifest, and the cluster then decrypts it. SOPS records each value's type in plaintext
+inside its `ENC[...]` string, and a value encrypted from an int decrypts as an int. D3's
+`check` therefore asserts `type:str` on every manifest value, which CI reads without a key.
+What kustomize-controller does with a decrypted all-digit string in a quoted field nobody
+has measured. D3's in-cluster proof includes that case, and shows the value applied as a
+string. PR 7b does not wait on the proof, because Ansible still writes the Secret and Jinja
+keeps the quotes. D5's flip of qbittorrent to `owner: flux` waits on it.
+
+*If the proof fails,* D3's `write` emits this value under `data:`, base64-encoded. Base64
+text of an ASCII digit string always begins with `M`, `N` or `O`, so no reader types it as a
+number, a bool or null. The pod reads the decoded bytes, so the file still holds the digits.
+D3's structure check then compares data-key names across `data` and `stringData`. Ansible's
+template keeps `stringData`, because Jinja keeps its quotes.
+
 ### The round trip
 
 `shadow_diff.py roundtrip` renders both modes into one directory. Its logic lives in
@@ -646,13 +813,22 @@ directories R1 writes for pihole, headlamp and netpol-baseline. For each directo
 two throwaway Flux `Kustomization` files and runs `flux build kustomization <name> --dry-run
 --kustomization-file <file> --path <dir>` once per mode.
 
-- **Placeholder side, directory that substitutes.** The file carries every key's R1 stub
-  value inline in `postBuild.substitute`, and the command adds `--strict-substitute`.
+- **Placeholder side, directory that substitutes.** The file carries every key's value for
+  the pass inline in `postBuild.substitute`, and the command adds `--strict-substitute`.
 - **Placeholder side, directory that does not substitute.** The file has no `postBuild`.
   The comparison then proves that the renderer escaped nothing there.
-- **Stub side.** The file has no `postBuild`, so nothing is substituted.
+- **Stub side.** A stub-mode render with the same values. The file has no `postBuild`, so
+  nothing is substituted.
 
-It then compares the two outputs byte for byte and names the first differing object.
+It then compares the two outputs byte for byte and names the first differing object. It
+runs two passes, each with its own summary line:
+
+1. Every key takes its R1 stub.
+2. Every key that is neither in the guard's map nor in `GUARD_DEFERRED` takes `0123`, and
+   every other key its R1 stub. Jinja writes the template's quotes around `0123` on the stub
+   side, and Flux drops them on the placeholder side. A difference therefore marks a
+   standalone use that the guard does not cover (*The standalone-value guard*). PR 1
+   shipped this pass with every key at `0123`, and PR 1c narrows it.
 
 This calls the controller's own `SubstituteVariables` per resource, so the CLI's line limit
 and its line-by-line newline handling never apply. Both sides are serialised by the same
@@ -714,14 +890,25 @@ change.
                                                + the count assert before the include)
   ansible/roles/k8s/{pi-peer-backup,home-assistant,authelia}/defaults/main.yml
                                               (+ render_sops_manifests)
++ scripts/lib/plain_scalar.py                 (the guard's resolver, shared with D3's write)
++ scripts/renderer/standalone_map.py          (writes the guard's key map)
+  scripts/renderer/renderer_lib/flux_probe.py (+ the resolver corpus)
++ ansible/filter_plugins/standalone_guard.py
++ ansible/roles/k8s/manifests/files/standalone_secret_keys.json
+  ansible/roles/k8s/manifests/tasks/main.yml  (+ the guard's two tasks before the render)
++ ansible/roles/k8s/qbittorrent/templates/mullvad-account-secret.yaml.j2
+  ansible/roles/k8s/qbittorrent/templates/deployment.yaml.j2   (projected Secret volume)
+  ansible/roles/k8s/qbittorrent/defaults/main.yml               (+ render_sops_manifests)
 ```
 
 ## Steps, as PRs
 
 R2 moves no object between writers, so C4 has nothing to check inside the slice. Two points
-carry forward. The three dedicated Secrets start life owned by Ansible. The PR that flips
+carry forward. The four dedicated Secrets start life owned by Ansible. The PR that flips
 each of those roles to `owner: flux` must add the role's SOPS-encrypted manifest in the same
-commit, or the Secret has no writer under prune.
+commit, or the Secret has no writer under prune. qbittorrent's flip also waits on D3's
+proof that an all-digit value in a SOPS-encrypted Secret applies as a string
+(*`mullvad_account` becomes a dedicated Secret*).
 
 PRs 3 and 4 each need the **operator-only** pre-merge digest check under Verification. An
 agent session must not merge either one until the operator has run it and both digests
@@ -787,12 +974,16 @@ PR 4 deletes it.
       PR 1 merges. A later bump of the flux CLI pin that changes the behaviour then fails
       CI. If either value comes back as a number or a boolean, Flux's substitution has
       dropped the template's quotes. The remedy is then a second `roundtrip` pass in which
-      every key's stub is `0123` on both sides, and PR 1 ships it:
-        - The stub side is a stub-mode render from a second stub file, so Jinja keeps the
-          template's quotes there. Every site where substitution changes a value's type then
-          shows as a difference, and exit criterion 1 cannot pass with one.
-        - A C3 value rule cannot be the remedy, because `mullvad_account`'s real value is
-          all digits and such a rule would refuse it.
+      every key's stub is `0123` on both sides, and PR 1 ships it. The stub side is a
+      stub-mode render from a second stub file, so Jinja keeps the template's quotes there.
+      Every site where substitution changes a value's type then shows as a difference.
+    - *Outcome.* Both values came back typed, on CI run 38426501907, and PR 1 shipped the
+      second pass. With every key at `0123`, that pass flags every standalone use, so exit
+      criterion 1 could not pass ([#4884](https://github.com/DanielH2018/server/issues/4884)).
+      This plan's earlier reason for refusing a C3 value rule, that `mullvad_account`'s
+      real value is all digits, no longer holds once PR 7b moves the key. The operator's
+      ruling of 2026-10-13 (Open question 13) replaces that reasoning with PR 1c's guard and
+      PR 7b's move.
     - The step then runs `roundtrip --role configarr --role janitorr`.
     - This PR records the measured behaviours, the per-directory rule and the mode selection
       in `docs/homelab-render.md`.
@@ -801,6 +992,35 @@ PR 4 deletes it.
       creates `secret_checks.py` holding only `PASSTHROUGH_FILTERS`, with `homepage_href`
       and `authelia_service_rules`, and a membership test per member. PR 2 builds on it, so
       D2's wait on PR 2 covers it.
+    - **PR 1c, the standalone-value guard** (about 200 lines, plus the generated map and
+      about 150 lines of tests), after PR 1 and before PR 2, whose widened round trip needs
+      it. D2's wait on PR 2 covers it.
+        - *Scope.* The per-directory standalone key sets in `placeholders.py`,
+          `standalone_map.py` and the committed map, `GUARD_DEFERRED` holding
+          `mullvad_account`, the resolver in `scripts/lib/plain_scalar.py`, the filter
+          plugin, and the shared `k8s/manifests` role's two tasks. The flux probe gains the
+          resolver corpus, and `roundtrip`'s second pass narrows to the keys outside the map
+          and `GUARD_DEFERRED` (*The standalone-value guard*).
+        - *Merge gate, **operator-only**.* The guard reads real values, which an agent never
+          decrypts. The operator runs a `--dry-run` deploy from the PR's head with `--tags`
+          set to the comma list of the map's tags. Each role's guard runs before its render,
+          and a dry run applies nothing. Every assert must pass. A refused key, named in the
+          play log, follows Open question 13. Until the gate passes, PR 1c does not merge,
+          because a refused value would fail its role's next deploy.
+        - *Tests.* In `scripts/lib/tests/`, the resolver refuses `0123`, `true`, `yes`,
+          `1e3`, `null`, the empty value, `1:20` and `2001-12-14` (`_is_flagged`), and
+          passes `abc`, `a.b-c.example` and `0123a` (`_is_clean`). In
+          `scripts/renderer/tests/`, standalone detection counts `main: ${k}`,
+          `k: "${k}"` and a `|-` block holding only `${k}`, and does not count `x-${k}` or a
+          block holding more text. The same directory takes the coverage test with its named
+          members. In `ansible/tests/k8s/`, a test evaluates the first task's expression
+          through Ansible's templar over fixture values. A mapped key holding `0123` is
+          refused, one holding `example.org` passes, and an undefined mapped key is refused.
+          The test also asserts that both tasks precede the render, that the first carries
+          `no_log`, and that the assert's message names no value.
+        - *CI red proofs.* The flux probe's corpus case fails when the resolver disagrees
+          with the pinned CLI on any value. A second-pass run over `homepage` with the map
+          read as empty must exit 1 and name its IngressRoute.
 2. **The five rules, ratcheted** (about 240 lines, over the guide because D2 waits on all of
    it and a split would add a sub-edge). The five rules in `secret_checks.py`, with their
    rule pairs and named members, and the `--role` scoping of named members and stale
@@ -809,7 +1029,10 @@ PR 4 deletes it.
    `from_json`, and the `indent` on each multi-line key. It predicts no entry for the 22
    filter arguments, which rule 5 accepts through `PASSTHROUGH_FILTERS`, or for the five
    bindings. The CI step widens to every tag outside `PLACEHOLDER_DEFERRED`, which is 55
-   tags. It excludes the documents that `KNOWN_VIOLATIONS` names.
+   tags, for both passes. It excludes the documents that `KNOWN_VIOLATIONS` names. In the
+   second pass, PR 1c's map keeps every guarded key at its R1 stub, so `${domain}`'s
+   standalone uses pass. `mullvad_account` is in `GUARD_DEFERRED` and keeps its stub too,
+   so qbittorrent's Secret passes until PR 7b removes its placeholder.
     - Rule 5's `vars`-lookup clause and `NON_SECRET_VARS_LOOKUPS`, with the prometheus site
       as its one member.
     - The pinned-fact refusal under *Mode selection*, which reads R1's reader tags from
@@ -951,13 +1174,31 @@ PR 4 deletes it.
       Verification checks pass.
     - Authelia is the SSO for the fleet, so deploy it in a window with the rollback below at
       hand.
+    - **PR 7b, `mullvad_account`'s dedicated Secret** (about 80 lines). It needs PR 4,
+      which drops the `| trim` on the line it moves, and PR 5, which adds the
+      `sops-manifest-entries` check. Otherwise it is independent of PRs 6 and 7.
+        - *Scope.* `mullvad-account-secret.yaml.j2`, the projected volume, `account`
+          dropped from `secret.yaml.j2`, `render_sops_manifests: [mullvad-account-secret.yaml]`,
+          `mullvad_account` added to `SOPS_MANIFEST_KEYS`, and `GUARD_DEFERRED` emptied
+          (*`mullvad_account` becomes a dedicated Secret*). C3 *Secrets* already states the
+          second path, so this PR has no contract gate.
+        - *Merge gate.* None beyond CI. Ansible keeps writing the Secret, and Jinja keeps
+          the template's quotes, so D3's in-cluster proof gates D5's flip of qbittorrent, not
+          this PR.
+        - *Tests.* The coverage test's named member moves: `mullvad_account` has no
+          standalone use, and `GUARD_DEFERRED` is empty. `sops-manifest-entries` reads four
+          entries on the real tree, and `roundtrip` asserts four excluded documents. A test
+          in `ansible/tests/services/` renders qbittorrent's Deployment and asserts that the
+          projected volume names both Secrets and that `FILE__MULLVAD_ACCOUNT` still points
+          at `<mount>/account`.
 8. **Confinement moves, if PR 2 found any** (one PR per role, each under 100 lines). Each
    moves a credential from a non-Secret document into the role's Secret, with `secretKeyRef`
    or a mounted file. The source census predicts none beyond the two identifier keys.
-9. **Close the ratchet** (about 40 lines). `KNOWN_VIOLATIONS` and `PLACEHOLDER_DEFERRED` are
-   empty, the round-trip step covers every tag, and the docs state the five rules as
-   enforced. With the ratchet empty, the `sops-manifest-entries` check reads as equality:
-   the three entries are exactly the templates that name a `SOPS_MANIFEST_KEYS` key.
+9. **Close the ratchet** (about 40 lines). `KNOWN_VIOLATIONS`, `PLACEHOLDER_DEFERRED` and
+   `GUARD_DEFERRED` are empty, the round-trip step covers every tag in both passes, and the
+   docs state the five rules and the guard as enforced. With the ratchet empty, the
+   `sops-manifest-entries` check reads as equality: the four entries are exactly the
+   templates that name a `SOPS_MANIFEST_KEYS` key.
 
 ## Verification
 
@@ -976,9 +1217,17 @@ summary line from the CI run for the commit:
 gh run view <run-id> --log | grep 'roundtrip:'
 ```
 
-It must read `roundtrip: 56 tags, 3 deferred directories, <s> substituting, <n> objects,
-0 differences, 3 documents in render_sops_manifests`. The last field is asserted, not only
-printed: `roundtrip` exits 1 when the excluded count differs from the number of entries.
+Each pass prints one such line, and both must read `roundtrip: 56 tags, 3 deferred
+directories, <s> substituting, <n> objects, 0 differences, 4 documents in
+render_sops_manifests`. The last field is asserted, not only printed: `roundtrip` exits 1
+when the excluded count differs from the number of entries.
+
+**The guard's coverage and resolver.** The coverage test runs in the `pytest` command above,
+so its pass shows there. The flux probe's resolver case runs in the same CI job as the round
+trip, and its line in the job log must report every corpus value agreeing with the pinned
+CLI. On daniel-box, every k8s deploy's play log shows the guard's assert passed for that
+role. An agent reads that log line without decrypting anything, because the assert prints
+key names only.
 
 **Before merging PRs 3 and 4: the Secret bytes must not move (operator-only).** A
 render-record dry run digests secret manifests with the host-local HMAC key, so it compares
@@ -1024,6 +1273,8 @@ remains the gate.
 - **home-assistant (PR 5).** `probe.py health home-assistant` passes. The HA log shows the
   `google_assistant` integration set up with no error, and a `request_sync` from the HA UI
   succeeds.
+- **qbittorrent (PR 7b).** `probe.py health qbittorrent` passes, and the VPN sidecar holds
+  its tunnel. The sidecar reads the account number from the projected file at its old path.
 - **pi-peer-backup (PR 6).** Start a manual run with
   `kubectl -n homelab create job ppb-r2 --from=cronjob/pi-peer-backup` (**operator-only**, a
   write verb). The run must push `up` with a file count.
@@ -1108,7 +1359,14 @@ remains the gate.
   above, plus the two measured type cases, whose results PR 1 records. A
   one-byte edit to a `stringData` value of a Secret in the placeholder render makes
   `roundtrip` report that Secret. The edit targets a Secret because Secrets hold nearly
-  every placeholder.
+  every placeholder. A second-pass run over `homepage` with the guard's map read as empty
+  exits 1 and names its IngressRoute, so the narrowed pass can still see a standalone use.
+- The standalone-value guard, as listed under PR 1c: the resolver's pair in
+  `scripts/lib/tests/`, the standalone-detection pair and the coverage test in
+  `scripts/renderer/tests/`, and the guard tasks' templar test in `ansible/tests/k8s/`. The
+  flux probe's corpus case fails when the resolver and the pinned CLI disagree on any value.
+  The coverage test fails on a fixture map missing `domain`, on a fixture `GUARD_DEFERRED`
+  member with no standalone use, and on a key in both sets.
 - `roundtrip` with no `flux` on `PATH` exits 2 and reports no pass.
 - `--role` scoping: a `--role bento-pdf` placeholder render exits 0 although `homepage`,
   `authelia` and `qbittorrent` are absent. The same named members, removed from an
@@ -1118,6 +1376,13 @@ remains the gate.
 
 - **PRs 1, 1b, 2, 2b and 9** change only the renderer and CI. A revert restores R1's
   behaviour. Reverting PR 1b alone needs PR 2 reverted first, because rule 5 reads its set.
+- **PR 1c** adds the guard to every k8s deploy. A revert removes the two tasks and the map,
+  and restores `roundtrip`'s second pass with every key at `0123`. That pass then flags
+  every standalone use again, so PR 2's widened step goes red. Reverting PR 1c therefore
+  needs PR 2's widening reverted first.
+- **A failed guard assert in a deploy** stops it before the apply, so the role's live
+  objects keep their old values. The assert names the keys. The operator follows Open
+  question 13 and redeploys.
 - **PRs 3 and 4** change no rendered byte, which the operator's pre-merge digest check
   proves. A revert restores the old template and needs no redeploy. Reverting PR 4 also
   removes mosquitto's colon-count assert, so a prefixed hash is again stripped rather than
@@ -1127,9 +1392,11 @@ remains the gate.
   (Open question 4) and redeploys.
 - **PR 4b** changes only rendered comments. A revert restores the old comments, and the
   next deploy of each role applies them, with no value changed.
-- **PRs 5 to 8** add a Secret. A revert and a redeploy restore the old template, and the
-  apply puts the moved keys back into the old Secret. Secret is not a pruned kind, so the
-  dedicated Secret stays live, unused. Deleting it needs a write verb (**operator-only**).
+- **PRs 5 to 8, 7b included,** add a Secret. A revert and a redeploy restore the old
+  template, and the apply puts the moved keys back into the old Secret. Secret is not a
+  pruned kind, so the dedicated Secret stays live, unused. Deleting it needs a write verb
+  (**operator-only**). Reverting PR 7b also puts `mullvad_account` back in
+  `GUARD_DEFERRED`, because its placeholder returns.
 - **A partial failure inside PR 7** can stop Authelia from starting, and with it SSO for every
   route behind it. Revert the PR and deploy `--tags authelia` from a worktree at the revert.
   The old config needs nothing the new Secret holds. The operator's pre-window dry run reads
@@ -1143,21 +1410,37 @@ remains the gate.
   quote, backslash or control character. For those characters Ansible has the same exposure
   today, since it embeds the values raw. C3 *Secrets* states the rule, and D3's `write`
   enforces it (Open question 7).
-- **A value whose YAML type substitution can change.** `mullvad_account` is all digits, and
-  qbittorrent's Secret writes it inside double quotes. Ansible has no type exposure here,
-  because Jinja writes the template's quotes into the applied text. Flux substitutes into a
-  re-serialised resource, and this plan has not established that the quotes survive that
-  step. If they do not, a value such as `0123` or `true` changes type, and the Secret fails
-  to apply. The round trip cannot show it, because every stub is a plain-safe string.
-  *Mitigation:* PR 1's two measured type cases decide it against the pinned CLI and then
-  assert the measured result. If the quotes are lost, PR 1 ships a second round-trip pass
-  with type-hostile stubs. A cross-slice note asks D3 to include an all-digit value in a
-  quoted field in its proof in the cluster.
+- **A value whose YAML type substitution can change.** Measured on the pinned CLI: a value
+  that stands alone in a field loses its string type whatever quotes the template uses, and
+  only text around the placeholder keeps it (Baseline). `0123`, `true`, `yes`, `1e3` and
+  `null` all came back typed. Ansible has no type exposure, because Jinja writes the
+  template's quotes into the applied text. Under Flux, a typed value in a Secret's
+  `stringData` fails the apply, and `mullvad_account`'s all-digit value would do so in
+  qbittorrent's Secret. The round trip's first pass cannot show it, because every R1 stub is
+  a plain-safe string. *Mitigation,* by the operator's ruling of 2026-10-13 (Open
+  question 13):
+    - PR 1c's guard refuses, where the values are decrypted, a value of a key with a
+      standalone use that either reader types. It fails closed and prints key names only.
+      D3's `write` applies the same resolver to `homelab-cluster-vars`.
+    - PR 7b moves `mullvad_account` to a dedicated SOPS Secret, so no placeholder carries
+      it. `GUARD_DEFERRED` holds it until then.
+    - The coverage test holds the guard's map to the render's standalone uses, and the
+      narrowed `0123` pass catches a standalone use the renderer's detection misses.
+    - The flux probe's corpus holds the resolver to the pinned CLI's typing, so a pin bump
+      that changes it fails CI.
+    - D3 carries a cross-slice note: its in-cluster proof includes an all-digit value in a
+      SOPS-encrypted Secret's quoted field, and shows it applied as a string. D5's flip of
+      qbittorrent waits on that proof. If the proof fails, D3 writes that value under
+      `data:` (*`mullvad_account` becomes a dedicated Secret*).
+- **A guard map that lags the render (failure class 4).** The deploy path reads the
+  committed map, not the render, so a template change that adds a standalone use leaves the
+  map short until it is regenerated. *Mitigation:* the coverage test fails that change's PR
+  in CI, and the narrowed `0123` pass reports the new site independently.
 - **A wrong `render_sops_manifests` entry (failure class 3).** The entry removes a document
   from both the publish and the round trip, so a widened list reads as clean.
   *Mitigation:* the `sops-manifest-entries` check holds each entry to one Secret of
-  multi-line keys and the list to the templates that name one, and `roundtrip` asserts the
-  excluded count.
+  `SOPS_MANIFEST_KEYS` keys and the list to the templates that name one, and `roundtrip`
+  asserts the excluded count.
 - **A name-derived list against an explicit one (failure class 4).** A new template joins a
   role's lists by its basename only when the role passes no list. authelia, navidrome and
   traefik pass theirs. *Mitigation:* PR 7 lists authelia's file in the expression, a
@@ -1207,6 +1490,9 @@ remains the gate.
   `roundtrip`, D3's `postBuild` writer and H1's vendored-file refusal all read it, so no two
   of them can disagree about a directory. The tags that read a pinned fact have one source
   too, R1's `PINNED_LIVE_FACTS`, which both R1's test and the pinned-fact refusal read.
+  Whether a key stands alone has one source as well, the renderer's per-directory
+  standalone sets. The committed map is their projection for the deploy path, and the
+  coverage test holds the two equal.
 - **`roundtrip` dropped by R4.** R4's PR 9 keeps `roundtrip`, `stubs` and `digest`, and
   deletes only `compare`. A later change to that PR that dropped `roundtrip` would remove the
   round trip's guarantee with no failing check. *Mitigation:* *The round trip* states the
@@ -1219,21 +1505,22 @@ remains the gate.
   decrypt SOPS, and the digest check also needs root. Run each as the account that holds the
   age key, which is the operator's. An agent session runs only the post-deploy record
   comparison and the JWKS check, and it does not merge PRs 3 or 4 without the operator's
-  digest result.
+  digest result. PR 1c's merge gate runs the guard over real values, so the operator runs
+  it too. The guard's own assert prints key names only, so an agent may read its result
+  from any play log.
 - **Authelia's filter syntax.** If the pinned image does not support the template filter or
   `nindent`, the pod fails at start. PR 7's deploy runs in a window, and the schema test
   pins the shape.
 - **A real value that Authelia's filter reads as template syntax.** The filter parses the
-  whole rendered `configuration.yml`, and that file interpolates many decrypted keys. C3's
-  value rule does not exclude `{`, and every test renders stub values. A real value holding
-  `{{` would stop Authelia from starting, and with it SSO for the fleet. *Mitigation:* PR 7's
-  count assert fails the deploy before the apply unless the rendered config holds exactly
-  one `{{`, and it prints no value. The operator's dry run before the window runs the same
-  assert. The assert runs only while Ansible renders authelia, and stops at D5's flip PR
-  for authelia. D3's `write` refuses `{{` in any value, and that refusal is the successor.
-  D5's authelia precondition asks only that three argon2 keys are present, so Open
-  question 12 asks D5 to require the refusals as well, and C3 to list `{{` in its value
-  rule.
+  whole rendered `configuration.yml`, and that file interpolates many decrypted keys. Every
+  test renders stub values. A real value holding `{{` would stop Authelia from starting, and
+  with it SSO for the fleet. *Mitigation:* PR 7's count assert fails the deploy before the
+  apply unless the rendered config holds exactly one `{{`, and it prints no value. The
+  operator's dry run before the window runs the same assert. The assert runs only while
+  Ansible renders authelia, and stops at D5's flip PR for authelia. D3's `write` refuses
+  `{{` in any value, and that refusal is the successor. C3's value rule lists `{{`. D5's
+  authelia precondition asks only that three argon2 keys are present, so Open question 12
+  asks D5 to require the refusals as well.
 - **Rule 5 has no types.** A part of a container alias that holds a string, such as `host`
   in authelia's `rule.domain` loop, could be iterated character by character and pass the
   rule. *Mitigation:* none in this slice. No template at `70591c307` iterates such a part,
@@ -1246,6 +1533,11 @@ remains the gate.
   behaviours, the two type results among them. R1's shadow-pair procedure there needs no
   change, since it passes `--secret-stubs`.
 - PR 1b adds `PASSTHROUGH_FILTERS` and its membership test to `docs/homelab-render.md`.
+- PR 1c adds the standalone-value guard to `docs/homelab-render.md`: what counts as a
+  standalone use, the committed map and the command that regenerates it, `GUARD_DEFERRED`,
+  the resolver and its corpus, and the narrowed second pass, which replaces the page's
+  "Every key `0123`" item. `ansible/roles/k8s/manifests/CLAUDE.md` gains the guard's two
+  tasks and what a refusal means for a deploy.
 - PR 2 adds the rule table and the pinned-fact refusal to `docs/homelab-render.md`.
 - PR 2b adds rule 5's two alias clauses to the same page, with the residual that a part of
   a container alias is untyped.
@@ -1265,9 +1557,12 @@ remains the gate.
   `ansible/tests/services/test_authelia_config_schema.py`. It adds the count assert's test
   and the secret-list test to `ansible/tests/services/`, and the orphan test to
   `ansible/tests/k8s/`.
+- PR 7b rewrites the header comment of qbittorrent's `secret.yaml.j2` to name the one value
+  it keeps, and gives the new template its own. It adds the projected-volume test to
+  `ansible/tests/services/`. `docs/homelab-render.md` drops `GUARD_DEFERRED`'s one member.
 - `docs/secret-rotation.md` gains a paragraph per dedicated Secret: rotating its key now means
   rendering that one Secret.
-- Until G2 retires `docs/facts.lock`, when a role `CLAUDE.md` section edited in PRs 3 to 7
+- Until G2 retires `docs/facts.lock`, when a role `CLAUDE.md` section edited in PRs 1c to 7b
   gains a backticked path or symbol, that PR runs
   `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` and commits the lock.
   After G2, the PR does neither: G2 deletes the lock, and its `lock-retired` rule fails
@@ -1285,13 +1580,22 @@ remains the gate.
   two measured type cases in the CI fixture; four more alias fixture pairs and one
   `NON_SECRET_VARS_LOOKUPS` pair; the pinned-fact refusal, which reads R1's reader set and
   which R3's PR 5 deletes with `PINNED_LIVE_FACTS`. No CLI flag: the call is C1's.
+- **Added by PR 1c and PR 7b:** about 200 lines for the standalone-value guard, with about
+  150 lines of tests: the standalone sets, a resolver shared with D3's `write`, a filter
+  plugin, two tasks in the shared `k8s/manifests` role, one generated map file with its
+  coverage test and its writer, a corpus case in the flux probe, and `GUARD_DEFERRED`. One
+  more small Secret template and a projected volume in qbittorrent. Every k8s deploy runs
+  one more assert, over a handful of keys.
 - **Removed:** the `from_json` parse, mosquitto's split, two `indent` interpolations of
-  credentials, 18 truthiness branches and two `trim` filters.
+  credentials, 18 truthiness branches and two `trim` filters. The second `0123` pass no
+  longer flags a standalone use that the guard covers, such as `${domain}`'s 74.
 - **Handed over, not counted here:** D3's refusals of `{{` and of a `:` in
   `mqtt_password_hash`, with their fixture tests, which succeed PR 4's and PR 7's asserts
-  once D5 flips those roles (Open question 12). D3 counts them.
-- **Net for operators:** rotating one of the three multi-line keys touches one small Secret
-  instead of a large config Secret.
+  once D5 flips those roles (Open question 12). D3's standalone-value refusal in `write` and
+  its in-cluster type proof (Open question 13). D3 counts them.
+- **Net for operators:** rotating one of the four keys in `SOPS_MANIFEST_KEYS` touches one
+  small Secret instead of a large one. A value that would change type under Flux fails its
+  role's deploy by key name, instead of failing an apply after the flip.
 
 ## Open questions
 
@@ -1378,12 +1682,12 @@ remains the gate.
 1. **Value encoding in `homelab-cluster-vars` (C3, D3).** *Applied for the character
    rule.* C3 *Secrets* states that a value holds no newline, double quote, backslash or
    control character, because Flux deletes newlines and a placeholder may sit inside a JSON
-   string. D3's `cluster_vars.py write` enforces it. D3's `write` also refuses `{{`, which
-   C3's rule does not list yet. Open question 12 asks C3 to add it. Whether
-   a value's YAML type survives substitution is a separate question, which PR 1's two
-   measured type cases answer for the pinned CLI. If the template's quotes are lost, PR 1
-   ships a second `roundtrip` pass with type-hostile stubs, which needs no contract
-   amendment (*Risks*). D3's proof in the cluster covers the controller version.
+   string. D3's `cluster_vars.py write` enforces it. C3's rule also lists `{{`, which D3's
+   `write` refuses. Whether a value's YAML type survives substitution was a separate
+   question. PR 1's two measured type cases answered it for the pinned CLI: the template's
+   quotes are lost. A second `roundtrip` pass alone could not be the whole answer, and the
+   operator's ruling in Open question 13 adds a C3 value rule for standalone uses. D3's
+   proof in the cluster covers the controller version.
 1. **Where `domain` comes from before D3, and D2's sub-edge on R2 (C3, D2 and the slice
    index).** D2's leaf, bento-pdf, takes its IngressRoute from
    `ansible/templates/ingressroute-default.yaml.j2`, which imports the `ingressroute.yml.j2`
@@ -1470,9 +1774,8 @@ remains the gate.
       the value. D3.2d's fixture tests include PR 4's pair: `$7$abc` is clean and
       `user:$7$abc` is refused. D3's red-proofs refuse a fixture value holding `{{` and
       pass one holding a single `{`. R2 needs nothing more from D3.
-    - *C3, open.* The value rule in *Secrets* lists no `{{`. It gains `{{`, because
-      Authelia's template filter parses the whole rendered config (PR 7). contracts.md
-      *Requested amendments not yet applied* does not hold this request.
+    - *C3, applied.* The value rule in *Secrets* lists `{{`, because Authelia's template
+      filter parses the whole rendered config (PR 7).
     - *D5, open.* D5's authelia precondition is that "D3's cluster file holds R3's three
       argon2 keys", which checks presence only, and D5 names no precondition on mosquitto's
       value. D3 says that D5's authelia and mosquitto PRs wait on D3.2d. D5's own text
@@ -1486,10 +1789,40 @@ remains the gate.
       check that another check covers.
 
    No R2 PR waits on this question. PRs 4 and 7 guard their roles for as long as Ansible
-   renders them, and the gap opens only at a D5 flip. *Owner:* C3 and D5, and R4 for the
-   citation. *Status:* D3 has taken up its part; the rest is not yet recorded.
-   *Resolution:* the contracts.md maintainer records the C3 row with the gate "before D5's
-   authelia flip PR merges", and R2 hands the D5 and R4 parts over as cross-slice notes.
+   renders them, and the gap opens only at a D5 flip. *Owner:* D5, and R4 for the
+   citation. *Status:* D3 has taken up its part, and C3 lists `{{`. The D5 and R4 parts
+   are not yet recorded. *Resolution:* R2 hands the D5 and R4 parts over as cross-slice
+   notes.
+1. **What guards a value that loses its string type under Flux (C3, D3, D5)?** *Answered
+   by the operator on 2026-10-13.* PR 1 measured that Flux drops a standalone value's string
+   type, and the shapes measured afterwards showed that no template shape keeps it
+   (Baseline). With the second `roundtrip` pass as PR 1 shipped it, exit criterion 1 could
+   not pass, and `mullvad_account` would fail qbittorrent's Secret under Flux
+   ([#4884](https://github.com/DanielH2018/server/issues/4884)). The plan offered two
+   directions: scope the `0123` pass to some keys, or restructure each standalone site.
+   Restructuring cannot keep a value, because only text around the placeholder keeps the
+   type.
+
+   **The operator's ruling:** guard the values where they are decrypted, and move
+   `mullvad_account` to a dedicated SOPS Secret. This plan carries it out as follows:
+    - PR 1c adds the standalone-value guard (*The standalone-value guard*), and PR 7b moves
+      `mullvad_account` (*`mullvad_account` becomes a dedicated Secret*).
+    - contracts.md C3 *Secrets* states the standalone value rule. This PR applied it, and
+      contracts.md's review log names the ruling.
+    - D3 carries two parts, recorded in its plan as a cross-slice note: `write` applies the
+      same resolver, and D3's in-cluster proof shows an all-digit value in a SOPS-encrypted
+      Secret's quoted field applied as a string.
+    - *D5, open.* D5's flip of qbittorrent waits on D3's proof, and it needs D3's SOPS
+      manifest for `mullvad_account` and its `decryption` field, as D5 already records for
+      the three roles of PRs 5 to 7. D5's text does not say so yet. R2 hands it over as a
+      cross-slice note.
+
+   *What a refusal means.* A refused key fails its role's deploy before the apply, by
+   name. The operator then either rotates the value to one the resolver passes
+   (**operator-only**), or, for a value that cannot change, moves the key to a dedicated
+   SOPS Secret as PR 7b does. Neither choice keeps the value under a placeholder. A key
+   joins `GUARD_DEFERRED` only in the PR that plans its move, and only until that move
+   lands.
 
 ## Review log
 
@@ -1925,5 +2258,34 @@ Fixed, all three, for R2's part:
   entries. None of them is one of R2's four C1 and H1 rows or the D2 sub-edge on R2's PRs 1
   and 2. R2 already asks for both (Open questions 5 and 8). The fix in R2 is the PR 1 gate
   above. The rows go to contracts.md as a cross-slice note.
+
+Refuted: none.
+
+### Operator ruling (2026-10-13)
+
+Raised: [#4884](https://github.com/DanielH2018/server/issues/4884). PR 1 measured that Flux
+drops a standalone value's string type, so the `0123` pass flagged every standalone use, and
+`mullvad_account` would break qbittorrent's Secret under Flux.
+
+The operator ruled: guard the values where they are decrypted, and move `mullvad_account` to a
+dedicated SOPS Secret. Applied in this round:
+
+- *Baseline* gains the measured shape table from CI run 38432848015 and the PyYAML
+  disagreement on `1e3`.
+- *Design* gains *The standalone-value guard* and *`mullvad_account` becomes a dedicated
+  Secret*. Rule 4 is renamed `no-sops-manifest-key`, because its set now holds a key that is
+  not multi-line. *The round trip* describes the narrowed second pass.
+- Exit criterion 1 can pass, because the second pass keeps every guarded key at its stub.
+  Exit criterion 5 is new, and covers the guard.
+- *Steps* gains PR 1c, before PR 2, and PR 7b, beside PRs 5 to 7. PR 2's widening states
+  both passes, and step 9 empties `GUARD_DEFERRED`.
+- *Verification*, *Rollback*, *Risks*, *Tests and docs* and *Complexity delta* follow. The
+  type risk states the measured result and the ruling.
+- New Open question 13 records the ruling. Open questions 7 and 12 no longer say that C3
+  lacks `{{`, which it has listed since contracts.md's Round 2 integration review.
+- Cross-slice notes: contracts.md C3 gains the standalone value rule, applied in the same
+  PR. D3 gains the resolver in `write`, the `type:str` assertion in `check`, and the
+  in-cluster proof for an all-digit value in a SOPS-encrypted Secret. D5's qbittorrent flip
+  needs both, and is filed for D5.
 
 Refuted: none.

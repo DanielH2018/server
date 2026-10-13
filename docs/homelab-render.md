@@ -351,6 +351,15 @@ Measured on CI run 38426501907 with flux v2.9.6:
   `true` value therefore changes type wherever it stands alone in a field. The probe asserts
   both results. A bump that keeps the quotes fails it, and the round trip's second pass can
   then go.
+- **No template shape keeps a standalone value a string.** CI run
+  [38432848015](https://github.com/DanielH2018/server/actions/runs/38432848015) built
+  `0123`, `true`, `yes`, `1e3` and `null` through a double-quoted, a single-quoted and a
+  `|-` block field, and through a bare `${v}` whose substitute value carries its own double
+  quotes. Every one came back typed, as the integer 83, `bool`, `bool`, the integer 1000 and
+  null, except
+  `yes` with its own quotes, which stayed a string. Only text around the placeholder, as in
+  `"x-${v}"`, kept all five strings, and that text changes the value. The probe behind it
+  was not merged.
 - A bare `n` as a key of `postBuild.substitute` defines no variable `n`. Go's YAML 1.1 reader
   takes the unquoted key `n` for `false`, so the probe names its variable `probe_n`.
 
