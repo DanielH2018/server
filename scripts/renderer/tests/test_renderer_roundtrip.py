@@ -16,7 +16,7 @@ import pytest
 
 from lib.proc_testing import fake_bin
 from renderer import homelab_render, shadow_diff
-from renderer.renderer_lib.flux_probe import RESOLVER_CORPUS, TYPES_SECRET
+from renderer.renderer_lib.flux_probe import RESOLVER_CORPUS, TYPES_FIXTURE_MANIFEST
 from renderer.renderer_lib.placeholders import read_guard_map
 from renderer.renderer_lib.roundtrip import (
     compare_sides,
@@ -61,7 +61,7 @@ if values and "probe_n" in values and values["probe_n"] in replay:
     scalar = replay[values["probe_n"]]
     if scalar is None:
         sys.exit("envsubst error: YAMLToJSON: json: unsupported value")
-    print({secret!r}.replace('"${{probe_n}}"', scalar), end="")
+    print({manifest!r}.replace('"${{probe_n}}"', scalar), end="")
     sys.exit(0)
 resources =yaml.safe_load((path / "kustomization.yaml").read_text())["resources"]
 out = []
@@ -87,7 +87,7 @@ print("---\\n".join(out), end="")
 
 @pytest.fixture
 def flux_on_path(tmp_path, monkeypatch):
-    fake = FAKE_FLUX.format(python=sys.executable, secret=TYPES_SECRET)
+    fake = FAKE_FLUX.format(python=sys.executable, manifest=TYPES_FIXTURE_MANIFEST)
     bin_dir = fake_bin(tmp_path / "bin", flux=fake)
     monkeypatch.setenv("PATH", str(bin_dir))
     monkeypatch.setenv("FAKE_FLUX_REPLAY", json.dumps(MEASURED))

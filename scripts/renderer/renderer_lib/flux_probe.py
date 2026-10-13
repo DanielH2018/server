@@ -116,7 +116,7 @@ def _configmap(name: str, data: dict[str, str]) -> str:
     )
 
 
-TYPES_SECRET = (
+TYPES_FIXTURE_MANIFEST = (
     "apiVersion: v1\nkind: Secret\nmetadata:\n  name: probe-types\n  namespace: probe\n"
     'type: Opaque\nstringData:\n  probe_n: "${probe_n}"\n'
 )
@@ -133,7 +133,7 @@ def write_fixtures(root: Path) -> None:
         ),
         PLAIN: _configmap(PLAIN, {k: v for k, (v, _) in PLAIN_CASES.items()}),
         STRICT: _configmap(STRICT, {"undefined": "${probe_undefined}"}),
-        TYPES: TYPES_SECRET,
+        TYPES: TYPES_FIXTURE_MANIFEST,
     }
     for name, text in fixtures.items():
         directory = root / name
