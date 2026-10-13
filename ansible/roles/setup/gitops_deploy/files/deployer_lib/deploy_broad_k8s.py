@@ -55,11 +55,35 @@ def deferred_owed(broad, declared: set[str]) -> set[str]:
     The refusal's own tags when it named them, else every declared service, because the
     derivation could rule none out. Intersected with `declared`, the entries this host
     deploys: a Pi service has no deploy here to discharge its line. `fold_deferred` records
-    this set in the ledger and `handle_broad` in the range's receipt, so the two agree.
+    this set in the ledger and `record_deferred_receipt` in the range's receipt, so the two
+    agree.
     """
     if not broad.deferred:
         return set()
     return (set(broad.owed) or set(declared)) & declared
+
+
+def record_deferred_receipt(
+    state: DeployerState, target: TickTarget, plans, declared: set[str]
+) -> None:
+    """Record each deferred plane's owed services under the range receipt's `deferred` key.
+
+    land.sh reads that entry as discharged once none of its services holds a ledger line
+    (#4843), so the entry must never exist before its lines do. Every exit that leaves the
+    range merged runs this after `deploy_k8s_owed.alert_and_record_deferred` has written
+    them. Written from the plans loop, it preceded the bump deploy below by minutes, and a
+    landing that read the markers in that window counted 0 owed and settled (#4866).
+
+    A plane that owes no declared service writes nothing (#4865). An empty entry would count
+    0 owed at once and read as applied, for a plane nothing ran: an unreadable host_vars
+    empties `declared`, and a refusal can name only services this host does not deploy.
+    """
+    for broad in plans:
+        owed = deferred_owed(broad, declared)
+        if owed:
+            state.record_receipt(
+                target.origin, target.local, deferred={broad.playbook: sorted(owed)}
+            )
 
 
 def fold_deferred(cs: ChangeSet, plans, declared: set[str]) -> ChangeSet:
@@ -201,6 +225,7 @@ def apply_broad_k8s(
             deploy_k8s_owed.alert_and_record_deferred(
                 tools, state, config, origin, applied, cs, plan.k8s_services
             )
+            record_deferred_receipt(state, target, plans, plan.k8s_services)
             deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
             posted = deploy_alerts.discord(
                 tools,
@@ -223,6 +248,7 @@ def apply_broad_k8s(
     deploy_k8s_owed.alert_and_record_deferred(
         tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services
     )
+    record_deferred_receipt(state, target, plans, plan.k8s_services)
     # The tick's last exit, and the only one a range with nothing deferred reaches, so the
     # secrets page has to be here as well as on the two failure arms (#2459).
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)

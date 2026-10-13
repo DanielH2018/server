@@ -437,11 +437,12 @@ class Landing:
         The receipt is the tick's own record for `base..origin` (#4843), so a deferral of a
         later range, or a ledger line a later tick moved past the merge, never reads as this
         PR's. A PR whose setup half is unapplied too answers False and keeps the
-        stranded-range remedy, which names both playbooks.
+        stranded-range remedy, which names both playbooks. An empty deferred set answers
+        False too: it owes nothing, so it would read as applied for a plane nothing ran (#4865).
         """
         return bool(
             receipt
-            and DEPLOY_PLAYBOOK in receipt.deferred
+            and receipt.deferred.get(DEPLOY_PLAYBOOK)
             and self.planes_unapplied(receipt) == {DEPLOY_PLAYBOOK}
         )
 
