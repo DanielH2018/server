@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render every systemd unit template under ansible/roles/ and verify the output.
+"""Render every systemd unit under ansible/roles/ and hosts/, and verify the output.
 
 `shell_templates.py` covers `*.sh.j2` and `k8s_manifests.py` covers `roles/k8s/*/templates/*.j2`;
 `*.service.j2` / `*.timer.j2` fell between them — nothing rendered a unit template or checked the
@@ -37,6 +37,15 @@ not a wrong value (`TimeoutStartSec=45min` when the intent was 60) or a misspell
 TARGET — `--recursive-errors=no` suppresses the line that would name a target unit systemd can't
 find.
 
+The host packages under `hosts/` render through the host renderer
+(`scripts/renderer/renderer_lib/host.py`), not a `.j2` glob, because a package unit may be a
+static file the glob would miss. Every unit the renderer emits is verified with its drop-ins
+laid out beside it: each host package installs with every shared package, so a host's drop-in
+over the shared `homelab-updater.timer` is verified over that timer. A component no host
+package lists yet renders through a package of its own. The run fails unless it verified
+`homelab-updater.timer`, so a host render that emits nothing cannot pass (H3.2c,
+`docs/target-architecture/host/h3-pi-pilot.md`).
+
 Also renders every polkit rule (`*.rules.j2`) under ansible/roles/ — JavaScript that the
 roles' tests content-check but whose syntax nothing else checks — and runs `node --check` on
 each output. A missing `node` SKIPS with a message rather than failing closed, unlike a missing
@@ -46,7 +55,7 @@ images always carry (they run Actions itself on Node.js), so the skip path is a
 local-workstation fallback, not a gate this repo depends on being armed in CI.
 
 Run directly or via the ``validate-unit-templates`` prek hook. Exits non-zero if any unit fails
-to render, if `systemd-analyze` reports a matching diagnostic, if a polkit rule fails to
+to render, if a host package fails to render or emits no `homelab-updater.timer`, if `systemd-analyze` reports a matching diagnostic, if a polkit rule fails to
 render, or if `node --check` flags one. Exits non-zero if `systemd-analyze` itself isn't
 available on PATH (fail loud, matching `shell_templates.py`'s policy — a missing verifier must
 not silently degrade to "renders, so it's fine").
@@ -58,7 +67,7 @@ import subprocess
 import sys
 from collections.abc import Sequence
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -70,14 +79,17 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from validate.validate_lib.ok_lines import ok_printer
 from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
+from renderer.renderer_lib import host as host_mode
 from lib.render_guard import (
     ANSIBLE,
     REPO,
     dump_numbered,
+    load_yaml,
     render_or_error,
 )
 
 ROLES = ANSIBLE / "roles"
+HOSTS = host_mode.HOSTS
 
 # A line systemd-analyze attributes to the file it's checking looks like
 # "<path>:<lineno>: <message>". A line about a followed unit ("k3s.service: Failed to open...")
@@ -151,7 +163,10 @@ def systemd_verify(unit_path: Path, systemd_analyze_bin: str) -> str | None:
 
     The exit status is ignored by design — see the module docstring for the measured cases
     where it reads 0 on a unit systemd itself printed a diagnostic for. The verdict comes from
-    scanning stderr for a line attributed to `unit_path`'s own path that matches `_FAIL_MESSAGE`.
+    scanning stderr for a line matching `_FAIL_MESSAGE` and attributed either to `unit_path`'s
+    own path or to a drop-in under `<unit_path>.d/`. systemd-analyze reads that directory
+    beside the unit and names the drop-in's own path in its diagnostic, so a check keyed on
+    the unit's path alone passed a typo'd drop-in.
     """
     proc = subprocess.run(
         [
@@ -164,11 +179,11 @@ def systemd_verify(unit_path: Path, systemd_analyze_bin: str) -> str | None:
         capture_output=True,
         text=True,
     )
-    prefix = f"{unit_path}:"
+    prefixes = (f"{unit_path}:", f"{unit_path}.d/")
     hits = [
         line
         for line in proc.stderr.splitlines()
-        if line.startswith(prefix) and _FAIL_MESSAGE.search(line)
+        if line.startswith(prefixes) and _FAIL_MESSAGE.search(line)
     ]
     if hits:
         return "\n".join(hits)
@@ -228,6 +243,139 @@ def check_polkit_rule(template: Path, out_dir: Path, node_bin: str) -> str | Non
         dump_numbered(rendered)
         return f"node --check: {proc.stderr.strip() or f'exited {proc.returncode}'}"
     return None
+
+
+# The unit the host renders must emit, so a render that emits nothing fails rather than
+# verifying zero units (H3, *Verification*, Unit validator).
+HOST_NAMED_MEMBER = "homelab-updater.timer"
+
+# Directories under `hosts/` that hold no host package.
+_NOT_A_HOST = frozenset({"components", "packages", "lib", "keys"})
+
+
+def render_component(name: str, hosts_root: Path, scratch: Path) -> host_mode.Package:
+    """Component `name` rendered through a package of its own, built under `scratch`.
+
+    A component no host package lists yet still ships, in the host package that later lists
+    it, so its units are verified now. The scratch tree links the real component and
+    `hosts/lib/`; the renderer resolves links before its containment checks.
+    """
+    root = scratch / "hosts"
+    (root / "components").mkdir(parents=True)
+    (root / "components" / name).symlink_to(
+        (hosts_root / "components" / name).resolve()
+    )
+    (root / "lib").symlink_to((hosts_root / "lib").resolve())
+    package = f"component-{name}"
+    spec = root / "packages" / package / "package.yml"
+    spec.parent.mkdir(parents=True)
+    spec.write_text(f"components: [{name}]\n")
+    return host_mode.render_package(package, hosts_root=root)
+
+
+def host_unit_groups(
+    hosts_root: Path, scratch: Path
+) -> list[tuple[str, list[host_mode.Package]]]:
+    """Each set of packages that installs together, labelled, as the host renderer emits it.
+
+    Every host package is grouped with every shared package, so a host's drop-in over a
+    shared unit, such as its `homelab-updater.timer` schedule, is verified over that unit.
+    The `shared` group holds the shared packages and every component no host package lists.
+    """
+    shared = [
+        host_mode.render_package(spec.parent.name, hosts_root=hosts_root)
+        for spec in sorted((hosts_root / "packages").glob("*/package.yml"))
+    ]
+    hosts = [
+        spec.parent.name
+        for spec in sorted(hosts_root.glob("*/package.yml"))
+        if spec.parent.name not in _NOT_A_HOST
+    ]
+    listed = {
+        component
+        for host in hosts
+        for component in load_yaml(hosts_root / host / "package.yml").get("components")
+        or []
+    }
+    orphans = [
+        render_component(spec.parent.name, hosts_root, scratch / spec.parent.name)
+        for spec in sorted((hosts_root / "components").glob("*/component.yml"))
+        if spec.parent.name not in listed
+    ]
+    groups = [("shared", shared + orphans)]
+    groups += [
+        (host, shared + [host_mode.render_host(host, hosts_root=hosts_root)])
+        for host in hosts
+    ]
+    return groups
+
+
+def check_host_group(
+    packages: list[host_mode.Package], out_dir: Path, systemd_analyze_bin: str
+) -> tuple[list[str], list[tuple[str, str]]]:
+    """Lay out one group's unit directory under `out_dir` and verify every unit in it.
+
+    Returns the units verified, and each failure as `(unit, error)`. A drop-in whose target
+    unit no package in the group ships is verified over a stub unit of that name, which
+    carries nothing the drop-in could be blamed for.
+    """
+    units: list[str] = []
+    for package in packages:
+        units += package.units()
+        for dst, (content, _) in package.files.items():
+            path = PurePosixPath(dst)
+            if path.is_relative_to(host_mode.UNIT_DIR):
+                target = out_dir / path.relative_to(host_mode.UNIT_DIR)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(content)
+    for dropin_dir in sorted(out_dir.glob("*.d")):
+        unit = dropin_dir.name.removesuffix(".d")
+        if unit.endswith(host_mode.UNIT_SUFFIXES) and unit not in units:
+            (out_dir / unit).write_text("[Unit]\nDescription=stub\n")
+            units.append(unit)
+    failures = []
+    for unit in sorted(units):
+        err = systemd_verify(out_dir / unit, systemd_analyze_bin)
+        if err:
+            print(f"\n----- rendered {unit} -----", file=sys.stderr)
+            dump_numbered((out_dir / unit).read_text())
+            failures.append((unit, f"systemd-analyze verify: {err}"))
+    return sorted(units), failures
+
+
+def check_host_units(
+    hosts_root: Path, out_dir: Path, systemd_analyze_bin: str, ok
+) -> tuple[int, int]:
+    """Verify every unit the host renderer emits; return (units checked, failures).
+
+    A render that raises, or a render missing `HOST_NAMED_MEMBER`, counts as a failure.
+    """
+    try:
+        groups = host_unit_groups(hosts_root, out_dir / "components")
+    except (host_mode.RenderRefused, host_mode.RenderError) as exc:
+        print(f"  [FAIL] hosts/: the host render failed: {exc}", file=sys.stderr)
+        return 0, 1
+    checked = failures = 0
+    seen: set[str] = set()
+    for label, packages in groups:
+        units, failed = check_host_group(
+            packages, out_dir / "hosts" / label, systemd_analyze_bin
+        )
+        checked += len(units)
+        seen.update(units)
+        failures += len(failed)
+        for unit, err in failed:
+            print(f"  [FAIL] hosts/{label}: {unit}: {err}", file=sys.stderr)
+        for unit in sorted(set(units) - {unit for unit, _ in failed}):
+            ok(f"  [ok]   hosts/{label}: {unit}")
+    if HOST_NAMED_MEMBER not in seen:
+        print(
+            f"  [FAIL] hosts/: no render emitted {HOST_NAMED_MEMBER}, so the host units "
+            "were not checked",
+            file=sys.stderr,
+        )
+        failures += 1
+    return checked, failures
 
 
 def main(argv: Sequence[str] = ()) -> int:
@@ -298,10 +446,15 @@ def main(argv: Sequence[str] = ()) -> int:
             else:
                 ok(f"  [ok]   {rules_rel}")
 
+        host_units, host_failures = check_host_units(
+            HOSTS, out_dir / "host-packages", systemd_analyze_bin, ok
+        )
+        failures += host_failures
+
     rules_checked = len(rules) if node_bin else 0
     print(
-        f"\n{len(templates)} unit template(s) and {rules_checked} polkit rule(s) checked, "
-        f"{failures} failure(s)."
+        f"\n{len(templates)} unit template(s), {host_units} host package unit(s) and "
+        f"{rules_checked} polkit rule(s) checked, {failures} failure(s)."
     )
     return 1 if failures else 0
 
