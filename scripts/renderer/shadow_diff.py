@@ -24,8 +24,10 @@ side.
 - `roundtrip --out DIR` (target slice R2) renders each tag in placeholder mode and in stub
   mode, builds every directory of both with `flux build kustomization`, substituting each
   key's stub where a directory substitutes, and compares the outputs byte for byte. A second
-  pass does the same with every key `0123`, which shows a value whose YAML type substitution
-  changes. Its library is `renderer_lib/roundtrip.py`.
+  pass does the same with `0123` for every key the standalone-value guard does not cover,
+  which shows a standalone use the guard's map misses. `--guard-map FILE` reads another map
+  than the committed one, so `{}` makes every key `0123` again. Its library is
+  `renderer_lib/roundtrip.py`.
 - `fluxprobe --out DIR` builds small fixtures with the flux CLI and fails unless each escape
   comes back as the round trip relies on. Its library is `renderer_lib/flux_probe.py`.
 
@@ -71,12 +73,14 @@ from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS
 from lib.exit_codes import SHADOW_DIFFERENT, SHADOW_OK, SHADOW_REFUSED
 from renderer.renderer_lib.cluster import RenderError, RenderRefused, select_tags
 from renderer.renderer_lib.flux_probe import probe
+from renderer.renderer_lib.placeholders import GUARD_MAP, read_guard_map
 from renderer.renderer_lib.roundtrip import (
     FluxMissing,
     Sides,
     StubPass,
     compare_sides,
     find_flux,
+    guarded_keys,
     render_sides,
     stub_passes,
 )
@@ -215,13 +219,18 @@ def red_proof(stub_pass: StubPass, sides: Sides) -> tuple[str, StubPass]:
     )
 
 
-def _roundtrip(out: Path, roles: list[str] | None, with_red_proof: bool) -> int:
+def _roundtrip(
+    out: Path, roles: list[str] | None, with_red_proof: bool, guard_map: Path
+) -> int:
     try:
         flux = find_flux()
+        guarded = guarded_keys(read_guard_map(guard_map))
     except FluxMissing as exc:
         return _refused("roundtrip", str(exc))
+    except (OSError, ValueError) as exc:
+        return _refused("roundtrip", f"the guard map {guard_map} does not read: {exc}")
     keys = homelab_stub_keys(yaml_fast.safe_load(SECRETS.read_text()))
-    passes = stub_passes(stub_vars(), keys)
+    passes = stub_passes(stub_vars(), keys, guarded)
     # Every failure before the builds is a refusal, never exit 1. CI's red half accepts only
     # exit 1, so a setup failure or an empty substituting set cannot pass as a red proof.
     try:
@@ -304,6 +313,14 @@ def main(argv: list[str] | None = None, tags: Callable[[], TagSets] = tag_sets) 
         help="change one key's substitute value by one byte, so a working round trip "
         "exits 1",
     )
+    trip.add_argument(
+        "--guard-map",
+        type=Path,
+        default=GUARD_MAP,
+        metavar="FILE",
+        help="the standalone-value guard's map whose keys keep their R1 stub in the second "
+        "pass. Default: the committed map; `{}` sets every key to 0123",
+    )
     fprobe = commands.add_parser(
         "fluxprobe", help="check the flux CLI's substitution on small fixtures"
     )
@@ -324,7 +341,7 @@ def main(argv: list[str] | None = None, tags: Callable[[], TagSets] = tag_sets) 
     if args.command == "digest":
         return _digest(args.dir)
     if args.command == "roundtrip":
-        return _roundtrip(args.out, args.roles, args.red_proof)
+        return _roundtrip(args.out, args.roles, args.red_proof, args.guard_map)
     if args.command == "fluxprobe":
         return _fluxprobe(args.out, args.red_proof)
     args.out.write_text(stub_file_text())

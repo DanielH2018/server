@@ -6,6 +6,8 @@ PR 1, placeholder mode and the round trip: [#4887](https://github.com/DanielH201
 
 PR 1b, the pass-through filters: [#4891](https://github.com/DanielH2018/server/pull/4891).
 
+PR 1c, the standalone-value guard: [#4914](https://github.com/DanielH2018/server/pull/4914).
+
 Depends on: [R1](r1-shadow-render.md)
 
 Unblocks: D2 and D3. D2's publish job renders bento-pdf, whose IngressRoute holds `domain`,
@@ -65,8 +67,9 @@ writer to the cluster throughout.
    listed for it under Verification.
 5. **The standalone-value guard covers every standalone key.** The coverage test is green
    and `GUARD_DEFERRED` is empty. In CI's flux probe, the guard's resolver refuses every
-   corpus value that the pinned CLI returns as something other than a string, and passes
-   every other one.
+   corpus value that the pinned CLI does not return as the identical string. It passes every
+   other one except the members of `FLUX_KEEPS_BUT_REFUSED`, which the probe holds to the
+   values the CLI keeps and the YAML 1.1 reader types, such as `1:20`.
 
 ## Baseline at `70591c307`
 
@@ -737,9 +740,17 @@ Refusing on the union fails closed where the two readers differ. The authority i
 CLI itself. CI's flux probe gains a corpus of values: the five measured ones, `0x1F`, `0o17`,
 `1:20`, `2001-12-14`, `~`, `on`, `.inf`, the empty value, and the strings `abc`,
 `a.b-c.example` and `0123a`. For each one, the probe builds a standalone `stringData` field
-with the pinned binary. It fails unless the resolver refuses exactly the values that come
-back as something other than a string. A pin bump that changes Flux's typing then fails CI,
-like the probe's other cases.
+with the pinned binary. It fails unless the resolver refuses every value that does not come
+back as the identical string. A pin bump that changes Flux's typing then fails CI, like the
+probe's other cases.
+
+*Measured in PR 1c.* The pinned CLI carries `go.yaml.in/yaml/v2@v2.4.4`, so the port follows
+that version's `resolve`. It returned `2001-12-14` as the string `2001-12-14T00:00:00Z`, so
+the probe compares the returned value, not its type. It failed the build for `.inf`. It kept
+`1:20` as a string, which PyYAML reads as the integer 80, so the union refuses a value the CLI
+keeps. The probe therefore names such values in `FLUX_KEEPS_BUT_REFUSED` and fails when a
+member stops being kept. PR 1c also adds `08`, `1.e3` and `y` to the corpus, which only the
+port types.
 
 **A digit regex is not enough.** The measured table types `yes` as a bool, `1e3` as the
 integer 1000 and `null` as null. None of them holds only digits.

@@ -61,3 +61,28 @@ def test_pihole_substitutes_and_its_deferred_directory_does_not():
     assert result.key_sets["pihole"]
     assert result.key_sets["pihole-deferred"] == frozenset()
     assert result.substituting() == ["pihole"]
+
+
+STANDALONE = {
+    "plain": "main: " + sentinel(KEY) + "\n",
+    "quoted": 'k: "' + sentinel(KEY) + '"\n',
+    "block": "k: |-\n  " + sentinel(KEY) + "\n",
+}
+NOT_STANDALONE = {
+    "prefixed": "main: x-" + sentinel(KEY) + "\n",
+    # Flux types only the outer scalar, so a placeholder inside a longer block is text.
+    "block-with-more-text": "config: |-\n  host: " + sentinel(KEY) + "\n  port: 1\n",
+}
+
+
+def test_a_placeholder_that_is_a_whole_scalar_is_flagged():
+    for shape, text in STANDALONE.items():
+        result = apply_placeholders([RenderedTag("t", {"f.yaml": text})], [KEY])
+        assert result.standalone == {"t": frozenset({KEY})}, shape
+
+
+def test_a_placeholder_inside_more_text_is_clean():
+    for shape, text in NOT_STANDALONE.items():
+        result = apply_placeholders([RenderedTag("t", {"f.yaml": text})], [KEY])
+        assert result.key_sets == {"t": frozenset({KEY})}, shape
+        assert result.standalone == {"t": frozenset()}, shape

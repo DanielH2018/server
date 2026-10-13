@@ -21,6 +21,12 @@ rendered, every `$` included: Flux applies it with no `postBuild` and never read
 syntax. `PlaceholderRender.key_sets` is the one source for every reader that asks whether a
 directory substitutes, and each reads it in process.
 
+After pass 3, each document of a directory that substitutes is parsed, and a key whose `${K}`
+is the entire parsed value of a scalar, in any style, joins the directory's standalone key
+set. Flux types a substituted standalone value by its text, so the standalone-value guard
+checks those keys' values where they are decrypted. `PlaceholderRender.standalone` holds the
+sets, and `scripts/renderer/standalone_map.py` projects them into the guard's committed map.
+
 `docs/homelab-render.md` is the operator's page, and
 `docs/target-architecture/render/r2-secret-placeholders.md` the plan.
 """
@@ -31,13 +37,19 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import enum
+import json
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
+from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
+from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.cluster import DEFERRED_SUFFIX, RenderedTag, render_tag
+from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS
 
 SENTINEL_PREFIX = "HOMELAB_SECRET__"
@@ -54,6 +66,29 @@ PLACEHOLDER_DEFERRED = frozenset(
         "home-assistant",
     }
 )
+
+# The keys with a standalone use that the guard does not check, each with its reason. The
+# guard's map leaves them out, and the round trip's second pass keeps their R1 stub. R2's PR
+# 7b empties the set, and R2's exit criterion requires it empty.
+GUARD_DEFERRED = frozenset(
+    {
+        # qbittorrent's Secret renders `account: "{{ mullvad_account }}"`, and the real value
+        # is all digits, so the guard would refuse every qbittorrent deploy. R2's PR 7b moves
+        # the key into a SOPS-encrypted Secret of its own, which no placeholder reaches. The
+        # operator ruled on 2026-10-13 for this pairing (R2's Open question 13).
+        "mullvad_account",
+    }
+)
+
+# The guard's committed map: each deploy tag to the keys standing alone in its render, less
+# GUARD_DEFERRED. `scripts/renderer/standalone_map.py` writes it, and the shared
+# `k8s/manifests` role reads it before every render.
+GUARD_MAP = K8S_ROLES / "manifests" / "files" / "standalone_secret_keys.json"
+
+
+def read_guard_map(path: Path = GUARD_MAP) -> dict[str, list[str]]:
+    """The guard's map at `path`."""
+    return json.loads(path.read_text())
 
 
 class Mode(enum.Enum):
@@ -112,6 +147,36 @@ class Sentinels:
             for m in self._sentinel.finditer(text)
         )
 
+    def standalone_keys(self, files: dict[str, str]) -> frozenset[str]:
+        """The keys whose `${K}` is the whole parsed value of a scalar in any of `files`.
+
+        `files` are a directory's files after pass 3. A mapping key counts as a scalar too.
+
+        Raises:
+            RenderError: A file does not parse as YAML, so its uses cannot be read.
+        """
+        placeholders = {"${" + key + "}": key for key in self._key_of.values()}
+        found: set[str] = set()
+
+        def walk(node: object) -> None:
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    walk(key)
+                    walk(value)
+            elif isinstance(node, list):
+                for value in node:
+                    walk(value)
+            elif isinstance(node, str) and node in placeholders:
+                found.add(placeholders[node])
+
+        for name, text in files.items():
+            try:
+                for document in yaml_fast.safe_load_all(text):
+                    walk(document)
+            except yaml.YAMLError as exc:
+                raise RenderError(f"{name} does not parse after pass 3: {exc}") from exc
+        return frozenset(found)
+
     def finish(self, text: str) -> str:
         """Passes 2 and 3 on one file of a directory that substitutes."""
         escaped = self._escapable.sub("$$", text)
@@ -129,11 +194,14 @@ class PlaceholderRender:
             substitutes.
         key_sets: Each directory name under `cluster/` mapped to its placeholder key set.
             A directory substitutes exactly when its set is not empty.
+        standalone: Each directory name mapped to its standalone key set, the subset of its
+            key set whose placeholder is the whole value of a scalar.
         skipped: The requested tags in `PLACEHOLDER_DEFERRED`, which were not rendered.
     """
 
     tags: list[RenderedTag]
     key_sets: dict[str, frozenset[str]]
+    standalone: dict[str, frozenset[str]]
     skipped: list[str]
 
     def substituting(self) -> list[str]:
@@ -144,21 +212,26 @@ class PlaceholderRender:
 def apply_placeholders(
     rendered: list[RenderedTag], keys: Iterable[str], skipped: Iterable[str] = ()
 ) -> PlaceholderRender:
-    """Run passes 2 and 3 over sentinel renders, directory by directory."""
+    """Run passes 2 and 3 over sentinel renders, directory by directory, and find standalone uses.
+
+    Raises:
+        RenderError: A file of a directory that substitutes does not parse after pass 3.
+    """
     sentinels = Sentinels(keys)
-    tags, key_sets = [], {}
+    tags, key_sets, standalone = [], {}, {}
     for tag in rendered:
         finished = {}
         for name, files in tag.directories().items():
             key_sets[name] = sentinels.key_set(files)
-            finished[name] = (
-                {f: sentinels.finish(text) for f, text in files.items()}
-                if key_sets[name]
-                else dict(files)
-            )
+            if key_sets[name]:
+                finished[name] = {f: sentinels.finish(t) for f, t in files.items()}
+                standalone[name] = sentinels.standalone_keys(finished[name])
+            else:
+                finished[name] = dict(files)
+                standalone[name] = frozenset()
         deferred = finished.get(tag.tag + DEFERRED_SUFFIX, {})
         tags.append(RenderedTag(tag.tag, finished[tag.tag], deferred))
-    return PlaceholderRender(tags, key_sets, sorted(skipped))
+    return PlaceholderRender(tags, key_sets, standalone, sorted(skipped))
 
 
 def render_placeholders(
