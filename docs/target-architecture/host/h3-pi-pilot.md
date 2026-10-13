@@ -1,6 +1,6 @@
 # H3 — Pi pilot: builder, updater, versioning
 
-Status: PLANNED
+Status: IN PROGRESS
 Depends on: R1
 Unblocks: H4, H5
 

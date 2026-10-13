@@ -3,8 +3,9 @@
 `homelab-render` renders the k8s manifests from the git tree alone, as a shadow of the
 Ansible manifests role. Target slice R1 builds it and proves it byte-identical to Ansible for
 the same stub inputs. Target slice R2 adds placeholder mode, which renders each secret
-reference as Flux's `${<key>}`. Ansible stays the only writer to the cluster: the renderer
-writes only to the directory it is given.
+reference as Flux's `${<key>}`. Target slice H3 adds host and package modes, which render
+the host packages (*Render a host package*). Ansible stays the only writer to the cluster: the
+renderer writes only to the directory it is given.
 
 The plans are [R1, shadow render with zero diff](target-architecture/render/r1-shadow-render.md)
 and [R2, secret placeholders](target-architecture/render/r2-secret-placeholders.md). C1 in
@@ -44,6 +45,8 @@ steps, and this page describes each piece once its PR has merged.
   first. CI's `flux_roundtrip` job runs both (*The round trip*).
 - `scripts/renderer/renderer_lib/secret_checks.py` holds `PASSTHROUGH_FILTERS`, the filters
   that only interpolate a secret key (*Filters that only interpolate a secret*).
+- `scripts/renderer/renderer_lib/host.py` holds host and package modes, which
+  `homelab_render.py host` and `package` run (*Render a host package*).
 
 ## The stub form
 
@@ -646,3 +649,59 @@ The first channel is a census. The `render-does-not-cover-role-writes` row of
 its move. A writing file outside the map fails the row until a reviewer adds it with its owner.
 A file in the map that no longer writes fails the row too, so the map stays the list of what
 the render still leaves out.
+
+## Render a host package
+
+Host mode renders one host's package, and package mode renders one shared package. The plan
+is [H3, Pi pilot](target-architecture/host/h3-pi-pilot.md), whose *Shared names for the host
+slices* fixes the source tree.
+
+```bash
+uv run python scripts/renderer/homelab_render.py host --host daniel-pi --out /tmp/h3
+uv run python scripts/renderer/homelab_render.py package --name homelab-updater --out /tmp/h3
+```
+
+- `host` reads `hosts/<host>/package.yml` and writes `DIR/hosts/<host>/`.
+- `package` reads `hosts/packages/<pkg>/package.yml` and writes `DIR/packages/<pkg>/`.
+- Each writes `root/`, the file tree the package installs, and `nfpm.yaml`, the spec the
+  builder runs `nfpm package` on.
+- A missing spec, a key the renderer does not know, a destination that is not a plain
+  absolute path, two files with one destination, or an existing package directory under
+  `--out` exits 2 and writes nothing. A template that fails exits 1 and writes nothing.
+
+A package spec lists its `components`, its `depends`, and optionally a `description` and
+files and defaults of its own. A component is a directory under `hosts/components/` with a
+`component.yml`, which holds a `defaults:` map and a `files:` list. Each file entry names a
+`src` relative to the component, a `dst` and an octal `mode`, 0644 by default. A `src` that
+ends `.j2` renders through the strict environment cluster mode uses. Any other `src` is copied byte
+for byte.
+
+A host package's context is the host's inventory layers, as
+`scripts/lib/render_context.py:render_context` builds them, with `inventory_hostname` set to
+the host. A shared package's context has no host_vars layer. The component's `defaults:` map
+goes in through the `component_defaults` keyword, beneath `group_vars/all.yml`. A host_vars
+value of the same name therefore wins, as it does over a role default. No `ansible_facts`
+value is in the context, so a template that reads one fails. A fact a template needs becomes
+an inventory variable.
+
+Every host package's `nfpm.yaml` carries `Depends: python3 (>= 3.12)`, because reconcile runs
+under `/usr/bin/python3`. Its `version` is `${HOMELAB_VERSION}`, which `nfpm` expands from the
+builder's environment, so two commits with the same tree render the same spec. Every package
+is `arch: all`.
+
+### Host mode renders no secret
+
+Only cluster mode has a substitution step after it, so only cluster mode renders placeholders
+and escapes `$`.
+
+- Host mode withholds every top-level key name of `ansible/vars/secrets.yml` from every layer,
+  through `render_context`'s `withhold` keyword, and resolves under the strict undefined class.
+  An inventory value that reads a secret is dropped with it.
+- A template that reads a secret, or a value aliasing one, fails the render. The error names
+  the secret key.
+- A `${` in a host template is shell, and renders byte for byte. Host mode imports nothing
+  from `placeholders.py`.
+
+`scripts/renderer/tests/test_renderer_host_mode.py` proves both halves. The secret pair goes
+red when the withholding is removed, because each fixture gives the secret's name a value in a
+layer.

@@ -767,7 +767,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         ),
     ),
     "scripts/renderer/homelab_render.py": (
-        _c(RENDER_OK, "RENDER_OK", "every requested tag rendered under DIR/cluster/."),
+        _c(RENDER_OK, "RENDER_OK", "every requested tag or package rendered in DIR."),
         _c(
             RENDER_FAILED,
             "RENDER_FAILED",
@@ -778,8 +778,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             RENDER_REFUSED,
             "RENDER_REFUSED",
             "the render was refused before anything was written.",
-            "Pass a fresh stubs file, name only renderable tags, and render into an "
-            "empty --out.",
+            "Pass a fresh stubs file, name only renderable tags or packages that exist, "
+            "and render into an empty --out.",
         ),
         _c(RENDER_BAD_ARGS, "RENDER_BAD_ARGS", "the command line is wrong."),
     ),
