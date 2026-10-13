@@ -31,6 +31,10 @@ steps, and this page describes each piece once its PR has merged.
 - `scripts/renderer/shadow_diff.py compare`, `stubcheck` and `digest` compare the two halves
   and hash a render (*Compare the two halves*). `scripts/renderer/renderer_lib/shadow.py`
   holds their library.
+- Two determinism modules in `scripts/renderer/tests/` render every tag twice under an audit
+  hook (*The render is deterministic and reads only the repo*).
+- A census row names every role task file that writes a cluster object itself, which the
+  render does not cover (*What the render does not cover*).
 
 ## The stub form
 
@@ -384,3 +388,64 @@ uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \
   --secret-stubs /tmp/r1-stubs.yml
 uv run python scripts/renderer/shadow_diff.py compare /var/lib/claude/shadow/X /tmp/r1-render
 ```
+
+## The render is deterministic and reads only the repo
+
+Two test modules prove R1's exit criterion 2: `test_renderer_determinism_even.py` and
+`test_renderer_determinism_odd.py` in `scripts/renderer/tests/`. Each takes the tags at its
+positions of the sorted `render_targets` list, so the halves stay balanced as tags join. It
+writes the stub file and renders its tags twice, each time in a subprocess with a different
+`PYTHONHASHSEED`, and requires the two trees to be identical.
+
+Each subprocess runs `scripts/renderer/tests/_render_audit_child.py`, which installs an audit
+hook before it imports the renderer. The hook ends the process on any file open outside the
+repo, the output directory, the stub file, ansible-core's local temp directory and the
+interpreter's prefixes, and on any `socket.connect`. `/dev/null` is the one device it allows.
+The test points `ANSIBLE_LOCAL_TEMP` into its own directory, because ansible-core creates that
+directory on import and its default is under the user's home. The hook lives in a subprocess
+because Python cannot remove an audit hook, and one installed in an xdist worker would outlive
+the test.
+
+What the hook does not see: ansible-core's import runs `ldconfig -p` and `ip link` as child
+processes, to find the C library and to read a MAC address for `uuid.getnode`. A child
+process reads the host without an `open` in the process the hook watches. No template reads
+either result, and a
+rendered byte that depended on one would differ between the CI runner's digest lines and
+daniel-box's.
+
+When `GITHUB_STEP_SUMMARY` is set, each module appends a `render digest at <sha>` heading and
+one `digest_line` per directory it rendered to its CI job summary. A directory's line depends
+on its own files alone, so the two summaries together hold every directory, whichever shards
+the modules ran on. Neither writes the `total` line. On a pull request the SHA is a synthetic
+merge commit, so compare the lines from the push run on master. To check them on daniel-box,
+render that commit in full and run `digest`:
+
+```bash
+uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
+uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1 \
+  --secret-stubs /tmp/r1-stubs.yml
+uv run python scripts/renderer/shadow_diff.py digest /tmp/r1
+```
+
+Every line but `total` must equal the matching line in one of the two job summaries.
+
+## What the render does not cover
+
+Zero diff covers what the manifests role renders: each role's applied directory, its deferred
+directory and its claim files. Four channels stay outside it:
+
+- objects that role tasks apply, create, patch, run or write through `exec` themselves, such
+  as `--from-file` ConfigMaps, probe and gate Jobs and `kubectl run` pods;
+- files that nine roles write to hosts, which belong to the host plane;
+- the `homelab` Namespace and its LimitRange, which `ansible/deploy.yml` builds inline;
+- the values of the five pinned live-read facts, which target slice R3 removes.
+
+The first channel is a census. The `render-does-not-cover-role-writes` row of
+`ansible/tests/repo/test_census_rows_roles.py` reads every task file under
+`ansible/roles/k8s/*/tasks/` except the manifests role's. A task writes when
+`ansible/tests/_k8s_guards.py:_chunk_mutates` matches it, the rule the dry-run guard census in
+`ansible/tests/deploy/test_k8s_dry_run.py` also reads. The row's `allow` map, in
+`ansible/tests/repo/_out_of_render_row.py`, names each writing file with the slice that owns
+its move. A writing file outside the map fails the row until a reviewer adds it with its owner.
+A file in the map that no longer writes fails the row too, so the map stays the list of what
+the render still leaves out.

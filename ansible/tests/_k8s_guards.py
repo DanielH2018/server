@@ -21,6 +21,11 @@ K8S_ROLES = REPO / "ansible/roles/k8s"
 
 
 def _task_chunks(task_file: Path, strip_trailing_comments: bool = False) -> list[str]:
+    """`_text_chunks` of a task file's text."""
+    return _text_chunks(task_file.read_text(), strip_trailing_comments)
+
+
+def _text_chunks(text: str, strip_trailing_comments: bool = False) -> list[str]:
     """Join each task's (possibly multi-line, folded-scalar) body into one string.
 
     A raw per-line scan can't see `kubectl … exec pod --` and the write verb it pipes to when
@@ -37,7 +42,7 @@ def _task_chunks(task_file: Path, strip_trailing_comments: bool = False) -> list
     """
     chunks: list[str] = []
     current: list[str] = []
-    for line in task_file.read_text().splitlines():
+    for line in text.splitlines():
         stripped = line.strip()
         if re.match(r"^-\s*name:", stripped):
             if current:

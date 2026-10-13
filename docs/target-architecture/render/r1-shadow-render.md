@@ -20,6 +20,8 @@ PR 7, the comparison tooling `shadow_diff.py compare`, `stubcheck` and `digest`:
 
 PR 7, the trailing-newline class, rendered with the template module's final newline: [#4851](https://github.com/DanielH2018/server/pull/4851).
 
+PR 8, the out-of-render census row and the two determinism modules: PR_NUMBER_PLACEHOLDER.
+
 Depends on: none
 
 Unblocks: [R2](r2-secret-placeholders.md), [R3](r3-remove-live-reads.md) and H3 (the host
@@ -43,7 +45,9 @@ a shadow, and Ansible stays the only writer to the cluster.
    operator then renders X with `homelab-render cluster` and the same stub file, and runs
    `shadow_diff.py compare`. It exits 0 and prints `<t> tags, <n> files, 0 differences`, with
    no missing and no extra file. `<t>` is the number of Ansible-owned tags at X, which is 56
-   at the baseline. The comparison covers each role's applied directory, its deferred
+   at the baseline. It is 58 at `7586bcf0f`, where the operator's run on 2026-10-13 printed
+   `58 tags, 320 files, 0 differences`: `blackbox-exporter` (#4834) and `flux` (D1) joined
+   after the baseline. The comparison covers each role's applied directory, its deferred
    directory and its volume-claim files. The operator posts that output on the PR that closes
    R1.
 2. **The render is deterministic and reads nothing outside the repo.** Two CI test modules
@@ -798,8 +802,8 @@ updates `docs/homelab-render.md` for what it adds.
       the other those at odd positions, so the halves stay balanced as tags join. Each
       writes the stub file with `shadow_diff.py stubs` and renders its tags twice into
       `tmp_path`, each time in a subprocess with a different `PYTHONHASHSEED`. Together they
-      cover all 56 tags. Each subprocess installs an
-      audit hook before importing the renderer. The hook refuses any `open` outside the repo,
+      cover every render target: 56 at the baseline, 58 at `7586bcf0f`. Each subprocess
+      installs an audit hook before importing the renderer. The hook refuses any `open` outside the repo,
       the output directory and the interpreter's own prefixes, and any `socket.connect`. The
       hook lives in the subprocess because Python cannot remove an audit hook, and one
       installed in an xdist worker would outlive the test. The subprocess also inherits
@@ -821,10 +825,20 @@ updates `docs/homelab-render.md` for what it adds.
       renders every role once in process at 15.46s, so one module rendering all 56 tags
       twice, with two ansible-core imports, would sit near the floor and become the pole of
       the job. That is why the test is two modules from the start: `--dist loadscope` keeps
-      a module on one worker, so only separate modules spread the cost. Record both weights
-      with `uv run python scripts/dev/pytest_shard.py --record-missing`. Each must record
-      under 20s, about two thirds of the floor. If one does not, split into three by
-      position modulo three. The per-directory digest lines make any split comparable.
+      a module on one worker, so only separate modules spread the cost. Record each weight
+      with `uv run python scripts/dev/pytest_shard.py --record-files <module>`, not
+      `--record-missing`, which records every unweighted module in the repo, so two PRs
+      running it conflict on the weights file. Each must record under 20s, about two thirds
+      of the floor. If one does not, split into three by position modulo three. The
+      per-directory digest lines make any split comparable.
+    - **As it landed.** The census row's data lives in `_out_of_render_row.py` beside
+      `test_census_rows_roles.py`, which imports it into `ROWS`, because that module sits
+      near the 500-line cap for a test module. The row finds 23 roles, the baseline's 22 plus
+      `flux` (D1). The audit hook also allows `/dev/null` and an `ANSIBLE_LOCAL_TEMP` the
+      test points into its own directory, because ansible-core opens the first and creates
+      the second when the renderer imports it. That import also runs `ldconfig -p` and
+      `ip link` as child processes, which an `open` hook does not see. `docs/homelab-render.md`
+      records both.
 
 ## Verification
 
@@ -852,7 +866,8 @@ uv run python scripts/renderer/shadow_diff.py compare \
 ```
 
 The last command must exit 0 and print `<t> tags, <n> files, 0 differences`, where `<t>` is
-the Ansible-owned tag count at X: 56 until D2 hands a tag to Flux. It refuses to report
+the Ansible-owned tag count at X: 56 at the baseline and 58 at `7586bcf0f`, until D2 hands a
+tag to Flux. It refuses to report
 success over an empty set. It also refuses when it finds no file for one of three named
 members: `traefik/deployment.yaml`, `pihole-instance-2` and a `claim-*.yaml` file. A named
 member whose tag is flux-owned at X is dropped from that check, and `compare` prints which.
@@ -1054,7 +1069,8 @@ whole-tree comparison, such as two full renders of one commit.
 - PR 7 adds the shadow-pair procedure to `docs/homelab-render.md`, marked operator-only.
 - PR 8 moves `_chunk_mutates` and its patterns from `test_k8s_dry_run.py` into
   `_k8s_guards.py`. `test_k8s_dry_run.py` imports them, and no assertion changes. It records
-  the two determinism modules' weights in `scripts/dev/pytest_shard_weights.json`.
+  the two determinism modules' weights in `scripts/dev/pytest_shard_weights.json` with
+  `--record-files`.
 - Every other test is listed with its PR above. `scripts/validate/` keeps its own render
   until R4.
 
