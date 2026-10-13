@@ -149,14 +149,16 @@ def test_no_bare_dollar_brace_is_clean():
 
 
 def test_no_bare_dollar_brace_is_flagged():
-    # A known key whose sentinel never reached this directory is a reference pass 3 did not
-    # write, as is a sentinel fragment a transform left behind.
+    # A shell `${HOME}` that missed the escape, a known key whose sentinel never reached this
+    # directory, and a sentinel fragment a transform left behind.
     render = _render(SECRET_DOC.format(sentinel(KEY)))
     render.tags[0].files["f.yaml"] += (
-        "  w: ${domain}\n  x: homelab_secret__fixture_key__end\n"
+        "  u: ${HOME}\n  w: ${domain}\n  x: homelab_secret__fixture_key__end\n"
     )
     found = {(v.rule, v.key) for v in output_violations(render, FIXTURE_KEYS)}
     assert found == {
+        (KNOWN_KEY, "HOME"),
+        (NO_BARE_DOLLAR_BRACE, "HOME"),
         (NO_BARE_DOLLAR_BRACE, "domain"),
         (NO_BARE_DOLLAR_BRACE, "sentinel"),
     }

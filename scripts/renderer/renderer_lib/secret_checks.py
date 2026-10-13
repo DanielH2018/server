@@ -331,28 +331,27 @@ def output_violations(
                         )
                     if not key_set:
                         continue
-                    for body in references(doc):
-                        violation = _reference_violation(body, site, known, key_set)
-                        if violation:
-                            found.append(
-                                Violation(violation, directory, name, site, body)
-                            )
+                    found.extend(
+                        Violation(rule, directory, name, site, body)
+                        for body in references(doc)
+                        for rule in _broken(body, site, known, key_set)
+                    )
     return found
 
 
-def _reference_violation(
-    body: str, site: str, known: set[str], key_set: frozenset[str]
-) -> str | None:
-    """The rule one reference `${body}` in a directory that substitutes breaks, if any."""
-    if body not in known:
-        return KNOWN_KEY
-    if body not in key_set:
-        return NO_BARE_DOLLAR_BRACE
+def _broken(body: str, site: str, known: set[str], keys: frozenset[str]) -> list[str]:
+    """Each rule one reference `${body}` in a directory that substitutes breaks.
+
+    Rules 3 and 4 read only a placeholder of pass 3, a reference to a key in `keys`.
+    """
+    rules = [KNOWN_KEY] if body not in known else []
+    if body not in keys:
+        return [*rules, NO_BARE_DOLLAR_BRACE]
     if body in SOPS_MANIFEST_KEYS:
-        return NO_SOPS_MANIFEST_KEY
+        rules.append(NO_SOPS_MANIFEST_KEY)
     if not site.startswith("Secret/") and body not in PLACEHOLDER_ANYWHERE:
-        return CONFINED_TO_SECRET
-    return None
+        rules.append(CONFINED_TO_SECRET)
+    return rules
 
 
 def _document(render: PlaceholderRender, directory: str, site: str) -> str | None:

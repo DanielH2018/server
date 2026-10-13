@@ -13,7 +13,11 @@ import dataclasses
 import pytest
 
 from renderer import homelab_render
-from renderer.renderer_lib.placeholders import pinned_fact_readers
+from renderer.renderer_lib.cluster import flux_owned_tags, select_tags
+from renderer.renderer_lib.placeholders import (
+    pinned_fact_readers,
+    pinned_fact_refusals,
+)
 from renderer.renderer_lib.secret_checks import (
     KNOWN_VIOLATIONS,
     NON_SECRET_VARS_LOOKUPS,
@@ -95,6 +99,12 @@ def test_a_role_render_without_the_named_members_is_clean(tmp_path, capsys):
         homelab_render.main(["cluster", "--out", str(out), "--role", "bento-pdf"]) == 0
     )
     assert "the five secret rules pass" in capsys.readouterr().out
+
+
+def test_no_render_target_is_a_flux_owned_reader_of_a_pinned_fact_is_clean():
+    # CI's pytest job runs this, so the commit that marks a reader `owner: flux` goes red
+    # before any publish job could run.
+    assert pinned_fact_refusals(select_tags(None), flux_owned_tags()) == []
 
 
 def test_the_refusal_reads_the_reader_tags_pinned_live_facts_records():
