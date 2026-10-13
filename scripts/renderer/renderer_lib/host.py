@@ -214,6 +214,8 @@ def _render_unit(
     ctx, reasons = host_context(host, spec.get("defaults") or {}, inventory, withheld)
     env = renderer_env(directory)
     for entry in files:
+        if not {"src", "dst"} <= set(entry):
+            raise RenderRefused(f"{directory}: file entry {entry} lacks src or dst")
         src, dst = str(entry["src"]), str(entry["dst"])
         destination = PurePosixPath(dst)
         if not destination.is_absolute() or ".." in destination.parts:
@@ -222,12 +224,27 @@ def _render_unit(
             )
         if dst in package.files:
             raise RenderRefused(f"{package.name}: two files install {dst}")
-        mode = int(str(entry.get("mode", "0644")), 8)
+        mode = _mode(entry.get("mode", "0644"), directory, dst)
         if src.endswith(".j2"):
             content = _render_template(env, src, ctx, reasons, directory).encode()
-        else:
+        elif (directory / src).is_file():
             content = (directory / src).read_bytes()
+        else:
+            raise RenderRefused(f"{directory}: src {src!r} does not exist")
         package.files[dst] = (content, mode)
+
+
+def _mode(value: object, directory: Path, dst: str) -> int:
+    """A file entry's octal `mode` string as an int.
+
+    Only a quoted string is taken. YAML 1.1 loads an unquoted `0644` as the integer 420, which
+    cannot be told apart from a literal 420, so an int is refused rather than guessed at.
+    """
+    if not isinstance(value, str) or not re.fullmatch(r"0?[0-7]{3,4}", value):
+        raise RenderRefused(
+            f"{directory}: {dst} mode {value!r} is not a quoted octal string such as '0644'"
+        )
+    return int(value, 8)
 
 
 def host_context(

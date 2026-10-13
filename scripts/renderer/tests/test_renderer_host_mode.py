@@ -160,6 +160,10 @@ def test_a_static_file_is_copied_without_rendering(hosts):
             {"files": [{"src": "a", "dst": "/x"}, {"src": "a", "dst": "/x"}]},
             "two files install /x",
         ),
+        # An unquoted 0644 loads as the int 420, which would install as mode 0o420.
+        ({"files": [{"src": "a", "dst": "/x", "mode": 0o644}]}, "not a quoted octal"),
+        ({"files": [{"src": "a"}]}, "lacks src or dst"),
+        ({"files": [{"src": "missing", "dst": "/x"}]}, "does not exist"),
     ],
 )
 def test_a_malformed_component_is_flagged(hosts, component, message):

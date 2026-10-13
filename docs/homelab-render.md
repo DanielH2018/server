@@ -669,12 +669,13 @@ uv run python scripts/renderer/homelab_render.py package --name homelab-updater 
   absolute path, two files with one destination, or an existing package directory under
   `--out` exits 2 and writes nothing. A template that fails exits 1 and writes nothing.
 
-A package spec lists its `components`, its `depends`, and optionally a `description` and
-files and defaults of its own. A component is a directory under `hosts/components/` with a
+A package spec lists its `components`, its `depends`, and optionally a `description` and files
+and defaults of its own. A component is a directory under `hosts/components/` with a
 `component.yml`, which holds a `defaults:` map and a `files:` list. Each file entry names a
-`src` relative to the component, a `dst` and an octal `mode`, 0644 by default. A `src` that
-ends `.j2` renders through the strict environment cluster mode uses. Any other `src` is copied byte
-for byte.
+`src` relative to the component, a `dst` and an octal `mode`, 0644 by default. The mode is a
+quoted string such as `"0755"`: YAML loads an unquoted `0755` as the integer 493, so the
+renderer refuses an integer. A `src` that ends `.j2` renders through the strict environment
+cluster mode uses. Any other `src` is copied byte for byte.
 
 A host package's context is the host's inventory layers, as
 `scripts/lib/render_context.py:render_context` builds them, with `inventory_hostname` set to
