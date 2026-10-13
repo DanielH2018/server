@@ -1,0 +1,12 @@
+# The shared package every host installs (H3, *The updater*). Its keyring entry joins in H3.4c,
+# with the key itself, so no render or build before then names a missing file.
+description: Installs the newest homelab packages and runs reconcile
+# The updater reads reconcile's record with python3.
+depends:
+  - "python3 (>= 3.12)"
+maintainer_scripts: [postinst, prerm]
+files:
+  - {lib: homelab-updater, dst: /usr/lib/homelab/homelab-updater, mode: "0755"}
+  - {src: units/homelab-updater.service, dst: /usr/lib/systemd/system/homelab-updater.service}
+  - {src: units/homelab-updater.timer, dst: /usr/lib/systemd/system/homelab-updater.timer}
+  - {src: templates/homelab.sources.j2, dst: /etc/apt/sources.list.d/homelab.sources}

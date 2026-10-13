@@ -3,6 +3,7 @@
 Status: IN PROGRESS
 
 PR H3.1, the renderer's host and package modes: [#4911](https://github.com/DanielH2018/server/pull/4911).
+PR H3.2a, the updater package: [#4917](https://github.com/DanielH2018/server/pull/4917).
 
 Depends on: R1
 Unblocks: H4, H5
@@ -487,7 +488,10 @@ installed versions are *reconciled* when the record's `result` names exactly the
    retry once. A `Depends` on an Ubuntu package can need fresher Ubuntu lists than step 3
    fetched. The full update runs at most once a day, recorded in a stamp file under
    `/var/lib/homelab-updater/`, and never between 04:00 and 05:59. Otherwise the run exits
-   non-zero and the next run tries again.
+   non-zero and the next run tries again. Any other install failure, such as a lock wait
+   that timed out, ends the run with no full update. The retry runs with
+   `DPkg::Lock::Timeout=0`, so one run waits on the lock at most once, and
+   `TimeoutStartSec` budgets that one wait.
 7. Run `systemctl start homelab-reconcile.service` synchronously. Its exit status is not the
    verdict. Step 8 reads the record that the run wrote.
 8. Read the record, then write `homelab_host.prom` with M3's write rule (*Shared names*,

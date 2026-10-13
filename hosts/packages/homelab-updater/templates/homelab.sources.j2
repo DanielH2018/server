@@ -1,0 +1,7 @@
+# Shipped by homelab-updater: the homelab apt repository on daniel-box. bootstrap-host.sh
+# writes this file before the first install, and dpkg takes it over.
+Types: deb
+URIs: http://{{ hostvars['daniel-box'].server_ip }}:8791
+Suites: homelab
+Components: main
+Signed-By: /usr/share/keyrings/homelab-archive-keyring.gpg
