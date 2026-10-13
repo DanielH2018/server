@@ -1,0 +1,23 @@
+---
+# Renovate's k8s-defaults manager tracks this pin. Keep the tag alongside a digest
+# (`repo:tag@sha256:...`) if you pin by digest — a bare `repo@sha256:...` freezes the image
+# with no update signal at all.
+blackbox_exporter_k8s_image: prom/blackbox-exporter:v0.29.0@sha256:9613f2884689b6fad9f1939f6a3b0388c93a022cfaededb19545b329b5c83dea
+
+# Auto-deploy stance — read by gitops_deploy through
+# `ansible/filter_plugins/k8s_autodeploy.py`, which raises at template time on a role that
+# declares neither. The reason is what makes the stance reviewable, so replace the text below
+# with the property that actually decides it.
+k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "observability — the ingress pager once M4 cuts over; a broken deploy cannot page about being broken. Its readinessProbe (/-/healthy) proves the process runs, not that a probe succeeds"  # noqa var-naming[no-role-prefix]
+
+blackbox_exporter_k8s_cpu_limit: "500m"
+blackbox_exporter_k8s_mem_limit: 256Mi
+blackbox_exporter_k8s_cpu_request: "50m"
+blackbox_exporter_k8s_mem_request: 64Mi
+
+# The uid the container runs as, pinned rather than left to the image's named user.
+# `ansible/tests/k8s/test_container_security_context.py::test_every_asserting_container_pins_a_uid`
+# requires it: a pod asserting runAsNonRoot with no runAsUser still passes admission after a
+# tag bump moves that named user to a different uid. Read the image's own uid and set it here.
+blackbox_exporter_k8s_uid: 65534

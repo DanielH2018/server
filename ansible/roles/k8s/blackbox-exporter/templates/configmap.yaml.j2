@@ -1,0 +1,13 @@
+---
+# The exporter's modules, carried verbatim from files/blackbox.yml.
+#
+# Rendering it here puts it inside the manifests the shared rollout gate hashes, so an edit to
+# a module rolls the pod without this role needing its own `checksum/` pod annotation.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: blackbox-exporter
+  namespace: {{ k8s_namespace }}
+data:
+  blackbox.yml: |
+{{ lookup('file', playbook_dir + '/roles/k8s/blackbox-exporter/files/blackbox.yml') | indent(4, true) }}

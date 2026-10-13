@@ -896,6 +896,12 @@ containers_list:
   - name: flux
     platform: k8s
     tier: platform
+  # The ingress probes' exporter (docs/target-architecture/monitoring/m4-blackbox-ingress.md).
+  # No depends_on: the plan states no order against observability. It sits above
+  # netpol-baseline only because that role must stay last.
+  - name: blackbox-exporter
+    platform: k8s
+    port: 9115
   # LAST on purpose: every workload role must finish before this role fences the namespace
   # (docs/networkpolicy-slice-answers.md). Nothing but list position keeps it last; no
   # depends_on edge says so yet.

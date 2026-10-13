@@ -1,0 +1,36 @@
+{#
+  hostAliases block that pins every cluster-served LAN name to the ingress VIP, for a pod that
+  probes those names from inside the cluster.
+
+  Why a pin at all: a pod without hostAliases resolves through cluster CoreDNS, which forwards
+  to resolvers that can answer the public wildcard `*.local.<domain>` with the wrong address.
+  The pin keeps a CoreDNS or Pi-hole fault out of the probe path.
+
+  Why one macro: uptime-kuma and blackbox-exporter probe the same ingress names, and both
+  Deployments call this, so the two lists cannot drift. Each caller says at its call site why
+  that pod probes the ingress. The list is rendered from `containers_list` | lan_hostnames,
+  plus the one literal probe host that fronts no workload.
+
+  Emits the `hostAliases:` key at pod-spec indent (6 spaces) and no trailing newline, so a
+  caller writes `{{ ingress_host_aliases() }}` on a line of its own. Each item writes its newline
+  before itself, for that reason. Import it `with context`: it reads hostvars,
+  k8s_primary_node, domain and k3s_metallb_ingress_vip.
+#}
+{% macro ingress_host_aliases() %}
+      hostAliases:
+        - ip: "{{ k3s_metallb_ingress_vip }}"
+          hostnames:
+            # The fleet all-clear tile's probe host (#1342), and the ONLY name here that
+            # fronts no workload. It exists so the edge self-check path cannot be outranked:
+            # Traefik's router priority is rule length, and an app's Host() rule can be
+            # longer than `PathPrefix(`/.well-known/traefik-edge-selfcheck`)` (48 chars) —
+            # littlelink's two-host rule is 68 and beat it, measured 2026-09-06, so the tile
+            # got littlelink's own 404 body. A name with no IngressRoute anywhere has no
+            # Host() router to lose to, whatever gets added later. It is covered by the
+            # existing *.local wildcard SAN, so it adds no ACME order.
+            # test_the_all_clear_probe_host_fronts_no_route keeps it unrouted.
+            - "edge-selfcheck.local.{{ domain }}"
+{%- for name in hostvars[k8s_primary_node].containers_list | lan_hostnames %}
+{{ "\n" }}            - "{{ name }}.local.{{ domain }}"
+{%- endfor %}
+{% endmacro %}
