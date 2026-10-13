@@ -62,24 +62,48 @@ groups:
       # its pod stale-marks every series it exports, and an instant read would then return
       # nothing for one evaluation and restart the hold. The `unless` drops an object as soon as
       # it reads Ready=True, so the 10m window never keeps a recovered object pending.
+      # The absent() arm is this family's zero-series alert for gotk_resource_info (#4809).
+      # Without it, a kube-state-metrics upgrade that changes the custom-resource-state format,
+      # a ClusterRole that loses list/watch on a Flux kind, or a Flux CRD version the config no
+      # longer matches leaves both readiness arms and FluxSuspended with no series, so they stay
+      # quiet. The kube-state-metrics job carries no `origin` label, so Kuma's Cluster Scrape
+      # Targets tile pages its up == 0, and M1 convention 5 conjoins the arm with up == 1. A
+      # failed kube-state-metrics scrape therefore returns nothing from this arm for that
+      # evaluation and restarts its hold, as with M1's AlertmanagerMetricsMissing. The arm
+      # names the root Kustomization alone, the one object that exists whenever Flux is
+      # installed. Its alert carries no exported_namespace, which is how the annotations tell
+      # the two cases apart.
       - alert: FluxNotReady
         expr: >-
-          max by (customresource_kind, exported_namespace, name) (
-            last_over_time(gotk_resource_info{customresource_kind="Kustomization", ready!="True"}[10m])
-            or last_over_time(gotk_resource_info{customresource_kind="OCIRepository", name="homelab", ready!="True"}[10m])
+          (
+            max by (customresource_kind, exported_namespace, name) (
+              last_over_time(gotk_resource_info{customresource_kind="Kustomization", ready!="True"}[10m])
+              or last_over_time(gotk_resource_info{customresource_kind="OCIRepository", name="homelab", ready!="True"}[10m])
+            )
+            unless on(customresource_kind, exported_namespace, name)
+            gotk_resource_info{ready="True"}
           )
-          unless on(customresource_kind, exported_namespace, name)
-          gotk_resource_info{ready="True"}
+          or
+          (absent(gotk_resource_info{customresource_kind="Kustomization", name="homelab"}) and on() (up{job="kube-state-metrics"} == 1))
         for: 15m
         labels:
           severity: warning
           service: flux
         annotations:
-          summary: A Flux object has not been Ready for 15 minutes.
+          summary: >-
+            {{ if $labels.exported_namespace }}A Flux object has not been Ready for 15
+            minutes.{{ else }}kube-state-metrics has exported no gotk_resource_info for the
+            root Kustomization for 15 minutes.{{ end }}
           description: >-
-            The {{ $labels.customresource_kind }} {{ $labels.name }} in
-            {{ $labels.exported_namespace }} has had a Ready condition other than True for 15
-            minutes. Its status conditions name the failing step.
+            {{ if $labels.exported_namespace }}The {{ $labels.customresource_kind }}
+            {{ $labels.name }} in {{ $labels.exported_namespace }} has had a Ready condition
+            other than True for 15 minutes. Its status conditions name the failing
+            step.{{ else }}kube-state-metrics is scraped, but for 15 minutes it has exported no
+            gotk_resource_info series for the Kustomization {{ $labels.name }}, so FluxNotReady
+            and FluxSuspended cannot see any Flux object. Read the kube-state-metrics log in
+            the observability namespace for a Forbidden or a custom-resource-state config
+            error, and compare the Flux CRD versions with
+            observability_ksm_flux_resource_state.{{ end }}
       # kube-state-metrics drops a label whose field is absent, and the flux role writes
       # spec.suspend only while flux_sync_suspend is true, so suspension matches
       # suspended="true". flux_sync_suspend and a hand suspend both count. The max by() keeps

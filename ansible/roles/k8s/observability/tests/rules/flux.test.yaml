@@ -12,7 +12,8 @@ evaluation_interval: 1m
 tests:
   # The zero-series case: no input at all, so the flux job is missing from the config.
   # FluxControllerDown fires once per controller after its 5m hold, and not before. The two
-  # gotk_resource_info rules evaluate to nothing and stay quiet past their holds.
+  # gotk_resource_info rules stay quiet past their holds: FluxNotReady's absent() arm is
+  # conjoined with kube-state-metrics' up == 1, and that series is missing too.
   - interval: 1m
     input_series: []
     alert_rule_test:
@@ -261,6 +262,49 @@ tests:
                 The OCIRepository homelab in flux-system has had a Ready condition other than
                 True for 15 minutes. Its status conditions name the failing step.
 
+  # kube-state-metrics scraped with no gotk_resource_info at all, as after an upgrade that
+  # changed its custom-resource-state format or a ClusterRole that lost list/watch on the Flux
+  # kinds. The absent() arm fires at 15m and not at 14m, with no exported_namespace, so the
+  # annotations name kube-state-metrics rather than a Flux object.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: FluxNotReady
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: FluxNotReady
+        exp_alerts:
+          - exp_labels:
+              customresource_kind: Kustomization
+              name: homelab
+              severity: warning
+              service: flux
+            exp_annotations:
+              summary: >-
+                kube-state-metrics has exported no gotk_resource_info for the root
+                Kustomization for 15 minutes.
+              description: >-
+                kube-state-metrics is scraped, but for 15 minutes it has exported no
+                gotk_resource_info series for the Kustomization homelab, so FluxNotReady and
+                FluxSuspended cannot see any Flux object. Read the kube-state-metrics log in
+                the observability namespace for a Forbidden or a custom-resource-state config
+                error, and compare the Flux CRD versions with
+                observability_ksm_flux_resource_state.
+
+  # The same missing series with kube-state-metrics' scrape failing. Kuma's Cluster Scrape
+  # Targets tile pages that up == 0, so the absent() arm stays quiet (M1 convention 5).
+  - interval: 1m
+    input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FluxNotReady
+        exp_alerts: []
+
   # The root Kustomization suspended. It fires at 24h and not at 23h59m, one evaluation short.
   # A failed kube-state-metrics scrape at 11h55m stale-marks the series for one 5m sample, and
   # the hold runs across it.
@@ -307,10 +351,12 @@ tests:
         alertname: FluxSuspended
         exp_alerts: []
 
-  # Healthy: every controller scraped with its metrics, both objects Ready and none suspended.
-  # No rule fires.
+  # Healthy: every controller scraped with its metrics, kube-state-metrics scraped, both
+  # objects Ready and none suspended. No rule fires, FluxNotReady's absent() arm included.
   - interval: 1m
     input_series:
+      - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'
+        values: '1x30'
       - series: 'up{job="flux", app="source-controller", instance="10.42.1.206:8080", pod="source-controller-579bc67689-2rrfs"}'
         values: '1x30'
       - series: 'controller_runtime_reconcile_total{job="flux", app="source-controller", instance="10.42.1.206:8080", pod="source-controller-579bc67689-2rrfs", controller="ocirepository", result="success"}'

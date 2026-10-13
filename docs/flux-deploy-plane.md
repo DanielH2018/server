@@ -113,7 +113,11 @@ M1's Alertmanager. Every rule carries `service="flux"`.
       carries no shadow label.
 - **`FluxNotReady`, warning.** A Kustomization, or the `OCIRepository` `homelab`, has had a
   Ready condition other than `True` for 15 minutes. The rule names `homelab`, so the verify
-  drill's `verify-drill`, which is meant to read Ready=False, never fires it.
+  drill's `verify-drill`, which is meant to read Ready=False, never fires it. The rule also
+  fires when kube-state-metrics has been scraped for 15 minutes with no `gotk_resource_info`
+  series for the root Kustomization. That loss would otherwise leave this rule and
+  `FluxSuspended` quiet. Its alert carries no `exported_namespace`, and its description
+  points at the kube-state-metrics log.
 - **`FluxSuspended`, warning.** A Kustomization has been suspended for more than 24 hours.
   `flux_sync_suspend` and a hand suspend both count.
 
