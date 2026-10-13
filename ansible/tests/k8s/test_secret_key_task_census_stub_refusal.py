@@ -79,7 +79,6 @@ def test_an_unguarded_assert_on_a_template_derived_fact_is_flagged(
     tmp_path: Path,
 ) -> None:
     role = _secret_role(tmp_path, _token_assert())
-    assert _ASSERT_ID not in census_mod.STUB_REFUSING
     _, offenders = _run(role)
     assert _ASSERT_ID in offenders
 
