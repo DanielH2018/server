@@ -4,7 +4,7 @@
 The design is H3's *The reconcile unit* (docs/target-architecture/host/h3-pi-pilot.md), and the
 step numbers below are that section's. `homelab-reconcile.service` runs this as root, under the
 host's /usr/bin/python3, which is 3.12 on Ubuntu 24.04. It uses the standard library only, and
-hosts/lib/tests/test_reconcile_syntax.py parses it with the 3.12 grammar.
+hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar.
 
 Usage: homelab-reconcile        (no arguments; exit 0 when every step succeeded, 1 otherwise)
 

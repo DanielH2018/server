@@ -718,7 +718,7 @@
  "evals/tests/test_ranking.py": 0.0,
  "evals/tests/test_review_outcomes.py": 0.0,
  "evals/tests/test_trend.py": 0.0,
- "hosts/lib/tests/test_homelab_reconcile.py": 4.89,
+ "hosts/lib/tests/test_homelab_reconcile.py": 5.04,
  "hosts/lib/tests/test_homelab_updater.py": 4.57,
  "hosts/lib/tests/test_homelab_updater_fetch.py": 8.44,
  "hosts/lib/tests/test_hosts_tree_is_tracked.py": 0.0,

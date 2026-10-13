@@ -209,6 +209,33 @@ def test_a_path_dpkg_reports_as_owned_is_never_removed_and_an_unowned_one_is(nod
     assert not (node.root / "usr/local/bin/stray").exists()
 
 
+def test_an_ansible_era_unit_is_disabled_stopped_and_removed_unless_a_package_owns_it(
+    node,
+):
+    for name in ("pi-sd-health.timer", "owned.timer"):
+        path = node.root / "etc/systemd/system" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("[Timer]\n")
+        node.state["units"][name] = {
+            "load": "loaded",
+            "active": "active",
+            "enabled": "enabled",
+        }
+        node.manifest["legacy"].append({"unit": name})
+    node.state["owned"] = ["/etc/systemd/system/owned.timer"]
+
+    result = node.run()
+
+    assert result.returncode == 0, result.stderr
+    assert node.actions() == [
+        ["disable", "pi-sd-health.timer"],
+        ["stop", "pi-sd-health.timer"],
+    ]
+    assert not (node.root / "etc/systemd/system/pi-sd-health.timer").exists()
+    assert (node.root / "etc/systemd/system/owned.timer").exists()
+    assert len(node.applied()["retired"]) == 2
+
+
 # The dpkg lock and the record.
 
 

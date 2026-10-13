@@ -87,8 +87,8 @@ def timeout_holds(
 def test_the_updater_timeout_exceeds_reconcile_plus_the_lock_wait_is_clean(
     package, reconcile_unit
 ):
-    assert timeout_start_s(reconcile_unit) == 30 * 60
     assert timeout_holds(package.files[SERVICE][0].decode(), reconcile_unit)
+    assert timeout_start_s(reconcile_unit) == 30 * 60
 
 
 def test_an_updater_timeout_of_20_minutes_is_flagged(reconcile_unit):
