@@ -1,6 +1,9 @@
 # H3 — Pi pilot: builder, updater, versioning
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR H3.1, the renderer's host and package modes: [#4911](https://github.com/DanielH2018/server/pull/4911).
+
 Depends on: R1
 Unblocks: H4, H5
 

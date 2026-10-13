@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""homelab-render: render the k8s manifests from the git tree alone, in C1's layout.
+"""homelab-render: render the k8s manifests and the host packages from the git tree alone.
 
 `cluster` renders each deploy tag into `DIR/cluster/<tag>/`, with a `kustomization.yaml`
 listing its files. It reads the git tree and, in stub mode, the stub file, and never contacts
@@ -10,6 +10,11 @@ Without `--secret-stubs`, `cluster` renders in placeholder mode (target slice R2
 reference renders as `${<key>}`, and a directory whose render holds one escapes every other `$`
 Flux would read as syntax. `renderer_lib/placeholders.py` holds the passes and the per-directory
 key sets, and placeholder mode skips the tags in its `PLACEHOLDER_DEFERRED`.
+
+`host --host NAME` renders `hosts/NAME/package.yml` into `DIR/hosts/NAME/`, and `package --name
+PKG` renders the shared package `hosts/packages/PKG/` into `DIR/packages/PKG/`. Each writes
+`root/`, the tree the package installs, and `nfpm.yaml`. Host and package modes render no
+secret and keep every `${` literal (`renderer_lib/host.py`).
 
 `--secret-stubs FILE` selects stub mode, R1's shadow mode. It takes the file that
 `shadow_diff.py stubs` writes, and every secret renders as its stub. A stub render is a
@@ -22,6 +27,7 @@ Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-rend
      uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
      uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \\
          --secret-stubs /tmp/r1-stubs.yml
+     uv run python scripts/renderer/homelab_render.py host --host daniel-pi --out /tmp/h
      uv run pytest scripts/renderer/tests
 """
 
@@ -47,6 +53,7 @@ from renderer.renderer_lib.cluster import (
     write_cluster,
 )
 from renderer.renderer_lib.context import load_stubs
+from renderer.renderer_lib.host import render_host, render_package, write_packages
 from renderer.renderer_lib.placeholders import (
     Mode,
     render_placeholders,
@@ -136,6 +143,23 @@ def _placeholder_cluster(out: Path, roles: list[str] | None) -> int:
     return RENDER_OK
 
 
+def packages(out: Path, host: str | None, name: str | None) -> int:
+    """Render one host's package, or one shared package, into `out`; return the exit code."""
+    try:
+        package = render_host(host) if host else render_package(str(name))
+        written = write_packages([package], out)
+    except RenderRefused as exc:
+        print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
+        return RENDER_REFUSED
+    except RenderError as exc:
+        print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
+        return RENDER_FAILED
+    print(
+        f"homelab-render: {package.name}, {len(written)} files under {out / package.directory}"
+    )
+    return RENDER_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -161,11 +185,33 @@ def main(argv: list[str] | None = None) -> int:
         help="the stub file shadow_diff.py stubs writes, for a stub-mode render. Without "
         "it, the render is in placeholder mode",
     )
+    host = commands.add_parser(
+        "host", help="render hosts/NAME/package.yml into DIR/hosts/NAME/"
+    )
+    host.add_argument(
+        "--host", required=True, metavar="NAME", help="the inventory host"
+    )
+    host.add_argument(
+        "--out", type=Path, required=True, metavar="DIR", help="the directory to write"
+    )
+    package = commands.add_parser(
+        "package", help="render hosts/packages/PKG/ into DIR/packages/PKG/"
+    )
+    package.add_argument(
+        "--name", required=True, metavar="PKG", help="the shared package"
+    )
+    package.add_argument(
+        "--out", type=Path, required=True, metavar="DIR", help="the directory to write"
+    )
     args = parser.parse_args(argv)
     # ansible-core creates its local temp directory when the render first imports its
     # constants, under `~/.ansible/tmp` by default. The system temp directory keeps the home
     # directory untouched, and ansible-core removes its own subdirectory at exit.
     os.environ.setdefault("ANSIBLE_LOCAL_TEMP", tempfile.gettempdir())
+    if args.command != "cluster":
+        return packages(
+            args.out, getattr(args, "host", None), getattr(args, "name", None)
+        )
     return cluster(args.out, args.roles, args.secret_stubs)
 
 
