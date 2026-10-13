@@ -3,9 +3,14 @@
 Run: uv run pytest scripts/renderer/tests/test_renderer_homelab_render.py
 """
 
+import os
+import sys
+
 import pytest
 
 from lib import yaml_fast
+from lib.proc_testing import run
+from lib.repo_paths import REPO
 from renderer import homelab_render, shadow_diff
 
 
@@ -84,3 +89,22 @@ def test_a_tag_directory_left_by_an_earlier_render_is_flagged(out, stub_file, ca
     assert _cluster(out, "--secret-stubs", str(stub_file), "--role", "littlelink") == 0
     assert _cluster(out, "--secret-stubs", str(stub_file), "--role", "littlelink") == 2
     assert "render into an empty --out" in capsys.readouterr().err
+
+
+def test_the_cli_writes_nothing_under_the_home_directory(out, tmp_path):
+    # ansible-core creates its local temp directory when the render imports it, and its
+    # default is `~/.ansible/tmp`. The variable is dropped so the CLI's own choice is tested.
+    home = tmp_path / "home"
+    home.mkdir()
+    # Proves the glob sees the directory, so an empty result cannot pass vacuously.
+    (home / "sentinel").write_text("")
+    env = {k: v for k, v in os.environ.items() if k != "ANSIBLE_LOCAL_TEMP"}
+    script = REPO / "scripts/renderer/homelab_render.py"
+    argv = [sys.executable, str(script), "cluster", "--out", str(out)]
+    done = run(
+        [*argv, "--role", "littlelink"], cwd=REPO, env={**env, "HOME": str(home)}
+    )
+    assert done.returncode == 0, done.stderr
+    written = sorted(p.relative_to(home).as_posix() for p in home.rglob("*"))
+    assert len(written) == 1, written
+    assert written == ["sentinel"]

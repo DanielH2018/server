@@ -5,7 +5,8 @@ takes the tags at positions `k`, `k + PARTS`, ... of the sorted `render_targets`
 renders them twice, each time in a subprocess with its own `PYTHONHASHSEED`. The subprocess is
 `_render_audit_child.py`, which installs an audit hook before it imports the renderer. The hook
 ends the process on any `open` outside the repo, the output directory, the stub file and the
-interpreter's own prefixes, and on any `socket.connect`.
+interpreter's own prefixes, on any `socket.connect`, and on any program start but the two
+probes ansible-core's import runs, which the child names in `IMPORT_PROBES`.
 
 In CI, `check_part` writes one digest line per rendered directory, as `shadow_diff.py digest`
 prints it, to two places. When `GITHUB_STEP_SUMMARY` is set, it appends them to the job
