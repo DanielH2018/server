@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-11 18:17 UTC
-generated_sha: 9bb5e8c08
+generated_at: 2026-10-13 06:17 UTC
+generated_sha: 0ef579e1f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,28 +17,29 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 0 | - | ✓ |
-| [#4331](https://github.com/DanielH2018/server/issues/4331) | medium | gap | backup-observability | Drill the etcd-first Longhorn recovery order that DR step 4 describes | 2026-10-10 | 0 | - | - |
-| [#4443](https://github.com/DanielH2018/server/issues/4443) | medium | improvement | cicd | Make entry points exit with lib.exit_codes names instead of private integers | 2026-10-11 | 0 | - | ✓ |
-| [#4445](https://github.com/DanielH2018/server/issues/4445) | medium | gap | cicd | Stop scripts exiting 0 when the operation failed or was skipped | 2026-10-11 | 0 | - | ✓ |
-| [#4446](https://github.com/DanielH2018/server/issues/4446) | medium | improvement | backup-observability | Send script error lines to stderr and give the deployer log a journald priority | 2026-10-11 | 0 | - | ✓ |
-| [#4451](https://github.com/DanielH2018/server/issues/4451) | medium | gap | cicd | Make every land.sh result exit with a documented code and print a VERDICT line | 2026-10-11 | 0 | worktree-fanout-orchestrator-wave5 | ✓ |
-| [#4452](https://github.com/DanielH2018/server/issues/4452) | medium | gap | cicd | Give fanout place launch distinct exit codes for nothing launched and partly launched | 2026-10-11 | 0 | - | ✓ |
-| [#4455](https://github.com/DanielH2018/server/issues/4455) | medium | gap | cicd | Extend the stdlib-only import set to role scripts the hosts run under uv run --no-project | 2026-10-11 | 0 | - | ✓ |
-| [#4461](https://github.com/DanielH2018/server/issues/4461) | medium | gap | cicd | Stop an agent's .claude/scratch/ draft keeping a merged fan-out tree out of clean | 2026-10-11 | 0 | - | ✓ |
-| [#4471](https://github.com/DanielH2018/server/issues/4471) | medium | gap | - | Stop probe.main reporting usage and config errors as unreadable (exit 75) | 2026-10-11 | 0 | worktree-fanout-orchestrator-wave5 | ✓ |
+| [#4599](https://github.com/DanielH2018/server/issues/4599) | medium | improvement | security | The AIDE check cannot page on an unexplained file change | 2026-10-12 | 0 | - | ✓ |
+| [#4738](https://github.com/DanielH2018/server/issues/4738) | medium | improvement | docs | Target architecture G1 step 6: run the 30-day diff-notice soak checks | 2026-10-12 | 0 | - | ✓ |
+| [#4781](https://github.com/DanielH2018/server/issues/4781) | medium | gap | cicd | A deploy-plane k8s_unapplied line never discharges for a role that is not digest-provable, though no rendered byte moved | 2026-10-13 | 0 | worktree-churn-plan-orchestrator-wave2 | ✓ |
+| [#4786](https://github.com/DanielH2018/server/issues/4786) | medium | addition | backup-observability | Target architecture M2: read the k8s-workloads shadow soak on days 3 and 7 before PR 4a | 2026-10-13 | 0 | - | ✓ |
+| [#4808](https://github.com/DanielH2018/server/issues/4808) | medium | gap | backup-observability | Flux's measured series push M1's 7-day head-series average over the 140,000 budget | 2026-10-13 | 0 | - | ✓ |
+| [#4824](https://github.com/DanielH2018/server/issues/4824) | medium | gap | backup-observability | Target architecture M5: read the log-rule shadow soak on day 7 before PR 4a | 2026-10-13 | 0 | - | ✓ |
+| [#4829](https://github.com/DanielH2018/server/issues/4829) | medium | gap | cicd | The drill's no-signature check trusts cosign's error text, which a referrers-API error also produces | 2026-10-13 | 0 | - | ✓ |
+| [#4833](https://github.com/DanielH2018/server/issues/4833) | medium | gap | cicd | The k8s scaffolder appends new roles after netpol-baseline, which must stay last | 2026-10-13 | 0 | worktree-churn-plan-orchestrator-wave2 | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
-| [#3675](https://github.com/DanielH2018/server/issues/3675) | low | improvement | cicd | Decide from slice-1 data whether fan-out review becomes the default | 2026-10-08 | 0 | - | - |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
-| [#3963](https://github.com/DanielH2018/server/issues/3963) | low | improvement | cicd | Find which check forces fan-out PR body rewrites, then render the fixed parts of the body — *no vetted remediation* | 2026-10-09 | 0 | - | ✓ |
-| [#3966](https://github.com/DanielH2018/server/issues/3966) | low | improvement | cicd | Set an explicit effort level for the fan-out reviewer and compare two settings | 2026-10-09 | 0 | - | ✓ |
 | [#4280](https://github.com/DanielH2018/server/issues/4280) | low | improvement | cicd | Widen the red-green label once fanout_review_stats.py shows the red phase catches defects | 2026-10-10 | 0 | - | ✓ |
 | [#4314](https://github.com/DanielH2018/server/issues/4314) | low | improvement | docs | Run the ADR-0019 retirement test on facts.lock after 60 days | 2026-10-10 | 0 | - | ✓ |
-| [#4404](https://github.com/DanielH2018/server/issues/4404) | low | gap | cicd | Derive the stdlib-only import set for hooks and no-venv callers, and check it statically and at runtime | 2026-10-11 | 0 | - | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
-| [#4447](https://github.com/DanielH2018/server/issues/4447) | low | improvement | cicd | Standardise script messages on a <prog>: error: prefix | 2026-10-11 | 0 | - | ✓ |
-| [#4464](https://github.com/DanielH2018/server/issues/4464) | low | improvement | cicd | Name a disarmed CI gate in land.sh instead of 'await_ci failed (exit 2)' | 2026-10-11 | 0 | - | ✓ |
-| [#4468](https://github.com/DanielH2018/server/issues/4468) | low | gap | - | Move probe.py's remaining could-not-read exits from 1 to 75 | 2026-10-11 | 0 | - | ✓ |
+| [#4660](https://github.com/DanielH2018/server/issues/4660) | low | gap | - | Workflow subagent run length has no measured outcome, so their cap stays undecided | 2026-10-12 | 0 | - | ✓ |
+| [#4663](https://github.com/DanielH2018/server/issues/4663) | low | gap | - | Implementer maxTurns decision needs a sample with enough red PRs | 2026-10-12 | 1 | - | ✓ |
+| [#4715](https://github.com/DanielH2018/server/issues/4715) | low | gap | docs | The backlog page shows #2584's retired accepted reason after G4 drops the role-doc size gate | 2026-10-12 | 0 | - | ✓ |
+| [#4737](https://github.com/DanielH2018/server/issues/4737) | low | improvement | cicd | daniel-server fan-out batches report done before their PR's CI runs, so CI-only guards turn red at landing | 2026-10-12 | 1 | - | ✓ |
+| [#4749](https://github.com/DanielH2018/server/issues/4749) | low | improvement | docs | Correct the k3s defaults comment that says nothing aggregates into view | 2026-10-12 | 0 | - | ✓ |
+| [#4750](https://github.com/DanielH2018/server/issues/4750) | low | improvement | backup-observability | Target architecture M1 Open question 9: read Prometheus retention over the week after PR 1 | 2026-10-12 | 0 | - | ✓ |
+| [#4756](https://github.com/DanielH2018/server/issues/4756) | low | improvement | backup-observability | M1's series budget counts head series, but the retention cap's bytes follow samples a second | 2026-10-12 | 0 | - | ✓ |
+| [#4760](https://github.com/DanielH2018/server/issues/4760) | low | improvement | docs | flux_components.py's docstring justifies _IndentedDumper by a scanner gap #4733 closed | 2026-10-12 | 0 | worktree-churn-plan-orchestrator-wave2 | ✓ |
+| [#4822](https://github.com/DanielH2018/server/issues/4822) | low | gap | cicd | Renovate does not move the flux CLI version input in promote.yml with flux_version | 2026-10-13 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -156,6 +157,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | # | Ruling | Finding | Reason |
 |---|---|---|---|
 | [#917](https://github.com/DanielH2018/server/issues/917) | refuted | The staging gate sees 6 of ~54 services, so most merges cross it ungated | Derived from the tree, as the issue's own suggested approach asked. The 61 roles under roles/k8s/ render 21 distinct top-level kinds; the six subset members exercise 16. The five they do not — CronJob, LimitRange, Namespace, StorageClass, PersistentVolume — are rendered only by configarr, pi-peer-backup, claude-otel and media-volume, every one already permanently excluded by Decision 6. No admissible role adds a kind, so widening buys no mechanism coverage, which is the principle Decision 6 selects on. Non-vacuity: the shared manifests role has no templates/ at all (so the 16 come from the six members, not inherited plumbing), and no StatefulSet exists anywhere in the tree (so the line-anchored kind match drops nothing). What widening still buys is per-role coverage, declined on three bounds now recorded in Decision 6: validate/k8s_manifests.py already renders and parses every template and --dry-run shows them to a real API server; the 8192 MiB VM cannot fit code-server (4096Mi) or valheim (6144Mi) beside the six members' 1664 MiB; and volume-claim/volume-snapshot/volume-revert gate nothing here because k8s_autodeploy_snapshot_pvcs is empty host-wide for reasons that are properties of the cluster. The cost side also moved: a rejection parks prod now that the gate blocks. Census and bounds landed in docs/staging-cluster.md via PR #921. |
-| [#2584](https://github.com/DanielH2018/server/issues/2584) | accepted | Role-doc warning band never reaches the CI log, because prek hides a passing hook's output | Operator decision 2026-09-25: keep the pytest-only surface. The band exists to reach the author, and sessions here run uv run pytest routinely, which prints RoleDocNearCeiling. CI already fails hard at MAX_LINES=400, the one threshold that must hold. A census page reaches nobody mid-edit, and an At-a-glance band field would fire the staleness gate on every prose edit to a banded doc. |
+| [#2584](https://github.com/DanielH2018/server/issues/2584) | accepted | Role-doc warning band never reaches the CI log, because prek hides a passing hook's output | role-doc size has no CI gate, by the 2026-10-12 ruling on #2826 (target-architecture G4). `inject-nested-docs.py --report` prints each doc's margin, and a doc over its read-time budget is delivered as a head plus an outline. |
 | [#2717](https://github.com/DanielH2018/server/issues/2717) | accepted | A 58-service shared-role caller expansion is unmeasured against a full deploy.yml | Measured 838s untagged vs 905s for the 58-tag expansion (one run each, within rollout-wait noise); no speed case for switching, and an untagged run holds the all lock for its whole duration. Operator decision 2026-09-27: keep expand_shared_tags as it is. |
 | [#3896](https://github.com/DanielH2018/server/issues/3896) | accepted | Decide whether the three setup-role service.yml files share a timer_service.yml | Operator decided 2026-10-09: #3709's remainder is closed as refuted, and no shared timer_service.yml is built. The three service.yml files keep their own sequences. |
+| [#4618](https://github.com/DanielH2018/server/issues/4618) | accepted | Nothing detects an expired login on the Remote Control host | Operator decision 2026-10-12: accept the gap. A login that expires while claude-rc is registered pages nothing, but the weekly try-restart caps the blind spot at seven days, and a login dead at start already pages through OnFailure= (PR #4677). |

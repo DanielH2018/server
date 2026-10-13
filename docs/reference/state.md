@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-10-11 18:17 UTC
-generated_sha: 9bb5e8c08
+generated_at: 2026-10-13 06:17 UTC
+generated_sha: 0ef579e1f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: 9bb5e8c08
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-10-11T18:09:06+0000 | 8m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-10-11T11:05:39+0000 | 7h11m | 1d | ok | session completed |
-| renovate-notify | 2026-10-11T13:00:38+0000 | 5h16m | 1d | ok | notified |
-| docs-refresh | 2026-10-11T06:17:00+0000 | 12h | 12h | ok | generators: ok |
-| secret-rotate | 2026-10-09T18:03:38+0000 | 2d | 7d | ok | last touched by: Give the agent user its own Authelia login for the homelab-ui MCP server |
-| longhorn-restore-drill | 2026-10-11T04:10:47+0000 | 14h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-10-05T10:20:03+0000 | 6d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1791168302.zip) |
+| gitops-deploy | 2026-10-13T06:16:35+0000 | 0m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-10-12T11:05:31+0000 | 19h12m | 1d | ok | session completed |
+| renovate-notify | 2026-10-12T15:58:59+0000 | 14h18m | 1d | ok | notified |
+| docs-refresh | 2026-10-12T18:18:00+0000 | 11h59m | 12h | ok | generators: ok |
+| secret-rotate | 2026-10-13T00:35:34+0000 | 5h41m | 7d | ok | last touched by: Point Flux at the prod manifest artifact, still owning nothing |
+| longhorn-restore-drill | 2026-10-13T04:10:47+0000 | 2h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-10-12T10:20:02+0000 | 19h57m | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1791773103.zip) |
