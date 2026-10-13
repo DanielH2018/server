@@ -225,7 +225,11 @@ variable with `gh variable get` stays allowed.
 
 A dispatch of the workflow from master with the input `verify_drill` pushes the bundle
 unsigned to the tag `verify-drill`, for the flux role's signature drill. It skips `promote`
-and `tag`, so it never moves `prod`.
+and `tag`, so it never moves `prod`. The drill push carries the annotation
+`io.homelab.verify-drill=true`, so its digest differs from the signed `sha-<commit>` digest of
+the same commit. Without it, the drill tag pointed at a signed digest and verified. The
+dispatch then runs `cosign verify` on the drill digest under `promote`'s identity, and the
+run fails if the verification succeeds.
 
 ## Retention of old artifact versions
 
