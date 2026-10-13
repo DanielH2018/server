@@ -8,6 +8,9 @@ PR 1b, the pass-through filters: [#4891](https://github.com/DanielH2018/server/p
 
 PR 1c, the standalone-value guard: [#4914](https://github.com/DanielH2018/server/pull/4914).
 
+PR 2, the five rules and the round trip over every tag:
+[#4928](https://github.com/DanielH2018/server/pull/4928).
+
 Depends on: [R1](r1-shadow-render.md)
 
 Unblocks: D2 and D3. D2's publish job renders bento-pdf, whose IngressRoute holds `domain`,
