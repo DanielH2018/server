@@ -767,7 +767,7 @@ Then repeat R1's shadow pair with a fresh `shadow_diff.py stubs` file. `compare`
     - R1's `stubs` test expects three pinned facts.
     - If R2's PR 2 is at the base, its refusal's test loses the named member `n8n`, and its
       flagged case moves to `authelia` and `authelia_password_hash`.
-    - Retire `ansible/tests/services/test_n8n_image_stamp.py`, whose subject is gone.
+    - Retire `test_n8n_image_stamp.py` in `ansible/tests/services/`, whose subject is gone.
     - `test_a_dry_run_records_the_digest_n8n_stamps_and_the_gate_skips_it` in
       `ansible/tests/deploy/test_built_image_drift_gate.py` loses its reason. Keep its second
       half, that every drift-gate task reading `k8s_built_images` skips on a dry run, under a

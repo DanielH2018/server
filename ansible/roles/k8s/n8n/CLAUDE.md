@@ -31,6 +31,18 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   runners are version-coupled; before the render, because the two image pins read the
   `k8s_built_image_tags` fact the builds publish. Rendered without that fact, the pins fall
   back to `:latest` and a Recreate pod stop-starts onto the same digest.
+- **A rebuild rolls the pods through the content tag.** A changed build input moves the
+  `sha-…` tag in both pins, so the pod template changes and the apply rolls each pod. A run
+  that pushes an image and dies before the roll is covered too: the re-run renders the same
+  new tag. A forced rebuild with unchanged inputs (`-e image_builder_force=true`) can push new
+  bytes under the old tag. If the play then dies before the roll, nothing in the re-run's
+  render moves, and `ansible/post_tasks/k8s_image_drift_gate.yml` fails the play and names the
+  image. Its printed remedy, another forced rebuild, rolls the pod only when that build
+  produces yet another digest. Otherwise the operator rolls both Deployments
+  (**operator-only**, a write verb):
+  `sudo k3s kubectl -n homelab rollout restart deploy/n8n deploy/n8n-runners`. A registry
+  digest annotation covered this case until R3 PR 2 removed it, so that the templates read
+  nothing from the registry (`docs/target-architecture/render/r3-remove-live-reads.md`).
 - **Base images:** each Dockerfile is `FROM` the upstream `:stable` channel tag with a digest
   beside it. Renovate bumps the digest, the tag holds the channel, and no `*_image:` var names
   an upstream image — so a bump ships only through a `--tags n8n` deploy.

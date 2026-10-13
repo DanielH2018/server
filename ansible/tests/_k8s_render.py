@@ -174,7 +174,7 @@ def render_role_template(
     `overrides` is a dict rather than `**kwargs` because a caller may need to override a
     variable named `host` — the staging variables guard hands every unsupplied name in.
 
-    For a guard that flips one variable — a `manage_*` flag, `k8s_built_images` — and asserts
+    For a guard that flips one variable, such as a `manage_*` flag, and asserts
     on what changes. `rendered_docs()` is the whole tree at inventory values; this is one
     template at values the inventory does not hold, so it is not cached and each call renders.
 

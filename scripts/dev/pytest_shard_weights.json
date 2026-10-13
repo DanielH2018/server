@@ -555,7 +555,6 @@
  "ansible/tests/services/test_monitor_bridge_mount_layout.py": 0.24,
  "ansible/tests/services/test_n8n_build_is_pinned.py": 0.0,
  "ansible/tests/services/test_n8n_deprecated_defaults_are_pinned.py": 0.02,
- "ansible/tests/services/test_n8n_image_stamp.py": 0.3,
  "ansible/tests/services/test_n8n_web_port_is_fenced.py": 0.0,
  "ansible/tests/services/test_navidrome_parked_route.py": 0.02,
  "ansible/tests/services/test_nut_fsd_login_confined.py": 3.17,

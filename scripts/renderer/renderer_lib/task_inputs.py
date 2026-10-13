@@ -15,9 +15,7 @@ writes them into the stub file next to the secret stubs.
 
 A string stand-in carries the secret stubs' marker, `stub-` plus the fact name with
 underscores turned to hyphens. A render holding one is a stub render for that tag, and a
-publish census that refuses stub tokens refuses it too. `k8s_built_images` pins to an empty
-list, which carries no marker: n8n's `checksum_annotation` renders it as `"unstaged"`. Only a
-rule keyed on `readers` can refuse that tag.
+publish census that refuses stub tokens refuses it too.
 """
 
 import sys as _sys
@@ -60,8 +58,6 @@ PINNED_LIVE_FACTS = {
     "authelia_agent_password_hash": PinnedFact(
         "stub-authelia-agent-password-hash", frozenset({"authelia"})
     ),
-    # The registry digests image-builder records after each build, a list of name and digest.
-    "k8s_built_images": PinnedFact([], frozenset({"n8n"})),
 }
 
 
