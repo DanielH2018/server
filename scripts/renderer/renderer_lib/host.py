@@ -61,6 +61,10 @@ COMPONENT_KEYS = frozenset({"defaults", "files"})
 # changes only when the package's content does, and nfpm expands it at build time.
 VERSION_FIELD = "${HOMELAB_VERSION}"
 
+# A host, package or component name becomes a directory under `hosts/`, so it is one plain
+# path piece: no `/`, no `..`, no leading dot or dash.
+_PLAIN_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
+
 _UNDEFINED = re.compile(r"'([^']+)' is undefined")
 
 
@@ -117,7 +121,7 @@ def render_host(
         RenderRefused: The host has no package, or the spec is malformed.
         RenderError: A template failed to render.
     """
-    spec = hosts_root / host / "package.yml"
+    spec = hosts_root / _plain_name(host, "host") / "package.yml"
     package = Package(name=f"homelab-{host}", directory=f"hosts/{host}")
     package.depends.extend(HOST_DEPENDS)
     return _render(package, spec, host, hosts_root, inventory, secret_names(secrets))
@@ -135,7 +139,7 @@ def render_package(
         RenderRefused: The package does not exist, or the spec is malformed.
         RenderError: A template failed to render.
     """
-    spec = hosts_root / "packages" / name / "package.yml"
+    spec = hosts_root / "packages" / _plain_name(name, "package") / "package.yml"
     package = Package(name=name, directory=f"packages/{name}")
     return _render(package, spec, None, hosts_root, inventory, secret_names(secrets))
 
@@ -182,13 +186,22 @@ def _render(
     package.depends.extend(str(entry) for entry in spec.get("depends") or [])
     _render_unit(package, spec_path.parent, spec, host, inventory, withheld)
     for name in spec.get("components") or []:
-        directory = hosts_root / "components" / name
+        directory = hosts_root / "components" / _plain_name(name, "component")
         component = directory / "component.yml"
         if not component.is_file():
             raise RenderRefused(f"{spec_path} lists component {name!r}, which has none")
         unit = _load(component, COMPONENT_KEYS)
         _render_unit(package, directory, unit, host, inventory, withheld)
     return package
+
+
+def _plain_name(name: object, kind: str) -> str:
+    """`name` if it is one plain path piece, which keeps a joined directory under its root."""
+    if not isinstance(name, str) or not _PLAIN_NAME.fullmatch(name):
+        raise RenderRefused(
+            f"{kind} name {name!r} is not a plain name (lowercase letters, digits, hyphens)"
+        )
+    return name
 
 
 def _load(path: Path, allowed: frozenset[str]) -> dict:

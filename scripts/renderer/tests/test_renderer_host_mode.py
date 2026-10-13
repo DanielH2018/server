@@ -256,6 +256,31 @@ def test_a_mode_with_no_special_bit_is_clean(hosts, mode):
     assert package.files["/x"][1] == int(mode, 8)
 
 
+@pytest.mark.parametrize("name", ["../x", "/etc", "a/b"])
+def test_a_component_name_that_is_not_plain_is_flagged(hosts, name):
+    root = hosts({"components": [name]})
+    with pytest.raises(RenderRefused, match="is not a plain name"):
+        host_mode.render_host("daniel-pi", root)
+
+
+@pytest.mark.parametrize("name", ["../x", "/etc", "a/b"])
+def test_a_package_or_host_name_that_is_not_plain_is_flagged(hosts, name):
+    root = hosts({})
+    with pytest.raises(RenderRefused, match="is not a plain name"):
+        host_mode.render_package(name, root)
+    with pytest.raises(RenderRefused, match="is not a plain name"):
+        host_mode.render_host(name, root)
+
+
+def test_a_plain_component_and_package_name_is_clean(hosts):
+    root = hosts({"components": ["homelab-updater"]}, {"homelab-updater": {}})
+    assert host_mode.render_host("daniel-pi", root).files == {}
+    spec = root / "packages" / "homelab-updater" / "package.yml"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("description: x\n")
+    assert host_mode.render_package("homelab-updater", root).name == "homelab-updater"
+
+
 def test_a_host_without_a_package_is_flagged_and_writes_nothing(tmp_path, capsys):
     out = tmp_path / "out"
     argv = ["host", "--host", "no-such-host", "--out", str(out)]
