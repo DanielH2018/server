@@ -28,6 +28,9 @@ steps, and this page describes each piece once its PR has merged.
   compute from the tree (*Task-computed values*).
 - `ansible/roles/k8s/manifests/defaults/main.yml:manifests_shadow_dir` keeps the Ansible
   render of a stubbed dry run (*Keep the Ansible render of a stubbed dry run*).
+- `scripts/renderer/shadow_diff.py compare`, `stubcheck` and `digest` compare the two halves
+  and hash a render (*Compare the two halves*). `scripts/renderer/renderer_lib/shadow.py`
+  holds their library.
 
 ## The stub form
 
@@ -181,8 +184,9 @@ would not compute. `scripts/lib/k8s_yaml.py:make_lookup`, which the render guard
 `scripts/validate/` read through, follows the same rules, so a guard checks the bytes a deploy
 writes.
 
-The render is not yet proven byte-identical to Ansible's. R1's PR 7 compares the two and
-closes each class of difference.
+The render is not yet proven byte-identical to Ansible's. `shadow_diff.py compare` reports
+each difference (*Compare the two halves*), and each class of difference then gets its own
+renderer fix.
 
 ## Pinned live-read facts
 
@@ -270,3 +274,104 @@ holds its real value there and is named. It recomputes the check with
 
 The run is **operator-only**, because the play decrypts SOPS and escalates with `become`. The
 plan's *Verification* section has the commands.
+
+## Compare the two halves
+
+`shadow_diff.py compare` reads two render trees and reports how they differ. Either side is
+an Ansible shadow tree, with one directory per service as `manifests_shadow_dir` keeps it, or
+a C1 tree, with `cluster/` at the top as `homelab_render.py cluster` writes it. It keys both
+by the C1 path. An Ansible service's deferred subdirectory, such as
+`pihole/pihole-instance-2/`, maps to `cluster/pihole-deferred/`. `kustomization.yaml` is
+ignored, because Ansible writes none.
+
+- **The expected tags.** When either side is an Ansible tree, the set is the render targets
+  of daniel-box less the entries that carry `owner: flux` (C4 in
+  [the contracts](target-architecture/contracts.md)). A C1 side's flux-owned directories are
+  ignored, and an Ansible directory for a tag outside the set is reported as extra. Two C1
+  trees compare over every render target.
+- **The verdict.** It exits 0 and prints `<t> tags, <n> files, 0 differences` only when the
+  trees match. `<t>` is the expected tag count and `<n>` the number of files compared. It
+  exits 1 on any missing, extra or differing file, and on an expected tag that neither side
+  rendered.
+- **The refusals.** It exits 2 when the expected set is empty, when neither tree holds a file
+  for an expected tag, or when either side lacks one of three named members:
+  `traefik/deployment.yaml`, pihole's deferred directory `pihole-instance-2`, and a
+  `claim-*.yaml` file. A named member whose tag is flux-owned is dropped from that check, and
+  `compare` prints which. A file where neither layout puts one is refused as well.
+- **The report.** It groups the differences by class: present on one side only, an expected
+  tag on neither side, trailing newlines only, whitespace only, content, and a file lacking a
+  stub token. The report is meant for posting, so it prints no stub or secret value. A file
+  that fails `stubcheck`'s rule is named and its content withheld. A file holding a `kind:
+  Secret` document is named without a hunk, because its `data` is base64 that redaction
+  cannot read. Every other hunk carries each stub token as `<stub>`.
+
+`shadow_diff.py stubcheck ANSIBLE C1` checks the Ansible tree's stub values against the C1
+render. For each file both trees hold, every stub token in the C1 file must also appear in
+the Ansible file, with the `data` of each Secret decoded on both sides. A stub token is
+`stub-` followed by lower-case letters, digits and hyphens, and tokens compare whole. It
+names each failing file with the tokens it lacks, never the file's content, and exits 1. A
+file only one side holds, or one whose C1 render holds no token, passes unchecked: the
+manifests role's shadow-dir assert is its guard.
+
+`shadow_diff.py digest DIR` prints one line per directory under `DIR/cluster/`, as
+`<directory> sha256:<hex>`, then a `total` line over every file under `DIR`. Each hash covers
+every file's path relative to its directory and the file's bytes, with paths sorted by byte, so
+no line depends on the absolute directory or the locale. A render of some tags gives the same
+lines for those tags as a render of all of them. `digest_line` and `directory_digests` in
+`scripts/renderer/renderer_lib/shadow.py` build the same lines for R1's determinism tests.
+
+All three exit 64 on a usage error. `scripts/lib/exit_codes.py` holds the codes as its
+`SHADOW_*` family.
+
+### Run the shadow pair
+
+The shadow pair is **operator-only**. Its Ansible half decrypts SOPS and escalates with
+`become`, so it runs on daniel-box as `ubuntu`, from a clean worktree of the operator's
+checkout at a merged master SHA X. Both halves then read the same commit. `deploy.sh
+--dry-run` renders the working tree, which must be clean. Ansible refuses non-blocking stdio,
+so the dry run redirects all three streams.
+
+```bash
+# Operator-only: as ubuntu, in a clean worktree of the operator's checkout at master SHA X.
+mkdir -p /var/tmp/homelab-shadow/X
+uv run python scripts/renderer/shadow_diff.py stubs \
+  --out /var/tmp/homelab-shadow/X/stubs.yml
+uv run python scripts/deploy_tools/render_targets.py daniel-box
+# Pass the comma list the line above printed as <tags>.
+./scripts/deploy.sh --dry-run --skip-staleness-check --tags "<tags>" \
+  -e @/var/tmp/homelab-shadow/X/stubs.yml \
+  -e manifests_shadow_dir=/var/tmp/homelab-shadow/X/ansible \
+  > /var/tmp/homelab-shadow/X/play.log 2>&1 < /dev/null
+uv run python scripts/renderer/homelab_render.py cluster \
+  --out /var/tmp/homelab-shadow/X/render \
+  --secret-stubs /var/tmp/homelab-shadow/X/stubs.yml
+uv run python scripts/renderer/shadow_diff.py compare \
+  /var/tmp/homelab-shadow/X/ansible /var/tmp/homelab-shadow/X/render
+```
+
+The operator posts `compare`'s output on the issue or PR that tracks the run.
+
+To hand the agent a reference tree, the operator first runs `stubcheck`. The copy goes ahead
+only when the dry run exited 0 and `stubcheck` exits 0. A file that fails `stubcheck` holds
+no stub where the C1 render holds one. The operator inspects that file locally and never
+copies or posts it.
+
+```bash
+# Operator-only: check the Ansible tree's stub tokens, then copy it into the agent's home.
+uv run python scripts/renderer/shadow_diff.py stubcheck \
+  /var/tmp/homelab-shadow/X/ansible /var/tmp/homelab-shadow/X/render
+sudo install -d -o claude -g claude -m 0700 /var/lib/claude/shadow
+sudo cp -r /var/tmp/homelab-shadow/X/ansible /var/lib/claude/shadow/X
+sudo chown -R claude:claude /var/lib/claude/shadow/X
+```
+
+The agent then renders and compares a branch based on X that changes only
+`scripts/renderer/`. Ansible's render of X is the same for every such branch, so one operator
+run serves them all:
+
+```bash
+uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
+uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \
+  --secret-stubs /tmp/r1-stubs.yml
+uv run python scripts/renderer/shadow_diff.py compare /var/lib/claude/shadow/X /tmp/r1-render
+```

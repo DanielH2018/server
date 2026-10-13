@@ -195,6 +195,7 @@ def _declared_values(prefix):
         ("scripts/dev/renovate_rebase.py", "RENOVATE_REBASE_"),
         ("scripts/dev/renovate_branch_sweep.py", "RENOVATE_SWEEP_"),
         ("scripts/renderer/homelab_render.py", "RENDER_"),
+        ("scripts/renderer/shadow_diff.py", "SHADOW_"),
     ],
 )
 def test_every_declared_code_has_a_contract_row(entry_point, prefix):
