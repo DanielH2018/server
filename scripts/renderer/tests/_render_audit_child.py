@@ -7,9 +7,9 @@ start but the two probes ansible-core's import runs. The hook lives in a subproc
 Python cannot remove an audit hook, and one installed in an xdist worker would outlive the test.
 
 Its one argument is a JSON object naming the paths to allow and the step to run: `render`,
-or the fixture steps `open`, `connect` and `spawn` that the red-proofs use. The file imports only the
-standard library, so nothing from the repo loads before the hook. It needs `scripts/` on
-`PYTHONPATH` to import the renderer, which `_render_audit.run_step` sets.
+or the fixture steps `open`, `connect`, `spawn` and `process` that the red-proofs use. The
+file imports only the standard library, so nothing from the repo loads before the hook. It
+needs `scripts/` on `PYTHONPATH` to import the renderer, which `_render_audit.run_step` sets.
 """
 
 import json
@@ -31,9 +31,12 @@ DEVICES = frozenset({os.devnull})
 # `ip` falls back to `ifconfig`, which the hook refuses: the check fails closed there.
 IMPORT_PROBES = frozenset({("ip", ("link",)), ("ldconfig", ("-p",))})
 # Each audit event that starts a program, and the index of its argv among the event's args.
-# `subprocess.Popen` may also raise `os.posix_spawn` for the same start, so both judge argv.
+# One start can raise several: `subprocess.Popen` goes on to `_posixsubprocess.fork_exec` or
+# `os.posix_spawn`, so each judges argv. `fork_exec` is also the only event a multiprocessing
+# or ProcessPoolExecutor start raises, and the interpreter it launches carries no hook.
 SPAWN_ARGV = {
     "subprocess.Popen": 1,
+    "_posixsubprocess.fork_exec": 1,
     "os.posix_spawn": 1,
     "os.exec": 1,
     "os.spawn": 2,
@@ -47,6 +50,8 @@ def _under(path: str, roots: list[str]) -> bool:
 
 def _argv(raw) -> list[str]:
     """An audit event's argv as strings. A lone string is a program name or a shell command."""
+    if raw is None:
+        return []
     if isinstance(raw, (str, bytes, os.PathLike)):
         return [os.fsdecode(raw)]
     return [os.fsdecode(arg) for arg in raw]
@@ -117,6 +122,13 @@ def _main(spec: dict) -> int:
         # Not lib.proc_testing.run: nothing from the repo loads before the hook. The bound
         # stops a wedged program the hook let through.
         return subprocess.run(spec["argv"], check=False, timeout=30).returncode
+    if step == "process":
+        import multiprocessing
+
+        child = multiprocessing.get_context("spawn").Process(target=os.getpid)
+        child.start()
+        child.join(30)
+        return 0
     from renderer import homelab_render
 
     return homelab_render.cluster(Path(spec["out"]), spec["tags"], Path(spec["stubs"]))

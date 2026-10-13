@@ -89,6 +89,13 @@ def test_the_audit_hook_refuses_a_spawn_beyond_the_import_probes():
         assert "refused subprocess.Popen of" in refused.stderr, refused.stderr
 
 
+def test_the_audit_hook_refuses_a_multiprocessing_start():
+    # A multiprocessing start raises `_posixsubprocess.fork_exec` and no `subprocess.Popen`.
+    refused = run_step({"allow": [str(REPO)], "step": "process"})
+    assert refused.returncode == AUDIT_REFUSED
+    assert "refused _posixsubprocess.fork_exec of" in refused.stderr, refused.stderr
+
+
 def test_the_audit_hook_allows_an_import_probe_from_any_directory():
     assert is_import_probe(["/usr/bin/ip", "link"])
     assert is_import_probe(["/usr/sbin/ip", "link"])
