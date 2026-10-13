@@ -75,3 +75,34 @@ def test_a_cgroup_missing_on_one_host_is_flagged_and_named(cfg):
     assert not ok, msg
     assert "daniel-server" in msg
     assert "claude-rc" in msg
+
+
+def test_claude_rc_missing_where_its_unit_runs_is_flagged(cfg):
+    """daniel-box runs claude-rc.service, so its claude-rc going silent pages and names it.
+
+    The replacement the PR #4874 review proposed for the test above: same per-host shape, on
+    the host whose rendered expectation includes claude-rc.
+    """
+    cfg = replace(cfg, CLAUDE_CGROUP_CONSECUTIVE=1)
+    stalls = [_stall("daniel-box", "fleet"), _stall("daniel-server", "fleet")]
+    ok, msg = _last_cycle(cfg, stalls)
+    assert not ok, msg
+    assert "daniel-box/claude-rc" in msg
+    assert "daniel-server" not in msg.split("|")[0]
+
+
+def test_the_live_steady_state_reads_green(cfg):
+    """daniel-server sets claude_code_rc_enabled: false, so its lack of claude-rc is healthy.
+
+    The cgroups live Prometheus reported on 2026-10-13: claude-rc and fleet from daniel-box,
+    fleet alone from daniel-server.
+    """
+    cfg = replace(cfg, CLAUDE_CGROUP_CONSECUTIVE=1)
+    stalls = [
+        _stall("daniel-box", "claude-rc"),
+        _stall("daniel-box", "fleet"),
+        _stall("daniel-server", "fleet"),
+    ]
+    ok, msg = _last_cycle(cfg, stalls)
+    assert ok, msg
+    assert "UNKNOWN" not in msg
