@@ -1,6 +1,6 @@
 # M3 — One host timer to the textfile collector
 
-Status: PLANNED
+Status: IN PROGRESS
 
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover
 
