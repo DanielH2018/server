@@ -12,6 +12,7 @@ from lib import yaml_fast
 from lib.proc_testing import run
 from lib.repo_paths import REPO
 from renderer import homelab_render, shadow_diff
+from renderer.renderer_lib.placeholders import render_placeholders
 
 
 @pytest.fixture
@@ -48,7 +49,11 @@ def test_cluster_without_secret_stubs_renders_placeholders(out, capsys):
 
 
 def test_a_placeholder_render_of_a_deferred_tag_alone_is_flagged(out, capsys):
-    assert _cluster(out, "--role", "home-assistant") == 2
+    # PLACEHOLDER_DEFERRED is empty since R2's PR 5, so a fixture member stands in.
+    def render(tags, keys):
+        return render_placeholders(tags, keys, deferred=frozenset({"littlelink"}))
+
+    assert homelab_render.cluster(out, ["littlelink"], None, render) == 2
     assert "PLACEHOLDER_DEFERRED" in capsys.readouterr().err
     assert list(out.iterdir()) == []
 

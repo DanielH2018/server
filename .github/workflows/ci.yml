@@ -756,14 +756,16 @@ jobs:
           echo "fluxprobe --red-proof exited $rc"
           [ "$rc" = 1 ]
 
-      - name: Round-trip configarr and janitorr through flux build
+      # home-assistant carries the first render_sops_manifests entry, so each pass also asserts
+      # it dropped exactly one document for it. R2's PR 2 widens the step to every tag.
+      - name: Round-trip configarr, janitorr and home-assistant through flux build
         run: |
           set -euo pipefail
           uv run python scripts/renderer/shadow_diff.py roundtrip --out "$RUNNER_TEMP/rt" \
-            --role configarr --role janitorr
+            --role configarr --role janitorr --role home-assistant
           rc=0
           uv run python scripts/renderer/shadow_diff.py roundtrip --out "$RUNNER_TEMP/rt-red" \
-            --role configarr --role janitorr --red-proof || rc=$?
+            --role configarr --role janitorr --role home-assistant --red-proof || rc=$?
           echo "roundtrip --red-proof exited $rc"
           [ "$rc" = 1 ]
 

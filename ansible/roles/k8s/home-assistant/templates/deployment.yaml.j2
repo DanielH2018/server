@@ -75,6 +75,7 @@ spec:
             - |
               install -m 644 /cm/root/*.yaml /config/
               install -m 600 /sec/secrets.yaml /config/secrets.yaml
+              install -m 600 /sec/google_service_account.json /config/google_service_account.json
               rm -f /config/automations.yaml /config/scripts.yaml
 {% for subdir, pattern in config_subdirs %}
               mkdir -p /config/{{ subdir }}
@@ -154,9 +155,16 @@ spec:
           configMap:
             name: {{ configmap_name }}
 {% endfor %}
+        # Both Secrets at /sec: secrets.yaml, and the Google service account, which has a
+        # Secret of its own because its multi-line value cannot pass through a Flux placeholder
+        # (templates/google-sa-secret.yaml.j2).
         - name: home-assistant-config-secrets
-          secret:
-            secretName: home-assistant-secrets
+          projected:
+            sources:
+              - secret:
+                  name: home-assistant-secrets
+              - secret:
+                  name: home-assistant-google-sa
         - name: home-assistant-config
           persistentVolumeClaim:
             claimName: {{ home_assistant_k8s_claim }}

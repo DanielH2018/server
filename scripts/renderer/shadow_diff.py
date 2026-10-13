@@ -48,7 +48,7 @@ Run: uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
      uv run python scripts/renderer/shadow_diff.py digest RENDER_DIR
      uv run python scripts/renderer/shadow_diff.py fluxprobe --out /tmp/r2-probe
      uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip \\
-         --role configarr --role janitorr
+         --role configarr --role janitorr --role home-assistant
      uv run pytest scripts/renderer/tests
 """
 
@@ -132,7 +132,7 @@ def stub_file_text(secrets: Path = SECRETS) -> str:
     """The stub file's bytes: a YAML mapping with sorted keys after a fixed header.
 
     `google_assistant_service_account`'s stub is a JSON object string. The dumper quotes it,
-    so `-e @FILE` loads a string, as the template's `from_json` expects, not a mapping.
+    so `-e @FILE` loads a string, not a mapping.
     """
     body = yaml.safe_dump(
         stub_vars(secrets), sort_keys=True, default_flow_style=False, width=4096
