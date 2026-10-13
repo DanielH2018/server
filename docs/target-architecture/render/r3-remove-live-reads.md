@@ -6,7 +6,9 @@ PR 1, pi-peer-backup's committed host key: [#4903](https://github.com/DanielH201
 
 PR 3, authelia's digest assert: [#4902](https://github.com/DanielH2018/server/pull/4902).
 
-Both PRs landed without their operator-only pre-merge checks under *Verification*. The orchestrator's briefs omitted them, and each check's property was read after the deploy instead. PR 3's assert ran unstubbed in the real deploy and returned `ok` on the live digests at 2026-10-13 18:12:00. PR 1's release records show the same `secret_digest`, `54b03051…`, before (`8a28ede4`) and after (`d98d8752`), so the Secret's bytes did not move. PR 4's checks stay pre-merge.
+PR 2, n8n's annotations: [#4925](https://github.com/DanielH2018/server/pull/4925).
+
+PRs 1 and 3 landed without their operator-only pre-merge checks under *Verification*. The orchestrator's briefs omitted them, and each check's property was read after the deploy instead. PR 3's assert ran unstubbed in the real deploy and returned `ok` on the live digests at 2026-10-13 18:12:00. PR 1's release records show the same `secret_digest`, `54b03051…`, before (`8a28ede4`) and after (`d98d8752`), so the Secret's bytes did not move. PR 4's checks stay pre-merge.
 
 Depends on: [R1](r1-shadow-render.md)
 
