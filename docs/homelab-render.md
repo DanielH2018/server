@@ -31,7 +31,7 @@ steps, and this page describes each piece once its PR has merged.
 - `scripts/renderer/shadow_diff.py compare`, `stubcheck` and `digest` compare the two halves
   and hash a render (*Compare the two halves*). `scripts/renderer/renderer_lib/shadow.py`
   holds their library.
-- Two determinism modules in `scripts/renderer/tests/` render every tag twice under an audit
+- Four determinism modules in `scripts/renderer/tests/` render every tag twice under an audit
   hook (*The render is deterministic and reads only the repo*).
 - A census row names every role task file that writes a cluster object itself, which the
   render does not cover (*What the render does not cover*).
@@ -391,11 +391,18 @@ uv run python scripts/renderer/shadow_diff.py compare /var/lib/claude/shadow/X /
 
 ## The render is deterministic and reads only the repo
 
-Two test modules prove R1's exit criterion 2: `test_renderer_determinism_even.py` and
-`test_renderer_determinism_odd.py` in `scripts/renderer/tests/`. Each takes the tags at its
-positions of the sorted `render_targets` list, so the halves stay balanced as tags join. It
-writes the stub file and renders its tags twice, each time in a subprocess with a different
-`PYTHONHASHSEED`, and requires the two trees to be identical.
+Four test modules prove R1's exit criterion 2: `test_renderer_determinism_0.py` to
+`test_renderer_determinism_3.py` in `scripts/renderer/tests/`. Module `k` takes the tags at
+positions `k`, `k + 4`, ... of the sorted `render_targets` list, so the parts stay balanced as
+tags join. It writes the stub file and renders its tags twice, each time in a subprocess with
+a different `PYTHONHASHSEED`, and requires the two trees to be identical. Module 0 also fails
+when a module for one of the four positions is missing.
+
+The split is four because of CI time. A module runs about 3.4 times slower on the CI runner
+than serially on daniel-box. The two-module split of 2026-10-13 took 28.0s per module in CI
+against 8.2s locally. Three parts were projected at 20.3s, over R1's 20s budget, and four at
+about 16.6s. `PARTS` in `scripts/renderer/tests/_render_audit.py` is the modulus, and changing
+it means adding or removing modules to match.
 
 Each subprocess runs `scripts/renderer/tests/_render_audit_child.py`, which installs an audit
 hook before it imports the renderer. The hook ends the process on any file open outside the
@@ -413,21 +420,36 @@ either result, and a
 rendered byte that depended on one would differ between the CI runner's digest lines and
 daniel-box's.
 
-When `GITHUB_STEP_SUMMARY` is set, each module appends a `render digest at <sha>` heading and
-one `digest_line` per directory it rendered to its CI job summary. A directory's line depends
-on its own files alone, so the two summaries together hold every directory, whichever shards
-the modules ran on. Neither writes the `total` line. On a pull request the SHA is a synthetic
-merge commit, so compare the lines from the push run on master. To check them on daniel-box,
-render that commit in full and run `digest`:
+In CI, each module writes one `digest_line` per directory it rendered to two places. The job
+log carries each as a line `render digest at <sha> (position <k> of 4): <line>`, which
+`gh run view --log` prints without a sign-in. The job summary carries them under a `render
+digest at <sha>` heading, but only a signed-in viewer can read it, and `gh` has no API for it.
+
+The log line takes a path of its own, because CI runs each shard under xdist. A test runs in a
+worker, and a worker's stdout never reaches the job log. So the test records its lines on its
+report with `record_property`, xdist carries the report back to the controller, and the
+`pytest_terminal_summary` hook in `scripts/renderer/tests/conftest.py` prints them there.
+`test_renderer_digest_log.py` runs a pytest session of its own under `-n 2` to prove that path.
+
+A directory's line depends on its own files alone, so the four modules' lines together hold
+every directory, whichever shards the modules ran on. None writes the `total` line. On a pull
+request the SHA is a synthetic merge commit, so compare the lines from the push run on master.
+To check them on daniel-box, render that commit in full and diff its `digest` against the
+log. Replace `<run>` with the push run's id, which `gh run list --branch master --event push
+--commit <sha>` prints.
 
 ```bash
 uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
 uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1 \
   --secret-stubs /tmp/r1-stubs.yml
-uv run python scripts/renderer/shadow_diff.py digest /tmp/r1
+uv run python scripts/renderer/shadow_diff.py digest /tmp/r1 | grep -v '^total ' \
+  | LC_ALL=C sort > /tmp/r1-box.txt
+gh run view <run> --log | grep -o 'render digest at .*' | sed 's/^[^:]*: //' \
+  | LC_ALL=C sort > /tmp/r1-ci.txt
+diff /tmp/r1-ci.txt /tmp/r1-box.txt
 ```
 
-Every line but `total` must equal the matching line in one of the two job summaries.
+The `diff` must print nothing, and both files must hold one line per directory.
 
 ## What the render does not cover
 
