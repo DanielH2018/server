@@ -15,11 +15,13 @@ An `assert` or a `fail` is held to a stricter guard. It sends nothing, but it ca
 value, so only the `homelab_secret_stubs` sentinel credits it: an ordinary dry run holds the real
 values and is meant to check them. An exemption for one says why it passes on any stub value.
 
-A derived variable comes from two places. `derived_variables` reads role defaults and inventory
-vars. `role_derived_facts` reads the role's own `set_fact` tasks: a fact whose value names a
-secret-bearing name, or looks up a role template whose Jinja names one, is derived too. That is
-how uptime-kuma's `kuma_declarations`, a parse of a template embedding every push token, reaches
-the push-token assert (#4850).
+A derived variable comes from three places. `derived_variables` reads role defaults and inventory
+vars. `tree_derived_facts` reads the `set_fact` tasks of every role beside this one, since a fact
+is play-scoped: a fact whose value names a secret-bearing name, or looks up a role template whose
+Jinja names one, is derived too. That is how uptime-kuma's `kuma_declarations`, a parse of a
+template embedding every push token, reaches the push-token assert (#4850). `file_registers` adds
+the `register:` of a selected task, scoped to its task file, which is how sonarr's asserts on its
+API reads' registers are selected (#4862).
 
 A guard counts only negated (`not k8s_no_mutate`), because `when: k8s_dry_run | bool` runs the
 task under a dry run alone. It is read from the parsed `when:`, so a guard word in a command
@@ -29,9 +31,8 @@ The exemptions are per task, which is why this is its own module: a `Census` row
 is keyed by file and would exempt all of authelia's `tasks/main.yml`.
 
 A second check covers the tasks a stub makes fail rather than act. `STUB_REFUSING` names each,
-and each must carry the `homelab_secret_stubs` guard itself. It predates the assert rule above.
-The census selects uptime-kuma's push-token assert on its own, but not sonarr's two asserts: they
-read a register, which no derivation follows.
+and each must carry the `homelab_secret_stubs` guard itself. It predates the assert rule above,
+which selects every task it named, so it is a backstop for a derivation that regresses.
 """
 
 import json
@@ -52,7 +53,9 @@ from _secret_derivation import (
     _tasks,
     _word_pattern,
     derived_variables,
-    role_derived_facts,
+    file_registers,
+    tree_derived_facts,
+    widen,
 )
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
@@ -99,6 +102,16 @@ EXEMPT: dict[str, str] = {
     "uptime-kuma/main.yml::Check the declaration index is populated": (
         "counts the parsed declarations, and a stub token changes no count"
     ),
+    # Selected through a register since #4862. A stub file is refused outside a k8s dry run, so
+    # a dry-run guard skips each on every stubbed run.
+    "arr-notification/main.yml::Report what the notification seed decided for "
+    "{{ arr_notification_app }}": (
+        "reads the seed's register and carries `not k8s_dry_run`, so a stubbed run skips it"
+    ),
+    "crowdsec/verify.yml::Name why the edge did not enforce the ban": (
+        "reads the ban gate's registers, and main.yml imports verify.yml on `not k8s_no_mutate`, "
+        "so a stubbed run skips it"
+    ),
 }
 
 # Must be selected, because it names `sonarr_api_key`, and must pass on its guard.
@@ -120,25 +133,25 @@ def census(
 ) -> tuple[list[str], list[str]]:
     """Every task in `role` whose body names a secret value, and those not covered.
 
-    `names` is widened by `role_derived_facts`. An `assert` or `fail` is covered only by the
+    `names` is widened by the facts any role beside `role` derives, then per task file by the
+    registers its selected tasks fill. An `assert` or `fail` is covered only by the
     sentinel guard or an exemption; any other task by a stub guard, a side-effect-free module or
     an exemption.
 
     Returns:
         The selected task ids, then the offending ones, each `<role>/<file>::<task name>`.
     """
-    facts = role_derived_facts(role, names)
-    if facts:
-        names = re.compile(f"{names.pattern}|{_word_pattern(facts).pattern}")
+    names = widen(names, tree_derived_facts(role.parent, names))
     covered = _guard_covered_files(role, guard=_STUB_GUARD)
     sentinel_covered = _guard_covered_files(role, guard=_SENTINEL_GUARD)
     selected, offenders = [], []
     for task_file in role_task_files(role):
         tasks = yaml_fast.safe_load(task_file.read_text())
+        here = widen(names, file_registers(tasks, names))
         for (task, guarded), (_, sentinel) in zip(
             _tasks(tasks), _tasks(tasks, guard=_SENTINEL_GUARD), strict=True
         ):
-            if not names.search(_body(task)):
+            if not here.search(_body(task)):
                 continue
             key = f"{role.name}/{task_file.name}::{task.get('name')}"
             selected.append(key)
@@ -199,12 +212,10 @@ def test_every_exemption_names_a_task_the_census_would_flag() -> None:
     assert stale_exemptions(EXEMPT, offenders) == []
 
 
-# "<role>/<task file>::<task name>" of each task that FAILS on a stub value: a format check on a
-# token, or an assert on a register that a guarded read left empty.
+# "<role>/<task file>::<task name>" of each task that FAILS on a stub value. sonarr's two asserts
+# on its API reads' registers left this list once the census followed a register (#4862).
 STUB_REFUSING = (
     "uptime-kuma/main.yml::Check every push token is in the format AutoKuma accepts",
-    "sonarr/verify.yml::Fail if a root folder does not resolve inside the pod",
-    "sonarr/verify.yml::Fail if the cluster library is not intact",
 )
 
 

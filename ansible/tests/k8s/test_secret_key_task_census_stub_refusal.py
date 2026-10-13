@@ -84,9 +84,10 @@ def test_an_unguarded_assert_on_a_template_derived_fact_is_flagged(
 
 
 def test_a_template_naming_no_secret_key_derives_nothing(tmp_path: Path) -> None:
-    secret = _secret_role(tmp_path, _token_assert())
+    # Separate roles directories: siblings share facts, and both roles set widget_declarations.
+    secret = _secret_role(tmp_path / "a", _token_assert())
     plain = _role(
-        tmp_path,
+        tmp_path / "b",
         "gadget",
         'token: "{{ gadget_label }}"\n',
         [_READ_DECLARATIONS, _token_assert()],
