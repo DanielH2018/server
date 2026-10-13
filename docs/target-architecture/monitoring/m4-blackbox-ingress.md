@@ -4,6 +4,8 @@ Status: IN PROGRESS
 
 PR 2, the validator's third `service` source: [#4798](https://github.com/DanielH2018/server/pull/4798).
 
+PR 1, the blackbox-exporter role: [#4834](https://github.com/DanielH2018/server/pull/4834).
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before this slice's PR 3
 
 Unblocks: M6 (with M2, M3 and M5)
@@ -205,7 +207,7 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
   that namespace's baseline relies on having one tenant (M1 baseline). In `homelab` it sits
   behind the same NetworkPolicy baseline as Kuma.
 - **Name resolution matches Kuma's.** Kuma's `hostAliases` block moves into a shared macro,
-  `ingress_host_aliases()`, in `ansible/templates/ingress-host-aliases.yaml.j2`. Both
+  `ingress_host_aliases()`, in `ansible/templates/ingress-host-aliases.yml.j2`. Both
   Deployments call it, so the two lists cannot drift and the probes resolve every ingress name
   exactly as Kuma does. A CoreDNS or Pi-hole fault therefore stays out of the probe path, as it
   is for Kuma. A shared macro is chosen over a copied loop plus a parity test because the macro
@@ -432,7 +434,7 @@ tuned. The likely episodes:
 ```diff
 +ansible/roles/k8s/blackbox-exporter/       scaffolded: defaults, tasks, templates, CLAUDE.md
 +  files/blackbox.yml
-+ansible/templates/ingress-host-aliases.yaml.j2  ingress_host_aliases(), moved from uptime-kuma
++ansible/templates/ingress-host-aliases.yml.j2   ingress_host_aliases(), moved from uptime-kuma
  ansible/inventory/host_vars/daniel-box.yml
 ~  containers_list: the blackbox-exporter entry, appended; no depends_on
  ansible/tests/k8s/
@@ -471,6 +473,10 @@ tuned. The likely episodes:
 - Leave the entry where the scaffolder appends it, and add no `depends_on` (*No deploy-order
   edge*). The PR body quotes the Baseline's simulation re-run on the branch: `observability`,
   `uptime-kuma` and `monitor-bridge` keep 19, 42 and 48.
+    - As built, the entry sits one slot above `netpol-baseline` instead. The scaffolder
+      appends after the list's last item, and that item is `netpol-baseline`, whose comment
+      in `daniel-box.yml` requires it to stay last. Nothing else changes: the entry still
+      carries no edge, and the three indices hold.
 - Add the two census rows by hand, because the scaffolder only prints them (Baseline):
     - `BORN_FENCED_ROLES` gains `blackbox-exporter`. Its comment says how it departs from the
       set's preamble. The role has `--no-route`, so Traefik never calls it. Its only caller is
@@ -1253,4 +1259,6 @@ Findings raised: 1 (1 medium). Fixed: 1, for M4's part. Refuted: none.
   `<name>.yml.j2` a doc names as a macro that must exist. This plan gave the future
   `ingress-host-aliases` macro file the `.yml.j2` suffix. **Fixed.** The plan now names it
   `ingress-host-aliases.yaml.j2`, the suffix that `service-default.yaml.j2` and three other
-  macros in `ansible/templates/` already carry. The same run then passed 869 tests.
+  macros in `ansible/templates/` already carry. The same run then passed 869 tests. PR 1
+  created the file as `ingress-host-aliases.yml.j2`, the suffix of every other macro there.
+  The row reads only a name a doc gives, so it passes once the file exists.

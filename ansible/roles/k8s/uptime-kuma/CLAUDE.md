@@ -37,6 +37,9 @@ reading behind each rule below.
 - **Do not add a readinessProbe to the autokuma sidecar, or restore its startupProbe** — either
   holds the whole pod `Ready = false` through the first reconcile. The allowance is
   `livenessProbe.initialDelaySeconds: 300`.
+- **The pod's `hostAliases` come from the shared `ingress_host_aliases()` macro**
+  (`ansible/templates/ingress-host-aliases.yml.j2`), which blackbox-exporter calls too, so both
+  pods pin every ingress name to the ingress VIP. Change the pinned names there.
 - **A push tile's `interval` is a deadline, not a poll rate, so recovery time is set on the
   producer**: a `kuma-check-<name>` timer's script exits 1 after a `down` push and
   `Restart=on-failure` reruns it. The `DECIDED:` marker above the drift tiles in

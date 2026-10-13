@@ -491,6 +491,7 @@
         "ansible/roles/k8s/arr-notification/defaults/main.yml",
         "ansible/roles/k8s/authelia/defaults/main.yml",
         "ansible/roles/k8s/autofix-bridge/defaults/main.yml",
+        "ansible/roles/k8s/blackbox-exporter/defaults/main.yml",
         "ansible/roles/k8s/observability/defaults/main.yml",
         "ansible/roles/k8s/cloudflare-ddns/defaults/main.yml",
         "ansible/roles/k8s/code-server/defaults/main.yml",

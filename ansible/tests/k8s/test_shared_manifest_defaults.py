@@ -45,6 +45,7 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
         "authelia",
         "bazarr",
         "bento-pdf",
+        "blackbox-exporter",
         "code-server",
         "docs",
         "headlamp",
