@@ -42,6 +42,8 @@ steps, and this page describes each piece once its PR has merged.
 - `scripts/renderer/shadow_diff.py roundtrip` builds the placeholder render and the stub render
   with the pinned flux CLI and compares them, and `fluxprobe` checks that CLI on fixtures
   first. CI's `flux_roundtrip` job runs both (*The round trip*).
+- `scripts/renderer/renderer_lib/secret_checks.py` holds `PASSTHROUGH_FILTERS`, the filters
+  that only interpolate a secret key (*Filters that only interpolate a secret*).
 
 ## The stub form
 
@@ -260,6 +262,25 @@ renders nothing, so `cluster` refuses it with exit 2. Stub mode renders every ta
 
 This set is a different thing from a `<tag>-deferred` directory, which holds the files a role
 passes as `manifests_deferred_files`.
+
+### Filters that only interpolate a secret
+
+`PASSTHROUGH_FILTERS` in `scripts/renderer/renderer_lib/secret_checks.py` names the repo
+filters that place an argument into their output unchanged. R2's PR 2 adds rule 5, which
+accepts a secret key as an argument to a member and refuses it as an argument to any other
+filter. The set is closed and holds two members, each passed `domain`:
+
+- `homepage_href`, from `ansible/filter_plugins/homepage_tiles.py:homepage_href`;
+- `authelia_service_rules`, from
+  `ansible/filter_plugins/authelia_access.py:authelia_service_rules`.
+
+Each member passes a membership test in
+`scripts/renderer/tests/test_renderer_secret_checks.py`. The test calls the filter in every
+call shape the templates write, once with the sentinel `r2-sentinel` for the key and once with
+`a.b-c.example`. The first output, serialised as JSON, must hold the sentinel. Replacing the
+sentinel there with `a.b-c.example` must give the second output exactly. A fixture filter that
+upper-cases its argument fails the first check, and one that rewrites `.` as `-` fails the
+second. A filter that fails the test leaves the set.
 
 ## The round trip
 
