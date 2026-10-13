@@ -1,0 +1,5 @@
+# Reconcile, which every host package ships (H3, *The reconcile unit*). The script lives in
+# hosts/lib/ beside the updater that starts it, and the unit here.
+files:
+  - {lib: homelab-reconcile, dst: /usr/lib/homelab/homelab-reconcile, mode: "0755"}
+  - {src: units/homelab-reconcile.service, dst: /usr/lib/systemd/system/homelab-reconcile.service}
