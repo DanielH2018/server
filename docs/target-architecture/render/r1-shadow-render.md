@@ -20,7 +20,7 @@ PR 7, the comparison tooling `shadow_diff.py compare`, `stubcheck` and `digest`:
 
 PR 7, the trailing-newline class, rendered with the template module's final newline: [#4851](https://github.com/DanielH2018/server/pull/4851).
 
-PR 8, the out-of-render census row and the two determinism modules: PR_NUMBER_PLACEHOLDER.
+PR 8, the out-of-render census row and the two determinism modules: [#4861](https://github.com/DanielH2018/server/pull/4861).
 
 Depends on: none
 
