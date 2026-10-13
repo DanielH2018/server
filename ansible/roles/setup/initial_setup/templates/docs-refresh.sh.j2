@@ -470,12 +470,6 @@ fi
 # of the average one. Only an entry more than 1.5x from what it measured is rewritten, so noise
 # inside that band leaves no diff and a run does not churn the table.
 #
-# A LOWERED WEIGHT CAN FAIL THE SUITE GATE BELOW, BY DESIGN. SERIAL_2026_10_13 in
-# scripts/dev/tests/test_pytest_shard_durations.py pins three modules' 2026-10-13 serial seconds
-# against their weights. If one of them is made faster, this step rewrites its weight down, the
-# row fails, and the run restores the tree and reports DOWN without publishing anything. The
-# repair is to delete that row, as its comment says. The failure never reaches a PR.
-#
 # Same degrade-not-abort handling and its own `timeout`, for the reasons the step above gives.
 REFRESH_MSG="$(timeout 600 "$UV" run --frozen python scripts/dev/pytest_shard.py \
   --refresh-drifted 8 2>&1)"
@@ -528,8 +522,8 @@ fi
 # end-of-file-fixer rewrote both generated files until the generators were fixed to emit
 # exactly one trailing newline. Vale is scoped to exclude docs/reference/ for the same
 # reason. Before adding any hook that matches a path staged above, check it cannot fail on
-# generator output. `static-ratchet-tests` matches the weights table; it runs four files of
-# the suite, which this script runs green just before the commit.
+# generator output. `static-ratchet-tests` matches the weights table; it runs only static test
+# files of the suite, which this script runs green just before the commit.
 # No `trap ... EXIT` here any more: on_exit above already removes this file, and a second trap
 # on the same signal would REPLACE that one and take the push with it.
 LOG="$(mktemp)"

@@ -8,6 +8,9 @@ PR 1b, the pass-through filters: [#4891](https://github.com/DanielH2018/server/p
 
 PR 1c, the standalone-value guard: [#4914](https://github.com/DanielH2018/server/pull/4914).
 
+PR 2, the five rules and the round trip over every tag:
+[#4928](https://github.com/DanielH2018/server/pull/4928).
+
 PR 5, Home Assistant's service account: [#4933](https://github.com/DanielH2018/server/pull/4933).
 It landed ahead of PR 2 ([#4918](https://github.com/DanielH2018/server/issues/4918)), so its
 `sops-manifest-entries` check carries the first two clauses only. The third clause, which
@@ -839,7 +842,10 @@ two throwaway Flux `Kustomization` files and runs `flux build kustomization <nam
 - **Stub side.** A stub-mode render with the same values. The file has no `postBuild`, so
   nothing is substituted.
 
-It then compares the two outputs byte for byte and names the first differing object. It
+It then compares the two outputs byte for byte and names the first differing object. The
+comparison leaves out observability's `checksum_annotation('config', ...)` annotations, which
+the constant `UNCOMPARED_ANNOTATIONS` names and `roundtrip` counts, because each hashes a
+config holding placeholder text (*Risks*, *Restart triggers lose sight of secrets*). It
 runs two passes, each with its own summary line:
 
 1. Every key takes its R1 stub.
