@@ -13,6 +13,7 @@ D1.6, Flux in the metrics plane: [#4803](https://github.com/DanielH2018/server/p
 D1.6b, the `flux` rule group: [#4813](https://github.com/DanielH2018/server/pull/4813).
 The signature drill, lever on: [#4816](https://github.com/DanielH2018/server/pull/4816).
 The signature drill's own digest: [#4826](https://github.com/DanielH2018/server/pull/4826).
+The signature drill, lever off: [#4832](https://github.com/DanielH2018/server/pull/4832).
 
 Depends on: none
 
