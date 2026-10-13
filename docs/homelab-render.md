@@ -266,9 +266,10 @@ passes as `manifests_deferred_files`.
 ### Filters that only interpolate a secret
 
 `PASSTHROUGH_FILTERS` in `scripts/renderer/renderer_lib/secret_checks.py` names the repo
-filters that place an argument into their output unchanged. R2's PR 2 adds rule 5, which
+filters that place an argument into their output unchanged. Its reader is rule 5, which
 accepts a secret key as an argument to a member and refuses it as an argument to any other
-filter. The set is closed and holds two members, each passed `domain`:
+filter. Rule 5 is not in place yet: R2's PR 2 adds it. The set is closed and holds two
+members, each passed `domain`:
 
 - `homepage_href`, from `ansible/filter_plugins/homepage_tiles.py:homepage_href`;
 - `authelia_service_rules`, from
