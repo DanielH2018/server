@@ -10,6 +10,8 @@ from renderer import shadow_diff
 from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS
 from secret_stubs import homelab_secret_stub, homelab_stub_keys
 
+GA = "google_assistant_service_account"
+
 
 def test_stubs_writes_the_same_file_twice_for_one_tree(tmp_path):
     first, second = tmp_path / "a.yml", tmp_path / "b.yml"
@@ -32,6 +34,9 @@ def test_stub_file_holds_every_stub_the_sentinel_and_the_pinned_facts(tmp_path):
         name: fact.value for name, fact in PINNED_LIVE_FACTS.items()
     }
     assert set(loaded) == {*keys, "homelab_secret_stubs", *PINNED_LIVE_FACTS}
+    # A JSON object is also a YAML flow mapping; the file must still load it as a string.
+    assert isinstance(loaded[GA], str)
+    assert loaded[GA] == homelab_secret_stub(GA)
 
 
 def test_stub_vars_over_a_secrets_file_without_clashes_is_clean(tmp_path):

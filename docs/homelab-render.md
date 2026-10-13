@@ -60,6 +60,11 @@ stub instead, which the filter `homelab_secret_stub` builds:
 - A key `K` becomes `stub-` plus `K` with underscores turned to hyphens, such as
   `stub-domain`. That shape is a valid DNS label, so a stubbed host name still passes
   `kubectl apply --dry-run=server`.
+- `google_assistant_service_account` keeps the stub shape it had while home-assistant's
+  `templates/config/secrets.yaml.j2` parsed it with `from_json`: a JSON object of
+  `project_id`, `client_email` and `private_key`, each valued
+  `stub-google-assistant-service-account-<field>`, serialised with sorted keys. R2's PR 5
+  removed the parse, so no template reads the fields any more.
 - `become_password` never takes a stub. It is the one name in `NEVER_STUB`, because
   `ansible/pre_tasks/load_secrets.yml` hands it to privilege escalation and no template
   reads it.

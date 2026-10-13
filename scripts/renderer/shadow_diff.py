@@ -129,7 +129,11 @@ def stub_vars(secrets: Path = SECRETS) -> dict[str, object]:
 
 
 def stub_file_text(secrets: Path = SECRETS) -> str:
-    """The stub file's bytes: a YAML mapping with sorted keys after a fixed header."""
+    """The stub file's bytes: a YAML mapping with sorted keys after a fixed header.
+
+    `google_assistant_service_account`'s stub is a JSON object string. The dumper quotes it,
+    so `-e @FILE` loads a string, not a mapping.
+    """
     body = yaml.safe_dump(
         stub_vars(secrets), sort_keys=True, default_flow_style=False, width=4096
     )
