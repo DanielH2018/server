@@ -255,6 +255,11 @@ key, or a variable derived from one. Each such task must be skipped under a stub
 use a side-effect-free module, or carry a per-task exemption with a reason. sonarr's API
 reads pass on their `homelab_secret_stubs` guard.
 
+The same module names the tasks that would fail on a stub rather than act on it, in
+`STUB_REFUSING`. Each must carry the `homelab_secret_stubs` guard itself, because the census
+credits an `assert` as side-effect free. uptime-kuma's push-token format check is one of
+them, as are the two sonarr asserts on the reads' registers.
+
 From this change on, the preamble names the stub filters, so the deployer cannot narrow an
 edit to `ansible/filter_plugins/secret_stubs.py` to a service. Each such edit defers every
 declared service, and `land.sh` reports `needs-manual-apply`.
