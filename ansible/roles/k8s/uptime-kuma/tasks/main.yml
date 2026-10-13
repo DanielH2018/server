@@ -48,6 +48,12 @@
       AutoKuma would refuse these push monitors, because each push_token is not 32 letters and
       digits: {{ kuma_declarations | kuma_malformed_push_tokens | join(', ') }}. Re-mint each
       token with `openssl rand -hex 16` (the add-secret skill has the sops command).
+  # Skipped under a secret stub file (`homelab_secret_stubs`, written by
+  # scripts/renderer/shadow_diff.py stubs). Every push token there is a stub, which is never 32
+  # letters and digits, so the assert would stop a shadow-render dry run at this role. The stub
+  # keeps its stub form rather than a token-shaped value, because stubcheck finds stubs by it.
+  # NOT on k8s_dry_run: an ordinary dry run still checks the real tokens.
+  when: not (homelab_secret_stubs | default(false) | bool)
 
 - name: Deploy uptime-kuma to the cluster
   ansible.builtin.include_role:
