@@ -24,9 +24,12 @@ import subprocess
 import shutil
 import socket
 import threading
+from functools import partial
+from unittest import mock
 
 import pytest
 
+from fanout_lib import clean
 from fanout_lib.clean import live_process_scan, remote_clean_command
 from fanout_lib.manifest import Batch
 from lib.worktrees import escape_holder
@@ -112,9 +115,22 @@ def _stub_bin(tmp_path, gh_prints=None, unit_active=False):
     )
 
 
-def _run_chain(repo, worktree, stub_bin):
+def _run_chain(repo, worktree, stub_bin, proc_root=None):
+    """Run the chain under bash, its in-use scan walking `proc_root`.
+
+    `proc_root` defaults to an empty directory, because the scan forks per pid and the host's
+    process count then sets the test's cost: about 4s a test on daniel-box against 1.6s on a CI
+    runner (#4873, the shape #4876 fixed in test_fanout_abandon.py). Only a test that needs the
+    scan to find a live process passes `/proc`.
+    """
+    if proc_root is None:
+        proc_root = stub_bin.parent / "proc"
+        proc_root.mkdir()
     batch = Batch("x", "h", str(worktree), BRANCH, UNIT, [1], "t")
-    cmd = remote_clean_command(batch, repo=str(repo))
+    # `remote_clean_command` takes no proc-root seam, so the scan it calls is wrapped here.
+    scan = partial(live_process_scan, proc_root=str(proc_root))
+    with mock.patch.object(clean, "live_process_scan", scan):
+        cmd = remote_clean_command(batch, repo=str(repo))
     # The guard that makes running this safe: never let it name the shared checkout.
     assert str(repo) in cmd and "/home/ubuntu/server" not in cmd
     return run(["bash", "-c", cmd], env=_scrubbed_env(extra_path=str(stub_bin)))
@@ -275,7 +291,9 @@ def test_a_stub_a_live_process_still_uses_is_kept_not_deleted(tmp_path):
     (worktree / ".remember").mkdir(parents=True)
     holder = subprocess.Popen(["sleep", "60"], cwd=worktree)
     try:
-        proc = _run_chain(repo, worktree, _stub_bin(tmp_path, f"{tip}\n"))
+        proc = _run_chain(
+            repo, worktree, _stub_bin(tmp_path, f"{tip}\n"), proc_root="/proc"
+        )
     finally:
         holder.kill()
         holder.wait()
@@ -311,8 +329,17 @@ def _serving(sock, answer: bytes) -> threading.Thread:
 
 
 def _scan(worktree, sock) -> subprocess.CompletedProcess:
-    """`live_process_scan` run under bash, asking `sock` through the real `nc -U`."""
-    script = live_process_scan(str(worktree), sock=str(sock)) + 'echo "$busy"'
+    """`live_process_scan` run under bash, asking `sock` through the real `nc -U`.
+
+    Its `/proc` loop walks an empty directory, as in `_run_chain`: no process sits in a
+    `tmp_path` tree, so the host's pids could only add cost, never change `busy`.
+    """
+    proc_root = worktree.parent / "proc"
+    proc_root.mkdir(exist_ok=True)
+    script = (
+        live_process_scan(str(worktree), sock=str(sock), proc_root=str(proc_root))
+        + 'echo "$busy"'
+    )
     return subprocess.run(
         ["bash", "-c", script], capture_output=True, text=True, check=True, timeout=30
     )

@@ -160,6 +160,36 @@ def test_the_stale_ratio_decides():
     assert shard_weight_gate.durations_problems(report, weights, ratio=2.0) != []
 
 
+# REPORT's new module recorded at the 0.48s that `test_guard_tests_read_renders_not_templates.py`
+# carried while it measured 45.67s on a master run (#4873): present in the table, and as good as
+# missing from it.
+UNDER_RECORDED = RECORDED | {NEW_MODULE: 0.48}
+
+
+def test_a_heavy_module_recorded_far_below_what_it_measured_is_flagged():
+    problems = shard_weight_gate.durations_problems(REPORT, UNDER_RECORDED)
+    assert len(problems) == 1
+    assert NEW_MODULE in problems[0]
+    assert "recorded 0.48s" in problems[0] and "26.4s" in problems[0]
+    assert "--record-files" in problems[0]
+
+
+def test_a_heavy_module_inside_the_runner_scale_is_clean():
+    """The accept half: 26.4s measured against 4.5s recorded is 5.9x, the runner running a
+    correctly recorded module slower than the workstation did. Only the ratio decides."""
+    weights = RECORDED | {NEW_MODULE: 4.5}
+    assert shard_weight_gate.durations_problems(REPORT, weights) == []
+    assert shard_weight_gate.durations_problems(REPORT, weights, under_ratio=5.0) != []
+
+
+def test_an_under_recorded_module_between_the_bounds_annotates_rather_than_fails():
+    assert shard_weight_gate.durations_problems(MARGIN_REPORT, UNDER_RECORDED) == []
+    warnings = shard_weight_gate.durations_warnings(MARGIN_REPORT, UNDER_RECORDED)
+    assert len(warnings) == 1
+    assert NEW_MODULE in warnings[0] and "12.4s" in warnings[0]
+    assert "--record-files" in warnings[0]
+
+
 def test_a_report_with_no_durations_is_itself_a_complaint():
     """Non-vacuity at run time. The gate finds its subject by parsing, so a format change or a
     test step that dropped `--durations=0` would otherwise leave it passing over nothing."""
@@ -216,20 +246,29 @@ def test_the_cli_exits_nonzero_on_a_heavy_unweighted_module(tmp_path, capsys):
     assert NEW_MODULE in printed and "--record-missing" in printed
 
 
+def _recorded_pole() -> str:
+    """A durations line for the committed table's heaviest module, measuring what it records.
+
+    The CLI reads the real table, so a report naming a real module at a made-up cost trips the
+    over- or under-recording arm on whatever that module's entry holds today.
+    """
+    weights = pytest_shard.load_weights()
+    path = max(weights, key=weights.__getitem__)
+    return f"{weights[path]:.2f}s call     {path}::test_the_pole\n"
+
+
 def test_the_cli_exits_zero_when_every_heavy_module_is_recorded(tmp_path, capsys):
-    """The same report with the unweighted module dropped. What is left is the recorded
-    17.31s pole, which the split already packs at its measured cost."""
-    recorded_only = "\n".join(
-        line for line in REPORT.splitlines() if NEW_MODULE not in line
-    )
-    assert _run_cli(tmp_path, recorded_only + "\n") == 0
-    assert "no unweighted module" in capsys.readouterr().out
+    """A report whose only heavy module is the table's own pole, measuring its recorded cost,
+    which the split already packs at that weight."""
+    assert _run_cli(tmp_path, _recorded_pole()) == 0
+    assert "no unweighted or under-recorded module" in capsys.readouterr().out
 
 
 def test_the_cli_exits_zero_and_annotates_a_module_between_the_bounds(tmp_path, capsys):
     """The PR path: no `--warn-only`, and still exit 0, because the step is what failed 6
     branches in 10 runs on a module that measured either side of 10s (#4010)."""
-    assert _run_cli(tmp_path, MARGIN_REPORT) == 0
+    margin_only = MARGIN_REPORT.splitlines(keepends=True)[0]
+    assert _run_cli(tmp_path, margin_only + _recorded_pole()) == 0
     printed = capsys.readouterr().out
     assert printed.startswith("::warning::") and NEW_MODULE in printed
 

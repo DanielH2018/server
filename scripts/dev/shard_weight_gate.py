@@ -1,11 +1,11 @@
 """The measured shard-weight gate: what CI's `pytest_shard.py --check-durations` step decides.
 
-It reads the pytest `--durations` report a CI shard already wrote, and complains about two
-shapes no static check can see: a heavy test module with no recorded weight, and a recorded
-weight far above what its module measured. `pytest_shard.py`'s module docstring has why the
-split needs the table and why the gate is a CI step. This module holds the bounds and the two
-arms; `pytest_shard.main` reads the report, hands over the committed table and turns the
-complaints into an exit code.
+It reads the pytest `--durations` report a CI shard already wrote, and complains about three
+shapes no static check can see: a heavy test module with no recorded weight, a recorded weight
+far above what its module measured, and a heavy module whose recorded weight is far below it.
+`pytest_shard.py`'s module docstring has why the split needs the table and why the gate is a CI
+step. This module holds the bounds and the three arms; `pytest_shard.main` reads the report,
+hands over the committed table and turns the complaints into an exit code.
 
 Split out of `pytest_shard.py` when the margin band (#4010) took that module past the
 600-line cap.
@@ -50,8 +50,8 @@ RUNNER_HEAVY_FAIL_SECONDS = 15.0
 # How many times its measured runner seconds a RECORDED weight may claim before the shard gate
 # rejects it, and the recorded seconds below which nobody cares.
 #
-# WHY A SECOND ARM AT ALL. Every other arm of the gate asks "is this file missing from the
-# table". None asks "is a recorded number still roughly what the file costs", so an entry that
+# WHY AN OVER-RECORDING ARM. The unweighted arm asks "is this file missing from the
+# table". It never asks "is a recorded number still roughly what the file costs", so an entry that
 # has become far too high stands until someone runs a full `--record`: `--record-missing` only
 # fills gaps. A recorded 17.31s for `ansible/tests/k8s/test_secret_consumer_census.py` that
 # measured 0.09s made the greedy split place it first, so one shard carried 17s of phantom
@@ -82,6 +82,22 @@ RUNNER_HEAVY_FAIL_SECONDS = 15.0
 # shape that occurs in practice.
 STALE_WEIGHT_RATIO = 5.0
 STALE_WEIGHT_FLOOR_SECONDS = 3.0
+
+# How many times its recorded weight a module may measure on the runner before the shard gate
+# reads the entry as too LOW. The arm shares the unweighted arm's bounds, so it looks only at a
+# module measuring `RUNNER_HEAVY_SECONDS` or more.
+#
+# WHY A THIRD ARM. The stale arm above catches a recorded number far too high, and
+# `--record-missing` never touches a present entry, so a weight far too low stood unseen. On
+# the master run in #4873, `test_guard_tests_read_renders_not_templates.py` measured 45.67s
+# against a recorded 0.48s and `test_nut_fsd_login_confined.py` 14.65s against 0.01s. Each
+# module had grown after its weight was recorded, so the split packed it as free: the skew of
+# an unweighted heavy file, with an entry present.
+#
+# WHY TEN. The runner/workstation scale and run-to-run variance together put a correctly
+# recorded module at up to SPREAD_PLACEHOLDER on the runner, and the entries this arm exists for
+# were 30x to 1500x off.
+UNDER_WEIGHT_RATIO = 10.0
 
 # pytest's own `--durations-min`: no report line is smaller, so no measured total is either.
 # Used as the divisor's floor, which cannot then be zero.
@@ -160,6 +176,7 @@ def stale_overweight(
 
     Over-recording only: the runner is slower per test than the recording workstation, so a
     measured value ABOVE its recorded one is the normal case and not this arm's subject.
+    `heavy_underweighted` takes a measured value FAR above it.
     """
     measured = parse_durations(text)
     flagged = [
@@ -172,6 +189,26 @@ def stale_overweight(
     return sorted(flagged, key=lambda item: (-item[1], item[0]))
 
 
+def heavy_underweighted(
+    text: str,
+    weights: dict[str, float],
+    threshold: float = RUNNER_HEAVY_SECONDS,
+    ratio: float = UNDER_WEIGHT_RATIO,
+) -> list[tuple[str, float, float]]:
+    """The recorded modules that measured `threshold`+ and `ratio`x or more their weight.
+
+    `(path, recorded, measured)`, heaviest measured first. The under-recording counterpart of
+    `stale_overweight`, bounded like `heavy_unweighted`; see `UNDER_WEIGHT_RATIO` for why.
+    """
+    measured = parse_durations(text)
+    flagged = [
+        (f, weights[f], s)
+        for f, s in measured.items()
+        if f in weights and s >= threshold and s >= ratio * weights[f]
+    ]
+    return sorted(flagged, key=lambda item: (-item[2], item[0]))
+
+
 def _heavy_complaint(heavy: list[tuple[str, float]], threshold: float) -> str:
     listed = ", ".join(f"{f} ({s:.1f}s)" for f, s in heavy)
     return (
@@ -181,22 +218,47 @@ def _heavy_complaint(heavy: list[tuple[str, float]], threshold: float) -> str:
     )
 
 
+def _under_complaint(
+    under: list[tuple[str, float, float]], threshold: float, ratio: float
+) -> str:
+    listed = ", ".join(
+        f"{f} (recorded {rec:.2f}s, measured {got:.1f}s)" for f, rec, got in under
+    )
+    return (
+        f"measured {threshold:.0f}s or more on this runner and {ratio:.0f}x or more its "
+        f"recorded weight, so the shard split packs it as nearly free: {listed}. "
+        f"Repair (seconds): {RECORD_FILES_HINT}"
+    )
+
+
 def durations_warnings(
     text: str,
     weights: dict[str, float],
     threshold: float = RUNNER_HEAVY_SECONDS,
     fail_above: float = RUNNER_HEAVY_FAIL_SECONDS,
+    under_ratio: float = UNDER_WEIGHT_RATIO,
 ) -> list[str]:
     """The complaints about a durations report that annotate the run and do not fail it.
 
-    An unweighted module measuring `threshold` or more but under `fail_above`: runner variance
-    alone moves a module across `threshold` (see `RUNNER_HEAVY_FAIL_SECONDS`). Empty when the
-    report parses to nothing, which `durations_problems` already fails on.
+    An unweighted or under-recorded module measuring `threshold` or more but under
+    `fail_above`: runner variance alone moves a module across `threshold` (see
+    `RUNNER_HEAVY_FAIL_SECONDS`). Empty when the report parses to nothing, which
+    `durations_problems` already fails on.
     """
+    warnings = []
     margin = [
         (f, s) for f, s in heavy_unweighted(text, weights, threshold) if s < fail_above
     ]
-    return [_heavy_complaint(margin, threshold)] if margin else []
+    if margin:
+        warnings.append(_heavy_complaint(margin, threshold))
+    under = [
+        row
+        for row in heavy_underweighted(text, weights, threshold, under_ratio)
+        if row[2] < fail_above
+    ]
+    if under:
+        warnings.append(_under_complaint(under, threshold, under_ratio))
+    return warnings
 
 
 def durations_problems(
@@ -205,13 +267,15 @@ def durations_problems(
     threshold: float = RUNNER_HEAVY_SECONDS,
     ratio: float = STALE_WEIGHT_RATIO,
     fail_above: float = RUNNER_HEAVY_FAIL_SECONDS,
+    under_ratio: float = UNDER_WEIGHT_RATIO,
 ) -> list[str]:
     """What is wrong with a shard's durations report, as readable complaints that fail the run.
 
-    Two arms over the one report, and both are reported: a heavy module with NO recorded
-    weight, and a recorded weight far HIGHER than what the module measured here. Each complaint
-    carries its own repair, because the two repairs differ — `--record-missing` fills a gap and
-    cannot refresh an entry that is merely wrong.
+    Three arms over the one report, and all are reported: a heavy module with NO recorded
+    weight, a recorded weight far HIGHER than what the module measured here, and a heavy module
+    whose recorded weight is far LOWER. Each complaint carries its own repair, because the
+    repairs differ — `--record-missing` fills a gap and cannot refresh an entry that is merely
+    wrong.
 
     A function rather than inline asserts in `main`, so the accept and reject halves can hand
     it a fixed report rather than needing a CI run.
@@ -229,6 +293,8 @@ def durations_problems(
     fail_bound = max(threshold, fail_above)
     if heavy := heavy_unweighted(text, weights, fail_bound):
         problems.append(_heavy_complaint(heavy, fail_bound))
+    if under := heavy_underweighted(text, weights, fail_bound, under_ratio):
+        problems.append(_under_complaint(under, fail_bound, under_ratio))
     if stale := stale_overweight(text, weights, ratio):
         listed = ", ".join(
             f"{f} (recorded {rec:.2f}s, measured {got:.2f}s)" for f, rec, got in stale

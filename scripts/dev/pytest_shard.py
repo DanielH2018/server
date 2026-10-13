@@ -40,7 +40,14 @@ MISSING" ever sees:
 a recorded 17.31s against 0.09s measured makes the greedy split place the file first, so one
 shard carries 17s of phantom weight. The gate
 answers that as a RATIO — see `shard_weight_gate.STALE_WEIGHT_RATIO` — and `--record-files` is its repair, since
-`--record-missing` only fills gaps.
+`--record-missing` only fills gaps. A third arm takes the opposite direction: a module that grew
+after its weight was recorded measured 45.67s against 0.48s, and the split packed it as free.
+`shard_weight_gate.UNDER_WEIGHT_RATIO` bounds it, and `--record-files` repairs it too.
+
+A CACHE SHARED ACROSS MODULES IS A PER-WORKER COST, NOT A MODULE'S. Under xdist every worker
+builds `_k8s_render`'s render once and charges it to whichever module asks first, so its weight
+would vary from run to run. `ansible/tests/conftest.py` builds it when collection finishes,
+outside every test's timed phases, and its `# DECIDED:` comment has the numbers.
 
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
 
@@ -322,8 +329,8 @@ def main(argv=None) -> int:
         type=Path,
         metavar="LOG",
         help=(
-            "read a pytest --durations report and fail on a heavy unweighted module or a "
-            "recorded weight far above what its module measured"
+            "read a pytest --durations report and fail on a heavy unweighted module, a "
+            "recorded weight far above what its module measured, or one far below it"
         ),
     )
     parser.add_argument(
@@ -379,8 +386,9 @@ def main(argv=None) -> int:
             return 1
         if not warnings:
             print(
-                f"no unweighted module measured {args.threshold:.0f}s or more in this shard, "
-                f"and no recorded weight is {args.stale_ratio:.0f}x what its module measured"
+                f"no unweighted or under-recorded module measured {args.threshold:.0f}s or "
+                f"more in this shard, and no recorded weight is {args.stale_ratio:.0f}x what "
+                f"its module measured"
             )
         return 0
 
