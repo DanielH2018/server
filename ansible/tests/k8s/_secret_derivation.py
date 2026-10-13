@@ -131,10 +131,10 @@ def _tree_signature(roles_dir: Path) -> tuple[tuple[str, int, int], ...]:
     than on the directory alone: an edited, added or removed file misses the cache.
     """
     files = [
-        path
+        file
         for role in role_dirs(roles_dir)
-        for path in [*role_task_files(role), *sorted((role / "templates").rglob("*"))]
-        if path.is_file()
+        for file in [*role_task_files(role), *sorted((role / "templates").rglob("*"))]
+        if file.is_file()
     ]
     return tuple((str(f), f.stat().st_mtime_ns, f.stat().st_size) for f in files)
 
