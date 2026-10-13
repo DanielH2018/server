@@ -253,6 +253,7 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "k8s-workloads",
         "loki-homelab",
         "flux",
+        "ingress-probes",
     ]
     assert keys == {
         "alerting-meta.yaml",
@@ -260,6 +261,7 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "k8s-workloads.yaml",
         "loki-homelab.yaml",
         "flux.yaml",
+        "ingress-probes.yaml",
     }
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()
@@ -271,7 +273,10 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "AlertmanagerMetricsMissing",
         "PrometheusRuleEvaluationFailures",
     }
-    assert alert_rules.rule_problems(groups, keys) == []
+    # The ingress-probes rules take `service` from their scrape job, so the conventions read
+    # the rendered prometheus.yml, as check_tree hands it to them.
+    prometheus_yml = alert_rules.rendered_files()["prometheus.yml"]
+    assert alert_rules.rule_problems(groups, keys, prometheus_yml=prometheus_yml) == []
 
 
 def test_the_loki_rule_files_their_list_and_their_configmap_agree_is_clean():

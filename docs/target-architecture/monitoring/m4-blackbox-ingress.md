@@ -2,6 +2,8 @@
 
 Status: IN PROGRESS
 
+PR 3, the probe job and its rules: [#4837](https://github.com/DanielH2018/server/pull/4837).
+
 PR 2, the validator's third `service` source: [#4798](https://github.com/DanielH2018/server/pull/4798).
 
 PR 1, the blackbox-exporter role: [#4834](https://github.com/DanielH2018/server/pull/4834).
