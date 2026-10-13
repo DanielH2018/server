@@ -26,6 +26,8 @@ steps, and this page describes each piece once its PR has merged.
   each role passes to its `k8s/manifests` include.
 - `scripts/renderer/renderer_lib/task_inputs.py:derived_facts` computes the values role tasks
   compute from the tree (*Task-computed values*).
+- `ansible/roles/k8s/manifests/defaults/main.yml:manifests_shadow_dir` keeps the Ansible
+  render of a stubbed dry run (*Keep the Ansible render of a stubbed dry run*).
 
 ## The stub form
 
@@ -252,3 +254,19 @@ reads pass on their `homelab_secret_stubs` guard.
 From this change on, the preamble names the stub filters, so the deployer cannot narrow an
 edit to `ansible/filter_plugins/secret_stubs.py` to a service. Each such edit defers every
 declared service, and `land.sh` reports `needs-manual-apply`.
+
+## Keep the Ansible render of a stubbed dry run
+
+The manifests role variable `manifests_shadow_dir` keeps what a k8s dry run renders. Passed
+with `-e` beside the stub file, it renders each service into `<dir>/<service>` and keeps it,
+owned by `sys_user`. Unset, which is the default, the dry run renders into a temporary
+directory and discards it, as before. This tree is the Ansible half of the shadow pair, which
+R1's comparison reads against `homelab_render.py cluster`'s output.
+
+The role's first task refuses the variable unless the run is a k8s dry run and every secret
+key still holds its stub. It runs after the SOPS load, so a key the stub file did not cover
+holds its real value there and is named. It recomputes the check with
+`homelab_unstubbed_keys`, so no sentinel or flag passed as an extra var can stand in for it.
+
+The run is **operator-only**, because the play decrypts SOPS and escalates with `become`. The
+plan's *Verification* section has the commands.
