@@ -92,10 +92,6 @@ EXEMPT: dict[str, str] = {
     "authelia/main.yml::Fail if the claude-agent credential is missing": (
         "checks only that the value is non-empty, and a stub is never empty"
     ),
-    "authelia/main.yml::Fail if no password hash could be obtained": (
-        "checks only that each digest is non-empty; a stubbed run reads the live digest back "
-        "or stands in a placeholder"
-    ),
     "uptime-kuma/main.yml::Check the declaration index is populated": (
         "counts the parsed declarations, and a stub token changes no count"
     ),
