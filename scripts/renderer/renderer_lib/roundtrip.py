@@ -19,9 +19,12 @@ code, so the outputs compare byte for byte, and the report names the first objec
 differs. It prints no file content: every value on either side is a stub.
 
 It runs two passes, `stub_passes`. The first substitutes each key's R1 stub, a plain-safe
-string. The second sets every key to `TYPE_HOSTILE_STUB` on both sides, because the pinned
-CLI drops the template's quotes around a substituted value, so a value such as `0123` changes
-type where it stands alone in a field.
+string. The second sets every key the standalone-value guard does not cover to
+`TYPE_HOSTILE_STUB` on both sides, and keeps every other key's R1 stub. The pinned CLI drops
+the template's quotes around a substituted value, so a value such as `0123` changes type where
+it stands alone in a field. A key in the guard's map under any tag, or in `GUARD_DEFERRED`, is
+covered, so a difference in the second pass marks a standalone use the renderer's detection
+missed.
 
 `roundtrip` needs the pinned flux CLI. Where `flux` is not on `PATH`, it refuses and never
 reports a pass. `docs/homelab-render.md` is the operator's page.
@@ -48,7 +51,11 @@ from renderer.renderer_lib.cluster import (
     render_tag,
     write_cluster,
 )
-from renderer.renderer_lib.placeholders import PlaceholderRender, render_placeholders
+from renderer.renderer_lib.placeholders import (
+    GUARD_DEFERRED,
+    PlaceholderRender,
+    render_placeholders,
+)
 
 PLACEHOLDER, STUB = "placeholder", "stub"
 KUSTOMIZATIONS = "kustomizations"
@@ -189,21 +196,30 @@ class StubPass:
     substitute: dict[str, str]
 
 
-def stub_passes(stubs: dict, keys: list[str]) -> list[StubPass]:
-    """The two passes: each key's R1 stub, then every key `TYPE_HOSTILE_STUB`.
+def guarded_keys(guard_map: Mapping[str, list[str]]) -> frozenset[str]:
+    """The keys the standalone-value guard covers: mapped under any tag, or deferred."""
+    return frozenset(k for keys in guard_map.values() for k in keys) | GUARD_DEFERRED
 
-    The second pass's stub side is a stub-mode render with every key set to the hostile stub,
+
+def stub_passes(
+    stubs: dict, keys: list[str], guarded: frozenset[str]
+) -> list[StubPass]:
+    """The two passes: each key's R1 stub, then every key outside `guarded` at `TYPE_HOSTILE_STUB`.
+
+    The second pass's stub side is a stub-mode render with those keys set to the hostile stub,
     so Jinja writes the template's quotes around it there. Flux does not on the placeholder
-    side, so a value whose YAML type substitution changes shows as a difference.
+    side, so a value whose YAML type substitution changes shows as a difference. A key in
+    `guarded` keeps its R1 stub, because the guard refuses a real value Flux would retype.
     """
-    hostile = dict.fromkeys(keys, TYPE_HOSTILE_STUB)
+    first = {k: str(stubs[k]) for k in keys}
+    hostile = {k: TYPE_HOSTILE_STUB for k in keys if k not in guarded}
     return [
-        StubPass(STUB, "each key's R1 stub", stubs, {k: str(stubs[k]) for k in keys}),
+        StubPass(STUB, "each key's R1 stub", stubs, first),
         StubPass(
             f"{STUB}-{TYPE_HOSTILE_STUB}",
-            f"every key {TYPE_HOSTILE_STUB}",
+            f"every key outside the standalone guard {TYPE_HOSTILE_STUB}",
             {**stubs, **hostile},
-            hostile,
+            {**first, **hostile},
         ),
     ]
 

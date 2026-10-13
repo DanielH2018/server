@@ -44,6 +44,10 @@ steps, and this page describes each piece once its PR has merged.
   first. CI's `flux_roundtrip` job runs both (*The round trip*).
 - `scripts/renderer/renderer_lib/secret_checks.py` holds `PASSTHROUGH_FILTERS`, the filters
   that only interpolate a secret key (*Filters that only interpolate a secret*).
+- The standalone-value guard: `placeholders.py`'s standalone key sets and `GUARD_DEFERRED`,
+  `scripts/renderer/standalone_map.py` and the map it commits, the resolver in
+  `scripts/lib/plain_scalar.py`, `ansible/filter_plugins/standalone_guard.py`, and two tasks
+  in the shared `k8s/manifests` role (*The standalone-value guard*).
 
 ## The stub form
 
@@ -304,10 +308,16 @@ the first object that differs. It prints no file content.
 It runs two passes:
 
 1. **Each key's R1 stub**, on both sides.
-2. **Every key `0123`**, on both sides. The stub side is a stub-mode render with every key set
-   to `0123`, so Jinja writes the template's quotes around it there. Flux drops them on the
-   placeholder side (*What the pinned flux CLI does*), so each site where substitution would
-   change a value's YAML type shows as a difference.
+2. **Every key outside the standalone-value guard `0123`**, on both sides, and every other key
+   its R1 stub. A key is inside the guard when the guard's map names it under any tag, or
+   when `GUARD_DEFERRED` holds it. The stub side is a stub-mode render with those keys set to
+   `0123`, so Jinja writes the template's quotes around it there. Flux drops them on the
+   placeholder side (*What the pinned flux CLI does*). A difference therefore marks a
+   standalone use of a key that the guard does not cover anywhere. The pass cannot see a
+   missed site of a key that is mapped under another tag, such as a new standalone
+   `${domain}`, because that key keeps its stub fleet-wide. The coverage test catches that
+   one (*The standalone-value guard*). `--guard-map FILE` reads another map than the
+   committed one, so `{}` sets every key to `0123` again.
 
 Each pass prints a summary line, such as `roundtrip: 2 tags, 0 deferred directories, 2
 substituting, 4 objects, 0 differences, with each key's R1 stub`. `roundtrip` exits 0 only
@@ -327,7 +337,15 @@ uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip 
 
 The CI job round-trips `configarr` and `janitorr`, whose Secrets embed whole app configs with
 several placeholders in a block scalar. R2's PR 2 widens it to every tag outside
-`PLACEHOLDER_DEFERRED`.
+`PLACEHOLDER_DEFERRED`. The job also round-trips `homepage` with the guard's map read as
+empty, and fails unless that run exits 1 and names `IngressRoute/homelab/homepage`. That proves
+the second pass still sees a standalone use the map does not cover:
+
+```bash
+echo '{}' > /tmp/empty-guard-map.json
+uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip-map \
+  --role homepage --guard-map /tmp/empty-guard-map.json
+```
 
 ### What the pinned flux CLI does
 
@@ -362,6 +380,61 @@ Measured on CI run 38426501907 with flux v2.9.6:
   was not merged.
 - A bare `n` as a key of `postBuild.substitute` defines no variable `n`. Go's YAML 1.1 reader
   takes the unquoted key `n` for `false`, so the probe names its variable `probe_n`.
+- **The probe holds the guard's resolver to the CLI.** It builds each value of
+  `RESOLVER_CORPUS` as a standalone `stringData` field. A value counts as kept only when it
+  comes back as the identical string. Measured with v2.9.6 on 2026-10-13, `2001-12-14` came
+  back as the string `2001-12-14T00:00:00Z`, and `.inf` failed the build. The probe fails when
+  the resolver passes a value the CLI does not keep. It also fails when the resolver refuses
+  a kept value outside `FLUX_KEEPS_BUT_REFUSED`, and when a member of that set stops being
+  kept. The set holds `1:20`: the CLI keeps it, and PyYAML reads it as the integer 80.
+  `--red-proof` reads the set as empty, so `1:20` fails too.
+
+## The standalone-value guard
+
+A *standalone use* is a placeholder that is the whole scalar of a field, such as
+`main: ${domain}` or `account: "${mullvad_account}"`. Flux substitutes without the template's
+quotes, so it types a standalone value by its text (*What the pinned flux CLI does*). A value
+such as `0123`, `yes`, `1e3`, `null` or `2001-12-14` stops being the same string. In a
+Secret's `stringData` the apply then fails, and elsewhere the object changes meaning. No
+template shape fixes it, so the guard checks the values where they are decrypted.
+
+- **The renderer names each key's standalone uses.** After pass 3, `placeholders.py` parses
+  every document of a directory that substitutes. A key joins the directory's standalone key
+  set when its `${K}` is the entire parsed value of a scalar, in any quote or block style.
+  `x-${K}`, or a placeholder inside a block that holds more text, is not standalone.
+- **The deploy path reads a committed projection.** `standalone_map.py` writes
+  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`, which maps each deploy tag
+  to the sorted keys standing alone in its directories, less `GUARD_DEFERRED`. To regenerate
+  it, run `uv run python scripts/renderer/standalone_map.py` and commit the file. The tags in
+  `PLACEHOLDER_DEFERRED` render no placeholders, so the map holds none of them, and the guard
+  checks no `home-assistant` value until R2's PR 5.
+- **The shared `k8s/manifests` role runs the guard before every render.** Its first task,
+  under `no_log`, collects the names of the service's mapped keys whose value the resolver
+  refuses, or which the loaded secrets do not define. Its second task is an assert that fails
+  the deploy unless that list is empty. The assert prints key names and never a value. A
+  map that is missing or does not parse fails the first task, so the guard fails closed.
+- **The resolver** is `scripts/lib/plain_scalar.py:refused`. It refuses a value when either of
+  two readers takes its bare text for anything but the same string. The first is PyYAML's
+  `safe_load`, a YAML 1.1 reader, which types timestamps and sexagesimal numbers, and which
+  changes or rejects any text that is no valid plain scalar. The second is a port of the
+  plain-scalar resolver of go-yaml v2.4.4, the version the pinned CLI carries. It types
+  `1e3`, `08`, `0o17` and `y`, which PyYAML reads as strings. The flux probe holds both to
+  the pinned CLI. D3's `cluster_vars.py write` imports the same function.
+- **`GUARD_DEFERRED`** in `placeholders.py` names the keys with a standalone use that the
+  guard does not check, each with its reason. It holds `mullvad_account`, whose one use is
+  qbittorrent's Secret and whose real value is all digits. R2's PR 7b moves it into a
+  dedicated SOPS-encrypted Secret and empties the set.
+- **The coverage test**, `scripts/renderer/tests/test_renderer_standalone_map.py`, renders the
+  fleet in placeholder mode and holds the committed map equal to it. It also fails on a key
+  in both the map and `GUARD_DEFERRED`, on a `GUARD_DEFERRED` member that stands alone
+  nowhere, and on a mapped key absent from `ansible/vars/secrets.yml`. Its named members are
+  `domain` under `homepage` and `mullvad_account` in `GUARD_DEFERRED`.
+
+When the assert refuses a key, the deploy stops before anything renders or applies, so the
+live objects keep their old values. R2's Open question 13 records the operator's ruling of
+2026-10-13: rotate the value to one that stays a string (**operator-only**), or move the key
+into a dedicated SOPS-encrypted Secret, as PR 7b does for `mullvad_account`. Then deploy
+again.
 
 ## Pinned live-read facts
 

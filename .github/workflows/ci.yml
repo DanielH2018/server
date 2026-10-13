@@ -767,6 +767,22 @@ jobs:
           echo "roundtrip --red-proof exited $rc"
           [ "$rc" = 1 ]
 
+      # The second pass keeps a key's R1 stub only where the standalone-value guard's map
+      # covers it. With the map read as empty, homepage's `main: ${domain}` takes `0123` and
+      # loses its string type, so the narrowed pass must still see that standalone use.
+      - name: Red-proof the round trip's second pass with the guard's map read as empty
+        run: |
+          set -euo pipefail
+          echo '{}' > "$RUNNER_TEMP/empty-guard-map.json"
+          rc=0
+          uv run python scripts/renderer/shadow_diff.py roundtrip --out "$RUNNER_TEMP/rt-map" \
+            --role homepage --guard-map "$RUNNER_TEMP/empty-guard-map.json" \
+            > "$RUNNER_TEMP/rt-map.log" || rc=$?
+          cat "$RUNNER_TEMP/rt-map.log"
+          echo "roundtrip with an empty guard map exited $rc"
+          [ "$rc" = 1 ]
+          grep -qx 'homepage: IngressRoute/homelab/homepage differs' "$RUNNER_TEMP/rt-map.log"
+
   # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
   # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name
   # lives on this gate rather than on either half above. `if: always()` because a job with
