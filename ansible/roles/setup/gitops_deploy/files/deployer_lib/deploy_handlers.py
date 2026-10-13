@@ -283,6 +283,9 @@ def handle_broad(
                 deploy_broad_k8s.fold_deferred(cs, plans, plan.k8s_services),
                 plan.k8s_services,
             )
+            deploy_broad_k8s.record_deferred_receipt(
+                state, target, plans, plan.k8s_services
+            )
             deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
             posted = deploy_alerts.discord(
                 tools,

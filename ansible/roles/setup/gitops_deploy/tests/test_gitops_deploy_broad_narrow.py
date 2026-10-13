@@ -207,6 +207,8 @@ def test_a_failed_setup_apply_still_owes_the_refused_deploy_plane(
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert state.hold_plane == "ansible/initial_setup.yml gitops_deploy"
     assert _owed(state) == ["radarr"]
+    (receipt,) = parse_receipts(state.read("receipts"))
+    assert receipt.deferred == {"ansible/deploy.yml": frozenset({"radarr"})}
 
 
 def test_a_mixed_range_whose_deploy_half_fails_keeps_the_setup_apply_recorded(

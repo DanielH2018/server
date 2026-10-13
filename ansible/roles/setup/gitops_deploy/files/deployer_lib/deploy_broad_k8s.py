@@ -69,10 +69,10 @@ def record_deferred_receipt(
     """Record each deferred plane's owed services under the range receipt's `deferred` key.
 
     land.sh reads that entry as discharged once none of its services holds a ledger line
-    (#4843), so the entry must never exist before its lines do. Each caller runs this after
-    `deploy_k8s_owed.alert_and_record_deferred` has written them. Written from the plans
-    loop, it preceded the bump deploy below by minutes, and a landing that read the markers
-    in that window counted 0 owed and settled (#4866).
+    (#4843), so the entry must never exist before its lines do. Every exit that leaves the
+    range merged runs this after `deploy_k8s_owed.alert_and_record_deferred` has written
+    them. Written from the plans loop, it preceded the bump deploy below by minutes, and a
+    landing that read the markers in that window counted 0 owed and settled (#4866).
 
     A plane that owes no declared service writes nothing (#4865). An empty entry would count
     0 owed at once and read as applied, for a plane nothing ran: an unreadable host_vars
