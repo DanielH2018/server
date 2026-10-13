@@ -19,7 +19,6 @@ import pytest
 import digest_covers
 from deployer_lib import deploy_narrow
 from lib.git_testing import git_out
-from lib.repo_paths import REPO
 
 from _narrow_fixtures import Tree
 
@@ -145,6 +144,31 @@ def _play_pre_task(body: str) -> str:
 
 
 # The #4836 shape: a new constant only `build_k8s_dep_map` reads.
+# #4836's own body: locals built, updated and assigned, and no entry written.
+TOPOSORT_LOCAL_WRITES = TOPOSORT.replace(
+    "def toposort_containers", "LAST = {'netpol-baseline'}\n\n\ndef toposort_containers"
+).replace(
+    '    return {c["name"]: _edges(c) for c in containers_list}\n',
+    """    dep_map = {}
+    names = [c["name"] for c in containers_list]
+    for c in containers_list:
+        deps = set(_edges(c))
+        if c["name"] in LAST:
+            deps.update(n for n in names if n not in LAST)
+        dep_map[c["name"]] = sorted(deps)
+    return dep_map
+""",
+)
+
+
+def _dep_map_body(body: str) -> str:
+    """`TOPOSORT` with `build_k8s_dep_map` running `body` before its return."""
+    return TOPOSORT.replace(
+        '    return {c["name"]: _edges(c) for c in containers_list}\n',
+        body + '    return {c["name"]: _edges(c) for c in containers_list}\n',
+    )
+
+
 TOPOSORT_SORTS_LAST = TOPOSORT.replace(
     "def toposort_containers", "LAST = {'netpol-baseline'}\n\n\ndef toposort_containers"
 ).replace("_edges(c) for c", "_edges(c) or list(LAST) for c")
@@ -236,6 +260,12 @@ ROWS = [
         None,
         id="a-new-shared-template-only-another-role-imports",
     ),
+    pytest.param(
+        "authelia",
+        [{"ansible/filter_plugins/toposort.py": TOPOSORT_LOCAL_WRITES}],
+        None,
+        id="4836-order-only-body-that-writes-only-its-own-locals",
+    ),
     # ── must keep ───────────────────────────────────────────────────────────────────────────
     pytest.param(
         "authelia",
@@ -307,6 +337,61 @@ ROWS = [
         ],
         "not an assert, fail or debug",
         id="an-assert-whose-result-is-registered",
+    ),
+    pytest.param(
+        "authelia",
+        [{"ansible/deploy.yml": _play_vars("ansible_become_user: nobody")}],
+        "changes the variable ansible_become_user, which Ansible itself reads",
+        id="a-play-var-ansible-reads-with-no-file-naming-it",
+    ),
+    pytest.param(
+        "authelia",
+        [
+            _edit(
+                "ansible/filter_plugins/toposort.py",
+                "    return list(containers_list)\n",
+                "    return [dict(c, use_authelia=False) for c in containers_list]\n",
+            )
+        ],
+        "every deploy runs",
+        id="toposort-containers-changes-what-it-returns",
+    ),
+    pytest.param(
+        "authelia",
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_body(
+                    "    for c in containers_list:\n"
+                    "        c.setdefault('depends_on', []).append('x')\n"
+                )
+            }
+        ],
+        "every deploy runs",
+        id="build-k8s-dep-map-writes-through-an-entry",
+    ),
+    pytest.param(
+        "authelia",
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_body(
+                    "    for c in containers_list:\n        c['seen'] = True\n"
+                )
+            }
+        ],
+        "every deploy runs",
+        id="build-k8s-dep-map-assigns-into-an-entry",
+    ),
+    pytest.param(
+        "authelia",
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_body(
+                    "    global _SEEN\n    _SEEN = containers_list\n"
+                )
+            }
+        ],
+        "every deploy runs",
+        id="build-k8s-dep-map-writes-a-global",
     ),
     pytest.param(
         "authelia",
@@ -403,37 +488,3 @@ def test_the_cli_prints_a_verdict_per_item_in_the_deployers_argv(tree, capsys):
     assert digest_covers.main([*argv[5:], "--repo", str(tree.root)]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out == {item: True, kept: False}
-
-
-def test_the_real_toposort_registers_the_order_only_filters():
-    """Non-vacuity: the table names filters the real plugin still registers by those names."""
-    text = (REPO / "ansible/filter_plugins/toposort.py").read_text()
-    registered = digest_covers._registered(text)
-    order = digest_covers.ORDER_ONLY_FILTERS["ansible/filter_plugins/toposort.py"]
-    assert order < set(registered)
-    assert "filter_by_platform" in registered
-
-
-def test_the_play_reads_the_ordering_filters_only_to_order_itself():
-    """`ORDER_ONLY_FILTERS` holds while these two `set_fact`s are the filters' only callers.
-
-    A new caller, or a role reading the dependency map, would let a change to them reach
-    something other than deploy order, and this goes red on it.
-    """
-    out = git_out(
-        REPO,
-        "grep",
-        "-hE",
-        r"(\|\s*|['\"])(build_k8s_dep_map|toposort_containers)\b|_k8s_container_deps_map",
-        "--",
-        "ansible/",
-        ":!ansible/tests/",
-        ":!ansible/filter_plugins/",
-    )
-    calls = {
-        line.strip() for line in out.splitlines() if not line.strip().startswith("#")
-    }
-    assert calls == {
-        '_k8s_container_deps_map: "{{ containers_list | build_k8s_dep_map(playbook_dir) }}"',
-        'containers_list: "{{ containers_list | toposort_containers(_k8s_container_deps_map) }}"',
-    }

@@ -27,9 +27,11 @@ or none, and is skipped. A path that can is covered when one of these holds:
     (`narrow_lib/templates.py:comment_only`): the render is byte-identical;
   * it is a play file (`deploy.yml`, `pre_tasks/`, `tasks/`, `post_tasks/`) that differs only
     by `assert`, `fail` and `debug` tasks with no `register` or `notify`, plus `vars:` keys only
-    those tasks read. Such a task changes nothing: it passes, or it stops the run;
-  * it is a filter plugin in `ORDER_ONLY_FILTERS` whose change is confined to the filters
-    that only order the play, and to the helpers no other filter reaches;
+    those tasks read and Ansible itself does not. Such a task changes nothing: it passes, or
+    it stops the run;
+  * it is a filter plugin in `ORDER_ONLY_FILTERS` whose change is confined to the filter
+    whose output only orders the play, and to the helpers no other filter reaches, and
+    writes nothing through its arguments or a global;
   * it is an inventory file, a shared template or another filter plugin that the deploy-plane
     narrowing (`narrow_lib/broad.py:broad_path_tags`) maps to tags other than ROLE. That
     derivation greps ROLE's whole tree, `tasks/` included.
@@ -45,7 +47,6 @@ it refuses, naming the path that kept it.
 Usage: digest_covers.py [--repo PATH] ROLE:BASE:HEAD [ROLE:BASE:HEAD ...]
 """
 
-import ast
 import json
 import re
 import sys
@@ -64,6 +65,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 from deploy_tools import digest_provable
 from deploy_tools.narrow_lib import broad, filters, paths
+from deploy_tools.narrow_lib.order_only import order_only
 from deploy_tools.narrow_lib import templates as narrow_templates
 
 # The deployer's own `files/`, reached as `narrow_lib/broad.py` reaches it, so there is one
@@ -89,22 +91,6 @@ _BLOCK_KEYS = ("block", "rescue", "always")
 # The role subdirectories Ansible parses as YAML. A file under `files/` or `templates/` is
 # shipped or rendered as text, so a YAML comment there is part of what lands.
 _PARSED_ROLE_DIRS = frozenset({"tasks", "defaults", "vars", "handlers", "meta"})
-
-# DECIDED: `toposort.py`'s two ordering filters reach no role's own tasks (#4781). `deploy.yml`
-# reads `build_k8s_dep_map` only into `_k8s_container_deps_map`, which it reads only as
-# `toposort_containers`' argument, whose result is the entries it was given, reordered.
-# `tests/test_digest_covers.py::test_the_play_reads_the_ordering_filters_only_to_order_itself`
-# pins the first two and `ansible/tests/deploy/test_toposort.py`'s
-# `test_returns_original_objects` the third. So a change confined to those two filters and
-# their own helpers moves the order roles deploy in, never what a role does. The gap
-# taken is a role whose bytes depend on list order; the render proof the caller still
-# requires catches that one. `filter_by_platform` in the same file decides WHICH entries
-# deploy, so a change reaching it keeps the line.
-ORDER_ONLY_FILTERS = {
-    "ansible/filter_plugins/toposort.py": frozenset(
-        {"build_k8s_dep_map", "toposort_containers"}
-    ),
-}
 
 
 def _module(task) -> str | None:
@@ -189,13 +175,39 @@ def _is_play_file(path: str) -> bool:
     return path.startswith(_BROAD_PLAY_PREFIXES) and path.endswith((".yml", ".yaml"))
 
 
+# Variables Ansible reads with no file naming them: its magic variables beyond the `ansible_`
+# prefix. `get_reserved_names()` adds the play and task keywords, which a var can shadow.
+_MAGIC_VARS = frozenset(
+    {
+        "playbook_dir", "inventory_hostname", "inventory_hostname_short", "inventory_dir",
+        "inventory_file", "group_names", "groups", "hostvars", "play_hosts", "role_name",
+        "role_names", "role_path", "omit", "environment",
+    }
+)  # fmt: skip
+
+
+def _ansible_reads(name: str) -> bool:
+    """Whether Ansible itself reads the variable `name`, so no grep can find its reader."""
+    from ansible.vars.reserved import get_reserved_names
+
+    return (
+        name.startswith("ansible_")
+        or name in _MAGIC_VARS
+        or name in get_reserved_names()
+    )
+
+
 def _var_reader(name: str, head: str, repo: Path) -> str | None:
     """The first file at `head` that reads the play variable `name` outside an inert task.
 
     A play or task file reads it when the name survives in its parsed value once its inert
     tasks and every definition of `name` are gone. A hit anywhere else under `ansible/` (a
-    role, a template, the inventory, a plugin) is a reader by itself.
+    role, a template, the inventory, a plugin) is a reader by itself. A variable Ansible reads
+    on its own (`ansible_become_user`, `playbook_dir`) is read by "Ansible itself": a grep
+    finds no file for it, and it changes how every task runs.
     """
+    if _ansible_reads(name):
+        return "Ansible itself"
     r = git("grep", "-lwF", "-e", name, head, "--", "ansible/", cwd=repo, check=False)
     if r.returncode > 1:
         return f"`git grep {name}` failed"
@@ -234,107 +246,6 @@ def _play_reason(path: str, before: str, after: str, head: str, repo: Path):
         if reader:
             return f"{path} changes the variable {name}, which {reader} reads"
     return None
-
-
-def _without_docstring(node):
-    body = getattr(node, "body", None)
-    if (
-        body
-        and isinstance(body[0], ast.Expr)
-        and isinstance(body[0].value, ast.Constant)
-        and isinstance(body[0].value.value, str)
-    ):
-        node.body = body[1:]
-
-
-def _top_level(text: str) -> tuple[dict[str, tuple[str, set[str]]], list[str]]:
-    """A module's top-level statements, with docstrings and comments left out.
-
-    Returns:
-        `name -> (dump, names it uses)` for each statement that binds a name, and the dumps
-        of the statements that bind none.
-    """
-    tree = ast.parse(text)
-    _without_docstring(tree)
-    named: dict[str, tuple[str, set[str]]] = {}
-    unnamed: list[str] = []
-    for stmt in tree.body:
-        for node in ast.walk(stmt):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                _without_docstring(node)
-        uses = {n.id for n in ast.walk(stmt) if isinstance(n, ast.Name)}
-        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            names = [stmt.name]
-        elif isinstance(stmt, (ast.Assign, ast.AnnAssign)):
-            targets = stmt.targets if isinstance(stmt, ast.Assign) else [stmt.target]
-            names = [t.id for t in targets if isinstance(t, ast.Name)]
-            if len(names) != len(targets):
-                names = []
-        elif isinstance(stmt, (ast.Import, ast.ImportFrom)):
-            names = [(a.asname or a.name).split(".")[0] for a in stmt.names]
-        else:
-            names = []
-        if not names:
-            unnamed.append(ast.dump(stmt))
-        for name in names:
-            named[name] = (ast.dump(stmt), uses)
-    return named, unnamed
-
-
-def _registered(text: str) -> dict[str, str]:
-    """`FilterModule.filters()`'s literal dict as filter name -> function name."""
-    for cls in ast.parse(text).body:
-        if isinstance(cls, ast.ClassDef) and cls.name == "FilterModule":
-            for ret in (n for n in ast.walk(cls) if isinstance(n, ast.Return)):
-                if isinstance(ret.value, ast.Dict):
-                    return {
-                        k.value: v.id
-                        for k, v in zip(ret.value.keys, ret.value.values, strict=True)
-                        if isinstance(k, ast.Constant)
-                        and isinstance(k.value, str)
-                        and isinstance(v, ast.Name)
-                    }
-    return {}
-
-
-def _closure(start: set[str], named: dict[str, tuple[str, set[str]]]) -> set[str]:
-    seen, todo = set(), list(start)
-    while todo:
-        name = todo.pop()
-        if name in seen or name not in named:
-            continue
-        seen.add(name)
-        todo.extend(named[name][1])
-    return seen
-
-
-def order_only(path: str, before: str, after: str) -> bool:
-    """Whether a filter plugin's change is confined to its `ORDER_ONLY_FILTERS` (#4781).
-
-    True when every top-level name whose definition changed is reached by none of the
-    plugin's other filters, at either end, and `FilterModule` itself is unchanged. False on
-    any doubt: a plugin not in the table, a parse error, a changed statement that binds no
-    name, or a registration this cannot read.
-    """
-    order = ORDER_ONLY_FILTERS.get(path)
-    if not order:
-        return False
-    try:
-        old, old_unnamed = _top_level(before)
-        new, new_unnamed = _top_level(after)
-        registered = _registered(before) | _registered(after)
-    except SyntaxError:
-        return False
-    if old_unnamed != new_unnamed or not registered:
-        return False
-    changed = {
-        n
-        for n in old.keys() | new.keys()
-        if old.get(n, ("",))[0] != new.get(n, ("",))[0]
-    }
-    others = {fn for name, fn in registered.items() if name not in order}
-    reached = _closure(others, old) | _closure(others, new) | {"FilterModule"}
-    return not changed & reached
 
 
 def _parsed_same(path: str, before: str, after: str) -> bool:

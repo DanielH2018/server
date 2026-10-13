@@ -1095,8 +1095,9 @@ untouched.
   `manifests`. A matching render at C vouches for the bytes, and the role's release record at R
   says when its other effects last ran. `scripts/deploy_tools/digest_covers.py` judges `R..C`
   for each such tag, fail-closed. Every path that could have written the line must be prose, a
-  comment-only edit Ansible discards, or an `assert`/`fail`/`debug` added to a play file. A
-  change to `toposort.py`'s ordering filters also passes, and so does an inventory or template
+  comment-only edit Ansible discards, or an `assert`/`fail`/`debug` added to a play file with
+  no variable Ansible itself reads. A change confined to `toposort.py`'s `build_k8s_dep_map`
+  that writes nothing through its arguments also passes, and so does an inventory or template
   path the deploy-plane narrowing maps to other tags. The range starts at the record, not the
   line's origin, because a second change moves the origin past the first. Its test module holds
   the case table: #4753's asserts, #4836's ordering change and #4818's comment discharge, and a
