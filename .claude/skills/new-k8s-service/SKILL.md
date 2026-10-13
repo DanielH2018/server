@@ -119,8 +119,10 @@ the sources it reads.
 ## 2. The inventory entry — ordering is automatic, position is not
 
 The scaffolder appends the entry to `containers_list` in
-`ansible/inventory/host_vars/daniel-box.yml` with `platform: k8s`, at the end of the list.
-Where in the list doesn't matter: the k8s play toposorts on
+`ansible/inventory/host_vars/daniel-box.yml` with `platform: k8s`, at the end of the list
+but ahead of netpol-baseline. That role is in `K8S_SORTS_LAST`, so the deploy sorts it last
+anyway, and `test_derived_order_matches_todays_hand_ordered_list` holds the list to the
+sorted order. Otherwise, where in the list doesn't matter: the k8s play toposorts on
 `build_k8s_dep_map` / `toposort_containers` (`ansible/filter_plugins/toposort.py`), and the
 two edges that used to require hand positioning are derived automatically —
 
