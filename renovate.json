@@ -140,6 +140,19 @@
     },
     {
       "customType": "regex",
+      "description": "The pint binary scripts/validate/alert_tools.sh provisions for the validate-alert-rules hook (M2 of the target architecture). promtool and amtool follow the observability role's image pins, but pint ships no image the cluster runs, so `pint_version` in the script is its only pin. ONE matchString: the script builds the download URL and the asset name from that literal, so a bump has nothing else to rewrite. The script checks the tarball against the release's own checksums.txt, so a bump needs no checksum edit. extractVersionTemplate strips the tag's `v`, because the literal holds the bare version.",
+      "managerFilePatterns": [
+        "/(^|/)scripts/validate/alert_tools\\.sh$/"
+      ],
+      "matchStrings": [
+        "pint_version=\"(?<currentValue>[\\d.]+)\""
+      ],
+      "depNameTemplate": "cloudflare/pint",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
       "description": "Pinned Vale style package in .vale.ini. A bare `Packages = Google` resolves to the newest release at `vale sync` time, so the rules gating CI could change with no commit — the pin closes that, and this manager stops the pin ageing silently in its place.",
       "managerFilePatterns": [
         "/(^|/)\\.vale\\.ini$/"

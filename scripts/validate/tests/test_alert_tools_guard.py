@@ -16,6 +16,7 @@ Run: uv run pytest scripts/validate/tests/test_alert_tools_guard.py
 import hashlib
 import io
 import platform
+import re
 import shutil
 import tarfile
 from pathlib import Path
@@ -29,6 +30,10 @@ from lib.repo_paths import REPO
 SCRIPT = REPO / "scripts" / "validate" / "alert_tools.sh"
 ARCH = {"x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}[platform.machine()]
 VERSIONS = {"prometheus": ("3.15.0", "promtool"), "alertmanager": ("0.34.1", "amtool")}
+# pint's version is the literal in the script, which Renovate bumps.
+_PINT_PIN = re.search(r'^pint_version="([^"]+)"$', SCRIPT.read_text(), re.M)
+assert _PINT_PIN, f"{SCRIPT} pins no pint_version"
+PINT_VERSION = _PINT_PIN.group(1)
 
 DEFAULTS = """\
 observability_k8s_prometheus_image: prom/prometheus:v3.15.0@sha256:{0}
@@ -45,19 +50,19 @@ while [[ $# -gt 0 ]]; do
     *) url="$1"; shift ;;
   esac
 done
-rel="${url#https://github.com/prometheus/}"
+rel="${url#https://github.com/*/}"
 project="${rel%%/*}"
 printf '%s\\n' "$url" >>"$CURL_LOG"
 cp "$RELEASES/$project/${url##*/}" "$out"
 """
 
 
-def _tarball(project: str, version: str, binary: str) -> bytes:
-    """A release tarball shaped like upstream's: `<project>-<version>.linux-<arch>/<binary>`."""
+def _tarball(member: str, binary: str) -> bytes:
+    """A release tarball holding one executable at `member` that echoes `binary` and its args."""
     body = f"#!/bin/sh\necho {binary} $*\n".encode()
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        info = tarfile.TarInfo(f"{project}-{version}.linux-{ARCH}/{binary}")
+        info = tarfile.TarInfo(member)
         info.size = len(body)
         info.mode = 0o755
         tar.addfile(info, io.BytesIO(body))
@@ -79,14 +84,34 @@ def checkout(tmp_path):
         "pin the images",
         **{"ansible/roles/k8s/observability/defaults/main.yml": DEFAULTS},
     )
-    for project, (version, binary) in VERSIONS.items():
+    # Prometheus's projects nest the binary under a versioned directory and list sums in
+    # sha256sums.txt. pint's tarball holds `pint-linux-<arch>` at its root, beside checksums.txt.
+    releases = [
+        (
+            project,
+            f"{project}-{version}.linux-{ARCH}",
+            f"{project}-{version}.linux-{ARCH}/{binary}",
+            binary,
+            "sha256sums.txt",
+        )
+        for project, (version, binary) in VERSIONS.items()
+    ]
+    releases.append(
+        (
+            "pint",
+            f"pint-{PINT_VERSION}-linux-{ARCH}",
+            f"pint-linux-{ARCH}",
+            "pint",
+            "checksums.txt",
+        )
+    )
+    for project, base, member, binary, sums in releases:
         served = tmp_path / "releases" / project
         served.mkdir(parents=True)
-        name = f"{project}-{version}.linux-{ARCH}.tar.gz"
-        data = _tarball(project, version, binary)
-        (served / name).write_bytes(data)
-        (served / "sha256sums.txt").write_text(
-            f"{hashlib.sha256(data).hexdigest()}  {name}\n"
+        data = _tarball(member, binary)
+        (served / f"{base}.tar.gz").write_bytes(data)
+        (served / sums).write_text(
+            f"{hashlib.sha256(data).hexdigest()}  {base}.tar.gz\n"
         )
     fake_bin(tmp_path / "bin", curl=FAKE_CURL)
     return repo
@@ -166,3 +191,14 @@ def test_a_second_worktree_of_the_clone_reuses_the_first_ones_cache_is_clean(che
     assert result.stdout.strip() == "promtool --version"
     assert _fetches(second) == []
     assert not (second / ".cache").exists()
+
+
+def test_pint_unpacks_from_a_tarball_with_no_top_directory_is_clean(checkout):
+    result = _run(checkout, "pint", "version")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "pint version"
+    tool_dir = checkout / ".git" / "alert-tools" / f"pint-{PINT_VERSION}"
+    assert (tool_dir / ".provisioned").read_text().strip() == (
+        f"pint-{PINT_VERSION}-linux-{ARCH}"
+    )

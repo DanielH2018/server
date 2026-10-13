@@ -3,6 +3,7 @@
 Status: IN PROGRESS
 
 PR 1, the workload-service mapping: [#4777](https://github.com/DanielH2018/server/pull/4777).
+PR 2, the k8s-workloads rules in shadow: [#4779](https://github.com/DanielH2018/server/pull/4779). Its soak starts at its deploy, and PR 4a waits 7 days from that time.
 
 Depends on: M1
 
@@ -476,8 +477,10 @@ mutes this family today.
 - `alert_rules.py --prove-red` (M1) gains a pint fixture in M1's
   `scripts/validate/tests/fixtures/alert_rules/`: an alert with no `severity` label, which
   `pint --offline lint` must reject.
-- `scripts/validate/pint/live.hcl` adds a `prometheus` block pointed at the daniel-box
-  loopback port that `otelq` already uses. It runs `promql/series` by hand in each rule PR's
+- `scripts/validate/pint/live.hcl` adds a `prometheus` block pointed at Prometheus's pinned
+  ClusterIP, `observability_prometheus_cluster_ip`, the address `otelq` falls back to. The
+  loopback hostPort answers only on the node the pod runs on, and Prometheus ran on
+  daniel-server when PR 2 was written. It runs `promql/series` by hand in each rule PR's
   verification, because CI cannot reach the cluster. The block sets `required = true`. pint's
   configuration reference says that with the default, `false`, a server it cannot reach is
   reported at `warning` level, which `pint lint` does not fail on. With `true` it is a `bug`.
@@ -780,8 +783,10 @@ uv run python scripts/diagnostics/probe.py health monitor-bridge
   miss, and only such a miss tunes a hold.
 
 The live pint pass runs on daniel-box:
-`.cache/alert-tools/pint-<version>/pint --config scripts/validate/pint/live.hcl lint
-ansible/roles/k8s/observability/files/rules/`. A `promql/series` finding fails it, and it is
+`scripts/validate/alert_tools.sh pint --config scripts/validate/pint/live.hcl lint
+ansible/roles/k8s/observability/files/rules/`. `live.hcl` reaches Prometheus at its pinned
+ClusterIP, because the loopback hostPort answers only on the node the pod runs on. A
+`promql/series` finding fails it, and it is
 clean before PR 2 merges. PR 2 records two red runs before the clean one, so a clean result
 is shown to come from a Prometheus that answered:
 

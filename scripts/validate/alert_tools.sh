@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
-# Provision promtool and amtool at the observability role's image tags, then run one of them.
+# Provision promtool, amtool and pint, then run one of them.
 #
-# THE VERSIONS COME FROM THE IMAGE PINS. `observability_k8s_prometheus_image` and
+# PROMTOOL AND AMTOOL FOLLOW THE IMAGE PINS. `observability_k8s_prometheus_image` and
 # `observability_k8s_alertmanager_image` in the observability role's defaults decide which
 # release is fetched. A Renovate image bump therefore moves the tool in the same PR, and the
 # tool CI checks with is the one the pod runs.
 #
-# THE SUMS FILE DECIDES WHAT IS UNPACKED. Each tarball is checked against its release's
-# `sha256sums.txt` before `tar` reads it. A digest missing from the sums file fails the same
+# PINT FOLLOWS ITS OWN PIN. cloudflare/pint ships no image the cluster runs, so `pint_version`
+# below is its version, and a Renovate regex manager in renovate.json bumps it.
+#
+# THE SUMS FILE DECIDES WHAT IS UNPACKED. Each tarball is checked against its release's sums
+# file, `sha256sums.txt` for Prometheus's projects and `checksums.txt` for pint, before `tar`
+# reads it. A digest missing from the sums file fails the same
 # way as a wrong one, so a partial download or a renamed asset never reaches the cache.
 #
 # THE STAMP, NOT THE DIRECTORY, IS THE GUARD. A version directory holding files but no stamp
@@ -26,11 +30,11 @@
 # on a deleted inode. The parent is opened read-only on fd 9, so no lock file is created. The
 # lock and the stamp together make concurrent provisions from several worktrees safe.
 #
-# With no arguments the script provisions both tools and exits 0. That is how CI provisions
-# before the hooks run. With `promtool ...` or `amtool ...` it provisions, then runs that tool
-# with the remaining arguments.
+# With no arguments the script provisions all three tools and exits 0. That is how CI
+# provisions before the hooks run. With `promtool ...`, `amtool ...` or `pint ...` it
+# provisions, then runs that tool with the remaining arguments.
 #
-# Run: scripts/validate/alert_tools.sh [promtool|amtool [arg ...]]
+# Run: scripts/validate/alert_tools.sh [promtool|amtool|pint [arg ...]]
 set -euo pipefail
 
 # `--help` answers before any fetch. The awk prints this file's leading comment block, which
@@ -83,18 +87,18 @@ image_version() {
 #######################################
 # Fetch, verify and unpack one tool unless its stamped version directory already exists.
 # Globals:
-#   arch, cache, tmp (set while a fetch is in progress)
+#   cache, tmp (set while a fetch is in progress)
 # Arguments:
-#   The upstream project (prometheus or alertmanager), its version, and the binary to keep.
+#   The cache name (prometheus, alertmanager or pint), its version, the release download URL,
+#   the tarball name without `.tar.gz`, the sums file's name, the binary's path inside the
+#   tarball, and the name to install it under.
 # Outputs:
 #   Errors on STDERR.
 #######################################
 provision() {
-  local project="$1" version="$2" binary="$3"
-  local dir="$cache/$project-$version"
+  local name="$1" version="$2" url="$3" base="$4" sums="$5" member="$6" binary="$7"
+  local dir="$cache/$name-$version"
   local stamp="$dir/.provisioned"
-  local base="$project-$version.linux-$arch"
-  local url="https://github.com/prometheus/$project/releases/download/v$version"
   local want got
 
   if [[ "$(cat "$stamp" 2>/dev/null || true)" == "$base" ]]; then
@@ -116,15 +120,18 @@ provision() {
     # The speed bound aborts a connection that stalls below 1 KB/s for a minute. Without it a
     # hung fetch blocks a local commit with no output and no end.
     curl -fsSL --speed-limit 1024 --speed-time 60 -o "$tmp/$base.tar.gz" "$url/$base.tar.gz"
-    curl -fsSL --speed-limit 1024 --speed-time 60 -o "$tmp/sha256sums.txt" "$url/sha256sums.txt"
-    want="$(awk -v f="$base.tar.gz" '$2 == f {print $1}' "$tmp/sha256sums.txt")"
+    curl -fsSL --speed-limit 1024 --speed-time 60 -o "$tmp/$sums" "$url/$sums"
+    want="$(awk -v f="$base.tar.gz" '$2 == f {print $1}' "$tmp/$sums")"
     got="$(sha256sum "$tmp/$base.tar.gz" | cut -d' ' -f1)"
     if [[ -z "$want" || "$want" != "$got" ]]; then
-      echo "alert_tools.sh: $base.tar.gz has sha256 $got, and sha256sums.txt lists '${want:-nothing}'" >&2
+      echo "alert_tools.sh: $base.tar.gz has sha256 $got, and $sums lists '${want:-nothing}'" >&2
       return 1
     fi
+    # Prometheus's tarballs hold `<base>/promtool`, and pint's holds `pint-linux-<arch>` at
+    # its root, so the member is unpacked into the fetch directory and installed by name.
+    tar xzf "$tmp/$base.tar.gz" -C "$tmp" "$member"
     mkdir -p "$dir"
-    tar xzf "$tmp/$base.tar.gz" -C "$dir" --strip-components=1 "$base/$binary"
+    install -m 0755 "$tmp/$member" "$dir/$binary"
     rm -rf "$tmp"
     tmp=""
     printf '%s\n' "$base" >"$stamp"
@@ -132,17 +139,29 @@ provision() {
   exec 9<&-
 }
 
+# Renovate's cloudflare/pint manager rewrites this line; keep it a literal.
+pint_version="0.89.2"
 prometheus_version="$(image_version observability_k8s_prometheus_image)"
 alertmanager_version="$(image_version observability_k8s_alertmanager_image)"
-provision prometheus "$prometheus_version" promtool
-provision alertmanager "$alertmanager_version" amtool
+prometheus_base="prometheus-$prometheus_version.linux-$arch"
+alertmanager_base="alertmanager-$alertmanager_version.linux-$arch"
+provision prometheus "$prometheus_version" \
+  "https://github.com/prometheus/prometheus/releases/download/v$prometheus_version" \
+  "$prometheus_base" sha256sums.txt "$prometheus_base/promtool" promtool
+provision alertmanager "$alertmanager_version" \
+  "https://github.com/prometheus/alertmanager/releases/download/v$alertmanager_version" \
+  "$alertmanager_base" sha256sums.txt "$alertmanager_base/amtool" amtool
+provision pint "$pint_version" \
+  "https://github.com/cloudflare/pint/releases/download/v$pint_version" \
+  "pint-$pint_version-linux-$arch" checksums.txt "pint-linux-$arch" pint
 
 case "${1:-}" in
   "") exit 0 ;;
   promtool) tool="$cache/prometheus-$prometheus_version/promtool" ;;
   amtool) tool="$cache/alertmanager-$alertmanager_version/amtool" ;;
+  pint) tool="$cache/pint-$pint_version/pint" ;;
   *)
-    echo "alert_tools.sh: unknown tool '$1'; expected promtool or amtool" >&2
+    echo "alert_tools.sh: unknown tool '$1'; expected promtool, amtool or pint" >&2
     exit 2
     ;;
 esac
