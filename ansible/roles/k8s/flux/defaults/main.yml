@@ -75,4 +75,4 @@ flux_sync_suspend: false
 # The signature drill. True renders a second OCIRepository, `verify-drill`, that follows the
 # unsigned tag `promote.yml`'s `verify_drill` dispatch pushes and must read Ready=False. False
 # deletes it, because dropping a document from the render deletes nothing live.
-flux_verify_drill: false
+flux_verify_drill: true
