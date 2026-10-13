@@ -1139,8 +1139,9 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
       version differs from `flux_version`. The drill path's checks sit in
       `ansible/tests/repo/test_promote_drill_workflow.py`. Its red fixtures are a drill push
       without the annotation, a signed push that carries it, a drill path without the
-      must-fail `cosign verify`, a verify step that passes on a refusal, and a verify step
-      under an identity other than `forge.py:SIGNER_IDENTITY`.
+      must-fail `cosign verify`, a verify step that passes on a refusal, one that accepts
+      any cosign failure rather than cosign's no-signature error, one that skips the digest
+      form check, and a verify step under an identity other than `forge.py:SIGNER_IDENTITY`.
     - **Operator-only after the first run:** set the `homelab-manifests` package to public,
       matching the texbrain package and ADR-0018 (Open question 2). D1.5 does not merge
       before this, and its *Gates before merge* checks it.
@@ -1365,7 +1366,8 @@ fails. Exit 2 shows that the same object was read and reconciled.
   `verify-drill`, which follows that tag with the same `spec.verify` and which no
   Kustomization reads. The drill push carries the annotation `io.homelab.verify-drill=true`,
   so no signed push carries its digest. The dispatch's own `cosign verify` under `promote`'s
-  identity must fail on that digest, and the run fails if it succeeds. Read the lever only
+  identity must fail on that digest with cosign's no-signature error. The run fails if the
+  verification succeeds or fails for any other reason. Read the lever only
   after that step has refused the digest. Without the annotation the drill verified, because
   its digest equalled `prod`'s signed digest ([#4820](https://github.com/DanielH2018/server/issues/4820)). Its Ready condition must be `False`
   with a verification error. No
@@ -2274,5 +2276,7 @@ Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-st
   commit `prod` already carried. cosign v3 stores a signature as a referrer of the digest,
   so every tag on a signed digest verifies. Fixed: the drill push carries the annotation
   `io.homelab.verify-drill=true`, and the dispatch fails unless `cosign verify` under
-  `promote`'s identity refuses the drill digest. *The signature check* reads the lever only
+  `promote`'s identity refuses the drill digest with its no-signature error. A refusal for
+  any other reason, such as a registry or Sigstore error, also fails the run
+  ([#4828](https://github.com/DanielH2018/server/issues/4828)). *The signature check* reads the lever only
   after that refusal.

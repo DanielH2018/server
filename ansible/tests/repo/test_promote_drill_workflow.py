@@ -26,6 +26,10 @@ SIGNED_IF = "${{ !inputs.verify_drill }}"
 DRILL_DIGEST = "${{ steps.drill-push.outputs.digest }}"
 # `if cosign verify ...; then exit 1` fails the run when verification succeeds.
 MUST_FAIL = "if cosign verify"
+# The only cosign errors that mean "the registry answered and held no signature". Any other
+# failure must fail the run, or an outage reads as a refusal.
+REFUSAL = "no valid bundles exist in registry|no signatures found"
+DIGEST_FORM = "grep -Eqx 'sha256:[0-9a-f]{64}'"
 
 
 def _step(publish: dict, step_id: str) -> dict:
@@ -45,6 +49,10 @@ def _refuses_problems(publish: dict) -> list[str]:
         found.append(f"publish: drill-refuses runs on {refuses.get('if')!r}")
     if MUST_FAIL not in run or "cosign sign" in run:
         found.append(f"publish: drill-refuses does not fail when `{MUST_FAIL}` passes")
+    if REFUSAL not in run:
+        found.append("publish: drill-refuses accepts any cosign failure as a refusal")
+    if DIGEST_FORM not in run:
+        found.append("publish: drill-refuses does not check the digest's form")
     if env.get("DIGEST") != DRILL_DIGEST:
         found.append("publish: drill-refuses does not verify the drill push's digest")
     if (env.get("IDENTITY"), env.get("ISSUER")) != (
@@ -119,6 +127,14 @@ RED = {
     "a verify step that passes on a refusal": (
         _run_edit("drill-refuses", MUST_FAIL, "if ! cosign verify"),
         "drill-refuses does not fail",
+    ),
+    "a verify step that accepts any cosign failure": (
+        _run_edit("drill-refuses", REFUSAL, "."),
+        "accepts any cosign failure",
+    ),
+    "a verify step that skips the digest check": (
+        _run_edit("drill-refuses", DIGEST_FORM, "true"),
+        "does not check the digest's form",
     ),
     "a verify step under a drifted identity": (
         _drifted_identity,

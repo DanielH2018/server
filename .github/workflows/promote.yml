@@ -222,15 +222,29 @@ jobs:
           ISSUER: https://token.actions.githubusercontent.com
         run: |
           set -euo pipefail
+          if ! printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
+            echo "::error::the drill push handed on digest '$DIGEST'"
+            exit 1
+          fi
           repo=ghcr.io/danielh2018/homelab-manifests
+          err="$RUNNER_TEMP/drill-verify.err"
           if cosign verify \
             --certificate-identity "$IDENTITY" \
             --certificate-oidc-issuer "$ISSUER" \
-            "$repo@$DIGEST"; then
+            "$repo@$DIGEST" 2> "$err"; then
             echo "::error::cosign verified the drill digest $DIGEST under promote's identity"
             exit 1
           fi
-          echo "cosign refused the drill digest $DIGEST, as the drill requires"
+          cat "$err" >&2
+          # cosign v3.1.3 prints the first message on its bundle path and the second on its
+          # legacy path, each only after the registry answered and held no signature. Any
+          # other failure, such as a registry 401 or 429 or a Sigstore outage, proves nothing
+          # about the signature, so it fails the run rather than reading as a refusal.
+          if ! grep -Eq 'no valid bundles exist in registry|no signatures found' "$err"; then
+            echo "::error::cosign failed on the drill digest for a reason other than a missing signature"
+            exit 1
+          fi
+          echo "cosign found no signature on the drill digest $DIGEST, as the drill requires"
 
   promote:
     needs: publish
