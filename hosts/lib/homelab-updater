@@ -42,6 +42,7 @@ HOST_PKG=homelab-$HOST
 # Step 3's restriction to the homelab source. The Ubuntu lists stay as apt-daily left them.
 HOMELAB_APT="-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0"
 INSTALL="apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=600"
+RETRY="apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=0"
 
 say() { echo "homelab-updater: $*" >&2; }
 
@@ -192,10 +193,27 @@ newer() {
 }
 
 # Steps 5 and 6. A Depends on an Ubuntu package can need fresher Ubuntu lists than step 3
-# fetched, so a failed install earns one full apt-get update and one retry, at most once a day
-# and never in the 04:00 to 05:59 hour that holds the apt timers.
+# fetched, so an install that fails to resolve or fetch a dependency earns one full apt-get
+# update and one retry. Any other failure, such as a lock wait that timed out or a failed
+# maintainer script, ends the run: fresher lists cannot fix it. The retry runs at most once a
+# day and never in the 04:00 to 05:59 hour that holds the apt timers.
+#
+# DECIDED: the retry waits for no lock. TimeoutStartSec=50min budgets one 600s lock wait
+# beside reconcile's 30 minutes (test_updater_package.py sums every wait in this file), and
+# the apt timers that take the lock run only in the hour this retry skips.
 install_newest() {
-    $INSTALL "$UPDATER" "$HOST_PKG" && return 0
+    if out=$($INSTALL "$UPDATER" "$HOST_PKG" 2>&1); then
+        return 0
+    fi
+    printf '%s\n' "$out" >&2
+    case $out in
+        *"is not installable"* | *"Unable to correct problems"* | *"has no installation candidate"* | \
+            *"Unable to locate package"* | *"Failed to fetch"* | *"Unable to fetch some archives"*) ;;
+        *)
+            say "install failed, not on a dependency; no full apt-get update"
+            return 1
+            ;;
+    esac
     case $(date +%H) in
         04 | 05)
             say "install failed; no full apt-get update between 04:00 and 05:59"
@@ -209,7 +227,7 @@ install_newest() {
     fi
     printf '%s\n' "$today" >"$FULL_UPDATE_STAMP"
     apt-get update || return 1
-    $INSTALL "$UPDATER" "$HOST_PKG"
+    $RETRY "$UPDATER" "$HOST_PKG"
 }
 
 # Steps 3 to 8. Exits.

@@ -718,7 +718,7 @@
  "evals/tests/test_review_outcomes.py": 0.0,
  "evals/tests/test_trend.py": 0.0,
  "hosts/lib/tests/test_homelab_updater.py": 4.57,
- "hosts/lib/tests/test_homelab_updater_fetch.py": 6.33,
+ "hosts/lib/tests/test_homelab_updater_fetch.py": 8.44,
  "hosts/lib/tests/test_hosts_tree_is_tracked.py": 0.0,
  "hosts/lib/tests/test_maintainer_scripts.py": 0.03,
  "hosts/lib/tests/test_updater_package.py": 0.1,

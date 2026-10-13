@@ -33,7 +33,13 @@ def test_a_list_without_both_packages_exits_non_zero_and_writes_nothing(
 
     result = host.run()
 
-    assert (result.returncode != 0) is fails
+    assert result.returncode == (1 if fails else 0), result.stderr
+    # The run reached step 4: it fetched, then read the list it fetched.
+    assert ["apt-get", "indextargets"] == host.calls("apt-get")[1][:2]
+    assert "--error-on=any" in host.calls("apt-get")[0]
+    assert (
+        "names no homelab-updater or no homelab-daniel-pi" in result.stderr
+    ) is fails
     assert host.prom.exists() is not fails
     assert (host.last_success.read_text().strip() == EARLIER) is fails
 
@@ -105,9 +111,52 @@ def test_no_full_update_runs_in_the_apt_timers_hours(host, hour, full_updates):
     host.state["install_failures"] = 1
     host.state["hour"] = hour
 
-    host.run()
+    result = host.run()
 
     assert _full_updates(host) == full_updates
+    assert len(host.installs()) == 1 + full_updates
+    assert result.returncode == (1 if full_updates == 0 else 0), result.stderr
+    assert ("between 04:00 and 05:59" in result.stderr) is (full_updates == 0)
+
+
+@pytest.mark.parametrize(
+    ("output", "full_updates"),
+    [
+        (
+            "E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 7",
+            0,
+        ),
+        ("E: Sub-process /usr/bin/dpkg returned an error code (1)", 0),
+        ("homelab-daniel-pi : Depends: tree but it is not installable", 1),
+        (
+            "E: Failed to fetch http://ports.ubuntu.com/pool/main/t/tree/tree.deb  404",
+            1,
+        ),
+    ],
+    ids=["lock-timeout", "dpkg-error", "unresolved-depends", "fetch-failure"],
+)
+def test_only_a_dependency_failure_earns_the_full_update(host, output, full_updates):
+    host.publish(V2)
+    host.state["install_failures"] = 1
+    host.state["install_output"] = output
+
+    result = host.run()
+
+    assert _full_updates(host) == full_updates
+    assert len(host.installs()) == 1 + full_updates
+    assert ("not on a dependency" in result.stderr) is (full_updates == 0)
+    # A run that spent nothing keeps the day's full update for a dependency failure.
+    assert host.state_dir.joinpath("full-update").exists() is bool(full_updates)
+
+
+def test_the_step_6_retry_waits_for_no_lock(host):
+    host.publish(V2)
+    host.state["install_failures"] = 1
+
+    assert host.run().returncode == 0
+    first, retry = host.installs()
+    assert "DPkg::Lock::Timeout=600" in first
+    assert "DPkg::Lock::Timeout=0" in retry
 
 
 # The textfile directory.

@@ -63,6 +63,7 @@ class Host:
             "update_exit": 0,
             "full_update_exit": 0,
             "install_failures": 0,
+            "install_output": "E: Unable to correct problems, you have held broken packages.",
             "audit": "",
             "configure_exit": 0,
             "configure_output": "",

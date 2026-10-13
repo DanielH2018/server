@@ -63,14 +63,16 @@ def timeout_start_s(unit: str) -> int:
     return sum(int(number) * _UNITS[suffix or None] for number, suffix in spans)
 
 
-def lock_timeout_s() -> int:
-    """Step 5's `DPkg::Lock::Timeout`, read from the updater script."""
-    (value,) = set(re.findall(r"DPkg::Lock::Timeout=(\d+)", UPDATER_SCRIPT.read_text()))
-    return int(value)
+def lock_timeout_s(script: str | None = None) -> int:
+    """Every `DPkg::Lock::Timeout` in the updater, summed: one run can wait on each in turn."""
+    text = UPDATER_SCRIPT.read_text() if script is None else script
+    waits = [int(value) for value in re.findall(r"DPkg::Lock::Timeout=(\d+)", text)]
+    assert waits, "the updater names no DPkg::Lock::Timeout"
+    return sum(waits)
 
 
-def timeout_holds(updater_unit: str) -> bool:
-    return timeout_start_s(updater_unit) > RECONCILE_TIMEOUT_S + lock_timeout_s()
+def timeout_holds(updater_unit: str, script: str | None = None) -> bool:
+    return timeout_start_s(updater_unit) > RECONCILE_TIMEOUT_S + lock_timeout_s(script)
 
 
 def test_the_updater_timeout_exceeds_reconcile_plus_the_lock_wait_is_clean(package):
@@ -79,6 +81,14 @@ def test_the_updater_timeout_exceeds_reconcile_plus_the_lock_wait_is_clean(packa
 
 def test_an_updater_timeout_of_20_minutes_is_flagged():
     assert not timeout_holds("[Service]\nTimeoutStartSec=20min\n")
+
+
+def test_a_step_6_retry_that_waits_on_the_lock_too_is_flagged(package):
+    # Two 600s waits and reconcile's 30 minutes fill the whole 50-minute limit.
+    retrying = UPDATER_SCRIPT.read_text().replace(
+        "DPkg::Lock::Timeout=0", "DPkg::Lock::Timeout=600"
+    )
+    assert not timeout_holds(package.files[SERVICE][0].decode(), retrying)
 
 
 @pytest.mark.parametrize(

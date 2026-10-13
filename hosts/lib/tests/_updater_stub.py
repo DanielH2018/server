@@ -12,6 +12,7 @@ state.json keys:
         writes no Packages list.
     update_exit, full_update_exit: the restricted and the full `apt-get update`'s exits.
     install_failures: how many `apt-get install` calls fail before one succeeds.
+    install_output: what a failed `apt-get install` prints.
     audit, configure_exit, configure_output: `dpkg --audit` and `dpkg --configure -a`.
     reconcile: "ok" or "fail", the run `systemctl start homelab-reconcile.service` records.
     verify: what `dpkg --verify` prints.
@@ -93,7 +94,7 @@ def apt_get(state: dict, args: list[str]) -> int:
     if args[0] == "install":
         if state["install_failures"] > 0:
             state["install_failures"] -= 1
-            print("E: Unable to locate a dependency", file=sys.stderr)
+            print(state["install_output"], file=sys.stderr)
             return 100
         for package in (arg for arg in args[1:] if not arg.startswith("-")):
             if "=" in package or package.startswith("DPkg::"):

@@ -201,13 +201,16 @@ def test_an_unknown_argument_is_a_usage_error(host):
 def test_a_half_installed_package_is_reinstalled(host, status, reinstalled):
     host.state["installed"]["homelab-daniel-pi"] = [status, V1]
 
-    host.run()
+    result = host.run()
 
+    assert result.returncode == 0, result.stderr
+    assert _ok(host.metrics()) == "1"
     reinstalls = [call for call in host.installs() if "--reinstall" in call]
     assert bool(reinstalls) is reinstalled
+    # An "ii " package is on the common path, where a reconciled record needs no reconcile.
+    assert host.reconciles() == int(reinstalled)
     if reinstalled:
         assert reinstalls[0][-1] == "homelab-daniel-pi"
-        assert host.reconciles() == 1
 
 
 @pytest.mark.parametrize(
@@ -218,9 +221,22 @@ def test_install_newest_removes_the_hold_before_its_fetch(host, args, held):
     # The operator asked for the hold to go, so a failed fetch leaves the next timer run free
     # to install. --clear-hold alone fetches nothing and keeps a hold reconcile does not clear.
     _held_on_a_failed_restart(host)
+    host.hold.write_text("stale\n")
     host.state["update_exit"] = 100
     host.state["reconcile"] = "fail"
 
-    host.run(*args)
+    result = host.run(*args)
 
+    assert result.returncode == 1
     assert host.hold.exists() is held
+    if held:
+        # --clear-hold reran reconcile, fetched nothing, and rewrote the hold it failed.
+        assert host.reconciles() == 1
+        assert host.calls("apt-get") == []
+        assert (
+            host.hold.read_text() == f"homelab-updater {V1}\nhomelab-daniel-pi {V1}\n"
+        )
+        assert _ok(host.metrics()) == "0"
+    else:
+        assert host.reconciles() == 0
+        assert "--error-on=any" in host.calls("apt-get")[0]
