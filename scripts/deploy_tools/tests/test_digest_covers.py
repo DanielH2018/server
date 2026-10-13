@@ -169,6 +169,25 @@ def _dep_map_body(body: str) -> str:
     )
 
 
+# Must-keep rows: (id, a new top-level statement, what `build_k8s_dep_map` runs on each entry
+# `c`). From the third on, the write goes through a callee the check cannot see into (#4842).
+ENTRY_WRITES = [
+    ("writes-through-an-entry", "", "c.setdefault('depends_on', []).append('x')"),
+    ("assigns-into-an-entry", "", "c['seen'] = True"),
+    ("lambda-writes", "_mark = lambda c: c.update(use_authelia=False)", "_mark(c)"),
+    (
+        "class-writes",
+        "class _M:\n    def __init__(self, c):\n        c['use_authelia'] = False",
+        "_M(c)",
+    ),
+    ("dunder-writes", "", "c.__setitem__('use_authelia', False)"),
+    (
+        "operator-writes",
+        "import operator",
+        "operator.setitem(c, 'use_authelia', False)",
+    ),
+]
+
 TOPOSORT_SORTS_LAST = TOPOSORT.replace(
     "def toposort_containers", "LAST = {'netpol-baseline'}\n\n\ndef toposort_containers"
 ).replace("_edges(c) for c", "_edges(c) or list(LAST) for c")
@@ -361,37 +380,26 @@ ROWS = [
         [
             {
                 "ansible/filter_plugins/toposort.py": _dep_map_body(
-                    "    for c in containers_list:\n"
-                    "        c.setdefault('depends_on', []).append('x')\n"
-                )
-            }
-        ],
-        "every deploy runs",
-        id="build-k8s-dep-map-writes-through-an-entry",
-    ),
-    pytest.param(
-        "authelia",
-        [
-            {
-                "ansible/filter_plugins/toposort.py": _dep_map_body(
-                    "    for c in containers_list:\n        c['seen'] = True\n"
-                )
-            }
-        ],
-        "every deploy runs",
-        id="build-k8s-dep-map-assigns-into-an-entry",
-    ),
-    pytest.param(
-        "authelia",
-        [
-            {
-                "ansible/filter_plugins/toposort.py": _dep_map_body(
                     "    global _SEEN\n    _SEEN = containers_list\n"
                 )
             }
         ],
         "every deploy runs",
         id="build-k8s-dep-map-writes-a-global",
+    ),
+    *(
+        pytest.param(
+            "authelia",
+            [
+                {
+                    "ansible/filter_plugins/toposort.py": f"{helper}\n\n\n"
+                    + _dep_map_body(f"    for c in containers_list:\n        {call}\n")
+                }
+            ],
+            "every deploy runs",
+            id=f"build-k8s-dep-map-{row}",
+        )
+        for row, helper, call in ENTRY_WRITES
     ),
     pytest.param(
         "authelia",
