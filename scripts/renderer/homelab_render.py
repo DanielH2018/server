@@ -2,18 +2,24 @@
 """homelab-render: render the k8s manifests from the git tree alone, in C1's layout.
 
 `cluster` renders each deploy tag into `DIR/cluster/<tag>/`, with a `kustomization.yaml`
-listing its files. It reads the git tree and the stub file, and never contacts a cluster, a
-host, a registry or a decryption key. Ansible stays the only writer to the cluster.
+listing its files. It reads the git tree and, in stub mode, the stub file, and never contacts
+a cluster, a host, a registry or a decryption key. Ansible stays the only writer to the
+cluster.
 
-Target slice R1 implements stub mode only. `--secret-stubs FILE` takes the file that
-`shadow_diff.py stubs` writes, and every secret renders as its stub. Without it, `cluster` is
-placeholder mode, which arrives with target slice R2. Until then it exits 2 before writing
-anything. A stub render is a comparison input and is never published.
+Without `--secret-stubs`, `cluster` renders in placeholder mode (target slice R2): every secret
+reference renders as `${<key>}`, and a directory whose render holds one escapes every other `$`
+Flux would read as syntax. `renderer_lib/placeholders.py` holds the passes and the per-directory
+key sets, and placeholder mode skips the tags in its `PLACEHOLDER_DEFERRED`.
+
+`--secret-stubs FILE` selects stub mode, R1's shadow mode. It takes the file that
+`shadow_diff.py stubs` writes, and every secret renders as its stub. A stub render is a
+comparison input and is never published.
 
 Exit codes: 0 rendered; 1 a template failed to render; 2 refused before writing anything;
 64 a usage error.
 
-Run: uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
+Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-render
+     uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
      uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \\
          --secret-stubs /tmp/r1-stubs.yml
      uv run pytest scripts/renderer/tests
@@ -39,6 +45,11 @@ from renderer.renderer_lib.cluster import (
     write_cluster,
 )
 from renderer.renderer_lib.context import load_stubs
+from renderer.renderer_lib.placeholders import (
+    Mode,
+    render_placeholders,
+    select_mode,
+)
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
 if str(FILTER_PLUGINS) not in _sys.path:
@@ -49,24 +60,27 @@ from secret_stubs import homelab_stub_keys, homelab_unstubbed_keys
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
 
 
+def secret_keys(secrets: Path = SECRETS) -> list[str]:
+    """The secret key names a render replaces, read from the ciphertext file's keys alone."""
+    return homelab_stub_keys(yaml_fast.safe_load(secrets.read_text()))
+
+
 def unstubbed(stubs: dict, secrets: Path = SECRETS) -> list[str]:
     """The secret keys the stub file leaves unset or sets to anything but their stub.
 
     Names only, never a value. A stub file written before a key was added names that key.
     """
-    keys = homelab_stub_keys(yaml_fast.safe_load(secrets.read_text()))
-    return homelab_unstubbed_keys(keys, stubs)
+    return homelab_unstubbed_keys(secret_keys(secrets), stubs)
 
 
 def cluster(out: Path, roles: list[str] | None, secret_stubs: Path | None) -> int:
     """Render `roles`, or every renderable tag, into `out`; return the exit code."""
-    if secret_stubs is None:
-        print(
-            "homelab-render: cluster without --secret-stubs is placeholder mode, which "
-            "arrives with target slice R2. Nothing was written.",
-            file=sys.stderr,
-        )
-        return RENDER_REFUSED
+    if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
+        return _stub_cluster(out, roles, secret_stubs)
+    return _placeholder_cluster(out, roles)
+
+
+def _stub_cluster(out: Path, roles: list[str] | None, secret_stubs: Path) -> int:
     stubs = load_stubs(secret_stubs)
     missing = unstubbed(stubs)
     if missing:
@@ -88,6 +102,34 @@ def cluster(out: Path, roles: list[str] | None, secret_stubs: Path | None) -> in
         return RENDER_FAILED
     print(
         f"homelab-render: {len(tags)} tags, {len(written)} files under {out / 'cluster'}"
+    )
+    return RENDER_OK
+
+
+def _placeholder_cluster(out: Path, roles: list[str] | None) -> int:
+    try:
+        tags = select_tags(roles)
+        result = render_placeholders(tags, secret_keys())
+        if not result.tags:
+            raise RenderRefused(
+                f"every requested tag is in PLACEHOLDER_DEFERRED: {result.skipped}"
+            )
+        written = write_cluster(result.tags, out)
+    except RenderRefused as exc:
+        print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
+        return RENDER_REFUSED
+    except (RenderError, ValueError) as exc:
+        print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
+        return RENDER_FAILED
+    skipped = (
+        f"; skipped, in PLACEHOLDER_DEFERRED: {', '.join(result.skipped)}"
+        if result.skipped
+        else ""
+    )
+    print(
+        f"homelab-render: placeholder mode, {len(result.tags)} tags, "
+        f"{len(result.substituting())} of {len(result.key_sets)} directories substitute, "
+        f"{len(written)} files under {out / 'cluster'}{skipped}"
     )
     return RENDER_OK
 
@@ -114,7 +156,8 @@ def main(argv: list[str] | None = None) -> int:
         "--secret-stubs",
         type=Path,
         metavar="FILE",
-        help="the stub file shadow_diff.py stubs writes; required until target slice R2",
+        help="the stub file shadow_diff.py stubs writes, for a stub-mode render. Without "
+        "it, the render is in placeholder mode",
     )
     args = parser.parse_args(argv)
     return cluster(args.out, args.roles, args.secret_stubs)

@@ -39,9 +39,10 @@ so a regeneration diffs as the pipeline plus upstream's change.
   that module's lists only as a decision the PR states.
   Renovate cannot regenerate the file, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
   rule) and the header test fails until the file is regenerated. The same PR moves the
-  `version:` of both `fluxcd/flux2/action` steps in `.github/workflows/promote.yml` and the
-  action's commit pin, so the CLI that pushes and tags the artifact moves with the
-  controllers. A `# renovate:` comment above each input is what Renovate reads, and
+  `version:` of both `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, of the
+  one in `.github/workflows/ci.yml`'s `flux_roundtrip` job, and the action's commit pin, so
+  the CLI that pushes and tags the artifact and the CLI that proves the round trip move with
+  the controllers. A `# renovate:` comment above each input is what Renovate reads, and
   `scripts/tests/test_renovate_flux_cli.py` fails a step that lost it (#4822). For a bump by
   hand, set all three yourself. `ansible/tests/repo/test_promote_workflow.py` fails a drift.
 

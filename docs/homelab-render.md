@@ -2,11 +2,13 @@
 
 `homelab-render` renders the k8s manifests from the git tree alone, as a shadow of the
 Ansible manifests role. Target slice R1 builds it and proves it byte-identical to Ansible for
-the same stub inputs. Ansible stays the only writer to the cluster: the renderer writes only
-to the directory it is given.
+the same stub inputs. Target slice R2 adds placeholder mode, which renders each secret
+reference as Flux's `${<key>}`. Ansible stays the only writer to the cluster: the renderer
+writes only to the directory it is given.
 
-The plan is [R1, shadow render with zero diff](target-architecture/render/r1-shadow-render.md).
-C1 in [the contracts](target-architecture/contracts.md) defines the interface. R1 lands in
+The plans are [R1, shadow render with zero diff](target-architecture/render/r1-shadow-render.md)
+and [R2, secret placeholders](target-architecture/render/r2-secret-placeholders.md). C1 in
+[the contracts](target-architecture/contracts.md) defines the interface. Each slice lands in
 steps, and this page describes each piece once its PR has merged.
 
 ## What is in place
@@ -35,6 +37,11 @@ steps, and this page describes each piece once its PR has merged.
   hook (*The render is deterministic and reads only the repo*).
 - A census row names every role task file that writes a cluster object itself, which the
   render does not cover (*What the render does not cover*).
+- `scripts/renderer/renderer_lib/placeholders.py` holds placeholder mode: the mode call, the
+  three passes, the per-directory key sets and `PLACEHOLDER_DEFERRED` (*Placeholder mode*).
+- `scripts/renderer/shadow_diff.py roundtrip` builds the placeholder render and the stub render
+  with the pinned flux CLI and compares them, and `fluxprobe` checks that CLI on fixtures
+  first. CI's `flux_roundtrip` job runs both (*The round trip*).
 
 ## The stub form
 
@@ -60,6 +67,17 @@ whose value is not exactly its stub. It returns names only, never a value.
 
 ## Render the cluster tree
 
+`cluster` has two modes, and `--secret-stubs` alone selects between them (C1 *Modes*):
+
+- Without `--secret-stubs`, the render is in placeholder mode (*Placeholder mode*):
+
+  ```bash
+  uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-render
+  ```
+
+- With `--secret-stubs FILE`, the render is in stub mode, R1's shadow mode. Every R1 command
+  on this page passes it, so each still renders stubs.
+
 To render the tags in stub mode, write a stub file for the commit and pass it to `cluster`:
 
 ```bash
@@ -80,10 +98,10 @@ else, and `DIR/flux/` belongs to a later slice.
 
 `cluster` exits 2 and writes nothing in four cases:
 
-- `--secret-stubs` is missing. Without it the render is placeholder mode, which target slice
-  R2 adds. A bare `cluster` call in a publish job therefore fails rather than publishing.
-- The stub file does not stub every key of `ansible/vars/secrets.yml`. The message names the
-  keys, never a value. Write a fresh stub file for the commit.
+- In stub mode, the stub file does not stub every key of `ansible/vars/secrets.yml`. The
+  message names the keys, never a value. Write a fresh stub file for the commit.
+- In placeholder mode, every requested tag is in `PLACEHOLDER_DEFERRED`, so nothing would
+  render.
 - A `--role` names a tag that is not a k8s render target of daniel-box.
 - A directory it would write under `DIR/cluster/` already holds files from an earlier
   render.
@@ -192,6 +210,128 @@ The render is not yet proven byte-identical to Ansible's. `shadow_diff.py compar
 each difference (*Compare the two halves*), and each class of difference then gets its own
 renderer fix.
 
+## Placeholder mode
+
+Target slice R2 adds placeholder mode, the mode a later publish job runs (C1 *Only
+placeholder mode publishes*). `cluster` without `--secret-stubs` renders every secret
+reference as `${<key>}`, where `<key>` is the key name in `ansible/vars/secrets.yml`. Flux
+substitutes the real values at apply time. Nothing publishes a render yet: target slice D2
+adds the publish job, and it waits on R2's PR 2 as well.
+
+`scripts/renderer/renderer_lib/placeholders.py` renders in three passes, because the escape
+would also escape a placeholder emitted before it:
+
+1. The context maps each secret key `K` to the sentinel `HOMELAB_SECRET__K__END`. Letters and
+   underscores survive `default`, `indent`, `to_json` and `~` intact, and a sentinel is a
+   valid YAML plain scalar, so a render the renderer parses itself still parses.
+2. In a directory that substitutes, every `$` followed by `$`, by `{` or by a sentinel becomes
+   `$$`. Flux reads `$$` as one literal `$`, so every run of dollars survives substitution as
+   written. A literal `${HOME}` renders as `$${HOME}`, and a bare `$$` as `$$$`.
+3. In a directory that substitutes, every sentinel becomes `${K}`.
+
+The five pinned live-read facts keep the values the stub file gives them (*Pinned live-read
+facts*), so a round trip sees one value on both sides.
+
+### Which directories substitute
+
+The unit is the Kustomization directory under `cluster/`, so `<tag>` and `<tag>-deferred`
+are decided apart. A directory's key set is the keys whose sentinel its render holds.
+
+- **A directory substitutes when its key set is not empty.** Passes 2 and 3 run on it, and
+  its Flux Kustomization carries `postBuild`.
+- **A directory with an empty key set** is written exactly as rendered, every `$` included.
+  Flux applies it with no `postBuild`, so it never reads that `$` as syntax, and an escape
+  there would reach the cluster as a literal `$${`.
+
+The key set is the one source for every reader that asks whether a directory substitutes,
+and each reads it in process from `PlaceholderRender.key_sets`: the escape, the round trip,
+and later the rules of R2's PR 2 and D2's `postBuild` writer. pihole substitutes, because its
+Secret holds keys, and `pihole-deferred` does not. At `65b52ff2f`, 46 of the 61 directories
+substitute.
+
+### Tags placeholder mode skips
+
+`PLACEHOLDER_DEFERRED` in `placeholders.py` names the tags placeholder mode cannot render
+yet, each with its reason. It holds `home-assistant`, whose `templates/config/secrets.yaml.j2`
+runs `from_json` on `google_assistant_service_account`, which raises on a sentinel. R2's PR 5
+empties the set. Placeholder mode skips a member and names it in the summary line, as
+`skipped, in PLACEHOLDER_DEFERRED: home-assistant`. A `--role` list that names only members
+renders nothing, so `cluster` refuses it with exit 2. Stub mode renders every tag.
+
+This set is a different thing from a `<tag>-deferred` directory, which holds the files a role
+passes as `manifests_deferred_files`.
+
+## The round trip
+
+`shadow_diff.py roundtrip` proves that Flux's substitution of the placeholder render gives the
+stub render back, object for object. `scripts/renderer/renderer_lib/roundtrip.py` holds its
+logic. It renders the requested tags in placeholder mode and in stub mode under `--out`. Then
+it builds every directory of each render with `flux build kustomization <dir> --dry-run`,
+through a throwaway Flux Kustomization:
+
+- **Placeholder side, a directory that substitutes.** The Kustomization carries every key's
+  value inline in `postBuild.substitute`, and the build adds `--strict-substitute`.
+- **Placeholder side, a directory that does not substitute.** No `postBuild`, so the
+  comparison proves the renderer escaped nothing there.
+- **Stub side.** No `postBuild`, so nothing is substituted.
+
+`flux build` runs the controller's own substitution per resource and serialises both sides
+with the same code. `roundtrip` therefore compares the two outputs byte for byte, and names
+the first object that differs. It prints no file content.
+
+It runs two passes:
+
+1. **Each key's R1 stub**, on both sides.
+2. **Every key `0123`**, on both sides. The stub side is a stub-mode render with every key set
+   to `0123`, so Jinja writes the template's quotes around it there. Flux drops them on the
+   placeholder side (*What the pinned flux CLI does*), so each site where substitution would
+   change a value's YAML type shows as a difference.
+
+Each pass prints a summary line, such as `roundtrip: 2 tags, 0 deferred directories, 2
+substituting, 4 objects, 0 differences, with each key's R1 stub`. `roundtrip` exits 0 only
+when both passes find no difference.
+
+It needs the pinned flux CLI. daniel-box has none, so it runs in CI's `flux_roundtrip` job.
+Where `flux` is not on `PATH`, it exits 2 and reports no pass. It also exits 2 when a render
+fails or no rendered directory substitutes, because nothing would pass through Flux's
+substitution. A setup failure therefore never exits 1, the code CI's red half requires. `--red-proof` changes one key's
+substitute value by one byte in the first pass, so a working round trip must exit 1. The CI
+job runs it that way too, and fails unless it does:
+
+```bash
+uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip \
+  --role configarr --role janitorr
+```
+
+The CI job round-trips `configarr` and `janitorr`, whose Secrets embed whole app configs with
+several placeholders in a block scalar. R2's PR 2 widens it to every tag outside
+`PLACEHOLDER_DEFERRED`.
+
+### What the pinned flux CLI does
+
+`shadow_diff.py fluxprobe` builds four small fixture directories with the flux CLI and fails
+unless each expected output appears. CI runs it before the round trip, against the same
+pinned binary, so a pin bump that changes one of these behaviours fails there first. With
+`--red-proof` it also expects one output no fixture yields, and CI requires that run to exit
+1. `scripts/renderer/renderer_lib/flux_probe.py` holds the fixtures.
+
+Measured on CI run 38426501907 with flux v2.9.6:
+
+- `$${HOME}` comes back as `${HOME}`, and `$$$`, which pass 2 writes for a bare `$$`, as `$$`.
+- `$$$$$${x}`, which pass 2 writes for a literal `$$${x}`, comes back as `$$${x}`.
+- `$$${K}`, which passes 2 and 3 write for a `$` directly before a secret reference, comes
+  back as `$` plus the value.
+- `${HOME}` in a directory built with no `postBuild` comes back unchanged.
+- A variable absent from `postBuild.substitute` fails the build under `--strict-substitute`.
+- **A `stringData` value written `"${probe_n}"` comes back as the integer `83` for
+  `probe_n=0123`, and as the YAML `bool` value `true` for `probe_n=true`.** Flux substitutes
+  into a resource it has already serialised, without the template's quotes. An all-digit or
+  `true` value therefore changes type wherever it stands alone in a field. The probe asserts
+  both results. A bump that keeps the quotes fails it, and the round trip's second pass can
+  then go.
+- A bare `n` as a key of `postBuild.substitute` defines no variable `n`. Go's YAML 1.1 reader
+  takes the unquoted key `n` for `false`, so the probe names its variable `probe_n`.
+
 ## Pinned live-read facts
 
 Five facts come from live state in a real run, so the renderer cannot compute them from the
@@ -213,6 +353,8 @@ equal to a word grep of the templates, so a new reader fails the suite.
 A stub render is a comparison input. Nothing may push it as the cluster artifact, because
 `domain` is a secret key too: a stubbed route matches `*.stub-domain` and answers no request.
 The plan's section *Stub output is never published* names the guards later slices add.
+A publish job states its mode by passing no `--secret-stubs` (C1 *Only placeholder mode
+publishes*).
 
 ## Write the stub file
 

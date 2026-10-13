@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Guard the flux CLI pin in the promote workflow (#4822).
+"""Guard the flux CLI pin in the promote and CI workflows (#4822).
 
 Each `fluxcd/flux2/action` step installs the flux CLI through its `version:` input, and
-ansible/tests/repo/test_promote_workflow.py holds that input equal to `flux_version` in
-roles/k8s/flux. Renovate's built-in github-actions manager extracts the action as `fluxcd/flux2`
+ansible/tests/repo/test_promote_workflow.py holds the promote workflow's inputs equal to
+`flux_version` in roles/k8s/flux. The CI workflow's `flux_roundtrip` job installs the same CLI
+for target slice R2's round trip, and the census below holds its input equal too. Renovate's built-in github-actions manager extracts the action as `fluxcd/flux2`
 on github-tags for its commit-SHA pin, but its known-actions table has no entry for the action,
 so it never reads the input. A custom manager reads it instead, from a `# renovate:` comment on
 the line above each input.
@@ -37,7 +38,7 @@ ACTION = "fluxcd/flux2/action@"
 
 # Named rather than derived: a workflow that lost a flux step fails here instead of shrinking
 # the census and passing.
-FLUX_STEPS_IN_PROMOTE = 2
+FLUX_STEPS = {WORKFLOW: 2, ".github/workflows/ci.yml": 1}
 
 # The deps named `fluxcd/flux2` other than the version input, as the extract reports each:
 # (file, datasource, manager, depType). The action dep's shape is the one #4822's lookup
@@ -95,18 +96,22 @@ def _flux_version() -> str:
     return defaults["flux_version"]
 
 
-def test_the_manager_reads_every_flux_cli_input() -> None:
-    text = (_REPO / WORKFLOW).read_text(encoding="utf-8")
-    assert text.count(ACTION) == FLUX_STEPS_IN_PROMOTE
+@pytest.mark.parametrize("workflow", sorted(FLUX_STEPS))
+def test_the_manager_reads_every_flux_cli_input(workflow: str) -> None:
+    patterns = _manager().get("managerFilePatterns", [])
+    assert any(_file_pattern_to_regex(fp).search(workflow) for fp in patterns), patterns
+    text = (_REPO / workflow).read_text(encoding="utf-8")
+    assert text.count(ACTION) == FLUX_STEPS[workflow]
     matches = _matches(text)
-    assert [m.group("currentValue") for m in matches] == [
-        _flux_version()
-    ] * FLUX_STEPS_IN_PROMOTE
+    assert [m.group("currentValue") for m in matches] == [_flux_version()] * FLUX_STEPS[
+        workflow
+    ]
     assert all(ACTION not in m.group(0) for m in matches), [m.group(0) for m in matches]
 
 
-def test_a_flux_step_without_its_annotation_is_flagged() -> None:
-    text = (_REPO / WORKFLOW).read_text(encoding="utf-8")
+@pytest.mark.parametrize("workflow", sorted(FLUX_STEPS))
+def test_a_flux_step_without_its_annotation_is_flagged(workflow: str) -> None:
+    text = (_REPO / workflow).read_text(encoding="utf-8")
     stripped = re.sub(
         r"\n[ \t]*# renovate: datasource=github-releases depName=fluxcd/flux2", "", text
     )
