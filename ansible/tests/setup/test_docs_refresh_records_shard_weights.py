@@ -23,6 +23,8 @@ the script breaks this test instead of silently leaving the cron pointing at not
 Run: uv run pytest ansible/tests/setup/test_docs_refresh_records_shard_weights.py
 """
 
+import re
+
 import pytest
 import pytest_shard
 
@@ -126,3 +128,54 @@ def test_the_weights_table_is_named_wherever_the_doc_trees_are(marker):
             f"{TEMPLATE.name}: the {marker!r} covering docs/reference does not name "
             f"{WEIGHTS}, so the table the cron writes is left loose in the primary checkout"
         )
+
+
+# The modes that read the table or fill its gaps, and so leave a present entry as it is.
+_NON_REFRESHING_FLAGS = frozenset(
+    {
+        "--record-missing",
+        "--of",
+        "--shard",
+        "--out",
+        "--summary",
+        "--check-durations",
+        "--warn-only",
+        "--threshold",
+        "--fail-above",
+        "--stale-ratio",
+    }
+)
+
+
+def _shard_script_arguments(text: str) -> list[str]:
+    """What follows `python <pytest_shard.py>` in each command, continuation lines joined.
+
+    Only the text after the script counts: `uv run --frozen` is uv's flag, and the publish
+    step's PR body names the script in prose without running it.
+    """
+    runs = re.compile(rf"python\s+{re.escape(SHARD_SCRIPT)}(.*)")
+    arguments, pending = [], ""
+    for line in _code_lines(text):
+        pending += line.rstrip().removesuffix("\\") + " "
+        if not line.rstrip().endswith("\\"):
+            arguments += [m.group(1) for m in runs.finditer(pending)]
+            pending = ""
+    return arguments
+
+
+def test_the_cron_also_refreshes_weights_that_are_present():
+    """#4888: `--record-missing` never touches a present entry, so a module that grew 1.5-2x
+    past its weight keeps the old number. The cron is the one place that measures serially on
+    the recording host, which is where drift that small is distinguishable from runner scale.
+
+    Any flag outside the gap-filling and read-only set satisfies this, so it proves the cron
+    runs a refreshing mode, not that the mode runs often enough or on a quiet host.
+    """
+    arguments = _shard_script_arguments(SCRIPT)
+    assert arguments, f"{TEMPLATE.name} never runs {SHARD_SCRIPT}"
+    flags = {flag for args in arguments for flag in re.findall(r"--[a-z][a-z-]*", args)}
+    refreshing = flags - _NON_REFRESHING_FLAGS
+    assert refreshing, (
+        f"{TEMPLATE.name} runs {SHARD_SCRIPT} only with {sorted(flags)}, none of which "
+        "re-measures an entry the table already holds"
+    )
