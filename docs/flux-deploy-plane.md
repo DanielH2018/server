@@ -194,11 +194,12 @@ deletes. That job runs only master's copy of `promote.py`, because it refuses an
 `refs/heads/master`.
 
 The repository secret `PROMOTE_TOKEN` is a fine-grained token with Variables read and write
-on this repository and a 90-day expiry. `promote` reads `DEPLOY_HOLD` with it, and `tag`
-writes `PROD_DIGEST` with it. The flux role's `CLAUDE.md` has its rotation steps, and the
+on two repositories, `DanielH2018/server` and `DanielH2018/dotfiles`, and a 90-day expiry.
+`promote` reads `DEPLOY_HOLD` with it, and `tag` writes `PROD_DIGEST` with it. The flux role's `CLAUDE.md` has its rotation steps, and the
 rotation registry's `external-90d` tier is the one its SOPS copy belongs on.
 
 The SOPS key `flux_github_status_token` is a fine-grained token with Commit statuses read and
-write on this repository, which notification-controller posts statuses with. It lives only in
+write on two repositories, `DanielH2018/server` and `DanielH2018/dotfiles`, which
+notification-controller posts statuses with. It has no expiration date. It lives only in
 SOPS, on the registry's `external` tier, and the flux role's `CLAUDE.md` has its rotation
 steps.

@@ -137,7 +137,8 @@ so a task deletes `ocirepository/verify-drill` by name on every run with the lev
   `GITHUB_TOKEN`. An agent session's token never holds the scope.
 - **`PROMOTE_TOKEN` rotation (operator-only).** The promote workflow reads `DEPLOY_HOLD` and
   writes `PROD_DIGEST` with the repository secret `PROMOTE_TOKEN`, a fine-grained token with
-  Variables read and write on this repository and a 90-day expiry. To rotate it, mint the
+  Variables read and write on two repositories, `DanielH2018/server` and
+  `DanielH2018/dotfiles`, and a 90-day expiry. To rotate it, mint the
   replacement, set it with `gh secret set PROMOTE_TOKEN -R DanielH2018/server`, store the copy
   with `sops set` as `promote_token`, run `uv run python
   scripts/secrets_mgmt/secret_rotation.py sync`, and commit `ansible/secret_rotation.yml`.
@@ -145,10 +146,11 @@ so a task deletes `ocirepository/verify-drill` by name on every run with the lev
   flags it before the token expires.
 - **`flux_github_status_token` rotation (operator-only).** notification-controller posts
   commit statuses with this fine-grained token, which has Commit statuses read and write on
-  this repository. It lives only in SOPS, with no GitHub secret beside it, and
+  two repositories, `DanielH2018/server` and `DanielH2018/dotfiles`. It has no expiration
+  date. It lives only in SOPS, with no GitHub secret beside it, and
   `templates/secret.yaml.j2` renders it into the Secret `flux-github-status`. Its registry
-  row is on the `external` tier, so the audit flags it 365 days after its last rotation. A
-  token minted with a shorter expiry stops posting statuses first. To rotate it, mint the
+  row is on the `external` tier, so the audit flags it 365 days after its last rotation,
+  and that audit is the only rotation prompt. To rotate it, mint the
   replacement, store it with `sops set` as `flux_github_status_token`, run `uv run python
   scripts/secrets_mgmt/secret_rotation.py sync`, commit, and redeploy with
   `./scripts/deploy.sh --tags flux`. notification-controller reads the Secret on each event,
