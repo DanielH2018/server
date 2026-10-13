@@ -172,6 +172,31 @@ def test_a_malformed_component_is_flagged(hosts, component, message):
         host_mode.render_host("daniel-pi", root)
 
 
+def test_a_component_default_reading_inventory_hostname_is_clean(hosts):
+    root = hosts(
+        *_one(
+            "templates/x.j2",
+            "{{ tag }}\n",
+            defaults={"tag": "{{ inventory_hostname }}-a"},
+        )
+    )
+    assert _rendered(host_mode.render_host("daniel-pi", root)) == "daniel-pi-a\n"
+
+
+@pytest.mark.parametrize("src", ["outside", "../outside", "link"])
+def test_a_static_src_outside_the_component_is_flagged(hosts, tmp_path, src):
+    outside = tmp_path / "outside"
+    outside.write_text("not the component's\n")
+    root = hosts(*_one("files/in", ""))
+    beat = root / "components" / "beat"
+    (beat / "link").symlink_to(outside)
+    entry = str(outside) if src == "outside" else src
+    spec = {"files": [{"src": entry, "dst": "/x"}]}
+    (beat / "component.yml").write_text(yaml.safe_dump(spec))
+    with pytest.raises(RenderRefused, match="is outside the component"):
+        host_mode.render_host("daniel-pi", root)
+
+
 def test_a_host_without_a_package_is_flagged_and_writes_nothing(tmp_path, capsys):
     out = tmp_path / "out"
     argv = ["host", "--host", "no-such-host", "--out", str(out)]

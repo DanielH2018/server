@@ -227,11 +227,23 @@ def _render_unit(
         mode = _mode(entry.get("mode", "0644"), directory, dst)
         if src.endswith(".j2"):
             content = _render_template(env, src, ctx, reasons, directory).encode()
-        elif (directory / src).is_file():
-            content = (directory / src).read_bytes()
         else:
-            raise RenderRefused(f"{directory}: src {src!r} does not exist")
+            content = _static(directory, src)
         package.files[dst] = (content, mode)
+
+
+def _static(directory: Path, src: str) -> bytes:
+    """The bytes of a static `src`, which must resolve to a file inside `directory`.
+
+    The path is resolved through any symlink first, so neither an absolute path, a `..` nor
+    a link out of the component can copy a file of the rendering machine into a package.
+    """
+    path = (directory / src).resolve()
+    if not path.is_relative_to(directory.resolve()):
+        raise RenderRefused(f"{directory}: src {src!r} is outside the component")
+    if not path.is_file():
+        raise RenderRefused(f"{directory}: src {src!r} does not exist")
+    return path.read_bytes()
 
 
 def _mode(value: object, directory: Path, dst: str) -> int:
@@ -269,6 +281,8 @@ def host_context(
             undefined_cls=StrictChainableUndefined,
             component_defaults=defaults,
             withhold=withheld,
+            # A play sets it before any variable expands, so a default may read it.
+            overrides={"inventory_hostname": host} if host else None,
         )
 
     reasons = {
