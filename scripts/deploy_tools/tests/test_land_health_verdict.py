@@ -273,7 +273,7 @@ def _deferred(landing, pr_path: str, **fakes):
     return ln
 
 
-def test_a_deploy_plane_the_tick_deferred_names_the_deferral_is_flagged(
+def test_a_deploy_plane_the_tick_deferred_prints_the_deferral_not_deploy_yml(
     landing, capsys
 ):
     """#4843: the ledger lines are the remedy, not a whole deploy.yml after an ff-merge."""
@@ -299,9 +299,10 @@ def test_a_deploy_plane_the_tick_deferred_names_the_deferral_is_flagged(
     ],
     ids=["lines-predate-the-merge", "setup-plane-pr"],
 )
-def test_a_range_the_tick_did_not_defer_keeps_the_stranded_remedy_is_clean(
+def test_a_range_the_tick_did_not_defer_keeps_the_stranded_remedy(
     landing, capsys, pr_path, fakes
 ):
+    """A `k8s_unapplied` line past the merge is not evidence of THIS PR's deferral."""
     ln = _deferred(landing, pr_path, **fakes)
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
