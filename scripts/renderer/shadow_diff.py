@@ -68,10 +68,14 @@ from deploy_tools.render_targets import render_targets
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
 from lib.cli_help import ArgumentParser
-from lib.render_guard import containers_entries
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS
 from lib.exit_codes import SHADOW_DIFFERENT, SHADOW_OK, SHADOW_REFUSED
-from renderer.renderer_lib.cluster import RenderError, RenderRefused, select_tags
+from renderer.renderer_lib.cluster import (
+    RenderError,
+    RenderRefused,
+    flux_owned_tags,
+    select_tags,
+)
 from renderer.renderer_lib.flux_probe import probe
 from renderer.renderer_lib.placeholders import GUARD_MAP, read_guard_map
 from renderer.renderer_lib.roundtrip import (
@@ -143,13 +147,7 @@ def stub_file_text(secrets: Path = SECRETS) -> str:
 def tag_sets(host: str = K8S_HOST, host_vars: Path = HOST_VARS) -> TagSets:
     """`host`'s render targets, and those of them whose entry carries `owner: flux` (C4)."""
     targets = render_targets(host, host_vars=host_vars)
-    path = host_vars / f"{host}.yml"
-    flux = (
-        {e["name"] for e in containers_entries(path) if e.get("owner") == "flux"}
-        if path.exists()
-        else set()
-    )
-    return targets, flux & set(targets)
+    return targets, flux_owned_tags(host, host_vars) & set(targets)
 
 
 # -- the CLI ------------------------------------------------------------------------------

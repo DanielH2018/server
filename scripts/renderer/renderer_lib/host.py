@@ -17,6 +17,22 @@ A `src` ending `.j2` renders through the renderer's strict environment. Any othe
 copied byte for byte. A `lib` entry copies `hosts/lib/<name>`, a script several packages ship,
 byte for byte; it is the one source outside the component a file entry may name.
 
+A package or component may also carry `units`, a policy for each unit reconcile must not
+restart on a change, and `legacy`, the Ansible-era entries reconcile retires (H3, *The host
+handoff rule*)::
+
+    units: {homelab-x.service: {policy: manual}}    # or windowed
+    legacy:
+      - {path: /usr/local/bin/x.sh}
+      - {cron: "X heartbeat", user: "{{ sys_user }}"}
+      - {cron_file: x}
+      - {unit: x.service}
+
+Each legacy value renders with the host's context. A host package installs
+`/usr/lib/homelab/manifest.json`, which `host_manifest` builds from these keys and the units and
+enable links the packages install. A shared package installs no manifest, and lists no legacy
+entry.
+
 A package spec may also list `maintainer_scripts`, each rendered from
 `hosts/lib/maintainer-scripts/<name>.j2` into the package's `scripts/`, outside `root/`, and
 named in `nfpm.yaml`'s `scripts:` (H3, *Package rules*).
@@ -55,6 +71,13 @@ from lib.render_guard import StrictChainableUndefined, load_yaml
 from lib.repo_paths import ANSIBLE, REPO
 from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.environment import RenderError, render_file, renderer_env
+from renderer.renderer_lib.host_manifest import (
+    DROPIN,
+    UPDATER,
+    add_manifest,
+    add_policies,
+    legacy_entry,
+)
 
 HOSTS = REPO / "hosts"
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
@@ -62,9 +85,18 @@ SECRETS = ANSIBLE / "vars" / "secrets.yml"
 # Every host package runs reconcile under /usr/bin/python3 (H3, *Package rules*).
 HOST_DEPENDS = ("python3 (>= 3.12)",)
 PACKAGE_KEYS = frozenset(
-    {"components", "defaults", "depends", "description", "files", "maintainer_scripts"}
+    {
+        "components",
+        "defaults",
+        "depends",
+        "description",
+        "files",
+        "legacy",
+        "maintainer_scripts",
+        "units",
+    }
 )
-COMPONENT_KEYS = frozenset({"defaults", "files"})
+COMPONENT_KEYS = frozenset({"defaults", "files", "legacy", "units"})
 # The builder exports the version (H3, *Package rules*). Kept out of the render, so a render
 # changes only when the package's content does, and nfpm expands it at build time.
 VERSION_FIELD = "${HOMELAB_VERSION}"
@@ -97,6 +129,8 @@ class Package:
         depends: The `Depends` entries, in the order the spec lists them.
         description: The package description.
         scripts: Each maintainer script's name, such as `postinst`, mapped to its bytes.
+        policies: Each unit given a restart policy, mapped to `manual` or `windowed`.
+        legacy: The legacy entries reconcile retires, each with its values rendered.
     """
 
     name: str
@@ -105,6 +139,8 @@ class Package:
     depends: list[str] = field(default_factory=list)
     description: str = ""
     scripts: dict[str, bytes] = field(default_factory=dict)
+    policies: dict[str, str] = field(default_factory=dict)
+    legacy: list[dict[str, str]] = field(default_factory=list)
 
     def units(self) -> list[str]:
         """The unit files the package installs under `/usr/lib/systemd/system/`, by name.
@@ -115,6 +151,22 @@ class Package:
             PurePosixPath(dst).name
             for dst in self.files
             if PurePosixPath(dst).parent == UNIT_DIR and dst.endswith(UNIT_SUFFIXES)
+        )
+
+    def dropin_targets(self) -> list[str]:
+        """The units, of any package, that this package installs a homelab drop-in for."""
+        return sorted(
+            path.parent.name.removesuffix(".d")
+            for path in map(PurePosixPath, self.files)
+            if path.parent.parent == UNIT_DIR and path.name == DROPIN
+        )
+
+    def enable_links(self) -> list[str]:
+        """The units whose enable link, under `<target>.wants/`, the package installs."""
+        return sorted(
+            path.name
+            for path in map(PurePosixPath, self.files)
+            if path.parent.parent == UNIT_DIR and path.parent.name.endswith(".wants")
         )
 
     def nfpm_spec(self) -> str:
@@ -160,7 +212,13 @@ def render_host(
     spec = hosts_root / _plain_name(host, "host") / "package.yml"
     package = Package(name=f"homelab-{host}", directory=f"hosts/{host}")
     package.depends.extend(HOST_DEPENDS)
-    return _render(package, spec, host, hosts_root, inventory, secret_names(secrets))
+    withheld = secret_names(secrets)
+    _render(package, spec, host, hosts_root, inventory, withheld)
+    updater = None
+    if (hosts_root / "packages" / UPDATER / "package.yml").is_file():
+        updater = render_package(UPDATER, hosts_root, inventory, secrets)
+    add_manifest(package, updater)
+    return package
 
 
 def render_package(
@@ -177,7 +235,13 @@ def render_package(
     """
     spec = hosts_root / "packages" / _plain_name(name, "package") / "package.yml"
     package = Package(name=name, directory=f"packages/{name}")
-    return _render(package, spec, None, hosts_root, inventory, secret_names(secrets))
+    _render(package, spec, None, hosts_root, inventory, secret_names(secrets))
+    if package.legacy:
+        # Reconcile reads only the host package's manifest, so a shared one's would be dropped.
+        raise RenderRefused(
+            f"{name}: a shared package lists no legacy entry; its host package does"
+        )
+    return package
 
 
 def write_packages(packages: list[Package], out: Path) -> list[Path]:
@@ -305,13 +369,26 @@ def _render_unit(
     withheld: frozenset[str],
     lib: Path,
 ) -> None:
-    """Render the files `spec` lists from `directory`, or `lib`, into `package`."""
+    """Render the files, policies and legacy entries `spec` lists into `package`.
+
+    Files come from `directory`, or from `lib`.
+    """
     files = spec.get("files") or []
-    if not files:
+    add_policies(package, directory, spec.get("units") or {})
+    legacy = spec.get("legacy") or []
+    if not files and not legacy:
         return
     ctx, reasons = host_context(host, spec.get("defaults") or {}, inventory, withheld)
     env = renderer_env(directory)
     env.loader = _ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
+    for entry in legacy:
+        package.legacy.append(
+            legacy_entry(
+                entry,
+                directory,
+                lambda text: _render_string(env, text, ctx, reasons, directory),
+            )
+        )
     for entry in files:
         sources = {"src", "lib"} & set(entry)
         if "dst" not in entry or not sources:
@@ -462,10 +539,30 @@ def _render_template(
 ) -> str:
     try:
         return render_file(env, src, ctx)
-    except jinja2.UndefinedError as exc:
+    except jinja2.TemplateError as exc:
+        raise _explained(exc, f"{directory / src}", reasons) from exc
+
+
+def _render_string(
+    env: jinja2.Environment,
+    text: str,
+    ctx: dict,
+    reasons: dict[str, str],
+    directory: Path,
+) -> str:
+    try:
+        return env.from_string(text).render(ctx)
+    except jinja2.TemplateError as exc:
+        raise _explained(exc, f"{directory}: {text!r}", reasons) from exc
+
+
+def _explained(
+    exc: jinja2.TemplateError, where: str, reasons: dict[str, str]
+) -> RenderError:
+    """The render error for `exc`, naming why an undefined name is missing when known."""
+    detail = ""
+    if isinstance(exc, jinja2.UndefinedError):
         match = _UNDEFINED.search(str(exc))
         name = match.group(1) if match else ""
         detail = f": {name} is {reasons[name]}" if name in reasons else ""
-        raise RenderError(f"{directory / src}: {exc}{detail}") from exc
-    except jinja2.TemplateError as exc:
-        raise RenderError(f"{directory / src}: {exc}") from exc
+    return RenderError(f"{where}: {exc}{detail}")

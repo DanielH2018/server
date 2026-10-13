@@ -31,7 +31,7 @@ A template a role lists in the defaults variable `render_sops_manifests` renders
 multi-line key, which no placeholder can carry. Placeholder mode emits no document for it, and
 drops it before pass 2, so its key counts in no key set and no standalone set. Stub mode still
 renders it. `PlaceholderRender.sops_manifests` keeps each dropped file's sentinel render for the
-`sops-manifest-entries` check in `secret_checks.py`.
+`sops-manifest-entries` check in `sops_entries.py`.
 
 `docs/homelab-render.md` is the operator's page, and
 `docs/target-architecture/render/r2-secret-placeholders.md` the plan.
@@ -45,7 +45,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 import enum
 import json
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -62,7 +62,7 @@ from renderer.renderer_lib.cluster import (
     render_tag,
 )
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS
+from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS, PinnedFact
 
 SENTINEL_PREFIX = "HOMELAB_SECRET__"
 SENTINEL_SUFFIX = "__END"
@@ -152,7 +152,7 @@ def placeholder_vars(keys: Iterable[str]) -> dict[str, object]:
 
     The pinned live-read facts take the values the stub file holds, so a round trip sees the
     same value on both sides. Until R3 deletes `PINNED_LIVE_FACTS`, no tag that reads one may
-    be published; R2's PR 2 adds that refusal.
+    be published, and `pinned_fact_refusals` refuses one marked `owner: flux`.
 
     Raises:
         ValueError: a pinned fact shares a name with a secret key, so one value would
@@ -164,6 +164,96 @@ def placeholder_vars(keys: Iterable[str]) -> dict[str, object]:
         raise ValueError(f"{clashes} are both secret keys and pinned live-read facts")
     overrides.update({name: fact.value for name, fact in PINNED_LIVE_FACTS.items()})
     return overrides
+
+
+def pinned_fact_refusals(
+    tags: Iterable[str],
+    flux_owned: Iterable[str],
+    facts: dict[str, PinnedFact] | None = None,
+) -> list[tuple[str, str]]:
+    """Each `(tag, fact)` where a requested tag marked `owner: flux` reads a pinned fact.
+
+    A pinned value renders a valid object that fails logins or backups, and only a flux-owned
+    tag is published, so a placeholder render refuses that combination (R2 *Mode selection*).
+    R3's PR 5 deletes this refusal with `PINNED_LIVE_FACTS`.
+    """
+    facts = PINNED_LIVE_FACTS if facts is None else facts
+    owned = set(tags) & set(flux_owned)
+    return sorted(
+        (tag, name)
+        for name, fact in facts.items()
+        for tag in fact.readers
+        if tag in owned
+    )
+
+
+def references(text: str) -> Iterator[str]:
+    """The body of every `${...}` Flux reads as a reference in `text`.
+
+    Flux's parser treats `$$` as an escape and drops one `$`, and opens a reference only on
+    `${` (fluxcd/pkg `envsubst/parse`), so each `$$` pairs before a `${` is looked for.
+    """
+    i, end = 0, len(text)
+    while i < end:
+        if text[i] != "$":
+            i += 1
+        elif text.startswith("$$", i):
+            i += 2
+        elif text.startswith("${", i):
+            close = text.find("}", i + 2)
+            close = end if close < 0 else close
+            yield text[i + 2 : close]
+            i = close + 1
+        else:
+            i += 1
+
+
+# A line that separates two YAML documents, kept whole by `re.split`.
+DOCUMENT_SEPARATOR = re.compile(r"(^---[ \t]*(?:\n|$))", re.MULTILINE)
+# kustomize-controller skips substitution on a resource whose label or annotation of this
+# name is `disabled`. The Flux CRDs in the `flux` tag carry it.
+SUBSTITUTE_OPT_OUT = "kustomize.toolkit.fluxcd.io/substitute"
+
+
+def substitution_disabled(doc: str) -> bool:
+    """Whether Flux skips substitution on the resource `doc`, by its label or annotation."""
+    if SUBSTITUTE_OPT_OUT not in doc:
+        return False
+    try:
+        obj = yaml_fast.safe_load(doc)
+    except yaml.YAMLError:
+        return False
+    meta = (obj.get("metadata") if isinstance(obj, dict) else None) or {}
+    return any(
+        (meta.get(field) or {}).get(SUBSTITUTE_OPT_OUT) == "disabled"
+        for field in ("labels", "annotations")
+    )
+
+
+def documents(text: str) -> list[tuple[str, str]]:
+    """Each YAML document of a rendered file as `(Kind/name, text)`, in order."""
+    pieces, current = [], []
+    for line in text.splitlines(keepends=True):
+        if line.rstrip() == "---":
+            pieces.append("".join(current))
+            current = []
+        else:
+            current.append(line)
+    pieces.append("".join(current))
+    found = []
+    for piece in pieces:
+        if not piece.strip():
+            continue
+        try:
+            obj = yaml_fast.safe_load(piece)
+        except yaml.YAMLError:
+            obj = None
+        if isinstance(obj, dict):
+            meta = obj.get("metadata") or {}
+            found.append((f"{obj.get('kind')}/{meta.get('name')}", piece))
+        else:
+            found.append(("no document", piece))
+    return found
 
 
 class Sentinels:
@@ -217,10 +307,19 @@ class Sentinels:
         return frozenset(found)
 
     def finish(self, text: str) -> str:
-        """Passes 2 and 3 on one file of a directory that substitutes."""
-        escaped = self._escapable.sub("$$", text)
-        return self._sentinel.sub(
-            lambda m: "${" + self._key_of[m.group(0)] + "}", escaped
+        """Passes 2 and 3 on one file of a directory that substitutes.
+
+        A document Flux does not substitute keeps its text, because Flux would never read
+        an escape there. A sentinel left in it fails rule 2.
+        """
+        return "".join(
+            piece
+            if DOCUMENT_SEPARATOR.fullmatch(piece) or substitution_disabled(piece)
+            else self._sentinel.sub(
+                lambda m: "${" + self._key_of[m.group(0)] + "}",
+                self._escapable.sub("$$", piece),
+            )
+            for piece in DOCUMENT_SEPARATOR.split(text)
         )
 
 

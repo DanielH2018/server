@@ -16,35 +16,10 @@ from lib.estate import Inventory
 from renderer import homelab_render
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.cluster import RenderRefused
+from renderer.renderer_lib.host_manifest import MANIFEST
 from renderer.renderer_lib.environment import RenderError
 
 SHELL = 'echo "${FOO:-x}" "${domain}" "$${HOME}" "$(date)"\n'
-
-
-@pytest.fixture
-def hosts(tmp_path):
-    """A writer for a `hosts/` tree: one package spec and its components."""
-    root = tmp_path / "hosts"
-
-    def write(
-        package: dict,
-        components: dict[str, dict] | None = None,
-        sources: dict[str, str] | None = None,
-        where: str = "daniel-pi",
-    ):
-        spec = root / where / "package.yml"
-        spec.parent.mkdir(parents=True, exist_ok=True)
-        spec.write_text(yaml.safe_dump(package))
-        for name, component in (components or {}).items():
-            directory = root / "components" / name
-            directory.mkdir(parents=True, exist_ok=True)
-            (directory / "component.yml").write_text(yaml.safe_dump(component))
-            for src, text in (sources or {}).items():
-                (directory / src).parent.mkdir(parents=True, exist_ok=True)
-                (directory / src).write_text(text)
-        return root
-
-    return write
 
 
 def _one(src: str, text: str, defaults: dict | None = None) -> tuple[dict, dict, dict]:
@@ -73,10 +48,15 @@ def test_a_host_package_is_written_in_the_c1_layout(hosts, tmp_path):
     assert spec["version"] == "${HOMELAB_VERSION}"
     assert spec["contents"] == [
         {
+            "src": "root/usr/lib/homelab/manifest.json",
+            "dst": "/usr/lib/homelab/manifest.json",
+            "file_info": {"mode": 0o644},
+        },
+        {
             "src": "root/usr/lib/homelab/x",
             "dst": "/usr/lib/homelab/x",
             "file_info": {"mode": 0o755},
-        }
+        },
     ]
 
 
@@ -154,7 +134,16 @@ def test_a_static_file_is_copied_without_rendering(hosts):
 @pytest.mark.parametrize(
     ("component", "message"),
     [
-        ({"files": [], "units": []}, "unknown keys"),
+        ({"files": [], "reconcilers": []}, "unknown keys"),
+        ({"units": {"homelab-u.timer": {"policy": "never"}}}, "is not a unit name"),
+        ({"units": {"u.conf": {"policy": "manual"}}}, "is not a unit name"),
+        ({"legacy": [{"cron": "x"}]}, "is not one of"),
+        ({"legacy": [{"path": "/etc/../x"}]}, "is malformed"),
+        ({"legacy": [{"cron_file": "../x"}]}, "is malformed"),
+        (
+            {"files": [{"src": "a", "dst": MANIFEST}]},
+            "is the rendered manifest",
+        ),
         ({"files": [{"src": "a", "dst": "usr/x"}]}, "not a plain absolute path"),
         (
             {"files": [{"src": "a", "dst": "/x"}, {"src": "a", "dst": "/x"}]},
@@ -274,7 +263,7 @@ def test_a_package_or_host_name_that_is_not_plain_is_flagged(hosts, name):
 
 def test_a_plain_component_and_package_name_is_clean(hosts):
     root = hosts({"components": ["homelab-updater"]}, {"homelab-updater": {}})
-    assert host_mode.render_host("daniel-pi", root).files == {}
+    assert set(host_mode.render_host("daniel-pi", root).files) == {MANIFEST}
     spec = root / "packages" / "homelab-updater" / "package.yml"
     spec.parent.mkdir(parents=True)
     spec.write_text("description: x\n")
