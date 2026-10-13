@@ -94,10 +94,12 @@ STALE_WEIGHT_FLOOR_SECONDS = 3.0
 # module had grown after its weight was recorded, so the split packed it as free: the skew of
 # an unweighted heavy file, with an entry present.
 #
-# WHY TEN. The runner/workstation scale and run-to-run variance together put a correctly
-# recorded module at up to SPREAD_PLACEHOLDER on the runner, and the entries this arm exists for
-# were 30x to 1500x off.
-UNDER_WEIGHT_RATIO = 10.0
+# WHY TWENTY. The runner is not a fixed multiple of the workstation. On that same run,
+# `scripts/docs/tests/test_gen_reference_decisions.py` measured 36.15s against 5.73s serial
+# on daniel-box, 6.3x, and #3604 saw one module vary 2x between two runs of the same code. A
+# correctly recorded module can therefore reach about 13x, and twenty clears it. The entries
+# this arm exists for were 34x to 1500x off.
+UNDER_WEIGHT_RATIO = 20.0
 
 # pytest's own `--durations-min`: no report line is smaller, so no measured total is either.
 # Used as the divisor's floor, which cannot then be zero.

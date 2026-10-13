@@ -34,7 +34,7 @@ lets it see the two shapes nothing static can. A heavy module landing where ever
 sibling is light is invisible to a neighbour heuristic, and `def test_` count, byte size and
 directory mean all fail to separate a heavy module from an ordinary file; the
 gate annotates it at `RUNNER_HEAVY_SECONDS` and rejects it at `RUNNER_HEAVY_FAIL_SECONDS`
-(both in `shard_weight_gate.py`, with the two arms).
+(both in `shard_weight_gate.py`, with the arms).
 And a recorded number can go wrong in the other direction, which no arm asking "is this file
 MISSING" ever sees:
 a recorded 17.31s against 0.09s measured makes the greedy split place the file first, so one

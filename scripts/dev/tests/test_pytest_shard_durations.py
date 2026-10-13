@@ -175,11 +175,11 @@ def test_a_heavy_module_recorded_far_below_what_it_measured_is_flagged():
 
 
 def test_a_heavy_module_inside_the_runner_scale_is_clean():
-    """The accept half: 26.4s measured against 4.5s recorded is 5.9x, the runner running a
-    correctly recorded module slower than the workstation did. Only the ratio decides."""
-    weights = RECORDED | {NEW_MODULE: 4.5}
+    """The accept half: 26.4s measured against 2.2s recorded is 12x, about the most a correctly
+    recorded module has reached on the runner (`UNDER_WEIGHT_RATIO`). Only the ratio decides."""
+    weights = RECORDED | {NEW_MODULE: 2.2}
     assert shard_weight_gate.durations_problems(REPORT, weights) == []
-    assert shard_weight_gate.durations_problems(REPORT, weights, under_ratio=5.0) != []
+    assert shard_weight_gate.durations_problems(REPORT, weights, under_ratio=10.0) != []
 
 
 def test_an_under_recorded_module_between_the_bounds_annotates_rather_than_fails():
