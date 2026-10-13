@@ -58,12 +58,18 @@ groups:
       # OCIRepository arm names `homelab`, so the drill's verify-drill, which is meant to read
       # Ready=False, never fires it. An absent `ready` label, before the first condition is
       # written, also reads as not Ready.
+      # last_over_time bridges a gap in kube-state-metrics' scrape. A failed scrape or a roll of
+      # its pod stale-marks every series it exports, and an instant read would then return
+      # nothing for one evaluation and restart the hold. The `unless` drops an object as soon as
+      # it reads Ready=True, so the 10m window never keeps a recovered object pending.
       - alert: FluxNotReady
         expr: >-
           max by (customresource_kind, exported_namespace, name) (
-            gotk_resource_info{customresource_kind="Kustomization", ready!="True"}
-            or gotk_resource_info{customresource_kind="OCIRepository", name="homelab", ready!="True"}
+            last_over_time(gotk_resource_info{customresource_kind="Kustomization", ready!="True"}[10m])
+            or last_over_time(gotk_resource_info{customresource_kind="OCIRepository", name="homelab", ready!="True"}[10m])
           )
+          unless on(customresource_kind, exported_namespace, name)
+          gotk_resource_info{ready="True"}
         for: 15m
         labels:
           severity: warning
@@ -77,12 +83,17 @@ groups:
       # kube-state-metrics drops a label whose field is absent, and the flux role writes
       # spec.suspend only while flux_sync_suspend is true, so suspension matches
       # suspended="true". flux_sync_suspend and a hand suspend both count. The max by() keeps
-      # the hold across a change of the other labels.
+      # the hold across a change of the other labels, and last_over_time across a gap in
+      # kube-state-metrics' scrape, as in FluxNotReady. Without it, a 24h hold would fire only
+      # after a whole day with no failed scrape and no roll of that pod. The `unless` drops a
+      # Kustomization once it reads as resumed.
       - alert: FluxSuspended
         expr: >-
           max by (customresource_kind, exported_namespace, name) (
-            gotk_resource_info{customresource_kind="Kustomization", suspended="true"}
+            last_over_time(gotk_resource_info{customresource_kind="Kustomization", suspended="true"}[10m])
           )
+          unless on(customresource_kind, exported_namespace, name)
+          gotk_resource_info{customresource_kind="Kustomization", suspended!="true"}
         for: 24h
         labels:
           severity: warning
