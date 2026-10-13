@@ -8,6 +8,8 @@ PR 2a, the ruler with its smoke rule and the lokitool phase: [#4805](https://git
 
 PR 2b, the grant that admits the ruler to Alertmanager: [#4812](https://github.com/DanielH2018/server/pull/4812).
 
+PR 3, the log rules in shadow and the ruler-watching alerts: [#4821](https://github.com/DanielH2018/server/pull/4821). Its 7-day soak starts at its deploy, whose UTC time the PR records.
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover. Two
 contracts.md rows also gate PRs here: the row *Open questions* 2 requests gates PR 2a, and
 the row *Open questions* 1 requests gates PR 4b. contracts.md's *Requests on C7* holds both
@@ -520,8 +522,9 @@ The ten `tests/test_check_*.py` files are `test_check_table.py` (`_GATES` and it
 `test_check_b2_gate.py`, `test_check_gates_exporters.py`, `test_check_streaks.py`,
 `test_check_cli.py`, `test_check_ha.py` (a comment) and `test_check_swallowed_verdicts.py`,
 whose gate assertion moves from `gates.LOKI_DEPENDENT` to `gates.STARTUP_GRACE`. The stream-label
-helper that PR 3 adds is not in the tree above, because its path follows
-`.claude/rules/python-layout.md` at implementation time.
+helper that PR 3 adds is not in the tree above, because its path followed
+`.claude/rules/python-layout.md` at implementation time: PR 3 placed it at
+`ansible/tests/_loki_streams.py`.
 
 ## Steps, as PRs
 
