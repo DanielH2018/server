@@ -1058,6 +1058,7 @@
  "scripts/renderer/tests/test_renderer_stub_file.py": 0.02,
  "scripts/renderer/tests/test_renderer_task_inputs.py": 2.08,
  "scripts/renderer/tests/test_renderer_template_census.py": 0.35,
+ "scripts/renderer/tests/test_renderer_trailing_newlines.py": 0.05,
  "scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py": 0.76,
  "scripts/secrets_mgmt/tests/test_rotation_tools.py": 0.0,
  "scripts/secrets_mgmt/tests/test_secret_bearing_host_paths.py": 0.42,
