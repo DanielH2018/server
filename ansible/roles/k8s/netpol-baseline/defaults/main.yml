@@ -72,7 +72,7 @@ netpol_baseline_obs_scope: namespace
 # homelab baseline gets. Empty, and empty deliberately. Most workloads here have no bespoke
 # policy, so exempting one leaves it fenced by NOTHING. The three that do (prometheus, loki,
 # alertmanager) carry additive grants to named homelab callers, so exempting one of them drops
-# the baseline's traefik, intra-namespace and node-CIDR peers and breaks its in-namespace callers.
+# the baseline's traefik, intra-namespace and node-CIDR peers and cuts its in-namespace callers.
 # tasks/main.yml has the long form above the observability exempt-set read.
 # Declared as a variable rather than hardcoding `== []` in the assert so that adding an
 # observability exemption is one edit in the same place as the homelab one, and so the failure

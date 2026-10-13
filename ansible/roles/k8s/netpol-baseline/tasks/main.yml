@@ -98,8 +98,10 @@
 # loki and alertmanager do have one each (`prometheus-callers`, `loki-callers`,
 # `alertmanager-callers`), but those are additive grants to named homelab callers, not tighter
 # replacements for the baseline. Exempting one of the three drops the baseline's traefik,
-# intra-namespace and node-CIDR peers from it, which cuts Grafana's queries, Prometheus's scrape
-# and the loopback readers such as otelq.
+# intra-namespace and node-CIDR peers from it, and each loses an in-namespace caller:
+#   - prometheus: Grafana's queries, plus otelq and Headlamp's proxy over the node-CIDR peer.
+#   - loki: Grafana's queries and Prometheus's `loki-internal` scrape.
+#   - alertmanager: Prometheus's alert delivery to `alertmanager:9093`, which is the paging path.
 - name: Read the workloads live-exempt from the observability baseline
   tags: [deploy]
   when:
