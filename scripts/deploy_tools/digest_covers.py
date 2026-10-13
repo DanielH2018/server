@@ -60,12 +60,16 @@ from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.narrow_git import CannotNarrow, show_at
+from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 from deploy_tools import digest_provable
 from deploy_tools.narrow_lib import broad, filters, paths
 from deploy_tools.narrow_lib import templates as narrow_templates
 
-# `broad` put the deployer's `files/` on the path, so there is one path mapper, not two.
+# The deployer's own `files/`, reached as `narrow_lib/broad.py` reaches it, so there is one
+# path mapper, not two.
+sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+
 from deployer_lib.deploy_changes import (
     _BROAD_PLAY_PREFIXES,
     _is_test_only_path,
@@ -346,11 +350,16 @@ def _parsed_same(path: str, before: str, after: str) -> bool:
 
 
 class Classifier:
-    """The per-path rule, with the deploy-plane `Context` built once per HEAD."""
+    """The per-path rule, with each path's verdict and each HEAD's `Context` built once.
+
+    One deployer call judges every pending line, and the lines one deploy-plane landing
+    writes share a HEAD and mostly a BASE, so the same paths recur across items.
+    """
 
     def __init__(self, repo: Path) -> None:
         self.repo = repo
         self._contexts: dict[str, broad.Context] = {}
+        self._verdicts: dict[tuple[str, str, str], str | frozenset[str] | None] = {}
 
     def _context(self, head: str) -> broad.Context:
         if head not in self._contexts:
@@ -366,37 +375,54 @@ class Classifier:
         if diff.returncode != 0:
             return f"`git diff {base[:8]} {head[:8]}` failed"
         for path in diff.stdout.splitlines():
-            why = self._path_reason(role, path, base, head)
-            if why:
-                return why
+            cs = services_from_changed_paths([path])
+            own = role in cs.k8s
+            plane = cs.broad_deploy and role in self._context(head).declared
+            if not (own or plane):
+                continue
+            key = (path, base, head)
+            if key not in self._verdicts:
+                self._verdicts[key] = self._verdict(path, base, head, cs.broad_deploy)
+            verdict = self._verdicts[key]
+            if isinstance(verdict, frozenset):
+                verdict = f"{path} reaches {role}" if role in verdict else None
+            if verdict:
+                return verdict
         return None
 
-    def _path_reason(self, role: str, path: str, base: str, head: str) -> str | None:
-        cs = services_from_changed_paths([path])
-        own = role in cs.k8s
-        plane = cs.broad_deploy and role in self._context(head).declared
-        if not (own or plane):
-            return None
+    def _verdict(
+        self, path: str, base: str, head: str, plane: bool
+    ) -> str | frozenset[str] | None:
+        """What a changed path does, for every role it could have written a line for.
+
+        Returns:
+            None when it changes nothing outside a digest, the tags it reaches for a
+            deploy-plane path the narrowing maps, or why it keeps every such line.
+        """
         if paths.is_prose(path) or _is_test_only_path(path):
             return None
         before, after = show_at(base, path, self.repo), show_at(head, path, self.repo)
-        if before is None or after is None:
-            return f"{path} is added or deleted"
-        if _parsed_same(path, before, after):
-            return None
-        if path.endswith(".j2") and narrow_templates.comment_only(before, after):
-            return None
+        if before is not None and after is not None:
+            if _parsed_same(path, before, after):
+                return None
+            if path.endswith(".j2") and narrow_templates.comment_only(before, after):
+                return None
         if not plane:
-            return f"{path} changes {role}'s own role"
-        if filters.is_plugin(path) and order_only(path, before, after):
-            return None
-        if _is_play_file(path):
-            return _play_reason(path, before, after, head, self.repo)
+            at = role_of(path)
+            return f"{path} changes {at.role if at else 'a'}'s own role"
+        # The narrowing reads an added or deleted inventory file, template or plugin itself;
+        # only the two rules here need both ends.
+        if before is not None and after is not None:
+            if filters.is_plugin(path) and order_only(path, before, after):
+                return None
+            if _is_play_file(path):
+                return _play_reason(path, before, after, head, self.repo)
+        elif _is_play_file(path):
+            return f"{path} is added or deleted"
         try:
-            tags = broad.broad_path_tags(path, base, self._context(head))
+            return frozenset(broad.broad_path_tags(path, base, self._context(head)))
         except CannotNarrow as exc:
             return f"{path}: {exc}"
-        return f"{path} reaches {role}" if role in tags else None
 
 
 def main(argv: list[str] | None = None) -> int:

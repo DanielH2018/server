@@ -135,6 +135,15 @@ def _play_vars(line: str) -> str:
 
 
 DEPLOY_WITH_PLAY_VAR = _play_vars("stubs_allowed: true")
+
+
+def _play_pre_task(body: str) -> str:
+    """`DEPLOY` with one more task in the play's own `pre_tasks:`, ahead of the preamble."""
+    return DEPLOY.replace(
+        "  pre_tasks:\n", f"  pre_tasks:\n    - name: Added\n      {body}\n"
+    )
+
+
 # The #4836 shape: a new constant only `build_k8s_dep_map` reads.
 TOPOSORT_SORTS_LAST = TOPOSORT.replace(
     "def toposort_containers", "LAST = {'netpol-baseline'}\n\n\ndef toposort_containers"
@@ -201,6 +210,32 @@ ROWS = [
         None,
         id="another-roles-own-change",
     ),
+    pytest.param(
+        "authelia",
+        [
+            {
+                "ansible/deploy.yml": _play_pre_task(
+                    "ansible.builtin.assert:\n        that: true"
+                )
+            }
+        ],
+        None,
+        id="an-assert-in-the-plays-own-pre-tasks",
+    ),
+    pytest.param(
+        "authelia",
+        [
+            {
+                "ansible/templates/host-aliases.yml.j2": "{% macro aliases() %}{% endmacro %}\n",
+                "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2": (
+                    "{% from 'host-aliases.yml.j2' import aliases %}\n"
+                    + BASE["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"]
+                ),
+            }
+        ],
+        None,
+        id="a-new-shared-template-only-another-role-imports",
+    ),
     # ── must keep ───────────────────────────────────────────────────────────────────────────
     pytest.param(
         "authelia",
@@ -237,6 +272,18 @@ ROWS = [
         ],
         "not an assert, fail or debug",
         id="a-set-fact-in-the-preamble-changes",
+    ),
+    pytest.param(
+        "authelia",
+        [
+            {
+                "ansible/deploy.yml": _play_pre_task(
+                    "ansible.builtin.set_fact:\n        skip_hash: true"
+                )
+            }
+        ],
+        "ansible/deploy.yml changes a task that is not an assert, fail or debug",
+        id="a-set-fact-in-the-plays-own-pre-tasks",
     ),
     pytest.param(
         "authelia",
