@@ -464,3 +464,24 @@ def test_a_template_naming_a_derived_fact_is_secret_bearing(tmp_path: Path) -> N
     )
     _, offenders = census(role, _word_pattern({"alpha_token"}))
     assert offenders == ["widget/main.yml::Check the token"]
+
+
+def test_an_assert_on_a_register_a_secret_read_fills_is_flagged(tmp_path: Path) -> None:
+    # The assert names no secret key itself; only the register carries the value (#4862).
+    role = _role(
+        tmp_path,
+        **{
+            "tasks/main.yml": """
+- name: Read with the token
+  ansible.builtin.uri:
+    url: "https://example.invalid/?t={{ alpha_token }}"
+  register: widget_read
+  when: not (homelab_secret_stubs | default(false) | bool)
+- name: Fail if the read is empty
+  ansible.builtin.assert:
+    that: widget_read.json | length > 0
+"""
+        },
+    )
+    _, offenders = census(role, _word_pattern({"alpha_token"}), exempt={})
+    assert offenders == ["widget/main.yml::Fail if the read is empty"]
