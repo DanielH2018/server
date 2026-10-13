@@ -22,6 +22,8 @@ PR 7, the trailing-newline class, rendered with the template module's final newl
 
 PR 8, the out-of-render census row and the two determinism modules: [#4861](https://github.com/DanielH2018/server/pull/4861).
 
+PR 8b, the digest lines in the CI job log and the determinism check split by four: [#4872](https://github.com/DanielH2018/server/pull/4872).
+
 Depends on: none
 
 Unblocks: [R2](r2-secret-placeholders.md), [R3](r3-remove-live-reads.md) and H3 (the host
