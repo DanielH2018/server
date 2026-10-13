@@ -14,7 +14,7 @@ import pytest
 import digest_covers
 from lib.git_testing import git_out
 
-from test_digest_covers import _commit, _dep_map_body, _edit, tree  # noqa: F401
+from test_digest_covers import HOST_VARS, _commit, _dep_map_body, _edit, tree  # noqa: F401
 
 # Must-keep rows: (id, a new top-level statement, what `build_k8s_dep_map` runs before its
 # return).
@@ -132,3 +132,23 @@ def test_the_order_only_rows(tree, commits, kept_because):  # noqa: F811
         assert reason is None
     else:
         assert reason and kept_because in reason
+
+
+def test_reordering_an_edge_set_is_order_only(tree):  # noqa: F811
+    """Each role's edges in another order change the dependency map and no entry."""
+    tree.write(
+        "ansible/inventory/host_vars/daniel-box.yml",
+        HOST_VARS + "    depends_on: [authelia, crowdsec]\n",
+    )
+    base = tree.commit("sonarr has two edges")
+    head = _commit(
+        tree,
+        [
+            _edit(
+                "ansible/filter_plugins/toposort.py",
+                "_edges(c) for c",
+                "sorted(_edges(c), reverse=True) for c",
+            )
+        ],
+    )
+    assert digest_covers.Classifier(tree.root).reason("authelia", base, head) is None

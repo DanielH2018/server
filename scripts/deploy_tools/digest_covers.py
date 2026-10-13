@@ -29,9 +29,9 @@ or none, and is skipped. A path that can is covered when one of these holds:
     by `assert`, `fail` and `debug` tasks with no `register` or `notify`, plus `vars:` keys only
     those tasks read and Ansible itself does not. Such a task changes nothing: it passes, or
     it stops the run;
-  * it is a filter plugin in `ORDER_ONLY_FILTERS` whose change is confined to the filter
-    whose output only orders the play, and to the helpers no other filter reaches, and
-    writes nothing through its arguments or a global;
+  * it is a filter plugin in `ORDER_ONLY_PLUGINS` whose sort chain, run with the plugins at
+    each end on HEAD's data, returns the same entries in any order and leaves its input
+    unchanged (`narrow_lib/order_only.py`);
   * it is an inventory file, a shared template or another filter plugin that the deploy-plane
     narrowing (`narrow_lib/broad.py:broad_path_tags`) maps to tags other than ROLE. That
     derivation greps ROLE's whole tree, `tasks/` included.
@@ -324,7 +324,7 @@ class Classifier:
         # The narrowing reads an added or deleted inventory file, template or plugin itself;
         # only the two rules here need both ends.
         if before is not None and after is not None:
-            if filters.is_plugin(path) and order_only(path, before, after):
+            if filters.is_plugin(path) and order_only(self.repo, path, base, head):
                 return None
             if _is_play_file(path):
                 return _play_reason(path, before, after, head, self.repo)

@@ -266,6 +266,18 @@ ROWS = [
         None,
         id="4836-order-only-body-that-writes-only-its-own-locals",
     ),
+    pytest.param(
+        "authelia",
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_body(
+                    "    global _SEEN\n    _SEEN = containers_list\n"
+                )
+            }
+        ],
+        None,
+        id="build-k8s-dep-map-binds-a-global-and-writes-no-entry",
+    ),
     # ── must keep ───────────────────────────────────────────────────────────────────────────
     pytest.param(
         "authelia",
@@ -385,17 +397,14 @@ ROWS = [
         "authelia",
         [
             {
-                "ansible/filter_plugins/toposort.py": _dep_map_body(
-                    "    global _SEEN\n    _SEEN = containers_list\n"
-                )
+                **_edit(
+                    "ansible/filter_plugins/toposort.py", '"docker")\n', '"k8s")\n'
+                ),
+                # An entry with no `platform`, which the new default moves into the k8s play.
+                "ansible/inventory/host_vars/daniel-box.yml": HOST_VARS
+                + "  - name: x\n",
             }
         ],
-        "every deploy runs",
-        id="build-k8s-dep-map-writes-a-global",
-    ),
-    pytest.param(
-        "authelia",
-        [_edit("ansible/filter_plugins/toposort.py", '"docker")\n', '"k8s")\n')],
         "every deploy runs",
         id="filter-by-platform-changes",
     ),
