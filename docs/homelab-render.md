@@ -231,7 +231,7 @@ would also escape a placeholder emitted before it:
    written. A literal `${HOME}` renders as `$${HOME}`, and a bare `$$` as `$$$`.
 3. In a directory that substitutes, every sentinel becomes `${K}`.
 
-The five pinned live-read facts keep the values the stub file gives them (*Pinned live-read
+The four pinned live-read facts keep the values the stub file gives them (*Pinned live-read
 facts*), so a round trip sees one value on both sides.
 
 ### Which directories substitute
@@ -365,13 +365,12 @@ Measured on CI run 38426501907 with flux v2.9.6:
 
 ## Pinned live-read facts
 
-Five facts come from live state in a real run, so the renderer cannot compute them from the
+Four facts come from live state in a real run, so the renderer cannot compute them from the
 tree. Target slice R3 removes those reads. Until then, each one takes a fixed stand-in in
 both halves:
 
 - `authelia_password_hash`, `authelia_claude_password_hash` and
   `authelia_agent_password_hash`, read by the `authelia` templates.
-- `pi_peer_backup_known_hosts_line`, read by the `pi-peer-backup` templates.
 - `k8s_built_images`, read by the `n8n` templates. It pins to `[]`, which n8n renders as
   `checksum/image: "unstaged"`.
 
@@ -397,7 +396,7 @@ SOPS leaves in plaintext, and decrypts nothing.
 uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
 ```
 
-The file holds every stub, the sentinel `homelab_secret_stubs: true` and the five pinned
+The file holds every stub, the sentinel `homelab_secret_stubs: true` and the four pinned
 facts. Pass it only to a k8s dry run or to the renderer, never to a run that applies
 anything.
 
@@ -635,7 +634,7 @@ directory and its claim files. Four channels stay outside it:
   as `--from-file` ConfigMaps, probe and gate Jobs and `kubectl run` pods;
 - files that nine roles write to hosts, which belong to the host plane;
 - the `homelab` Namespace and its LimitRange, which `ansible/deploy.yml` builds inline;
-- the values of the five pinned live-read facts, which target slice R3 removes.
+- the values of the four pinned live-read facts, which target slice R3 removes.
 
 The first channel is a census. The `render-does-not-cover-role-writes` row of
 `ansible/tests/repo/test_census_rows_roles.py` reads every task file under

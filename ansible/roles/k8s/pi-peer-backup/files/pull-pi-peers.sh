@@ -6,8 +6,8 @@
 # Kopia scope.
 #
 # sudo rsync on the Pi (NOPASSWD sudo for the ubuntu user) is REQUIRED: the files are
-# root:root 0600/0640. StrictHostKeyChecking=yes against the deploy-pinned known_hosts
-# (stricter than the old accept-new — the pin is mounted, never TOFU'd here). No
+# root:root 0600/0640. StrictHostKeyChecking=yes against the known_hosts pin committed in
+# the role (stricter than the old accept-new — the pin is mounted, never TOFU'd here). No
 # --delete: a removed peer lingering in the backup is harmless, and --delete would wipe
 # the copy if the source were ever momentarily empty.
 #
@@ -131,6 +131,13 @@ OUT=$(rsync -a --chmod=D700 --timeout=120 \
   -e "ssh -i $HOME/.ssh/id -o UserKnownHostsFile=/ssh/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes -o ConnectTimeout=15" \
   "$PI_SRC" "$DEST/" 2>&1)
 RC=$?
+
+# ssh exits 255 for any connection failure, and rsync passes that code through, so the exit
+# code alone cannot tell a changed host key from an unreachable Pi. ssh's own line can.
+if [ "$RC" -eq 255 ] && [[ "$OUT" == *"Host key verification failed."* ]]; then
+  push down "daniel-pi host key differs from the committed pin"
+  exit 1
+fi
 
 if [ "$RC" -ne 0 ]; then
   SUMMARY=$(printf '%s' "$OUT" | tail -1 | tr -d '"' | tr '\n' ' ')
