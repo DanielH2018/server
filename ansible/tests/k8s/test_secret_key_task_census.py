@@ -423,3 +423,44 @@ def test_an_exemption_for_a_guarded_or_missing_task_is_stale(tmp_path: Path) -> 
         "widget/main.yml::Gone",
         "widget/main.yml::Post the token when not stubbed",
     ]
+
+
+def test_a_double_quoted_template_lookup_derives_its_fact(tmp_path: Path) -> None:
+    role = _role(
+        tmp_path,
+        **{
+            "templates/t.j2": 'token: "{{ alpha_token }}"\n',
+            "tasks/main.yml": """
+- name: Read the template
+  ansible.builtin.set_fact:
+    decl: '{{ lookup("template", "t.j2") | from_yaml }}'
+- name: Check the token
+  ansible.builtin.assert:
+    that: decl.token | length == 32
+""",
+        },
+    )
+    _, offenders = census(role, _word_pattern({"alpha_token"}))
+    assert offenders == ["widget/main.yml::Check the token"]
+
+
+def test_a_template_naming_a_derived_fact_is_secret_bearing(tmp_path: Path) -> None:
+    role = _role(
+        tmp_path,
+        **{
+            "templates/t.j2": 'token: "{{ tok }}"\n',
+            "tasks/main.yml": """
+- name: Encode the token
+  ansible.builtin.set_fact:
+    tok: "{{ alpha_token | b64encode }}"
+- name: Read the template
+  ansible.builtin.set_fact:
+    decl: "{{ lookup('template', 't.j2') | from_yaml }}"
+- name: Check the token
+  ansible.builtin.assert:
+    that: decl.token | length == 32
+""",
+        },
+    )
+    _, offenders = census(role, _word_pattern({"alpha_token"}))
+    assert offenders == ["widget/main.yml::Check the token"]

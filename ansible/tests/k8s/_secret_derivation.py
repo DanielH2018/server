@@ -113,26 +113,29 @@ def role_derived_facts(role: Path, names: re.Pattern[str]) -> set[str]:
             if module is None or not isinstance(task[module], dict):
                 continue
             keys = {str(k) for k in task[module] if k != "cacheable"}
-            text = " ".join(_JINJA.findall(_body(task)))
+            # `_body` is JSON, which escapes a double quote; the lookup pattern reads it bare.
+            text = " ".join(_JINJA.findall(_body(task))).replace('\\"', '"')
             facts.append((keys, text, list(_looked_up_templates(role, text))))
-    secret_templates = {
-        path
+    templates = {
+        path: " ".join(_JINJA.findall(path.read_text()))
         for _, _, paths in facts
         for path in paths
-        if path.is_file() and names.search(" ".join(_JINJA.findall(path.read_text())))
+        if path.is_file()
     }
     derived: set[str] = set()
     while True:
-        local = _word_pattern(derived) if derived else None
+        secret = (
+            re.compile(f"{names.pattern}|{_word_pattern(derived).pattern}")
+            if derived
+            else names
+        )
+        # Recomputed each pass: a template naming a fact derived last pass is secret-bearing now.
+        secret_templates = {p for p, text in templates.items() if secret.search(text)}
         found = {
             key
             for keys, text, paths in facts
             if not keys <= derived
-            and (
-                names.search(text)
-                or (local and local.search(text))
-                or secret_templates.intersection(paths)
-            )
+            and (secret.search(text) or secret_templates.intersection(paths))
             for key in keys
         } - derived
         if not found:
