@@ -48,7 +48,12 @@ from lib.k8s_context import resolve_vars
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.context import play_context
-from renderer.renderer_lib.environment import RenderError, loader_name, renderer_env
+from renderer.renderer_lib.environment import (
+    RenderError,
+    loader_name,
+    render_file,
+    renderer_env,
+)
 from renderer.renderer_lib.task_inputs import derived_facts, include_vars
 
 KUSTOMIZATION = "kustomization.yaml"
@@ -212,7 +217,7 @@ def render_tag(tag: str, stubs: dict, host: str = K8S_HOST) -> RenderedTag:
             vars_["manifests_label_src"] = str(path)
             path = LABEL_WRAPPER
         try:
-            return env.get_template(loader_name(env, path)).render(vars_)
+            return render_file(env, loader_name(env, path), vars_)
         except (jinja2.TemplateError, ValueError, AnsibleError) as exc:
             raise RenderError(f"{tag}/{out_name} from {path.name}: {exc}") from exc
 

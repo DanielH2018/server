@@ -7,7 +7,7 @@ template and a task expression see the same filters and the same `lookup`.
 Typical usage example:
 
     env = renderer_env(K8S_ROLES / "nut" / "templates", ctx)
-    text = env.get_template("deployment.yaml.j2").render(ctx)
+    text = render_file(env, "deployment.yaml.j2", ctx)
 """
 
 import sys as _sys
@@ -38,11 +38,38 @@ def renderer_env(templates: Path, ctx: dict | None = None) -> jinja2.Environment
     The template census in `scripts/renderer/tests/` parses every template through this
     environment, so a filter or test the renderer lacks fails there before a render meets it.
     With `ctx`, the environment's `lookup` reads files and renders templates against it.
+
+    Unlike the render guards' environment, it drops a template's last newline, as
+    ansible-core's `AnsibleEnvironment` does, and `render_file` adds back what the template
+    module adds back. So an `{% include %}` loses its last newline, as it does under Ansible.
     """
     env = template_env(templates, undefined_cls=StrictChainableUndefined)
+    env.keep_trailing_newline = False
     if ctx is not None:
         env.globals["lookup"] = _template_lookup(env, ctx)
     return env
+
+
+def render_file(env: jinja2.Environment, name: str, variables: dict) -> str:
+    """Template `name` on `env`'s loader, rendered to the text the `template` module writes."""
+    source, _, _ = cast(jinja2.BaseLoader, env.loader).get_source(env, name)
+    return _with_source_newlines(source, env.get_template(name).render(variables))
+
+
+def _with_source_newlines(source: str, text: str) -> str:
+    """`text`, padded with newlines until it ends in as many as `source` does.
+
+    This is ansible-core's `TemplateEngine._post_render_mutation`, which the template module
+    and the template lookup both apply. Jinja drops the source's last newline, and the engine
+    appends only the newlines the render comes up short. A render that already ends in enough
+    keeps its own, so the label wrapper's closing `}}` line adds none after the YAML dump's.
+    """
+    missing = _newlines_at_end(source) - _newlines_at_end(text)
+    return text + "\n" * missing if missing > 0 else text
+
+
+def _newlines_at_end(text: str) -> int:
+    return len(text) - len(text.rstrip("\n"))
 
 
 def _template_lookup(env: jinja2.Environment, ctx: dict):
@@ -64,21 +91,23 @@ def _template_lookup(env: jinja2.Environment, ctx: dict):
         kind = kind.removeprefix("ansible.builtin.")
         if kind != "template":
             return base(context, kind, *args, **kwargs)
-        # Not rstripped: ansible-core's lookup keeps a render's trailing newlines, and
-        # image-builder's content tag hashes them.
-        return _lookup_template(env, Path(args[0])).render(context.get_all())
+        # Not rstripped: ansible-core's lookup pads a render's trailing newlines as the
+        # template module does, and image-builder's content tag hashes them.
+        return _lookup_render(env, Path(args[0]), context.get_all())
 
     return lookup
 
 
-def _lookup_template(env: jinja2.Environment, path: Path) -> jinja2.Template:
-    """The template `lookup('template', path)` renders, found as Ansible's lookup finds it."""
+def _lookup_render(env: jinja2.Environment, path: Path, variables: dict) -> str:
+    """`lookup('template', path)`, with the template found as Ansible's lookup finds it."""
     if not path.is_absolute():
-        return env.get_template(path.as_posix())
+        return render_file(env, path.as_posix(), variables)
     try:
-        return env.get_template(loader_name(env, path))
+        name = loader_name(env, path)
     except RenderError:
-        return env.from_string(path.read_text())
+        source = path.read_text()
+        return _with_source_newlines(source, env.from_string(source).render(variables))
+    return render_file(env, name, variables)
 
 
 def loader_name(env: jinja2.Environment, path: Path) -> str:
@@ -113,4 +142,6 @@ def evaluate(env: jinja2.Environment, expression: str, variables: dict) -> objec
             and "{{" not in inner
         ):
             return env.compile_expression(inner, undefined_to_none=False)(**variables)
-        return env.from_string(expression).render(variables)
+        return _with_source_newlines(
+            expression, env.from_string(expression).render(variables)
+        )
