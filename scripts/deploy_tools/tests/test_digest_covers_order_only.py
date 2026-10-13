@@ -14,7 +14,8 @@ import pytest
 import digest_covers
 from lib.git_testing import git_out
 
-from test_digest_covers import HOST_VARS, _commit, _dep_map_body, _edit, tree  # noqa: F401
+from test_digest_covers import _commit, _dep_map_body, _edit, tree  # noqa: F401
+from test_digest_covers import HOST_VARS
 
 # Must-keep rows: (id, a new top-level statement, what `build_k8s_dep_map` runs before its
 # return).
@@ -152,3 +153,30 @@ def test_reordering_an_edge_set_is_order_only(tree):  # noqa: F811
         ],
     )
     assert digest_covers.Classifier(tree.root).reason("authelia", base, head) is None
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "for c in containers_list:\n    for f in [c.update]:\n        f(use_authelia=False)",
+        "for c in containers_list:\n    [f(use_authelia=False) for f in [c.update]]",
+        "for c in containers_list:\n    (f := c.__setitem__)\n    f('use_authelia', False)",
+        "for c in containers_list:\n    h = []\n    h.append(c)\n    h[0]['use_authelia'] = False",
+        "sorted(containers_list, key=dict.clear)",
+    ],
+    ids=[
+        "loop-alias",
+        "comprehension-alias",
+        "walrus-alias",
+        "list-holder",
+        "sorted-key",
+    ],
+)
+def test_4844s_other_aliasing_shapes_keep_the_line(tree, body):  # noqa: F811
+    """The aliasing rows #4844 added to its static check, which the running check sees as writes."""
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree, [{"ansible/filter_plugins/toposort.py": _dep_map_writes("", body)}]
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason

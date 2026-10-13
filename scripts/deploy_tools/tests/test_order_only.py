@@ -7,7 +7,8 @@ judged end to end.
 Run: uv run pytest scripts/deploy_tools/tests/test_order_only.py
 """
 
-from deploy_tools.narrow_lib import filters, order_only
+from deploy_tools.narrow_lib import order_only
+from deploy_tools.narrow_lib import filters
 from lib.git_testing import git_out
 from lib.repo_paths import REPO
 

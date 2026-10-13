@@ -39,8 +39,10 @@ from lib.git import git
 # review found a new aliasing bypass: Python mutation cannot be tracked soundly from syntax.
 # Running the code imports it, which `filters.py` never does; here both ends are commits the
 # deploy itself imports, under the same interpreter. The gaps taken: a branch HEAD's data does
-# not exercise, an import-time side effect outside the subprocess, and a role whose bytes
-# depend on list order, which the render proof the caller still requires catches.
+# not exercise, a side effect outside the entries the chain returns and reads (a file write,
+# say, which lands in the subprocess's temp dir here and in the controller's cwd in a deploy),
+# and a role whose bytes depend on list order, which the render proof the caller still
+# requires catches.
 ORDER_ONLY_PLUGINS = frozenset({"ansible/filter_plugins/toposort.py"})
 
 _PLUGINS = "ansible/filter_plugins"
