@@ -38,7 +38,8 @@ is the operator's page.
 
 Exit codes: 0 done, with no difference; 1 a difference, a file lacking a stub, or a failed
 probe case; 2 refused, for an empty set, a missing named member, a tree of the wrong layout,
-an occupied --out or no flux on PATH; 64 a usage error.
+an occupied --out, no flux on PATH, or a round trip whose render failed or holds no
+directory that substitutes; 64 a usage error.
 
 Run: uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
      uv run python scripts/renderer/shadow_diff.py compare ANSIBLE_DIR RENDER_DIR
@@ -221,16 +222,20 @@ def _roundtrip(out: Path, roles: list[str] | None, with_red_proof: bool) -> int:
         return _refused("roundtrip", str(exc))
     keys = homelab_stub_keys(yaml_fast.safe_load(SECRETS.read_text()))
     passes = stub_passes(stub_vars(), keys)
+    # Every failure before the builds is a refusal, never exit 1. CI's red half accepts only
+    # exit 1, so a setup failure or an empty substituting set cannot pass as a red proof.
     try:
         sides = render_sides(out, select_tags(roles), keys, passes)
+        if not sides.placeholder.substituting():
+            raise RenderRefused(
+                "no rendered directory substitutes, so the round trip would prove nothing "
+                "about substitution"
+            )
         if with_red_proof:
             key, passes[0] = red_proof(passes[0], sides)
             print(f"roundtrip: red proof: {key}'s substitute value changed by one byte")
-    except RenderRefused as exc:
+    except (RenderRefused, RenderError, ValueError) as exc:
         return _refused("roundtrip", str(exc))
-    except (RenderError, ValueError) as exc:
-        print(f"shadow_diff roundtrip: {exc}", file=sys.stderr)
-        return SHADOW_DIFFERENT
     reports = [compare_sides(sides, p, flux) for p in passes]
     for report in reports:
         print("\n".join(report.lines()))

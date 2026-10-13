@@ -107,6 +107,19 @@ def test_a_value_alone_in_a_quoted_field_differs_in_the_0123_pass(
     assert printed[2].endswith(" 1 differences, with every key 0123")
 
 
+@pytest.mark.parametrize("extra", [[], ["--red-proof"]], ids=["green", "red-proof"])
+def test_a_render_with_nothing_substituting_is_refused(
+    flux_on_path, tmp_path, capsys, extra
+):
+    # registry renders no secret reference. Without this refusal the green run exited 0 with
+    # `0 substituting`, and the red run's setup error exited 1, which CI's red half accepts.
+    out = tmp_path / "rt"
+    assert _main("roundtrip", "--out", str(out), "--role", "registry", *extra) == 2
+    captured = capsys.readouterr()
+    assert "no rendered directory substitutes" in captured.err
+    assert "roundtrip:" not in captured.out
+
+
 def test_roundtrip_without_flux_on_path_exits_2(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("PATH", str(tmp_path))
     assert _main("roundtrip", "--out", str(tmp_path / "rt"), "--role", "configarr") == 2

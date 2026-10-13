@@ -292,7 +292,9 @@ substituting, 4 objects, 0 differences, with each key's R1 stub`. `roundtrip` ex
 when both passes find no difference.
 
 It needs the pinned flux CLI. daniel-box has none, so it runs in CI's `flux_roundtrip` job.
-Where `flux` is not on `PATH`, it exits 2 and reports no pass. `--red-proof` changes one key's
+Where `flux` is not on `PATH`, it exits 2 and reports no pass. It also exits 2 when a render
+fails or no rendered directory substitutes, because nothing would pass through Flux's
+substitution. A setup failure therefore never exits 1, the code CI's red half requires. `--red-proof` changes one key's
 substitute value by one byte in the first pass, so a working round trip must exit 1. The CI
 job runs it that way too, and fails unless it does:
 
