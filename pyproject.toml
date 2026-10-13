@@ -170,6 +170,10 @@ extend-exclude = [
   "ansible/collections",
   "*.md",
 ]
+# The hosts run reconcile under Ubuntu 24.04's python3, which is 3.12. Formatting it for the
+# repo's newer target writes 3.14-only syntax, `except A, B:` among it.
+# hosts/lib/tests/test_reconcile_component.py parses the file with the 3.12 grammar.
+per-file-target-version = { "hosts/lib/homelab-reconcile" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
