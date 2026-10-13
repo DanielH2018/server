@@ -190,7 +190,9 @@ def run_query(ns):
         # run_alerts asks for the same end explicitly (`direction=backward`), since `forward`
         # spends a capped window's whole limit on its oldest lines.
         start, end = since_window_ns(getattr(ns, "since", None))
-        url = loki_query_url(base, ns.logql, ns.limit, start=start, end=end)
+        url = loki_query_url(
+            base, ns.logql, ns.limit, start=start, end=end, step=ns.step
+        )
         formatter = format_loki
     data, err = core.fetch_json(url, resolve=pin)
     if err:
