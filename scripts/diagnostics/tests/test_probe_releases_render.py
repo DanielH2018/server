@@ -1,9 +1,9 @@
-"""The render digest outranks the `--stale-only` path verdict, both ways.
+"""The render digest outranks the `--stale-only` path verdict, both ways, over real git history.
 
-Every refusal is paired with the clearing case it differs from by one field, so a rule that
-stopped refusing fails here rather than reading green. The three-branch ladder -- a match
-clears, a mismatch flags, an untrustworthy record falls back to the path rule -- gets one test
-per branch on top of that.
+Most tests drive `compute_stale` and then `apply_digest_verdicts` over a throwaway repo. The
+three-branch ladder -- a match clears, a mismatch flags, an untrustworthy record falls back to
+the path rule -- gets one test per branch, and so does a render of a commit behind the ref
+(#4881). The single-pair refusal table is `test_probe_releases_render_ladder.py`.
 
 Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_render.py
 """
