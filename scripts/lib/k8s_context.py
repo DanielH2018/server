@@ -18,7 +18,12 @@ import re
 from jinja2 import StrictUndefined, Undefined
 
 from lib.ansible_jinja_env import ansible_bool
-from lib.render_guard import SHARED_TPL, StubUndefined, make_env
+from lib.render_guard import (
+    SHARED_TPL,
+    StubUndefined,
+    make_env,
+    pad_to_source_newlines,
+)
 
 __all__ = [
     "resolve_vars",
@@ -48,8 +53,13 @@ def resolve_vars(
     ``undefined_cls`` decides what an undefined name inside a value becomes. The default
     ``StubUndefined`` renders ``STUB`` inside text and None as a whole value. A strict class
     such as ``render_guard.StrictChainableUndefined`` raises in both places instead.
+
+    A value rendered as text ends in as many newlines as ansible-core gives it: Jinja drops the
+    source's last one, and ``pad_to_source_newlines`` adds back only those the render lacks. So
+    ``"p {{ x }}\\n"`` with ``x`` ending in a newline resolves to one newline, not two (#4853).
     """
     env = make_env([SHARED_TPL], undefined_cls=undefined_cls)
+    env.keep_trailing_newline = False
     # `bool` is an Ansible filter, not a Jinja builtin, so a group_var that uses it renders
     # here as "No filter named 'bool'" — a render failure pointing at a variable that is
     # perfectly valid under Ansible. Every render guard registers the real filter through
@@ -81,11 +91,16 @@ def resolve_vars(
         variable comes back a list, not its `str()`. `.render()` always returns a string, so
         without this a list alias reaches a `{% for %}` loop as the literal characters of its
         Python repr — `[`, `'`, `1`, ... — silently breaking the template it aliases into.
+
+        The shape is judged as Jinja parses it. One trailing newline still counts as a single
+        expression, because Jinja drops it before parsing, and a string result is then padded
+        like a text render. Any other text around the expression, such as a leading space or a
+        second newline, makes the value text, as it is under Ansible.
         """
         if isinstance(node, str):
             if "{{" not in node:
                 return node
-            pure = _PURE_TEMPLATE.match(node.strip())
+            pure = _PURE_TEMPLATE.fullmatch(node.removesuffix("\n"))
             if pure:
                 # `compile_expression` would turn an undefined result into None, which a
                 # strict caller must see raise instead.
@@ -94,8 +109,12 @@ def resolve_vars(
                 )(**ctx)
                 if isinstance(value, StrictUndefined):
                     value._fail_with_undefined_error()
-                return None if isinstance(value, Undefined) else value
-            return env.from_string(node).render(ctx)
+                if isinstance(value, Undefined):
+                    return None
+                if isinstance(value, str):
+                    return pad_to_source_newlines(node, value)
+                return value
+            return pad_to_source_newlines(node, env.from_string(node).render(ctx))
         if isinstance(node, list):
             return [expand(n, ctx) for n in node]
         if isinstance(node, dict):

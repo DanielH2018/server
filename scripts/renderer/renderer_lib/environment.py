@@ -25,7 +25,7 @@ from jinja2.runtime import Context
 
 from lib.ansible_jinja_env import template_env
 from lib.k8s_yaml import make_lookup
-from lib.render_guard import StrictChainableUndefined
+from lib.render_guard import StrictChainableUndefined, pad_to_source_newlines
 
 
 class RenderError(RuntimeError):
@@ -53,23 +53,7 @@ def renderer_env(templates: Path, ctx: dict | None = None) -> jinja2.Environment
 def render_file(env: jinja2.Environment, name: str, variables: dict) -> str:
     """Template `name` on `env`'s loader, rendered to the text the `template` module writes."""
     source, _, _ = cast(jinja2.BaseLoader, env.loader).get_source(env, name)
-    return _with_source_newlines(source, env.get_template(name).render(variables))
-
-
-def _with_source_newlines(source: str, text: str) -> str:
-    """`text`, padded with newlines until it ends in as many as `source` does.
-
-    This is ansible-core's `TemplateEngine._post_render_mutation`, which the template module
-    and the template lookup both apply. Jinja drops the source's last newline, and the engine
-    appends only the newlines the render comes up short. A render that already ends in enough
-    keeps its own, so the label wrapper's closing `}}` line adds none after the YAML dump's.
-    """
-    missing = _newlines_at_end(source) - _newlines_at_end(text)
-    return text + "\n" * missing if missing > 0 else text
-
-
-def _newlines_at_end(text: str) -> int:
-    return len(text) - len(text.rstrip("\n"))
+    return pad_to_source_newlines(source, env.get_template(name).render(variables))
 
 
 def _template_lookup(env: jinja2.Environment, ctx: dict):
@@ -106,7 +90,7 @@ def _lookup_render(env: jinja2.Environment, path: Path, variables: dict) -> str:
         name = loader_name(env, path)
     except RenderError:
         source = path.read_text()
-        return _with_source_newlines(source, env.from_string(source).render(variables))
+        return pad_to_source_newlines(source, env.from_string(source).render(variables))
     return render_file(env, name, variables)
 
 
@@ -142,6 +126,6 @@ def evaluate(env: jinja2.Environment, expression: str, variables: dict) -> objec
             and "{{" not in inner
         ):
             return env.compile_expression(inner, undefined_to_none=False)(**variables)
-        return _with_source_newlines(
+        return pad_to_source_newlines(
             expression, env.from_string(expression).render(variables)
         )
