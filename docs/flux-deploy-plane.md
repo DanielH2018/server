@@ -1,8 +1,9 @@
 # The Flux deploy plane
 
 Flux's source controller, Kustomize controller and notification controller run in the
-`flux-system` namespace. They follow no source yet, so Flux applies nothing, and
-the GitOps deployer and Ansible still deploy every service, Flux included. The plan that takes
+`flux-system` namespace. They follow the promoted artifact, whose root Kustomization is
+empty, so Flux applies nothing outside `flux-system`, and the GitOps deployer and Ansible
+still deploy every service, Flux included. The plan that takes
 Flux from here to owning the cluster is [slice D1](target-architecture/deploy/d1-flux-installed.md)
 and the slices after it, and the decision it proposes is
 [ADR-0020](adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md).
@@ -80,13 +81,44 @@ its six groups, so a Flux upgrade that widens it fails CI.
 To check the controllers after a deploy, run `kubectl -n flux-system get deploy` and
 `uv run python scripts/diagnostics/probe.py health flux`.
 
+## What Flux follows
+
+The flux role applies these objects in `flux-system` from `templates/sync.yaml.j2`, after the
+Flux CRDs are Established:
+
+- **The `OCIRepository` `homelab`** polls `oci://ghcr.io/danielh2018/homelab-manifests:prod`
+  every minute, with no pull secret, so the package stays public. It verifies the cosign
+  signature against the identity of the `promote` workflow on `refs/heads/master`, so an artifact
+  anything else pushed is never applied.
+- **The Kustomization `homelab`** is the root. It applies `./flux` from that artifact, with
+  `prune: true`, `wait: false` and `deletionPolicy: Orphan`. The bundle's root holds no
+  objects, so its inventory is empty.
+- **The Provider `github-status` and the Alert `commit-status`** post a commit status with the
+  context `flux/<kustomization>` on the commit the artifact carries. A Ready reconcile posts
+  `success`, and an error event posts `failure`.
+- **The Provider `discord` and the Alert `deploy-errors`** post error events from every
+  Kustomization and from the `OCIRepository` `homelab` to the channel the deployer posts to.
+
+To stop all reconciliation, land a PR that sets `flux_sync_suspend: true` in the role's
+defaults. It renders `suspend: true` on the `OCIRepository` and the root, and deletes nothing.
+Setting it back to `false` resumes both at the next role run. With the lever off the render
+omits the field, so a hand suspend survives the role's runs; a suspend the lever wrote does
+not.
+
+The signature drill uses a second lever. `flux_verify_drill: true` renders an `OCIRepository`
+`verify-drill`, which follows the unsigned tag that a `verify_drill` dispatch of `promote`
+pushes, and must read Ready=False with a verification error. It is not a source of
+`deploy-errors`, so the drill posts nothing to Discord. Setting the lever back to `false`
+deletes the object at the role's next run.
+
 ## Publishing and promotion
 
 The `promote` workflow, `.github/workflows/promote.yml`, runs after each successful push run
 of CI on master. It publishes the commit as the OCI artifact
 `ghcr.io/danielh2018/homelab-manifests:sha-<commit>` and moves the tag `prod` to the newest
-published master commit. No controller follows `prod` yet, so a move changes nothing in the
-cluster. The workflow has four jobs:
+published master commit. The `OCIRepository` `homelab` follows `prod`, and the bundle's root
+Kustomization is empty, so a move changes nothing in the cluster but the commit Flux reports.
+The workflow has four jobs:
 
 1. `render` checks out the triggering commit and refuses one that is not on master. It builds
    the bundle, one empty root Kustomization, and scans it with gitleaks. It holds read access
@@ -162,6 +194,12 @@ deletes. That job runs only master's copy of `promote.py`, because it refuses an
 `refs/heads/master`.
 
 The repository secret `PROMOTE_TOKEN` is a fine-grained token with Variables read and write
-on this repository and a 90-day expiry. `promote` reads `DEPLOY_HOLD` with it, and `tag`
-writes `PROD_DIGEST` with it. The flux role's `CLAUDE.md` has its rotation steps, and the
+on two repositories, `DanielH2018/server` and `DanielH2018/dotfiles`, and a 90-day expiry.
+`promote` reads `DEPLOY_HOLD` with it, and `tag` writes `PROD_DIGEST` with it. The flux role's `CLAUDE.md` has its rotation steps, and the
 rotation registry's `external-90d` tier is the one its SOPS copy belongs on.
+
+The SOPS key `flux_github_status_token` is a fine-grained token with Commit statuses read and
+write on two repositories, `DanielH2018/server` and `DanielH2018/dotfiles`, which
+notification-controller posts statuses with. It has no expiration date. It lives only in
+SOPS, on the registry's `external` tier, and the flux role's `CLAUDE.md` has its rotation
+steps.
