@@ -43,3 +43,22 @@ def test_the_play_reads_the_ordering_filters_only_to_order_itself():
         '_k8s_container_deps_map: "{{ containers_list | build_k8s_dep_map(playbook_dir) }}"',
         'containers_list: "{{ containers_list | toposort_containers(_k8s_container_deps_map) }}"',
     }
+
+
+def test_no_tracked_module_keeps_the_static_write_analysis():
+    """The order-only rule runs the sort chain rather than reading it, so the reader is gone (#4842).
+
+    A syntax-reading write check drew a new aliasing bypass in each of two reviews; one left
+    beside the dynamic check would be a second rule that can disagree with the first.
+    """
+    # `[ ]` keeps this pattern from matching its own line.
+    out = git_out(
+        REPO,
+        "grep",
+        "-lE",
+        r"def[ ]_writes_outside_itself\(",
+        "--",
+        "*.py",
+        check=False,  # no match exits 1
+    )
+    assert out.split() == []
