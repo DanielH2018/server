@@ -25,7 +25,9 @@ Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-rend
      uv run pytest scripts/renderer/tests
 """
 
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 import sys as _sys
@@ -160,6 +162,10 @@ def main(argv: list[str] | None = None) -> int:
         "it, the render is in placeholder mode",
     )
     args = parser.parse_args(argv)
+    # ansible-core creates its local temp directory when the render first imports its
+    # constants, under `~/.ansible/tmp` by default. The system temp directory keeps the home
+    # directory untouched, and ansible-core removes its own subdirectory at exit.
+    os.environ.setdefault("ANSIBLE_LOCAL_TEMP", tempfile.gettempdir())
     return cluster(args.out, args.roles, args.secret_stubs)
 
 

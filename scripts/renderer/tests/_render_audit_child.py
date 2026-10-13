@@ -2,34 +2,66 @@
 
 `_render_audit.py` runs this file once per render. Before it imports the renderer, it installs
 an audit hook. The hook ends the process on any `open` outside the repo, the output directory,
-the stub file and the interpreter's own prefixes, and on any `socket.connect`. The hook lives in a subprocess because Python cannot remove an audit hook,
-and one installed in an xdist worker would outlive the test.
+the stub file and the interpreter's own prefixes, on any `socket.connect`, and on any program
+start but the two probes ansible-core's import runs. The hook lives in a subprocess because
+Python cannot remove an audit hook, and one installed in an xdist worker would outlive the test.
 
 Its one argument is a JSON object naming the paths to allow and the step to run: `render`,
-or the fixture steps `open` and `connect` that the red-proofs use. The file imports only the
+or the fixture steps `open`, `connect` and `spawn` that the red-proofs use. The file imports only the
 standard library, so nothing from the repo loads before the hook. It needs `scripts/` on
 `PYTHONPATH` to import the renderer, which `_render_audit.run_step` sets.
 """
 
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 # The subprocess's exit code when the hook stopped it.
 AUDIT_REFUSED = 3
-# ansible-core's import runs `ldconfig -p` and `ip link` (ctypes.util.find_library and
-# uuid.getnode), and subprocess opens /dev/null for their unused streams. The device holds no
-# host state. The probes themselves are processes, which an `open` hook does not see.
+# subprocess opens /dev/null for the unused streams of the import probes below. The device
+# holds no host state.
 DEVICES = frozenset({os.devnull})
+# The programs ansible-core's import runs, as (program name, arguments): `ip link` from
+# `ansible/utils/vars.py`'s `uuid.getnode()`, and `ldconfig -p` from `ctypes.util.find_library`
+# in `ansible/utils/display.py` and `ansible/_internal/_encryption/_crypt.py`. They read the
+# host's MAC address and library paths, which no template reads. The name is matched without
+# its directory, because uuid searches PATH plus /sbin and /usr/sbin for `ip`. A host without
+# `ip` falls back to `ifconfig`, which the hook refuses: the check fails closed there.
+IMPORT_PROBES = frozenset({("ip", ("link",)), ("ldconfig", ("-p",))})
+# Each audit event that starts a program, and the index of its argv among the event's args.
+# `subprocess.Popen` may also raise `os.posix_spawn` for the same start, so both judge argv.
+SPAWN_ARGV = {
+    "subprocess.Popen": 1,
+    "os.posix_spawn": 1,
+    "os.exec": 1,
+    "os.spawn": 2,
+    "os.system": 0,
+}
 
 
 def _under(path: str, roots: list[str]) -> bool:
     return any(path == root or path.startswith(root + os.sep) for root in roots)
 
 
+def _argv(raw) -> list[str]:
+    """An audit event's argv as strings. A lone string is a program name or a shell command."""
+    if isinstance(raw, (str, bytes, os.PathLike)):
+        return [os.fsdecode(raw)]
+    return [os.fsdecode(arg) for arg in raw]
+
+
+def is_import_probe(argv: list[str]) -> bool:
+    """Whether `argv` is exactly one of `IMPORT_PROBES`, wherever its program lives."""
+    return bool(argv) and (os.path.basename(argv[0]), tuple(argv[1:])) in IMPORT_PROBES
+
+
 def install_audit_hook(allowed: list[str]) -> None:
-    """End this process on an `open` outside `allowed` or on any `socket.connect`.
+    """End this process on an `open` outside `allowed`, a `socket.connect` or a program start.
+
+    A program start passes only when it is one of `IMPORT_PROBES`, since a child process
+    reads the host without an `open` in this process.
 
     The hook exits through `os._exit`, not by raising, so a caller that catches `OSError` and
     carries on cannot hide the read. A file descriptor passed to `open` is allowed, because
@@ -45,6 +77,11 @@ def install_audit_hook(allowed: list[str]) -> None:
     def hook(event: str, args: tuple) -> None:
         if event == "socket.connect":
             refuse(f"socket.connect to {args[1]!r}")
+        if event in SPAWN_ARGV:
+            argv = _argv(args[SPAWN_ARGV[event]])
+            if not is_import_probe(argv):
+                refuse(f"{event} of {argv!r}")
+            return
         if event != "open" or isinstance(args[0], int) or args[0] is None:
             return
         path = os.fsdecode(args[0])
@@ -76,6 +113,10 @@ def _main(spec: dict) -> int:
         with socket.socket() as sock:
             sock.connect((spec["host"], spec["port"]))
         return 0
+    if step == "spawn":
+        # Not lib.proc_testing.run: nothing from the repo loads before the hook. The bound
+        # stops a wedged program the hook let through.
+        return subprocess.run(spec["argv"], check=False, timeout=30).returncode
     from renderer import homelab_render
 
     return homelab_render.cluster(Path(spec["out"]), spec["tags"], Path(spec["stubs"]))

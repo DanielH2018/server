@@ -18,7 +18,7 @@ from _render_audit import (
     run_step,
     tree_differences,
 )
-from _render_audit_child import AUDIT_REFUSED
+from _render_audit_child import AUDIT_REFUSED, is_import_probe
 from lib.repo_paths import REPO
 
 
@@ -79,3 +79,19 @@ def test_the_audit_hook_refuses_every_socket_connect():
     )
     assert refused.returncode == AUDIT_REFUSED
     assert "refused socket.connect to ('127.0.0.1', 9)" in refused.stderr
+
+
+def test_the_audit_hook_refuses_a_spawn_beyond_the_import_probes():
+    # `ip addr` shares the probe's program, so its refusal shows the arguments are matched too.
+    for argv in (["true"], ["ip", "addr"]):
+        refused = run_step({"allow": [str(REPO)], "step": "spawn", "argv": argv})
+        assert refused.returncode == AUDIT_REFUSED, argv
+        assert "refused subprocess.Popen of" in refused.stderr, refused.stderr
+
+
+def test_the_audit_hook_allows_an_import_probe_from_any_directory():
+    assert is_import_probe(["/usr/bin/ip", "link"])
+    assert is_import_probe(["/usr/sbin/ip", "link"])
+    assert is_import_probe(["/sbin/ldconfig", "-p"])
+    assert not is_import_probe(["/sbin/ldconfig"])
+    assert not is_import_probe([])
