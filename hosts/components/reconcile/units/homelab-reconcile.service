@@ -1,0 +1,11 @@
+# Shipped by every host package. A postinst starts it with --no-block, and homelab-updater
+# starts it synchronously. Reconcile marks this unit `manual`, so it never restarts itself.
+[Unit]
+Description=Reconcile this host's units and legacy entries with its homelab packages
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/homelab/homelab-reconcile
+# homelab-updater.service's TimeoutStartSec budgets this limit;
+# hosts/lib/tests/test_updater_package.py holds the inequality.
+TimeoutStartSec=30min

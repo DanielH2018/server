@@ -1,0 +1,467 @@
+#!/usr/bin/python3
+"""homelab-reconcile: bring this host's units and legacy entries in line with its packages.
+
+The design is H3's *The reconcile unit* (docs/target-architecture/host/h3-pi-pilot.md), and the
+step numbers below are that section's. `homelab-reconcile.service` runs this as root, under the
+host's /usr/bin/python3, which is 3.12 on Ubuntu 24.04. It uses the standard library only, and
+hosts/lib/tests/test_reconcile_component.py parses it with the 3.12 grammar.
+
+Usage: homelab-reconcile        (no arguments; exit 0 when every step succeeded, 1 otherwise)
+
+It takes dpkg's frontend lock with a blocking lockf, so a start from a postinst waits until the
+whole apt transaction has finished. Under the lock it reads the manifest, its own state and both
+packages' status, then releases the lock before its first systemctl call.
+
+The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
+
+    {"units": {"<unit>": {"policy": "manual" | "windowed"}, "<unit>": {}, ...},
+     "enable_links": ["<unit>", ...],
+     "legacy": [{"path": "/abs/path"}, {"cron": "<name>", "user": "<user>"},
+                {"cron_file": "<name under /etc/cron.d>"}, {"unit": "<Ansible-era unit>"}],
+     "reconcilers": []}
+
+`units` names every unit reconcile manages, another homelab package's and another package's
+drop-in target included. `enable_links` names each unit whose enable link the manifest's
+packages ship. No reconciler kind exists yet: H4 adds the udev reload and H7 adds ufw and
+libvirt, so a manifest listing one fails the run here.
+
+Its state and record, /var/lib/homelab-reconcile/applied.json:
+
+    {"result":  {"versions": {"<package>": "<version>"}, "ok": <bool>, "finished": <epoch>},
+     "last_ok": {the same fields, from the newest run that succeeded},
+     "units": {"<unit>": {"file": "<sha256>", "dropin": "<sha256>"} | null},
+     "enable_links": ["<unit>", ...],
+     "retired": ["<legacy entry as canonical JSON>", ...]}
+
+homelab-updater reads only `result` and `last_ok`. Each per-entry item advances only when its
+step succeeded on it, or when the step's rule left it alone, so the next run retries exactly
+the actions that failed. A `null` hash reads as changed.
+
+HOMELAB_ROOT prefixes every path this reads or writes. Only the tests in hosts/lib/tests/ set it.
+"""
+
+import fcntl
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(os.environ.get("HOMELAB_ROOT", "/"))
+LOCK = ROOT / "var/lib/dpkg/lock-frontend"
+MANIFEST = ROOT / "usr/lib/homelab/manifest.json"
+APPLIED = ROOT / "var/lib/homelab-reconcile/applied.json"
+UNIT_DIR = Path("/usr/lib/systemd/system")
+ETC_UNIT_DIR = Path("/etc/systemd/system")
+CRON_D = Path("/etc/cron.d")
+DROPIN = "50-homelab.conf"
+
+# An upgrade never restarts the run that installed it, whatever the manifest says.
+ALWAYS_MANUAL = frozenset({"homelab-updater.service", "homelab-reconcile.service"})
+UNIT_NAME = re.compile(r"[A-Za-z0-9@_.:-]+\.(service|timer|socket|path)")
+PLAIN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+POLICIES = frozenset({"manual", "windowed"})
+# systemctl's exit for a unit that is not loaded: there is nothing to stop.
+NOT_LOADED = 5
+
+
+class ManifestError(Exception):
+    """The manifest is missing or malformed, so reconcile acts on nothing."""
+
+
+def say(message: str) -> None:
+    print(f"homelab-reconcile: {message}", file=sys.stderr)
+
+
+def under_root(path: Path) -> Path:
+    return ROOT / path.relative_to("/")
+
+
+def run(*argv: str, stdin: str | None = None) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(argv, input=stdin, capture_output=True, text=True)
+    except OSError as exc:
+        return subprocess.CompletedProcess(argv, 127, "", str(exc))
+
+
+def systemctl(*args: str) -> subprocess.CompletedProcess:
+    return run("systemctl", *args)
+
+
+def is_homelab(unit: str) -> bool:
+    return unit.startswith("homelab-")
+
+
+# Reading, under the lock.
+
+
+def read_installed(packages: list[str]) -> dict[str, tuple[str, str]]:
+    """Each package's three-letter dpkg status and version; ("", "") for one dpkg lacks."""
+    out = run(
+        "dpkg-query",
+        "-W",
+        "-f",
+        "${Package} ${db:Status-Abbrev}${Version}\\n",
+        *packages,
+    ).stdout
+    installed = dict.fromkeys(packages, ("", ""))
+    for line in out.splitlines():
+        name, _, rest = line.partition(" ")
+        if name in installed:
+            installed[name] = (rest[:3], rest[3:])
+    return installed
+
+
+def load_json(path: Path) -> dict:
+    try:
+        value = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def parse_manifest(text: str) -> dict:
+    try:
+        manifest = json.loads(text)
+    except ValueError as exc:
+        raise ManifestError(f"{MANIFEST} is not JSON: {exc}") from exc
+    if not isinstance(manifest, dict):
+        raise ManifestError(f"{MANIFEST} is not an object")
+    units = manifest.get("units", {})
+    links = manifest.get("enable_links", [])
+    legacy = manifest.get("legacy", [])
+    reconcilers = manifest.get("reconcilers", [])
+    if not isinstance(units, dict) or not all(
+        UNIT_NAME.fullmatch(name)
+        and isinstance(spec, dict)
+        and spec.get("policy") in POLICIES | {None}
+        for name, spec in units.items()
+    ):
+        raise ManifestError(f"{MANIFEST}: units {units!r} is not a map of unit names")
+    if not isinstance(links, list) or not all(link in units for link in links):
+        raise ManifestError(f"{MANIFEST}: every enable link must name a listed unit")
+    if not isinstance(legacy, list) or not all(map(valid_legacy, legacy)):
+        raise ManifestError(
+            f"{MANIFEST}: legacy {legacy!r} holds an entry of no known kind"
+        )
+    if not isinstance(reconcilers, list):
+        raise ManifestError(f"{MANIFEST}: reconcilers is not a list")
+    return {
+        "units": units,
+        "enable_links": links,
+        "legacy": legacy,
+        "reconcilers": reconcilers,
+    }
+
+
+def valid_legacy(entry: object) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    if set(entry) == {"path"}:
+        path = entry["path"]
+        return (
+            isinstance(path, str)
+            and path.startswith("/")
+            and ".." not in path.split("/")
+        )
+    if set(entry) == {"cron", "user"}:
+        return all(isinstance(v, str) and v and "\n" not in v for v in entry.values())
+    if set(entry) == {"cron_file"}:
+        return isinstance(entry["cron_file"], str) and bool(
+            PLAIN_NAME.fullmatch(entry["cron_file"])
+        )
+    if set(entry) == {"unit"}:
+        return isinstance(entry["unit"], str) and bool(
+            UNIT_NAME.fullmatch(entry["unit"])
+        )
+    return False
+
+
+def read_under_lock(packages: list[str]) -> tuple[str | None, dict, dict]:
+    """The manifest text (None when absent), the previous state, and both packages' status.
+
+    Blocks until no apt or dpkg frontend holds the lock, and releases it before returning.
+    """
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(LOCK, os.O_RDWR | os.O_CREAT, 0o640)
+    try:
+        fcntl.lockf(fd, fcntl.LOCK_EX)
+        try:
+            text = MANIFEST.read_text()
+        except FileNotFoundError:
+            text = None
+        return text, load_json(APPLIED), read_installed(packages)
+    finally:
+        os.close(fd)  # closing the descriptor releases the lock
+
+
+# Unit state.
+
+
+def unit_hash(unit: str) -> dict:
+    """The sha256 of the unit's file and of its homelab drop-in; None for one that is absent."""
+
+    def digest(path: Path) -> str | None:
+        try:
+            return hashlib.sha256(under_root(path).read_bytes()).hexdigest()
+        except FileNotFoundError:
+            return None
+
+    return {
+        "file": digest(UNIT_DIR / unit),
+        "dropin": digest(UNIT_DIR / f"{unit}.d" / DROPIN),
+    }
+
+
+def load_state(unit: str) -> str:
+    return systemctl("show", "-p", "LoadState", "--value", unit).stdout.strip()
+
+
+def is_active(unit: str) -> bool:
+    return systemctl("is-active", unit).stdout.strip() == "active"
+
+
+def not_found_homelab_units() -> set[str]:
+    """Every loaded `homelab-*` unit whose LoadState is not-found: its file has gone."""
+    out = systemctl("show", "-p", "Id", "-p", "LoadState", "homelab-*").stdout
+    found = set()
+    for block in out.split("\n\n"):
+        props = dict(
+            line.partition("=")[::2] for line in block.splitlines() if "=" in line
+        )
+        if props.get("LoadState") == "not-found" and is_homelab(props.get("Id", "")):
+            found.add(props["Id"])
+    return found
+
+
+def stop(unit: str) -> bool:
+    result = systemctl("stop", unit)
+    if result.returncode not in (0, NOT_LOADED):
+        say(f"stop {unit} failed: {result.stderr.strip()}")
+        return False
+    systemctl(
+        "reset-failed", unit
+    )  # a unit that is not failed makes this fail harmlessly
+    say(f"stopped {unit}")
+    return True
+
+
+# Legacy entries (H3, *The host handoff rule*).
+
+
+def owned(path: Path) -> bool | None:
+    """True when a package owns `path`, False when none does, None when dpkg cannot say."""
+    code = run("dpkg", "-S", str(path)).returncode
+    return {0: True, 1: False}.get(code)
+
+
+def retire_path(path: Path) -> bool:
+    owner = owned(path)
+    if owner is None:
+        say(f"dpkg -S {path} failed; not removing it")
+        return False
+    if owner:
+        say(f"{path} is owned by a package; leaving it")
+        return True
+    target = under_root(path)
+    if not os.path.lexists(target):
+        return True
+    try:
+        target.unlink()
+    except OSError as exc:
+        say(f"cannot remove {path}: {exc}")
+        return False
+    say(f"removed {path}")
+    return True
+
+
+def retire_cron(name: str, user: str) -> bool:
+    listing = run("crontab", "-l", "-u", user)
+    if listing.returncode != 0:
+        return "no crontab for" in listing.stderr
+    lines = listing.stdout.splitlines(keepends=True)
+    marker = f"#Ansible: {name}"
+    if not any(line.rstrip("\n") == marker for line in lines):
+        return True
+    kept, skip = [], False
+    for line in lines:
+        if skip:
+            skip = False
+        elif line.rstrip("\n") == marker:
+            skip = True
+        else:
+            kept.append(line)
+    if run("crontab", "-u", user, "-", stdin="".join(kept)).returncode != 0:
+        say(f"cannot rewrite {user}'s crontab without {name}")
+        return False
+    say(f"removed cron {name} from {user}'s crontab")
+    return True
+
+
+def retire_unit(unit: str) -> bool:
+    path = ETC_UNIT_DIR / unit
+    if os.path.lexists(under_root(path)):
+        owner = owned(path)
+        if owner is not False:
+            say(f"{path} is owned by a package, or dpkg cannot say; leaving it")
+            return owner is True
+        if systemctl("disable", unit).returncode != 0:
+            say(f"disable {unit} failed")
+            return False
+        if not stop(unit) or not retire_path(path):
+            return False
+        return systemctl("daemon-reload").returncode == 0
+    return stop(unit)
+
+
+def retire(entry: dict) -> bool:
+    if "path" in entry:
+        return retire_path(Path(entry["path"]))
+    if "cron" in entry:
+        return retire_cron(entry["cron"], entry["user"])
+    if "cron_file" in entry:
+        return retire_path(CRON_D / entry["cron_file"])
+    return retire_unit(entry["unit"])
+
+
+def legacy_key(entry: dict) -> str:
+    return json.dumps(entry, sort_keys=True)
+
+
+# The run.
+
+
+def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
+    """Steps 1 to 5. Return whether every step succeeded, and the advanced per-entry state."""
+    ok = True
+    raw_units = prev.get("units")
+    prev_units: dict = raw_units if isinstance(raw_units, dict) else {}
+    prev_links = set(prev.get("enable_links") or [])
+    units: dict = manifest["units"]
+    links = set(manifest["enable_links"])
+    units_state: dict = {}
+    links_state = set(links)
+
+    # Step 1: stop what the manifest dropped, and every homelab unit whose file has gone.
+    dropped = {u for u in set(prev_units) - set(units) if is_homelab(u)}
+    unlinked = {u for u in prev_links - links if is_homelab(u) and u.endswith(".timer")}
+    stopping = dropped | unlinked | not_found_homelab_units()
+    for unit in sorted(stopping):
+        if stop(unit):
+            continue
+        ok = False
+        if unit in prev_units and unit not in units:
+            units_state[unit] = prev_units[unit]
+        if unit in unlinked:
+            links_state.add(unit)
+
+    # Step 2: start every enabled unit that is not active, and never a masked one.
+    started = set()
+    for unit in sorted(links):
+        if is_active(unit) or load_state(unit) == "masked":
+            continue
+        if systemctl("start", unit).returncode == 0:
+            say(f"started {unit}")
+            started.add(unit)
+        else:
+            say(f"start {unit} failed")
+            ok = False
+
+    # Step 3: apply the restart policy to every unit whose file or drop-in changed. A foreign
+    # unit the manifest dropped is walked once more, because its drop-in has gone.
+    foreign_dropped = {u for u in prev_units if u not in units and not is_homelab(u)}
+    for unit in sorted((set(units) | foreign_dropped) - dropped):
+        new, old = unit_hash(unit), prev_units.get(unit)
+        keep = unit in units
+        if new != old and not left_alone(unit, units, links, started):
+            verb = "try-restart" if unit.endswith(".service") else "restart"
+            if systemctl(verb, unit).returncode == 0:
+                say(f"{verb} {unit}")
+            else:
+                say(f"{verb} {unit} failed")
+                ok = False
+                new, keep = old, True
+        if keep:
+            units_state[unit] = new
+
+    # Step 4: retire the legacy entries not yet retired.
+    prev_retired = set(prev.get("retired") or [])
+    retired = []
+    for entry in manifest["legacy"]:
+        key = legacy_key(entry)
+        if key in prev_retired or retire(entry):
+            retired.append(key)
+        else:
+            ok = False
+
+    # Step 5: the per-kind reconcilers. This version knows none.
+    for name in manifest["reconcilers"]:
+        say(f"the manifest lists reconciler {name!r}, which this version does not have")
+        ok = False
+
+    return ok, {
+        "units": units_state,
+        "enable_links": sorted(links_state),
+        "retired": sorted(retired),
+    }
+
+
+def left_alone(unit: str, units: dict, links: set[str], started: set[str]) -> bool:
+    """True when step 3's rule takes a changed unit's new file without acting on it."""
+    policy = units.get(unit, {}).get("policy")
+    if unit in ALWAYS_MANUAL or policy in POLICIES or unit in started:
+        return True
+    # A masked unit may still have an enable link, so this comes before the next test.
+    if load_state(unit) == "masked":
+        return True
+    if is_homelab(unit):
+        enabled = unit in links
+    else:
+        enabled = systemctl("is-enabled", unit).stdout.strip() == "enabled"
+    return not (enabled or is_active(unit))
+
+
+def write_applied(state: dict) -> None:
+    """Step 6: write applied.json atomically."""
+    APPLIED.parent.mkdir(parents=True, exist_ok=True)
+    tmp = APPLIED.with_name(f".{APPLIED.name}.{os.getpid()}")
+    tmp.write_text(json.dumps(state, indent=1, sort_keys=True) + "\n")
+    os.replace(tmp, APPLIED)
+
+
+def main() -> int:
+    host = run("hostname").stdout.strip()
+    packages = ["homelab-updater", f"homelab-{host}"]
+    text, prev, installed = read_under_lock(packages)
+    versions = {name: version for name, (_, version) in installed.items()}
+
+    state = {k: prev[k] for k in ("units", "enable_links", "retired") if k in prev}
+    broken = [name for name, (status, _) in installed.items() if status != "ii "]
+    if broken:
+        say(f"{', '.join(broken)} is not installed as 'ii '; acting on nothing")
+        ok = False
+    else:
+        try:
+            if text is None:
+                raise ManifestError(f"{MANIFEST} does not exist")
+            manifest = parse_manifest(text)
+        except ManifestError as exc:
+            say(f"{exc}; acting on nothing")
+            ok = False
+        else:
+            ok, state = act(manifest, prev)
+
+    result = {"versions": versions, "ok": ok, "finished": int(time.time())}
+    state["result"] = result
+    last_ok = result if ok else prev.get("last_ok")
+    if isinstance(last_ok, dict):
+        state["last_ok"] = last_ok
+    write_applied(state)
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
