@@ -2,6 +2,8 @@
 
 Status: IN PROGRESS
 
+PR 1, the textfile collector's live producer named: [#4869](https://github.com/DanielH2018/server/pull/4869) (issue #4855).
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover
 
 Unblocks: M6 (with M2, M4 and M5)
