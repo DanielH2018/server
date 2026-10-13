@@ -26,6 +26,7 @@ import re
 
 import pytest
 from lib import yaml_fast
+from _helpers import ROLES
 from _k8s_render import render_role_template
 
 MUTE = "weekly-reboot"
@@ -83,6 +84,9 @@ SHADOW = {
         "shadow": "true",
     },
 }
+INGRESS_RULES = (
+    ROLES / "k8s" / "observability" / "files" / "rules" / "ingress-probes.yaml"
+)
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
 
 
@@ -150,6 +154,23 @@ def test_every_route_a_shadow_alert_reaches_is_the_blackhole(name):
 def test_a_paging_alert_expected_as_blackhole_is_flagged():
     labels, receivers = PAGING["ingress-probes-missing"]
     assert not_blackholed(labels) == receivers
+
+
+def test_the_ingress_sets_carry_the_labels_their_rules_ship():
+    """The sets above stand for the ingress-probes rules only while they carry the rules'
+    routing labels. A rule that drops `shadow` must move its set, and its outcome, with it."""
+    sets = {labels["alertname"]: labels for labels, _ in PAGING.values()}
+    sets.update({labels["alertname"]: labels for labels in SHADOW.values()})
+    [group] = yaml_fast.safe_load(INGRESS_RULES.read_text())["groups"]
+    assert len(group["rules"]) == 4
+    for rule in group["rules"]:
+        labels = sets[rule["alert"]]
+        literal = rule["labels"]
+        assert labels.get("shadow") == literal.get("shadow"), rule["alert"]
+        assert labels["severity"] == literal["severity"], rule["alert"]
+        assert labels["service"] == literal.get("service", labels["service"]), rule[
+            "alert"
+        ]
 
 
 def test_a_paging_route_without_the_mute_is_flagged():

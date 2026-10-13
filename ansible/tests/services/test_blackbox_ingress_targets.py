@@ -139,6 +139,7 @@ def test_every_target_host_is_pinned_in_the_exporters_host_aliases():
     aliased = {
         name
         for alias in deployment["spec"]["template"]["spec"]["hostAliases"]
+        if alias["ip"] == ctx["k3s_metallb_ingress_vip"]
         for name in alias["hostnames"]
     }
     hosts = {target.removeprefix("https://") for target in job_targets()}
