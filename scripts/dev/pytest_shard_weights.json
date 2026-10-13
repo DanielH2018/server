@@ -436,7 +436,7 @@
  "ansible/tests/repo/test_helpers.py": 0.0,
  "ansible/tests/repo/test_hook_config_changes_run_the_hook.py": 1.15,
  "ansible/tests/repo/test_host_tool_pins_match_their_twins.py": 0.0,
- "ansible/tests/repo/test_k8s_render_prebuild.py": 0.0,
+ "ansible/tests/repo/test_k8s_render_prebuild.py": 2.6,
  "ansible/tests/repo/test_k8s_render_role_template.py": 0.05,
  "ansible/tests/repo/test_lan_facts_have_one_source.py": 0.32,
  "ansible/tests/repo/test_leakguard.py": 1.88,

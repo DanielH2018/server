@@ -84,8 +84,8 @@ STALE_WEIGHT_RATIO = 5.0
 STALE_WEIGHT_FLOOR_SECONDS = 3.0
 
 # How many times its recorded weight a module may measure on the runner before the shard gate
-# reads the entry as too LOW. The arm shares the unweighted arm's bounds, so it looks only at a
-# module measuring `RUNNER_HEAVY_SECONDS` or more.
+# reads the entry as too LOW. The arm fails the run at the unweighted arm's bound and annotates
+# from `UNDER_WEIGHT_WARN_SECONDS` below.
 #
 # WHY A THIRD ARM. The stale arm above catches a recorded number far too high, and
 # `--record-missing` never touches a present entry, so a weight far too low stood unseen. On
@@ -100,6 +100,18 @@ STALE_WEIGHT_FLOOR_SECONDS = 3.0
 # correctly recorded module can therefore reach about 13x, and twenty clears it. The entries
 # this arm exists for were 34x to 1500x off.
 UNDER_WEIGHT_RATIO = 20.0
+
+# Where the under-recorded arm starts ANNOTATING, below the 10s the unweighted arm uses.
+#
+# WHY LOWER. #4873's verify-by is "no module recorded under 1s totals over 5s", and four of
+# the six rows that issue named measured 7.41-7.66s against 0.0-0.01s recorded: under the 10s
+# bound, so the arm could not have seen them. Those four were the k8s render charged to its
+# first reader, which `ansible/tests/conftest.py` now builds outside every timed phase; this
+# band is what makes that shape visible again if the build ever lands back on a test. Between
+# here and `RUNNER_HEAVY_SECONDS` a 20x ratio needs a weight of 0.25-0.5s or less, so the band
+# annotates only near-free entries, and it never fails the run: a 5s module is an eighth of a
+# shard, the skew the margin band above already tolerates.
+UNDER_WEIGHT_WARN_SECONDS = 5.0
 
 # pytest's own `--durations-min`: no report line is smaller, so no measured total is either.
 # Used as the divisor's floor, which cannot then be zero.
@@ -229,7 +241,9 @@ def _under_complaint(
     return (
         f"measured {threshold:.0f}s or more on this runner and {ratio:.0f}x or more its "
         f"recorded weight, so the shard split packs it as nearly free: {listed}. "
-        f"Repair (seconds): {RECORD_FILES_HINT}"
+        f"Repair (seconds): {RECORD_FILES_HINT}. If it records near 0s again, the time is a "
+        "per-process cache its first test built: build that cache outside the timed phases, "
+        "as ansible/tests/conftest.py does for the k8s render"
     )
 
 
@@ -239,12 +253,14 @@ def durations_warnings(
     threshold: float = RUNNER_HEAVY_SECONDS,
     fail_above: float = RUNNER_HEAVY_FAIL_SECONDS,
     under_ratio: float = UNDER_WEIGHT_RATIO,
+    under_threshold: float = UNDER_WEIGHT_WARN_SECONDS,
 ) -> list[str]:
     """The complaints about a durations report that annotate the run and do not fail it.
 
-    An unweighted or under-recorded module measuring `threshold` or more but under
-    `fail_above`: runner variance alone moves a module across `threshold` (see
-    `RUNNER_HEAVY_FAIL_SECONDS`). Empty when the report parses to nothing, which
+    An unweighted module measuring `threshold` or more but under `fail_above`: runner variance
+    alone moves a module across `threshold` (see `RUNNER_HEAVY_FAIL_SECONDS`). An
+    under-recorded module annotates from `under_threshold` instead (see
+    `UNDER_WEIGHT_WARN_SECONDS`). Empty when the report parses to nothing, which
     `durations_problems` already fails on.
     """
     warnings = []
@@ -255,11 +271,11 @@ def durations_warnings(
         warnings.append(_heavy_complaint(margin, threshold))
     under = [
         row
-        for row in heavy_underweighted(text, weights, threshold, under_ratio)
+        for row in heavy_underweighted(text, weights, under_threshold, under_ratio)
         if row[2] < fail_above
     ]
     if under:
-        warnings.append(_under_complaint(under, threshold, under_ratio))
+        warnings.append(_under_complaint(under, under_threshold, under_ratio))
     return warnings
 
 

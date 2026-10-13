@@ -182,6 +182,25 @@ def test_a_heavy_module_inside_the_runner_scale_is_clean():
     assert shard_weight_gate.durations_problems(REPORT, weights, under_ratio=10.0) != []
 
 
+# `test_karakeep_public_bypass.py` on that master run: recorded 0.0s, measured 7.41s, every
+# second of it the k8s render charged to the first test on its worker.
+CACHE_FIRST_REPORT = f"7.41s setup    {NEW_MODULE}::test_the_long_one\n"
+
+
+def test_a_near_free_entry_measuring_over_five_seconds_annotates():
+    """Below the unweighted arm's 10s, where four of #4873's six rows sat."""
+    weights = RECORDED | {NEW_MODULE: 0.0}
+    assert shard_weight_gate.durations_problems(CACHE_FIRST_REPORT, weights) == []
+    warnings = shard_weight_gate.durations_warnings(CACHE_FIRST_REPORT, weights)
+    assert len(warnings) == 1 and NEW_MODULE in warnings[0] and "7.4s" in warnings[0]
+
+
+def test_an_under_recorded_module_under_five_seconds_is_clean():
+    report = CACHE_FIRST_REPORT.replace("7.41s", "4.90s")
+    weights = RECORDED | {NEW_MODULE: 0.0}
+    assert shard_weight_gate.durations_warnings(report, weights) == []
+
+
 def test_an_under_recorded_module_between_the_bounds_annotates_rather_than_fails():
     assert shard_weight_gate.durations_problems(MARGIN_REPORT, UNDER_RECORDED) == []
     warnings = shard_weight_gate.durations_warnings(MARGIN_REPORT, UNDER_RECORDED)
