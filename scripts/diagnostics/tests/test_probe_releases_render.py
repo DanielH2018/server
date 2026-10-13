@@ -8,7 +8,6 @@ per branch on top of that.
 Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_render.py
 """
 
-import json
 import re
 from types import SimpleNamespace
 
@@ -18,7 +17,15 @@ from diagnostics.probe_lib import releases as pr
 from diagnostics.probe_lib import releases_format as rf
 from diagnostics.probe_lib import releases_render as rr
 
-from _release_fixtures import _commit, _init_repo, _record, _set_origin_master
+from _release_fixtures import (
+    _commit,
+    _init_repo,
+    _release,
+    _render,
+    _set_origin_master,
+    _write_renders,
+)
+from lib.git_testing import git_out
 
 from lib.repo_paths import REPO
 
@@ -30,44 +37,6 @@ def test_render_dir_matches_the_ansible_default():
         "manifests_render_record_dir is not defined in the manifests role defaults"
     )
     assert m.group(1) == str(rr.RENDER_DIR)
-
-
-def _release(service, commit, secrets=(), host="daniel-box", secret_digest=None):
-    rec = _record(service, commit=commit)
-    rec["host"] = host
-    rec["secret_manifests"] = list(secrets)
-    if secret_digest is not None:
-        rec["secret_digest"] = secret_digest
-    return rec
-
-
-def _render(
-    service,
-    commit,
-    secrets=(),
-    digest="deadbeef",
-    dirty=False,
-    host="daniel-box",
-    secret_digest=None,
-):
-    rec = {
-        "service": service,
-        "commit": commit,
-        "tree_dirty": dirty,
-        "host": host,
-        "manifests_digest": digest,
-        "secret_manifests": list(secrets),
-    }
-    if secret_digest is not None:
-        rec["secret_digest"] = secret_digest
-    return rec
-
-
-def _write_renders(render_dir, *renders):
-    render_dir.mkdir()
-    for rec in renders:
-        (render_dir / f"{rec['service']}.json").write_text(json.dumps(rec))
-    return render_dir
 
 
 @pytest.fixture
@@ -345,133 +314,81 @@ def test_a_matching_digest_keeps_a_volume_claim_hit_pending(tmp_path):
     assert list(pending) == ["littlelink"]
 
 
+_OTHER = "docs/unrelated.md"
+
+
+def _behind_stale(tmp_path, at_r, after_r, digest="deadbeef", side=False):
+    """littlelink applied at `base`, `at_r` moved by R, `after_r` by the ref, a render at R.
+
+    With `side`, the render names a child of R that master never merged.
+    """
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    base = _commit(repo, {p: "v1\n" for p in (_OWN, _PVC, _RENDERER, _OTHER)}, "v1")
+    r = _commit(repo, {p: "v2\n" for p in at_r}, "R")
+    if side:
+        r = git_out(repo, "commit-tree", "HEAD^{tree}", "-p", r, "-m", "side")
+    _set_origin_master(
+        repo, _commit(repo, {p: "v3\n" for p in (_OTHER, *after_r)}, "tip")
+    )
+    records, hits = [_release("littlelink", base)], {}
+    stale = pr.compute_stale(
+        records,
+        repo_root=repo,
+        shared_roles={"volume-claim", "manifests"},
+        consumers={},
+        hits_out=hits,
+    )
+    rr.apply_digest_verdicts(
+        stale,
+        records,
+        repo_root=repo,
+        render_dir=_write_renders(
+            tmp_path / "renders", _render("littlelink", r, digest=digest)
+        ),
+        hits=hits,
+    )
+    return stale
+
+
+@pytest.mark.parametrize("at_r", [[_RENDERER], [_OWN, _RENDERER]])
+def test_a_hit_a_matching_render_behind_the_ref_holds_is_clean(tmp_path, at_r):
+    """#4881: a comment-only release_stamp.yml edit held the fleet stale for ten hours."""
+    assert _behind_stale(tmp_path, at_r, []) == {}
+
+
+@pytest.mark.parametrize("after_r", [[_OWN], [_RENDERER]])
+def test_a_hit_after_a_matching_render_behind_the_ref_is_flagged(tmp_path, after_r):
+    """Only the hits R..ref touched are left, including R's own path touched again."""
+    assert _behind_stale(tmp_path, [_RENDERER], after_r) == {
+        "littlelink": rr.path_reason(after_r)
+    }
+
+
+def test_a_mismatch_behind_the_ref_keeps_the_path_verdict_is_flagged(tmp_path):
+    """R..ref may hold the fix, so a mismatch at R is UNKNOWN rather than DRIFTED."""
+    assert _behind_stale(tmp_path, [_RENDERER], [], digest="cafef00d") == {
+        "littlelink": rr.path_reason([_RENDERER])
+    }
+
+
+def test_a_volume_claim_hit_a_render_behind_the_ref_holds_is_flagged(tmp_path):
+    assert _behind_stale(tmp_path, [_PVC, _RENDERER], []) == {
+        "littlelink": rr.path_reason([_PVC])
+    }
+
+
+def test_a_render_off_the_refs_history_keeps_the_path_verdict_is_flagged(tmp_path):
+    """A commit the ref does not hold proves nothing about it, whatever its digest."""
+    assert _behind_stale(tmp_path, [_RENDERER], [], side=True) == {
+        "littlelink": rr.path_reason([_RENDERER])
+    }
+
+
 def test_digest_provable_roles_match_the_deployers():
     from deployer_lib import deploy_k8s_owed
 
     assert rr.DIGEST_PROVABLE_ROLES == deploy_k8s_owed.DIGEST_PROVABLE_ROLES
-
-
-TIP = "b" * 40
-
-
-def test_a_trusted_render_proves_current_is_clean():
-    assert rr.render_proves_current(_release("x", "a" * 40), _render("x", TIP), TIP)
-
-
-SECRET = ["s.yaml"]
-
-
-def test_a_trusted_render_with_matching_secret_digests_is_clean():
-    assert rr.render_proves_current(
-        _release("x", "a" * 40, secrets=SECRET, secret_digest="d1"),
-        _render("x", TIP, secrets=SECRET, secret_digest="d1"),
-        TIP,
-    )
-
-
-@pytest.mark.parametrize(
-    ("release", "render"),
-    [
-        pytest.param(
-            _release("x", "a" * 40), _render("x", "c" * 40), id="other-commit"
-        ),
-        pytest.param(
-            _release("x", "a" * 40), _render("x", TIP, dirty=True), id="dirty"
-        ),
-        pytest.param(
-            _release("x", "a" * 40),
-            _render("x", TIP, dirty="False"),
-            id="dirty-as-string",
-        ),
-        pytest.param(
-            _release("x", "a" * 40), _render("x", TIP, host="daniel-server"), id="host"
-        ),
-        pytest.param(
-            _release("x", "a" * 40, host=None), _render("x", TIP), id="no-host"
-        ),
-        pytest.param(
-            _release("x", "a" * 40),
-            _render("x", TIP, secrets=["s.yaml"]),
-            id="render-secret",
-        ),
-        pytest.param(
-            _release("x", "a" * 40, secrets=["s.yaml"]),
-            _render("x", TIP),
-            id="release-secret",
-        ),
-        pytest.param(_release("x", "a" * 40), None, id="no-render"),
-        pytest.param(
-            _release("x", "a" * 40, secrets=SECRET, secret_digest="d1"),
-            _render("x", TIP, secrets=SECRET, secret_digest="d2"),
-            id="secret-digest-differs",
-        ),
-        pytest.param(
-            _release("x", "a" * 40, secrets=SECRET),
-            _render("x", TIP, secrets=SECRET, secret_digest="d1"),
-            id="release-predates-secret-digest",
-        ),
-        pytest.param(
-            _release("x", "a" * 40, secrets=SECRET, secret_digest="d1"),
-            _render("x", TIP, secrets=SECRET),
-            id="render-predates-secret-digest",
-        ),
-        pytest.param(
-            _release("x", "a" * 40, secrets=SECRET, secret_digest=""),
-            _render("x", TIP, secrets=SECRET, secret_digest=""),
-            id="both-keyless",
-        ),
-        pytest.param(
-            _release("x", "a" * 40, secrets=SECRET, secret_digest="d1"),
-            _render("x", TIP, secrets=["t.yaml"], secret_digest="d1"),
-            id="secret-names-differ",
-        ),
-    ],
-)
-def test_an_untrusted_render_is_flagged(release, render):
-    assert not rr.render_proves_current(release, render, TIP)
-
-
-def test_an_unresolved_ref_is_flagged():
-    assert not rr.render_proves_current(
-        _release("x", "a" * 40), _render("x", TIP), None
-    )
-
-
-@pytest.mark.parametrize(
-    ("release", "render", "expected"),
-    [
-        pytest.param(
-            _release("x", "a" * 40), _render("x", TIP), rr.CURRENT, id="current"
-        ),
-        pytest.param(
-            _release("x", "a" * 40),
-            _render("x", TIP, digest="other"),
-            rr.DRIFTED,
-            id="drifted",
-        ),
-        pytest.param(
-            _release("x", "a" * 40, secrets=SECRET, secret_digest="d1"),
-            _render("x", TIP, secrets=SECRET, secret_digest="d2"),
-            rr.DRIFTED,
-            id="drifted-secret-digest",
-        ),
-        pytest.param(
-            _release("x", "a" * 40, secrets=SECRET),
-            _render("x", TIP, secrets=SECRET),
-            rr.UNKNOWN,
-            id="unknown-no-secret-digest",
-        ),
-        pytest.param(
-            _release("x", "a" * 40),
-            _render("x", "c" * 40, digest="other"),
-            rr.UNKNOWN,
-            id="unknown-other-commit-despite-a-mismatch",
-        ),
-    ],
-)
-def test_the_verdict_ladder_names_its_branch(release, render, expected):
-    """A mismatch an untrustworthy record reports is UNKNOWN, never DRIFTED."""
-    assert rr.digest_verdict(release, render, TIP)[0] == expected
 
 
 @pytest.mark.parametrize(

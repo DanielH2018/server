@@ -21,14 +21,25 @@ outrank the path check:
   * `UNKNOWN` -- no record, or one that proves nothing (below). The path verdict stands
     unchanged, which is the whole of the pre-#3046 behaviour.
 
-WHAT MAKES A RECORD PROVE NOTHING. A digest is evidence only when the render record's `commit`
-IS the ref, its tree was clean, and its `host` is the release record's, because a digest from
-another commit, a dirty tree or another host's vars names different bytes. `manifests_digest`
+WHAT MAKES A RECORD PROVE NOTHING. A digest is evidence about the ref only when the render
+record's `commit` IS the ref, its tree was clean, and its `host` is the release record's,
+because a digest from another commit, a dirty tree or another host's vars names different
+bytes. `manifests_digest`
 also excludes secret manifests by design, and uptime-kuma's `static-monitors.yaml` is one: a
 monitor added there leaves the digest identical while the path check correctly reads it stale.
 The `secret_digest` HMAC covers that, so a service with secret manifests needs that field on
 BOTH records; one written before it, or one whose host key was unreadable ('' by design), falls
 back to the path verdict and the fleet converges one redeploy at a time.
+
+A RENDER BEHIND THE REF (#4881). The producer renders hourly and master merges more often, so a
+record whose commit is the ref is the exception. A render of an ANCESTOR R of the ref that
+meets every other rule above, and whose digest matches, still proves the applied bytes are what
+R renders. Every path hit R already holds is then a false positive, so `apply_verdicts` drops
+it, the same way `CURRENT` does. A hit touched again in R..ref keeps the path verdict, and so
+does an `undigested_hits` hit wherever it falls. When every hit left is one R..ref touched,
+the grace window counts from the oldest commit in R..ref touching them, because the hits
+before R no longer say when drift started. A MISMATCH at R proves nothing about the ref, since
+R..ref may hold the fix, so it reads `UNKNOWN`, never `DRIFTED`.
 
 TWO THINGS A DRIFTED VERDICT DOES NOT OVERRIDE. A service inside `compute_stale`'s grace window
 keeps waiting: the window exists because a landing's own deploy is still in flight, and a digest
@@ -45,6 +56,7 @@ answers come from.
 
 import json
 import subprocess
+import time
 from pathlib import Path
 
 # The same `scripts/` bootstrap releases.py carries, for its reason.
@@ -182,6 +194,79 @@ def verdicts_for(records, renders, ref_sha):
     }
 
 
+def changed_since(commit, ref_sha, repo_root=REPO_ROOT):
+    """{path: oldest committer time} for every path touched in `commit..ref_sha`.
+
+    None when `commit` is not an ancestor of `ref_sha`, or git cannot say: a render of a commit
+    the ref does not hold, or one this checkout does not know, proves nothing about the ref.
+
+    The log is raw, so a path whose only edit after `commit` is comment-only still counts. That
+    keeps a hit the path rules would drop, which is the safe direction.
+    """
+    try:
+        if (
+            git(
+                "merge-base",
+                "--is-ancestor",
+                commit,
+                ref_sha,
+                cwd=repo_root,
+                check=False,
+                timeout=10,
+            ).returncode
+            != 0
+        ):
+            return None
+        result = git(
+            "log",
+            "--name-only",
+            "--format=%x00%ct",
+            f"{commit}..{ref_sha}",
+            cwd=repo_root,
+            check=False,
+            timeout=15,
+        )
+    except OSError, subprocess.SubprocessError:
+        return None
+    if result.returncode != 0:
+        return None
+    started = {}
+    # Newest first, so the last time recorded for a path is its oldest.
+    for entry in result.stdout.split("\0")[1:]:
+        lines = [line.strip() for line in entry.splitlines() if line.strip()]
+        if not lines:
+            continue
+        for path in lines[1:]:
+            started[path] = int(lines[0])
+    return started
+
+
+def renders_behind(records, renders, ref_sha, verdicts, repo_root=REPO_ROOT):
+    """{service: `changed_since` its render} for each service a render behind `ref_sha` clears.
+
+    That is a service `verdicts` leaves `UNKNOWN` whose render's commit R is an ancestor of
+    `ref_sha` and whose digest is `CURRENT` at R, by the same rules `digest_verdict` applies at
+    the ref. `apply_verdicts` reads one as `CURRENT` for every path hit R already holds. One git
+    range per distinct R, since the producer renders every service at one commit.
+    """
+    ranges, behind = {}, {}
+    for rec in records:
+        service = rec.get("service")
+        render = renders.get(service)
+        if verdicts.get(service, (None,))[0] != UNKNOWN or not render:
+            continue
+        commit = render.get("commit")
+        if not commit or commit == ref_sha:
+            continue
+        if digest_verdict(rec, render, commit)[0] != CURRENT:
+            continue
+        if commit not in ranges:
+            ranges[commit] = changed_since(commit, ref_sha, repo_root)
+        if ranges[commit] is not None:
+            behind[service] = ranges[commit]
+    return behind
+
+
 def path_reason(hits):
     """The `PATH_HIT_PREFIX` reason for `hits`, naming the first three."""
     more = f" (+{len(hits) - 3} more)" if len(hits) > 3 else ""
@@ -206,7 +291,14 @@ def undigested_hits(service, hits):
     return kept
 
 
-def apply_verdicts(stale, pending, verdicts, hits=None):
+def _hit_path(hit):
+    """The path a `compute_stale` hit names, without a deploy-plane annotation after it."""
+    return hit.split(" ", 1)[0]
+
+
+def apply_verdicts(
+    stale, pending, verdicts, hits=None, behind=None, grace_seconds=0, now=None
+):
     """Let the digest answer override the path verdict in `stale` and `pending`, in place.
 
     Returns the sorted names a CURRENT verdict cleared from `stale`.
@@ -216,20 +308,39 @@ def apply_verdicts(stale, pending, verdicts, hits=None):
     `undigested_hits` keeps. A stale service with such a hit stays stale, its reason narrowed
     to the kept hits, and a pending one stays pending.
 
+    `behind` is `renders_behind`'s answer. A service in it is CURRENT at its render's commit R,
+    so it keeps, as well, every hit whose path R..ref touched. When every hit it keeps is one of
+    those, it is re-dated from R: a stale service whose oldest such commit is younger than
+    `grace_seconds` moves to `pending`, as `compute_stale` would have placed it. `now` is epoch
+    seconds, for the tests.
+
     A CURRENT service is dropped from `pending` too, so it does not read as a merge still
     waiting on its deploy. A DRIFTED one is left alone where the grace window or the
     unknown-commit doubt already answers for it, per the module docstring.
     """
     cleared = []
+    behind = behind or {}
     for service, (verdict, reason) in sorted(verdicts.items()):
+        # Without the hits there is no telling which ones R holds, so nothing is dropped.
+        if service in behind and hits is not None:
+            verdict = CURRENT
         if verdict == CURRENT:
-            kept = undigested_hits(service, (hits or {}).get(service, ()))
+            service_hits = (hits or {}).get(service, ())
+            undigested = undigested_hits(service, service_hits)
+            after = behind.get(service, {})
+            redated = [h for h in service_hits if _hit_path(h) in after]
+            kept = [h for h in service_hits if h in undigested or h in redated]
             if service in stale and stale[service].startswith(PATH_HIT_PREFIX):
-                if kept:
-                    stale[service] = path_reason(kept)
-                else:
+                if not kept:
                     del stale[service]
                     cleared.append(service)
+                elif pending is not None and _within_grace(
+                    kept, redated, after, grace_seconds, now
+                ):
+                    del stale[service]
+                    pending[service] = _age(kept, after, now)
+                else:
+                    stale[service] = path_reason(kept)
             if pending and service in pending and not kept:
                 del pending[service]
         elif verdict == DRIFTED:
@@ -241,6 +352,23 @@ def apply_verdicts(stale, pending, verdicts, hits=None):
     return cleared
 
 
+def _age(kept, after, now):
+    """Seconds since the oldest commit after the render that touched a path in `kept`."""
+    started = min(after[_hit_path(h)] for h in kept)
+    return int((now if now is not None else time.time()) - started)
+
+
+def _within_grace(kept, redated, after, grace_seconds, now):
+    """Whether re-dating `kept` from the render puts it inside the grace window.
+
+    Only when every kept hit is one the render's range touched: an `undigested_hits` hit from
+    before the render keeps `compute_stale`'s date, which no render speaks to.
+    """
+    if grace_seconds <= 0 or not after or any(h not in redated for h in kept):
+        return False
+    return _age(kept, after, now) < grace_seconds
+
+
 def apply_digest_verdicts(
     stale,
     records,
@@ -249,14 +377,29 @@ def apply_digest_verdicts(
     ref="origin/master",
     render_dir=None,
     hits=None,
+    grace_seconds=0,
+    now=None,
 ):
-    """`apply_verdicts` for the render records in `render_dir` and `ref` resolved in `repo_root`."""
+    """`apply_verdicts` for the render records in `render_dir` and `ref` resolved in `repo_root`.
+
+    `grace_seconds` and `now` are `compute_stale`'s, for the re-dating `apply_verdicts` does.
+    """
     renders = load_renders(render_dir or RENDER_DIR)
     if not renders:
         return []
+    ref_sha = resolve_ref(ref, repo_root)
+    verdicts = verdicts_for(records, renders, ref_sha)
+    behind = (
+        renders_behind(records, renders, ref_sha, verdicts, repo_root)
+        if ref_sha
+        else {}
+    )
     return apply_verdicts(
         stale,
         pending,
-        verdicts_for(records, renders, resolve_ref(ref, repo_root)),
+        verdicts,
         hits=hits,
+        behind=behind,
+        grace_seconds=grace_seconds,
+        now=now,
     )

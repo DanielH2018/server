@@ -7,14 +7,20 @@ push DOWN for a merge whose own landing is mid-deploy.
 Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_grace.py
 """
 
+import pytest
+
 from diagnostics.probe_lib import releases as pr
+from diagnostics.probe_lib import releases_render as rr
 from lib.git_testing import git, git_out, scrubbed_env
 
 from _release_fixtures import (
     _commit,
     _init_repo,
     _record,
+    _release,
+    _render,
     _set_origin_master,
+    _write_renders,
 )
 from lib.proc_testing import run
 
@@ -150,3 +156,51 @@ def test_names_out_is_empty_for_a_clean_fleet(tmp_path):
     out = tmp_path / "names"
     pr.write_counted_names(out, {}, [])
     assert out.read_text() == ""
+
+
+@pytest.mark.parametrize(
+    ("after_age", "expected_stale"),
+    [
+        pytest.param(120, {}, id="young-hit-after-render-is-pending"),
+        pytest.param(3700, {"littlelink": None}, id="old-hit-after-render-is-stale"),
+    ],
+)
+def test_a_render_behind_the_ref_dates_the_hits_it_leaves(
+    tmp_path, after_age, expected_stale
+):
+    """A hit the render holds no longer dates the drift, so the hit after it starts the clock.
+
+    Without the re-dating, a two-hour-old hit the render already answers for would keep the
+    service stale for a merge two minutes old (#4881).
+    """
+    renderer = "ansible/roles/k8s/manifests/tasks/apply.yml"
+    own = "ansible/roles/k8s/littlelink/templates/service.yaml.j2"
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    base = _commit(repo, {renderer: "v1\n", own: "v1\n"}, "v1")
+    fresh = _committer_time(repo, base)
+    r = _commit_dated(repo, {renderer: "v2\n"}, "R, two hours ago", fresh - 7200)
+    tip = _commit_dated(repo, {own: "v2\n"}, "after R", fresh - after_age)
+    _set_origin_master(repo, tip)
+
+    records, pending, hits = [_release("littlelink", base)], {}, {}
+    kwargs = {"grace_seconds": 3600, "now": fresh, "pending": pending}
+    stale = pr.compute_stale(
+        records,
+        repo_root=repo,
+        shared_roles={"manifests"},
+        consumers={},
+        hits_out=hits,
+        **kwargs,
+    )
+    assert "littlelink" in stale, "the R hit must date the drift before the render"
+    rr.apply_digest_verdicts(
+        stale,
+        records,
+        repo_root=repo,
+        render_dir=_write_renders(tmp_path / "renders", _render("littlelink", r)),
+        hits=hits,
+        **kwargs,
+    )
+    assert stale == {svc: rr.path_reason([own]) for svc in expected_stale}
+    assert pending == ({} if expected_stale else {"littlelink": after_age})

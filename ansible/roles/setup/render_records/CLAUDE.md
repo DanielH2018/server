@@ -53,8 +53,8 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
   units, the worktree and the role's directories; true and a re-run restores them. To move the
   producer, apply false on the old host before changing `render_records_host`: the playbook
   entry is gated on that var, so a host that stops matching it is never visited again. The
-  records already written stay; the reader refuses them once their `commit` falls behind
-  origin/master.
+  records already written stay. The reader still reads each as a render behind origin/master,
+  which answers only for the path hits its own `commit` already holds.
 - **Authoritative sources:** the records themselves. The tile goes green only when every
   listed service has a record whose `commit` is the chosen SHA, `tree_dirty` is false, `host`
   is this host and `rendered_at` falls inside this run. Ansible's exit code is reported in the
@@ -72,10 +72,14 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
 ## Limits
 
 - **A record matches origin/master only until the next merge.** Master takes on the order of a
-  hundred merges a day, and the producer runs hourly. The reader refuses a record whose
-  `commit` is not origin/master, so between a merge and the next run it falls back to the
-  path logic. That is the cadence the operator chose (2026-09-25); a render every 30 minutes
-  would keep a play running 18% of the time. The GitOps deployer reads the records two more
+  hundred merges a day, and the producer runs hourly. That is the cadence the operator chose
+  (2026-09-25); a render every 30 minutes would keep a play running 18% of the time. The
+  release-staleness reader therefore also accepts a record whose `commit` R is an ancestor of
+  origin/master (#4881). A matching digest there drops every path hit R already holds. A hit
+  in R..origin/master keeps the path verdict, with its grace window counted from R, and a
+  mismatch at R falls back to the path logic rather than reading drifted. Before #4881 the
+  reader refused every record behind the tip, and one comment-only edit to a shared task file
+  paged 30 services stale for ten hours. The GitOps deployer reads the records two more
   ways. Its `k8s_unapplied` discharge accepts a render of any commit holding the change, so
   the cadence costs it at most an hour (#3057). Its deploy-plane shadow log needs a render of
   the exact commit being applied, which a tick usually precedes (#3045). So a full play

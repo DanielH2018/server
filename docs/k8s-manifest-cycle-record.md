@@ -414,9 +414,16 @@ reason whether or not a path moved, or the record proves nothing and the path ve
 Until #3046 only the first branch existed, so a service the path narrowing read clean could drift
 unseen.
 
-A record proves nothing unless its `commit` is origin/master, its tree was clean, and its `host`
-is the release record's. A digest also says nothing about secret manifests: a rendered line added
-to uptime-kuma's `static-monitors.yaml.j2`, a secret manifest, left its digest unchanged. So a
+A record proves nothing unless its tree was clean and its `host` is the release record's. Its
+`commit` R must also be origin/master or an ancestor of it (#4881). A record behind the tip
+answers only for the path hits R already holds: a matching digest drops those, every hit in
+R..origin/master keeps the path verdict, and a mismatch at R proves nothing about the tip, so
+the path verdict stands rather than a drifted one. The producer renders hourly and master merges
+more often than that, so until #4881 the reader refused nearly every record. On 2026-10-13 one
+comment-only edit to `release_stamp.yml` kept 30 services reading stale for ten hours.
+
+A digest also says nothing about secret manifests: a rendered line added to uptime-kuma's
+`static-monitors.yaml.j2`, a secret manifest, left its digest unchanged. So a
 verdict needs `secret_manifests` empty on both records, which held for 25 of 58 on that date
 (#2586), or the same names on both and `secret_digest` present on both (#2574) — a `secret_digest`
 that is present and DIFFERENT is drift, and one that is absent keeps the path verdict, so services
