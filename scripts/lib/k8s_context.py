@@ -91,11 +91,16 @@ def resolve_vars(
         variable comes back a list, not its `str()`. `.render()` always returns a string, so
         without this a list alias reaches a `{% for %}` loop as the literal characters of its
         Python repr — `[`, `'`, `1`, ... — silently breaking the template it aliases into.
+
+        The shape is judged as Jinja parses it. One trailing newline still counts as a single
+        expression, because Jinja drops it before parsing, and a string result is then padded
+        like a text render. Any other text around the expression, such as a leading space or a
+        second newline, makes the value text, as it is under Ansible.
         """
         if isinstance(node, str):
             if "{{" not in node:
                 return node
-            pure = _PURE_TEMPLATE.match(node.strip())
+            pure = _PURE_TEMPLATE.fullmatch(node.removesuffix("\n"))
             if pure:
                 # `compile_expression` would turn an undefined result into None, which a
                 # strict caller must see raise instead.
@@ -104,7 +109,11 @@ def resolve_vars(
                 )(**ctx)
                 if isinstance(value, StrictUndefined):
                     value._fail_with_undefined_error()
-                return None if isinstance(value, Undefined) else value
+                if isinstance(value, Undefined):
+                    return None
+                if isinstance(value, str):
+                    return pad_to_source_newlines(node, value)
+                return value
             return pad_to_source_newlines(node, env.from_string(node).render(ctx))
         if isinstance(node, list):
             return [expand(n, ctx) for n in node]

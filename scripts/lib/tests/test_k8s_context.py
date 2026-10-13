@@ -156,3 +156,23 @@ def test_resolve_vars_ends_a_value_whose_render_ends_in_a_newline_as_ansible_cor
     variables = {"x": "a\n"}
     expected = _ansible_core_resolves(source, variables)
     assert resolve_vars({"y": source}, variables)["y"] == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "x"),
+    [
+        # Jinja drops the one trailing newline before parsing, so this is still a single
+        # expression, and Ansible pads its string result back to the source's newline.
+        pytest.param("{{ x }}\n", "a", id="one-newline-after-a-bare-expression"),
+        pytest.param("{{ x }}\n\n", "a\n", id="two-newlines-after-a-bare-expression"),
+        # Text around the expression makes the value text rather than the expression's type.
+        pytest.param(" {{ x }} ", "a", id="spaces-around-a-bare-expression"),
+        pytest.param("\n{{ x }}", "a", id="newline-before-a-bare-expression"),
+        pytest.param("{{ x }}\n", [1, 2], id="list-keeps-its-type"),
+    ],
+)
+def test_resolve_vars_resolves_a_whole_value_expression_as_ansible_core_does(source, x):
+    variables = {"x": x}
+    expected = _ansible_core_resolves(source, variables)
+    resolved = resolve_vars({"y": source}, variables)["y"]
+    assert (resolved, type(resolved)) == (expected, type(expected))
