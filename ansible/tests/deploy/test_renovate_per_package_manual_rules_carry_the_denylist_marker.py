@@ -59,6 +59,19 @@ BUILTIN_MANAGERS = [
     }
 ]
 
+# Built-in managers that read no file a role deploys, each with its default
+# `managerFilePatterns` (upstream `lib/modules/manager/<name>/index.ts`). A rule whose
+# `matchManagers` names only these reads its pin from a workflow or a local action, so no role
+# owns the pin and no deploy follows its merge. Such a rule is outside this census rather than
+# unmappable: the cosign binary in the promote and prune workflows is one (#4767).
+# `test_no_role_file_is_read_by_a_non_role_manager` checks the "no role file" half.
+NON_ROLE_MANAGERS = {
+    "github-actions": (
+        "/(^|/)(workflow-templates|\\.(?:github|gitea|forgejo)/(?:workflows|actions))/.+\\.ya?ml$/",
+        "/(^|/)action\\.ya?ml$/",
+    ),
+}
+
 
 def _role_relative_files(roles_dir: Path = _ROLES) -> list[str]:
     """Every file under `ansible/roles/`, as the repo-relative path Renovate matches on.
@@ -111,13 +124,23 @@ def pin_owner_roles(
     return owners
 
 
+def _reads_no_role(rule: dict) -> bool:
+    managers = set(rule.get("matchManagers", []))
+    return bool(managers) and managers <= NON_ROLE_MANAGERS.keys()
+
+
 def per_package_manual_rules(rules: list[dict]) -> list[dict]:
-    """The `manual` rules after the denylist rule that match by package name."""
+    """The `manual` rules after the denylist rule that match by package name.
+
+    A rule scoped to `NON_ROLE_MANAGERS` alone is left out, because no role owns its pin.
+    """
     manual_at, _ = find_rule(rules, MANUAL_GROUP_PREFIX)
     return [
         r
         for r in rules[manual_at + 1 :]
-        if r.get("matchPackageNames") and "(manual" in str(r.get("groupName", ""))
+        if r.get("matchPackageNames")
+        and "(manual" in str(r.get("groupName", ""))
+        and not _reads_no_role(r)
     ]
 
 
@@ -308,6 +331,37 @@ def test_a_pin_no_role_owns_is_flagged() -> None:
     rules = _rule_set("plugin (manual — finish it)")
     problems = per_package_marker_problems(rules, {}, _DENYLIST)
     assert len(problems) == 1 and "no manager reads" in problems[0], problems
+
+
+def test_a_pin_only_a_workflow_manager_reads_is_outside_the_census() -> None:
+    rules = _rule_set("plugin (manual — finish it)")
+    rules[1]["matchManagers"] = ["github-actions"]
+    assert per_package_marker_problems(rules, {}, _DENYLIST) == []
+
+
+def test_a_rule_that_also_names_a_role_manager_stays_in_the_census() -> None:
+    rules = _rule_set("plugin (manual — finish it)")
+    rules[1]["matchManagers"] = ["github-actions", "custom.regex"]
+    problems = per_package_marker_problems(rules, {}, _DENYLIST)
+    assert len(problems) == 1 and "no manager reads" in problems[0], problems
+
+
+def test_no_role_file_is_read_by_a_non_role_manager() -> None:
+    """The exemption holds only while these managers' default patterns select no role file."""
+    for name, patterns in NON_ROLE_MANAGERS.items():
+        regexes = [_file_pattern(p) for p in patterns]
+        assert any(r.search(".github/workflows/promote.yml") for r in regexes), name
+        read = [f for f in _role_relative_files() if any(r.search(f) for r in regexes)]
+        assert not read, f"{name} reads role files {read}; their pins have an owner"
+
+
+def test_the_census_leaves_out_the_cosign_workflow_rule() -> None:
+    rules = _renovate()["packageRules"]
+    cosign = [
+        r for r in rules if str(r.get("groupName", "")).startswith("cosign (manual")
+    ]
+    assert len(cosign) == 1
+    assert cosign[0] not in per_package_manual_rules(rules)
 
 
 def test_a_promoted_owner_whose_rule_still_carries_the_marker_is_flagged() -> None:
