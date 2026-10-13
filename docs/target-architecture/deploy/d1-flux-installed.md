@@ -1,6 +1,6 @@
 # D1 — Flux installed, owning nothing
 
-Status: IN PROGRESS
+Status: DONE
 
 D1.1, the Flux schemas and the proposal: [#4697](https://github.com/DanielH2018/server/pull/4697).
 D1.2, the flux role and its controllers: [#4734](https://github.com/DanielH2018/server/pull/4734).
@@ -14,6 +14,13 @@ D1.6b, the `flux` rule group: [#4813](https://github.com/DanielH2018/server/pull
 The signature drill, lever on: [#4816](https://github.com/DanielH2018/server/pull/4816).
 The signature drill's own digest: [#4826](https://github.com/DanielH2018/server/pull/4826).
 The signature drill, lever off: [#4832](https://github.com/DanielH2018/server/pull/4832).
+The hold drill, and X: [#4817](https://github.com/DanielH2018/server/pull/4817). Its `promote`
+run logged `held` under `DEPLOY_HOLD`, and `prod` stayed put. After the operator set the
+variable back to `none`, a re-run of that run promoted X.
+The exit criterion held on 2026-10-13 with T = X = `446a367a`: a `flux/homelab` status of
+`success`, `lastAppliedOriginRevision` `master@sha1:446a367a…`, `homelab` the only
+Kustomization with an empty inventory, and the working set in the flux role's `CLAUDE.md`.
+The readings are on [#4817](https://github.com/DanielH2018/server/pull/4817).
 
 Depends on: none
 
