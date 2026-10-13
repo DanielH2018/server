@@ -1,9 +1,8 @@
 """`PINNED_LIVE_FACTS` names every tag whose templates read a pinned fact, and no other.
 
-Later slices key two publish guards on those reader tags. `k8s_built_images` pins to an empty
-list, which renders as `"unstaged"` and carries no stub token, so a reader the constant
-misses would publish a stand-in that no value census can see. The tags are therefore derived
-here from a word grep of the k8s templates and `ansible/templates/`, and held equal.
+Later slices key two publish guards on those reader tags, so a reader the constant misses
+would escape both. The tags are therefore derived here from a word grep of the k8s templates
+and `ansible/templates/`, and held equal.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_pinned_live_facts.py
 """
@@ -37,7 +36,7 @@ def _readers(fact: str, roles: Path = K8S_ROLES, shared: Path = SHARED) -> set[s
 
 
 def test_reader_tags_equal_a_word_grep_of_the_templates():
-    assert len(PINNED_LIVE_FACTS) == 4
+    assert len(PINNED_LIVE_FACTS) == 3
     derived = {name: _readers(name) for name in PINNED_LIVE_FACTS}
     assert derived == {
         name: set(fact.readers) for name, fact in PINNED_LIVE_FACTS.items()
@@ -53,7 +52,6 @@ def test_string_stand_ins_carry_the_stub_marker():
     for name, fact in PINNED_LIVE_FACTS.items():
         if isinstance(fact.value, str):
             assert fact.value == homelab_secret_stub(name)
-    assert PINNED_LIVE_FACTS["k8s_built_images"].value == []
 
 
 def test_reader_under_a_listed_tag_is_clean(tmp_path):

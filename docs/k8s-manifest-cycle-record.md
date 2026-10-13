@@ -231,9 +231,7 @@ Those roles add a `checksum/<name>` pod-template annotation instead, rendered by
 `checksum_annotation(name, value=...)` / `checksum_annotation(name, path=...)` macro in
 `ansible/templates/checksum-annotation.yml.j2` (value mode renders an already-computed checksum
 verbatim; path mode hashes one file's raw bytes inline via `lookup('file', path, rstrip=False) |
-hash('sha1')`). n8n's own image-digest pod-roll annotation reuses the same macro's value mode
-too, for a consistent annotation line — the macro only standardises how the line renders, not
-what feeds it. `ansible/tests/k8s/test_checksum_annotation_census.py` is the guard: every role
+hash('sha1')`). `ansible/tests/k8s/test_checksum_annotation_census.py` is the guard: every role
 that stages a ConfigMap this way either carries the annotation or is named in that test's `DEBT`
 dict with the reason it does not need one (observability's dashboards poll on their own, per
 Grafana's `updateIntervalSeconds`).
@@ -291,8 +289,6 @@ Every stamped service can be dry-run since #2588. Each role that includes this o
 cluster writes on `k8s_no_mutate`, so no role needs a dry run refused on its behalf: the
 `k8s_dry_run_unsupported` list and `deploy.yml`'s assert against it were deleted once empty
 (#2876), and `ansible/tests/deploy/test_k8s_dry_run.py` now holds that guard in their place.
-n8n's image-checksum annotation reads the registry digest a deploy would stamp, where it used to
-render `unstaged` under a dry run.
 
 ## The release record, field by field
 
