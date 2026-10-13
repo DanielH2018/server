@@ -222,6 +222,12 @@ def guard_map_rows(files, pr_range: str, git) -> frozenset[str] | None:
     Not a `Classifier`, because it reads git, and never passed to `plane_note`: an empty set
     there would read as a role a hand must apply.
 
+    The callers left undeployed owe the deployer nothing. The map renders into no manifest,
+    so each one's render still matches its applied digests, and `manifests` is a
+    render-proof role (`gitops_markers.RENDER_PROOF_SHARED_ROLES`): the tick's
+    `k8s_unapplied` line for it discharges on that match, as it does for a smoke-narrowed
+    change (`shared_role_callers.smoke_caller`).
+
     Args:
         files: the PR's changed paths, the list the landing's caller expansion reads.
         pr_range: `<old>..<new>` bounding this PR's own change.
