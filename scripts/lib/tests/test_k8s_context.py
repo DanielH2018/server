@@ -117,3 +117,62 @@ def test_resolve_vars_under_a_strict_class_raises_on_an_undefined_name_is_flagge
 ):
     with pytest.raises(jinja2.UndefinedError, match="nope"):
         resolve_vars({"v": value}, {}, undefined_cls=StrictChainableUndefined)
+
+
+# --- resolve_vars: the trailing newline of a value rendered as text ---
+#
+# ansible-core resolves a var through `AnsibleEnvironment`, whose `keep_trailing_newline` is
+# False, then pads the result as `TemplateEngine._post_render_mutation` does: newlines are added
+# only until it ends in as many as the source. `resolve_vars` renders through `make_env`, which
+# keeps the source's last newline, so a render that already ends in one gains a second (#4853).
+#
+# Each value has text around its expression. Without that text `_PURE_TEMPLATE` matches, and
+# the value is evaluated as an expression and never reaches `keep_trailing_newline`.
+
+
+def _ansible_core_resolves(source: str, variables: dict) -> str:
+    """`source`, held in the var `y`, as ansible-core's `Templar` resolves `{{ y }}`."""
+    from ansible.parsing.dataloader import DataLoader
+    from ansible.template import Templar, trust_as_template
+
+    templar = Templar(
+        loader=DataLoader(), variables={**variables, "y": trust_as_template(source)}
+    )
+    return templar.template(trust_as_template("{{ y }}"))
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        pytest.param("p {{ x }}\n", id="one-newline"),
+        # A fix that rstrips the render and appends one newline passes the case above and
+        # fails this one; padding up to the source's count passes both.
+        pytest.param("p {{ x }}\n\n", id="two-newlines"),
+    ],
+)
+def test_resolve_vars_ends_a_value_whose_render_ends_in_a_newline_as_ansible_core_does(
+    source,
+):
+    variables = {"x": "a\n"}
+    expected = _ansible_core_resolves(source, variables)
+    assert resolve_vars({"y": source}, variables)["y"] == expected
+
+
+@pytest.mark.parametrize(
+    ("source", "x"),
+    [
+        # Jinja drops the one trailing newline before parsing, so this is still a single
+        # expression, and Ansible pads its string result back to the source's newline.
+        pytest.param("{{ x }}\n", "a", id="one-newline-after-a-bare-expression"),
+        pytest.param("{{ x }}\n\n", "a\n", id="two-newlines-after-a-bare-expression"),
+        # Text around the expression makes the value text rather than the expression's type.
+        pytest.param(" {{ x }} ", "a", id="spaces-around-a-bare-expression"),
+        pytest.param("\n{{ x }}", "a", id="newline-before-a-bare-expression"),
+        pytest.param("{{ x }}\n", [1, 2], id="list-keeps-its-type"),
+    ],
+)
+def test_resolve_vars_resolves_a_whole_value_expression_as_ansible_core_does(source, x):
+    variables = {"x": x}
+    expected = _ansible_core_resolves(source, variables)
+    resolved = resolve_vars({"y": source}, variables)["y"]
+    assert (resolved, type(resolved)) == (expected, type(expected))
