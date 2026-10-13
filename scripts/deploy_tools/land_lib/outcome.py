@@ -213,7 +213,11 @@ ABANDONED_WATCH_NOTE = (
 def unrecorded_apply_note(behind_since: str | None) -> str:
     """What "no broad apply covers this PR" means, given whether the tick is still behind.
 
-    Two states reach that branch, and only one of them is stranded. With `behind_since`
+    A third state reaches that branch first: the tick refused to narrow the deploy plane and
+    deferred it to `k8s_unapplied` (#4333). `deferred_plane_note` owns that one, and
+    `Landing.tick_half_remediation` decides between the two.
+
+    Two states reach this note, and only one of them is stranded. With `behind_since`
     empty the tick is level with origin and `next_action()` answers `noop` for every later
     tick, so nothing will ever apply this range. With it set the tick
     fast-forwarded only as far as a green ancestor of the tip — it crossed this PR's merge
@@ -233,6 +237,32 @@ def unrecorded_apply_note(behind_since: str | None) -> str:
     return (
         "  Something OTHER than the tick fast-forwarded the checkout, so the tick will "
         "never see this range again."
+    )
+
+
+def deferred_plane_note(owed: int | None) -> str:
+    """What "no broad apply covers this PR" means when the tick deferred the deploy plane.
+
+    The tick fast-forwarded this PR itself, could not narrow its deploy plane, and recorded
+    every service the plane may reach as a `k8s_unapplied` line instead of running the whole
+    `ansible/deploy.yml` (#4333). Each line discharges on a deploy of its service or on the
+    render proof (#4841), so the stranded-range remedy is wrong twice over: it runs the
+    twenty-minute play the tick deliberately skipped, and its ff-merge on the primary checkout
+    cancels the tick's deploys (#4843). One string, printed by every site that reaches this
+    state, so they cannot drift.
+
+    Args:
+      owed: how many of the deferred services still hold a ledger line, or None when the
+        ledger could not be read.
+    """
+    count = "an unknown number" if owed is None else str(owed)
+    return (
+        "  The tick fast-forwarded this PR but could not narrow its deploy plane, so it "
+        f"deferred the plane to the k8s_unapplied ledger: {count} of its services are still "
+        "owed, instead of a whole ansible/deploy.yml run.\n"
+        "  Each discharges once a `./scripts/deploy.sh --tags <service>` deploy or the "
+        "render proof covers it, and the plane is applied when none is left. List them with "
+        "`uv run python scripts/diagnostics/probe.py gitops-state`."
     )
 
 

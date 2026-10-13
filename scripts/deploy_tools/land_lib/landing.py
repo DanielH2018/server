@@ -26,6 +26,7 @@ from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.outcome import (
     ABANDONED_WATCH_NOTE,
     Outcome,
+    deferred_plane_note,
     hold_clear_hint,
     say,
     unrecorded_apply_note,
@@ -37,8 +38,8 @@ from lib.json_types import as_object
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
-from gitops_ledger import Receipt, parse_receipts
-from gitops_markers import MARKERS
+from gitops_ledger import Receipt, deferred_still_owed, parse_receipts
+from gitops_markers import DEPLOY_PLAYBOOK, MARKERS
 
 BRANCH = "master"
 
@@ -342,19 +343,29 @@ class Landing:
         the other direction is the bug.
         """
         receipt = self.receipt_for(sha)
-        if not (receipt and receipt.applied):
+        if not (receipt and (receipt.applied or receipt.deferred)):
             return False
         # Every plane this PR's broad half needs, not just any plane (#4333): a refused
         # deploy-plane narrowing applies nothing and writes no `ansible/deploy.yml` entry,
-        # while a setup plane in the same tick still writes its own. An unread answer is the
+        # while a setup plane in the same tick still writes its own. A deferred plane
+        # counts once every service it owed has discharged (#4843). An unread answer is the
         # conservative False the docstring gives.
+        missing = self.planes_unapplied(receipt)
+        if missing is None:
+            return False
+        return not missing or (
+            self.deferred_plane(receipt) and self.deferred_plane_owed(receipt) == 0
+        )
+
+    def planes_unapplied(self, receipt: Receipt | None) -> set[str] | None:
+        """The playbooks this PR's broad half needs that `receipt` did not apply; None unread."""
         try:
             needed = land_tags.self_applied_playbooks(
                 list(self.classification.pr_paths), self.classification.quiet
             )
         except Exception:
-            return False
-        return needed <= set(receipt.applied)
+            return None
+        return set(needed) - set(receipt.applied if receipt else ())
 
     def receipt_for(self, sha: str) -> Receipt | None:
         """The deployer's receipt for the tick that crossed `sha`, or None when there is none.
@@ -412,10 +423,33 @@ class Landing:
         """
         if self.tick_watch_abandoned:
             return [ABANDONED_WATCH_NOTE]
+        receipt = self.receipt_for(self.merge_sha) if self.merge_sha else None
+        if receipt and self.deferred_plane(receipt):
+            return [deferred_plane_note(self.deferred_plane_owed(receipt))]
         lines = [unrecorded_apply_note(self.state("behind_since"))]
         if self.classification.self_applied_command:
             lines.append(f"  Apply it: {self.classification.self_applied_command}")
         return lines
+
+    def deferred_plane(self, receipt: Receipt | None) -> bool:
+        """Did the tick defer this PR's deploy plane, and is that plane all it left unapplied?
+
+        The receipt is the tick's own record for `base..origin` (#4843), so a deferral of a
+        later range, or a ledger line a later tick moved past the merge, never reads as this
+        PR's. A PR whose setup half is unapplied too answers False and keeps the
+        stranded-range remedy, which names both playbooks.
+        """
+        return bool(
+            receipt
+            and DEPLOY_PLAYBOOK in receipt.deferred
+            and self.planes_unapplied(receipt) == {DEPLOY_PLAYBOOK}
+        )
+
+    def deferred_plane_owed(self, receipt: Receipt) -> int | None:
+        """How many services the deferred plane still owes; None when the ledger is unread."""
+        return deferred_still_owed(
+            receipt, DEPLOY_PLAYBOOK, self.state(MARKERS["owed"])
+        )
 
     def tick_half_open_lines(self) -> list[str]:
         """What the deployer's own state still owes this landing, as printable lines.
