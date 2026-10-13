@@ -88,12 +88,15 @@ time. It held Flux for only those first minutes. With the 720 series in the whol
 projects to about 140,540, over the budget. The offset is the operator's decision
 ([#4808](https://github.com/DanielH2018/server/issues/4808)).
 
-**The deploy's sample gap.** D1.6 rolled Prometheus, through its config checksum, and
-kube-state-metrics, through its new argument. Prometheus's own `up{job="prometheus"}` series
-has a sample at 02:50:43Z and the next at 02:51:01Z, an 18-second gap. kube-state-metrics'
-`up` has a sample at 02:49:52Z and the next at 02:51:17Z, one missed 1-minute scrape. The M2
-soak ([#4786](https://github.com/DanielH2018/server/issues/4786)) loses those seconds and
-nothing more.
+**The deploy's gaps.** D1.6 rolled Prometheus, through its config checksum, and
+kube-state-metrics, through its new argument. Rule evaluation stopped for 4 minutes: the
+Watchdog, which every 1-minute evaluation writes to `ALERTS`, has a sample at 02:49:45Z and
+the next at 02:53:45Z, so three evaluations were missed. Scraping resumed sooner, because the
+new pod scrapes before its rule manager starts. Prometheus's own `up{job="prometheus"}` has a
+sample at 02:50:43Z and the next at 02:51:01Z. kube-state-metrics' `up` has a sample at
+02:49:52Z and the next at 02:51:17Z, one missed 1-minute scrape. The M2 soak
+([#4786](https://github.com/DanielH2018/server/issues/4786)) therefore has no alert
+evaluations from 02:49:45Z to 02:53:45Z.
 
 ## Alerts
 
