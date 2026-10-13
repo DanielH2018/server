@@ -19,8 +19,8 @@
       Renders the value verbatim, `| default('unstaged')`. Use this when the value comes from
       a task — a `copy` register, a fact hashing several files together (monitor-bridge,
       autofix-bridge, valheim-stats and terraria-stats each stage TWO modules and hash
-      both into one trigger — see their tasks/main.yml), an image digest (n8n's
-      `checksum/image`) — anything other than one file's raw bytes, so a role's own
+      both into one trigger — see their tasks/main.yml) — anything other than one file's
+      raw bytes, so a role's own
       computation is preserved exactly rather than approximated by this macro's own hashing.
 
     checksum_annotation('name', path=<absolute path to one file>)

@@ -441,14 +441,10 @@ again.
 
 ## Pinned live-read facts
 
-Four facts come from live state in a real run, so the renderer cannot compute them from the
+Three facts come from live state in a real run, so the renderer cannot compute them from the
 tree. Target slice R3 removes those reads. Until then, each one takes a fixed stand-in in
-both halves:
-
-- `authelia_password_hash`, `authelia_claude_password_hash` and
-  `authelia_agent_password_hash`, read by the `authelia` templates.
-- `k8s_built_images`, read by the `n8n` templates. It pins to `[]`, which n8n renders as
-  `checksum/image: "unstaged"`.
+both halves: `authelia_password_hash`, `authelia_claude_password_hash` and
+`authelia_agent_password_hash`, read by the `authelia` templates.
 
 A string stand-in carries the secret stubs' marker, such as `stub-authelia-password-hash`.
 Each entry also names its reader tags. A test in `scripts/renderer/tests/` holds those tags
