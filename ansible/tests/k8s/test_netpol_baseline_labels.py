@@ -490,9 +490,11 @@ def test_each_namespace_scope_lever_has_a_live_exempt_gate():
 
 
 def test_observability_expects_an_empty_exempt_set():
-    """Nothing in observability has a bespoke policy, so an exemption there fences nothing."""
+    """An exemption here leaves a pod fenced by nothing, or by only its homelab-caller grant.
+
+    The second is prometheus, loki and alertmanager; tasks/main.yml has why that breaks them."""
     defaults = (_ROLE / "defaults" / "main.yml").read_text()
     assert "netpol_baseline_obs_exempt_workloads: []" in defaults, (
-        "observability's expected exempt set must be empty and explicit — an exemption in a "
-        "namespace with no bespoke policies is a pod fenced by nothing at all"
+        "observability's expected exempt set must be empty and explicit — an exemption there "
+        "leaves a pod fenced by nothing, or by a caller grant that cuts its in-namespace callers"
     )
