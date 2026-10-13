@@ -72,11 +72,55 @@ Two sources put Flux in the metrics plane, both in `ansible/roles/k8s/observabil
 drops a label whose field is absent, and the flux role writes `spec.suspend` only while
 `flux_sync_suspend` is true. A rule about suspension therefore matches `suspended="true"`.
 
-**Series.** The plan estimated under 1,000 series for the `flux` job after the bucket drop.
-`gotk_resource_info` holds one live series per Flux object, two in D1, and each promotion
-adds one short-lived series per object through the `revision` label. Both count against M1's
-fleet budget of 140,000 head series. The measured counts are recorded after the landing
-([#4802](https://github.com/DanielH2018/server/issues/4802)).
+**Series.** These counts were measured on 2026-10-13 at about 03:00Z, after D1.6 deployed
+`observability` at 02:50:58Z:
+
+- `count({job="flux"})` read 718 for the three controllers. Go runtime families (`go_*`) make
+  up 459 of them, 153 per controller.
+- `count({job="flux",__name__=~".+_bucket"})` returned no series, so the bucket drop holds.
+- `count(gotk_resource_info)` read 2: the root Kustomization `homelab` and the
+  `OCIRepository` `homelab`. Each promotion adds one short-lived series per object through
+  the `revision` label, until the old series leaves the head block.
+
+Both count against M1's fleet budget of 140,000 head series, which reads
+`avg_over_time(prometheus_tsdb_head_series[7d])`. That average read 139,817.7 at the same
+time. It held Flux for only those first minutes. With the 720 series in the whole window, it
+projects to about 140,540, over the budget. The offset is the operator's decision
+([#4808](https://github.com/DanielH2018/server/issues/4808)).
+
+**The deploy's gaps.** D1.6 rolled Prometheus, through its config checksum, and
+kube-state-metrics, through its new argument. Rule evaluation stopped for 4 minutes: the
+Watchdog, which every 1-minute evaluation writes to `ALERTS`, has a sample at 02:49:45Z and
+the next at 02:53:45Z, so three evaluations were missed. Scraping resumed sooner, because the
+new pod scrapes before its rule manager starts. Prometheus's own `up{job="prometheus"}` has a
+sample at 02:50:43Z and the next at 02:51:01Z. kube-state-metrics' `up` has a sample at
+02:49:52Z and the next at 02:51:17Z, one missed 1-minute scrape. The M2 soak
+([#4786](https://github.com/DanielH2018/server/issues/4786)) therefore has no alert
+evaluations from 02:49:45Z to 02:53:45Z.
+
+## Alerts
+
+The `flux` rule group, `ansible/roles/k8s/observability/files/rules/flux.yaml`, pages through
+M1's Alertmanager. Every rule carries `service="flux"`.
+
+- **`FluxControllerDown`, critical.** Two rules share the name.
+    - One fires when a controller's scrape has failed for 5 minutes. It carries
+      `shadow="true"`, because Kuma's `Cluster Scrape Targets` tile already pages that
+      condition. M6's batch A3 drops the label when it retires the tile.
+    - The other fires when a controller has had no scrape target for 5 minutes, or has been
+      scraped with no `controller_runtime_reconcile_total` series. Pod discovery finds no
+      target for a controller with no pod, so no Kuma tile sees that loss. This rule
+      carries no shadow label.
+- **`FluxNotReady`, warning.** A Kustomization, or the `OCIRepository` `homelab`, has had a
+  Ready condition other than `True` for 15 minutes. The rule names `homelab`, so the verify
+  drill's `verify-drill`, which is meant to read Ready=False, never fires it.
+- **`FluxSuspended`, warning.** A Kustomization has been suspended for more than 24 hours.
+  `flux_sync_suspend` and a hand suspend both count.
+
+notification-controller's Discord alerts stay as a second channel beside these.
+`ansible/roles/k8s/observability/tests/rules/flux.test.yaml` fires each rule and holds a
+case one evaluation short of each hold. A lost `gotk_resource_info` leaves the last two rules
+quiet ([#4809](https://github.com/DanielH2018/server/issues/4809)).
 
 ## A `containers_list` change reaches Flux
 

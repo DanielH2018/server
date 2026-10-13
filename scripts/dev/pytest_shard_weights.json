@@ -485,6 +485,7 @@
  "ansible/tests/services/test_dri_resource_name_agrees.py": 0.0,
  "ansible/tests/services/test_every_jellyfin_plugin_target_abi_fits_the_image.py": 0.0,
  "ansible/tests/services/test_exportarr_sidecars.py": 0.01,
+ "ansible/tests/services/test_flux_rule_literals.py": 0.07,
  "ansible/tests/services/test_grafana_authelia_oidc.py": 0.0,
  "ansible/tests/services/test_ha_trusted_proxies_cover_cloudflare.py": 0.01,
  "ansible/tests/services/test_headlamp_widget_mapping_order.py": 0.0,

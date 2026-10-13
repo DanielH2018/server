@@ -1,0 +1,339 @@
+# promtool unit tests for files/rules/flux.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# Each rule has a case that fires it and a red case one evaluation short of its hold, so a
+# shortened `for:` fails here. The series carry the labels the live cluster gives them on
+# 2026-10-13: the flux job's `app` and `pod`, and kube-state-metrics' customresource_* labels
+# on gotk_resource_info.
+rule_files:
+  - ../../files/rules/flux.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so the flux job is missing from the config.
+  # FluxControllerDown fires once per controller after its 5m hold, and not before. The two
+  # gotk_resource_info rules evaluate to nothing and stay quiet past their holds.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FluxControllerDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: FluxControllerDown
+        exp_alerts:
+          - exp_labels:
+              job: flux
+              app: source-controller
+              severity: critical
+              service: flux
+            exp_annotations: &absent_source
+              summary: A Flux controller has no pod, or Prometheus lost its metrics.
+              description: >-
+                For 5 minutes source-controller has either had no scrape target, so its pod
+                is gone or the flux scrape job is missing from prometheus.yml, or it has been
+                scraped with no controller_runtime_reconcile_total series. Read the Deployment
+                in the flux-system namespace.
+          - exp_labels:
+              job: flux
+              app: kustomize-controller
+              severity: critical
+              service: flux
+            exp_annotations: &absent_kustomize
+              summary: A Flux controller has no pod, or Prometheus lost its metrics.
+              description: >-
+                For 5 minutes kustomize-controller has either had no scrape target, so its pod
+                is gone or the flux scrape job is missing from prometheus.yml, or it has been
+                scraped with no controller_runtime_reconcile_total series. Read the Deployment
+                in the flux-system namespace.
+          - exp_labels:
+              job: flux
+              app: notification-controller
+              severity: critical
+              service: flux
+            exp_annotations: &absent_notification
+              summary: A Flux controller has no pod, or Prometheus lost its metrics.
+              description: >-
+                For 5 minutes notification-controller has either had no scrape target, so its
+                pod is gone or the flux scrape job is missing from prometheus.yml, or it has
+                been scraped with no controller_runtime_reconcile_total series. Read the
+                Deployment in the flux-system namespace.
+      - eval_time: 16m
+        alertname: FluxNotReady
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: FluxSuspended
+        exp_alerts: []
+
+  # A failed scrape. source-controller's scrape fails from 6m, so the shadowed rule fires at
+  # 11m and not at 10m, after 4 minutes down. A failed scrape stale-marks the target's series,
+  # so its reconcile counter goes stale at 6m. The unshadowed rule stays quiet anyway, through
+  # 16m: the target exists, and its up is not 1, so it never pages Kuma's condition twice.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="flux", app="source-controller", instance="10.42.1.206:8080", pod="source-controller-579bc67689-2rrfs"}'
+        values: '1x5 0x15'
+      - series: 'controller_runtime_reconcile_total{job="flux", app="source-controller", instance="10.42.1.206:8080", pod="source-controller-579bc67689-2rrfs", controller="ocirepository", result="success"}'
+        values: '1x5 stale'
+      - series: 'up{job="flux", app="kustomize-controller", instance="10.42.1.207:8080", pod="kustomize-controller-5d94ff85cc-bfhww"}'
+        values: '1x20'
+      - series: 'controller_runtime_reconcile_total{job="flux", app="kustomize-controller", instance="10.42.1.207:8080", pod="kustomize-controller-5d94ff85cc-bfhww", controller="kustomization", result="success"}'
+        values: '1x20'
+      - series: 'up{job="flux", app="notification-controller", instance="10.42.1.208:8080", pod="notification-controller-59f9f8cc96-pjvbs"}'
+        values: '1x20'
+      - series: 'controller_runtime_reconcile_total{job="flux", app="notification-controller", instance="10.42.1.208:8080", pod="notification-controller-59f9f8cc96-pjvbs", controller="provider", result="success"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: FluxControllerDown
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: FluxControllerDown
+        exp_alerts:
+          - exp_labels:
+              job: flux
+              app: source-controller
+              instance: 10.42.1.206:8080
+              pod: source-controller-579bc67689-2rrfs
+              severity: critical
+              service: flux
+              shadow: "true"
+            exp_annotations:
+              summary: Prometheus cannot scrape a Flux controller.
+              description: >-
+                source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
+                source-controller is down or unreachable from Prometheus. Read its pod's
+                events and log in the flux-system namespace.
+      - eval_time: 16m
+        alertname: FluxControllerDown
+        exp_alerts:
+          - exp_labels:
+              job: flux
+              app: source-controller
+              instance: 10.42.1.206:8080
+              pod: source-controller-579bc67689-2rrfs
+              severity: critical
+              service: flux
+              shadow: "true"
+            exp_annotations:
+              summary: Prometheus cannot scrape a Flux controller.
+              description: >-
+                source-controller-579bc67689-2rrfs has failed its scrape for 5 minutes, so
+                source-controller is down or unreachable from Prometheus. Read its pod's
+                events and log in the flux-system namespace.
+
+  # A controller with no pod, and one scraped with no controller-runtime series. Both fire the
+  # unshadowed rule after 5m and not at 4m, one alert each. source-controller is healthy and
+  # fires nothing.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="flux", app="source-controller", instance="10.42.1.206:8080", pod="source-controller-579bc67689-2rrfs"}'
+        values: '1x10'
+      - series: 'controller_runtime_reconcile_total{job="flux", app="source-controller", instance="10.42.1.206:8080", pod="source-controller-579bc67689-2rrfs", controller="ocirepository", result="success"}'
+        values: '1x10'
+      - series: 'up{job="flux", app="kustomize-controller", instance="10.42.1.207:8080", pod="kustomize-controller-5d94ff85cc-bfhww"}'
+        values: '1x10'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: FluxControllerDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: FluxControllerDown
+        exp_alerts:
+          - exp_labels:
+              job: flux
+              app: kustomize-controller
+              instance: 10.42.1.207:8080
+              pod: kustomize-controller-5d94ff85cc-bfhww
+              severity: critical
+              service: flux
+            exp_annotations: *absent_kustomize
+          - exp_labels:
+              job: flux
+              app: notification-controller
+              severity: critical
+              service: flux
+            exp_annotations: *absent_notification
+
+  # The root Kustomization not Ready. It fires at 15m and not at 14m. The healthy
+  # OCIRepository fires nothing.
+  - interval: 1m
+    input_series:
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '1x20'
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="source.toolkit.fluxcd.io", customresource_kind="OCIRepository", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="True", revision="prod@sha256:6d922645e7f2cc91a50eec3f617aa220f084ebf322dd99a6d586d9456f309c63", url="oci://ghcr.io/danielh2018/homelab-manifests"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: FluxNotReady
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: FluxNotReady
+        exp_alerts:
+          - exp_labels:
+              customresource_kind: Kustomization
+              exported_namespace: flux-system
+              name: homelab
+              severity: warning
+              service: flux
+            exp_annotations: &not_ready_kustomization
+              summary: A Flux object has not been Ready for 15 minutes.
+              description: >-
+                The Kustomization homelab in flux-system has had a Ready condition other than
+                True for 15 minutes. Its status conditions name the failing step.
+
+  # A failing Kustomization whose Ready flips between False and Unknown every minute, as on
+  # each retry. Each flip ends one series and starts another, so without the max by() each
+  # label set would restart the hold and the rule would never fire.
+  - interval: 1m
+    input_series:
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1'
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="Unknown", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: 'stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale 1 stale'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: FluxNotReady
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: FluxNotReady
+        exp_alerts:
+          - exp_labels:
+              customresource_kind: Kustomization
+              exported_namespace: flux-system
+              name: homelab
+              severity: warning
+              service: flux
+            exp_annotations: *not_ready_kustomization
+
+  # A failed kube-state-metrics scrape at 7m stale-marks the series, and its next sample
+  # arrives at 9m. The hold runs across the gap, so the rule still fires at 15m.
+  - interval: 1m
+    input_series:
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '1x6 stale _ 1x12'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FluxNotReady
+        exp_alerts:
+          - exp_labels:
+              customresource_kind: Kustomization
+              exported_namespace: flux-system
+              name: homelab
+              severity: warning
+              service: flux
+            exp_annotations: *not_ready_kustomization
+
+  # Recovery: not Ready for 10m, then Ready. The 10m window still holds the False series at
+  # 15m, so only the `unless` on the Ready=True series keeps the rule from firing then.
+  - interval: 1m
+    input_series:
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '1x9 stale'
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="True", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '_x10 1x10'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: FluxNotReady
+        exp_alerts: []
+
+  # The OCIRepository arm names homelab. Both OCIRepositories read Ready=False for 30m, and only
+  # homelab fires: the drill's verify-drill is meant to read Ready=False.
+  - interval: 1m
+    input_series:
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="source.toolkit.fluxcd.io", customresource_kind="OCIRepository", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="False", url="oci://ghcr.io/danielh2018/homelab-manifests"}'
+        values: '1x30'
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="source.toolkit.fluxcd.io", customresource_kind="OCIRepository", customresource_version="v1", exported_namespace="flux-system", name="verify-drill", ready="False", url="oci://ghcr.io/danielh2018/homelab-manifests"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FluxNotReady
+        exp_alerts:
+          - exp_labels:
+              customresource_kind: OCIRepository
+              exported_namespace: flux-system
+              name: homelab
+              severity: warning
+              service: flux
+            exp_annotations:
+              summary: A Flux object has not been Ready for 15 minutes.
+              description: >-
+                The OCIRepository homelab in flux-system has had a Ready condition other than
+                True for 15 minutes. Its status conditions name the failing step.
+
+  # The root Kustomization suspended. It fires at 24h and not at 23h59m, one evaluation short.
+  # A failed kube-state-metrics scrape at 11h55m stale-marks the series for one 5m sample, and
+  # the hold runs across it.
+  # The OCIRepository, suspended beside it by flux_sync_suspend, never fires: the rule reads
+  # Kustomizations only. The input interval stays inside the 5m lookback, so the series never
+  # reads absent between samples.
+  - interval: 5m
+    input_series:
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="True", suspended="true", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '1x143 stale 1x216'
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="source.toolkit.fluxcd.io", customresource_kind="OCIRepository", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="True", suspended="true", url="oci://ghcr.io/danielh2018/homelab-manifests"}'
+        values: '1x360'
+    alert_rule_test:
+      - eval_time: 23h59m
+        alertname: FluxSuspended
+        exp_alerts: []
+      - eval_time: 30h
+        alertname: FluxSuspended
+        exp_alerts:
+          - exp_labels:
+              customresource_kind: Kustomization
+              exported_namespace: flux-system
+              name: homelab
+              severity: warning
+              service: flux
+            exp_annotations:
+              summary: A Flux Kustomization has been suspended for more than 24 hours.
+              description: >-
+                The Kustomization homelab in flux-system has been suspended for 24 hours, so
+                Flux applies nothing it owns. If flux_sync_suspend is true, set it back and run
+                the flux role; otherwise the suspend was made by hand.
+
+  # Resumed: suspended for 23h56m, then resumed, which drops the `suspended` label. The 10m
+  # window still holds the suspended series at 24h, so only the `unless` on the resumed
+  # series keeps the rule from firing then.
+  - interval: 2m
+    input_series:
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="True", suspended="true", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '1x718 stale'
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="True", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '_x719 1x10'
+    alert_rule_test:
+      - eval_time: 24h
+        alertname: FluxSuspended
+        exp_alerts: []
+
+  # Healthy: every controller scraped with its metrics, both objects Ready and none suspended.
+  # No rule fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="flux", app="source-controller", instance="10.42.1.206:8080", pod="source-controller-579bc67689-2rrfs"}'
+        values: '1x30'
+      - series: 'controller_runtime_reconcile_total{job="flux", app="source-controller", instance="10.42.1.206:8080", pod="source-controller-579bc67689-2rrfs", controller="ocirepository", result="success"}'
+        values: '1x30'
+      - series: 'up{job="flux", app="kustomize-controller", instance="10.42.1.207:8080", pod="kustomize-controller-5d94ff85cc-bfhww"}'
+        values: '1x30'
+      - series: 'controller_runtime_reconcile_total{job="flux", app="kustomize-controller", instance="10.42.1.207:8080", pod="kustomize-controller-5d94ff85cc-bfhww", controller="kustomization", result="success"}'
+        values: '1x30'
+      - series: 'up{job="flux", app="notification-controller", instance="10.42.1.208:8080", pod="notification-controller-59f9f8cc96-pjvbs"}'
+        values: '1x30'
+      - series: 'controller_runtime_reconcile_total{job="flux", app="notification-controller", instance="10.42.1.208:8080", pod="notification-controller-59f9f8cc96-pjvbs", controller="provider", result="success"}'
+        values: '1x30'
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="kustomize.toolkit.fluxcd.io", customresource_kind="Kustomization", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="True", revision="master@sha1:df49ee19e0fb69c90b2a2dd5db3fc9f4785fc062", source_name="homelab"}'
+        values: '1x30'
+      - series: 'gotk_resource_info{job="kube-state-metrics", instance="kube-state-metrics:8080", customresource_group="source.toolkit.fluxcd.io", customresource_kind="OCIRepository", customresource_version="v1", exported_namespace="flux-system", name="homelab", ready="True", revision="prod@sha256:6d922645e7f2cc91a50eec3f617aa220f084ebf322dd99a6d586d9456f309c63", url="oci://ghcr.io/danielh2018/homelab-manifests"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: FluxControllerDown
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: FluxNotReady
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: FluxSuspended
+        exp_alerts: []
