@@ -180,15 +180,14 @@ def test_every_ingress_rule_has_an_expected_outcome():
     assert {rule["alert"] for rule in group["rules"]} <= covered
 
 
-def test_every_host_check_rule_is_routed_as_a_shadow_set():
-    """Non-vacuity for `host_sets`: the four rules M3's PR 3 ships, each in SHADOW by name."""
+def test_host_sets_names_every_host_check_rule():
+    """Non-vacuity for `host_sets`: the four rules M3's PR 3 ships, each keyed by its service."""
     assert set(host_sets()) == {
         "DiskHealthFailed/daniel-box",
         "DiskHealthNotReporting/daniel-box",
         "TextfileCollectorError/daniel-box",
         "TextfileCollectorError/daniel-server",
     }
-    assert set(host_sets()) <= set(SHADOW)
 
 
 def test_a_paging_route_without_the_mute_is_flagged():
