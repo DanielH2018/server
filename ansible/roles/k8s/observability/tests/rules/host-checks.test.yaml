@@ -1,0 +1,234 @@
+# promtool unit tests for files/rules/host-checks.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# The input series carry the labels the `node` scrape job adds: `job`, and `origin` and
+# `instance`, both the node name. promtool's `time()` is the eval time in seconds from 0, so a
+# fresh timestamp series reads 60 x the minute index (`0+60xN`), and a frozen one stays put.
+#
+# DiskHealthNotReporting fires with one of two label sets. Its first arm keeps the series'
+# labels, `job` and `instance` included. Its absent_over_time arm carries only the equality
+# matchers' `check` and `origin`.
+rule_files:
+  - ../../files/rules/host-checks.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so no disk-health series has existed for longer
+  # than the 1500s deadline. DiskHealthNotReporting fires through absent_over_time, and the
+  # rules that read a series stay quiet.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 26m
+        alertname: DiskHealthNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: disk-health
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's root disk check has stopped reporting.
+              description: >-
+                No disk-health verdict newer than 1500s reached Prometheus from daniel-box's
+                textfile collector, so nothing is watching the root disk. Read the `daniel-box
+                disk health` cron and the `disk-health` syslog tag, then
+                /var/lib/node-exporter-textfile/disk-health.prom on the host.
+      - eval_time: 26m
+        alertname: DiskHealthFailed
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: TextfileCollectorError
+        exp_alerts: []
+
+  # The verdict turns red from minute 3 while the file stays fresh. DiskHealthFailed fires in
+  # shadow at once, and DiskHealthNotReporting stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x2 0x5'
+      - series: 'homelab_check_last_run_timestamp_seconds{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x7'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x7'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: DiskHealthFailed
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: DiskHealthFailed
+        exp_alerts:
+          - exp_labels:
+              check: disk-health
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's root disk check is red.
+              description: >-
+                disk-health.sh on daniel-box read the root filesystem above its threshold, or
+                df failed. Longhorn stops scheduling replicas on the node at 75%.
+                homelab_disk_root_used_ratio{check="disk-health"} holds the share it read, and
+                the `disk-health` syslog tag holds the run's message.
+      - eval_time: 4m
+        alertname: DiskHealthNotReporting
+        exp_alerts: []
+
+  # The file stopped being refreshed: node_exporter keeps serving the timestamp written at 0.
+  # The first arm fires once the timestamp is more than 1500s old, between minutes 25 and 26.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x40'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 24m
+        alertname: DiskHealthNotReporting
+        exp_alerts: []
+      - eval_time: 26m
+        alertname: DiskHealthNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: disk-health
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's root disk check has stopped reporting.
+              description: >-
+                No disk-health verdict newer than 1500s reached Prometheus from daniel-box's
+                textfile collector, so nothing is watching the root disk. Read the `daniel-box
+                disk health` cron and the `disk-health` syslog tag, then
+                /var/lib/node-exporter-textfile/disk-health.prom on the host.
+
+  # The file is gone from minute 6, so the series goes stale while the exporter stays up. The
+  # absent_over_time arm fires once 1500s pass with no sample, after minute 30 and not
+  # before. The exporter-down group below differs from this one only in `up`, so this group
+  # is its control.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x5 stale'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x45'
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: DiskHealthNotReporting
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: DiskHealthNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: disk-health
+              origin: daniel-box
+              severity: critical
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: daniel-box's root disk check has stopped reporting.
+              description: >-
+                No disk-health verdict newer than 1500s reached Prometheus from daniel-box's
+                textfile collector, so nothing is watching the root disk. Read the `daniel-box
+                disk health` cron and the `disk-health` syslog tag, then
+                /var/lib/node-exporter-textfile/disk-health.prom on the host.
+
+  # The exporter is down from minute 6: `up` reads 0 and the series is gone, as in the
+  # control above. The bridge's `targets` check pages the dead exporter, so the `unless`
+  # clause keeps DiskHealthNotReporting quiet past the point the control fires.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x5 stale'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x5 0x40'
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: DiskHealthNotReporting
+        exp_alerts: []
+
+  # A short gap: one, then two failed scrapes mark the series stale between fresh timestamps,
+  # as a node-exporter roll does. A bare absent() would fire at each stale minute; the
+  # absent_over_time arm still sees the earlier samples and stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="disk-health", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0+60x4 stale 360+60x4 stale stale 780+60x10'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x23'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: DiskHealthNotReporting
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: DiskHealthNotReporting
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: DiskHealthNotReporting
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: DiskHealthNotReporting
+        exp_alerts: []
+
+  # daniel-box's collector fails from minute 3. TextfileCollectorError fires in shadow for
+  # daniel-box once its 10m hold has passed, and daniel-server's rule stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'node_textfile_scrape_error{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x2 1x20'
+      - series: 'node_textfile_scrape_error{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x22'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: TextfileCollectorError
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: TextfileCollectorError
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              severity: warning
+              service: daniel-box
+              shadow: "true"
+            exp_annotations:
+              summary: node_exporter on daniel-box cannot read a textfile.
+              description: >-
+                node_exporter's textfile collector on daniel-box has failed for 10 minutes, so
+                a file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
+                series in it is gone. Read node_textfile_mtime_seconds for the files it still
+                sees, and the node-exporter pod's log.
+
+  # The same failure on daniel-server fires its own rule, with daniel-server as `service`.
+  - interval: 1m
+    input_series:
+      - series: 'node_textfile_scrape_error{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x22'
+      - series: 'node_textfile_scrape_error{instance="daniel-server", job="node", origin="daniel-server"}'
+        values: '0x2 1x20'
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: TextfileCollectorError
+        exp_alerts:
+          - exp_labels:
+              instance: daniel-server
+              job: node
+              origin: daniel-server
+              severity: warning
+              service: daniel-server
+              shadow: "true"
+            exp_annotations:
+              summary: node_exporter on daniel-server cannot read a textfile.
+              description: >-
+                node_exporter's textfile collector on daniel-server has failed for 10 minutes,
+                so a file in /var/lib/node-exporter-textfile is malformed or unreadable, and
+                every series in it is gone. Read node_textfile_mtime_seconds for the files it
+                still sees, and the node-exporter pod's log.

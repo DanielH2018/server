@@ -11,7 +11,8 @@ and reads each route the walk ends on. Each label set carries one expected outco
 - `blackhole` (`SHADOW`): every route the set reaches has the `blackhole` receiver. A rule
   that runs in parallel with a Kuma tile carries `shadow="true"`, and this is the proof that
   it pages nobody. M4's two `IngressProbeFailed*` sets move to `PAGING` in its PR 5, and
-  `BlackboxExporterDown` moves in M6's batch A3.
+  `BlackboxExporterDown` moves in M6's batch A3. M3's two `DiskHealth*` sets move in its PR 5,
+  and the two `TextfileCollectorError` sets in M6's batch A1.
 
 One predicate, "blackhole or muted", would pass a meta alert routed to the blackhole, which is
 a pager that never pages. Hence one outcome per set, each with a rejecting half. A paging
@@ -38,6 +39,7 @@ EQUALITY = re.compile(r'^(\w+)="([^"]*)"$')
 INGRESS_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "ingress-probes.yaml"
 )
+HOST_RULES = ROLES / "k8s" / "observability" / "files" / "rules" / "host-checks.yaml"
 # A per-target ingress alert takes `service` from its probe target, so a probed service
 # stands in for it.
 INGRESS_STAND_IN_SERVICE = "homepage"
@@ -55,6 +57,22 @@ def ingress_set(alert: str) -> dict[str, str]:
         "alertname": alert,
         "service": INGRESS_STAND_IN_SERVICE,
         **rule["labels"],
+    }
+
+
+def host_sets() -> dict[str, dict[str, str]]:
+    """The labels each host-checks rule reaches Alertmanager with, keyed `<alert>/<service>`.
+
+    `TextfileCollectorError` is one rule per node, so the alert name alone is not a key. Every
+    rule there carries a literal `service`.
+    """
+    [group] = yaml_fast.safe_load(HOST_RULES.read_text())["groups"]
+    return {
+        f"{rule['alert']}/{rule['labels']['service']}": {
+            "alertname": rule["alert"],
+            **rule["labels"],
+        }
+        for rule in group["rules"]
     }
 
 
@@ -78,11 +96,12 @@ PAGING = {
     ),
     "ingress-probes-missing": (ingress_set("IngressProbesMissing"), ["discord"]),
 }
-# The shadow sets, as M4's ingress-probes rules ship them.
+# The shadow sets, as M4's ingress-probes rules and M3's host-checks rules ship them.
 SHADOW = {
     "ingress-probe-failed": ingress_set("IngressProbeFailed"),
     "ingress-probe-failed-critical": ingress_set("IngressProbeFailedCritical"),
     "blackbox-exporter-down": ingress_set("BlackboxExporterDown"),
+    **host_sets(),
 }
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
 
@@ -159,6 +178,16 @@ def test_every_ingress_rule_has_an_expected_outcome():
     covered = {labels["alertname"] for labels in SHADOW.values()}
     covered |= {labels["alertname"] for labels, _ in PAGING.values()}
     assert {rule["alert"] for rule in group["rules"]} <= covered
+
+
+def test_host_sets_names_every_host_check_rule():
+    """Non-vacuity for `host_sets`: the four rules M3's PR 3 ships, each keyed by its service."""
+    assert set(host_sets()) == {
+        "DiskHealthFailed/daniel-box",
+        "DiskHealthNotReporting/daniel-box",
+        "TextfileCollectorError/daniel-box",
+        "TextfileCollectorError/daniel-server",
+    }
 
 
 def test_a_paging_route_without_the_mute_is_flagged():

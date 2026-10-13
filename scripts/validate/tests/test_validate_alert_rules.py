@@ -254,6 +254,7 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "loki-homelab",
         "flux",
         "ingress-probes",
+        "host-checks",
     ]
     assert keys == {
         "alerting-meta.yaml",
@@ -262,6 +263,7 @@ def test_the_tree_rules_meet_every_convention_is_clean():
         "loki-homelab.yaml",
         "flux.yaml",
         "ingress-probes.yaml",
+        "host-checks.yaml",
     }
     doc = yaml_fast.safe_load(
         (alert_rules.RULES_DIR / "alerting-meta.yaml").read_text()

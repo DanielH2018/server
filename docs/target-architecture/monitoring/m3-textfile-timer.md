@@ -6,6 +6,8 @@ PR 1, the textfile collector's live producer named: [#4869](https://github.com/D
 
 PR 2, disk-health's verdict written to the textfile collector: [#4871](https://github.com/DanielH2018/server/pull/4871) (issue #4856).
 
+PR 3, the host-checks rules in shadow beside Kuma's disk tile: [#4937](https://github.com/DanielH2018/server/pull/4937) (issue #4936).
+
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover
 
 Unblocks: M6 (with M2, M4 and M5)
