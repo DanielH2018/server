@@ -503,6 +503,7 @@
  "ansible/tests/services/test_karakeep_backend_policies.py": 0.0,
  "ansible/tests/services/test_karakeep_public_bypass.py": 0.0,
  "ansible/tests/services/test_karakeep_time_tagger_script.py": 0.0,
+ "ansible/tests/services/test_ksm_flux_resource_state.py": 0.13,
  "ansible/tests/services/test_kuma_ddns_tile_outlives_the_update_cron.py": 0.03,
  "ansible/tests/services/test_kuma_discord_template.py": 0.03,
  "ansible/tests/services/test_kuma_email_template.py": 0.03,

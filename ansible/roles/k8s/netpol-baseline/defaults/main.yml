@@ -112,15 +112,21 @@ netpol_baseline_obs_node_cidrs: "{{ k3s_cni0_gateways + k3s_flannel_node_ips }}"
 # Columns:
 #   service — the Service name. It is the name the gate reads and the name the leg dials. It is
 #             not always the pod label (scrutiny's pods are `app: scrutiny-web`).
-#   plane   — `homelab` or `observability`. It picks the namespace and the lever: a homelab row
-#             runs only while netpol_baseline_enforced is true, an observability row only while
-#             netpol_baseline_obs_enforced is.
-#   port    — the POD port, from the target's own NetworkPolicy `port:`. Every target here maps
-#             Service port to pod port 1:1. A dialled row may omit it when `service` names a
-#             containers_list entry; the Job then reads the entry's `port` through `entry_port`,
-#             so the row follows the entry rather than copying it (uptime-kuma's, #3867). The
-#             lookup sits in the template because role defaults resolve without this repo's
-#             filter plugins in the render guards.
+#   plane   — `homelab`, `observability` or `flux-system`. It picks the namespace, through
+#             netpol_baseline_probe_namespaces, and the lever: a homelab row runs only while
+#             netpol_baseline_enforced is true, an observability row only while
+#             netpol_baseline_obs_enforced is. A flux-system row has no lever and always runs,
+#             because the flux role owns that namespace's fence and this role never renders it.
+#   port    — the POD port, from the target's own NetworkPolicy `port:`. A dialled row may omit
+#             it when `service` names a containers_list entry; the Job then reads the entry's
+#             `port` through `entry_port`, so the row follows the entry rather than copying it
+#             (uptime-kuma's, #3867). The lookup sits in the template because role defaults
+#             resolve without this repo's filter plugins in the render guards.
+#   service_port — the port the leg dials, for a Service that does NOT map its port to the pod
+#             port 1:1. Absent on every row whose Service does, and the leg then dials `port`.
+#             The fence is enforced on the pod port after the Service's DNAT, so `port` stays
+#             the pod port the policy names, and `service_port` is only how the leg reaches it.
+#             Read it from the Service's `spec.ports`, never from the pod.
 #   expect  — `refused` (an inverted leg), `open` (the connection must succeed), or absent (the
 #             gate checks the row, and no leg dials it).
 #   policy  — the policy file that owns the fence, printed in the failure message.
@@ -128,7 +134,8 @@ netpol_baseline_obs_node_cidrs: "{{ k3s_cni0_gateways + k3s_flannel_node_ips }}"
 # A WRONG PORT ON A `refused` ROW FAILS SILENTLY GREEN. A port nothing listens on makes `nc` fail,
 # which is the PASS branch of an inverted leg. The gate proves the Service has a ready backend; it
 # does not prove the port is the one that backend serves. Re-check a port against its source
-# whenever you touch its row.
+# whenever you touch its row. A Service port the Service does not declare fails the same way, so
+# a `service_port` row dials only a port an in-namespace caller is proven to reach.
 #
 # The probe pod is `app: netpol-baseline-probe`. No caller list in the repo names that label, so
 # every `refused` row must refuse it. Its `netpol-probe: control` label admits it to speedtest:80,
@@ -179,15 +186,35 @@ netpol_baseline_probe_targets:
   - {service: loki-homelab, plane: homelab, port: 3100, expect: refused, policy: networkpolicy-loki-homelab.yaml.j2}
   - {service: scrutiny, plane: homelab, port: 8080, expect: refused, policy: "scrutiny's netpol_from, pod label scrutiny-web"}
   - {service: karakeep-meilisearch, plane: homelab, port: 7700, expect: refused, policy: "karakeep's netpol_fences (host_vars/daniel-box.yml)"}
+  # The flux-system fence: upstream's `allow-egress`, kept in the flux role's vendored
+  # files/gotk-components.yaml, admits ingress only from pods in flux-system, and
+  # flux-allow-prometheus admits Prometheus to 8080 alone. Each Service maps port 80 to a
+  # NAMED target port, so these rows dial 80 and name the pod port behind it:
+  # source-controller and notification-controller map 80 to `http` (9090), webhook-receiver
+  # maps 80 to `http-webhook` (9292). source-controller's 80 is the one kustomize-controller
+  # fetches every artifact through, and notification-controller's is the one every event
+  # reaches it on. The controllers' 8080 has no Service, so no row dials it; the `flux` scrape
+  # job's `up` series is its positive control.
+  - {service: source-controller, plane: flux-system, port: 9090, service_port: 80, expect: refused, policy: "flux's allow-egress (flux/files/gotk-components.yaml)"}
+  - {service: notification-controller, plane: flux-system, port: 9090, service_port: 80, expect: refused, policy: "flux's allow-egress (flux/files/gotk-components.yaml)"}
+  - {service: webhook-receiver, plane: flux-system, port: 9292, service_port: 80, expect: refused, policy: "flux's allow-egress (flux/files/gotk-components.yaml)"}
   # The sentinel. The probe's control leg dials it with a retry, outside the table, so the row
   # has no `expect`.
   - {service: speedtest, plane: homelab}
 
-# The rows whose lever is on. The gate loops this and the Job renders from it, so a plane with
-# its lever off is neither gated nor dialled.
+# The namespace each plane's Services live in. The readiness gate reads a row's EndpointSlice
+# there, and the Job dials a row outside its own namespace as `<service>.<namespace>`.
+netpol_baseline_probe_namespaces:
+  homelab: "{{ k8s_namespace }}"
+  observability: "{{ k8s_observability_namespace }}"
+  flux-system: flux-system
+
+# The rows whose lever is on, plus the flux-system rows, which have none. The gate loops this
+# and the Job renders from it, so a plane with its lever off is neither gated nor dialled.
 netpol_baseline_probe_active: >-
   {{ netpol_baseline_probe_targets
      | selectattr('plane', 'in',
                   (['homelab'] if netpol_baseline_enforced | bool else [])
-                  + (['observability'] if netpol_baseline_obs_enforced | bool else []))
+                  + (['observability'] if netpol_baseline_obs_enforced | bool else [])
+                  + ['flux-system'])
      | list }}

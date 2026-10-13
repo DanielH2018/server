@@ -72,6 +72,8 @@ MUST_DROP = [
     ("longhorn", "longhorn_workqueue_queue_duration_seconds_bucket"),
     ("longhorn", "longhorn_workqueue_work_duration_seconds_bucket"),
     ("kube-state-metrics", "kube_replicaset_created"),
+    ("flux", "gotk_reconcile_duration_seconds_bucket"),
+    ("flux", "workqueue_queue_duration_seconds_bucket"),
 ]
 
 # (job, metric, why it matters) — the half that catches a rule widened past its intent.
@@ -120,6 +122,16 @@ MUST_KEEP = [
         "kube-state-metrics",
         "kube_replicaset_owner",
         "the pod to Deployment hop in observability's files/rules/workload-service.yaml",
+    ),
+    (
+        "flux",
+        "gotk_reconcile_duration_seconds_count",
+        "_sum and _count survive the bucket drop, so reconcile rates stay available",
+    ),
+    (
+        "flux",
+        "controller_runtime_reconcile_errors_total",
+        "a counter one family from the dropped histograms; a widened regex would take it",
     ),
 ]
 

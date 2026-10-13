@@ -231,7 +231,7 @@
     # null-safe too, and would have counted a NOT-ready endpoint as present.
     cmd: >-
       k3s kubectl
-      -n {{ k8s_namespace if item.plane == 'homelab' else k8s_observability_namespace }}
+      -n {{ netpol_baseline_probe_namespaces[item.plane] }}
       get endpointslice -l kubernetes.io/service-name={{ item.service }}
       -o jsonpath={.items[*].endpoints[*].conditions.ready}
   become: true
@@ -260,8 +260,9 @@
   loop_control:
     label: "{{ item.item.service }}"
 
-# Every task from here runs while either lever is on. The table rows of a plane whose lever is
-# off are not rendered, so the Job tests only what is meant to be enforced.
+# Every task from here runs while any row is active, which the lever-less flux-system rows make
+# always. The table rows of a plane whose lever is off are not rendered, so the Job tests only
+# what is meant to be enforced.
 - name: Clear the previous netpol-baseline probe run
   tags: [deploy]
   when:

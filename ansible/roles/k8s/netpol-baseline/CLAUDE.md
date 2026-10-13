@@ -26,6 +26,12 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 - **Observability namespace has its own levers** (`netpol_baseline_obs_enforced`,
   `netpol_baseline_obs_scope`, own node-CIDR list) — rolled out and back independently of
   `homelab`'s.
+- **The probe also tests the `flux-system` fence**, which the flux role owns. Its table rows
+  carry plane `flux-system`, which has no lever, so they run whatever
+  `netpol_baseline_enforced` and `netpol_baseline_obs_enforced` say. Each flux Service maps
+  port 80 to a different pod port, so those rows set `service_port` for the leg to dial and
+  keep `port` as the pod port the fence names. The table comment in `defaults/main.yml` has
+  the columns.
 - **The observability policies are deferred** (#3591). The role's prune is armed, and the
   armed apply's `-n homelab` refuses a document in another namespace (#3575). So
   `networkpolicy-observability`, `-prometheus` and `-loki` render into
