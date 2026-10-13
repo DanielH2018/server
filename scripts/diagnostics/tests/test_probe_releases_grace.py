@@ -236,3 +236,35 @@ def test_an_undigested_hit_touched_again_after_the_render_keeps_its_date_is_flag
     )
     assert stale == {"littlelink": rr.path_reason([_PVC])}
     assert pending == {}
+
+
+def test_an_undigested_hit_touched_only_after_the_render_gets_grace(tmp_path):
+    """R answers for none of the volume-claim change, but the change is two minutes old.
+
+    Its own commit dates it, so the older renderer hit R holds does not (#4881).
+    """
+    stale, pending = _after_render_behind(
+        tmp_path, [(_RENDERER, 7200), (_PVC, 120)], render_at=0
+    )
+    assert stale == {}
+    assert pending == {"littlelink": 120}
+
+
+@pytest.mark.parametrize(
+    ("own_age", "expected_pending"),
+    [
+        pytest.param(1800, {"littlelink": 1800}, id="oldest-kept-hit-is-inside-grace"),
+        pytest.param(3700, {}, id="oldest-kept-hit-is-outside-grace"),
+    ],
+)
+def test_a_service_dates_from_its_oldest_kept_hit_across_both_kinds(
+    tmp_path, own_age, expected_pending
+):
+    """A digested hit after R and an undigested one: the older of the two sets the date."""
+    stale, pending = _after_render_behind(
+        tmp_path, [(_RENDERER, 7200), (_OWN, own_age), (_PVC, 120)], render_at=0
+    )
+    assert pending == expected_pending
+    assert stale == (
+        {} if expected_pending else {"littlelink": rr.path_reason([_OWN, _PVC])}
+    )

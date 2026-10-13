@@ -3,9 +3,10 @@
 `test_probe_releases.py` (the reader: flags, lookup, loading, missing_services) and
 `test_probe_releases_stale.py` (staleness over real git history) both build a release record,
 and the second needs throwaway repos. `test_probe_releases_render.py` and
-`test_probe_releases_grace.py` both build the render records the digest verdict reads. They live here rather than in a conftest because
-`scripts/conftest.py` covers every suite under `scripts/`, while these names are wanted by
-these modules alone -- the same split `_probe_health_fixtures.py` makes beside them.
+`test_probe_releases_grace.py` both build the render records the digest verdict reads. They
+live here rather than in a conftest because `scripts/conftest.py` covers every suite under
+`scripts/`, while these names are wanted by these modules alone -- the same split
+`_probe_health_fixtures.py` makes beside them.
 
 Import by bare name: pytest puts a test's own directory on `sys.path`, so
 `from _release_fixtures import _record` resolves from any module in this directory.

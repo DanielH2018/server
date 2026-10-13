@@ -418,7 +418,13 @@ A record proves nothing unless its tree was clean and its `host` is the release 
 `commit` R must also be origin/master or an ancestor of it (#4881). A record behind the tip
 answers only for the path hits R already holds: a matching digest drops those, every hit in
 R..origin/master keeps the path verdict, and a mismatch at R proves nothing about the tip, so
-the path verdict stands rather than a drifted one. The producer renders hourly and master merges
+the path verdict stands rather than a drifted one. A hit under a shared role the digest does not
+cover (a volume-claim change) is kept wherever it falls. The reader dates each kept hit by the
+oldest commit R does not answer for: a digested hit from its oldest commit in R..origin/master,
+an uncovered hit from its oldest commit since the release record's applied commit. The service
+takes the oldest of those dates. Grace is thus "a merge younger than N minutes" once R clears the
+older hits, and the window's length is unchanged. A `commit` that is not a full lowercase SHA
+proves nothing. The producer renders hourly and master merges
 more often than that, so until #4881 the reader refused nearly every record. On 2026-10-13 one
 comment-only edit to `release_stamp.yml` kept 30 services reading stale for ten hours.
 

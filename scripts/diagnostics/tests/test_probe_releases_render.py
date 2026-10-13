@@ -317,10 +317,13 @@ def test_a_matching_digest_keeps_a_volume_claim_hit_pending(tmp_path):
 _OTHER = "docs/unrelated.md"
 
 
-def _behind_stale(tmp_path, at_r, after_r, digest="deadbeef", side=False):
+def _behind_stale(
+    tmp_path, at_r, after_r, digest="deadbeef", side=False, spell=lambda sha: sha
+):
     """littlelink applied at `base`, `at_r` moved by R, `after_r` by the ref, a render at R.
 
-    With `side`, the render names a child of R that master never merged.
+    With `side`, the render names a child of R that master never merged. `spell` rewrites the
+    commit the render records, for a spelling git would still resolve.
     """
     repo = tmp_path / "repo"
     _init_repo(repo)
@@ -344,7 +347,7 @@ def _behind_stale(tmp_path, at_r, after_r, digest="deadbeef", side=False):
         records,
         repo_root=repo,
         render_dir=_write_renders(
-            tmp_path / "renders", _render("littlelink", r, digest=digest)
+            tmp_path / "renders", _render("littlelink", spell(r), digest=digest)
         ),
         hits=hits,
     )
@@ -381,6 +384,23 @@ def test_a_volume_claim_hit_a_render_behind_the_ref_holds_is_flagged(tmp_path):
 def test_a_render_off_the_refs_history_keeps_the_path_verdict_is_flagged(tmp_path):
     """A commit the ref does not hold proves nothing about it, whatever its digest."""
     assert _behind_stale(tmp_path, [_RENDERER], [], side=True) == {
+        "littlelink": rr.path_reason([_RENDERER])
+    }
+
+
+@pytest.mark.parametrize(
+    "spell",
+    [
+        pytest.param(str.upper, id="uppercase"),
+        pytest.param(lambda sha: sha[:12], id="abbreviated"),
+        pytest.param(lambda sha: "--version", id="option"),
+    ],
+)
+def test_a_render_commit_that_is_not_a_full_lowercase_sha_proves_nothing_is_flagged(
+    tmp_path, spell
+):
+    """The record's commit reaches git, so a spelling git would resolve is still refused."""
+    assert _behind_stale(tmp_path, [_RENDERER], [], spell=spell) == {
         "littlelink": rr.path_reason([_RENDERER])
     }
 

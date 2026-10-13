@@ -76,8 +76,12 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
   (2026-09-25); a render every 30 minutes would keep a play running 18% of the time. The
   release-staleness reader therefore also accepts a record whose `commit` R is an ancestor of
   origin/master (#4881). A matching digest there drops every path hit R already holds. A hit
-  in R..origin/master keeps the path verdict, with its grace window counted from R, and a
-  mismatch at R falls back to the path logic rather than reading drifted. Before #4881 the
+  in R..origin/master keeps the path verdict, and so does a hit under a shared role the digest
+  does not cover. The grace window counts from the oldest commit R does not answer for, hit by
+  hit: a digested hit from its oldest commit in R..origin/master, an uncovered one from its
+  oldest commit since the release record's applied commit. A mismatch at R falls back to the
+  path logic rather than reading drifted, and so does a render whose `commit` is not a full
+  lowercase SHA. Before #4881 the
   reader refused every record behind the tip, and one comment-only edit to a shared task file
   paged 30 services stale for ten hours. The GitOps deployer reads the records two more
   ways. Its `k8s_unapplied` discharge accepts a render of any commit holding the change, so
