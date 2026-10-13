@@ -293,3 +293,104 @@ def test_all_real_unit_templates_render_and_verify_clean():
     # every live *.service.j2 / *.timer.j2 must render with StubUndefined + its owning role's real
     # defaults to a unit systemd-analyze reports no attributed diagnostic for.
     assert v.main() == 0
+
+
+# ── the host packages under hosts/, rendered by the host renderer ─────────────────────
+
+PI_DROPIN = "[Timer]\nOnBootSec=\nOnUnitActiveSec=\nOnCalendar=*-*-* 03:00:00\n"
+
+
+def _hosts_tree(tmp_path, dropin: str = PI_DROPIN, component_unit: str | None = None):
+    """A hosts/ tree holding the real shared updater and a fixture daniel-pi package.
+
+    The Pi package ships a drop-in over the shared `homelab-updater.timer`, the shape H3.6's
+    real package takes, and lists a fixture component when `component_unit` is given.
+    """
+    root = tmp_path / "hosts"
+    (root / "packages").mkdir(parents=True)
+    (root / "components").mkdir()
+    (root / "packages" / "homelab-updater").symlink_to(
+        v.HOSTS / "packages" / "homelab-updater"
+    )
+    (root / "lib").symlink_to(v.HOSTS / "lib")
+    pi = root / "daniel-pi"
+    (pi / "units").mkdir(parents=True)
+    (pi / "units" / "50-homelab.conf").write_text(dropin)
+    spec = (
+        "files:\n  - {src: units/50-homelab.conf, "
+        "dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}\n"
+    )
+    if component_unit is not None:
+        component = root / "components" / "fixture"
+        (component / "units").mkdir(parents=True)
+        (component / "units" / "homelab-fixture.service").write_text(component_unit)
+        (component / "component.yml").write_text(
+            "files:\n  - {src: units/homelab-fixture.service, "
+            "dst: /usr/lib/systemd/system/homelab-fixture.service}\n"
+        )
+        spec = "components: [fixture]\n" + spec
+    (pi / "package.yml").write_text(spec)
+    return root
+
+
+def _check_hosts(tmp_path, root):
+    lines = []
+    checked, failures = v.check_host_units(
+        root, tmp_path / "out", "systemd-analyze", lines.append
+    )
+    return checked, failures, lines
+
+
+@requires_systemd_analyze
+def test_host_units_with_the_pis_updater_dropin_are_clean(tmp_path):
+    checked, failures, lines = _check_hosts(tmp_path, _hosts_tree(tmp_path))
+    # The shared updater's pair in the `shared` group, then again under the Pi's drop-in.
+    assert (checked, failures) == (4, 0)
+    assert "  [ok]   hosts/daniel-pi: homelab-updater.timer" in lines
+    dropin = (
+        tmp_path / "out/hosts/daniel-pi/homelab-updater.timer.d/50-homelab.conf"
+    ).read_text()
+    assert dropin == PI_DROPIN
+
+
+@requires_systemd_analyze
+def test_host_units_typo_in_the_dropin_over_the_shared_timer_is_flagged(
+    tmp_path, capsys
+):
+    root = _hosts_tree(tmp_path, dropin="[Timer]\nRandomizedDelaySecc=5m\n")
+    _, failures, _ = _check_hosts(tmp_path, root)
+    assert failures == 1
+    err = capsys.readouterr().err
+    assert "hosts/daniel-pi: homelab-updater.timer" in err
+    assert "50-homelab.conf:2: Unknown key" in err
+
+
+@requires_systemd_analyze
+def test_host_units_typo_in_a_component_unit_is_flagged(tmp_path, capsys):
+    unit = (
+        "[Unit]\nDescription=test\n\n[Service]\nType=oneshot\nExecStart=/bin/true\n"
+        "SuccessExitStatuss=75\n"
+    )
+    _, failures, _ = _check_hosts(tmp_path, _hosts_tree(tmp_path, component_unit=unit))
+    assert failures == 1
+    assert "homelab-fixture.service" in capsys.readouterr().err
+
+
+@requires_systemd_analyze
+def test_host_units_without_the_named_member_is_flagged(tmp_path, capsys):
+    root = tmp_path / "hosts"
+    (root / "packages").mkdir(parents=True)
+    checked, failures, _ = _check_hosts(tmp_path, root)
+    assert (checked, failures) == (0, 1)
+    assert f"no render emitted {v.HOST_NAMED_MEMBER}" in capsys.readouterr().err
+
+
+def test_host_unit_groups_render_every_shipped_unit_of_the_tree(tmp_path):
+    """The named members: the shared updater's pair and the unlisted reconcile component."""
+    groups = dict(v.host_unit_groups(v.HOSTS, tmp_path))
+    units = {unit for package in groups["shared"] for unit in package.units()}
+    assert {
+        "homelab-updater.service",
+        "homelab-updater.timer",
+        "homelab-reconcile.service",
+    } <= units
