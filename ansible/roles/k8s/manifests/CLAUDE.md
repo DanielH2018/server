@@ -51,6 +51,15 @@ deferred pair below.
   `manifests_deferred_files` plus `manifests_deferred_dir_name` render, prune and digest them
   into a reserved sibling directory the caller applies itself, gating on
   `manifests_deferred_render`. Callers: `pihole`, `headlamp`, `netpol-baseline`.
+- **`manifests_shadow_dir` keeps a stubbed dry run's render**, the Ansible half of target slice
+  R1's shadow render. The operator passes it with `-e`, beside the stub file, to
+  `deploy.sh --dry-run`. Each service then renders into `<dir>/<service>`, owned by `sys_user`,
+  and the temporary directory is neither created nor discarded. The role's first task refuses
+  it outside a k8s dry run, and while any secret key holds a value other than its stub. That
+  assert recomputes the check with `homelab_unstubbed_keys` and reads no flag. Empty by
+  default: `ansible/roles/k8s/manifests/defaults/main.yml:manifests_shadow_dir`. Its test is
+  `ansible/tests/deploy/test_manifests_shadow_dir.py`, and `docs/homelab-render.md` has the
+  operator's view.
 
 ## Rules a caller can break
 
@@ -87,6 +96,7 @@ deferred pair below.
   only on objects it has a last-applied baseline for. `verify_secret_keys.yml` reconciles every
   Secret doc in each file, not only the first, and refuses an entry declaring no Secret.
 - **A `--dry-run` applies `--dry-run=server` from a fresh tempfile directory**, pruning nothing.
+  Under `manifests_shadow_dir` it applies from the kept shadow directory instead.
 
 ## Release records
 

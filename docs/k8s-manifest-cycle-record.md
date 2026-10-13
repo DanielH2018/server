@@ -274,6 +274,15 @@ leaving nothing on disk to apply. Four consequences:
   `created`/`configured` words a real apply does. The batch drain and the stabilisation gate both
   key on `changed`, so an honest `changed` here would cascade into them.
 
+A shadow run is a dry run with `manifests_shadow_dir` set and a secret stub file passed, and it
+differs from a plain one in three ways. The role renders each service into
+`<manifests_shadow_dir>/<service>` and keeps it, where a plain dry run discards its temporary
+directory. The directory and its files are owned by `sys_user` rather than root, so the
+operator reads and deletes the tree without `sudo`. And the role's first task refuses the run
+unless every secret key still holds its stub, so a kept tree never holds a real value. The
+shadow run proves the same things a plain dry run does, for stub values only: it is the input
+to target slice R1's comparison with `homelab-render`, not a check of the real secrets.
+
 The `k8s_dry_run` guard on the rollout-restart is explicit rather than falling out of the change
 conditions: a dry run renders to a fresh dir every time, so `manifests_render` is always
 `changed` and the live Deployment would be restarted on every dry run.

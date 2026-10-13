@@ -77,6 +77,42 @@
 # directory on every restart and takes ownership of what it finds, which fights Ansible
 # for the same resources.
 
+- name: Refuse a shadow render directory outside a stubbed dry run for {{ manifests_service }}
+  # `manifests_shadow_dir` keeps the render instead of discarding it, so the directory must hold
+  # stub values only (target slice R1, docs/homelab-render.md). The preamble's stub asserts ran
+  # before the SOPS load, and this one runs after it, on the values about to be rendered: a key
+  # the stub file did not cover now holds its real value. It reads the key names from the
+  # ciphertext `secrets.yml` and recomputes the content check itself. No sentinel or flag can
+  # stand in for it, because an extra var of that name would outrank any fact set earlier.
+  # The filter returns key names only, so the message never prints a value. `when` reads the
+  # variable alone and `that` holds `k8s_dry_run`, so a real run with the variable set is
+  # refused rather than skipped. `always`, so no tag selection renders past it.
+  # ENFORCED by ansible/tests/deploy/test_manifests_shadow_dir.py.
+  tags: [always]
+  vars:
+    manifests_shadow_keys: >-
+      {{ lookup('ansible.builtin.file', playbook_dir ~ '/vars/secrets.yml') | from_yaml
+      | homelab_stub_keys }}
+    # '' for an undefined key, which is never a stub, so it counts as unstubbed.
+    manifests_shadow_unstubbed: >-
+      {{ manifests_shadow_keys
+      | homelab_unstubbed_keys(query('ansible.builtin.vars', *manifests_shadow_keys, default=''))
+      }}
+  ansible.builtin.assert:
+    that:
+      - k8s_dry_run | bool
+      - (manifests_shadow_unstubbed | length) == 0
+    fail_msg: >-
+      manifests_shadow_dir={{ manifests_shadow_dir }} keeps a render that must hold stub values
+      only.
+      {{ 'This run is not a k8s dry run.' if not (k8s_dry_run | bool) else '' }}
+      {{ ('These secret keys do not hold their stub: ' ~ (manifests_shadow_unstubbed | join(', '))
+          ~ '.') if manifests_shadow_unstubbed | length > 0 else '' }}
+      Pass it only to `deploy.sh --dry-run`, beside the whole stub file that
+      `scripts/renderer/shadow_diff.py stubs` writes from this tree.
+    quiet: true
+  when: manifests_shadow_dir | length > 0
+
 - name: Check that manifests_rollout_kind is a kind every consumer understands
   tags: [deploy]
   # Three places key on the exact literal 'daemonset': the apply-output ternary below, the
@@ -237,21 +273,33 @@
   # 30 minutes so the window closes on its own, but "my dry run deployed" is not a window worth
   # having. Cost: the prune task below is not exercised, and mode/owner differ from the real
   # path. Neither is something `kubectl apply` judges.
+  #
+  # A shadow render (`manifests_shadow_dir`) keeps its directory, so it needs no temp one.
   ansible.builtin.tempfile:
     state: directory
     suffix: "-{{ manifests_service }}-dryrun"
   register: manifests_dry_run_dir
   become: true
-  when: k8s_dry_run | bool
+  when:
+    - k8s_dry_run | bool
+    - manifests_shadow_dir | length == 0
 
 - name: Select the render directory for {{ manifests_service }}
   tags: [always]
   # Single source of truth for every path below, so a future task cannot render to the real
   # tree while the apply reads the temp one.
+  #
+  # The shadow branch sits inside the dry-run branch, so no run but a dry run renders there.
+  # Its tree is owned by `sys_user`, so the operator compares, copies and deletes it without
+  # sudo. Every other render stays root's.
   ansible.builtin.set_fact:
     manifests_dest_dir: >-
-      {{ manifests_dry_run_dir.path if k8s_dry_run | bool
+      {{ (manifests_shadow_dir ~ '/' ~ manifests_service
+          if manifests_shadow_dir | length > 0 else manifests_dry_run_dir.path)
+         if k8s_dry_run | bool
          else '/etc/rancher/k3s/manifests/' ~ manifests_service }}
+    manifests_dest_owner: >-
+      {{ sys_user if k8s_dry_run | bool and manifests_shadow_dir | length > 0 else 'root' }}
 
 - name: Select the deferred render directory for {{ manifests_service }}
   tags: [always]
@@ -284,12 +332,14 @@
 
 - name: Create the manifest directory for {{ manifests_service }}
   tags: [config]
+  # The file module gives every directory it creates the same owner and mode, so a shadow
+  # render's `manifests_shadow_dir` itself is `sys_user`'s too when this task creates it.
   ansible.builtin.file:
     path: "{{ manifests_dest_dir }}"
     state: directory
     mode: "0700"
-    owner: root
-    group: root
+    owner: "{{ manifests_dest_owner }}"
+    group: "{{ manifests_dest_owner }}"
   become: true
 
 - name: Render manifests for {{ manifests_service }}
@@ -321,8 +371,8 @@
          if manifests_prune | bool else manifests_label_src }}
     dest: "{{ manifests_dest_dir }}/{{ item }}"
     mode: "0644"
-    owner: root
-    group: root
+    owner: "{{ manifests_dest_owner }}"
+    group: "{{ manifests_dest_owner }}"
   loop: "{{ manifests_files_resolved }}"
   become: true
   register: manifests_render
@@ -341,8 +391,8 @@
          if manifests_prune | bool else manifests_label_src }}
     dest: "{{ manifests_dest_dir }}/{{ item }}"
     mode: "0600"
-    owner: root
-    group: root
+    owner: "{{ manifests_dest_owner }}"
+    group: "{{ manifests_dest_owner }}"
   loop: "{{ manifests_secret_files_resolved }}"
   become: true
   register: manifests_secret_render
@@ -363,8 +413,8 @@
          if manifests_prune | bool else manifests_label_src }}
     dest: "{{ manifests_dest_dir }}/claim-{{ manifests_claim.name }}.yaml"
     mode: "0644"
-    owner: root
-    group: root
+    owner: "{{ manifests_dest_owner }}"
+    group: "{{ manifests_dest_owner }}"
   loop: "{{ k8s_claims | default([]) }}"
   loop_control:
     loop_var: manifests_claim
@@ -393,8 +443,8 @@
     path: "{{ manifests_deferred_dir }}"
     state: directory
     mode: "0700"
-    owner: root
-    group: root
+    owner: "{{ manifests_dest_owner }}"
+    group: "{{ manifests_dest_owner }}"
   become: true
   when: (manifests_deferred_files | default([]) | length) > 0
 
@@ -409,8 +459,8 @@
     src: "{{ playbook_dir }}/roles/k8s/{{ manifests_service }}/templates/{{ item }}.j2"
     dest: "{{ manifests_deferred_dir }}/{{ item }}"
     mode: "0644"
-    owner: root
-    group: root
+    owner: "{{ manifests_dest_owner }}"
+    group: "{{ manifests_dest_owner }}"
   loop: "{{ manifests_deferred_files | default([]) }}"
   become: true
   register: manifests_deferred_render
@@ -940,10 +990,15 @@
   # be left lying around, and the premise of the mode is that it leaves nothing behind. The
   # path appears in the apply task's own failure output, so a debugging session can still read
   # the rendered manifests off the console before this runs.
+  #
+  # A shadow render keeps its directory, which is the point of `manifests_shadow_dir`. It
+  # creates no temp directory either, so the guard below says so rather than leaning on the
+  # skipped register having no `path`.
   ansible.builtin.file:
     path: "{{ manifests_dry_run_dir.path }}"
     state: absent
   become: true
   when:
     - k8s_dry_run | bool
+    - manifests_shadow_dir | length == 0
     - manifests_dry_run_dir.path is defined

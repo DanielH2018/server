@@ -33,6 +33,14 @@ manifests_secret_digest_key: /var/lib/homelab/k8s-secret-digest.key
 manifests_render_record: false
 manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
 
+# The Ansible half of the shadow render (target slice R1). Set with -e beside a secret stub
+# file on a `deploy.sh --dry-run`, it keeps each service's render in `<dir>/<service>`, owned by
+# `sys_user`, instead of discarding a temporary directory. R1 compares that tree with what
+# `homelab-render cluster` writes. An assert in tasks/main.yml refuses it outside a k8s
+# dry run, or while any secret key holds a value other than its stub. Empty by default, which
+# changes nothing about a real deploy or an ordinary dry run.
+manifests_shadow_dir: ''
+
 # Live prune (#1076, #3388). `kubectl apply -f <dir>/` only adds/updates, so a manifest
 # dropped from the role's file list leaves its live object running — the "Prune staged manifests
 # dropped from the file lists" task only deletes the STAGED FILE, never the live object.

@@ -258,6 +258,7 @@
  "ansible/tests/deploy/test_manifests_apply_verdict.py": 1.76,
  "ansible/tests/deploy/test_manifests_prune.py": 0.03,
  "ansible/tests/deploy/test_manifests_service_default.py": 0.0,
+ "ansible/tests/deploy/test_manifests_shadow_dir.py": 3.19,
  "ansible/tests/deploy/test_platform_filter.py": 0.0,
  "ansible/tests/deploy/test_platform_filter_real_inventory.py": 0.0,
  "ansible/tests/deploy/test_playbooks_gather_through_the_preamble.py": 0.0,
