@@ -282,7 +282,14 @@ def _unknown_labels(exprs: dict[str, str]) -> dict[str, list[str]]:
 
 
 def test_loki_rules_select_on_stream_labels_is_clean():
-    assert not _unknown_labels(_loki_rule_exprs()), (
+    exprs = _loki_rule_exprs()
+    named = set().union(
+        *(_selector_labels(s) for e in exprs.values() for s in _stream_selectors(e))
+    )
+    assert {"job", "machine", "container"} <= named, (
+        f"the rule selectors name only {sorted(named)}, so this check reads too little"
+    )
+    assert not _unknown_labels(exprs), (
         "a Loki rule selects on a label the Alloy streams do not carry, so it matches no "
         "stream and its count reads zero forever"
     )
