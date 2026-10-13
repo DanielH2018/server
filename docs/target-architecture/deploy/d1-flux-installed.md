@@ -10,6 +10,7 @@ D1.4, the promote workflow: [#4759](https://github.com/DanielH2018/server/pull/4
 D1.7, retention for old artifact versions: [#4770](https://github.com/DanielH2018/server/pull/4770).
 D1.5, Flux follows prod: [#4787](https://github.com/DanielH2018/server/pull/4787).
 D1.6, Flux in the metrics plane: [#4803](https://github.com/DanielH2018/server/pull/4803).
+D1.6b, the `flux` rule group: [#4813](https://github.com/DanielH2018/server/pull/4813).
 
 Depends on: none
 
