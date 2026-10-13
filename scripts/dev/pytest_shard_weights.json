@@ -644,6 +644,7 @@
  "ansible/tests/setup/test_health_cron_boot_grace.py": 0.0,
  "ansible/tests/setup/test_host_coredns_install_is_checksummed.py": 0.0,
  "ansible/tests/setup/test_host_lib_sibling_copies.py": 0.28,
+ "ansible/tests/setup/test_host_package_two_writers.py": 1.41,
  "ansible/tests/setup/test_host_python_invocations.py": 0.33,
  "ansible/tests/setup/test_host_python_pin.py": 0.0,
  "ansible/tests/setup/test_initial_setup_host_gates.py": 0.02,
@@ -1149,6 +1150,6 @@
  "scripts/validate/tests/test_validate_root_ignored_files.py": 0.04,
  "scripts/validate/tests/test_validate_setup_templates.py": 1.61,
  "scripts/validate/tests/test_validate_shell_templates.py": 2.74,
- "scripts/validate/tests/test_validate_unit_templates.py": 2.39,
+ "scripts/validate/tests/test_validate_unit_templates.py": 3.66,
  "scripts/z2m/tests/test_set_device_option.py": 4.08
 }
