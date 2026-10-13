@@ -136,7 +136,11 @@ def test_the_order_only_rows(tree, commits, kept_because):  # noqa: F811
 
 
 def test_reordering_an_edge_set_is_order_only(tree):  # noqa: F811
-    """Each role's edges in another order change the dependency map and no entry."""
+    """Each role's edges in another order change the dependency map and no entry.
+
+    The edges are sorted in place on a shallow copy of the entry's list. A syntax reading
+    cannot tell that copy from the entry's own list, and #4841's write check refused it.
+    """
     tree.write(
         "ansible/inventory/host_vars/daniel-box.yml",
         HOST_VARS + "    depends_on: [authelia, crowdsec]\n",
@@ -147,8 +151,13 @@ def test_reordering_an_edge_set_is_order_only(tree):  # noqa: F811
         [
             _edit(
                 "ansible/filter_plugins/toposort.py",
-                "_edges(c) for c",
-                "sorted(_edges(c), reverse=True) for c",
+                '    return {c["name"]: _edges(c) for c in containers_list}\n',
+                "    dep_map = {}\n"
+                "    for c in containers_list:\n"
+                "        deps = list(_edges(c))\n"
+                "        deps.sort(reverse=True)\n"
+                '        dep_map[c["name"]] = deps\n'
+                "    return dep_map\n",
             )
         ],
     )
