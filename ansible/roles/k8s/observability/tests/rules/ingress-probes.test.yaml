@@ -1,0 +1,151 @@
+# promtool unit tests for files/rules/ingress-probes.yaml. Run with
+# `scripts/validate/alert_tools.sh promtool test rules <this file>`; the validate-alert-rules
+# hook runs it on every commit that touches the rules.
+#
+# The input series carry the labels the blackbox-ingress job's targets set: `service`,
+# `module` and `page_tier`, with the probed URL as `instance`. The two per-target alerts take
+# `service` from those labels, so every exp_alerts entry for them lists it, and promtool's
+# whole-label-set comparison fails an expression that drops it.
+rule_files:
+  - ../../files/rules/ingress-probes.yaml
+evaluation_interval: 1m
+tests:
+  # The zero-series case: no input at all, so the scrape job is missing from the config.
+  # IngressProbesMissing fires once its 10m hold has passed, and not before.
+  - interval: 1m
+    input_series: []
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: IngressProbesMissing
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: IngressProbesMissing
+        exp_alerts:
+          - exp_labels:
+              job: blackbox-ingress
+              severity: warning
+              service: observability
+            exp_annotations:
+              summary: Prometheus has lost the blackbox-ingress scrape job.
+              description: >-
+                No up{job="blackbox-ingress"} series exists, so the blackbox-ingress job is
+                gone from prometheus.yml or renders no target. No ingress probe can fire until
+                the series is back.
+
+  # A warning-tier ingress fails from minute 3. IngressProbeFailed fires in shadow once its
+  # 2m hold has passed, and the critical rule, which selects the other tier, stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-ingress", instance="https://homepage.local.example.com", service="homepage", module="http_sso_302", page_tier="warning"}'
+        values: '1x2 0x10'
+      - series: 'up{job="blackbox-ingress", instance="https://homepage.local.example.com", service="homepage", module="http_sso_302", page_tier="warning"}'
+        values: '1x12'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: IngressProbeFailed
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: IngressProbeFailed
+        exp_alerts:
+          - exp_labels:
+              job: blackbox-ingress
+              instance: https://homepage.local.example.com
+              service: homepage
+              module: http_sso_302
+              page_tier: warning
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: The ingress probe of homepage is failing.
+              description: >-
+                blackbox_exporter's http_sso_302 probe of https://homepage.local.example.com
+                has failed for 2 minutes. A probe behind SSO expects Authelia's 302, which
+                proves the edge and the middleware answer, not that the backend is up, so a
+                pass there does not clear the backend. Read probe_http_status_code for this
+                instance, then the Traefik and Authelia logs.
+      - eval_time: 6m
+        alertname: IngressProbeFailedCritical
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: BlackboxExporterDown
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: IngressProbesMissing
+        exp_alerts: []
+
+  # A home-critical ingress fails from minute 3. IngressProbeFailedCritical fires in shadow,
+  # and the warning rule stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-ingress", instance="https://auth.local.example.com", service="authelia", module="http_2xx", page_tier="critical"}'
+        values: '1x2 0x10'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: IngressProbeFailedCritical
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: IngressProbeFailedCritical
+        exp_alerts:
+          - exp_labels:
+              job: blackbox-ingress
+              instance: https://auth.local.example.com
+              service: authelia
+              module: http_2xx
+              page_tier: critical
+              severity: critical
+              shadow: "true"
+            exp_annotations:
+              summary: The ingress probe of authelia is failing.
+              description: >-
+                blackbox_exporter's http_2xx probe of https://auth.local.example.com has
+                failed for 2 minutes. authelia is home-critical. A probe behind SSO expects
+                Authelia's 302, which proves the edge and the middleware answer, not that the
+                backend is up, so a pass there does not clear the backend. Read
+                probe_http_status_code for this instance, then the Traefik and Authelia logs.
+      - eval_time: 6m
+        alertname: IngressProbeFailed
+        exp_alerts: []
+
+  # The exporter is unreachable: every target's scrape fails from minute 5.
+  # BlackboxExporterDown fires in shadow after its 5m hold. The probes' own series go stale,
+  # so no per-target alert fires.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="blackbox-ingress", instance="https://homepage.local.example.com", service="homepage", module="http_sso_302", page_tier="warning"}'
+        values: '1x4 0x15'
+      - series: 'up{job="blackbox-ingress", instance="https://auth.local.example.com", service="authelia", module="http_2xx", page_tier="critical"}'
+        values: '1x4 0x15'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: BlackboxExporterDown
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: BlackboxExporterDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              service: blackbox-exporter
+              shadow: "true"
+            exp_annotations:
+              summary: Prometheus cannot scrape blackbox_exporter for any ingress probe.
+              description: >-
+                Every blackbox-ingress target has failed its scrape for 5 minutes, so the
+                exporter is down or unreachable from Prometheus and no ingress probe runs. The
+                per-service ingress alerts go quiet while it lasts. Read the blackbox-exporter
+                pod's events and log in the homelab namespace.
+      - eval_time: 11m
+        alertname: IngressProbesMissing
+        exp_alerts: []
+
+  # One target's scrape fails while the other's works. That is a single failed scrape, which
+  # Kuma's Cluster Scrape Targets tile pages, so BlackboxExporterDown stays quiet.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="blackbox-ingress", instance="https://homepage.local.example.com", service="homepage", module="http_sso_302", page_tier="warning"}'
+        values: '0x20'
+      - series: 'up{job="blackbox-ingress", instance="https://auth.local.example.com", service="authelia", module="http_2xx", page_tier="critical"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: BlackboxExporterDown
+        exp_alerts: []

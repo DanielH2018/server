@@ -105,6 +105,15 @@ holds the two windows equal, and
 `ansible/tests/services/test_alertmanager_routing.py::test_every_route_a_paging_alert_reaches_is_muted`
 walks the routing tree to prove the alerts reach the mute.
 
+**The `blackbox-ingress` job probes every ingress tile through blackbox-exporter.** It is
+hand-written in `prometheus.yaml.j2` and renders one target per tile the
+`kuma_ingress_monitors` filter yields, so Kuma's tiles and the probes read one list. Each
+target sets `service`, `module` and `page_tier`, and the `ingress-probes` rules take `service`
+from the target rather than from a literal. A new routed entry therefore changes
+`prometheus.yml` and rolls Prometheus. `ansible/tests/services/test_blackbox_ingress_targets.py`
+pins the targets to the filter's tiles, and
+`docs/target-architecture/monitoring/m4-blackbox-ingress.md` has the design.
+
 **A per-workload alert takes its `service` label from a recording rule.**
 `ansible/roles/k8s/observability/files/rules/workload-service.yaml` records one series per
 Deployment, DaemonSet and pod, each carrying the deploy tag as `service`. kube-state-metrics
