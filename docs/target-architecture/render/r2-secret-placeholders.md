@@ -41,7 +41,7 @@ writer to the cluster throughout.
       `postBuild`.
 
    The first pass gives every key its R1 stub. The second gives `0123` to every key that the
-   standalone-value guard does not cover, and the R1 stub to every key it covers
+   standalone-value guard covers under no tag, and the R1 stub to every key it covers
    (*The standalone-value guard*). The coverage test holds the guard's key map equal to the
    keys the render uses standalone, so the second pass can pass: `${domain}`, which stands
    alone 74 times, keeps its stub there.
@@ -690,8 +690,8 @@ question 6).
 A *standalone use* is a placeholder that is the whole scalar of a field, such as
 `main: ${domain}` or `account: "${mullvad_account}"`. Flux types a substituted standalone
 value by its text, whatever quotes or block style the template used (Baseline). A value that
-a YAML reader takes for an int, a float, a bool, null, a timestamp or a sexagesimal number
-therefore changes type. In a Secret's `stringData`, the apply then fails. Elsewhere the object
+a YAML 1.1 resolver or the pinned CLI's reader takes for an int, a float, a bool, null, a
+timestamp or a sexagesimal number therefore changes type. In a Secret's `stringData`, the apply then fails. Elsewhere the object
 changes meaning. Text around the placeholder keeps the type, but that text changes the value,
 so no template shape fixes a standalone use. The guard checks the values instead, where they
 are decrypted.
@@ -762,10 +762,13 @@ the map. CI's `pytest` job runs it, so the map cannot go stale on master.
 
 **The `0123` pass narrows.** PR 1's second pass sets every key to `0123`, so it flags every
 standalone use, `${domain}`'s 74 among them. From PR 1c it sets to `0123` only the keys that
-are neither mapped nor in `GUARD_DEFERRED`. Every other key keeps its R1 stub. A difference
-then means a standalone use that the renderer's own detection missed, which the map
-therefore does not guard. The pass is an independent check of that detection, through
-Flux's own typing. With the map complete, it flags nothing for `${domain}`.
+are neither mapped under any tag nor in `GUARD_DEFERRED`. Every other key keeps its R1
+stub. A difference then means a key none of whose standalone uses the renderer detected,
+which the map therefore does not guard at all. The pass checks that much of the detection
+independently, through Flux's own typing. It cannot see a missed site of a key that is
+already mapped under another tag, such as a new standalone `${domain}`, because that key
+keeps its stub fleet-wide. The renderer's detection alone covers that case. With the map
+complete, the pass flags nothing for `${domain}`.
 
 ### `mullvad_account` becomes a dedicated Secret
 
@@ -824,10 +827,11 @@ It then compares the two outputs byte for byte and names the first differing obj
 runs two passes, each with its own summary line:
 
 1. Every key takes its R1 stub.
-2. Every key that is neither in the guard's map nor in `GUARD_DEFERRED` takes `0123`, and
-   every other key its R1 stub. Jinja writes the template's quotes around `0123` on the stub
-   side, and Flux drops them on the placeholder side. A difference therefore marks a
-   standalone use that the guard does not cover (*The standalone-value guard*). PR 1
+2. Every key that is neither in the guard's map, under any tag, nor in `GUARD_DEFERRED`
+   takes `0123`, and every other key its R1 stub. Jinja writes the template's quotes around
+   `0123` on the stub side, and Flux drops them on the placeholder side. A difference
+   therefore marks a key with a standalone use that the guard does not cover anywhere
+   (*The standalone-value guard*). PR 1
    shipped this pass with every key at `0123`, and PR 1c narrows it.
 
 This calls the controller's own `SubstituteVariables` per resource, so the CLI's line limit
@@ -1807,7 +1811,7 @@ remains the gate.
    `mullvad_account` to a dedicated SOPS Secret. This plan carries it out as follows:
     - PR 1c adds the standalone-value guard (*The standalone-value guard*), and PR 7b moves
       `mullvad_account` (*`mullvad_account` becomes a dedicated Secret*).
-    - contracts.md C3 *Secrets* states the standalone value rule. This PR applied it, and
+    - contracts.md C3 *Secrets* states the standalone value rule, applied on 2026-10-13.
       contracts.md's review log names the ruling.
     - D3 carries two parts, recorded in its plan as a cross-slice note: `write` applies the
       same resolver, and D3's in-cluster proof shows an all-digit value in a SOPS-encrypted
@@ -1815,7 +1819,8 @@ remains the gate.
     - *D5, open.* D5's flip of qbittorrent waits on D3's proof, and it needs D3's SOPS
       manifest for `mullvad_account` and its `decryption` field, as D5 already records for
       the three roles of PRs 5 to 7. D5's text does not say so yet. R2 hands it over as a
-      cross-slice note.
+      cross-slice note, tracked in
+      [#4895](https://github.com/DanielH2018/server/issues/4895).
 
    *What a refusal means.* A refused key fails its role's deploy before the apply, by
    name. The operator then either rotates the value to one the resolver passes
@@ -2286,6 +2291,7 @@ dedicated SOPS Secret. Applied in this round:
 - Cross-slice notes: contracts.md C3 gains the standalone value rule, applied in the same
   PR. D3 gains the resolver in `write`, the `type:str` assertion in `check`, and the
   in-cluster proof for an all-digit value in a SOPS-encrypted Secret. D5's qbittorrent flip
-  needs both, and is filed for D5.
+  needs both, and is filed for D5 as
+  [#4895](https://github.com/DanielH2018/server/issues/4895).
 
 Refuted: none.

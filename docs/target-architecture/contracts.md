@@ -293,10 +293,13 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   Any step in either path that needs plaintext is **operator-only**.
 
   **Standalone values.** A *standalone use* is a placeholder that is the whole scalar of a
-  field. A key with a standalone use holds a value that a YAML 1.1 resolver reads as a
-  string, never as an int, float, bool, null, timestamp or sexagesimal number. Flux types a
-  standalone value by its text, whatever quotes the template wrote. The producer enforces the
-  rule where it decrypts. Before D3 that producer is R2's guard in the Ansible deploy path.
+  field. A key with a standalone use holds a value that both a YAML 1.1 resolver and the
+  pinned Flux CLI's reader read as a string, never as an int, float, bool, null, timestamp
+  or sexagesimal number. A YAML 1.1 resolver alone is not enough: PyYAML reads `1e3` as a
+  string, and the pinned CLI returned the integer 1000. Flux types a standalone value by its
+  text, whatever quotes the template wrote. R2's shared resolver holds the definition, and
+  the corpus in R2's flux probe holds that resolver to the pinned CLI. The producer
+  enforces the rule where it decrypts. Before D3 that producer is R2's guard in the Ansible deploy path.
   From D3 on, `cluster_vars.py write` enforces it too. Both fail closed and print key names
   only (R2, D3). A key whose real value breaks the rule leaves the placeholder path for a
   dedicated SOPS manifest, as `mullvad_account` does (R2 PR 7b).
