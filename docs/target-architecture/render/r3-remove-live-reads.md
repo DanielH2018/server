@@ -1,6 +1,6 @@
 # R3 — Remove the pre-apply live reads
 
-Status: PLANNED
+Status: IN PROGRESS
 
 Depends on: [R1](r1-shadow-render.md)
 

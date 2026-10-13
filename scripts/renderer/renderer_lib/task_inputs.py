@@ -60,10 +60,6 @@ PINNED_LIVE_FACTS = {
     "authelia_agent_password_hash": PinnedFact(
         "stub-authelia-agent-password-hash", frozenset({"authelia"})
     ),
-    # Slurped from daniel-pi's SSH host key over Ansible's own connection.
-    "pi_peer_backup_known_hosts_line": PinnedFact(
-        "stub-pi-peer-backup-known-hosts-line", frozenset({"pi-peer-backup"})
-    ),
     # The registry digests image-builder records after each build, a list of name and digest.
     "k8s_built_images": PinnedFact([], frozenset({"n8n"})),
 }
