@@ -1,4 +1,4 @@
-"""`homelab_render.py cluster`: its refusals and the C1 layout of a stub render.
+"""`homelab_render.py cluster`: its refusals, the C1 layout of a stub render, and the mode call.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_homelab_render.py
 """
@@ -33,10 +33,18 @@ def test_help_exits_zero():
     assert exc.value.code == 0
 
 
-def test_cluster_without_secret_stubs_exits_2_and_writes_nothing(out, capsys):
-    assert _cluster(out) == 2
-    # Every refusal exits 2, so the message is what proves it is this one.
-    assert "placeholder mode" in capsys.readouterr().err
+def test_cluster_without_secret_stubs_renders_placeholders(out, capsys):
+    assert _cluster(out, "--role", "littlelink") == 0
+    assert "placeholder mode" in capsys.readouterr().out
+    text = (out / "cluster" / "littlelink" / "deployment.yaml").read_text()
+    # `domain` is a secret key, so the route renders as its placeholder, not its stub.
+    assert "value: https://www.${domain}\n" in text
+    assert "stub-" not in text and "HOMELAB_SECRET" not in text
+
+
+def test_a_placeholder_render_of_a_deferred_tag_alone_is_flagged(out, capsys):
+    assert _cluster(out, "--role", "home-assistant") == 2
+    assert "PLACEHOLDER_DEFERRED" in capsys.readouterr().err
     assert list(out.iterdir()) == []
 
 
