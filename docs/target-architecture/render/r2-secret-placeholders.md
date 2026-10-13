@@ -6,6 +6,8 @@ PR 1, placeholder mode and the round trip: [#4887](https://github.com/DanielH201
 
 PR 1b, the pass-through filters: [#4891](https://github.com/DanielH2018/server/pull/4891).
 
+PR 1c, the standalone-value guard: [#4914](https://github.com/DanielH2018/server/pull/4914).
+
 Depends on: [R1](r1-shadow-render.md)
 
 Unblocks: D2 and D3. D2's publish job renders bento-pdf, whose IngressRoute holds `domain`,
