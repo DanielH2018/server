@@ -25,6 +25,7 @@ from _renovate import (
     _CONFIG_MANAGERS,
     _PACKAGE_RULES,
     _REPO,
+    _file_pattern_to_regex,
     _resolve_setting,
     _to_python_regex,
 )
@@ -38,10 +39,10 @@ ACTION = "fluxcd/flux2/action@"
 # the census and passing.
 FLUX_STEPS_IN_PROMOTE = 2
 
-# The three deps named `fluxcd/flux2`, as the extract reports each: (file, datasource, manager,
-# depType). The action dep's shape is the one #4822's lookup recorded.
+# The deps named `fluxcd/flux2` other than the version input, as the extract reports each:
+# (file, datasource, manager, depType). The action dep's shape is the one #4822's lookup
+# recorded. `_dep` derives the version input from its manager.
 DEPS = {
-    "the version input": (WORKFLOW, "github-releases", "custom.regex", None),
     "flux_version": (FLUX_DEFAULTS, "github-releases", "custom.regex", "annotated-pin"),
     "the action pin": (WORKFLOW, "github-tags", "github-actions", "action"),
 }
@@ -53,10 +54,32 @@ def _manager() -> dict:
     (manager,) = [
         m
         for m in _CONFIG_MANAGERS
-        if m.get("depNameTemplate") == DEP_NAME
-        and any("promote" in fp for fp in m.get("managerFilePatterns", []))
+        if any(
+            _file_pattern_to_regex(fp).search(WORKFLOW)
+            for fp in m.get("managerFilePatterns", [])
+        )
+        and any("depName=fluxcd/flux2" in ms for ms in m.get("matchStrings", []))
     ]
     return manager
+
+
+def _dep(dep: str) -> tuple[str, str, str, str, str | None]:
+    """The dep as (depName, file, datasource, manager, depType).
+
+    The version input's name and datasource come from the manager's own templates, so this
+    walk tests what the manager emits rather than a constant that matched the flux rule before
+    the manager existed.
+    """
+    if dep == "the version input":
+        manager = _manager()
+        return (
+            manager.get("depNameTemplate", ""),
+            WORKFLOW,
+            manager.get("datasourceTemplate", ""),
+            "custom.regex",
+            None,
+        )
+    return (DEP_NAME, *DEPS[dep])
 
 
 def _matches(text: str) -> list[re.Match]:
@@ -90,17 +113,17 @@ def test_a_flux_step_without_its_annotation_is_flagged() -> None:
     assert len(_matches(stripped)) < stripped.count(ACTION)
 
 
-@pytest.mark.parametrize("dep", sorted(DEPS))
+@pytest.mark.parametrize("dep", sorted([*DEPS, "the version input"]))
 @pytest.mark.parametrize("update_type", UPDATE_TYPES)
 def test_every_flux_dep_lands_in_the_manual_flux_group(
     dep: str, update_type: str
 ) -> None:
-    rel_path, datasource, manager, dep_type = DEPS[dep]
+    dep_name, rel_path, datasource, manager, dep_type = _dep(dep)
 
     def resolve(field: str):
         return _resolve_setting(
             field,
-            DEP_NAME,
+            dep_name,
             rel_path,
             update_type,
             datasource,
@@ -119,7 +142,7 @@ def test_the_action_pin_outside_the_flux_rule_is_flagged() -> None:
         r for r in rules if str(r.get("groupName", "")).startswith("flux (manual")
     ]
     rule["matchDatasources"] = ["github-releases"]
-    rel_path, datasource, manager, dep_type = DEPS["the action pin"]
+    _, rel_path, datasource, manager, dep_type = _dep("the action pin")
     group = _resolve_setting(
         "groupName",
         DEP_NAME,
