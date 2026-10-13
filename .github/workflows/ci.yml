@@ -727,7 +727,7 @@ jobs:
   flux_roundtrip:
     name: flux round trip (placeholder render against stub render)
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -756,13 +756,14 @@ jobs:
           echo "fluxprobe --red-proof exited $rc"
           [ "$rc" = 1 ]
 
-      # home-assistant carries the first render_sops_manifests entry, so each pass also asserts
-      # it dropped exactly one document for it. R2's PR 2 widens the step to every tag.
-      - name: Round-trip configarr, janitorr and home-assistant through flux build
+      # The green run builds every tag outside PLACEHOLDER_DEFERRED, in both passes, so it
+      # covers home-assistant, which carries the first render_sops_manifests entry: each pass
+      # also asserts it dropped exactly one document for it. The red half stays on three
+      # tags: it only has to show that one changed byte is seen.
+      - name: Round-trip every tag through flux build
         run: |
           set -euo pipefail
-          uv run python scripts/renderer/shadow_diff.py roundtrip --out "$RUNNER_TEMP/rt" \
-            --role configarr --role janitorr --role home-assistant
+          uv run python scripts/renderer/shadow_diff.py roundtrip --out "$RUNNER_TEMP/rt"
           rc=0
           uv run python scripts/renderer/shadow_diff.py roundtrip --out "$RUNNER_TEMP/rt-red" \
             --role configarr --role janitorr --role home-assistant --red-proof || rc=$?

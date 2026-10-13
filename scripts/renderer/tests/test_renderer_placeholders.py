@@ -24,6 +24,21 @@ TEXT = (
 WITHOUT_SECRET = "a: ${HOME}\nb: $$\nc: $$${x}\n"
 
 
+OPTED_OUT = (
+    "kind: CustomResourceDefinition\nmetadata:\n  name: c\n  annotations:\n"
+    "    kustomize.toolkit.fluxcd.io/substitute: disabled\ndescription: ${HOME}\n"
+)
+
+
+def test_a_document_that_opts_out_of_substitution_keeps_its_text():
+    # Flux never substitutes it, so an escape would reach the cluster as `$${HOME}`.
+    text = "a: ${HOME}\ne: " + sentinel(KEY) + "\n---\n" + OPTED_OUT
+    result = apply_placeholders([RenderedTag("t", {"f.yaml": text})], [KEY])
+    assert result.tags[0].files["f.yaml"] == (
+        "a: $${HOME}\ne: ${probe_key}\n---\n" + OPTED_OUT
+    )
+
+
 def test_a_directory_with_a_secret_escapes_and_one_without_does_not():
     rendered = [
         RenderedTag("with-secret", {"f.yaml": TEXT}),
