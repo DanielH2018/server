@@ -14,6 +14,10 @@ trade-offs behind those rules are at the end of this page, under *The deployer's
     as `k3s`, is recorded for a hand apply. Left alone, an unapplied change sits undeployed behind
     a green master until someone notices.
 
+Flux also runs, and applies nothing outside `flux-system`: it follows the promoted artifact,
+whose root Kustomization is empty, so this deployer and Ansible still deploy every service.
+[The Flux deploy plane](flux-deploy-plane.md) has what it runs and what it reports.
+
 Each k8s role declares its own `k8s_autodeploy` stance
 (`ansible/roles/k8s/<role>/defaults/main.yml`); `ansible/filter_plugins/k8s_autodeploy.py`
 collects the ones declaring `false` into the denylist above.

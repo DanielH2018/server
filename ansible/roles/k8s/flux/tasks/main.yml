@@ -1,11 +1,18 @@
 ---
-# Flux's source-, kustomize- and notification-controller in flux-system. They own nothing yet:
-# Ansible deploys every service, this one included (docs/flux-deploy-plane.md).
+# Flux's source-, kustomize- and notification-controller in flux-system. They follow the
+# `prod` artifact, whose root Kustomization applies nothing, so Ansible deploys every service,
+# this one included (docs/flux-deploy-plane.md).
 
 - name: Render and apply the Flux controllers
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
+    # The OCIRepository, the root Kustomization, the Providers and the Alerts are kinds whose
+    # CRDs components.yaml installs, so one directory apply would refuse them on a cluster
+    # that lacks the CRDs. The tasks at the end of this file wait for the CRDs, then apply them.
+    manifests_deferred_files:
+      - sync.yaml
+    manifests_deferred_dir_name: flux-sync
     # Every namespaced document lives in flux-system, so the armed apply and its prune run
     # there. The CRDs and the cluster RBAC are cluster-scoped and ignore the namespace.
     manifests_prune_namespace: "{{ flux_namespace }}"
@@ -93,3 +100,48 @@
   loop_control:
     label: "{{ item.item.name }}"
   when: not k8s_no_mutate
+
+- name: Wait for the Flux CRDs the sync objects use
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl wait --for=condition=Established --timeout=120s
+      crd/ocirepositories.source.toolkit.fluxcd.io
+      crd/kustomizations.kustomize.toolkit.fluxcd.io
+      crd/providers.notification.toolkit.fluxcd.io
+      crd/alerts.notification.toolkit.fluxcd.io
+  become: true
+  changed_when: false
+  when: not k8s_no_mutate
+
+# No --prune and no -n: each document names flux-system. The shared role prunes this
+# directory's staged files from `manifests_deferred_files`, and nothing prunes the live objects,
+# so a document dropped from sync.yaml.j2 stays until a task deletes it. A dry run skips this
+# apply, so the server-side dry run never sees these documents, as with headlamp's RBAC.
+- name: Apply the Flux sync objects
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: "k3s kubectl apply -f {{ manifests_deferred_dir }}/"
+  become: true
+  register: flux_sync_apply
+  changed_when: >-
+    'created' in flux_sync_apply.stdout
+    or 'configured' in flux_sync_apply.stdout
+  when: not k8s_no_mutate
+
+# The verify drill's way out. After the CRD wait and the apply, because --ignore-not-found
+# covers a missing object but not a missing kind. The timeout bounds the wait on
+# source-controller's finalizer.
+- name: Delete the verify-drill OCIRepository while the drill is off
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ flux_namespace }} delete
+      ocirepositories.source.toolkit.fluxcd.io verify-drill
+      --ignore-not-found --timeout=60s
+  become: true
+  register: flux_verify_drill_delete
+  changed_when: "'deleted' in flux_verify_drill_delete.stdout | default('')"
+  when:
+    - not k8s_no_mutate
+    - not flux_verify_drill | bool

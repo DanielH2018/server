@@ -1,8 +1,9 @@
 # flux — the Flux controllers, installed and owning nothing (k3s, daniel-box)
 
 Flux's source-controller, kustomize-controller and notification-controller, in the
-`flux-system` namespace. They follow no source yet, so Flux applies nothing and Ansible
-deploys every service, this role included. `docs/flux-deploy-plane.md` is the operator's
+`flux-system` namespace. They follow the promoted artifact `prod`, whose root Kustomization
+is empty, so Flux applies nothing outside `flux-system` and Ansible deploys every service,
+this role included. `docs/flux-deploy-plane.md` is the operator's
 view; the slice plan is `docs/target-architecture/deploy/d1-flux-installed.md`.
 
 ## At a glance
@@ -83,7 +84,51 @@ hands them to the end-of-play stabilisation gate, as observability does. Every
 `flux_controllers` entry carries `restart_on: []`, because no task here restarts a controller
 and no controller reads a Secret or ConfigMap through its pod spec; `defaults/main.yml` has the
 full reason. `probe.py health flux` would otherwise fail all three as NOT ROLLED after a
-NetworkPolicy edit.
+NetworkPolicy edit, or after a rotation of either Secret that `templates/secret.yaml.j2`
+renders.
+
+**Memory, an idle floor.** On 2026-10-13, with no source configured, `kubectl top pod -n
+flux-system` read source-controller at 16Mi, kustomize-controller at 18Mi and
+notification-controller at 24Mi, beside a 64Mi request each. That is the floor for a root
+that applies nothing. D5 re-measures it once Flux applies services.
+
+## What Flux follows
+
+`templates/sync.yaml.j2` renders the OCIRepository `homelab` on `prod`, the root
+Kustomization `homelab`, and the Providers and Alerts that post commit statuses and Discord
+errors. `docs/flux-deploy-plane.md` describes each object.
+
+- **It is a deferred file, applied after the CRDs.** The include stages it in `flux-sync`
+  (`manifests_deferred_dir_name`), because one directory apply of the CRDs and their objects
+  fails on a cluster that lacks the CRDs. `tasks/main.yml` waits for the four CRDs to be
+  Established, then applies the directory. A `--dry-run` never shows it to the API server.
+- **Nothing prunes these objects.** No Flux kind is in `manifests_prune_allowlist`, so a
+  document dropped from the render stays live until a task deletes it by name.
+- **The signer identity is pinned twice.** `flux_signer_subject` and `flux_signer_issuer` are
+  the regular expressions the OCIRepository matches, and `scripts/deploy_tools/forge.py` holds
+  the same identity for `promote.py`'s `cosign verify`.
+  `ansible/tests/k8s/test_flux_role.py` fails a drift between the two.
+
+## The suspend lever
+
+`flux_sync_suspend: true` renders `suspend: true` on the OCIRepository and the root, which
+stops all reconciliation and deletes nothing. Landed through a PR, it is the way out of D1.5.
+With the lever off the render omits `spec.suspend` instead of writing `false`, so a hand
+suspend survives the role's runs.
+
+A suspend the lever wrote does not survive: the next run with the lever off removes it,
+because the client-side apply's three-way merge deletes a field that the last apply rendered
+and this one omits. This role reads `containers_list`, so an unattended broad-plane tick can
+be that next run. That is why H1's disaster-recovery order parks the GitOps deployer while
+the root stays suspended (`docs/target-architecture/deploy/d1-flux-installed.md`, *Decisions*).
+
+## The verify drill
+
+`flux_verify_drill: true` renders a second OCIRepository, `verify-drill`, which follows the
+unsigned tag that a `verify_drill` dispatch of `promote` pushes. It must read Ready=False with
+a verification error. The `deploy-errors` Alert does not name it, so it posts nothing to
+Discord. The way out is the lever set back to `false`: dropping the document deletes nothing,
+so a task deletes `ocirepository/verify-drill` by name on every run with the lever off.
 
 ## Tokens
 
@@ -97,5 +142,14 @@ NetworkPolicy edit.
   with `sops set` as `promote_token`, run `uv run python
   scripts/secrets_mgmt/secret_rotation.py sync`, and commit `ansible/secret_rotation.yml`.
   The copy's registry row is on the `external-90d` tier with `source: record`, so the audit
-  flags it before the token expires. The first SOPS copy and its row land in a follow-up to
-  the PR that added the workflow; until then nothing tracks the expiry.
+  flags it before the token expires.
+- **`flux_github_status_token` rotation (operator-only).** notification-controller posts
+  commit statuses with this fine-grained token, which has Commit statuses read and write on
+  this repository. It lives only in SOPS, with no GitHub secret beside it, and
+  `templates/secret.yaml.j2` renders it into the Secret `flux-github-status`. Its registry
+  row is on the `external` tier, so the audit flags it 365 days after its last rotation. A
+  token minted with a shorter expiry stops posting statuses first. To rotate it, mint the
+  replacement, store it with `sops set` as `flux_github_status_token`, run `uv run python
+  scripts/secrets_mgmt/secret_rotation.py sync`, commit, and redeploy with
+  `./scripts/deploy.sh --tags flux`. notification-controller reads the Secret on each event,
+  so no controller restarts.
