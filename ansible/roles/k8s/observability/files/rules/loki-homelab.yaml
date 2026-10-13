@@ -1,0 +1,40 @@
+# The homelab Loki's health, read from its Prometheus scrape job. Plain YAML, never Jinja:
+# prometheus-rules.yaml.j2 carries this file verbatim. The design is
+# docs/target-architecture/monitoring/m5-loki-ruler.md, "The rules". M5's PR 3 adds the
+# three alerts that watch the ruler itself, once PR 2a has recorded their metric names.
+groups:
+  - name: loki-homelab
+    rules:
+      # SHADOW UNTIL M6's A3 DELETES IT. Kuma's Cluster Scrape Targets tile already pages
+      # up == 0 for this job, because monitor-bridge's check_cluster_targets selects every up
+      # series without an `origin` label, and loki-homelab's carries none. M1 convention 5
+      # allows one pager, so this routes to the blackhole receiver. A3's Cutover-b deletes
+      # the rule, because A3's scrape-target rule pages the same series.
+      - alert: LokiHomelabDown
+        expr: up{job="loki-homelab"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: loki-homelab
+          shadow: "true"
+        annotations:
+          summary: Prometheus cannot scrape the homelab Loki.
+          description: >-
+            {{ $labels.instance }} has failed its scrape for 5 minutes, so the homelab Loki is
+            down or unreachable from Prometheus. Read the loki-homelab pod's events and log in
+            the homelab namespace.
+      # This family's zero-series alert. A renamed or dropped loki-homelab scrape job would
+      # leave every other rule here evaluating to nothing. No Kuma tile reads a missing scrape
+      # job, so it pages without a shadow label.
+      - alert: LokiHomelabMetricsMissing
+        expr: absent(up{job="loki-homelab"})
+        for: 10m
+        labels:
+          severity: warning
+          service: loki-homelab
+        annotations:
+          summary: Prometheus has lost the homelab Loki's scrape job.
+          description: >-
+            No up{job="loki-homelab"} series exists, so the loki-homelab job is gone from
+            prometheus.yml or its target was renamed. No rule that reads the homelab Loki's
+            metrics can fire until the series is back.

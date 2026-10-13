@@ -256,6 +256,12 @@ RENDER_FAILED = FAILED
 RENDER_REFUSED = 2
 RENDER_BAD_ARGS = USAGE_ERROR
 
+# -- scripts/renderer/shadow_diff.py ----------------------------------------------------
+SHADOW_OK = OK
+SHADOW_DIFFERENT = FAILED
+SHADOW_REFUSED = 2
+SHADOW_BAD_ARGS = USAGE_ERROR
+
 
 # -- the renderable copy ----------------------------------------------------------------
 
@@ -776,6 +782,22 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "tags, and render into an empty --out.",
         ),
         _c(RENDER_BAD_ARGS, "RENDER_BAD_ARGS", "the command line is wrong."),
+    ),
+    "scripts/renderer/shadow_diff.py": (
+        _c(SHADOW_OK, "SHADOW_OK", "done, and compare or stubcheck found nothing."),
+        _c(
+            SHADOW_DIFFERENT,
+            "SHADOW_DIFFERENT",
+            "compare found a difference, or stubcheck a file lacking a stub token.",
+            "Never copy or post a tree stubcheck fails.",
+        ),
+        _c(
+            SHADOW_REFUSED,
+            "SHADOW_REFUSED",
+            "refused: an empty set, a missing named member or a misplaced file.",
+            "Render every tag on both sides, then compare again.",
+        ),
+        _c(SHADOW_BAD_ARGS, "SHADOW_BAD_ARGS", "the command line is wrong."),
     ),
 }
 

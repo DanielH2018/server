@@ -195,6 +195,11 @@ def _build_parser():
         "than 'you did not ask far enough back'.",
     )
     lq.add_argument(
+        "--step",
+        help="evaluation step of a metric query, e.g. 5m. Unset, Loki picks range/250, so "
+        "--since 7d samples once every 2419s and steps over anything shorter.",
+    )
+    lq.add_argument(
         "--json", action="store_true", help="print raw JSON instead of the log lines"
     )
     al = sub.add_parser(
