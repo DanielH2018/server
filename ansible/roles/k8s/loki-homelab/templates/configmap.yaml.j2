@@ -23,7 +23,7 @@ data:
       storage:
         filesystem:
           chunks_directory: /loki/chunks
-          rules_directory: /loki/rules
+          rules_directory: /etc/loki-rules
       replication_factor: 1
       ring:
         kvstore:
@@ -52,11 +52,19 @@ data:
       retention_enabled: true
       retention_delete_delay: 2h
       delete_request_store: filesystem
+    # The ruler reads its rule files from the loki-homelab-rules ConfigMap, which
+    # deployment.yaml.j2 mounts at /etc/loki-rules/fake: `fake` is the tenant Loki uses when
+    # auth_enabled is false. rule_path is the ruler's own scratch, so it sits on the claim.
+    # The group interval, not evaluation_interval, sets the query load: files/rules/ sets it
+    # per group.
     ruler:
       storage:
         type: local
         local:
-          directory: /loki/rules
+          directory: /etc/loki-rules
+      rule_path: /loki/rules-scratch
+      alertmanager_url: http://alertmanager.{{ k8s_observability_namespace }}.svc:9093
+      enable_api: true
   # The cluster shipper's config, River not YAML — so it lives in templates/config/ where
   # validate/k8s_manifests.py does not try to parse it as a manifest, and lands here as a
   # block scalar. Every label it emits is a contract; see the file's header.

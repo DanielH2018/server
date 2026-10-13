@@ -310,35 +310,47 @@ def _alerts(doc: object) -> list[tuple[str, dict]]:
 
 
 def group_list_problems(
-    stems: set[str], groups: list[str], keys: set[str]
+    stems: set[str],
+    groups: list[str],
+    keys: set[str],
+    floor: frozenset[str] = GROUP_FLOOR,
+    list_name: str = "observability_rule_groups",
+    configmap: str = RULES_CONFIGMAP,
+    rules_path: str = "files/rules",
 ) -> list[str]:
     """A problem for each group the rule directory, the list and the ConfigMap disagree on.
 
+    The defaults describe the observability role's Prometheus rules. `alert_rules.py` passes
+    the loki-homelab ruler's names for its LogQL rules.
+
     Args:
         stems: The rule files' names without `.yaml`.
-        groups: `observability_rule_groups`.
-        keys: The rendered `prometheus-rules` ConfigMap's data keys.
+        groups: The role default that lists the groups, such as `observability_rule_groups`.
+        keys: The rendered rules ConfigMap's data keys.
+        floor: The groups the run must find.
+        list_name: The role default's name, for the messages.
+        configmap: The rules ConfigMap's name, for the messages.
+        rules_path: The rule directory, for the messages.
     """
     problems = [
-        f"rule group {group}: no files/rules/{group}.yaml, so nothing checks the group "
-        "the M1 slice plan requires"
-        for group in sorted(GROUP_FLOOR - stems)
+        f"rule group {group}: no {rules_path}/{group}.yaml, so nothing checks the group "
+        "a monitoring slice plan requires"
+        for group in sorted(floor - stems)
     ]
     rendered = {key.removesuffix(".yaml") for key in keys}
     for stem in sorted(stems - set(groups)):
         problems.append(
-            f"files/rules/{stem}.yaml: observability_rule_groups does not name it, so it never "
-            "reaches the prometheus-rules ConfigMap. Add the group to the list."
+            f"{rules_path}/{stem}.yaml: {list_name} does not name it, so it never "
+            f"reaches the {configmap} ConfigMap. Add the group to the list."
         )
     for group in sorted(set(groups) - stems):
         problems.append(
-            f"observability_rule_groups names {group}, and files/rules/{group}.yaml does not "
-            "exist"
+            f"{list_name} names {group}, and {rules_path}/{group}.yaml does not exist"
         )
     for group in sorted((stems & set(groups)) ^ rendered):
         problems.append(
-            f"rule group {group}: the rendered {RULES_CONFIGMAP} ConfigMap and "
-            "observability_rule_groups disagree on it"
+            f"rule group {group}: the rendered {configmap} ConfigMap and "
+            f"{list_name} disagree on it"
         )
     return problems
 

@@ -1,0 +1,10 @@
+# Rejected by `lokitool rules lint --dry-run`: the line filter has no string to match.
+groups:
+  - name: fixture
+    interval: 5m
+    rules:
+      - alert: FixtureNotificationDropped
+        expr: count_over_time({container="fixture"} |= [3h]) > 0
+        labels:
+          severity: critical
+          service: fixture

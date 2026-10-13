@@ -1,0 +1,21 @@
+{#
+  The Loki ruler's rule files, one key per group in loki_homelab_rule_groups, each carried
+  verbatim from files/rules/<group>.yaml. deployment.yaml.j2 mounts this ConfigMap as the
+  ruler's tenant directory. The list names each file rather than a glob finding them, because
+  the offline renderer has no fileglob lookup; a file the list does not name never reaches this
+  ConfigMap, and scripts/validate/alert_rules.py fails when the two disagree.
+
+  A rules edit changes this role's rendered manifests, so the shared rollout restarts Loki and
+  the Alloy DaemonSet (this role's CLAUDE.md, *Ruler*).
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-homelab-rules
+  namespace: {{ k8s_namespace }}
+data:
+{% for group in loki_homelab_rule_groups %}
+  {{ group }}.yaml: |
+    {{ lookup('file', playbook_dir + '/roles/k8s/loki-homelab/files/rules/' + group + '.yaml') | indent(4) }}
+{% endfor %}

@@ -469,7 +469,7 @@ The two_factor session also gets its own state file and is never a fallback for 
 `ui_mcp.sh` loads a jar unconditionally, so promoting it would put a shell as the repo user
 (code-server) and volume deletion (longhorn) behind every page load.
 
-## `promtool`, `amtool` and `pint` (`scripts/validate/alert_tools.sh`)
+## `promtool`, `amtool`, `pint` and `lokitool` (`scripts/validate/alert_tools.sh`)
 
 The `validate-alert-rules` prek hook (`scripts/validate/alert_rules.py`) checks the alert
 plane with Prometheus's and Alertmanager's own parsers. It renders the observability role and
@@ -486,12 +486,19 @@ whose every target sets it, one `Watchdog` at most,
 no `${`, a test case firing every alert, and a zero-series case per rule file.
 `scripts/validate/alert_conventions.py` lists each rule in its docstring.
 
+The hook also checks the `loki-homelab` ruler's LogQL rules in
+`ansible/roles/k8s/loki-homelab/files/rules/`. It runs `lokitool rules lint --dry-run` on each
+file, which parses every expression. It fails when the files, `loki_homelab_rule_groups` and
+the rendered `loki-homelab-rules` ConfigMap's keys disagree, because a file the list does not
+name never reaches the ruler. LogQL has no `promtool test rules` counterpart, so the
+conventions above do not apply to these files.
+
 `scripts/validate/alert_tools.sh` provisions `promtool` and `amtool` at the tags of the
 role's `observability_k8s_prometheus_image` and `observability_k8s_alertmanager_image` pins,
-and `pint` at the `pint_version` it pins itself, which a Renovate regex manager bumps. It
-installs them into `alert-tools/` under the git common dir (`git rev-parse
+`lokitool` at the tag of `loki-homelab`'s `loki_homelab_k8s_image` pin, and `pint` at the
+`pint_version` it pins itself, which a Renovate regex manager bumps. It installs them into `alert-tools/` under the git common dir (`git rev-parse
 --git-common-dir`). Every worktree of a clone shares that cache. The first run in a clone
-downloads about 150 MB, and a later worktree of the same clone downloads nothing. To run a
+downloads about 180 MB, and a later worktree of the same clone downloads nothing. To run a
 tool by hand, pass it through the script: `scripts/validate/alert_tools.sh promtool test rules
 <file>`. CI's `hooks` job provisions the tools, then runs `alert_rules.py --prove-red`, which
 shows each tool rejecting its bad fixture under `scripts/validate/tests/fixtures/alert_rules/`.

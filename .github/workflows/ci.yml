@@ -179,17 +179,17 @@ jobs:
           scripts/validate/vale.sh
 
       # promtool and amtool, at the tags of the observability role's Prometheus and Alertmanager
-      # image pins, and pint at the version alert_tools.sh pins, for the `validate-alert-rules`
-      # hook. The script fetches each release tarball, checks it against its release's sums
-      # file, and unpacks the binary into alert-tools/ under the git common dir,
-      # .git/alert-tools/ in this checkout. It is the tool path the hook itself calls, so CI
-      # and a worktree provision the same way.
-      - name: Provision promtool, amtool and pint
+      # image pins, lokitool at the tag of loki-homelab's Loki image pin, and pint at the
+      # version alert_tools.sh pins, for the `validate-alert-rules` hook. The script fetches
+      # each release archive, checks it against its release's sums file, and unpacks the
+      # binary into alert-tools/ under the git common dir, .git/alert-tools/ in this checkout.
+      # It is the tool path the hook itself calls, so CI and a worktree provision the same way.
+      - name: Provision promtool, amtool, pint and lokitool
         run: scripts/validate/alert_tools.sh
 
       # The tools' red proof. Each one must accept its good fixture and reject its bad one
       # with the expected message under scripts/validate/tests/fixtures/alert_rules/. The
-      # pytest shards install neither binary, so without this step nothing shows the hook's
+      # pytest shards install none of the binaries, so without this step nothing shows the hook's
       # tool phase can fail.
       - name: Prove each alert tool rejects its bad fixture
         run: uv run python scripts/validate/alert_rules.py --prove-red
