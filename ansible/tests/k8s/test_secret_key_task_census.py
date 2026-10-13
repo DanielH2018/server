@@ -29,9 +29,9 @@ The exemptions are per task, which is why this is its own module: a `Census` row
 is keyed by file and would exempt all of authelia's `tasks/main.yml`.
 
 A second check covers the tasks a stub makes fail rather than act. `STUB_REFUSING` names each,
-and each must carry the `homelab_secret_stubs` guard itself. It predates the assert rule above
-and keeps the members that census cannot select: sonarr's two asserts read a register, which no
-derivation follows.
+and each must carry the `homelab_secret_stubs` guard itself. It predates the assert rule above.
+The census selects uptime-kuma's push-token assert on its own, but not sonarr's two asserts: they
+read a register, which no derivation follows.
 """
 
 import json
