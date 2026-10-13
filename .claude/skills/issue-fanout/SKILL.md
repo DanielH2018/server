@@ -238,8 +238,9 @@ progress report and the Stop hook's three continuations ran out. Both print the 
 and exit 1, because no PR exists to land. A host whose read timed out reads `unread` and exits 75
 unless another batch exits 1 or 5; `place.py`'s docstring has every tier. A daniel-server batch reports `done <PR URL>` once its PR's CI has passed, so land that
 PR from this session with `land.sh`. A daniel-server batch whose CI stayed red after its one
-resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named and the
-PR URL. Read the failure, then fix the branch or re-run the CI before landing.
+resume, or gave no verdict in its wait, reads `needs-input` with the failing checks named. Its
+text gives the PR without `https://`, because `status` reads a full PR URL as `done`. Read the
+failure, then fix the branch or re-run the CI before landing.
 
 **`no-verdict` is a daniel-box batch that opened its PR and never finished landing it.** On
 that host `done` needs a `VERDICT:` line too — in the final text, or in the batch's

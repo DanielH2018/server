@@ -237,5 +237,8 @@ def ci_gate(pipe: "Pipeline", last: Phase) -> tuple[Phase, dict | None]:
             f"CI gave no verdict{again} within its wait ({detail}). Check the PR's runs, "
             f"and re-run `cc-wait gh-ci --pr <n> --repo {pipe.target.repo}`"
         )
+    # `status` reads any `https://…/pull/N` in the text as `done`, so the hold names the PR
+    # without its scheme.
+    pr = record.pr.removeprefix("https://")
     report = {"type": "result", "is_error": False}
-    return last, {**report, "result": f"needs input: {why}.\n{record.pr}"}
+    return last, {**report, "result": f"needs input: {why}.\n{pr}"}

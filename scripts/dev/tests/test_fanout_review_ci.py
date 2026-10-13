@@ -10,6 +10,7 @@ import json
 
 from _review_fakes import PR, _pipeline, _report
 from fanout_lib.review.review_ci import CI_RECHECK_S, CI_SLICE_S, CI_WAIT_S
+from fanout_lib.status import BLOCKER, PR_URL
 from fanout_lib.target import Target
 
 PASSED = (0, "WAIT: passed abcd1234: 20 check runs passed\n")
@@ -107,7 +108,9 @@ def test_red_ci_after_the_one_resume_ends_needs_input_naming_the_checks(tmp_path
     assert final["result"].startswith(
         "needs input: CI is red after one resume, so the PR needs a hand: pytest."
     )
-    assert final["result"].endswith(PR)
+    # `status` reads a PR URL in the text as `done`, ahead of a `needs input:` line.
+    assert BLOCKER.search(final["result"]) and not PR_URL.search(final["result"])
+    assert final["result"].endswith(PR.removeprefix("https://"))
     assert [p for _, _, p in run.claude].count("ci-fix") == 1
     assert "CI gate: failed after one resume: pytest." in run.comments[0]
     assert _record(tmp_path)["outcome"] == "needs-input"
@@ -129,6 +132,7 @@ def test_ci_that_stays_cancelled_ends_needs_input_when_the_budget_runs_out(tmp_p
     final = pipeline.run_all()
     assert final["result"].startswith("needs input: CI gave no verdict within its wait")
     assert "WAIT: cancelled" in final["result"]
+    assert BLOCKER.search(final["result"]) and not PR_URL.search(final["result"])
     assert [phase for _, _, phase in run.claude] == ["implement", "review"]
     assert len(run.ci_calls) == CI_WAIT_S // CI_RECHECK_S
     assert _record(tmp_path)["ci_gate"].startswith("no verdict: WAIT: cancelled")
