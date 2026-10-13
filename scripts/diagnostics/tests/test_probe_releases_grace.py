@@ -158,6 +158,50 @@ def test_names_out_is_empty_for_a_clean_fleet(tmp_path):
     assert out.read_text() == ""
 
 
+_RENDERER = "ansible/roles/k8s/manifests/tasks/apply.yml"
+_OWN = "ansible/roles/k8s/littlelink/templates/service.yaml.j2"
+_PVC = "ansible/roles/k8s/volume-claim/templates/pvc.yaml.j2"
+
+
+def _after_render_behind(tmp_path, steps, render_at):
+    """littlelink applied at `base`, then each `(path, age)` of `steps` committed `age` ago.
+
+    Returns `(stale, pending)` after a matching render of step `render_at`, with a one-hour
+    grace window.
+    """
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    base = _commit(repo, {p: "v1\n" for p in (_RENDERER, _OWN, _PVC)}, "v1")
+    fresh = _committer_time(repo, base)
+    shas = [
+        _commit_dated(repo, {path: f"v{i + 2}\n"}, f"step {i}", fresh - age)
+        for i, (path, age) in enumerate(steps)
+    ]
+    _set_origin_master(repo, shas[-1])
+
+    records, pending, hits = [_release("littlelink", base)], {}, {}
+    kwargs = {"grace_seconds": 3600, "now": fresh, "pending": pending}
+    stale = pr.compute_stale(
+        records,
+        repo_root=repo,
+        shared_roles={"manifests", "volume-claim"},
+        consumers={},
+        hits_out=hits,
+        **kwargs,
+    )
+    assert "littlelink" in stale, "the oldest hit must date the drift before the render"
+    render = _render("littlelink", shas[render_at])
+    rr.apply_digest_verdicts(
+        stale,
+        records,
+        repo_root=repo,
+        render_dir=_write_renders(tmp_path / "renders", render),
+        hits=hits,
+        **kwargs,
+    )
+    return stale, pending
+
+
 @pytest.mark.parametrize(
     ("after_age", "expected_stale"),
     [
@@ -173,34 +217,22 @@ def test_a_render_behind_the_ref_dates_the_hits_it_leaves(
     Without the re-dating, a two-hour-old hit the render already answers for would keep the
     service stale for a merge two minutes old (#4881).
     """
-    renderer = "ansible/roles/k8s/manifests/tasks/apply.yml"
-    own = "ansible/roles/k8s/littlelink/templates/service.yaml.j2"
-    repo = tmp_path / "repo"
-    _init_repo(repo)
-    base = _commit(repo, {renderer: "v1\n", own: "v1\n"}, "v1")
-    fresh = _committer_time(repo, base)
-    r = _commit_dated(repo, {renderer: "v2\n"}, "R, two hours ago", fresh - 7200)
-    tip = _commit_dated(repo, {own: "v2\n"}, "after R", fresh - after_age)
-    _set_origin_master(repo, tip)
-
-    records, pending, hits = [_release("littlelink", base)], {}, {}
-    kwargs = {"grace_seconds": 3600, "now": fresh, "pending": pending}
-    stale = pr.compute_stale(
-        records,
-        repo_root=repo,
-        shared_roles={"manifests"},
-        consumers={},
-        hits_out=hits,
-        **kwargs,
+    stale, pending = _after_render_behind(
+        tmp_path, [(_RENDERER, 7200), (_OWN, after_age)], render_at=0
     )
-    assert "littlelink" in stale, "the R hit must date the drift before the render"
-    rr.apply_digest_verdicts(
-        stale,
-        records,
-        repo_root=repo,
-        render_dir=_write_renders(tmp_path / "renders", _render("littlelink", r)),
-        hits=hits,
-        **kwargs,
-    )
-    assert stale == {svc: rr.path_reason([own]) for svc in expected_stale}
+    assert stale == {svc: rr.path_reason([_OWN]) for svc in expected_stale}
     assert pending == ({} if expected_stale else {"littlelink": after_age})
+
+
+def test_an_undigested_hit_touched_again_after_the_render_keeps_its_date_is_flagged(
+    tmp_path,
+):
+    """R's render does not answer for the volume-claim change before it, so drift dates from there.
+
+    Re-dating it from the touch after R would hide a two-hour-old unapplied PVC change as pending.
+    """
+    stale, pending = _after_render_behind(
+        tmp_path, [(_PVC, 7200), (_OWN, 7000), (_PVC, 120)], render_at=1
+    )
+    assert stale == {"littlelink": rr.path_reason([_PVC])}
+    assert pending == {}

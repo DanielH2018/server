@@ -36,9 +36,9 @@ record whose commit is the ref is the exception. A render of an ANCESTOR R of th
 meets every other rule above, and whose digest matches, still proves the applied bytes are what
 R renders. Every path hit R already holds is then a false positive, so `apply_verdicts` drops
 it, the same way `CURRENT` does. A hit touched again in R..ref keeps the path verdict, and so
-does an `undigested_hits` hit wherever it falls. When every hit left is one R..ref touched,
-the grace window counts from the oldest commit in R..ref touching them, because the hits
-before R no longer say when drift started. A MISMATCH at R proves nothing about the ref, since
+does an `undigested_hits` hit wherever it falls. When every hit left is a digested one R..ref
+touched, the grace window counts from the oldest commit in R..ref touching them, because the
+hits before R no longer say when drift started. An undigested hit keeps its own date. A MISMATCH at R proves nothing about the ref, since
 R..ref may hold the fix, so it reads `UNKNOWN`, never `DRIFTED`.
 
 TWO THINGS A DRIFTED VERDICT DOES NOT OVERRIDE. A service inside `compute_stale`'s grace window
@@ -310,7 +310,7 @@ def apply_verdicts(
 
     `behind` is `renders_behind`'s answer. A service in it is CURRENT at its render's commit R,
     so it keeps, as well, every hit whose path R..ref touched. When every hit it keeps is one of
-    those, it is re-dated from R: a stale service whose oldest such commit is younger than
+    those and none is an `undigested_hits` hit, it is re-dated from R: a stale service whose oldest such commit is younger than
     `grace_seconds` moves to `pending`, as `compute_stale` would have placed it. `now` is epoch
     seconds, for the tests.
 
@@ -328,7 +328,11 @@ def apply_verdicts(
             service_hits = (hits or {}).get(service, ())
             undigested = undigested_hits(service, service_hits)
             after = behind.get(service, {})
-            redated = [h for h in service_hits if _hit_path(h) in after]
+            # An undigested hit is never re-dated: R's render does not answer for its
+            # change before R, so its drift may predate R even when R..ref touched it again.
+            redated = [
+                h for h in service_hits if h not in undigested and _hit_path(h) in after
+            ]
             kept = [h for h in service_hits if h in undigested or h in redated]
             if service in stale and stale[service].startswith(PATH_HIT_PREFIX):
                 if not kept:
