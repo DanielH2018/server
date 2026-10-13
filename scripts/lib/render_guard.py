@@ -68,6 +68,7 @@ __all__ = [
     "landing_hosts_for_tags",
     "load_yaml",
     "make_env",
+    "pad_to_source_newlines",
     "render_or_error",
     "service_records_at",
     "service_records_at_or_none",
@@ -177,6 +178,23 @@ def make_env(dirs, undefined_cls=StubUndefined) -> Environment:
         lstrip_blocks=False,
         keep_trailing_newline=True,
     )
+
+
+def pad_to_source_newlines(source: str, text: str) -> str:
+    """`text`, padded with newlines until it ends in as many as `source` does.
+
+    This is ansible-core's `TemplateEngine._post_render_mutation`, which the template module,
+    the template lookup and var resolution all apply. It pairs with an environment whose
+    `keep_trailing_newline` is False: Jinja drops the source's last newline, and the engine
+    appends only the newlines the render comes up short. A render that already ends in enough
+    keeps its own, so the label wrapper's closing `}}` line adds none after the YAML dump's.
+    """
+    missing = _newlines_at_end(source) - _newlines_at_end(text)
+    return text + "\n" * missing if missing > 0 else text
+
+
+def _newlines_at_end(text: str) -> int:
+    return len(text) - len(text.rstrip("\n"))
 
 
 def render_or_error(
