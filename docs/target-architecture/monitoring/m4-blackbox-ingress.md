@@ -1134,6 +1134,10 @@ Findings raised: 5 (1 high, 4 medium). Fixed: 5. Refuted: none.
   that. M1's `--prove-red` runs one fixture per tool, so PR 2 extends it. No M1
   check enforces convention 2's `service` assertion, so PR 2 enforces it for this source,
   and *Open questions* item 5 asks M1 to enforce it for every alert.
+  *Corrected 2026-10-13 (#4799):* that claim was stale. M1's `rule_test_problems` already
+  requires some firing case to assert `service`. PR 2 adds the stronger rule, `service` in
+  every `exp_alerts` entry, for this source only. Item 5 now asks whether M1 should require
+  every entry for every alert.
 
 ### Round c2 (per-slice review, 2026-10-11)
 
