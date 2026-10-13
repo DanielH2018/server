@@ -1,10 +1,12 @@
 """Which tasks and variables carry a secret value, for the secret-key task census.
 
-`derived_variables` reads role defaults and inventory vars; `role_derived_facts` reads one role's
-`set_fact` tasks, including a fact parsed out of a secret-bearing `lookup('template', ...)`.
-`_tasks` walks a task file with whether a guard covers each task.
+`derived_variables` reads role defaults and inventory vars. `role_derived_facts` reads the
+`set_fact` and `register:` tasks of every role beside one role, including a fact parsed out of a
+secret-bearing `lookup('template', ...)`. `_tasks` walks a task file with whether a guard covers
+each task.
 """
 
+import functools
 import json
 import re
 from collections.abc import Iterator
@@ -12,7 +14,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 
-from _role_census import role_task_files
+from _role_census import role_dirs, role_task_files
 
 _STUB_GUARD = re.compile(
     r"\bnot\s*\(?\s*(?:k8s_no_mutate|k8s_dry_run|homelab_secret_stubs)\b"
@@ -69,14 +71,22 @@ def _tasks(
 
 
 def _body(task: dict) -> str:
-    """The task's text minus its name and its nested tasks, which are checked on their own."""
+    """The task's text minus its name, its `register:` and its nested tasks.
+
+    Nested tasks are checked on their own. A register name is what the task writes, not what it
+    reads, so a task that reuses a derived register's name is not selected for that alone.
+    """
     rest = {
-        k: v for k, v in task.items() if k not in ("name", "block", "rescue", "always")
+        k: v
+        for k, v in task.items()
+        if k not in ("name", "register", "block", "rescue", "always")
     }
     return json.dumps(rest, default=str)
 
 
 _SET_FACT = {"set_fact", "ansible.builtin.set_fact"}
+# Keys whose value Ansible evaluates as a Jinja expression without `{{ }}`.
+_BARE_JINJA_KEYS = ("when", "until", "changed_when", "failed_when")
 _TEMPLATE_LOOKUP = re.compile(r"""lookup\(\s*['"]template['"]\s*,([^)]*)\)""")
 _QUOTED = re.compile(r"""['"]([^'"]+)['"]""")
 _OTHER_ROLE_TEMPLATE = re.compile(r"roles/k8s/([^/]+)/templates/(.+)")
@@ -101,24 +111,60 @@ def _looked_up_templates(role: Path, text: str) -> Iterator[Path]:
 
 
 def role_derived_facts(role: Path, names: re.Pattern[str]) -> set[str]:
-    """The `set_fact` keys in `role` that carry a secret value, transitively.
+    """The fact and register names that carry a secret value into `role`, transitively.
 
-    A fact is derived when its task's Jinja names a match of `names` or an already derived fact,
-    or when the task looks up a role template whose own Jinja does.
+    A `set_fact` key or a `register:` name is derived when its task's Jinja names a match of
+    `names` or an already derived name, or when a `set_fact` looks up a role template whose own
+    Jinja does. A register's task is read in its `{{ }}` expressions and its bare-Jinja keys
+    (`when:`, `until:`, `changed_when:`, `failed_when:`), never in plain text: pihole's gravity
+    SQL holds the word `domain`, a secret key's name. Both are play-scoped, so every role beside
+    `role` is read too: a fact one role sets is read in another, and a role reads the register
+    of a role it includes (#4862).
     """
-    facts: list[tuple[set[str], str, list[Path]]] = []
-    for task_file in role_task_files(role):
-        for task, _ in _tasks(yaml_fast.safe_load(task_file.read_text())):
-            module = next((k for k in _SET_FACT if k in task), None)
-            if module is None or not isinstance(task[module], dict):
-                continue
-            keys = {str(k) for k in task[module] if k != "cacheable"}
-            # `_body` is JSON, which escapes a double quote; the lookup pattern reads it bare.
-            text = " ".join(_JINJA.findall(_body(task))).replace('\\"', '"')
-            facts.append((keys, text, list(_looked_up_templates(role, text))))
+    return set(_tree_derived(role.parent, _tree_signature(role.parent), names))
+
+
+def _tree_signature(roles_dir: Path) -> tuple[tuple[str, int, int], ...]:
+    """Each task and template file under `roles_dir` with its mtime and size.
+
+    The census asks once per role about the same tree, so the result is cached on this rather
+    than on the directory alone: an edited, added or removed file misses the cache.
+    """
+    files = [
+        file
+        for role in role_dirs(roles_dir)
+        for file in [*role_task_files(role), *sorted((role / "templates").rglob("*"))]
+        if file.is_file()
+    ]
+    return tuple((str(f), f.stat().st_mtime_ns, f.stat().st_size) for f in files)
+
+
+@functools.cache
+def _tree_derived(
+    roles_dir: Path,
+    _signature: tuple[tuple[str, int, int], ...],
+    names: re.Pattern[str],
+) -> frozenset[str]:
+    # (names the task writes, the text it reads, the templates it looks up)
+    writes: list[tuple[set[str], str, list[Path]]] = []
+    for sibling in role_dirs(roles_dir):
+        for task_file in role_task_files(sibling):
+            for task, _ in _tasks(yaml_fast.safe_load(task_file.read_text())):
+                # `_body` is JSON, which escapes a double quote; the lookup pattern reads it bare.
+                text = " ".join(_JINJA.findall(_body(task))).replace('\\"', '"')
+                if isinstance(task.get("register"), str):
+                    bare = json.dumps(
+                        [task.get(k) for k in _BARE_JINJA_KEYS], default=str
+                    )
+                    writes.append(({task["register"]}, f"{text} {bare}", []))
+                module = next((k for k in _SET_FACT if k in task), None)
+                if module is None or not isinstance(task[module], dict):
+                    continue
+                keys = {str(k) for k in task[module] if k != "cacheable"}
+                writes.append((keys, text, list(_looked_up_templates(sibling, text))))
     templates = {
         path: " ".join(_JINJA.findall(path.read_text()))
-        for _, _, paths in facts
+        for _, _, paths in writes
         for path in paths
         if path.is_file()
     }
@@ -133,11 +179,11 @@ def role_derived_facts(role: Path, names: re.Pattern[str]) -> set[str]:
         secret_templates = {p for p, text in templates.items() if secret.search(text)}
         found = {
             key
-            for keys, text, paths in facts
+            for keys, text, paths in writes
             if not keys <= derived
             and (secret.search(text) or secret_templates.intersection(paths))
             for key in keys
         } - derived
         if not found:
-            return derived
+            return frozenset(derived)
         derived |= found

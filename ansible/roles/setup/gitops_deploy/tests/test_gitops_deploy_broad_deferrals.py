@@ -17,7 +17,12 @@ import dataclasses
 import pytest
 
 from deployer_lib import deploy_locks
-from gitops_ledger import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, parse_owed
+from gitops_ledger import (
+    OWED_K8S_DEFERRED,
+    OWED_K8S_UNAPPLIED,
+    parse_owed,
+    parse_receipts,
+)
 from _broad_k8s_range import (
     alerted,
     APPLYABLE_ROLE,
@@ -258,3 +263,56 @@ def test_a_hand_edited_k8s_role_is_not_recorded(
     assert gitops_deploy.main(tick.tools, config, state) == 0
     assert alerted(state_dir, "k8s") == ORIGIN, "it took the defer-and-alert path"
     assert deferred(state_dir) == []
+
+
+# ── the deferred receipt is written only after the ledger lines it counts ────────────────
+
+
+def _read_during_the_bump_deploy(settings, tick, state, outcome):
+    """A refused deploy plane beside a sonarr bump the tick deploys, with radarr declared.
+
+    Returns the `Config` and a list that receives, as the bump's playbook starts, each service
+    the receipt names under `deferred` with no ledger line yet. That deploy is the
+    minutes-long window a landing whose tick watch was abandoned reads the markers in.
+
+    Args:
+        outcome: an exception the bump deploy raises, or None for a clean one.
+    """
+    config = mixed(settings, tick, DEPLOY_PLANE)
+    tick.declare(DECLARES_SONARR + "  - name: radarr\n    platform: k8s\n")
+    tick.narrow = (3, "")
+    tick.playbook_outcomes = [outcome]
+    uncounted: list[str] = []
+    run = tick.tools.run
+
+    def read_then_run(argv, **kwargs):
+        if "ansible-playbook" in argv:
+            lines = parse_owed(state.read("owed"), OWED_K8S_UNAPPLIED)
+            named = {
+                s
+                for r in parse_receipts(state.read("receipts"))
+                for s in r.deferred.get("ansible/deploy.yml", ())
+            }
+            uncounted.extend(sorted(named - {e.subject for e in lines}))
+        return run(argv, **kwargs)
+
+    tick.tools = dataclasses.replace(tick.tools, run=read_then_run)
+    return config, uncounted
+
+
+@pytest.mark.parametrize("outcome", [None, RuntimeError("boom")])
+def test_a_deferred_receipt_never_names_a_service_the_ledger_does_not_yet_hold(
+    gitops_deploy, tick, settings, state, outcome
+):
+    """#4866: a read during the bump deploy counted 0 owed and settled the landing.
+
+    The receipt's `deferred` entry was written in the plans loop, and the lines it counts only
+    after the bump deploy. A reader between the two found every owed service discharged. The
+    entry is still written on both merged exits, so a fix-forward's land.sh finds the deferral.
+    """
+    config, uncounted = _read_during_the_bump_deploy(settings, tick, state, outcome)
+    assert gitops_deploy.main(tick.tools, config, state) == 0
+    assert tick.playbooks == [DEPLOY_SONARR]
+    assert uncounted == []
+    (receipt,) = parse_receipts(state.read("receipts"))
+    assert receipt.deferred == {"ansible/deploy.yml": frozenset({"radarr", "sonarr"})}
