@@ -2,6 +2,8 @@
 
 Status: IN PROGRESS
 
+PR 1, pi-peer-backup's committed host key: [#4903](https://github.com/DanielH2018/server/pull/4903).
+
 Depends on: [R1](r1-shadow-render.md)
 
 Unblocks: D5, which moves every role to Flux and so needs every role to render from git alone
