@@ -18,7 +18,7 @@ Two checks survive PR 4a, because they hold the rule to the estate rather than t
 
 - the DaemonSet floor equals the DaemonSets the roles in `containers_list` render, plus the
   add-on DaemonSets Longhorn and MetalLB bring;
-- the crash-loop recency window is at least 30m, the floor the `DECIDED: 30m` marker in
+- the crash-loop recency window is at least 30m, the floor the `DECIDED 30m` marker in
   `bridge/config_cluster.py` derives from 15-19 minute restart spacing, and shorter than the
   evidence window.
 
@@ -64,7 +64,7 @@ CRASH_LOOP = "K8sContainerCrashLooping"
 RESTART_INCREASE = re.compile(
     r"increase\(kube_pod_container_status_restarts_total\[(\w+)\]\)\s*>\s*(\d+)"
 )
-# The `DECIDED: 30m` floor in bridge/config_cluster.py: the worst observed restart spacing was
+# The `DECIDED 30m` floor in bridge/config_cluster.py: the worst observed restart spacing was
 # 15-19 minutes, and a recency window inside it goes up in the gaps and flaps.
 RECENCY_FLOOR_S = 30 * 60
 
