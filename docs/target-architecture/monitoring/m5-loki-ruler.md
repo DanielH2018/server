@@ -305,13 +305,14 @@ rule file with LogQL expressions. Each alert carries `shadow: "true"` until PR 4
 | `loki_ingestion`, host arm | `LokiHostLogsSilent` | `absent_over_time` of the authlog and syslog union, minus the Pi, over 3h | — | `warning` | `loki-homelab` |
 | `loki_ingestion`, pod arm | `LokiPodLogsSilent` | `absent_over_time({job="k8s"}[30m])` | — | `warning` | `loki-homelab` |
 | `loki_ingestion`, Pi arm | `LokiPiLogsSilent` | `absent_over_time({job="pi"}[3h])` | — | `warning` | `daniel-pi` |
-| `kuma_notify_failures` | `KumaNotificationDropped` | `count_over_time` of `{container="uptime-kuma"}` lines that contain `Cannot send notification`, over 3h, `> 0` | — | `critical` | `uptime-kuma` |
+| `kuma_notify_failures` | `KumaNotificationDropped` | the `sum` of `count_over_time` of `{container="uptime-kuma"}` lines that contain `Cannot send notification`, over 3h, `> 0` | — | `critical` | `uptime-kuma` |
 
 Every `service` is a literal, so M1's label check passes with no derivation.
 
 `KumaNotificationDropped`'s expression is
-`count_over_time({container="uptime-kuma"} |= "Cannot send notification" [3h]) > 0`. It
-keeps only the drop half of `KUMA_NOTIFY_FAILURES_LOGQL`. The
+`sum(count_over_time({container="uptime-kuma"} |= "Cannot send notification" [3h])) > 0`.
+The `sum` makes one alert of every stream in the window, which a pod restart inside 3h
+would otherwise split into one alert per pod. It keeps only the drop half of `KUMA_NOTIFY_FAILURES_LOGQL`. The
 bridge fetches the reason lines too, but its verdict pages only on a drop line, and a reason
 line only adds to the message (*Baseline*). No annotation templates line text (*Risks*), so a
 reason alternative would add nothing to the rule. It would make the rule fire on any Kuma
@@ -333,7 +334,7 @@ value PR 2a records.
 | `LokiHomelabMetricsMissing` | `absent(up{job="loki-homelab"})` | 10m | `warning` | none |
 | `LokiRulerEvaluationFailing` | `increase` of the evaluation-failure counter for `<recorded>` over 10m, `> 0` | 15m | `warning` | until PR 4b |
 | `LokiRulerNotEvaluating` | the age of `<recorded>`'s last evaluation exceeds 10m, or that gauge is `absent()`, `and on() up{job="loki-homelab"} == 1` | 10m | `warning` | until PR 4b |
-| `LokiRulerNotificationsFailing` | `increase` of the notifier's error counter over 15m, above the threshold PR 3 sets from PR 2a's step | 5m | `critical` | none |
+| `LokiRulerNotificationsFailing` | the failed sends over 15m, `changes` minus `resets` of the notifier's error counter, `>= 2` | 5m | `critical` | none |
 
 Each of the five has a reason for its shape:
 
@@ -367,6 +368,15 @@ Each of the five has a reason for its shape:
   not. One firing rule cannot show whether the counter counts sends or alerts. Several rules
   firing across a restart's refused send differ in the two cases, so PR 3 reads which one
   holds from the notifier that Loki v3.7.8 vendors before it sets the threshold.
+
+  PR 3 read it: the vendored notifier's `sendLoop.sendAll` adds the batch's alert count to
+  the counter on each failed send, so the counter counts alerts. PR 2a's step of 1 per
+  refused send was one batch holding `LokiRulerSmoke` alone. A refused batch of four alerts
+  steps it by 4, more than one rule's three failed sends over 15m, so no threshold on its
+  `increase` separates the two. The alert counts failed sends instead, as the number of
+  times the counter rose in 15m: `changes` minus `resets`, so a Loki restart's drop to 0 is
+  not counted. A broken path fails each 5m send, and a 15m window of 1m scrapes always holds
+  at least two of them. One refused send is one rise, whatever the batch holds.
 
 **A Loki outage pages once.** A dead Loki evaluates no log rule, and `LokiRulerNotEvaluating`
 requires `up == 1`. Until M6's A3 the pager is Kuma's `Cluster Scrape Targets` tile. From A3's
@@ -600,7 +610,7 @@ depends on which tags are flux-owned, and PR 4a states each case.
   value PR 2a recorded, with their promtool cases. `LokiRulerNotEvaluating` and
   `LokiRulerEvaluationFailing` are shadow. `LokiRulerNotEvaluating`'s `for` is at least PR
   2a's measured gap. `LokiRulerNotificationsFailing`'s threshold comes from PR 2a's step per
-  refused send (*The rules*).
+  refused send and the notifier's code (*The rules*).
 - Deploys `loki-homelab` (another restart), then `observability`.
 - After the deploy, `alertmanager_alerts{state="active"}` falls by one once `LokiRulerSmoke`
   resolves, unless a log rule fires. The live evaluation names any rule that does. Read the
@@ -973,7 +983,7 @@ restart: PR 2a and PR 3 restart Loki anyway.
   no reading (exit criterion 2). Mitigation: the first firing rule's failed sends raise the
   error counter, and `LokiRulerNotificationsFailing` pages through Prometheus, whose path to
   Alertmanager the break does not share. The cost is that first log alert, which reaches no
-  one until the threshold and the 5m `for` pass, about 20 minutes. A permanent firing
+  one until a second send fails and the 5m `for` passes, about 11 minutes. A permanent firing
   heartbeat rule would remove that cost but would need a C7 and M6 exemption, so this plan
   does not add one.
 - **The cutover's no-pager window.** From PR 4a's `monitor-bridge` start to PR 4b's deploy,
@@ -984,7 +994,7 @@ restart: PR 2a and PR 3 restart Loki anyway.
 - **A new source pod is refused for a while.** The grant names the ruler by `podSelector`, and
   every rules edit makes a new Loki pod that kube-router admits only after a delay
   ([ADR 0009](../../adr/0009-networkpolicy-default-deny-ingress.md)). Mitigation:
-  `LokiRulerNotificationsFailing` needs more than two errors held for 5m, and verification
+  `LokiRulerNotificationsFailing` needs two failed sends held for 5m, and verification
   reads the error counter from two minutes after the pod starts.
 - **A self-inflicted alert on every Loki restart.** Every loki-homelab rollout restarts the
   `Recreate` Loki: this slice's PRs, M6 and each image bump. Mitigation:
