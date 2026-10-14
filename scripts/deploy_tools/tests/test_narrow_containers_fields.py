@@ -25,7 +25,15 @@ from deploy_tools.narrow_lib import broad as narrow_broad
 from deploy_tools.narrow_lib import containers
 from lib.repo_paths import REPO
 
-from _narrow_fixtures import DECLARED, HOST_VARS, Tree, _refs, build_tree
+from _narrow_fixtures import (
+    DECLARED,
+    HOST_VARS,
+    WHOLE_ENTRY_READERS,
+    Tree,
+    _refs,
+    build_tree,
+    write_whole_entry_readers,
+)
 
 BOX = "ansible/inventory/host_vars/daniel-box.yml"
 
@@ -384,26 +392,10 @@ def test_edited_host_names_the_host_vars_owner_only(path: str, host: str | None)
     assert containers.edited_host(path) == host
 
 
-# The five readers of every field D2's baseline counted at 70591c307, each in its shape there.
-# 8e79e95d6 moved the live five onto named filters; the pair keeps a reader of every field
-# present, because a template that adds one meets the same `reader_paths` rule.
-WHOLE_ENTRY_READERS = {
-    "pihole": "{% for s in hostvars[k8s_primary_node].containers_list | default([])"
-    " | filter_by_platform('k8s') %}{{ s.hostname }}{% endfor %}\n",
-    "uptime-kuma": "{% for e in hostvars[k8s_primary_node].containers_list"
-    " | selectattr('hostname', 'defined') %}{{ e.hostname }}{% endfor %}\n",
-    "monitor-bridge": "{% set p = containers_list | selectattr('port', 'defined')"
-    " | list %}\n",
-    "artifacts": "{{ containers_list | map(attribute='name') | list }}\n",
-    "netpol-baseline": "{% for e in containers_list %}{{ e.name }}{% endfor %}\n",
-}
-
-
 def _narrow_with_whole_entry_readers(tmp_path, replacement: str) -> set[str]:
     """Commit the five readers, then the sonarr edit `replacement` makes; narrow it."""
     t = build_tree(tmp_path)
-    for role, text in WHOLE_ENTRY_READERS.items():
-        t.write(f"ansible/roles/k8s/{role}/templates/reader.yaml.j2", text)
+    write_whole_entry_readers(t)
     t.commit("five readers of every field")
     t.write(BOX, HOST_VARS.replace("image: sonarr:1", replacement))
     # Bystander tags, as on the real fleet's 59: six of eleven would trip the ceiling `narrow`
