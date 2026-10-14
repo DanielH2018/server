@@ -1,0 +1,5 @@
+---
+# The builder's arm. False until H3.4b, which adds the repository half and flips it on
+# daniel-box (docs/target-architecture/host/h3-pi-pilot.md, *Steps, as PRs*, item 5). False
+# runs teardown.yml, so turning the builder off later is this flag and the setup-plane tick.
+homelab_builder_enabled: false
