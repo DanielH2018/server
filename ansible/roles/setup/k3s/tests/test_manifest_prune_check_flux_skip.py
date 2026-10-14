@@ -4,6 +4,12 @@ The real template is rendered and run under bash, with the same stubs as
 `ansible/tests/setup/test_manifest_prune_check_list_failure.py`. Here the kubectl stub answers
 each kind with the rows a test hands it, so a test can place a Flux-labelled object on the
 cluster and choose which Kustomizations exist in flux-system.
+
+The stub prints rows only when the template asks for them with DEPLOYMENT_JSONPATH, and fails
+the `kubectl get` otherwise. A stub that printed fixed rows for any jsonpath would test the
+parser against a row shape kubectl never sends. A typo in the label path, a dropped `flux=`
+prefix or a reordered field would all stay green. Run live on 2026-10-14, this jsonpath
+printed `flux-system kustomize-controller flux= ` for a Deployment with no label and no owner.
 """
 
 from lib.proc_testing import run, write_exec
@@ -12,6 +18,11 @@ from _shell_render import render_shell_script
 TEMPLATE = ("setup", "k3s", "manifest-prune-check.sh.j2")
 SEP = "\x1e"
 KUSTOMIZATIONS = "kustomizations.kustomize.toolkit.fluxcd.io"
+DEPLOYMENT_JSONPATH = (
+    r'jsonpath={range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{" flux="}'
+    r'{.metadata.labels.kustomize\.toolkit\.fluxcd\.io/name}{" "}'
+    r'{.metadata.ownerReferences}{"\n"}{end}'
+)
 
 
 def _run(tmp_path, deployments, kustomizations=("bento-pdf",)):
@@ -42,6 +53,8 @@ def _run(tmp_path, deployments, kustomizations=("bento-pdf",)):
     uv = write_exec(tmp_path / "uv", "#!/usr/bin/env bash\necho deployment/declared\n")
     rows = tmp_path / "deployments"
     rows.write_text("".join(f"{row}\n" for row in deployments))
+    jsonpath = tmp_path / "jsonpath"
+    jsonpath.write_text(DEPLOYMENT_JSONPATH)
     if kustomizations is None:
         kustomization_arm = "echo 'error: forbidden' >&2; exit 1"
     else:
@@ -50,8 +63,8 @@ def _run(tmp_path, deployments, kustomizations=("bento-pdf",)):
         tmp_path / "k3s",
         "#!/usr/bin/env bash\n"
         'case "$3" in\n'
-        f"  {KUSTOMIZATIONS}) {kustomization_arm} ;;\n"
-        f'  deployment) cat "{rows}" ;;\n'
+        f'  {KUSTOMIZATIONS}) [[ "$5" == flux-system ]] || exit 1; {kustomization_arm} ;;\n'
+        f'  deployment) [[ "$6" == "$(<"{jsonpath}")" ]] || exit 1; cat "{rows}" ;;\n'
         "esac\n",
     )
 
