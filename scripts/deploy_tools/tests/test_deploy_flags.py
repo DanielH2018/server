@@ -12,18 +12,30 @@ Both halves, per CLAUDE.md: a refused argument must exit 64 having deployed noth
 the bug got wrong), and the pass-through arguments a REAL deploy carries must still reach the
 playbook (the half a gate that simply refused everything would pass).
 
+The gate imports ansible-core in the wrapper's own process, and that import creates a temp
+directory the `--check` exec must not orphan (issue #4893).
+
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_flags.py
 """
 
 import importlib.util
+import subprocess
 import sys
 
 import pytest
 
 from deploy_tools.deploy_lib import flags as deploy_flags
 from lib import exit_codes as ec
+from lib.repo_paths import REPO
 
-from _deploy_sh_fakes import make_snapshot_repo, run_front_half
+from _deploy_sh_fakes import (
+    FAKE_RECAP,
+    UV_WRAPPER_ARMS,
+    deploy_sh_env,
+    make_snapshot_repo,
+    run_front_half,
+    stub_bin,
+)
 
 # The code the wrapper must not return for a usage error: it means changes are live. It
 # must never be this gate's answer.
@@ -94,3 +106,52 @@ def test_a_valid_run_still_reaches_the_locked_half(tmp_path, monkeypatch):
     )
     assert code is None, calls
     assert ("deploy", ["in-process", "uptime-kuma"]) in calls, calls
+
+
+# The `uv` a `--check` run execs: the playbook answers at once. The wrapper's own
+# `deploy_locks.py` call still runs for real, through UV_WRAPPER_ARMS.
+_UV_STUB = """#!/bin/bash
+case "$*" in
+  *ansible-playbook*) {recap}; exit 0 ;;
+{locks}
+  *) exit 0 ;;
+esac
+""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
+
+
+def test_a_check_run_leaves_no_ansible_local_temp_directory(tmp_path):
+    """Importing ansible for the gate makes a temp directory that the exec must not orphan.
+
+    ansible-core removes its `ansible-local-<pid>*` directory in an atexit handler, and a
+    `--check` run ends in `os.execvp`, which runs none (issue #4893). The variable puts the
+    directory under `tmp_path` rather than `~/.ansible/tmp`, which other processes share.
+    """
+    ansible_tmp = tmp_path / "ansible-tmp"
+    env = deploy_sh_env(
+        tmp_path,
+        stub_bin(tmp_path, {"uv": _UV_STUB}),
+        ANSIBLE_LOCAL_TEMP=str(ansible_tmp),
+    )
+    repo = make_snapshot_repo(tmp_path / "repo")
+    deploy_sh = REPO / "scripts" / "deploy.sh"
+    result = subprocess.run(
+        [
+            str(deploy_sh),
+            "--skip-tag-check",
+            "--skip-staleness-check",
+            "--check",
+            "--tags",
+            "alpha",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+    # ansible-core creates the parent when it resolves the setting, so the import happened
+    # and the empty listing below cannot pass vacuously.
+    assert ansible_tmp.is_dir()
+    assert sorted(p.name for p in ansible_tmp.iterdir()) == []
