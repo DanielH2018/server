@@ -466,6 +466,12 @@ installed versions are *reconciled* when the record's `result` names exactly the
 3. Run `apt-get update --error-on=any` restricted to the homelab source, with
    `-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o
    APT::Get::List-Cleanup=0`. The Ubuntu lists stay as `apt-daily` last left them.
+    - The restricted calls, this fetch and step 4's `apt-get indextargets`, also carry
+      `-o Dir::Cache::pkgcache= -o Dir::Cache::srcpkgcache=`, and the fetch carries
+      `-o pkgCacheFile::Generate=false`. Without them, `apt-get update` ends by rebuilding
+      `pkgcache.bin` and `indextargets` builds one too, each from the homelab source
+      alone, so every run, the common path included, rewrites the apt cache. The
+      container's common-path case caught both against real apt (H3.3b).
     - Without `--error-on=any`, apt treats a failed fetch as transient: it warns, keeps the
       list the last good fetch left, and can exit 0. Step 4 would then read that old list,
       which still holds `Version:` lines, as "nothing newer". The flag applies to this
@@ -914,16 +920,21 @@ concurrency group on push. It needs no secrets, and it does these steps:
    names, `Python 3.12` on 24.04, so reconcile runs under the interpreter each release
    carries. Every case below runs on both legs. It serves both builds from a local unsigned
    repository with `python3 -m http.server` on `127.0.0.1:8791`, as daniel-box serves the
-   real one, and runs the updater against it. Every case but the stopped-server case asserts
-   that the server's log holds that case's `GET` of `dists/homelab/Release`. Every case
-   asserts that `/var/lib/apt/lists/` holds no list named after daniel-box's address. The
-   cases are:
-    - after the first install, stop the local server, run the updater, and assert that it
-      exits non-zero and leaves `/var/lib/homelab-updater/last_success` and the success
-      timestamp in `homelab_host.prom` unchanged. The case goes red when step 3 lets a
-      failed fetch through, whether apt exits 0 or the updater ignores its exit. Every other
-      case is its green half, so `--error-on=any` must also pass a fetch from the unsigned
-      local repository;
+   real one, and runs the updater against it. Every case but two asserts that the server's
+   log holds that case's `GET` of `dists/homelab/Release`. The stopped-server case has no
+   server, and the lock case exits at step 2, before the fetch, so it asserts the log holds
+   no `GET`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
+   repository and none named after daniel-box's address. Until H3.6 ships the Pi package,
+   every case installs a fixture `homelab-daniel-pi` of the same shape, rendered with the
+   real reconcile component from `hosts/lib/tests/container/fixture/`. The cases are:
+    - after the upgrade to the head version, stop the local server, run the head version's
+      updater, and assert that it exits non-zero and leaves
+      `/var/lib/homelab-updater/last_success` and the success timestamp in
+      `homelab_host.prom` unchanged. The case goes red when step 3 lets a failed fetch
+      through, whether apt exits 0 or the updater ignores its exit. It runs after the
+      upgrade because the base version's updater is master's, which a change under review
+      does not reach. Every other case is its green half, so `--error-on=any` must also
+      pass a fetch from the unsigned local repository;
     - install the base version, and assert that `homelab_host.prom` exists in the textfile
       directory with mode 0644 after that first run;
     - upgrade to the head version, and assert that every dropped file is gone and every
@@ -944,14 +955,17 @@ concurrency group on push. It needs no secrets, and it does these steps:
     - run the common path and assert that `/var/cache/apt/pkgcache.bin` is unchanged.
 6. It writes the file-level package diff to the job summary.
 
-The job has no `name:` key, so GitHub shows it as `host_packages`. The gate census in
-`ansible/tests/repo/test_every_ci_job_is_gated.py` falls back to the job id the same way.
-Later host slices extend this job and add no workflow of their own. They read its result
-from the `ci.yml` runs, filtered by job name:
+The job has no `name:` key. GitHub names each matrix leg after the job id and the leg's
+values, such as `host_packages (24.04, 3.12)`. The gate census in
+`ansible/tests/repo/test_every_ci_job_is_gated.py` falls back to the job id, and the gate's
+`needs.host_packages.result` fails when either leg fails. Later host slices extend this job
+and add no workflow of their own. They read each leg's result from the `ci.yml` runs,
+filtered by the job name's prefix:
 
 ```bash
 gh run list --workflow ci.yml --branch master --limit 3 --json databaseId,headSha,conclusion
-gh run view <run-id> --json jobs --jq '.jobs[] | select(.name == "host_packages") | .conclusion'
+gh run view <run-id> --json jobs \
+  --jq '.jobs[] | select(.name | startswith("host_packages")) | [.name, .conclusion]'
 ```
 
 ### `homelab-tools` (C5)
@@ -1081,6 +1095,7 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
 + hosts/lib/homelab-reconcile
 + hosts/lib/tests/
 + hosts/lib/tests/container/Dockerfile
++ hosts/lib/tests/container/fixture/                (H3.3b: the cases' homelab-daniel-pi until H3.6)
 + hosts/packages/homelab-updater/package.yml
 + hosts/packages/homelab-updater/units/
 + hosts/packages/homelab-tools/package.yml            (H3.11)
@@ -1106,6 +1121,10 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
   scripts/validate/unit_templates.py                   (+ every unit and drop-in the host renderer emits)
 + scripts/validate/host_packages.py                    (H3.3a: render, diff and both lints the job runs)
 + scripts/validate/tests/test_validate_host_packages.py
++ scripts/validate/host_package_cases.py              (H3.3b: the container cases the job runs)
++ scripts/validate/validate_lib/host_fixtures.py      (H3.3b: the fixture builds and the local repository)
++ scripts/validate/validate_lib/host_container.py     (H3.3b: the systemd container the cases drive)
++ scripts/validate/tests/test_validate_host_package_cases.py
 + scripts/validate/tests/fixtures/host_packages/red/   (the lints' red fixture, built in CI too)
   prek.toml                                            (unit and shell selectors gain hosts/)
   scripts/deploy_tools/land_lib/pipeline.py            (host candidate in resolve, render after CI, host wait step)
@@ -1385,6 +1404,9 @@ says otherwise.
 8. **H3.6 The Pi package, empty, plus bring-up.**
     - Add `hosts/daniel-pi/package.yml` carrying only the `reconcile` component and the Pi's
       updater-schedule drop-in, with no enable link for `homelab-updater.timer`.
+    - Run the container case that installs the Pi package by hand against this PR's real
+      render, not H3.3b's fixture `homelab-daniel-pi`. The other cases keep the fixture,
+      because they need a unit, a file and a payload that the real package does not ship.
     - Add `hosts/bootstrap-host.sh`. It takes `bootstrap-host.sh <hostname>` and runs as
       root. It carries H7's step numbers, so H7 extends it in place:
         - Step 1 refuses if `hostname` differs from `<hostname>`.
@@ -1907,7 +1929,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
 - **H3.1, H3.2a to H3.2d, H3.3a and H3.3b:** revert each on its own, in reverse order. They
   change no host. Reverting H3.2c drops the host units from the unit validator and the
   censuses, which nothing ships yet. Reverting H3.3b leaves H3.3a's render diff and lints in
-  the gate.
+  the gate. It also takes back the updater's cache options, so every run, the common path
+  included, rewrites `pkgcache.bin` again.
 - **H3.4a:** reverting it parks the deployer again, and the clear is the same operator-only
   sequence, range check included. Never revert it while H3.4b to H3.5b are armed. Disarm
   first.
@@ -2167,8 +2190,11 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - `scripts/validate/tests/test_validate_host_packages.py` holds the `type: config` pair,
       the `.deb` lint pair and the render diff, and `test_maintainer_scripts.py` imports the
       whitelist from `scripts/validate/host_packages.py`.
-- **H3.3b:** none beyond the job, whose cases are the tests on both release legs, the
-  stopped-server case included.
+- **H3.3b:** the job, whose cases are the tests on both release legs, the stopped-server
+  case included. `scripts/validate/tests/test_validate_host_package_cases.py` covers the
+  fixtures, the local repository and the two log checks without a container.
+  `hosts/lib/tests/test_homelab_updater_fetch.py` asserts the cache options the common-path
+  case made the updater carry.
 - **H3.4a:** the `homelab_builder` role `CLAUDE.md`, whose glance block `gen_role_glance.py`
   writes.
 - **H3.4b to H3.5c:**

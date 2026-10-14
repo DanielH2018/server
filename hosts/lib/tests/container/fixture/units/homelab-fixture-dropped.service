@@ -1,0 +1,10 @@
+# A long-running unit only the base fixture ships, with an enable link. The upgrade case asserts
+# that reconcile stops it once the head fixture drops it.
+[Unit]
+Description=Fixture unit the head version of the container cases drops
+
+[Service]
+ExecStart=/usr/bin/sleep infinity
+
+[Install]
+WantedBy=multi-user.target

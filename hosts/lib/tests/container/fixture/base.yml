@@ -1,0 +1,13 @@
+# The container cases' homelab-daniel-pi, version N. H3.6 ships the real package; until then
+# scripts/validate/host_package_cases.py renders this spec, and the three beside it, as
+# hosts/daniel-pi/package.yml in a scratch tree with the real reconcile component.
+description: Fixture host package for the host_packages container cases
+components: [reconcile]
+maintainer_scripts: [preinst, postinst, prerm]
+files:
+  - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/homelab-fixture-kept.service}
+  - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/multi-user.target.wants/homelab-fixture-kept.service}
+  - {src: units/homelab-fixture-dropped.service, dst: /usr/lib/systemd/system/homelab-fixture-dropped.service}
+  - {src: units/homelab-fixture-dropped.service, dst: /usr/lib/systemd/system/multi-user.target.wants/homelab-fixture-dropped.service}
+  - {src: files/fixture-dropped, dst: /usr/lib/homelab/fixture-dropped}
+  - {src: units/updater-timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
