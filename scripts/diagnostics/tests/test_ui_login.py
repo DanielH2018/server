@@ -10,6 +10,7 @@ import base64
 import json
 import os
 import re
+import subprocess
 import sys
 
 import pytest
@@ -392,6 +393,20 @@ def test_an_account_without_a_login_file_still_logs_in_as_the_operator(tmp_path)
     creds = ui_login.agent_credentials(str(tmp_path / "absent.json"))
     assert creds is None
     assert ui_login.one_factor_login(creds, sops) == ("op", "pw-2")
+
+
+def test_without_a_login_file_the_domain_comes_from_inventory_not_sops(
+    monkeypatch, tmp_path
+):
+    group_vars = tmp_path / "all.yml"
+    group_vars.write_text("domain: lan.example\n")
+
+    def no_subprocess(argv, **_):
+        raise AssertionError(f"ran {argv[0]}; the domain is an inventory value")
+
+    monkeypatch.setattr(subprocess, "run", no_subprocess)
+    absent = str(tmp_path / "absent.json")
+    assert ui_login.lookup_domain(absent, str(group_vars)) == "lan.example"
 
 
 def test_a_login_file_missing_a_key_is_refused_not_papered_over_with_sops(tmp_path):

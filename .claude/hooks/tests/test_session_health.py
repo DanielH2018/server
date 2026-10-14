@@ -317,7 +317,7 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
     such path, which is the only condition under which the insert is load-bearing. This is the
     repo rule about verifying a moved entry point by RUNNING it rather than by running the suite.
 
-    Deliberately a real subprocess reaching real external binaries: `sops` and `curl` (via
+    Deliberately a real subprocess reaching real external binaries: `curl` (via
     `uv run probe.py targets`), and `gh` (via `uv run prune_worktrees.py`, once per worktree on
     disk). The `_fence_external_binaries` conftest fixture stubs them so this runs neither slow
     nor side-effecting — see fenced_calls below for the proof it held.
@@ -338,13 +338,13 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
         "other_live_sessions or master_moved_problems (both report through this string).\n"
         + proc.stdout
     )
-    # target_problems() runs unconditionally on every call to main(), so sops/curl/journalctl
+    # target_problems() runs unconditionally on every call to main(), so curl/journalctl
     # are always exercised — unlike gh, which only fires per worktree on disk and so isn't
     # asserted here. A stub silently dropped from PATH is
     # indistinguishable from a passing run without this: the real binaries would just run
     # underneath it.
     recorded = fenced_calls.read_text()
-    for binary in ("sops", "curl", "journalctl"):
+    for binary in ("curl", "journalctl"):
         assert binary in recorded, (
             f"the real `{binary}` ran instead of the stub — the PATH fence did not hold.\n"
             f"recorded calls:\n{recorded}"
