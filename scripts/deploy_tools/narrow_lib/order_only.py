@@ -46,6 +46,11 @@ from lib.git import git
 # process in a deploy (#4995), a call that raises no audit event and creates a file at an
 # absolute path outside the temp tree (#4999), and a role whose bytes depend on list order,
 # which the render proof the caller still requires catches.
+# The runner is distinguishable from a deploy. Its cwd ends in `/cwd` under an `order-only-`
+# temp dir, `sys.flags.isolated` is 1, and `sys.argv[0]` is `-c`. So the check holds only for
+# a plugin written in good faith. It catches an accidental side effect, not an evasive one.
+# We accept that limit, because a commit that can land a hostile filter plugin on master can
+# act through any deploy anyway. The related open gaps are #4995 and #4999.
 ORDER_ONLY_PLUGINS = frozenset({"ansible/filter_plugins/toposort.py"})
 
 _PLUGINS = "ansible/filter_plugins"
