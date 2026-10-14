@@ -65,9 +65,9 @@ _TIMEOUT = 60
 # The plugin is imported after the hook and can reach anything `__main__`, `os` or `builtins`
 # holds, so the hook reads nothing from them: `_install` binds the exit function and the tables
 # as closure cells, and is deleted before the import. Only the interpreter's hook list then
-# refers to the hook, and the `gc` events that would walk to it are off the allowlist. The hook exits with
-# `os._exit` rather than raising, because a raise lands in the plugin's frame, where an `except`
-# can swallow it. `_run` reads the nonzero exit as doubt.
+# refers to the hook, and the `gc` events that would walk to it are off the allowlist. The hook
+# exits with `os._exit` rather than raising, because a raise lands in the plugin's frame, where
+# an `except` can swallow it. `_run` reads the nonzero exit as doubt.
 _RUNNER = """
 import copy, json, os, sys
 
