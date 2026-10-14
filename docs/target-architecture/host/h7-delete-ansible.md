@@ -1300,9 +1300,10 @@ steps are:
    them, before the updater's first run writes into it. daniel-box serves the repo it installs from, so it cannot bootstrap
    from `http://10.0.0.215:8791`, and it uses `--local-build <clone>` instead. That flag
    builds every package daniel-box needs from the clone:
-    - It runs the builder's trust check on the clone's `HEAD`, against the trust root
-      pinned in the script beside the keyring fingerprint, and refuses an unverified commit.
-      H3 *Open questions* 1 settles which signature that is.
+    - It verifies no signature on the clone's `HEAD`, because the builder checks none
+      ([ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md)).
+      Which check it runs on a hand-supplied clone instead is open:
+      [#5011](https://github.com/DanielH2018/server/issues/5011).
     - It fetches nfpm and uv at the versions pinned in the script and checks each sha256.
     - It renders and builds `homelab-repos`, `homelab-tools`, `homelab-updater` and
       `homelab-daniel-box` from the clone, with `uv run --frozen` and

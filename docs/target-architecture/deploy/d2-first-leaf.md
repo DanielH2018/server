@@ -14,6 +14,14 @@ D2.1d, the Ansible play skips a non-Ansible-owned entry:
 
 D2.2, the deployer skip: [#4965](https://github.com/DanielH2018/server/pull/4965).
 
+D2.3, `land.sh` waits on promotion: [#4997](https://github.com/DanielH2018/server/pull/4997).
+
+D2.4a, the two drift checks: [#4981](https://github.com/DanielH2018/server/pull/4981). The
+operator ran its `k3s-bringup.yml` hand apply on 2026-10-14 and cleared the owed line.
+
+D2.4b, the script readers and the two generators:
+[#4988](https://github.com/DanielH2018/server/pull/4988).
+
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five
 rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3), on
