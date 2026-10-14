@@ -24,8 +24,8 @@ output `domain` since `0ef579e1f`
 Depends on: [R1](r1-shadow-render.md)
 
 Unblocks: D2 and D3. D2's publish job renders bento-pdf, whose IngressRoute holds `domain`,
-so it needs this slice's PRs 1 and 2; Open question 8 asks for that sub-edge in the
-contract. D3 produces `homelab-cluster-vars` and the SOPS-encrypted Secret manifests this
+so it needs this slice's PRs 1 and 2, and D2.7 also needs domain PR 2b of step 10; Open
+question 8 asks for the first sub-edge in the contract. D3 produces `homelab-cluster-vars` and the SOPS-encrypted Secret manifests this
 slice hands over.
 
 ## Goal and exit criterion
@@ -1247,6 +1247,67 @@ PR 4 deletes it.
    docs state the five rules and the guard as enforced. With the ratchet empty, the
    `sops-manifest-entries` check reads as equality: the four entries are exactly the
    templates that name a `SOPS_MANIFEST_KEYS` key.
+10. **Publish `domain` (operator ruling 2026-10-14)** (four PRs). This item calls them domain
+    PR 1, 2a, 2b and 3, so they stay distinct from PRs 1 to 9. The operator ruled: "domain is
+    not secret, it's a var for flexibility just in case of future changes." The renderer
+    writes `domain` as a literal, and `domain` stays an Ansible variable in
+    `ansible/inventory/group_vars/all.yml`, so it can change in one place. C3 *The source of
+    `domain`* records the ruling, and D2 *Where `domain` comes from* points here. D2.7 waits
+    on domain PR 2b and on no PR of D3. The plan comes from a read-only scoping of master, so
+    it cites symbols and not line numbers.
+    - **The move order never leaves `domain` undefined.** `community.sops.load_vars` in
+      `ansible/pre_tasks/load_secrets.yml` loads at `include_vars` precedence, which outranks
+      inventory group_vars, and the extra-vars stub file outranks both. While the inventory
+      and `secrets.yml` hold the same value, nothing changes. Domain PR 1 adds the inventory
+      value first. Domain PR 3 deletes the `secrets.yml` value last.
+    - **Domain PR 1, the inventory value.**
+        - `ansible/inventory/group_vars/all.yml` gains `domain`, with the value that
+          `secrets.yml` holds.
+        - `scripts/diagnostics/probe_lib/core.py` and `scripts/diagnostics/ui_login.py` stop
+          calling `sops_extract('domain')` and read the inventory value. That removes the
+          age-key blocker that H3 and H4 record for `probe.py metric` and `probe.py
+          monitors`.
+        - `ansible/inventory/host_vars/daniel-pi.yml`'s comment about `domain` is rewritten.
+        - *Landing.* A new `all.yml` key is read by many templates, so expect a wide deploy
+          whose applies are no-ops, or a broad refusal. Confirm which with
+          `uv run python scripts/deploy_tools/deploy_tags.py narrow origin/master HEAD`
+          before the PR.
+    - **Domain PR 2a, the named members that hold either way.** While `domain` and `email`
+      are both placeholders and after `domain` is not, the PR's changes hold.
+        - Rule 3's named member becomes `${email}` in traefik's `ConfigMap/traefik-static`.
+        - The standalone map's named member becomes `email` in traefik.
+        - CI's "Red-proof the round trip's second pass" step moves to `--role traefik`.
+    - **Domain PR 2b, the flip.** `domain` stops being a placeholder or a stub key.
+        - `ansible/filter_plugins/secret_stubs.py` gains a `PUBLISHED` set. It does not reuse
+          `NEVER_STUB`, whose reason is "no template reads it". `homelab_stub_keys` excludes
+          `PUBLISHED`.
+        - `secret_checks.py`: `PLACEHOLDER_ANYWHERE` becomes `{"email"}`. The prometheus
+          `filter hash`/`domain` entry leaves `KNOWN_VIOLATIONS`, which ends
+          [#4952](https://github.com/DanielH2018/server/issues/4952) and makes PR 8's
+          observability item moot. The `homepage_href`/`authelia_service_rules` filter
+          allowlist and its two `RULE5_MEMBERS` retire. `RULE5_FLOOR` is recounted.
+        - `var_aliases.py`: every `ALIAS_MEMBERS` entry is an alias of `domain`, so the
+          real-tree alias census becomes empty. The clause keeps its fixture pair, because
+          the pair is the only proof that the clause can go red, and the empty census then
+          holds nothing that could fail. `NOT_ALIASES` regains the prometheus block.
+        - The standalone map regenerates through `scripts/renderer/standalone_map.py`. Its 16
+          domain-only rows drop, from 41 rows to 25.
+        - Tests that use `domain` as the real secret switch to `email` or a fixture key.
+        - R2's per-member prose in *Design* changes here, together with the code. A
+          documented-path test fails on names that do not exist yet, so an earlier edit would
+          fail CI.
+        - *Landing.* Every tag reads the standalone map, so expect a wide, byte-identical
+          deploy.
+    - **Domain PR 3, operator-only.** It lands in one piece.
+        - The operator deletes `domain` from `ansible/vars/secrets.yml` with `sops`.
+        - The same PR drops `domain` from `ansible/secret_rotation.yml` and adds it to
+          `RETIRED`, which
+          `scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py` reads.
+        - It drops `PUBLISHED`, because the key is gone. It updates the `ignore`-tier
+          precedent prose in `scripts/secrets_mgmt/secret_bearing_host_paths.py` and
+          `docs/secret-rotation.md`.
+    - **Edges.** D2.7 waits on domain PR 2b, not on D3. If domain PR 2b lands before PR 8,
+      PR 8's observability item is moot, and PR 9 closes the ratchet without it.
 
 ## Verification
 
@@ -1743,10 +1804,10 @@ remains the gate.
    macro. The macro builds the Host rule as `hostname ~ '.local.' ~ domain`, and `domain` is
    a key of `secrets.yml`. Under R2, bento-pdf's directory substitutes and the artifact
    carries `${domain}`, which strict substitution refuses without a source.
-    - *The source.* C3 *The source of `domain` before D3* settles it. The default is that
-      D2.7 waits on D3.3 and `domain` comes from `homelab-cluster-vars`. The alternative is a
-      literal `domain` in the render, which only the operator may choose
-      (**operator-only**). C3 rejects a Secret the operator creates by hand.
+    - *The source.* Resolved by the operator's ruling of 2026-10-14: `domain` is published.
+      C3 *The source of `domain`* records it. The render holds a literal `domain`, and step
+      10 plans the move. The former default, `domain` from `homelab-cluster-vars`, is
+      rejected, and so is a Secret the operator creates by hand.
     - *A conflict for D2 and the contract.* D2 *Where `${domain}` comes from before D3*
       plans a third source, `homelab-identifiers`, which the Ansible-owned flux role renders
       from SOPS. C3 names it neither as the default nor as the alternative. D2 and the
@@ -1758,10 +1819,9 @@ remains the gate.
       on R2.1 and R2.2". contracts.md does not yet list that request under *Requested
       amendments not yet applied*. The contracts.md maintainer records it there, from R2's
       cross-slice note. No R2 PR waits on the sub-edge; only D2's PRs gain from it.
-    - *What the sub-edge does not buy.* Under C3's default, D2.7 waits on D3.3, and the row
-      `D3 | D2, R2` makes D3.3 wait on all of R2, PR 7's Authelia window included. The
-      sub-edge frees D2's other PRs from R2's PRs 3 to 9. D2.7 avoids them only under C3's
-      operator-only alternative, or under `homelab-identifiers` if the contract adopts it.
+    - *What the sub-edge does not buy.* The sub-edge frees D2's other PRs from R2's PRs 3 to
+      9. D2.7 avoids them too, because under the ruling of 2026-10-14 it waits on domain PR
+      2b of step 10 and on no PR of D3.
     - *The publish command.* D2's publish passes no `--secret-stubs`, and its test on
       `.github/workflows/promote.yml` asserts that. R2 adds no flag for it. D2's *source*
       gate refuses a `${K}` whose key the tag's declared source lacks. It pairs each `$$`
@@ -2344,3 +2404,15 @@ dedicated SOPS Secret. Applied in this round:
   [#4895](https://github.com/DanielH2018/server/issues/4895).
 
 Refuted: none.
+
+### Operator ruling (2026-10-14)
+
+The operator ruled that `domain` is published: "domain is not secret, it's a var for
+flexibility just in case of future changes." Applied in this round:
+
+- *Steps* gains step 10, *Publish `domain`*, with four PRs: the inventory value, the named
+  members that hold either way, the flip, and the operator's deletion from `secrets.yml`.
+- Open question 1 records the ruling as the source of `domain`. The *Unblocks* line adds D2.7's
+  edge on the flip.
+- R2's per-member prose is unchanged here. The flip PR changes it together with the code,
+  because a documented-path test fails on names that do not exist yet.
