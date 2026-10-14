@@ -99,8 +99,9 @@ EXEMPT: dict[str, str] = {
 
 # Must be selected, because it names `sonarr_api_key`, and must pass on its guard.
 MUST_FIND_GUARDED = "sonarr/verify.yml::Read the cluster copy's root folders"
-# The one derived variable the plan's baseline measured.
-MUST_DERIVE = "headlamp_k8s_oidc_issuer_url"
+# No role default or inventory variable derives from a secret key since `domain` was published,
+# so `derived_variables` has no real-tree member. Its fixture pair is
+# `test_a_task_naming_a_derived_variable_is_flagged`.
 
 
 def _var_files() -> list[Path]:
@@ -177,11 +178,6 @@ def test_every_task_that_names_a_secret_key_is_skipped_under_stubs() -> None:
         "each on `not (homelab_secret_stubs | default(false) | bool)` (or `not k8s_no_mutate` "
         f"if no dry run may run it), or exempt it in EXEMPT with a reason: {offenders}"
     )
-
-
-def test_the_derivation_finds_the_measured_derived_variable() -> None:
-    keys = set(homelab_stub_keys(yaml_fast.safe_load(SECRETS.read_text())))
-    assert MUST_DERIVE in derived_variables(keys, _var_files())
 
 
 def stale_exemptions(exempt: Mapping[str, str], offenders: list[str]) -> list[str]:

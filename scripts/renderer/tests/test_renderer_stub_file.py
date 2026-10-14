@@ -36,12 +36,12 @@ def test_stub_file_holds_every_stub_the_sentinel_and_the_pinned_facts(tmp_path):
 
 def test_stub_vars_over_a_secrets_file_without_clashes_is_clean(tmp_path):
     secrets = tmp_path / "secrets.yml"
-    secrets.write_text("domain: ENC[x]\nsops:\n  version: 3\n")
-    assert shadow_diff.stub_vars(secrets)["domain"] == "stub-domain"
+    secrets.write_text("email: ENC[x]\nsops:\n  version: 3\n")
+    assert shadow_diff.stub_vars(secrets)["email"] == "stub-email"
 
 
 def test_stub_vars_over_a_secret_key_named_like_a_pinned_fact_is_flagged(tmp_path):
     secrets = tmp_path / "secrets.yml"
-    secrets.write_text("domain: ENC[x]\nauthelia_password_hash: ENC[x]\n")
+    secrets.write_text("email: ENC[x]\nauthelia_password_hash: ENC[x]\n")
     with pytest.raises(ValueError, match="authelia_password_hash"):
         shadow_diff.stub_vars(secrets)

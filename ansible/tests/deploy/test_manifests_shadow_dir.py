@@ -35,12 +35,12 @@ DISCARD = "Discard the throwaway render directory"
 
 _SECRETS = """\
 alpha_token: ENC[AES256_GCM,data:AAAA,type:str]
-domain: ENC[AES256_GCM,data:BBBB,type:str]
+email: ENC[AES256_GCM,data:BBBB,type:str]
 become_password: ENC[AES256_GCM,data:CCCC,type:str]
 sops:
     version: 3.9.0
 """
-_KEYS = ("alpha_token", "domain")
+_KEYS = ("alpha_token", "email")
 _STUBS = {key: homelab_secret_stub(key) for key in _KEYS}
 # What the k8s play holds after the SOPS load on a run with no stub file.
 _REAL = {key: f"real-value-of-{key}" for key in _KEYS}
@@ -169,7 +169,7 @@ def test_the_assert_keeps_a_shadow_render_to_a_fully_stubbed_dry_run(
         "real_run_with_stubs": "refused",
     }
     one_key = results["one_key_real"]["refuse"]["msg"]
-    assert "alpha_token" in one_key and "domain" not in one_key, one_key
+    assert "alpha_token" in one_key and "email" not in one_key, one_key
     for host in ("no_stub_file", "flag_and_sentinel", "one_key_real"):
         message = results[host]["refuse"]["msg"]
         assert "real-value-of" not in message, (

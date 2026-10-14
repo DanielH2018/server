@@ -6,7 +6,8 @@ in `test_renderer_secret_checks_tree.py`.
 The membership test calls a filter as a template does, once with the sentinel `r2-sentinel`
 for the secret key and once with `a.b-c.example`. The first output, serialised as JSON, must
 hold the sentinel, and replacing the sentinel there with `a.b-c.example` must give the second
-output exactly.
+output exactly. `PASSTHROUGH_FILTERS` is empty, so a fixture filter is the test's only subject
+until a repo filter joins the set.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_secret_checks.py
 """
@@ -16,12 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from authelia_access import FilterModule as AutheliaFilters
-from homepage_tiles import FilterModule as HomepageFilters
-from lib.repo_paths import K8S_ROLES, SHARED_TPL
-from renderer import shadow_diff
+from lib.repo_paths import SHARED_TPL
 from renderer.renderer_lib.cluster import RenderedTag
-from renderer.renderer_lib.context import play_context
 from renderer.renderer_lib.environment import renderer_env
 from renderer.renderer_lib.jinja_aliases import scan_templates
 from renderer.renderer_lib.jinja_uses import Policy, Use, embed_refusals
@@ -48,29 +45,6 @@ from renderer.renderer_lib.secret_checks import (
 
 SENTINEL = "r2-sentinel"
 OTHER = "a.b-c.example"
-# authelia's templates/config-secret.yaml.j2 binds this list with `{% set %}` before its call.
-RFC1918_NETWORKS = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
-# The filters as the templates reach them, so a member must be registered under its name.
-FILTERS = {**HomepageFilters().filters(), **AutheliaFilters().filters()}
-
-# Every call shape the templates write, with the secret key `domain` passed as `key`.
-CALLS = {
-    "homepage_href": [
-        lambda f, entries, key: f(entries, "headlamp", key),
-        lambda f, entries, key: f(entries, "pihole", key, "/admin"),
-        lambda f, entries, key: f(entries, "longhorn-ui", key, lan=True),
-    ],
-    "authelia_service_rules": [
-        lambda f, entries, key: f(entries, key, RFC1918_NETWORKS),
-    ],
-}
-
-
-@pytest.fixture(scope="module")
-def containers_list():
-    return play_context(K8S_ROLES / "homepage", shadow_diff.stub_vars())[
-        "containers_list"
-    ]
 
 
 def check_membership(call):
@@ -86,18 +60,11 @@ def check_membership(call):
     )
 
 
-def test_every_member_has_its_template_calls():
-    assert set(CALLS) == PASSTHROUGH_FILTERS
+def test_membership_of_an_interpolating_filter_is_clean():
+    def fixture_filter(entries, name, domain):
+        return f"https://{name}.{domain}/"
 
-
-@pytest.mark.parametrize(
-    ("name", "shape"),
-    [(name, shape) for name, shapes in CALLS.items() for shape in range(len(shapes))],
-)
-def test_membership_of_each_member_is_clean(containers_list, name, shape):
-    check_membership(
-        lambda key: CALLS[name][shape](FILTERS[name], containers_list, key)
-    )
+    check_membership(lambda key: fixture_filter([], "headlamp", key))
 
 
 @pytest.mark.parametrize(
@@ -118,7 +85,7 @@ def test_membership_of_a_transforming_filter_is_flagged(transform, message):
 # -- the five rules, each over a small fixture --------------------------------------------
 
 KEY, SOPS_KEY = "fixture_key", "pi_peer_backup_ssh_key"
-FIXTURE_KEYS = [KEY, SOPS_KEY, "domain"]
+FIXTURE_KEYS = [KEY, SOPS_KEY, "email"]
 SECRET_DOC = (
     "apiVersion: v1\nkind: Secret\nmetadata:\n  name: s\nstringData:\n  v: {}\n"
 )
@@ -160,20 +127,20 @@ def test_no_bare_dollar_brace_is_flagged():
     # directory, and a sentinel fragment a transform left behind.
     render = _render(SECRET_DOC.format(sentinel(KEY)))
     render.tags[0].files["f.yaml"] += (
-        "  u: ${HOME}\n  w: ${domain}\n  x: homelab_secret__fixture_key__end\n"
+        "  u: ${HOME}\n  w: ${email}\n  x: homelab_secret__fixture_key__end\n"
     )
     found = {(v.rule, v.key) for v in output_violations(render, FIXTURE_KEYS)}
     assert found == {
         (KNOWN_KEY, "HOME"),
         (NO_BARE_DOLLAR_BRACE, "HOME"),
-        (NO_BARE_DOLLAR_BRACE, "domain"),
+        (NO_BARE_DOLLAR_BRACE, "email"),
         (NO_BARE_DOLLAR_BRACE, "sentinel"),
     }
 
 
 def test_confined_to_secret_is_clean():
     text = (
-        CONFIGMAP_DOC.format(sentinel("domain"))
+        CONFIGMAP_DOC.format(sentinel("email"))
         + "---\n"
         + SECRET_DOC.format(sentinel(KEY))
     )
@@ -212,7 +179,7 @@ def _refused(source: str, **kwargs) -> list[tuple[str, str]]:
         "{% if fixture_key is not defined %}x{% endif %}",
         "{{ fixture_key | indent(4) }}",
         "{{ pi_peer_backup_ssh_key | to_json }}",
-        "{% for h in [('a.' ~ domain, 1)] + ([('b.' ~ domain, 2)] if x else []) %}"
+        "{% for h in [('a.' ~ email, 1)] + ([('b.' ~ email, 2)] if x else []) %}"
         "{% endfor %}",
         "{% filter indent(4) %}{{ fixture_key }}{% endfilter %}",
         "{% set x %}{{ fixture_key }}{% endset %}",
@@ -331,7 +298,7 @@ LOOKUP = "{{ lookup('template', playbook_dir + '/b.j2') | %s }}"
     [
         (LOOKUP % "indent(4)", "{{ fixture_key }}"),
         (INCLUDE_TRIM, "no key here"),
-        ("{% filter indent(4) %}{% include 'b.j2' %}{% endfilter %}", "{{ domain }}"),
+        ("{% filter indent(4) %}{% include 'b.j2' %}{% endfilter %}", "{{ email }}"),
     ],
 )
 def test_an_embed_that_keeps_its_keys_intact_is_clean(includer, embedded):
@@ -398,12 +365,12 @@ def test_a_sops_manifest_key_absent_from_the_secrets_file_is_flagged():
 
 
 def test_a_key_passed_to_a_filter_outside_the_set_is_flagged():
-    source = "{{ entries | fixture_href('x', domain) }}"
-    assert _refused(source) == [("domain", "argument to fixture_href")]
+    source = "{{ entries | fixture_href('x', email) }}"
+    assert _refused(source) == [("email", "argument to fixture_href")]
 
 
 def test_a_key_passed_to_a_filter_in_a_fixture_set_is_clean():
-    source = "{{ entries | fixture_href('x', domain) }}"
+    source = "{{ entries | fixture_href('x', email) }}"
     passthrough = PASSTHROUGH_FILTERS | {"fixture_href"}
     assert _refused(source, passthrough=passthrough) == []
 

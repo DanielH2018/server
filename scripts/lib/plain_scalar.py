@@ -1,6 +1,6 @@
 """Whether a secret value survives Flux's substitution as the same string (target slice R2).
 
-A placeholder that is the whole scalar of a field, such as `main: ${domain}`, is a standalone
+A placeholder that is the whole scalar of a field, such as `email: ${email}`, is a standalone
 use. Flux substitutes into a resource it has already serialised, without the template's
 quotes, and then reads the result as YAML again. A standalone value therefore keeps its
 string type only when a YAML reader takes its bare text for exactly that string.

@@ -39,13 +39,13 @@ INCOMPLETE = "Refuse a stub file that does not stub every key"
 # NEVER_STUB, so no stub file carries it and the asserts must not ask for it.
 _SECRETS = """\
 alpha_token: ENC[AES256_GCM,data:AAAA,type:str]
-domain: ENC[AES256_GCM,data:BBBB,type:str]
+email: ENC[AES256_GCM,data:BBBB,type:str]
 google_assistant_service_account: ENC[AES256_GCM,data:CCCC,type:str]
 become_password: ENC[AES256_GCM,data:DDDD,type:str]
 sops:
     version: 3.9.0
 """
-_KEYS = ("alpha_token", "domain", "google_assistant_service_account")
+_KEYS = ("alpha_token", "email", "google_assistant_service_account")
 _STUBS = {key: homelab_secret_stub(key) for key in _KEYS}
 _SHADOW = {"k8s_dry_run": True, "load_secrets_stubs_allowed": True}
 
@@ -186,7 +186,7 @@ def test_each_stub_run_case_is_refused_or_accepted(tmp_path: Path) -> None:
         "sentinel_without_a_file": INCOMPLETE,
     }
     missing = results["one_key_missing"][INCOMPLETE]["msg"]
-    assert "alpha_token" in missing and "domain" not in missing, missing
+    assert "alpha_token" in missing and "email" not in missing, missing
     unstubbed = results["sentinel_without_a_file"][INCOMPLETE]["msg"]
     assert all(key in unstubbed for key in _KEYS), unstubbed
     assert "become_password" not in unstubbed, (
