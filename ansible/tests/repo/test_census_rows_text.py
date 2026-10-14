@@ -13,7 +13,13 @@ from functools import cache
 from pathlib import PurePosixPath
 
 import pytest
-from _deploy_sh_callers_row import DEPLOY_SH_CALLERS
+from _deploy_sh_callers_row import (
+    DEPLOY_SH_CALLERS,
+    DEPLOY_SH_ENTRY_POINTS,
+    PLAN,
+    table_rows,
+    unlisted_rows,
+)
 from _helpers import REPO, discover_docs
 from deploy_tools.land_lib import policy
 from lib import yaml_fast
@@ -440,3 +446,16 @@ def test_census_row_flags_its_red_subjects_and_passes_its_green_ones(row: Census
 def test_the_macro_corpus_skips_the_generated_register():
     """The one exclusion; `must_find` above is the positive control that a doc is still read."""
     assert GENERATED_REGISTER not in _macro_docs()
+
+
+def test_every_mapped_deploy_sh_caller_is_a_row_of_the_plan_table_is_clean():
+    """The census row maps a caller to a cell; the cell must still be a row of D2's table."""
+    text = (REPO / PLAN).read_text()
+    assert "`deploy.sh --tags T`" in table_rows(text)
+    assert unlisted_rows(DEPLOY_SH_ENTRY_POINTS, text) == []
+
+
+def test_a_caller_mapped_to_no_row_of_the_plan_table_is_flagged():
+    text = (REPO / PLAN).read_text()
+    assert unlisted_rows({"scripts/x.py": "`nowhere`"}, text)
+    assert unlisted_rows(DEPLOY_SH_ENTRY_POINTS, "no table here")

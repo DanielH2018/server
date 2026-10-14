@@ -85,7 +85,8 @@ and `--skip-tag-check` does not bypass it. Merge the change and let `promote` pu
 drop the tag to deploy the rest. The other entry points leave such a tag out instead of
 refusing: `--changed` drops it from the derived list and names it, and a shared role's
 expansion (`--tags manifests`) drops it from the callers. A list that a drop empties deploys
-nothing and exits 0. `--list-services` names each such tag on stderr.
+nothing and exits 0, and its verdict line reads `nothing-to-deploy` rather than `deployed`.
+`--list-services` names each such tag on stderr.
 
 Being *ahead* of master is normal branch work and is never refused.
 

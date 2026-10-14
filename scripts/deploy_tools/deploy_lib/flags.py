@@ -39,6 +39,14 @@ class Refused(Exception):
         self.code = code
 
 
+class NothingToDeploy(Exception):
+    """A gate left no tag to deploy, so the run ends at exit 0 having deployed nothing.
+
+    Not a `Refused`: the exit code is `DEPLOY_OK`, and only the verdict line tells this run
+    from a deploy (`messages.report`'s `nothing`).
+    """
+
+
 def check_passthrough(args: list[str]) -> None:
     """Refuse with `DEPLOY_BAD_FLAGS` when ansible-playbook's parser rejects `args`."""
     if usage_error(args):

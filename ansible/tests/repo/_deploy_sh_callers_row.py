@@ -32,16 +32,17 @@ _SHELL_FILES = ("*.sh", "*.sh.j2", "*.bash")
 _KEY_FILES = ("*.yml", "*.yaml", "*.service.j2")
 _NOT_TESTS = (":(exclude)*/tests/*", ":(exclude)ansible/tests/*")
 
-# Each caller, mapped to its row in the entry-point table of
-# docs/target-architecture/deploy/d2-first-leaf.md, *What each entry point does with a tag that
-# is not Ansible-owned*. The row says what the caller does with a flux-owned tag, which
-# `deploy.sh` refuses with exit 5 for the whole list.
+PLAN = "docs/target-architecture/deploy/d2-first-leaf.md"
+TABLE_HEADING = "### What each entry point does with a tag that is not Ansible-owned"
+
+# Each caller, mapped to the first cell of its row in `PLAN`'s entry-point table, as written
+# there. The row says what the caller does with a flux-owned tag, which `deploy.sh` refuses
+# with exit 5 for the whole list. `unlisted_rows` holds each cell to the table.
 DEPLOY_SH_ENTRY_POINTS = {
-    "scripts/deploy_tools/land_lib/tools.py": "land.sh",
-    "ansible/roles/setup/deploy_ui/files/deploy_ui.py": "deploy_ui",
-    "ansible/roles/setup/render_records/files/render_records.py": (
-        "render_targets.py CLI, whose list render_records runs"
-    ),
+    "scripts/deploy_tools/land_lib/tools.py": "`land.sh`",
+    "ansible/roles/setup/deploy_ui/files/deploy_ui.py": "`deploy_ui`",
+    # It runs deploy.sh over the list that row's CLI prints.
+    "ansible/roles/setup/render_records/files/render_records.py": "`render_targets.py` CLI",
 }
 DEPLOY_SH_EXEMPT = {
     "ansible/bring-up.sh": (
@@ -53,6 +54,27 @@ DEPLOY_SH_EXEMPT = {
         "play runs"
     ),
 }
+
+
+def table_rows(text: str) -> set[str]:
+    """The first cells of the table under `TABLE_HEADING` in `text`, or none without one."""
+    _, found, rest = text.partition(TABLE_HEADING)
+    section = rest.split("\n#", 1)[0] if found else ""
+    return {
+        line.split("|")[1].strip()
+        for line in section.splitlines()
+        if line.startswith("| ") and not line.startswith("|-")
+    }
+
+
+def unlisted_rows(entry_points: dict[str, str], text: str) -> list[str]:
+    """Each caller whose mapped cell is no row of the table in `text`."""
+    rows = table_rows(text)
+    return [
+        f"{rel} maps to {cell}, which is no row of {PLAN}'s entry-point table"
+        for rel, cell in sorted(entry_points.items())
+        if cell not in rows
+    ]
 
 
 def _deploy_sh_candidates() -> list[str]:

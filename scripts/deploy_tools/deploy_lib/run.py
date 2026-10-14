@@ -46,14 +46,14 @@ from pathlib import Path
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.deploy_lib.flags import Refused, check_passthrough
+from deploy_tools.deploy_lib.flags import NothingToDeploy, Refused, check_passthrough
 from deploy_tools.deploy_lib.owners import (
     mark_owners,
     owner_note,
     read_owners,
     refuse_flux_owned,
 )
-from deploy_tools.deploy_lib.messages import PROG, say, say_error, say_warning
+from deploy_tools.deploy_lib.messages import report, say, say_error, say_warning
 from lib.cli_help import answer_help
 from lib.exit_codes import (
     DEPLOY_BAD_FLAGS,
@@ -61,7 +61,6 @@ from lib.exit_codes import (
     DEPLOY_STALE,
     DEPLOY_TAG_MISS,
 )
-from lib.exit_messages import describe as describe_exit, verdict_line
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_VARS, REPO
 
@@ -166,7 +165,12 @@ def run_changed(plan: Plan, git_diff=None) -> tuple[int, str]:
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         status = _call(
-            deploy_tags.changed, plan.changed_ref, cwd=plan.repo_root, git_diff=git_diff
+            lambda: deploy_tags.changed(
+                plan.changed_ref,
+                cwd=plan.repo_root,
+                git_diff=git_diff,
+                skip=read_owners(plan),
+            )
         )
     return status, out.getvalue().strip()
 
@@ -185,7 +189,7 @@ def expand_shared_roles(plan: Plan) -> None:
     validation would have let through.
 
     A caller Flux applies is left out with a note; a typed one stays for `refuse_flux_owned`.
-    An expansion left empty ends the run with exit 0, because an empty `--tags` is a full run.
+    An expansion left empty ends with nothing to deploy, because an empty `--tags` is a full run.
     """
     if not plan.tags:
         return
@@ -218,7 +222,7 @@ def expand_shared_roles(plan: Plan) -> None:
         say(
             "deploy.sh: no service Ansible deploys runs those roles -- nothing was deployed."
         )
-        raise Refused(DEPLOY_OK)
+        raise NothingToDeploy
     if replaced:
         plan.tags = tags
         plan.args = [*_without_tags(plan.args), f"--tags={plan.tags_csv}"]
@@ -390,7 +394,7 @@ def derive_changed_tags(plan: Plan, args: list[str], tools: Tools) -> list[str]:
     resume point. Exit 4 is the honest answer, and land.sh already retries it.
 
     `deploy_tags.changed` leaves out a tag Flux applies and names it, so a derivation that
-    reached only such tags arrives here empty and ends as exit 0.
+    reached only such tags arrives here empty and ends with nothing to deploy.
     """
     if not plan.changed:
         return args
@@ -400,7 +404,7 @@ def derive_changed_tags(plan: Plan, args: list[str], tools: Tools) -> list[str]:
     if status != 0:
         raise Refused(status)
     if not derived:
-        raise Refused(0)
+        raise NothingToDeploy
     return [*args, "--tags", derived]
 
 
@@ -511,6 +515,18 @@ def prepare_stdio() -> None:
 
 def run(argv: list[str], tools: Tools = REAL_TOOLS) -> int:
     """Resolve and gate one invocation; exec the locked half, or return a refusal's code."""
+    return outcome(argv, tools)[0]
+
+
+def outcome(argv: list[str], tools: Tools = REAL_TOOLS) -> tuple[int, bool]:
+    """`run`'s exit code, and True when it is a 0 that deployed nothing (`NothingToDeploy`)."""
+    try:
+        return _gated_run(argv, tools), False
+    except NothingToDeploy:
+        return DEPLOY_OK, True
+
+
+def _gated_run(argv: list[str], tools: Tools) -> int:
     # Ahead of `git rev-parse` and every gate below it: `--help` must not reach the
     # staleness gate and be answered with exit 4 and a `git rebase` remedy, on the one
     # question an operator asks a script they have not run before.
@@ -553,41 +569,9 @@ def run(argv: list[str], tools: Tools = REAL_TOOLS) -> int:
     return 1  # the exec does not return; reached only when a test replaces it
 
 
-ENTRY_POINT = "scripts/deploy.sh"
-
-
-def report(rc: int, argv: list[str], out=None) -> None:
-    """Print what `rc` means and the run's one-line verdict, both from `lib.exit_codes`.
-
-    The script that exits is the one place that cannot go stale, so the meaning of each code
-    is printed here rather than copied into hooks and docs.
-
-    Args:
-      rc: the code `run` returned.
-      argv: this invocation's arguments, quoted in the verdict's detail so a log holding
-        several runs says which one each verdict belongs to.
-      out: where to write. Resolved at call time rather than bound as a default, so it is
-        `sys.stderr` as replaced by whoever redirected it. stderr, so a caller parsing
-        stdout for a tag list is unaffected.
-
-    A run that reached `--check`, `--dry-run` or `--list-services` never gets here: those
-    exec ansible-playbook or `deploy_tags.py list` in place, and the exit code is that
-    command's rather than one of these.
-    """
-    out = out if out is not None else sys.stderr
-    # Only on a non-zero exit: a successful deploy has already printed a PLAY RECAP, and its
-    # meaning is "it worked".
-    note = describe_exit(ENTRY_POINT, rc) if rc else None
-    if note:
-        print(f"{PROG}: error: {note}", file=out)
-    verdict = verdict_line(ENTRY_POINT, rc, " ".join(argv) or "no arguments")
-    if verdict:
-        print(verdict, file=out)
-
-
 def main(argv: list[str] | None = None) -> int:
     prepare_stdio()
     argv = sys.argv[1:] if argv is None else argv
-    rc = run(argv)
-    report(rc, argv)
+    rc, nothing = outcome(argv)
+    report(rc, argv, nothing=nothing)
     return rc

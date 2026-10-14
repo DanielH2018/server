@@ -21,8 +21,7 @@ WHAT COUNTS AS VALID. The union of:
   - `always`, which Ansible treats specially
 
 Used by scripts/deploy.sh: its front half `deploy_lib/run.py` imports `validate` and `changed`,
-and its locked half and `deploy_ui` parse `list`'s flat stdout (see test_deploy_tags.py).
-`describe` is the human view. `owners.py` says what `changed` does with a tag Flux applies.
+and its locked half and `deploy_ui` parse `list`'s flat stdout; `describe` is the human view.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags.py
 """
@@ -31,7 +30,7 @@ import argparse
 import difflib
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import NamedTuple
 
@@ -422,6 +421,7 @@ def changed(
     ref: str,
     cwd: Path = REPO,
     git_diff: Callable[[str, Path], list[str]] | None = None,
+    skip: Mapping[str, str] | None = None,
 ) -> int:
     """Print, on stdout, the comma-joined --tags value for every service changed vs `ref`.
 
@@ -429,7 +429,8 @@ def changed(
     explaining the derivation goes to stderr. `cwd` is the checkout whose diff is read:
     `deploy_lib/run.py` passes its caller's working tree rather than this module's checkout.
     `git_diff` is the seam for the diff itself; None resolves `_git_diff_paths` at call time,
-    so a test that patches the module attribute still reaches it.
+    so a test that patches the module attribute still reaches it. `skip` is `deploy.sh`'s
+    `owners.flux_owned` map, whose tags are left out; land.sh's CLI call passes none (D2.3).
     """
     from reach import reach
 
@@ -479,7 +480,7 @@ def changed(
         )
 
     # Before the split, so a shared role beside a list the drop empties still exits 3.
-    derived = owners.drop_owned(cs.k8s | cs.services, cwd, "--changed")
+    derived = owners.drop_owned(cs.k8s | cs.services, skip or {}, "--changed")
     host_vars = cwd / HOST_VARS.relative_to(REPO)
     tags, shared = split_shared_roles(derived, host_vars)
     if shared:

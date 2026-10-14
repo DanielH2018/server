@@ -15,6 +15,8 @@ import pytest
 from _deploy_sh_fakes import make_snapshot_repo, run_front_half
 
 from deploy_tools.deploy_lib import run as deploy_run
+from deploy_tools.deploy_lib import tags as deploy_tags
+from deploy_tools.deploy_lib.flags import NothingToDeploy
 from lib.exit_codes import DEPLOY_FLUX_OWNED
 from lib.git_testing import git
 
@@ -106,20 +108,41 @@ def test_an_owner_outside_the_known_values_refuses_is_flagged(tmp_path, monkeypa
 # -- deploy.sh --changed -------------------------------------------------------------------
 
 
+def _diff(roles):
+    paths = [f"ansible/roles/k8s/{role}/templates/deployment.yaml.j2" for role in roles]
+    return lambda ref, cwd: paths
+
+
 def _changed(monkeypatch, repo, roles):
     """The front half with the real `--changed` derivation over a diff touching `roles`."""
-    paths = [f"ansible/roles/k8s/{role}/templates/deployment.yaml.j2" for role in roles]
-    derive = partial(deploy_run.run_changed, git_diff=lambda ref, cwd: paths)
+    derive = partial(deploy_run.run_changed, git_diff=_diff(roles))
     return run_front_half(monkeypatch, repo, ["--changed"], changed=derive)
 
 
 def test_changed_deriving_only_a_flux_tag_ends_as_nothing_to_deploy_is_flagged(
     tmp_path, monkeypatch, capsys
 ):
-    code, calls = _changed(monkeypatch, _repo(tmp_path), ["bento"])
+    repo = _repo(tmp_path)
+    code, calls = _changed(monkeypatch, repo, ["bento"])
     assert code == 0
     assert _deployed(calls) == []
     assert "--changed: left out `bento` is applied by Flux" in capsys.readouterr().err
+    # Exit 0 alone reads as a deploy; the verdict line tells the two apart.
+    plan = deploy_run.Plan(repo_root=repo, changed=True, skip_staleness_check=True)
+    tools = deploy_run.Tools(
+        changed=partial(deploy_run.run_changed, git_diff=_diff(["bento"]))
+    )
+    with pytest.raises(NothingToDeploy):
+        deploy_run.derive_changed_tags(plan, [], tools)
+
+
+def test_landings_changed_call_keeps_a_flux_tag_is_clean(tmp_path, capsys):
+    """land.sh runs `deploy_tags.py changed` with no `skip`; D2.3 owns its split."""
+    status = deploy_tags.changed(
+        "origin/master", cwd=_repo(tmp_path), git_diff=_diff(["bento"])
+    )
+    assert status == 0
+    assert capsys.readouterr().out == "bento\n"
 
 
 def test_changed_keeps_the_ansible_owned_tags_beside_it_is_clean(tmp_path, monkeypatch):
@@ -149,6 +172,8 @@ def test_an_expansion_the_drop_empties_deploys_nothing_is_flagged(
     code, calls = run_front_half(monkeypatch, repo, ["--tags", "helper"])
     assert code == 0
     assert _deployed(calls) == []
+    with pytest.raises(NothingToDeploy):
+        deploy_run.expand_shared_roles(deploy_run.Plan(repo_root=repo, tags=["helper"]))
 
 
 def test_a_typed_flux_tag_beside_its_shared_role_still_refuses_is_flagged(

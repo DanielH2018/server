@@ -63,18 +63,14 @@ def owner_note(tag: str, owner: str) -> str:
     )
 
 
-def drop_owned(tags: Collection[str], repo_root: Path, site: str) -> set[str]:
-    """`tags` less every tag `flux_owned(repo_root)` maps, with one stderr note per tag left out.
+def drop_owned(tags: Collection[str], owners: Mapping[str, str], site: str) -> set[str]:
+    """`tags` less every tag in `owners`, with one stderr note per tag left out.
 
     Args:
         tags: the tags a site derived.
-        repo_root: the checkout whose `containers_list` decides.
+        owners: `flux_owned`'s map.
         site: the flag the note names, such as `--changed`.
-
-    Raises:
-        ValueError: as `flux_owned` does.
     """
-    owners = flux_owned(repo_root)
     for tag in sorted(set(tags) & owners.keys()):
         print(
             f"{PROG}: {site}: left out {owner_note(tag, owners[tag])}.", file=sys.stderr
