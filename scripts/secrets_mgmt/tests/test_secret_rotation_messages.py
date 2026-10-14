@@ -89,7 +89,8 @@ def test_rotate_deploy_of_a_flux_owned_consumer_is_flagged(capsys):
 
 
 def test_rotate_next_line_leaves_out_a_flux_owned_consumer(capsys):
-    """Without `--deploy` the hint must not name a tag `deploy.sh` refuses with exit 5."""
+    """Without `--deploy` the hint must not name a tag `deploy.sh` refuses with exit 5, and
+    must still say to commit: Flux reaches the rotated value only through a committed tree."""
     tools, _ = build_tools(
         Fakes(registry=_reg(_TOKEN), owners={"monitor-bridge": "flux"})
     )
@@ -98,3 +99,4 @@ def test_rotate_next_line_leaves_out_a_flux_owned_consumer(capsys):
     assert sr.cmd_rotate(args, tools) == 0
     out = capsys.readouterr().out
     assert "deploy.sh --tags" not in out, out
+    assert "Next: commit secrets.yml and secret_rotation.yml" in out, out

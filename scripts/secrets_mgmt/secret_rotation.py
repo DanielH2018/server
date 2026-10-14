@@ -412,13 +412,17 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     elif args.deploy:
         if left_out:
             print("  deployed nothing: no consumer is left for Ansible to deploy")
-    elif tags or not left_out:
+    else:
         # deploy.sh deploys HEAD, not the working tree, so the rotated values reach no
-        # consumer until they are committed.
-        print(
-            "\nNext: commit secrets.yml and secret_rotation.yml, then redeploy the "
-            "consumer(s): `./scripts/deploy.sh --tags %s`" % ",".join(sorted(tags))
+        # consumer until they are committed. A consumer Flux applies needs the commit too,
+        # so the commit half stays when every consumer was left out of the redeploy.
+        redeploy = (
+            ", then redeploy the consumer(s): `./scripts/deploy.sh --tags %s`"
+            % ",".join(sorted(tags))
+            if tags
+            else ""
         )
+        print("\nNext: commit secrets.yml and secret_rotation.yml" + redeploy)
     return 0
 
 
