@@ -94,6 +94,12 @@ class Cause(StrEnum):
     rather than formatted from the return code, because `f"deploy-exit-{rc}"` made the set
     unbounded and the board groups by this field. `DEPLOY_EXIT_OTHER` is the bucket for a
     code outside deploy.sh's own contract, which should not happen.
+
+    PROMOTE_* NAME HOW A WAIT ON PROMOTION ENDED (`promote.py land-wait`), for a PR whose tag
+    Flux applies. `promote-held` is DEPLOY_HOLD holding, beside `deploy-failed`.
+    `promote-timeout` is the wait reaching twice the promote timeout. It rides beside
+    `deferred`, as `deploy-exit-4` rides beside `tip-outran-retries`: the promotion applies
+    this PR itself, and a later one may still cover it.
     """
 
     TICK_HELD = "tick-held"
@@ -109,6 +115,8 @@ class Cause(StrEnum):
     DEPLOY_EXIT_NO_HOSTS = "deploy-exit-78"
     DEPLOY_EXIT_LOCK_PLAN_FAILED = "deploy-exit-79"
     DEPLOY_EXIT_OTHER = "deploy-exit-other"
+    PROMOTE_HELD = "promote-held"
+    PROMOTE_TIMEOUT = "promote-timeout"
     INVALID = "invalid-cause"
 
 
@@ -207,6 +215,17 @@ ABANDONED_WATCH_NOTE = (
     "read mid-apply: an apply that fails writes hold_sha only when it returns.\n"
     "  This is NOT the ordinary deferral. A later tick does not clear a hold, and a hold "
     "blocks every session's deploy. Re-run land.sh once the tick has settled."
+)
+
+
+# What a `deferred` with cause `promote-timeout` means, printed by `promotion.wait_on_promotion`.
+# The ordinary deferral is a tick that will cross the PR on its own. This one may not end on its
+# own: a publish refusal leaves no `sha-<commit>` tag to promote. `land_probe` reads the note and
+# reports the landing as `gave-up`, a resume point, as it does for ABANDONED_WATCH_NOTE.
+PROMOTE_TIMEOUT_NOTE = (
+    "  No promotion covered this merge commit in time. This is NOT the ordinary deferral: a "
+    "publish refusal leaves no sha-<commit> tag to promote.\n"
+    "  Read the `promote` workflow's failed `publish` jobs first, then re-run land.sh."
 )
 
 

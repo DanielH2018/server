@@ -148,6 +148,31 @@ both in its body:
 The operator accepted that unattended apply on 2026-10-12, for this role's first landing and
 for later landings that reach `flux` as a reader.
 
+## Handing a service back
+
+A service whose `containers_list` entry sets `owner: flux` is applied by Flux, and every
+Ansible path skips it. Handing it back to Ansible takes two PRs, in this order. Every later
+return of a service to Ansible, and every retirement, follows the same order.
+
+1. **PR H1 sets `owner: released`.** Every Ansible path still skips the service. The next
+   bundle omits `flux/<tag>.yaml`, so the root Kustomization prunes the `<tag>` Kustomization,
+   and `deletionPolicy: Orphan` leaves its objects serving. That bundle reaches the cluster only
+   when `promote` moves `prod`, which needs `DEPLOY_HOLD` to read `none`. A hold is the likeliest
+   reason to hand back. In that case the operator clears it once H1 is on master
+   (**operator-only**).
+1. **Wait for `NotFound`.**
+   `kubectl get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system <tag>` must return
+   `NotFound`.
+1. **PR H2 removes `owner`.** Its body quotes the `NotFound`. Once it merges, the deployer
+   narrows the edit to the service's tag and applies it, and `land.sh` deploys it client-side.
+
+Between H1 and H2 the service has no writer and keeps serving its last spec, so the two
+writers never overlap. `land.sh` refuses to merge H2 while the Kustomization exists
+([docs/landing.md](landing.md#the-merge-wait)). That refusal is the only guard on the merge:
+a merge made outside `land.sh` bypasses it, and the `NotFound` in H2's body is then the only
+check. The Flux labels and `kustomize-controller`'s `managedFields` entry stay on the objects.
+No skip reads them alone, so they need no removal.
+
 ## Reading Flux objects
 
 The read-only identity that plain `kubectl` uses reads every Flux kind. The vendored

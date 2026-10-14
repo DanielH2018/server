@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from deploy_tools.land_lib import land_probe
-from deploy_tools.land_lib.outcome import ABANDONED_WATCH_NOTE
+from deploy_tools.land_lib.outcome import ABANDONED_WATCH_NOTE, PROMOTE_TIMEOUT_NOTE
 
 _SHIM = Path(__file__).resolve().parents[3] / ".claude" / "wait-sources" / "land"
 
@@ -64,6 +64,16 @@ def test_a_deferral_that_abandoned_a_mid_apply_tick_still_gave_up(tmp_path):
     log = landing(
         tmp_path,
         f"VERDICT: deferred (PR #939 — landed, not yet applied)\n{ABANDONED_WATCH_NOTE}\n",
+        rc=75,
+    )
+    assert land_probe.read(log)["state"] == "gave-up"
+
+
+def test_a_deferral_no_promotion_covered_still_gave_up(tmp_path):
+    """A promote timeout may be a publish refusal, which no later tick clears: re-run land.sh."""
+    log = landing(
+        tmp_path,
+        f"{PROMOTE_TIMEOUT_NOTE}\nVERDICT: deferred (PR #939 — no promotion covered it)\n",
         rc=75,
     )
     assert land_probe.read(log)["state"] == "gave-up"
