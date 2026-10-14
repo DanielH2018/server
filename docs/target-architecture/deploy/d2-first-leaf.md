@@ -453,11 +453,11 @@ section calls domain PR 1, 2a, 2b and 3.
   placeholder. Its Kustomization therefore carries no `postBuild`.
 - **D2.7 waits on domain PR 2b, and on no PR of D3.** `homelab-cluster-vars` no longer holds
   `domain`, so bento-pdf needs neither that Secret nor the `cluster-vars` edge.
-- **The source gate holds the edge mechanically.** Before domain PR 2b, `domain` is still a
-  placeholder, so bento-pdf's render holds `${domain}` and its Kustomization carries
-  `postBuild`. No Kustomization in the bundle generates `homelab-cluster-vars`, so D2.6c's
-  source gate refuses the bundle. A D2.7 merged too early publishes nothing, and `land.sh`
-  reports `promote-timeout` (*Risks*).
+- **The host gate holds the edge mechanically.** Before domain PR 2b, `domain` is still a
+  placeholder, so bento-pdf's render holds `${domain}` in its Host rules. D2.6c's host gate
+  accepts only the literal, so it refuses the bundle in every ordering of D2 and D3. The
+  source gate refuses it too, but only until D3.3a publishes `cluster-vars`. A D2.7 merged
+  too early publishes nothing, and `land.sh` reports `promote-timeout` (*Risks*).
 - **Rejected: `homelab-cluster-vars` as the source.** It was the former default. It made
   D2.7 wait on D3.3 and put every routed tag behind decryption, for a value that is not
   secret.
@@ -1544,7 +1544,7 @@ later slices size against:
   two-PR handback under *Rollback*, `land.sh`'s refusal to merge H2 while the Kustomization
   exists, and the `NotFound` line in H2's body. A hand merge of H2 bypasses the refusal.
 - **A D2.7 merged before domain PR 2b publishes nothing.** Until then bento-pdf's render
-  holds `${domain}`, so the source gate refuses the bundle. `prod` stays put, Ansible
+  holds `${domain}`, so the host gate refuses the bundle. `prod` stays put, Ansible
   already skips bento-pdf, and the leaf runs frozen until domain PR 2b lands. Mitigation:
   the D2.7 preconditions name domain PR 2b, and `land.sh`'s `promote-timeout` message names
   the failed `publish` job.

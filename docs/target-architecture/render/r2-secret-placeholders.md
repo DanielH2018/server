@@ -1307,7 +1307,10 @@ PR 4 deletes it.
           precedent prose in `scripts/secrets_mgmt/secret_bearing_host_paths.py` and
           `docs/secret-rotation.md`.
     - **Edges.** D2.7 waits on domain PR 2b, not on D3. If domain PR 2b lands before PR 8,
-      PR 8's observability item is moot, and PR 9 closes the ratchet without it.
+      PR 8's observability item is moot, and PR 9 closes the ratchet without it. If D3.2c
+      writes `ansible/vars/cluster-vars.sops.env` before domain PR 2b lands, the flip
+      changes the placeholder key set, and `cluster_vars.py check` fails until the operator
+      runs `write` again.
 
 ## Verification
 
@@ -1798,7 +1801,7 @@ remains the gate.
    quotes are lost. A second `roundtrip` pass alone could not be the whole answer, and the
    operator's ruling in Open question 13 adds a C3 value rule for standalone uses. D3's
    proof in the cluster covers the controller version.
-1. **Where `domain` comes from before D3, and D2's sub-edge on R2 (C3, D2 and the slice
+1. **Where `domain` comes from, and D2's sub-edge on R2 (C3, D2 and the slice
    index).** D2's leaf, bento-pdf, takes its IngressRoute from
    `ansible/templates/ingressroute-default.yaml.j2`, which imports the `ingressroute.yml.j2`
    macro. The macro builds the Host rule as `hostname ~ '.local.' ~ domain`, and `domain` is
@@ -1808,11 +1811,10 @@ remains the gate.
       C3 *The source of `domain`* records it. The render holds a literal `domain`, and step
       10 plans the move. The former default, `domain` from `homelab-cluster-vars`, is
       rejected, and so is a Secret the operator creates by hand.
-    - *A conflict for D2 and the contract.* D2 *Where `${domain}` comes from before D3*
-      plans a third source, `homelab-identifiers`, which the Ansible-owned flux role renders
-      from SOPS. C3 names it neither as the default nor as the alternative. D2 and the
-      contracts.md maintainer settle it (D2 Open question 5). R2 needs nothing from either
-      choice, because every source substitutes the same `${domain}`.
+    - *A conflict for D2 and the contract.* Resolved. D2's round 10 withdrew the third
+      source, `homelab-identifiers`, which the Ansible-owned flux role rendered from SOPS.
+      The ruling of 2026-10-14 leaves the render with a literal `domain`, and D2 *Where
+      `domain` comes from* states it (D2 Open question 5).
     - *The edge.* The index row for D2 reads `D1, R1, R2`, which waits on all of R2. D2's
       publish needs only PRs 1 and 2: placeholder mode, the per-directory key set, the five
       rules, the `--role` scoping and the pinned-fact refusal. R2 asks for the sub-edge "D2
