@@ -786,6 +786,127 @@ jobs:
           [ "$rc" = 1 ]
           grep -qx 'homepage: IngressRoute/homelab/homepage differs' "$RUNNER_TEMP/rt-map.log"
 
+  # Target slice H3's host packages (docs/target-architecture/host/h3-pi-pilot.md, *CI (builds,
+  # never signs)*, steps 1 to 3 and 6; H3.3b adds the container cases as steps 4 and 5). It
+  # renders every package at the head and at the merge base on every run, with no path filter,
+  # because a group_vars edit can change a render. When no rendered tree differs, the build and
+  # lint steps skip and the job ends green. The job has no `name:`, so GitHub shows it as
+  # `host_packages`, the name later host slices filter `gh run view` on.
+  #
+  # The merge base is HEAD's first parent on every event but a dispatch. On a pull request HEAD
+  # is the merge ref, whose first parent is the base branch tip; on a push it is the previous
+  # master commit. A dispatched branch diffs against its merge base with master, and a dispatch
+  # builds and lints even when nothing differs, as every job here treats a dispatch as a sweep.
+  #
+  # nfpm is fetched and checked against its pinned sha256 on every run, ahead of the diff. A
+  # Renovate PR that bumps the pin changes no render, so with the fetch behind the diff gate a
+  # wrong digest or a 404 URL would reach master green.
+  host_packages:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    env:
+      # The custom manager in renovate.json reads this annotation and moves the version and the
+      # digest in one PR. The digest is the sha256 of nfpm_<version>_Linux_x86_64.tar.gz, which
+      # Renovate reads from the release's checksums.txt.
+      # renovate: datasource=github-release-attachments depName=goreleaser/nfpm
+      NFPM_VERSION: v2.48.0
+      NFPM_SHA256: 6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0  # the merge-base render below needs history
+          persist-credentials: false  # nothing here pushes or fetches
+
+      # The renderer imports no Galaxy collection, so no Galaxy cache.
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      - name: Fetch the pinned nfpm and check its sha256
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl --retry 3 -fsSLo "$RUNNER_TEMP/nfpm.tar.gz" \
+            "https://github.com/goreleaser/nfpm/releases/download/$NFPM_VERSION/nfpm_${NFPM_VERSION#v}_Linux_x86_64.tar.gz"
+          echo "$NFPM_SHA256  $RUNNER_TEMP/nfpm.tar.gz" | sha256sum -c --strict
+          tar -xzf "$RUNNER_TEMP/nfpm.tar.gz" -C "$RUNNER_TEMP/bin" nfpm
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/bin/nfpm" --version
+
+      # Each side renders with the renderer in its own tree, so a renderer change that alters a
+      # render shows as a diff. The base tree is a worktree at the merge base.
+      - name: Render every host package at the head and at the merge base
+        id: render
+        env:
+          EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = workflow_dispatch ]; then
+            base=$(git merge-base origin/master HEAD)
+          else
+            base=$(git rev-parse HEAD^1)
+          fi
+          echo "Merge base: $base"
+          git worktree add --detach "$RUNNER_TEMP/base-tree" "$base"
+          mkdir -p "$RUNNER_TEMP/render/base" "$RUNNER_TEMP/render/head"
+          uv run python scripts/validate/host_packages.py render \
+            --tree "$RUNNER_TEMP/base-tree" --out "$RUNNER_TEMP/render/base"
+          uv run python scripts/validate/host_packages.py render \
+            --tree . --out "$RUNNER_TEMP/render/head"
+          uv run python scripts/validate/host_packages.py diff \
+            "$RUNNER_TEMP/render/base" "$RUNNER_TEMP/render/head" \
+            --summary "$GITHUB_STEP_SUMMARY" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+      # The version is H3's *Package rules* shape, `0.<first-parent count>+g<12 hex>`, taken
+      # from each side's own commit, as the builder takes it from the commit it builds.
+      - name: Build both renders with the pinned nfpm
+        if: github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+        env:
+          BASE_SHA: ${{ steps.render.outputs.base }}
+        run: |
+          set -euo pipefail
+          for side in base head; do
+            sha=$BASE_SHA
+            [ "$side" = head ] && sha=$(git rev-parse HEAD)
+            HOMELAB_VERSION="0.$(git rev-list --count --first-parent "$sha")+g$(git rev-parse "$sha" | cut -c1-12)"
+            export HOMELAB_VERSION
+            mkdir -p "$RUNNER_TEMP/debs/$side"
+            find "$RUNNER_TEMP/render/$side" -name nfpm.yaml -print0 | sort -z |
+              while IFS= read -r -d '' spec; do
+                (cd "$(dirname "$spec")" &&
+                  nfpm package --config nfpm.yaml --packager deb --target "$RUNNER_TEMP/debs/$side/")
+              done
+          done
+          find "$RUNNER_TEMP/debs" -name '*.deb' -print0 | sort -z |
+            while IFS= read -r -d '' deb; do
+              echo "== $deb"
+              dpkg-deb --field "$deb" Package Version Depends
+              dpkg-deb --contents "$deb"
+            done
+
+      - name: Run the type-config and maintainer-script lints over both renders and builds
+        if: github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+        run: |
+          uv run python scripts/validate/host_packages.py lint \
+            "$RUNNER_TEMP/render" "$RUNNER_TEMP/debs"
+
+      # The lints' red proof on the pinned nfpm: a package built from the red fixture carries a
+      # conffile and a postinst line outside the whitelist, and the lint must flag both.
+      - name: Red-proof the lints on a package built from the red fixture
+        if: github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/red"
+          (cd scripts/validate/tests/fixtures/host_packages/red &&
+            nfpm package --config nfpm.yaml --packager deb --target "$RUNNER_TEMP/red/")
+          rc=0
+          uv run python scripts/validate/host_packages.py lint "$RUNNER_TEMP/red" \
+            2> "$RUNNER_TEMP/red.log" || rc=$?
+          cat "$RUNNER_TEMP/red.log"
+          echo "lint of the red fixture exited $rc"
+          [ "$rc" = 1 ]
+          grep -q 'conffiles lists /etc/homelab-red.conf' "$RUNNER_TEMP/red.log"
+          grep -qF "postinst:2: 'rm -rf /etc/foo'" "$RUNNER_TEMP/red.log"
+
   # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
   # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name
   # lives on this gate rather than on either half above. `if: always()` because a job with
@@ -795,24 +916,26 @@ jobs:
   prek:
     name: prek (lint + validate + tests + secrets)
     runs-on: ubuntu-26.04
-    needs: [hooks, pytest, ansible_lint, deck_mod, flux_roundtrip]
+    needs: [hooks, pytest, ansible_lint, deck_mod, flux_roundtrip, host_packages]
     if: always()
     steps:
       # Every dependency must be named in an expression here, not merely in `needs` above: a
       # `needs` entry this step does not read is WAITED for and never CHECKED, so the required
       # context would pass green with that job red. `test_every_ci_job_is_gated.py` enforces it.
-      - name: Require all five halves to have succeeded
+      - name: Require all six halves to have succeeded
         env:
           HOOKS: ${{ needs.hooks.result }}
           PYTEST: ${{ needs.pytest.result }}
           ANSIBLE_LINT: ${{ needs.ansible_lint.result }}
           DECK_MOD: ${{ needs.deck_mod.result }}
           FLUX_ROUNDTRIP: ${{ needs.flux_roundtrip.result }}
+          HOST_PACKAGES: ${{ needs.host_packages.result }}
         run: |
           echo "hooks=$HOOKS pytest=$PYTEST ansible-lint=$ANSIBLE_LINT deck-mod=$DECK_MOD" \
-            "flux-roundtrip=$FLUX_ROUNDTRIP"
+            "flux-roundtrip=$FLUX_ROUNDTRIP host-packages=$HOST_PACKAGES"
           [ "$HOOKS" = success ] && [ "$PYTEST" = success ] && [ "$ANSIBLE_LINT" = success ] \
-            && [ "$DECK_MOD" = success ] && [ "$FLUX_ROUNDTRIP" = success ]
+            && [ "$DECK_MOD" = success ] && [ "$FLUX_ROUNDTRIP" = success ] \
+            && [ "$HOST_PACKAGES" = success ]
 
   renovate-config:
     name: renovate config validator

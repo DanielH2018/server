@@ -1,0 +1,136 @@
+"""The host-package checks CI's `host_packages` job runs: render, diff and the two lints.
+
+The maintainer-script lint's line cases live beside the scripts it reads, in
+`hosts/lib/tests/test_maintainer_scripts.py`. The `.deb` cases here build their packages with
+`dpkg-deb --build`, because the pinned nfpm exists only inside the CI job, whose red-proof step
+builds `fixtures/host_packages/red/` with it.
+
+Run: uv run pytest scripts/validate/tests/test_validate_host_packages.py
+"""
+
+from pathlib import Path
+
+import pytest
+from lib import proc_testing
+from lib.repo_paths import REPO
+from validate import host_packages
+
+RED = Path(__file__).parent / "fixtures" / "host_packages" / "red"
+
+
+def _deb(tmp_path: Path, scripts: dict[str, str], conffiles: str = "") -> Path:
+    """A minimal `.deb` whose control archive carries `scripts` and `conffiles`."""
+    root = tmp_path / "pkg"
+    control = root / "DEBIAN"
+    control.mkdir(parents=True)
+    # dpkg-deb refuses a control directory the session umask left group-writable.
+    control.chmod(0o755)
+    (control / "control").write_text(
+        "Package: homelab-fixture\nVersion: 1.0\nArchitecture: all\n"
+        "Maintainer: homelab\nDescription: fixture\n"
+    )
+    (root / "etc").mkdir()
+    (root / "etc" / "fixture.conf").write_text("x\n")
+    if conffiles:
+        (control / "conffiles").write_text(conffiles)
+    for name, text in scripts.items():
+        proc_testing.write_exec(control / name, text)
+    deb = tmp_path / "debs" / "homelab-fixture.deb"
+    deb.parent.mkdir()
+    proc_testing.run(
+        ["dpkg-deb", "--root-owner-group", "--build", str(root), str(deb)], check=True
+    )
+    return deb
+
+
+def test_every_shipped_render_is_clean(tmp_path):
+    assert host_packages.render(REPO, tmp_path) == 0
+    # Named member: a glob that stopped finding the specs would lint nothing and pass.
+    assert (tmp_path / "packages" / "homelab-updater" / "nfpm.yaml").is_file()
+    assert host_packages.lint([tmp_path]) == []
+
+
+def test_a_tree_without_hosts_renders_no_package(tmp_path):
+    assert host_packages.render(tmp_path, tmp_path / "out") == 0
+    assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("kind", ["config|noreplace", "config"])
+def test_a_config_type_is_flagged(kind):
+    spec = (RED / "nfpm.yaml").read_text().replace("config|noreplace", kind)
+    assert host_packages.lint_config_types(spec) == [
+        f"/etc/homelab-red.conf: type {kind!r} ships a conffile; "
+        "host packages ship plain files only"
+    ]
+
+
+def test_a_deb_with_plain_files_and_a_whitelisted_postinst_is_clean(tmp_path):
+    postinst = "#!/bin/sh\nsystemctl daemon-reload || true\nexit 0\n"
+    assert host_packages.lint_deb(_deb(tmp_path, {"postinst": postinst})) == []
+
+
+def test_a_deb_with_a_conffile_and_a_bad_postinst_is_flagged(tmp_path):
+    deb = _deb(
+        tmp_path,
+        {"postinst": (RED / "scripts" / "postinst").read_text()},
+        conffiles="/etc/fixture.conf\n",
+    )
+    assert host_packages.lint_deb(deb) == [
+        "conffiles lists /etc/fixture.conf; host packages ship plain files only",
+        "postinst:2: 'rm -rf /etc/foo'",
+    ]
+
+
+def test_nothing_to_lint_is_flagged(tmp_path):
+    assert host_packages.lint([tmp_path]) == [
+        f"[FAIL] {tmp_path}: no nfpm.yaml or .deb to lint"
+    ]
+
+
+def _write(directory: Path, files: dict[str, tuple[str, int]]) -> None:
+    for name, (text, mode) in files.items():
+        path = directory / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        path.chmod(mode)
+
+
+def test_identical_renders_have_no_diff(tmp_path):
+    files = {"nfpm.yaml": ("name: a\n", 0o644), "root/etc/a": ("a\n", 0o644)}
+    _write(tmp_path / "base" / "packages" / "a", files)
+    _write(tmp_path / "head" / "packages" / "a", files)
+    assert host_packages.diff(tmp_path / "base", tmp_path / "head") == []
+
+
+def test_each_file_change_is_listed(tmp_path):
+    _write(
+        tmp_path / "base" / "packages" / "a",
+        {
+            "nfpm.yaml": ("name: a\n", 0o644),
+            "root/edited": ("old\n", 0o644),
+            "root/dropped": ("x\n", 0o644),
+            "root/chmodded": ("x\n", 0o644),
+        },
+    )
+    _write(tmp_path / "base" / "packages" / "gone", {"nfpm.yaml": ("name: g\n", 0o644)})
+    _write(
+        tmp_path / "head" / "packages" / "a",
+        {
+            "nfpm.yaml": ("name: a\n", 0o644),
+            "root/edited": ("new\n", 0o644),
+            "root/chmodded": ("x\n", 0o755),
+            "root/added": ("x\n", 0o644),
+        },
+    )
+    _write(
+        tmp_path / "head" / "hosts" / "daniel-pi", {"nfpm.yaml": ("name: p\n", 0o644)}
+    )
+
+    assert host_packages.diff(tmp_path / "base", tmp_path / "head") == [
+        "- `hosts/daniel-pi`: new, 1 files",
+        "- `packages/a/root/added`: added",
+        "- `packages/a/root/chmodded`: mode 0644 -> 0755",
+        "- `packages/a/root/dropped`: removed",
+        "- `packages/a/root/edited`: content changed",
+        "- `packages/gone`: dropped",
+    ]

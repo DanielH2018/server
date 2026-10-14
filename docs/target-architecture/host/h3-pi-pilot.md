@@ -6,6 +6,8 @@ PR H3.1, the renderer's host and package modes: [#4911](https://github.com/Danie
 PR H3.2a, the updater package: [#4917](https://github.com/DanielH2018/server/pull/4917).
 PR H3.2b, the reconcile unit: [#4927](https://github.com/DanielH2018/server/pull/4927).
 PR H3.2c, the censuses and the unit validator: [#4935](https://github.com/DanielH2018/server/pull/4935).
+PR H3.2d, the manifest emitter: [#4944](https://github.com/DanielH2018/server/pull/4944).
+PR H3.3a, the `host_packages` CI job skeleton: [#4974](https://github.com/DanielH2018/server/pull/4974).
 
 Depends on: R1
 Unblocks: H4, H5
@@ -422,7 +424,9 @@ and every host slice applies it.
       `systemctl --no-block start homelab-reconcile.service || true` and `exit 0`.
     - `prerm` stops `homelab-*` units only when `$1` is `remove`.
     - `preinst` refuses a hostname mismatch and does nothing else.
-    - A lint in `hosts/lib/tests/` holds every script to a whitelist of line shapes. The
+    - A lint, `lint_script` in `scripts/validate/host_packages.py`, holds every script to a
+      whitelist of line shapes. CI runs it over each build, and
+      `hosts/lib/tests/test_maintainer_scripts.py` runs it over every shipped render. The
       whitelist admits no `dpkg-divert` line. H4 ships no diversion: its round-1 review
       replaced the two it planned with a `NUT_CONFPATH` drop-in. H7's *In-place edits* is the
       first slice that diverts a file. That slice defines the `preinst` and `postrm`
@@ -1104,6 +1108,9 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
 + scripts/renderer/renderer_lib/host_manifest.py       (units, legacy and manifest.json, H3.2d)
   scripts/validate/shell_templates.py                  (+ hosts/components/*/templates/)
   scripts/validate/unit_templates.py                   (+ every unit and drop-in the host renderer emits)
++ scripts/validate/host_packages.py                    (H3.3a: render, diff and both lints the job runs)
++ scripts/validate/tests/test_validate_host_packages.py
++ scripts/validate/tests/fixtures/host_packages/red/   (the lints' red fixture, built in CI too)
   prek.toml                                            (unit and shell selectors gain hosts/)
   scripts/deploy_tools/land_lib/pipeline.py            (host candidate in resolve, render after CI, host wait step)
   scripts/deploy_tools/land_lib/classify.py            (shortcut reads the host candidate)
@@ -2158,8 +2165,12 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - the two-writer census gains the legacy join and its red fixture;
     - `docs/homelab-render.md`'s host-mode section documents `units:`, `legacy:` and the
       manifest.
-- **H3.3a:** `KNOWN_JOBS` in `ansible/tests/repo/test_every_ci_job_is_gated.py` gains
-  `host_packages`.
+- **H3.3a:**
+    - `KNOWN_JOBS` in `ansible/tests/repo/test_every_ci_job_is_gated.py` gains
+      `host_packages`;
+    - `scripts/validate/tests/test_validate_host_packages.py` holds the `type: config` pair,
+      the `.deb` lint pair and the render diff, and `test_maintainer_scripts.py` imports the
+      whitelist from `scripts/validate/host_packages.py`.
 - **H3.3b:** none beyond the job, whose cases are the tests on both release legs, the
   stopped-server case included.
 - **H3.4a:** the `homelab_builder` role `CLAUDE.md`, whose glance block `gen_role_glance.py`
