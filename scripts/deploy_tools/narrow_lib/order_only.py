@@ -40,10 +40,12 @@ from lib.git import git
 # Running the code imports it, which `filters.py` never does; here both ends are commits the
 # deploy itself imports, under the same interpreter. A side effect outside the returned entries
 # that leaves the process, such as a file write, an environment change or a child process, ends
-# the run through the runner's audit hook (#4846). The gaps taken: a branch HEAD's data does not
-# exercise, a write into another imported module's state, which no audit event reports and
-# which persists in the controller process in a deploy (#4995), and a role whose bytes depend
-# on list order, which the render proof the caller still requires catches.
+# the run through the runner's audit hook, and a path that appears under the temp tree fails
+# it too (#4846). The gaps taken: a branch HEAD's data does not exercise, a write into another
+# imported module's state, which no audit event reports and which persists in the controller
+# process in a deploy (#4995), a call that raises no audit event and creates a file at an
+# absolute path outside the temp tree (#4999), and a role whose bytes depend on list order,
+# which the render proof the caller still requires catches.
 ORDER_ONLY_PLUGINS = frozenset({"ansible/filter_plugins/toposort.py"})
 
 _PLUGINS = "ansible/filter_plugins"
@@ -55,40 +57,47 @@ _TIMEOUT = 60
 # as Ansible does, so a re-pointed registration is the code that runs.
 #
 # An audit hook, installed before the import so the plugin's module-level code runs under it
-# too, ends the process on the first event that changes state outside the interpreter (#4846):
-# an `open` whose flags write or create, a filesystem, cwd or environment mutation, a child
-# process, a socket, or a foreign call. It exits with `os._exit` rather than raising, because
-# a raise lands in the plugin's frame, where an `except` can swallow it. `_run` reads the
-# nonzero exit as doubt. The hook calls nothing that is itself audited.
+# too, ends the process on any event outside the allowlist below, and on an `open` whose flags
+# write or create (#4846). The allowlist is every event the real chain raises; an event it
+# misses, after an interpreter or Ansible upgrade, reads as doubt and keeps the line rather than
+# discharging it. An allowlist, because each denylist review found another mutating event.
+#
+# The plugin is imported after the hook and can reach anything `__main__`, `os` or `builtins`
+# holds, so the hook reads nothing from them: `_install` binds the exit function and the tables
+# as closure cells, and is deleted before the import. Only the interpreter's hook list then
+# refers to the hook, and the `gc` events that would walk to it are off the allowlist. The hook exits with
+# `os._exit` rather than raising, because a raise lands in the plugin's frame, where an `except`
+# can swallow it. `_run` reads the nonzero exit as doubt.
 _RUNNER = """
 import copy, json, os, sys
 
-_WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
-_MUTATING_OS = frozenset(
-    "os." + name
-    for name in (
-        "add_dll_directory chdir chflags chmod chown exec fork forkpty kill killpg link lockf "
-        "mkdir posix_spawn putenv remove removexattr rename rmdir setxattr spawn startfile "
-        "symlink system truncate unsetenv utime"
-    ).split()
+
+def _install(exit_, write_flags, allowed):
+    def audit(event, args):
+        try:
+            if event == "open":
+                if args[2] & write_flags:
+                    exit_(86)
+            elif event not in allowed:
+                exit_(86)
+        except BaseException:
+            exit_(86)
+
+    sys.addaudithook(audit)
+
+
+_install(
+    os._exit,
+    os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC,
+    frozenset({
+        "builtins.id", "compile", "exec", "function.__new__", "import", "marshal.loads",
+        "object.__getattr__", "object.__setattr__", "os.listdir", "socket.getaddrinfo",
+        "sys._getframemodulename",
+        # Interpreter shutdown, after the result is printed.
+        "cpython.PyInterpreterState_Clear", "cpython._PySys_ClearAuditHooks",
+    }),
 )
-_MUTATING_SOCKET = frozenset({"socket.bind", "socket.connect", "socket.sendmsg", "socket.sendto"})
-_MUTATING_PREFIXES = (
-    "shutil.", "subprocess.", "ctypes.", "fcntl.", "mmap.", "pty.", "sqlite3.", "tempfile.",
-    "webbrowser.", "ftplib.", "smtplib.", "http.client.", "urllib.",
-)
-
-
-def _audit(event, args):
-    if event == "open":
-        flags = args[2] if len(args) > 2 else 0
-        if isinstance(flags, int) and flags & _WRITE_FLAGS:
-            os._exit(86)
-    elif event in _MUTATING_OS or event in _MUTATING_SOCKET or event.startswith(_MUTATING_PREFIXES):
-        os._exit(86)
-
-
-sys.addaudithook(_audit)
+del _install
 sys.path.insert(0, sys.argv[1])
 import toposort
 f = toposort.FilterModule().filters()
@@ -118,8 +127,8 @@ def _run(repo: Path, plugins: str, head: str) -> tuple[dict, bool] | None:
     """The chain's canonical outputs with the plugin tree `plugins` on HEAD's data, or None.
 
     None on any doubt: data that will not load or serialize, an import error, an exception,
-    a timeout, a side effect the runner's audit hook reports, or output that is not the
-    expected JSON.
+    a timeout, a side effect the runner's audit hook reports, a path that appeared under the
+    temp tree during the run, or output that is not the expected JSON.
     """
     try:
         host_vars = git(
@@ -128,18 +137,24 @@ def _run(repo: Path, plugins: str, head: str) -> tuple[dict, bool] | None:
         entries = yaml_fast.safe_load(host_vars.stdout)["containers_list"]
         data = json.dumps(entries)
         with tempfile.TemporaryDirectory(prefix="order-only-") as tmp:
-            code, ansible = Path(tmp, "plugins"), Path(tmp, "ansible")
+            root = Path(tmp)
+            code, ansible, cwd = root / "plugins", root / "ansible", root / "cwd"
             _extract(repo, plugins, code)
             _extract(repo, f"{head}:{_ROLES}", ansible / "roles")
+            cwd.mkdir()
+            before = set(root.rglob("*"))
             r = subprocess.run(
                 [sys.executable, "-I", "-B", "-c", _RUNNER, str(code), str(ansible)],
-                cwd=tmp,
+                cwd=cwd,
                 input=data,
                 capture_output=True,
                 text=True,
                 timeout=_TIMEOUT,
             )
-        if r.returncode != 0:
+            # Some calls create a file and raise no audit event (`os.mkfifo`, `os.mknod`), so a
+            # relative path the hook cannot see still shows up here (#4846).
+            created = set(root.rglob("*")) - before
+        if r.returncode != 0 or created:
             return None
         result = json.loads(r.stdout)
         return result["out"], result["input_unchanged"] is True

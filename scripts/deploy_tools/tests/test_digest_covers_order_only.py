@@ -221,8 +221,32 @@ def test_a_dep_map_that_writes_a_file_keeps_the_line(tree, body):  # noqa: F811
         ("import os", "os.putenv('MARKER', '1')"),
         ("import subprocess", "subprocess.run(['true'])"),
         ("open('marker', 'w').write('x')", ""),
+        ("import os", "os.mkfifo('marker')"),
+        ("import os\nimport stat", "os.mknod('marker', stat.S_IFREG | 0o600)"),
+        # Rebinding what the hook might look up at call time, before the write.
+        (
+            "import os\n\nos._exit = lambda code: None",
+            "open('marker', 'w').write('x')",
+        ),
+        (
+            "import __main__\n\n__main__._WRITE_FLAGS = 0",
+            "open('marker', 'w').write('x')",
+        ),
+        # Walking the heap to reach the hook's closure.
+        ("import gc", "gc.get_objects()"),
     ],
-    ids=["swallowed-write", "mkdir", "putenv", "subprocess", "module-level-write"],
+    ids=[
+        "swallowed-write",
+        "mkdir",
+        "putenv",
+        "subprocess",
+        "module-level-write",
+        "mkfifo",
+        "mknod",
+        "rebinds-os-exit",
+        "rebinds-runner-globals",
+        "gc-walk",
+    ],
 )
 def test_a_dep_map_with_another_side_effect_keeps_the_line(tree, helper, body):  # noqa: F811
     """The runner's audit hook ends the run on each of these, even inside an `except` (#4846)."""
