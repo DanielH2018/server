@@ -931,12 +931,14 @@ concurrency group on push. It needs no secrets, and it does these steps:
    repository and none named after daniel-box's address. Until H3.6 ships the Pi package,
    every case installs a fixture `homelab-daniel-pi` of the same shape, rendered with the
    real reconcile component from `hosts/lib/tests/container/fixture/`. The cases are:
-    - after the first install, stop the local server, run the updater, and assert that it
-      exits non-zero and leaves `/var/lib/homelab-updater/last_success` and the success
-      timestamp in `homelab_host.prom` unchanged. The case goes red when step 3 lets a
-      failed fetch through, whether apt exits 0 or the updater ignores its exit. Every other
-      case is its green half, so `--error-on=any` must also pass a fetch from the unsigned
-      local repository;
+    - after the upgrade to the head version, stop the local server, run the head version's
+      updater, and assert that it exits non-zero and leaves
+      `/var/lib/homelab-updater/last_success` and the success timestamp in
+      `homelab_host.prom` unchanged. The case goes red when step 3 lets a failed fetch
+      through, whether apt exits 0 or the updater ignores its exit. It runs after the
+      upgrade because the base version's updater is master's, which a change under review
+      does not reach. Every other case is its green half, so `--error-on=any` must also
+      pass a fetch from the unsigned local repository;
     - install the base version, and assert that `homelab_host.prom` exists in the textfile
       directory with mode 0644 after that first run;
     - upgrade to the head version, and assert that every dropped file is gone and every

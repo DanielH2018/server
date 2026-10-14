@@ -8,10 +8,10 @@ packages from an unsigned repository with `python3 -m http.server` on 127.0.0.1:
 container, and drives `homelab-updater` through these cases:
 
   * install the base version on a bare container;
-  * stop the server, and the updater exits non-zero with `last_success` unadvanced. This is the
-    red proof of step 3's `--error-on=any`: it fails when the updater lets a failed fetch
-    through;
   * upgrade to the head version, which drops a unit and a file and adds `Depends: tree`;
+  * stop the server, and the head version's updater exits non-zero with `last_success`
+    unadvanced. This is the red proof of step 3's `--error-on=any`: it fails when the
+    updater lets a failed fetch through;
   * upgrade homelab-updater under a running updater, which finishes with no restart. The new
     version also ships a keyring-shaped file at H3.4c's path, which nothing reads;
   * kill the updater's cgroup during an unpack, then hold dpkg's frontend lock over the next
@@ -241,6 +241,8 @@ class Cases:
                 expect(c.active(unit) == "active", f"reconcile did not start {unit}")
 
         def stopped_server() -> None:
+            # The red proof reaches a change to step 3 only through the head's updater.
+            self.expect_installed(c, "updater-head", "host-head")
             # last_success holds whole seconds, so a run inside the same second as the
             # first would write the same value and hide a fetch let through.
             time.sleep(1.1)
@@ -366,8 +368,10 @@ class Cases:
             expect(kept == "active", f"the reinstall left the kept unit {kept}")
 
         self.case(c, "install the base version", install_base)
-        self.case(c, "the stopped server", stopped_server, fetch=False)
         self.case(c, "upgrade to the head version", upgrade)
+        # After the upgrade, so the run is the head build's updater. The base build's is
+        # master's, which a pull request's change to step 3 does not reach.
+        self.case(c, "the stopped server", stopped_server, fetch=False)
         self.case(c, "upgrade homelab-updater under a running updater", unit_change)
         self.case(c, "kill the updater during the unpack", kill_during_unpack)
         self.case(c, "dpkg's frontend lock held", lock_held, fetch=False)
