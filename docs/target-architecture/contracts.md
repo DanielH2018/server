@@ -14,7 +14,7 @@ numbers.
 ## Slice index and dependency edges
 
 The *Depends on* column names the slices a slice waits on. A sub-edge such as "D2.7 also
-D3.3" says that one PR waits on one PR of another slice, and the slice's other PRs do not.
+D4.0" says that one PR waits on one PR of another slice, and the slice's other PRs do not.
 Sub-edges keep the graph acyclic where two slices interleave: D2 with D3 and D4, D5 with H2,
 and D5 with M6. A sub-edge marked *live* waits until the earlier PR is deployed, not only
 merged.
@@ -26,7 +26,7 @@ merged.
 | R3 | Remove the pre-apply live reads | R1 |
 | R4 | Delete the k8s Ansible path | D6 |
 | D1 | Flux installed, owning nothing | —. D1.6b, the `flux` rule group, also M1 |
-| D2 | One stateless leaf end to end on production | D1, R1, and R2's PRs 1 and 2 (placeholder mode and the five rules). D2.6d also M1. D2.7 also D4.0, M1, and D3.3 under C3's default source for `domain` |
+| D2 | One stateless leaf end to end on production | D1, R1, and R2's PRs 1 and 2 (placeholder mode and the five rules). D2.6d also M1. D2.7 also D4.0, M1, and PR 2b of R2's *Publish `domain`* item (C3) |
 | D3 | Secrets through Flux | D2, R2. D3.0 to D3.3 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census |
 | D4 | Ordering (`dependsOn`, deferred applies) | D2. D4.0 needs nothing. D4.9 also D1.6b and M1 |
 | D5 | Bulk move | D3, D4, R3, M1, M2. traefik's flip and the flux PR also H1.1a, and the flux PR also H1.7b. Wave D also H2.1, and the H2 family PR of each role H2 moves. The PR that flips the last Ansible-owned stateless leaf also M6's B-1e |
@@ -81,14 +81,15 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
 - **Only placeholder mode publishes.** The publish job runs `cluster` without
   `--secret-stubs`, and its command says so. It refuses a bundle in which a Kustomization
   without `postBuild` has a directory that holds `${<key>}` for a key name of `secrets.yml`.
-  That refusal is the check that stops a route rendered without its real `domain` before
-  `prod` moves.
+  That refusal is the check that stops an unsubstituted secret placeholder before `prod`
+  moves.
 - **Cluster output:**
   - `DIR/cluster/<tag>/` holds the role's manifests and a `kustomization.yaml` that lists them.
   - `DIR/cluster/<tag>-deferred/` holds the files the role passes as
     `manifests_deferred_files` (R1).
   - `DIR/flux/<tag>.yaml` holds the Kustomization `<tag>` and its suffixed kinds, see C3.
   - `DIR/flux/<name>.yaml` and `DIR/cluster/<name>/` hold a shared kind, see C3.
+  - `DIR/flux/kustomization.yaml` lists every file in `DIR/flux/`.
   - From D5.1a1, `DIR/cluster/<tag>-snapshot/` and `DIR/cluster/<tag>-verify/`.
   - From D2's first publishing PR, `DIR/digests.json` at the bundle root. No Kustomization's
     path reaches it. It maps each deploy tag and each member of `SHARED_KINDS` to two
@@ -260,7 +261,8 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   `flux/<name>` like a tag. Each member also needs a footprint rule in the renderer that
   names the deploy tags its files count for (C1 `digests.json`), and a census test fails the
   PR that adds a member without one (D2).
-- **Reserved names.** The render fails on a deploy tag that equals a member of `SHARED_KINDS`
+- **Reserved names.** The render fails on a deploy tag named `homelab`, the root
+  Kustomization's name. It also fails on a deploy tag that equals a member of `SHARED_KINDS`
   or ends in `-deferred`. D5.1a1 reserves `-snapshot`, `-verify`, `soak` and
   `homelab-namespace` too, so no deploy tag takes `soak` or `homelab-namespace` before its
   kind joins the set.
@@ -303,13 +305,16 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   From D3 on, `cluster_vars.py write` enforces it too. Both fail closed and print key names
   only (R2, D3). A key whose real value breaks the rule leaves the placeholder path for a
   dedicated SOPS manifest, as `mullvad_account` does (R2 PR 7b).
-- **The source of `domain` before D3.** `homelab-cluster-vars` first exists at D3.3. D2's leaf
-  references one variable, `domain`, in its IngressRoute's Host rule, so it cannot flip before
-  that key has a source.
-  - **Default:** D2.7 waits on D3.3, and `domain` comes from `homelab-cluster-vars` like every
-    other key. No plaintext reaches git.
-  - **Alternative:** the operator rules that `domain` may be published, and the renderer
-    writes it as a literal (**operator-only**). D2.7 then needs no part of D3.
+- **The source of `domain`.** The operator ruled on 2026-10-14 that `domain` is published
+  (*Operator ruling (2026-10-14)*). The renderer writes `domain` as a literal.
+  - `domain` stays an Ansible variable, defined in `ansible/inventory/group_vars/all.yml`, so
+    it can change in one place.
+  - No render substitutes `domain`, so a route needs neither `homelab-cluster-vars` nor the
+    `cluster-vars` edge.
+  - D2.7 waits on PR 2b of R2's *Publish `domain`* item, which makes `domain` a published key.
+    D2.7 waits on no PR of D3.
+  - **Rejected:** `domain` from `homelab-cluster-vars`, the former default. It made D2.7 wait
+    on D3.3 and put every routed tag behind decryption, for a value that is not secret.
   - **Rejected:** a Secret the operator creates by hand. D3 would have to adopt an object that
     no commit describes, and D3.5 shows that Flux removes keys only for the field managers it
     takes over.
@@ -318,6 +323,9 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
 
 - **Ownership flag.** A `containers_list` entry gains `owner: flux` in the same PR that adds
   its Kustomization.
+- **Values of `owner`.** `owner` takes `flux` or `released`. `released` leaves the tag out of
+  the bundle while every Ansible path still skips it. A handback is two PRs: `released`, then
+  the removal of `owner` once the tag's Kustomization reads `NotFound`.
 - **What skips a flux-owned entry.** In that same PR, the Ansible k8s play, `deploy.sh`, the
   GitOps deployer's k8s arms and `land.sh` all skip it. No commit may leave a role reachable
   by both Ansible and Flux.
@@ -530,8 +538,6 @@ request leaves this list and the round's *Review log* entry names it.
 
 ### Requests on C1
 
-- **The flux directory's kustomization** (D2 Open question 6). *Cluster output* gains
-  "`DIR/flux/kustomization.yaml` lists every file in `DIR/flux/`." Gate: before D2.6b merges.
 - **A shared-only mode** (D3 Open question 6). *Modes* gains `cluster --out DIR
   --shared-only`, which writes the shared kinds and the root and no tag, for a publish with
   no flux-owned tag. Gate: before D3.3a merges.
@@ -616,8 +622,6 @@ request leaves this list and the round's *Review log* entry names it.
   so, *Per-tag Kustomizations* gains `wait: false` plus generated `healthChecks`, or a
   shorter `timeout`, for a tag outside the changed set. No gate is named until the trigger
   fires.
-- **The root's name is reserved** (D2 Open question 6). The render fails on a deploy tag
-  named `homelab`, the root Kustomization's name. Gate: before D2.6b merges.
 - **Deferred applies by variable** (D4 Open question 7). *Per-tag Kustomizations* reads "a
   role that passes `manifests_deferred_files` gets `<tag>-deferred` once it is flux-owned",
   because D1 adds the flux role as a fourth caller, and *Reserved names* says that D4.2
@@ -651,14 +655,6 @@ request leaves this list and the round's *Review log* entry names it.
 - **The deletion policy's kept set** (D6 Open question 7). If D6.7 merges, it switches every
   `<tag>` except `flux`. `flux`, every `<tag>-deferred` and every shared kind keep `Orphan`.
   Gate: before D6.7 merges.
-
-### Requests on C4
-
-- **A second `owner` value for the handback** (D2 Open question 7). "`owner` takes `flux` or
-  `released`. `released` leaves the tag out of the bundle while every Ansible path still
-  skips it. A handback is two PRs: `released`, then the removal of `owner` once the tag's
-  Kustomization reads `NotFound`." Gate: before D2.7 merges, because D2.7's rollback relies
-  on it.
 
 ### Requests on C5
 
@@ -748,7 +744,7 @@ All are fixed here, and each slice-side half is handed to its slice. Refuted: no
 
 - *Slice index.* An explanation of sub-edges. R3 is renamed "Remove the pre-apply live reads"
   (R3 Open question 1). D2 is renamed "One stateless leaf end to end on production". New
-  edges: D2 on R2, D2.7 on D4.0 and on D3.3, D3.0 to D3.3 on D2.1 to D2.6 only, D3.3 on
+  edges: D2 on R2, D2.7 on D4.0 and on D3.3 (the D3.3 edge left on 2026-10-14), D3.0 to D3.3 on D2.1 to D2.6 only, D3.3 on
   D4.3a, D4.3a on D2.5 and D2.6 only, D5 wave D on H2.1 and H2's family PRs, M3/M4/M5 on M2's
   PR 3, M6's C-4b on D6, H1.7b on D3, H1.9 on R4, H2.3b and H2.8a on D3, H2.8a on H6.4a and
   H6.4b, H6 on H1.1a to H1.8 and M1, and G4's PR 3 on G2. H2 narrows from H1 to H1.1a to
@@ -946,3 +942,34 @@ Applied to this page:
   C3 *Secrets* now states the rule and names its producers. The operator's ruling settles the
   wording, so the PR that records it applies it directly, and no row in *Requested
   amendments not yet applied* precedes it. R2's guard PR, PR 1c, has no contract gate left.
+
+### Operator ruling (2026-10-14)
+
+- **`domain` is published** (D2 Open question 5). The operator ruled on 2026-10-14: "domain is
+  not secret, it's a var for flexibility just in case of future changes." C3 *The source of
+  `domain`* adopts the alternative it listed. The renderer writes `domain` as a literal, and
+  `domain` stays an Ansible variable in `ansible/inventory/group_vars/all.yml`, so it can
+  change in one place.
+    - D2.7 no longer waits on D3.3a or D3.3b. It waits on PR 2b of R2's *Publish `domain`*
+      item, which makes `domain` a published key. The slice index row for D2 states the edge.
+    - `homelab-cluster-vars` no longer holds `domain`, and no tag substitutes it.
+    - R2's per-member prose is unchanged here. PR 2b changes it together with the code,
+      because R2's documented-path test fails on names that do not exist yet.
+    - Earlier *Review log* entries keep their wording as history. Where one names the D2.7
+      to D3.3 edge, this ruling supersedes it.
+- **D2's production drill is accepted** (D2 Open question 1). The operator accepts the drill
+  on production, and the session may merge D2.8 itself. The ruling changes no contract row.
+  D2.8's text records it.
+
+### Applied requests (2026-10-14)
+
+- **The flux directory's kustomization** (D2 Open question 6). C1 *Cluster output* now states
+  that `DIR/flux/kustomization.yaml` lists every file in `DIR/flux/`. The request leaves
+  *Requests on C1*, which clears the gate before D2.6b merges.
+- **The root's name is reserved** (D2 Open question 6). C3 *Reserved names* now states that
+  the render fails on a deploy tag named `homelab`, the root Kustomization's name. The
+  request leaves *Requests on C3*, which clears the gate before D2.6b merges.
+- **A second `owner` value for the handback** (D2 Open question 7). C4 *Values of `owner`*
+  now states that `owner` takes `flux` or `released`. D2.1a, D2.1b, D2.1d and D2.2 already
+  implement `released` in code, so the contract now matches the code. *Requests on C4*
+  leaves the list, which clears the gate before D2.7 merges.

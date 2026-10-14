@@ -6,6 +6,8 @@ PR H3.1, the renderer's host and package modes: [#4911](https://github.com/Danie
 PR H3.2a, the updater package: [#4917](https://github.com/DanielH2018/server/pull/4917).
 PR H3.2b, the reconcile unit: [#4927](https://github.com/DanielH2018/server/pull/4927).
 PR H3.2c, the censuses and the unit validator: [#4935](https://github.com/DanielH2018/server/pull/4935).
+PR H3.2d, the manifest emitter: [#4944](https://github.com/DanielH2018/server/pull/4944).
+PR H3.3a, the `host_packages` CI job skeleton: [#4974](https://github.com/DanielH2018/server/pull/4974).
 
 Depends on: R1
 Unblocks: H4, H5
@@ -153,7 +155,10 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   that file. `probe_lib/core.py:prom_endpoint` and `core.py:k8s_endpoint` go through
   `core.py:sops_extract('domain')`, which needs an age key. `probe.py metric` and
   `probe.py monitors` use them (`probe_lib/monitors.py:run_monitors`,
-  `probe_lib/kuma_live.py`), so neither runs as the `claude` user.
+  `probe_lib/kuma_live.py`), so neither runs as the `claude` user. The operator ruled on
+  2026-10-14 that `domain` is published. Domain PR 1 of the *Publish `domain`* item in R2's
+  *Steps, as PRs* makes both functions read the inventory value, so this age-key blocker
+  goes away once domain PR 1 lands.
 - **The CI gate is one context.** `ci.yml`'s `prek` job carries the required context
   `prek (lint + validate + tests + secrets)`, and the deployer reads the same name from
   `gitops_deploy_ci_contexts`. `ansible/tests/repo/test_every_ci_job_is_gated.py` fails a
@@ -419,7 +424,9 @@ and every host slice applies it.
       `systemctl --no-block start homelab-reconcile.service || true` and `exit 0`.
     - `prerm` stops `homelab-*` units only when `$1` is `remove`.
     - `preinst` refuses a hostname mismatch and does nothing else.
-    - A lint in `hosts/lib/tests/` holds every script to a whitelist of line shapes. The
+    - A lint, `lint_script` in `scripts/validate/host_packages.py`, holds every script to a
+      whitelist of line shapes. CI runs it over each build, and
+      `hosts/lib/tests/test_maintainer_scripts.py` runs it over every shipped render. The
       whitelist admits no `dpkg-divert` line. H4 ships no diversion: its round-1 review
       replaced the two it planned with a `NUT_CONFPATH` drop-in. H7's *In-place edits* is the
       first slice that diverts a file. That slice defines the `preinst` and `postrm`
@@ -1101,6 +1108,9 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
 + scripts/renderer/renderer_lib/host_manifest.py       (units, legacy and manifest.json, H3.2d)
   scripts/validate/shell_templates.py                  (+ hosts/components/*/templates/)
   scripts/validate/unit_templates.py                   (+ every unit and drop-in the host renderer emits)
++ scripts/validate/host_packages.py                    (H3.3a: render, diff and both lints the job runs)
++ scripts/validate/tests/test_validate_host_packages.py
++ scripts/validate/tests/fixtures/host_packages/red/   (the lints' red fixture, built in CI too)
   prek.toml                                            (unit and shell selectors gain hosts/)
   scripts/deploy_tools/land_lib/pipeline.py            (host candidate in resolve, render after CI, host wait step)
   scripts/deploy_tools/land_lib/classify.py            (shortcut reads the host candidate)
@@ -2155,8 +2165,12 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - the two-writer census gains the legacy join and its red fixture;
     - `docs/homelab-render.md`'s host-mode section documents `units:`, `legacy:` and the
       manifest.
-- **H3.3a:** `KNOWN_JOBS` in `ansible/tests/repo/test_every_ci_job_is_gated.py` gains
-  `host_packages`.
+- **H3.3a:**
+    - `KNOWN_JOBS` in `ansible/tests/repo/test_every_ci_job_is_gated.py` gains
+      `host_packages`;
+    - `scripts/validate/tests/test_validate_host_packages.py` holds the `type: config` pair,
+      the `.deb` lint pair and the render diff, and `test_maintainer_scripts.py` imports the
+      whitelist from `scripts/validate/host_packages.py`.
 - **H3.3b:** none beyond the job, whose cases are the tests on both release legs, the
   stopped-server case included.
 - **H3.4a:** the `homelab_builder` role `CLAUDE.md`, whose glance block `gen_role_glance.py`
@@ -2456,8 +2470,9 @@ reviewer's suggested remedy, the reason is given.
 - **H3-R1-07 (high) The land wait polls a loopback that answers on one node only.** Fixed.
   The wait queries loopback, then `observability_prometheus_cluster_ip`, the otelq order.
   `prom_endpoint`, the transport `probe.py metric` uses, was rejected because it calls
-  `core.py:sops_extract('domain')`, and the agent user has no age key. A refused transport
-  reads as not settled, with its own message and test.
+  `core.py:sops_extract('domain')`, and the agent user has no age key. The operator's ruling
+  of 2026-10-14 removes that blocker once domain PR 1 of R2's *Publish `domain`* item lands.
+  A refused transport reads as not settled, with its own message and test.
 - **H3-R1-08 (high) The rollback cannot run, and it deletes the signing key.** Fixed. The
   role gets its own arm flag, `homelab_builder_enabled`, in its defaults. A flip there is a
   path under `roles/setup/homelab_builder/`, and `deploy_changes.py:setup_tags_for` maps it to

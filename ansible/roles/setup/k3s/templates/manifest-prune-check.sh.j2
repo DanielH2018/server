@@ -58,6 +58,11 @@
 # `ansible/roles/k8s/manifests/defaults/main.yml`, whose `manifests_prune` DECIDED comment names
 # the armed roles. This cron keeps watching every role, armed or not. An orphan that predates
 # its role's arming carries no label, so the prune cannot see it and only this cron reports it.
+#
+# An object Flux applies is skipped while its Kustomization exists: it carries the label
+# kustomize.toolkit.fluxcd.io/name=<n>, and a Kustomization <n> exists in flux-system. Ansible
+# stages no manifest for it, so it would otherwise read as an orphan. After a handback the label
+# stays and the Kustomization is gone, so the object is checked again (read_flux_kustomizations).
 set -uo pipefail
 
 for arg in "$@"; do
@@ -227,21 +232,50 @@ is_excluded_ns() {
 # the exit code survives; a process substitution discards it.
 LIST_ERR=""
 
+# The Kustomizations in flux-system, read ONCE per run. An object Flux applies is staged by no
+# Ansible role, so without this skip every object of a Flux-owned service reads as an orphan.
+#
+# The skip needs the Kustomization as well as the label. After a handback (the D2 plan's
+# *Rollback*, docs/target-architecture/deploy/d2-first-leaf.md) the orphaned objects keep their
+# kustomize.toolkit.fluxcd.io/name label, and the Kustomization that set it is gone. A skip that
+# read the label alone would hide exactly the objects this check exists to report.
+#
+# A failed read skips nothing, so every Flux-labelled object is checked as if Ansible owned it,
+# and FLUX_ERR turns the tile red with the cause.
+declare -A FLUX_KUSTOMIZATIONS=()
+FLUX_ERR=""
+read_flux_kustomizations() {
+  local rows entry
+  if ! rows=$($KUBECTL get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system \
+    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null); then
+    FLUX_ERR="kubectl get kustomizations -n flux-system failed — Flux-labelled objects checked as orphans"
+    return
+  fi
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] && FLUX_KUSTOMIZATIONS["$entry"]=1
+  done <<< "$rows"
+}
+
 check_kind() {
-  local kind="$1" ns name owner rows
+  local kind="$1" ns name flux owner rows
+  # The label is printed behind a fixed `flux=` prefix so the field is never empty. `read`
+  # splits on runs of spaces, so an empty middle field would shift the ownerReferences JSON
+  # into it.
   if ! rows=$($KUBECTL get "$kind" -A \
-    -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{" "}{.metadata.ownerReferences}{"\n"}{end}' \
+    -o jsonpath='{range .items[*]}{.metadata.namespace}{" "}{.metadata.name}{" flux="}{.metadata.labels.kustomize\.toolkit\.fluxcd\.io/name}{" "}{.metadata.ownerReferences}{"\n"}{end}' \
     2>/dev/null); then
     LIST_ERR="${LIST_ERR:+$LIST_ERR, }$kind"
     return
   fi
-  while IFS=' ' read -r ns name owner; do
+  while IFS=' ' read -r ns name flux owner; do
     [[ -z "$ns" || -z "$name" ]] && continue
     is_excluded_ns "$ns" "$kind" && continue
     # An ownerReference means a controller (Longhorn, MetalLB, ...) created this object as a
     # child of something else — our templates would never declare it, so its absence here is
     # expected, not drift.
     [[ -n "$owner" ]] && continue
+    flux="${flux#flux=}"
+    [[ -n "$flux" && -n "${FLUX_KUSTOMIZATIONS[$flux]:-}" ]] && continue
     if [[ -z "${DECLARED[${kind}/${name}]:-}" ]]; then
       add_orphan "${kind}/${ns}/${name}"
     fi
@@ -283,6 +317,7 @@ check_kind() {
 # is an orphan, so running the arm would bury the one real fault under several hundred false
 # ones. DECLARED_ERR carries that fault into the message below instead.
 if [[ -z "$DECLARED_ERR" ]]; then
+  read_flux_kustomizations
   for KIND in ingressroute middleware service tlsoption deployment daemonset cronjob networkpolicy; do
     check_kind "$KIND"
   done
@@ -304,7 +339,7 @@ setup_drift_scan
 DEPLOYED_NOTE="${DEPLOYED_NOTE/the setup plays once each/initial_setup.yml and k3s-bringup.yml once each}"
 MANIFEST_NOTE="${MANIFEST_NOTE/the setup plays once each/k3s-bringup.yml and initial_setup.yml once each}"
 
-if [[ -z "$ORPHANS" && -z "$DRIFTED" && -z "$STALE" && -z "$DECLARED_ERR" && -z "$LIST_ERR" ]]; then
+if [[ -z "$ORPHANS" && -z "$DRIFTED" && -z "$STALE" && -z "$DECLARED_ERR" && -z "$LIST_ERR" && -z "$FLUX_ERR" ]]; then
   STATUS=up
   # Names the arms it actually covered. The old wording — "deployed scripts match the repo" —
   # was true of the three copy:-deployed files and silently claimed the other twenty.
@@ -314,6 +349,7 @@ else
   MSG=""
   [[ -n "$DECLARED_ERR" ]] && MSG="$DECLARED_ERR"
   [[ -n "$LIST_ERR" ]] && MSG="${MSG:+$MSG; }kubectl get failed for ${LIST_ERR} — orphans of those kinds unchecked"
+  [[ -n "$FLUX_ERR" ]] && MSG="${MSG:+$MSG; }${FLUX_ERR}"
   [[ -n "$ORPHANS" ]] && MSG="${MSG:+$MSG; }live but absent from staged manifests: ${ORPHANS}"
   # Each name is a repo-relative path, so the role it belongs to says which playbook renders it:
   # roles/setup/k3s/... comes from k3s-bringup.yml, every other setup role from initial_setup.yml.

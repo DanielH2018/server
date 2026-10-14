@@ -343,9 +343,9 @@ R1 ──▶ H3 ──▶ H4 ──▶ H5          D2 + H1.1a–H1.8 + H4 + M1 �
 H2 + H5 + H6 + R4 ──▶ H7
 ```
 
-D2 and D3 interleave. D3.0 to D3.3 need only D2.1 to D2.6, and by default D2.7, the leaf's
-flip, waits on D3.3, because the leaf's route needs the SOPS variable `domain` (C3). D4.0 lands
-before D2.7. D2.6b ships the empty `SHARED_KINDS` and the publish census that D3.3a adds
+D2 and D3 interleave. D3.0 to D3.3 need only D2.1 to D2.6. D2.7, the leaf's flip, waits on
+no PR of D3, because the operator ruled on 2026-10-14 that `domain` is published (C3). It
+waits on PR 2b of R2's *Publish `domain`* item instead. D4.0 lands before D2.7. D2.6b ships the empty `SHARED_KINDS` and the publish census that D3.3a adds
 `cluster-vars` to.
 
 The docs guard goes first: it is independent, cheapest, and removes the leading confirmed
@@ -406,10 +406,11 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
    empty string. R2's round trip runs with `--strict-substitute`, and D3's baseline shows
    kustomize-controller v1.9.6 substituting strictly by default. R2's PR 1 red-proofs it for
    the pinned binary.
-1. **Where `domain` comes from before D3.** C3's default makes D2.7, the leaf's flip, wait on
-   D3.3, so the leaf's route reads `domain` from `homelab-cluster-vars`. The operator may
-   instead rule that `domain` is published in plaintext, which lets D2 finish before D3. The
-   operator rules before D2.7 (**operator-only**).
+1. **Resolved: where `domain` comes from.** The operator ruled on 2026-10-14 that `domain` is
+   published: "domain is not secret, it's a var for flexibility just in case of future
+   changes." The renderer writes `domain` as a literal, and it stays an Ansible variable in
+   `ansible/inventory/group_vars/all.yml`. D2.7, the leaf's flip, waits on PR 2b of R2's
+   *Publish `domain`* item and on no PR of D3 (C3).
 1. **Three smaller design points.** Whether hashing SOPS ciphertext for restart checksums
    over-triggers when sops re-encrypts unchanged values (D3). How the Longhorn pre-apply
    snapshot runs once per revision (D5). Whether `deploy_ui` retires with the deployer (D6).

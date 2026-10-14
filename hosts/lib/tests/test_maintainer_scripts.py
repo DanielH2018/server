@@ -5,54 +5,18 @@ H3's *Package rules*: `postinst` reloads systemd and starts reconcile without bl
 hostname mismatch. Nothing else runs as root at install time. The whitelist admits no
 `dpkg-divert` line; H7's *In-place edits* adds those shapes with the first diversion.
 
-`lint` is the function CI's `host_packages` job (H3.3a) runs over each build. The tests here
-run it over every package the tree renders.
+The whitelist and `lint_script` live in `scripts/validate/host_packages.py`, which CI's
+`host_packages` job runs over each build. The tests here run it over every package the tree
+renders.
 
 Run: uv run pytest hosts/lib/tests/test_maintainer_scripts.py
 """
-
-import re
 
 import pytest
 
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
-
-_UNIT = r"homelab-[a-z0-9-]+\.(?:service|timer|socket|path)"
-_HOST = r"[a-z0-9][a-z0-9-]*"
-_COMMON = [r"#!/bin/sh", r"", r"#.*", r"exit 0"]
-WHITELIST = {
-    "postinst": [
-        r"systemctl daemon-reload \|\| true",
-        r"systemctl --no-block start homelab-reconcile\.service \|\| true",
-    ],
-    "prerm": [
-        r'if \[ "\$1" = remove \]; then',
-        rf"    systemctl stop {_UNIT} \|\| true",
-        r"fi",
-    ],
-    "preinst": [
-        rf'if \[ "\$\(hostname\)" != "{_HOST}" \]; then',
-        rf'    echo "homelab-{_HOST} installs only on {_HOST}" >&2',
-        r"    exit 1",
-        r"fi",
-    ],
-}
-
-
-def lint(name: str, text: str) -> list[str]:
-    """Each line of maintainer script `name` that no whitelisted shape matches.
-
-    A script name outside the whitelist is one finding on its own.
-    """
-    if name not in WHITELIST:
-        return [f"{name}: no maintainer script of this name is allowed"]
-    shapes = [re.compile(shape) for shape in [*_COMMON, *WHITELIST[name]]]
-    return [
-        f"{name}:{number}: {line!r}"
-        for number, line in enumerate(text.splitlines(), 1)
-        if not any(shape.fullmatch(line) for shape in shapes)
-    ]
+from validate.host_packages import lint_script as lint
 
 
 def _shipped() -> dict[str, host_mode.Package]:

@@ -13,7 +13,8 @@ of those a library -- through the importing package's own directory, through a r
 or by naming the tests that are its only importers. The reverse does not hold. The classifier
 also calls a module a library once another script imports it, guard or not, and
 `ha_state_model.py`, `await_ci.py`, `fanout.py` and `land_tags.py` are each imported and run
-directly. So a library with its own `__main__` guard counts as an entry point too (#4405).
+directly; `land_tags.py`'s run only points at `land_tags_cli.py` (#4945). So a library with its
+own `__main__` guard counts as an entry point too (#4405).
 
 RUNTIME. Each script runs under this interpreter, not under `uv run` -- one `uv run` per entry
 point cost a minute and a half where direct invocation costs ten seconds, over a census this
@@ -42,10 +43,11 @@ from lib.script_classify import _has_main_guard, by_name, classify, file_text
 # Non-vacuity: the census reads the tree, so a classifier change or a directory move can empty
 # it, and `all(...)` over nothing passes. The first five are the shapes the census must keep --
 # a shell shim, a Python gate, an adhoc tool, a scheduled generator, and the one whose
-# `--help` answer was the reason for the test. The last four are imported by other scripts
+# `--help` answer was the reason for the test. The next four are imported by other scripts
 # and also run directly, so the classifier calls them libraries; they are here so the
 # `__main__`-guard half of `_entry_points` cannot lose them silently (#4405).
-# `ha_state_model.py` broke three times on one import (#674).
+# `ha_state_model.py` broke three times on one import (#674). `land_tags_cli.py` is the CLI
+# that moved out of `land_tags.py` (#4945).
 MUST_FIND = frozenset(
     {
         "deploy.sh",
@@ -57,6 +59,7 @@ MUST_FIND = frozenset(
         "await_ci.py",
         "fanout.py",
         "land_tags.py",
+        "land_tags_cli.py",
     }
 )
 

@@ -1,0 +1,17 @@
+# The red proof of both host-package lints (scripts/validate/host_packages.py). The pytest pair
+# flags this spec's `type: config|noreplace`; CI's host_packages job builds it with the pinned
+# nfpm and the lint must flag the .deb's conffile and its postinst line.
+name: homelab-red
+arch: all
+platform: linux
+version: 1.0.0
+maintainer: homelab
+description: A package both host-package lints must flag
+contents:
+- src: root/etc/homelab-red.conf
+  dst: /etc/homelab-red.conf
+  type: config|noreplace
+  file_info:
+    mode: 420
+scripts:
+  postinstall: scripts/postinst

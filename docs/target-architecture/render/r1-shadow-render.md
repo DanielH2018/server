@@ -489,8 +489,8 @@ R1 makes the safe failure the default:
   flux-owned tag, so it fails a tree from R1's renderer. That holds after D2 only if D2's
   `flux/` writer skips stub mode, which Open question 7 asks D2 to state.
 
-D2's publish therefore needs R2's placeholder mode, and a source for `domain` before D3
-writes `homelab-cluster-vars`. Both are outside R1. *Open questions* names the edge and the
+D2's publish therefore needs R2's placeholder mode, and a published literal `domain`, which
+domain PR 2b of R2's step 10 provides. Both are outside R1. *Open questions* names the edge and the
 owners, and *Risks* records the hazard.
 
 ### The Ansible half of the shadow pair
@@ -1153,7 +1153,7 @@ whole-tree comparison, such as two full renders of one commit.
    slice 7, a pre-merge dry run without secrets, is optional, and parts of it are
    unverified. *Resolution:* R1 does not wait on it. If slice 7 lands, revisit the
    operator-only marking and the copy hand-off.
-1. **What does D2 publish, and where does `domain` come from before D3?** R1 alone cannot
+1. **What does D2 publish, and where does `domain` come from?** R1 alone cannot
    feed D2's publish job (*Stub output is never published*). R1 changes no interface for
    this. Other documents do (contracts.md, D2, R2 and R3), and each change is a cross-slice
    note:
@@ -1181,14 +1181,10 @@ whole-tree comparison, such as two full renders of one commit.
     - *Plugin edits after R1's PR 5.* Each edit to `secret_stubs.py`, such as R2's stub
       changes or R3's PHC-shaped stubs, defers every declared service and needs a fresh
       operator shadow run (*Risks*). *Owner:* R2 and R3, each in its own landing text.
-    - *The source for `domain`.* C3 names a source for `domain` that exists before D3.
-      Writing `domain` in plaintext into a tracked Flux object or the artifact is a decision
-      about a SOPS-encrypted key, so it is **operator-only**. CI holds no age key (C3), so
-      until that source exists, a check before `prod` moves cannot compare the Host rule
-      with the real domain. It can assert that `${domain}` is present and that a
-      substitution source for it is declared. The route load through Traefik after the
-      promotion is what sees the real host. *Owner:* the contracts.md maintainer, D2 and
-      the operator.
+    - *The source for `domain`.* Resolved by the operator's ruling of 2026-10-14: `domain` is
+      published, and C3 *The source of `domain`* records it. The renderer writes it as a
+      literal, so a check before `prod` moves compares the Host rule with the real domain
+      without an age key. *Owner:* D2 and R2's step 10.
 
 ## Review log
 

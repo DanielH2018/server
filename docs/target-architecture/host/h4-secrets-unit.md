@@ -210,7 +210,10 @@ The exit criterion has five parts, all observed together:
 - **Who can read what.** The agent has a restricted ssh login on daniel-server and none on
   the Pi (`docs/claude-agent-user.md`). `probe.py monitors` decrypts:
   `scripts/diagnostics/probe_lib/monitors.py` imports `core.py:prom_endpoint`, which calls
-  `core.py:k8s_endpoint`, which calls `core.py:sops_extract('domain')`. H3's *Verification*
+  `core.py:k8s_endpoint`, which calls `core.py:sops_extract('domain')`. The age-key blocker
+  that call causes goes away once domain PR 1 of R2's *Publish `domain`* item lands
+  (operator ruling of 2026-10-14), because `domain` is then read from the inventory. H3's
+  *Verification*
   therefore gives the agent a Prometheus query over loopback, with
   `ansible/roles/k8s/observability/defaults/main.yml:observability_prometheus_cluster_ip` as
   the fallback.
@@ -1831,7 +1834,9 @@ How each was fixed, with the evidence measured at `70591c307`:
   red call log. *Open questions* 5 lists the H3 amendment and answers H5's item.
 - **R10-06.** `probe_lib/monitors.py` imports `core.py:prom_endpoint`, which reaches
   `core.py:sops_extract('domain')`. The agent now reads `monitor_status` from Prometheus on
-  loopback, with `observability_prometheus_cluster_ip` as the fallback. The Pi ssh block
+  loopback, with `observability_prometheus_cluster_ip` as the fallback. The age-key blocker
+  goes away once domain PR 1 of R2's *Publish `domain`* item lands (operator ruling of
+  2026-10-14). The Pi ssh block
   and the H4.6 precondition are the operator's. `docs/claude-agent-user.md` gives the agent
   a restricted login on daniel-server, so that block stays the agent's. The credential-store
   check uses `sudo find`, because the old `sudo stat /run/credstore/*` glob expands in an
