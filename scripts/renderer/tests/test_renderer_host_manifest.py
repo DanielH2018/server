@@ -144,6 +144,6 @@ def test_a_manifest_entry_no_package_backs_is_flagged(hosts, package, where, mes
 
 
 def test_a_legacy_entry_reading_a_secret_is_flagged(hosts):
-    root = hosts({"legacy": [{"path": "/srv/{{ domain }}/x"}]})
-    with pytest.raises(RenderError, match="domain is a secret key"):
+    root = hosts({"legacy": [{"path": "/srv/{{ email }}/x"}]})
+    with pytest.raises(RenderError, match="email is a secret key"):
         host_mode.render_host("daniel-pi", root)

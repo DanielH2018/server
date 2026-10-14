@@ -2,7 +2,7 @@
 """Write the standalone-value guard's key map from a placeholder render (target slice R2).
 
 A standalone use is a placeholder that is the whole scalar of a field, such as
-`main: ${domain}`. Flux types a substituted standalone value by its text, so the shared
+`email: ${email}`. Flux types a substituted standalone value by its text, so the shared
 `k8s/manifests` role refuses, before it renders, a value of such a key that a YAML reader
 would type as anything but the same string. The deploy path never runs the renderer, so it
 reads the renderer's standalone key sets through this projection: the committed file

@@ -10,6 +10,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_roundtrip.py
 """
 
 import json
+import re
 import sys
 
 import pytest
@@ -183,30 +184,38 @@ def test_a_standalone_use_outside_the_map_is_flagged_in_the_0123_pass(
     )
 
 
-def test_observability_with_its_checksum_annotations_left_out_is_clean(
+def test_observability_with_its_checksum_annotations_compared_is_clean(
     flux_on_path, tmp_path, capsys
 ):
-    # #4885: each `checksum/config` hashes a config that holds placeholders on one side and
-    # stub values on the other. The round trip leaves out exactly the five its templates write.
+    # #4952: Prometheus's `checksum/config` hashed a config holding `${domain}`, so the round
+    # trip left the five checksum annotations out. With `domain` published, no hashed config
+    # holds a placeholder, and the round trip compares every annotation.
     out = tmp_path / "rt"
     assert _main("roundtrip", "--out", str(out), "--role", "observability") == 0
-    for summary in capsys.readouterr().out.splitlines():
-        assert (
-            " 5 annotations in UNCOMPARED_ANNOTATIONS left out, 0 differences"
-            in summary
-        )
+    assert capsys.readouterr().out.count(" 0 differences, ") == 2
 
 
-def test_observability_with_no_annotation_left_out_is_flagged(flux_on_path, tmp_path):
+def test_observability_with_one_checksum_annotation_changed_is_flagged(
+    flux_on_path, tmp_path
+):
+    # The clean half above passes whether or not the annotations are compared, so this half
+    # changes one hashed value on the placeholder side and requires the round trip to see it.
     keys = homelab_render.secret_keys()
     passes = stub_passes(shadow_diff.stub_vars(), keys, guarded_keys(read_guard_map()))
     sides = render_sides(tmp_path / "rt", ["observability"], keys, passes)
-    report = compare_sides(sides, passes[0], flux_on_path, annotations={})
+    annotation = re.compile(r"(checksum/config: )\S+")
+    (path, *_) = [
+        p
+        for p in sorted(
+            (sides.cluster(roundtrip.PLACEHOLDER) / "observability").glob("*.yaml")
+        )
+        if annotation.search(p.read_text())
+    ]
+    path.write_text(annotation.sub(r"\g<1>changed", path.read_text(), count=1))
+    report = compare_sides(sides, passes[0], flux_on_path)
     assert report.exit_code() == 1
-    assert any(
-        ln.startswith("observability: Deployment/observability/") and "differs" in ln
-        for ln in report.differences
-    ), report.differences
+    (difference,) = report.differences
+    assert difference.startswith("observability: ") and difference.endswith(" differs")
 
 
 def test_the_flux_crds_that_opt_out_of_substitution_are_clean(
@@ -223,7 +232,7 @@ def test_a_known_violation_document_left_out_is_clean(flux_on_path, tmp_path, ca
     out = tmp_path / "rt"
     assert _main("roundtrip", "--out", str(out), "--role", "pi-peer-backup") == 0
     for summary in capsys.readouterr().out.splitlines():
-        assert " 1 documents in KNOWN_VIOLATIONS and 0 annotations" in summary
+        assert " 1 documents in KNOWN_VIOLATIONS left out, 0 differences" in summary
 
 
 def _report(**fields) -> roundtrip.Report:
@@ -231,43 +240,17 @@ def _report(**fields) -> roundtrip.Report:
 
 
 def test_exclusions_that_match_what_they_name_are_clean():
-    member = "observability: Deployment/prometheus checksum/config"
     report = _report(
-        directories=["observability", "pi-peer-backup"],
+        directories=["pi-peer-backup"],
         documents=["pi-peer-backup: Secret/pi-peer-backup-ssh"],
-        annotations=[member] + ["observability: Deployment/x checksum/config"] * 4,
     )
     assert roundtrip.exclusion_problems(report, KNOWN_VIOLATIONS) == []
 
 
-@pytest.mark.parametrize(
-    ("fields", "problem"),
-    [
-        (
-            {"directories": ["pi-peer-backup"]},
-            "left out the documents [], where KNOWN_VIOLATIONS names",
-        ),
-        (
-            {
-                "directories": ["observability"],
-                "annotations": ["observability: Deployment/x checksum/config"] * 5,
-            },
-            "named member gone: checksum/config on Deployment/prometheus",
-        ),
-        (
-            {
-                "directories": ["observability"],
-                "annotations": ["observability: Deployment/prometheus checksum/config"],
-            },
-            "left out 1 checksum/config annotations in observability, where its "
-            "templates write 5",
-        ),
-    ],
-    ids=["document-not-left-out", "member-gone", "count-short"],
-)
-def test_exclusions_that_miss_what_they_name_are_flagged(fields, problem):
-    problems = roundtrip.exclusion_problems(_report(**fields), KNOWN_VIOLATIONS)
-    assert any(problem in p for p in problems), problems
+def test_exclusions_that_miss_what_they_name_are_flagged():
+    report = _report(directories=["pi-peer-backup"])
+    (problem,) = roundtrip.exclusion_problems(report, KNOWN_VIOLATIONS)
+    assert "left out the documents [], where KNOWN_VIOLATIONS names" in problem
 
 
 @pytest.mark.parametrize("extra", [[], ["--red-proof"]], ids=["green", "red-proof"])

@@ -14,6 +14,7 @@ from lib.narrow_git import CannotNarrow
 from lib.repo_paths import ANSIBLE
 from secret_stubs import (
     NEVER_STUB,
+    PUBLISHED,
     homelab_secret_stub,
     homelab_stub_keys,
     homelab_unstubbed_keys,
@@ -57,12 +58,18 @@ def test_filters_built_any_other_way_is_flagged():
         filter_names(built, PLUGIN_REL)
 
 
-def test_stub_keys_are_every_secret_key_but_sops_and_never_stub():
+def test_stub_keys_are_every_secret_key_but_sops_never_stub_and_published():
     file_keys = _file_keys()
-    assert {"sops", "become_password", GA, "domain"} <= file_keys
+    assert {"sops", "become_password", GA, "email"} <= file_keys
     keys = homelab_stub_keys(yaml_fast.safe_load(SECRETS.read_text()))
-    assert keys == sorted(file_keys - {"sops"} - NEVER_STUB.keys())
+    assert keys == sorted(file_keys - {"sops"} - NEVER_STUB.keys() - PUBLISHED.keys())
     assert "become_password" not in keys
+
+
+def test_a_published_key_takes_no_stub_and_any_other_key_does():
+    secrets = {"domain": "ENC[x]", "email": "ENC[x]", "sops": {"version": 3}}
+    assert "domain" in PUBLISHED
+    assert homelab_stub_keys(secrets) == ["email"]
 
 
 def test_every_stub_is_a_dns_label():
@@ -73,7 +80,7 @@ def test_every_stub_is_a_dns_label():
         if not (DNS_LABEL.match(stub) and len(stub) <= 63)
     }
     assert not bad
-    assert stubs["domain"] == "stub-domain"
+    assert stubs["email"] == "stub-email"
     assert stubs[GA] == "stub-google-assistant-service-account"
 
 
@@ -85,10 +92,10 @@ def test_unstubbed_keys_of_the_full_stub_map_is_clean():
 
 def test_unstubbed_keys_names_exactly_the_changed_or_missing_key_is_flagged():
     stubs = _stub_map()
-    changed = stubs | {"domain": "example.org"}
-    assert homelab_unstubbed_keys(list(stubs), changed) == ["domain"]
-    assert homelab_unstubbed_keys(list(stubs), list(changed.values())) == ["domain"]
+    changed = stubs | {"email": "a@example.org"}
+    assert homelab_unstubbed_keys(list(stubs), changed) == ["email"]
+    assert homelab_unstubbed_keys(list(stubs), list(changed.values())) == ["email"]
     missing = {key: value for key, value in stubs.items() if key != GA}
     assert homelab_unstubbed_keys(list(stubs), missing) == [GA]
     with pytest.raises(ValueError, match="keys but"):
-        homelab_unstubbed_keys(["domain", GA], ["stub-domain"])
+        homelab_unstubbed_keys(["email", GA], ["stub-email"])

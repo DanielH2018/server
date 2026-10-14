@@ -1,7 +1,7 @@
 """Ansible filter plugin holding the standalone-value guard's deploy-time check (target slice R2).
 
 A standalone use is a placeholder that is the whole scalar of a field, such as
-`main: ${domain}`. Under Flux, a substituted standalone value loses the template's quotes and
+`email: ${email}`. Under Flux, a substituted standalone value loses the template's quotes and
 is typed by its text, so a value such as `0123`, `yes` or `1e3` changes type. The shared
 `k8s/manifests` role therefore refuses, before it renders, any value of a role's mapped key
 that `scripts/lib/plain_scalar.py:refused` refuses. `scripts/renderer/standalone_map.py`

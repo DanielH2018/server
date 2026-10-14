@@ -95,9 +95,9 @@ def test_a_component_default_sits_beneath_host_vars(hosts):
 def test_a_template_reading_a_secret_is_flagged(hosts):
     # The default puts the name in a layer, so only the withholding keeps it out.
     root = hosts(
-        *_one("templates/x.j2", "{{ domain }}\n", defaults={"domain": "example.org"})
+        *_one("templates/x.j2", "{{ email }}\n", defaults={"email": "a@example.org"})
     )
-    with pytest.raises(RenderError, match="domain is a secret key"):
+    with pytest.raises(RenderError, match="email is a secret key"):
         host_mode.render_host("daniel-pi", root)
 
 
@@ -107,10 +107,10 @@ def test_a_template_reading_an_inventory_alias_of_a_secret_is_flagged(hosts, tmp
     inventory = Inventory(all_vars=tmp_path / "all.yml", host_vars=tmp_path / "hv")
     inventory.host_vars.mkdir()
     inventory.all_vars.write_text(
-        yaml.safe_dump({"domain": "example.org", "site": "https://{{ domain }}"})
+        yaml.safe_dump({"email": "a@example.org", "site": "mailto:{{ email }}"})
     )
     root = hosts(*_one("templates/x.j2", "{{ site }}\n"))
-    with pytest.raises(RenderError, match=r"site is its inventory value.*'domain'"):
+    with pytest.raises(RenderError, match=r"site is its inventory value.*'email'"):
         host_mode.render_host("daniel-pi", root, inventory=inventory)
 
 
