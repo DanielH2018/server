@@ -26,6 +26,9 @@ def test_the_domain_is_read_from_inventory_without_a_decrypt(monkeypatch, tmp_pa
     monkeypatch.setattr(subprocess, "run", _no_subprocess)
     assert core.domain(str(group_vars)) == "lan.example"
     assert core.ha_host() == f"home-assistant.local.{core.domain()}"
+    # `probe.py metric` and `probe.py monitors` reach the domain through this path.
+    base, _pin = core.prom_endpoint()
+    assert base == f"https://prometheus.local.{core.domain()}"
 
 
 def test_a_group_vars_without_domain_is_refused(tmp_path):
