@@ -926,6 +926,9 @@ that D2.6d adds.
         - the same entry with `hostname` also reaches the readers of `hostname`;
         - an added Ansible-owned entry with the same fields still returns None, and so does
           a bare `owner: flux` entry added in an edit that swaps two other entries.
+    - An `EVERY_ENTRY` pair in `test_narrow_filter_tables.py`: a bare entry appended to a
+      list moves exactly the filters `EVERY_ENTRY` names, `entry_names` among them, and a
+      filter with a row per entry is moved.
     - A render census in `ansible/tests/k8s/`, through `_k8s_render.py:render_texts`. It
       appends a fixture entry to daniel-box's `containers_list`, in the role context and in
       `hostvars`, and compares with a control render through the same override and the list
@@ -1581,8 +1584,8 @@ later slices size against:
 - D2.1d: tests in `ansible/tests/deploy/`. `docs/gitops-pipeline.md`'s *Broad changes* says
   that the play skips an entry that carries `owner`. The PR body quotes the narrow refusal,
   the equality test's output and the operator's ruling on the discharge.
-- D2.1c: tests in `scripts/deploy_tools/tests/`, and the render census in
-  `ansible/tests/k8s/`. The `changed_fields` docstring states the new case, and
+- D2.1c: tests in `scripts/deploy_tools/tests/`, the `EVERY_ENTRY` pair among them, and the
+  render census in `ansible/tests/k8s/`. The `changed_fields` docstring states the new case, and
   `docs/gitops-pipeline.md`'s *Broad changes* says that an added Flux-born entry reaches only
   the readers it can move.
 - D2.1b: tests in `scripts/deploy_tools/tests/` and `.claude/hooks/tests/`.
