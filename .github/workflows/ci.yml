@@ -872,6 +872,13 @@ jobs:
             "$RUNNER_TEMP/render/base" "$RUNNER_TEMP/render/head" \
             --summary "$GITHUB_STEP_SUMMARY" >> "$GITHUB_OUTPUT"
           echo "base=$base" >> "$GITHUB_OUTPUT"
+          # A dispatch of master has its merge base at HEAD, so both builds carry one version
+          # and no case can upgrade. The container steps read this and stand down.
+          if [ "$base" = "$(git rev-parse HEAD)" ]; then
+            echo "upgrade=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "upgrade=true" >> "$GITHUB_OUTPUT"
+          fi
 
       # The version is H3's *Package rules* shape, `0.<first-parent count>+g<12 hex>`, taken
       # from each side's own commit, as the builder takes it from the commit it builds.
@@ -926,12 +933,19 @@ jobs:
 
       # Step 4. The Dockerfile pins the release by digest and the packages by snapshot. The
       # runner's CA bundle reaches the build only, for the snapshot archive's https redirect.
+      # The early exit is in the script, not the `if:`, because a dispatch must reach this
+      # step (test_ci_dispatch_sweeps_everything.py) and a dispatch of master must stay green.
       - name: Build the test image for this release
         if: github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
         env:
           RELEASE: ${{ matrix.release }}
+          UPGRADE: ${{ steps.render.outputs.upgrade }}
         run: |
           set -euo pipefail
+          if [ "$UPGRADE" != true ]; then
+            echo "::notice::The merge base is HEAD, so no case can upgrade; no image is built."
+            exit 0
+          fi
           docker build --build-arg RELEASE="$RELEASE" --build-context runner-ca=/etc/ssl/certs \
             -t "homelab-host-test:$RELEASE" hosts/lib/tests/container
           {
@@ -947,7 +961,12 @@ jobs:
         env:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}
+          UPGRADE: ${{ steps.render.outputs.upgrade }}
         run: |
+          if [ "$UPGRADE" != true ]; then
+            echo "::notice::The merge base is HEAD, so no case can upgrade; no case runs."
+            exit 0
+          fi
           uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
             --work "$RUNNER_TEMP/cases"

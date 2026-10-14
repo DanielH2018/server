@@ -707,21 +707,6 @@
       "enabled": false
     },
     {
-      "description": "The host_packages job's test image (hosts/lib/tests/container/Dockerfile) pins one stage per Ubuntu release the fleet runs or is moving to, ubuntu:24.04 and ubuntu:26.04, each by digest. A version bump would move a stage off the release it exists to test, so only digest bumps open. A digest bump changes no host package render, so its PR runs no container case: dispatch `gh workflow run ci.yml --ref <branch>` before merging, which builds both images and runs every case.",
-      "matchManagers": [
-        "dockerfile"
-      ],
-      "matchFileNames": [
-        "hosts/lib/tests/container/Dockerfile"
-      ],
-      "matchUpdateTypes": [
-        "major",
-        "minor",
-        "patch"
-      ],
-      "enabled": false
-    },
-    {
       "description": "Ansible Galaxy collections (requirements.yml). The in-file comment requires bumping them in lockstep with ansible-core, so these need a deliberate look \u2014 own group, no automerge (overrides the custom.regex non-major automerge rule above).",
       "matchManagers": [
         "custom.regex"
