@@ -1926,11 +1926,10 @@ remains the gate.
     - D3 carries two parts, recorded in its plan as a cross-slice note: `write` applies the
       same resolver, and D3's in-cluster proof shows an all-digit value in a SOPS-encrypted
       Secret's quoted field applied as a string.
-    - *D5, open.* D5's flip of qbittorrent waits on D3's proof, and it needs D3's SOPS
-      manifest for `mullvad_account` and its `decryption` field, as D5 already records for
-      the three roles of PRs 5 to 7. D5's text does not say so yet. R2 hands it over as a
-      cross-slice note, tracked in
-      [#4895](https://github.com/DanielH2018/server/issues/4895).
+    - *D5, recorded.* D5's flip of qbittorrent waits on D3's proof, and it needs D3's SOPS
+      manifest for `mullvad_account` and its `decryption` field, as D5 records for the three
+      roles of PRs 5 to 7. D5's header and step 26 list both, and PR 7b, as the flip's
+      preconditions ([#4895](https://github.com/DanielH2018/server/issues/4895)).
 
    *What a refusal means.* A refused key fails its role's deploy before the apply, by
    name. The operator then either rotates the value to one the resolver passes
