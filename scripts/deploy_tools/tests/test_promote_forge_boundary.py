@@ -184,10 +184,24 @@ def _world_with_3000_tags(tmp_path) -> World:
 
 
 def _registry_requests_within_budget(world: World, examined: list[str]) -> bool:
-    """Exactly one token request, one `prod` fetch and one `HEAD` per examined candidate."""
-    repository = f"/v2/{forge.ARTIFACT}/manifests"
-    expected = [("GET", "/token"), ("GET", f"{repository}/prod")]
-    expected += [("HEAD", f"{repository}/sha-{sha}") for sha in examined]
+    """One token request, the in-flight HEADs, one `prod` fetch, one `HEAD` per examined
+    candidate, then the two bundle pulls `verify` reuses, T's and `prod`'s.
+    """
+    repository = f"/v2/{forge.ARTIFACT}"
+    manifests = f"{repository}/manifests"
+    expected = [
+        ("GET", "/token"),
+        ("HEAD", f"{manifests}/prod"),
+        ("HEAD", f"{manifests}/last-good"),
+        ("GET", f"{manifests}/prod"),
+    ]
+    expected += [("HEAD", f"{manifests}/sha-{sha}") for sha in examined]
+    for sha in (examined[-1], world.commits[0]):
+        manifest = world.transport.manifests[digest_of(sha)]
+        expected += [
+            ("GET", f"{manifests}/{digest_of(sha)}"),
+            ("GET", f"{repository}/blobs/{manifest['layers'][0]['digest']}"),
+        ]
     return world.transport.registry_requests() == expected
 
 

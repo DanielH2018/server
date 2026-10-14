@@ -8,9 +8,11 @@ contexts file `promote.py` reads, and runs `promote.py decide` against all three
 """
 
 import hashlib
+import io
 import json
 import re
 import subprocess
+import tarfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -24,6 +26,34 @@ CONTEXTS_YAML = f"gitops_deploy_ci_contexts:\n  - {CONTEXT}\n"
 
 def digest_of(name: str) -> str:
     return "sha256:" + hashlib.sha256(name.encode()).hexdigest()
+
+
+# The bundle a commit with no published tag renders: D1's empty root and the renderer's
+# digests.json for no tag, as promote.yml writes them.
+EMPTY_ROOT = (
+    b"apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources: []\n"
+)
+EMPTY_DIGESTS = {"_unclassified": {"footprint": "e3b0", "own": "e3b0", "paths": []}}
+
+
+def bundle_files(digests: dict | None = None, **flux: str) -> dict[str, bytes]:
+    """A bundle: `digests.json` (omitted when None), the kustomize root, and `flux/<name>.yaml`."""
+    files = {"flux/kustomization.yaml": EMPTY_ROOT}
+    if digests is not None:
+        files["digests.json"] = json.dumps(digests).encode()
+    files.update({f"flux/{name}.yaml": text.encode() for name, text in flux.items()})
+    return files
+
+
+def tarball(files: dict[str, bytes]) -> bytes:
+    """The one gzipped layer `flux push artifact` writes, holding `files`."""
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
+        for name, raw in sorted(files.items()):
+            info = tarfile.TarInfo(name)
+            info.size = len(raw)
+            tar.addfile(info, io.BytesIO(raw))
+    return buffer.getvalue()
 
 
 def green(name: str = CONTEXT) -> list[dict]:
@@ -54,6 +84,8 @@ class FakeTransport:
         api_forced: a status to answer for an api.github.com path, such as `.../versions`
             for the listing or `.../versions/<id>` for one delete.
         deleted: the id of each version a DELETE removed.
+        blobs: each layer's bytes by its digest.
+        statuses: each commit's newest status per context, as `{context: state}`.
         requests: every `(method, url)` sent, in order.
     """
 
@@ -64,6 +96,8 @@ class FakeTransport:
     versions: list[dict] = field(default_factory=list)
     api_forced: dict[str, int] = field(default_factory=dict)
     deleted: list[int] = field(default_factory=list)
+    blobs: dict[str, bytes] = field(default_factory=dict)
+    statuses: dict[str, dict[str, str]] = field(default_factory=dict)
     requests: list[tuple[str, str]] = field(default_factory=list)
 
     def __call__(self, method, url, headers):
@@ -75,6 +109,15 @@ class FakeTransport:
         if parts.netloc == "api.github.com" and match:
             runs = self.check_runs.get(match.group(1), [])
             return forge.Response(200, body=json.dumps({"check_runs": runs}).encode())
+        match = re.fullmatch(r"/repos/[^/]+/[^/]+/commits/(\w+)/status", parts.path)
+        if (
+            parts.netloc == "api.github.com"
+            and match
+            and parts.path not in self.api_forced
+        ):
+            found = self.statuses.get(match.group(1), {})
+            body = {"statuses": [{"context": c, "state": s} for c, s in found.items()]}
+            return forge.Response(200, body=json.dumps(body).encode())
         if parts.path in self.api_forced:
             message = {"message": f"forced HTTP {self.api_forced[parts.path]}"}
             body = json.dumps(message).encode()
@@ -97,6 +140,11 @@ class FakeTransport:
     def _registry(self, method, path):
         if path == "/token":
             return forge.Response(200, body=b'{"token": "registry-token"}')
+        if "/blobs/" in path:
+            blob = self.blobs.get(path.rsplit("/blobs/", 1)[1])
+            return (
+                forge.Response(404) if blob is None else forge.Response(200, body=blob)
+            )
         if path.endswith("/tags/list"):
             return forge.Response(
                 200, body=json.dumps({"tags": sorted(self.tags)}).encode()
@@ -226,17 +274,44 @@ class World:
         _git(self.repo, "checkout", "-q", "master")
         return sha
 
-    def publish(self, sha: str, check_runs: list[dict] | None = None) -> None:
-        """Push and sign `sha-<sha>`, with green CI unless `check_runs` says otherwise."""
+    def publish(
+        self,
+        sha: str,
+        check_runs: list[dict] | None = None,
+        files: dict[str, bytes] | None = None,
+    ) -> None:
+        """Push and sign `sha-<sha>`, with green CI unless `check_runs` says otherwise.
+
+        Its bundle holds `files`, or the empty bundle when they are None.
+        """
         self.transport.tags[f"sha-{sha}"] = digest_of(sha)
         self.transport.check_runs[sha] = green() if check_runs is None else check_runs
+        self.store(digest_of(sha), files)
 
-    def set_prod(self, sha: str, revision: str | None = None) -> None:
-        """Point `prod` at `sha`, annotated with `revision` when given."""
+    def store(self, digest: str, files: dict[str, bytes] | None = None) -> None:
+        """Make `digest` a pullable bundle holding `files`, the empty bundle by default."""
+        layer = tarball(bundle_files(EMPTY_DIGESTS) if files is None else files)
+        layer_digest = "sha256:" + hashlib.sha256(layer).hexdigest()
+        self.transport.blobs[layer_digest] = layer
+        self.transport.manifests[digest] = {"layers": [{"digest": layer_digest}]}
+
+    def set_prod(
+        self,
+        sha: str,
+        revision: str | None = None,
+        files: dict[str, bytes] | None = None,
+    ) -> None:
+        """Point `prod` at `sha`, annotated with `revision` when given, holding `files`."""
         self.transport.tags["prod"] = digest_of(sha)
         value = f"master@sha1:{sha}" if revision is None else revision
         annotations = {promote.REVISION_ANNOTATION: value} if value else {}
         self.transport.manifests["prod"] = {"annotations": annotations}
+        if files is not None or digest_of(sha) not in self.transport.manifests:
+            self.store(digest_of(sha), files)
+
+    def set_last_good(self, sha: str) -> None:
+        """Point `last-good` at `sha-<sha>`'s digest."""
+        self.transport.tags["last-good"] = digest_of(sha)
 
     def clients(self, registry: forge.Registry | None = None) -> forge.Forge:
         return forge.Forge(

@@ -4,10 +4,11 @@
 fact it reads from outside the checkout comes through this module:
 
 - `Registry` speaks the OCI distribution API to ghcr.io: the token request, the manifest
-  fetch and the manifest `HEAD`, and for `land-wait` a bundle file read out of its layer. It
+  fetch and the manifest `HEAD`, and a bundle's files read out of its layer, for `decide`'s
+  pulls and `land-wait`. It
   lists no tags, so a run's request count does not grow with the number of published versions.
-- `GitHub` reads a repository variable through `gh variable get` and a commit's check-runs
-  through the REST API. For `promote.py prune` it also lists the artifact's package versions
+- `GitHub` reads a repository variable through `gh variable get`, and a commit's check-runs
+  and its commit statuses through the REST API. For `promote.py prune` it also lists the artifact's package versions
   and deletes one, through the Packages API.
 - `Cosign` runs `cosign verify` under the identity the cluster's OCIRepository checks.
 
@@ -108,8 +109,13 @@ class Transport(Protocol):
     ) -> Response: ...
 
 
-def urllib_transport(method: str, url: str, headers: Mapping[str, str]) -> Response:
+def urllib_transport(
+    method: str, url: str, headers: Mapping[str, str], timeout: float = TIMEOUT_S
+) -> Response:
     """Send one request with `urllib`, returning a non-2xx status rather than raising it.
+
+    `timeout` is in seconds. `probe.py landing` passes its own, measured against the live
+    registry, and every `promote.py` read keeps TIMEOUT_S.
 
     Raises:
         ForgeError: the request timed out or never reached the server.
@@ -118,7 +124,7 @@ def urllib_transport(method: str, url: str, headers: Mapping[str, str]) -> Respo
         url, method=method, headers={"User-Agent": USER_AGENT, **headers}
     )
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return Response(response.status, _lower(response.headers), response.read())
     except urllib.error.HTTPError as err:
         return Response(err.code, _lower(err.headers or {}), err.read() or b"")
@@ -215,12 +221,36 @@ class Registry:
         Raises:
             ForgeError: any other status, a body that is not a JSON object, or no answer.
         """
+        found = self._manifest(reference)
+        return None if found is None else found[0]
+
+    def tagged(self, reference: str) -> tuple[dict, str] | None:
+        """The manifest `reference` names and its digest, from one GET, or None when absent.
+
+        The digest is the response's `Docker-Content-Digest`, so reading a tag's commit and
+        its digest costs one request rather than a GET and a HEAD.
+
+        Raises:
+            ForgeError: as `manifest`, or a 200 without a well-formed digest header.
+        """
+        found = self._manifest(reference)
+        if found is None:
+            return None
+        manifest, response = found
+        digest = response.headers.get("docker-content-digest", "")
+        if not _DIGEST.fullmatch(digest):
+            raise ForgeError(
+                f"manifest {reference}: no sha256 Docker-Content-Digest header"
+            )
+        return manifest, digest
+
+    def _manifest(self, reference: str) -> tuple[dict, Response] | None:
         response = self._manifest_request("GET", reference)
         if response.status == 200:
             manifest = _json(response, f"manifest {reference}")
             if not isinstance(manifest, dict):
                 raise ForgeError(f"manifest {reference}: the body is not a JSON object")
-            return manifest
+            return manifest, response
         if response.status == 404 or "MANIFEST_UNKNOWN" in _error_codes(response):
             return None
         raise ForgeError(f"manifest {reference}: HTTP {response.status}")
@@ -259,16 +289,18 @@ class Registry:
             raise ForgeError(f"blob {digest}: HTTP {response.status}")
         return response.body
 
-    def bundle_file(self, reference: str, name: str) -> bytes | None:
-        """The file `name` at the root of the bundle `reference` tags, or None for no such tag.
+    def bundle(self, reference: str) -> dict[str, bytes] | None:
+        """Every regular file in the bundle `reference` names, by its path from the bundle root.
 
         `flux push artifact` writes one layer, a gzipped tarball of the bundle directory, so
-        the file is read out of that layer.
+        the files are read out of that layer. `reference` is a tag or a `sha256:` digest.
+
+        Returns:
+            The files, or None when the registry has no such tag or digest.
 
         Raises:
-            ForgeError: the manifest has no single layer, the layer is not a gzipped tarball,
-                or the tarball holds no `name` at its root. Each read of the registry raises
-                as `manifest` and `blob` do.
+            ForgeError: the manifest has no single layer, or the layer is not a gzipped
+                tarball. Each read of the registry raises as `manifest` and `blob` do.
         """
         manifest = self.manifest(reference)
         if manifest is None:
@@ -278,18 +310,18 @@ class Registry:
         digest = layer.get("digest") if isinstance(layer, dict) else None
         if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
             raise ForgeError(f"manifest {reference}: not one layer with a digest")
+        files: dict[str, bytes] = {}
         try:
             with tarfile.open(
                 fileobj=io.BytesIO(self.blob(digest)), mode="r:gz"
             ) as tar:
                 for member in tar.getmembers():
-                    if member.isfile() and member.name.removeprefix("./") == name:
-                        handle = tar.extractfile(member)
-                        if handle is not None:
-                            return handle.read()
+                    handle = tar.extractfile(member) if member.isfile() else None
+                    if handle is not None:
+                        files[member.name.removeprefix("./")] = handle.read()
         except (tarfile.TarError, gzip.BadGzipFile, EOFError, OSError) as err:
             raise ForgeError(f"bundle {reference}: {err}") from err
-        raise ForgeError(f"bundle {reference} holds no {name}")
+        return files
 
 
 def _api_message(response: Response) -> str:
@@ -387,6 +419,37 @@ class GitHub:
         if not isinstance(runs, list):
             raise ForgeError(f"check-runs for {sha}: the body has no check_runs list")
         return runs
+
+    def statuses(self, sha: str) -> dict[str, str]:
+        """The newest commit status per context on commit `sha`, as `{context: state}`.
+
+        Reads GitHub's combined status, which keeps the newest status of each context. A
+        state is `pending`, `success`, `failure` or `error`. A context with no status is
+        absent from the map, which the caller must never read as success.
+
+        Raises:
+            ForgeError: any status but 200, a body without a `statuses` list, or no answer.
+        """
+        url = (
+            f"https://api.github.com/repos/{self.repository}/commits/{sha}/status"
+            "?per_page=100"
+        )
+        response = self._transport("GET", url, self._rest_headers())
+        if response.status != 200:
+            raise ForgeError(
+                f"statuses for {sha}: HTTP {response.status}{_api_message(response)}"
+            )
+        body = _json(response, f"statuses for {sha}")
+        found = body.get("statuses") if isinstance(body, dict) else None
+        if not isinstance(found, list):
+            raise ForgeError(f"statuses for {sha}: the body has no statuses list")
+        return {
+            entry["context"]: entry["state"]
+            for entry in found
+            if isinstance(entry, dict)
+            and isinstance(entry.get("context"), str)
+            and isinstance(entry.get("state"), str)
+        }
 
     def package_versions(self) -> list[dict]:
         """Every version of the artifact's package, as the Packages API returns each one.

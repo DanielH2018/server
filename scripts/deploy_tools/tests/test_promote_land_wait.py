@@ -315,14 +315,18 @@ def test_the_digests_file_is_read_out_of_the_bundle_layer():
         _bundle({"flux/kustomization.yaml": b"", "digests.json": body})
     )
     registry = forge.Registry(transport, None)
-    assert registry.bundle_file(f"sha-{M}", "digests.json") == body
-    assert registry.bundle_file(f"sha-{P}", "digests.json") is None
+    files = registry.bundle(f"sha-{M}")
+    assert files is not None and files["digests.json"] == body
+    assert registry.bundle(f"sha-{P}") is None
 
 
 def test_a_bundle_without_the_digests_file_is_a_read_error():
     transport = BlobTransport(_bundle({"flux/kustomization.yaml": b""}))
-    with pytest.raises(forge.ForgeError, match=r"holds no digests\.json"):
-        forge.Registry(transport, None).bundle_file(f"sha-{M}", "digests.json")
+    f = forge.Forge(
+        forge.Registry(transport, None), forge.GitHub(transport, None), forge.Cosign()
+    )
+    with pytest.raises(promote_wait.WaitReadError, match=r"holds no digests\.json"):
+        promote_wait._bundle_digests(f, M)
 
 
 def test_the_kustomization_list_is_read_with_the_read_only_kubectl():
