@@ -59,3 +59,35 @@ def test_real_inventory_renders_stamped_services_and_skips_a_shared_role():
 def test_cli_exits_one_for_a_host_with_nothing_to_render(capsys):
     assert render_targets.main(["no-such-host"]) == 1
     assert "no renderable k8s service" in capsys.readouterr().err
+
+
+def _flux_tree(tmp_path, owner_line):
+    """A host whose two renderable services differ only in whether `bento-pdf` sets `owner`."""
+    host_vars, roles = tmp_path / "host_vars", tmp_path / "roles"
+    host_vars.mkdir()
+    (host_vars / "box.yml").write_text(
+        "containers_list:\n"
+        "  - name: bento-pdf\n    platform: k8s\n"
+        + owner_line
+        + "  - name: sonarr\n    platform: k8s\n"
+    )
+    for name in ("bento-pdf", "sonarr"):
+        _role(roles, name, _INCLUDER)
+    return host_vars, roles
+
+
+def test_cli_lists_an_ansible_owned_tag_is_clean(tmp_path, capsys):
+    host_vars, roles = _flux_tree(tmp_path, "")
+    assert render_targets.main(["box"], host_vars, roles) == 0
+    assert capsys.readouterr().out.strip() == "bento-pdf,sonarr"
+
+
+def test_cli_lists_a_flux_owned_tag_is_flagged(tmp_path, capsys):
+    """The hourly record list leaves it out, and the full universe keeps it for the renderer."""
+    host_vars, roles = _flux_tree(tmp_path, "    owner: flux\n")
+    assert render_targets.main(["box"], host_vars, roles) == 0
+    assert capsys.readouterr().out.strip() == "sonarr"
+    assert render_targets.render_targets("box", host_vars, roles) == [
+        "bento-pdf",
+        "sonarr",
+    ]

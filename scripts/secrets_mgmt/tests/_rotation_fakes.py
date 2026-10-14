@@ -47,6 +47,9 @@ class Fakes:
     # exactly that exception, so a runner that swallowed it would fake away the difference.
     run_rc: int = 0
     run_stdout: str = ""
+    # Deploy tag to `owner`, as `lib.k8s_roles.tag_owners` maps it. Empty is the live tree's
+    # answer until a service moves to Flux.
+    owners: dict[str, str] = field(default_factory=dict)
 
 
 def build_tools(f: Fakes) -> tuple[RotationTools, list]:
@@ -112,6 +115,7 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         sops_set=partial(sops_set, run=run),
         kuma_push=kuma_push,
         deploy=partial(run_deploy, run=run),
+        owners=lambda: f.owners,
     ), calls
 
 

@@ -22,6 +22,10 @@ also depends on H2's family PRs for six roles, as *Host-side rows* lists, and ne
 - D3's `cluster_vars.py write` refusals gate two flips: the `{{` and argon2 refusals gate
   authelia's, and the `mqtt_password_hash` colon refusal gates mosquitto's (*How each kind of
   task moves*).
+- R2 PR 7b and a green run of D3.3d's `sops-manifest-type-proof` job gate qbittorrent's flip,
+  because R2 PR 7b moves `mullvad_account` into a dedicated SOPS Secret whose all-digit value
+  only that job measures (*How each kind of task moves*). Neither R2 nor D3 waits on D5, so
+  the edge adds no loop.
 - M6's B-1e gates littlelink's flip, because M6's live health-gate drill needs littlelink
   Ansible-owned. M6 depends on M2 to M5 only, so the edge adds no loop.
 - H1.7b gates the flux PR. Until H1.7b, H1's bring-up runs step 1 with
@@ -2181,6 +2185,24 @@ sizes its batch of roles against that projection.
       `mqtt_password_hash`, merged before the flip. R2's colon-count assert stops running once
       Flux renders mosquitto. Without the refusal, a value holding `:` would reach the
       password file with its prefix stripped, and every MQTT client would fail to log in.
+    - qbittorrent: the flip has three preconditions, because R2 PR 7b moves `mullvad_account`
+      out of qbittorrent's Secret into the dedicated SOPS Secret `qbittorrent-mullvad-account`,
+      the fourth `render_sops_manifests` entry (R2 *`mullvad_account` becomes a dedicated
+      Secret*). The flip PR body quotes all three.
+        - **R2 PR 7b is merged**, so no placeholder carries `mullvad_account` and R2's
+          `GUARD_DEFERRED` is empty. The flip PR body links the merged PR.
+        - **D3's SOPS manifest and `decryption`.** `cluster_vars.py check` (operator-run)
+          lists D3's SOPS manifest for `mullvad_account`, and qbittorrent's Kustomization
+          renders `decryption`, as for home-assistant, pi-peer-backup and authelia. A test in
+          `scripts/renderer/tests/` names qbittorrent as a member of the tags that render
+          `decryption`.
+        - **A green run of D3.3d's `sops-manifest-type-proof` job.** The run shows that an
+          all-digit value in a quoted `stringData` field of a SOPS-encrypted Secret applies
+          as a string. The flip PR body links the run. If the job is red, D3's `write` emits
+          the value under base64 `data:` first, and the flip waits on the D3 PR that does so
+          (R2 *`mullvad_account` becomes a dedicated Secret*). The API server refuses an
+          int as a `stringData` value, so a flip without either could leave qbittorrent's
+          Kustomization unable to apply.
     - registry: the self-test and netpol probe Jobs become `registry-verify`. **The GC is
       retired, not moved,** in a conversion PR while registry is still Ansible-owned. Its
       script scales `deploy/registry`, whose `replicas: 1` Flux renders, so under Flux the
@@ -4321,6 +4343,14 @@ Refuted: none.
 - Cross-slice note from R4 on D5.2c: the step says that `ansible/volume-revert.yml` gathers
   facts. Confirmed at `70591c307`: `longhorn-api/tasks/resolve.yml` reads `ansible_hostname`
   four times, and `load_secrets.yml` runs `ansible.builtin.setup`.
+
+### Cross-slice follow-up (2026-10-14)
+
+- Cross-slice note from R2 (Open question 13,
+  [#4895](https://github.com/DanielH2018/server/issues/4895)): qbittorrent's flip in step 26
+  waits on R2 PR 7b, D3's SOPS manifest for `mullvad_account` with `decryption`, and a green
+  run of D3.3d's `sops-manifest-type-proof` job. The header names the edge. The issue cited
+  the job as D3.3c's. D3 places it at D3.3d, after D3.3c's manifest copy, which it exercises.
 
 ### Pillar review fold (2026-10-12)
 

@@ -294,7 +294,8 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     the registry dates advanced to git's (skipped with `--no-derive`). Exits 64 when
     `args.name` names a non-auto-tier secret, 3 when a `sops set` fails or times out partway
     through the batch, 1 when `--deploy` is given and the redeploy fails (the new tokens are written but
-    their consumers are not), 0 otherwise.
+    their consumers are not), 0 otherwise. A consumer whose entry carries `owner` is left out of
+    the redeploy and named, and no deploy runs when none is left.
     """
     reg = tools.load_registry()
     now = tools.today()
@@ -390,6 +391,15 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         return 0
 
     tools.save_registry(reg)
+    # Before both the redeploy and the Next: line, so neither names a tag `deploy.sh` refuses.
+    owners = tools.owners()
+    left_out = tags & owners.keys()
+    for tag in sorted(left_out):
+        print(
+            "  not redeployed: %s carries owner: %s, which no Ansible path may apply"
+            % (tag, owners[tag])
+        )
+    tags -= left_out
     if args.deploy and tags:
         if tools.deploy(sorted(tags)) != 0:
             error(
@@ -399,13 +409,20 @@ def cmd_rotate(args, tools: RotationTools) -> int:
                 % ",".join(sorted(tags))
             )
             return 1
-    elif not args.deploy:
+    elif args.deploy:
+        if left_out:
+            print("  deployed nothing: no consumer is left for Ansible to deploy")
+    else:
         # deploy.sh deploys HEAD, not the working tree, so the rotated values reach no
-        # consumer until they are committed.
-        print(
-            "\nNext: commit secrets.yml and secret_rotation.yml, then redeploy the "
-            "consumer(s): `./scripts/deploy.sh --tags %s`" % ",".join(sorted(tags))
+        # consumer until they are committed. A consumer Flux applies needs the commit too,
+        # so the commit half stays when every consumer was left out of the redeploy.
+        redeploy = (
+            ", then redeploy the consumer(s): `./scripts/deploy.sh --tags %s`"
+            % ",".join(sorted(tags))
+            if tags
+            else ""
         )
+        print("\nNext: commit secrets.yml and secret_rotation.yml" + redeploy)
     return 0
 
 

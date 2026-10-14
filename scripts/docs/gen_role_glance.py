@@ -31,7 +31,9 @@ roles:
   column, per claim — `catalog_backup.claim_tiers` is the one derivation both print, so a
   tier here is read from the claim's StorageClass and the k3s role's `k3s_longhorn_*_volumes`
   lists, never typed), and the `k8s_autodeploy` stance with the role's own
-  `k8s_autodeploy_reason`;
+  `k8s_autodeploy_reason`. For an entry that carries `owner` (`lib.k8s_roles.tag_owners`), an
+  **Applied by** line replaces both the deploy tag and the stance: it names Flux and
+  `promote`, or the handback, and says `deploy.sh` refuses the tag with exit 5;
 - a setup role (`roles/setup/<name>/`, every directory but the include-only `common`): the
   playbook and tag that apply it, with the `when:` that restricts it to a host, read from the
   `roles:` lists and `include_role` tasks of the bring-up playbooks; every cron it installs,
@@ -103,7 +105,9 @@ from docs.catalog_lib.catalog_backup import (
     autodeploy_stance,
     claim_index,
     claim_tiers,
+    entry_owner,
     load_longhorn_tier_lists,
+    owner_stance,
 )
 from docs.catalog_lib.catalog_facts import auth_tier, k8s_route
 from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES
@@ -115,8 +119,10 @@ from docs.catalog_lib.glance_facts import (
     setup_glance_lines,
     setup_role_dirs,
 )
+from lib.ansible_inventory import K8S_HOST
 from lib.cli_help import ArgumentParser
 from lib.estate import Estate, role_defaults
+from lib.k8s_roles import tag_owners
 from lib.render_guard import ALL_VARS, entry_tags
 from lib.repo_paths import ANSIBLE, REPO
 
@@ -188,16 +194,21 @@ def glance_lines(
     k3s_defaults: Path = K3S_DEFAULTS,
     claim_classes: dict[str, str | None] | None = None,
     tiers: LonghornTiers | None = None,
+    owner: str | None = None,
 ) -> list[str]:
     """The block's bullet lines for one deployed k8s role, unwrapped.
 
     `claim_classes` is `claim_index(k8s_roles)` and `tiers` the Longhorn tier lists, both
     built once by the caller that renders every role; built here for a single-role call,
-    whose tier lists derive the R2 set from the repo's `containers_list`.
+    whose tier lists derive the R2 set from the repo's `containers_list`. `owner` is the
+    entry's `owner` as `entry_owner` reads it, None for an Ansible-owned entry.
     """
     name = entry["name"]
     defaults = role_defaults(role_dir)
-    lines = [f'- **Deploy tag:** `--tags "{",".join(entry_tags(entry))}"`']
+    if owner is not None:
+        lines = [f"- **Applied by:** {owner_stance(owner)}"]
+    else:
+        lines = [f'- **Deploy tag:** `--tags "{",".join(entry_tags(entry))}"`']
 
     images = image_vars(name, defaults, group_vars)
     if images:
@@ -246,6 +257,9 @@ def glance_lines(
     else:
         lines.append("- **Claims:** none (no PVC)")
 
+    if owner is not None:
+        # The Applied by line already stands in for the stance.
+        return lines
     stance, reason = autodeploy_stance(role_dir)
     if stance is None:
         lines.append(
@@ -376,6 +390,10 @@ def stale_k8s_docs(
     claim_classes = claim_index(k8s_roles)
     entries = estate.k8s_entries()
     tiers = load_longhorn_tier_lists(k3s_defaults, group_vars, list(entries.values()))
+    inventory = estate.inventory
+    owners = tag_owners(
+        inventory.host_vars / f"{inventory.plane_hosts.get('k8s', K8S_HOST)}.yml"
+    )
     stale: list[str] = []
     for entry in entries.values():
         name = entry["name"]
@@ -390,6 +408,7 @@ def stale_k8s_docs(
                 k3s_defaults=k3s_defaults,
                 claim_classes=claim_classes,
                 tiers=tiers,
+                owner=entry_owner(entry, owners),
             )
         )
         if _refresh(role_dir / "CLAUDE.md", block, write=write):

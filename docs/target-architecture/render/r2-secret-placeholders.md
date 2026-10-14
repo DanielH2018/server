@@ -24,6 +24,9 @@ output `domain` since `0ef579e1f`
 Domain PR 1, `domain` as an inventory variable read without SOPS:
 [#4994](https://github.com/DanielH2018/server/pull/4994).
 
+Domain PR 2a of step 10, the named members moved from `domain` to `email`:
+[#4990](https://github.com/DanielH2018/server/pull/4990).
+
 Depends on: [R1](r1-shadow-render.md)
 
 Unblocks: D2 and D3. D2's publish job renders bento-pdf, whose IngressRoute holds `domain`,
@@ -593,7 +596,7 @@ it empty.
 Each rule also asserts that it read something, so a rule that stops matching cannot pass
 vacuously:
 
-- Rule 3 must see `${domain}` in `homepage`'s IngressRoute.
+- Rule 3 must see `${email}` in `traefik`'s `traefik-static` ConfigMap.
 - Rule 1 must see a placeholder in `authelia`'s config Secret.
 - Rule 2 must see `$${` in `qbittorrent`'s `qbittorrent-netns-reset` ConfigMap, which embeds
   `qbittorrent/files/netns-reset.sh`. The `qbittorrent` directory substitutes, because its
@@ -788,7 +791,7 @@ question 13), and contracts.md C3 *Secrets* states the rule.
 mode and holds the committed map equal to each tag's standalone keys less `GUARD_DEFERRED`.
 It fails on three more conditions: a key in both the map and `GUARD_DEFERRED`, a
 `GUARD_DEFERRED` member with no standalone use left, and a mapped key absent from
-`secrets.yml`. Its named members are `domain`, mapped under `homepage`, and, until PR 7b,
+`secrets.yml`. Its named members are `email`, mapped under `traefik`, and, until PR 7b,
 `mullvad_account` in `GUARD_DEFERRED`. On a mismatch it prints the command that regenerates
 the map. CI's `pytest` job runs it, so the map cannot go stale on master.
 
@@ -1475,8 +1478,8 @@ remains the gate.
   above, plus the two measured type cases, whose results PR 1 records. A
   one-byte edit to a `stringData` value of a Secret in the placeholder render makes
   `roundtrip` report that Secret. The edit targets a Secret because Secrets hold nearly
-  every placeholder. A second-pass run over `homepage` with the guard's map read as empty
-  exits 1 and names its IngressRoute, so the narrowed pass can still see a standalone use.
+  every placeholder. A second-pass run over `traefik` with `email` dropped from the guard's
+  map exits 1 and names its Deployment, so the narrowed pass can still see a standalone use.
 - The standalone-value guard, as listed under PR 1c: the resolver's pair in
   `scripts/lib/tests/`, the standalone-detection pair and the coverage test in
   `scripts/renderer/tests/`, and the guard tasks' templar test in `ansible/tests/k8s/`. The
@@ -1926,11 +1929,10 @@ remains the gate.
     - D3 carries two parts, recorded in its plan as a cross-slice note: `write` applies the
       same resolver, and D3's in-cluster proof shows an all-digit value in a SOPS-encrypted
       Secret's quoted field applied as a string.
-    - *D5, open.* D5's flip of qbittorrent waits on D3's proof, and it needs D3's SOPS
-      manifest for `mullvad_account` and its `decryption` field, as D5 already records for
-      the three roles of PRs 5 to 7. D5's text does not say so yet. R2 hands it over as a
-      cross-slice note, tracked in
-      [#4895](https://github.com/DanielH2018/server/issues/4895).
+    - *D5, recorded.* D5's flip of qbittorrent waits on D3's proof, and it needs D3's SOPS
+      manifest for `mullvad_account` and its `decryption` field, as D5 records for the three
+      roles of PRs 5 to 7. D5's header and step 26 list both, and PR 7b, as the flip's
+      preconditions ([#4895](https://github.com/DanielH2018/server/issues/4895)).
 
    *What a refusal means.* A refused key fails its role's deploy before the apply, by
    name. The operator then either rotates the value to one the resolver passes
