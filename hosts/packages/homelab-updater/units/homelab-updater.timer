@@ -1,4 +1,3 @@
-# H3.3a proof: a temporary line that changes the render.
 # Shipped by homelab-updater, with no enable link: each host package ships its own link, and a
 # host arms its updater by shipping it. A host package's drop-in overrides the schedule.
 [Unit]
