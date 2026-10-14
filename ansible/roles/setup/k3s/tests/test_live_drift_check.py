@@ -278,6 +278,30 @@ def test_the_migration_residue_manager_does_not_count_as_server_side():
     )
 
 
+def _flux_meta(*, last_applied: bool) -> dict:
+    meta = _meta(("kustomize-controller", "Apply"))
+    if last_applied:
+        meta["annotations"] = {ldc.LAST_APPLIED: "{}"}
+    return meta
+
+
+def test_a_flux_applied_object_is_skipped():
+    # ACCEPT half. Flux applies server-side and strips last-applied on every apply.
+    assert ldc.is_server_side_applied(_flux_meta(last_applied=False))
+
+
+def test_a_handed_back_flux_object_is_compared():
+    # fact: ansible/roles/setup/k3s/CLAUDE.md#Notable
+    # REJECT half. After a handback kustomize-controller's entry survives, and Ansible's
+    # client-side apply writes last-applied again. The object is Ansible's to compare.
+    assert not ldc.is_server_side_applied(_flux_meta(last_applied=True))
+    # The narrowing covers Flux's entry only. A kubectl server-side apply over a leftover
+    # annotation is still server-side, as the function's docstring says.
+    kubectl_ssa = _meta(("kubectl", "Apply"))
+    kubectl_ssa["annotations"] = {ldc.LAST_APPLIED: "{}"}
+    assert ldc.is_server_side_applied(kubectl_ssa)
+
+
 def test_fetch_asks_kubectl_for_managed_fields():
     # kubectl strips managedFields from `get` output by default, so without the flag every
     # object reads as client-side applied and the exclusion is silently inert.

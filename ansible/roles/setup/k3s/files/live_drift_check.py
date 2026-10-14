@@ -41,7 +41,8 @@ rather than quietly omitting it.
 Server-side-applied objects are out of scope on both arms. SSA prunes removed fields by field
 ownership and writes no last-applied annotation, so neither "no baseline" nor a comparison
 against a leftover annotation says anything true about them. is_server_side_applied() reads
-that off managedFields rather than a list of names.
+that off managedFields rather than a list of names. An object Flux applied counts as
+server-side until it carries last-applied again, after a handback.
 
 Exit codes: 0 clean, 1 drift or a client-side-applied object with no apply baseline, 2 the
 check itself failed.
@@ -143,6 +144,12 @@ PATCH_MAINTAINED = {
 # server-side apply. It carries operation "Apply" but owns only the last-applied annotation,
 # so it does NOT mean the object is server-side managed.
 _MIGRATION_MANAGER = "kubectl-last-applied"
+
+# Flux's field manager. Flux applies server-side and strips last-applied-configuration on every
+# apply, so an object carrying both this manager's Apply entry and that annotation was applied
+# client-side by Ansible after a handback. The entry outlives the handback, and only the
+# annotation says the object is Ansible's again.
+_FLUX_MANAGER = "kustomize-controller"
 
 _SUFFIXES = {
     "": 1.0,
@@ -262,9 +269,15 @@ def is_server_side_applied(meta: dict) -> bool:
     The signal is managedFields, not a list of names: five roles apply script and dashboard
     ConfigMaps server-side (roles/k8s/{monitor-bridge,autofix-bridge,terraria-stats,
     valheim-stats,observability}), and a sixth joins them without touching this file.
+
+    A kustomize-controller entry does not count on an object that carries last-applied: that
+    object was handed back from Flux to Ansible, and its baseline is current again.
     """
+    handed_back = LAST_APPLIED in (meta.get("annotations") or {})
     return any(
-        entry.get("operation") == "Apply" and entry.get("manager") != _MIGRATION_MANAGER
+        entry.get("operation") == "Apply"
+        and entry.get("manager") != _MIGRATION_MANAGER
+        and not (handed_back and entry.get("manager") == _FLUX_MANAGER)
         for entry in meta.get("managedFields") or []
     )
 
