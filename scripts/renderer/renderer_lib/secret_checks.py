@@ -219,6 +219,11 @@ KNOWN_VIOLATIONS = frozenset(
             "truthiness test",
             "renovate_agent_kuma_push_token",
         ),
+        # Rule 5: the `observability_prometheus_config` set block outputs `{{ domain }}`, so it
+        # is an alias of `domain`, and the Deployment hashes it with `hash('sha1')`. Under Flux
+        # the hash would cover the placeholder, so a `domain` change would not restart
+        # Prometheus. #4952; R2's PR 8 moves the key out of the hashed text.
+        _rule5("observability", "prometheus.yaml.j2", "filter hash", "domain"),
     }
 )
 

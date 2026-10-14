@@ -60,7 +60,10 @@ def test_rule5_finds_its_floor_named_members_and_allowlisted_site_is_clean(
     assert rule5_members(rule5_result, keys) == []
     (site,) = NON_SECRET_VARS_LOOKUPS
     assert (site.template, site.argument) in rule5_result.lookup_sites
-    assert not [v for v in rule5_result.violations if v.file == site.template]
+    # The template's one violation is the `domain` hash in the block (#4952), none from the lookup.
+    in_template = [v for v in rule5_result.violations if v.file == site.template]
+    assert [(v.site, v.key) for v in in_template] == [("filter hash", "domain")]
+    assert set(in_template) <= KNOWN_VIOLATIONS
 
 
 def _without(render, directory: str, file_part: str, old: str):

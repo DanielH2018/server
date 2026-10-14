@@ -100,15 +100,11 @@ ALIAS_MEMBERS = (
     ("ansible/templates/ingressroute.yml.j2", "domain", "value alias host", 1),
 )
 
-# The bindings rule 5 must see and must not read as an alias, as `(template, name)`. The
-# Prometheus set block's one candidate reference is its `NON_SECRET_VARS_LOOKUPS` site, so its
-# `hash('sha1')` is no transform of a key.
-NOT_ALIASES = (
-    (
-        "ansible/roles/k8s/observability/templates/prometheus.yaml.j2",
-        "observability_prometheus_config",
-    ),
-)
+# The bindings rule 5 must see and must not read as an alias, as `(template, name)`. It is
+# empty because the `observability_prometheus_config` set block in `prometheus.yaml.j2`
+# outputs `{{ domain }}` and so is an alias, which its `KNOWN_VIOLATIONS` entry records
+# (#4952). R2's PR 8 moves the key out of that block and restores the member here.
+NOT_ALIASES: tuple[tuple[str, str], ...] = ()
 
 
 def not_alias_problems(
