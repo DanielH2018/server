@@ -293,6 +293,10 @@ notification-controller posts on T:
 - **T, not the trigger.** `decide` may pick a commit newer than the one whose CI started the
   run, and Flux posts statuses only on the commit `prod` names. `verify` reads T's own bundle,
   which `decide` pulled, never the render job's `out/`.
+- **Only this promotion's statuses count.** `tag` stamps the time just before it moves
+  `prod`, and `verify` ignores any status on T updated more than a minute before that. A
+  commit promoted a second time, after a hold on it was cleared, still carries the first
+  promotion's statuses, and an old `failure` would otherwise hold it again at the first read.
 - **The verdict.** Every expected status `success` is `good`. Any `failure` or `error` is
   `failed`. A missing or `pending` status keeps the wait going and never reads as success, so
   the timeout ends it as `failed`, naming each name that had no `success`. The timeout is the

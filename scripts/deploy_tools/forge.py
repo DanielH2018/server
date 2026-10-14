@@ -5,11 +5,11 @@ fact it reads from outside the checkout comes through this module:
 
 - `Registry` speaks the OCI distribution API to ghcr.io: the token request, the manifest
   fetch and the manifest `HEAD`, and a bundle's files read out of its layer, for `decide`'s
-  pulls and `land-wait`. It
-  lists no tags, so a run's request count does not grow with the number of published versions.
+  pulls and `land-wait`. It lists no tags, so a run's request count does not grow with the
+  number of published versions.
 - `GitHub` reads a repository variable through `gh variable get`, and a commit's check-runs
-  and its commit statuses through the REST API. For `promote.py prune` it also lists the artifact's package versions
-  and deletes one, through the Packages API.
+  and commit statuses through the REST API. For `promote.py prune` it also lists the
+  artifact's package versions and deletes one, through the Packages API.
 - `Cosign` runs `cosign verify` under the identity the cluster's OCIRepository checks.
 
 Each read returns a value, returns None for "absent", or raises `ForgeError`. What absent and
@@ -17,8 +17,7 @@ error MEAN for a promotion is `promote.py`'s business, not this module's. A forg
 rewrites this module and leaves `promote.py` alone.
 
 Every HTTP request goes through a `Transport`, a callable taking the method, the URL and the
-headers. The real one is `urllib_transport`. The tests pass a fake that models a registry and
-counts the requests made.
+headers: `urllib_transport`, or the tests' fake, which models a registry and counts requests.
 
 The plan is `docs/target-architecture/deploy/d1-flux-installed.md`, *Decisions*,
 *Every GitHub and GHCR call goes through one forge adapter*.
@@ -36,6 +35,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Protocol
 
 
@@ -337,6 +337,14 @@ def _api_message(response: Response) -> str:
     return f": {message}" if isinstance(message, str) and message else ""
 
 
+def _updated(entry: dict) -> datetime:
+    """A commit status's `updated_at`, or the earliest time when it is missing or malformed."""
+    try:
+        return datetime.fromisoformat(str(entry.get("updated_at")))
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
+
+
 def _error_codes(response: Response) -> set[str]:
     """The `code` of each entry in an OCI error body, or nothing when the body has none."""
     try:
@@ -420,12 +428,13 @@ class GitHub:
             raise ForgeError(f"check-runs for {sha}: the body has no check_runs list")
         return runs
 
-    def statuses(self, sha: str) -> dict[str, str]:
+    def statuses(self, sha: str, since: datetime | None = None) -> dict[str, str]:
         """The newest commit status per context on commit `sha`, as `{context: state}`.
 
         Reads GitHub's combined status, which keeps the newest status of each context. A
         state is `pending`, `success`, `failure` or `error`. A context with no status is
-        absent from the map, which the caller must never read as success.
+        absent from the map, which the caller must never read as success. With `since`, a
+        status whose `updated_at` precedes it, or is unreadable, is absent too.
 
         Raises:
             ForgeError: any status but 200, a body without a `statuses` list, or no answer.
@@ -449,6 +458,7 @@ class GitHub:
             if isinstance(entry, dict)
             and isinstance(entry.get("context"), str)
             and isinstance(entry.get("state"), str)
+            and (since is None or _updated(entry) >= since)
         }
 
     def package_versions(self) -> list[dict]:

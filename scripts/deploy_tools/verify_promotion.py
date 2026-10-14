@@ -18,6 +18,11 @@ WHERE THE BUNDLES COME FROM. `decide` pulls both before `prod` moves and writes 
 `--bundle-dir` (`write_handoff`), so a registry error promotes nothing. `verify` reads them
 back (`read_handoff`) and makes no registry call.
 
+ONLY STATUSES FROM THIS PROMOTION COUNT. T may carry statuses from an earlier promotion of
+the same commit, such as the `failure` that held it before an operator cleared the hold and
+dispatched `promote` again. `verify` reads T's statuses from `--moved-at`, the time the `tag`
+job moved `prod`, less MOVED_AT_SKEW_S, so an older status reads as no status at all.
+
 THE VERDICT. Every expected status `success` is `good`. Any expected `failure` or `error` is
 `failed`, naming those. At the timeout it is `failed`, naming every expected name that is not
 `success`. A missing status, or a `pending` one, keeps the wait going and never reads as
@@ -41,6 +46,7 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import yaml
@@ -64,6 +70,11 @@ KUSTOMIZATION_API = "kustomize.toolkit.fluxcd.io/v1"
 STATUS_PREFIX = "flux/"
 FAILED_STATES = frozenset({"failure", "error"})
 _SHA = re.compile(r"[0-9a-f]{40}")
+
+# How far before `--moved-at` a status on T still counts, for clock skew between the runner
+# that stamped the move and GitHub. A status left by an earlier promotion of T is older than
+# that by a whole failed run: a verify timeout, a settle, an operator's clear and a new render.
+MOVED_AT_SKEW_S = 60
 
 # Seconds between two status reads. Each is one GITHUB_TOKEN call, so a 15-minute wait spends
 # 30 of the token's 1,000 an hour.
@@ -262,11 +273,12 @@ class StatusReads:
 
     Attributes:
         statuses: the newest status per context on a commit, raising `forge.ForgeError`.
+            With a time, it leaves out every status updated before it.
         sleep: waits the given seconds.
         clock: monotonic seconds.
     """
 
-    statuses: Callable[[str], dict[str, str]]
+    statuses: Callable[[str, datetime | None], dict[str, str]]
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
 
@@ -297,7 +309,7 @@ def already_failing(
     if not dependents or not prior:
         return frozenset()
     try:
-        states = reads.statuses(prior)
+        states = reads.statuses(prior, None)
     except forge.ForgeError as err:
         print(f"  verify: prod's commit {prior[:8]}: {err}; expecting every dependent")
         return frozenset()
@@ -311,6 +323,7 @@ def verify(
     target: str,
     prior: str,
     expected: Expected,
+    since: datetime | None = None,
     poll_s: int = POLL_S,
 ) -> Verdict:
     """Wait on T's statuses for the expected names until one fails, all pass or time runs out.
@@ -320,6 +333,8 @@ def verify(
         target: T, the commit `decide` printed. Never the commit that triggered the run.
         prior: `prod`'s commit before the move, or "" on the first run.
         expected: what to wait on.
+        since: the earliest update a status on T may carry and still count, so a status
+            from an earlier promotion of T reads as none. None counts every status.
         poll_s: the seconds between reads.
     """
     reported = already_failing(reads, prior, expected.dependents)
@@ -340,7 +355,7 @@ def verify(
     last = ""
     while True:
         try:
-            states = reads.statuses(target)
+            states = reads.statuses(target, since)
             line = ", ".join(
                 f"{n}={states.get(STATUS_PREFIX + n, 'none')}" for n in names
             )
@@ -391,6 +406,11 @@ def add_parser(commands) -> None:
         default="",
         help="prod's commit before the move; empty on a first run",
     )
+    cmd.add_argument(
+        "--moved-at",
+        required=True,
+        help="when the tag job moved prod, as ISO 8601 UTC; older statuses on T are ignored",
+    )
 
 
 def run(f: forge.Forge, args: argparse.Namespace, github_output: str | None) -> int:
@@ -401,12 +421,23 @@ def run(f: forge.Forge, args: argparse.Namespace, github_output: str | None) -> 
         error(f"verify takes 40-hex commits, not {args.target!r} and {args.prior!r}")
         return USAGE_ERROR
     try:
+        moved_at = datetime.fromisoformat(args.moved_at)
+    except ValueError:
+        moved_at = None
+    if moved_at is None or moved_at.tzinfo is None:
+        error(
+            f"verify: --moved-at {args.moved_at!r} is not an ISO 8601 time with a zone"
+        )
+        return USAGE_ERROR
+    try:
         prod, target = read_handoff(args.bundle_dir)
         expected = expected_set(target, prod)
     except (OSError, ValueError, yaml.YAMLError) as err:
         error(f"verify: the bundles decide handed on: {err}")
         return FAILED
-    verdict = verify(StatusReads(f.github.statuses), args.target, args.prior, expected)
+    since = moved_at - timedelta(seconds=MOVED_AT_SKEW_S)
+    reads = StatusReads(f.github.statuses)
+    verdict = verify(reads, args.target, args.prior, expected, since)
     return report(args.target, verdict, github_output)
 
 

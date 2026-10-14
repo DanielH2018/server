@@ -64,6 +64,11 @@ def verification_problems(wf: dict) -> list[str]:
             "tag: does not compare prod's live digest with decide's before moving"
         )
     verify = jobs.get("verify", {})
+    # A status an earlier promotion of T left must not count, so verify reads from the move.
+    if "needs.tag.outputs.moved_at" not in str(
+        _steps(verify)
+    ) or "--moved-at" not in str(_steps(verify)):
+        found.append("verify: does not bound T's statuses by the time prod moved")
     if "needs.promote.outputs.target" not in str(_steps(verify)):
         found.append("verify: does not take T from promote's outputs")
     minutes = {name: jobs.get(name, {}).get("timeout-minutes", 0) for name in jobs}
@@ -189,6 +194,11 @@ def _a_short_promote_job(wf):
     wf["jobs"]["promote"]["timeout-minutes"] = 15
 
 
+def _verify_without_the_move_time(wf):
+    step = next(s for s in wf["jobs"]["verify"]["steps"] if s.get("id") == "verify")
+    del step["env"]["MOVED_AT"]
+
+
 def _tag_moves_without_comparing(wf):
     step = next(s for s in wf["jobs"]["tag"]["steps"] if s.get("id") == "move")
     del step["env"]["PRIOR_DIGEST"]
@@ -214,6 +224,10 @@ OWN_RED = {
     "a promote job shorter than the wait": (
         _a_short_promote_job,
         "promote: its timeout-minutes cannot hold",
+    ),
+    "a verify that reads statuses from before the move": (
+        _verify_without_the_move_time,
+        "verify: does not bound T's statuses",
     ),
     "a tag that moves prod without comparing": (
         _tag_moves_without_comparing,

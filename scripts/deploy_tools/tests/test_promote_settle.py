@@ -8,6 +8,7 @@ bash with fakes that append their argv to one log, then asserts the calls and th
 Run: uv run pytest scripts/deploy_tools/tests/test_promote_settle.py
 """
 
+import re
 import shutil
 
 import pytest
@@ -21,6 +22,8 @@ REPO_URL = "oci://ghcr.io/danielh2018/homelab-manifests"
 T = "a" * 40
 DIGEST = "sha256:" + "d" * 64
 RESET = "sha256:" + "e" * 64
+# The move step's outputs: `moved`, and the UTC time stamped just before the move.
+MOVED = r"moved=true\nmoved_at=\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\n"
 
 # Each fake logs `<tool> <argv>` and fails when its argv contains FAKE_<TOOL>_FAIL.
 _FAKE = """#!/usr/bin/env bash
@@ -217,14 +220,14 @@ def test_a_first_verified_run_seeds_last_good_before_prod_moves(tmp_path, jobs):
         f"flux tag artifact {REPO_URL}@{RESET} --tag last-good",
         f"flux tag artifact {REPO_URL}:sha-{T} --tag prod",
     ]
-    assert output == "moved=true\n"
+    assert re.fullmatch(MOVED, output), output
 
 
 def test_a_run_with_last_good_present_moves_prod_alone(tmp_path, jobs):
     result, calls, output = _move(tmp_path, jobs)
     assert result.returncode == 0, result.stderr
     assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag prod"]
-    assert output == "moved=true\n"
+    assert re.fullmatch(MOVED, output), output
 
 
 def test_a_failed_seed_moves_nothing_and_reports_no_move(tmp_path, jobs):
@@ -258,7 +261,7 @@ def test_a_first_run_moves_prod_when_prod_is_still_absent(tmp_path, jobs):
     )
     assert result.returncode == 0, result.stderr
     assert calls == [f"flux tag artifact {REPO_URL}:sha-{T} --tag prod"]
-    assert output == "moved=true\n"
+    assert re.fullmatch(MOVED, output), output
 
 
 def test_a_prod_read_that_fails_moves_nothing(tmp_path, jobs):

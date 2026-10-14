@@ -86,6 +86,7 @@ class FakeTransport:
         deleted: the id of each version a DELETE removed.
         blobs: each layer's bytes by its digest.
         statuses: each commit's newest status per context, as `{context: state}`.
+        status_times: the `updated_at` every status on a commit carries; none when absent.
         requests: every `(method, url)` sent, in order.
     """
 
@@ -98,6 +99,7 @@ class FakeTransport:
     deleted: list[int] = field(default_factory=list)
     blobs: dict[str, bytes] = field(default_factory=dict)
     statuses: dict[str, dict[str, str]] = field(default_factory=dict)
+    status_times: dict[str, str] = field(default_factory=dict)
     requests: list[tuple[str, str]] = field(default_factory=list)
 
     def __call__(self, method, url, headers):
@@ -116,7 +118,14 @@ class FakeTransport:
             and parts.path not in self.api_forced
         ):
             found = self.statuses.get(match.group(1), {})
-            body = {"statuses": [{"context": c, "state": s} for c, s in found.items()]}
+            stamp = {}
+            if match.group(1) in self.status_times:
+                stamp = {"updated_at": self.status_times[match.group(1)]}
+            body = {
+                "statuses": [
+                    {"context": c, "state": s, **stamp} for c, s in found.items()
+                ]
+            }
             return forge.Response(200, body=json.dumps(body).encode())
         if parts.path in self.api_forced:
             message = {"message": f"forced HTTP {self.api_forced[parts.path]}"}

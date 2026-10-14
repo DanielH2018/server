@@ -466,6 +466,7 @@ jobs:
     # `verify` and `settle` run only once `prod` has moved, whatever else this job did.
     outputs:
       moved: ${{ steps.move.outputs.moved }}
+      moved_at: ${{ steps.move.outputs.moved_at }}
     steps:
       - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
         with:
@@ -532,8 +533,11 @@ jobs:
             flux tag artifact "oci://$repo@$PRIOR_DIGEST" --tag last-good
             echo "seeded last-good at prod's digest $PRIOR_DIGEST"
           fi
+          # Stamped before the move, so no status Flux posts for this promotion predates it.
+          # verify ignores any older status on T, such as one an earlier promotion left.
+          moved_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           flux tag artifact "oci://$repo:sha-$TARGET" --tag prod
-          echo "moved=true" >> "$GITHUB_OUTPUT"
+          printf 'moved=true\nmoved_at=%s\n' "$moved_at" >> "$GITHUB_OUTPUT"
 
       # A failed write leaves PROD_DIGEST behind prod, which the deploy-pipeline exporter pages
       # on from slice D2: the safe direction.
@@ -591,10 +595,11 @@ jobs:
         env:
           TARGET: ${{ needs.promote.outputs.target }}
           PRIOR: ${{ needs.promote.outputs.prior }}
+          MOVED_AT: ${{ needs.tag.outputs.moved_at }}
           GITHUB_TOKEN: ${{ github.token }}
         run: >-
           uv run --frozen python scripts/deploy_tools/promote.py verify "$TARGET"
-          --bundle-dir "$RUNNER_TEMP/verify-input" --prior "$PRIOR"
+          --bundle-dir "$RUNNER_TEMP/verify-input" --prior "$PRIOR" --moved-at "$MOVED_AT"
 
   settle:
     needs: [promote, tag, verify]

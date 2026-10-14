@@ -11,6 +11,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_promote_decide_verification.p
 import dataclasses
 import hashlib
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from _promote_fakes import World, bundle_files, digest_of
@@ -275,3 +276,53 @@ def test_a_status_read_that_answers_500_is_a_forge_error(world):
     world.transport.api_forced[f"/repos/DanielH2018/server/commits/{t}/status"] = 500
     with pytest.raises(forge.ForgeError, match="HTTP 500"):
         world.clients().github.statuses(t)
+
+
+# -- statuses an earlier promotion left on T -------------------------------------------------
+
+MOVED_AT = datetime(2026, 10, 15, 1, 0, tzinfo=UTC)
+
+
+def _repromoted(world) -> tuple[str, vp.Expected, vp.StatusReads]:
+    """T held on `failure`, then promoted again: its statuses predate the second move."""
+    t = world.commits[-1]
+    world.transport.statuses[t] = {
+        "flux/homelab": "success",
+        "flux/bento-pdf": "failure",
+    }
+    world.transport.status_times[t] = "2026-10-15T00:30:00Z"
+    expected = vp.Expected(frozenset({"homelab", "bento-pdf"}), frozenset(), "", 600)
+    clock = Clock()
+    return (
+        t,
+        expected,
+        vp.StatusReads(world.clients().github.statuses, clock.sleep, clock),
+    )
+
+
+def test_a_failure_an_earlier_promotion_left_on_t_is_not_read_as_this_ones_is_clean(
+    world,
+):
+    t, expected, reads = _repromoted(world)
+    since = MOVED_AT - timedelta(seconds=vp.MOVED_AT_SKEW_S)
+    assert vp.verify(reads, t, "", expected, since) == vp.Verdict(
+        "failed", ("bento-pdf", "homelab")
+    ), "nothing fresh arrived, so the timeout names both, not the stale failure"
+    world.transport.status_times[t] = "2026-10-15T01:02:00Z"
+    world.transport.statuses[t]["flux/bento-pdf"] = "success"
+    assert vp.verify(reads, t, "", expected, since) == vp.Verdict("good")
+
+
+def test_a_failure_an_earlier_promotion_left_on_t_holds_at_once_is_flagged(world):
+    """The red half: an unbounded read takes the old failure as this promotion's."""
+    t, expected, reads = _repromoted(world)
+    clock_before = reads.clock()
+    assert vp.verify(reads, t, "", expected) == vp.Verdict("failed", ("bento-pdf",))
+    assert reads.clock() == clock_before, "it held on the first read, without waiting"
+
+
+def test_a_status_with_no_update_time_reads_as_none_once_bounded(world):
+    t = world.commits[-1]
+    world.transport.statuses[t] = {"flux/homelab": "success"}
+    assert world.clients().github.statuses(t, MOVED_AT) == {}
+    assert world.clients().github.statuses(t) == {"flux/homelab": "success"}
