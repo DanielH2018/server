@@ -20,11 +20,13 @@ MODULES = frozenset(
         "ci",
         "tick",
         "deploy",
+        "promotion",
         "health_verdict",
         "pipeline",
         "detach",
         "handoff",
         "pr_json",
+        "land_flux",
         "land_platform",
         "land_probe",
         "land_reach",
@@ -41,6 +43,7 @@ ALLOWED = {
     "ledger": {"outcome"},
     # The classifier libraries the Tools defaults wrap (#4349 moved them in from beside land.py).
     "tools": {
+        "land_flux",
         "land_platform",
         "land_reach",
         "land_rerolls",
@@ -56,10 +59,12 @@ ALLOWED = {
     "classify": {"landing", "outcome", "land_tags"},
     "ci": {"landing", "outcome"},
     "tick": {"landing", "outcome"},
-    "deploy": {"landing", "outcome", "ci", "tick", "land_platform"},
+    "deploy": {"landing", "outcome", "ci", "tick", "land_platform", "promotion"},
+    # The split before deploy.sh and the wait on promotion, a half of step 5 (D2.3).
+    "promotion": {"landing", "outcome"},
     # `tick.rearm_tick`: the second kick request, after the gate, for a first one that joined
     # a run in flight. The kick's states live in tick.py, in one place.
-    "health_verdict": {"landing", "outcome", "tick"},
+    "health_verdict": {"landing", "outcome", "tick", "promotion"},
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
     # callable and it never knows what a landing is.
     "detach": set(),
@@ -73,6 +78,8 @@ ALLOWED = {
     "land_tags_cli": {"land_tags", "land_reach"},
     "land_platform": {"land_tags"},
     "land_reach": set(),
+    # The boundaries for a tag Flux applies. It imports promote_wait, outside land_lib.
+    "land_flux": set(),
     "land_rerolls": set(),
     "land_shared": set(),
     # cc-wait's `land` source runs under `uv run --no-project`, so it reads only the

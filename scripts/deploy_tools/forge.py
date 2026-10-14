@@ -4,8 +4,8 @@
 fact it reads from outside the checkout comes through this module:
 
 - `Registry` speaks the OCI distribution API to ghcr.io: the token request, the manifest
-  fetch and the manifest `HEAD`. It lists no tags, so a run's request count does not grow
-  with the number of published versions.
+  fetch and the manifest `HEAD`, and for `land-wait` a bundle file read out of its layer. It
+  lists no tags, so a run's request count does not grow with the number of published versions.
 - `GitHub` reads a repository variable through `gh variable get` and a commit's check-runs
   through the REST API. For `promote.py prune` it also lists the artifact's package versions
   and deletes one, through the Packages API.
@@ -24,9 +24,12 @@ The plan is `docs/target-architecture/deploy/d1-flux-installed.md`, *Decisions*,
 """
 
 import base64
+import gzip
+import io
 import json
 import re
 import subprocess
+import tarfile
 import time
 import urllib.error
 import urllib.request
@@ -34,7 +37,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
 
+
 REPOSITORY = "DanielH2018/server"
+# The repository variable that holds promotion: `none`, or why it is held (contract C2).
+HOLD_VARIABLE = "DEPLOY_HOLD"
 REGISTRY = "ghcr.io"
 ARTIFACT = "danielh2018/homelab-manifests"
 
@@ -176,13 +182,29 @@ class Registry:
         self._bearer = token["token"]
         return self._bearer
 
+    def _request(
+        self, method: str, url: str, headers: Mapping[str, str] | None = None
+    ) -> Response:
+        """One registry request with the bearer token, asking for a new token once on a 401.
+
+        GHCR's pull token expires after a few minutes, and `promote.py land-wait` holds one
+        Registry for its whole wait, so a 401 means "ask again" before it means "refused".
+        """
+        response = self._transport(
+            method, url, {**(headers or {}), "Authorization": f"Bearer {self._token()}"}
+        )
+        if response.status == 401:
+            self._bearer = None
+            response = self._transport(
+                method,
+                url,
+                {**(headers or {}), "Authorization": f"Bearer {self._token()}"},
+            )
+        return response
+
     def _manifest_request(self, method: str, reference: str) -> Response:
         url = f"https://{REGISTRY}/v2/{self.repository}/manifests/{reference}"
-        headers = {
-            "Accept": MANIFEST_ACCEPT,
-            "Authorization": f"Bearer {self._token()}",
-        }
-        return self._transport(method, url, headers)
+        return self._request(method, url, {"Accept": MANIFEST_ACCEPT})
 
     def manifest(self, reference: str) -> dict | None:
         """The manifest `reference` names, parsed, or None when the registry has no such tag.
@@ -221,6 +243,53 @@ class Registry:
                 f"HEAD {reference}: no sha256 Docker-Content-Digest header"
             )
         return digest
+
+    def blob(self, digest: str) -> bytes:
+        """The bytes of the blob `digest` names.
+
+        GHCR answers with a redirect to its content host, which `urllib` follows.
+
+        Raises:
+            ForgeError: any status but 200, or no answer. A listed layer that is absent is
+                an error, because its manifest names it.
+        """
+        url = f"https://{REGISTRY}/v2/{self.repository}/blobs/{digest}"
+        response = self._request("GET", url)
+        if response.status != 200:
+            raise ForgeError(f"blob {digest}: HTTP {response.status}")
+        return response.body
+
+    def bundle_file(self, reference: str, name: str) -> bytes | None:
+        """The file `name` at the root of the bundle `reference` tags, or None for no such tag.
+
+        `flux push artifact` writes one layer, a gzipped tarball of the bundle directory, so
+        the file is read out of that layer.
+
+        Raises:
+            ForgeError: the manifest has no single layer, the layer is not a gzipped tarball,
+                or the tarball holds no `name` at its root. Each read of the registry raises
+                as `manifest` and `blob` do.
+        """
+        manifest = self.manifest(reference)
+        if manifest is None:
+            return None
+        layers = manifest.get("layers")
+        layer = layers[0] if isinstance(layers, list) and len(layers) == 1 else None
+        digest = layer.get("digest") if isinstance(layer, dict) else None
+        if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
+            raise ForgeError(f"manifest {reference}: not one layer with a digest")
+        try:
+            with tarfile.open(
+                fileobj=io.BytesIO(self.blob(digest)), mode="r:gz"
+            ) as tar:
+                for member in tar.getmembers():
+                    if member.isfile() and member.name.removeprefix("./") == name:
+                        handle = tar.extractfile(member)
+                        if handle is not None:
+                            return handle.read()
+        except (tarfile.TarError, gzip.BadGzipFile, EOFError, OSError) as err:
+            raise ForgeError(f"bundle {reference}: {err}") from err
+        raise ForgeError(f"bundle {reference} holds no {name}")
 
 
 def _api_message(response: Response) -> str:

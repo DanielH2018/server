@@ -122,6 +122,7 @@ class Landing:
         # role trees, say -- stays routed to every declaring host, which is the direction a
         # wrong answer here must fall.
         self.k8s_only: list[str] = []
+        self.owned_tags: dict[str, str] = {}  # tag -> owner (`promotion.split_owned`)
         self.deployed_hosts: set[str] = set()
         # The commit the deploy phase rendered, when it rendered one that is not the primary
         # checkout's HEAD -- `deploy.sh --at <sha>`. Empty means the deploy came from the
