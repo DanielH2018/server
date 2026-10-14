@@ -6,6 +6,9 @@ D2.1a, the flag's script reader and the narrowing: [#4956](https://github.com/Da
 
 D2.1b, `deploy.sh` refuses, drops and marks: [#4961](https://github.com/DanielH2018/server/pull/4961).
 
+D2.1c, an added Flux-born entry reaches only the readers it can move:
+[#4977](https://github.com/DanielH2018/server/pull/4977).
+
 D2.1d, the Ansible play skips a non-Ansible-owned entry:
 [#4958](https://github.com/DanielH2018/server/pull/4958).
 
