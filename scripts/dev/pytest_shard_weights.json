@@ -649,6 +649,7 @@
  "ansible/tests/setup/test_gitops_deploy_reaps_on_non_deployer.py": 0.0,
  "ansible/tests/setup/test_has_flag_roles_have_both_directions.py": 0.03,
  "ansible/tests/setup/test_health_cron_boot_grace.py": 0.0,
+ "ansible/tests/setup/test_homelab_builder.py": 0.03,
  "ansible/tests/setup/test_host_coredns_install_is_checksummed.py": 0.0,
  "ansible/tests/setup/test_host_lib_sibling_copies.py": 0.28,
  "ansible/tests/setup/test_host_package_two_writers.py": 1.41,
