@@ -266,7 +266,7 @@ def page_title(report: str) -> str | None:
 def domain() -> str:
     from diagnostics.probe_lib import core
 
-    return core.sops_extract("domain")
+    return core.domain()
 
 
 @pytest.fixture(scope="module")

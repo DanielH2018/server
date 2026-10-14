@@ -30,7 +30,7 @@ def _fake_prometheus(monkeypatch, covered_s=COVERED_S, span_body=None):
         return '{"data":{"resultType":"vector","result":[]}}'
 
     monkeypatch.setattr(core, "fetch", fake_fetch)
-    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(core, "domain", lambda: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
     return seen
 

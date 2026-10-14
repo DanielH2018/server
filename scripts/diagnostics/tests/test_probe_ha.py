@@ -14,9 +14,30 @@ from diagnostics.probe_lib import core
 from diagnostics.probe_lib import ha
 
 
+def _no_subprocess(argv, **_):
+    raise AssertionError(
+        f"ran {argv[0]}; the domain is an inventory value, not a decrypt"
+    )
+
+
+def test_the_domain_is_read_from_inventory_without_a_decrypt(monkeypatch, tmp_path):
+    group_vars = tmp_path / "all.yml"
+    group_vars.write_text("k8s_namespace: homelab\ndomain: lan.example\n")
+    monkeypatch.setattr(subprocess, "run", _no_subprocess)
+    assert core.domain(str(group_vars)) == "lan.example"
+    assert core.ha_host() == f"home-assistant.local.{core.domain()}"
+
+
+def test_a_group_vars_without_domain_is_refused(tmp_path):
+    group_vars = tmp_path / "all.yml"
+    group_vars.write_text("k8s_namespace: homelab\n")
+    with pytest.raises(SystemExit, match="domain not found"):
+        core.domain(str(group_vars))
+
+
 def test_ha_base_builds_on_ha_host(monkeypatch):
-    # ha_host() decrypts the domain from SOPS; stub it — CI has no age key.
-    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    # ha_host() reads the domain from inventory; stub it so the test owns the value.
+    monkeypatch.setattr(core, "domain", lambda: "example.test")
     assert core.ha_host() == "home-assistant.local.example.test"
     assert core.ha_base() == "https://home-assistant.local.example.test"
 
@@ -24,7 +45,7 @@ def test_ha_base_builds_on_ha_host(monkeypatch):
 def test_ha_resolve_pins_vip(monkeypatch):
     # Since the bridge teardown (slice-7 BT4) host-shell DNS for the .local name rides the
     # Cloudflare wildcard, so every HA call pins the name to the ingress VIP.
-    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(core, "domain", lambda: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
     assert core.ha_resolve() == "home-assistant.local.example.test:443:10.0.0.240"
 

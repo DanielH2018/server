@@ -57,7 +57,7 @@ def _route_alert_fetch(
         return _json.dumps(_fake_loki(lines))
 
     monkeypatch.setattr(core, "fetch", fake_fetch)
-    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(core, "domain", lambda: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
     return seen
 
