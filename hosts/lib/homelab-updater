@@ -233,8 +233,11 @@ install_newest() {
 # Steps 3 to 8. Exits.
 update() {
     configured=$1
+    # pkgCacheFile::Generate=false skips the cache rebuild apt-get update ends with. That
+    # rebuild would read only the homelab source and rewrite pkgcache.bin on every run, so
+    # the common path would load an apt cache after all.
     # shellcheck disable=SC2086 # HOMELAB_APT is a list of options.
-    if ! apt-get update --error-on=any $HOMELAB_APT; then
+    if ! apt-get update --error-on=any -o pkgCacheFile::Generate=false $HOMELAB_APT; then
         say "the homelab fetch failed; writing nothing"
         exit 1
     fi

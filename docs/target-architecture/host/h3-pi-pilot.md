@@ -467,6 +467,10 @@ installed versions are *reconciled* when the record's `result` names exactly the
 3. Run `apt-get update --error-on=any` restricted to the homelab source, with
    `-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o
    APT::Get::List-Cleanup=0`. The Ubuntu lists stay as `apt-daily` last left them.
+    - The fetch also carries `-o pkgCacheFile::Generate=false`. Without it, `apt-get update`
+      ends by rebuilding `pkgcache.bin` from the homelab source alone, so every run, the
+      common path included, rewrites the apt cache. The container's common-path case
+      caught this against real apt (H3.3b).
     - Without `--error-on=any`, apt treats a failed fetch as transient: it warns, keeps the
       list the last good fetch left, and can exit 0. Step 4 would then read that old list,
       which still holds `Version:` lines, as "nothing newer". The flag applies to this

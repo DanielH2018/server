@@ -54,7 +54,7 @@ RUN systemctl mask \
         fstrim.timer motd-news.timer \
         systemd-udevd.service systemd-udev-trigger.service systemd-udev-settle.service \
         systemd-udevd-control.socket systemd-udevd-kernel.socket \
-        getty@tty1.service console-getty.service \
+        getty@tty1.service console-getty.service systemd-modules-load.service \
     && systemctl set-default multi-user.target
 
 # The textfile directory with M3's owner and mode, which optimize_pi creates on the Pi
