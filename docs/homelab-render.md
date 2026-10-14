@@ -103,7 +103,7 @@ A placeholder render with `--role` also writes the publish bundle for the tags i
 `DIR/flux/` and `DIR/digests.json`. `docs/flux-deploy-plane.md`'s *The bundle* describes
 both. A stub render and a render without `--role` write neither.
 
-`cluster` exits 2 and writes nothing in seven cases:
+`cluster` exits 2 and writes nothing in six cases:
 
 - In stub mode, the stub file does not stub every key of `ansible/vars/secrets.yml`. The
   message names the keys, never a value. Write a fresh stub file for the commit.

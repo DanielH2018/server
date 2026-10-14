@@ -42,9 +42,10 @@ from lib.k8s_roles import (
     CLAIM_TEMPLATE,
     SHARED_MANIFEST_DEFAULTS,
     resolved_manifest_files,
+    tag_owners,
 )
 from lib.k8s_context import resolve_vars
-from lib.render_guard import SHARED_TPL, StrictChainableUndefined, containers_entries
+from lib.render_guard import SHARED_TPL, StrictChainableUndefined
 from lib.repo_paths import HOST_VARS, K8S_ROLES
 from renderer.renderer_lib.bundle import (
     DEFERRED_SUFFIX,
@@ -134,11 +135,15 @@ def select_tags(
 
 
 def flux_owned_tags(host: str = K8S_HOST, host_vars: Path = HOST_VARS) -> set[str]:
-    """The names of `host`'s `containers_list` entries that carry `owner: flux` (C4)."""
+    """The deploy tags of `host`'s k8s entries that carry `owner: flux` (C4).
+
+    `tag_owners` maps them, the reader `promote.py published-tags` uses too, so the tags this
+    refusal checks are the tags the bundle publishes.
+    """
     path = host_vars / f"{host}.yml"
     if not path.exists():
         return set()
-    return {e["name"] for e in containers_entries(path) if e.get("owner") == "flux"}
+    return {tag for tag, owner in tag_owners(path).items() if owner == "flux"}
 
 
 def rollout_timeout_default() -> str:
