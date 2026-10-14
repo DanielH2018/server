@@ -9,16 +9,20 @@ invisible to the deployer, and the record is the only evidence of it this host h
 
 The render records (`roles/k8s/manifests/tasks/render_record.yml`) come from the hourly
 `render_records` producer. `render_proof` lets a render stand in for a deploy of a shared role
-(#3057), and `digest_diff` feeds the deploy-plane shadow log (#3045).
+(#3057), and `digest_diff` feeds `log_digest_shadow`, the deploy plane's shadow log (#3045),
+which moved here from `deploy_narrow.py` to keep that module under its length cap.
 
 Its own module rather than a section of `deploy_io.py`, which is at its length ceiling and
 whose allowlist entry only ever falls.
 
-Stdlib only, for the reason `deploy_io.py` gives: the unit runs under `uv run --no-project`.
+Stdlib and `deploy_config` only, for the reason `deploy_io.py` gives: the unit runs under
+`uv run --no-project`.
 """
 
 import json
 import pathlib
+
+from deployer_lib.deploy_config import WARNING, log
 
 # Mirrors `manifests_release_dir` in roles/k8s/manifests/defaults/main.yml, the way
 # `probe_lib/releases.py:RELEASE_DIR` does and for the same reason: this unit runs under
@@ -159,3 +163,45 @@ def digest_diff(
         )
         out.setdefault(f"{verdict}: {why}" if why else verdict, []).append(service)
     return out
+
+
+# DECIDED: shadow mode first (#3045). The render-digest diff is LOGGED beside what the
+# narrowing chose and decides nothing yet. A render record exists only for a service
+# `render_targets.py` lists — a daniel-box k8s entry whose role includes `k8s/manifests` — and
+# the hourly producer writes it at the newest green commit, so at a tick that has just
+# fetched a merge the commit being applied usually has no render at all, so these lines
+# rarely answer; the DECIDED below says what measures instead. A service with no usable record
+# would keep this function's answer, and the full run stays the fallback either way.
+def log_digest_shadow(digest_diff, origin: str, deploy) -> None:
+    """Log the tags a render-digest diff at `origin` would apply, beside `deploy`'s answer.
+
+    `deploy` is the deploy plane's `deploy_narrow.BroadPlan`, which `deploy_narrow.plan`
+    passes; this module cannot import that type, because `deploy_narrow` imports it.
+
+    Never raises: it runs before the ff-merge, where an escaped exception parks every landing.
+    """
+    try:
+        verdicts = digest_diff(origin)
+    except Exception as exc:
+        log(
+            f"narrow-shadow: no digest diff ({type(exc).__name__}: {exc})",
+            level=WARNING,
+        )
+        return
+    drifted = verdicts.get(DRIFTED, [])
+    unknown = ", ".join(
+        f"{key.split(': ', 1)[1]} {len(names)}"
+        for key, names in sorted(verdicts.items())
+        if key.startswith("unknown: ")
+    )
+    if deploy.deferred:
+        chose = "to defer the plane"
+    elif not deploy.apply:
+        chose = "nothing"
+    else:
+        chose = ",".join(deploy.tags)
+    log(
+        f"narrow-shadow: render digest at {origin[:8]} would apply "
+        f"{','.join(drifted) or 'nothing'} (current {len(verdicts.get(CURRENT, []))}; "
+        f"unknown: {unknown or 'none'}); the narrowing chose {chose}"
+    )

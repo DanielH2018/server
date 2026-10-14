@@ -17,7 +17,7 @@ the entry module. The class object is this one; the re-export is a second name f
 This is a leaf: `deploy_changes` for the `ChangeSet` type, the standard library, nothing else.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from deployer_lib.deploy_changes import ChangeSet
 
@@ -83,13 +83,16 @@ class TickPlan:
     Attributes:
         cs: the ChangeSet, after k8s rerouting and the auto-deploy promotion split.
         paths: the changed paths, minus any comment-only broad change dropped as quiet.
-        k8s_services: this host's `platform: k8s` containers_list entries, which decide
-            whether a deferred k8s alert can name a `--tags` redeploy at all.
+        k8s_services: this host's Ansible-owned `platform: k8s` containers_list entries,
+            which decide whether a deferred k8s alert can name a `--tags` redeploy at all.
+        owners: each tag whose entry sets `owner` at the commit being applied, to that value
+            (`deploy_inventory.service_owners`). The deploy plane drops these tags.
     """
 
     cs: ChangeSet
     paths: list[str]
     k8s_services: set[str]
+    owners: dict[str, str] = field(default_factory=dict)
 
 
 class NotTheDeployerHost(Exception):

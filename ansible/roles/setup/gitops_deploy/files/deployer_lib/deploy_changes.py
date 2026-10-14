@@ -353,6 +353,9 @@ class ChangeSet:
     # that reads `k8s` directly; only k8s_remediation folds it in, and only after
     # intersecting with what this host declares.
     k8s_consumers: set[str] = field(default_factory=set)
+    # k8s tags not Ansible-owned at origin, which `deploy_inventory.route_not_ansible_owned`
+    # moves out of `k8s`: merged and logged, never applied, deferred, alerted on or owed (D2.2).
+    flux: set[str] = field(default_factory=set)
 
 
 def shared_module_consumers(paths, repo_root) -> set[str]:

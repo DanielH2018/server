@@ -59,7 +59,7 @@ ALLOWED: dict[str, set[str] | None] = {
     # The narrowing subprocess and the plan it returns: `deploy_config` for `log`, and
     # `gitops_hold` for `held_tag`, the hold-marker format `broad_hold_cleared_by` reads back
     # (#3138) — a stdlib leaf, so no cycle. `gitops_markers` for the playbook its deploy plane
-    # names, and `deploy_release` (import-free) for the verdict keys its shadow log reads. It
+    # names, and `deploy_release` for the render-digest shadow log its plan writes. It
     # must NOT import `deploy_toolbox`, which imports IT for the `narrow_deploy_plane` default.
     "deploy_narrow": {
         "deploy_config",
@@ -78,11 +78,11 @@ ALLOWED: dict[str, set[str] | None] = {
     # The hold and the rule that clears it (#3658). The deploy UI installs it beside the two
     # modules above, so it may import nothing else.
     "gitops_hold": {"gitops_ledger", "gitops_markers"},
-    # The k8s release records, read to discharge a `k8s_unapplied` line. Stdlib only because
-    # the unit runs under `uv run --no-project`, its header says. `deploy_toolbox` imports it for
-    # the `release_commit` default, so an import of `deploy_toolbox` or anything reaching it
-    # would also be a cycle.
-    "deploy_release": set(),
+    # The k8s release records, read to discharge a `k8s_unapplied` line, and the shadow log's
+    # `log` from `deploy_config`, a leaf. `deploy_toolbox` imports it for the `release_commit`
+    # default, so an import of `deploy_toolbox` or anything reaching it would be a cycle; so
+    # would `deploy_narrow`, whose `BroadPlan` the shadow log reads without importing.
+    "deploy_release": {"deploy_config"},
     "deploy_config": set(),
     "deploy_failtext": set(),
     "deploy_git": set(),

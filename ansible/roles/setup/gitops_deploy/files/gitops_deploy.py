@@ -303,6 +303,12 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
         deploy_handlers.alert_red_tip(tools, state, config, target)
 
     plan = deploy_phases.plan_tick(tools, state, config, target)
+    # DECIDED: the ledger drop runs here, before the ff-merge, although every other k8s ledger
+    # write runs on an exit that leaves the range merged. A range a busy lock resets or a
+    # manual plane parks is re-crossed by a later tick, and `deploy.sh` refuses a tree behind
+    # origin meanwhile, so no Ansible deploy can need the dropped line; once the range merges,
+    # Flux applies the service. Running it here covers every handler with one call (D2.2).
+    deploy_k8s_owed.skip_not_ansible_owned(state, plan, target.origin)
     if plan.cs.broad:
         return deploy_handlers.handle_broad(tools, state, config, target, plan)
     if plan.cs.k8s_deploy:

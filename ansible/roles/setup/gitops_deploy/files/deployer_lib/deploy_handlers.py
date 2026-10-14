@@ -194,6 +194,7 @@ def handle_broad(
             tools.narrow_setup_role,
             appliable,
             tools.digest_diff,
+            owners=plan.owners,
         )
         if applies
         else []

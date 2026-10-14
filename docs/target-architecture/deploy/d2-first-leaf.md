@@ -9,6 +9,8 @@ D2.1b, `deploy.sh` refuses, drops and marks: [#4961](https://github.com/DanielH2
 D2.1d, the Ansible play skips a non-Ansible-owned entry:
 [#4958](https://github.com/DanielH2018/server/pull/4958).
 
+D2.2, the deployer skip: [#4965](https://github.com/DanielH2018/server/pull/4965).
+
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five
 rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3), on
