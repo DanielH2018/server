@@ -17,6 +17,11 @@ what it renders: `owner`, which hands a tag to Flux (D2). `changed_fields` leave
 an edit to one alone changes no field a reader reads, and `reader_paths` keeps no reader for an
 edit that changed no field. The entry's own tag still comes from `entry_change_tags`, which
 compares whole entries.
+
+An added or removed entry that is not Ansible-owned, one whose `owner` is an `OWNER_VALUES`
+member, is recorded by the fields it carries (D2.1c). It reaches the readers of those fields
+and the readers of `EVERY_ENTRY`'s filters, not every reader. An Ansible-owned one still
+reaches every reader.
 """
 
 import sys as _sys
@@ -29,6 +34,7 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import NamedTuple
 
 from lib.ansible_inventory import containers_entries_in
+from lib.k8s_roles import OWNER_VALUES
 from lib.render_guard import entry_tags
 
 _MENTION = re.compile(r"(?<!\w)containers_list(?!\w)")
@@ -96,6 +102,16 @@ NAMED_JOB = frozenset({"metrics_port"})
 # them out. `owner` hands an entry's tag to Flux (docs/target-architecture/deploy/d2-first-leaf.md).
 # `test_census_rows_roles.py` holds every member out of the templates' Jinja code.
 DEPLOY_MECHANICS_FIELDS = frozenset({"owner"})
+# The filters whose output holds an item for every entry, whatever fields it carries, so an added
+# or removed entry moves them though it carries no field their row names but `name`. Every other
+# row's filter skips an entry without its other fields, and reads `name` only to look an entry
+# up or to label one it kept. `test_narrow_filter_tables.py` holds this set to the filters'
+# behaviour.
+EVERY_ENTRY = frozenset({"entry_names"})
+# The field `changed_fields` records on an added or removed entry, and `reader_reads` on an
+# `EVERY_ENTRY` filter's read, so the two meet in `reads_changed`. The parentheses keep it apart
+# from every key an entry can carry.
+PRESENCE = "(presence)"
 
 
 class Job(NamedTuple):
@@ -150,9 +166,19 @@ class Edit(NamedTuple):
     host: str | None = None
 
 
-def edit(before: dict, after: dict, path: str = "") -> Edit:
-    """The `Edit` that turns the inventory document `before` at `path` into `after`."""
-    return Edit(changed_fields(before, after), job_owners(after), edited_host(path))
+def edit(
+    before: dict,
+    after: dict,
+    path: str = "",
+    explain: Callable[[str], None] = lambda _m: None,
+) -> Edit:
+    """The `Edit` that turns the inventory document `before` at `path` into `after`.
+
+    `explain` receives `changed_fields`' journal lines.
+    """
+    return Edit(
+        changed_fields(before, after, explain), job_owners(after), edited_host(path)
+    )
 
 
 def edited_host(path: str) -> str | None:
@@ -175,28 +201,53 @@ def _other_hosts_list(code: str, start: int, host: str | None) -> bool:
     return (match.group(1) if match.group(1) is not None else match.group(2)) != host
 
 
-def changed_fields(before: dict, after: dict) -> dict[str, frozenset[str]] | None:
+def changed_fields(
+    before: dict, after: dict, explain: Callable[[str], None] = lambda _m: None
+) -> dict[str, frozenset[str]] | None:
     """The fields a `containers_list` edit changed, by entry; None when it moves every reader.
 
-    An entry the edit left alone is absent. An added or removed entry moves every reader that
-    iterates the list, whatever it reads, and a renamed entry is one of each. A reorder moves
-    them too, with no field changed: `scrape_jobs` and `kuma_ingress_monitors` emit in list
-    order. A name two entries share is every field as well: `entries` keeps the last of them
-    and a `NAMED_ENTRY` filter reads the first, so an edit to the first would go unseen.
-    `test_containers_list_names_unique.py` keeps a repeated name off master, so this branch
-    is a defence the deployer's range never reaches (#4399).
+    An entry the edit left alone is absent. A `DEPLOY_MECHANICS_FIELDS` member is never named,
+    so an entry whose only change is one of them is absent too.
 
-    A `DEPLOY_MECHANICS_FIELDS` member is never named, so an entry whose only change is one of
-    them is absent too.
+    An added or removed entry that is not Ansible-owned is named with `PRESENCE` and every field
+    it carries but `name` and the `DEPLOY_MECHANICS_FIELDS` members, and `explain` gets one
+    `narrow:` line naming it and them (D2.1c). A filter other than an `EVERY_ENTRY` one holds
+    `name` in its row to look an entry up or to label one it kept for another field, so the
+    entry's name alone moves no such filter. A renamed entry is one of each.
+
+    Three edits still return None:
+
+    - An added or removed Ansible-owned entry, so every reader that iterates the list is kept,
+      whatever it reads. An `owner` outside `OWNER_VALUES` counts as Ansible-owned here, as
+      the widest reach.
+    - A reorder of the entries both lists hold, with no field changed: `scrape_jobs` and
+      `kuma_ingress_monitors` emit in list order.
+    - A name two entries share: `entries` keeps the last of them and a `NAMED_ENTRY` filter
+      reads the first, so an edit to the first would go unseen.
+      `test_containers_list_names_unique.py` keeps a repeated name off master, so this branch
+      is a defence the deployer's range never reaches (#4399).
     """
     old, new = entries(before), entries(after)
     repeated = any(
         len(entries(doc)) != len(containers_entries_in(doc)) for doc in (before, after)
     )
-    if repeated or list(old) != list(new):
+    if repeated or [n for n in old if n in new] != [n for n in new if n in old]:
+        return None
+    moved = [(n, e, "added") for n, e in new.items() if n not in old]
+    moved += [(n, e, "removed") for n, e in old.items() if n not in new]
+    if not all(_not_ansible_owned(entry) for _, entry, _ in moved):
         return None
     changed = {}
+    for name, entry, verb in moved:
+        counted = frozenset(entry) - {"name"} - DEPLOY_MECHANICS_FIELDS
+        explain(
+            f"narrow: containers_list/{name} {verb} with owner {entry['owner']}, counting"
+            f" {','.join(sorted(counted)) or 'no field'} and its presence"
+        )
+        changed[name] = counted | {PRESENCE}
     for name, entry in new.items():
+        if name not in old:
+            continue
         keys = frozenset(
             key
             for key in set(entry) | set(old[name])
@@ -206,6 +257,12 @@ def changed_fields(before: dict, after: dict) -> dict[str, frozenset[str]] | Non
         if keys:
             changed[name] = keys
     return changed
+
+
+def _not_ansible_owned(entry: dict) -> bool:
+    """Whether `entry` sets `owner` to an `OWNER_VALUES` member, the value its readers accept."""
+    owner = entry.get("owner")
+    return isinstance(owner, str) and owner in OWNER_VALUES
 
 
 def reader_reads(
@@ -221,7 +278,7 @@ def reader_reads(
     entry. Every mention inside Jinja code must hand the list straight to
     a filter `FILTER_FIELDS` names, past any `default`. One mention that does not (a loop,
     `selectattr`, an index, a filter returning entries) makes the whole template a reader of
-    every field.
+    every field. An `EVERY_ENTRY` filter's read holds `PRESENCE` beside its row.
     """
     reads: dict[str | Job | None, frozenset[str]] = {}
     for chunk in _JINJA_CODE.findall(_JINJA_COMMENT.sub("", text)):
@@ -237,7 +294,10 @@ def reader_reads(
                 entry = literal
             elif literal is not None and name in NAMED_JOB:
                 entry = Job(literal)
-            reads[entry] = reads.get(entry, frozenset()) | FILTER_FIELDS[name]
+            fields = FILTER_FIELDS[name] | (
+                {PRESENCE} if name in EVERY_ENTRY else frozenset()
+            )
+            reads[entry] = reads.get(entry, frozenset()) | fields
     return reads
 
 
