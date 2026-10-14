@@ -152,27 +152,32 @@ def test_a_substitute_value_changed_by_one_byte_is_flagged(
 def test_a_standalone_use_the_guard_covers_is_clean_in_the_0123_pass(
     flux_on_path, tmp_path, capsys
 ):
-    # homepage's IngressRoute holds `main: {{ domain }}`, and the committed map guards
-    # `domain`, so the second pass keeps its R1 stub.
+    # traefik's Deployment holds `value: "{{ email }}"`, and the committed map guards
+    # `email`, so the second pass keeps its R1 stub.
     out = tmp_path / "rt"
-    assert _main("roundtrip", "--out", str(out), "--role", "homepage") == 0
+    assert _main("roundtrip", "--out", str(out), "--role", "traefik") == 0
     assert capsys.readouterr().out.count(" 0 differences, ") == 2
 
 
 def test_a_standalone_use_outside_the_map_is_flagged_in_the_0123_pass(
     flux_on_path, tmp_path, capsys
 ):
-    # With the map read as empty, `${domain}` takes `0123`. Substituted, it loses the
-    # template's quotes and changes type, which the R1 stubs never show.
-    (tmp_path / "empty.json").write_text("{}")
+    # With `email` dropped from the map, `${email}` takes `0123`. Substituted, it loses the
+    # template's quotes and changes type, which the R1 stubs never show. Every other key
+    # keeps the committed map's cover, so the difference is `email`'s alone.
+    without_email = {
+        tag: [key for key in keys if key != "email"]
+        for tag, keys in read_guard_map().items()
+    }
+    (tmp_path / "map.json").write_text(json.dumps(without_email))
     out = tmp_path / "rt"
-    args = ("--role", "homepage", "--guard-map", str(tmp_path / "empty.json"))
+    args = ("--role", "traefik", "--guard-map", str(tmp_path / "map.json"))
     assert _main("roundtrip", "--out", str(out), *args) == 1
     printed = capsys.readouterr().out.splitlines()
     assert printed[0].endswith(
         " 0 differences, 0 documents in render_sops_manifests, with each key's R1 stub"
     )
-    assert printed[1] == "homepage: IngressRoute/homelab/homepage differs"
+    assert printed[1] == "traefik: Deployment/homelab/traefik differs"
     assert printed[2].endswith(
         " 1 differences, 0 documents in render_sops_manifests, with every key outside the standalone guard 0123"
     )

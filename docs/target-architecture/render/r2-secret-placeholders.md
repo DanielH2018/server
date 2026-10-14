@@ -590,7 +590,7 @@ it empty.
 Each rule also asserts that it read something, so a rule that stops matching cannot pass
 vacuously:
 
-- Rule 3 must see `${domain}` in `homepage`'s IngressRoute.
+- Rule 3 must see `${email}` in `traefik`'s `traefik-static` ConfigMap.
 - Rule 1 must see a placeholder in `authelia`'s config Secret.
 - Rule 2 must see `$${` in `qbittorrent`'s `qbittorrent-netns-reset` ConfigMap, which embeds
   `qbittorrent/files/netns-reset.sh`. The `qbittorrent` directory substitutes, because its
@@ -785,7 +785,7 @@ question 13), and contracts.md C3 *Secrets* states the rule.
 mode and holds the committed map equal to each tag's standalone keys less `GUARD_DEFERRED`.
 It fails on three more conditions: a key in both the map and `GUARD_DEFERRED`, a
 `GUARD_DEFERRED` member with no standalone use left, and a mapped key absent from
-`secrets.yml`. Its named members are `domain`, mapped under `homepage`, and, until PR 7b,
+`secrets.yml`. Its named members are `email`, mapped under `traefik`, and, until PR 7b,
 `mullvad_account` in `GUARD_DEFERRED`. On a mismatch it prints the command that regenerates
 the map. CI's `pytest` job runs it, so the map cannot go stale on master.
 
@@ -1472,8 +1472,8 @@ remains the gate.
   above, plus the two measured type cases, whose results PR 1 records. A
   one-byte edit to a `stringData` value of a Secret in the placeholder render makes
   `roundtrip` report that Secret. The edit targets a Secret because Secrets hold nearly
-  every placeholder. A second-pass run over `homepage` with the guard's map read as empty
-  exits 1 and names its IngressRoute, so the narrowed pass can still see a standalone use.
+  every placeholder. A second-pass run over `traefik` with `email` dropped from the guard's
+  map exits 1 and names its Deployment, so the narrowed pass can still see a standalone use.
 - The standalone-value guard, as listed under PR 1c: the resolver's pair in
   `scripts/lib/tests/`, the standalone-detection pair and the coverage test in
   `scripts/renderer/tests/`, and the guard tasks' templar test in `ansible/tests/k8s/`. The

@@ -771,20 +771,25 @@ jobs:
           [ "$rc" = 1 ]
 
       # The second pass keeps a key's R1 stub only where the standalone-value guard's map
-      # covers it. With the map read as empty, homepage's `main: ${domain}` takes `0123` and
-      # loses its string type, so the narrowed pass must still see that standalone use.
-      - name: Red-proof the round trip's second pass with the guard's map read as empty
+      # covers it. With `email` dropped from the committed map under every tag, the `${email}`
+      # in traefik's CF_API_EMAIL env value takes `0123` and loses its string type, so the
+      # narrowed pass must still see that standalone use. Every other key keeps the committed
+      # map's cover, so the step holds whether or not `domain` is a placeholder (R2's domain
+      # PR 2b).
+      - name: Red-proof the round trip's second pass with email dropped from the guard's map
         run: |
           set -euo pipefail
-          echo '{}' > "$RUNNER_TEMP/empty-guard-map.json"
+          jq 'map_values(map(select(. != "email")))' \
+            ansible/roles/k8s/manifests/files/standalone_secret_keys.json \
+            > "$RUNNER_TEMP/guard-map-without-email.json"
           rc=0
           uv run python scripts/renderer/shadow_diff.py roundtrip --out "$RUNNER_TEMP/rt-map" \
-            --role homepage --guard-map "$RUNNER_TEMP/empty-guard-map.json" \
+            --role traefik --guard-map "$RUNNER_TEMP/guard-map-without-email.json" \
             > "$RUNNER_TEMP/rt-map.log" || rc=$?
           cat "$RUNNER_TEMP/rt-map.log"
-          echo "roundtrip with an empty guard map exited $rc"
+          echo "roundtrip with email dropped from the guard map exited $rc"
           [ "$rc" = 1 ]
-          grep -qx 'homepage: IngressRoute/homelab/homepage differs' "$RUNNER_TEMP/rt-map.log"
+          grep -qx 'traefik: Deployment/homelab/traefik differs' "$RUNNER_TEMP/rt-map.log"
 
   # Target slice H3's host packages (docs/target-architecture/host/h3-pi-pilot.md, *CI (builds,
   # never signs)*, steps 1 to 3 and 6; H3.3b adds the container cases as steps 4 and 5). It
