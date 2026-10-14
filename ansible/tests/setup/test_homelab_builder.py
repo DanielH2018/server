@@ -11,12 +11,12 @@ Run: uv run pytest ansible/tests/setup/test_homelab_builder.py
 """
 
 from _helpers import SETUP_ROLES, load_defaults, load_tasks, task_named, walk_tasks
+from _setup_render import render_setup_text
 
 ROLE = SETUP_ROLES / "homelab_builder"
 INSTALL = load_tasks(ROLE / "tasks" / "install.yml")
 TEARDOWN = load_tasks(ROLE / "tasks" / "teardown.yml")
 DEFAULTS = load_defaults(ROLE)
-UNIT_TEMPLATE = ROLE / "templates" / "homelab-apt-repo.service.j2"
 
 _UNIT_DIR = "/etc/systemd/system/"
 _SIGNER_MARKERS = (
@@ -97,14 +97,15 @@ def test_the_signing_key_is_generated_once_as_the_signer():
 
 
 def test_the_repo_unit_serves_the_signer_tree_on_server_ip_as_a_dynamic_user():
-    text = UNIT_TEMPLATE.read_text()
+    text = render_setup_text(
+        "homelab_builder", "homelab-apt-repo.service.j2", {"server_ip": "192.0.2.7"}
+    )
     assert "DynamicUser=yes" in text
     assert "ProtectSystem=strict" in text
     assert (
-        "--bind {{ server_ip }} {{ homelab_builder_repo_port }} "
-        "--directory {{ homelab_builder_signer_dir }}/repo"
+        "ExecStart=/usr/bin/python3 -m http.server --bind 192.0.2.7 8791 "
+        "--directory /var/lib/homelab-signer/repo"
     ) in text
-    assert DEFAULTS["homelab_builder_repo_port"] == 8791
 
 
 def test_the_ufw_rule_admits_the_two_peers_and_no_wider_source():
