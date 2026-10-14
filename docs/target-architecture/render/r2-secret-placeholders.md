@@ -16,6 +16,11 @@ It landed ahead of PR 2 ([#4918](https://github.com/DanielH2018/server/issues/49
 `sops-manifest-entries` check carries the first two clauses only. The third clause, which
 reads `KNOWN_VIOLATIONS`, is [#4930](https://github.com/DanielH2018/server/issues/4930).
 
+PR 2b, rule 5's aliases: [#4953](https://github.com/DanielH2018/server/pull/4953). The
+census found one entry, the `hash('sha1')` on `observability_prometheus_config`, which has
+output `domain` since `0ef579e1f`
+([#4952](https://github.com/DanielH2018/server/issues/4952)). PR 8 removes it.
+
 Depends on: [R1](r1-shadow-render.md)
 
 Unblocks: D2 and D3. D2's publish job renders bento-pdf, whose IngressRoute holds `domain`,
@@ -555,8 +560,10 @@ it empty.
    the alias clauses included. A binding whose expression holds such a site and no key or
    alias is therefore no alias. The prometheus site sits inside the
    `{% set observability_prometheus_config %}` block, which the Deployment hashes with
-   `hash('sha1')`. Without this sentence, that block would be an alias, and its hash would be
-   a violation.
+   `hash('sha1')`. Without this sentence, the lookup alone would make that block an alias.
+   The block also outputs `{{ domain }}` since `0ef579e1f`, so it is an alias of `domain`
+   whatever this sentence says, and its hash is a `KNOWN_VIOLATIONS` entry
+   ([#4952](https://github.com/DanielH2018/server/issues/4952)).
    Without this clause, a later `lookup('vars', check.token) | trim` would pass all three
    checks. Rule 5 would see no key name. Rule 2 would find the sentinel intact. The round
    trip would find both sides equal, because `trim` changes neither the sentinel nor the
@@ -605,10 +612,13 @@ vacuously:
     - It classifies the bare `lookup('vars', check.token)` in
       `monitor-bridge/templates/env-secret.yaml.j2` as a possible secret reference.
     - It classifies `headlamp_k8s_oidc_issuer_url` as an alias of `domain`.
-    - It classifies the `observability_prometheus_config` set block in
-      `observability/templates/prometheus.yaml.j2` as no alias, and accepts its
-      `| hash('sha1')` use, because the block's one candidate reference is the
-      `NON_SECRET_VARS_LOOKUPS` site.
+    - It finds the `observability_prometheus_config` set block in
+      `observability/templates/prometheus.yaml.j2` to be an alias of `domain`, and refuses
+      its `| hash('sha1')` use. That use is the `KNOWN_VIOLATIONS` entry for
+      [#4952](https://github.com/DanielH2018/server/issues/4952), so the named member is
+      the entry, and the stale-entry check holds it. The block's `NON_SECRET_VARS_LOOKUPS`
+      site is no reference for the alias clauses. PR 8's observability item restores the
+      member as one that rule 5 classifies as no alias and accepts.
 
   No PR in this slice edits any of these uses. PR 3 changes only `static-monitors.yaml.j2`'s
   `{% if <token> | default('') %}` tests, and PR 7 only the `jwks` block of authelia's
@@ -1067,14 +1077,19 @@ PR 4 deletes it.
     - **PR 2b, rule 5's aliases** (about 130 lines), after PR 2. Both alias clauses: the one
       over role defaults and inventory, with `headlamp_k8s_oidc_issuer_url` as its named
       member, and the template-local one, with the `tags` binding and the
-      `ingressroute.yml.j2` macro's `host` as its named members. The census predicts no new
-      entry. Every use of the five bindings is accepted, and the uses of HA's `ga` add none
+      `ingressroute.yml.j2` macro's `host` as its named members. The census finds one new entry
+      ([#4952](https://github.com/DanielH2018/server/issues/4952)), the prometheus block
+      below. Every use of the five bindings is accepted, and the uses of HA's `ga` add none
       beside its `from_json` entry. D2 does not wait on this PR, because an alias clause
       only adds refusals of template sources.
         - The tree at `70591c307` has five set blocks, all in `observability`, and no
-          `{% with %}`. No set block names a secret key. The prometheus block is the one
-          that holds a candidate reference, its `NON_SECRET_VARS_LOOKUPS` site, so it is a
-          named member that rule 5 must accept.
+          `{% with %}`. At the PR 2b base, one set block names a key: the prometheus block
+          outputs `{{ domain }}`, a line added by `0ef579e1f` on 2026-10-12, after the
+          `70591c307` baseline. The block is therefore an alias of `domain`, and the
+          Deployment hashes it with `hash('sha1')`. Under Flux that hash would cover the
+          placeholder, so a `domain` change would not restart Prometheus. The census finds
+          that `hash` as a `KNOWN_VIOLATIONS` entry, and PR 8 removes it. The other four
+          blocks name no key.
         - No macro call passes a key, so the set-block, `{% with %}`, unpacked-target and
           macro-parameter forms have no member in the tree. Each has an `_is_flagged` and
           `_is_clean` fixture pair under Verification instead, so none can stop being
@@ -1220,6 +1235,13 @@ PR 4 deletes it.
 8. **Confinement moves, if PR 2 found any** (one PR per role, each under 100 lines). Each
    moves a credential from a non-Secret document into the role's Secret, with `secretKeyRef`
    or a mounted file. The source census predicts none beyond the two identifier keys.
+    - **observability** ([#4952](https://github.com/DanielH2018/server/issues/4952)). The
+      `observability_prometheus_config` block of `prometheus.yaml.j2` outputs `{{ domain }}`
+      and the Deployment hashes the block with `hash('sha1')`. The PR moves the key out of
+      the hashed text, so the hash no longer covers a secret. It keeps the property that a
+      config change restarts Prometheus: a `domain` change still rolls the Deployment, by a
+      path that does not hash the key, and a test asserts it. It removes the
+      `KNOWN_VIOLATIONS` entry and restores the `NOT_ALIASES` member.
 9. **Close the ratchet** (about 40 lines). `KNOWN_VIOLATIONS`, `PLACEHOLDER_DEFERRED` and
    `GUARD_DEFERRED` are empty, the round-trip step covers every tag in both passes, and the
    docs state the five rules and the guard as enforced. With the ratchet empty, the
@@ -1347,8 +1369,9 @@ remains the gate.
       `{% macro m(h) %}{{ h | trim }}{% endmacro %}{{ m('a.' ~ K) }}`.
 - Rule 5's `NON_SECRET_VARS_LOOKUPS` sites and aliases: a fixture set block holding only
   the allowlisted lookup, used as `| hash('sha1')`, is clean. The same block with a key
-  added is flagged. Against the real tree, the `observability_prometheus_config` block is
-  accepted.
+  added is flagged. Against the real tree, the `observability_prometheus_config` block holds
+  `domain` besides the lookup, so its `hash('sha1')` is the one `KNOWN_VIOLATIONS` entry in
+  that template, and the lookup adds none.
 - The count assert in PR 7: the test evaluates the first task's count expression through
   Ansible's templar, over a fixture config in place of the lookup. A fixture holding only
   the filter expression counts 1 and passes the assert. The same fixture with a value of
@@ -2152,7 +2175,8 @@ Fixed, all three:
   `{% set %}`, set blocks, `{% with %}`, loop targets and macro parameters. It splits
   aliases into value and container shapes, so those uses pass and a transform on either
   shape fails. The `static-monitors.yaml.j2` member is now named by construct, the bridge-row
-  `tags` binding. The clause lands in PR 2b, which predicts no new entry. A new risk names
+  `tags` binding. The clause lands in PR 2b. It predicted no new entry, and the census found one
+  ([#4952](https://github.com/DanielH2018/server/issues/4952)). A new risk names
   the residual that a part of a container alias is untyped.
 - **R2-c2-3.** Confirmed. `X_AUTHELIA_CONFIG_FILTERS=template` parses the whole file, and
   C3's value rule does not exclude `{`. PR 7 adds a count assert to the authelia role
@@ -2221,9 +2245,12 @@ Fixed, all six:
   the finding names, each loop closed with `{% endfor %}`.
 - **R2-c3-5.** Confirmed. Each of the five observability set blocks was checked against
   the 184 secret key names in `secrets.yml`, and no block contains one. The prometheus
-  block's only candidate reference is the non-literal `vars` lookup. Rule 5 now states that
+  block's only candidate reference is the non-literal `vars` lookup. *Corrected by PR 2b:*
+  that held at `70591c307`, and the block has output `{{ domain }}` since `0ef579e1f`
+  ([#4952](https://github.com/DanielH2018/server/issues/4952)). Rule 5 now states that
   a `NON_SECRET_VARS_LOOKUPS` site is no secret reference for the alias clauses either. The
-  block is a named member that rule 5 accepts, and a fixture pair joins the red-proofs.
+  fixture pair joins the red-proofs. The block's named member is now its
+  `KNOWN_VIOLATIONS` entry, not an accepted use.
 - **R2-c3-6.** Confirmed as unverified. No one in this round can run the pinned CLI, so
   the plan states no result.
     - PR 1's CI fixture gains `"${n}"` with `n=0123` and with `n=true`, and records whether

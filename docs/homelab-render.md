@@ -310,10 +310,36 @@ embed on a refused form, or on `indent` when the target names a `SOPS_MANIFEST_K
 Two embeds in image-builder name their target through a variable, so they cannot be
 resolved. They pass only `indent`, which rule 5 accepts on an unresolved embed.
 
+Rule 5 also follows a key through a name bound to it, so a transform of the name fails as a
+transform of the key. It reads two kinds of binding.
+
+- **Template-local.** A `{% set %}`, a set block, a `{% with %}`, a loop target (unpacked
+  targets included) or a macro parameter that receives an expression naming a key is an
+  alias of that key. A `{% set x = 'a.' ~ K %}` followed by `{{ x | trim }}` fails like
+  `{{ K | trim }}`. A bare use of the alias passes. A binding that receives a list, tuple or
+  dict is a container alias, and a binding of a single value is a value alias. A container
+  alias also passes iteration, a part selected by a constant name and, when a `{% set %}`
+  bound it to a literal container, a length test in an `{% if %}`. A value alias passes none
+  of the three.
+- **Role defaults and inventory.** The Jinja strings in `ansible/roles/k8s/*/defaults/main.yml`,
+  `ansible/inventory/group_vars/` and `ansible/inventory/host_vars/` are parsed the same way.
+  A value that names a key is an alias for it, the text around an interpolation counts as a
+  `~` concatenation, and a transform in the value is a violation. Every template that uses
+  the variable then treats it as the key, and an alias of an alias counts too. The tree has
+  one, `headlamp_k8s_oidc_issuer_url`, which is `https://auth.{{ domain }}`.
+
+The residual: rule 5 has no types, so a part of a container alias is untyped. A loop over a
+part that holds a string, such as the `host` in authelia's `rule.domain` loop, would iterate
+the string character by character, and the check would accept it. No template iterates such a
+part, so a reviewer reads any new `{% for %}` over a part of a container alias as a
+transform.
+
 `KNOWN_VIOLATIONS` holds every violation the first fleet render found and the tree still has:
-rule 4 on authelia's and pi-peer-backup's Secrets, and rule 5's 29 entries. Those are the two
-`indent`s on those keys, two `trim`s, mosquitto's `string`, and 24 truthiness tests. R2's PRs
-3 to 7 remove them, and an entry that no longer matches fails the check, so the set shrinks
+rule 4 on authelia's and pi-peer-backup's Secrets, and rule 5's 30 entries. Those are the two
+`indent`s on those keys, two `trim`s, mosquitto's `string`, 24 truthiness tests, and the
+`hash('sha1')` on Prometheus's config block, which now outputs `domain`
+([#4952](https://github.com/DanielH2018/server/issues/4952)). R2's PRs
+3 to 8 remove them, and an entry that no longer matches fails the check, so the set shrinks
 only through a fix. R2's PR 5 removed Home Assistant's two entries, the `from_json` parse and
 the Secret that embedded its output through `indent`.
 

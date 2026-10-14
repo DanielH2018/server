@@ -18,11 +18,13 @@ import pytest
 
 from authelia_access import FilterModule as AutheliaFilters
 from homepage_tiles import FilterModule as HomepageFilters
-from lib.repo_paths import K8S_ROLES
+from lib.repo_paths import K8S_ROLES, SHARED_TPL
 from renderer import shadow_diff
 from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.context import play_context
-from renderer.renderer_lib.jinja_uses import Use, embed_refusals
+from renderer.renderer_lib.environment import renderer_env
+from renderer.renderer_lib.jinja_aliases import scan_templates
+from renderer.renderer_lib.jinja_uses import Policy, Use, embed_refusals
 from renderer.renderer_lib.placeholders import apply_placeholders, sentinel
 from renderer.renderer_lib.secret_checks import (
     CONFINED_TO_SECRET,
@@ -214,6 +216,11 @@ def _refused(source: str, **kwargs) -> list[tuple[str, str]]:
         "{% endfor %}",
         "{% filter indent(4) %}{{ fixture_key }}{% endfilter %}",
         "{% set x %}{{ fixture_key }}{% endset %}",
+        # #4939's shapes, each used bare.
+        "{% set x %}{{ fixture_key }}{% endset %}{{ x }}",
+        "{% macro m() %}{{ fixture_key }}{% endmacro %}{{ m() }}",
+        "{% macro m() %}{{ caller() }}{% endmacro %}"
+        "{% call m() %}{{ fixture_key }}{% endcall %}",
     ],
 )
 def test_no_secret_expression_is_clean(source):
@@ -242,11 +249,66 @@ def test_no_secret_expression_is_clean(source):
             "{% filter indent(4) %}{{ pi_peer_backup_ssh_key }}{% endfilter %}",
             "block filter indent",
         ),
+        # #4938: a block filter around a macro argument, a binding or a loop.
+        (
+            "{% macro m(v) %}{{ v }}{% endmacro %}"
+            "{% filter trim %}{{ m(fixture_key) }}{% endfilter %}",
+            "block filter trim",
+        ),
+        (
+            "{% filter trim %}{% set x = fixture_key %}{{ x }}{% endfilter %}",
+            "block filter trim",
+        ),
+        (
+            "{% filter trim %}{% for c in fixture_key %}{{ c }}{% endfor %}{% endfilter %}",
+            "block filter trim",
+        ),
+        # #4939: a filter where a captured block, a macro or a call body is used.
+        ("{% set x %}{{ fixture_key }}{% endset %}{{ x | trim }}", "filter trim"),
+        (
+            "{% macro m() %}{{ fixture_key }}{% endmacro %}{{ m() | trim }}",
+            "filter trim",
+        ),
+        (
+            "{% macro m() %}{{ caller() | trim }}{% endmacro %}"
+            "{% call m() %}{{ fixture_key }}{% endcall %}",
+            "filter trim",
+        ),
+        (
+            "{% macro m() %}{{ fixture_key }}{% endmacro %}"
+            "{% filter trim %}{% call m() %}{% endcall %}{% endfilter %}",
+            "block filter trim",
+        ),
     ],
 )
 def test_no_secret_expression_is_flagged(source, form):
     (refused,) = _refused(source)
     assert refused[1] == form
+
+
+IMPORTER = "{% from 'b.j2' import m %}{{ m()"
+
+
+def _imported_refusals(importer: str) -> list[tuple[str, str]]:
+    """`(key, form)` refused in `importer`, which imports `m` from a template outputting a key."""
+    sources = {
+        Path("a.j2"): importer,
+        Path("b.j2"): "{% macro m() %}{{ fixture_key }}{% endmacro %}",
+    }
+    policy = Policy(PASSTHROUGH_FILTERS, SOPS_MANIFEST_KEYS)
+    env = renderer_env(SHARED_TPL)
+    scans = scan_templates(
+        sources, frozenset(FIXTURE_KEYS), policy, env, resolve=lambda _, n: Path(n)
+    )
+    return [(use.key, use.forms[-1]) for use in scans[Path("a.j2")].uses if use.refused]
+
+
+def test_a_macro_imported_with_from_used_bare_is_clean():
+    assert _imported_refusals(IMPORTER + " }}") == []
+
+
+def test_a_macro_imported_with_from_transformed_is_flagged():
+    assert _imported_refusals(IMPORTER + " | trim }}") == [(KEY, "filter trim")]
 
 
 def _embed_refusals(includer: str, embedded: str) -> list[tuple[str, str]]:
@@ -296,12 +358,15 @@ def test_named_members_and_the_floor_found_are_clean():
     member = NamedUse("t.j2", KEY, "filter default", 1)
     use = Use(KEY, ("filter default", "output"), False)
     result = Rule5(naming=["t.j2"] * RULE5_FLOOR, accepted=[("t.j2", use)])
-    assert rule5_members(result, FIXTURE_KEYS, frozenset(), (member,)) == []
+    assert (
+        rule5_members(result, FIXTURE_KEYS, frozenset(), (member,), not_aliases=())
+        == []
+    )
 
 
 def test_a_rule5_result_under_the_floor_is_flagged():
     result = Rule5(naming=["t.j2"] * (RULE5_FLOOR - 1))
-    (problem,) = rule5_members(result, FIXTURE_KEYS, frozenset(), ())
+    (problem,) = rule5_members(result, FIXTURE_KEYS, frozenset(), (), not_aliases=())
     assert f"{RULE5_FLOOR - 1} templates name a secret key, under the floor" in problem
 
 
@@ -309,7 +374,9 @@ def test_a_rule5_result_missing_a_named_use_is_flagged():
     member = NamedUse("t.j2", KEY, "filter default", 1)
     use = Use(KEY, ("output",), False)
     result = Rule5(naming=["t.j2"] * RULE5_FLOOR, accepted=[("t.j2", use)])
-    (problem,) = rule5_members(result, FIXTURE_KEYS, frozenset(), (member,))
+    (problem,) = rule5_members(
+        result, FIXTURE_KEYS, frozenset(), (member,), not_aliases=()
+    )
     assert (
         f"named member gone: 1 accepted uses of {KEY} through filter default" in problem
     )
@@ -380,20 +447,20 @@ def test_a_non_secret_vars_lookup_entry_is_clean(tmp_path):
     result = _rule5_over(tmp_path, LOOKUP)
     site = _site({"terraria_k8s_replicas"})
     assert result.violations == []
-    assert rule5_members(result, FIXTURE_KEYS, frozenset({site}), (), 0) == []
+    assert rule5_members(result, FIXTURE_KEYS, frozenset({site}), (), 0, ()) == []
 
 
 def test_a_non_secret_vars_lookup_entry_naming_a_key_is_flagged(tmp_path):
     result = _rule5_over(tmp_path, LOOKUP)
     sites = frozenset({_site({KEY})})
-    (problem,) = rule5_members(result, FIXTURE_KEYS, sites, (), 0)
+    (problem,) = rule5_members(result, FIXTURE_KEYS, sites, (), 0, ())
     assert f"can read the secret keys ['{KEY}']" in problem
 
 
 def test_a_non_secret_vars_lookup_entry_whose_site_has_gone_is_flagged(tmp_path):
     result = _rule5_over(tmp_path, "{{ x }}")
     sites = frozenset({_site(set())})
-    (problem,) = rule5_members(result, FIXTURE_KEYS, sites, (), 0)
+    (problem,) = rule5_members(result, FIXTURE_KEYS, sites, (), 0, ())
     assert "stale NON_SECRET_VARS_LOOKUPS entry" in problem
 
 

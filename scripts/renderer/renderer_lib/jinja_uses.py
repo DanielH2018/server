@@ -1,13 +1,16 @@
 """Where each secret key appears in a template's syntax tree, and the forms it passes through.
 
-Rule 5 of `secret_checks.py` reads template sources through this walk. `scan` parses a template
-and finds every use of a key: a loaded name, a `lookup('vars', 'K')` with a literal name, and
-a `lookup('vars', X)` whose argument is not a literal. From each use, `judge` walks up the
-enclosing nodes to the first one that decides it, and records each form it passed on the way.
+Rule 5 of `secret_checks.py` reads template sources through this walk. `jinja_aliases.py`
+walks a template and finds every use of a key: a loaded name, a `lookup('vars', 'K')` with a
+literal name, a `lookup('vars', X)` whose argument is not a literal, and a use of an alias
+that carries one. From each use, `judge` walks up the enclosing nodes to the first one that
+decides it, and records each form it passed on the way.
 
 A use passes through a filter that keeps the value's text, a `~` concatenation, a list, tuple
-or dict literal, the value branch of a conditional, and `+` on a container literal. It is
-accepted at an output, a binding, an `is defined` test or a macro argument. Every other
+or dict literal, the value branch of a conditional, `+` on a container literal, and a macro
+argument, whose value the call's output carries. It is accepted at an output, a `{% call %}`,
+a binding or an `is defined` test. A container alias also passes through a part selected by
+a constant name, and a set-bound literal one is accepted at an `{% if %}`. Every other
 enclosing node refuses it, so each use yields at most one refusal.
 
 `docs/homelab-render.md` is the operator's page, and
@@ -24,13 +27,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NamedTuple
 
-import jinja2
 from jinja2 import nodes
 
 from lib.repo_paths import ANSIBLE, K8S_ROLES, SHARED_TPL
 
 TRUTHINESS = "truthiness test in an if"
 CONTAINER = "container literal"
+LENGTH_TEST = "length test in an if"
+MACRO_ARGUMENT = "macro argument"
+PART = "part"
 
 # How a use reached through a non-literal `vars` lookup names its key.
 DYNAMIC_LOOKUP = "lookup('vars', {})"
@@ -53,6 +58,22 @@ class Use(NamedTuple):
     key: str
     forms: tuple[str, ...]
     refused: bool
+
+
+class Alias(NamedTuple):
+    """How a use reached its key through a name, rather than naming the key itself.
+
+    Attributes:
+        form: The first form of each use, such as `value alias x` or `output of macro m`.
+        container: The name holds a list, tuple or dict that carries the key, so a part
+            selected from it by a constant name is a container alias too.
+        listed: `{% set %}` bound the name to a literal container, so an `{% if %}` on it
+            reads only its length.
+    """
+
+    form: str
+    container: bool = False
+    listed: bool = False
 
 
 @dataclass(frozen=True)
@@ -81,7 +102,7 @@ def lookup_argument(node: nodes.Node) -> str:
     return f"<{type(node).__name__}>"
 
 
-def _vars_lookup(node: nodes.Node) -> nodes.Expr | None:
+def vars_lookup(node: nodes.Node) -> nodes.Expr | None:
     """The argument of `lookup('vars', X)` when `node` is that call."""
     if (
         isinstance(node, nodes.Call)
@@ -95,7 +116,7 @@ def _vars_lookup(node: nodes.Node) -> nodes.Expr | None:
     return None
 
 
-def _macro_names(tree: nodes.Template) -> set[str]:
+def macro_names(tree: nodes.Template) -> set[str]:
     """The names a template binds to macros, its own or imported by name."""
     names = {m.name for m in tree.find_all(nodes.Macro)}
     for imp in tree.find_all(nodes.FromImport):
@@ -109,6 +130,7 @@ def judge(
     macros: set[str],
     policy: Policy,
     dynamic: bool = False,
+    alias: Alias | None = None,
 ) -> Use:
     """Walk up from one key use through `ancestors`, innermost last, to the form that decides.
 
@@ -118,11 +140,20 @@ def judge(
         macros: The names the template binds to macros.
         policy: The pass-through filters and the multi-line keys.
         dynamic: The use is a non-literal `vars` lookup, held to the identity forms.
+        alias: The name the use reached the key through, when it is not the key itself.
     """
-    forms: list[str] = []
+    forms: list[str] = [alias.form] if alias else []
     for parent, fname in reversed(ancestors):
         if isinstance(parent, nodes.Keyword):
             continue
+        # A part of a container alias is one, until a form turns it into text.
+        whole = alias is not None and alias.container and set(forms[1:]) <= {PART}
+        if whole and fname == "node" and _selects_part(parent):
+            forms.append(PART)
+            continue
+        if alias and alias.listed and len(forms) == 1:
+            if isinstance(parent, nodes.If) and fname == "test":
+                return Use(key, (*forms, LENGTH_TEST), False)
         if isinstance(parent, nodes.Filter):
             if fname == "node":
                 form = f"filter {parent.name}"
@@ -146,16 +177,41 @@ def judge(
             forms.append("conditional value")
             continue
         # `+` on a container literal joins two containers and reads no character of the key.
-        if isinstance(parent, nodes.Add) and CONTAINER in forms:
+        if isinstance(parent, nodes.Add) and (CONTAINER in forms or whole):
             forms.append("container join")
             continue
-        accepted = _terminal(parent, fname, macros, dynamic)
+        # The call's output carries the argument, so the call's own context judges it.
+        if _macro_call(parent, fname, macros) and not dynamic:
+            forms.append(MACRO_ARGUMENT)
+            continue
+        accepted = _terminal(parent, fname, dynamic)
         if accepted == "output":
             return _through_blocks(key, [*forms, accepted], ancestors, policy, dynamic)
         if accepted:
             return Use(key, (*forms, accepted), False)
         return Use(key, (*forms, _refused_form(parent, fname)), True)
     return Use(key, (*forms, "template root"), True)
+
+
+def _selects_part(parent: nodes.Node) -> bool:
+    """Whether `parent` selects a part by a constant attribute name or string key."""
+    if isinstance(parent, nodes.Getattr):
+        return True
+    return (
+        isinstance(parent, nodes.Getitem)
+        and isinstance(parent.arg, nodes.Const)
+        and isinstance(parent.arg.value, str)
+    )
+
+
+def _macro_call(parent: nodes.Node, fname: str, macros: set[str]) -> bool:
+    """Whether a use in `parent`'s field `fname` is an argument of a call to a macro."""
+    return (
+        isinstance(parent, nodes.Call)
+        and fname in ("args", "kwargs")
+        and isinstance(parent.node, nodes.Name)
+        and parent.node.name in macros
+    )
 
 
 def _keeps(name: str, key: str, policy: Policy, dynamic: bool) -> bool:
@@ -200,11 +256,12 @@ def _through_blocks(
     return Use(key, tuple(forms), False)
 
 
-def _terminal(
-    parent: nodes.Node, fname: str, macros: set[str], dynamic: bool
-) -> str | None:
+def _terminal(parent: nodes.Node, fname: str, dynamic: bool) -> str | None:
     """The accepted form that ends a walk at `parent`, or None when `parent` refuses it."""
     if isinstance(parent, nodes.Output):
+        return "output"
+    # A `{% call %}` writes its macro's output where it stands.
+    if isinstance(parent, nodes.CallBlock) and fname == "call":
         return "output"
     if dynamic:
         return None
@@ -217,13 +274,6 @@ def _terminal(
     defined = ("defined", "undefined")
     if isinstance(parent, nodes.Test) and fname == "node" and parent.name in defined:
         return f"test {parent.name}"
-    if (
-        isinstance(parent, nodes.Call)
-        and fname in ("args", "kwargs")
-        and isinstance(parent.node, nodes.Name)
-        and parent.node.name in macros
-    ):
-        return "macro argument"
     return None
 
 
@@ -271,8 +321,9 @@ class TemplateScan:
         names_key: The tree names a secret key, as a loaded name or a literal `vars` lookup.
         uses: Every use, accepted or refused, in tree order.
         lookup_sites: The argument text of every non-literal `vars` lookup, allowlisted or not.
-        keys: The keys the tree names.
+        keys: The keys the tree names, itself or through an alias.
         embeds: Every include and template lookup.
+        bindings: `(name, is an alias)` for each name a binding in the tree sets.
     """
 
     names_key: bool = False
@@ -280,6 +331,7 @@ class TemplateScan:
     lookup_sites: list[str] = field(default_factory=list)
     keys: set[str] = field(default_factory=set)
     embeds: list[Embed] = field(default_factory=list)
+    bindings: list[tuple[str, bool]] = field(default_factory=list)
 
 
 def _template_lookup(node: nodes.Node) -> tuple[str | None] | None:
@@ -312,7 +364,7 @@ def _template_lookup(node: nodes.Node) -> tuple[str | None] | None:
     return (None,)
 
 
-def _embed(
+def embed_of(
     node: nodes.Node, ancestors, macros: set[str], policy: Policy
 ) -> Embed | None:
     """The embed `node` is, judged with the forms its output passes through, or None."""
@@ -404,57 +456,3 @@ def embed_refusals(
                     for key in sorted(keys & multi_line)
                 )
     return refusals
-
-
-def scan(
-    env: jinja2.Environment,
-    source: str,
-    keys: frozenset[str],
-    policy: Policy,
-    non_secret: frozenset[str] = frozenset(),
-) -> TemplateScan:
-    """Walk one template's syntax tree and judge every use of a key in `keys`.
-
-    Args:
-        env: The Jinja environment to parse with.
-        source: The template's text.
-        keys: The secret key names.
-        policy: The pass-through filters and the multi-line keys.
-        non_secret: The argument texts of the non-literal `vars` lookups in this template
-            that read no secret key. They are recorded as sites and judged as nothing.
-    """
-    tree = env.parse(source)
-    macros = _macro_names(tree)
-    found = TemplateScan()
-
-    def visit(node: nodes.Node, ancestors: list[tuple[nodes.Node, str]]) -> None:
-        embed = _embed(node, ancestors, macros, policy)
-        if embed is not None:
-            found.embeds.append(embed)
-        argument = _vars_lookup(node)
-        if argument is not None:
-            if isinstance(argument, nodes.Const):
-                if argument.value in keys:
-                    found.names_key = True
-                    found.keys.add(argument.value)
-                    found.uses.append(judge(argument.value, ancestors, macros, policy))
-            else:
-                text = lookup_argument(argument)
-                found.lookup_sites.append(text)
-                if text not in non_secret:
-                    name = DYNAMIC_LOOKUP.format(text)
-                    found.uses.append(judge(name, ancestors, macros, policy, True))
-            return
-        if isinstance(node, nodes.Name) and node.ctx == "load" and node.name in keys:
-            found.names_key = True
-            found.keys.add(node.name)
-            found.uses.append(judge(node.name, ancestors, macros, policy))
-            return
-        for fname in node.fields:
-            value = getattr(node, fname)
-            for child in value if isinstance(value, list) else [value]:
-                if isinstance(child, nodes.Node):
-                    visit(child, [*ancestors, (node, fname)])
-
-    visit(tree, [])
-    return found

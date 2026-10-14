@@ -1082,6 +1082,7 @@
  "scripts/renderer/tests/test_renderer_pinned_live_facts.py": 0.15,
  "scripts/renderer/tests/test_renderer_placeholders.py": 0.24,
  "scripts/renderer/tests/test_renderer_roundtrip.py": 16.74,
+ "scripts/renderer/tests/test_renderer_secret_aliases.py": 0.08,
  "scripts/renderer/tests/test_renderer_secret_checks.py": 0.04,
  "scripts/renderer/tests/test_renderer_secret_checks_tree.py": 9.45,
  "scripts/renderer/tests/test_renderer_secret_stubs.py": 0.0,
