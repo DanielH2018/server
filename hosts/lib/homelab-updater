@@ -238,7 +238,7 @@ update() {
     # pkgCacheFile::Generate=false skips the cache build apt-get update ends with, which the
     # empty cache paths would otherwise run in memory for nothing.
     # shellcheck disable=SC2086 # HOMELAB_APT is a list of options.
-    if ! apt-get update --error-on=any -o pkgCacheFile::Generate=false $HOMELAB_APT; then
+    if ! { apt-get update --error-on=any -o pkgCacheFile::Generate=false $HOMELAB_APT || true; }; then
         say "the homelab fetch failed; writing nothing"
         exit 1
     fi
