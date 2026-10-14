@@ -31,6 +31,8 @@ SWEEP_STEPS = frozenset(
         "Run hooks (full sweep)",
         "Lint the whole tree",
         "Build both renders with the pinned nfpm",
+        "Build the test image for this release",
+        "Run the updater cases in systemd containers",
     }
 )
 SCOPED_STEPS = frozenset(

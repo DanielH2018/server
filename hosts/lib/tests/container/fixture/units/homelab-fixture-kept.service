@@ -1,0 +1,10 @@
+# A long-running unit every fixture version of homelab-daniel-pi ships with an enable link, so
+# reconcile starts it and prerm stops it on removal.
+[Unit]
+Description=Fixture unit the container cases keep across upgrades
+
+[Service]
+ExecStart=/usr/bin/sleep infinity
+
+[Install]
+WantedBy=multi-user.target

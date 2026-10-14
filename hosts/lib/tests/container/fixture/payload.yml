@@ -1,0 +1,11 @@
+# The head fixture plus a 64 MiB payload, which keeps dpkg unpacking long enough for the kill
+# case to land inside the unpack. The case runner writes files/fixture-payload before it renders.
+description: Fixture host package for the host_packages container cases
+components: [reconcile]
+maintainer_scripts: [preinst, postinst, prerm]
+depends: [tree]
+files:
+  - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/homelab-fixture-kept.service}
+  - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/multi-user.target.wants/homelab-fixture-kept.service}
+  - {src: units/updater-timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
+  - {src: files/fixture-payload, dst: /usr/lib/homelab/fixture-payload}

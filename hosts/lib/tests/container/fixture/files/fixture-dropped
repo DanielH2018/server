@@ -1,0 +1,1 @@
+A file only the base fixture ships; the upgrade case asserts dpkg removed it.

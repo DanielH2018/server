@@ -1,0 +1,10 @@
+# Version N+1 of the fixture: it drops a unit, its enable link and a file, and adds a Depends
+# on an Ubuntu package, which the updater must leave installed.
+description: Fixture host package for the host_packages container cases
+components: [reconcile]
+maintainer_scripts: [preinst, postinst, prerm]
+depends: [tree]
+files:
+  - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/homelab-fixture-kept.service}
+  - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/multi-user.target.wants/homelab-fixture-kept.service}
+  - {src: units/updater-timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
