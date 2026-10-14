@@ -24,7 +24,7 @@ from lib.exit_codes import (
     DEPLOY_TAG_MISS,
 )
 from deploy_tools.land_lib import land_platform
-from deploy_tools.land_lib import ci, tick
+from deploy_tools.land_lib import ci, promotion, tick
 from deploy_tools.land_lib.landing import Landing, TickState, retry_while_locked
 from deploy_tools.land_lib.outcome import (
     ABANDONED_WATCH_NOTE,
@@ -440,13 +440,35 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
 
 
 def deploy_phase(ln: Landing) -> None:
-    """Step 5, end to end: derive if needed, deploy, ride out a stale tree, stamp the ledger."""
-    o, t = ln.opts, ln.tools
+    """Step 5, end to end: derive, split, deploy, wait on promotion, stamp the ledger.
+
+    The split comes before any deploy.sh (`promotion.split_owned`): a tag Flux applies leaves
+    `resolved_tags`, and deploy.sh runs only when an Ansible-owned tag remains. A PR holding
+    such a tag then waits on promotion, after deploy.sh for a PR that holds both kinds.
+    """
+    t = ln.tools
     if ln.needs_diff:
         derive_from_diff(ln)
-    if not ln.resolved_tags:
+    promotion.split_owned(ln)
+    if not ln.resolved_tags and not ln.owned_tags:
         no_tag_outcome(ln)
-    ln.ledger.tags_label = ln.tags_csv
+    ln.ledger.tags_label = ",".join(ln.resolved_tags + list(ln.owned_tags))
+    if ln.resolved_tags:
+        _deploy_resolved(ln)
+    elif not ln.tick_is_the_apply:
+        # Nothing for deploy.sh, so the gate renders the merge commit from a snapshot, as
+        # after `deploy.sh --at`, and the tick is kicked to converge the primary checkout.
+        ln.deployed_at = ln.merge_sha
+        tick.kick_tick(ln)
+    if ln.owned_tags:
+        promotion.wait_on_promotion(ln)
+    ln.ledger.t_deploy = t.clock()
+    ln.deploy_ended_at = t.wall_clock()
+
+
+def _deploy_resolved(ln: Landing) -> None:
+    """deploy.sh for `resolved_tags`, riding out a stale tree; returns only when it deployed."""
+    o, t = ln.opts, ln.tools
     # The merge commit, rendered from a snapshot of itself rather than from the primary
     # checkout. Step 4 does not wait for the tick to fast-forward that checkout, so nothing
     # before this point has moved it -- `--at` is what makes that safe.
@@ -556,5 +578,3 @@ def deploy_phase(ln: Landing) -> None:
             Verdict.TIP_OUTRAN_RETRIES,
         )
     deploy_outcome(ln, rc)
-    ln.ledger.t_deploy = t.clock()
-    ln.deploy_ended_at = t.wall_clock()

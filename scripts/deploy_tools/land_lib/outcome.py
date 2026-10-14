@@ -94,6 +94,12 @@ class Cause(StrEnum):
     rather than formatted from the return code, because `f"deploy-exit-{rc}"` made the set
     unbounded and the board groups by this field. `DEPLOY_EXIT_OTHER` is the bucket for a
     code outside deploy.sh's own contract, which should not happen.
+
+    PROMOTE_* NAME HOW A WAIT ON PROMOTION ENDED (`promote.py land-wait`), for a PR whose tag
+    Flux applies. `promote-held` is DEPLOY_HOLD holding, beside `deploy-failed`.
+    `promote-timeout` is the wait reaching twice the promote timeout. It rides beside
+    `deferred`, as `deploy-exit-4` rides beside `tip-outran-retries`: the promotion applies
+    this PR itself, and a later one may still cover it.
     """
 
     TICK_HELD = "tick-held"
@@ -109,6 +115,8 @@ class Cause(StrEnum):
     DEPLOY_EXIT_NO_HOSTS = "deploy-exit-78"
     DEPLOY_EXIT_LOCK_PLAN_FAILED = "deploy-exit-79"
     DEPLOY_EXIT_OTHER = "deploy-exit-other"
+    PROMOTE_HELD = "promote-held"
+    PROMOTE_TIMEOUT = "promote-timeout"
     INVALID = "invalid-cause"
 
 

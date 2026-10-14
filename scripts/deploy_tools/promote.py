@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Decide which published master commit the cluster's `prod` tag moves to, and prune old ones.
+"""Decide which published master commit the cluster's `prod` tag moves to, wait on it, prune.
 
 THE PROBLEM. The `promote` workflow runs after each green CI run on master, and GitHub keeps
 only one pending job per concurrency group. Take merges X2 and then X3, where CI(X3) finishes
@@ -41,16 +41,23 @@ signature after the versions it could sign, then runs `cosign verify` on `prod`'
 on `last-good`'s when that tag exists. It prints one line per version deleted, then a summary
 line. Any failed read deletes nothing.
 
+LAND-WAIT. `land-wait M` waits until a promotion covers the merge commit M, for `land.sh`.
+`promote_wait.py` holds it, and its docstring states the three outcomes and what each reads.
+
 Exit codes:
   0   decide: promote, held or current. prune: every read, delete and verify succeeded.
+      land-wait: settled.
   1   decide: error, and nothing moves. prune: a read, a delete or a verify failed.
+      land-wait: deploy-failed, a hold.
   64  usage error
+  75  land-wait: gave-up, the wait reached its timeout.
 
 Every GitHub and GHCR call goes through `forge.py`. This module imports no HTTP library and
-starts no `gh` subprocess (scripts/deploy_tools/tests/test_promote_forge_boundary.py).
+starts no subprocess (scripts/deploy_tools/tests/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py decide --trigger <sha>
      uv run python scripts/deploy_tools/promote.py prune
+     uv run python scripts/deploy_tools/promote.py land-wait <sha> --services <tag,...>
 """
 
 import argparse
@@ -72,6 +79,7 @@ from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
 import forge
+import promote_wait
 from artifact_retention import (
     LAST_GOOD_TAG,
     PROD_TAG,
@@ -93,7 +101,7 @@ from deployer_lib.deploy_git import ci_verdict
 CI_CONTEXTS_SOURCE = "ansible/roles/setup/gitops_deploy/defaults/main.yml"
 CI_CONTEXTS_KEY = "gitops_deploy_ci_contexts"
 
-HOLD_VARIABLE = "DEPLOY_HOLD"
+HOLD_VARIABLE = forge.HOLD_VARIABLE
 MASTER_REF = "origin/master"
 
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
@@ -514,9 +522,35 @@ def main(
         default=REPO,
         help="the checkout to read git and the contexts from",
     )
+    waiter = commands.add_parser(
+        "land-wait", help="wait until a promotion covers a merge commit (land.sh)"
+    )
+    waiter.add_argument("merge", help="M, the merge commit to wait on")
+    waiter.add_argument(
+        "--services",
+        default="",
+        help="the PR's published tags, comma-separated, named in the settled annotation",
+    )
+    waiter.add_argument(
+        "--repo",
+        type=Path,
+        default=REPO,
+        help="the checkout whose history answers each ancestry read",
+    )
+    waiter.add_argument(
+        "--timeout",
+        type=int,
+        default=promote_wait.LAND_WAIT_TIMEOUT_S,
+        help="seconds before it gives up (default: twice the promote timeout)",
+    )
     args = parser.parse_args(argv)
     if f is None:
         f = forge.connect(os.environ)
+    if args.command == "land-wait":
+        services = [tag for tag in args.services.split(",") if tag]
+        reads = promote_wait.live_wait_reads(f, args.repo)
+        result = promote_wait.land_wait(reads, args.merge, services, args.timeout)
+        return promote_wait.report_wait(args.merge, result)
     if args.command == "prune":
         return prune(f, args.repo, now or datetime.now(UTC))
     try:
