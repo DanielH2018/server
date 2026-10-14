@@ -383,3 +383,64 @@ def test_a_filter_answering_from_a_valid_neighbour_is_flagged():
         return answer
 
     assert not _reads_only_the_named_entry(from_a_neighbour, ())
+
+
+# ── EVERY_ENTRY against the filters' behaviour ─────────────────────────────────────────
+
+
+# Each filter's arguments after the list, a lookup naming the entry already in the list.
+_EVERY_ARGS = {
+    "authelia_service_rules": ("example.com", ["10.0.0.0/8"]),
+    "entry_names": (),
+    "entry_port": ("target",),
+    "homepage_href": ("target", "example.com"),
+    "homepage_widget_url": ("target", "media"),
+    "in_service_tier": ("target", "home-edge"),
+    "kuma_ingress_monitors": (),
+    "lan_hostnames": ("k8s",),
+    "metrics_port": ("target",),
+    "netpol_caller_fences": (),
+    "published_ports": (),
+    "scrape_jobs": ("media",),
+    "tier_priority_class": ("target",),
+}
+# The entry D2.1c's narrowing records by its presence alone: it carries no field a filter
+# row names but `name`, and the `platform` every k8s entry carries.
+_BARE = {"name": "added", "platform": "k8s"}
+
+
+def _answer(filter_, containers_list: list, args: tuple) -> tuple:
+    try:
+        return ("returned", filter_(containers_list, *args))
+    except (KeyError, TypeError, ValueError, AnsibleFilterError) as exc:
+        return ("raised", type(exc).__name__, str(exc))
+
+
+def _moved_by_a_bare_entry(filter_, args: tuple) -> bool:
+    """Whether appending `_BARE` beside the target changes what `filter_` answers."""
+    target = {
+        **_TARGET,
+        "platform": "k8s",
+        "use_authelia": True,
+        "auth_tier": "one_factor",
+    }
+    return _answer(filter_, [target, _BARE], args) != _answer(filter_, [target], args)
+
+
+def test_every_entry_names_the_filters_a_bare_entry_moves():
+    """An added entry is recorded by its fields and its presence, which only these meet."""
+    assert set(_EVERY_ARGS) == set(containers.FILTER_FIELDS)
+    # Non-vacuity: artifacts' `known_services.json` lists every entry through it.
+    assert "entry_names" in containers.EVERY_ENTRY
+    filters = _filters()
+    moved = {
+        n for n, args in _EVERY_ARGS.items() if _moved_by_a_bare_entry(filters[n], args)
+    }
+    assert moved == containers.EVERY_ENTRY
+
+
+def test_a_filter_with_a_row_per_entry_is_moved_by_a_bare_entry_is_flagged():
+    def every_port(containers_list):
+        return [e.get("port") for e in containers_list]
+
+    assert _moved_by_a_bare_entry(every_port, ())

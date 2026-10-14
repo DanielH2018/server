@@ -280,12 +280,12 @@ def _containers_list_tags(
 ) -> set[str]:
     """The tags a `containers_list` change reaches: its entries' own, and the list's readers.
 
-    A bare read counts against every host's list, since the rendering play picks its host;
-    a `hostvars['<host>']` read names its host, so another host's edit skips it (#4422).
-    `containers.entry_change_tags` carries why a removed entry maps to nothing.
+    A bare read counts against every host's list, as the rendering play picks the host; a
+    `hostvars['<host>']` read names its host, so another host's edit skips it (#4422).
     """
     own = containers.entry_change_tags(before, after, ctx.explain, path)
-    return own | _list_reader_tags(ctx, path, containers.edit(before, after, path))
+    edit = containers.edit(before, after, path, ctx.explain)
+    return own | _list_reader_tags(ctx, path, edit)
 
 
 def _list_reader_tags(ctx: Context, path: str, edit: containers.Edit) -> set[str]:

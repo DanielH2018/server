@@ -3,7 +3,6 @@
 Run: uv run pytest scripts/renderer/tests/test_renderer_secret_stubs.py
 """
 
-import json
 import re
 
 import pytest
@@ -22,7 +21,6 @@ from secret_stubs import (
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
 GA = "google_assistant_service_account"
-GA_FIELDS = {"project_id", "client_email", "private_key"}
 DNS_LABEL = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
 
 
@@ -67,27 +65,16 @@ def test_stub_keys_are_every_secret_key_but_sops_and_never_stub():
     assert "become_password" not in keys
 
 
-def test_every_stub_but_the_google_assistant_one_is_a_dns_label():
+def test_every_stub_is_a_dns_label():
     stubs = _stub_map()
     bad = {
         key: stub
         for key, stub in stubs.items()
-        if key != GA and not (DNS_LABEL.match(stub) and len(stub) <= 63)
+        if not (DNS_LABEL.match(stub) and len(stub) <= 63)
     }
     assert not bad
     assert stubs["domain"] == "stub-domain"
-
-
-def test_google_assistant_stub_is_an_object_of_the_three_fields_the_template_reads():
-    stub = homelab_secret_stub(GA)
-    fields = json.loads(stub)
-    assert set(fields) == GA_FIELDS
-    assert all(
-        isinstance(value, str)
-        and value.startswith("stub-google-assistant-service-account-")
-        for value in fields.values()
-    )
-    assert stub == json.dumps(fields, sort_keys=True)
+    assert stubs[GA] == "stub-google-assistant-service-account"
 
 
 def test_unstubbed_keys_of_the_full_stub_map_is_clean():
