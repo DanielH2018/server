@@ -43,9 +43,9 @@ from pathlib import Path
 from typing import NamedTuple
 
 
-from lib.render_guard import containers_entries
-from lib.repo_paths import HOST_VARS, REPO, SHARED_TPL
+from lib.repo_paths import REPO, SHARED_TPL
 from renderer.renderer_lib.environment import renderer_env
+from renderer.renderer_lib.jinja_aliases import scan_templates
 from renderer.renderer_lib.jinja_uses import (
     DYNAMIC_LOOKUP,
     TRUTHINESS,
@@ -55,8 +55,17 @@ from renderer.renderer_lib.jinja_uses import (
     embed_refusals,
     resolve_embed,
     rule5_templates,
-    scan,
     template_tag,
+)
+from renderer.renderer_lib.var_aliases import (
+    ALIAS_MEMBERS,
+    NON_SECRET_VARS_LOOKUPS as NON_SECRET_VARS_LOOKUPS,
+    NOT_ALIASES,
+    VarsLookupSite as VarsLookupSite,
+    not_alias_problems,
+    rule5_var_files,
+    var_aliases,
+    var_tag,
 )
 from renderer.renderer_lib.sops_entries import (
     SOPS_MANIFEST_KEYS,
@@ -214,47 +223,6 @@ KNOWN_VIOLATIONS = frozenset(
 )
 
 
-def _replicas_vars(host_vars: Path = HOST_VARS) -> set[str]:
-    """Every `replicas_var` of a `metrics:` item in any host's `containers_list`."""
-    return {
-        str(item["replicas_var"])
-        for path in sorted(host_vars.glob("*.yml"))
-        for entry in containers_entries(path)
-        for item in entry.get("metrics") or []
-        if isinstance(item, dict) and "replicas_var" in item
-    }
-
-
-class VarsLookupSite(NamedTuple):
-    """A non-literal `lookup('vars', X)` that reads no secret key.
-
-    Attributes:
-        template: The template's path from the repository root.
-        argument: `X` as `lookup_argument` writes it.
-        names: Returns every variable name `X` can take.
-    """
-
-    template: str
-    argument: str
-    names: Callable[[], set[str]]
-
-
-# The non-literal `vars` lookups that rule 5 does not count as a secret reference, for any of
-# its clauses. Each entry fails the check when its site has gone, or when a name its argument
-# can take is a secret key.
-NON_SECRET_VARS_LOOKUPS = frozenset(
-    {
-        # `lookup('vars', job.replicas_var) | int > 0` drops a scrape job whose workload is
-        # scaled to zero. `replicas_var` is a field of a `containers_list` entry's `metrics:`
-        # list (ansible/filter_plugins/scrape_jobs.py), and names a replica count.
-        VarsLookupSite(
-            _ROLE_TEMPLATES.format("observability", "prometheus.yaml.j2"),
-            "job.replicas_var",
-            _replicas_vars,
-        ),
-    }
-)
-
 # The fewest in-scope templates whose syntax tree names a secret key: 59 at `70591c307`.
 RULE5_FLOOR = 59
 
@@ -297,6 +265,7 @@ RULE5_MEMBERS = (
         "output",
         1,
     ),
+    *(NamedUse(*member) for member in ALIAS_MEMBERS),
 )
 
 
@@ -419,7 +388,8 @@ def scan_template(
     """Rule 5's walk over one template, with `passthrough` and `SOPS_MANIFEST_KEYS`."""
     env = env or renderer_env(SHARED_TPL)
     policy = Policy(passthrough, SOPS_MANIFEST_KEYS)
-    return scan(env, source, keys, policy, non_secret)
+    path = Path("template.j2")
+    return scan_templates({path: source}, keys, policy, env, {path: non_secret})[path]
 
 
 @dataclass
@@ -431,12 +401,14 @@ class Rule5:
         naming: The templates whose tree names a secret key.
         accepted: Each accepted use, with its template's path from the repository root.
         lookup_sites: `(template, argument)` for every non-literal `vars` lookup.
+        bindings: `(template, name, is an alias)` for each name a template binds.
     """
 
     violations: list[Violation] = field(default_factory=list)
     naming: list[str] = field(default_factory=list)
     accepted: list[tuple[str, Use]] = field(default_factory=list)
     lookup_sites: set[tuple[str, str]] = field(default_factory=set)
+    bindings: set[tuple[str, str, bool]] = field(default_factory=set)
 
 
 def rule5(
@@ -444,15 +416,33 @@ def rule5(
     paths: list[Path] | None = None,
     non_secret: frozenset[VarsLookupSite] = NON_SECRET_VARS_LOOKUPS,
     root: Path = REPO,
+    var_files: list[Path] | None = None,
 ) -> Rule5:
-    """Run rule 5 over `paths`, by default every template it reads, embeds included."""
+    """Run rule 5 over `paths`, by default every template it reads, embeds included.
+
+    `var_files` are the role defaults and inventory files the alias clause reads. They
+    default to the real ones when `paths` does too, and to none otherwise.
+    """
     keyset = frozenset(keys)
     env = renderer_env(SHARED_TPL)
-    result, scans = Rule5(), {}
-    for path in rule5_templates() if paths is None else paths:
-        rel = path.relative_to(root).as_posix()
-        allowed = frozenset(s.argument for s in non_secret if s.template == rel)
-        scans[path] = scan = scan_template(path.read_text(), keyset, allowed, env=env)
+    policy = Policy(PASSTHROUGH_FILTERS, SOPS_MANIFEST_KEYS)
+    if var_files is None:
+        var_files = rule5_var_files() if paths is None else []
+    paths = rule5_templates() if paths is None else paths
+    aliases = var_aliases(keyset, policy, var_files, env)
+    result = Rule5([_rule5_violation(*r, root, var_tag) for r in aliases.refused])
+    rels = {path: path.relative_to(root).as_posix() for path in paths}
+    allowed = {
+        path: frozenset(s.argument for s in non_secret if s.template == rel)
+        for path, rel in rels.items()
+    }
+    sources = {path: path.read_text() for path in paths}
+    scans = scan_templates(
+        sources, keyset, policy, env, allowed, aliases=aliases.bindings
+    )
+    for path, scan in scans.items():
+        rel = rels[path]
+        result.bindings.update((rel, name, alias) for name, alias in scan.bindings)
         if scan.names_key:
             result.naming.append(rel)
         result.lookup_sites.update((rel, arg) for arg in scan.lookup_sites)
@@ -464,9 +454,9 @@ def rule5(
     return result
 
 
-def _rule5_violation(path: Path, key: str, form: str, root: Path) -> Violation:
+def _rule5_violation(path: Path, name: str, form: str, root: Path, tag=template_tag):
     rel = path.relative_to(root).as_posix()
-    return Violation(NO_SECRET_EXPRESSION, template_tag(path), rel, form, key)
+    return Violation(NO_SECRET_EXPRESSION, tag(path), rel, form, name)
 
 
 def rule5_members(
@@ -475,6 +465,7 @@ def rule5_members(
     non_secret: frozenset[VarsLookupSite] = NON_SECRET_VARS_LOOKUPS,
     members: tuple[NamedUse, ...] = RULE5_MEMBERS,
     floor: int = RULE5_FLOOR,
+    not_aliases: tuple[tuple[str, str], ...] = NOT_ALIASES,
 ) -> list[str]:
     """Each named member, floor or `NON_SECRET_VARS_LOOKUPS` entry rule 5 fails, one line apiece."""
     problems = []
@@ -496,6 +487,7 @@ def rule5_members(
                 f"{NO_SECRET_EXPRESSION}: named member gone: {member.count} accepted uses of "
                 f"{member.key} through {member.form} in {member.template}, found {found}"
             )
+    problems += not_alias_problems(result.bindings, not_aliases)
     known = set(keys)
     for site in sorted(non_secret):
         if (site.template, site.argument) not in result.lookup_sites:
