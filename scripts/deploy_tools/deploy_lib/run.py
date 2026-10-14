@@ -37,6 +37,7 @@ runner, an operator typing ``./scripts/deploy.sh``) the two are the same checkou
 import contextlib
 import io
 import os
+import shutil
 import sys
 import traceback
 from collections.abc import Callable
@@ -255,10 +256,29 @@ def run_locked(plan: Plan) -> int:
 
 
 def exec_argv(argv: list[str]) -> None:
-    """Replace this process with `argv`. Flushes first: exec discards Python's buffers."""
+    """Replace this process with `argv`. Flushes first: exec discards Python's buffers.
+
+    Exec skips the atexit handlers too. Importing ansible-core's constants, which
+    `flags.usage_error` does on every run, creates an `ansible-local-<pid>*` directory under
+    `~/.ansible/tmp` and registers only an atexit handler to remove it. Every `--check` and
+    `--dry-run` left one behind until this removed it before the exec (issue #4893).
+    """
+    drop_ansible_local_tmp()
     sys.stdout.flush()
     sys.stderr.flush()
     os.execvp(argv[0], argv)
+
+
+def drop_ansible_local_tmp() -> None:
+    """Remove the local temp directory ansible-core made for this process, if it made one.
+
+    Read from `sys.modules` rather than imported: importing the constants is what creates the
+    directory, so a run that never loaded ansible must not load it here.
+    """
+    constants = sys.modules.get("ansible.constants")
+    path = getattr(constants, "DEFAULT_LOCAL_TMP", None)
+    if isinstance(path, str):
+        shutil.rmtree(path, ignore_errors=True)
 
 
 @dataclass(frozen=True)

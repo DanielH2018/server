@@ -34,7 +34,7 @@ from collections.abc import Collection
 from pathlib import Path
 
 from deploy_tools.narrow_lib.broad import context_for
-from deploy_tools.render_targets import render_targets
+from deploy_tools.render_targets import render_record_targets
 from lib.cli_help import ArgumentParser
 from lib.render_guard import HOSTS_LAND_SH_NEVER_DEPLOYS
 from lib.repo_paths import HOST_VARS, K8S_ROLES
@@ -129,7 +129,9 @@ def smoke_caller(
     CHEAPEST, derived rather than listed. A candidate must be a render target on a host
     `land.sh` deploys to — declared `platform: k8s` and including `k8s/manifests`, as
     `render_targets` derives it — so the deploy actually exercises the render-and-apply path
-    the change is in. Among those, the cost key is the number of hosts declaring it, then the
+    the change is in. Its entry must also carry no `owner`, as `render_record_targets` reads
+    it: `land.sh` drops such a tag from its `deploy.sh` call, so a smoke caller Flux applies
+    would exercise nothing. Among those, the cost key is the number of hosts declaring it, then the
     number of manifests it renders, then its name: a one-template service on one host is one
     apply of an object that is already converged, and the name breaks the tie so two runs over
     one tree pick the same caller. The `# DECIDED:` above says why that count is not a timing.
@@ -146,7 +148,7 @@ def smoke_caller(
     for path in sorted(host_vars.glob("*.yml")):
         if path.stem.startswith("_") or path.stem in HOSTS_LAND_SH_NEVER_DEPLOYS:
             continue
-        for name in render_targets(path.stem, host_vars, roles):
+        for name in render_record_targets(path.stem, host_vars, roles):
             hosts[name] = hosts.get(name, 0) + 1
     candidates = sorted(set(tags) & set(hosts))
     if not candidates:

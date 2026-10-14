@@ -9,9 +9,11 @@ import sys
 import pytest
 
 from lib import yaml_fast
+from lib.exit_codes import RENDER_OK
 from lib.proc_testing import run
 from lib.repo_paths import REPO
 from renderer import homelab_render, shadow_diff
+from renderer.renderer_lib import cluster as cluster_mod
 from renderer.renderer_lib.placeholders import render_placeholders
 
 
@@ -113,3 +115,34 @@ def test_the_cli_writes_nothing_under_the_home_directory(out, tmp_path):
     written = sorted(p.relative_to(home).as_posix() for p in home.rglob("*"))
     assert len(written) == 1, written
     assert written == ["sentinel"]
+
+
+def _host_vars(tmp_path, entries):
+    path = tmp_path / "host_vars"
+    path.mkdir()
+    (path / "daniel-box.yml").write_text("containers_list:\n" + entries)
+    return path
+
+
+def test_a_flux_owned_tag_with_role_is_clean(out, tmp_path):
+    """`render_targets()` stays the full universe, so `cluster --role` still renders a tag
+    Flux applies (D2.4b), where the hourly record list leaves it out."""
+    host_vars = _host_vars(
+        tmp_path, "  - name: littlelink\n    platform: k8s\n    owner: flux\n"
+    )
+    assert cluster_mod.select_tags(["littlelink"], host_vars=host_vars) == [
+        "littlelink"
+    ]
+    flux_owned = cluster_mod.flux_owned_tags(host_vars=host_vars)
+    assert flux_owned == {"littlelink"}
+    code = homelab_render.cluster(
+        out, ["littlelink"], None, flux_owned=lambda: flux_owned
+    )
+    assert code == RENDER_OK
+    assert (out / "cluster" / "littlelink" / "deployment.yaml").is_file()
+
+
+def test_a_tag_the_host_does_not_declare_with_role_is_flagged(tmp_path):
+    host_vars = _host_vars(tmp_path, "  - name: sonarr\n    platform: k8s\n")
+    with pytest.raises(cluster_mod.RenderRefused, match="not k8s render targets"):
+        cluster_mod.select_tags(["littlelink"], host_vars=host_vars)

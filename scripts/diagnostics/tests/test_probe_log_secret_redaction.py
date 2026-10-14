@@ -66,7 +66,7 @@ def test_an_ordinary_log_line_is_printed():
 
 def test_ha_get_routes_its_body_through_the_redaction(monkeypatch, capsys):
     """The wiring, not the regex: `ha get error_log` must not print the raw body."""
-    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(core, "domain", lambda: "example.test")
     monkeypatch.setattr(ha, "ha_token", lambda: "t")
     monkeypatch.setattr(ha, "ha_get", lambda url, token, resolve=None: RECORD)
     ns = type("NS", (), {"ha_cmd": "get", "path": "error_log", "dry_run": False})()

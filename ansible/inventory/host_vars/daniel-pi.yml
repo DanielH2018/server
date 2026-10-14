@@ -4,11 +4,12 @@ server_ip: 10.0.0.139
 # reads it through hostvars, so hosts.ini carries no ansible_host for this host.
 ansible_host: "{{ server_ip }}"
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
-# `domain` is inherited from SOPS (secrets.yml → daniel-hunter.com), exactly like
-# daniel-server — the Pi carries no host-specific override. The only domain consumer
-# here is wg-easy's WG_HOST (wireguard.daniel-hunter.com — the one hostname with a DNS
-# record at the public IP). A host-specific `domain: daniel-pi.com` override would be wrong:
-# that zone does not resolve, and the SOPS value is what keeps it out of the VPN endpoint. To
+# `domain` is inherited from group_vars/all.yml (daniel-hunter.com), exactly like every other
+# host — the Pi carries no host-specific override. It is a plain variable, not a secret
+# (operator ruling, 2026-10-14). The only domain consumer here is wg-easy's WG_HOST
+# (wireguard.daniel-hunter.com — the one hostname with a DNS record at the public IP). A
+# host-specific `domain: daniel-pi.com` override would be wrong: that zone does not resolve,
+# and the shared value is what keeps it out of the VPN endpoint. To
 # give a future Pi-exposed service a "daniel-pi" hostname, use a `pi.`-prefixed subdomain of the
 # working zone (e.g. glances.pi.daniel-hunter.com — real DNS via cloudflare-ddns), not a
 # separate daniel-pi.com zone.

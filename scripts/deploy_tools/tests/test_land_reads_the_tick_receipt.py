@@ -16,7 +16,7 @@ import json
 
 import pytest
 
-from deploy_tools.land_lib import land_tags
+from deploy_tools.land_lib import land_tags, land_tags_cli
 from _land_fakes import RECEIPTS, Fakes, build_classifier
 from _narrow_fixtures import Tree, _refs
 
@@ -82,7 +82,7 @@ def test_the_plane_cli_narrows_from_this_prs_own_range(pr, capsys):
     tree, rng = pr
     payload = json.dumps({"files": [{"path": RBAC}], "changedFiles": 1})
     argv = ["--json", payload, "--plane", "--range", rng]
-    assert land_tags.main(argv, repo=tree.root) == 0
+    assert land_tags_cli.main(argv, repo=tree.root) == 0
     assert "--tags kubeconfig`" in capsys.readouterr().out
 
 
@@ -98,7 +98,7 @@ def test_the_plane_cli_names_a_changed_bringup_playbook_over_a_range(tmp_path, c
         {"files": [{"path": "ansible/k3s-bringup.yml"}], "changedFiles": 1}
     )
     argv = ["--json", payload, "--plane", "--range", f"{old}..{new}"]
-    assert land_tags.main(argv, repo=tree.root) == 0
+    assert land_tags_cli.main(argv, repo=tree.root) == 0
     out = capsys.readouterr().out
     assert "`uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s`" in out
     assert "<role>" not in out

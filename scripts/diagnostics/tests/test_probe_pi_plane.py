@@ -137,7 +137,7 @@ def test_format_pi_containers_empty_is_a_failure_not_a_pass():
 
 
 def test_run_pi_targets_dry_run_prints_the_curl(monkeypatch, capsys):
-    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(core, "domain", lambda: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
 
     class Ns:
@@ -158,7 +158,7 @@ def test_run_pi_containers_dry_run_prints_the_ssh_argv(capsys):
 
 
 def test_run_pi_targets_end_to_end_reports_a_missing_job(monkeypatch, capsys):
-    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(core, "domain", lambda: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
 
     def fake_fetch(url, resolve=None):

@@ -17,12 +17,14 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from collections.abc import Mapping
+from promote_wait import WaitResult
 from typing import Any
 
 from deploy_tools.deploy_lib.detach_notify import GateResult
 from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import landing as landing_mod
 from deploy_tools.land_lib.options import Options
+from deploy_tools.land_lib.land_flux import FluxReads
 from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
 from deploy_tools.land_lib.land_tags import Derivation, DeriveSource
 from gitops_markers import MARKERS
@@ -176,6 +178,20 @@ class Fakes:
     # changed since the PR's merge base. Empty is a PR already up to date with master, and an
     # exception is raised in place of an answer.
     compare: list[list[str] | Exception] = field(default_factory=lambda: [[]])
+    # `tools.owners_at`: each tag that sets `owner` at a ref, by ref. A ref absent here has
+    # none, which is every live entry until D2.7. An exception is raised in place of a map.
+    owners: dict[str, dict[str, str] | Exception] = field(default_factory=dict)
+    # `tools.kustomization_exists`: the Kustomizations kubectl finds in flux-system. An
+    # exception is raised for every read.
+    kustomizations: set[str] | Exception = field(default_factory=set)
+    # What `tools.land_wait` returns, one entry per call.
+    land_wait: list[WaitResult] = field(
+        default_factory=lambda: [
+            WaitResult(
+                verdict="settled", cause="", detail="1 applied", revision="", widened=""
+            )
+        ]
+    )
 
 
 def _seq(values: list, calls: list, name: str):
@@ -362,6 +378,21 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         calls.append(("own_narrowing", (pr_range,), {}))
         return f.own_narrowing
 
+    def owners_at(primary, ref):
+        calls.append(("owners_at", (ref,), {"cwd": primary}))
+        answer = f.owners.get(ref, {})
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    def kustomization_exists(name):
+        calls.append(("kustomization_exists", (name,), {}))
+        if isinstance(f.kustomizations, Exception):
+            raise f.kustomizations
+        return name in f.kustomizations
+
+    land_wait = _seq(f.land_wait, calls, "land_wait")
+
     t = [0.0]
 
     def clock() -> float:
@@ -382,6 +413,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         declared_at=lambda ref, primary: f.declared_at,
         landing_hosts_at=landing_hosts_at,
         read_state=lambda root, name: f.state.get(name, ""),
+        flux=FluxReads(owners_at, kustomization_exists, land_wait),
         own_narrowing=own_narrowing,
         paths_a_hand_must_apply=lambda paths, pr_range, primary, declared: [
             p for p in paths if p not in f.plane_paths_dropped

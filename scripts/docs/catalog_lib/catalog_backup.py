@@ -485,11 +485,35 @@ def autodeploy_stance(role_dir: Path) -> tuple[bool | None, str]:
     return False, reason.strip() if isinstance(reason, str) else ""
 
 
+def owner_stance(owner: str) -> str:
+    """What applies a k8s service whose `containers_list` entry carries `owner`, as one clause.
+
+    The glance and the catalogue print it in place of the deploy tag and the auto-deploy
+    stance, because no Ansible path deploys such a tag. The plan is
+    docs/target-architecture/deploy/d2-first-leaf.md, *What each entry point does with a tag
+    that is not Ansible-owned*.
+    """
+    if owner == "flux":
+        return "Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5"
+    return (
+        f"nothing until a PR removes `owner` (`owner: {owner}`, mid-handback); "
+        "`deploy.sh` refuses its tag with exit 5"
+    )
+
+
+def entry_owner(entry: dict[str, Any], owners: dict[str, str]) -> str | None:
+    """`entry`'s `owner` as `lib.k8s_roles.tag_owners` mapped it, or None when Ansible-owned."""
+    from lib.render_guard import entry_tags
+
+    return next((owners[tag] for tag in entry_tags(entry) if tag in owners), None)
+
+
 def autodeploy_eligibility(
     entry: dict[str, Any],
     platform: str,
     host_data: dict[str, Any],
     k8s_roles: Path = K8S_ROLES,
+    owner: str | None = None,
 ) -> str:
     """Derive `entry`'s GitOps auto-deploy eligibility from its role's `k8s_autodeploy` default.
 
@@ -498,10 +522,14 @@ def autodeploy_eligibility(
         platform: "k8s" or "docker" — only "k8s" has a GitOps auto-deploy path.
         host_data: The host's parsed `host_vars`, read for `has_gitops` off k8s.
         k8s_roles: Root directory of the k8s roles.
+        owner: The entry's `owner`, as `entry_owner` reads it; None for an Ansible-owned one.
 
     Returns:
-        "eligible", "denylisted (<reason>)", or an `UNKNOWN`/"n/a" explanation.
+        "eligible", "denylisted (<reason>)", or an `UNKNOWN`/"n/a" explanation. An entry
+        with an `owner` is "n/a: applied by" its `owner_stance`.
     """
+    if owner is not None:
+        return f"n/a: applied by {owner_stance(owner)}"
     if platform != "k8s":
         if host_data.get("has_gitops") is False:
             return "n/a (host has no GitOps auto-deploy path)"

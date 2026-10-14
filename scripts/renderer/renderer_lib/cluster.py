@@ -99,13 +99,18 @@ class RenderedTag:
         return dirs
 
 
-def select_tags(requested: list[str] | None, host: str = K8S_HOST) -> list[str]:
+def select_tags(
+    requested: list[str] | None, host: str = K8S_HOST, host_vars: Path = HOST_VARS
+) -> list[str]:
     """The sorted tags to render: `requested`, or every render target of `host`.
+
+    A tag Flux applies is a render target too: `render_targets` keeps it, because the bundle
+    publishes it.
 
     Raises:
         RenderRefused: A requested tag is not one of `host`'s render targets.
     """
-    targets = set(render_targets(host))
+    targets = set(render_targets(host, host_vars))
     if not requested:
         return sorted(targets)
     unknown = sorted(set(requested) - targets)

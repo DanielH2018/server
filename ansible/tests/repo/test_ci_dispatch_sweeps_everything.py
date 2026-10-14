@@ -26,7 +26,13 @@ CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 
 # The census names its members. A step rename would otherwise drop the step out of the check
 # without failing anything, and `all()` over an empty set passes.
-SWEEP_STEPS = frozenset({"Run hooks (full sweep)", "Lint the whole tree"})
+SWEEP_STEPS = frozenset(
+    {
+        "Run hooks (full sweep)",
+        "Lint the whole tree",
+        "Build both renders with the pinned nfpm",
+    }
+)
 SCOPED_STEPS = frozenset(
     {
         "Collect this PR's changed files",
@@ -39,7 +45,15 @@ SCOPED_STEPS = frozenset(
     }
 )
 KNOWN_JOBS = frozenset(
-    {"hooks", "ansible_lint", "pytest", "deck_mod", "prek", "renovate-config"}
+    {
+        "hooks",
+        "ansible_lint",
+        "pytest",
+        "deck_mod",
+        "host_packages",
+        "prek",
+        "renovate-config",
+    }
 )
 
 _EVENT_TERM = re.compile(r"github\.event_name\s*(==|!=)\s*'([a-z_]+)'")

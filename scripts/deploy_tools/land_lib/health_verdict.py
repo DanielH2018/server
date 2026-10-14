@@ -12,7 +12,7 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from deploy_tools.land_lib import tick
+from deploy_tools.land_lib import promotion, tick
 from deploy_tools.land_lib.landing import Landing, TickState
 from deploy_tools.land_lib.outcome import (
     ABANDONED_WATCH_NOTE,
@@ -39,16 +39,16 @@ def gate_from_the_deployed_tree(ln: Landing) -> tuple[bool, list[str]]:
     primary is the single case where the fallback still answers the right question.
     """
     if not ln.deployed_at:
-        return ln.tools.gate(ln.resolved_tags)
+        return ln.tools.gate(promotion.gated_tags(ln))
     with ln.tools.snapshot(ln.opts.primary, ln.deployed_at) as snap:
         if snap is not None:
-            return ln.tools.gate(ln.resolved_tags, cwd=snap)
+            return ln.tools.gate(promotion.gated_tags(ln), cwd=snap)
         if ln.merge_applied():
             say(
                 f"could not snapshot {ln.deployed_at[:12]} for the health gate; the primary "
                 "checkout already carries it, so rendering there instead"
             )
-            return ln.tools.gate(ln.resolved_tags)
+            return ln.tools.gate(promotion.gated_tags(ln))
         return False, [
             f"could not snapshot {ln.deployed_at[:12]} for the health gate, and the primary "
             "checkout does not carry it yet -- nothing here can enumerate what was deployed, "
@@ -99,7 +99,7 @@ def _regate_after_later_deploys(ln: Landing) -> bool:
 
 def health(ln: Landing) -> NoReturn:
     """Gate every deployed tag, then settle, or name what is still open."""
-    pr, sha, tags = ln.opts.pr, ln.merge_sha, ln.tags_csv
+    pr, sha, tags = ln.opts.pr, ln.merge_sha, ",".join(promotion.gated_tags(ln))
     settled, lines = gate_from_the_deployed_tree(ln)
     for line in lines:
         say(line)

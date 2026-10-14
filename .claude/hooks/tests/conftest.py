@@ -3,9 +3,10 @@
 `test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess` runs session-health.py as
 a real subprocess (deliberately -- see that test's own docstring), which means `main()` runs
 for real and reaches whatever it reaches: `gh pr list` once per stale worktree candidate (an
-authenticated GitHub API call), `sops -d` to decrypt `ansible/vars/secrets.yml` for the
-`domain` key, `curl` against the live Prometheus endpoint, and `journalctl` for the
-release-staleness cron's last verdict. A main() test that hand-rolled its own monkeypatches
+authenticated GitHub API call), `curl` against the live Prometheus endpoint, and `journalctl`
+for the release-staleness cron's last verdict. `sops` stays fenced although `main()` no longer
+reaches it, since the probes read `domain` from inventory: a probe path that decrypts again then
+hits the stub, not the real age key. A main() test that hand-rolled its own monkeypatches
 instead of going through `_run_main` would let `stale_worktree_lines` run for real too and
 make `gh` calls. None of that is what either test is checking.
 

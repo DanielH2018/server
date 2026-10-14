@@ -430,3 +430,35 @@ def test_a_hand_edited_pi_block_is_flagged(tmp_path):
     assert g.stale_pi_docs(write=False, estate=estate, containers_roles=roles) == [
         "containers/widget"
     ]
+
+
+# An entry that carries `owner` is not Ansible's to deploy (D2.4b): the deploy tag and the
+# auto-deploy stance would both mislead, so one Applied by line names what applies it.
+
+
+def _littlelink_block(tmp_path, owner):
+    """The block `stale_k8s_docs` writes for a copy of littlelink, its entry carrying `owner`."""
+    entry = dict(g.Estate().k8s_entries()["littlelink"])
+    if owner:
+        entry["owner"] = owner
+    dst = _copy_role("littlelink", tmp_path / "roles")
+    (tmp_path / "daniel-box.yml").write_text(
+        yaml.safe_dump({"containers_list": [entry]})
+    )
+    estate = g.Estate(Inventory(host_vars=tmp_path))
+    g.stale_k8s_docs(write=True, estate=estate, k8s_roles=dst.parent)
+    return (dst / "CLAUDE.md").read_text().split("<!-- /generated_from -->")[0]
+
+
+def test_an_ansible_owned_role_glance_is_clean(tmp_path):
+    block = _littlelink_block(tmp_path, None)
+    assert '- **Deploy tag:** `--tags "littlelink"`' in block
+    assert "- **Auto-deploy:**" in block
+    assert "Applied by" not in block
+
+
+def test_a_flux_owned_role_glance_is_flagged(tmp_path):
+    block = _littlelink_block(tmp_path, "flux")
+    assert "- **Applied by:** Flux, through `promote`" in block
+    assert "exit 5" in block
+    assert "Deploy tag" not in block and "Auto-deploy" not in block

@@ -83,7 +83,7 @@ def _without(render, directory: str, file_part: str, old: str):
 @pytest.mark.parametrize(
     ("directory", "file_part", "old", "member"),
     [
-        ("homepage", "ingressroute", "${domain}", "${domain} in homepage's"),
+        ("traefik", "static-config", "${email}", "${email} in traefik's"),
         ("authelia", "config-secret", "${", "a placeholder in authelia's"),
         ("qbittorrent", "netns", "$${", "an escaped $${ in qbittorrent's"),
     ],
@@ -97,7 +97,7 @@ def test_an_output_rule_member_removed_from_the_fleet_is_flagged(
 
 
 def test_a_role_render_without_the_named_members_is_clean(tmp_path, capsys):
-    # homepage, authelia and qbittorrent are absent, so their members are not asserted.
+    # traefik, authelia and qbittorrent are absent, so their members are not asserted.
     out = tmp_path / "out"
     assert (
         homelab_render.main(["cluster", "--out", str(out), "--role", "bento-pdf"]) == 0

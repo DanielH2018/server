@@ -39,6 +39,8 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from lib.repo_paths import K8S_ROLES
+
 
 def role_paths_for(service, shared_roles, consumers=None):
     """The `ansible/roles/k8s/` paths whose history decides whether `service` is stale.
@@ -125,3 +127,37 @@ def consumes_manifests(role_dir):
     if not tasks_dir.is_dir():
         return False
     return any("k8s/manifests" in p.read_text() for p in tasks_dir.glob("*.yml"))
+
+
+def missing_services(records, host_vars=None, k8s_roles_dir=None):
+    """k8s-platform service tags, expected to be release-stamped, with no record at all.
+
+    Deployed before the release stamp shipped, or never deployed -- either way this must read
+    UNKNOWN rather than being silently excluded from a fleet audit. Scoped to roles that
+    actually consume `k8s/manifests` (see `consumes_manifests`); a role that never applies
+    manifests never gets a record to be missing. A tag whose entry carries `owner` is never
+    missing either: Flux applies it, so no Ansible deploy writes it a record (D2.4b).
+    """
+    # Deferred for the reason `releases._deploy_tags` gives.
+    from deploy_tools.deploy_lib import tags as deploy_tags
+    from diagnostics.probe_lib.releases_retired import tree_owners
+
+    host_vars = host_vars or deploy_tags.HOST_VARS
+    k8s_roles_dir = k8s_roles_dir or K8S_ROLES
+    declared = [
+        (host, tag)
+        for host, platform, tag in deploy_tags.service_records(host_vars)
+        if platform == "k8s"
+    ]
+    owned = {
+        tag
+        for host in {host for host, _tag in declared}
+        for tag in tree_owners(host_vars / f"{host}.yml")
+    }
+    known = {
+        tag
+        for _host, tag in declared
+        if tag not in owned and consumes_manifests(k8s_roles_dir / tag)
+    }
+    present = {r.get("service") for r in records if "error" not in r}
+    return sorted(known - present)

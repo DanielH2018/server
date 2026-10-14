@@ -15,7 +15,6 @@ import json
 import os
 import socket
 import ssl
-import subprocess
 import sys
 
 import pytest
@@ -59,21 +58,16 @@ def test_bad_since_exits_usage_error(capsys):
 
 
 def test_group_vars_key_missing_stays_a_failure(monkeypatch, capsys):
-    # SOPS answers the domain through `subprocess.run`. The group_vars read is the repo config
-    # under test, served here without `k3s_metallb_ingress_vip`; every other open is real.
+    # The group_vars read is the repo config under test, served here with the domain but
+    # without `k3s_metallb_ingress_vip`; every other open is real.
     real_open = builtins.open
 
     def open_without_vip(path, *args, **kwargs):
         if path == core.GROUP_VARS_PATH:
-            return io.StringIO("k8s_namespace: homelab\n")
+            return io.StringIO("domain: example.test\nk8s_namespace: homelab\n")
         return real_open(path, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "open", open_without_vip)
-    monkeypatch.setattr(
-        subprocess,
-        "run",
-        lambda argv, **_: subprocess.CompletedProcess(argv, 0, "example.test\n", ""),
-    )
     rc = _exit_code(lambda: probe.main(["b2-deletions", "--since", "1h"]))
     assert rc == FAILED, f"a missing group_vars key exited {rc}"
 

@@ -59,7 +59,7 @@ def _capture_fetch(monkeypatch, body='{"data":{"result":[]}}'):
         return body
 
     monkeypatch.setattr(core, "fetch", fake_fetch)
-    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(core, "domain", lambda: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
     return seen
 
@@ -275,7 +275,7 @@ def test_alerts_pi_scopes_to_pi_attributed_rows_across_both_streams(
 
 
 def test_alerts_dry_run_prints_a_command_per_stream(monkeypatch, capsys):
-    monkeypatch.setattr(core, "sops_extract", lambda key: "example.test")
+    monkeypatch.setattr(core, "domain", lambda: "example.test")
     monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
     ns = cli_parser._build_parser().parse_args(["--dry-run", "alerts", "--days", "3"])
     assert alerts.run_alerts(ns) == 0

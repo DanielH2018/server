@@ -124,10 +124,10 @@ def agent_credentials(path=AGENT_CREDENTIALS_PATH):
     return data
 
 
-def lookup_domain():
-    """The LAN domain: from the agent's login file when it has one, else from SOPS."""
-    creds = agent_credentials()
-    return creds["domain"] if creds else core.sops_extract("domain")
+def lookup_domain(creds_path=AGENT_CREDENTIALS_PATH, group_vars_path=None):
+    """The LAN domain: from the agent's login file when it has one, else from inventory."""
+    creds = agent_credentials(creds_path)
+    return creds["domain"] if creds else core.domain(group_vars_path)
 
 
 def one_factor_login(creds, read_secret):

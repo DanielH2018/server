@@ -304,7 +304,7 @@ def _fetch_workload(name, namespace, cluster, tools=DEFAULT_TOOLS):
     return None, None
 
 
-def _release_record(service, release_dir=None):
+def _release_record(service, release_dir=None, host_vars=None):
     """This service's release_stamp.yml record as a dict, or None if unreadable.
 
     `roles/k8s/manifests/tasks/release_stamp.yml` writes one record per service after every
@@ -312,9 +312,17 @@ def _release_record(service, release_dir=None):
     record by name). None covers a service that has never been deployed since the stamp
     shipped, and a truncated or missing file — every reader here treats that as "nothing to
     compare against" rather than a failure of its own.
+
+    None too for a service whose entry carries `owner` in the tree, as
+    `releases_retired.tree_owners` reads it. Flux applies it, so no Ansible apply writes it a
+    newer record, and the last one Ansible wrote would expect restarts that never come.
+    `host_vars` is the file that ownership is read from, the repo's own when None.
     """
     from diagnostics.probe_lib.releases import RELEASE_DIR
+    from diagnostics.probe_lib.releases_retired import tree_owners
 
+    if service in tree_owners(host_vars):
+        return None
     release_dir = RELEASE_DIR if release_dir is None else release_dir
     try:
         record = json.loads((release_dir / f"{service}.json").read_text())

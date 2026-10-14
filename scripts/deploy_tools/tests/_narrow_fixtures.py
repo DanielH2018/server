@@ -111,3 +111,24 @@ def build_tree(tmp_path) -> Tree:
 def _refs(tree: Tree, message: str = "change") -> tuple[str, str]:
     old = git_out(tree.root, "rev-parse", "HEAD")
     return old, tree.commit(message)
+
+
+# The five readers of every field D2's baseline counted at 70591c307, each in its shape there.
+# 8e79e95d6 moved the live five onto named filters; the pair keeps a reader of every field
+# present, because a template that adds one meets the same `reader_paths` rule.
+WHOLE_ENTRY_READERS = {
+    "pihole": "{% for s in hostvars[k8s_primary_node].containers_list | default([])"
+    " | filter_by_platform('k8s') %}{{ s.hostname }}{% endfor %}\n",
+    "uptime-kuma": "{% for e in hostvars[k8s_primary_node].containers_list"
+    " | selectattr('hostname', 'defined') %}{{ e.hostname }}{% endfor %}\n",
+    "monitor-bridge": "{% set p = containers_list | selectattr('port', 'defined')"
+    " | list %}\n",
+    "artifacts": "{{ containers_list | map(attribute='name') | list }}\n",
+    "netpol-baseline": "{% for e in containers_list %}{{ e.name }}{% endfor %}\n",
+}
+
+
+def write_whole_entry_readers(tree: Tree) -> None:
+    """Write each of `WHOLE_ENTRY_READERS` as its role's `reader.yaml.j2`, uncommitted."""
+    for role, text in WHOLE_ENTRY_READERS.items():
+        tree.write(f"ansible/roles/k8s/{role}/templates/reader.yaml.j2", text)

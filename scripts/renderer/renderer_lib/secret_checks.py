@@ -313,10 +313,10 @@ def output_members(render: PlaceholderRender, known_keys: Iterable[str]) -> list
 
     require(
         CONFINED_TO_SECRET,
-        "homepage",
-        "IngressRoute/homepage",
-        lambda doc: "domain" in references(doc),
-        "${domain}",
+        "traefik",
+        "ConfigMap/traefik-static",
+        lambda doc: "email" in references(doc),
+        "${email}",
     )
     require(
         KNOWN_KEY,
