@@ -25,7 +25,9 @@ this PR itself and has not crossed it yet, so nothing is wrong and re-running la
 nothing the next tick does not. That ends the wait as `deferred`, exit 4, so a caller can tell
 it from a resume point without reading the verdict text. A `deferred` whose log also carries
 `outcome.ABANDONED_WATCH_NOTE` stays `gave-up`: that run stopped watching a tick mid-apply, a
-hold cannot be ruled out, and the remedy is to re-run land.sh.
+hold cannot be ruled out, and the remedy is to re-run land.sh. So does one carrying
+`outcome.PROMOTE_TIMEOUT_NOTE`: no promotion covered a tag Flux applies, and a publish refusal
+does not clear on its own.
 """
 
 import json
@@ -35,7 +37,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import detach
-from deploy_tools.land_lib.outcome import ABANDONED_WATCH_NOTE, Verdict
+from deploy_tools.land_lib.outcome import (
+    ABANDONED_WATCH_NOTE,
+    PROMOTE_TIMEOUT_NOTE,
+    Verdict,
+)
 from lib.cli_help import ArgumentParser, refuse_help_under_describe
 
 # land.sh's exit code -> the state that ends the wait. Every code land.sh documents is here.
@@ -55,6 +61,7 @@ TERMINAL = {
 _VERDICT_TOKEN = re.compile(r"^VERDICT: (\S+)")
 # The note's first line is enough to find it, and survives a rewrap of the rest.
 _ABANDONED_WATCH = ABANDONED_WATCH_NOTE.splitlines()[0].strip()
+_PROMOTE_TIMEOUT = PROMOTE_TIMEOUT_NOTE.splitlines()[0].strip()
 
 # A landing's phase lines: `== 4/6  deploying ...`. The newest one is the progress detail.
 _PHASE = re.compile(r"^== (.+)$", re.MULTILINE)
@@ -130,11 +137,12 @@ def read(log: Path, now: float | None = None) -> dict:
 
 
 def _is_plain_deferral(log: Path, verdict: str) -> bool:
-    """Whether a landing's 75 is `deferred` without the abandoned-watch note beside it."""
+    """Whether a landing's 75 is `deferred` with neither give-up note beside it."""
     token = _VERDICT_TOKEN.match(verdict)
     if not token or token.group(1) != Verdict.DEFERRED:
         return False
-    return _ABANDONED_WATCH not in log.read_text(errors="replace")
+    text = log.read_text(errors="replace")
+    return _ABANDONED_WATCH not in text and _PROMOTE_TIMEOUT not in text
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -4,6 +4,7 @@ The chain has four links in three languages, and every break in it is SILENT —
 an annotation query that matches nothing exactly as it renders one with no deploys to show:
 
     deploy.sh / gitops_deploy.py  --logger-->  syslog
+    promote.py land-wait          --logger-->  syslog  (promote_wait.py, flux_host.py)
     alloy                         --ships-->   loki-homelab
     dashboards                    --query-->   that Loki, by datasource uid
 
@@ -30,6 +31,11 @@ _DEPLOY_PLAYBOOK = _REPO / "scripts/deploy_tools/deploy_lib/playbook.py"
 _DEPLOY_DETACH = _REPO / "scripts/deploy_tools/deploy_lib/detach_run.py"
 # emit_deploy_annotation lives in the deployer's I/O module, not in its entry point.
 _GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py"
+# A Flux promotion that land.sh waited on: `land-wait` builds the line, and `FluxHost.log`
+# runs `logger`, because promote_wait.py starts no subprocess itself.
+_PROMOTE = _REPO / "scripts/deploy_tools/promote_wait.py"
+_FLUX_HOST = _REPO / "scripts/deploy_tools/flux_host.py"
+_EMITTERS = (_DEPLOY_PLAYBOOK, _GITOPS, _PROMOTE)
 
 
 def test_the_query_matches_what_the_deployers_actually_log():
@@ -44,7 +50,7 @@ def test_the_query_matches_what_the_deployers_actually_log():
     literals = re.findall(r'\|=\s*"([^"]+)"', expr)
     assert literals, f"the expr must carry a line filter to match on: {expr}"
 
-    for emitter in (_DEPLOY_PLAYBOOK, _GITOPS):
+    for emitter in _EMITTERS:
         text = emitter.read_text()
         for literal in literals:
             assert literal in text, (
@@ -72,7 +78,7 @@ def test_the_expr_parses_the_fields_the_annotation_renders():
     )
 
     key = field.group(1)
-    for emitter in (_DEPLOY_PLAYBOOK, _GITOPS):
+    for emitter in _EMITTERS:
         assert f"{key}=" in emitter.read_text(), (
             f"{emitter.name} does not emit a `{key}=` field, so the annotation text would be "
             f"blank on every marker"
@@ -106,10 +112,16 @@ def test_the_datasource_uid_matches_the_provisioned_one():
 
 
 def test_both_deploy_paths_annotate():
-    """One emitter alone means the dashboards show half the deploys, which is worse than none —
-    an operator would read the gaps as "nothing was deployed then"."""
+    """One emitter alone means the dashboards show part of the deploys, which is worse than
+    none — an operator would read the gaps as "nothing was deployed then". A Flux promotion is
+    the third path: `land-wait` annotates it with `source=promote` once it settles. The name
+    predates it and stays, because docs/target-architecture/deploy/d6-delete-old-path.md
+    cites it."""
     assert "def annotate(" in _DEPLOY_PLAYBOOK.read_text()
     assert "emit_deploy_annotation" in _GITOPS.read_text()
+    promote = _PROMOTE.read_text()
+    assert "def annotate_promotion(" in promote and "source=promote" in promote
+    assert '"deploy-annotation"' in promote
 
 
 def _annotate_guards(source: str, function: str = "run") -> list[str]:
@@ -163,6 +175,12 @@ def test_annotating_can_never_fail_a_good_deploy():
     impl = gitops.split("def emit_deploy_annotation(", 1)[1].split("\ndef ", 1)[0]
     assert "except Exception" in impl, (
         "the gitops emitter must swallow its own failures"
+    )
+
+    flux_host = _FLUX_HOST.read_text()
+    log = flux_host.split("    def log(", 1)[1].split("\n    def ", 1)[0]
+    assert "contextlib.suppress(OSError" in log, (
+        "land-wait's logger call must swallow a missing or failing logger"
     )
 
 

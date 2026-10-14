@@ -168,6 +168,15 @@ treats `BLOCKED` as a question about checks. The wait keeps going
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
 
+**A PR that hands a tag back from Flux is refused before the merge while Flux still owns the
+tag.** Before the direct merge, `land_lib/merge.py` compares each tag's `owner` at the PR's
+merge base and at its head. For each tag that the PR makes Ansible-owned, it reads
+`kubectl get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system <tag>`. It merges only
+on `NotFound`. A Kustomization that exists, or a read that fails, ends the landing with
+`refused` and nothing merged. The order of the two PRs that hand a service back is in
+[docs/flux-deploy-plane.md](flux-deploy-plane.md#handing-a-service-back). A merge made outside
+`land.sh` bypasses this check.
+
 ## The CI wait
 
 **Do not hand-poll CI and do not hand-merge.** `await_ci.py` reads the same check-runs endpoint
@@ -272,6 +281,40 @@ it reaches, and a list it returns is deployed rather than reported as broad. Onl
 refuses too does the landing grade from the deployer's markers — and it refuses on a tag list
 covering more than half the fleet, so a `group_vars` key many roles read is graded from the
 markers rather than deployed. `--tags` overrides the scope entirely.
+
+### A tag Flux applies waits on promotion
+
+**A tag whose `containers_list` entry sets `owner` never reaches `deploy.sh`.** Step 5 reads
+ownership at the merge commit (`land_lib/promotion.py:split_owned`) and takes every such tag out
+of the list before `deploy_by_host` sees it. `deploy.sh` runs only for the Ansible-owned tags
+that remain. A PR whose only tag is flux-owned runs no `deploy.sh` at all. The gate then renders
+the merge commit from a snapshot, and `land.sh` kicks the tick to converge the primary checkout.
+
+For those tags `land.sh` runs `promote.py land-wait <merge commit>`. The wait never follows one
+`promote` run, because GitHub may evict a queued run and a later run may promote a newer commit.
+Instead it reads the cluster every 30 seconds:
+
+- **The changed set.** It waits on `homelab` and every Kustomization whose `footprint` differs
+  between the merge commit's `digests.json` and the one on the newest published ancestor of its
+  first parent (`scripts/deploy_tools/changed_set.py`). A file that is missing or unreadable
+  widens the wait to every Kustomization, and the progress line says so. `sha-<merge commit>`
+  is usually not published when the wait starts, so the wait widens until it is.
+- **`settled`.** Every expected Kustomization is Ready, and its
+  `status.lastAppliedOriginRevision` names the merge commit or a commit that descends from it.
+  `land-wait` then writes one `deploy-annotation` line with `source=promote`, and the landing
+  goes on to the health gate for each `owner: flux` tag.
+- **`deploy-failed`, cause `promote-held`.** `DEPLOY_HOLD` holds a value other than `none`. The
+  line names the held SHA and, for a `failed=` hold, the failed names. Clearing the hold is
+  **operator-only**.
+- **`deferred`, cause `promote-timeout`, exit 75.** No promotion covered the merge commit
+  within twice the promote timeout (24 minutes, `promote_wait.py:LAND_WAIT_TIMEOUT_S`). Look first at
+  the `promote` workflow's failed `publish` jobs: a publish refusal leaves no `sha-<commit>` tag
+  to promote. The next promotion may still cover the merge commit.
+
+`land-wait` reads the Kustomizations with the read-only `kubectl`, ancestry with
+`git merge-base --is-ancestor` in the primary checkout, and `DEPLOY_HOLD` with
+`gh variable get`. The last is one authenticated GitHub call per poll. A read that fails keeps
+the wait going, and an unreadable Kustomization list never reads as `settled`.
 
 `land.sh` runs from the primary checkout wherever you invoke it. The deploy no longer depends on
 that — `--at <sha>` renders the merge commit from anywhere — but three reads still ask about the

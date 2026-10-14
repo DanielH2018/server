@@ -128,7 +128,7 @@ def test_ha_state_non_json_body_exits_unreadable(monkeypatch, capsys):
     body = "<html><body>502 Bad Gateway</body></html>\n"
 
     def run(argv, **_):
-        # sops answers the domain and the token; curl answers the GET with the error page.
+        # sops answers the token; curl answers the GET with the error page.
         reply = "example.test\n" if SECRETS_PATH in argv else body
         return subprocess.CompletedProcess(argv, 0, reply, "")
 

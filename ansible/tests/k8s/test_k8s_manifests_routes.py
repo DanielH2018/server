@@ -34,7 +34,6 @@ def _k8s_authelia_config() -> dict:
         K8S / "authelia" / "templates" / "config-secret.yaml.j2",
         container_item=entry,
         containers_list=BOX_VARS["containers_list"],
-        domain="example.com",
         email="stub@example.com",
         authelia_jwt="stub",
         authelia_secret="stub",
@@ -203,15 +202,17 @@ def test_the_lapi_route_never_gains_a_public_host_rule():
     ingressroute() macro; this pins the rendered result so a macro refactor can't undo it."""
     entry = next(c for c in _k8s_entries() if c["name"] == "crowdsec")
     route_tpl = K8S / "crowdsec" / "templates" / "ingressroute.yaml.j2"
-    rendered = _render(
-        route_tpl, container_item=entry, domain="example.com", **ALL_VARS_VALUES
-    )
+    rendered = _render(route_tpl, container_item=entry, **ALL_VARS_VALUES)
     for doc in (d for d in yaml_fast.safe_load_all(rendered) if d):
         if doc["metadata"]["name"] != "crowdsec":
             continue
         for route in doc["spec"]["routes"]:
             hosts = re.findall(r"Host\(`([^`]+)`\)", route["match"])
-            public = [h for h in hosts if not h.endswith(".local.example.com")]
+            public = [
+                h
+                for h in hosts
+                if not h.endswith(f".local.{ALL_VARS_VALUES['domain']}")
+            ]
             assert not public, (
                 f"the LAPI IngressRoute matches {public} on the public domain — the "
                 "ban-management API must stay LAN-only whatever k8s_public_route says"
@@ -349,7 +350,6 @@ def test_no_monitoring_route_serves_a_bare_path_prefix():
 def _dashboard_route_match() -> str:
     rendered = _render(
         K8S / "traefik" / "templates" / "dashboard-ingressroute.yaml.j2",
-        domain="example.com",
         **ALL_VARS_VALUES,
     )
     doc = yaml_fast.safe_load(rendered)

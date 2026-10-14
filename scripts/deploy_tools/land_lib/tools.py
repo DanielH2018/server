@@ -3,19 +3,18 @@
 A test replaces one field of `Tools` and never a PATH entry. The defaults are the real
 implementations, defined here so the phase modules never import subprocess.
 
-WHICH CHECKOUT EACH HELPER COMES FROM. await_ci, land_tags and deploy_lib/detach_notify are
-imported from land.py's checkout, so they are always the same release as it -- a PR adding a flag
-to one and its call site must pass its own landing, though the primary checkout still holds
-the previous release. gitops_tick.sh is run from beside land.py for the same reason.
+WHICH CHECKOUT EACH HELPER COMES FROM. await_ci, land_tags, deploy_lib/detach_notify and
+land_flux's promote_wait are imported from land.py's checkout, so they are the same release as
+it: a PR adding a flag to one and its call site must pass its own landing, though the primary
+checkout holds the previous release. gitops_tick.sh is run from beside land.py for that reason.
 deploy_tags.py and deploy.sh are run as subprocesses with the PRIMARY checkout as cwd,
 because their question IS the primary checkout: `blockers` reads `HEAD..origin/master` and
 `changed` reads `<since>...HEAD`, and deploy.sh renders from its working directory. Moving
 either to this file's checkout would silently re-aim them at the worktree's HEAD. WHAT IS NOT
 HERE. Five path-list decisions -- `plane_note`, `self_applied`, `remaining_setup_hosts`,
 `derive`, `quiet_paths` -- are NOT on `Tools`. They are pure functions of a file list, so a
-fake that replaced them with constant lambdas would let no pipeline test run real tag
-derivation. They live on `Classifier`, a separate frozen dataclass the Landing holds beside
-`Tools`, so a test can take the real ones and the fake boundaries.
+fake of them would leave no pipeline test running the real derivation. They live on the frozen
+`Classifier` the Landing holds beside `Tools`, so a test takes the real ones and fake boundaries.
 """
 
 import contextlib
@@ -50,7 +49,7 @@ from gitops_hold import DeployerSnapshot, read_field
 from gitops_markers import MARKERS
 from deploy_tools import await_ci, shared_role_reach
 from deploy_tools.land_lib import land_platform, land_reach, land_rerolls
-from deploy_tools.land_lib import land_shared, land_tags
+from deploy_tools.land_lib import land_flux, land_shared, land_tags
 from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
@@ -546,6 +545,7 @@ class Tools:
         land_tags.landing_hosts_at
     )
     read_state: Callable[[Path, str], str | None] = read_state
+    flux: land_flux.FluxReads = field(default_factory=land_flux.FluxReads)
     # The PR's own narrowing, for a landing that never awaits the tick and so has no receipt
     # to read. Runs git over the PR's range, which is why it is a boundary here rather than a
     # `Classifier`. `classify.narrow_plane` is its one caller.

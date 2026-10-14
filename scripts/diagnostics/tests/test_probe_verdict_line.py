@@ -126,9 +126,8 @@ def _monitor_status(status):
 @pytest.mark.parametrize("status, expected_rc", [("1", OK), ("0", FAILED)])
 def test_monitors_ends_with_its_verdict(monkeypatch, capsys, status, expected_rc):
     def run(argv, *args, **kwargs):
-        # `k8s_endpoint` reads the domain from SOPS before the curl.
-        if argv[0] == "sops":
-            return _completed(argv, "example.test\n")
+        # `k8s_endpoint` reads the domain from inventory, so `monitors` needs no age key.
+        assert argv[0] != "sops", f"monitors decrypted: {argv}"
         return _completed(argv, _monitor_status(status))
 
     monkeypatch.setattr(subprocess, "run", run)
