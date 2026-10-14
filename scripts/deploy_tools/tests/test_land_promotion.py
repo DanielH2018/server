@@ -60,14 +60,18 @@ def test_an_ansible_owned_pr_never_waits_on_promotion(land_run):
     assert [c[1][1] for c in calls if c[0] == "deploy"] == [["sonarr"]]
 
 
-def test_a_released_tag_waits_but_is_neither_annotated_nor_gated(land_run):
+def test_a_released_tag_waits_but_is_neither_published_nor_gated(land_run):
     """`owner: released` is mid-handback: no Ansible path applies it and Flux no longer
-    publishes it, so the wait covers the prune and the gate has nothing of it to grade."""
+    publishes it, so the wait covers the prune and the gate has nothing of it to grade.
+
+    The published list handed to land-wait is the one its annotation names, so an empty one
+    here is what keeps the tag out of `services=`."""
     fakes = _fakes(owners={MERGE_SHA: {"bento-pdf": "released"}})
     rc, _, _, calls, _ = land_run([], fakes)
     assert rc == 0
     assert "deploy" not in _names(calls)
     assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
+    assert [c[1] for c in calls if c[0] == "gate"] == [([],)]
 
 
 def test_a_held_promotion_is_deploy_failed_with_promote_held(land_run):
