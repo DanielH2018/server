@@ -339,8 +339,8 @@ only through a fix. R2's PR 5 removed Home Assistant's two entries, the `from_js
 the Secret that embedded its output through `indent`.
 
 Each rule must find its named members, so a rule that stops matching cannot pass: rule 3
-`${domain}` in homepage's IngressRoute, rule 1 a placeholder in authelia's config Secret,
-rule 2 the escaped `$${` in qbittorrent's `qbittorrent-netns-reset` ConfigMap, rule 4 every
+`${email}` in traefik's `traefik-static` ConfigMap, rule 1 a placeholder in authelia's config
+Secret, rule 2 the escaped `$${` in qbittorrent's `qbittorrent-netns-reset` ConfigMap, rule 4 every
 `SOPS_MANIFEST_KEYS` key in `ansible/vars/secrets.yml`, and rule 5 at least 59 templates that
 name a key and four accepted uses. A `--role` render asserts a member of rules 1 to 4, and
 counts their `KNOWN_VIOLATIONS` entries stale, only for the tags it rendered. Rule 5 reads
@@ -467,14 +467,15 @@ uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip 
 The CI job round-trips every tag outside `PLACEHOLDER_DEFERRED` in both passes, with no
 `--role`. That covers `home-assistant`, which carries the first `render_sops_manifests` entry.
 Its red half runs on `configarr`, `janitorr` and `home-assistant` only, because one changed byte
-is all it has to show. The job also round-trips `homepage` with the guard's map read as
-empty, and fails unless that run exits 1 and names `IngressRoute/homelab/homepage`. That proves
-the second pass still sees a standalone use the map does not cover:
+is all it has to show. The job also round-trips `traefik` with `email` dropped from the guard's
+map under every tag, and fails unless that run exits 1 and names `Deployment/homelab/traefik`.
+That proves the second pass still sees a standalone use the map does not cover:
 
 ```bash
-echo '{}' > /tmp/empty-guard-map.json
+jq 'map_values(map(select(. != "email")))' \
+  ansible/roles/k8s/manifests/files/standalone_secret_keys.json > /tmp/guard-map-without-email.json
 uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip-map \
-  --role homepage --guard-map /tmp/empty-guard-map.json
+  --role traefik --guard-map /tmp/guard-map-without-email.json
 ```
 
 ### What the pinned flux CLI does
@@ -558,7 +559,7 @@ template shape fixes it, so the guard checks the values where they are decrypted
   fleet in placeholder mode and holds the committed map equal to it. It also fails on a key
   in both the map and `GUARD_DEFERRED`, on a `GUARD_DEFERRED` member that stands alone
   nowhere, and on a mapped key absent from `ansible/vars/secrets.yml`. Its named members are
-  `domain` under `homepage` and `mullvad_account` in `GUARD_DEFERRED`.
+  `email` under `traefik` and `mullvad_account` in `GUARD_DEFERRED`.
 
 When the assert refuses a key, the deploy stops before anything renders or applies, so the
 live objects keep their old values. R2's Open question 13 records the operator's ruling of

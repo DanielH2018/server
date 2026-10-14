@@ -29,22 +29,22 @@ def test_the_committed_map_covers_every_standalone_use_is_clean(render, known_ke
 
 
 def test_the_named_members_are_where_the_guard_expects_them(render):
-    assert "domain" in read_guard_map()["homepage"]
+    assert "email" in read_guard_map()["traefik"]
     assert "mullvad_account" in GUARD_DEFERRED
     assert "mullvad_account" in render.standalone["qbittorrent"]
 
 
 def test_a_map_missing_a_standalone_key_is_flagged(render, known_keys):
     committed = read_guard_map()
-    committed["homepage"] = [k for k in committed["homepage"] if k != "domain"]
+    committed["traefik"] = [k for k in committed["traefik"] if k != "email"]
     (problem,) = coverage_problems(committed, render, known_keys)
-    assert problem.startswith("homepage: ") and "standalone_map.py" in problem
+    assert problem.startswith("traefik: ") and "standalone_map.py" in problem
 
 
 def test_a_key_both_mapped_and_deferred_is_flagged(render, known_keys):
-    deferred = GUARD_DEFERRED | {"domain"}
+    deferred = GUARD_DEFERRED | {"email"}
     committed = read_guard_map()
-    assert "domain is both in the map and in GUARD_DEFERRED" in coverage_problems(
+    assert "email is both in the map and in GUARD_DEFERRED" in coverage_problems(
         committed, render, known_keys, deferred
     )
 
@@ -57,6 +57,6 @@ def test_a_deferred_key_with_no_standalone_use_is_flagged(render, known_keys):
 
 
 def test_a_mapped_key_absent_from_the_secrets_file_is_flagged(render, known_keys):
-    assert coverage_problems(read_guard_map(), render, known_keys - {"domain"}) == [
-        "domain is in the map and not in ansible/vars/secrets.yml"
+    assert coverage_problems(read_guard_map(), render, known_keys - {"email"}) == [
+        "email is in the map and not in ansible/vars/secrets.yml"
     ]
