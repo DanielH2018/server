@@ -307,6 +307,16 @@ applies, defers, alerts on or owes such a tag. D2's plan has the design:
   a service still holds from before the range that set `owner`, because no Ansible deploy
   would ever discharge it.
 
+- **An added or removed such entry reaches only the readers it can move.**
+  `narrow_lib/containers.py:changed_fields` records it by the fields it carries other than
+  `name` and `owner`. The narrowing applies the readers of those fields, plus every reader of
+  an `EVERY_ENTRY` filter, whose output lists every entry: artifacts' `known_services.json`
+  reads `entry_names`. An added Ansible-owned entry still reaches every template that reads
+  the list. A bare entry reached artifacts, blackbox-exporter, pihole and uptime-kuma on
+  2026-10-14, and `hostname` added authelia and observability.
+  `ansible/tests/k8s/test_flux_born_entry_reader_census.py` renders the tree with such an
+  entry, and fails when a role whose render moves maps to a tag the narrowing does not apply.
+
 `ansible/tests/deploy/test_owner_readers_agree.py` holds `service_owners` equal to
 `scripts/lib/k8s_roles.py:tag_owners` and the `ansible_owned` filter. Each reader raises on an
 `owner` value other than `flux` or `released`.
