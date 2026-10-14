@@ -9,6 +9,11 @@ retired service.
 Every `manifests_service` is a declared deploy tag, so a record whose service no
 `containers_list` entry names belongs to a retired service. Dropping it is the way out;
 removing the file from the host is housekeeping, not a requirement.
+
+A service whose entry carries `owner` outlives its record the same way while it is still
+declared: Flux applies it, or it is mid-handback, so no Ansible deploy writes it a newer
+record. `probe.py releases --stale-only` and `probe.py health` read that through `tree_owners`
+and ignore the record (D2.4b, docs/target-architecture/deploy/d2-first-leaf.md).
 """
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching `lib.k8s_roles` by package
@@ -26,6 +31,31 @@ def drop_retired(records, declared):
     is kept for the caller to report rather than silently dropped.
     """
     return [r for r in records if "error" in r or r.get("service") in declared]
+
+
+def tree_owners(host_vars=None):
+    """Each deploy tag whose `containers_list` entry carries `owner`, to that value.
+
+    `host_vars` is the k8s host's host_vars file, the repo's own when None.
+
+    Raises:
+        ValueError: an entry's `owner` is outside `lib.k8s_roles.OWNER_VALUES`.
+    """
+    # Deferred for the reason `role_dir_names` gives.
+    from lib.k8s_roles import tag_owners
+
+    return tag_owners() if host_vars is None else tag_owners(host_vars)
+
+
+def drop_owned(records, host_vars=None):
+    """`records` less those whose service carries `owner`, and the `tree_owners` map read.
+
+    A record carrying `error` is kept, as `drop_retired` keeps it.
+    """
+    owners = tree_owners(host_vars)
+    return [
+        r for r in records if "error" in r or r.get("service") not in owners
+    ], owners
 
 
 def role_dir_names(k8s_roles_dir):

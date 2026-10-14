@@ -2,13 +2,18 @@
 """The k8s services a render-record run renders on one host, derived from the tree.
 
 `render_records` (roles/setup/render_records) runs `deploy.sh --dry-run -e
-manifests_render_record=true` hourly, and this module is its `--tags` list. A service
-qualifies when two things hold:
+manifests_render_record=true` hourly, and this module is its `--tags` list. A service is a
+render target when two things hold:
 
   * the host's `containers_list` declares it with `platform: k8s`, because a deploy reaches
     only the host it runs on, and a record's `host` must equal the release record's;
   * its role includes `k8s/manifests`, because render_record.yml runs inside that role and a
     role that applies its objects some other way writes no record.
+
+The CLI prints `render_record_targets`, which adds a third: the entry carries no `owner`
+(`lib.k8s_roles.tag_owners`). `deploy.sh` refuses such a tag with exit 5, so a record run that
+listed it would refuse the whole list. `render_targets()` keeps every render target, because
+the renderer, R1's `compare` and R2 render a Flux-owned tag too.
 
 Derived rather than listed. A list goes stale the day a service is added, and a service missing
 from it reads to the staleness reader as one with nothing to compare.
@@ -29,6 +34,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser
+from lib.k8s_roles import tag_owners
 from lib.render_guard import containers_entries, entry_platform, entry_tags
 from lib.repo_paths import HOST_VARS, K8S_ROLES
 
@@ -70,11 +76,34 @@ def render_targets(
     return sorted(names)
 
 
-def main(argv: list[str] | None = None) -> int:
+def render_record_targets(
+    host: str,
+    host_vars: Path = HOST_VARS,
+    roles: Path = K8S_ROLES,
+) -> list[str]:
+    """`render_targets` less every tag whose entry carries `owner`: the ones Ansible deploys.
+
+    Raises:
+        ValueError: an entry's `owner` is outside `lib.k8s_roles.OWNER_VALUES`.
+    """
+    path = host_vars / f"{host}.yml"
+    owners = tag_owners(path) if path.exists() else {}
+    return [
+        name for name in render_targets(host, host_vars, roles) if name not in owners
+    ]
+
+
+def main(
+    argv: list[str] | None = None, host_vars: Path = HOST_VARS, roles: Path = K8S_ROLES
+) -> int:
+    """Print the host's render-record targets, comma-joined; 1 when it has none.
+
+    `host_vars` and `roles` are for the tests; the CLI reads the checkout's own.
+    """
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("host", help="the inventory hostname whose services to list")
     args = parser.parse_args(argv)
-    tags = render_targets(args.host)
+    tags = render_record_targets(args.host, host_vars, roles)
     if not tags:
         print(
             f"render_targets: no renderable k8s service on {args.host}", file=sys.stderr

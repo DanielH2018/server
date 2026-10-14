@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 
 from secrets_mgmt import secret_rotation as sr
-from _rotation_fakes import TODAY, Fakes, build_tools
+from _rotation_fakes import TODAY, Fakes, build_tools, process_calls
 
 
 def _reg(name: str, tier: str = "auto", **extra) -> dict:
@@ -59,3 +59,42 @@ def test_every_stderr_line_carries_the_scripts_error_prefix(monkeypatch, capsys)
     assert len(lines) == len(codes), lines
     for line in lines:
         assert line.startswith("secret_rotation.py: error: "), line
+
+
+# A token whose consumer Flux applies (D2.4b): the redeploy leaves that tag out, and runs no
+# deploy at all when no consumer is left. `monitor-bridge` is the test token's one consumer.
+_TOKEN = "monitor_bridge_test_token"
+
+
+def _deploys(calls) -> list[list[str]]:
+    return [argv for argv, _ in process_calls(calls) if "ansible-playbook" in argv]
+
+
+def test_rotate_deploy_of_an_ansible_owned_consumer_is_clean(capsys):
+    tools, calls = build_tools(Fakes(registry=_reg(_TOKEN)))
+    assert sr.cmd_rotate(_rotate(_TOKEN), tools) == 0
+    assert [argv[-1] for argv in _deploys(calls)] == ["monitor-bridge"]
+    assert "not redeployed" not in capsys.readouterr().out
+
+
+def test_rotate_deploy_of_a_flux_owned_consumer_is_flagged(capsys):
+    tools, calls = build_tools(
+        Fakes(registry=_reg(_TOKEN), owners={"monitor-bridge": "flux"})
+    )
+    assert sr.cmd_rotate(_rotate(_TOKEN), tools) == 0
+    assert _deploys(calls) == []
+    out = capsys.readouterr().out
+    assert "not redeployed: monitor-bridge carries owner: flux" in out, out
+    assert "deployed nothing" in out, out
+
+
+def test_rotate_next_line_leaves_out_a_flux_owned_consumer(capsys):
+    """Without `--deploy` the hint must not name a tag `deploy.sh` refuses with exit 5."""
+    tools, _ = build_tools(
+        Fakes(registry=_reg(_TOKEN), owners={"monitor-bridge": "flux"})
+    )
+    args = _rotate(_TOKEN)
+    args.deploy = False
+    assert sr.cmd_rotate(args, tools) == 0
+    out = capsys.readouterr().out
+    assert "deploy.sh --tags" not in out, out

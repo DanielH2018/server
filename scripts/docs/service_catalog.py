@@ -48,6 +48,9 @@ FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
     (ansible/filter_plugins/k8s_autodeploy.py enforces it at deploy time), but this
     script tolerates a missing declaration by reporting unknown, because a stray role
     mid-edit should not crash report generation the way it correctly crashes a deploy.
+  - owner. An entry that carries `owner` (`lib.k8s_roles.tag_owners`) is not Ansible's to
+    deploy, so its Auto-deploy cell names what applies it instead of a stance: Flux through
+    `promote`, or nothing while it is mid-handback. `deploy.sh` refuses its tag with exit 5.
 
 Run: uv run python scripts/docs/service_catalog.py --out /tmp/service_catalog.html
 Tests: uv run pytest scripts/docs/tests/test_service_catalog.py
@@ -67,6 +70,7 @@ from docs.catalog_lib.catalog_backup import (
     autodeploy_eligibility,
     backup_tier,
     claim_index,
+    entry_owner,
     load_longhorn_tier_lists,
 )
 from docs.catalog_lib.catalog_facts import auth_tier, route_for
@@ -74,6 +78,7 @@ from docs.catalog_lib.catalog_model import K3S_DEFAULTS, K8S_ROLES, ServiceRow
 from docs.catalog_lib.catalog_render import render_html, render_markdown
 from lib.cli_help import ArgumentParser
 from lib.estate import Estate, Inventory
+from lib.k8s_roles import tag_owners
 from lib.repo_paths import ALL_VARS, HOST_VARS
 
 # containers_list and the host_vars walk both come from lib.estate, the loader every docs
@@ -112,6 +117,7 @@ def build_rows(
     rows: list[ServiceRow] = []
     for host in estate.host_vars_hosts():
         host_data = estate.own_vars(host)
+        owners = tag_owners(host_vars / f"{host}.yml")
         for entry in estate.entries(host):
             name = entry["name"]
             platform = entry.get("platform", "docker")
@@ -131,7 +137,11 @@ def build_rows(
                         claim_classes,
                     ),
                     autodeploy=autodeploy_eligibility(
-                        entry, platform, host_data, k8s_roles
+                        entry,
+                        platform,
+                        host_data,
+                        k8s_roles,
+                        entry_owner(entry, owners),
                     ),
                 )
             )

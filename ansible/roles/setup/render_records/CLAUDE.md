@@ -34,7 +34,9 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
    primary checkout. The script creates the worktree itself when it is missing.
 4. It asks that tree for the service list (`scripts/deploy_tools/render_targets.py`): every
    k8s service `containers_list` declares on this host whose role includes `k8s/manifests`.
-   The list is derived at the commit being rendered.
+   The list is derived at the commit being rendered. It leaves out a service whose entry
+   carries `owner`, such as a Flux-owned one: `deploy.sh` refuses that tag with exit 5, and
+   a refused tag would stop the whole run.
 5. It runs `deploy.sh --dry-run --skip-staleness-check -e manifests_render_record=true` over
    that list. The staleness gate is skipped because the chosen commit may sit below the tip;
    the record names its own commit, which is what the reader compares.

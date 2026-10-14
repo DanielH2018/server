@@ -132,17 +132,19 @@ def test_a_hand_typed_tags_run_still_expands_to_every_caller():
     assert len(replaced["manifests"]) > 1
 
 
-def _tree(tmp_path, entries, templates):
+def _tree(tmp_path, entries, templates, owners=None):
     """A host_vars + roles pair `smoke_caller` can read.
 
     Args:
         tmp_path: the directory to build both trees under.
         entries: host name to the service names its `containers_list` declares.
         templates: service name to how many `templates/*.j2` its role renders.
+        owners: service name to the `owner` its entry carries; absent means Ansible-owned.
 
     Returns:
         The `(host_vars, roles)` pair, in `smoke_caller`'s argument order.
     """
+    owners = owners or {}
     host_vars, roles = tmp_path / "host_vars", tmp_path / "roles"
     host_vars.mkdir()
     for host, names in entries.items():
@@ -150,6 +152,8 @@ def _tree(tmp_path, entries, templates):
         for name in names:
             lines.append(f"  - name: {name}")
             lines.append("    platform: k8s")
+            if name in owners:
+                lines.append(f"    owner: {owners[name]}")
         (host_vars / f"{host}.yml").write_text("\n".join(lines) + "\n")
     for name, count in templates.items():
         (roles / name / "tasks").mkdir(parents=True)
@@ -196,3 +200,26 @@ def test_no_candidate_keeps_every_caller(tmp_path):
     assert land_shared.narrowed("manifests", {"sonarr"}, _PR_3117_FILES) == {
         "sonarr"
     }, "a single caller is already as narrow as it goes"
+
+
+def _bento_tree(tmp_path, owners=None):
+    """bento-pdf is the cheapest caller, as on the live tree, and littlelink the next."""
+    return _tree(
+        tmp_path,
+        {"box": ["bento-pdf", "littlelink", "sonarr"]},
+        {"bento-pdf": 1, "littlelink": 2, "sonarr": 5},
+        owners,
+    )
+
+
+def test_an_ansible_owned_cheapest_caller_is_clean(tmp_path):
+    host_vars, roles = _bento_tree(tmp_path)
+    tags = {"bento-pdf", "littlelink", "sonarr"}
+    assert smoke_caller(tags, host_vars, roles) == "bento-pdf"
+
+
+def test_a_flux_owned_cheapest_caller_is_flagged(tmp_path):
+    """`land.sh` drops a Flux-owned tag from its `deploy.sh` call, so the next caller smokes."""
+    host_vars, roles = _bento_tree(tmp_path, {"bento-pdf": "flux"})
+    tags = {"bento-pdf", "littlelink", "sonarr"}
+    assert smoke_caller(tags, host_vars, roles) == "littlelink"

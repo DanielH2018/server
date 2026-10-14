@@ -14,6 +14,7 @@ import json
 import re
 
 from diagnostics.probe_lib import releases as pr
+from diagnostics.probe_lib import releases_retired
 
 from _release_fixtures import _record
 
@@ -323,3 +324,30 @@ def test_supplies_manifest_bytes_is_flagged_for_a_templates_or_files_role(tmp_pa
     assert pr._supplies_manifest_bytes(with_templates) is True
     assert pr._supplies_manifest_bytes(with_files) is True
     assert pr._supplies_manifest_bytes(renderer) is True
+
+
+# ── --stale-only skips a tag the tree does not leave to Ansible (D2.4b) ───────────────────
+#
+# `run_releases --stale-only` drops these records before both verdicts, and the services the
+# returned map names from its record-less list.
+
+
+def _owned(tmp_path, owner_line):
+    host_vars = tmp_path / "daniel-box.yml"
+    host_vars.write_text(
+        "containers_list:\n  - name: bento-pdf\n    platform: k8s\n" + owner_line
+    )
+    unreadable = {"error": "truncated", "path": "x.json"}
+    return releases_retired.drop_owned([_record("bento-pdf"), unreadable], host_vars)
+
+
+def test_stale_only_over_an_ansible_owned_record_is_clean(tmp_path):
+    records, owners = _owned(tmp_path, "")
+    assert [r.get("service") for r in records] == ["bento-pdf", None]
+    assert owners == {}
+
+
+def test_stale_only_over_a_flux_owned_record_is_flagged(tmp_path):
+    records, owners = _owned(tmp_path, "    owner: flux\n")
+    assert [r.get("service") for r in records] == [None], "the unreadable record stays"
+    assert owners == {"bento-pdf": "flux"}

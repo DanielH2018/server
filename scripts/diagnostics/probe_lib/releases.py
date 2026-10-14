@@ -83,7 +83,7 @@ from diagnostics.probe_lib.releases_consumers import (  # noqa: E402
 
 # The digest verdict, which outranks the path verdict computed here.
 from diagnostics.probe_lib.releases_render import apply_digest_verdicts, path_reason  # noqa: E402
-from diagnostics.probe_lib.releases_retired import drop_retired  # noqa: E402
+from diagnostics.probe_lib.releases_retired import drop_owned, drop_retired  # noqa: E402
 from diagnostics.probe_lib.releases_retired import role_dir_names  # noqa: E402
 
 
@@ -566,6 +566,7 @@ def run_releases(ns):
         print(json.dumps(records, indent=2))
         return 0
     if getattr(ns, "stale_only", False):
+        records, owned = drop_owned(records)
         grace_seconds = int(getattr(ns, "grace_minutes", 0) or 0) * 60
         pending, hits = {}, {}
         stale = compute_stale(
@@ -574,7 +575,7 @@ def run_releases(ns):
         apply_digest_verdicts(
             stale, records, pending=pending, hits=hits, grace_seconds=grace_seconds
         )
-        missing = missing_services(records)
+        missing = [name for name in missing_services(records) if name not in owned]
         write_counted_names(getattr(ns, "names_out", None), stale, missing)
         render = format_stale_kuma if getattr(ns, "kuma", False) else format_stale_only
         text, code = render(
