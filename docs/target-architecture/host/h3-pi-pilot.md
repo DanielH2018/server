@@ -1933,7 +1933,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
 - **H3.1, H3.2a to H3.2d, H3.3a and H3.3b:** revert each on its own, in reverse order. They
   change no host. Reverting H3.2c drops the host units from the unit validator and the
   censuses, which nothing ships yet. Reverting H3.3b leaves H3.3a's render diff and lints in
-  the gate.
+  the gate. It also takes back the updater's cache options, so every run, the common path
+  included, rewrites `pkgcache.bin` again.
 - **H3.4a:** reverting it parks the deployer again, and the clear is the same operator-only
   sequence, range check included. Never revert it while H3.4b to H3.5b are armed. Disarm
   first.
@@ -2193,8 +2194,11 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - `scripts/validate/tests/test_validate_host_packages.py` holds the `type: config` pair,
       the `.deb` lint pair and the render diff, and `test_maintainer_scripts.py` imports the
       whitelist from `scripts/validate/host_packages.py`.
-- **H3.3b:** none beyond the job, whose cases are the tests on both release legs, the
-  stopped-server case included.
+- **H3.3b:** the job, whose cases are the tests on both release legs, the stopped-server
+  case included. `scripts/validate/tests/test_validate_host_package_cases.py` covers the
+  fixtures, the local repository and the two log checks without a container.
+  `hosts/lib/tests/test_homelab_updater_fetch.py` asserts the cache options the common-path
+  case made the updater carry.
 - **H3.4a:** the `homelab_builder` role `CLAUDE.md`, whose glance block `gen_role_glance.py`
   writes.
 - **H3.4b to H3.5c:**
