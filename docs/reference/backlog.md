@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-13 18:17 UTC
-generated_sha: b5b5f32a2
+generated_at: 2026-10-14 18:17 UTC
+generated_sha: 00689f715
 ---
 
 !!! warning "Generated file — do not edit"
@@ -25,9 +25,12 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4839](https://github.com/DanielH2018/server/issues/4839) | medium | gap | backup-observability | Target architecture M4: read the ingress-probe shadow soak on day 3 and after the Sunday before PR 4 | 2026-10-13 | 0 | - | ✓ |
 | [#4884](https://github.com/DanielH2018/server/issues/4884) | medium | gap | cicd | Flux drops template quotes on substitution, so R2's 0123 round-trip pass flags every standalone key and mullvad_account breaks qbittorrent's Secret | 2026-10-13 | 0 | - | ✓ |
 | [#4895](https://github.com/DanielH2018/server/issues/4895) | medium | gap | docs | D5's qbittorrent flip does not name the mullvad_account SOPS manifest and D3's type proof as preconditions | 2026-10-13 | 0 | - | ✓ |
-| [#4899](https://github.com/DanielH2018/server/issues/4899) | medium | addition | security | Target architecture R2 PR 1c: refuse a standalone secret value that Flux would retype, before any render | 2026-10-13 | 0 | worktree-churn-plan-orchestrator-wave2 | ✓ |
-| [#4901](https://github.com/DanielH2018/server/issues/4901) | medium | gap | cicd | Dated serial-measurement test goes red when the cron does its job and lowers a weight | 2026-10-13 | 0 | - | ✓ |
-| [#4905](https://github.com/DanielH2018/server/issues/4905) | medium | addition | cicd | Target architecture H3.1: render a host's package and the shared packages from the tree | 2026-10-13 | 0 | worktree-churn-plan-orchestrator-wave2 | ✓ |
+| [#4940](https://github.com/DanielH2018/server/issues/4940) | medium | addition | backup-observability | Target architecture M3: read the host-checks shadow soak on day 7 before PR 4 | 2026-10-13 | 0 | - | ✓ |
+| [#4942](https://github.com/DanielH2018/server/issues/4942) | medium | gap | cicd | The host renderer ships an enable link as a copied file, not a symlink | 2026-10-13 | 0 | - | ✓ |
+| [#4952](https://github.com/DanielH2018/server/issues/4952) | medium | gap | security | Rule 5's alias clause refuses Prometheus's checksum hash of a set block that holds domain | 2026-10-14 | 0 | - | ✓ |
+| [#4955](https://github.com/DanielH2018/server/issues/4955) | medium | gap | cicd | D2.1c's design counts five whole-entry containers_list readers that 8e79e95d6 moved onto named filters | 2026-10-14 | 0 | - | ✓ |
+| [#4963](https://github.com/DanielH2018/server/issues/4963) | medium | addition | cicd | Target architecture D2.1c: send an added Flux-born containers_list entry only to the readers it can move | 2026-10-14 | 0 | worktree-churn-plan-orchestrator-wave3 | ✓ |
+| [#4966](https://github.com/DanielH2018/server/issues/4966) | medium | addition | cicd | Target architecture D2.4a: make the prune and drift checks tell a Flux-applied object from a handed-back one | 2026-10-14 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
@@ -43,11 +46,14 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4840](https://github.com/DanielH2018/server/issues/4840) | low | gap | cicd | A build-context edit outside a k8s role writes no k8s_unapplied line, and the release census names the wrong cause | 2026-10-13 | 0 | - | ✓ |
 | [#4846](https://github.com/DanielH2018/server/issues/4846) | low | gap | cicd | order_only's dynamic check cannot see a plugin side effect outside the entries it returns | 2026-10-13 | 0 | - | ✓ |
 | [#4875](https://github.com/DanielH2018/server/issues/4875) | low | gap | cicd | A red-phase test with a false premise strands a correct fix at the green gate | 2026-10-13 | 0 | - | ✓ |
-| [#4885](https://github.com/DanielH2018/server/issues/4885) | low | gap | cicd | Observability's checksum/config annotation hashes placeholder text, so R2's round trip cannot pass for observability | 2026-10-13 | 0 | - | ✓ |
 | [#4893](https://github.com/DanielH2018/server/issues/4893) | low | gap | cicd | ansible-core's local temp directories accumulate under ~/.ansible/tmp on daniel-box | 2026-10-13 | 0 | - | ✓ |
-| [#4906](https://github.com/DanielH2018/server/issues/4906) | low | gap | docs | docs-refresh.sh.j2 says static-ratchet-tests runs four files; it runs twelve | 2026-10-13 | 0 | - | ✓ |
 | [#4907](https://github.com/DanielH2018/server/issues/4907) | low | gap | cicd | Retiring a fan-out run's last batch deletes its manifest, so a live cc-wait fanout watch on that run fails | 2026-10-13 | 0 | - | ✓ |
 | [#4912](https://github.com/DanielH2018/server/issues/4912) | low | gap | cicd | R2's round trip finds flux's vendored Kustomization CRD different in the first pass, so PR 2's widened step cannot pass for flux | 2026-10-13 | 0 | - | ✓ |
+| [#4930](https://github.com/DanielH2018/server/issues/4930) | low | gap | cicd | Add the KNOWN_VIOLATIONS clause to sops-manifest-entries once R2's PR 2 lands | 2026-10-13 | 0 | - | ✓ |
+| [#4931](https://github.com/DanielH2018/server/issues/4931) | low | improvement | cicd | Retire google_assistant_service_account's JSON-object stub now that no template parses it | 2026-10-13 | 0 | - | ✓ |
+| [#4945](https://github.com/DanielH2018/server/issues/4945) | low | gap | cicd | land_tags CLI fans a comment-only shared-role edit out to callers the real landing drops | 2026-10-13 | 0 | - | ✓ |
+| [#4960](https://github.com/DanielH2018/server/issues/4960) | low | gap | docs | D2 plan Baseline item 5 names secret_rotation and render_targets as deploy.sh callers, but neither runs it | 2026-10-14 | 0 | - | ✓ |
+| [#4964](https://github.com/DanielH2018/server/issues/4964) | low | gap | cicd | declared_k8s_services reads list items after containers_list as declared services | 2026-10-14 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
