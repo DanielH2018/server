@@ -2,7 +2,8 @@
 
 `toposort_containers` orders the k8s play by the map `build_k8s_dep_map` derives from each
 role's templates and entry, and `filter_by_platform` splits the list between the Docker and k8s
-plays. The Docker play runs in containers_list order: the Pi is its only host, and its one
+plays. `ansible_owned` drops the entries another deployer owns from the k8s play's batch loop.
+The Docker play runs in containers_list order: the Pi is its only host, and its one
 ordering constraint (docker-proxy before autoheal) is that list's order.
 """
 
@@ -176,6 +177,31 @@ def filter_by_platform(containers_list, platform="docker"):
     return [c for c in containers_list if c.get("platform", "docker") == platform]
 
 
+# The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag. `released`:
+# the first PR of a handback, which every Ansible path still skips. The twin of
+# `scripts/lib/k8s_roles.py:OWNER_VALUES`, which a filter plugin cannot import. The plan is
+# docs/target-architecture/deploy/d2-first-leaf.md, *The ownership flag and its three readers*.
+OWNER_VALUES = frozenset({"flux", "released"})
+
+
+def ansible_owned(containers_list):
+    """Select the containers_list entries Ansible deploys: those without an `owner` key.
+
+    The predicate is the key's presence, not its value. An `owner` value outside
+    OWNER_VALUES, a bare `owner:` included, raises AnsibleFilterError rather than reading as
+    Ansible-owned: a misspelt owner would otherwise hand the tag to two deployers at once.
+    Order is preserved, and the input list is not mutated.
+    """
+    for c in containers_list:
+        owner = c.get("owner")
+        if "owner" in c and (not isinstance(owner, str) or owner not in OWNER_VALUES):
+            raise AnsibleFilterError(
+                f"containers_list entry {c.get('name')!r} has owner {owner!r}, "
+                f"not one of {sorted(OWNER_VALUES)}"
+            )
+    return [c for c in containers_list if "owner" not in c]
+
+
 class FilterModule:
     """Ansible filter plugin registering this module's containers_list helpers."""
 
@@ -184,4 +210,5 @@ class FilterModule:
             "build_k8s_dep_map": build_k8s_dep_map,
             "toposort_containers": toposort_containers,
             "filter_by_platform": filter_by_platform,
+            "ansible_owned": ansible_owned,
         }

@@ -4,6 +4,9 @@ Status: IN PROGRESS
 
 D2.1a, the flag's script reader and the narrowing: [#4956](https://github.com/DanielH2018/server/pull/4956).
 
+D2.1d, the Ansible play skips a non-Ansible-owned entry:
+[#4958](https://github.com/DanielH2018/server/pull/4958).
+
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five
 rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3), on
@@ -963,7 +966,8 @@ that D2.6d adds.
       is written, and no other landing parks. `land.sh` reports `needs-manual-apply`.
       `deploy_k8s_owed.py:discharge_k8s_unapplied` drops a line on its own once that
       service deploys at or after the recorded SHA. The lines that remain are discharged
-      one of two ways, and the choice is **operator-only** (Open question 9):
+      one of two ways. The choice was **operator-only**, and the operator ruled for the
+      clear on 2026-10-13 (Open question 9):
         - **Default, the clear.** The operator clears each remaining line with `uv run
           python scripts/deploy_tools/gitops_state.py clear-owed k8s_unapplied <svc>`, one
           service per call. The grounds are the equality test and the diff: the play
@@ -1398,8 +1402,8 @@ later slices size against:
 - **D2.1d** reverts like the others for the play's behaviour, but its revert edits
   `ansible/deploy.yml` and `toposort.py` again. The tick refuses to narrow it and records a
   `k8s_unapplied` line for every declared k8s service, as at D2.1d's landing. The revert
-  takes the same procedure: the session quotes the refusal before the PR, and the operator
-  rules between the clear and a full deploy under D1.2's stop rule (**operator-only**).
+  takes the same procedure: the session quotes the refusal before the PR, and the
+  operator's 2026-10-13 ruling for the clear covers it (Open question 9).
   After D2.7, a revert of D2.1d alone would put bento-pdf back in the play while Flux still
   applies it, so it waits until the handback has removed `owner`.
 - **A partial failure at D2.1d's landing.** Nothing is applied, so nothing on the cluster
@@ -1668,12 +1672,13 @@ later slices size against:
    relies on it.
 8. **Resolved: `DEPLOY_HOLD`'s no-hold value.** D2 reads and writes `none`, as D1 does,
    because `gh` cannot set an empty value. C2 *`DEPLOY_HOLD`'s values* states `none`.
-9. **How are D2.1d's `k8s_unapplied` lines discharged?** The default is the operator's
-   clear, one `gitops_state.py clear-owed k8s_unapplied <svc>` per line left after the
-   self-discharge, on the grounds of the equality test and the diff. The alternative is a
-   full deploy under D1.2's stop rule, which re-applies the denylisted roles. Resolution:
-   the operator rules before D2.1d merges (**operator-only**), and the PR body quotes the
-   ruling. The same ruling covers a revert of D2.1d.
+9. **Resolved: how D2.1d's `k8s_unapplied` lines are discharged.** The operator ruled on
+   2026-10-13 for the default, the clear: one `gitops_state.py clear-owed k8s_unapplied
+   <svc>` per line left after the self-discharge, on the grounds of the equality test and
+   the diff. The operator runs each clear themselves: "I can also run the "gitops_state.py
+   clear-owed k8s_unapplied <svc>" if you give me the command". The alternative, a full
+   deploy under D1.2's stop rule, is not taken. D2.1d's PR body quotes the ruling. The
+   same ruling covers a revert of D2.1d.
 10. **What narrow output should H1, H2 and H6 expect for a Flux-born entry?** Their steps
     still branch on an own-tag-only outcome and expect 23 reader tags. D2.1c changes both
     for an added entry that carries `owner`:
