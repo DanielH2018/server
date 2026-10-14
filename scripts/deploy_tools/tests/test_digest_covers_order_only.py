@@ -189,3 +189,25 @@ def test_4844s_other_aliasing_shapes_keep_the_line(tree, body):  # noqa: F811
     )
     reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
     assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "for c in containers_list:\n    open(c['name'], 'w').write('x')",
+        "for c in containers_list:\n    open(c['name'], 'a').write('x')",
+    ],
+    ids=["open-write", "open-append"],
+)
+def test_a_dep_map_that_writes_a_file_keeps_the_line(tree, body):  # noqa: F811
+    """A file write leaves every entry and the input as they were, and still keeps the line (#4846).
+
+    In a deploy the file lands in the controller's cwd, where a later role could read it, so
+    the returned entries alone cannot prove the change order-only.
+    """
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree, [{"ansible/filter_plugins/toposort.py": _dep_map_writes("", body)}]
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
