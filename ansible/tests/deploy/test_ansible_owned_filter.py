@@ -55,8 +55,14 @@ def _k8s_play_tasks() -> dict[str, dict]:
     return {t["name"]: t for t in play["pre_tasks"] + play["tasks"]}
 
 
-def _run_k8s_play(containers_list: list[dict]) -> tuple[list[dict], list[str]]:
+def _run_k8s_play(
+    containers_list: list[dict], loop: str | None = None
+) -> tuple[list[dict], list[str]]:
     """Evaluate the k8s play's containers_list facts and its batch loop over a host's list.
+
+    Args:
+        containers_list: The host's containers_list, before the play filters it.
+        loop: A batch-loop expression to evaluate in place of deploy.yml's, for a red fixture.
 
     Returns:
         The containers_list fact the play's templates read, and the names the batch loop visits,
@@ -78,7 +84,7 @@ def _run_k8s_play(containers_list: list[dict]) -> tuple[list[dict], list[str]]:
             variables[fact] = templar.template(trust_as_template(expr))
     templar = Templar(loader=DataLoader(), variables=variables)
     templar.environment.filters.update(toposort.FilterModule().filters())
-    batches = templar.template(trust_as_template(tasks[_BATCH_TASK]["loop"]))
+    batches = templar.template(trust_as_template(loop or tasks[_BATCH_TASK]["loop"]))
     return variables["containers_list"], [c["name"] for batch in batches for c in batch]
 
 
@@ -151,23 +157,34 @@ def _owner_drop_mismatch(containers: list[dict], select) -> str:
     )
 
 
+def _play_visit_mismatch(containers: list[dict], loop: str | None = None) -> str:
+    """Why the batch loop does not visit the toposorted list less its owned entries; "" if so."""
+    fact, visited = _run_k8s_play(containers, loop)
+    expected = [c["name"] for c in fact if "owner" not in c]
+    if visited == expected:
+        return ""
+    return f"the batch loop visits {visited}, but the toposorted Ansible-owned list is {expected}"
+
+
 @pytest.mark.parametrize("path", _host_var_files(), ids=lambda p: p.stem)
 def test_ansible_owned_drops_exactly_the_entries_carrying_owner_is_clean(path):
     containers = _containers(path)
     assert _owner_drop_mismatch(containers, ansible_owned) == ""
 
-    k8s = [c for c in containers if c.get("platform") == "k8s"]
-    if k8s:
-        fact, visited = _run_k8s_play(containers)
-        assert visited == [c["name"] for c in fact if "owner" not in c], (
-            "the play's batch loop visits a different set or order of roles than the "
-            "toposorted list less its owned entries"
-        )
+    if any(c.get("platform") == "k8s" for c in containers):
+        assert _play_visit_mismatch(containers) == ""
 
 
 def test_a_filter_dropping_an_entry_without_owner_is_flagged():
     containers = _containers(HOST_VARS / "daniel-box.yml")
     assert _owner_drop_mismatch(containers, lambda cs: ansible_owned(cs)[:-1]) != ""
+
+
+def test_a_batch_loop_dropping_an_entry_without_owner_is_flagged():
+    # The live list carries no `owner` yet, so this loop is the play half's only red case: it
+    # skips the last Ansible-owned role, which the clean half must catch on the same list.
+    loop = "{{ (containers_list | ansible_owned)[:-1] | batch(2) | list }}"
+    assert _play_visit_mismatch(_containers(HOST_VARS / "daniel-box.yml"), loop) != ""
 
 
 def test_the_host_census_names_daniel_box_with_its_k8s_entries():
