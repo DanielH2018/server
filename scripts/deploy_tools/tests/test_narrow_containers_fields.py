@@ -382,3 +382,46 @@ def test_an_added_daniel_box_entry_skips_a_reader_of_the_pis_list(tree: Tree):
 )
 def test_edited_host_names_the_host_vars_owner_only(path: str, host: str | None):
     assert containers.edited_host(path) == host
+
+
+# The five readers of every field D2's baseline counted at 70591c307, each in its shape there.
+# 8e79e95d6 moved the live five onto named filters; the pair keeps a reader of every field
+# present, because a template that adds one meets the same `reader_paths` rule.
+WHOLE_ENTRY_READERS = {
+    "pihole": "{% for s in hostvars[k8s_primary_node].containers_list | default([])"
+    " | filter_by_platform('k8s') %}{{ s.hostname }}{% endfor %}\n",
+    "uptime-kuma": "{% for e in hostvars[k8s_primary_node].containers_list"
+    " | selectattr('hostname', 'defined') %}{{ e.hostname }}{% endfor %}\n",
+    "monitor-bridge": "{% set p = containers_list | selectattr('port', 'defined')"
+    " | list %}\n",
+    "artifacts": "{{ containers_list | map(attribute='name') | list }}\n",
+    "netpol-baseline": "{% for e in containers_list %}{{ e.name }}{% endfor %}\n",
+}
+
+
+def _narrow_with_whole_entry_readers(tmp_path, replacement: str) -> set[str]:
+    """Commit the five readers, then the sonarr edit `replacement` makes; narrow it."""
+    t = build_tree(tmp_path)
+    for role, text in WHOLE_ENTRY_READERS.items():
+        t.write(f"ansible/roles/k8s/{role}/templates/reader.yaml.j2", text)
+    t.commit("five readers of every field")
+    t.write(BOX, HOST_VARS.replace("image: sonarr:1", replacement))
+    # Bystander tags, as on the real fleet's 59: six of eleven would trip the ceiling `narrow`
+    # puts on a tag list covering most of the fleet.
+    declared = DECLARED | set(WHOLE_ENTRY_READERS) | {f"other-{n}" for n in range(6)}
+    return narrow_broad.narrow(*_refs(t), cwd=t.root, declared=declared, callers={})
+
+
+def test_an_owner_only_edit_maps_to_the_entrys_own_tag_alone_is_clean(tmp_path):
+    """`owner` is a deploy-mechanics field, so no template reader moves (D2.1a)."""
+    edited = _narrow_with_whole_entry_readers(
+        tmp_path, "image: sonarr:1\n    owner: flux"
+    )
+    assert edited == {"sonarr"}
+
+
+def test_a_hostname_edit_reaches_the_five_whole_entry_readers_is_flagged(tmp_path):
+    edited = _narrow_with_whole_entry_readers(
+        tmp_path, "image: sonarr:1\n    hostname: sonarr"
+    )
+    assert edited == {"sonarr"} | set(WHOLE_ENTRY_READERS)
