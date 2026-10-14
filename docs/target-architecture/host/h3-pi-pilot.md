@@ -1105,6 +1105,9 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
 + scripts/renderer/renderer_lib/host_manifest.py       (units, legacy and manifest.json, H3.2d)
   scripts/validate/shell_templates.py                  (+ hosts/components/*/templates/)
   scripts/validate/unit_templates.py                   (+ every unit and drop-in the host renderer emits)
++ scripts/validate/host_packages.py                    (H3.3a: render, diff and both lints the job runs)
++ scripts/validate/tests/test_validate_host_packages.py
++ scripts/validate/tests/fixtures/host_packages/red/   (the lints' red fixture, built in CI too)
   prek.toml                                            (unit and shell selectors gain hosts/)
   scripts/deploy_tools/land_lib/pipeline.py            (host candidate in resolve, render after CI, host wait step)
   scripts/deploy_tools/land_lib/classify.py            (shortcut reads the host candidate)
@@ -2159,8 +2162,12 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - the two-writer census gains the legacy join and its red fixture;
     - `docs/homelab-render.md`'s host-mode section documents `units:`, `legacy:` and the
       manifest.
-- **H3.3a:** `KNOWN_JOBS` in `ansible/tests/repo/test_every_ci_job_is_gated.py` gains
-  `host_packages`.
+- **H3.3a:**
+    - `KNOWN_JOBS` in `ansible/tests/repo/test_every_ci_job_is_gated.py` gains
+      `host_packages`;
+    - `scripts/validate/tests/test_validate_host_packages.py` holds the `type: config` pair,
+      the `.deb` lint pair and the render diff, and `test_maintainer_scripts.py` imports the
+      whitelist from `scripts/validate/host_packages.py`.
 - **H3.3b:** none beyond the job, whose cases are the tests on both release legs, the
   stopped-server case included.
 - **H3.4a:** the `homelab_builder` role `CLAUDE.md`, whose glance block `gen_role_glance.py`
