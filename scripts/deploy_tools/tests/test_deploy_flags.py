@@ -12,6 +12,9 @@ Both halves, per CLAUDE.md: a refused argument must exit 64 having deployed noth
 the bug got wrong), and the pass-through arguments a REAL deploy carries must still reach the
 playbook (the half a gate that simply refused everything would pass).
 
+The gate imports ansible-core in the wrapper's own process, and that import creates a temp
+directory the `--check` exec must not orphan (issue #4893).
+
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_flags.py
 """
 
