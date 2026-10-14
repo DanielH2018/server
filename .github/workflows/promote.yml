@@ -376,9 +376,9 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
-    # `decide` waits up to 35 minutes on a verification in flight
+    # `decide` waits up to 40 minutes on a verification in flight
     # (verify_promotion.IN_FLIGHT_WAIT_S), and the walk and the pulls take a few more.
-    timeout-minutes: 45
+    timeout-minutes: 50
     # GitHub keeps one pending job per group and a newer one evicts it. `decide` walks master
     # from its tip rather than reading the trigger, so the last job to run promotes the newest
     # published commit whichever pending job was evicted.
@@ -527,8 +527,9 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
     # Above the largest derived timeout (verify_promotion.promote_timeout, 13 minutes for a
-    # tag at manifests_rollout_timeout_default), and below decide's in-flight wait.
-    timeout-minutes: 30
+    # tag at manifests_rollout_timeout_default), and with settle's below decide's in-flight
+    # wait. A job killed at this limit leaves no verdict, which settle holds as unverified.
+    timeout-minutes: 25
     # No concurrency group: a pending job in `promote` can be evicted. `decide` waits while
     # `prod` differs from `last-good` instead (the DECIDED marker in verify_promotion.py).
     permissions:
@@ -577,7 +578,7 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 5
     permissions:
       packages: write
     steps:

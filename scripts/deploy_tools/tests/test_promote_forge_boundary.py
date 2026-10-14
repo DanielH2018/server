@@ -18,6 +18,8 @@ from _promote_fakes import World, digest_of
 
 PROMOTE = Path(promote.__file__)
 PROMOTE_WAIT = PROMOTE.with_name("promote_wait.py")
+VERIFY = PROMOTE.with_name("verify_promotion.py")
+PRUNE = PROMOTE.with_name("artifact_prune.py")
 
 # The modules that would let promote.py make a forge call without the adapter. `subprocess`
 # and `pty` are here because `gh` and `cosign` are forge calls too.
@@ -111,10 +113,13 @@ def forbidden_imports(source: str) -> set[str]:
     )
 
 
-@pytest.mark.parametrize("module", [PROMOTE, PROMOTE_WAIT], ids=lambda p: p.name)
+@pytest.mark.parametrize(
+    "module", [PROMOTE, PROMOTE_WAIT, VERIFY, PRUNE], ids=lambda p: p.name
+)
 def test_promote_imports_the_adapter_and_no_http_library_is_clean(module):
-    """`promote_wait.py` is `land-wait`, split out of promote.py, and holds the same boundary:
-    its kubectl and logger go through `flux_host.py` as its GitHub calls go through forge."""
+    """Each module split out of promote.py holds the same boundary: `promote_wait.py`
+    (`land-wait`), whose kubectl and logger go through `flux_host.py`; `verify_promotion.py`
+    (`verify`), whose status reads go through forge; and `artifact_prune.py` (`prune`)."""
     source = module.read_text(encoding="utf-8")
     assert ADAPTER in imported_modules(source)
     assert forbidden_imports(source) == set()

@@ -86,12 +86,14 @@ _DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
 # no wait, a second run's `promote` could move `prod` past a T that `verify` still waits on,
 # Flux would never post T's statuses, and the timeout would write a false hold. `prod` differs
 # from `last-good` only between a run's `tag` and its `settle`, so the wait costs two HEADs a
-# poll. A run that never settles stalls promotion as `current`, which `PromotionStalled`
-# pages. The long form is docs/flux-deploy-plane.md, *Verification*.
+# poll. A run that never settles stalls promotion as `current`, which D2.6d's
+# `PromotionStalled` alert pages once it lands. The long form is docs/flux-deploy-plane.md,
+# *Verification*.
 #
-# Longer than the `verify` job's timeout-minutes plus `settle`, so the wait outlasts any run
-# still verifying (ansible/tests/repo/test_promote_workflow_verify.py).
-IN_FLIGHT_WAIT_S = 35 * 60
+# Longer than the `verify` job's timeout-minutes plus `settle`'s, with ten minutes for runner
+# queueing, so the wait outlasts any run still verifying
+# (ansible/tests/repo/test_promote_workflow_verify.py).
+IN_FLIGHT_WAIT_S = 40 * 60
 IN_FLIGHT_POLL_S = 30
 
 # `<T> failed=<names>`, the one hold form the revert rule may pass. `settle` writes it.
