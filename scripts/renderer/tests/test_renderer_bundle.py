@@ -11,7 +11,7 @@ import pytest
 
 from changed_set import changed_set
 from lib import yaml_fast
-from lib.exit_codes import RENDER_REFUSED
+from lib.exit_codes import RENDER_OK, RENDER_REFUSED
 from renderer import homelab_render
 from renderer.renderer_lib import cluster as cluster_mod
 from renderer.renderer_lib.bundle import (
@@ -127,10 +127,10 @@ def test_two_renders_of_one_tree_write_identical_bundles(tmp_path):
     texts = []
     for name in ("first", "second"):
         out = tmp_path / name
-        assert (
-            homelab_render.main(["cluster", "--out", str(out), "--role", "littlelink"])
-            == 0
+        code = homelab_render.cluster(
+            out, ["littlelink"], None, flux_owned=lambda: {"littlelink"}
         )
+        assert code == RENDER_OK
         texts.append(
             {
                 p.relative_to(out).as_posix(): p.read_bytes()
@@ -145,6 +145,22 @@ def test_two_renders_of_one_tree_write_identical_bundles(tmp_path):
         "flux/littlelink.yaml",
     ]
     assert set(json.loads(texts[0][DIGESTS])) == {"littlelink", UNCLASSIFIED}
+
+
+def test_a_role_render_of_a_tag_flux_does_not_own_writes_no_bundle_is_clean(tmp_path):
+    """pihole defers files. Only a published tag is refused for that, so this renders."""
+    out = tmp_path / "out"
+    assert homelab_render.cluster(out, ["pihole"], None, flux_owned=set) == RENDER_OK
+    assert sorted(p.name for p in out.iterdir()) == ["cluster"]
+    assert (out / "cluster" / "pihole-deferred").is_dir()
+
+
+def test_a_flux_owned_tag_that_defers_files_is_flagged(tmp_path, capsys):
+    out = tmp_path / "out"
+    code = homelab_render.cluster(out, ["pihole"], None, flux_owned=lambda: {"pihole"})
+    assert code == RENDER_REFUSED
+    assert "D4.2" in capsys.readouterr().err
+    assert not out.exists() or list(out.iterdir()) == []
 
 
 BASE = {

@@ -16,8 +16,9 @@ anything, a placeholder render also refuses a tag marked `owner: flux` that read
 live-read fact, and runs the five secret rules of `renderer_lib/secret_checks.py`.
 
 A placeholder render with `--role` also writes the publish bundle beside `DIR/cluster/`, for
-the tags it names (target slice D2): `DIR/flux/<tag>.yaml`, `DIR/flux/kustomization.yaml` and
-`DIR/digests.json`. `renderer_lib/bundle.py` holds the writer, `SHARED_KINDS` and the footprint
+the tags it names that carry `owner: flux` (target slice D2): `DIR/flux/<tag>.yaml`,
+`DIR/flux/kustomization.yaml` and `DIR/digests.json`. A render that names no such tag writes
+no bundle. `renderer_lib/bundle.py` holds the writer, `SHARED_KINDS` and the footprint
 rules. Every `cluster` render refuses a deploy tag named `homelab` or after a `SHARED_KINDS`
 member, the names of Kustomizations that are no deploy tag's (C3 *Reserved names*).
 
@@ -174,7 +175,8 @@ def _placeholder_cluster(
 ) -> int:
     try:
         tags = select_tags(roles, kinds=kinds)
-        refusals = pinned_fact_refusals(tags, flux_owned(), pinned)
+        owned = flux_owned()
+        refusals = pinned_fact_refusals(tags, owned, pinned)
         if refusals:
             for tag, fact in refusals:
                 print(
@@ -201,7 +203,10 @@ def _placeholder_cluster(
                 file=sys.stderr,
             )
             return RENDER_FAILED
-        bundle = _bundle(result, out) if roles else {}
+        # Only a flux-owned tag is published, so only one gets a Kustomization. A --role
+        # render of any other tag, a deferring one included, writes its cluster/ alone.
+        published = [t.tag for t in result.tags if t.tag in owned] if roles else []
+        bundle = _bundle(result, out, published) if published else {}
         written = write_cluster(result.tags, out)
         written += write_bundle(bundle, out)
     except RenderRefused as exc:
@@ -215,24 +220,29 @@ def _placeholder_cluster(
         if result.skipped
         else ""
     )
-    published = f", {FLUX_DIR}/ and {DIGESTS} for the published tags" if bundle else ""
+    publishing = (
+        f", {FLUX_DIR}/ and {DIGESTS} for {', '.join(published)}" if bundle else ""
+    )
     print(
         f"homelab-render: placeholder mode, {len(result.tags)} tags, "
         f"{len(result.substituting())} of {len(result.key_sets)} directories substitute, "
-        f"{len(written)} files under {out}{published}, the five secret rules pass with "
+        f"{len(written)} files under {out}{publishing}, the five secret rules pass with "
         f"{len(report.violations)} known violations{skipped}"
     )
     return RENDER_OK
 
 
-def _bundle(result: PlaceholderRender, out: Path) -> dict[str, str]:
-    """The `flux/` files and `digests.json` publishing every tag `result` rendered.
+def _bundle(
+    result: PlaceholderRender, out: Path, published: list[str]
+) -> dict[str, str]:
+    """The `flux/` files and `digests.json` publishing the tags `published` of `result`.
 
-    Computed from the render in this process, before anything is written (C1).
+    Computed from the render in this process, before anything is written (C1). A rendered
+    directory of a tag outside `published` counts under `_unclassified`.
 
     Raises:
-        RenderRefused: `out` already holds a `flux/` file or `digests.json`, or a tag renders
-            a `-deferred` directory, which no Kustomization applies before D4.2.
+        RenderRefused: `out` already holds a `flux/` file or `digests.json`, or a published
+            tag renders a `-deferred` directory, which no Kustomization applies before D4.2.
     """
     if (out / DIGESTS).exists() or any((out / FLUX_DIR).glob("*")):
         raise RenderRefused(
@@ -245,7 +255,7 @@ def _bundle(result: PlaceholderRender, out: Path) -> dict[str, str]:
         return bundle_files(
             directories,
             result.key_sets,
-            [tag.tag for tag in result.tags],
+            published,
             rollout_timeout_default(),
         )
     except ValueError as exc:
