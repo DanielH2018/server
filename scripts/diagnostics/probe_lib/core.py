@@ -51,7 +51,7 @@ def ha_host():
     host-shell DNS for it rides the Cloudflare grey-cloud wildcard — so callers pin it
     to the ingress VIP (ha_resolve) instead of trusting DNS.
     """
-    return f"home-assistant.local.{sops_extract('domain')}"
+    return f"home-assistant.local.{domain()}"
 
 
 def ha_resolve():
@@ -64,6 +64,23 @@ def ha_resolve():
 
 def ha_base():
     return f"https://{ha_host()}"
+
+
+def domain(group_vars_path=None):
+    """The homelab's domain, read from inventory (plaintext, not a secret).
+
+    The operator ruled on 2026-10-14 that `domain` is not a secret, so this needs no age key.
+    `secrets.yml` holds the same value until R2's domain PR 3 deletes it there.
+
+    Args:
+        group_vars_path: The group_vars file to read. None reads the repo's `all.yml`.
+    """
+    path = group_vars_path or GROUP_VARS_PATH
+    with open(path) as f:
+        for line in f:
+            if line.startswith("domain:"):
+                return line.split(":", 1)[1].strip()
+    raise SystemExit(f"domain not found in {path}")
 
 
 def metallb_vip():
@@ -82,7 +99,7 @@ def k8s_endpoint(hostname):
     edge from a shell here; curl pins it to the MetalLB ingress VIP instead. Containers get the
     right answer from Pi-hole and need no pin.
     """
-    host = f"{hostname}.local.{sops_extract('domain')}"
+    host = f"{hostname}.local.{domain()}"
     return f"https://{host}", f"{host}:443:{metallb_vip()}"
 
 
@@ -168,7 +185,7 @@ SECRETS_PATH = os.path.join(
     "secrets.yml",
 )
 
-# Inventory group vars (plaintext) — source of the MetalLB ingress VIP.
+# Inventory group vars (plaintext) — source of the domain and the MetalLB ingress VIP.
 GROUP_VARS_PATH = os.path.join(
     REPO,
     "ansible",
