@@ -16,8 +16,9 @@ It landed ahead of PR 2 ([#4918](https://github.com/DanielH2018/server/issues/49
 `sops-manifest-entries` check carries the first two clauses only. The third clause, which
 reads `KNOWN_VIOLATIONS`, is [#4930](https://github.com/DanielH2018/server/issues/4930).
 
-PR 2b, rule 5's aliases: the census found one entry, the `hash('sha1')` on
-`observability_prometheus_config`, which has output `domain` since `0ef579e1f`
+PR 2b, rule 5's aliases: [#4953](https://github.com/DanielH2018/server/pull/4953). The
+census found one entry, the `hash('sha1')` on `observability_prometheus_config`, which has
+output `domain` since `0ef579e1f`
 ([#4952](https://github.com/DanielH2018/server/issues/4952)). PR 8 removes it.
 
 Depends on: [R1](r1-shadow-render.md)
