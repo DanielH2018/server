@@ -48,14 +48,12 @@ def tree_owners(host_vars=None):
 
 
 def drop_owned(records, host_vars=None):
-    """`records` less those whose service carries `owner`, and the `tree_owners` map read.
+    """`records` less those whose service carries `owner`, as `tree_owners` reads it.
 
     A record carrying `error` is kept, as `drop_retired` keeps it.
     """
     owners = tree_owners(host_vars)
-    return [
-        r for r in records if "error" in r or r.get("service") not in owners
-    ], owners
+    return [r for r in records if "error" in r or r.get("service") not in owners]
 
 
 def role_dir_names(k8s_roles_dir):

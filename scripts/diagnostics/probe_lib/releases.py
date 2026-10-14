@@ -77,7 +77,7 @@ from diagnostics.probe_lib.releases_diff import drop_comment_only_defaults  # no
 # Its own module for the reason above; that module's docstring says what it reuses and why.
 from diagnostics.probe_lib.releases_consumers import (  # noqa: E402
     consumers_for,
-    consumes_manifests,
+    missing_services,
     role_paths_for,
 )
 
@@ -534,26 +534,6 @@ def compute_stale(
     return stale
 
 
-def missing_services(records, host_vars=None, k8s_roles_dir=None):
-    """k8s-platform service tags, expected to be release-stamped, with no record at all.
-
-    Deployed before the release stamp shipped, or never deployed -- either way this must read
-    UNKNOWN rather than being silently excluded from a fleet audit. Scoped to roles that
-    actually consume `k8s/manifests` (see `consumes_manifests`); a role that never applies
-    manifests never gets a record to be missing.
-    """
-    deploy_tags = _deploy_tags()
-    host_vars = host_vars or deploy_tags.HOST_VARS
-    k8s_roles_dir = k8s_roles_dir or (REPO_ROOT / "ansible/roles/k8s")
-    known = {
-        tag
-        for _host, platform, tag in deploy_tags.service_records(host_vars)
-        if platform == "k8s" and consumes_manifests(k8s_roles_dir / tag)
-    }
-    present = {r.get("service") for r in records if "error" not in r}
-    return sorted(known - present)
-
-
 def run_releases(ns):
     """Print the release records (or, with `--json`, raw JSON) and return the exit code.
 
@@ -566,7 +546,7 @@ def run_releases(ns):
         print(json.dumps(records, indent=2))
         return 0
     if getattr(ns, "stale_only", False):
-        records, owned = drop_owned(records)
+        records = drop_owned(records)
         grace_seconds = int(getattr(ns, "grace_minutes", 0) or 0) * 60
         pending, hits = {}, {}
         stale = compute_stale(
@@ -575,7 +555,7 @@ def run_releases(ns):
         apply_digest_verdicts(
             stale, records, pending=pending, hits=hits, grace_seconds=grace_seconds
         )
-        missing = [name for name in missing_services(records) if name not in owned]
+        missing = missing_services(records)
         write_counted_names(getattr(ns, "names_out", None), stale, missing)
         render = format_stale_kuma if getattr(ns, "kuma", False) else format_stale_only
         text, code = render(
