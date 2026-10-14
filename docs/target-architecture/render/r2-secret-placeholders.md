@@ -32,6 +32,10 @@ Domain PR 1, `domain` as an inventory variable read without SOPS:
 Domain PR 2a of step 10, the named members moved from `domain` to `email`:
 [#4990](https://github.com/DanielH2018/server/pull/4990).
 
+Domain PR 2b, the flip, so `domain` is published and no stub or placeholder:
+[#5017](https://github.com/DanielH2018/server/pull/5017). It deployed every tag with no pod
+restart, and CI's flux round trip read 0 differences over 58 tags in both passes.
+
 Depends on: [R1](r1-shadow-render.md)
 
 Unblocks: D2 and D3. D2's publish job renders bento-pdf, whose IngressRoute holds `domain`,
