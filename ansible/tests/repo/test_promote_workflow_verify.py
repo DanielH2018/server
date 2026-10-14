@@ -28,6 +28,7 @@ import verify_promotion
 MOVED_GATE = "needs.tag.outputs.moved == 'true'"
 # Weighed even when an earlier job failed or was cancelled, so a moved `prod` always settles.
 ALWAYS = "always()"
+PRIOR_DIGEST = "needs.promote.outputs.prior_digest"
 
 
 @pytest.fixture(scope="module")
@@ -54,6 +55,14 @@ def verification_problems(wf: dict) -> list[str]:
         # group can be evicted, so `decide` waits on a verification in flight instead.
         if "concurrency" in job:
             found.append(f"{name}: joins a concurrency group")
+    # `tag` moves `prod` only while it still names the digest `decide` read.
+    move = next((s for s in _steps(jobs.get("tag", {})) if s.get("id") == "move"), {})
+    if PRIOR_DIGEST not in str(move.get("env")) or "manifests/prod" not in str(
+        move.get("run")
+    ):
+        found.append(
+            "tag: does not compare prod's live digest with decide's before moving"
+        )
     verify = jobs.get("verify", {})
     if "needs.promote.outputs.target" not in str(_steps(verify)):
         found.append("verify: does not take T from promote's outputs")
@@ -180,6 +189,11 @@ def _a_short_promote_job(wf):
     wf["jobs"]["promote"]["timeout-minutes"] = 15
 
 
+def _tag_moves_without_comparing(wf):
+    step = next(s for s in wf["jobs"]["tag"]["steps"] if s.get("id") == "move")
+    del step["env"]["PRIOR_DIGEST"]
+
+
 OWN_RED = {
     "settle in the promote group": (
         _settle_in_the_promote_group,
@@ -200,6 +214,10 @@ OWN_RED = {
     "a promote job shorter than the wait": (
         _a_short_promote_job,
         "promote: its timeout-minutes cannot hold",
+    ),
+    "a tag that moves prod without comparing": (
+        _tag_moves_without_comparing,
+        "tag: does not compare prod's live digest",
     ),
 }
 

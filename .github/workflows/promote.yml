@@ -394,6 +394,7 @@ jobs:
       target: ${{ steps.decide.outputs.target }}
       digest: ${{ steps.decide.outputs.digest }}
       prior: ${{ steps.decide.outputs.prior }}
+      prior_digest: ${{ steps.decide.outputs.prior_digest }}
       reset_digest: ${{ steps.decide.outputs.reset_digest }}
       seed: ${{ steps.decide.outputs.seed }}
       clears_hold: ${{ steps.decide.outputs.clears_hold }}
@@ -474,6 +475,14 @@ jobs:
       # The commit and digest come from `decide`, never from the trigger: the commit `prod`
       # moves to is the newest published one, which need not be the one whose CI ran.
       #
+      # `prod` moves only if it still names the digest `decide` read. Another run's `promote`
+      # can decide while this run's `tag` waits on the group, so two runs can each read the
+      # same `prod`. The first `tag` moves it; the second finds it moved, moves nothing, and
+      # verifies nothing, rather than moving `prod` past a T that the first run's `verify`
+      # still waits on. `tag` jobs share the `promote` group, so the read and the move are
+      # never interleaved with another run's. The DECIDED marker in verify_promotion.py has
+      # the other half, `decide`'s wait.
+      #
       # The first verified run seeds `last-good`: when `decide` read no `last-good`, the step
       # tags `prod`'s digest with it before `prod` moves, so a failed verification has a
       # verified revision to reset to.
@@ -483,7 +492,7 @@ jobs:
           TARGET: ${{ needs.promote.outputs.target }}
           DIGEST: ${{ needs.promote.outputs.digest }}
           SEED: ${{ needs.promote.outputs.seed }}
-          PRIOR_DIGEST: ${{ needs.promote.outputs.reset_digest }}
+          PRIOR_DIGEST: ${{ needs.promote.outputs.prior_digest }}
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -492,11 +501,34 @@ jobs:
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
           printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
             || { echo "::error::decide's digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
+
+          # prod's live digest, from one HEAD. curl reads each credential from stdin.
+          name=danielh2018/homelab-manifests
+          token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
+            | curl --retry 3 -fsS -K - \
+              "https://ghcr.io/token?scope=repository:$name:pull&service=ghcr.io" \
+            | jq -r '.token // empty')"
+          [ -n "$token" ] || { echo "::error::ghcr.io issued no pull token for $name"; exit 1; }
+          heads="$RUNNER_TEMP/prod-head.txt"
+          status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
+            | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
+              -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
+              "https://ghcr.io/v2/$name/manifests/prod")"
+          case "$status" in
+            200) live="$(tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }')" ;;
+            404) live="" ;;
+            *) echo "::error::HEAD prod answered HTTP $status"; exit 1 ;;
+          esac
+          if [ "$live" != "$PRIOR_DIGEST" ]; then
+            echo "::warning::prod is at '${live:-absent}', not the '${PRIOR_DIGEST:-absent}' decide read: another run moved it first, so this run moves nothing and verifies nothing. The next promote run promotes $TARGET or a newer commit."
+            exit 0
+          fi
+
           printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
           repo=ghcr.io/danielh2018/homelab-manifests
           if [ "$SEED" = true ]; then
             printf '%s' "$PRIOR_DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
-              || { echo "::error::decide's prod digest '$PRIOR_DIGEST' is not sha256:<64 hex>"; exit 1; }
+              || { echo "::error::decide read no prod digest to seed last-good from"; exit 1; }
             flux tag artifact "oci://$repo@$PRIOR_DIGEST" --tag last-good
             echo "seeded last-good at prod's digest $PRIOR_DIGEST"
           fi
@@ -506,6 +538,7 @@ jobs:
       # A failed write leaves PROD_DIGEST behind prod, which the deploy-pipeline exporter pages
       # on from slice D2: the safe direction.
       - name: Record prod's digest
+        if: ${{ steps.move.outputs.moved == 'true' }}
         env:
           DIGEST: ${{ needs.promote.outputs.digest }}
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}

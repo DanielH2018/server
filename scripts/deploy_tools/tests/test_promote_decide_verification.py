@@ -102,6 +102,7 @@ def test_an_absent_last_good_is_seeded_from_prods_digest(world, monkeypatch, cap
     world.publish(tip)
     _, outputs, _, _ = _decide(world, monkeypatch, capsys, tip)
     assert (outputs["seed"], outputs["reset_digest"]) == ("true", digest_of(c0))
+    assert outputs["prior_digest"] == digest_of(c0), "tag compares prod against this"
 
 
 def test_a_present_last_good_is_the_reset_target_and_is_not_seeded(

@@ -80,13 +80,15 @@ ROOT_RETRY_S = 60
 
 _DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
 
-# DECIDED: `decide` waits on a verification in flight rather than joining `verify` and
-# `settle` to the `promote` concurrency group. GitHub keeps one pending job per group and a
-# newer one cancels it, so a pending `settle` could be evicted with its hold unwritten. With
-# no wait, a second run's `promote` could move `prod` past a T that `verify` still waits on,
-# Flux would never post T's statuses, and the timeout would write a false hold. `prod` differs
-# from `last-good` only between a run's `tag` and its `settle`, so the wait costs two HEADs a
-# poll. A run that never settles stalls promotion as `current`, which D2.6d's
+# DECIDED: a verification in flight is guarded by two checks rather than by joining `verify`
+# and `settle` to the `promote` concurrency group. GitHub keeps one pending job per group and
+# a newer one cancels it, so a pending `settle` could be evicted with its hold unwritten.
+# Unguarded, a second run could move `prod` past a T that `verify` still waits on, Flux would
+# never post T's statuses, and the timeout would write a false hold and reset `prod` under the
+# second run's verified commit. So `decide` waits while `prod` differs from `last-good`, which
+# it does only between a run's `tag` and its `settle`, at two HEADs a poll. And `tag` moves
+# `prod` only while it still names the digest `decide` read, which closes the gap between one
+# run's `decide` and an earlier run's `tag` (promote.yml, the `Move prod` step). A run that never settles stalls promotion as `current`, which D2.6d's
 # `PromotionStalled` alert pages once it lands. The long form is docs/flux-deploy-plane.md,
 # *Verification*.
 #

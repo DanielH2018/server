@@ -40,25 +40,22 @@ The rules for each read are in docs/target-architecture/deploy/d1-flux-installed
 
 OUTPUT. One line on stdout, `trigger=<sha> verdict=<verdict> target=<sha or empty>`. The
 reason for a `held`, `current` or `error` goes to stderr. When `$GITHUB_OUTPUT` is set, the
-step outputs are appended to it: `verdict`, `target` and `digest`; `prior`, `prod`'s commit
-before the move; `reset_digest`, the digest a failed verification resets `prod` to; `seed`,
-`true` when the `tag` job must tag `prod`'s digest `last-good` before it moves `prod`; and
-`clears_hold`.
+step outputs are appended to it: `verdict`, `target` and `digest`; `prior` and
+`prior_digest`, `prod`'s commit and digest before the move, which `tag` re-reads before it
+moves anything; `reset_digest`, where a failed verification resets `prod` to; `seed`, `true`
+when `tag` must tag `prior_digest` as `last-good` first; and `clears_hold`.
 
 PRUNE. `prune` deletes old artifact versions, once a day from `prune-artifacts.yml`.
 `artifact_prune.py` holds it, and its docstring states what it reads.
 
-VERIFY. `verify T` waits on T's commit statuses for T's changed set and prints `good` or
-`failed`, for the `settle` job. `verify_promotion.py` holds it. `ci-verdict SHA` prints a
-commit's CI verdict, for the render job's re-check of a dispatched `sha`.
+VERIFY. `verify T` prints `good` or `failed` for the `settle` job (`verify_promotion.py`).
+`ci-verdict SHA` prints a commit's CI verdict, for the render job's re-check of a dispatched sha.
 
-LAND-WAIT. `land-wait M` waits until a promotion covers the merge commit M, for `land.sh`.
-`promote_wait.py` holds it, and its docstring states the three outcomes and what each reads.
+LAND-WAIT. `land-wait M` waits until a promotion covers merge commit M, for `land.sh`
+(`promote_wait.py`, whose docstring states the three outcomes and what each reads).
 
-CHECK-BUNDLE. `check-bundle DIR` runs the publish census over the bundle the render job built,
-before anything is pushed. `published-tags` prints the tags the bundle publishes, one per line,
-for the render step's `--role` list. Both read the checkout alone, and `bundle_census.py`
-holds them.
+CHECK-BUNDLE. `check-bundle DIR` runs the publish census before any push, and `published-tags`
+prints the render step's `--role` list. Both read the checkout alone (`bundle_census.py`).
 
 Exit codes:
   0   decide: promote, held or current. prune: every read, delete and verify succeeded.
@@ -70,8 +67,8 @@ Exit codes:
   64  usage error
   75  land-wait: gave-up, the wait reached its timeout.
 
-Every GitHub and GHCR call goes through `forge.py`. This module imports no HTTP library and
-starts no subprocess (scripts/deploy_tools/tests/test_promote_forge_boundary.py).
+Every GitHub and GHCR call goes through `forge.py`, and this module starts no subprocess
+(scripts/deploy_tools/tests/test_promote_forge_boundary.py).
 
 Run: uv run python scripts/deploy_tools/promote.py decide --trigger <sha>
      uv run python scripts/deploy_tools/promote.py prune
@@ -111,8 +108,8 @@ from artifact_retention import PROD_TAG
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib.deploy_git import ci_verdict
 
-# The deployer's required check-run names. Named once, as one literal, so a `git grep` for the
-# path or the key finds this reader when the key moves (H7.2e moves it to group_vars).
+# The deployer's required check-run names, as one literal so a `git grep` for the path or the
+# key finds this reader when H7.2e moves the key to group_vars.
 CI_CONTEXTS_SOURCE = "ansible/roles/setup/gitops_deploy/defaults/main.yml"
 CI_CONTEXTS_KEY = "gitops_deploy_ci_contexts"
 
@@ -124,10 +121,9 @@ MASTER_REF = "origin/master"
 # operator rules on that, in a one-line PR of its own. Every D2 step assumes it is off.
 REVERT_RULE = False
 
-# How many commits a first run's walk examines, newest first. Without `prod` the walk would
-# otherwise reach master's root, at one `HEAD` and up to one check-runs read per commit. At about
-# 124 merges a day (gitops_deploy_ci_ancestor_walk_max's comment) 50 is several hours of merges,
-# and `publish` pushes each one, so the commit that triggered the run is well inside it.
+# How many commits a first run's walk examines, newest first, so a walk with no `prod` stops
+# short of master's root. At about 124 merges a day (gitops_deploy_ci_ancestor_walk_max's
+# comment) 50 is several hours of merges, so the commit that triggered the run is inside it.
 FIRST_RUN_WALK_MAX = 50
 
 # `flux push artifact --revision master@sha1:<sha>` writes this annotation on the manifest.
@@ -184,6 +180,7 @@ class Decision:
         digest: the digest of `sha-<T>` for `promote`, empty otherwise.
         reason: why, for every verdict but `promote`.
         prior: `prod`'s commit before the move, empty on the first run.
+        prior_digest: `prod`'s digest before the move, empty on the first run.
         reset_digest: what a failed verification resets `prod` to: `last-good`'s digest,
             or `prod`'s when `seed` tags it `last-good` first. Empty on the first run.
         seed: `last-good` is absent, so the `tag` job tags `prod`'s digest with it first.
@@ -196,6 +193,7 @@ class Decision:
     digest: str = ""
     reason: str = ""
     prior: str = ""
+    prior_digest: str = ""
     reset_digest: str = ""
     seed: bool = False
     clears_hold: bool = False
@@ -321,6 +319,7 @@ def _promotion(
         target=target,
         digest=digest,
         prior=prod or "",
+        prior_digest=prod_digest or "",
         reset_digest=last_good or prod_digest or "",
         seed=seed,
         clears_hold=held is not None,
@@ -453,6 +452,7 @@ def report(trigger: str, decision: Decision, github_output: str | None) -> int:
                 f"target={decision.target}\n"
                 f"digest={decision.digest}\n"
                 f"prior={decision.prior}\n"
+                f"prior_digest={decision.prior_digest}\n"
                 f"reset_digest={decision.reset_digest}\n"
                 f"seed={str(decision.seed).lower()}\n"
                 f"clears_hold={str(decision.clears_hold).lower()}\n"

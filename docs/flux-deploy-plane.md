@@ -316,15 +316,22 @@ the variable with `prod`'s live digest and pages on a mismatch.
 **The first verified run seeds `last-good`.** When the tag is absent, `tag` points it at
 `prod`'s digest before it moves `prod`, so a failed verification has somewhere to reset to.
 
-**A verification in flight blocks the next one.** `prod` and `last-good` name the same digest
-except between a run's `tag` and its `settle`. While they differ, `decide` waits, re-reading
-`DEPLOY_HOLD` each 30 seconds, and gives up as `current` after 40 minutes. `verify` and
-`settle` join no concurrency group: GitHub keeps one pending job per group and a newer one
-cancels it, so a pending `settle` could be dropped with its hold unwritten. Without the wait,
-a second run could move `prod` past a T that `verify` still waits on, Flux would never post T's
-statuses, and the timeout would write a false hold. A run that never settles leaves the two
-apart, and every later run reports `current`. Slice D2.6d's `PromotionStalled` alert pages
-that stall.
+**A verification in flight blocks the next one.** Two checks enforce it:
+
+- `prod` and `last-good` name the same digest except between a run's `tag` and its `settle`.
+  While they differ, `decide` waits, re-reading `DEPLOY_HOLD` each 30 seconds, and gives up as
+  `current` after 40 minutes.
+- `tag` moves `prod` only while it still names the digest `decide` read. Two runs can decide on
+  the same `prod` when the second run's `promote` job runs while the first run's `tag` waits
+  on the group. The first `tag` moves `prod`, and the second finds it moved, logs a warning,
+  and moves and verifies nothing. Its commit waits for the next run.
+
+`verify` and `settle` join no concurrency group: GitHub keeps one pending job per group and a
+newer one cancels it, so a pending `settle` could be dropped with its hold unwritten. Without
+the two checks, a second run could move `prod` past a T that `verify` still waits on, Flux
+would never post T's statuses, and the timeout would write a false hold. A run that never
+settles leaves `prod` and `last-good` apart, and every later run reports `current`. Slice
+D2.6d's `PromotionStalled` alert pages that stall.
 
 **Clearing a hold** is **operator-only**: set `DEPLOY_HOLD` back to `none` (*Publishing and
 promotion*), then dispatch `promote` with `-f sha=<master tip>`. `decide` promotes the newest

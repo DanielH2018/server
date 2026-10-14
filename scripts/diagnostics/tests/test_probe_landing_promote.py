@@ -65,13 +65,13 @@ def test_both_hold_lines_print_whatever_each_reads(
     assert lines[HOLD_SHA] in text and lines[DEPLOY_HOLD] in text
 
 
-@pytest.mark.parametrize("dropped", [HOLD_SHA, DEPLOY_HOLD])
-def test_a_view_that_drops_either_hold_line_is_flagged(dropped):
-    """The red half: a text view missing one hold line fails the check the green half makes."""
-    text = landing.format_text({**_snap(HELD), "claims": None})
-    kept = "\n".join(line for line in text.splitlines() if not line.startswith(dropped))
-    assert all(name in text for name in (HOLD_SHA, DEPLOY_HOLD))
-    assert not all(name in kept for name in (HOLD_SHA, DEPLOY_HOLD))
+def test_both_hold_lines_print_when_neither_hold_could_be_read():
+    """A line never goes missing: an unread hold prints `unknown`, not nothing."""
+    snap = {**_snap(), "hold": None, "promote": None, "claims": None}
+    lines = _lines(snap)
+    assert lines[HOLD_SHA].endswith(": unknown")
+    assert lines[DEPLOY_HOLD].endswith(": unknown")
+    assert lines[HOLD_SHA] in landing.format_text(snap)
 
 
 def test_prod_equal_to_last_good_is_reported_when_both_digests_match():

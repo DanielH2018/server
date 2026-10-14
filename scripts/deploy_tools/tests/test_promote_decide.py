@@ -25,6 +25,7 @@ NOTHING_MOVES = {
     "target": "",
     "digest": "",
     "prior": "",
+    "prior_digest": "",
     "reset_digest": "",
     "seed": "false",
     "clears_hold": "false",
