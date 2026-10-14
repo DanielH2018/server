@@ -30,6 +30,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import json
+from collections.abc import Collection
 from pathlib import Path
 
 from deploy_tools.narrow_lib.broad import context_for
@@ -161,8 +162,11 @@ def smoke_caller(
 
 
 def expand_shared_tags(
-    tags: list[str], declared: set[str], callers: dict[str, set[str]]
-) -> tuple[list[str], dict[str, list[str]]]:
+    tags: list[str],
+    declared: set[str],
+    callers: dict[str, set[str]],
+    skip: Collection[str] = (),
+) -> tuple[list[str], dict[str, list[str]], dict[str, list[str]]]:
     """`tags` with each shared-role name replaced by the tags of every role that runs it.
 
     A shared role runs with its caller's variables (`manifests_service`, the claims, the
@@ -173,22 +177,29 @@ def expand_shared_tags(
         tags: the tags as typed, in order.
         declared: every name `containers_list` declares as a tag.
         callers: the role-caller graph, as `lib.k8s_roles.role_callers` walks it.
+        skip: the tags no Ansible path may deploy (`deploy_tags.flux_owned`). An expansion
+            leaves each out. A typed one stays, so that `deploy.sh` refuses it by name.
 
     Returns:
-        The expanded list, in typed order and de-duplicated, and for each name that was
-        replaced the sorted tags it became. A name that is neither declared nor run by any
-        declared role stays as typed, so `deploy_tags.validate` refuses it by name.
+        The expanded list, in typed order and de-duplicated. For each name that was replaced,
+        the sorted tags it became. For each name whose callers `skip` thinned, the sorted
+        callers it left out. A name whose every caller is in `skip` becomes no tag at all, so
+        the list can come back empty. A name that is neither declared nor run by any declared
+        role stays as typed, so `deploy_tags.validate` refuses it by name.
     """
     out: list[str] = []
     replaced: dict[str, list[str]] = {}
+    dropped: dict[str, list[str]] = {}
     for tag in tags:
         reached = [] if tag in declared else sorted(caller_tags(tag, declared, callers))
         if reached:
-            replaced[tag] = reached
-        for name in reached or [tag]:
+            replaced[tag] = [name for name in reached if name not in skip]
+            if left_out := [name for name in reached if name in skip]:
+                dropped[tag] = left_out
+        for name in replaced[tag] if reached else [tag]:
             if name not in out:
                 out.append(name)
-    return out, replaced
+    return out, replaced, dropped
 
 
 # DECIDED: every caller counts, including one whose deploy writes no release record (#3057).

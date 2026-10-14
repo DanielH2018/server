@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import sys
+from collections.abc import Callable
 from pathlib import Path, PurePath
 
 from lib.proc_testing import fake_bin, path_with
@@ -234,13 +235,16 @@ def run_front_half(
     *,
     stale: int = 0,
     validate: int = 0,
-    changed: tuple[int, str] = (0, ""),
+    changed: tuple[int, str] | Callable = (0, ""),
 ) -> tuple[int | None, list[tuple]]:
     """Run `deploy_run.run(argv)` in `repo` with each helper replaced by a recorder.
 
     The front half calls its helpers in process, so a stubbed `uv` cannot answer for them:
     `deploy_run.Tools` is the seam that injects their verdicts instead. The argument passes, the `--at`
     resolution and the order of the gates are the real code, run against a real repo.
+
+    `changed` is the `--changed` derivation's verdict, or a callable that takes the plan and
+    returns one, such as `deploy_run.run_changed` to run the real derivation.
 
     Returns the refusal code (None when the run reached its exec) and the calls in order:
     `("staleness", tags, at_sha)`, `("validate", tags, at_sha)`, `("changed", ref)`,
@@ -264,7 +268,7 @@ def run_front_half(
 
     def derive(plan):
         calls.append(("changed", plan.changed_ref))
-        return changed
+        return changed(plan) if callable(changed) else changed
 
     def fake_exec(target):
         calls.append(("deploy", target))

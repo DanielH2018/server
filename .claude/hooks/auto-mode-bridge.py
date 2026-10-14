@@ -70,7 +70,7 @@ MAX_RETRIES_PER_SESSION = 2
 # table -- the prose is `scripts/lib/exit_codes.py`'s and the wrapper prints it. The hook
 # cannot import that module (stdlib-only, on the per-command hot path under `uv run
 # --no-sync`), so `tests/test_auto_mode_bridge.py` holds these against it.
-_REFUSALS = frozenset({2, 3, 4, 75, 76, 77, 78, 79})
+_REFUSALS = frozenset({2, 3, 4, 5, 75, 76, 77, 78, 79})
 _PLAYBOOK_FAILED = 20
 
 _DEPLOY_CMD = re.compile(r"(?:^|[\s;&|])(?:\./|/[^\s]*/)?scripts/deploy\.sh(?:\s|$)")

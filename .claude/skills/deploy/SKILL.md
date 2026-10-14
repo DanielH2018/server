@@ -185,6 +185,12 @@ on those rather than on the number. What the codes mean as a group is
 and a fact an operator needs at a failed run belongs in `CONTRACTS` in `scripts/lib/exit_codes.py`,
 not in this skill: a copy here drifted once already (#2853).
 
+**A tag Flux applies is never yours to deploy.** When its `containers_list` entry carries
+`owner`, `deploy.sh --tags` refuses the whole list with exit 5, and no flag bypasses that. Its
+change lands through `promote` once it merges; drop the tag to deploy the rest. `--changed` and
+a shared role's expansion leave such a tag out and name it. `--list-services` marks each one on
+stderr.
+
 ## What `--tags`, `--at` and `--detach` change
 
 **With `--tags`, only a commit reaching those tags makes the tree stale.** The staleness gate

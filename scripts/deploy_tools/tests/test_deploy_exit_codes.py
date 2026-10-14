@@ -227,6 +227,13 @@ def test_a_successful_run_prints_the_verdict_and_no_meaning(capsys):
     assert err == "DEPLOY-VERDICT: deployed (no arguments)\n"
 
 
+def test_a_zero_that_deployed_nothing_is_not_called_deployed_is_flagged(capsys):
+    """A gate that left no tag exits 0; `deployed` would be a green over nothing."""
+    deploy_run.report(ec.DEPLOY_OK, ["--tags", "manifests"], nothing=True)
+    err = capsys.readouterr().err
+    assert err == "DEPLOY-VERDICT: nothing-to-deploy (--tags manifests)\n"
+
+
 def test_a_code_outside_the_contract_prints_nothing_rather_than_a_wrong_meaning(capsys):
     """200 is not deploy.sh's; inventing a meaning for it is worse than the bare number."""
     deploy_run.report(200, ["--tags", "sonarr"])

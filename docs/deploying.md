@@ -78,6 +78,16 @@ pass-through argument ansible-playbook's own parser refuses, which the wrapper a
 before it takes the lock. `land.sh` exits 64 on a bad argument too, so one number means "you
 typed it wrong" for both entry points (#3024).
 
+`DEPLOY_FLUX_OWNED` (5) means the tag is not Ansible's to deploy at all. Its `containers_list`
+entry carries `owner`, so Flux applies it through `promote` and no Ansible path may. The
+wrapper refuses the whole `--tags` list, before any lock, under `--check` and `--dry-run` too,
+and `--skip-tag-check` does not bypass it. Merge the change and let `promote` publish it, or
+drop the tag to deploy the rest. The other entry points leave such a tag out instead of
+refusing: `--changed` drops it from the derived list and names it, and a shared role's
+expansion (`--tags manifests`) drops it from the callers. A list that a drop empties deploys
+nothing and exits 0, and its verdict line reads `nothing-to-deploy` rather than `deployed`.
+`--list-services` names each such tag on stderr.
+
 Being *ahead* of master is normal branch work and is never refused.
 
 ## Checking a change without deploying it
