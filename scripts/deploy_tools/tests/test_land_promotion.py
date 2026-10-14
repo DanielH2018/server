@@ -7,12 +7,14 @@ test_promote_land_wait.py.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_promotion.py
 """
 
+import subprocess
+
 import pytest
 from dataclasses import replace
 
 from _land_fakes import MERGE_SHA, Fakes
-from deploy_tools.land_lib import merge
-from deploy_tools.land_lib.outcome import Outcome
+from deploy_tools.land_lib import deploy, land_flux, merge
+from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Outcome
 from promote_wait import WaitResult
 
 HEAD = "c" * 40
@@ -82,6 +84,8 @@ def test_a_promotion_timeout_is_deferred_with_promote_timeout(land_run):
     rc, out, _, _, logline = land_run([], _fakes(land_wait=[timed_out]))
     assert rc == 75 and "VERDICT: deferred" in out
     assert "cause=promote-timeout" in logline
+    # The note `land_probe` reads to report this deferral as `gave-up`, a resume point.
+    assert PROMOTE_TIMEOUT_NOTE in out
 
 
 def test_an_unreadable_ownership_map_deploys_nothing(land_run):
@@ -179,3 +183,44 @@ def test_a_handback_refused_through_land_sh_never_reaches_deploy_sh(land_run):
     assert rc == 1 and "VERDICT: refused" in out
     assert "deploy" not in _names(calls)
     assert not [c for c in calls if c[0] == "gh"]
+
+
+def test_the_deploy_end_is_stamped_before_the_promotion_wait(landing):
+    """The re-gate reads a deploy started after this stamp as a later one, so a stamp taken
+    after a 24-minute wait would hide another session's redeploy of the Ansible-owned tag."""
+    ln, calls = landing(_fakes(derived=(["sonarr", "bento-pdf"], "pr")))
+    ln.merge_sha = MERGE_SHA
+    ln.resolved_tags = ["sonarr", "bento-pdf"]
+    ln.tools.wall_clock = lambda: calls.append(("wall_clock", (), {})) or 5.0
+    deploy.deploy_phase(ln)
+    names = _names(calls)
+    assert names.index("deploy") < names.index("wall_clock") < names.index("land_wait")
+
+
+# -- the Kustomization read ------------------------------------------------------------------
+
+
+def _kubectl_answering(rc: int, stderr: str = ""):
+    """A `lib.kubectl.kubectl` that answers `rc` and `stderr` for every read."""
+
+    def kubectl(cluster, *args, timeout):
+        return subprocess.CompletedProcess(args, rc, "", stderr)
+
+    return kubectl
+
+
+def test_a_kustomization_kubectl_lists_exists():
+    assert land_flux.kustomization_exists("bento-pdf", _kubectl_answering(0)) is True
+
+
+def test_a_not_found_kustomization_does_not_exist():
+    stderr = 'Error from server (NotFound): kustomizations "bento-pdf" not found'
+    run = _kubectl_answering(1, stderr)
+    assert land_flux.kustomization_exists("bento-pdf", run) is False
+
+
+def test_a_forbidden_kustomization_read_is_unreadable():
+    stderr = "Error from server (Forbidden): kustomizations is forbidden"
+    run = _kubectl_answering(1, stderr)
+    with pytest.raises(land_flux.KustomizationUnreadable, match="Forbidden"):
+        land_flux.kustomization_exists("bento-pdf", run)

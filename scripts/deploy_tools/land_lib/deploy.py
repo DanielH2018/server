@@ -460,10 +460,13 @@ def deploy_phase(ln: Landing) -> None:
         # after `deploy.sh --at`, and the tick is kicked to converge the primary checkout.
         ln.deployed_at = ln.merge_sha
         tick.kick_tick(ln)
+    # Stamped before the promotion wait: the re-gate reads a later deploy of these tags as one
+    # that started after deploy.sh returned, and the wait can last 24 minutes.
+    ln.deploy_ended_at = t.wall_clock()
     if ln.owned_tags:
         promotion.wait_on_promotion(ln)
+    # Step 5's own time on the board, the promotion wait included.
     ln.ledger.t_deploy = t.clock()
-    ln.deploy_ended_at = t.wall_clock()
 
 
 def _deploy_resolved(ln: Landing) -> None:

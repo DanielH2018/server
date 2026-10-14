@@ -218,6 +218,17 @@ ABANDONED_WATCH_NOTE = (
 )
 
 
+# What a `deferred` with cause `promote-timeout` means, printed by `promotion.wait_on_promotion`.
+# The ordinary deferral is a tick that will cross the PR on its own. This one may not end on its
+# own: a publish refusal leaves no `sha-<commit>` tag to promote. `land_probe` reads the note and
+# reports the landing as `gave-up`, a resume point, as it does for ABANDONED_WATCH_NOTE.
+PROMOTE_TIMEOUT_NOTE = (
+    "  No promotion covered this merge commit in time. This is NOT the ordinary deferral: a "
+    "publish refusal leaves no sha-<commit> tag to promote.\n"
+    "  Read the `promote` workflow's failed `publish` jobs first, then re-run land.sh."
+)
+
+
 def unrecorded_apply_note(behind_since: str | None) -> str:
     """What "no broad apply covers this PR" means, given whether the tick is still behind.
 

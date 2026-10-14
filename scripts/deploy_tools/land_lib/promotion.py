@@ -19,8 +19,9 @@ map to a landing's words:
 | deploy-failed | `deploy-failed` | `promote-held` | 1 |
 | gave-up | `deferred` | `promote-timeout` | 75 |
 
-`gave-up` reads as `deferred` rather than as a failure: the promotion applies this PR itself,
-and a later one may still cover it, as a tick that has not crossed origin may.
+`gave-up` keeps the closed verdict set: it prints `deferred` beside `PROMOTE_TIMEOUT_NOTE`, and
+`land_probe` reads the note and reports the landing as `gave-up`, a resume point, rather than as
+the ordinary deferral that clears on its own.
 """
 
 import subprocess
@@ -30,7 +31,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Landing
-from deploy_tools.land_lib.outcome import Cause, Verdict, say
+from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Cause, Verdict, say
 
 
 def published(ln: Landing) -> list[str]:
@@ -88,6 +89,7 @@ def wait_on_promotion(ln: Landing) -> None:
             1,
             f"PR #{pr}, {sha} — DEPLOY_HOLD holds promotion, so {tags} is not applied",
         )
+    print(PROMOTE_TIMEOUT_NOTE)
     ln.ledger.cause = Cause.PROMOTE_TIMEOUT
     ln.finish(
         Verdict.DEFERRED,

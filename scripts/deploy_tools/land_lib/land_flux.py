@@ -49,14 +49,18 @@ class KustomizationUnreadable(RuntimeError):
     """The read-only kubectl could not say whether a Kustomization exists."""
 
 
-def kustomization_exists(name: str) -> bool:
+def kustomization_exists(
+    name: str, run: Callable[..., subprocess.CompletedProcess] = kubectl.kubectl
+) -> bool:
     """Whether the Kustomization `name` exists in flux-system, read with the read-only kubectl.
+
+    `run` is `lib.kubectl.kubectl`, or a fake of it.
 
     Raises:
         KustomizationUnreadable: kubectl failed for any reason but `NotFound`.
     """
     try:
-        proc = kubectl.kubectl(
+        proc = run(
             "prod",
             "get",
             KUSTOMIZATIONS,
