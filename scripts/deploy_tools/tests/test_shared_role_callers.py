@@ -27,7 +27,7 @@ def test_caller_tags_follows_a_shared_caller_and_skips_a_dead_end():
 
 
 def test_expand_shared_tags_keeps_order_and_leaves_an_unknown_name_as_typed():
-    tags, replaced = shared_role_callers.expand_shared_tags(
+    tags, replaced, _ = shared_role_callers.expand_shared_tags(
         ["web", "helper", "typo"], {"web", "api"}, {"helper": {"api", "web"}}
     )
     assert tags == ["web", "api", "typo"]

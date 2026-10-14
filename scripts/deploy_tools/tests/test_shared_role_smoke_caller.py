@@ -125,7 +125,7 @@ def test_the_smoke_set_cannot_widen_past_the_digest_provable_roles():
 def test_a_hand_typed_tags_run_still_expands_to_every_caller():
     """The asymmetry #2717 decided: `deploy.sh --tags manifests` is the operator asking."""
     declared = land_shared.declared_tags()
-    tags, replaced = shared_role_callers.expand_shared_tags(
+    tags, replaced, _ = shared_role_callers.expand_shared_tags(
         ["manifests"], declared, land_shared.role_callers()
     )
     assert set(tags) == _every_caller("manifests")

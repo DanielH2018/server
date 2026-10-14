@@ -4,6 +4,8 @@ Status: IN PROGRESS
 
 D2.1a, the flag's script reader and the narrowing: [#4956](https://github.com/DanielH2018/server/pull/4956).
 
+D2.1b, `deploy.sh` refuses, drops and marks: [#4957](https://github.com/DanielH2018/server/issues/4957).
+
 D2.1d, the Ansible play skips a non-Ansible-owned entry:
 [#4958](https://github.com/DanielH2018/server/pull/4958).
 

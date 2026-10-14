@@ -21,12 +21,8 @@ WHAT COUNTS AS VALID. The union of:
   - `always`, which Ansible treats specially
 
 Used by scripts/deploy.sh: its front half `deploy_lib/run.py` imports `validate` and `changed`,
-and its locked half runs `list`. `list`'s flat sorted output is meant to be stable enough to back a
-shell completion script one day (so the completion list and this validator couldn't disagree —
-they'd be one function) — no such completion script exists yet, here or in the chezmoi dotfiles
-repo that owns this machine's shell config, so today that's just the intent `list`'s shape was
-chosen to keep open, not something wired up. `describe` is the separate human-facing view; `list`
-stays flat and one-per-line for that possible future consumer (see test_deploy_tags.py).
+and its locked half and `deploy_ui` parse `list`'s flat stdout (see test_deploy_tags.py).
+`describe` is the human view. `owners.py` says what `changed` does with a tag Flux applies.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_tags.py
 """
@@ -47,6 +43,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
+from deploy_tools.deploy_lib import owners
 from deploy_tools.deploy_lib.messages import PROG
 from lib.cli_help import ArgumentParser, error, warn
 from lib.git import git, git_stdout
@@ -481,7 +478,10 @@ def changed(
             prog=PROG,
         )
 
-    tags, shared = split_shared_roles(cs.k8s | cs.services)
+    # Before the split, so a shared role beside a list the drop empties still exits 3.
+    derived = owners.drop_owned(cs.k8s | cs.services, cwd, "--changed")
+    host_vars = cwd / HOST_VARS.relative_to(REPO)
+    tags, shared = split_shared_roles(derived, host_vars)
     if shared:
         # Emitting these as tags makes deploy.sh refuse the whole list (exit 2), so the
         # shared roles leave the tag list and become an instruction that can actually
@@ -489,7 +489,7 @@ def changed(
         warn(
             f"--changed: {', '.join(shared)} "
             f"{'is a shared role' if len(shared) == 1 else 'are shared roles'} with no "
-            f"containers_list entry. {k8s_remediation(set(shared), service_tags())}",
+            f"containers_list entry. {k8s_remediation(set(shared), service_tags(host_vars))}",
             prog=PROG,
         )
         if not tags:

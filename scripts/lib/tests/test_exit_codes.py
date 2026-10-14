@@ -28,6 +28,7 @@ def test_the_no_verdict_set_is_exactly_the_refusals_by_name():
         ec.DEPLOY_TAG_MISS,
         ec.DEPLOY_BROAD,
         ec.DEPLOY_STALE,
+        ec.DEPLOY_FLUX_OWNED,
         ec.DEPLOY_LOCK_BUSY,
         ec.DEPLOY_LOCK_UNAVAILABLE,
         ec.DEPLOY_SNAPSHOT_FAILED,
@@ -42,6 +43,7 @@ def test_the_no_verdict_set_is_exactly_the_refusals_by_name():
         "DEPLOY_TAG_MISS",
         "DEPLOY_BROAD",
         "DEPLOY_STALE",
+        "DEPLOY_FLUX_OWNED",
         "DEPLOY_LOCK_BUSY",
         "DEPLOY_LOCK_UNAVAILABLE",
         "DEPLOY_SNAPSHOT_FAILED",
@@ -71,6 +73,9 @@ def test_the_front_half_refuses_with_the_named_codes():
 
     assert deploy_run.DEPLOY_TAG_MISS is ec.DEPLOY_TAG_MISS
     assert deploy_run.DEPLOY_STALE is ec.DEPLOY_STALE
+    from deploy_tools.deploy_lib import owners
+
+    assert owners.DEPLOY_FLUX_OWNED is ec.DEPLOY_FLUX_OWNED
     assert deploy_run.DEPLOY_BAD_FLAGS is ec.DEPLOY_BAD_FLAGS
     from deploy_tools.deploy_lib import under_locks as locked
 

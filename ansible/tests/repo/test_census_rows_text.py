@@ -13,6 +13,7 @@ from functools import cache
 from pathlib import PurePosixPath
 
 import pytest
+from _deploy_sh_callers_row import DEPLOY_SH_CALLERS
 from _helpers import REPO, discover_docs
 from deploy_tools.land_lib import policy
 from lib import yaml_fast
@@ -323,6 +324,7 @@ ROWS = (
         min_matches=500,
         must_find=frozenset({"scripts/lib/yaml_fast.py", "ansible/tests/_helpers.py"}),
     ),
+    DEPLOY_SH_CALLERS,
     Census(
         name="host-package-units-are-named-homelab",
         reason=(

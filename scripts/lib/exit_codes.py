@@ -47,7 +47,7 @@ USAGE_ERROR = 64
 TEMP_FAIL = 75
 
 # -- scripts/deploy.sh ------------------------------------------------------------------ The
-# wrapper's own contract: 2, 3, 4 and 64 are refused by its front half `deploy_lib/run.py`, 20 and
+# wrapper's own contract: 2, 3, 4, 5 and 64 are refused by its front half `deploy_lib/run.py`, 20 and
 # 75-79 by its locked half `deploy_lib/under_locks.py` (and `deploy_lib/detach_run.py`).
 # `DEPLOY_SH_NO_VERDICT` below is the set that means NOTHING was deployed, and every member is a
 # resume point. Read the frozenset rather than a list in prose. 20 is the inverse -- the
@@ -60,6 +60,7 @@ DEPLOY_OK = OK
 DEPLOY_TAG_MISS = 2
 DEPLOY_BROAD = 3
 DEPLOY_STALE = 4
+DEPLOY_FLUX_OWNED = 5
 DEPLOY_PLAYBOOK_FAILED = 20
 DEPLOY_BAD_FLAGS = USAGE_ERROR
 DEPLOY_LOCK_BUSY = TEMP_FAIL
@@ -90,6 +91,7 @@ DEPLOY_SH_NO_VERDICT = frozenset(
         DEPLOY_TAG_MISS,
         DEPLOY_BROAD,
         DEPLOY_STALE,
+        DEPLOY_FLUX_OWNED,
         DEPLOY_LOCK_BUSY,
         DEPLOY_LOCK_UNAVAILABLE,
         DEPLOY_SNAPSHOT_FAILED,
@@ -325,6 +327,14 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "Staleness is decided before --tags is validated, so a stale tree carrying a tag "
             "it does not know yet (a new role's first landing) reports this, not a tag miss.",
             verdict="stale",
+        ),
+        _c(
+            DEPLOY_FLUX_OWNED,
+            "DEPLOY_FLUX_OWNED",
+            "the tag is applied by Flux through `promote`, so NOTHING was deployed.",
+            "Its containers_list entry carries `owner`, so no Ansible path may apply it. Merge "
+            "the change and let `promote` publish it; drop the tag to deploy the rest.",
+            verdict="flux-owned",
         ),
         _c(
             DEPLOY_PLAYBOOK_FAILED,
