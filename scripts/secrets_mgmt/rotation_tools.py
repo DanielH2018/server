@@ -207,6 +207,16 @@ def run_deploy(tags: list[str], *, run: Callable = subprocess.run) -> int:
     return run(cmd, cwd=REPO).returncode
 
 
+def tree_owners() -> dict[str, str]:
+    """Each k8s deploy tag whose `containers_list` entry carries `owner`, to that value.
+
+    No Ansible path may deploy such a tag: Flux applies it, or it is mid-handback.
+    """
+    from lib.k8s_roles import tag_owners
+
+    return tag_owners()
+
+
 # The rotation cadence per tier, and the default `secret_registry.py` seeds, syncs and audits with.
 # `secret_rotation.py` assigns the same table AS A LITERAL, because
 # `scripts/docs/gen_doc_fragments.py` reads it out of THAT file with `ast.literal_eval` and a
@@ -238,4 +248,5 @@ class RotationTools:
     sops_set: Callable[[str, str], None] = sops_set
     kuma_push: Callable[[str, bool, str], None] = kuma_push
     deploy: Callable[[list[str]], int] = run_deploy
+    owners: Callable[[], Mapping[str, str]] = tree_owners
     tier_days: Mapping[str, int | None] = DEFAULT_TIER_DAYS

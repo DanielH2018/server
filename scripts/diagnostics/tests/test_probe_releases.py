@@ -14,6 +14,7 @@ import json
 import re
 
 from diagnostics.probe_lib import releases as pr
+from diagnostics.probe_lib import releases_consumers, releases_retired
 
 from _release_fixtures import _record
 
@@ -268,8 +269,15 @@ def test_shared_k8s_roles_matches_the_known_set():
 
 def test_consumes_manifests_agrees_with_the_real_tree():
     """sonarr applies manifests; volume-snapshot, whose tasks drive kubectl directly, does not."""
-    assert pr.consumes_manifests(REPO / "ansible/roles/k8s/sonarr") is True
-    assert pr.consumes_manifests(REPO / "ansible/roles/k8s/volume-snapshot") is False
+    assert (
+        releases_consumers.consumes_manifests(REPO / "ansible/roles/k8s/sonarr") is True
+    )
+    assert (
+        releases_consumers.consumes_manifests(
+            REPO / "ansible/roles/k8s/volume-snapshot"
+        )
+        is False
+    )
 
 
 def test_manifest_affecting_shared_roles_keeps_the_byte_suppliers():
@@ -323,3 +331,53 @@ def test_supplies_manifest_bytes_is_flagged_for_a_templates_or_files_role(tmp_pa
     assert pr._supplies_manifest_bytes(with_templates) is True
     assert pr._supplies_manifest_bytes(with_files) is True
     assert pr._supplies_manifest_bytes(renderer) is True
+
+
+# ── --stale-only skips a tag the tree does not leave to Ansible (D2.4b) ───────────────────
+#
+# `run_releases --stale-only` drops such a record before both verdicts, and `missing_services`
+# never lists the tag, since no Ansible deploy writes it a record.
+
+_BENTO = "  - name: bento-pdf\n    platform: k8s\n"
+
+
+def _box(tmp_path, owner_line):
+    host_vars = tmp_path / "host_vars"
+    host_vars.mkdir()
+    (host_vars / "daniel-box.yml").write_text(
+        "containers_list:\n" + _BENTO + owner_line
+    )
+    return host_vars
+
+
+def test_stale_only_over_an_ansible_owned_record_is_clean(tmp_path):
+    host_vars = _box(tmp_path, "")
+    unreadable = {"error": "truncated", "path": "x.json"}
+    records = releases_retired.drop_owned(
+        [_record("bento-pdf"), unreadable], host_vars / "daniel-box.yml"
+    )
+    assert [r.get("service") for r in records] == ["bento-pdf", None]
+
+
+def test_stale_only_over_a_flux_owned_record_is_flagged(tmp_path):
+    host_vars = _box(tmp_path, "    owner: flux\n")
+    unreadable = {"error": "truncated", "path": "x.json"}
+    records = releases_retired.drop_owned(
+        [_record("bento-pdf"), unreadable], host_vars / "daniel-box.yml"
+    )
+    assert [r.get("service") for r in records] == [None], "the unreadable record stays"
+
+
+def test_a_record_less_ansible_owned_service_is_missing_is_clean(tmp_path):
+    roles_dir = tmp_path / "roles"
+    _role(roles_dir, "bento-pdf", consumes_manifests=True)
+    host_vars = _box(tmp_path, "")
+    missing = pr.missing_services([], host_vars=host_vars, k8s_roles_dir=roles_dir)
+    assert missing == ["bento-pdf"]
+
+
+def test_a_record_less_flux_owned_service_is_missing_is_flagged(tmp_path):
+    roles_dir = tmp_path / "roles"
+    _role(roles_dir, "bento-pdf", consumes_manifests=True)
+    host_vars = _box(tmp_path, "    owner: flux\n")
+    assert pr.missing_services([], host_vars=host_vars, k8s_roles_dir=roles_dir) == []

@@ -190,3 +190,49 @@ def test_the_not_rolled_line_carries_no_skip_marker():
     )
     for line in text.splitlines():
         assert not any(m in line for m in notify_mod.NOT_APPLICABLE_MARKERS), line
+
+
+# --- a tag that is not Ansible-owned in the tree (D2.4b) ----------------------------------
+#
+# Once Flux applies a tag, no Ansible deploy writes it a newer release record, and the last one
+# Ansible wrote would expect a restart that never comes. The gate ignores the record when the
+# tree marks the tag `owner:`. It reads the tree, never the workload's Flux label: after a
+# handback the label stays on objects Ansible applies again.
+
+
+def _gate(tmp_path, owner_line):
+    """The gate's verdict on a stale record that expects a restart, and a workload that
+    carries Flux's label and last rolled a day before that record's apply."""
+    host_vars = tmp_path / "daniel-box.yml"
+    host_vars.write_text(
+        "containers_list:\n  - name: bento-pdf\n    platform: k8s\n" + owner_line
+    )
+    (tmp_path / "bento-pdf.json").write_text(
+        json.dumps(_record([{"name": "bento-pdf", "kind": "deploy", "restart": True}]))
+    )
+    workload = _deploy(
+        restarted_at=(APPLIED - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
+    workload["metadata"]["labels"] = {"kustomize.toolkit.fluxcd.io/name": "bento-pdf"}
+    # The chain `run_health` runs: the record read, its expectation, then the verdict.
+    record = health._release_record("bento-pdf", tmp_path, host_vars)
+    return health.format_role_health(
+        "bento-pdf",
+        _checked(workload, "bento-pdf"),
+        NOW,
+        health.release_expected_restarts(record),
+    )
+
+
+def test_a_stale_record_for_a_flux_owned_tag_is_clean(tmp_path):
+    text, code = _gate(tmp_path, "    owner: flux\n")
+    assert code == 0, text
+    assert "NOT ROLLED" not in text
+
+
+def test_a_stale_record_for_an_ansible_owned_tag_with_a_flux_label_is_flagged(
+    tmp_path,
+):
+    text, code = _gate(tmp_path, "")
+    assert code == 1
+    assert "NOT ROLLED" in text
