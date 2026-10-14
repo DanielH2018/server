@@ -155,7 +155,10 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
   that file. `probe_lib/core.py:prom_endpoint` and `core.py:k8s_endpoint` go through
   `core.py:sops_extract('domain')`, which needs an age key. `probe.py metric` and
   `probe.py monitors` use them (`probe_lib/monitors.py:run_monitors`,
-  `probe_lib/kuma_live.py`), so neither runs as the `claude` user.
+  `probe_lib/kuma_live.py`), so neither runs as the `claude` user. The operator ruled on
+  2026-10-14 that `domain` is published. Domain PR 1 of the *Publish `domain`* item in R2's
+  *Steps, as PRs* makes both functions read the inventory value, so this age-key blocker
+  goes away once domain PR 1 lands.
 - **The CI gate is one context.** `ci.yml`'s `prek` job carries the required context
   `prek (lint + validate + tests + secrets)`, and the deployer reads the same name from
   `gitops_deploy_ci_contexts`. `ansible/tests/repo/test_every_ci_job_is_gated.py` fails a
@@ -2467,8 +2470,9 @@ reviewer's suggested remedy, the reason is given.
 - **H3-R1-07 (high) The land wait polls a loopback that answers on one node only.** Fixed.
   The wait queries loopback, then `observability_prometheus_cluster_ip`, the otelq order.
   `prom_endpoint`, the transport `probe.py metric` uses, was rejected because it calls
-  `core.py:sops_extract('domain')`, and the agent user has no age key. A refused transport
-  reads as not settled, with its own message and test.
+  `core.py:sops_extract('domain')`, and the agent user has no age key. The operator's ruling
+  of 2026-10-14 removes that blocker once domain PR 1 of R2's *Publish `domain`* item lands.
+  A refused transport reads as not settled, with its own message and test.
 - **H3-R1-08 (high) The rollback cannot run, and it deletes the signing key.** Fixed. The
   role gets its own arm flag, `homelab_builder_enabled`, in its defaults. A flip there is a
   path under `roles/setup/homelab_builder/`, and `deploy_changes.py:setup_tags_for` maps it to
