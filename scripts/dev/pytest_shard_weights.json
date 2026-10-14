@@ -1133,6 +1133,7 @@
  "scripts/tests/test_renovate_manager_overlap.py": 0.0,
  "scripts/tests/test_renovate_managers.py": 0.02,
  "scripts/tests/test_renovate_manual_rules_push_weekly.py": 0.0,
+ "scripts/tests/test_renovate_nfpm_pin.py": 0.0,
  "scripts/tests/test_renovate_nginx_digest_soak.py": 0.0,
  "scripts/tests/test_renovate_release_urls.py": 0.3,
  "scripts/tests/test_script_bootstraps_present.py": 3.01,
