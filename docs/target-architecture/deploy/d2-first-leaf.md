@@ -6,6 +6,9 @@ D2.1a, the flag's script reader and the narrowing: [#4956](https://github.com/Da
 
 D2.1b, `deploy.sh` refuses, drops and marks: [#4961](https://github.com/DanielH2018/server/pull/4961).
 
+D2.1c, an added Flux-born entry reaches only the readers it can move:
+[#4977](https://github.com/DanielH2018/server/pull/4977).
+
 D2.1d, the Ansible play skips a non-Ansible-owned entry:
 [#4958](https://github.com/DanielH2018/server/pull/4958).
 
@@ -335,23 +338,35 @@ entries before D6.1 removes the deployer's k8s arms. Each such addition reaches 
 tags today. D2.1c records such an entry by its fields instead of returning None:
 
 - `changed_fields` records the entry under its name, with every field it carries other than
-  `name` and the `DEPLOY_MECHANICS_FIELDS` members, even when that set is empty.
+  `name` and the `DEPLOY_MECHANICS_FIELDS` members, even when that set is empty. It adds the
+  marker `PRESENCE` to that set.
 - `reader_paths` then keeps the five whole-entry readers, whose reads are None, because
   `changed` holds an entry. It keeps a `FILTER_FIELDS` reader only when the entry carries a
-  field that the reader reads.
+  field that the reader reads, or when the reader's filter is in `EVERY_ENTRY`.
 - `changed_fields` still returns None for an added or removed Ansible-owned entry, for a
   repeated name, and when the entries that both lists hold change their relative order.
 
-`name` is left out because every `FILTER_FIELDS` row holds it for the lookup, and the
-bare-entry render under *Baseline* moves no `FILTER_FIELDS` reader. The one reader that the
-render moves by name, artifacts, reads through `map`, so it is a whole-entry reader and stays
-in. The entry's own tag still comes from `entry_change_tags`, and D2.2 drops it because Flux
-owns it.
+`name` is left out because every `FILTER_FIELDS` row but one holds it to look an entry up, or
+to label an entry the filter kept for another field. The exception is `entry_names`, which
+lists every entry's name, so any added entry moves its output. `EVERY_ENTRY` names that filter,
+and `reader_reads` adds `PRESENCE` to its read, so the marker on the added entry meets it.
+`test_narrow_filter_tables.py` holds the set to the filters' behaviour: a bare entry appended
+to a list moves exactly the `EVERY_ENTRY` filters.
 
-A bare Flux-born entry therefore applies five reader tags: artifacts, monitor-bridge,
-netpol-baseline, pihole and uptime-kuma. An entry that carries `hostname` adds the readers of
-`hostname`, authelia's access rules and uptime-kuma's monitors among them. Those readers must
-apply, because their output then names the new service.
+The set exists because the design above was written against `70591c307`. There, artifacts
+read the list through `map`, a whole-entry reader. 8e79e95d6 moved it onto `entry_names` before
+D2.1c, and leaving `name` out would then drop artifacts, the one reader the bare-entry render
+under *Baseline* moves. The entry's own tag still comes from `entry_change_tags`, and D2.2
+drops it because Flux owns it.
+
+The same commit moved the other four whole-entry readers onto named filters. So on the tree
+of 2026-10-14 a bare Flux-born entry applies four reader tags: artifacts through
+`entry_names`, and blackbox-exporter, pihole and uptime-kuma through `lan_hostnames`, which
+reads the entry's `platform`. pihole reads it in its dnsmasq include. blackbox-exporter and
+uptime-kuma read it through the shared `ingress-host-aliases.yml.j2`. Only artifacts' render
+moves. An entry that carries `hostname` adds the readers of `hostname`: authelia's access
+rules and observability's Prometheus config, beside uptime-kuma's monitors. Those readers must apply,
+because their output then names the new service.
 
 The entry's own tag alone, which X2-06 proposed, is not sound, because the bare-entry render
 moves artifacts' `known_services.json`. So the narrowing shrinks the apply but does not empty
@@ -914,6 +929,9 @@ that D2.6d adds.
         - the same entry with `hostname` also reaches the readers of `hostname`;
         - an added Ansible-owned entry with the same fields still returns None, and so does
           a bare `owner: flux` entry added in an edit that swaps two other entries.
+    - An `EVERY_ENTRY` pair in `test_narrow_filter_tables.py`: a bare entry appended to a
+      list moves exactly the filters `EVERY_ENTRY` names, `entry_names` among them, and a
+      filter with a row per entry is moved.
     - A render census in `ansible/tests/k8s/`, through `_k8s_render.py:render_texts`. It
       appends a fixture entry to daniel-box's `containers_list`, in the role context and in
       `hostvars`, and compares with a control render through the same override and the list
@@ -1521,8 +1539,8 @@ later slices size against:
   runs frozen until D3.3a lands. Mitigation: the D2.7 preconditions name D3.3a and D3.3b,
   and `land.sh`'s `promote-timeout` message names the failed `publish` job.
 - **A Flux-born entry still applies Ansible-owned readers unattended** (failure class 4).
-  D2.1c cuts an added bare entry's reach from 23 reader tags to five, but three of the five
-  remain denylisted: pihole, uptime-kuma and monitor-bridge each declare
+  D2.1c cuts an added bare entry's reach from 23 reader tags to four, but three of the four
+  remain denylisted: blackbox-exporter, pihole and uptime-kuma each declare
   `k8s_autodeploy: false`. Applying them forward-only also
   applies any change of theirs that is on master and not yet applied. Mitigation: each adding
   PR in H1, H2 and H6 runs D1.2's stop rule over the reader tags its narrow output names, and
@@ -1569,8 +1587,8 @@ later slices size against:
 - D2.1d: tests in `ansible/tests/deploy/`. `docs/gitops-pipeline.md`'s *Broad changes* says
   that the play skips an entry that carries `owner`. The PR body quotes the narrow refusal,
   the equality test's output and the operator's ruling on the discharge.
-- D2.1c: tests in `scripts/deploy_tools/tests/`, and the render census in
-  `ansible/tests/k8s/`. The `changed_fields` docstring states the new case, and
+- D2.1c: tests in `scripts/deploy_tools/tests/`, the `EVERY_ENTRY` pair among them, and the
+  render census in `ansible/tests/k8s/`. The `changed_fields` docstring states the new case, and
   `docs/gitops-pipeline.md`'s *Broad changes* says that an added Flux-born entry reaches only
   the readers it can move.
 - D2.1b: tests in `scripts/deploy_tools/tests/` and `.claude/hooks/tests/`.
@@ -1688,12 +1706,13 @@ later slices size against:
     for an added entry that carries `owner`:
     - **A bare entry** (`name`, `platform`, `owner`, and `depends_on` until D4.1 makes it a
       deploy-mechanics field). `deploy_tags.py narrow` names the entry's own tag plus the
-      five whole-entry readers: artifacts, monitor-bridge, netpol-baseline, pihole and
-      uptime-kuma. The tick applies those five, because D2.2 drops the own tag.
+      reader tags. On the tree of 2026-10-14 those are artifacts, blackbox-exporter, pihole
+      and uptime-kuma, as *The ownership flag and its three readers* derives. The tick
+      applies those four, because D2.2 drops the own tag.
     - **An entry with `hostname`**, or with `port`, `tier` or `metrics`. The output adds
-      every `FILTER_FIELDS` reader of each field the entry carries, such as authelia's
-      access rules and uptime-kuma's monitors for `hostname`. The PR measures that set; D2
-      does not fix a count for it.
+      every `FILTER_FIELDS` reader of each field the entry carries. For `hostname` on the
+      same tree that is authelia's access rules and observability's Prometheus config. The PR
+      measures that set; D2 does not fix a count for it.
     - **An added Ansible-owned entry** still makes `changed_fields` return None, so it
       reaches the full reader set, 23 tags at `70591c307`. D1.2's 24-tag expectation is
       for the `flux` entry, which carries no `owner`.

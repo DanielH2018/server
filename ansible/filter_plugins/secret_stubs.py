@@ -7,18 +7,12 @@ valid DNS label, so a stubbed host name still passes `kubectl apply --dry-run=se
 module is the one definition of the form, which R1's renderer and its playbook checks are
 built to share, so neither restates it. `docs/homelab-render.md` is the operator's page.
 
-`google_assistant_service_account` is the one key a template parses: home-assistant's
-`templates/config/secrets.yaml.j2` runs it through `from_json` and reads three fields. Its
-stub is therefore a JSON object holding exactly those fields, serialised with sorted keys so
-it is one fixed string.
-
 Ansible loads every module under `filter_plugins/` in every play, so this one imports the
 standard library only. `FilterModule.filters()` returns one literal dict, because
 `scripts/deploy_tools/narrow_lib/filters.py:filter_names` reads the filter names statically
 and refuses any other shape.
 """
 
-import json
 from collections.abc import Mapping
 
 STUB_PREFIX = "stub-"
@@ -32,30 +26,10 @@ NEVER_STUB = {
     ),
 }
 
-# Keys a template parses, mapped to the fields it reads. Target slice R2 removes the parse.
-_STRUCTURED = {
-    "google_assistant_service_account": ("project_id", "client_email", "private_key"),
-}
-
-
-def _label(name: str) -> str:
-    return STUB_PREFIX + name.replace("_", "-")
-
 
 def homelab_secret_stub(key) -> str:
-    """The stub value of the secret variable `key`.
-
-    `stub-<key with hyphens>` for every key but a structured one, whose stub is a sorted-key
-    JSON object string with one `stub-<key>-<field>` value per field its template reads.
-    """
-    key = str(key)
-    fields = _STRUCTURED.get(key)
-    if fields is None:
-        return _label(key)
-    return json.dumps(
-        {field: f"{_label(key)}-{field.replace('_', '-')}" for field in fields},
-        sort_keys=True,
-    )
+    """The stub value of the secret variable `key`: `stub-<key with hyphens>`."""
+    return STUB_PREFIX + str(key).replace("_", "-")
 
 
 def homelab_stub_keys(secrets) -> list[str]:
