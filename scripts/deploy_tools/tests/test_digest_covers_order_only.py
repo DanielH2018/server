@@ -211,3 +211,24 @@ def test_a_dep_map_that_writes_a_file_keeps_the_line(tree, body):  # noqa: F811
     )
     reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
     assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "helper, body",
+    [
+        ("", "try:\n    open('marker', 'w').write('x')\nexcept Exception:\n    pass"),
+        ("import os", "os.mkdir('marker')"),
+        ("import os", "os.putenv('MARKER', '1')"),
+        ("import subprocess", "subprocess.run(['true'])"),
+        ("open('marker', 'w').write('x')", ""),
+    ],
+    ids=["swallowed-write", "mkdir", "putenv", "subprocess", "module-level-write"],
+)
+def test_a_dep_map_with_another_side_effect_keeps_the_line(tree, helper, body):  # noqa: F811
+    """The runner's audit hook ends the run on each of these, even inside an `except` (#4846)."""
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree, [{"ansible/filter_plugins/toposort.py": _dep_map_writes(helper, body)}]
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason

@@ -38,22 +38,57 @@ from lib.git import git
 # nothing a role does. #4841 and #4844 read the code's syntax for writes instead, and each
 # review found a new aliasing bypass: Python mutation cannot be tracked soundly from syntax.
 # Running the code imports it, which `filters.py` never does; here both ends are commits the
-# deploy itself imports, under the same interpreter. The gaps taken: a branch HEAD's data does
-# not exercise, a side effect outside the entries the chain returns and reads (a file write,
-# say, which lands in the subprocess's temp dir here and in the controller's cwd in a deploy),
-# and a role whose bytes depend on list order, which the render proof the caller still
-# requires catches.
+# deploy itself imports, under the same interpreter. A side effect outside the returned entries
+# that leaves the process, such as a file write, an environment change or a child process, ends
+# the run through the runner's audit hook (#4846). The gaps taken: a branch HEAD's data does not
+# exercise, a write into another imported module's state, which no audit event reports and
+# which persists in the controller process in a deploy (#4995), and a role whose bytes depend
+# on list order, which the render proof the caller still requires catches.
 ORDER_ONLY_PLUGINS = frozenset({"ansible/filter_plugins/toposort.py"})
 
 _PLUGINS = "ansible/filter_plugins"
 _ROLES = "ansible/roles"
 _TIMEOUT = 60
 
-# Runs in `python -I`, so neither PYTHONPATH nor the caller's cwd reaches the import. Resolves
-# each filter through `FilterModule().filters()`, as Ansible does, so a re-pointed
-# registration is the code that runs.
+# Runs in `python -I -B`, so neither PYTHONPATH nor the caller's cwd reaches the import, and
+# the import writes no `__pycache__`. Resolves each filter through `FilterModule().filters()`,
+# as Ansible does, so a re-pointed registration is the code that runs.
+#
+# An audit hook, installed before the import so the plugin's module-level code runs under it
+# too, ends the process on the first event that changes state outside the interpreter (#4846):
+# an `open` whose flags write or create, a filesystem, cwd or environment mutation, a child
+# process, a socket, or a foreign call. It exits with `os._exit` rather than raising, because
+# a raise lands in the plugin's frame, where an `except` can swallow it. `_run` reads the
+# nonzero exit as doubt. The hook calls nothing that is itself audited.
 _RUNNER = """
-import copy, json, sys
+import copy, json, os, sys
+
+_WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
+_MUTATING_OS = frozenset(
+    "os." + name
+    for name in (
+        "add_dll_directory chdir chflags chmod chown exec fork forkpty kill killpg link lockf "
+        "mkdir posix_spawn putenv remove removexattr rename rmdir setxattr spawn startfile "
+        "symlink system truncate unsetenv utime"
+    ).split()
+)
+_MUTATING_SOCKET = frozenset({"socket.bind", "socket.connect", "socket.sendmsg", "socket.sendto"})
+_MUTATING_PREFIXES = (
+    "shutil.", "subprocess.", "ctypes.", "fcntl.", "mmap.", "pty.", "sqlite3.", "tempfile.",
+    "webbrowser.", "ftplib.", "smtplib.", "http.client.", "urllib.",
+)
+
+
+def _audit(event, args):
+    if event == "open":
+        flags = args[2] if len(args) > 2 else 0
+        if isinstance(flags, int) and flags & _WRITE_FLAGS:
+            os._exit(86)
+    elif event in _MUTATING_OS or event in _MUTATING_SOCKET or event.startswith(_MUTATING_PREFIXES):
+        os._exit(86)
+
+
+sys.addaudithook(_audit)
 sys.path.insert(0, sys.argv[1])
 import toposort
 f = toposort.FilterModule().filters()
@@ -83,7 +118,8 @@ def _run(repo: Path, plugins: str, head: str) -> tuple[dict, bool] | None:
     """The chain's canonical outputs with the plugin tree `plugins` on HEAD's data, or None.
 
     None on any doubt: data that will not load or serialize, an import error, an exception,
-    a timeout, or output that is not the expected JSON.
+    a timeout, a side effect the runner's audit hook reports, or output that is not the
+    expected JSON.
     """
     try:
         host_vars = git(
@@ -96,7 +132,7 @@ def _run(repo: Path, plugins: str, head: str) -> tuple[dict, bool] | None:
             _extract(repo, plugins, code)
             _extract(repo, f"{head}:{_ROLES}", ansible / "roles")
             r = subprocess.run(
-                [sys.executable, "-I", "-c", _RUNNER, str(code), str(ansible)],
+                [sys.executable, "-I", "-B", "-c", _RUNNER, str(code), str(ansible)],
                 cwd=tmp,
                 input=data,
                 capture_output=True,
