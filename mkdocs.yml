@@ -172,6 +172,7 @@ nav:
       - "ADR-0018 The repository stays public, CI stays hosted": adr/0018-the-repository-stays-public-and-ci-stays-hosted.md
       - "ADR-0019 Fact support stops at the repo store": adr/0019-fact-support-stops-at-the-repo-store.md
       - "ADR-0020 Flux applies the cluster from a promoted artifact": adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md
+      - "ADR-0021 The host-package builder trusts master plus green CI": adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a

@@ -156,8 +156,9 @@ Kuma before wave D, the tile goes with Kuma, and wave D drops that part of its P
 
 **Decision.** What remains on each host ships as one `.deb` per host (C5, C6). nfpm builds it
 from homelab-render's host output. A LAN builder builds a commit on `origin/master` with a
-green CI verdict, and a separate signer signs the result. H3 Open question 1 decides whether
-the builder also requires a signature, and whose. A `homelab-updater` timer installs the
+green CI verdict, and a separate signer signs the result. The builder requires no commit
+signature ([ADR-0021](../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md),
+H3 Open question 1). A `homelab-updater` timer installs the
 package from an apt repo served outside k3s. A change that republishes several hosts reaches
 one canary host first (C5). dpkg is the only mechanism the survey
 found that removes config the repo stopped shipping, on stock Ubuntu 24.04 and without an
@@ -421,10 +422,12 @@ a tag that is not flux-owned (M6 Open question 4), so that flip waits on the dri
    to justify a second mechanism beside dpkg. Each H-slice that adds one reports its size.
    H7 sets a line ceiling on reconcile as an exit criterion. Crossing it is the trigger to
    switch the host plan to ansible-pull.
-1. **The host trust anchor** (H3 Open question 1, **operator-only**). The builder trusts a
+1. **The host trust anchor** (H3 Open question 1, ruled 2026-10-14). The builder trusts a
    commit on `origin/master` with a green CI verdict. That is the anchor the GitOps deployer
    applies to the two k3s nodes. For the Pi it is the first unattended path from master to
-   root. The operator records the choice in an ADR before H3.5a merges.
+   root. The operator chose that anchor, with no signature check, and
+   [ADR-0021](../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) records
+   it.
 1. **The revert rule** (C2, **operator-only**). It decides whether a merged revert of a
    failing change clears its own `DEPLOY_HOLD`, or whether every hold waits for the operator.
    It replaces D5 Open question 17.
