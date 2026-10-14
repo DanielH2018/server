@@ -77,6 +77,11 @@ def test_only_the_restricted_fetch_carries_error_on_any(host):
     restricted, full = updates
     assert "--error-on=any" in restricted
     assert "pkgCacheFile::Generate=false" in restricted
+    assert "Dir::Cache::pkgcache=" in restricted
+    indextargets = next(
+        call for call in host.calls("apt-get") if call[1] == "indextargets"
+    )
+    assert "Dir::Cache::pkgcache=" in indextargets
     assert "Dir::Etc::sourcelist=sources.list.d/homelab.sources" in restricted
     assert full == ["apt-get", "update"]
     assert len(host.installs()) == 2

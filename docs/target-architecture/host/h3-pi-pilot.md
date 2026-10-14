@@ -467,10 +467,12 @@ installed versions are *reconciled* when the record's `result` names exactly the
 3. Run `apt-get update --error-on=any` restricted to the homelab source, with
    `-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o
    APT::Get::List-Cleanup=0`. The Ubuntu lists stay as `apt-daily` last left them.
-    - The fetch also carries `-o pkgCacheFile::Generate=false`. Without it, `apt-get update`
-      ends by rebuilding `pkgcache.bin` from the homelab source alone, so every run, the
-      common path included, rewrites the apt cache. The container's common-path case
-      caught this against real apt (H3.3b).
+    - The restricted calls, this fetch and step 4's `apt-get indextargets`, also carry
+      `-o Dir::Cache::pkgcache= -o Dir::Cache::srcpkgcache=`, and the fetch carries
+      `-o pkgCacheFile::Generate=false`. Without them, `apt-get update` ends by rebuilding
+      `pkgcache.bin` and `indextargets` builds one too, each from the homelab source
+      alone, so every run, the common path included, rewrites the apt cache. The
+      container's common-path case caught both against real apt (H3.3b).
     - Without `--error-on=any`, apt treats a failed fetch as transient: it warns, keeps the
       list the last good fetch left, and can exit 0. Step 4 would then read that old list,
       which still holds `Version:` lines, as "nothing newer". The flag applies to this
@@ -922,10 +924,13 @@ concurrency group on push. It needs no secrets, and it does these steps:
    names, `Python 3.12` on 24.04, so reconcile runs under the interpreter each release
    carries. Every case below runs on both legs. It serves both builds from a local unsigned
    repository with `python3 -m http.server` on `127.0.0.1:8791`, as daniel-box serves the
-   real one, and runs the updater against it. Every case but the stopped-server case asserts
-   that the server's log holds that case's `GET` of `dists/homelab/Release`. Every case
-   asserts that `/var/lib/apt/lists/` holds no list named after daniel-box's address. The
-   cases are:
+   real one, and runs the updater against it. Every case but two asserts that the server's
+   log holds that case's `GET` of `dists/homelab/Release`. The stopped-server case has no
+   server, and the lock case exits at step 2, before the fetch, so it asserts the log holds
+   no `GET`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
+   repository and none named after daniel-box's address. Until H3.6 ships the Pi package,
+   every case installs a fixture `homelab-daniel-pi` of the same shape, rendered with the
+   real reconcile component from `hosts/lib/tests/container/fixture/`. The cases are:
     - after the first install, stop the local server, run the updater, and assert that it
       exits non-zero and leaves `/var/lib/homelab-updater/last_success` and the success
       timestamp in `homelab_host.prom` unchanged. The case goes red when step 3 lets a
@@ -1400,6 +1405,9 @@ says otherwise.
 8. **H3.6 The Pi package, empty, plus bring-up.**
     - Add `hosts/daniel-pi/package.yml` carrying only the `reconcile` component and the Pi's
       updater-schedule drop-in, with no enable link for `homelab-updater.timer`.
+    - Run the container case that installs the Pi package by hand against this PR's real
+      render, not H3.3b's fixture `homelab-daniel-pi`. The other cases keep the fixture,
+      because they need a unit, a file and a payload that the real package does not ship.
     - Add `hosts/bootstrap-host.sh`. It takes `bootstrap-host.sh <hostname>` and runs as
       root. It carries H7's step numbers, so H7 extends it in place:
         - Step 1 refuses if `hostname` differs from `<hostname>`.

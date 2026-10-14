@@ -40,7 +40,9 @@ HOST=$(hostname)
 UPDATER=homelab-updater
 HOST_PKG=homelab-$HOST
 # Step 3's restriction to the homelab source. The Ubuntu lists stay as apt-daily left them.
-HOMELAB_APT="-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0"
+# The empty cache paths keep step 4's `apt-get indextargets`, which builds apt's package cache,
+# from writing one read from the homelab source alone over pkgcache.bin.
+HOMELAB_APT="-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 -o Dir::Cache::pkgcache= -o Dir::Cache::srcpkgcache="
 INSTALL="apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=600"
 RETRY="apt-get install -y --no-install-recommends -o DPkg::Lock::Timeout=0"
 
@@ -233,9 +235,8 @@ install_newest() {
 # Steps 3 to 8. Exits.
 update() {
     configured=$1
-    # pkgCacheFile::Generate=false skips the cache rebuild apt-get update ends with. That
-    # rebuild would read only the homelab source and rewrite pkgcache.bin on every run, so
-    # the common path would load an apt cache after all.
+    # pkgCacheFile::Generate=false skips the cache build apt-get update ends with, which the
+    # empty cache paths would otherwise run in memory for nothing.
     # shellcheck disable=SC2086 # HOMELAB_APT is a list of options.
     if ! apt-get update --error-on=any -o pkgCacheFile::Generate=false $HOMELAB_APT; then
         say "the homelab fetch failed; writing nothing"
