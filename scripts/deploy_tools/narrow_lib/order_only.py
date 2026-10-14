@@ -38,22 +38,71 @@ from lib.git import git
 # nothing a role does. #4841 and #4844 read the code's syntax for writes instead, and each
 # review found a new aliasing bypass: Python mutation cannot be tracked soundly from syntax.
 # Running the code imports it, which `filters.py` never does; here both ends are commits the
-# deploy itself imports, under the same interpreter. The gaps taken: a branch HEAD's data does
-# not exercise, a side effect outside the entries the chain returns and reads (a file write,
-# say, which lands in the subprocess's temp dir here and in the controller's cwd in a deploy),
-# and a role whose bytes depend on list order, which the render proof the caller still
-# requires catches.
+# deploy itself imports, under the same interpreter. A side effect outside the returned entries
+# that leaves the process, such as a file write, an environment change or a child process, ends
+# the run through the runner's audit hook, and a path that appears under the temp tree fails
+# it too (#4846). The gaps taken: a branch HEAD's data does not exercise, a write into another
+# imported module's state, which no audit event reports and which persists in the controller
+# process in a deploy (#4995), a call that raises no audit event and creates a file at an
+# absolute path outside the temp tree (#4999), and a role whose bytes depend on list order,
+# which the render proof the caller still requires catches.
+# The runner is distinguishable from a deploy. Its cwd ends in `/cwd` under an `order-only-`
+# temp dir, `sys.flags.isolated` is 1, and `sys.argv[0]` is `-c`. So the check holds only for
+# a plugin written in good faith. It catches an accidental side effect, not an evasive one.
+# We accept that limit, because a commit that can land a hostile filter plugin on master can
+# act through any deploy anyway. The related open gaps are #4995 and #4999.
 ORDER_ONLY_PLUGINS = frozenset({"ansible/filter_plugins/toposort.py"})
 
 _PLUGINS = "ansible/filter_plugins"
 _ROLES = "ansible/roles"
 _TIMEOUT = 60
 
-# Runs in `python -I`, so neither PYTHONPATH nor the caller's cwd reaches the import. Resolves
-# each filter through `FilterModule().filters()`, as Ansible does, so a re-pointed
-# registration is the code that runs.
+# Runs in `python -I -B`, so neither PYTHONPATH nor the caller's cwd reaches the import, and
+# the import writes no `__pycache__`. Resolves each filter through `FilterModule().filters()`,
+# as Ansible does, so a re-pointed registration is the code that runs.
+#
+# An audit hook, installed before the import so the plugin's module-level code runs under it
+# too, ends the process on any event outside the allowlist below, and on an `open` whose flags
+# write or create (#4846). The allowlist is every event the real chain raises; an event it
+# misses, after an interpreter or Ansible upgrade, reads as doubt and keeps the line rather than
+# discharging it. An allowlist, because each denylist review found another mutating event.
+#
+# The plugin is imported after the hook and can reach anything `__main__`, `os` or `builtins`
+# holds, so the hook reads nothing from them: `_install` binds the exit function and the tables
+# as closure cells, and is deleted before the import. Only the interpreter's hook list then
+# refers to the hook, and the `gc` events that would walk to it are off the allowlist. The hook
+# exits with `os._exit` rather than raising, because a raise lands in the plugin's frame, where
+# an `except` can swallow it. `_run` reads the nonzero exit as doubt.
 _RUNNER = """
-import copy, json, sys
+import copy, json, os, sys
+
+
+def _install(exit_, write_flags, allowed):
+    def audit(event, args):
+        try:
+            if event == "open":
+                if args[2] & write_flags:
+                    exit_(86)
+            elif event not in allowed:
+                exit_(86)
+        except BaseException:
+            exit_(86)
+
+    sys.addaudithook(audit)
+
+
+_install(
+    os._exit,
+    os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC,
+    frozenset({
+        "builtins.id", "compile", "exec", "function.__new__", "import", "marshal.loads",
+        "object.__getattr__", "object.__setattr__", "os.listdir", "socket.getaddrinfo",
+        "sys._getframemodulename",
+        # Interpreter shutdown, after the result is printed.
+        "cpython.PyInterpreterState_Clear", "cpython._PySys_ClearAuditHooks",
+    }),
+)
+del _install
 sys.path.insert(0, sys.argv[1])
 import toposort
 f = toposort.FilterModule().filters()
@@ -83,7 +132,8 @@ def _run(repo: Path, plugins: str, head: str) -> tuple[dict, bool] | None:
     """The chain's canonical outputs with the plugin tree `plugins` on HEAD's data, or None.
 
     None on any doubt: data that will not load or serialize, an import error, an exception,
-    a timeout, or output that is not the expected JSON.
+    a timeout, a side effect the runner's audit hook reports, a path that appeared under the
+    temp tree during the run, or output that is not the expected JSON.
     """
     try:
         host_vars = git(
@@ -92,18 +142,24 @@ def _run(repo: Path, plugins: str, head: str) -> tuple[dict, bool] | None:
         entries = yaml_fast.safe_load(host_vars.stdout)["containers_list"]
         data = json.dumps(entries)
         with tempfile.TemporaryDirectory(prefix="order-only-") as tmp:
-            code, ansible = Path(tmp, "plugins"), Path(tmp, "ansible")
+            root = Path(tmp)
+            code, ansible, cwd = root / "plugins", root / "ansible", root / "cwd"
             _extract(repo, plugins, code)
             _extract(repo, f"{head}:{_ROLES}", ansible / "roles")
+            cwd.mkdir()
+            before = set(root.rglob("*"))
             r = subprocess.run(
-                [sys.executable, "-I", "-c", _RUNNER, str(code), str(ansible)],
-                cwd=tmp,
+                [sys.executable, "-I", "-B", "-c", _RUNNER, str(code), str(ansible)],
+                cwd=cwd,
                 input=data,
                 capture_output=True,
                 text=True,
                 timeout=_TIMEOUT,
             )
-        if r.returncode != 0:
+            # Some calls create a file and raise no audit event (`os.mkfifo`, `os.mknod`), so a
+            # relative path the hook cannot see still shows up here (#4846).
+            created = set(root.rglob("*")) - before
+        if r.returncode != 0 or created:
             return None
         result = json.loads(r.stdout)
         return result["out"], result["input_unchanged"] is True
