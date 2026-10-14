@@ -7,6 +7,7 @@ PR H3.2a, the updater package: [#4917](https://github.com/DanielH2018/server/pul
 PR H3.2b, the reconcile unit: [#4927](https://github.com/DanielH2018/server/pull/4927).
 PR H3.2c, the censuses and the unit validator: [#4935](https://github.com/DanielH2018/server/pull/4935).
 PR H3.2d, the manifest emitter: [#4944](https://github.com/DanielH2018/server/pull/4944).
+PR H3.3a, the `host_packages` CI job skeleton: [#4974](https://github.com/DanielH2018/server/pull/4974).
 
 Depends on: R1
 Unblocks: H4, H5
