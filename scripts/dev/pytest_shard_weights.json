@@ -221,6 +221,7 @@
  "ansible/roles/setup/renovate_notify/tests/test_pending_soak.py": 0.0,
  "ansible/roles/setup/renovate_notify/tests/test_pending_soak_wiring.py": 0.0,
  "ansible/roles/setup/renovate_notify/tests/test_renovate_notify.py": 0.0,
+ "ansible/tests/deploy/test_ansible_owned_filter.py": 0.07,
  "ansible/tests/deploy/test_bring_up_continue_sequence.py": 0.0,
  "ansible/tests/deploy/test_broad_deploy_prefixes_partition.py": 0.0,
  "ansible/tests/deploy/test_built_image_drift_gate.py": 0.0,

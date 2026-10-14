@@ -130,6 +130,13 @@ The setup/deploy split exists because `deploy.yml` is a `containers_list` loop a
 nothing for the setup plane, so pointing an operator at it for a `roles/setup/` change is a
 no-op that leaves the change unapplied.
 
+That loop skips an entry that carries `owner`. The k8s play batches `containers_list |
+ansible_owned`, and `ansible_owned` in `ansible/filter_plugins/toposort.py` keeps only the
+entries without `owner`. Flux applies an entry with `owner: flux`, and the first PR that
+hands an entry back to Ansible sets `owner: released`. The `containers_list` fact keeps
+every entry, because templates read it. A `deploy.yml` or `toposort.py` change is still
+broad, so the deployer applies none of it.
+
 A setup role the deployer cannot apply is a fourth case. `k3s` lives in `k3s-bringup.yml` and
 `common` in no playbook, so `setup_tags_for` derives nothing for either. Such a range
 fast-forwards and records the role instead of parking; see *A role only a hand can apply is
