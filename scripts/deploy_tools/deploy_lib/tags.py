@@ -381,8 +381,8 @@ def _cmd_narrow(args: argparse.Namespace) -> int:
 # callers over `shared_role_reach.paths_a_hand_must_apply`, which drops a comment-only shared
 # path, and `derive` maps a shared role to no tag of its own. A service role's own edit keeps
 # its one tag, because a task file has its own defer channel
-# (`deploy_k8s.comment_only_k8s_defaults`' docstring). `land_tags.main()` still expands the raw
-# list and so disagrees with the landing; that CLI gap is #4945.
+# (`deploy_k8s.comment_only_k8s_defaults`' docstring). `land_lib/land_tags_cli.py` expands
+# over the same filtered list, so the CLI agrees with the landing (#4945).
 def comment_only_paths(
     paths: list[str], old_ref: str, new_ref: str, show=None
 ) -> set[str]:

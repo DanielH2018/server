@@ -6,8 +6,8 @@ Depends on: [D2](d2-first-leaf.md), [R2](../render/r2-secret-placeholders.md). D
 need only D2.1 to D2.6c, and D3.3a also needs D4.3a, as the slice index says. D3.4 to D3.9
 need all of D2.
 
-Unblocks: [D5](d5-bulk-move.md), and PR D2.7 of [D2](d2-first-leaf.md), which waits on D3.3b
-under C3's default source for `domain`.
+Unblocks: [D5](d5-bulk-move.md). PR D2.7 of [D2](d2-first-leaf.md) does not wait on D3,
+because the operator ruled on 2026-10-14 that `domain` is published (C3).
 
 ## Goal and exit criterion
 
@@ -16,9 +16,10 @@ After D3, Flux renders a flux-owned role's Secrets by substituting values from o
 `ansible/vars/cluster-vars.sops.env` with an age key that only the cluster holds. CI holds no
 key, yet proves the file is in step with `ansible/vars/secrets.yml`. A changed secret value
 restarts the pods that read it, through a checksum of ciphertext, never of plaintext. `peanut`
-is the first role with a Secret that Flux owns. Every routed flux-owned tag substitutes
-`${domain}` from the same Secret. Under C3's default, D2.7 flips bento-pdf only after D3.3b,
-so no tag ever substitutes from another source. R2's four SOPS-encrypted manifests get their
+is the first role with a Secret that Flux owns. Every flux-owned tag whose render holds a
+secret placeholder substitutes it from the same Secret. `domain` is published and is not one
+of those placeholders, so D2.7 flips bento-pdf with no part of D3, and no tag ever
+substitutes from another source. R2's four SOPS-encrypted manifests get their
 delivery path, which D5 uses when their roles move.
 
 **Exit criterion.** Five checks, each under *Verification*:
@@ -33,9 +34,9 @@ delivery path, which D5 uses when their roles move.
    and peanut's pod restarts in the same revision.
 4. **CI refuses drift.** A PR that changes a cluster-referenced key in `secrets.yml` without
    regenerating the cluster file fails `cluster_vars.py check`.
-5. **D2's leaf substitutes from this Secret.** After D2.7 settles, bento-pdf's Kustomization
-   substitutes from `homelab-cluster-vars` and depends on `cluster-vars`, and the bento-pdf
-   page loads through Traefik.
+5. **D2's leaf takes nothing from this Secret.** After D2.7 settles, bento-pdf's
+   Kustomization has no `postBuild` and no `cluster-vars` edge, because `domain` is
+   published, and the bento-pdf page loads through Traefik.
 
 ## Baseline at `70591c307`
 
@@ -118,16 +119,18 @@ delivery path, which D5 uses when their roles move.
   question 2 from source.
 - **`postBuild.substituteFrom` reads a Secret in the Kustomization's own namespace**, which
   is `flux-system` (C3).
-- **Every route carries `domain`, a SOPS key.** `grep -c '^domain: ENC\['` and
+- **Every route carries `domain`, which is published.** The operator ruled on 2026-10-14
+  that `domain` is not secret. At the baseline `grep -c '^domain: ENC\['` and
   `grep -c '^email: ENC\['` on `secrets.yml` each print 1. The `ingressroute` macro in
   `ansible/templates/ingressroute.yml.j2` builds each Host rule as `hostname ~ '.local.' ~
   domain`. bento-pdf and texbrain take their route from
   `ansible/templates/ingressroute-default.yaml.j2`, and peanut's own
-  `templates/ingressroute.yaml.j2` imports the same macro. Under R2's placeholder mode each
-  renders `${domain}`, which R2's `PLACEHOLDER_ANYWHERE` allows outside a Secret. Under C3's
-  default, D2.7 waits on D3.3b, so no flux-owned tag substitutes before
-  `homelab-cluster-vars` exists. D2 has withdrawn the Secret `homelab-identifiers` that its
-  D2.6a once added, so no other source of `domain` exists to retire.
+  `templates/ingressroute.yaml.j2` imports the same macro. Until domain PR 2b of R2's
+  *Publish `domain`* item, R2's placeholder mode renders `${domain}`, which R2's
+  `PLACEHOLDER_ANYWHERE` allows outside a Secret. From domain PR 2b on, every route renders
+  the literal. `homelab-cluster-vars` never holds `domain`, and D2.7 waits on no PR of D3. D2
+  has withdrawn the Secret `homelab-identifiers` that its D2.6a once added, so no other
+  source of `domain` exists to retire.
 - **The two leaves read no configuration.** A search for `configMap`, `secret` and `envFrom`
   in bento-pdf's and texbrain's `templates/deployment.yaml.j2` finds nothing. peanut's names
   `peanut-secrets` twice through `secretKeyRef` and once as a volume's `secretName`.
@@ -252,9 +255,8 @@ publish job ─▶ homelab_render.py cluster, placeholder mode (no --secret-stub
                out/cluster/cluster-vars/{kustomization.yaml, cluster-vars.sops.env}
 cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
             secretGenerator ─▶ Secret flux-system/homelab-cluster-vars
-          Kustomization peanut, bento-pdf, ...  dependsOn cluster-vars
-            postBuild.substituteFrom homelab-cluster-vars ─▶ Secret homelab/peanut-secrets,
-                                                             IngressRoute Host rules
+          Kustomization peanut, ...  dependsOn cluster-vars
+            postBuild.substituteFrom homelab-cluster-vars ─▶ Secret homelab/peanut-secrets
 ```
 
 - **A cluster-only age key.** The operator generates a dedicated age keypair. The public half
@@ -283,8 +285,8 @@ cluster:  Kustomization cluster-vars (decryption: sops, secretRef sops-age)
   writer that Flux overwrites, so no runbook creates one.
 - **`cluster-vars.sops.env`** holds exactly the keys that the cluster render references as
   `${key}`, across all 56 tags and not only the flux-owned ones, less `SOPS_MANIFEST_KEYS`.
-  That set includes `domain` and `email`. Each bulk-move PR in D5 therefore needs no
-  regeneration.
+  That set includes `email` and leaves out `domain`, which is published. Each bulk-move PR
+  in D5 therefore needs no regeneration.
 - **`cluster-vars.source`** is the freshness evidence. It holds one line per key in the
   cluster file or the cluster manifests: the key name and the SHA-256 of that key's
   `ENC[...]` string in `secrets.yml`. The ciphertext is public, so the hash exposes nothing.
@@ -514,9 +516,9 @@ reserved-name logic of its own.
 - **A shared kind's file holds one document.** D3.3a adds the clause that a `SHARED_KINDS`
   member's file holds exactly the Kustomization of its own name. D4.3's clause covers a tag's
   file, so the two clauses do not overlap.
-- **The bundle carries `cluster-vars` before any tag is flux-owned.** Under C3's default,
-  D3.3a lands before D2.7, while D2's publish step still writes the root alone. D3.3a changes
-  that branch: with no flux-owned tag, the step runs `homelab_render.py cluster --out out
+- **The bundle can carry `cluster-vars` before any tag is flux-owned.** D3.3a may land
+  before D2.7, because D2.7 no longer waits on it. Then D2's publish step still writes the
+  root alone, and D3.3a changes that branch: with no flux-owned tag, the step runs `homelab_render.py cluster --out out
   --shared-only`, which writes every `SHARED_KINDS` member and a root that lists them, and no
   tag. With flux-owned tags, the usual call writes the shared kinds beside the tags. The first
   decryption then gets a revision of its own, before any tag depends on it. C1 names no
@@ -552,23 +554,20 @@ reserved-name logic of its own.
       per-tag unit with the rendered Kustomization as the source. R2's Open question 5
       requests the per-directory wording before R2's PR 1, and D3.3b waits on that
       amendment (Open question 6).
-- **Every routed Kustomization depends on `cluster-vars`.** Each IngressRoute holds
-  `${domain}`, so the set is non-empty for every directory that holds a route, secret or
-  not. A directory with no route and no secret reference gets neither field, so a literal
-  `${` in it reaches the cluster unescaped.
+- **Every substituting Kustomization depends on `cluster-vars`.** A route does not make a
+  directory substitute, because `domain` is published and renders as a literal. The set is
+  non-empty for a directory with a secret reference. A directory with no secret reference
+  gets neither field, so a literal `${` in it reaches the cluster unescaped.
 - **The source gate stays as D2 wrote it.** D2.6c's gate admits a `substituteFrom` Secret
   only when a Kustomization in the bundle generates it, and from D3.3a on `cluster-vars`
   does. The gate does not check which keys that Secret holds. R2's rules 1, 2 and 4 put
   every reference in a substituting tag in R2's placeholder set, and `check` holds the
   dotenv's key names equal to that set less `SOPS_MANIFEST_KEYS`. D3.3b adds no key set to
   the gate.
-- **No flux-owned tag changes source.** Under C3's default, D2.7, the first flip, waits on
-  D3.3b. bento-pdf therefore substitutes from `homelab-cluster-vars` from its first revision,
-  and D3.3b changes no live object.
-    - Only under C3's **operator-only** alternative, where D2.7 renders `domain` as a literal,
-      does a flux-owned tag change here. D3.3b then renders `${domain}` again, and each routed
-      flux-owned tag gains `postBuild` and the `cluster-vars` edge in the same revision. The
-      substituted objects do not change.
+- **No flux-owned tag changes source.** D2.7, the first flip, renders `domain` as a literal
+  and waits on no PR of D3. bento-pdf holds no placeholder, so it gains neither `postBuild`
+  nor the `cluster-vars` edge here. D3.3b changes no live object, because the only flux-owned
+  tag at D2.7 is bento-pdf, which holds none.
 - **The promote timeout covers the hop.** Until D4.3's chained timeout lands, D3.3b adds the
   `cluster-vars` timeout and one `requeue-dependency` interval to D2's derived timeout when
   the bundle holds a substituting tag, because each such tag waits on `cluster-vars`. D4.3's
@@ -814,9 +813,10 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
     - A pair in `scripts/deploy_tools/tests/`: the derived timeout grows by the
       `cluster-vars` timeout plus one `requeue-dependency` interval when the bundle holds a
       substituting tag, and does not grow when it holds none.
-    - **Inert for the cluster** under C3's default, because no tag is flux-owned yet. After it
-      is promoted, `flux/cluster-vars` still reads `success`. D2.7 waits on this PR, and exit
-      criterion 5 is checked after D2.7 settles.
+    - **Inert for the cluster**, because bento-pdf, the only flux-owned tag at D2.7, holds
+      no secret placeholder. After it is promoted, `flux/cluster-vars` still reads
+      `success`. D2.7 does not wait on this PR, and exit criterion 5 is checked after D2.7
+      settles.
 8. **D3.3c — Restart and SOPS-manifest wiring** (about 180 lines).
     - Add `checksum/restart` for the D3 targets, the outside-role reference test, the
       self-rollouts census, and the SOPS manifest copy with `decryption`. C3's per-role
@@ -959,10 +959,10 @@ gh api repos/DanielH2018/server/commits/<T>/statuses \
 # Exit 4: CI's gate, run locally.
 uv run python scripts/secrets_mgmt/cluster_vars.py check
 
-# Exit 5, after D2.7 settles: bento-pdf substitutes from homelab-cluster-vars and routes.
+# Exit 5, after D2.7 settles: bento-pdf substitutes nothing and routes.
 kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf \
   -o jsonpath='{.spec.postBuild.substituteFrom[*].name}{" "}{.spec.dependsOn[*].name}'
-# Prints homelab-cluster-vars and cluster-vars. Then load bento-pdf.local.<domain> with
+# Prints one space and nothing else. Then load bento-pdf.local.<domain> with
 # the homelab-ui MCP server.
 ```
 
@@ -1046,10 +1046,10 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
 - **D3.3d** adds only a CI job, whose kind cluster and age key are throwaway and die with
   the run. A revert changes no live object. It also removes the proof that D5's qbittorrent
   flip waits on, so that flip cannot merge until the job is restored.
-- **D3.3b.** Revert D3.6 first if peanut is flux-owned, then D2.7 (D2's handback), because
-  D2.7's preconditions name D3.3b. Without the edge, a substituting tag can reconcile before
-  `cluster-vars` applies a rotated value. On a rebuilt cluster its build fails until
-  `homelab-cluster-vars` exists.
+- **D3.3b.** Revert D3.6 first if peanut is flux-owned. Without the edge, a substituting tag
+  can reconcile before `cluster-vars` applies a rotated value. On a rebuilt cluster its
+  build fails until `homelab-cluster-vars` exists. D2.7 does not depend on D3.3b, so its
+  handback is not a step here.
 - **D3.3a.** Revert D3.3b first, with what that needs, because its edges name
   `cluster-vars`. The root then prunes the `cluster-vars` Kustomization, and
   `deletionPolicy: Orphan` leaves `homelab-cluster-vars` in place, unused.
@@ -1081,8 +1081,9 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   suspected compromise also needs every key in the cluster file rotated (**operator-only**)
   and its consumers redeployed. `docs/secret-rotation.md` and `docs/break-glass.md` state
   that distinction in D3.4.
-- **Every routed tag depends on decryption.** `${domain}` puts each IngressRoute behind
-  `cluster-vars`, so a broken `sops-age` stops every routed flux-owned tag from reconciling.
+- **Every substituting tag depends on decryption.** A secret placeholder puts a tag behind
+  `cluster-vars`, so a broken `sops-age` stops every substituting flux-owned tag from
+  reconciling. A route alone does not, because `domain` is published.
   Mitigation: they stay at their last revision and keep serving, and `promote` holds on
   `flux/cluster-vars`. D3.3a's precondition proves the key pair matches before the first
   decryption, and D3.3a promotes that decryption before any tag depends on it.
@@ -1217,8 +1218,8 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   rules covers it. D3 also adds no second writer of cluster manifests. Open question 8
   proposes one, `seal`, at about 120 lines with its tests.
 - **Removed:** for each flux-owned role, `verify_secret_keys.yml` no longer runs. R4 deletes
-  it once no role is Ansible-owned. Under C3's default, no interim `domain` source exists, so
-  D3 has none to retire.
+  it once no role is Ansible-owned. `domain` is published and has no interim source, so D3
+  has none to retire.
 
 ## Open questions
 
@@ -1232,18 +1233,17 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
 3. **Does `sops set` work on a dotenv file with the pinned sops version?** Resolution:
    D3.2a's tests run `write` against a throwaway key with the pinned binary, which its CI
    step installs.
-4. **The source of `domain`, and whether it should need decryption.** D3 follows C3's
-   default: D2.7 waits on D3.3b, and `domain` comes from `homelab-cluster-vars`.
+4. **Resolved: the source of `domain`, and whether it should need decryption.** The
+   operator ruled on 2026-10-14 that `domain` is published: "domain is not secret, it's a
+   var for flexibility just in case of future changes." The renderer writes it as a
+   literal, and `homelab-cluster-vars` does not hold it.
     - D2 has withdrawn D2.6a and its Secret `homelab-identifiers`. Nothing remains to
       retire.
-    - C3's alternative, a literal `domain`, is **operator-only**. Under it, D3.3b replaces
-      the literal, as *Which Kustomizations substitute* says.
-    - Keeping `domain` and `email` on a source that needs no decryption would keep routed
-      tags without secrets off the `cluster-vars` edge, at the cost of a second source beside
-      C3's one Secret. C3 does not allow it, and this plan does not propose it.
+    - D2.7 waits on domain PR 2b of R2's *Publish `domain`* item and on no PR of D3.
+    - Routed tags without a secret stay off the `cluster-vars` edge. `email`, the other
+      key the question named, stays a secret placeholder.
 
-   Resolution: settled for the default. The operator chooses the alternative before D2.7 if
-   at all.
+   Resolution: settled by the ruling.
 5. **What is `SHARED_KINDS`'s origin, D4.3a or D2.6b?** C3 and the slice index name D4.3a.
    D2's plan ships the set in D2.6b, and D4's step list has no D4.3a. Resolution: D3.3a waits
    on whichever PR ships the empty set, census and reserved-name check. The contracts.md

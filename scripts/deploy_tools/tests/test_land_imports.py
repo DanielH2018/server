@@ -31,6 +31,7 @@ MODULES = frozenset(
         "land_rerolls",
         "land_shared",
         "land_tags",
+        "land_tags_cli",
     }
 )
 ALLOWED = {
@@ -66,7 +67,10 @@ ALLOWED = {
     # stops through Outcome so they carry the verdict a landing's would.
     "handoff": {"options", "outcome"},
     # The tag derivation and what it reads. None of them knows what a landing is.
-    "land_tags": {"land_reach", "land_shared"},
+    "land_tags": {"land_shared"},
+    # The CLI over the tag derivation. It reads `shared_role_reach` from outside land_lib,
+    # which imports `land_tags`, so it sits above both (#4945).
+    "land_tags_cli": {"land_tags", "land_reach"},
     "land_platform": {"land_tags"},
     "land_reach": set(),
     "land_rerolls": set(),
