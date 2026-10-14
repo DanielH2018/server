@@ -19,7 +19,7 @@ from ansible.errors import AnsibleFilterError
 from lib import yaml_fast
 
 from _helpers import HOST_VARS
-from _k8s_render import rendered_docs
+from _k8s_render import host_context, rendered_docs
 from authelia_access import AUTH_TIERS, authelia_service_rules
 
 DOMAIN = "example.com"
@@ -198,7 +198,9 @@ def test_the_one_factor_rule_is_scoped_like_the_wildcard_it_replaces():
     """A service gaining its own rule must not gain reach the wildcard withheld: the same
     RFC1918 `networks` list, so a non-LAN source still falls through to two_factor."""
     rules = _rendered_rules()
-    wildcard = next(r for r in rules if r["domain"] == f"*.local.{DOMAIN}")
+    wildcard = next(
+        r for r in rules if r["domain"] == f"*.local.{host_context()['domain']}"
+    )
     generated = next(
         r
         for r in rules

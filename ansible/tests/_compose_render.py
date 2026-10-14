@@ -58,9 +58,8 @@ def host_context(
     another service's entry.
 
     Exposed so a guard can assert on a value the render expanded. The Pi's Alloy config names
-    `loki-homelab.local.{{ domain }}`; the plaintext inventory carries no `domain`, so the
-    render uses the stub `render_context` starts from, and a guard that hardcoded a domain
-    would hold only while that stub does.
+    `loki-homelab.local.{{ domain }}`, which the render fills from the inventory's `domain`,
+    so a guard reads the domain from this context rather than hardcoding one.
 
     Args:
         vars_: The host's vars. None reads daniel-pi's host_vars file. A dict REPLACES that

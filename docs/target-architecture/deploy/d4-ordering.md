@@ -1188,10 +1188,9 @@ Each bound below says how long a PR can be reverted alone.
    derives the expected statuses from Kustomization names, and D2.6b holds the allowlist
    census, the empty `SHARED_KINDS` and the reserved names `homelab` and the set's members.
    D4 adds only the per-file document rule (D4.3) and the `-deferred` suffix (D4.2).
-   contracts.md C2 and C3 still attribute these to "D4.3a", and the slice index still has
-   D3.3 wait on D4.3a. Resolution: the contracts.md maintainer names D2.5 and D2.6b in C2 and
-   C3 and drops the D3.3 → D4.3a edge. D3's row already has D3.0 to D3.3 wait on D2.1 to
-   D2.6, which covers D2.6b.
+   Resolution, applied on 2026-10-14: contracts.md C2 names D2.5 and C3 names D2.6b, and the
+   slice index has no D3.3 → D4.3a edge. D3's row has D3.0 to D3.3 wait on D2.1 to D2.6c,
+   which covers D2.6b.
 6. **Renderer-rule edges and C3.** Resolved: C3's *Ordering* row allows an edge from a
    renderer rule that the adding slice names. *Design* names D4's.
 7. **C3's list of deferred applies.** C3 names pihole, headlamp and netpol-baseline. D1 adds

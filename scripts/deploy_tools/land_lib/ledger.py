@@ -19,8 +19,11 @@ request joined a run already in flight and the second, after the gate, started o
 `failed` (systemd refused the request), and empty for a landing that kicked none. The joined
 tick fetched before the merge, so it does not carry the landing's commit.
 
-`cause` is a one-token reason beside a `deploy-failed` verdict, and empty beside every other
-one. The verdict alone cannot tell "nothing was deployed" (a tag miss, a failed tick, a
+`cause` is a one-token reason beside a `deploy-failed` verdict. Two exit-75 verdicts carry one
+too: `tip-outran-retries` with `deploy-exit-4`, and `deferred` with `promote-timeout`, the wait
+on a promotion that no promotion covered in time. Every other verdict leaves it empty. The
+Landings board's cause panel reads `deploy-failed` alone, so those two show only in its raw
+lines. The verdict alone cannot tell "nothing was deployed" (a tag miss, a failed tick, a
 host-lookup crash) from "changes are live and a task failed after them", so `cause` lets the
 board split them. Its vocabulary is `outcome.Cause` and it is checked HERE, on assignment,
 because the board groups by the field: a value invented at one of the seven writing sites

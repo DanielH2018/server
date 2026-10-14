@@ -67,7 +67,7 @@ def ui_login(*args) -> subprocess.CompletedProcess:
 def domain() -> str:
     from diagnostics.probe_lib import core
 
-    return core.sops_extract("domain")
+    return core.domain()
 
 
 @pytest.fixture

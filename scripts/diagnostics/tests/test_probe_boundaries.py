@@ -33,6 +33,7 @@ KNOWN_CONSUMERS = frozenset(
 # `setattr(core, "...")` calls in scripts/diagnostics/tests/test_probe*.py.
 PATCHED = frozenset(
     {
+        "domain",
         "fetch",
         "k8s_namespace",
         "metallb_vip",
