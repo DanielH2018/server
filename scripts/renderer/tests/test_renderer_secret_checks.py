@@ -13,6 +13,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_secret_checks.py
 """
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -46,6 +47,11 @@ from renderer.renderer_lib.secret_checks import (
 SENTINEL = "r2-sentinel"
 OTHER = "a.b-c.example"
 
+# Each `PASSTHROUGH_FILTERS` member mapped to every call shape the templates write, each a
+# function of the secret key. Empty while the set is: a member added without its calls here
+# fails `test_every_member_has_its_template_calls`.
+CALLS: dict[str, list[Callable[[str], object]]] = {}
+
 
 def check_membership(call):
     """Raise AssertionError unless `call(key)` places `key` into its output unchanged."""
@@ -58,6 +64,14 @@ def check_membership(call):
     assert replaced == expected, (
         f"replacing the sentinel gives {replaced}, but the call with {OTHER!r} gives {expected}"
     )
+
+
+def test_every_member_has_its_template_calls():
+    assert set(CALLS) == PASSTHROUGH_FILTERS
+    for name, calls in CALLS.items():
+        assert calls, f"{name} names no call shape"
+        for call in calls:
+            check_membership(call)
 
 
 def test_membership_of_an_interpolating_filter_is_clean():

@@ -10,6 +10,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_roundtrip.py
 """
 
 import json
+import re
 import sys
 
 import pytest
@@ -192,6 +193,29 @@ def test_observability_with_its_checksum_annotations_compared_is_clean(
     out = tmp_path / "rt"
     assert _main("roundtrip", "--out", str(out), "--role", "observability") == 0
     assert capsys.readouterr().out.count(" 0 differences, ") == 2
+
+
+def test_observability_with_one_checksum_annotation_changed_is_flagged(
+    flux_on_path, tmp_path
+):
+    # The clean half above passes whether or not the annotations are compared, so this half
+    # changes one hashed value on the placeholder side and requires the round trip to see it.
+    keys = homelab_render.secret_keys()
+    passes = stub_passes(shadow_diff.stub_vars(), keys, guarded_keys(read_guard_map()))
+    sides = render_sides(tmp_path / "rt", ["observability"], keys, passes)
+    annotation = re.compile(r"(checksum/config: )\S+")
+    (path, *_) = [
+        p
+        for p in sorted(
+            (sides.cluster(roundtrip.PLACEHOLDER) / "observability").glob("*.yaml")
+        )
+        if annotation.search(p.read_text())
+    ]
+    path.write_text(annotation.sub(r"\g<1>changed", path.read_text(), count=1))
+    report = compare_sides(sides, passes[0], flux_on_path)
+    assert report.exit_code() == 1
+    (difference,) = report.differences
+    assert difference.startswith("observability: ") and difference.endswith(" differs")
 
 
 def test_the_flux_crds_that_opt_out_of_substitution_are_clean(
