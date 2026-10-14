@@ -1,4 +1,69 @@
 ---
-# The disarmed half. Empty until H3.4b adds what install.yml writes, so it has nothing to reap
-# yet. The attended clear after H3.4a merges runs this arm, and it changes nothing on the host.
-[]
+# The disarmed half. Every task is absent-shaped, so a host that was never armed no-ops
+# through the whole file.
+#
+# It stops and removes the role's four units, the ufw rule and the builder's state directory.
+# Two of the units (homelab-builder.service and .timer) and homelab-repo-sign.service arrive
+# in H3.5a and H3.5b; listing them now means a disarm after those PRs needs no edit here.
+#
+# DECIDED: teardown never touches /var/lib/homelab-signer or either system user. The signer's
+# GnuPG home holds the archive key every host trusts, so a disarm must not cost a key
+# rotation. The signer user stays with it: a re-arm that recreated it would get a new uid,
+# the keygen's creates: guard would skip, and the signer could no longer read its own key.
+# ENFORCED: ansible/tests/setup/test_homelab_builder.py.
+
+- name: Check which builder units were installed here
+  tags: [homelab-builder-teardown]
+  ansible.builtin.stat:
+    path: "/etc/systemd/system/{{ item }}"
+  loop:
+    - homelab-builder.timer
+    - homelab-builder.service
+    - homelab-repo-sign.service
+    - homelab-apt-repo.service
+  loop_control:
+    label: "{{ item }}"
+  register: homelab_builder_unit_stats
+
+- name: Stop and disable the builder units
+  tags: [homelab-builder-teardown]
+  ansible.builtin.systemd:
+    name: "{{ item.item }}"
+    enabled: false
+    state: stopped
+  loop: "{{ homelab_builder_unit_stats.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  become: true
+  when: item.stat.exists
+
+- name: Remove the builder unit files
+  tags: [homelab-builder-teardown]
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop:
+    - homelab-builder.timer
+    - homelab-builder.service
+    - homelab-repo-sign.service
+    - homelab-apt-repo.service
+  become: true
+  notify: Reload systemd
+
+- name: Remove the repository's ufw rules
+  tags: [homelab-builder-teardown]
+  community.general.ufw:
+    rule: allow
+    port: "{{ homelab_builder_repo_port }}"
+    proto: tcp
+    from_ip: "{{ item }}"
+    delete: true
+  loop: "{{ homelab_builder_repo_clients }}"
+  become: true
+
+- name: Remove the builder's state directory
+  tags: [homelab-builder-teardown]
+  ansible.builtin.file:
+    path: "{{ homelab_builder_state_dir }}"
+    state: absent
+  become: true

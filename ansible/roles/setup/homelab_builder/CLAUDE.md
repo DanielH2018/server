@@ -13,12 +13,13 @@ design.
   `templates/*.timer.j2`)
 <!-- /generated_from -->
 
-## A disarmed skeleton, and why it is its own PR
+## The dispatcher and the arm
 
-`ansible/roles/setup/homelab_builder/defaults/main.yml:homelab_builder_enabled` is `false`.
-`tasks/main.yml` dispatches on it: `install.yml` when true, `teardown.yml` when false. Both
-arms are empty, so an apply changes nothing on the host. H3.4b fills both arms and flips the
-flag; H3.5a adds the builder timer and this file's autonomous-role contract.
+`ansible/roles/setup/homelab_builder/defaults/main.yml:homelab_builder_enabled` is `true`.
+`tasks/main.yml` dispatches on it: `install.yml` when true, `teardown.yml` when false. To
+disarm the builder, set the flag to `false`; the setup-plane tick then applies the teardown
+arm. H3.5a adds the builder timer and this file's autonomous-role contract. Until then the
+role installs no timer or cron, so nothing it installs changes state on a schedule.
 
 The playbook entry carries `when: has_gitops`, so the role reaches daniel-box only.
 `scripts/deploy_tools/setup_lib/setup_gates.py` reads that gate for the deployer's routing,
@@ -35,3 +36,36 @@ play's `load_secrets` pre_task decrypts:
 3. `uv run ansible-playbook ansible/initial_setup.yml --tags homelab_builder`.
 
 After the clear, a change under this role's directory lands through the setup-plane tick.
+
+## What the install arm writes (H3.4b)
+
+- The system users `homelab-builder` and `homelab-signer`, nologin, with no home created.
+- `/var/lib/homelab-builder/` (0711) with `src/` and `uv-cache/` (0700). Its `staged/` is
+  owned by the builder with group `homelab-signer` at 2770, because the builder writes it and
+  the signer empties it.
+- `/var/lib/homelab-signer/` (0711) with `gnupg/` (0700) and `repo/` (0755), the published
+  tree.
+- The archive signing key, generated once as `homelab-signer` by `gpg --quick-generate-key`.
+  Its `creates:` guard is `gnupg/openpgp-revocs.d`, the one directory gpg writes only when it
+  generates a key. Removing that directory makes the next apply generate a second key.
+- `homelab-apt-repo.service`, which runs `python3 -m http.server` on `server_ip` at
+  `homelab_builder_repo_port` over `repo/`, with `DynamicUser=yes`. apt trusts the signature
+  on `InRelease`, not the transport.
+- One ufw rule per `homelab_builder_repo_clients` entry, each a peer's `server_ip`. A client
+  removed from that list keeps its rule until the teardown runs or someone deletes it by hand.
+
+`/etc/homelab-builder/` and the builder's environment file arrive in H3.5a with the builder
+units, so this arm reads no SOPS key.
+
+## The teardown keeps the signing key
+
+The teardown stops and removes the four units the role installs by H3.5b, the ufw rules and
+`/var/lib/homelab-builder/`. It never touches `/var/lib/homelab-signer/` or either user. The
+GnuPG home holds the key every host trusts. A re-arm that recreated `homelab-signer` with a new
+uid could no longer read that key. The `# DECIDED:` marker at the top of `tasks/teardown.yml`
+carries the reasoning, and
+`ansible/tests/setup/test_homelab_builder.py::test_the_teardown_never_names_the_signer_tree_is_clean`
+holds it.
+
+A failed tick apply of this role writes `hold_sha` and stops every session's landings.
+`docs/host-packages.md` has the clear path.

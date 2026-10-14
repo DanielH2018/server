@@ -1,4 +1,130 @@
 ---
-# The armed half. Empty until H3.4b adds the repository half: the system users, their
-# directories, homelab-apt-repo.service, the ufw rule and the signing key.
-[]
+# The armed half, H3.4b: the repository half (docs/target-architecture/host/h3-pi-pilot.md,
+# *Shared names*, Repository and Builder state, and *The builder and the repository*). The
+# builder units, its script and config.env are H3.5a's.
+#
+# Every task carries homelab-builder-install and no initial_setup-wide tag such as `firewall`,
+# so narrow_setup narrows a change here to this arm alone.
+
+- name: Install GnuPG for the signing key
+  tags: [homelab-builder-install]
+  ansible.builtin.apt:
+    name: gnupg
+    state: present
+  become: true
+
+# Both users first: staged/ below is group-owned by homelab-signer. No home is created, so no
+# /etc/skel dotfiles land in a state directory; the directories below carry the modes.
+- name: Create the builder and signer system users
+  tags: [homelab-builder-install]
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    system: true
+    home: "{{ item.home }}"
+    create_home: false
+    shell: /usr/sbin/nologin
+  loop:
+    - { name: homelab-builder, home: "{{ homelab_builder_state_dir }}" }
+    - { name: homelab-signer, home: "{{ homelab_builder_signer_dir }}" }
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+
+# The two top directories are 0711: each user's subdirectories carry their own modes, and the
+# signer must traverse the builder's directory to reach staged/, as http.server must traverse
+# the signer's to reach repo/.
+- name: Create the builder and signer state directories
+  tags: [homelab-builder-install]
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ homelab_builder_state_dir }}", owner: homelab-builder, group: homelab-builder, mode: "0711" }
+    - { path: "{{ homelab_builder_state_dir }}/src", owner: homelab-builder, group: homelab-builder, mode: "0700" }
+    - { path: "{{ homelab_builder_state_dir }}/uv-cache", owner: homelab-builder, group: homelab-builder, mode: "0700" }
+    # The builder writes here and the signer empties it, so it is the one shared directory.
+    - { path: "{{ homelab_builder_state_dir }}/staged", owner: homelab-builder, group: homelab-signer, mode: "2770" }
+    - { path: "{{ homelab_builder_signer_dir }}", owner: homelab-signer, group: homelab-signer, mode: "0711" }
+    - { path: "{{ homelab_builder_signer_dir }}/gnupg", owner: homelab-signer, group: homelab-signer, mode: "0700" }
+    - { path: "{{ homelab_builder_signer_dir }}/repo", owner: homelab-signer, group: homelab-signer, mode: "0755" }
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+
+# openpgp-revocs.d is the guard because gpg creates it only when it generates a key: a bare
+# `gpg --list-keys` on an empty home creates pubring.kbx and trustdb.gpg, never this directory
+# (measured with GnuPG 2.4.4). The key has no passphrase because the signer runs unattended,
+# and it never expires because rotation is a procedure (docs/break-glass.md).
+- name: Generate the archive signing key in the signer's GnuPG home
+  tags: [homelab-builder-install]
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --homedir
+      - "{{ homelab_builder_signer_dir }}/gnupg"
+      - --batch
+      - --pinentry-mode
+      - loopback
+      - --passphrase
+      - ""
+      - --quick-generate-key
+      - "{{ homelab_builder_key_uid }}"
+      - rsa4096
+      - sign
+      - never
+    creates: "{{ homelab_builder_signer_dir }}/gnupg/openpgp-revocs.d"
+  become: true
+  become_user: homelab-signer
+
+# Key generation starts a gpg-agent under the signer's home. Nothing else uses it until the
+# signer unit runs, so stop it rather than leave a stray process behind the apply. With no
+# agent running, `--kill` is a no-op, so the task runs on every apply.
+- name: Stop any gpg-agent running under the signer's home
+  tags: [homelab-builder-install]
+  ansible.builtin.command:
+    argv:
+      - gpgconf
+      - --homedir
+      - "{{ homelab_builder_signer_dir }}/gnupg"
+      - --kill
+      - gpg-agent
+  become: true
+  become_user: homelab-signer
+  changed_when: false
+
+- name: Install the apt repository unit
+  tags: [homelab-builder-install]
+  ansible.builtin.template:
+    src: homelab-apt-repo.service.j2
+    dest: /etc/systemd/system/homelab-apt-repo.service
+    mode: "0644"
+  become: true
+  notify:
+    - Reload systemd
+    - Restart homelab-apt-repo
+
+- name: Flush handlers so the unit is loaded before it is enabled
+  tags: [homelab-builder-install]
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the apt repository
+  tags: [homelab-builder-install]
+  ansible.builtin.systemd:
+    name: homelab-apt-repo.service
+    enabled: true
+    state: started
+  become: true
+
+- name: Admit the repository's clients to its port
+  tags: [homelab-builder-install]
+  community.general.ufw:
+    rule: allow
+    port: "{{ homelab_builder_repo_port }}"
+    proto: tcp
+    from_ip: "{{ item }}"
+    comment: homelab apt repository
+  loop: "{{ homelab_builder_repo_clients }}"
+  become: true
