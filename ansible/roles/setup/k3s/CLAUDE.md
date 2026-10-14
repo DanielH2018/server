@@ -96,3 +96,13 @@ authority of those four actuators is written here so a later edit cannot quietly
   authenticator can wedge silently with every probe still green.
   `docs/k3s-node-plane-crons-and-incidents.md` has the detail and the incident evidence for each;
   `ansible/tests/setup/test_k3s_unit_logging.py` holds the log drop-in.
+- **Both drift checks know an object Flux applies, and neither reads its label alone.** The
+  prune check skips an object labelled `kustomize.toolkit.fluxcd.io/name=<n>` only while a
+  Kustomization `<n>` exists in `flux-system`. It reads that list once per run, and a failed
+  read skips nothing. The live drift check takes a `kustomize-controller` `Apply` entry as
+  server-side only on an object without `last-applied-configuration`. Flux strips that
+  annotation on every apply, so its presence means Ansible applied the object after a
+  handback. A handed-back object keeps both the label and Flux's `managedFields` entry, which
+  is why each check also reads live state. ENFORCED:
+  `ansible/roles/setup/k3s/tests/test_manifest_prune_check_flux_skip.py::test_a_labelled_object_whose_kustomization_is_gone_is_flagged`,
+  `ansible/roles/setup/k3s/tests/test_live_drift_check.py::test_a_handed_back_flux_object_is_compared`.
