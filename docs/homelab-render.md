@@ -348,7 +348,7 @@ transform.
 rule 4 on authelia's and pi-peer-backup's Secrets, and rule 5's two entries, the `indent`s on
 those keys. R2's PRs 6 and 7 remove them, and an entry that no longer matches fails the check,
 so the set shrinks only through a fix. R2's PR 4 removed qbittorrent's two `trim`s and
-mosquitto's `string`, and mosquitto's deploy now refuses a stored hash that holds a colon.
+mosquitto's `string`, and mosquitto's deploy refuses a stored hash that holds a colon.
 R2's PR 5 removed Home Assistant's two entries, the `from_json` parse and
 the Secret that embedded its output through `indent`. R2's PR 3 removed the 24 truthiness
 tests, each now `{% if K is defined %}`. Domain PR 2b removed the `hash('sha1')` on
