@@ -12,6 +12,7 @@ import re
 
 import pytest
 from _helpers import walk_tasks
+from _deploy_mechanics_row import DEPLOY_MECHANICS
 from _out_of_render_row import OUT_OF_RENDER
 from _row_table import Census, Subject, check, proof_problems, tracked
 from lib import yaml_fast
@@ -473,6 +474,7 @@ ROWS = (
             }
         ),
     ),
+    DEPLOY_MECHANICS,
     OUT_OF_RENDER,
 )
 
