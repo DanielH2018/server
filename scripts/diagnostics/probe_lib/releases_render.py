@@ -21,14 +21,34 @@ outrank the path check:
   * `UNKNOWN` -- no record, or one that proves nothing (below). The path verdict stands
     unchanged, which is the whole of the pre-#3046 behaviour.
 
-WHAT MAKES A RECORD PROVE NOTHING. A digest is evidence only when the render record's `commit`
-IS the ref, its tree was clean, and its `host` is the release record's, because a digest from
-another commit, a dirty tree or another host's vars names different bytes. `manifests_digest`
+WHAT MAKES A RECORD PROVE NOTHING. A digest is evidence about the ref only when the render
+record's `commit` IS the ref, its tree was clean, and its `host` is the release record's,
+because a digest from another commit, a dirty tree or another host's vars names different
+bytes. `manifests_digest`
 also excludes secret manifests by design, and uptime-kuma's `static-monitors.yaml` is one: a
 monitor added there leaves the digest identical while the path check correctly reads it stale.
 The `secret_digest` HMAC covers that, so a service with secret manifests needs that field on
 BOTH records; one written before it, or one whose host key was unreadable ('' by design), falls
 back to the path verdict and the fleet converges one redeploy at a time.
+
+A RENDER BEHIND THE REF (#4881). The producer renders hourly and master merges more often, so a
+record whose commit is the ref is the exception. A render of an ANCESTOR R of the ref that
+meets every other rule above, and whose digest matches, still proves the applied bytes are what
+R renders. Every path hit R already holds is then a false positive, so `apply_verdicts` drops
+it, the same way `CURRENT` does. A hit touched again in R..ref keeps the path verdict, and so
+does an `undigested_hits` hit wherever it falls.
+
+The grace window counts from the oldest commit R does not answer for, hit by hit, and the
+service's date is the oldest over its kept hits. A digested hit kept because R..ref touched it
+dates from its oldest commit in R..ref. An undigested hit dates from its oldest commit in the
+release record's `commit..ref`, since R answers for none of it. So a path touched only after R
+dates from its own recent commit and gets grace, while one touched before R keeps its old date
+and reads stale. A dropped hit dates nothing. That is what keeps grace meaning "a merge younger
+than N minutes" once R clears the older hits. The window's length is unchanged.
+
+A MISMATCH at R proves nothing about the ref, since R..ref may hold the fix, so it reads
+`UNKNOWN`, never `DRIFTED`. So does a render whose `commit` is not a full 40-character
+lowercase SHA, since that value reaches git.
 
 TWO THINGS A DRIFTED VERDICT DOES NOT OVERRIDE. A service inside `compute_stale`'s grace window
 keeps waiting: the window exists because a landing's own deploy is still in flight, and a digest
@@ -44,7 +64,9 @@ answers come from.
 """
 
 import json
+import re
 import subprocess
+import time
 from pathlib import Path
 
 # The same `scripts/` bootstrap releases.py carries, for its reason.
@@ -68,6 +90,10 @@ PATH_HIT_PREFIX = "changed since applied: "
 DIGEST_PROVABLE_ROLES = frozenset({"manifests"})
 
 _K8S_ROLES = "ansible/roles/k8s/"
+
+# A commit a record names reaches `git merge-base` and `git log`, so only a full lowercase
+# object name is passed on: not a ref, an option, an abbreviation or an uppercase spelling.
+_FULL_SHA = re.compile(r"[0-9a-f]{40}")
 
 # The three answers `digest_verdict` returns.
 CURRENT = "current"
@@ -182,6 +208,115 @@ def verdicts_for(records, renders, ref_sha):
     }
 
 
+def _touch_times(rev_range, paths=(), repo_root=REPO_ROOT):
+    """{path: oldest committer time} for every path `git log rev_range` touches, or None.
+
+    `paths`, when given, limits the log to those pathspecs. None means git could not answer,
+    which a caller treats as undated: a range git cannot read is not evidence a change is fresh.
+    """
+    try:
+        result = git(
+            "log",
+            "--name-only",
+            "--format=%x00%ct",
+            rev_range,
+            *(("--", *paths) if paths else ()),
+            cwd=repo_root,
+            check=False,
+            timeout=15,
+        )
+    except OSError, subprocess.SubprocessError:
+        return None
+    if result.returncode != 0:
+        return None
+    started = {}
+    # Newest first, so the last time recorded for a path is its oldest.
+    for entry in result.stdout.split("\0")[1:]:
+        lines = [line.strip() for line in entry.splitlines() if line.strip()]
+        if not lines:
+            continue
+        for path in lines[1:]:
+            started[path] = int(lines[0])
+    return started
+
+
+def changed_since(commit, ref_sha, repo_root=REPO_ROOT):
+    """{path: oldest committer time} for every path touched in `commit..ref_sha`.
+
+    None when `commit` is not an ancestor of `ref_sha`, or git cannot say: a render of a commit
+    the ref does not hold, or one this checkout does not know, proves nothing about the ref.
+
+    The log is raw, so a path whose only edit after `commit` is comment-only still counts. That
+    keeps a hit the path rules would drop, which is the safe direction.
+    """
+    try:
+        ancestor = git(
+            "merge-base",
+            "--is-ancestor",
+            commit,
+            ref_sha,
+            cwd=repo_root,
+            check=False,
+            timeout=10,
+        )
+    except OSError, subprocess.SubprocessError:
+        return None
+    if ancestor.returncode != 0:
+        return None
+    return _touch_times(f"{commit}..{ref_sha}", repo_root=repo_root)
+
+
+def renders_behind(records, renders, ref_sha, verdicts, repo_root=REPO_ROOT, hits=None):
+    """{service: {path: date}} for each service a render behind `ref_sha` clears.
+
+    That is a service `verdicts` leaves `UNKNOWN` whose render's commit R is a full SHA, an
+    ancestor of `ref_sha`, and `CURRENT` at R by the same rules `digest_verdict` applies at the
+    ref. `apply_verdicts` reads one as `CURRENT` for every path hit R already holds. One git
+    range per distinct R, since the producer renders every service at one commit.
+
+    The dates are the epoch seconds each kept hit counts from. A path R..ref touched dates from
+    its oldest commit there, because R answers for everything before it. An `undigested_hits`
+    path in `hits` dates from its oldest commit in the release record's `commit..ref_sha`,
+    because R answers for none of it. A path with no date is absent, and the caller reads it
+    as old.
+    """
+    ranges, behind = {}, {}
+    for rec in records:
+        service = rec.get("service")
+        render = renders.get(service)
+        if verdicts.get(service, (None,))[0] != UNKNOWN or not render:
+            continue
+        commit = render.get("commit")
+        # The commit reaches git, so only a full lowercase object name is passed on.
+        if not _is_full_sha(commit) or commit == ref_sha:
+            continue
+        if digest_verdict(rec, render, commit)[0] != CURRENT:
+            continue
+        if commit not in ranges:
+            ranges[commit] = changed_since(commit, ref_sha, repo_root)
+        if ranges[commit] is None:
+            continue
+        dates = dict(ranges[commit])
+        base = rec.get("commit")
+        undigested = sorted(
+            {
+                _hit_path(h)
+                for h in undigested_hits(service, (hits or {}).get(service, ()))
+            }
+        )
+        if undigested and _is_full_sha(base):
+            dates.update(
+                _touch_times(f"{base}..{ref_sha}", undigested, repo_root) or {}
+            )
+        behind[service] = dates
+    return behind
+
+
+def _is_full_sha(value):
+    """Whether `value` is exactly 40 lowercase hex characters."""
+    return isinstance(value, str) and _FULL_SHA.fullmatch(value) is not None
+
+
 def path_reason(hits):
     """The `PATH_HIT_PREFIX` reason for `hits`, naming the first three."""
     more = f" (+{len(hits) - 3} more)" if len(hits) > 3 else ""
@@ -206,7 +341,14 @@ def undigested_hits(service, hits):
     return kept
 
 
-def apply_verdicts(stale, pending, verdicts, hits=None):
+def _hit_path(hit):
+    """The path a `compute_stale` hit names, without a deploy-plane annotation after it."""
+    return hit.split(" ", 1)[0]
+
+
+def apply_verdicts(
+    stale, pending, verdicts, hits=None, behind=None, grace_seconds=0, now=None
+):
     """Let the digest answer override the path verdict in `stale` and `pending`, in place.
 
     Returns the sorted names a CURRENT verdict cleared from `stale`.
@@ -216,22 +358,49 @@ def apply_verdicts(stale, pending, verdicts, hits=None):
     `undigested_hits` keeps. A stale service with such a hit stays stale, its reason narrowed
     to the kept hits, and a pending one stays pending.
 
+    `behind` is `renders_behind`'s answer: {service: {path: date}}. A service in it is CURRENT
+    at its render's commit R, so it keeps every `undigested_hits` hit and every hit whose path
+    R..ref touched. The drift date is the oldest `date` among the kept hits, and a kept hit
+    with no date counts as old. A stale service whose drift is younger than `grace_seconds`
+    moves to `pending`, as `compute_stale` would have placed it. `now` is epoch seconds, for
+    the tests.
+
     A CURRENT service is dropped from `pending` too, so it does not read as a merge still
     waiting on its deploy. A DRIFTED one is left alone where the grace window or the
     unknown-commit doubt already answers for it, per the module docstring.
     """
     cleared = []
+    behind = behind or {}
     for service, (verdict, reason) in sorted(verdicts.items()):
+        # Without the hits there is no telling which ones R holds, so nothing is dropped.
+        if service in behind and hits is not None:
+            verdict = CURRENT
         if verdict == CURRENT:
-            kept = undigested_hits(service, (hits or {}).get(service, ()))
+            service_hits = (hits or {}).get(service, ())
+            kept = undigested_hits(service, service_hits)
+            dates = behind.get(service)
+            if dates is not None:
+                kept = [h for h in service_hits if h in kept or _hit_path(h) in dates]
+            age = _drift_age(kept, dates, now) if dates is not None else None
             if service in stale and stale[service].startswith(PATH_HIT_PREFIX):
-                if kept:
-                    stale[service] = path_reason(kept)
-                else:
+                if not kept:
                     del stale[service]
                     cleared.append(service)
-            if pending and service in pending and not kept:
-                del pending[service]
+                elif (
+                    pending is not None
+                    and age is not None
+                    and grace_seconds > 0
+                    and age < grace_seconds
+                ):
+                    del stale[service]
+                    pending[service] = age
+                else:
+                    stale[service] = path_reason(kept)
+            if pending and service in pending:
+                if not kept:
+                    del pending[service]
+                elif age is not None:
+                    pending[service] = age
         elif verdict == DRIFTED:
             if pending and service in pending:
                 continue
@@ -239,6 +408,18 @@ def apply_verdicts(stale, pending, verdicts, hits=None):
                 continue
             stale[service] = reason
     return cleared
+
+
+def _drift_age(kept, dates, now):
+    """Seconds since the oldest kept hit's date, or None when any kept hit has no date.
+
+    A hit git could not date is not evidence the change is fresh, so it leaves the age unknown
+    and the caller keeps the service stale.
+    """
+    if not kept or any(_hit_path(h) not in dates for h in kept):
+        return None
+    started = min(dates[_hit_path(h)] for h in kept)
+    return int((now if now is not None else time.time()) - started)
 
 
 def apply_digest_verdicts(
@@ -249,14 +430,29 @@ def apply_digest_verdicts(
     ref="origin/master",
     render_dir=None,
     hits=None,
+    grace_seconds=0,
+    now=None,
 ):
-    """`apply_verdicts` for the render records in `render_dir` and `ref` resolved in `repo_root`."""
+    """`apply_verdicts` for the render records in `render_dir` and `ref` resolved in `repo_root`.
+
+    `grace_seconds` and `now` are `compute_stale`'s, for the re-dating `apply_verdicts` does.
+    """
     renders = load_renders(render_dir or RENDER_DIR)
     if not renders:
         return []
+    ref_sha = resolve_ref(ref, repo_root)
+    verdicts = verdicts_for(records, renders, ref_sha)
+    behind = (
+        renders_behind(records, renders, ref_sha, verdicts, repo_root, hits)
+        if ref_sha
+        else {}
+    )
     return apply_verdicts(
         stale,
         pending,
-        verdicts_for(records, renders, resolve_ref(ref, repo_root)),
+        verdicts,
         hits=hits,
+        behind=behind,
+        grace_seconds=grace_seconds,
+        now=now,
     )

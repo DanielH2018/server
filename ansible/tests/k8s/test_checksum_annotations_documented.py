@@ -51,7 +51,7 @@ ANNOTATION_KEY_RE = re.compile(
 )
 
 # `checksum_annotation('foo', ...)` — the shared macro (ansible/templates/checksum-
-# annotation.yml.j2) that monitor-bridge, autofix-bridge, n8n, game-stats and observability
+# annotation.yml.j2) that monitor-bridge, autofix-bridge, game-stats and observability
 # call instead of writing `checksum/foo:` literally. Scoped to the SOURCE half of the census:
 # the render expands the macro into the literal key that ANNOTATION_KEY_RE already matches, so
 # a rendered template needs this pattern for nothing. A template the render does
@@ -107,13 +107,12 @@ SOURCE_FALLBACK_MEMBERS = {
 
 # One annotation per role that genuinely defines one, so narrowing the read cannot empty the
 # census and pass over nothing. Every member here arrives through the render: the macro writes
-# the literal key, and these are the only five roles that call it.
+# the literal key, and these are the only four roles that call it.
 CENSUS_MEMBERS = {
     "observability": "config",
     "game-stats": "stats-script",
     "autofix-bridge": "autofix-script",
     "monitor-bridge": "check-script",
-    "n8n": "image",
 }
 
 
@@ -299,7 +298,7 @@ def test_each_role_that_defines_an_annotation_is_still_credited_with_it(
 
     `ANNOTATION_KEY_RE` is stricter than the prose pattern it replaced, so a form it fails to
     match reads as "this role defines no annotation" and every claim about it passes over an
-    empty set. These five are the roles that call `checksum_annotation()`.
+    empty set. These four are the roles that call `checksum_annotation()`.
     """
     actual = _annotations_in_templates(K8S_ROLES / role_name)
     assert annotation in actual, (

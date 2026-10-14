@@ -58,7 +58,9 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   earlier in this role's batch can still be rolling when the role runs. The drain waits for
   those rollouts first. That keeps the exempt-set reads, the policy applies and the probe off
   a shared end-of-batch drain, whatever batch the role lands in. It cannot wait for a role
-  listed after this one, so the entry stays last in `containers_list`. In a run of
+  deployed after this one, so the role sorts last: `K8S_SORTS_LAST` in
+  `ansible/filter_plugins/toposort.py` gives it an edge onto every other k8s entry, whatever
+  its position in `containers_list`. In a run of
   `--tags netpol-baseline` alone the queue is empty and the drain does nothing.
 
 ## Where a per-workload policy lives

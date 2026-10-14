@@ -218,9 +218,13 @@ under `uv run --no-project`. The journal names the outcome on every tick:
   until a hand cleared it. A refusal now fast-forwards and records each service it may reach
   as a `k8s_unapplied` line, which names the `--tags` command and discharges itself once a
   deploy carries the change. The fleet-coverage refusal prints the tags it reached beside its
-  exit 3, so only those are recorded; any other refusal records every declared service. No
-  receipt is written for the plane, so `land.sh` reports `needs-manual-apply` rather than
-  reading it as applied.
+  exit 3, so only those are recorded; any other refusal records every declared service. The
+  receipt applies nothing for the plane and records the same services under `deferred`.
+  The tick writes that entry only after the ledger lines, so a read mid-tick never counts 0
+  owed (#4866), and writes none for a plane that owes no service this host declares (#4865).
+  `land.sh` reads that key, scoped to the range that crossed the PR. While any of those
+  services still holds a ledger line it reports `needs-manual-apply` and names the deferral
+  rather than a whole `deploy.yml`. Once none does, it reads the plane as applied (#4843).
 
 `narrow` is read-only and can be run by hand against any range. The rules it applies, and what
 each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
@@ -1080,7 +1084,7 @@ untouched.
   commit before the tick it kicks records the change. That check reads only the own record, since
   the shared-role and render proofs each start a subprocess.
 - A caller carries the change when its release record descends from the line's commit. For
-  `manifests` alone, a caller also carries it when a render at a commit descending from the line's
+  `manifests`, a caller also carries it when a render at a commit descending from the line's
   matches its applied digests (`deploy_release.render_proof`). The render need only hold the
   change, so the hourly producer answers within about an hour of a merge. Every other shared role
   acts outside the digest, and `deploy_k8s_owed.DIGEST_PROVABLE_ROLES` carries the `# DECIDED:`
@@ -1089,8 +1093,23 @@ untouched.
   digest covers. `scripts/deploy_tools/digest_provable.py` derives that per role, fail-closed:
   every task is a `k8s/manifests` include, a pure fact or check module, or an include of a task
   file that meets the same rule, and the role has no handlers or meta dependencies. A comment-only
-  template edit to such a role then discharges within about an hour with no deploy. A role that
-  includes `image-builder`, writes a host file or calls an API still needs its record to descend.
+  template edit to such a role then discharges within about an hour with no deploy.
+- Any other role takes the render proof per range (#4781). That covers an own role that
+  includes `image-builder`, writes a host file or calls an API, and every shared role but
+  `manifests`. A matching render at C vouches for the bytes, and the role's release record at R
+  says when its other effects last ran. `scripts/deploy_tools/digest_covers.py` judges `R..C`
+  for each such tag, fail-closed. Every path that could have written the line must be prose, a
+  comment-only edit Ansible discards, or an `assert`/`fail`/`debug` added to a play file with
+  no variable Ansible itself reads. A `toposort.py` change also passes when the play's sort
+  chain, run with the plugin at each end on C's data, returns the same entries in any order
+  and leaves its input unchanged (#4842). So does an inventory or template path the
+  deploy-plane narrowing maps to other tags. The range starts at the record, not the
+  line's origin, because a second change moves the origin past the first. Its test module holds
+  the case table: #4753's asserts, #4836's ordering change and #4818's comment discharge, and a
+  changed task, a play variable a role reads and `filter_by_platform` keep the line.
+- A line can still outlive its change when a tag's render differs from its applied bytes for
+  another reason. That tag needs a deploy anyway, and its own line or `probe.py releases` names
+  it. Deploying that tag discharges the line.
 - Each line is written at the newest commit in the tick's range whose own diff reaches its
   service (`deploy_phases.k8s_change_commits`), not at the tick's tip. A landing deploys its PR's
   commit, so a line at a later, unrelated tip could never discharge by ancestry.
@@ -1100,7 +1119,9 @@ untouched.
   `gitops_state.py clear-owed k8s_deferred <svc>`.
 - `gitops_state.py clear-owed k8s_unapplied <svc>` is the hand clear for `k8s_unapplied`. It is
   needed for a change that was reverted rather than applied, or for a shared role with a caller
-  nothing can prove applied: no tag runs the role, or a caller writes no release record.
+  nothing can prove applied: no tag runs the role, or a caller writes no release record. A line
+  the render proof cannot discharge is not one of those: deploy the service, or the tag holding
+  a shared line, and the discharge drops it.
 - The banner, the journal and `probe.py gitops-state` print one remedy per line, from
   `gitops_markers.k8s_unapplied_remedy`. A shared role never gets a bare `deploy.sh --tags
   <role>`, because that command redeploys every service that runs the role (#4373). For

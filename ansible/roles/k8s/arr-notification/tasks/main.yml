@@ -85,6 +85,9 @@
     msg: >-
       {{ arr_notification_seed.stdout | default('') }}
       {{ arr_notification_seed.stderr | default('') }}
+  # The sentinel is redundant with `not k8s_dry_run`, since a stub file is refused outside a
+  # dry run. The secret-key census credits only the sentinel on a `fail`.
   when:
     - not k8s_dry_run | bool
+    - not (homelab_secret_stubs | default(false) | bool)
     - arr_notification_seed.rc | default(0) != 0

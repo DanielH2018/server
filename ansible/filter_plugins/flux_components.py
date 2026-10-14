@@ -15,10 +15,12 @@ closes each one at render time:
   `volumes` and in every container's `volumeMounts`.
 
 A merge patch cannot rename a list item, which is why the rename is code rather than patch
-data. Each renamed item is written with `name` as its first key, and every block sequence is
-indented under its key, so a guard that reads the rendered `- name:` lines sees the new names.
-PyYAML's default writes a sequence at its key's own column, which that guard reads as the end
-of the block: it then collects no name and passes.
+data. Each renamed item is written with `name` as its first key. `_IndentedDumper` indents
+every block sequence two columns under its key, the style the hand-written templates use.
+That is a style choice only: PyYAML's default writes a sequence at its key's own column, and
+the volume-name guard (`volume_blocks` in `ansible/tests/k8s/test_volume_names_descriptive.py`)
+reads that form too since #4733. Dropping the dumper would change the flux render's whitespace
+and nothing else.
 
 No Ansible import at load time, so the tests call the function the playbook runs.
 """

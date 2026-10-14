@@ -1,9 +1,8 @@
 """`PINNED_LIVE_FACTS` names every tag whose templates read a pinned fact, and no other.
 
-Later slices key two publish guards on those reader tags. `k8s_built_images` pins to an empty
-list, which renders as `"unstaged"` and carries no stub token, so a reader the constant
-misses would publish a stand-in that no value census can see. The tags are therefore derived
-here from a word grep of the k8s templates and `ansible/templates/`, and held equal.
+Later slices key two publish guards on those reader tags, so a reader the constant misses
+would escape both. The tags are therefore derived here from a word grep of the k8s templates
+and `ansible/templates/`, and held equal.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_pinned_live_facts.py
 """
@@ -37,7 +36,7 @@ def _readers(fact: str, roles: Path = K8S_ROLES, shared: Path = SHARED) -> set[s
 
 
 def test_reader_tags_equal_a_word_grep_of_the_templates():
-    assert len(PINNED_LIVE_FACTS) == 5
+    assert len(PINNED_LIVE_FACTS) == 3
     derived = {name: _readers(name) for name in PINNED_LIVE_FACTS}
     assert derived == {
         name: set(fact.readers) for name, fact in PINNED_LIVE_FACTS.items()
@@ -53,28 +52,27 @@ def test_string_stand_ins_carry_the_stub_marker():
     for name, fact in PINNED_LIVE_FACTS.items():
         if isinstance(fact.value, str):
             assert fact.value == homelab_secret_stub(name)
-    assert PINNED_LIVE_FACTS["k8s_built_images"].value == []
 
 
 def test_reader_under_a_listed_tag_is_clean(tmp_path):
     roles, shared = tmp_path / "roles", tmp_path / "templates"
-    (roles / "pi-peer-backup" / "templates").mkdir(parents=True)
-    (roles / "pi-peer-backup" / "templates" / "secret.yaml.j2").write_text(
-        "line: {{ pi_peer_backup_known_hosts_line }}\n"
+    (roles / "authelia" / "templates").mkdir(parents=True)
+    (roles / "authelia" / "templates" / "config-secret.yaml.j2").write_text(
+        "hash: {{ authelia_password_hash }}\n"
     )
     shared.mkdir()
-    readers = _readers("pi_peer_backup_known_hosts_line", roles, shared)
-    assert readers == set(PINNED_LIVE_FACTS["pi_peer_backup_known_hosts_line"].readers)
+    readers = _readers("authelia_password_hash", roles, shared)
+    assert readers == set(PINNED_LIVE_FACTS["authelia_password_hash"].readers)
 
 
 def test_reader_under_an_unlisted_tag_is_flagged(tmp_path):
     roles, shared = tmp_path / "roles", tmp_path / "templates"
-    for role in ("pi-peer-backup", "littlelink"):
+    for role in ("authelia", "littlelink"):
         (roles / role / "templates").mkdir(parents=True)
-        (roles / role / "templates" / "secret.yaml.j2").write_text(
-            "line: {{ pi_peer_backup_known_hosts_line }}\n"
+        (roles / role / "templates" / "config-secret.yaml.j2").write_text(
+            "hash: {{ authelia_password_hash }}\n"
         )
     shared.mkdir()
-    readers = _readers("pi_peer_backup_known_hosts_line", roles, shared)
-    assert readers != set(PINNED_LIVE_FACTS["pi_peer_backup_known_hosts_line"].readers)
+    readers = _readers("authelia_password_hash", roles, shared)
+    assert readers != set(PINNED_LIVE_FACTS["authelia_password_hash"].readers)
     assert "littlelink" in readers

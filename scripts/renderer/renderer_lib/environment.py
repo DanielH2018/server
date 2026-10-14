@@ -7,7 +7,7 @@ template and a task expression see the same filters and the same `lookup`.
 Typical usage example:
 
     env = renderer_env(K8S_ROLES / "nut" / "templates", ctx)
-    text = env.get_template("deployment.yaml.j2").render(ctx)
+    text = render_file(env, "deployment.yaml.j2", ctx)
 """
 
 import sys as _sys
@@ -25,7 +25,7 @@ from jinja2.runtime import Context
 
 from lib.ansible_jinja_env import template_env
 from lib.k8s_yaml import make_lookup
-from lib.render_guard import StrictChainableUndefined
+from lib.render_guard import StrictChainableUndefined, pad_to_source_newlines
 
 
 class RenderError(RuntimeError):
@@ -38,11 +38,22 @@ def renderer_env(templates: Path, ctx: dict | None = None) -> jinja2.Environment
     The template census in `scripts/renderer/tests/` parses every template through this
     environment, so a filter or test the renderer lacks fails there before a render meets it.
     With `ctx`, the environment's `lookup` reads files and renders templates against it.
+
+    Unlike the render guards' environment, it drops a template's last newline, as
+    ansible-core's `AnsibleEnvironment` does, and `render_file` adds back what the template
+    module adds back. So an `{% include %}` loses its last newline, as it does under Ansible.
     """
     env = template_env(templates, undefined_cls=StrictChainableUndefined)
+    env.keep_trailing_newline = False
     if ctx is not None:
         env.globals["lookup"] = _template_lookup(env, ctx)
     return env
+
+
+def render_file(env: jinja2.Environment, name: str, variables: dict) -> str:
+    """Template `name` on `env`'s loader, rendered to the text the `template` module writes."""
+    source, _, _ = cast(jinja2.BaseLoader, env.loader).get_source(env, name)
+    return pad_to_source_newlines(source, env.get_template(name).render(variables))
 
 
 def _template_lookup(env: jinja2.Environment, ctx: dict):
@@ -64,21 +75,23 @@ def _template_lookup(env: jinja2.Environment, ctx: dict):
         kind = kind.removeprefix("ansible.builtin.")
         if kind != "template":
             return base(context, kind, *args, **kwargs)
-        # Not rstripped: ansible-core's lookup keeps a render's trailing newlines, and
-        # image-builder's content tag hashes them.
-        return _lookup_template(env, Path(args[0])).render(context.get_all())
+        # Not rstripped: ansible-core's lookup pads a render's trailing newlines as the
+        # template module does, and image-builder's content tag hashes them.
+        return _lookup_render(env, Path(args[0]), context.get_all())
 
     return lookup
 
 
-def _lookup_template(env: jinja2.Environment, path: Path) -> jinja2.Template:
-    """The template `lookup('template', path)` renders, found as Ansible's lookup finds it."""
+def _lookup_render(env: jinja2.Environment, path: Path, variables: dict) -> str:
+    """`lookup('template', path)`, with the template found as Ansible's lookup finds it."""
     if not path.is_absolute():
-        return env.get_template(path.as_posix())
+        return render_file(env, path.as_posix(), variables)
     try:
-        return env.get_template(loader_name(env, path))
+        name = loader_name(env, path)
     except RenderError:
-        return env.from_string(path.read_text())
+        source = path.read_text()
+        return pad_to_source_newlines(source, env.from_string(source).render(variables))
+    return render_file(env, name, variables)
 
 
 def loader_name(env: jinja2.Environment, path: Path) -> str:
@@ -113,4 +126,6 @@ def evaluate(env: jinja2.Environment, expression: str, variables: dict) -> objec
             and "{{" not in inner
         ):
             return env.compile_expression(inner, undefined_to_none=False)(**variables)
-        return env.from_string(expression).render(variables)
+        return pad_to_source_newlines(
+            expression, env.from_string(expression).render(variables)
+        )

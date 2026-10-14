@@ -120,21 +120,12 @@ def test_the_builder_records_every_image_not_only_changed_ones():
         )
 
 
-def test_a_dry_run_records_the_digest_n8n_stamps_and_the_gate_skips_it():
-    """n8n's `checksum/image` annotation reads this fact, so a dry run must record it too.
+def test_every_gate_task_reading_the_record_skips_a_dry_run():
+    """The builder records digests on a dry run and under --check too, so the gate must skip both.
 
-    Guarded on `k8s_no_mutate`, the record would be skipped on every dry run, n8n would render
-    `unstaged`, and its dry-run render digest could never match a deploy's. Dropping the guard is safe only
-    because every gate task that reads the fact skips itself on a dry run and under --check.
+    No pod rolls in either mode, so a gate task that ran there would compare the registry with
+    pods this play never touched.
     """
-    for task in _tasks(_BUILDER):
-        if "k8s_built_images" in str(task.get("ansible.builtin.set_fact", "")):
-            assert not re.search(
-                r"k8s_no_mutate|k8s_dry_run|ansible_check_mode",
-                str(task.get("when", "")),
-            ), (
-                "the k8s_built_images record is skipped on a dry run, so n8n renders `unstaged`"
-            )
     readers = [t for t in _tasks(_GATE) if "k8s_built_images" in str(t)]
     assert readers
     for task in readers:

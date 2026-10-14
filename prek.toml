@@ -280,8 +280,10 @@ pass_filenames = false
 # gitops_deploy_tick_interval). group_vars/all.yml is in scope for the same reason
 # validate-shell-templates includes it: host_python_version and the other cross-role fallbacks
 # it carries feed every unit's render. The polkit rules are a third suffix in the first
-# alternative.
-files = "^(scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|ansible/roles/setup/.*/defaults/main\\.yml|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+# alternative. Every file under hosts/ and the host renderer's modules are in scope because the
+# validator renders every host package through that renderer (H3.2c); a package unit may be a
+# static file, so no suffix narrows the hosts/ alternative.
+files = "^(hosts/.*|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/render_targets\\.py|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|ansible/roles/setup/.*/defaults/main\\.yml|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # Flag bash's `${#var}` length expansion in a Jinja template, before anything renders it. `{#`
 # opens a Jinja comment, so a shell script inside a `.j2` that writes `${#var}` either fails the
@@ -528,24 +530,39 @@ files = "(^|/)CLAUDE\\.md$|^(?!.*\\.md$)"
 # next-run review says to check before a hook gains one of its staged paths.
 exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|evals/history\\.json$)"
 
-# Eight static test modules that turned more PRs red than any other test the author's own code
+# Twelve static test modules that turned more PRs red than any other test the author's own code
 # did not break. The first four were 24 of 154 failed CI runs from 2026-08-30 to 2026-10-05
 # (#3605). The three census-row modules and the role CLAUDE.md check failed 6 PRs between them
 # after that, to 2026-10-09 (#4008). Three of those were the role check's size arm, which the
-# operator retired on 2026-10-12 (#2826). The module still runs its existence and tag checks. Each failure names its own repair, so finding it at
-# commit time saves a CI round trip and a fix commit. The first four ran in 3.4s on daniel-box
-# and 7.5s on daniel-server; all eight measured 10.7-12.6s on daniel-server against 8.1-8.8s
-# for the four, back to back on 2026-10-09. The whole suite left prek on 2026-10-02 because it
-# cost 89-235s, and still runs only in CI and the two crons.
+# operator retired on 2026-10-12 (#2826). The module still runs its existence and tag checks.
+# The last four are the other census-row modules: #4894 went red in CI on the suite module's
+# glob-census row on 2026-10-13, and #4904 added all four. Each failure names its own repair,
+# so finding it at commit time saves a CI round trip and a fix commit. The first four ran in
+# 3.4s on daniel-box and 7.5s on daniel-server; all eight measured 10.7-12.6s on daniel-server
+# against 8.1-8.8s for the four, back to back on 2026-10-09. On daniel-box on 2026-10-13, back
+# to back, the eight measured 14.4-14.9s and all twelve 15.0-15.2s. The whole suite left prek
+# on 2026-10-02 because it cost 89-235s, and still runs only in CI and the two crons.
 #
 # It sits after `tighten-ratchet-allowlists` and `facts-reverify-changed` because the ratchet
 # and facts tests read the files those two rewrite. `files` is wider than `.py`: a `moved`
 # facts atom is often a YAML key or a `DECIDED:` marker in a template, and the doc fragments
 # read role defaults, inventory and the fail2ban template. The shard partition test reads
-# ci.yml and pyproject.toml's `testpaths`. The census rows read tracked `.py` files, and
-# test_role_claude_md reads every role's CLAUDE.md beside its tasks and templates.
+# ci.yml and pyproject.toml's `testpaths`. test_role_claude_md reads every role's CLAUDE.md
+# beside its tasks and templates. The census rows read tracked `.py` files, and four more
+# kinds of path:
+# - every workflow under .github/workflows/, for the runner-pin and shared-fetch rows;
+# - any file under a role's templates/, defaults/ or files/, for the row that refuses a
+#   literal uptime-kuma port, because a `.sh` or `.conf` there can dial it;
+# - Markdown and JSON under .claude/skills/, .claude/agents/ and evals/cases/, for the rows
+#   on the review surfaces' standing-list slug and the agents' inline re-flag list;
+# - a compiled module (`.pyc`, `.so`, anything under __pycache__/), for the row that refuses
+#   a tracked one.
+# The macro row reads every Markdown doc under docs/ and .claude/ and every CLAUDE.md, and only
+# the CLAUDE.md files, the skills and the agents are gated. A docs/ page or a .claude/rules/
+# file that names a deleted macro goes red in CI instead. Gating all Markdown would charge every docs-only commit the 15s above, and
+# the edit that usually breaks the row deletes a macro template, which `.j2` already gates.
 #
-# CI skips it on both `prek run` steps, because its `pytest` job runs the same eight files.
+# CI skips it on both `prek run` steps, because its `pytest` job runs the same twelve files.
 # That job's checkout is not shallow (`fetch-depth: 0`), so the ratchet's allowlist comparison
 # runs there too, against the merge base with origin/master (#4009). docs-refresh
 # stages scripts/dev/pytest_shard_weights.json, so this fires on that cron's commit, which
@@ -554,10 +571,10 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 [[repos.hooks]]
 id = "static-ratchet-tests"
 name = "Static ratchet tests (module length, facts.lock, shard partition, doc fragments, role CLAUDE.md, census rows)"
-entry = "uv run --frozen pytest -q -p no:cacheprovider ansible/tests/repo/test_module_length_ratchet.py ansible/tests/repo/test_facts_lock_matches_tree.py ansible/tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py ansible/tests/repo/test_role_claude_md.py ansible/tests/repo/test_census_rows_python.py scripts/tests/test_census_rows_test_modules.py scripts/tests/test_census_rows_test_renders.py"
+entry = "uv run --frozen pytest -q -p no:cacheprovider ansible/tests/repo/test_module_length_ratchet.py ansible/tests/repo/test_facts_lock_matches_tree.py ansible/tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py ansible/tests/repo/test_role_claude_md.py ansible/tests/repo/test_census_rows_python.py scripts/tests/test_census_rows_test_modules.py scripts/tests/test_census_rows_test_renders.py ansible/tests/repo/test_census_rows_suite.py ansible/tests/repo/test_census_rows_roles.py ansible/tests/repo/test_census_rows_text.py ansible/tests/repo/test_census_rows_layout.py"
 language = "system"
 pass_filenames = false
-files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock$|^scripts/dev/pytest_shard_weights\\.json$|^ansible/tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/ci\\.yml$|^ansible/.*\\.(ya?ml|j2|ini)$)"
+files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock$|^scripts/dev/pytest_shard_weights\\.json$|^ansible/tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^ansible/.*\\.(ya?ml|j2|ini)$|^ansible/roles/[^/]+/[^/]+/(templates|defaults|files)/|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/)"
 
 
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file

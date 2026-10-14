@@ -61,9 +61,10 @@ def stop_hook_settings(root: str) -> dict:
 # the verdict `status` should print. Five hours covers the longest fan-out session measured
 # (286 minutes; the next longest was 104) and bounds one that waits on something forever.
 RUNTIME_MAX_S = 5 * 3600
-# A `--review` batch runs up to five sessions under one unit (`fanout_lib.review.review`): the
-# implementer, a review, a fix, a delta review and the landing. The reviews and the fix are far
-# shorter than the implementer, so three hours on top of its five covers them.
+# A `--review` batch runs up to six sessions under one unit (`fanout_lib.review.review`): the
+# implementer, a review, a fix, a delta review, the landing and, on a host that does not land,
+# a CI fix. The reviews and the fixes are far shorter than the implementer, and the CI wait
+# adds at most two `review_ci.CI_WAIT_S`, so three hours on top of its five covers them.
 # `review.LAND_MARGIN_S` skips the landing rather than start it too close to this cap.
 REVIEW_RUNTIME_MAX_S = 8 * 3600
 # The script a `--review` unit runs as `<it> review`, relative to a checkout; see `review_script`.

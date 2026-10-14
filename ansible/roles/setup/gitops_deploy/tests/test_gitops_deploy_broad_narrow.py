@@ -17,7 +17,7 @@ import dataclasses
 from deployer_lib import deploy_narrow
 from deployer_lib import deploy_tick_types
 from _deploy_fakes import receipt_applied
-from gitops_ledger import OWED_K8S_UNAPPLIED
+from gitops_ledger import OWED_K8S_UNAPPLIED, parse_receipts
 
 ORIGIN = "2" * 40
 # A deploy-plane path: inventory is in `_BROAD_DEPLOY_PREFIXES`, and the tick used to run
@@ -57,7 +57,8 @@ def test_a_refused_range_runs_no_play_and_owes_every_declared_service(
 ):
     """#4333: an untagged deploy.yml ran past the tick's budget and held every landing.
 
-    No receipt either: an empty tag list there reads as "the whole play ran" to land.sh.
+    No `applied` entry either: an empty tag list there reads as "the whole play ran" to
+    land.sh. The receipt records the deferral instead, which land.sh reads (#4843).
     """
     tick.declare(DECLARES_RADARR_SONARR)
     tick.paths = [GROUP_VARS]
@@ -65,7 +66,7 @@ def test_a_refused_range_runs_no_play_and_owes_every_declared_service(
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == []
     assert tick.merges == [ORIGIN]
-    assert receipt_applied(state) is None
+    assert receipt_applied(state) == {}
     assert state.hold_plane is None
     assert _owed(state) == ["radarr", "sonarr"]
     out = capsys.readouterr().out
@@ -81,6 +82,24 @@ def test_a_refusal_naming_its_tags_owes_only_those(gitops_deploy, tick, state):
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == []
     assert _owed(state) == ["sonarr"]
+
+
+def test_a_refusal_owing_no_declared_service_writes_no_deferred_receipt(
+    gitops_deploy, tick, state
+):
+    """#4865: an empty deferred entry read as a discharged plane, so land.sh settled.
+
+    The refusal names only a service this host does not declare, so nothing is owed here and
+    no ledger line is written. A `deferred` entry would then count 0 owed, which land.sh reads
+    as "every owed service discharged", for a plane nothing applied.
+    """
+    tick.declare(DECLARES_RADARR_SONARR)
+    tick.paths = [GROUP_VARS]
+    tick.narrow = (3, "wg-easy")
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert tick.playbooks == []
+    assert _owed(state) == []
+    assert [r.deferred for r in parse_receipts(state.read("receipts"))] in ([], [{}])
 
 
 def test_a_range_that_moves_no_rendered_output_applies_nothing(
@@ -172,6 +191,9 @@ def test_a_mixed_range_whose_deploy_half_is_refused_applies_only_the_setup_plane
     assert [argv[-1] for argv in tick.playbooks] == ["gitops_deploy"]
     assert receipt_applied(state) == {"ansible/initial_setup.yml": ("gitops_deploy",)}
     assert _owed(state) == ["radarr", "sonarr"]
+    # The same set, scoped to this range, is what land.sh reads the deferral from (#4843).
+    (receipt,) = parse_receipts(state.read("receipts"))
+    assert receipt.deferred == {"ansible/deploy.yml": frozenset({"radarr", "sonarr"})}
 
 
 def test_a_failed_setup_apply_still_owes_the_refused_deploy_plane(
@@ -185,6 +207,8 @@ def test_a_failed_setup_apply_still_owes_the_refused_deploy_plane(
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert state.hold_plane == "ansible/initial_setup.yml gitops_deploy"
     assert _owed(state) == ["radarr"]
+    (receipt,) = parse_receipts(state.read("receipts"))
+    assert receipt.deferred == {"ansible/deploy.yml": frozenset({"radarr"})}
 
 
 def test_a_mixed_range_whose_deploy_half_fails_keeps_the_setup_apply_recorded(

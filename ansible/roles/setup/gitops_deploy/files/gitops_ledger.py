@@ -410,12 +410,17 @@ class Receipt(NamedTuple):
         manual: setup role tag -> the narrowest tags its change in this range needs, for
             each role the tick left owed to a hand. An empty frozenset means no derivation
             could narrow it, so the reader prints the whole-role tag.
+        deferred: playbook -> the services each one owes, for a plane the tick refused to
+            narrow and deferred to the `k8s_unapplied` ledger instead of running (#4333).
+            The plane is applied once none of those services has a ledger line left, which
+            `deferred_still_owed` counts (#4843).
     """
 
     origin: str
     base: str
     applied: dict[str, tuple[str, ...]]
     manual: dict[str, frozenset[str]]
+    deferred: dict[str, frozenset[str]]
 
 
 def _receipt(obj: dict | None) -> Receipt | None:
@@ -426,18 +431,20 @@ def _receipt(obj: dict | None) -> Receipt | None:
     if obj is None:
         return None
     origin, base = obj.get("origin"), obj.get("base")
-    applied, manual = obj.get("applied", {}), obj.get("manual", {})
+    planes = [obj.get(k, {}) for k in ("applied", "manual", "deferred")]
     if not (isinstance(origin, str) and origin and isinstance(base, str)):
         return None
-    if not (isinstance(applied, dict) and isinstance(manual, dict)):
+    if not all(isinstance(p, dict) for p in planes):
         return None
-    if not all(isinstance(v, list) for v in [*applied.values(), *manual.values()]):
+    if not all(isinstance(v, list) for p in planes for v in p.values()):
         return None
+    applied, manual, deferred = planes
     return Receipt(
         origin,
         base,
         {k: tuple(str(t) for t in v) for k, v in applied.items()},
         {k: frozenset(str(t) for t in v) for k, v in manual.items()},
+        {k: frozenset(str(t) for t in v) for k, v in deferred.items()},
     )
 
 
@@ -452,13 +459,33 @@ def parse_receipts(text: str | None) -> list[Receipt]:
 
 
 def receipt_line(receipt: Receipt) -> str:
-    """One `receipts` line, the reverse of `parse_receipts` for a single receipt."""
-    return json.dumps(
-        {
-            "origin": receipt.origin,
-            "base": receipt.base,
-            "applied": {k: list(v) for k, v in sorted(receipt.applied.items())},
-            "manual": {k: sorted(v) for k, v in sorted(receipt.manual.items())},
-        },
-        sort_keys=True,
-    )
+    """One `receipts` line, the reverse of `parse_receipts` for a single receipt.
+
+    `deferred` is written only when it holds a plane, so a rewrite leaves every receipt
+    written before the key existed byte-for-byte as it was.
+    """
+    obj = {
+        "origin": receipt.origin,
+        "base": receipt.base,
+        "applied": {k: list(v) for k, v in sorted(receipt.applied.items())},
+        "manual": {k: sorted(v) for k, v in sorted(receipt.manual.items())},
+    }
+    if receipt.deferred:
+        obj["deferred"] = {k: sorted(v) for k, v in sorted(receipt.deferred.items())}
+    return json.dumps(obj, sort_keys=True)
+
+
+def deferred_still_owed(
+    receipt: Receipt, playbook: str, owed: str | None
+) -> int | None:
+    """How many of the services `receipt` deferred `playbook` to still hold a ledger line.
+
+    0 means every one has discharged, through a deploy or the render proof, so the plane
+    is applied. A service the tick recorded under `k8s_deferred` instead is owed there, so
+    both classes count, each service once. None when the ledger could not be read, which
+    proves nothing either way.
+    """
+    if owed is None:
+        return None
+    lines = parse_owed(owed, OWED_K8S_UNAPPLIED) + parse_owed(owed, OWED_K8S_DEFERRED)
+    return len(receipt.deferred.get(playbook, frozenset()) & {e.subject for e in lines})

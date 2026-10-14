@@ -1,0 +1,6 @@
+#!/bin/sh
+# Rendered by homelab-render from hosts/lib/maintainer-scripts/postinst.j2. Reconcile does the
+# work once apt's transaction ends (H3, *The reconcile unit*), so this script cannot fail.
+systemctl daemon-reload || true
+systemctl --no-block start homelab-reconcile.service || true
+exit 0

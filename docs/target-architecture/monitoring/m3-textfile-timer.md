@@ -1,6 +1,12 @@
 # M3 — One host timer to the textfile collector
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR 1, the textfile collector's live producer named: [#4869](https://github.com/DanielH2018/server/pull/4869) (issue #4855).
+
+PR 2, disk-health's verdict written to the textfile collector: [#4871](https://github.com/DanielH2018/server/pull/4871) (issue #4856).
+
+PR 3, the host-checks rules in shadow beside Kuma's disk tile: [#4937](https://github.com/DanielH2018/server/pull/4937) (issue #4936).
 
 Depends on: M1, and M2's PR 3 (the `weekly-reboot` mute) before the cutover
 
@@ -70,8 +76,10 @@ cluster outage.
     - The node-exporter DaemonSet
       (`ansible/roles/k8s/node-exporter/templates/daemonset.yaml.j2`) mounts hostPath
       `/var/lib/node-exporter-textfile` at `/textfile` and passes
-      `--collector.textfile.directory=/textfile`, on both k3s nodes. The hostPath has no
-      `type`, so on first start the kubelet created it as root with mode 0755.
+      `--collector.textfile.directory=/textfile`, on both k3s nodes. The hostPath has
+      `type: DirectoryOrCreate`, since a789fc266
+      ([#145](https://github.com/DanielH2018/server/pull/145)), so on first start the kubelet
+      created it as root with mode 0755.
     - The `claude_code` role installs `files/claude-cgroup-metrics.sh` (task "Deploy the cgroup
       metrics script") and `claude-cgroup-metrics.timer`, which runs it as root every 30s. It
       writes `claude_cgroup.prom` on every host with `has_claude_code: true`, which is

@@ -2,11 +2,14 @@
 
 `homelab-render` renders the k8s manifests from the git tree alone, as a shadow of the
 Ansible manifests role. Target slice R1 builds it and proves it byte-identical to Ansible for
-the same stub inputs. Ansible stays the only writer to the cluster: the renderer writes only
-to the directory it is given.
+the same stub inputs. Target slice R2 adds placeholder mode, which renders each secret
+reference as Flux's `${<key>}`. Target slice H3 adds host and package modes, which render
+the host packages (*Render a host package*). Ansible stays the only writer to the cluster: the
+renderer writes only to the directory it is given.
 
-The plan is [R1, shadow render with zero diff](target-architecture/render/r1-shadow-render.md).
-C1 in [the contracts](target-architecture/contracts.md) defines the interface. R1 lands in
+The plans are [R1, shadow render with zero diff](target-architecture/render/r1-shadow-render.md)
+and [R2, secret placeholders](target-architecture/render/r2-secret-placeholders.md). C1 in
+[the contracts](target-architecture/contracts.md) defines the interface. Each slice lands in
 steps, and this page describes each piece once its PR has merged.
 
 ## What is in place
@@ -31,6 +34,23 @@ steps, and this page describes each piece once its PR has merged.
 - `scripts/renderer/shadow_diff.py compare`, `stubcheck` and `digest` compare the two halves
   and hash a render (*Compare the two halves*). `scripts/renderer/renderer_lib/shadow.py`
   holds their library.
+- Four determinism modules in `scripts/renderer/tests/` render every tag twice under an audit
+  hook (*The render is deterministic and reads only the repo*).
+- A census row names every role task file that writes a cluster object itself, which the
+  render does not cover (*What the render does not cover*).
+- `scripts/renderer/renderer_lib/placeholders.py` holds placeholder mode: the mode call, the
+  three passes, the per-directory key sets and `PLACEHOLDER_DEFERRED` (*Placeholder mode*).
+- `scripts/renderer/shadow_diff.py roundtrip` builds the placeholder render and the stub render
+  with the pinned flux CLI and compares them, and `fluxprobe` checks that CLI on fixtures
+  first. CI's `flux_roundtrip` job runs both (*The round trip*).
+- `scripts/renderer/renderer_lib/secret_checks.py` holds `PASSTHROUGH_FILTERS`, the filters
+  that only interpolate a secret key (*Filters that only interpolate a secret*).
+- The standalone-value guard: `placeholders.py`'s standalone key sets and `GUARD_DEFERRED`,
+  `scripts/renderer/standalone_map.py` and the map it commits, the resolver in
+  `scripts/lib/plain_scalar.py`, `ansible/filter_plugins/standalone_guard.py`, and two tasks
+  in the shared `k8s/manifests` role (*The standalone-value guard*).
+- `scripts/renderer/renderer_lib/host.py` holds host and package modes, which
+  `homelab_render.py host` and `package` run (*Render a host package*).
 
 ## The stub form
 
@@ -40,11 +60,11 @@ stub instead, which the filter `homelab_secret_stub` builds:
 - A key `K` becomes `stub-` plus `K` with underscores turned to hyphens, such as
   `stub-domain`. That shape is a valid DNS label, so a stubbed host name still passes
   `kubectl apply --dry-run=server`.
-- `google_assistant_service_account` is the one key a template parses. home-assistant's
-  `templates/config/secrets.yaml.j2` runs it through `from_json` and reads `project_id`,
-  `client_email` and `private_key`. Its stub is a JSON object holding exactly those three
-  fields, each valued `stub-google-assistant-service-account-<field>`, serialised with
-  sorted keys.
+- `google_assistant_service_account` keeps the stub shape it had while home-assistant's
+  `templates/config/secrets.yaml.j2` parsed it with `from_json`: a JSON object of
+  `project_id`, `client_email` and `private_key`, each valued
+  `stub-google-assistant-service-account-<field>`, serialised with sorted keys. R2's PR 5
+  removed the parse, so no template reads the fields any more.
 - `become_password` never takes a stub. It is the one name in `NEVER_STUB`, because
   `ansible/pre_tasks/load_secrets.yml` hands it to privilege escalation and no template
   reads it.
@@ -55,6 +75,17 @@ reads keys only, so the ciphertext file is enough. `homelab_unstubbed_keys` retu
 whose value is not exactly its stub. It returns names only, never a value.
 
 ## Render the cluster tree
+
+`cluster` has two modes, and `--secret-stubs` alone selects between them (C1 *Modes*):
+
+- Without `--secret-stubs`, the render is in placeholder mode (*Placeholder mode*):
+
+  ```bash
+  uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-render
+  ```
+
+- With `--secret-stubs FILE`, the render is in stub mode, R1's shadow mode. Every R1 command
+  on this page passes it, so each still renders stubs.
 
 To render the tags in stub mode, write a stub file for the commit and pass it to `cluster`:
 
@@ -76,10 +107,10 @@ else, and `DIR/flux/` belongs to a later slice.
 
 `cluster` exits 2 and writes nothing in four cases:
 
-- `--secret-stubs` is missing. Without it the render is placeholder mode, which target slice
-  R2 adds. A bare `cluster` call in a publish job therefore fails rather than publishing.
-- The stub file does not stub every key of `ansible/vars/secrets.yml`. The message names the
-  keys, never a value. Write a fresh stub file for the commit.
+- In stub mode, the stub file does not stub every key of `ansible/vars/secrets.yml`. The
+  message names the keys, never a value. Write a fresh stub file for the commit.
+- In placeholder mode, every requested tag is in `PLACEHOLDER_DEFERRED`, so nothing would
+  render.
 - A `--role` names a tag that is not a k8s render target of daniel-box.
 - A directory it would write under `DIR/cluster/` already holds files from an earlier
   render.
@@ -188,27 +219,358 @@ The render is not yet proven byte-identical to Ansible's. `shadow_diff.py compar
 each difference (*Compare the two halves*), and each class of difference then gets its own
 renderer fix.
 
+## Placeholder mode
+
+Target slice R2 adds placeholder mode, the mode a later publish job runs (C1 *Only
+placeholder mode publishes*). `cluster` without `--secret-stubs` renders every secret
+reference as `${<key>}`, where `<key>` is the key name in `ansible/vars/secrets.yml`. Flux
+substitutes the real values at apply time. Nothing publishes a render yet: target slice D2
+adds the publish job, and it waits on R2's PR 2 as well.
+
+`scripts/renderer/renderer_lib/placeholders.py` renders in three passes, because the escape
+would also escape a placeholder emitted before it:
+
+1. The context maps each secret key `K` to the sentinel `HOMELAB_SECRET__K__END`. Letters and
+   underscores survive `default`, `indent`, `to_json` and `~` intact, and a sentinel is a
+   valid YAML plain scalar, so a render the renderer parses itself still parses.
+2. In a directory that substitutes, every `$` followed by `$`, by `{` or by a sentinel becomes
+   `$$`. Flux reads `$$` as one literal `$`, so every run of dollars survives substitution as
+   written. A literal `${HOME}` renders as `$${HOME}`, and a bare `$$` as `$$$`.
+3. In a directory that substitutes, every sentinel becomes `${K}`.
+
+The four pinned live-read facts keep the values the stub file gives them (*Pinned live-read
+facts*), so a round trip sees one value on both sides.
+
+### Which directories substitute
+
+The unit is the Kustomization directory under `cluster/`, so `<tag>` and `<tag>-deferred`
+are decided apart. A directory's key set is the keys whose sentinel its render holds.
+
+- **A directory substitutes when its key set is not empty.** Passes 2 and 3 run on it, and
+  its Flux Kustomization carries `postBuild`.
+- **A directory with an empty key set** is written exactly as rendered, every `$` included.
+  Flux applies it with no `postBuild`, so it never reads that `$` as syntax, and an escape
+  there would reach the cluster as a literal `$${`.
+
+- **A document that opts out keeps its text, even in a directory that substitutes.**
+  Flux's Kustomize controller skips substitution on a resource whose label or annotation
+  `kustomize.toolkit.fluxcd.io/substitute` is `disabled`, so passes 2 and 3 skip it, and
+  rules 1 to 4 read none of its references. The Flux CRDs in the `flux` tag carry it, and
+  the Kustomization CRD's description holds a literal `${`. Escaped, that `${` came back
+  from the pinned CLI as `$${`. A sentinel left in such a document fails rule 2.
+
+The key set is the one source for every reader that asks whether a directory substitutes,
+and each reads it in process from `PlaceholderRender.key_sets`: the escape, the round trip,
+the five secret rules, and later D2's `postBuild` writer. pihole substitutes, because its
+Secret holds keys, and `pihole-deferred` does not. At `65b52ff2f`, 46 of the 61 directories
+substitute.
+
+### Tags placeholder mode skips
+
+`PLACEHOLDER_DEFERRED` in `placeholders.py` names the tags placeholder mode cannot render
+yet, each with its reason. It is empty. Its last member was `home-assistant`, whose
+`from_json` parse of `google_assistant_service_account` raised on a sentinel until R2's PR 5
+moved that key into a Secret of its own. Placeholder mode skips a member and names it in the
+summary line, as `skipped, in PLACEHOLDER_DEFERRED: <tag>`. A `--role` list that names only
+members renders nothing, so `cluster` refuses it with exit 2. Stub mode renders every tag.
+
+This set is a different thing from a `<tag>-deferred` directory, which holds the files a role
+passes as `manifests_deferred_files`.
+
+### The five secret rules
+
+`scripts/renderer/renderer_lib/secret_checks.py` runs five rules after every placeholder
+render, before anything is written. A violation makes `cluster` exit 1. Each line names the
+rule, the tag, the file, the document as `Kind/name` or the refused form, and the key.
+
+| Rule | Reads | Refuses |
+|---|---|---|
+| `known-key` | the output of a directory that substitutes | a `${NAME}` whose name is not a key of `ansible/vars/secrets.yml` |
+| `no-bare-dollar-brace` | the output, read as Flux reads it, each `$$` paired first | a `${` that is not a placeholder of pass 3, and a sentinel fragment in any directory |
+| `confined-to-secret` | the kind of each rendered document | a placeholder outside `kind: Secret`, except `domain` and `email` (`PLACEHOLDER_ANYWHERE`) |
+| `no-sops-manifest-key` | the output | a placeholder of a key in `SOPS_MANIFEST_KEYS`, the multi-line keys Flux cannot substitute |
+| `no-secret-expression` | the syntax tree of every `.j2` under the k8s roles' `templates/` and `ansible/templates/`, but `*.sh.j2` | any form of a secret key that could change its value |
+
+Rule 5 allows a key only bare, under `default`, `to_json` or `indent` (not for a
+`SOPS_MANIFEST_KEYS` key), inside a `~` concatenation, as the subject of `is defined`, as an
+argument to a member of `PASSTHROUGH_FILTERS`, or bound to a name or placed in a list, tuple
+or dict. It refuses every other filter, every attribute, subscript or method call, every
+comparison and every truthiness test, `{% if K | default('') %}` included. It reads a key
+reached through `lookup('vars', 'K')` as `K`. A non-literal `lookup('vars', X)` counts as a
+possible secret reference, held to bare, `default` and `to_json`, unless
+`NON_SECRET_VARS_LOOKUPS` names its site. That set holds one site, Prometheus's
+`lookup('vars', job.replicas_var) | int`, and the entry fails when any `containers_list`
+`replicas_var` names a secret key, or when the site has gone.
+
+An output inside a `{% filter %}` block, or a `{% set %}` block with a filter, passes through
+that block's filters too, and rule 5 holds it to the same list. An `{% include %}` or a
+`lookup('template', ...)` counts as a use of every key its target names, and through its
+target's own embeds. Rule 5 resolves the target as the renderer does, then refuses the
+embed on a refused form, or on `indent` when the target names a `SOPS_MANIFEST_KEYS` key.
+Two embeds in image-builder name their target through a variable, so they cannot be
+resolved. They pass only `indent`, which rule 5 accepts on an unresolved embed.
+
+`KNOWN_VIOLATIONS` holds every violation the first fleet render found and the tree still has:
+rule 4 on authelia's and pi-peer-backup's Secrets, and rule 5's 29 entries. Those are the two
+`indent`s on those keys, two `trim`s, mosquitto's `string`, and 24 truthiness tests. R2's PRs
+3 to 7 remove them, and an entry that no longer matches fails the check, so the set shrinks
+only through a fix. R2's PR 5 removed Home Assistant's two entries, the `from_json` parse and
+the Secret that embedded its output through `indent`.
+
+Each rule must find its named members, so a rule that stops matching cannot pass: rule 3
+`${domain}` in homepage's IngressRoute, rule 1 a placeholder in authelia's config Secret,
+rule 2 the escaped `$${` in qbittorrent's `qbittorrent-netns-reset` ConfigMap, rule 4 every
+`SOPS_MANIFEST_KEYS` key in `ansible/vars/secrets.yml`, and rule 5 at least 59 templates that
+name a key and four accepted uses. A `--role` render asserts a member of rules 1 to 4, and
+counts their `KNOWN_VIOLATIONS` entries stale, only for the tags it rendered. Rule 5 reads
+the whole tree on every run.
+
+`scripts/renderer/tests/test_renderer_secret_checks.py` holds each rule's `_is_clean` and
+`_is_flagged` pair, and `test_renderer_secret_checks_tree.py` the fleet render and the named
+members.
+
+### Manifests placeholder mode leaves out
+
+A multi-line key cannot pass through a placeholder, because Flux deletes every newline from a
+substituted value. Each such key moves into a small Secret of its own, which D3 ships as a
+SOPS-encrypted manifest. The role lists that Secret's manifest in the defaults variable
+`render_sops_manifests`, and placeholder mode emits no document for it. It drops the file
+before pass 2 and rebuilds the directory's `kustomization.yaml` without it, so its key counts
+in no key set and in no standalone set. Stub mode still renders it, and Ansible renders and
+applies it like any other secret file.
+
+| Role | Entry | Secret | Key |
+|---|---|---|---|
+| `home-assistant` | `google-sa-secret.yaml` | `home-assistant-google-sa` | `google_assistant_service_account` |
+
+A wrong entry would hide a whole Secret from the publish and from the round trip, so the
+`sops-manifest-entries` check in `renderer_lib/sops_entries.py` holds the lists on every
+placeholder render. `cluster` exits 1 and writes nothing when an entry:
+
+- names a file the role does not render;
+- renders anything but exactly one document, of kind `Secret`;
+- names a secret key outside `SOPS_MANIFEST_KEYS`, or no key in it.
+
+The check reads the keys from the entry's sentinel render, so a key reached through an alias
+counts. A `--role` render checks only the tags it rendered. R2's plan adds a third clause once
+PR 2's `KNOWN_VIOLATIONS` ratchet exists: every template outside the lists that names a
+`SOPS_MANIFEST_KEYS` key must carry a live entry there.
+
+### Filters that only interpolate a secret
+
+`PASSTHROUGH_FILTERS` in `scripts/renderer/renderer_lib/secret_checks.py` names the repo
+filters that place an argument into their output unchanged. Its reader is rule 5, which
+accepts a secret key as an argument to a member and refuses it as an argument to any other
+filter. The set is closed and holds two members, each passed `domain`:
+
+- `homepage_href`, from `ansible/filter_plugins/homepage_tiles.py:homepage_href`;
+- `authelia_service_rules`, from
+  `ansible/filter_plugins/authelia_access.py:authelia_service_rules`.
+
+Each member passes a membership test in
+`scripts/renderer/tests/test_renderer_secret_checks.py`. The test calls the filter in every
+call shape the templates write, once with the sentinel `r2-sentinel` for the key and once with
+`a.b-c.example`. The first output, serialised as JSON, must hold the sentinel. Replacing the
+sentinel there with `a.b-c.example` must give the second output exactly. A fixture filter that
+upper-cases its argument fails the first check, and one that rewrites `.` as `-` fails the
+second. A filter that fails the test leaves the set.
+
+## The round trip
+
+`shadow_diff.py roundtrip` proves that Flux's substitution of the placeholder render gives the
+stub render back, object for object. `scripts/renderer/renderer_lib/roundtrip.py` holds its
+logic. It renders the requested tags in placeholder mode and in stub mode under `--out`. Then
+it builds every directory of each render with `flux build kustomization <dir> --dry-run`,
+through a throwaway Flux Kustomization:
+
+- **Placeholder side, a directory that substitutes.** The Kustomization carries every key's
+  value inline in `postBuild.substitute`, and the build adds `--strict-substitute`.
+- **Placeholder side, a directory that does not substitute.** No `postBuild`, so the
+  comparison proves the renderer escaped nothing there.
+- **Stub side.** No `postBuild`, so nothing is substituted.
+
+`flux build` runs the controller's own substitution per resource and serialises both sides
+with the same code. `roundtrip` therefore compares the two outputs byte for byte, and names
+the first object that differs. It prints no file content.
+
+It runs two passes:
+
+1. **Each key's R1 stub**, on both sides.
+2. **Every key outside the standalone-value guard `0123`**, on both sides, and every other key
+   its R1 stub. A key is inside the guard when the guard's map names it under any tag, or
+   when `GUARD_DEFERRED` holds it. The stub side is a stub-mode render with those keys set to
+   `0123`, so Jinja writes the template's quotes around it there. Flux drops them on the
+   placeholder side (*What the pinned flux CLI does*). A difference therefore marks a
+   standalone use of a key that the guard does not cover anywhere. The pass cannot see a
+   missed site of a key that is mapped under another tag, such as a new standalone
+   `${domain}`, because that key keeps its stub fleet-wide. The coverage test catches that
+   one (*The standalone-value guard*). `--guard-map FILE` reads another map than the
+   committed one, so `{}` sets every key to `0123` again.
+
+Three things are left out of the comparison, by name and by count, and nothing else:
+
+- **The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names.** These are authelia's
+  `Secret/authelia-config` and pi-peer-backup's `Secret/pi-peer-backup-ssh`, which still
+  carry a multi-line key. Each entry whose directory was built must drop exactly one object.
+- **The files a role's `render_sops_manifests` names.** Placeholder mode emits no document for
+  them, and each stub render drops the same files. Each pass counts the documents it dropped
+  and fails unless the count equals the number of entries in the tags it built.
+- **The annotations `UNCOMPARED_ANNOTATIONS` names**, in `renderer_lib/roundtrip.py`. It holds
+  observability's `checksum/config`, written by `checksum_annotation('config', ...)` on each
+  of five workloads. Each hashes a rendered config that holds placeholders on one side and
+  stub values on the other, so the two hashes differ although substitution restores every
+  value. R2 accepts this under *Restart triggers lose sight of secrets*: a rotated secret
+  rolls no pod, and target slice D3 owns the restart mechanism. The count left out must
+  equal the `checksum_annotation` calls that write the annotation in the role's templates,
+  and Prometheus's Deployment must be among them.
+
+A document that loses an annotation is serialised again on both sides, by the same code.
+Each pass prints a summary line, such as `roundtrip: 58 tags, 4 deferred directories, 47
+substituting, 450 objects, 2 documents in KNOWN_VIOLATIONS and 5 annotations in
+UNCOMPARED_ANNOTATIONS left out, 0 differences, 1 documents in render_sops_manifests, with each
+key's R1 stub`. `roundtrip` exits 0 only when both passes find no difference and each
+exclusion count holds.
+
+It needs the pinned flux CLI. daniel-box has none, so it runs in CI's `flux_roundtrip` job.
+Where `flux` is not on `PATH`, it exits 2 and reports no pass. It also exits 2 when a render
+fails or no rendered directory substitutes, because nothing would pass through Flux's
+substitution. A setup failure therefore never exits 1, the code CI's red half requires. `--red-proof` changes one key's
+substitute value by one byte in the first pass, so a working round trip must exit 1. The CI
+job runs it that way too, and fails unless it does:
+
+```bash
+uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip \
+  --role configarr --role janitorr --role home-assistant
+```
+
+The CI job round-trips every tag outside `PLACEHOLDER_DEFERRED` in both passes, with no
+`--role`. That covers `home-assistant`, which carries the first `render_sops_manifests` entry.
+Its red half runs on `configarr`, `janitorr` and `home-assistant` only, because one changed byte
+is all it has to show. The job also round-trips `homepage` with the guard's map read as
+empty, and fails unless that run exits 1 and names `IngressRoute/homelab/homepage`. That proves
+the second pass still sees a standalone use the map does not cover:
+
+```bash
+echo '{}' > /tmp/empty-guard-map.json
+uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip-map \
+  --role homepage --guard-map /tmp/empty-guard-map.json
+```
+
+### What the pinned flux CLI does
+
+`shadow_diff.py fluxprobe` builds four small fixture directories with the flux CLI and fails
+unless each expected output appears. CI runs it before the round trip, against the same
+pinned binary, so a pin bump that changes one of these behaviours fails there first. With
+`--red-proof` it also expects one output no fixture yields, and CI requires that run to exit
+1. `scripts/renderer/renderer_lib/flux_probe.py` holds the fixtures.
+
+Measured on CI run 38426501907 with flux v2.9.6:
+
+- `$${HOME}` comes back as `${HOME}`, and `$$$`, which pass 2 writes for a bare `$$`, as `$$`.
+- `$$$$$${x}`, which pass 2 writes for a literal `$$${x}`, comes back as `$$${x}`.
+- `$$${K}`, which passes 2 and 3 write for a `$` directly before a secret reference, comes
+  back as `$` plus the value.
+- `${HOME}` in a directory built with no `postBuild` comes back unchanged.
+- A variable absent from `postBuild.substitute` fails the build under `--strict-substitute`.
+- **A `stringData` value written `"${probe_n}"` comes back as the integer `83` for
+  `probe_n=0123`, and as the YAML `bool` value `true` for `probe_n=true`.** Flux substitutes
+  into a resource it has already serialised, without the template's quotes. An all-digit or
+  `true` value therefore changes type wherever it stands alone in a field. The probe asserts
+  both results. A bump that keeps the quotes fails it, and the round trip's second pass can
+  then go.
+- **No template shape keeps a standalone value a string.** CI run
+  [38432848015](https://github.com/DanielH2018/server/actions/runs/38432848015) built
+  `0123`, `true`, `yes`, `1e3` and `null` through a double-quoted, a single-quoted and a
+  `|-` block field, and through a bare `${v}` whose substitute value carries its own double
+  quotes. Every one came back typed, as the integer 83, `bool`, `bool`, the integer 1000 and
+  null, except
+  `yes` with its own quotes, which stayed a string. Only text around the placeholder, as in
+  `"x-${v}"`, kept all five strings, and that text changes the value. The probe behind it
+  was not merged.
+- A bare `n` as a key of `postBuild.substitute` defines no variable `n`. Go's YAML 1.1 reader
+  takes the unquoted key `n` for `false`, so the probe names its variable `probe_n`.
+- **The probe holds the guard's resolver to the CLI.** It builds each value of
+  `RESOLVER_CORPUS` as a standalone `stringData` field. A value counts as kept only when it
+  comes back as the identical string. Measured with v2.9.6 on 2026-10-13, `2001-12-14` came
+  back as the string `2001-12-14T00:00:00Z`, and `.inf` failed the build. The probe fails when
+  the resolver passes a value the CLI does not keep. It also fails when the resolver refuses
+  a kept value outside `FLUX_KEEPS_BUT_REFUSED`, and when a member of that set stops being
+  kept. The set holds `1:20`: the CLI keeps it, and PyYAML reads it as the integer 80.
+  `--red-proof` reads the set as empty, so `1:20` fails too.
+
+## The standalone-value guard
+
+A *standalone use* is a placeholder that is the whole scalar of a field, such as
+`main: ${domain}` or `account: "${mullvad_account}"`. Flux substitutes without the template's
+quotes, so it types a standalone value by its text (*What the pinned flux CLI does*). A value
+such as `0123`, `yes`, `1e3`, `null` or `2001-12-14` stops being the same string. In a
+Secret's `stringData` the apply then fails, and elsewhere the object changes meaning. No
+template shape fixes it, so the guard checks the values where they are decrypted.
+
+- **The renderer names each key's standalone uses.** After pass 3, `placeholders.py` parses
+  every document of a directory that substitutes. A key joins the directory's standalone key
+  set when its `${K}` is the entire parsed value of a scalar, in any quote or block style.
+  `x-${K}`, or a placeholder inside a block that holds more text, is not standalone.
+- **The deploy path reads a committed projection.** `standalone_map.py` writes
+  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`, which maps each deploy tag
+  to the sorted keys standing alone in its directories, less `GUARD_DEFERRED`. To regenerate
+  it, run `uv run python scripts/renderer/standalone_map.py` and commit the file. The tags in
+  `PLACEHOLDER_DEFERRED` render no placeholders, so the map holds none of them, and the guard
+  checks no `home-assistant` value until R2's PR 5.
+- **The shared `k8s/manifests` role runs the guard before every render.** Its first task,
+  under `no_log`, collects the names of the service's mapped keys whose value the resolver
+  refuses, or which the loaded secrets do not define. Its second task is an assert that fails
+  the deploy unless that list is empty. The assert prints key names and never a value. A
+  map that is missing or does not parse fails the first task, so the guard fails closed.
+- **The resolver** is `scripts/lib/plain_scalar.py:refused`. It refuses a value when either of
+  two readers takes its bare text for anything but the same string. The first is PyYAML's
+  `safe_load`, a YAML 1.1 reader, which types timestamps and sexagesimal numbers, and which
+  changes or rejects any text that is no valid plain scalar. The second is a port of the
+  plain-scalar resolver of go-yaml v2.4.4, the version the pinned CLI carries. It types
+  `1e3`, `08`, `0o17` and `y`, which PyYAML reads as strings. The flux probe holds both to
+  the pinned CLI. D3's `cluster_vars.py write` imports the same function.
+- **`GUARD_DEFERRED`** in `placeholders.py` names the keys with a standalone use that the
+  guard does not check, each with its reason. It holds `mullvad_account`, whose one use is
+  qbittorrent's Secret and whose real value is all digits. R2's PR 7b moves it into a
+  dedicated SOPS-encrypted Secret and empties the set.
+- **The coverage test**, `scripts/renderer/tests/test_renderer_standalone_map.py`, renders the
+  fleet in placeholder mode and holds the committed map equal to it. It also fails on a key
+  in both the map and `GUARD_DEFERRED`, on a `GUARD_DEFERRED` member that stands alone
+  nowhere, and on a mapped key absent from `ansible/vars/secrets.yml`. Its named members are
+  `domain` under `homepage` and `mullvad_account` in `GUARD_DEFERRED`.
+
+When the assert refuses a key, the deploy stops before anything renders or applies, so the
+live objects keep their old values. R2's Open question 13 records the operator's ruling of
+2026-10-13: rotate the value to one that stays a string (**operator-only**), or move the key
+into a dedicated SOPS-encrypted Secret, as PR 7b does for `mullvad_account`. Then deploy
+again.
+
 ## Pinned live-read facts
 
-Five facts come from live state in a real run, so the renderer cannot compute them from the
+Three facts come from live state in a real run, so the renderer cannot compute them from the
 tree. Target slice R3 removes those reads. Until then, each one takes a fixed stand-in in
-both halves:
-
-- `authelia_password_hash`, `authelia_claude_password_hash` and
-  `authelia_agent_password_hash`, read by the `authelia` templates.
-- `pi_peer_backup_known_hosts_line`, read by the `pi-peer-backup` templates.
-- `k8s_built_images`, read by the `n8n` templates. It pins to `[]`, which n8n renders as
-  `checksum/image: "unstaged"`.
+both halves: `authelia_password_hash`, `authelia_claude_password_hash` and
+`authelia_agent_password_hash`, read by the `authelia` templates.
 
 A string stand-in carries the secret stubs' marker, such as `stub-authelia-password-hash`.
 Each entry also names its reader tags. A test in `scripts/renderer/tests/` holds those tags
 equal to a word grep of the templates, so a new reader fails the suite.
+
+**A placeholder render refuses a flux-owned reader.** A pinned value renders a valid object
+that fails logins or backups, and only a tag marked `owner: flux` (C4) is published. So
+`cluster` without `--secret-stubs` exits 1, before it renders, when a requested tag is marked
+`owner: flux` and reads a pinned fact. The message names the tag and the fact.
+`placeholders.py:pinned_fact_refusals` reads the reader tags `PINNED_LIVE_FACTS` records and
+derives them nowhere else, so R3's PRs shrink the refusal as they drop facts. The one reader is
+`authelia`. R3's PR 5 deletes the refusal with the constant.
 
 ## Stub output is never published
 
 A stub render is a comparison input. Nothing may push it as the cluster artifact, because
 `domain` is a secret key too: a stubbed route matches `*.stub-domain` and answers no request.
 The plan's section *Stub output is never published* names the guards later slices add.
+A publish job states its mode by passing no `--secret-stubs` (C1 *Only placeholder mode
+publishes*).
 
 ## Write the stub file
 
@@ -220,7 +582,7 @@ SOPS leaves in plaintext, and decrypts nothing.
 uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
 ```
 
-The file holds every stub, the sentinel `homelab_secret_stubs: true` and the five pinned
+The file holds every stub, the sentinel `homelab_secret_stubs: true` and the four pinned
 facts. Pass it only to a k8s dry run or to the renderer, never to a run that applies
 anything.
 
@@ -251,9 +613,16 @@ key before the load, so neither assert fires.
 
 A census in `ansible/tests/k8s/test_secret_key_task_census.py` covers the tasks that would
 act on a stub under an allowed run. It reads every k8s role task whose body names a secret
-key, or a variable derived from one. Each such task must be skipped under a stubbed dry run,
-use a side-effect-free module, or carry a per-task exemption with a reason. sonarr's API
-reads pass on their `homelab_secret_stubs` guard.
+key, or a variable derived from one. A derived variable is a role default or inventory var
+built from a secret key, or a `set_fact` key or `register:` name whose task in any k8s role
+names one. Each such task must be skipped under a stubbed dry run, use a
+side-effect-free module, or carry a per-task exemption with a reason. An `assert` or a `fail`
+can refuse a stub value, so the census credits only the `homelab_secret_stubs` guard on it.
+sonarr's API reads, and its two asserts on the reads' registers, pass on that guard.
+
+The same module names uptime-kuma's push-token format check in `STUB_REFUSING`, which must
+carry the `homelab_secret_stubs` guard itself. The list predates the census's assert rule and
+backs it up.
 
 From this change on, the preamble names the stub filters, so the deployer cannot narrow an
 edit to `ansible/filter_plugins/secret_stubs.py` to a service. Each such edit defers every
@@ -379,3 +748,178 @@ uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \
   --secret-stubs /tmp/r1-stubs.yml
 uv run python scripts/renderer/shadow_diff.py compare /var/lib/claude/shadow/X /tmp/r1-render
 ```
+
+## The render is deterministic and reads only the repo
+
+Four test modules prove R1's exit criterion 2: `test_renderer_determinism_0.py` to
+`test_renderer_determinism_3.py` in `scripts/renderer/tests/`. Module `k` takes the tags at
+positions `k`, `k + 4`, ... of the sorted `render_targets` list, so the parts stay balanced as
+tags join. It writes the stub file and renders its tags twice, each time in a subprocess with
+a different `PYTHONHASHSEED`, and requires the two trees to be identical. Module 0 also fails
+when a module for one of the four positions is missing.
+
+The split is four because of CI time. A module runs about 3.4 times slower on the CI runner
+than serially on daniel-box. The two-module split of 2026-10-13 took 28.0s per module in CI
+against 8.2s locally. Three parts were projected at 20.3s, over R1's 20s budget, and four at
+about 16.6s. `PARTS` in `scripts/renderer/tests/_render_audit.py` is the modulus, and changing
+it means adding or removing modules to match.
+
+Each subprocess runs `scripts/renderer/tests/_render_audit_child.py`, which installs an audit
+hook before it imports the renderer. The hook ends the process on any file open outside the
+repo, the output directory, the stub file, ansible-core's local temp directory and the
+interpreter's prefixes, and on any `socket.connect`. `/dev/null` is the one device it allows.
+It also ends the process on any program start but two: `ip link` and `ldconfig -p`, which
+ansible-core's import runs to read a MAC address for `uuid.getnode` and to find the C library.
+A child process reads the host without an `open` in the process the hook watches, so the hook
+names these two in `scripts/renderer/tests/_render_audit_child.py:IMPORT_PROBES` and refuses
+the rest. No template reads either result, and a rendered byte that depended on one would
+differ between the CI runner's digest lines and daniel-box's. The test points
+`ANSIBLE_LOCAL_TEMP` into its own directory, because ansible-core creates that directory on
+import and its default is under the user's home. The hook lives in a subprocess because Python
+cannot remove an audit hook, and one installed in an xdist worker would outlive the test. The
+CLI sets `ANSIBLE_LOCAL_TEMP` to the system temp directory when the caller has not set it, so
+`homelab_render.py cluster` writes nothing under the home directory either.
+
+In CI, each module writes one `digest_line` per directory it rendered to two places. The job
+log carries each as a line `render digest at <sha> (position <k> of 4): <line>`, which
+`gh run view --log` prints without a sign-in. The job summary carries them under a `render
+digest at <sha>` heading, but only a signed-in viewer can read it, and `gh` has no API for it.
+
+The log line takes a path of its own, because CI runs each shard under xdist. A test runs in a
+worker, and a worker's stdout never reaches the job log. So the test records its lines on its
+report with `record_property`, xdist carries the report back to the controller, and the
+`pytest_terminal_summary` hook in `scripts/renderer/tests/conftest.py` prints them there.
+`test_renderer_digest_log.py` runs a pytest session of its own under `-n 2` to prove that path.
+
+A directory's line depends on its own files alone, so the four modules' lines together hold
+every directory, whichever shards the modules ran on. None writes the `total` line. On a pull
+request the SHA is a synthetic merge commit, so compare the lines from the push run on master.
+To check them on daniel-box, render that commit in full and diff its `digest` against the
+log. Replace `<run>` with the push run's id, which `gh run list --branch master --event push
+--commit <sha>` prints.
+
+```bash
+uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
+uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1 \
+  --secret-stubs /tmp/r1-stubs.yml
+uv run python scripts/renderer/shadow_diff.py digest /tmp/r1 | grep -v '^total ' \
+  | LC_ALL=C sort > /tmp/r1-box.txt
+gh run view <run> --log | grep -o 'render digest at .*' | sed 's/^[^:]*: //' \
+  | LC_ALL=C sort > /tmp/r1-ci.txt
+diff /tmp/r1-ci.txt /tmp/r1-box.txt
+```
+
+The `diff` must print nothing, and both files must hold one line per directory.
+
+## What the render does not cover
+
+Zero diff covers what the manifests role renders: each role's applied directory, its deferred
+directory and its claim files. Four channels stay outside it:
+
+- objects that role tasks apply, create, patch, run or write through `exec` themselves, such
+  as `--from-file` ConfigMaps, probe and gate Jobs and `kubectl run` pods;
+- files that nine roles write to hosts, which belong to the host plane;
+- the `homelab` Namespace and its LimitRange, which `ansible/deploy.yml` builds inline;
+- the values of the four pinned live-read facts, which target slice R3 removes.
+
+The first channel is a census. The `render-does-not-cover-role-writes` row of
+`ansible/tests/repo/test_census_rows_roles.py` reads every task file under
+`ansible/roles/k8s/*/tasks/` except the manifests role's. A task writes when
+`ansible/tests/_k8s_guards.py:_chunk_mutates` matches it, the rule the dry-run guard census in
+`ansible/tests/deploy/test_k8s_dry_run.py` also reads. The row's `allow` map, in
+`ansible/tests/repo/_out_of_render_row.py`, names each writing file with the slice that owns
+its move. A writing file outside the map fails the row until a reviewer adds it with its owner.
+A file in the map that no longer writes fails the row too, so the map stays the list of what
+the render still leaves out.
+
+## Render a host package
+
+Host mode renders one host's package, and package mode renders one shared package. The plan
+is [H3, Pi pilot](target-architecture/host/h3-pi-pilot.md), whose *Shared names for the host
+slices* fixes the source tree.
+
+```bash
+uv run python scripts/renderer/homelab_render.py host --host daniel-pi --out /tmp/h3
+uv run python scripts/renderer/homelab_render.py package --name homelab-updater --out /tmp/h3
+```
+
+- `host` reads `hosts/<host>/package.yml` and writes `DIR/hosts/<host>/`.
+- `package` reads `hosts/packages/<pkg>/package.yml` and writes `DIR/packages/<pkg>/`.
+- Each writes `root/`, the file tree the package installs, and `nfpm.yaml`, the spec the
+  builder runs `nfpm package` on.
+- A missing spec, a key the renderer does not know, a destination that is not a plain
+  absolute path, two files with one destination, or an existing package directory under
+  `--out` exits 2 and writes nothing. A template that fails exits 1 and writes nothing.
+
+A package spec lists its `components`, its `depends`, and optionally a `description` and files
+and defaults of its own. A component is a directory under `hosts/components/` with a
+`component.yml`, which holds a `defaults:` map and a `files:` list. Each file entry names a
+`src` relative to the component, a `dst` and an octal `mode`, 0644 by default. The mode is a
+quoted string such as `"0755"`: YAML loads an unquoted `0755` as the integer 493, so the
+renderer refuses an integer. A `src` that ends `.j2` renders through the strict environment
+cluster mode uses. Any other `src` is copied byte for byte.
+
+A file entry may name `lib: NAME` instead of a `src`. It copies `hosts/lib/NAME`, a script
+several packages ship, byte for byte. `NAME` is a plain name, and the file must resolve inside
+`hosts/lib/` through any symlink. It is the one source outside the component that an entry may
+name.
+
+A package spec may also list `maintainer_scripts`: any of `preinst`, `postinst` and `prerm`.
+Each renders from `hosts/lib/maintainer-scripts/<name>.j2` with the package's context plus
+`package_units`, the unit files the package installs directly under
+`/usr/lib/systemd/system/`. The render writes it to `DIR/<package>/scripts/<name>`, mode 0755,
+outside `root/`, and `nfpm.yaml`'s `scripts:` names it. Only a host package may list
+`preinst`, because it refuses a hostname mismatch. The maintainer-script lint in
+`hosts/lib/tests/test_maintainer_scripts.py` holds each rendered script to the line shapes H3's
+*Package rules* allow.
+
+A package spec or a component may also carry `units:` and `legacy:`, which feed the manifest.
+
+- `units:` maps a unit to `{policy: manual}` or `{policy: windowed}`. Reconcile does not
+  restart a unit with a policy when its file changes. The unit must be one the host package
+  or `homelab-updater` installs, or one the host package drops in on.
+- `legacy:` lists the Ansible-era entries reconcile retires: `{path: ...}`, `{cron: NAME,
+  user: USER}`, `{cron_file: NAME}` or `{unit: NAME}`. Each value renders with the
+  package's context, so `user: "{{ sys_user }}"` becomes the user's name. A shared package
+  refuses a legacy entry, because reconcile reads only the host package's manifest.
+
+Host mode writes `/usr/lib/homelab/manifest.json`, mode 0644, into every host package. It is
+the manifest `hosts/lib/homelab-reconcile` reads, in the schema that script's docstring
+documents. `units` lists every unit the host package and `homelab-updater` install, and every
+unit the host package drops a `50-homelab.conf` into, each with its policy or `{}`.
+`enable_links` lists each unit the host package installs under a
+`/usr/lib/systemd/system/<target>.wants/` directory. `legacy` holds the rendered entries, and
+`reconcilers` is empty until H4. A spec file entry may not install the manifest's path.
+The render refuses any manifest that `homelab-reconcile:parse_manifest` would refuse: an enable
+link for a unit no package installs or drops in on, or a drop-in on a unit that is not a
+service, timer, socket or path.
+
+A host package's context is the host's inventory layers, as
+`scripts/lib/render_context.py:render_context` builds them, with `inventory_hostname` set to
+the host. A shared package's context has no host_vars layer. The component's `defaults:` map
+goes in through the `component_defaults` keyword, beneath `group_vars/all.yml`. A host_vars
+value of the same name therefore wins, as it does over a role default. No `ansible_facts`
+value is in the context, so a template that reads one fails. A fact a template needs becomes
+an inventory variable.
+
+Every host package's `nfpm.yaml` carries `Depends: python3 (>= 3.12)`, because reconcile runs
+under `/usr/bin/python3`. Its `version` is `${HOMELAB_VERSION}`, which `nfpm` expands from the
+builder's environment, so two commits with the same tree render the same spec. Every package
+is `arch: all`.
+
+### Host mode renders no secret
+
+Only cluster mode has a substitution step after it, so only cluster mode renders placeholders
+and escapes `$`.
+
+- Host mode withholds every top-level key name of `ansible/vars/secrets.yml` from every layer,
+  through `render_context`'s `withhold` keyword, and resolves under the strict undefined class.
+  An inventory value that reads a secret is dropped with it.
+- A template that reads a secret, or a value aliasing one, fails the render. The error names
+  the secret key.
+- A `${` in a host template is shell, and renders byte for byte. Host mode imports nothing
+  from `placeholders.py`.
+
+`scripts/renderer/tests/test_renderer_host_mode.py` proves both halves. The secret pair goes
+red when the withholding is removed, because each fixture gives the secret's name a value in a
+layer.

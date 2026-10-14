@@ -45,6 +45,11 @@ reading behind each rule below.
   `Restart=on-failure` reruns it. The `DECIDED:` marker above the drift tiles in
   `templates/static-monitors.yaml.j2` keeps those deadlines. ENFORCED:
   `ansible/tests/setup/test_kuma_check_timer.py`.
+- **The push-token format check skips under a secret stub file**, on `when: not
+  (homelab_secret_stubs | default(false) | bool)`. A stub token is never 32 letters and digits,
+  so the check stopped the first shadow-render dry run here. The guard is not `k8s_dry_run`,
+  because an ordinary dry run still checks the real tokens. ENFORCED:
+  `ansible/tests/k8s/test_secret_key_task_census.py::test_every_stub_refusing_task_is_skipped_under_stubs`.
 
 ## One Discord template for every monitor, fed by `description` and tags
 

@@ -97,6 +97,10 @@ class Record:
     outcome: str = ""
     # The VERDICT line of the landing the pipeline ran (#3960), "" when it ran none.
     verdict: str = ""
+    # The CI wait a batch that does not land runs (#4737): "" when it ran none, else its
+    # result in words, and whether the implementer was resumed for a red verdict.
+    ci_gate: str = ""
+    ci_resumed: bool = False
     # Per phase: wall-clock seconds, and the tool calls the classifier denied.
     durations: dict[str, float] = field(default_factory=dict)
     permission_denials: dict[str, int] = field(default_factory=dict)
@@ -161,6 +165,41 @@ def findings_of(phase: Phase) -> tuple[list[dict] | None, str]:
     return [f for f in out["findings"] if isinstance(f, dict)], ""
 
 
+def held_for_findings(record: Record, state_dir: _Path) -> dict | None:
+    """A `needs input:` report holding the open PR on a confident leftover, else None.
+
+    On every host: a daniel-server batch's PR is landed by the orchestrator from `status`'s
+    `done` line, which would land it just the same. A security finding is counted rather
+    than named, because this text reaches `status` and the orchestrator's transcript.
+    """
+    left = blocking(record.remaining)
+    if not left:
+        return None
+    named = [f"{f.get('title')} ({f.get('file')})" for f in left if not is_held(f)]
+    held = len(left) - len(named)
+    if held:
+        named.append(f"{held} security findings in {state_dir}")
+    return {
+        "type": "result",
+        "is_error": False,
+        "result": (
+            "needs input: the review left a confident medium-or-worse finding after the "
+            f"fix round, so the PR was not landed: {'; '.join(named)}.\n{record.pr}"
+        ),
+    }
+
+
+def held_for_green(record: Record, reason: str) -> dict:
+    return {
+        "type": "result",
+        "is_error": False,
+        "result": (
+            f"needs input: the PR fails the green gate, so it was not landed: {reason}."
+            f"\n{record.pr}"
+        ),
+    }
+
+
 def issues_section(brief: str) -> str:
     """The brief's fenced issue text, which is all the reviewer learns about intent."""
     _, sep, rest = brief.partition(ISSUES_HEADING)
@@ -186,6 +225,8 @@ def comment_body(record: Record) -> str:
         lines.append(f"Red gate refused the test author's commit: {record.red_gate}.")
     if record.green_gate:
         lines.append(f"Green gate: {record.green_gate}.")
+    if record.ci_gate:
+        lines.append(f"CI gate: {record.ci_gate}.")
     if record.red_hunks:
         noticed = record.red_hunks - len(record.red_hunks_missed)
         lines.append(
@@ -197,7 +238,7 @@ def comment_body(record: Record) -> str:
             f"{len(record.base_passing)} of the PR's {record.base_tests} new tests pass with "
             "its code changes taken out."
         )
-    if record.red_gate or record.base_tests:
+    if record.red_gate or record.base_tests or record.ci_gate:
         lines.append("")
     held = sum(1 for f in record.findings if is_held(f))
     lines.append(

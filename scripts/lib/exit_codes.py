@@ -767,34 +767,34 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         ),
     ),
     "scripts/renderer/homelab_render.py": (
-        _c(RENDER_OK, "RENDER_OK", "every requested tag rendered under DIR/cluster/."),
+        _c(RENDER_OK, "RENDER_OK", "every requested tag or package rendered in DIR."),
         _c(
             RENDER_FAILED,
             "RENDER_FAILED",
-            "a template failed to render, so nothing was written.",
-            "The message names the template and the undefined name or filter error.",
+            "a render, a secret check or the pinned-fact refusal failed; nothing was written.",
+            "The message names the template and the error, or the rule, tag, file and key.",
         ),
         _c(
             RENDER_REFUSED,
             "RENDER_REFUSED",
             "the render was refused before anything was written.",
-            "Pass --secret-stubs with a fresh shadow_diff.py stubs file, name only renderable "
-            "tags, and render into an empty --out.",
+            "Pass a fresh stubs file, name only renderable tags or packages that exist, "
+            "and render into an empty --out.",
         ),
         _c(RENDER_BAD_ARGS, "RENDER_BAD_ARGS", "the command line is wrong."),
     ),
     "scripts/renderer/shadow_diff.py": (
-        _c(SHADOW_OK, "SHADOW_OK", "done, and compare or stubcheck found nothing."),
+        _c(SHADOW_OK, "SHADOW_OK", "done, and the subcommand found nothing."),
         _c(
             SHADOW_DIFFERENT,
             "SHADOW_DIFFERENT",
-            "compare found a difference, or stubcheck a file lacking a stub token.",
+            "a difference, a file lacking a stub token, or a failed fluxprobe case.",
             "Never copy or post a tree stubcheck fails.",
         ),
         _c(
             SHADOW_REFUSED,
             "SHADOW_REFUSED",
-            "refused: an empty set, a missing named member or a misplaced file.",
+            "refused: an empty set, a missing named member or file, a busy --out, no flux.",
             "Render every tag on both sides, then compare again.",
         ),
         _c(SHADOW_BAD_ARGS, "SHADOW_BAD_ARGS", "the command line is wrong."),

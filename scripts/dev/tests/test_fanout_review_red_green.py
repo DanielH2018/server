@@ -265,7 +265,8 @@ def test_nothing_the_red_phase_hid_from_the_gates_reaches_the_implementer(
         argv = unprefixed(argv)
         if argv[0] == "git":
             return git(repo, *argv[3:], check=False)
-        if argv[0] in ("gh", "uv"):
+        # `bash` is the CI wait a daniel-server batch now runs (#4737): exit 0 reads as a pass.
+        if argv[0] in ("gh", "uv", "bash"):
             return subprocess.CompletedProcess(argv, 0, "", "")
         phase = (repo / ".fanout" / "phase").read_text().strip()
         if phase == "red":

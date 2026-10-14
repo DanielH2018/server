@@ -34,15 +34,31 @@ lets it see the two shapes nothing static can. A heavy module landing where ever
 sibling is light is invisible to a neighbour heuristic, and `def test_` count, byte size and
 directory mean all fail to separate a heavy module from an ordinary file; the
 gate annotates it at `RUNNER_HEAVY_SECONDS` and rejects it at `RUNNER_HEAVY_FAIL_SECONDS`
-(both in `shard_weight_gate.py`, with the two arms).
+(both in `shard_weight_gate.py`, with the arms).
 And a recorded number can go wrong in the other direction, which no arm asking "is this file
 MISSING" ever sees:
 a recorded 17.31s against 0.09s measured makes the greedy split place the file first, so one
 shard carries 17s of phantom weight. The gate
 answers that as a RATIO — see `shard_weight_gate.STALE_WEIGHT_RATIO` — and `--record-files` is its repair, since
-`--record-missing` only fills gaps.
+`--record-missing` only fills gaps. A third arm takes the opposite direction: a module that grew
+after its weight was recorded measured 45.67s against 0.48s, and the split packed it as free.
+`shard_weight_gate.UNDER_WEIGHT_RATIO` bounds it, and `--record-files` repairs it too.
+
+A CACHE SHARED ACROSS MODULES IS A PER-WORKER COST, NOT A MODULE'S. Under xdist every worker
+builds `_k8s_render`'s render once and charges it to whichever module asks first, so its weight
+would vary from run to run. `ansible/tests/conftest.py` builds it when collection finishes,
+outside every test's timed phases, and its `# DECIDED:` comment has the numbers.
 
 The docs-refresh cron runs `--record-missing` itself, so gaps in the table fill without a human.
+
+A WEIGHT THAT DRIFTS MODERATELY LOW IS INVISIBLE TO THE GATE, so the cron re-measures it too.
+Three modules measured 1.66x to 1.98x their recorded weight in a serial run (#4888), well
+inside the 20x under-recorded arm, and `--record-missing` never touches a present entry. A CI
+ratio that low cannot separate drift from runner scale, because the runner already measures
+correctly recorded entries 1.1x to 13x their weight. A serial run on the recording host can, so
+the cron runs `--refresh-drifted`: each run re-measures one hash slice of the table and rewrites
+only the entries `DRIFT_RATIO` or more away from what they measured. Measurement noise inside
+that band leaves the table alone, which is what keeps a twice-daily run from churning it.
 
 THE GATE FAILS ONLY WHERE SOMEONE CAN APPLY THE REPAIR. On a pull request the author re-records
 and pushes. On a push to master nobody can, and a red master run still reaches the deployer's
@@ -60,14 +76,17 @@ Usage:
     uv run python scripts/dev/pytest_shard.py --record                # re-measure the weights
     uv run python scripts/dev/pytest_shard.py --record-missing        # only the unweighted files
     uv run python scripts/dev/pytest_shard.py --record-files a.py b.py  # refresh these entries
+    uv run python scripts/dev/pytest_shard.py --refresh-drifted 8     # one eighth, drifted rows only
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # CI's measured gate
     uv run python scripts/dev/pytest_shard.py --check-durations ci.log --warn-only  # annotate, exit 0
 """
 
+import hashlib
 import json
 import statistics
 import subprocess
 import sys
+import time
 import tomllib
 from pathlib import Path, PurePosixPath
 
@@ -101,6 +120,17 @@ _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 # Without this term the split balances recorded seconds and leaves the file COUNT wildly uneven,
 # which is how the 357-file shard became the pole while the model called every shard equal.
 _PER_FILE_SECONDS = 0.028
+
+# How far apart a module's recorded and measured seconds may sit, either way, before
+# `--refresh-drifted` rewrites the entry. It is #4888's Verify-by bound, so a refreshed table
+# holds every module within it, and a re-measurement inside it is treated as noise.
+DRIFT_RATIO = 1.5
+# An entry within this many seconds of what it measured stays, whatever the ratio: 0.02s
+# measuring 0.05s is 2.5x and changes no shard's balance.
+DRIFT_FLOOR_SECONDS = 0.5
+# The docs-refresh cron runs at 06:17 and 18:17. Two runs 12 hours apart always fall in
+# consecutive periods of this length, so successive runs visit successive slices.
+_SLICE_PERIOD_SECONDS = 12 * 60 * 60
 
 
 def testpaths() -> list[str]:
@@ -278,6 +308,65 @@ def record_named_weights(
     return _write_weights(kept, path)
 
 
+def refresh_slice(path: str, slices: int) -> int:
+    """The 0-based slice of `slices` that `--refresh-drifted` re-measures `path` in.
+
+    A hash of the path, not `assign`'s weighted packing. Packing moves a module to another
+    slice whenever any weight changes, so a module could keep landing in slices already visited
+    and go unmeasured for several rotations. A hash places it by its own path alone.
+    """
+    return int(hashlib.sha256(path.encode()).hexdigest(), 16) % slices
+
+
+def slice_at(seconds: float, slices: int) -> int:
+    """The 0-based slice a `--refresh-drifted` run at epoch `seconds` re-measures."""
+    return int(seconds // _SLICE_PERIOD_SECONDS) % slices
+
+
+def drifted(recorded: float, measured: float) -> bool:
+    """Whether `measured` is far enough from `recorded`, either way, to rewrite the entry."""
+    if abs(measured - recorded) < DRIFT_FLOOR_SECONDS:
+        return False
+    low, high = sorted((recorded, measured))
+    return high > DRIFT_RATIO * low
+
+
+def refresh_drifted_weights(
+    index: int,
+    slices: int,
+    path: Path = WEIGHTS_PATH,
+    *,
+    files: list[str] | None = None,
+    measure=measure_weights,
+) -> list[str]:
+    """Re-measure slice `index` of `slices` of the recorded entries, and rewrite the drifted ones.
+
+    The unattended repair for a weight that has drifted but not far enough for the gate's
+    ratio arms. Only an entry `drifted` judges out of band is rewritten, so re-measuring a
+    slice usually leaves the table byte-identical. A recorded path no longer in the census is
+    dropped, as `record_missing_weights` drops it.
+
+    Args:
+        index: The 0-based slice to re-measure.
+        slices: How many slices the table is split into.
+        path: The weights table to read and rewrite.
+        files: The census to keep entries for; `census()` when None.
+        measure: Measures a list of files, as `measure_weights` does.
+
+    Returns:
+        The paths whose weights were rewritten, sorted.
+    """
+    files = census() if files is None else files
+    known = load_weights(path)
+    kept = {f: known[f] for f in files if f in known}
+    chosen = [f for f in kept if refresh_slice(f, slices) == index]
+    measured = measure(chosen) if chosen else {}
+    moved = sorted(f for f in chosen if drifted(kept[f], measured.get(f, 0.0)))
+    kept |= {f: measured.get(f, 0.0) for f in moved}
+    _write_weights(kept, path)
+    return moved
+
+
 def _summary(shards: int) -> str:
     files, weights = census(), load_weights()
     placed = assign(files, shards, weights)
@@ -318,12 +407,21 @@ def main(argv=None) -> int:
         help="re-measure only these test files and refresh their recorded weights",
     )
     parser.add_argument(
+        "--refresh-drifted",
+        type=int,
+        metavar="SLICES",
+        help=(
+            "re-measure one of SLICES hash slices of the recorded weights, chosen by the "
+            "12-hour period, and rewrite the entries that drifted past DRIFT_RATIO"
+        ),
+    )
+    parser.add_argument(
         "--check-durations",
         type=Path,
         metavar="LOG",
         help=(
-            "read a pytest --durations report and fail on a heavy unweighted module or a "
-            "recorded weight far above what its module measured"
+            "read a pytest --durations report and fail on a heavy unweighted module, a "
+            "recorded weight far above what its module measured, or one far below it"
         ),
     )
     parser.add_argument(
@@ -379,8 +477,9 @@ def main(argv=None) -> int:
             return 1
         if not warnings:
             print(
-                f"no unweighted module measured {args.threshold:.0f}s or more in this shard, "
-                f"and no recorded weight is {args.stale_ratio:.0f}x what its module measured"
+                f"no unweighted or under-recorded module measured {args.threshold:.0f}s or "
+                f"more in this shard, and no recorded weight is {args.stale_ratio:.0f}x what "
+                f"its module measured"
             )
         return 0
 
@@ -404,13 +503,24 @@ def main(argv=None) -> int:
         )
         print(f"re-measured {refreshed}; {len(written)} in the table at {WEIGHTS_PATH}")
         return 0
+    if args.refresh_drifted is not None:
+        slices = args.refresh_drifted
+        if slices < 1:
+            parser.error("--refresh-drifted needs at least one slice")
+        index = slice_at(time.time(), slices)
+        moved = refresh_drifted_weights(index, slices)
+        print(
+            f"re-measured slice {index + 1} of {slices}; rewrote {len(moved)} drifted "
+            f"weight(s){': ' + ', '.join(moved) if moved else ''} in {WEIGHTS_PATH}"
+        )
+        return 0
     if args.summary:
         print(_summary(args.of))
         return 0
     if args.shard is None:
         parser.error(
-            "one of --shard, --summary, --record, --record-missing, --record-files or "
-            "--check-durations is required"
+            "one of --shard, --summary, --record, --record-missing, --record-files, "
+            "--refresh-drifted or --check-durations is required"
         )
 
     files = shard_files(args.shard, args.of)

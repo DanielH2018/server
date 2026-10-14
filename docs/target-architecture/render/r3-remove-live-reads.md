@@ -1,6 +1,14 @@
 # R3 — Remove the pre-apply live reads
 
-Status: PLANNED
+Status: IN PROGRESS
+
+PR 1, pi-peer-backup's committed host key: [#4903](https://github.com/DanielH2018/server/pull/4903).
+
+PR 3, authelia's digest assert: [#4902](https://github.com/DanielH2018/server/pull/4902).
+
+PR 2, n8n's annotations: [#4925](https://github.com/DanielH2018/server/pull/4925).
+
+PRs 1 and 3 landed without their operator-only pre-merge checks under *Verification*. The orchestrator's briefs omitted them, and each check's property was read after the deploy instead. PR 3's assert ran unstubbed in the real deploy and returned `ok` on the live digests at 2026-10-13 18:12:00. PR 1's release records show the same `secret_digest`, `54b03051…`, before (`8a28ede4`) and after (`d98d8752`), so the Secret's bytes did not move. PR 4's checks stay pre-merge.
 
 Depends on: [R1](r1-shadow-render.md)
 
@@ -761,7 +769,7 @@ Then repeat R1's shadow pair with a fresh `shadow_diff.py stubs` file. `compare`
     - R1's `stubs` test expects three pinned facts.
     - If R2's PR 2 is at the base, its refusal's test loses the named member `n8n`, and its
       flagged case moves to `authelia` and `authelia_password_hash`.
-    - Retire `ansible/tests/services/test_n8n_image_stamp.py`, whose subject is gone.
+    - Retire `test_n8n_image_stamp.py` in `ansible/tests/services/`, whose subject is gone.
     - `test_a_dry_run_records_the_digest_n8n_stamps_and_the_gate_skips_it` in
       `ansible/tests/deploy/test_built_image_drift_gate.py` loses its reason. Keep its second
       half, that every drift-gate task reading `k8s_built_images` skips on a dry run, under a

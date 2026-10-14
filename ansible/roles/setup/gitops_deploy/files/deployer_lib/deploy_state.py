@@ -296,22 +296,17 @@ class DeployerState:
 
     # ── the per-SHA tick receipt (#3391) ──────────────────────────────────────────────────
 
-    def record_receipt(
-        self,
-        origin: str,
-        base: str,
-        applied: dict[str, list[str]] | None = None,
-        manual: dict[str, frozenset[str] | None] | None = None,
-    ) -> None:
+    def record_receipt(self, origin: str, base: str, **planes: dict[str, Any]) -> None:
         """Merge what this tick did at `origin` into that SHA's receipt, creating it if absent.
 
         Args:
             origin: the SHA the tick crossed to.
             base: the commit the checkout stood on before the tick.
-            applied: playbook -> the tags it applied with. Called once per plan, so a
-                setup-then-deploy range ends with both.
-            manual: setup role tag -> the narrowest tags its change in this range needs, or
-                None where no derivation could narrow it.
+            **planes: each merged into the receipt key it names. `applied`: playbook -> the
+                tags it applied with; called once per plan, so a setup-then-deploy range
+                ends with both. `manual`: setup role tag -> the narrowest tags its change in
+                this range needs, or None where no derivation could narrow it. `deferred`:
+                playbook -> the services a refused narrowing owed instead (#4333, #4843).
 
         Every key the stored receipt carries beyond these survives the merge, for the reason
         `gitops_markers.parse_owed` gives. The marker keeps the newest `RECEIPT_KEEP` lines.
@@ -328,7 +323,8 @@ class DeployerState:
             else:
                 lines.append(line)
         obj = obj or {"origin": origin, "base": base}
-        for key, new in (("applied", applied or {}), ("manual", manual or {})):
+        for key, new in planes.items():
+            assert key in ("applied", "manual", "deferred"), key
             held = obj.get(key)
             if not isinstance(held, dict):
                 held = {}

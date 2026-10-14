@@ -29,6 +29,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 
+import json
+
 from deploy_tools.deploy_lib import tags as deploy_tags
 from lib.k8s_roles import role_callers
 from lib.repo_paths import GITOPS_DEPLOY_FILES, ROLES
@@ -183,3 +185,72 @@ def narrowed_roles(files, declared: set[str] | None = None) -> frozenset[str]:
         if tags and narrowed(role, tags, files) != tags:
             out.add(role)
     return frozenset(out)
+
+
+# The standalone-value guard's map (#4932). `manifests/tasks/main.yml` reads only the row keyed
+# by `manifests_service`, so a row that changed can change no other caller's deploy.
+GUARD_MAP = "ansible/roles/k8s/manifests/files/standalone_secret_keys.json"
+
+
+def _guard_rows_at(ref: str, git) -> dict | None:
+    """The guard map at `ref` as a dict of rows, or None when it is absent or does not parse."""
+    r = git("show", f"{ref}:{GUARD_MAP}")
+    if r.returncode != 0:
+        return None
+    try:
+        rows = json.loads(r.stdout)
+    except ValueError:
+        return None
+    return rows if isinstance(rows, dict) else None
+
+
+def guard_map_rows(files, pr_range: str, git) -> frozenset[str] | None:
+    """The tags whose guard-map row differs over `pr_range`, or None to keep every caller.
+
+    `shared_caller_tags` fans a `manifests` change out to every role that includes it, about
+    57 tags. A change to `GUARD_MAP` alone reaches only the callers whose row moved, because
+    the guard task reads `.get(manifests_service, [])` and nothing else. The landing
+    intersects the `manifests` callers with this set. An empty set is a valid answer here:
+    a reserialised map, or a row removed for a retired role, deploys no caller.
+
+    None, which keeps the full fan-out, when:
+      - `GUARD_MAP` is not in `files`, or another non-test `manifests` path is;
+      - `pr_range` is not `<old>..<new>`, or its diff does not name `GUARD_MAP`, the
+        narrower-range hazard `land_tags.quiet_paths` describes;
+      - either side is absent, unreadable, not JSON or not an object.
+
+    Not a `Classifier`, because it reads git, and never passed to `plane_note`: an empty set
+    there would read as a role a hand must apply.
+
+    The callers left undeployed owe the deployer nothing. The map renders into no manifest,
+    so each one's render still matches its applied digests, and `manifests` is a
+    render-proof role (`gitops_markers.RENDER_PROOF_SHARED_ROLES`): the tick's
+    `k8s_unapplied` line for it discharges on that match, as it does for a smoke-narrowed
+    change (`shared_role_callers.smoke_caller`).
+
+    Args:
+        files: the PR's changed paths, the list the landing's caller expansion reads.
+        pr_range: `<old>..<new>` bounding this PR's own change.
+        git: runs `git <args>` in the checkout holding both ends of the range and returns
+          the `CompletedProcess` without raising, as `Landing.git` does.
+    """
+    files = list(files)
+    if GUARD_MAP not in files:
+        return None
+    if any(
+        role_for(p) == "manifests" and not is_role_test_path(p) and p != GUARD_MAP
+        for p in files
+    ):
+        return None
+    old, sep, new = pr_range.partition("..")
+    if not (sep and old and new):
+        return None
+    diff = git("diff", "--name-only", f"{old}..{new}")
+    if diff.returncode != 0 or GUARD_MAP not in diff.stdout.splitlines():
+        return None
+    before, after = _guard_rows_at(old, git), _guard_rows_at(new, git)
+    if before is None or after is None:
+        return None
+    return frozenset(
+        k for k in before.keys() | after.keys() if before.get(k) != after.get(k)
+    )

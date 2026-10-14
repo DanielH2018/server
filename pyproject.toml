@@ -46,6 +46,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   ".claude/hooks",
   "scripts",                         # closes the smoke_extract CI gap
   "evals",                                         # homelab eval-case schema validation
+  "hosts/lib/tests",                               # the scripts the host packages ship (H3)
 ]
 # `-n auto` (pytest-xdist) fans the suite across the machine's cores: 5.6s -> 3.0s locally, and
 # pytest was 13.5s of the ~24s of hook work in CI's `rest` shard. Set here rather than in the prek
@@ -169,6 +170,10 @@ extend-exclude = [
   "ansible/collections",
   "*.md",
 ]
+# The hosts run reconcile under Ubuntu 24.04's python3, which is 3.12. Formatting it for the
+# repo's newer target writes 3.14-only syntax, `except A, B:` among it.
+# hosts/lib/tests/test_reconcile_component.py parses the file with the 3.12 grammar.
+per-file-target-version = { "hosts/lib/homelab-reconcile" = "py312" }
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),
@@ -350,6 +355,7 @@ include = [
   "ansible/tests",
   "ansible/filter_plugins",
   "evals",
+  "hosts",
 ]
 exclude = ["ansible/collections", "site", ".claude/worktrees"]
 

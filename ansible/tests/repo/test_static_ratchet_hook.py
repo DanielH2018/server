@@ -1,10 +1,10 @@
-"""The `static-ratchet-tests` prek hook runs the eight tests that turned PRs red, and CI skips it.
+"""The `static-ratchet-tests` prek hook runs the twelve tests that turned PRs red, and CI skips it.
 
-Eight static test modules caused most of the PR reds that the author's own code did not (#3605,
-#4008). The hook runs them at commit time so the failure and its repair arrive before CI. This
-guard holds three things a later edit could quietly lose: every module the hook names still
-exists, its `files` gate matches the edits those tests react to, and CI's two `prek run` steps
-skip it, because the `pytest` job runs the same modules.
+Twelve static test modules caused most of the PR reds that the author's own code did not
+(#3605, #4008, #4904). The hook runs them at commit time so the failure and its repair arrive
+before CI. This guard holds three things a later edit could quietly lose: every module the
+hook names still exists, its `files` gate matches the edits those tests react to, and CI's two
+`prek run` steps skip it, because the `pytest` job runs the same modules.
 
 Run: uv run pytest ansible/tests/repo/test_static_ratchet_hook.py
 """
@@ -19,8 +19,8 @@ from _helpers import REPO
 HOOK_ID = "static-ratchet-tests"
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 
-# The four modules #3605 measured and the four #4008 added. A module dropped from the entry
-# fails here by name.
+# The four modules #3605 measured, the four #4008 added and the four #4904 added. A module
+# dropped from the entry fails here by name.
 EXPECTED_MODULES = {
     "ansible/tests/repo/test_module_length_ratchet.py",
     "ansible/tests/repo/test_facts_lock_matches_tree.py",
@@ -30,6 +30,10 @@ EXPECTED_MODULES = {
     "ansible/tests/repo/test_census_rows_python.py",
     "scripts/tests/test_census_rows_test_modules.py",
     "scripts/tests/test_census_rows_test_renders.py",
+    "ansible/tests/repo/test_census_rows_suite.py",
+    "ansible/tests/repo/test_census_rows_roles.py",
+    "ansible/tests/repo/test_census_rows_text.py",
+    "ansible/tests/repo/test_census_rows_layout.py",
 }
 
 
@@ -65,6 +69,12 @@ def test_the_hook_runs_every_expected_module_and_each_exists():
         "ansible/inventory/hosts.ini",
         "pyproject.toml",
         ".github/workflows/ci.yml",
+        ".github/workflows/image-smoke.yml",
+        "ansible/roles/k8s/monitor-bridge/files/notify.sh",
+        ".claude/agents/skeptic.md",
+        ".claude/skills/homelab-review/SKILL.md",
+        "evals/cases/review-standing.json",
+        "scripts/lib/__pycache__/gh.cpython-314.pyc",
     ],
 )
 def test_the_gate_matches_an_edit_the_tests_react_to(path):

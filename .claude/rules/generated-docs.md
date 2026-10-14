@@ -36,7 +36,8 @@ dirty.
 
 **What the cron DOES stage is a closed list, and a generator outside it dirties the tree.**
 Three paths: `docs/reference/`, `docs/assets/generated/`, and `scripts/dev/pytest_shard_weights.json`
-(the test shard-weights table, recorded by `pytest_shard.py --record-missing` since #2274).
+(the test shard-weights table, recorded by `pytest_shard.py --record-missing` since #2274, and
+re-measured where it drifted by `--refresh-drifted` since #4888).
 Adding a fourth means editing the cron's `git add`, the porcelain check in its
 `restore_generated_tree`, and `ansible/tests/setup/test_docs_refresh_records_shard_weights.py`,
 which holds the first two against each other. A path written but not staged parks the GitOps

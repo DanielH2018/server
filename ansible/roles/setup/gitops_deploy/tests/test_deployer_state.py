@@ -386,12 +386,16 @@ def test_a_receipt_merges_every_plan_of_one_origin_into_one_line(state):
     )
     state.record_receipt("o" * 40, "b" * 40, manual={"k3s": frozenset({"kubeconfig"})})
     state.record_receipt("o" * 40, "b" * 40, applied={"ansible/deploy.yml": []})
+    state.record_receipt(
+        "o" * 40, "b" * 40, deferred={"ansible/deploy.yml": ["sonarr"]}
+    )
     (receipt,) = parse_receipts(state.read("receipts"))
     assert receipt.applied == {
         "ansible/initial_setup.yml": ("x",),
         "ansible/deploy.yml": (),
     }
     assert receipt.manual == {"k3s": frozenset({"kubeconfig"})}
+    assert receipt.deferred == {"ansible/deploy.yml": frozenset({"sonarr"})}
 
 
 def test_a_receipt_keeps_a_key_this_writer_does_not_know(state):

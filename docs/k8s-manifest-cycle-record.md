@@ -231,9 +231,7 @@ Those roles add a `checksum/<name>` pod-template annotation instead, rendered by
 `checksum_annotation(name, value=...)` / `checksum_annotation(name, path=...)` macro in
 `ansible/templates/checksum-annotation.yml.j2` (value mode renders an already-computed checksum
 verbatim; path mode hashes one file's raw bytes inline via `lookup('file', path, rstrip=False) |
-hash('sha1')`). n8n's own image-digest pod-roll annotation reuses the same macro's value mode
-too, for a consistent annotation line — the macro only standardises how the line renders, not
-what feeds it. `ansible/tests/k8s/test_checksum_annotation_census.py` is the guard: every role
+hash('sha1')`). `ansible/tests/k8s/test_checksum_annotation_census.py` is the guard: every role
 that stages a ConfigMap this way either carries the annotation or is named in that test's `DEBT`
 dict with the reason it does not need one (observability's dashboards poll on their own, per
 Grafana's `updateIntervalSeconds`).
@@ -291,8 +289,6 @@ Every stamped service can be dry-run since #2588. Each role that includes this o
 cluster writes on `k8s_no_mutate`, so no role needs a dry run refused on its behalf: the
 `k8s_dry_run_unsupported` list and `deploy.yml`'s assert against it were deleted once empty
 (#2876), and `ansible/tests/deploy/test_k8s_dry_run.py` now holds that guard in their place.
-n8n's image-checksum annotation reads the registry digest a deploy would stamp, where it used to
-render `unstaged` under a dry run.
 
 ## The release record, field by field
 
@@ -414,9 +410,22 @@ reason whether or not a path moved, or the record proves nothing and the path ve
 Until #3046 only the first branch existed, so a service the path narrowing read clean could drift
 unseen.
 
-A record proves nothing unless its `commit` is origin/master, its tree was clean, and its `host`
-is the release record's. A digest also says nothing about secret manifests: a rendered line added
-to uptime-kuma's `static-monitors.yaml.j2`, a secret manifest, left its digest unchanged. So a
+A record proves nothing unless its tree was clean and its `host` is the release record's. Its
+`commit` R must also be origin/master or an ancestor of it (#4881). A record behind the tip
+answers only for the path hits R already holds: a matching digest drops those, every hit in
+R..origin/master keeps the path verdict, and a mismatch at R proves nothing about the tip, so
+the path verdict stands rather than a drifted one. A hit under a shared role the digest does not
+cover (a volume-claim change) is kept wherever it falls. The reader dates each kept hit by the
+oldest commit R does not answer for: a digested hit from its oldest commit in R..origin/master,
+an uncovered hit from its oldest commit since the release record's applied commit. The service
+takes the oldest of those dates. Grace is thus "a merge younger than N minutes" once R clears the
+older hits, and the window's length is unchanged. A `commit` that is not a full lowercase SHA
+proves nothing. The producer renders hourly and master merges
+more often than that, so until #4881 the reader refused nearly every record. On 2026-10-13 one
+comment-only edit to `release_stamp.yml` kept 30 services reading stale for ten hours.
+
+A digest also says nothing about secret manifests: a rendered line added to uptime-kuma's
+`static-monitors.yaml.j2`, a secret manifest, left its digest unchanged. So a
 verdict needs `secret_manifests` empty on both records, which held for 25 of 58 on that date
 (#2586), or the same names on both and `secret_digest` present on both (#2574) — a `secret_digest`
 that is present and DIFFERENT is drift, and one that is absent keeps the path verdict, so services

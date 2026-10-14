@@ -229,7 +229,14 @@ _ROLE_PLANES = {
 # registry and secrets file name every secret by definition, so including them would make
 # every census non-empty and the check vacuous.
 _CENSUS_SKIP = ("collections",)
-_CENSUS_SKIP_FILES = {"secrets.yml", "secret_rotation.yml"}
+# The manifests role's standalone-value guard map names about 150 keys and renders none of
+# them: the guard reads each value at deploy time and writes nothing, so a rotation owes the
+# `manifests` role no redeploy.
+_CENSUS_SKIP_FILES = {
+    "secrets.yml",
+    "secret_rotation.yml",
+    "standalone_secret_keys.json",
+}
 
 # Markdown is EXCLUDED, and this is a correctness fix rather than tidiness. A role's CLAUDE.md
 # names secrets it explains without rendering any of them, so counting docs makes the census

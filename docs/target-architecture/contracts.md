@@ -291,6 +291,18 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
     `render_sops_manifests` entry, which kustomize-controller decrypts (R2, D3).
 
   Any step in either path that needs plaintext is **operator-only**.
+
+  **Standalone values.** A *standalone use* is a placeholder that is the whole scalar of a
+  field. A key with a standalone use holds a value that both a YAML 1.1 resolver and the
+  pinned Flux CLI's reader read as a string, never as an int, float, bool, null, timestamp
+  or sexagesimal number. A YAML 1.1 resolver alone is not enough: PyYAML reads `1e3` as a
+  string, and the pinned CLI returned the integer 1000. Flux types a standalone value by its
+  text, whatever quotes the template wrote. R2's shared resolver holds the definition, and
+  the corpus in R2's flux probe holds that resolver to the pinned CLI. The producer
+  enforces the rule where it decrypts. Before D3 that producer is R2's guard in the Ansible deploy path.
+  From D3 on, `cluster_vars.py write` enforces it too. Both fail closed and print key names
+  only (R2, D3). A key whose real value breaks the rule leaves the placeholder path for a
+  dedicated SOPS manifest, as `mullvad_account` does (R2 PR 7b).
 - **The source of `domain` before D3.** `homelab-cluster-vars` first exists at D3.3. D2's leaf
   references one variable, `domain`, in its IngressRoute's Host rule, so it cannot flip before
   that key has a source.
@@ -923,3 +935,14 @@ Applied to this page:
   `verify-drill` as a transient second `OCIRepository` in `flux-system`. It is present only
   while `flux_verify_drill` is true, and the flux role deletes it while the lever is off. The
   request leaves *Requests on C3*, which clears the gate before D1.5 merges.
+
+### Operator ruling (2026-10-13)
+
+- **The standalone value rule** (R2 Open question 13,
+  [#4892](https://github.com/DanielH2018/server/issues/4892)). On the pinned flux CLI, a value
+  substituted alone into a field loses its string type, whatever quotes the template uses. The
+  operator ruled on 2026-10-13: guard the values where they are decrypted, and move
+  `mullvad_account`, the one key whose real value is all digits, to a dedicated SOPS Secret.
+  C3 *Secrets* now states the rule and names its producers. The operator's ruling settles the
+  wording, so the PR that records it applies it directly, and no row in *Requested
+  amendments not yet applied* precedes it. R2's guard PR, PR 1c, has no contract gate left.

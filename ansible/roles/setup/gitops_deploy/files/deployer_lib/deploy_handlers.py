@@ -233,9 +233,10 @@ def handle_broad(
     for broad in plans:
         playbook, tags = broad.playbook, broad.tags
         if broad.deferred:
-            # Nothing ran, so no receipt, no hold cleared and no line cleared: an empty tag
-            # list in the receipt reads as "the whole play ran" to land.sh (#4333).
-            # `apply_broad_k8s` records what it owes.
+            # Nothing ran, so no `applied` entry, no hold cleared and no line cleared: an
+            # empty tag list there reads as "the whole play ran" to land.sh (#4333).
+            # `apply_broad_k8s` records what it owes in the ledger, and only then the
+            # receipt's `deferred` entry (`record_deferred_receipt` says why the order).
             continue
         try:
             if broad.apply:
@@ -281,6 +282,9 @@ def handle_broad(
                 set(),
                 deploy_broad_k8s.fold_deferred(cs, plans, plan.k8s_services),
                 plan.k8s_services,
+            )
+            deploy_broad_k8s.record_deferred_receipt(
+                state, target, plans, plan.k8s_services
             )
             deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
             posted = deploy_alerts.discord(

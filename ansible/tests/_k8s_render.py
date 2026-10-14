@@ -8,6 +8,8 @@ Rendering goes through validate.k8s_manifests' own machinery rather than a secon
 what a test considers a manifest cannot drift from what that validator does.
 """
 
+import contextlib
+
 from lib import yaml_fast
 from _role_census import role_dirs
 from lib.render_context import render_context
@@ -100,9 +102,11 @@ _TEXTS: list[tuple[str, str, str]] = []
 def rendered_docs():
     """The rendered manifests, rendering the tree at most once per process.
 
-    A full render costs ~0.95s, so each call site paying it separately would add tens of
+    A full render costs ~1.9s, so each call site paying it separately would add tens of
     seconds to the suite. The render is a pure function of the
     repo tree, which no test writes to, so one result serves the whole session.
+    `ansible/tests/conftest.py` builds it through `prebuild()` when collection finishes, so
+    the cost lands outside every test's timed phases.
 
     # DECIDED: shared docs, not deep copies. Every call site iterates and asserts; none mutates
     # a doc, and copying 323 dicts per call would spend a slice of what the cache saves. A test
@@ -126,6 +130,20 @@ def rendered_texts():
     """
     rendered_docs()
     return iter(tuple(_TEXTS))
+
+
+def prebuild(read=rendered_docs) -> None:
+    """Build the `rendered_docs()` cache now, and leave a failed render for a test to report.
+
+    A render that raises leaves `_CACHE` empty, so the first test to read the render renders
+    again and fails naming the template. Raising here instead would end a collection hook's
+    caller in an INTERNALERROR that names no test.
+
+    Args:
+        read: what builds the cache. A test seam; the hook passes nothing.
+    """
+    with contextlib.suppress(Exception):
+        read()
 
 
 def render_texts(overrides: dict) -> tuple[tuple[str, str, str], ...]:
@@ -156,7 +174,7 @@ def render_role_template(
     `overrides` is a dict rather than `**kwargs` because a caller may need to override a
     variable named `host` — the staging variables guard hands every unsupplied name in.
 
-    For a guard that flips one variable — a `manage_*` flag, `k8s_built_images` — and asserts
+    For a guard that flips one variable, such as a `manage_*` flag, and asserts
     on what changes. `rendered_docs()` is the whole tree at inventory values; this is one
     template at values the inventory does not hold, so it is not cached and each call renders.
 

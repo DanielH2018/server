@@ -47,6 +47,6 @@ def test_stub_vars_over_a_secrets_file_without_clashes_is_clean(tmp_path):
 
 def test_stub_vars_over_a_secret_key_named_like_a_pinned_fact_is_flagged(tmp_path):
     secrets = tmp_path / "secrets.yml"
-    secrets.write_text("domain: ENC[x]\nk8s_built_images: ENC[x]\n")
-    with pytest.raises(ValueError, match="k8s_built_images"):
+    secrets.write_text("domain: ENC[x]\nauthelia_password_hash: ENC[x]\n")
+    with pytest.raises(ValueError, match="authelia_password_hash"):
         shadow_diff.stub_vars(secrets)

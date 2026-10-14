@@ -1,25 +1,44 @@
 #!/usr/bin/env python3
-"""homelab-render: render the k8s manifests from the git tree alone, in C1's layout.
+"""homelab-render: render the k8s manifests and the host packages from the git tree alone.
 
 `cluster` renders each deploy tag into `DIR/cluster/<tag>/`, with a `kustomization.yaml`
-listing its files. It reads the git tree and the stub file, and never contacts a cluster, a
-host, a registry or a decryption key. Ansible stays the only writer to the cluster.
+listing its files. It reads the git tree and, in stub mode, the stub file, and never contacts
+a cluster, a host, a registry or a decryption key. Ansible stays the only writer to the
+cluster.
 
-Target slice R1 implements stub mode only. `--secret-stubs FILE` takes the file that
-`shadow_diff.py stubs` writes, and every secret renders as its stub. Without it, `cluster` is
-placeholder mode, which arrives with target slice R2. Until then it exits 2 before writing
-anything. A stub render is a comparison input and is never published.
+Without `--secret-stubs`, `cluster` renders in placeholder mode (target slice R2): every secret
+reference renders as `${<key>}`, and a directory whose render holds one escapes every other `$`
+Flux would read as syntax. `renderer_lib/placeholders.py` holds the passes and the per-directory
+key sets, and placeholder mode skips the tags in its `PLACEHOLDER_DEFERRED`. Placeholder mode
+leaves out each role's `render_sops_manifests` files, and the `sops-manifest-entries` check of
+`renderer_lib/sops_entries.py` holds those lists before anything is written. Before it writes
+anything, a placeholder render also refuses a tag marked `owner: flux` that reads a pinned
+live-read fact, and runs the five secret rules of `renderer_lib/secret_checks.py`.
 
-Exit codes: 0 rendered; 1 a template failed to render; 2 refused before writing anything;
-64 a usage error.
+`host --host NAME` renders `hosts/NAME/package.yml` into `DIR/hosts/NAME/`, and `package --name
+PKG` renders the shared package `hosts/packages/PKG/` into `DIR/packages/PKG/`. Each writes
+`root/`, the tree the package installs, and `nfpm.yaml`. Host and package modes render no
+secret and keep every `${` literal (`renderer_lib/host.py`).
 
-Run: uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
+`--secret-stubs FILE` selects stub mode, R1's shadow mode. It takes the file that
+`shadow_diff.py stubs` writes, and every secret renders as its stub. A stub render is a
+comparison input and is never published.
+
+Exit codes: 0 rendered; 1 a template failed to render, a secret check failed, or a flux-owned
+tag reads a pinned live-read fact; 2 refused before writing anything; 64 a usage error.
+
+Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-render
+     uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
      uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \\
          --secret-stubs /tmp/r1-stubs.yml
+     uv run python scripts/renderer/homelab_render.py host --host daniel-pi --out /tmp/h
      uv run pytest scripts/renderer/tests
 """
 
+import os
 import sys
+import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 import sys as _sys
@@ -31,14 +50,26 @@ from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
+from renderer.renderer_lib import secret_checks
 from renderer.renderer_lib.cluster import (
     RenderError,
     RenderRefused,
+    flux_owned_tags,
     render_tag,
     select_tags,
     write_cluster,
 )
 from renderer.renderer_lib.context import load_stubs
+from renderer.renderer_lib.host import render_host, render_package, write_packages
+from renderer.renderer_lib.sops_entries import sops_manifest_entries
+from renderer.renderer_lib.task_inputs import PinnedFact
+from renderer.renderer_lib.placeholders import (
+    Mode,
+    PlaceholderRender,
+    pinned_fact_refusals,
+    render_placeholders,
+    select_mode,
+)
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
 if str(FILTER_PLUGINS) not in _sys.path:
@@ -49,24 +80,45 @@ from secret_stubs import homelab_stub_keys, homelab_unstubbed_keys
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
 
 
+def secret_keys(secrets: Path = SECRETS) -> list[str]:
+    """The secret key names a render replaces, read from the ciphertext file's keys alone."""
+    return homelab_stub_keys(yaml_fast.safe_load(secrets.read_text()))
+
+
 def unstubbed(stubs: dict, secrets: Path = SECRETS) -> list[str]:
     """The secret keys the stub file leaves unset or sets to anything but their stub.
 
     Names only, never a value. A stub file written before a key was added names that key.
     """
-    keys = homelab_stub_keys(yaml_fast.safe_load(secrets.read_text()))
-    return homelab_unstubbed_keys(keys, stubs)
+    return homelab_unstubbed_keys(secret_keys(secrets), stubs)
 
 
-def cluster(out: Path, roles: list[str] | None, secret_stubs: Path | None) -> int:
-    """Render `roles`, or every renderable tag, into `out`; return the exit code."""
-    if secret_stubs is None:
-        print(
-            "homelab-render: cluster without --secret-stubs is placeholder mode, which "
-            "arrives with target slice R2. Nothing was written.",
-            file=sys.stderr,
-        )
-        return RENDER_REFUSED
+def cluster(
+    out: Path,
+    roles: list[str] | None,
+    secret_stubs: Path | None,
+    render: Callable[[list[str], list[str]], PlaceholderRender] = render_placeholders,
+    flux_owned: Callable[[], set[str]] = flux_owned_tags,
+    pinned: dict[str, PinnedFact] | None = None,
+    known: frozenset[secret_checks.Violation] = secret_checks.KNOWN_VIOLATIONS,
+) -> int:
+    """Render `roles`, or every renderable tag, into `out`; return the exit code.
+
+    Args:
+        out: The directory to write.
+        roles: The tags to render, or None for every render target.
+        secret_stubs: The stub file of a stub-mode render, or None for placeholder mode.
+        render: The placeholder render; a test replaces it with one over fixture sets.
+        flux_owned: Returns the tags marked `owner: flux`; a test passes fixture tags.
+        pinned: The pinned live-read facts the refusal reads, `PINNED_LIVE_FACTS` when None.
+        known: The ratchet the secret checks hold the render to; a test passes another.
+    """
+    if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
+        return _stub_cluster(out, roles, secret_stubs)
+    return _placeholder_cluster(out, roles, render, flux_owned, pinned, known)
+
+
+def _stub_cluster(out: Path, roles: list[str] | None, secret_stubs: Path) -> int:
     stubs = load_stubs(secret_stubs)
     missing = unstubbed(stubs)
     if missing:
@@ -88,6 +140,81 @@ def cluster(out: Path, roles: list[str] | None, secret_stubs: Path | None) -> in
         return RENDER_FAILED
     print(
         f"homelab-render: {len(tags)} tags, {len(written)} files under {out / 'cluster'}"
+    )
+    return RENDER_OK
+
+
+def _placeholder_cluster(
+    out: Path,
+    roles: list[str] | None,
+    render: Callable[[list[str], list[str]], PlaceholderRender],
+    flux_owned: Callable[[], set[str]],
+    pinned: dict[str, PinnedFact] | None,
+    known: frozenset[secret_checks.Violation],
+) -> int:
+    try:
+        tags = select_tags(roles)
+        refusals = pinned_fact_refusals(tags, flux_owned(), pinned)
+        if refusals:
+            for tag, fact in refusals:
+                print(
+                    f"homelab-render: {tag} is marked owner: flux and reads the pinned "
+                    f"live-read fact {fact}, whose stand-in must never be published. "
+                    "Nothing was written.",
+                    file=sys.stderr,
+                )
+            return RENDER_FAILED
+        keys = secret_keys()
+        result = render(tags, keys)
+        if not result.tags:
+            raise RenderRefused(
+                f"every requested tag is in PLACEHOLDER_DEFERRED: {result.skipped}"
+            )
+        problems = sops_manifest_entries(result, keys)
+        if problems:
+            raise RenderError("\n".join(problems))
+        report = secret_checks.check(result, keys, known)
+        if not report.ok():
+            print("\n".join(report.lines()), file=sys.stderr)
+            print(
+                "homelab-render: the secret checks failed. Nothing was written.",
+                file=sys.stderr,
+            )
+            return RENDER_FAILED
+        written = write_cluster(result.tags, out)
+    except RenderRefused as exc:
+        print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
+        return RENDER_REFUSED
+    except (RenderError, ValueError) as exc:
+        print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
+        return RENDER_FAILED
+    skipped = (
+        f"; skipped, in PLACEHOLDER_DEFERRED: {', '.join(result.skipped)}"
+        if result.skipped
+        else ""
+    )
+    print(
+        f"homelab-render: placeholder mode, {len(result.tags)} tags, "
+        f"{len(result.substituting())} of {len(result.key_sets)} directories substitute, "
+        f"{len(written)} files under {out / 'cluster'}, the five secret rules pass with "
+        f"{len(report.violations)} known violations{skipped}"
+    )
+    return RENDER_OK
+
+
+def packages(out: Path, host: str | None, name: str | None) -> int:
+    """Render one host's package, or one shared package, into `out`; return the exit code."""
+    try:
+        package = render_host(host) if host else render_package(str(name))
+        written = write_packages([package], out)
+    except RenderRefused as exc:
+        print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
+        return RENDER_REFUSED
+    except RenderError as exc:
+        print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
+        return RENDER_FAILED
+    print(
+        f"homelab-render: {package.name}, {len(written)} files under {out / package.directory}"
     )
     return RENDER_OK
 
@@ -114,9 +241,36 @@ def main(argv: list[str] | None = None) -> int:
         "--secret-stubs",
         type=Path,
         metavar="FILE",
-        help="the stub file shadow_diff.py stubs writes; required until target slice R2",
+        help="the stub file shadow_diff.py stubs writes, for a stub-mode render. Without "
+        "it, the render is in placeholder mode",
+    )
+    host = commands.add_parser(
+        "host", help="render hosts/NAME/package.yml into DIR/hosts/NAME/"
+    )
+    host.add_argument(
+        "--host", required=True, metavar="NAME", help="the inventory host"
+    )
+    host.add_argument(
+        "--out", type=Path, required=True, metavar="DIR", help="the directory to write"
+    )
+    package = commands.add_parser(
+        "package", help="render hosts/packages/PKG/ into DIR/packages/PKG/"
+    )
+    package.add_argument(
+        "--name", required=True, metavar="PKG", help="the shared package"
+    )
+    package.add_argument(
+        "--out", type=Path, required=True, metavar="DIR", help="the directory to write"
     )
     args = parser.parse_args(argv)
+    # ansible-core creates its local temp directory when the render first imports its
+    # constants, under `~/.ansible/tmp` by default. The system temp directory keeps the home
+    # directory untouched, and ansible-core removes its own subdirectory at exit.
+    os.environ.setdefault("ANSIBLE_LOCAL_TEMP", tempfile.gettempdir())
+    if args.command != "cluster":
+        return packages(
+            args.out, getattr(args, "host", None), getattr(args, "name", None)
+        )
     return cluster(args.out, args.roles, args.secret_stubs)
 
 

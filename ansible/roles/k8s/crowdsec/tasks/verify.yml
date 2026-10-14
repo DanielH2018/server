@@ -103,6 +103,10 @@
 
   rescue:
     - name: Name why the edge did not enforce the ban
+      # The sentinel is redundant with main.yml's `not k8s_no_mutate` on the import, since a
+      # stub file is refused outside a dry run. The secret-key census credits only the
+      # sentinel on a `fail`.
+      when: not (homelab_secret_stubs | default(false) | bool)
       ansible.builtin.fail:
         msg: >-
           The edge ban gate failed at "{{ ansible_failed_task.name }}".

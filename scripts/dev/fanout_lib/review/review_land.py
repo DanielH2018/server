@@ -62,7 +62,7 @@ class Landing:
     wait: str = ""
 
 
-def _login(argv: list[str]) -> list[str]:
+def login(argv: list[str]) -> list[str]:
     return ["bash", "-lc", 'exec "$@"', "land", *argv]
 
 
@@ -87,7 +87,7 @@ def land(
     pr = pr_url.rstrip("/").rsplit("/", 1)[-1]
     log_dir = worktree / ".fanout"
     started = run(
-        _login(
+        login(
             [
                 str(worktree / LAND_SH), "--pr", pr, "--arm-merge", "--await-merge",
                 "--detach", "--log-dir", str(log_dir),
@@ -98,9 +98,9 @@ def land(
     if started.returncode != 0:
         return Landing(started.returncode, tail=_tail(started.stdout + started.stderr))
     wait = ["cc-wait", "land", pr, "--log-dir", str(log_dir)]
-    waited = run(_login(wait), None)
+    waited = run(login(wait), None)
     while waited.returncode == STILL_WAITING and time_left() > WAIT_MARGIN_S:
-        waited = run(_login(wait), None)
+        waited = run(login(wait), None)
     log = _newest_log(log_dir, pr)
     text = log.read_text(errors="replace") if log else ""
     matches = list(VERDICT_LINE.finditer(text))

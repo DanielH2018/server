@@ -28,7 +28,7 @@ ansible/roles/k8s/artifacts/tests/test_artifact_server.py 515
 ansible/roles/k8s/monitor-bridge/tests/test_check_service.py 585
 ansible/roles/k8s/monitor-bridge/tests/test_host_temp.py 585
 ansible/roles/setup/fake_remux/tests/test_fake_remux_replace_logic.py 567
-ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py 646  # conjoined: the hold, alert-slot and k8s-owed methods read and write only through read/write, which this class alone defines (three mixins until #3661)
+ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py 642  # conjoined: the hold, alert-slot and k8s-owed methods read and write only through read/write, which this class alone defines (three mixins until #3661)
 ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py 533
 ansible/roles/setup/renovate_notify/tests/test_notify_logic.py 552
 ansible/tests/deploy/test_cronjob_gate_decision.py 535
@@ -36,5 +36,5 @@ ansible/tests/longhorn/test_longhorn_restore_drill.py 502
 ansible/tests/setup/test_cron_scripts_publish_via_pr.py 673
 scripts/backup/tests/test_longhorn_reap_logic.py 668
 scripts/deploy_tools/tests/test_deploy_detach_notify.py 508
-scripts/dev/fanout_lib/review/review.py 663  # conjoined: the red phase and green gate read the pipeline state and call _claude, _git and the argv builders only Pipeline defines (the RedPhase mixin until this entry); reaping every test run it starts took it to 663 (#4508)
+scripts/dev/fanout_lib/review/review.py 647  # conjoined: the red phase and green gate read the pipeline state and call _claude, _git and the argv builders only Pipeline defines (the RedPhase mixin until this entry); reaping every test run it starts took it to 663 (#4508); moving the hold reports and the CI wait out took it to 647 (#4737)
 scripts/lib/exit_codes.py 807  # conjoined: each family's constants and its CONTRACTS row are held to each other by test_exit_codes.py, so a family split out would import _c and Code from here and CONTRACTS would import it back; the readers of CONTRACTS live in exit_messages.py. The shadow_diff.py family took it to 807

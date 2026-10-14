@@ -1,6 +1,6 @@
 # R1 — Shadow render with zero diff
 
-Status: IN PROGRESS
+Status: DONE
 
 PR 1a, the stub module and the stub file: [#4700](https://github.com/DanielH2018/server/pull/4700).
 
@@ -17,6 +17,14 @@ PR 5, the refusal of a misplaced or incomplete stub file: [#4753](https://github
 PR 6, a stubbed dry-run render kept under `manifests_shadow_dir`: [#4788](https://github.com/DanielH2018/server/pull/4788).
 
 PR 7, the comparison tooling `shadow_diff.py compare`, `stubcheck` and `digest`: [#4794](https://github.com/DanielH2018/server/pull/4794).
+
+PR 7, the trailing-newline class, rendered with the template module's final newline: [#4851](https://github.com/DanielH2018/server/pull/4851).
+
+PR 8, the out-of-render census row and the two determinism modules: [#4861](https://github.com/DanielH2018/server/pull/4861).
+
+PR 8b, the digest lines in the CI job log and the determinism check split by four: [#4872](https://github.com/DanielH2018/server/pull/4872).
+
+The exit criterion held on 2026-10-13 at X = `410a24fb1`. The operator's shadow pair printed `58 tags, 320 files, 0 differences`, and `stubcheck` printed `320 paired files, 0 lacking a stub token`. Master's push run [38418479795](https://github.com/DanielH2018/server/actions/runs/38418479795) passed the four determinism modules and the census row, and `shadow_diff.py digest` on daniel-box matched its 62 digest lines.
 
 Depends on: none
 
@@ -41,16 +49,19 @@ a shadow, and Ansible stays the only writer to the cluster.
    operator then renders X with `homelab-render cluster` and the same stub file, and runs
    `shadow_diff.py compare`. It exits 0 and prints `<t> tags, <n> files, 0 differences`, with
    no missing and no extra file. `<t>` is the number of Ansible-owned tags at X, which is 56
-   at the baseline. The comparison covers each role's applied directory, its deferred
+   at the baseline. It is 58 at `7586bcf0f`, where the operator's run on 2026-10-13 printed
+   `58 tags, 320 files, 0 differences`: `blackbox-exporter` (#4834) and `flux` (D1) joined
+   after the baseline. The comparison covers each role's applied directory, its deferred
    directory and its volume-claim files. The operator posts that output on the PR that closes
    R1.
-2. **The render is deterministic and reads nothing outside the repo.** Two CI test modules
-   each render half the tags twice, each time in its own subprocess with a different
+2. **The render is deterministic and reads nothing outside the repo.** Four CI test modules
+   each render a quarter of the tags twice, each time in its own subprocess with a different
    `PYTHONHASHSEED`. An audit hook in each subprocess refuses every file open outside the
    repo, the output directory and the interpreter's own install, and every socket connect.
-   The two trees of each half must be identical. Each module writes one digest line per
-   rendered directory to its CI job summary. `shadow_diff.py digest` on daniel-box prints
-   the same line for every directory, for the same commit, as the push run on master shows.
+   The two trees of each quarter must be identical. Each module writes one digest line per
+   rendered directory to its CI job log and its job summary. `shadow_diff.py digest` on
+   daniel-box prints the same line for every directory, for the same commit, as the push
+   run's log on master shows.
    Per-directory lines keep that comparison valid however the tags are split across
    modules.
 3. **What the render does not cover is named.** A census row lists every role task file that
@@ -423,7 +434,7 @@ module under `scripts/renderer/tests/` starts `test_renderer_`.
   `scripts/lib/tests/test_entry_points_answer_help.py` covers its `--help`.
     - Only `compare` and `stubcheck` read an Ansible tree. `stubs` reads only the git tree,
       and `digest` only a C1 tree, so both outlive the Ansible path that R4 deletes.
-    - Their callers are the operator's shadow run and the two determinism modules in PR 8,
+    - Their callers are the operator's shadow run and the determinism modules in PR 8,
       which call the stub writer and import `digest`'s function. R1 itself adds no workflow
       step. R2's `roundtrip` step in `.github/workflows/ci.yml` is the first workflow call
       to `shadow_diff.py`.
@@ -591,7 +602,7 @@ channels, and R1 records each one rather than rendering it:
 + scripts/renderer/renderer_lib/context.py
 + scripts/renderer/renderer_lib/task_inputs.py  (+ PINNED_LIVE_FACTS and its reader tags)
 + scripts/renderer/renderer_lib/cluster.py
-+ scripts/renderer/tests/                       (library tests, two determinism modules)
++ scripts/renderer/tests/                       (library tests, four determinism modules)
 + ansible/filter_plugins/secret_stubs.py        (stub form, key list, comparison, NEVER_STUB)
 + ansible/tests/k8s/                            (+ the secret-key task census module)
 + docs/homelab-render.md
@@ -745,18 +756,27 @@ updates `docs/homelab-render.md` for what it adds.
       stub edit moves no byte of a real render, so the lines clear the same way. R2's and
       R3's edits to the plugin inherit this landing (*Risks*).
     - **How the lines clear.** Each service's line drops on that service's next deploy.
-      `manifests` and every role that `digest_provable.py` accepts drop through the render
-      proof within about an hour, because no rendered byte moves. The PR's author lists the
-      lines still open a day after the merge on the PR. The operator decides whether to let
-      them discharge on later deploys or to run `gitops_state.py clear-owed k8s_unapplied
-      <svc>`. Root `CLAUDE.md`, *When to wait*, applies: an executor stops at
-      `needs-manual-apply` and never runs an unscoped `deploy.sh` to follow through.
+      Otherwise a line drops through the render proof within about an hour, once the hourly
+      render matches the service's applied bytes. A role that `digest_provable.py` accepts
+      needs only that match. Any other role also needs `digest_covers.py` to find that the
+      range from its applied commit to the render changed nothing outside the digest
+      (#4781). An assert-only preamble edit and a comment-only plugin edit pass that rule.
+      A line whose render does not match stays until that service is deployed, because the
+      render shows a real difference. The PR's author lists the lines still open a day after
+      the merge on the PR. The operator decides whether to let them discharge on later
+      deploys or to run `gitops_state.py clear-owed k8s_unapplied <svc>`. Root `CLAUDE.md`,
+      *When to wait*, applies: an executor stops at `needs-manual-apply` and never runs an
+      unscoped `deploy.sh` to follow through.
 6. **Keep a stubbed dry-run render** (about 120 lines). `manifests_shadow_dir`, its assert,
    the owner switch and the discard guard, with a `manifests_shadow_dir` bullet in
    `ansible/roles/k8s/manifests/CLAUDE.md`. The assert recomputes the stub check with PR 1a's
    filters, so it needs no plugin edit. The change touches the shared `manifests` role, so
    the deployer records one `k8s_unapplied` line for `manifests`. With the variable unset no
-   rendered byte moves, so the render proof discharges that line within about an hour.
+   rendered byte moves, so the render proof discharges that line within about an hour of the
+   last caller's render matching its applied bytes. A caller whose render differs for an
+   unrelated reason holds the line until that caller is deployed. On 2026-10-13
+   `homelab-mcp` held #4818's comment-only `manifests` line this way, behind an
+   `obs_api.py` edit that changed its image build context.
 7. **Compare the two renders, then close the diffs** (about 190 lines, then one PR per
    class of diff). `shadow_diff.py compare`, `stubcheck` and `digest`. The operator runs
    the shadow pair at a master SHA X (*Verification*), posts the report and hands the agent a
@@ -782,23 +802,30 @@ updates `docs/homelab-render.md` for what it adds.
       `cronjob-gate` and `qbittorrent`, and so fails when one of them stops writing rather
       than when it stops being selected. A writing file outside the `allow` map fails the row
       until a reviewer adds it with its owning slice. A stale `allow` entry fails it too.
-    - **The determinism modules.** Two modules in `scripts/renderer/tests/` share one
-      helper. One renders the tags at even positions of the sorted `render_targets` list,
-      the other those at odd positions, so the halves stay balanced as tags join. Each
+    - **The determinism modules.** Four modules in `scripts/renderer/tests/` share one
+      helper. Module `k` renders the tags at positions `k`, `k + 4`, ... of the sorted
+      `render_targets` list, so the parts stay balanced as tags join. PR 8 landed two, by
+      even and odd position, and PR 8b split them into four (*Its budget*). Each
       writes the stub file with `shadow_diff.py stubs` and renders its tags twice into
       `tmp_path`, each time in a subprocess with a different `PYTHONHASHSEED`. Together they
-      cover all 56 tags. Each subprocess installs an
-      audit hook before importing the renderer. The hook refuses any `open` outside the repo,
+      cover every render target: 56 at the baseline, 58 at `7586bcf0f`. Each subprocess
+      installs an audit hook before importing the renderer. The hook refuses any `open` outside the repo,
       the output directory and the interpreter's own prefixes, and any `socket.connect`. The
       hook lives in the subprocess because Python cannot remove an audit hook, and one
       installed in an xdist worker would outlive the test. The subprocess also inherits
       `leakguard`'s PATH shims.
-    - **The digest.** When `GITHUB_STEP_SUMMARY` is set, each module appends a `render
-      digest at $GITHUB_SHA` heading and one line per directory it rendered, computed by
-      `shadow_diff.py digest`'s function. The shards are separate matrix jobs, so the two
-      modules may write to two job summaries. A per-directory line does not depend on which
-      other tags were rendered, so the union of the two summaries is the full set, and no
-      step has to join them. Neither module writes the `total` line, which only a full
+    - **The digest.** Each module computes one line per directory it rendered with
+      `shadow_diff.py digest`'s function. When `GITHUB_SHA` is set, it prints each to the
+      job log as `render digest at $GITHUB_SHA (position <k> of 4): <line>`. When
+      `GITHUB_STEP_SUMMARY` is set, it also appends them to the job summary under a `render
+      digest at $GITHUB_SHA` heading. Only the log is readable without a sign-in: `gh` has
+      no API for a job summary, and the run page loads one only for a signed-in viewer. A
+      test runs in an xdist worker, whose stdout never reaches the log, so the test records
+      its lines on its report with `record_property`. The `pytest_terminal_summary` hook in
+      `scripts/renderer/tests/conftest.py` prints them from the controller. The shards are
+      separate matrix jobs, so the modules may write to several job logs. A per-directory
+      line does not depend on which other tags were rendered, so the union of the logs is
+      the full set, and no step has to join them. Neither module writes the `total` line, which only a full
       render can compute. `.github/workflows/ci.yml` does not change. R1 therefore adds no
       step to the six-leg `pytest` job, no job for the gate to read, and no workflow edit,
       which the agent's token cannot push. On a `pull_request` or `merge_group` run
@@ -810,10 +837,34 @@ updates `docs/homelab-render.md` for what it adds.
       renders every role once in process at 15.46s, so one module rendering all 56 tags
       twice, with two ansible-core imports, would sit near the floor and become the pole of
       the job. That is why the test is two modules from the start: `--dist loadscope` keeps
-      a module on one worker, so only separate modules spread the cost. Record both weights
-      with `uv run python scripts/dev/pytest_shard.py --record-missing`. Each must record
-      under 20s, about two thirds of the floor. If one does not, split into three by
-      position modulo three. The per-directory digest lines make any split comparable.
+      a module on one worker, so only separate modules spread the cost. Record each weight
+      with `uv run python scripts/dev/pytest_shard.py --record-files <module>`, not
+      `--record-missing`, which records every unweighted module in the repo, so two PRs
+      running it conflict on the weights file. Each must record under 20s, about two thirds
+      of the floor. If one does not, split into three by position modulo three. The
+      per-directory digest lines make any split comparable.
+    - **As PR 8b measured it.** The 20s bound is read in CI. On master's push run for
+      `0eb3b9a7`, each two-module half took 28.0s in CI against its 9.6s recorded weight,
+      and 8.2s serially on daniel-box on 2026-10-13. The cause is the runner, not the
+      check. The renderer's imports take 65ms, and the render spends its time in Jinja
+      and in `render_context`, so neither ansible-core imports nor subprocess start-up
+      explain it. Every heavy CPU-bound module runs about as much slower there:
+      `test_entry_points_answer_help.py` took 53.2s in CI against its 16.03s weight, and
+      `test_validate_k8s_manifests.py` 37.4s against 15.46s. Measured per tag at 3.4
+      times, three parts project to 20.3s in CI and four to about 16.6s, so PR 8b splits
+      by four. Its weights are recorded with `--record-files` in local serial seconds, as
+      every other entry in the table is. A weight in CI seconds for these modules alone
+      would over-weight them against the rest. `PARTS` in
+      `scripts/renderer/tests/_render_audit.py` is the modulus, and the module for
+      position 0 fails when a module for any position is missing.
+    - **As it landed.** The census row's data lives in `_out_of_render_row.py` beside
+      `test_census_rows_roles.py`, which imports it into `ROWS`, because that module sits
+      near the 500-line cap for a test module. The row finds 23 roles, the baseline's 22 plus
+      `flux` (D1). The audit hook also allows `/dev/null` and an `ANSIBLE_LOCAL_TEMP` the
+      test points into its own directory, because ansible-core opens the first and creates
+      the second when the renderer imports it. That import also runs `ldconfig -p` and
+      `ip link` as child processes, which an `open` hook does not see. `docs/homelab-render.md`
+      records both.
 
 ## Verification
 
@@ -841,7 +892,8 @@ uv run python scripts/renderer/shadow_diff.py compare \
 ```
 
 The last command must exit 0 and print `<t> tags, <n> files, 0 differences`, where `<t>` is
-the Ansible-owned tag count at X: 56 until D2 hands a tag to Flux. It refuses to report
+the Ansible-owned tag count at X: 56 at the baseline and 58 at `7586bcf0f`, until D2 hands a
+tag to Flux. It refuses to report
 success over an empty set. It also refuses when it finds no file for one of three named
 members: `traefik/deployment.yaml`, `pihole-instance-2` and a `claim-*.yaml` file. A named
 member whose tag is flux-owned at X is dropped from that check, and `compare` prints which.
@@ -878,9 +930,13 @@ uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1 \
 uv run python scripts/renderer/shadow_diff.py digest /tmp/r1
 ```
 
-Each per-directory line must equal the matching line in the job summaries of the push run
-on master for the same commit. The two determinism modules may write their lines to two
-shards' summaries, and together they hold every directory. The `total` line is for a
+Each per-directory line must equal the matching line in the job logs of the push run on
+master for the same commit. The four determinism modules may write their lines to several
+shards' logs, and together they hold every directory. `gh run view <run> --log` prints every
+job's log, each digest line as `render digest at <sha> (position <k> of 4): <line>`.
+`docs/homelab-render.md`, *The render is deterministic and reads only the repo*, has the
+commands that sort both sides and diff them. Replace `<run>` with the push run's id, which
+`gh run list --branch master --event push --commit <sha>` prints. The `total` line is for a
 whole-tree comparison, such as two full renders of one commit.
 
 **Red-proofs, one per new check:**
@@ -902,7 +958,9 @@ whole-tree comparison, such as two full renders of one commit.
   flagged, and the real tree passes.
 - The determinism test: a test hands its comparison two trees that differ in one file and
   must see it fail. A fixture render step that opens `/etc/hostname` is refused by the audit
-  hook, and one that opens a repo file passes.
+  hook, and one that opens a repo file passes. PR 8b adds two more. The module for position 0 fails when a module
+  for any position is missing. A test runs a pytest session of its own under `-n 2` and
+  requires a worker's recorded digest line to print exactly once in that session's output.
 - The preamble refusal: a test renders the assert with ansible-core's `Templar`. These pass:
   stubs with `k8s_dry_run` and the play variable, and no stubs at all. These fail: stubs
   without `k8s_dry_run`, and stubs with `k8s_dry_run` but no play variable, which is the
@@ -1043,7 +1101,10 @@ whole-tree comparison, such as two full renders of one commit.
 - PR 7 adds the shadow-pair procedure to `docs/homelab-render.md`, marked operator-only.
 - PR 8 moves `_chunk_mutates` and its patterns from `test_k8s_dry_run.py` into
   `_k8s_guards.py`. `test_k8s_dry_run.py` imports them, and no assertion changes. It records
-  the two determinism modules' weights in `scripts/dev/pytest_shard_weights.json`.
+  the two determinism modules' weights in `scripts/dev/pytest_shard_weights.json` with
+  `--record-files`.
+- PR 8b replaces those two modules with four, records their weights the same way, and
+  updates *The render is deterministic and reads only the repo* in `docs/homelab-render.md`.
 - Every other test is listed with its PR above. `scripts/validate/` keeps its own render
   until R4.
 

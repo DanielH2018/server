@@ -37,11 +37,14 @@ so a regeneration diffs as the pipeline plus upstream's change.
   ClusterRole, also fails `ansible/tests/k8s/test_aggregated_clusterroles.py`. Regenerating
   does not clear that failure: it widens `view` for every identity bound to it, so extend
   that module's lists only as a decision the PR states.
-  Renovate rewrites `flux_version` alone, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
-  rule) and the header test fails until the file is regenerated. Set the same release as the
-  `version:` of both `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, so the
-  CLI that pushes and tags the artifact moves with the controllers.
-  `ansible/tests/repo/test_promote_workflow.py` fails a drift.
+  Renovate cannot regenerate the file, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
+  rule) and the header test fails until the file is regenerated. The same PR moves the
+  `version:` of both `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, of the
+  one in `.github/workflows/ci.yml`'s `flux_roundtrip` job, and the action's commit pin, so
+  the CLI that pushes and tags the artifact and the CLI that proves the round trip move with
+  the controllers. A `# renovate:` comment above each input is what Renovate reads, and
+  `scripts/tests/test_renovate_flux_cli.py` fails a step that lost it (#4822). For a bump by
+  hand, set all three yourself. `ansible/tests/repo/test_promote_workflow.py` fails a drift.
 
 ## How the render meets the fleet guards
 
@@ -92,6 +95,22 @@ flux-system` read source-controller at 16Mi, kustomize-controller at 18Mi and
 notification-controller at 24Mi, beside a 64Mi request each. That is the floor for a root
 that applies nothing. D5 re-measures it once Flux applies services.
 
+**Memory, following `prod`.** Later on 2026-10-13, three hours after D1.5 pointed the root at
+`prod`, the working set is higher. The three controllers request 192Mi in all, 64Mi each, and
+each is limited to 1Gi. The peak is the largest
+`container_memory_working_set_bytes{namespace="flux-system",container="manager"}` over those
+three hours:
+
+| Controller | `kubectl top` at 03:46Z | Three-hour peak |
+|---|---|---|
+| kustomize-controller | 63Mi | 70.1Mi |
+| source-controller | 24Mi | 29.8Mi |
+| notification-controller | 27Mi | 27.8Mi |
+
+kustomize-controller runs above its 64Mi request while it applies an empty root. The node
+has room, and the 1Gi limit is about fourteen times the peak, so D1 leaves the request alone. D5 sets
+the requests from its own measurement once Flux applies services.
+
 ## What Flux follows
 
 `templates/sync.yaml.j2` renders the OCIRepository `homelab` on `prod`, the root
@@ -135,7 +154,11 @@ Ready=True with its signature verified (#4820). `publish` pushes with `--reprodu
 the drill ran at the commit `prod` already carried, so its digest equalled `prod`'s signed
 digest. #4826 fixed that. The drill push carries the annotation
 `io.homelab.verify-drill=true`, so no signed push carries its digest, and the dispatch fails
-unless `cosign verify` refuses that digest with cosign's no-signature error. The re-dispatch
+unless `cosign verify` refuses that digest. The refusal alone proves nothing, because cosign
+v3.1.3 reads a registry error on its bundle probe as "no bundle" (#4829). The dispatch
+therefore also reads the registry itself, and fails unless it answers that the digest has no
+referrer and no legacy `.sig` tag. GHCR serves no referrers API, so cosign keeps a digest's
+bundle in the referrers tag `sha256-<hex>`. The re-dispatch
 pushed `sha256:5bac820c…bb97` unsigned. At 04:45:39Z `verify-drill` read Ready=False with
 "failed to verify the signature using provider 'cosign keyless': no signatures found", and
 `homelab` stayed Ready. `deploy-errors` posted nothing to Discord, because it names only the

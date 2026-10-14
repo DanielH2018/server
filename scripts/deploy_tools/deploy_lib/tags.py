@@ -380,14 +380,24 @@ def _cmd_narrow(args: argparse.Namespace) -> int:
     return narrow_cmd(args.old, args.new)
 
 
+# DECIDED: role `tasks/` and `handlers/` comment-only edits stay out of this set (#4926). A
+# SHARED role's one (image-builder's tasks, say) already deploys no caller: the landing expands
+# callers over `shared_role_reach.paths_a_hand_must_apply`, which drops a comment-only shared
+# path, and `derive` maps a shared role to no tag of its own. A service role's own edit keeps
+# its one tag, because a task file has its own defer channel
+# (`deploy_k8s.comment_only_k8s_defaults`' docstring). `land_tags.main()` still expands the raw
+# list and so disagrees with the landing; that CLI gap is #4945.
 def comment_only_paths(
     paths: list[str], old_ref: str, new_ref: str, show=None
 ) -> set[str]:
-    """The broad-plane and k8s `defaults/` paths whose diff between two refs carries no content change.
+    """The broad-plane, k8s `defaults/` and shared-template paths whose diff carries no content change.
 
     The k8s half is the read the tick makes before it would defer a role (#4460), so a
     landing does not run a no-op deploy for an edit the tick treats as no change. `show`
     replaces `_git_show`, for a test.
+
+    The template half is `narrow_lib/templates.py:comment_only_shared_templates`: a shared
+    `ansible/templates/*.j2` whose edit sits wholly inside `{# ... #}` blocks (#4926).
 
     Public because `land_tags` asks the same question for its plane note, and two
     derivations that disagree about one commit is the defect this module's shared imports
@@ -399,13 +409,16 @@ def comment_only_paths(
     explicit refs. Worktrees share the object store with the checkout they were made from,
     so a ref fetched in the primary is readable from a worktree that never fetched it.
     """
+    from deploy_tools.narrow_lib.templates import comment_only_shared_templates
     from deployer_lib.deploy_k8s import comment_only_k8s_defaults
     from deployer_lib.deploy_logic import comment_only_broad_changes
 
     show = show or _git_show
-    return comment_only_broad_changes(
-        paths, old_ref, new_ref, show
-    ) | comment_only_k8s_defaults(paths, old_ref, new_ref, show)
+    return (
+        comment_only_broad_changes(paths, old_ref, new_ref, show)
+        | comment_only_k8s_defaults(paths, old_ref, new_ref, show)
+        | comment_only_shared_templates(paths, old_ref, new_ref, show)
+    )
 
 
 def changed(
