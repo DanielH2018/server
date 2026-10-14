@@ -35,6 +35,8 @@ sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_t
 
 # `service_tags_at` is re-exported rather than defined here: `narrow_broad` needs it too,
 # and importing this module for it would put a cycle through `deploy_tags`.
+from lib.cli_help import answer_help
+from lib.exit_codes import USAGE_ERROR
 from lib.render_guard import (  # noqa: F401
     containers_entries_in,
     landing_hosts_for_tags,
@@ -424,3 +426,16 @@ def quiet_paths(paths: list[str], range_: str) -> set[str]:
         return docs | deploy_tags.comment_only_paths(paths, old, new)
     except subprocess.CalledProcessError, OSError:
         return docs
+
+
+# The CLI moved to `land_tags_cli.py`, above `shared_role_reach` (#4945). Run directly, this
+# module refuses rather than printing nothing, because an empty answer reads as "no tags".
+_MOVED = (
+    "land_tags.py is a library. Its CLI is "
+    "scripts/deploy_tools/land_lib/land_tags_cli.py, with the same arguments."
+)
+
+if __name__ == "__main__":
+    answer_help(_MOVED)
+    print(_MOVED, file=sys.stderr)
+    sys.exit(USAGE_ERROR)
