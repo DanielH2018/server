@@ -185,7 +185,7 @@ EMAIL_TIER = {
     # One tile per host, and both mail for the reason the template's own comment gives: a
     # secondary upsmon that is not running is only discovered at a power cut, which is exactly
     # when Discord is unreachable. They were declared on the tier before this list could see
-    # them — their `| default('')` token gate rendered them away under the old stubbed render.
+    # them — their token gate rendered them away under the old stubbed render.
     "UPS Secondary (daniel-box)",
     "UPS Secondary (daniel-server)",
     # The single existential risk on a one-server control plane: at its backend quota etcd

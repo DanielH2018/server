@@ -10,7 +10,7 @@ with open(monitors.STATIC_MONITORS_PATH) as _f:
     REAL_STATIC_MONITORS_TEXT = _f.read()
 RENOVATE_TILE = "Renovate Agent — Alive"
 RENOVATE_GATE = (
-    "renovate_agent_kuma_push_token | default('')",
+    "renovate_agent_kuma_push_token is defined",
     "renovate_agent_enabled | default(false)",
 )
 
@@ -89,6 +89,23 @@ def test_a_non_secret_gate_is_read_from_the_inventory_without_sops(monkeypatch):
     )
     crowdsec = "traefik_k8s_manage_crowdsec | default(true)"
     assert monitors.gate_conjunct_state(crowdsec, read_secret=no_decrypt) is True
+
+
+def test_a_declared_secret_is_defined_from_the_key_list_is_clean():
+    """R2's PR 3 made every token gate `<token> is defined` (#4968). Ansible defines every
+    declared key, so the plaintext key list decides, and a decrypt would be wasted.
+    """
+
+    def no_decrypt(var):
+        raise AssertionError(f"decrypted {var}")
+
+    state = monitors.gate_conjunct_state(RENOVATE_GATE[0], read_secret=no_decrypt)
+    assert state is True
+
+
+def test_an_undeclared_secret_is_defined_is_flagged():
+    """A key the store does not declare is undefined at render, so its tile renders away."""
+    assert monitors.gate_conjunct_state("no_such_push_token is defined") is False
 
 
 def test_a_disarmed_renovate_agent_is_listed_as_gated_not_missing(monkeypatch):
