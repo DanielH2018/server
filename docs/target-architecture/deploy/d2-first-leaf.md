@@ -1,6 +1,8 @@
 # D2 — One stateless leaf end to end on production
 
-Status: PLANNED
+Status: IN PROGRESS
+
+D2.1a, the flag's script reader and the narrowing: [#4956](https://github.com/DanielH2018/server/pull/4956).
 
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five

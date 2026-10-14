@@ -46,6 +46,8 @@ __all__ = [
     "role_callers",
     "resolved_manifest_files",
     "role_dirs",
+    "OWNER_VALUES",
+    "tag_owners",
 ]
 
 
@@ -196,6 +198,39 @@ def k8s_entries(host_vars: Path = K8S_HOST_VARS) -> dict[str, dict]:
         host_vars=host_vars.parent, plane_hosts={"k8s": host_vars.stem}
     )
     return Estate(inventory).k8s_entries()
+
+
+# The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag. `released`:
+# the first PR of a handback, which the renderer leaves out of the bundle. Every Ansible path
+# skips both; an entry without `owner` is Ansible-owned. The plan is
+# docs/target-architecture/deploy/d2-first-leaf.md, *The ownership flag and its three readers*.
+OWNER_VALUES = frozenset({"flux", "released"})
+
+
+def tag_owners(host_vars: Path = K8S_HOST_VARS) -> dict[str, str]:
+    """Each deploy tag of a k8s entry in `host_vars` that sets `owner`, to that value.
+
+    Only `platform: k8s` entries are read, because Flux applies k8s tags alone; an `owner` on a
+    Docker entry is not this reader's to judge. An entry without the key is Ansible-owned and
+    maps no tag. An entry that declares `tags`
+    maps each of them, since each selects it. Any value outside `OWNER_VALUES` raises
+    ValueError, a bare `owner:` included: a misspelt owner read as Ansible-owned would hand
+    the tag to both Ansible and Flux.
+    """
+    from lib.render_guard import entry_tags
+
+    owners: dict[str, str] = {}
+    for name, entry in k8s_entries(host_vars).items():
+        if "owner" not in entry:
+            continue
+        owner = entry["owner"]
+        if not isinstance(owner, str) or owner not in OWNER_VALUES:
+            raise ValueError(
+                f"containers_list entry {name} in {host_vars} has owner {owner!r}, "
+                f"not one of {sorted(OWNER_VALUES)}"
+            )
+        owners.update(dict.fromkeys(entry_tags(entry), owner))
+    return owners
 
 
 # How one k8s role reaches another's tasks: `include_role`/`import_role` naming it as

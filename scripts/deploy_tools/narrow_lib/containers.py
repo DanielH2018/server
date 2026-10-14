@@ -11,6 +11,12 @@ job a `metrics_port` read names, which `reads_changed` resolves to the entry dec
 either side keeps the reader, as before #4340. A read through `hostvars['<host>']` with a
 literal host reads that host's list alone, so an edit to another host's `host_vars` skips it
 (#4422).
+
+`DEPLOY_MECHANICS_FIELDS` names the entry fields that say how an entry is deployed rather than
+what it renders: `owner`, which hands a tag to Flux (D2). `changed_fields` leaves them out, so
+an edit to one alone changes no field a reader reads, and `reader_paths` keeps no reader for an
+edit that changed no field. The entry's own tag still comes from `entry_change_tags`, which
+compares whole entries.
 """
 
 import sys as _sys
@@ -86,6 +92,10 @@ NAMED_ENTRY = frozenset(
 # `metrics` to the first that declares the job, so while no entry's `metrics` changed it
 # reads that entry alone, and `reads_changed` keys the read on it.
 NAMED_JOB = frozenset({"metrics_port"})
+# The entry fields that steer the deploy and render into no template, so `changed_fields` leaves
+# them out. `owner` hands an entry's tag to Flux (docs/target-architecture/deploy/d2-first-leaf.md).
+# `test_census_rows_roles.py` holds every member out of the templates' Jinja code.
+DEPLOY_MECHANICS_FIELDS = frozenset({"owner"})
 
 
 class Job(NamedTuple):
@@ -175,6 +185,9 @@ def changed_fields(before: dict, after: dict) -> dict[str, frozenset[str]] | Non
     and a `NAMED_ENTRY` filter reads the first, so an edit to the first would go unseen.
     `test_containers_list_names_unique.py` keeps a repeated name off master, so this branch
     is a defence the deployer's range never reaches (#4399).
+
+    A `DEPLOY_MECHANICS_FIELDS` member is never named, so an entry whose only change is one of
+    them is absent too.
     """
     old, new = entries(before), entries(after)
     repeated = any(
@@ -187,7 +200,8 @@ def changed_fields(before: dict, after: dict) -> dict[str, frozenset[str]] | Non
         keys = frozenset(
             key
             for key in set(entry) | set(old[name])
-            if entry.get(key) != old[name].get(key)
+            if key not in DEPLOY_MECHANICS_FIELDS
+            and entry.get(key) != old[name].get(key)
         )
         if keys:
             changed[name] = keys
@@ -355,12 +369,16 @@ def reader_paths(
     """The grep hits whose template reads the fields `edit` changed, in the order given.
 
     An `edit` whose `changed` is None, or no `edit` at all, is every field of every entry, so
-    every hit that renders the list is kept.
+    every hit that renders the list is kept. An `edit` whose `changed` holds no entry keeps no
+    hit, not even a reader of every field: no field any template can read has moved, as for an
+    edit to `owner` alone.
 
     A hit under `skip_prefixes` (the play's own tree) is not a consumer here: the play
     iterates the list to visit each entry's role, which the entry tags already name. A `.md`
     is prose and a `.py` under a role's `files/` runs on a host rather than rendering.
     """
+    if edit is not None and edit.changed == {}:
+        return []
     kept = []
     for hit in hits:
         if any(hit.startswith(p) for p in skip_prefixes) or hit.endswith(
