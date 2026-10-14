@@ -44,11 +44,16 @@ line. Any failed read deletes nothing.
 LAND-WAIT. `land-wait M` waits until a promotion covers the merge commit M, for `land.sh`.
 `promote_wait.py` holds it, and its docstring states the three outcomes and what each reads.
 
+CHECK-BUNDLE. `check-bundle DIR` runs the publish census over the bundle the render job built,
+before anything is pushed. `published-tags` prints the tags the bundle publishes, one per line,
+for the render step's `--role` list. Both read the checkout alone, and `bundle_census.py`
+holds them.
+
 Exit codes:
   0   decide: promote, held or current. prune: every read, delete and verify succeeded.
-      land-wait: settled.
+      land-wait: settled. check-bundle: the census passes. published-tags: printed.
   1   decide: error, and nothing moves. prune: a read, a delete or a verify failed.
-      land-wait: deploy-failed, a hold.
+      land-wait: deploy-failed, a hold. check-bundle: the census failed, one line each.
   64  usage error
   75  land-wait: gave-up, the wait reached its timeout.
 
@@ -58,6 +63,7 @@ starts no subprocess (scripts/deploy_tools/tests/test_promote_forge_boundary.py)
 Run: uv run python scripts/deploy_tools/promote.py decide --trigger <sha>
      uv run python scripts/deploy_tools/promote.py prune
      uv run python scripts/deploy_tools/promote.py land-wait <sha> --services <tag,...>
+     uv run python scripts/deploy_tools/promote.py check-bundle out
 """
 
 import argparse
@@ -78,6 +84,7 @@ from lib.exit_codes import FAILED, OK
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
+import bundle_census
 import forge
 import promote_wait
 from artifact_retention import (
@@ -543,7 +550,31 @@ def main(
         default=promote_wait.LAND_WAIT_TIMEOUT_S,
         help="seconds before it gives up (default: twice the promote timeout)",
     )
+    checker = commands.add_parser(
+        "check-bundle", help="run the publish census over a rendered bundle"
+    )
+    checker.add_argument("out", type=Path, help="the bundle root the render job built")
+    lister = commands.add_parser(
+        "published-tags",
+        help="print the deploy tags the bundle publishes, one per line",
+    )
+    for sub in (checker, lister):
+        sub.add_argument(
+            "--host-vars",
+            type=Path,
+            default=bundle_census.K8S_HOST_VARS,
+            help="the inventory file whose owner: flux entries the bundle publishes",
+        )
     args = parser.parse_args(argv)
+    # Both read the checkout alone, in the render job, which holds no token.
+    if args.command == "published-tags":
+        for tag in bundle_census.published_tags(args.host_vars):
+            print(tag)
+        return OK
+    if args.command == "check-bundle":
+        return bundle_census.report(
+            args.out, bundle_census.published_tags(args.host_vars)
+        )
     if f is None:
         f = forge.connect(os.environ)
     if args.command == "land-wait":

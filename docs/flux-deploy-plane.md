@@ -224,13 +224,13 @@ deletes the object at the role's next run.
 The `promote` workflow, `.github/workflows/promote.yml`, runs after each successful push run
 of CI on master. It publishes the commit as the OCI artifact
 `ghcr.io/danielh2018/homelab-manifests:sha-<commit>` and moves the tag `prod` to the newest
-published master commit. The `OCIRepository` `homelab` follows `prod`, and the bundle's root
-Kustomization is empty, so a move changes nothing in the cluster but the commit Flux reports.
-The workflow has four jobs:
+published master commit. The `OCIRepository` `homelab` follows `prod`. While no
+`containers_list` entry carries `owner: flux`, the bundle's root Kustomization is empty, so a
+move changes nothing in the cluster but the commit Flux reports. The workflow has four jobs:
 
 1. `render` checks out the triggering commit and refuses one that is not on master. It builds
-   the bundle, one empty root Kustomization, and scans it with gitleaks. It holds read access
-   only.
+   the bundle (*The bundle*), runs `promote.py check-bundle` over it, and scans it with
+   gitleaks. It holds read access only, and a refusal at any step pushes nothing.
 1. `publish` checks out no repository code. It pushes the bundle as `sha-<commit>` and signs
    it with cosign, under a certificate that names the workflow's own identity.
 1. `promote` runs `promote.py decide`, read-only. `decide` walks master from its tip back to
@@ -259,6 +259,75 @@ and `tag`, so it never moves `prod`. The drill push carries the annotation
 the same commit. Without it, the drill tag pointed at a signed digest and verified. The
 dispatch then runs `cosign verify` on the drill digest under `promote`'s identity, and the
 run fails if the verification succeeds.
+
+## The bundle
+
+The render job publishes the deploy tags whose `containers_list` entry carries `owner: flux`.
+`promote.py published-tags` prints them. A tag marked `owner: released` is left out. That
+marking is the first PR of handing a service back (*Handing a service back*).
+
+The build step passes each published tag to the renderer with `--role` and no
+`--secret-stubs`. No `--secret-stubs` is what selects placeholder mode, the only mode that
+publishes (`docs/homelab-render.md`, *Placeholder mode*). With no published tag the renderer
+never runs, because `cluster` without `--role` renders every tag. The step then writes D1's
+empty root and an empty bundle's `digests.json` itself.
+`ansible/tests/repo/test_promote_workflow_bundle.py` fails if either literal drifts from what
+the renderer writes for no tag.
+
+The bundle holds:
+
+- `cluster/<tag>/`, each published tag's manifests and their `kustomization.yaml`.
+- `flux/<tag>.yaml`, the Kustomization `<tag>` in `flux-system`. It applies
+  `./cluster/<tag>` from the `OCIRepository` `homelab` with `prune: true`, `wait: true`,
+  `deletionPolicy: Orphan` and the manifests role's `manifests_rollout_timeout_default`.
+  It carries `postBuild.substituteFrom` naming the Secret `homelab-cluster-vars` exactly
+  when the tag's render holds a placeholder.
+- `flux/kustomization.yaml`, which lists every other file in `flux/`. The root Kustomization
+  `homelab` applies it.
+- `digests.json`, described below.
+
+A published tag that defers files is refused, because no Kustomization applies
+`<tag>-deferred` until D4.2 adds it.
+
+### Shared kinds and reserved names
+
+A Kustomization that belongs to no deploy tag is a shared kind. `SHARED_KINDS` in
+`scripts/renderer/renderer_lib/bundle.py` names every one, and it is empty until D3.3a adds
+`cluster-vars`. A shared kind publishes `flux/<name>.yaml` and `cluster/<name>/`. Each member
+needs a footprint rule in `FOOTPRINT_RULES` there, which names the tags its files count for,
+and `test_every_shared_kind_has_a_footprint_rule` fails a member without one.
+
+Every `cluster` render refuses a deploy tag named `homelab`, the root's name, or after a
+`SHARED_KINDS` member. D4.2 adds the `-deferred` suffix to that check.
+
+### `digests.json`
+
+The renderer computes `digests.json` in its own process. It maps each published tag and each
+shared kind to two SHA-256 digests:
+
+- `own` covers `cluster/<name>/` alone.
+- `footprint` covers every path that counts for the name: the tag's own directories, with
+  `-deferred` stripped, its `flux/<tag>.yaml`, and the files of each shared kind whose rule
+  lists the tag.
+
+`flux/kustomization.yaml`, `digests.json` itself and `images/` count for no name. Any other
+path that no rule claims lands under `_unclassified`, with the same two digests and a `paths`
+list. `land.sh`'s wait reads `footprint` through `scripts/deploy_tools/changed_set.py`, and a
+change under `_unclassified` counts as every name changed. D6's *What a footprint counts* in
+`docs/target-architecture/deploy/d6-delete-old-path.md` defines the classification.
+
+### The publish census
+
+`promote.py check-bundle out` fails the render job before gitleaks and before the push. It
+computes its allowlist from the inventory and `SHARED_KINDS`, never from the render, so a
+renderer bug cannot widen it. It fails when:
+
+- `flux/` lacks a file for a published tag or a shared kind, or holds any other file;
+- `flux/kustomization.yaml` omits a file in `flux/`, or lists one that is not there;
+- `flux/<name>.yaml` holds anything but the Kustomization `<name>` applying
+  `./cluster/<name>`;
+- a published tag has no `cluster/<tag>/`;
+- `digests.json` is missing or names another set.
 
 ## Retention of old artifact versions
 

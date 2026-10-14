@@ -15,6 +15,13 @@ leaves out each role's `render_sops_manifests` files, and the `sops-manifest-ent
 anything, a placeholder render also refuses a tag marked `owner: flux` that reads a pinned
 live-read fact, and runs the five secret rules of `renderer_lib/secret_checks.py`.
 
+A placeholder render with `--role` also writes the publish bundle beside `DIR/cluster/`, for
+the tags it names that carry `owner: flux` (target slice D2): `DIR/flux/<tag>.yaml`,
+`DIR/flux/kustomization.yaml` and `DIR/digests.json`. A render that names no such tag writes
+no bundle. `renderer_lib/bundle.py` holds the writer, `SHARED_KINDS` and the footprint
+rules. Every `cluster` render refuses a deploy tag named `homelab` or after a `SHARED_KINDS`
+member, the names of Kustomizations that are no deploy tag's (C3 *Reserved names*).
+
 `host --host NAME` renders `hosts/NAME/package.yml` into `DIR/hosts/NAME/`, and `package --name
 PKG` renders the shared package `hosts/packages/PKG/` into `DIR/packages/PKG/`. Each writes
 `root/`, the tree the package installs, and `nfpm.yaml`. Host and package modes render no
@@ -25,7 +32,8 @@ secret and keep every `${` literal (`renderer_lib/host.py`).
 comparison input and is never published.
 
 Exit codes: 0 rendered; 1 a template failed to render, a secret check failed, or a flux-owned
-tag reads a pinned live-read fact; 2 refused before writing anything; 64 a usage error.
+tag reads a pinned live-read fact; 2 refused before writing anything, a reserved tag name among
+the causes; 64 a usage error.
 
 Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-render
      uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
@@ -51,11 +59,19 @@ from lib.cli_help import ArgumentParser
 from lib.exit_codes import RENDER_FAILED, RENDER_OK, RENDER_REFUSED
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
 from renderer.renderer_lib import secret_checks
+from renderer.renderer_lib.bundle import (
+    DIGESTS,
+    FLUX_DIR,
+    SHARED_KINDS,
+    bundle_files,
+    write_bundle,
+)
 from renderer.renderer_lib.cluster import (
     RenderError,
     RenderRefused,
     flux_owned_tags,
     render_tag,
+    rollout_timeout_default,
     select_tags,
     write_cluster,
 )
@@ -101,6 +117,7 @@ def cluster(
     flux_owned: Callable[[], set[str]] = flux_owned_tags,
     pinned: dict[str, PinnedFact] | None = None,
     known: frozenset[secret_checks.Violation] = secret_checks.KNOWN_VIOLATIONS,
+    kinds: frozenset[str] = SHARED_KINDS,
 ) -> int:
     """Render `roles`, or every renderable tag, into `out`; return the exit code.
 
@@ -112,13 +129,16 @@ def cluster(
         flux_owned: Returns the tags marked `owner: flux`; a test passes fixture tags.
         pinned: The pinned live-read facts the refusal reads, `PINNED_LIVE_FACTS` when None.
         known: The ratchet the secret checks hold the render to; a test passes another.
+        kinds: The shared kinds, whose names no deploy tag may take; a test passes others.
     """
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
-        return _stub_cluster(out, roles, secret_stubs)
-    return _placeholder_cluster(out, roles, render, flux_owned, pinned, known)
+        return _stub_cluster(out, roles, secret_stubs, kinds)
+    return _placeholder_cluster(out, roles, render, flux_owned, pinned, known, kinds)
 
 
-def _stub_cluster(out: Path, roles: list[str] | None, secret_stubs: Path) -> int:
+def _stub_cluster(
+    out: Path, roles: list[str] | None, secret_stubs: Path, kinds: frozenset[str]
+) -> int:
     stubs = load_stubs(secret_stubs)
     missing = unstubbed(stubs)
     if missing:
@@ -129,7 +149,7 @@ def _stub_cluster(out: Path, roles: list[str] | None, secret_stubs: Path) -> int
         )
         return RENDER_REFUSED
     try:
-        tags = select_tags(roles)
+        tags = select_tags(roles, kinds=kinds)
         rendered = [render_tag(tag, stubs) for tag in tags]
         written = write_cluster(rendered, out)
     except RenderRefused as exc:
@@ -151,10 +171,12 @@ def _placeholder_cluster(
     flux_owned: Callable[[], set[str]],
     pinned: dict[str, PinnedFact] | None,
     known: frozenset[secret_checks.Violation],
+    kinds: frozenset[str],
 ) -> int:
     try:
-        tags = select_tags(roles)
-        refusals = pinned_fact_refusals(tags, flux_owned(), pinned)
+        tags = select_tags(roles, kinds=kinds)
+        owned = flux_owned()
+        refusals = pinned_fact_refusals(tags, owned, pinned)
         if refusals:
             for tag, fact in refusals:
                 print(
@@ -181,7 +203,12 @@ def _placeholder_cluster(
                 file=sys.stderr,
             )
             return RENDER_FAILED
+        # Only a flux-owned tag is published, so only one gets a Kustomization. A --role
+        # render of any other tag, a deferring one included, writes its cluster/ alone.
+        published = [t.tag for t in result.tags if t.tag in owned] if roles else []
+        bundle = _bundle(result, out, published) if published else {}
         written = write_cluster(result.tags, out)
+        written += write_bundle(bundle, out)
     except RenderRefused as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
         return RENDER_REFUSED
@@ -193,13 +220,46 @@ def _placeholder_cluster(
         if result.skipped
         else ""
     )
+    publishing = (
+        f", {FLUX_DIR}/ and {DIGESTS} for {', '.join(published)}" if bundle else ""
+    )
     print(
         f"homelab-render: placeholder mode, {len(result.tags)} tags, "
         f"{len(result.substituting())} of {len(result.key_sets)} directories substitute, "
-        f"{len(written)} files under {out / 'cluster'}, the five secret rules pass with "
+        f"{len(written)} files under {out}{publishing}, the five secret rules pass with "
         f"{len(report.violations)} known violations{skipped}"
     )
     return RENDER_OK
+
+
+def _bundle(
+    result: PlaceholderRender, out: Path, published: list[str]
+) -> dict[str, str]:
+    """The `flux/` files and `digests.json` publishing the tags `published` of `result`.
+
+    Computed from the render in this process, before anything is written (C1). A rendered
+    directory of a tag outside `published` counts under `_unclassified`.
+
+    Raises:
+        RenderRefused: `out` already holds a `flux/` file or `digests.json`, or a published
+            tag renders a `-deferred` directory, which no Kustomization applies before D4.2.
+    """
+    if (out / DIGESTS).exists() or any((out / FLUX_DIR).glob("*")):
+        raise RenderRefused(
+            f"{out} already holds {FLUX_DIR}/ or {DIGESTS}; render into an empty --out"
+        )
+    directories = {
+        name: files for tag in result.tags for name, files in tag.directories().items()
+    }
+    try:
+        return bundle_files(
+            directories,
+            result.key_sets,
+            published,
+            rollout_timeout_default(),
+        )
+    except ValueError as exc:
+        raise RenderRefused(str(exc)) from exc
 
 
 def packages(out: Path, host: str | None, name: str | None) -> int:

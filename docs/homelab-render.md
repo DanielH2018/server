@@ -97,10 +97,14 @@ every k8s render target of daniel-box, the list
 Each tag becomes `DIR/cluster/<tag>/`. The directory holds the rendered manifests and a
 `kustomization.yaml` whose `resources` list them in lexical order, the order
 `kubectl apply -f <dir>/` reads a directory in. A tag that defers files also gets
-`DIR/cluster/<tag>-deferred/`, with its own `kustomization.yaml`. The renderer writes nothing
-else, and `DIR/flux/` belongs to a later slice.
+`DIR/cluster/<tag>-deferred/`, with its own `kustomization.yaml`.
 
-`cluster` exits 2 and writes nothing in four cases:
+A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and
+`DIR/digests.json`, for the tags it names that carry `owner: flux`.
+`docs/flux-deploy-plane.md`'s *The bundle* describes both. A stub render, a render without
+`--role` and a render that names no flux-owned tag write neither.
+
+`cluster` exits 2 and writes nothing in six cases:
 
 - In stub mode, the stub file does not stub every key of `ansible/vars/secrets.yml`. The
   message names the keys, never a value. Write a fresh stub file for the commit.
@@ -108,7 +112,12 @@ else, and `DIR/flux/` belongs to a later slice.
   render.
 - A `--role` names a tag that is not a k8s render target of daniel-box.
 - A directory it would write under `DIR/cluster/` already holds files from an earlier
-  render.
+  render, or `DIR/flux/` or `DIR/digests.json` does.
+- A tag to render is named `homelab`, the root Kustomization's name, or after a member of
+  `SHARED_KINDS` (C3 *Reserved names*). An all-tag render refuses it too.
+- A placeholder render with `--role` names a flux-owned tag that defers files. No
+  Kustomization applies `<tag>-deferred` until D4.2 adds it. A tag Flux does not own renders
+  as before.
 
 It exits 1 when a template fails to render, and it writes nothing then either. It exits 64
 on a usage error. `scripts/lib/exit_codes.py` holds the four codes as its `RENDER_*` family.
