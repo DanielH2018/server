@@ -17,8 +17,9 @@ import re
 from _row_table import Census, Subject, tracked
 
 # Three spellings of a run, not a mention: an argv list element naming the shim in Python, a
-# shell line that starts with it, and a YAML or unit key whose command it is. An alert, a hint
-# or a docstring that tells an operator to run `./scripts/deploy.sh` matches none.
+# shell line that starts with it, and a YAML or unit key whose command it is. YAML takes the
+# shell spelling too, for a command in a block scalar under `shell: |`. An alert, a hint or a
+# docstring that names `./scripts/deploy.sh` mid-sentence matches none.
 _DEPLOY_SH_ARGV = re.compile(r"""["']\./scripts/deploy\.sh["']\s*[,\]]""")
 _DEPLOY_SH_SHELL = re.compile(
     r"^[ \t]*(?:exec[ \t]+)?(?:\./|\S*/)?scripts/deploy\.sh(?:\s|$)", re.MULTILINE
@@ -47,6 +48,10 @@ DEPLOY_SH_EXEMPT = {
         "runs a full deploy with no --tags, so no tag reaches the refusal; the play's "
         "`ansible_owned` batch loop skips the entry instead"
     ),
+    "ansible/post_tasks/k8s_image_drift_gate.yml": (
+        "the line is a command an operator reads in a `fail_msg` block scalar, not one the "
+        "play runs"
+    ),
 }
 
 
@@ -57,12 +62,12 @@ def _deploy_sh_candidates() -> list[str]:
 def _deploy_sh_runs(subject: Subject) -> int:
     rel = subject.rel
     if rel.endswith(".py"):
-        pattern = _DEPLOY_SH_ARGV
+        patterns = (_DEPLOY_SH_ARGV,)
     elif rel.endswith(tuple(glob.lstrip("*") for glob in _SHELL_FILES)):
-        pattern = _DEPLOY_SH_SHELL
+        patterns = (_DEPLOY_SH_SHELL,)
     else:
-        pattern = _DEPLOY_SH_KEY
-    return len(pattern.findall(subject.text))
+        patterns = (_DEPLOY_SH_KEY, _DEPLOY_SH_SHELL)
+    return sum(len(pattern.findall(subject.text)) for pattern in patterns)
 
 
 def _unlisted_deploy_sh_caller(subject: Subject) -> list[str]:
@@ -93,6 +98,10 @@ DEPLOY_SH_CALLERS = Census(
         Subject(
             "ansible/roles/setup/x/tasks/main.yml",
             "- ansible.builtin.command:\n    cmd: ./scripts/deploy.sh --tags x\n",
+        ),
+        Subject(
+            "ansible/roles/setup/y/tasks/main.yml",
+            "- ansible.builtin.shell: |\n    ./scripts/deploy.sh --tags x\n",
         ),
     ),
     green=(
