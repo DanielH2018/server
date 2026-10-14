@@ -6,7 +6,7 @@
 #
 # scripts/validate/host_package_cases.py runs the cases against it.
 
-ARG RELEASE
+ARG RELEASE=24.04
 
 # Each release pinned by digest, so a rebuild starts from the same root filesystem.
 FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55 AS ubuntu-24.04

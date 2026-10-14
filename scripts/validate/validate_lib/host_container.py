@@ -13,6 +13,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import shlex
 import subprocess
+import time
 import sys
 from pathlib import Path
 
@@ -57,7 +58,27 @@ class Container:
             check=True,
             stdout=subprocess.DEVNULL,
         )
-        state = self.sh("timeout 120 systemctl is-system-running --wait").stdout.strip()
+        # A docker exec that lands before PID 1 has its private socket up gets no answer at
+        # all, so the wait itself is retried until systemd answers.
+        deadline = time.monotonic() + 180
+        while True:
+            result = self.sh("timeout 120 systemctl is-system-running --wait")
+            state = result.stdout.strip()
+            if state or time.monotonic() > deadline:
+                break
+            time.sleep(1)
+        if state not in ("running", "degraded"):
+            logs = subprocess.run(
+                ["docker", "logs", "--tail", "60", self.name],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            print(
+                f"{self.name}: systemctl said {result.stderr.strip()!r}; the container's"
+                f" log:\n{logs.stdout}{logs.stderr}",
+                file=sys.stderr,
+            )
         if state == "degraded":
             failed = self.sh("systemctl --failed --no-legend --plain").stdout
             print(f"{self.name}: systemd is degraded:\n{failed}", file=sys.stderr)

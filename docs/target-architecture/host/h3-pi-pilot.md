@@ -948,14 +948,17 @@ concurrency group on push. It needs no secrets, and it does these steps:
     - run the common path and assert that `/var/cache/apt/pkgcache.bin` is unchanged.
 6. It writes the file-level package diff to the job summary.
 
-The job has no `name:` key, so GitHub shows it as `host_packages`. The gate census in
-`ansible/tests/repo/test_every_ci_job_is_gated.py` falls back to the job id the same way.
-Later host slices extend this job and add no workflow of their own. They read its result
-from the `ci.yml` runs, filtered by job name:
+The job has no `name:` key. GitHub names each matrix leg after the job id and the leg's
+values, such as `host_packages (24.04, 3.12)`. The gate census in
+`ansible/tests/repo/test_every_ci_job_is_gated.py` falls back to the job id, and the gate's
+`needs.host_packages.result` fails when either leg fails. Later host slices extend this job
+and add no workflow of their own. They read each leg's result from the `ci.yml` runs,
+filtered by the job name's prefix:
 
 ```bash
 gh run list --workflow ci.yml --branch master --limit 3 --json databaseId,headSha,conclusion
-gh run view <run-id> --json jobs --jq '.jobs[] | select(.name == "host_packages") | .conclusion'
+gh run view <run-id> --json jobs \
+  --jq '.jobs[] | select(.name | startswith("host_packages")) | [.name, .conclusion]'
 ```
 
 ### `homelab-tools` (C5)
@@ -1085,6 +1088,7 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
 + hosts/lib/homelab-reconcile
 + hosts/lib/tests/
 + hosts/lib/tests/container/Dockerfile
++ hosts/lib/tests/container/fixture/                (H3.3b: the cases' homelab-daniel-pi until H3.6)
 + hosts/packages/homelab-updater/package.yml
 + hosts/packages/homelab-updater/units/
 + hosts/packages/homelab-tools/package.yml            (H3.11)
@@ -1110,6 +1114,10 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
   scripts/validate/unit_templates.py                   (+ every unit and drop-in the host renderer emits)
 + scripts/validate/host_packages.py                    (H3.3a: render, diff and both lints the job runs)
 + scripts/validate/tests/test_validate_host_packages.py
++ scripts/validate/host_package_cases.py              (H3.3b: the container cases the job runs)
++ scripts/validate/validate_lib/host_fixtures.py      (H3.3b: the fixture builds and the local repository)
++ scripts/validate/validate_lib/host_container.py     (H3.3b: the systemd container the cases drive)
++ scripts/validate/tests/test_validate_host_package_cases.py
 + scripts/validate/tests/fixtures/host_packages/red/   (the lints' red fixture, built in CI too)
   prek.toml                                            (unit and shell selectors gain hosts/)
   scripts/deploy_tools/land_lib/pipeline.py            (host candidate in resolve, render after CI, host wait step)
