@@ -335,13 +335,14 @@ part, so a reviewer reads any new `{% for %}` over a part of a container alias a
 transform.
 
 `KNOWN_VIOLATIONS` holds every violation the first fleet render found and the tree still has:
-rule 4 on authelia's and pi-peer-backup's Secrets, and rule 5's 30 entries. Those are the two
-`indent`s on those keys, two `trim`s, mosquitto's `string`, 24 truthiness tests, and the
+rule 4 on authelia's and pi-peer-backup's Secrets, and rule 5's six entries. Those are the two
+`indent`s on those keys, two `trim`s, mosquitto's `string`, and the
 `hash('sha1')` on Prometheus's config block, which now outputs `domain`
 ([#4952](https://github.com/DanielH2018/server/issues/4952)). R2's PRs
-3 to 8 remove them, and an entry that no longer matches fails the check, so the set shrinks
+4 to 8 remove them, and an entry that no longer matches fails the check, so the set shrinks
 only through a fix. R2's PR 5 removed Home Assistant's two entries, the `from_json` parse and
-the Secret that embedded its output through `indent`.
+the Secret that embedded its output through `indent`. R2's PR 3 removed the 24 truthiness
+tests, each now `{% if K is defined %}`.
 
 Each rule must find its named members, so a rule that stops matching cannot pass: rule 3
 `${domain}` in homepage's IngressRoute, rule 1 a placeholder in authelia's config Secret,

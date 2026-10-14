@@ -14,8 +14,8 @@ Three things the inventory alone cannot supply, each handled rather than stubbed
   so two secret-shaped values stay DISTINCT. That is what lets a guard join a tile to the
   monitor-bridge env-secret that feeds it on the rendered value, instead of regex-scanning both
   templates for the variable name they share.
-- **A `| default('')`-gated tile renders AWAY when its token is undefined**, because Jinja's
-  `default` filter replaces the undefined before `NamedStub` is ever consulted. Eleven tiles —
+- **A token-gated tile renders AWAY when its token is undefined**, because its
+  `{% if <token> is defined %}` reads False before `NamedStub` is ever consulted. Eleven tiles —
   the drift checks, the status-page sync, both UPS secondaries, both Loki read routes — left the
   census that way, so every guard here silently stopped covering them. `_token_seed()` seeds every
   `*_push_token` the two templates name, derived from the templates rather than listed, so a new
@@ -166,7 +166,7 @@ def _parse_entities(rendered: str) -> dict[str, dict]:
     entities = {name: json.loads(body) for name, body in secret["stringData"].items()}
     missing = GATED_MEMBERS - set(entities)
     assert not missing, (
-        f"the census lost {sorted(missing)} — a `| default('')`-gated tile renders away when its "
+        f"the census lost {sorted(missing)} — a token-gated tile renders away when its "
         "push token is unseeded, and every guard over it then passes on nothing"
     )
     return entities

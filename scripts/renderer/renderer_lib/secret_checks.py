@@ -48,7 +48,6 @@ from renderer.renderer_lib.environment import renderer_env
 from renderer.renderer_lib.jinja_aliases import scan_templates
 from renderer.renderer_lib.jinja_uses import (
     DYNAMIC_LOOKUP,
-    TRUTHINESS,
     Policy,
     TemplateScan,
     Use,
@@ -152,32 +151,6 @@ def _rule4(tag: str, file: str, site: str, name: str) -> Violation:
     return Violation(NO_SOPS_MANIFEST_KEY, tag, file, site, name)
 
 
-# The push-tile tokens that uptime-kuma's static monitors test with
-# `{% if <token> | default('') %}`.
-_KUMA_TOKENS = (
-    "aide_daniel_box_push_token",
-    "aide_daniel_pi_push_token",
-    "aide_daniel_server_push_token",
-    "docs_refresh_push_token",
-    "etcd_drill_fence_push_token",
-    "etcd_drill_full_push_token",
-    "etcd_snapshot_push_token",
-    "homelab_eval_push_token",
-    "kuma_status_page_sync_push_token",
-    "live_drift_push_token",
-    "loki_route_witness_daniel_server_push_token",
-    "loki_route_witness_push_token",
-    "manifest_prune_push_token",
-    "registry_gc_push_token",
-    "release_staleness_push_token",
-    "render_records_push_token",
-    "rkhunter_daniel_box_push_token",
-    "rkhunter_daniel_pi_push_token",
-    "rkhunter_daniel_server_push_token",
-    "setup_drift_push_token",
-    "ups_secondary_daniel_server_push_token",
-    "ups_secondary_push_token",
-)
 _AUTHELIA_KEY, _PPB_KEY = "authelia_oidc_rsa_key_content", "pi_peer_backup_ssh_key"
 
 # Every violation the first fleet render finds. Each entry leaves through the PR that fixes
@@ -205,19 +178,6 @@ KNOWN_VIOLATIONS = frozenset(
         ),
         _rule5(
             "mosquitto", "config-secret.yaml.j2", "filter string", "mqtt_password_hash"
-        ),
-        # Rule 5: the truthiness tests on a token, each rewritten as `is defined` by R2's
-        # PR 3. The last one joins its test to a feature flag with `and`.
-        _rule5("pi-peer-backup", "secret.yaml.j2", TRUTHINESS, "healthchecks_ping_key"),
-        *(
-            _rule5("uptime-kuma", "static-monitors.yaml.j2", TRUTHINESS, k)
-            for k in _KUMA_TOKENS
-        ),
-        _rule5(
-            "uptime-kuma",
-            "static-monitors.yaml.j2",
-            "truthiness test",
-            "renovate_agent_kuma_push_token",
         ),
         # Rule 5: the `observability_prometheus_config` set block outputs `{{ domain }}`, so it
         # is an alias of `domain`, and the Deployment hashes it with `hash('sha1')`. Under Flux
