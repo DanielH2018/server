@@ -143,16 +143,16 @@ _JINJA_IF_RE = re.compile(r"{%-?\s*if\b")
 _JINJA_ENDIF_RE = re.compile(r"{%-?\s*endif\b")
 # The condition itself, so a gated monitor can be checked against its variables rather than
 # excused on the strength of the `{% if %}` existing. The whole condition, not its first
-# identifier: a gate may be a secret (`{% if <secret_name> | default('') %}`), an inventory
+# identifier: a gate may be a secret (`{% if <secret_name> is defined %}`), an inventory
 # flag (`traefik_k8s_manage_crowdsec | default(true)`), or an `and` of both (the Renovate
 # agent's tile, #3414). Reading only the leading token judged that last one on its token alone,
 # so a disarmed agent's withdrawn tile read as missing.
 _JINJA_IF_COND_RE = re.compile(r"{%-?\s*if\s+(.+?)\s*-?%}")
 _GATE_AND_RE = re.compile(r"\s+and\s+")
-# One conjunct this check can resolve: an identifier, optionally piped through filters. An `or`
-# or a `not` makes the gate something other than "every conjunct must hold", so a conjunct
+# One conjunct this check can resolve: an identifier, piped through filters or tested `is defined`.
+# An `or` or a `not` makes the gate something other than "every conjunct must hold", so a conjunct
 # carrying either is left unresolvable and reads as "could not be read" rather than guessed at.
-_GATE_CONJUNCT_RE = re.compile(r"([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\|.*)?")
+_GATE_CONJUNCT_RE = re.compile(r"([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+is\s+defined|\s*\|.*)?")
 _GATE_OR_NOT_RE = re.compile(r"\b(?:or|not)\b")
 
 
@@ -335,9 +335,9 @@ def gate_conjunct_state(conjunct, no_secrets=False, read_secret=None):
     An inventory variable (host_vars, group_vars, the uptime-kuma role's defaults — the
     template's own render context) is evaluated against that context: `renovate_agent_enabled`
     is a host_var, not a secret, and asking SOPS for it got "undeclared", which reads False.
-    A secret goes through `gate_var_state` as before. A name that is neither is evaluated with
-    nothing bound, so the template's own `| default(...)` decides, exactly as it does at render:
-    `traefik_k8s_manage_crowdsec | default(true)` is True, `tok | default('')` False.
+    A secret goes through `gate_var_state`, except under `is defined`: Ansible defines every
+    declared key, so that is True with no decrypt. A name that is neither is evaluated with
+    nothing bound, so the template decides as at render: `x | default(true)` is True.
 
     Inventory is consulted first and the secrets file's plaintext key list second, so only a
     name the store declares costs a decrypt, and `no_secrets` withholds only that decrypt.
@@ -351,8 +351,8 @@ def gate_conjunct_state(conjunct, no_secrets=False, read_secret=None):
     if var in variables:
         return eval_gate_conjunct(conjunct, variables)
     names = declared_secret_names()
-    if names is not None and var not in names:
-        return eval_gate_conjunct(conjunct, variables)
+    if names is not None and (var not in names or conjunct.endswith(" defined")):
+        return var in names or eval_gate_conjunct(conjunct, variables)
     return None if no_secrets else (read_secret or gate_var_state)(var)
 
 

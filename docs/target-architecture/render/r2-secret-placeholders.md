@@ -21,6 +21,11 @@ census found one entry, the `hash('sha1')` on `observability_prometheus_config`,
 output `domain` since `0ef579e1f`
 ([#4952](https://github.com/DanielH2018/server/issues/4952)). PR 8 removes it.
 
+PR 3, branches on a secret's value:
+[#4978](https://github.com/DanielH2018/server/pull/4978). It rewrites 24 truthiness tests,
+not the Baseline's 18. `2fe9ad122` and `ba05d2459` added six push tiles to
+`static-monitors.yaml.j2` after `70591c307`, each with its own `KNOWN_VIOLATIONS` entry.
+
 Domain PR 1, `domain` as an inventory variable read without SOPS:
 [#4994](https://github.com/DanielH2018/server/pull/4994).
 

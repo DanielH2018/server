@@ -224,8 +224,8 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
     - `hosts/lib/` holds the scripts several packages ship, with tests in `hosts/lib/tests/`.
     - `hosts/bootstrap-host.sh` is the bring-up script.
     - `hosts/keys/` holds the public keys hosts trust. PR H3.4c commits the first,
-      `homelab-archive-keyring.gpg`. No key that the builder's anchor check reads lives
-      there, so a candidate commit cannot supply its own anchor (*Open questions* 1).
+      `homelab-archive-keyring.gpg`. The builder's anchor reads no key ([ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md)), so
+      nothing a candidate commit puts there can move it.
 - **Packages and the slice that creates each.** `homelab-updater`, `homelab-daniel-pi` and
   `homelab-tools` in H3, `homelab-daniel-server` in H4, `homelab-daniel-box` in H6, and
   `homelab-repos` in H7. `homelab-tools` is the one architecture-specific package (C5,
@@ -320,10 +320,9 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
           of the oldest first-parent commit after the last built commit. It is the tip's
           committer time when the tip does not descend from the last built commit, and 0
           when the tip is the last built commit. `sha` names that oldest unbuilt commit, or
-          the tip. `reason` says why the run built nothing newer: `hold`, `trust`,
-          `ancestry`, `keyring`, `ci`, `no-green`, `tools`, `canary`, or `ok` when it
-          built or had nothing to build. Only a check that the *Open questions* 1 ADR
-          adds emits `trust`. `tools` is a pinned binary whose digest differs
+          the tip. `reason` says why the run built nothing newer: `hold`, `ancestry`,
+          `keyring`, `ci`, `no-green`, `tools`, `canary`, or `ok` when it built or had
+          nothing to build. `tools` is a pinned binary whose digest differs
           (*`homelab-tools`*), and `canary` is an open rollout gate (*Staged rollout*).
     - Neither `homelab-builder` nor `homelab-signer` can write the textfile directory. Each
       writes its file under its own state directory. Its unit then runs the role's
@@ -735,11 +734,8 @@ Each run does these steps:
    green CI verdict. `deploy_git.py:ci_walk_candidates` gives the GitOps deployer the same
    anchor (C5). The builder checks no commit signature, because master commits carry
    GitHub's signature, not the operator's (*Baseline*).
-    - Whether the builder adds a check, and which, is *Open questions* 1. The operator
-      records that choice in an ADR before H3.5a merges (**operator-only**).
-    - A check the ADR adds reads its key from a root-owned file that the role installs,
-      never from the candidate, so a commit cannot supply its own anchor. Its refusal
-      builds nothing, writes `reason="trust"`, and fails the run (step 8).
+    - The builder adds no other check. The operator chose option (a) of *Open questions*
+      1, and [ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) records it.
 6. Check out the chosen commit in a scratch worktree, then run the renderer there with
    `uv run --frozen`: `host` mode for every `hosts/*/package.yml`, and `package` mode for every
    package under `hosts/packages/`. The uv cache is `/var/lib/homelab-builder/uv-cache`, and the
@@ -1293,7 +1289,8 @@ says otherwise.
           `bootstrap-host.sh` is H3.6's, because H3.6 creates the script.
 6. **H3.5a Builder half, staging only.** Merge it after H3.4c, in an attended window. It
    also waits on three gates:
-    - the operator's ADR for *Open questions* 1 is merged (**operator-only**);
+    - the operator's ADR for *Open questions* 1 is merged: [ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md), accepted
+      2026-10-14;
     - the C5 *Version* row (*Open questions* 7) is amended, or listed under *Requested
       amendments not yet applied* with this gate;
     - **operator-only:** the signing-key reach check in *Verification* has run for every
@@ -1852,8 +1849,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       `homelab_builder.prom`, whose unbuilt-since value is then non-zero, with `reason`
       `ancestry` and `sha` naming the commit.
     - A green fixture commit that is not on `origin/master`'s first-parent chain is never
-      chosen. A check that the *Open questions* 1 ADR adds brings its own red and green
-      pair, with `reason="trust"`.
+      chosen.
     - A held builder fetches, writes its metrics with `reason="hold"` and builds nothing.
     - A walk with no green commit exits 0 and writes `reason="no-green"`. A run that builds
       writes `reason="ok"` with the value 0.
@@ -2062,8 +2058,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
   WireGuard endpoint. `daniel-pi.yml` sets `has_gitops: false`, so no deploy reaches the
   Pi unattended at `70591c307`. From H3.9b, a merged commit with a green CI verdict
   reaches root there within one updater fire. That anchor is the one the deployer gives
-  the two k3s nodes. *Open questions* 1 weighs a stronger one, and option (c) keeps the Pi
-  off the unattended path.
+  the two k3s nodes. [ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) keeps that anchor for the Pi, and option (c) of *Open
+  questions* 1 stays available to take the Pi off the unattended path.
 - **The signing key is root on every host that trusts it.** It lives only in
   `homelab-signer`'s GnuPG home, mode 0700, plus the break-glass copy.
     - The signer runs only the script the role installs, and the role arrives from master
@@ -2235,8 +2231,7 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - the builder's tests beside the role's script: the failure exits, the `ci` refusal,
       the version count, the keyring check, `publish-textfile` and the sandboxing test
       (H3.5a), and the signer refusal and `Valid-Until` tests (H3.5b);
-    - the ADR for *Open questions* 1, under `docs/adr/`, before H3.5a
-      (**operator-only**);
+    - [ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) for *Open questions* 1, merged before H3.5a;
     - `docs/gitops-pipeline.md` gains a note that the builder, not the tick, applies `hosts/`
       (H3.5b);
     - the `host_packages` row's red and green pairs in
@@ -2390,10 +2385,9 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
    and only for the Pi. It stays available at no design cost: H3.9b's enable link is the
    switch, and dropping it moves the Pi to (c).
 
-   Resolution: the operator records the choice in an ADR before H3.5a merges
-   (**operator-only**), because it sets the root of trust for every host. Choice (b) adds
-   its verification to builder step 5 with a red and green pair. Choice (c) drops H3.9b's
-   link and meets exit observation 4 with a hand-started run.
+   Resolution: the operator chose (a) on 2026-10-14, and [ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) records it. Builder step 5
+   adds no check. Moving the Pi to (c) later drops H3.9b's link and meets exit observation
+   4 with a hand-started run.
 2. **What if the Depends gate fails?** If `apt-get install homelab-daniel-pi` does not
    install an added `Depends`, the design's fallback applies: ansible-pull becomes the plan,
    and H4 to H7 are re-planned. The slice stops at H3.7. H3.1 to H3.6 stay, because the
