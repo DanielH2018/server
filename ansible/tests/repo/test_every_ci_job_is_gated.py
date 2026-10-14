@@ -43,6 +43,7 @@ KNOWN_JOBS = frozenset(
         "ansible_lint",
         "deck_mod",
         "flux_roundtrip",
+        "host_packages",
         GATE_JOB,
         "renovate-config",
     }
@@ -53,7 +54,7 @@ KNOWN_JOBS = frozenset(
 # subtraction, so `needs.ansible-lint.result` is a syntax error. The job id carries the
 # underscore and the display name carries the hyphen.
 GATE_READS = frozenset(
-    {"hooks", "pytest", "ansible_lint", "deck_mod", "flux_roundtrip"}
+    {"hooks", "pytest", "ansible_lint", "deck_mod", "flux_roundtrip", "host_packages"}
 )
 
 _RESULT_EXPR = re.compile(r"needs\.([A-Za-z0-9_-]+)\.result")
