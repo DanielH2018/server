@@ -7,8 +7,8 @@ tick merged and never applies, because the role is denylisted or the change is n
 (#2570); nothing pages on it. This module is the deployer's one reader and writer of both:
 
 - `defer_bumps` and `alert_and_record_deferred` record,
-- `clear_applied_k8s_deferred`, `discharge_k8s_unapplied` and `drop_deleted_k8s_unapplied`
-  discharge,
+- `clear_applied_k8s_deferred`, `discharge_k8s_unapplied`, `drop_deleted_k8s_unapplied` and
+  `skip_not_ansible_owned` discharge,
 - `pending_k8s_deferred` answers what is owed,
 - `reconcile` is the tick-start pass that discharges and names what is left.
 
@@ -65,6 +65,37 @@ def reconcile(tools: DeployTools, state: DeployerState, config: Config) -> None:
     discharge_k8s_unapplied(tools, state, config)
     drop_deleted_k8s_unapplied(tools, state, config)
     log_k8s_unapplied(state)
+
+
+def skip_not_ansible_owned(state: DeployerState, plan, origin: str) -> set[str]:
+    """Log each tag the tick routed to `cs.flux`, and drop the ledger lines such tags hold.
+
+    `plan` is the tick's `TickPlan`, and `plan.owners` maps each tag not Ansible-owned at
+    `origin`, the commit being applied. Flux applies such a service, so no Ansible deploy will
+    ever discharge its line. A tick writes no new one, because `plan_tick` routes the service
+    to `cs.flux` and leaves it out of `k8s_services`. This drops a line written before the
+    range that set `owner`. `main()` calls it on every tick that classifies a range (D2.2).
+
+    Returns:
+        The services whose lines were dropped.
+    """
+    for tag in sorted(plan.cs.flux):
+        reached = [p for p in plan.paths if p.startswith(f"ansible/roles/k8s/{tag}/")]
+        log(
+            f"flux: {tag}: owned by {plan.owners[tag]} at {origin[:8]} — fast-forwarding "
+            f"{', '.join(sorted(reached))}; Flux applies it, so this tick does not apply, "
+            "defer, alert on or owe it"
+        )
+    dropped: set[str] = set()
+    for cls in (OWED_K8S_UNAPPLIED, OWED_K8S_DEFERRED):
+        owned = {e.service for e in state.owed_pending(cls)} & plan.owners.keys()
+        for service in state.clear_owed(cls, sorted(owned)) if owned else []:
+            log(
+                f"flux: {service}: dropped its {cls} line — owned by "
+                f"{plan.owners[service]}, so Flux applies it and no Ansible deploy will"
+            )
+            dropped.add(service)
+    return dropped
 
 
 def defer_bumps(state: DeployerState, origin: str, bumps) -> None:

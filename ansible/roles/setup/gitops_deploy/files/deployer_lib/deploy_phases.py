@@ -18,6 +18,7 @@ Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 
 from deployer_lib import deploy_alert_text
 from deployer_lib import deploy_alerts
+from deployer_lib import deploy_inventory
 from deployer_lib import deploy_io
 from deployer_lib import deploy_cross_role
 from deployer_lib import deploy_defer
@@ -267,11 +268,12 @@ def plan_tick(
     # Roles holding a copy of a changed file another role owns, by import or by lookup().
     readers = deploy_cross_role.k8s_lookup_readers(paths, config.repo)
     cs.k8s_consumers = shared_module_consumers(paths, config.repo) | readers
-    hostvars = deploy_io.host_vars_text(config.repo, config.hostname)
-    k8s_services = declared_k8s_services(hostvars) if hostvars is not None else set()
+    hostvars, owners = deploy_io.host_vars_owners(config, target.origin, run=tools.run)
+    deploy_inventory.route_not_ansible_owned(cs, owners)
+    k8s_services = declared_k8s_services(hostvars) - owners.keys()
     cs = _promote_k8s_auto_deploys(tools, state, config, cs, paths, target)
     cs.k8s_origins = k8s_change_commits(tools, config, target, set(quiet))
-    return TickPlan(cs=cs, paths=paths, k8s_services=k8s_services)
+    return TickPlan(cs=cs, paths=paths, k8s_services=k8s_services, owners=owners)
 
 
 def _adopt_incoming_cross_role_tables(

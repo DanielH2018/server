@@ -83,6 +83,11 @@ Each arm is a rule and the function that holds it; the record page has its incid
   role; `deploy_phases.reconcile_denylist` re-renders `config.env`.
 - **Pi Docker changes are never auto-deployed**, and an encrypted-vars-only push merges without
   redeploying, alerting once per SHA.
+- **A k8s tag whose `containers_list` entry sets `owner` goes to `cs.flux`**, beside `cs.k8s`.
+  Flux applies it, so the tick merges and logs it and never applies, defers, alerts on or owes
+  it. The deploy plane drops it before its empty check. Ownership is read at the commit being
+  applied. `docs/gitops-pipeline.md`'s *A tag Flux applies is merged and skipped* has the four
+  sites, and `ansible/tests/deploy/test_owner_readers_agree.py` holds the three readers equal.
 - **A new module under `files/` goes in the copy `loop:` and `stamp_deployed_pairs` in
   `tasks/code.yml`**. ENFORCED: `ansible/tests/deploy/test_gitops_deploy_ship_list.py`.
 

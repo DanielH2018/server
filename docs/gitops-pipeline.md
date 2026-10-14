@@ -281,6 +281,36 @@ A failed narrowed apply adds the plane it named to `hold_plane` as the entry
 `ansible/deploy.yml <tags>`. Only an apply covering those tags drops that entry: an untagged full
 run does, and a narrowed run covering a different service does not.
 
+### A tag Flux applies is merged and skipped
+
+A `containers_list` entry that sets `owner` is not Ansible-owned. With `owner: flux`, Flux
+applies the tag through `promote`. With `owner: released`, set by the first PR that hands the
+tag back, no writer applies it. The tick skips both values the same way, so the deployer never
+applies, defers, alerts on or owes such a tag. D2's plan has the design:
+[The ownership flag and its three readers](target-architecture/deploy/d2-first-leaf.md#the-ownership-flag-and-its-three-readers).
+
+- **Ownership is read at the commit being applied.** `deploy_io.host_vars_owners` reads this
+  host's host_vars at origin with `git show`, and `deploy_inventory.service_owners` parses it.
+  The range that sets `owner` therefore already skips its own tag. An unreadable file at
+  origin falls back to the checkout, which carries every `owner` an earlier range merged.
+- **A changed path of such a role goes to `cs.flux`**, beside `cs.k8s`.
+  `deploy_inventory.route_not_ansible_owned` moves the tag out of `cs.k8s` before the
+  image-bump promotion, so an image bump to it is never promoted. The tag also leaves
+  `TickPlan.k8s_services`, so a refusal that names no tags does not owe it.
+- **The deploy plane drops such a tag before its empty check.** `deploy_narrow._deploy_plane`
+  logs `narrow: dropping <tag>: owned by <owner>` once per tag. A narrowed list that held only
+  such tags applies nothing and records `narrowed-to-nothing`, because an empty `--tags` value
+  would run the whole playbook.
+- **The journal names the tag, and the ledger drops it.** After `plan_tick`, `main()` calls
+  `deploy_k8s_owed.skip_not_ansible_owned`. It logs `flux: <tag>: owned by <owner>` with the
+  paths the range changed. It also clears a `k8s_unapplied` or `k8s_deferred` line that such
+  a service still holds from before the range that set `owner`, because no Ansible deploy
+  would ever discharge it.
+
+`ansible/tests/deploy/test_owner_readers_agree.py` holds `service_owners` equal to
+`scripts/lib/k8s_roles.py:tag_owners` and the `ansible_owned` filter. Each reader raises on an
+`owner` value other than `flux` or `released`.
+
 ### Both apply arms are forward-only
 
 A failed apply writes `hold_sha` and `hold_plane`, alerts, and leaves the tree

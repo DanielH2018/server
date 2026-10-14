@@ -18,10 +18,11 @@ Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 import json
 import subprocess
 import time
+from collections.abc import Mapping
 from typing import Callable, NamedTuple
 
-from deployer_lib.deploy_config import WARNING, log
-from deployer_lib.deploy_release import CURRENT, DRIFTED
+from deployer_lib.deploy_config import log
+from deployer_lib.deploy_release import log_digest_shadow
 
 # The playbook the setup arm runs, and the one `narrow_setup.py` derives reachability against.
 from deployer_lib.deploy_setup_roles import INITIAL_SETUP
@@ -415,6 +416,7 @@ def plan(
     narrow_setup: Callable[..., tuple[int, str]],
     setup_roles: dict[str, str],
     digest_diff: Callable[[str], dict[str, list[str]]] | None = None,
+    owners: Mapping[str, str] | None = None,
 ) -> list[BroadPlan]:
     """What this broad tick applies, in order: the setup plane's tags, then the deploy plane's.
 
@@ -428,6 +430,8 @@ def plan(
         setup_roles: role tag -> role directory, for the roles `INITIAL_SETUP` applies.
         digest_diff: `deploy_release.digest_diff`, read for the shadow log alone. None skips
             the log.
+        owners: each tag that is not Ansible-owned at `target.origin`, to its owner. The
+            deploy plane drops these tags. None drops none.
 
     A range that carries both planes gets both plans. Until 2026-09-18 this was an if/else
     and the setup arm won: a `roles/setup/` edit landing beside a `host_vars/` edit applied
@@ -459,57 +463,21 @@ def plan(
             )
             plans.append(BroadPlan(INITIAL_SETUP, [NARROWED_TO_NOTHING], False))
     if deploy_plane:
-        deploy = _deploy_plane(narrow, config, target)
+        deploy = _deploy_plane(narrow, config, target, owners or {})
         if digest_diff is not None:
             log_digest_shadow(digest_diff, target.origin, deploy)
         plans.append(deploy)
     return plans
 
 
-# DECIDED: shadow mode first (#3045). The render-digest diff is LOGGED beside what the
-# narrowing chose and decides nothing yet. A render record exists only for a service
-# `render_targets.py` lists — a daniel-box k8s entry whose role includes `k8s/manifests` — and
-# the hourly producer writes it at the newest green commit, so at a tick that has just
-# fetched a merge the commit being applied usually has no render at all, so these lines
-# rarely answer; the DECIDED below says what measures instead. A service with no usable record
-# would keep this function's answer, and the full run stays the fallback either way.
-def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
-    """Log the tags a render-digest diff at `origin` would apply, beside `deploy`'s answer.
-
-    Never raises: it runs before the ff-merge, where an escaped exception parks every landing.
-    """
-    try:
-        verdicts = digest_diff(origin)
-    except Exception as exc:
-        log(
-            f"narrow-shadow: no digest diff ({type(exc).__name__}: {exc})",
-            level=WARNING,
-        )
-        return
-    drifted = verdicts.get(DRIFTED, [])
-    unknown = ", ".join(
-        f"{key.split(': ', 1)[1]} {len(names)}"
-        for key, names in sorted(verdicts.items())
-        if key.startswith("unknown: ")
-    )
-    if deploy.deferred:
-        chose = "to defer the plane"
-    elif not deploy.apply:
-        chose = "nothing"
-    else:
-        chose = ",".join(deploy.tags)
-    log(
-        f"narrow-shadow: render digest at {origin[:8]} would apply "
-        f"{','.join(drifted) or 'nothing'} (current {len(verdicts.get(CURRENT, []))}; "
-        f"unknown: {unknown or 'none'}); the narrowing chose {chose}"
-    )
-
-
-def _deploy_plane(narrow, config, target) -> BroadPlan:
+def _deploy_plane(narrow, config, target, owners: Mapping[str, str]) -> BroadPlan:
     """The deploy plane: a narrowed `--tags`, nothing at all, or a deferral.
 
     Whichever it is, `config.k8s_autodeploy_denylist` does not subtract from it — see
-    `denylisted_in` and the DECIDED marker on it.
+    `denylisted_in` and the DECIDED marker on it. A tag in `owners` is dropped, because Flux
+    applies it; a list that drop empties applies nothing, as `NARROWED_TO_NOTHING`. A
+    refusal's own tags are kept whole: `_deferred` reads an empty list as "every declared
+    service", and `plan_tick` already leaves the dropped tags out of that set.
     """
     playbook = DEPLOY_PLAYBOOK
     try:
@@ -532,6 +500,15 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
     if rc != 0:
         return _deferred(playbook, f"exit {rc}", out)
     tags = [t for t in out.split(",") if t]
+    # Dropped BEFORE the empty check below, so a list holding only Flux-owned tags applies
+    # nothing rather than reaching `--tags` empty, which runs the whole playbook.
+    for t in tags:
+        if t in owners:
+            log(
+                f"narrow: dropping {t}: owned by {owners[t]} at {target.origin[:8]}, so "
+                "Flux applies it and this tick does not"
+            )
+    tags = [t for t in tags if t not in owners]
     if not tags:
         # A tag list nothing would match is NOT the same as no tags: `--tags <nothing>`
         # still runs every `tags: always` task in the play, and an empty `--tags` value runs

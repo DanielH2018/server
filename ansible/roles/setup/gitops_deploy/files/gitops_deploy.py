@@ -303,6 +303,7 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
         deploy_handlers.alert_red_tip(tools, state, config, target)
 
     plan = deploy_phases.plan_tick(tools, state, config, target)
+    deploy_k8s_owed.skip_not_ansible_owned(state, plan, target.origin)
     if plan.cs.broad:
         return deploy_handlers.handle_broad(tools, state, config, target, plan)
     if plan.cs.k8s_deploy:
