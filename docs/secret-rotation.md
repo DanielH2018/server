@@ -118,6 +118,9 @@ not rotated again by the weekly cron. Examples:
   Missing this on 2026-08-29 left Bazarr reconnecting in a loop that leaked 173 MiB → its 1Gi cap
   in 90 minutes and OOM-killed it; the only visible signal was the "k3s Container OOM" monitor,
   which self-clears one hour after the kill while subtitle fetching stays silently broken.
+- `mqtt_password_hash`: `mosquitto_passwd` writes a `username:hash` line. Store only the part
+  after the first `:`, because the template prepends `mqtt_username` itself. The mosquitto
+  deploy refuses a stored hash that holds a colon, before the apply.
 - **CrowdSec bouncer keys** (`crowdsec_k8s_bouncer_api_key`, the cluster edge's — the only
   bouncer since E7 retired the Docker edge and its `dockertraefik` key) and the agent password
   (`crowdsec_k8s_agent_password`, shared by all four agents). Since slice-6 B2 the single
