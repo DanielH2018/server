@@ -21,8 +21,8 @@ census found one entry, the `hash('sha1')` on `observability_prometheus_config`,
 output `domain` since `0ef579e1f`
 ([#4952](https://github.com/DanielH2018/server/issues/4952)). PR 8 removes it.
 
-Domain PR 1, `domain` as an inventory variable read without SOPS: the PR for
-[#4984](https://github.com/DanielH2018/server/issues/4984).
+Domain PR 1, `domain` as an inventory variable read without SOPS:
+[#4994](https://github.com/DanielH2018/server/pull/4994).
 
 Depends on: [R1](r1-shadow-render.md)
 
