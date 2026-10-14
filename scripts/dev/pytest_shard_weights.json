@@ -209,6 +209,7 @@
  "ansible/roles/setup/k3s/tests/test_longhorn_restore_drill_checks.py": 0.0,
  "ansible/roles/setup/k3s/tests/test_longhorn_skipped_volumes.py": 0.0,
  "ansible/roles/setup/k3s/tests/test_longhorn_trim_volume_list_failure.py": 0.15,
+ "ansible/roles/setup/k3s/tests/test_manifest_prune_check_flux_skip.py": 0.36,
  "ansible/roles/setup/render_records/tests/test_render_records.py": 0.0,
  "ansible/roles/setup/renovate_agent/tests/test_agent_logic.py": 0.0,
  "ansible/roles/setup/renovate_agent/tests/test_crash_report.py": 0.0,
