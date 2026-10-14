@@ -57,7 +57,10 @@ def test_a_typed_tag_that_is_not_ansible_owned_is_flagged(
     assert code == DEPLOY_FLUX_OWNED
     assert _deployed(calls) == []
     err = capsys.readouterr().err
-    assert f"owner: {owner}" in err and "`bento` lands through `promote`" in err
+    assert (
+        f"`bento` is {'applied by Flux' if owner == 'flux' else 'mid-handback'}" in err
+    )
+    assert f"owner: {owner}" in err and "No Ansible path may apply `bento`" in err
 
 
 def test_an_ansible_owned_tag_beside_one_is_clean(tmp_path, monkeypatch):

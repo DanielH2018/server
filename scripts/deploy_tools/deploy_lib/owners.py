@@ -134,7 +134,7 @@ def refuse_flux_owned(plan) -> None:
     for tag in owned:
         say_error(
             f"{owner_note(tag, owners[tag])} -- nothing was deployed.",
-            f"  `{tag}` lands through `promote` once its change merges, never through Ansible.",
+            f"  No Ansible path may apply `{tag}`; drop it from --tags to deploy the rest.",
         )
     if owned:
         raise Refused(DEPLOY_FLUX_OWNED)

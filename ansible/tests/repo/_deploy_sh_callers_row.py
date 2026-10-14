@@ -75,8 +75,8 @@ DEPLOY_SH_CALLERS = Census(
     name="deploy-sh-callers-are-in-the-entry-point-table",
     reason=(
         "`deploy.sh` refuses a whole --tags list with exit 5 when one tag is applied by "
-        "Flux, and a caller nobody listed either breaks on that refusal or, once it "
-        "bypasses the wrapper, writes the service behind Flux's back. Add the caller to "
+        "Flux, so a caller nobody listed fails outright the day a tag it passes moves to "
+        "Flux, and nobody decided what it should do instead. Add the caller to "
         "the entry-point table in docs/target-architecture/deploy/d2-first-leaf.md, say "
         "there what it does with such a tag, and map it in `DEPLOY_SH_ENTRY_POINTS`; or "
         "exempt it in `DEPLOY_SH_EXEMPT` with the reason no tag reaches it."

@@ -746,6 +746,7 @@
  "scripts/deploy_tools/tests/test_deploy_exit_codes.py": 2.76,
  "scripts/deploy_tools/tests/test_deploy_expands_shared_roles.py": 0.07,
  "scripts/deploy_tools/tests/test_deploy_flags.py": 0.1,
+ "scripts/deploy_tools/tests/test_deploy_flux_owned.py": 0.26,
  "scripts/deploy_tools/tests/test_deploy_lock_wait_budget.py": 0.0,
  "scripts/deploy_tools/tests/test_deploy_messages.py": 0.0,
  "scripts/deploy_tools/tests/test_deploy_probe.py": 0.96,
