@@ -365,8 +365,9 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
       signs.
     - The builder builds only a commit on `origin/master` that has a green CI verdict. That
       is the anchor the GitOps deployer trusts.
-    - Whether the builder also requires a signature, and whose, is H3 Open question 1. The
-      operator rules on it in an ADR before H3.5a merges (**operator-only**).
+    - The builder requires no commit signature and no landing tag.
+      [ADR-0021](../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) records
+      the operator's choice on H3 Open question 1.
     - The signer signs only `homelab-*` packages whose version names the commit the builder
       chose. It refuses anything else in the staging directory.
     - The builder runs under systemd sandboxing. Code that runs as the builder still decides
@@ -658,8 +659,6 @@ request leaves this list and the round's *Review log* entry names it.
 
 ### Requests on C5
 
-- **Which signature the builder trusts** (H3 Open question 1). Gate: before H3.5a merges
-  (**operator-only**).
 - **The version counts the built commit** (H3 Open question 7). The builder builds the newest
   green commit, which can be older than the tip. *Version* then reads
   `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`. Gate: before
@@ -960,6 +959,13 @@ Applied to this page:
 - **D2's production drill is accepted** (D2 Open question 1). The operator accepts the drill
   on production, and the session may merge D2.8 itself. The ruling changes no contract row.
   D2.8's text records it.
+- **The builder trusts master plus green CI** (H3 Open question 1). The operator chose option
+  (a) on 2026-10-14:
+  [ADR-0021](../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) records it.
+  The builder builds a commit on `origin/master` with a green CI verdict, and checks no
+  signature and no landing tag. C5 *Signing* already named that anchor, so the ruling removes
+  only the open question from it. The request leaves *Requests on C5*, which clears its gate
+  before H3.5a merges.
 
 ### Applied requests (2026-10-14)
 
