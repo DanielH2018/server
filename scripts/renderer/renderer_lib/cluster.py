@@ -32,7 +32,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import jinja2
-import yaml
 from ansible.errors import AnsibleError
 
 from deploy_tools.render_targets import render_targets
@@ -47,6 +46,13 @@ from lib.k8s_roles import (
 from lib.k8s_context import resolve_vars
 from lib.render_guard import SHARED_TPL, StrictChainableUndefined, containers_entries
 from lib.repo_paths import HOST_VARS, K8S_ROLES
+from renderer.renderer_lib.bundle import (
+    DEFERRED_SUFFIX,
+    KUSTOMIZATION,
+    SHARED_KINDS,
+    kustomization_text,
+    reserved_tags,
+)
 from renderer.renderer_lib.context import play_context
 from renderer.renderer_lib.environment import (
     RenderError,
@@ -56,8 +62,6 @@ from renderer.renderer_lib.environment import (
 )
 from renderer.renderer_lib.task_inputs import derived_facts, include_vars
 
-KUSTOMIZATION = "kustomization.yaml"
-DEFERRED_SUFFIX = "-deferred"
 LABEL_WRAPPER = SHARED_TPL / "role-labelled.yaml.j2"
 MANIFESTS_DEFAULTS = K8S_ROLES / "manifests" / "defaults" / "main.yml"
 # The include vars that decide what the manifests role renders and where.
@@ -100,7 +104,10 @@ class RenderedTag:
 
 
 def select_tags(
-    requested: list[str] | None, host: str = K8S_HOST, host_vars: Path = HOST_VARS
+    requested: list[str] | None,
+    host: str = K8S_HOST,
+    host_vars: Path = HOST_VARS,
+    kinds: frozenset[str] = SHARED_KINDS,
 ) -> list[str]:
     """The sorted tags to render: `requested`, or every render target of `host`.
 
@@ -108,15 +115,22 @@ def select_tags(
     publishes it.
 
     Raises:
-        RenderRefused: A requested tag is not one of `host`'s render targets.
+        RenderRefused: A requested tag is not one of `host`'s render targets, or a tag to
+            render takes a reserved name: the root Kustomization's, `homelab`, or a member
+            of `kinds` (C3 *Reserved names*).
     """
     targets = set(render_targets(host, host_vars))
-    if not requested:
-        return sorted(targets)
-    unknown = sorted(set(requested) - targets)
+    tags = sorted(set(requested or targets))
+    reserved = reserved_tags(tags, kinds)
+    if reserved:
+        raise RenderRefused(
+            f"{reserved} take a name the bundle reserves for a Kustomization that is no "
+            "deploy tag's: the root homelab or a SHARED_KINDS member"
+        )
+    unknown = sorted(set(tags) - targets)
     if unknown:
         raise RenderRefused(f"{unknown} are not k8s render targets of {host}")
-    return sorted(set(requested))
+    return tags
 
 
 def flux_owned_tags(host: str = K8S_HOST, host_vars: Path = HOST_VARS) -> set[str]:
@@ -127,18 +141,12 @@ def flux_owned_tags(host: str = K8S_HOST, host_vars: Path = HOST_VARS) -> set[st
     return {e["name"] for e in containers_entries(path) if e.get("owner") == "flux"}
 
 
-def kustomization_text(files: list[str]) -> str:
-    """A `kustomization.yaml` listing `files` in lexical order.
-
-    Lexical order is the order `kubectl apply -f <dir>/` reads a directory in.
-    """
-    return yaml.safe_dump(
-        {
-            "apiVersion": "kustomize.config.k8s.io/v1beta1",
-            "kind": "Kustomization",
-            "resources": sorted(files),
-        },
-        sort_keys=False,
+def rollout_timeout_default() -> str:
+    """`manifests_rollout_timeout_default` as the manifests role's own defaults set it."""
+    return str(
+        yaml_fast.safe_load(MANIFESTS_DEFAULTS.read_text())[
+            "manifests_rollout_timeout_default"
+        ]
     )
 
 
