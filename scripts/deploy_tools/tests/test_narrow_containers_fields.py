@@ -421,6 +421,12 @@ def test_an_owner_only_edit_maps_to_the_entrys_own_tag_alone_is_clean(tmp_path):
 
 
 def test_a_hostname_edit_reaches_the_five_whole_entry_readers_is_flagged(tmp_path):
+    """The keep half: a field a template can read still reaches every reader of every field.
+
+    Master's code passes it too, because the early return in `reader_paths` never fires on an
+    edit that changed a field. It goes red when the narrowing drops too much: `hostname`
+    joining `DEPLOY_MECHANICS_FIELDS`, or an early return on any `changed` that is not None.
+    """
     edited = _narrow_with_whole_entry_readers(
         tmp_path, "image: sonarr:1\n    hostname: sonarr"
     )
