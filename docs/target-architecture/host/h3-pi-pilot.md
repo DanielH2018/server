@@ -6,6 +6,7 @@ PR H3.1, the renderer's host and package modes: [#4911](https://github.com/Danie
 PR H3.2a, the updater package: [#4917](https://github.com/DanielH2018/server/pull/4917).
 PR H3.2b, the reconcile unit: [#4927](https://github.com/DanielH2018/server/pull/4927).
 PR H3.2c, the censuses and the unit validator: [#4935](https://github.com/DanielH2018/server/pull/4935).
+PR H3.2d, the manifest emitter: [#4944](https://github.com/DanielH2018/server/pull/4944).
 
 Depends on: R1
 Unblocks: H4, H5
@@ -419,7 +420,9 @@ and every host slice applies it.
       `systemctl --no-block start homelab-reconcile.service || true` and `exit 0`.
     - `prerm` stops `homelab-*` units only when `$1` is `remove`.
     - `preinst` refuses a hostname mismatch and does nothing else.
-    - A lint in `hosts/lib/tests/` holds every script to a whitelist of line shapes. The
+    - A lint, `lint_script` in `scripts/validate/host_packages.py`, holds every script to a
+      whitelist of line shapes. CI runs it over each build, and
+      `hosts/lib/tests/test_maintainer_scripts.py` runs it over every shipped render. The
       whitelist admits no `dpkg-divert` line. H4 ships no diversion: its round-1 review
       replaced the two it planned with a `NUT_CONFPATH` drop-in. H7's *In-place edits* is the
       first slice that diverts a file. That slice defines the `preinst` and `postrm`
