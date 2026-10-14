@@ -482,9 +482,10 @@ it empty.
    must be a placeholder from pass 3. In every directory, no sentinel fragment may remain. A
    `${` in a directory that does not substitute is literal text, because Flux never
    substitutes there.
-3. **`confined-to-secret`**: a placeholder sits only in a document of `kind: Secret`. The two
-   identifier keys, `domain` and `email`, are the exception, in a frozenset
-   `PLACEHOLDER_ANYWHERE` whose comment gives the reason. A key that may leave a Secret for
+3. **`confined-to-secret`**: a placeholder sits only in a document of `kind: Secret`. The
+   identifier key `email` is the exception, in a frozenset `PLACEHOLDER_ANYWHERE` whose
+   comment gives the reason. `domain` left the set in domain PR 2b, because it is no longer a
+   secret key and renders no placeholder. A key that may leave a Secret for
    one kind only is a `(key, kind)` pair, never a member of `PLACEHOLDER_ANYWHERE`. H1 adds
    the first two pairs, for its BackupTargets (Open question 10).
 4. **`no-sops-manifest-key`**: no key in `SOPS_MANIFEST_KEYS` appears as a placeholder. The
@@ -525,10 +526,9 @@ it empty.
 
    **Filters that only interpolate.** The frozenset `PASSTHROUGH_FILTERS` names the repo
    filters that place an argument into their output unchanged. It is closed, so rule 5
-   refuses a key passed to any other filter. It holds two members:
-    - `homepage_href`, cited as `ansible/filter_plugins/homepage_tiles.py:homepage_href`;
-    - `authelia_service_rules`, cited as
-      `ansible/filter_plugins/authelia_access.py:authelia_service_rules`.
+   refuses a key passed to any other filter. It is empty. Its two members, `homepage_href`
+   and `authelia_service_rules`, were each passed `domain` alone, and domain PR 2b retired
+   them with it. Kept as members, they would accept a later secret passed to either filter.
 
    A member's output holds the key, so rule 5 holds the output to the forms a `~`
    concatenation may take. Each member has a membership test. The test calls the filter with
@@ -572,9 +572,10 @@ it empty.
    alias is therefore no alias. The prometheus site sits inside the
    `{% set observability_prometheus_config %}` block, which the Deployment hashes with
    `hash('sha1')`. Without this sentence, the lookup alone would make that block an alias.
-   The block also outputs `{{ domain }}` since `0ef579e1f`, so it is an alias of `domain`
-   whatever this sentence says, and its hash is a `KNOWN_VIOLATIONS` entry
-   ([#4952](https://github.com/DanielH2018/server/issues/4952)).
+   The block has output `{{ domain }}` since `0ef579e1f`, which made it an alias of `domain`
+   and its hash a `KNOWN_VIOLATIONS` entry
+   ([#4952](https://github.com/DanielH2018/server/issues/4952)) until domain PR 2b
+   published `domain`.
    Without this clause, a later `lookup('vars', check.token) | trim` would pass all three
    checks. Rule 5 would see no key name. Rule 2 would find the sentinel intact. The round
    trip would find both sides equal, because `trim` changes neither the sentinel nor the
@@ -594,7 +595,8 @@ it empty.
     - A parse of those 68 files at `70591c307` finds 184 Jinja strings, and one names a key:
       `ansible/roles/k8s/headlamp/defaults/main.yml:headlamp_k8s_oidc_issuer_url`, which is
       `https://auth.{{ domain }}`. Its one use, in `headlamp/templates/deployment.yaml.j2`,
-      is bare.
+      is bare. Since domain PR 2b published `domain`, none names a key. The clause's
+      fixture pair is its only proof that it can go red.
 
 `KNOWN_VIOLATIONS` starts with every violation PR 2 measures and shrinks to empty as PRs 3 to
 8 land. An entry that no longer matches fails too, so the set shrinks only through a fix.
@@ -607,29 +609,25 @@ vacuously:
   `qbittorrent/files/netns-reset.sh`. The `qbittorrent` directory substitutes, because its
   Secret holds the WireGuard key.
 - Rule 4 asserts that every key in `SOPS_MANIFEST_KEYS` exists in `secrets.yml`.
-- Rule 5 must find a secret key in the syntax tree of at least 59 in-scope templates, the
-  count at `70591c307` (Baseline). The floor counts what the rule computes, not a text
-  match. Its other named members:
+- Rule 5 must find a secret key in the syntax tree of at least 46 in-scope templates. The
+  floor was 59 at `70591c307` (Baseline), and domain PR 2b recounted it once `domain` left
+  the secret keys. The floor counts what the rule computes, not a text match. Its other
+  named members:
     - It accepts the value-position `default('')` on `kuma_status_page_sync_push_token` in
       `uptime-kuma/templates/secret.yaml.j2`.
-    - It accepts the 21 `homepage_href` calls in
-      `homepage/templates/config/services.yaml.j2`, and the `authelia_service_rules` loop in
-      `authelia/templates/config-secret.yaml.j2` with every use of `rule` in its body.
-    - It classifies the bridge-row `tags` binding in
-      `uptime-kuma/templates/static-monitors.yaml.j2` as a container alias of `domain`, and
-      accepts its `{% if tags %}` and `{{ tags | to_json }}`.
-    - It classifies `host` in the `ansible/templates/ingressroute.yml.j2` macro's loop as a
-      value alias of `domain`, and accepts its bare uses.
     - It classifies the bare `lookup('vars', check.token)` in
       `monitor-bridge/templates/env-secret.yaml.j2` as a possible secret reference.
-    - It classifies `headlamp_k8s_oidc_issuer_url` as an alias of `domain`.
-    - It finds the `observability_prometheus_config` set block in
-      `observability/templates/prometheus.yaml.j2` to be an alias of `domain`, and refuses
-      its `| hash('sha1')` use. That use is the `KNOWN_VIOLATIONS` entry for
-      [#4952](https://github.com/DanielH2018/server/issues/4952), so the named member is
-      the entry, and the stale-entry check holds it. The block's `NON_SECRET_VARS_LOOKUPS`
-      site is no reference for the alias clauses. PR 8's observability item restores the
-      member as one that rule 5 classifies as no alias and accepts.
+    - It classifies the `observability_prometheus_config` set block in
+      `observability/templates/prometheus.yaml.j2` as no alias, and accepts its
+      `| hash('sha1')` use. The block's `NON_SECRET_VARS_LOOKUPS` site is no reference for
+      the alias clauses.
+
+  Until domain PR 2b, rule 5 also had to accept the 21 `homepage_href` calls and the
+  `authelia_service_rules` loop, and to classify four aliases of `domain`: the bridge-row
+  `tags` binding in `static-monitors.yaml.j2`, `host` in the `ingressroute.yml.j2` macro's
+  loop, and `headlamp_k8s_oidc_issuer_url`. Each held `domain` and no other key, so each left
+  with it, and the alias clauses' real-tree census is empty. Each clause keeps its fixture
+  pair as its proof that it can go red.
 
   No PR in this slice edits any of these uses. PR 3 changes only `static-monitors.yaml.j2`'s
   `{% if <token> | default('') %}` tests, and PR 7 only the `jwks` block of authelia's
@@ -864,10 +862,10 @@ two throwaway Flux `Kustomization` files and runs `flux build kustomization <nam
   nothing is substituted.
 
 It then compares the two outputs byte for byte and names the first differing object. The
-comparison leaves out observability's `checksum_annotation('config', ...)` annotations, which
-the constant `UNCOMPARED_ANNOTATIONS` names and `roundtrip` counts, because each hashes a
-config holding placeholder text (*Risks*, *Restart triggers lose sight of secrets*). It
-runs two passes, each with its own summary line:
+comparison includes every `checksum_annotation` pod annotation. Until domain PR 2b it left
+out observability's five `checksum/config` annotations, because Prometheus's hashed config
+held `${domain}` (*Risks*, *Restart triggers lose sight of secrets*). It runs two passes,
+each with its own summary line:
 
 1. Every key takes its R1 stub.
 2. Every key that is neither in the guard's map, under any tag, nor in `GUARD_DEFERRED`
@@ -1253,6 +1251,8 @@ PR 4 deletes it.
       config change restarts Prometheus: a `domain` change still rolls the Deployment, by a
       path that does not hash the key, and a test asserts it. It removes the
       `KNOWN_VIOLATIONS` entry and restores the `NOT_ALIASES` member.
+      Domain PR 2b made this item moot: with `domain` published, the block names no key,
+      and that PR removed the entry and restored the member.
 9. **Close the ratchet** (about 40 lines). `KNOWN_VIOLATIONS`, `PLACEHOLDER_DEFERRED` and
    `GUARD_DEFERRED` are empty, the round-trip step covers every tag in both passes, and the
    docs state the five rules and the guard as enforced. With the ratchet empty, the
@@ -1589,10 +1589,12 @@ remains the gate.
   *Mitigation:* PR 6's manual run and PR 7's JWKS check show whether the consumer accepts
   the key. If one does not, the operator adds the newline to the stored value with `sops`
   (**operator-only**), as Open question 4 does for whitespace.
-- **Restart triggers lose sight of secrets.** The five `checksum_annotation('config', ...)`
-  lines in observability hash a config that holds placeholders. A rotated secret then changes
-  no annotation and rolls no pod. D3 owns the restart mechanism. The design's open question 4
-  already names the ciphertext-hash variant.
+- **Restart triggers lose sight of secrets.** A `checksum_annotation` that hashes a config
+  holding a placeholder changes no annotation when the secret rotates, so it rolls no pod.
+  Observability's five `checksum/config` lines did so until domain PR 2b published `domain`.
+  No hashed config holds a placeholder since then, and the round trip compares every such
+  annotation, so a placeholder that reaches one fails it. D3 owns the restart mechanism for a
+  Secret. The design's open question 4 already names the ciphertext-hash variant.
 - **Failure class 2 (proxy).** A green round trip proves the substitution is exact for the
   stub values, through the controller's own function as the pinned CLI vendors it. It does
   not prove the in-cluster controller version behaves the same. D3's exit criterion 1 proves

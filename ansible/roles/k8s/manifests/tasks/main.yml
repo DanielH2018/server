@@ -258,10 +258,10 @@
 
 # The standalone-value guard (target slice R2, docs/homelab-render.md). A key in this role's
 # row of `files/standalone_secret_keys.json` stands alone in a field of its render, as
-# `main: ${domain}` does. Under Flux such a value loses the template's quotes and is typed by
-# its text, so `0123`, `yes` or `1e3` would stop being a string. These two tasks refuse such a
-# value now, while Ansible still writes it, so the deploy stops before anything renders and
-# the live objects keep their old values. `scripts/renderer/standalone_map.py` writes the map,
+# traefik's `email: ${email}` does. Under Flux such a value loses the template's quotes and is
+# typed by its text, so `0123`, `yes` or `1e3` would stop being a string. These two tasks
+# refuse such a value now, while Ansible still writes it, so the deploy stops before anything
+# renders and the live objects keep their old values. `scripts/renderer/standalone_map.py` writes the map,
 # and a test in scripts/renderer/tests/ holds it equal to the render.
 #
 # The first task reads the decrypted values, so it runs under `no_log` and keeps key names

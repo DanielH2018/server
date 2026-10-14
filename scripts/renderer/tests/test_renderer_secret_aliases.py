@@ -12,19 +12,22 @@ import pytest
 
 from renderer.renderer_lib.secret_checks import (
     NO_SECRET_EXPRESSION,
+    PASSTHROUGH_FILTERS,
     rule5,
     scan_template,
 )
 from renderer.renderer_lib.var_aliases import not_alias_problems
 
 KEY = "fixture_key"
-KEYS = frozenset({KEY, "domain"})
-RULES = "{% for rule in entries | authelia_service_rules(fixture_key, []) %}"
+KEYS = frozenset({KEY, "email"})
+# A fixture member of `PASSTHROUGH_FILTERS`, whose output is a container alias.
+PASSTHROUGH = PASSTHROUGH_FILTERS | {"fixture_rules"}
+RULES = "{% for rule in entries | fixture_rules(fixture_key, []) %}"
 
 
 def _refused(source: str, **kwargs) -> list[tuple[str, str]]:
     """`(key, form)` of each use rule 5 refuses in a fixture template."""
-    scan = scan_template(source, KEYS, **kwargs)
+    scan = scan_template(source, KEYS, passthrough=PASSTHROUGH, **kwargs)
     return [(use.key, use.forms[-1]) for use in scan.uses if use.refused]
 
 

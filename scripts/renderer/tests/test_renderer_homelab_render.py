@@ -11,7 +11,7 @@ import pytest
 from lib import yaml_fast
 from lib.exit_codes import RENDER_OK
 from lib.proc_testing import run
-from lib.repo_paths import REPO
+from lib.repo_paths import ALL_VARS, REPO
 from renderer import homelab_render, shadow_diff
 from renderer.renderer_lib import cluster as cluster_mod
 from renderer.renderer_lib.placeholders import render_placeholders
@@ -42,11 +42,11 @@ def test_help_exits_zero():
 
 
 def test_cluster_without_secret_stubs_renders_placeholders(out, capsys):
-    assert _cluster(out, "--role", "littlelink") == 0
+    assert _cluster(out, "--role", "speedtest") == 0
     assert "placeholder mode" in capsys.readouterr().out
-    text = (out / "cluster" / "littlelink" / "deployment.yaml").read_text()
-    # `domain` is a secret key, so the route renders as its placeholder, not its stub.
-    assert "value: https://www.${domain}\n" in text
+    text = (out / "cluster" / "speedtest" / "secret.yaml").read_text()
+    # A secret key renders as its placeholder, not its stub.
+    assert "APP_KEY: ${speedtest_app_key}\n" in text
     assert "stub-" not in text and "HOMELAB_SECRET" not in text
 
 
@@ -78,17 +78,19 @@ def test_cluster_renders_littlelink_in_the_c1_layout(out, stub_file):
 
     text = (tag / "deployment.yaml").read_text()
     assert "STUB" not in text and "{{" not in text
-    # The stub file reached the render: `domain` is a secret key.
-    assert "value: https://www.stub-domain\n" in text
+    # `domain` is published, so the stub file holds no value for it and the route renders
+    # its inventory value.
+    domain = yaml_fast.safe_load(ALL_VARS.read_text())["domain"]
+    assert f"value: https://www.{domain}\n" in text
 
 
 def test_a_stub_file_missing_a_key_is_flagged(out, stub_file, tmp_path, capsys):
     stubs = yaml_fast.safe_load(stub_file.read_text())
-    del stubs["domain"]
+    del stubs["email"]
     short = tmp_path / "short.yml"
     short.write_text(shadow_diff.yaml.safe_dump(stubs))
     assert _cluster(out, "--secret-stubs", str(short)) == 2
-    assert "['domain']" in capsys.readouterr().err
+    assert "['email']" in capsys.readouterr().err
     assert list(out.iterdir()) == []
 
 

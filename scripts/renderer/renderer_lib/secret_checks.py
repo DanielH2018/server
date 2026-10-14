@@ -92,23 +92,16 @@ OUTPUT_RULES = (
 
 # The repo filters that place an argument into their output unchanged. Rule 5 accepts a secret
 # key as an argument to a member, and refuses it as an argument to any other filter, so the set
-# is closed. Each member passes the membership test in
-# `scripts/renderer/tests/test_renderer_secret_checks.py`, and a filter that fails it leaves
-# the set.
-PASSTHROUGH_FILTERS = frozenset(
-    {
-        # ansible/filter_plugins/homepage_tiles.py:homepage_href
-        "homepage_href",
-        # ansible/filter_plugins/authelia_access.py:authelia_service_rules
-        "authelia_service_rules",
-    }
-)
+# is closed. A member must pass the membership test in
+# `scripts/renderer/tests/test_renderer_secret_checks.py`. The set is empty: its two members,
+# `homepage_href` and `authelia_service_rules`, took only `domain`, which is no longer a
+# secret key, and kept as members they would accept a later secret passed to either filter.
+PASSTHROUGH_FILTERS: frozenset[str] = frozenset()
 
-# The keys rule 3 lets leave a Secret. Both are identifiers, not credentials: `domain` names
-# every route in IngressRoutes, Middlewares and ConfigMaps, and `email` the ACME and alert
-# addresses. A key that may leave a Secret for one kind only is a `(key, kind)` pair, never a
-# member here.
-PLACEHOLDER_ANYWHERE = frozenset({"domain", "email"})
+# The keys rule 3 lets leave a Secret. `email` is an identifier, not a credential: it names
+# the ACME and alert addresses. A key that may leave a Secret for one kind only is a
+# `(key, kind)` pair, never a member here.
+PLACEHOLDER_ANYWHERE = frozenset({"email"})
 
 # A case-insensitive fragment of the sentinel `HOMELAB_SECRET__K__END`. A transform that only
 # partly alters a sentinel, such as `lower`, leaves it in the output.
@@ -179,17 +172,13 @@ KNOWN_VIOLATIONS = frozenset(
         _rule5(
             "mosquitto", "config-secret.yaml.j2", "filter string", "mqtt_password_hash"
         ),
-        # Rule 5: the `observability_prometheus_config` set block outputs `{{ domain }}`, so it
-        # is an alias of `domain`, and the Deployment hashes it with `hash('sha1')`. Under Flux
-        # the hash would cover the placeholder, so a `domain` change would not restart
-        # Prometheus. #4952; R2's PR 8 moves the key out of the hashed text.
-        _rule5("observability", "prometheus.yaml.j2", "filter hash", "domain"),
     }
 )
 
 
-# The fewest in-scope templates whose syntax tree names a secret key: 59 at `70591c307`.
-RULE5_FLOOR = 59
+# The fewest in-scope templates whose syntax tree names a secret key: 59 at `70591c307`, and
+# 46 once `domain` left the secret keys (R2's domain PR 2b).
+RULE5_FLOOR = 46
 
 
 class NamedUse(NamedTuple):
@@ -210,18 +199,6 @@ RULE5_MEMBERS = (
         _ROLE_TEMPLATES.format("uptime-kuma", "secret.yaml.j2"),
         "kuma_status_page_sync_push_token",
         "filter default",
-        1,
-    ),
-    NamedUse(
-        _ROLE_TEMPLATES.format("homepage", "config/services.yaml.j2"),
-        "domain",
-        "argument to homepage_href",
-        21,
-    ),
-    NamedUse(
-        _ROLE_TEMPLATES.format("authelia", "config-secret.yaml.j2"),
-        "domain",
-        "argument to authelia_service_rules",
         1,
     ),
     NamedUse(

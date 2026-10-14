@@ -76,35 +76,22 @@ NON_SECRET_VARS_LOOKUPS = frozenset(
 )
 
 # The uses the alias clauses must find and accept on the real tree, as
-# `(template, key, form, count)`: the headlamp default, the uptime-kuma bridge row's `tags`,
-# whose `{% if tags %}` is the length test, and the IngressRoute macro's loop target `host`.
-ALIAS_MEMBERS = (
-    (
-        "ansible/roles/k8s/headlamp/templates/deployment.yaml.j2",
-        "domain",
-        "value alias headlamp_k8s_oidc_issuer_url",
-        1,
-    ),
-    (
-        "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2",
-        "domain",
-        "container alias tags",
-        2,
-    ),
-    (
-        "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2",
-        "domain",
-        "length test in an if",
-        1,
-    ),
-    ("ansible/templates/ingressroute.yml.j2", "domain", "value alias host", 1),
-)
+# `(template, key, form, count)`. It is empty: every alias the tree held was an alias of
+# `domain`, which is no longer a secret key. The role-default fixture pair in
+# `scripts/renderer/tests/test_renderer_secret_aliases.py` is the clause's proof that it can
+# go red.
+ALIAS_MEMBERS: tuple[tuple[str, str, str, int], ...] = ()
 
-# The bindings rule 5 must see and must not read as an alias, as `(template, name)`. It is
-# empty because the `observability_prometheus_config` set block in `prometheus.yaml.j2`
-# outputs `{{ domain }}` and so is an alias, which its `KNOWN_VIOLATIONS` entry records
-# (#4952). R2's PR 8 moves the key out of that block and restores the member here.
-NOT_ALIASES: tuple[tuple[str, str], ...] = ()
+# The bindings rule 5 must see and must not read as an alias, as `(template, name)`. The
+# `observability_prometheus_config` set block holds the non-literal `vars` lookup in
+# `NON_SECRET_VARS_LOOKUPS` and no key, so the lookup alone must not make it an alias of a
+# key: the Deployment hashes the block with `hash('sha1')`.
+NOT_ALIASES: tuple[tuple[str, str], ...] = (
+    (
+        "ansible/roles/k8s/observability/templates/prometheus.yaml.j2",
+        "observability_prometheus_config",
+    ),
+)
 
 
 def not_alias_problems(

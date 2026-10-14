@@ -44,7 +44,8 @@ steps, and this page describes each piece once its PR has merged.
   with the pinned flux CLI and compares them, and `fluxprobe` checks that CLI on fixtures
   first. CI's `flux_roundtrip` job runs both (*The round trip*).
 - `scripts/renderer/renderer_lib/secret_checks.py` holds `PASSTHROUGH_FILTERS`, the filters
-  that only interpolate a secret key (*Filters that only interpolate a secret*).
+  that only interpolate a secret key, which is empty (*Filters that only interpolate a
+  secret*).
 - The standalone-value guard: `placeholders.py`'s standalone key sets and `GUARD_DEFERRED`,
   `scripts/renderer/standalone_map.py` and the map it commits, the resolver in
   `scripts/lib/plain_scalar.py`, `ansible/filter_plugins/standalone_guard.py`, and two tasks
@@ -58,11 +59,15 @@ A shadow render never reads a secret. Every key of `ansible/vars/secrets.yml` re
 stub instead, which the filter `homelab_secret_stub` builds:
 
 - A key `K` becomes `stub-` plus `K` with underscores turned to hyphens, such as
-  `stub-domain`. That shape is a valid DNS label, so a stubbed host name still passes
+  `stub-email`. That shape is a valid DNS label, so a stubbed host name still passes
   `kubectl apply --dry-run=server`.
 - `become_password` never takes a stub. It is the one name in `NEVER_STUB`, because
   `ansible/pre_tasks/load_secrets.yml` hands it to privilege escalation and no template
   reads it.
+- `domain` takes no stub and no placeholder. It is the one name in `PUBLISHED`, because the
+  operator ruled on 2026-10-14 that it is a variable, not a secret. Every render reads its
+  value from `ansible/inventory/group_vars/all.yml`. It leaves `PUBLISHED` once the operator
+  deletes it from `ansible/vars/secrets.yml`.
 
 Two more filters serve the stub-file refusals in the playbook preamble (*A stub file stops
 outside a k8s dry run*). `homelab_stub_keys` lists the key names that take a stub, from the parsed `secrets.yml`. It
@@ -291,7 +296,7 @@ rule, the tag, the file, the document as `Kind/name` or the refused form, and th
 |---|---|---|
 | `known-key` | the output of a directory that substitutes | a `${NAME}` whose name is not a key of `ansible/vars/secrets.yml` |
 | `no-bare-dollar-brace` | the output, read as Flux reads it, each `$$` paired first | a `${` that is not a placeholder of pass 3, and a sentinel fragment in any directory |
-| `confined-to-secret` | the kind of each rendered document | a placeholder outside `kind: Secret`, except `domain` and `email` (`PLACEHOLDER_ANYWHERE`) |
+| `confined-to-secret` | the kind of each rendered document | a placeholder outside `kind: Secret`, except `email` (`PLACEHOLDER_ANYWHERE`) |
 | `no-sops-manifest-key` | the output | a placeholder of a key in `SOPS_MANIFEST_KEYS`, the multi-line keys Flux cannot substitute |
 | `no-secret-expression` | the syntax tree of every `.j2` under the k8s roles' `templates/` and `ansible/templates/`, but `*.sh.j2` | any form of a secret key that could change its value |
 
@@ -330,29 +335,29 @@ transform of the key. It reads two kinds of binding.
   A value that names a key is an alias for it, the text around an interpolation counts as a
   `~` concatenation, and a transform in the value is a violation. Every template that uses
   the variable then treats it as the key, and an alias of an alias counts too. The tree has
-  one, `headlamp_k8s_oidc_issuer_url`, which is `https://auth.{{ domain }}`.
+  none since `domain` was published. Its one alias was `headlamp_k8s_oidc_issuer_url`,
+  `https://auth.{{ domain }}`.
 
 The residual: rule 5 has no types, so a part of a container alias is untyped. A loop over a
-part that holds a string, such as the `host` in authelia's `rule.domain` loop, would iterate
-the string character by character, and the check would accept it. No template iterates such a
+part that holds a string would iterate the string character by character, and the check
+would accept it. No template iterates such a
 part, so a reviewer reads any new `{% for %}` over a part of a container alias as a
 transform.
 
 `KNOWN_VIOLATIONS` holds every violation the first fleet render found and the tree still has:
-rule 4 on authelia's and pi-peer-backup's Secrets, and rule 5's six entries. Those are the two
-`indent`s on those keys, two `trim`s, mosquitto's `string`, and the
-`hash('sha1')` on Prometheus's config block, which now outputs `domain`
-([#4952](https://github.com/DanielH2018/server/issues/4952)). R2's PRs
-4 to 8 remove them, and an entry that no longer matches fails the check, so the set shrinks
+rule 4 on authelia's and pi-peer-backup's Secrets, and rule 5's five entries. Those are the two
+`indent`s on those keys, two `trim`s and mosquitto's `string`. R2's PRs 4 to 7 remove them, and an entry that no longer matches fails the check, so the set shrinks
 only through a fix. R2's PR 5 removed Home Assistant's two entries, the `from_json` parse and
 the Secret that embedded its output through `indent`. R2's PR 3 removed the 24 truthiness
-tests, each now `{% if K is defined %}`.
+tests, each now `{% if K is defined %}`. Domain PR 2b removed the `hash('sha1')` on
+Prometheus's config block, which output `domain`
+([#4952](https://github.com/DanielH2018/server/issues/4952)), by publishing `domain`.
 
 Each rule must find its named members, so a rule that stops matching cannot pass: rule 3
 `${email}` in traefik's `traefik-static` ConfigMap, rule 1 a placeholder in authelia's config
 Secret, rule 2 the escaped `$${` in qbittorrent's `qbittorrent-netns-reset` ConfigMap, rule 4 every
-`SOPS_MANIFEST_KEYS` key in `ansible/vars/secrets.yml`, and rule 5 at least 59 templates that
-name a key and four accepted uses. A `--role` render asserts a member of rules 1 to 4, and
+`SOPS_MANIFEST_KEYS` key in `ansible/vars/secrets.yml`, and rule 5 at least 46 templates that
+name a key and two accepted uses. A `--role` render asserts a member of rules 1 to 4, and
 counts their `KNOWN_VIOLATIONS` entries stale, only for the tags it rendered. Rule 5 reads
 the whole tree on every run.
 
@@ -392,13 +397,11 @@ PR 2's `KNOWN_VIOLATIONS` ratchet exists: every template outside the lists that 
 `PASSTHROUGH_FILTERS` in `scripts/renderer/renderer_lib/secret_checks.py` names the repo
 filters that place an argument into their output unchanged. Its reader is rule 5, which
 accepts a secret key as an argument to a member and refuses it as an argument to any other
-filter. The set is closed and holds two members, each passed `domain`:
+filter. The set is closed and empty. Its two members, `homepage_href` and
+`authelia_service_rules`, were each passed `domain` alone, so they left the set when `domain`
+was published. As members they would accept a later secret passed to either filter.
 
-- `homepage_href`, from `ansible/filter_plugins/homepage_tiles.py:homepage_href`;
-- `authelia_service_rules`, from
-  `ansible/filter_plugins/authelia_access.py:authelia_service_rules`.
-
-Each member passes a membership test in
+A member must pass a membership test in
 `scripts/renderer/tests/test_renderer_secret_checks.py`. The test calls the filter in every
 call shape the templates write, once with the sentinel `r2-sentinel` for the key and once with
 `a.b-c.example`. The first output, serialised as JSON, must hold the sentinel. Replacing the
@@ -434,11 +437,11 @@ It runs two passes:
    placeholder side (*What the pinned flux CLI does*). A difference therefore marks a
    standalone use of a key that the guard does not cover anywhere. The pass cannot see a
    missed site of a key that is mapped under another tag, such as a new standalone
-   `${domain}`, because that key keeps its stub fleet-wide. The coverage test catches that
+   `${email}`, because that key keeps its stub fleet-wide. The coverage test catches that
    one (*The standalone-value guard*). `--guard-map FILE` reads another map than the
    committed one, so `{}` sets every key to `0123` again.
 
-Three things are left out of the comparison, by name and by count, and nothing else:
+Two things are left out of the comparison, by name and by count, and nothing else:
 
 - **The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names.** These are authelia's
   `Secret/authelia-config` and pi-peer-backup's `Secret/pi-peer-backup-ssh`, which still
@@ -446,20 +449,15 @@ Three things are left out of the comparison, by name and by count, and nothing e
 - **The files a role's `render_sops_manifests` names.** Placeholder mode emits no document for
   them, and each stub render drops the same files. Each pass counts the documents it dropped
   and fails unless the count equals the number of entries in the tags it built.
-- **The annotations `UNCOMPARED_ANNOTATIONS` names**, in `renderer_lib/roundtrip.py`. It holds
-  observability's `checksum/config`, written by `checksum_annotation('config', ...)` on each
-  of five workloads. Each hashes a rendered config that holds placeholders on one side and
-  stub values on the other, so the two hashes differ although substitution restores every
-  value. R2 accepts this under *Restart triggers lose sight of secrets*: a rotated secret
-  rolls no pod, and target slice D3 owns the restart mechanism. The count left out must
-  equal the `checksum_annotation` calls that write the annotation in the role's templates,
-  and Prometheus's Deployment must be among them.
 
-A document that loses an annotation is serialised again on both sides, by the same code.
+Every `checksum/...` pod annotation is compared. Until domain PR 2b the round trip also left
+out observability's five `checksum/config` annotations, because Prometheus's hashed config
+held `${domain}`. No hashed config holds a placeholder since `domain` was published, so a
+placeholder that reaches one is a difference.
+
 Each pass prints a summary line, such as `roundtrip: 58 tags, 4 deferred directories, 47
-substituting, 450 objects, 2 documents in KNOWN_VIOLATIONS and 5 annotations in
-UNCOMPARED_ANNOTATIONS left out, 0 differences, 1 documents in render_sops_manifests, with each
-key's R1 stub`. `roundtrip` exits 0 only when both passes find no difference and each
+substituting, 450 objects, 2 documents in KNOWN_VIOLATIONS left out, 0 differences, 1
+documents in render_sops_manifests, with each key's R1 stub`. `roundtrip` exits 0 only when both passes find no difference and each
 exclusion count holds.
 
 It needs the pinned flux CLI. daniel-box has none, so it runs in CI's `flux_roundtrip` job.
@@ -533,7 +531,7 @@ Measured on CI run 38426501907 with flux v2.9.6:
 ## The standalone-value guard
 
 A *standalone use* is a placeholder that is the whole scalar of a field, such as
-`main: ${domain}` or `account: "${mullvad_account}"`. Flux substitutes without the template's
+`email: ${email}` or `account: "${mullvad_account}"`. Flux substitutes without the template's
 quotes, so it types a standalone value by its text (*What the pinned flux CLI does*). A value
 such as `0123`, `yes`, `1e3`, `null` or `2001-12-14` stops being the same string. In a
 Secret's `stringData` the apply then fails, and elsewhere the object changes meaning. No
@@ -599,7 +597,7 @@ derives them nowhere else, so R3's PRs shrink the refusal as they drop facts. Th
 ## Stub output is never published
 
 A stub render is a comparison input. Nothing may push it as the cluster artifact, because
-`domain` is a secret key too: a stubbed route matches `*.stub-domain` and answers no request.
+every secret key in it holds a stub, not a value the workload can use.
 The plan's section *Stub output is never published* names the guards later slices add.
 A publish job states its mode by passing no `--secret-stubs` (C1 *Only placeholder mode
 publishes*).
