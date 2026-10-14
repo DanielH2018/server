@@ -3,8 +3,8 @@
 Status: PLANNED
 
 Depends on: [D2](d2-first-leaf.md), [R2](../render/r2-secret-placeholders.md). D3.0 to D3.3c
-need only D2.1 to D2.6c, and D3.3a also needs D4.3a, as the slice index says. D3.4 to D3.9
-need all of D2.
+need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census, as the slice
+index says. D3.4 to D3.9 need all of D2.
 
 Unblocks: [D5](d5-bulk-move.md). PR D2.7 of [D2](d2-first-leaf.md) does not wait on D3,
 because the operator ruled on 2026-10-14 that `domain` is published (C3).
@@ -226,9 +226,8 @@ delivery path, which D5 uses when their roles move.
     - D1's Alert `commit-status` sends every Kustomization event to the GitHub provider, with
       context `flux/<name>`, so any Kustomization in the bundle posts its own status.
     - The publish census admits the flux-owned tags plus the members of `SHARED_KINDS`, a
-      closed literal set that ships empty with a reserved-name check. C3 and the slice index
-      put that in D4.3a. D2's plan puts the same in D2.6b. D4.3 adds the rule for the
-      documents a tag's file holds.
+      closed literal set that ships empty with a reserved-name check. C3 and D2's plan put
+      that in D2.6b. D4.3 adds the rule for the documents a tag's file holds.
     - D2.6b writes `postBuild.substituteFrom` naming `homelab-cluster-vars` on each tag
       whose render holds a placeholder. D2 states that unit per tag, after C1, and D3.3b
       reads it per directory, as R2 does. D2.6c's source gate in `promote.py check-bundle`
@@ -485,10 +484,10 @@ operator's step.
 ### Where the `cluster-vars` Kustomization is published (D3.3a)
 
 `cluster-vars` is the first shared kind, a Kustomization that is not a deploy tag. The rule
-that admits it exists before D3: C3 and the slice index have D4.3a ship `SHARED_KINDS` empty,
-with the allowlist census and the reserved-name check, and D2's plan puts the same in D2.6b.
-D3.3a waits on that PR and adds one literal member, `cluster-vars`. It writes no census or
-reserved-name logic of its own.
+that admits it exists before D3: C3 and D2's plan have D2.6b ship `SHARED_KINDS` empty, with
+the allowlist census and the reserved-name check. D3.3a waits on that PR, as part of D2.1 to
+D2.6c, and adds one literal member, `cluster-vars`. It writes no census or reserved-name
+logic of its own.
 
 - **Layout.** The Flux object is the only document in `out/flux/cluster-vars.yaml`. Its
   directory, `out/cluster/cluster-vars/`, holds the dotenv file and this
@@ -780,7 +779,7 @@ procedure, and `docs/break-glass.md` lists the key in its recovery kit.
       worktree and never in the primary checkout. A no-change `write` leaves every file
       byte-identical, so its exit status proves that each committed value passes the new
       refusals. A refusal follows Open question 7.
-6. **D3.3a — The `cluster-vars` kind** (about 120 lines). Waits on D4.3a.
+6. **D3.3a — The `cluster-vars` kind** (about 120 lines). Waits on D2.6b, which D3's header already covers.
     - The renderer adds `cluster-vars` to `SHARED_KINDS`, emits `out/flux/cluster-vars.yaml`
       and `out/cluster/cluster-vars/`, and gains `--shared-only`. The publish step's no-tag
       branch calls it. The census gains the shared-kind file clause, and the publish job runs
@@ -1244,10 +1243,9 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
       key the question named, stays a secret placeholder.
 
    Resolution: settled by the ruling.
-5. **What is `SHARED_KINDS`'s origin, D4.3a or D2.6b?** C3 and the slice index name D4.3a.
-   D2's plan ships the set in D2.6b, and D4's step list has no D4.3a. Resolution: D3.3a waits
-   on whichever PR ships the empty set, census and reserved-name check. The contracts.md
-   maintainer and D4 reconcile the name (cross-slice notes).
+5. **Resolved: what is `SHARED_KINDS`'s origin?** D2.6b ships the empty set, the census and
+   the reserved-name check. D4 has no D4.3a (D4-R10-01), and C3 credits D2.6b. D3.3a waits on
+   D2.6b through D2.1 to D2.6c and on no PR of D4.
 6. **Contract amendments this slice still needs.** C1's shared-kind output, its escape rule
    and C3's shared kinds are already in contracts.md. Proposed wording for the rest:
     - C3 *Per-role fields* gains a fourth field: "`decryption: {provider: sops, secretRef:
@@ -1261,8 +1259,8 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
       merges.
     - C1 *Modes* gains `cluster --out DIR --shared-only`, which writes the shared kinds and
       the root and no tag, for a publish with no flux-owned tag. Gate: before D3.3a merges.
-    - The slice index names D3.3a for the D4.3a edge and D3.3b for D2.7's edge, and C3's
-      *Shared kinds* names D3.3a.
+    - **Applied.** C3's *Shared kinds* names D3.3a. The slice index has no D4.3a edge, and
+      D2.7 no longer waits on D3.
     - C3's value rule gains `{{`: "A value holds no newline, double quote, backslash,
       control character or `{{`". Authelia's template filter parses its whole
       configuration file, and `write` already refuses the run. Gate: before D5's authelia

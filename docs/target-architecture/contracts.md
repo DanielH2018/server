@@ -973,3 +973,9 @@ Applied to this page:
   now states that `owner` takes `flux` or `released`. D2.1a, D2.1b, D2.1d and D2.2 already
   implement `released` in code, so the contract now matches the code. *Requests on C4*
   leaves the list, which clears the gate before D2.7 merges.
+- **D2.5 and D2.6b own what the contract credited to D4.3a** (D2 Open question 6, D4 Open
+  question 5). C2 *Verification* credits D2.5 for the name-based expected statuses. C3
+  *Shared kinds* and *Publish census* credit D2.6b for the empty `SHARED_KINDS` and the
+  allowlist census. The slice index has no D4.3a edge: D3's row waits on D2.1 to D2.6c, which
+  include D2.6b. The round 2 entry for X2-11 made these edits, so this entry records that the
+  request is applied, and the gates before D2.5 and D2.6b are clear.

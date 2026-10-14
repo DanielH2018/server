@@ -419,7 +419,7 @@ The 59 Deployments and 5 DaemonSets that carry `restartedAt` roll once at their 
 ### Mechanisms first, then waves
 
 ```text
-D5.1a1 per-tag kinds in D4.3a's allowlist census, reserved names, deletionPolicy
+D5.1a1 per-tag kinds in D2.6b's allowlist census, reserved names, deletionPolicy
 D5.1a2 prune-disabled labels, claims and suspend fields in digests.json, collision census
 D5.1a3 Job census: TTL, names, backoffLimit, rerun-safe, connection helper
 D5.1b the suspend lever: render, no `suspend: false`, promote exclusion, hand-write field manager
@@ -465,8 +465,8 @@ D5.4a1 image contexts ─▶ D5.4a2 CI images ─▶ (operator: packages public)
 - **Where each Kustomization is written.** D5 builds on the layout that C1 and C3 already
   state, and changes one timing in it (Open question 16):
     - **What D2 to D4 leave.** D2.6b adds the publish census with an empty `SHARED_KINDS`.
-      D4.3a makes the census an allowlist computed from the renderer's inputs, never from
-      its output, and ships `SHARED_KINDS` still empty. A shared kind has its own file,
+      The census is an allowlist computed from the renderer's inputs, never from its output,
+      and `SHARED_KINDS` ships empty. A shared kind has its own file,
       `out/flux/<name>.yaml`, holding exactly the Kustomization `<name>`, and its own
       directory, `out/cluster/<name>/`. A member with no file fails the census (D4, *A shared
       kind has its own file*). D3.3a adds `cluster-vars`, the first member. The expected
@@ -487,7 +487,7 @@ D5.4a1 image contexts ─▶ D5.4a2 CI images ─▶ (operator: packages public)
     - **Reserved names.** D5.1a1 adds a literal list of reserved names, `soak` and
       `homelab-namespace`, beside the members of `SHARED_KINDS`, so no deploy tag can take
       either name before its kind exists. It also reserves the suffixes `-snapshot` and
-      `-verify`, beside D4.3a's `-deferred`.
+      `-verify`, beside D4.2's `-deferred`.
     - D2's `out/digests.json` sits at the bundle root (C1). No Kustomization's path reaches
       it.
     - Red fixtures: an unknown extra document in a tag's file, an unknown extra file, a
@@ -1819,7 +1819,7 @@ sizes its batch of roles against that projection.
   baseline finds credentials in ConfigMaps too, and the repository is public.
 - For a `Recreate` role, the window it lands in.
 
-1. **D5.1a1 — The publish layout** (about 150 lines). Extends D4.3a's allowlist census,
+1. **D5.1a1 — The publish layout** (about 150 lines). Extends D2.6b's allowlist census,
    which holds `cluster-vars` from D3.3a: the per-tag kinds and where they are written, the
    input rule for each tag's file, the reserved names `soak` and `homelab-namespace` and the
    suffixes `-snapshot` and `-verify`, and `deletionPolicy: Orphan` on every non-tag kind,
@@ -2817,7 +2817,7 @@ includes valheim's initContainer.
     - Reverting D5.1b while a role sets `flux_suspend` resumes that role, so remove the key
       first. Reverting D5.1d while a role is suspended reopens the race it closes, so it goes
       only after every suspend is removed.
-    - Reverting D5.1a1's publish census restores D4.3a's census with D3.3a's `cluster-vars`,
+    - Reverting D5.1a1's publish census restores D2.6b's census with D3.3a's `cluster-vars`,
       which refuses every per-tag D5 kind, so it goes only after the PRs that add those kinds.
     - Reverting D5.1e while observability or pihole is flux-owned leaves that role with no
       restart on a config or Secret change, and restores D3's interim census, which then
@@ -3464,7 +3464,7 @@ includes valheim's initContainer.
       mechanism PRs D5.1a1 to D5.2c and D5.4 need no part of R3.
     - **M1 and M2 as a PR-level sub-edge from D5.3b1 on.** D5.3b1 is the first PR that
       reads their rules, and D5.3a's fence peer needs only the Prometheus that runs today.
-    - **D3 and D4 as PR-level edges.** D5.1a1 needs D3.3 and D4.3a, and each role PR needs
+    - **D3 and D4 as PR-level edges.** D5.1a1 needs D3.3 and D2.6b, and each role PR needs
       D3's per-role pieces.
     - H1, H2 and M6 are sub-edges already.
     - Resolution: the pre-start review round decides, and the index row stays as written

@@ -597,8 +597,8 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
   `out/cluster/<name>/`. The census computes its allowlist from inputs, never from the
   render: the published tags plus `SHARED_KINDS`, a closed literal set that is empty at D2.
   The PR that adds a kind adds its name, with a fixture that passes. D4 Open question 5 agrees
-  that D2 owns this layout, the census and the name-based statuses. C2 and C3 still name
-  D4.3a, and Open question 6 requests the amendment.
+  that D2 owns this layout, the census and the name-based statuses. C2 and C3 credit D2.5
+  and D2.6b, as Open question 6 records.
 - **The renderer refuses a reserved tag name, as C3 places it.** D2.6b's render fails on a
   deploy tag named `homelab`, the root Kustomization's name, or named after a member of
   `SHARED_KINDS`. D4.2 adds the `-deferred` suffix to the same check, and D5.1a1 adds
@@ -1687,11 +1687,11 @@ later slices size against:
    shared-kind output are applied. The C3 *Reserved names* and C1 *Cluster output*
    amendments below were applied on 2026-10-14. Proposed wording for the rest, owned by the
    contracts.md maintainer:
-    - C2 *Verification* and C3 *Shared kinds* and *Publish census*: replace "D4.3a" with
-      D2.5 for the name-based expected statuses, and with D2.6b for the empty
-      `SHARED_KINDS` and the allowlist census. D4 Open question 5 asks for the same change.
-      The slice index's "D4.3a needs only D2.5 and D2.6" and "D3.3 also D4.3a" then have no
-      subject. Gate: before D2.5 merges for C2, and before D2.6b merges for C3.
+    - **Applied on 2026-10-14.** C2 *Verification* credits D2.5 for the name-based expected
+      statuses. C3 *Shared kinds* and *Publish census* credit D2.6b for the empty
+      `SHARED_KINDS` and the allowlist census. D4 Open question 5 asked for the same change.
+      The slice index carries neither "D4.3a needs only D2.5 and D2.6" nor "D3.3 also
+      D4.3a". The gates before D2.5 and D2.6b merge are clear.
     - **Applied on 2026-10-14.** C3 *Reserved names*: "The render fails on a deploy tag
       named `homelab`, the root's name," beside the `SHARED_KINDS` members and the
       `-deferred` suffix. D2.6b adds the check in the renderer, and D4.2 adds the suffix to
