@@ -1,0 +1,3 @@
+---
+# The armed half. Empty until H3.4b adds the repository half: the system users, their
+# directories, homelab-apt-repo.service, the ufw rule and the signing key.

@@ -1,0 +1,16 @@
+---
+# Dispatcher, the gitops_deploy shape. The playbook entry gates the role on has_gitops, and
+# homelab_builder_enabled picks the half, so a host that disarms the builder still reaps what
+# an earlier armed run installed.
+#
+# Both halves are STATIC imports, so `narrow_setup` can follow them. The `when:` here is
+# attached to every imported task, and no task in the role changes homelab_builder_enabled.
+# The two imports carry no tags: a tag here would be inherited by every task under it.
+
+- name: Install the host-package builder on the GitOps host
+  ansible.builtin.import_tasks: install.yml
+  when: homelab_builder_enabled | bool
+
+- name: Reap the host-package builder from a host that disarms it
+  ansible.builtin.import_tasks: teardown.yml
+  when: not (homelab_builder_enabled | bool)

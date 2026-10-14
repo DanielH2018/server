@@ -28,6 +28,9 @@
     # never overlap.
     - { role: hypervisor, tags: ["hypervisor"] }
     - { role: gitops_deploy, tags: ["gitops_deploy"] }
+    # After gitops_deploy, on the same host. The host-package builder publishes from the
+    # checkout the deployer keeps; the role dispatches on homelab_builder_enabled internally.
+    - { role: homelab_builder, tags: ["homelab_builder"], when: has_gitops }
     # After gitops_deploy: it reads /var/lib/gitops-deploy and dispatches on has_gitops.
     - { role: deploy_ui, tags: ["deploy_ui"] }
     # Per-user, become: false throughout — they manage the connecting user's home, not
