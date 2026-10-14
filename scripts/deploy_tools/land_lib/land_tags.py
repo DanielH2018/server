@@ -21,7 +21,6 @@ with the PR's own `changedFiles`, this reports `fallback` and the caller widens 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 """
 
-import json
 import subprocess
 import sys
 from enum import StrEnum
@@ -36,8 +35,6 @@ sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_t
 
 # `service_tags_at` is re-exported rather than defined here: `narrow_broad` needs it too,
 # and importing this module for it would put a cycle through `deploy_tags`.
-from lib.cli_help import ArgumentParser
-from lib.git import git
 from lib.render_guard import (  # noqa: F401
     containers_entries_in,
     landing_hosts_for_tags,
@@ -64,7 +61,6 @@ from deploy_tools.deploy_lib import tags as deploy_tags
 # Bare, from scripts/deploy_tools, inserted above.
 import narrow_setup
 import reach
-from deploy_tools.land_lib.land_reach import remaining_setup_hosts_note
 
 # Re-exported, not defined here: the path-to-role mappers live in `reach` and the shared-role
 # expansion built on them in `land_shared`. Every reader keeps its old name, and
@@ -428,82 +424,3 @@ def quiet_paths(paths: list[str], range_: str) -> set[str]:
         return docs | deploy_tags.comment_only_paths(paths, old, new)
     except subprocess.CalledProcessError, OSError:
         return docs
-
-
-def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
-    """Print one fact about a PR's file list -- tags, plane note, self-applied flag, or remaining-setup-hosts note.
-
-    Which one prints depends on `--plane`/`--self-applied`/`--remaining-setup-hosts`; with
-    none of them, prints the derived `--tags` value. Always exits 0. `repo` is where `--plane`
-    derives this PR's own narrowing over `--range`, a seam for the tests. The CLI has no merge
-    commit to find a receipt by, so it narrows the way a fast-path landing does.
-    """
-    parser = ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--json", required=True, help="`gh pr view --json files,changedFiles` output"
-    )
-    parser.add_argument(
-        "--plane",
-        action="store_true",
-        help="print what still needs a manual apply (empty if nothing), not the tags",
-    )
-    parser.add_argument(
-        "--self-applied",
-        action="store_true",
-        help="print `yes` if the tick applies part of this PR itself (empty otherwise)",
-    )
-    parser.add_argument(
-        "--remaining-setup-hosts",
-        metavar="HOST",
-        default=None,
-        help=(
-            "print what a self-applied setup role in this PR still needs beyond HOST -- "
-            "the host the tick just ran on (empty if nothing)"
-        ),
-    )
-    parser.add_argument(
-        "--range",
-        dest="range_",
-        default="",
-        help="`<old>..<new>` — read the diff to drop broad paths whose change is comments only",
-    )
-    ns = parser.parse_args(argv)
-    payload = json.loads(ns.json)
-    paths = [f["path"] for f in payload.get("files", [])]
-    quiet = quiet_paths(paths, ns.range_)
-    if ns.plane:
-        narrow = own_narrow_tags(paths, ns.range_, repo)
-        print(plane_note(paths, quiet=quiet, narrow_tags=narrow))
-        return 0
-    if ns.self_applied:
-        print("yes" if self_applied(paths, quiet=quiet) else "")
-        return 0
-    if ns.remaining_setup_hosts is not None:
-        print(
-            remaining_setup_hosts_note(
-                paths, ns.remaining_setup_hosts, quiet=quiet, pr_range=ns.range_
-            )
-        )
-        return 0
-    tags, source = derive(
-        [f["path"] for f in payload.get("files", [])],
-        # -1 rather than 0: `gh` omitting the field must not be read as agreement with an
-        # empty file list, which would silently license a zero-tag deploy.
-        payload.get("changedFiles", -1),
-        quiet=quiet,
-    )
-    # The callers of what `--plane` stopped naming, as `classify` adds them.
-    if source == DeriveSource.PR:
-        reached = shared_caller_tags(paths)
-        rows = guard_map_rows(
-            paths, ns.range_, lambda *a: git(*a, cwd=repo, check=False)
-        )
-        if rows is not None and "manifests" in reached:
-            reached["manifests"] &= rows
-        tags = sorted(set(tags).union(*reached.values()))
-    print(f"{source} {','.join(tags)}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
