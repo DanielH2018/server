@@ -210,7 +210,9 @@ OWNER_VALUES = frozenset({"flux", "released"})
 def tag_owners(host_vars: Path = K8S_HOST_VARS) -> dict[str, str]:
     """Each deploy tag of a k8s entry in `host_vars` that sets `owner`, to that value.
 
-    An entry without the key is Ansible-owned and maps no tag. An entry that declares `tags`
+    Only `platform: k8s` entries are read, because Flux applies k8s tags alone; an `owner` on a
+    Docker entry is not this reader's to judge. An entry without the key is Ansible-owned and
+    maps no tag. An entry that declares `tags`
     maps each of them, since each selects it. Any value outside `OWNER_VALUES` raises
     ValueError, a bare `owner:` included: a misspelt owner read as Ansible-owned would hand
     the tag to both Ansible and Flux.
