@@ -128,3 +128,35 @@ groups:
             The Kustomization {{ $labels.name }} in {{ $labels.exported_namespace }} has been
             suspended for 24 hours, so Flux applies nothing it owns. If flux_sync_suspend is
             true, set it back and run the flux role; otherwise the suspend was made by hand.
+      # Every kustomize-controller worker is busy and more work is waiting, so applies queue,
+      # the fix for a failing one included. An unchanged Kustomization that is unhealthy holds a
+      # worker for its whole `timeout` on every retry, and `verify`'s timeout leaves those out.
+      # The design is docs/target-architecture/deploy/d4-ordering.md, "Saturated reconcile
+      # workers". The maximum comes from its gauge, because `--concurrent` changes in D5.1. The
+      # two worker gauges share one label set, so `==` matches them whole and the alert keeps
+      # app, instance and pod; an on() there would drop them. The queue's series also carry
+      # `name` and `priority`, so its join names its labels. A broad revision fills the workers
+      # for hours while it progresses, so this is a warning and the soak never reads it. A
+      # failed scrape stale-marks the gauges and restarts the hold. No last_over_time bridges
+      # it: a missed scrape errs toward quiet, and FluxControllerDown pages one that stays down.
+      - alert: FluxWorkersSaturated
+        expr: >-
+          (
+            controller_runtime_active_workers{job="flux", app="kustomize-controller", controller="kustomization"}
+            ==
+            controller_runtime_max_concurrent_reconciles{job="flux", app="kustomize-controller", controller="kustomization"}
+          )
+          and on(pod, controller)
+          (workqueue_depth{job="flux", app="kustomize-controller", controller="kustomization"} > 0)
+        for: 30m
+        labels:
+          severity: warning
+          service: flux
+        annotations:
+          summary: Every kustomize-controller reconcile worker has been busy for 30 minutes.
+          description: >-
+            All {{ $value }} of {{ $labels.pod }}'s reconcile workers have been busy for 30
+            minutes with Kustomizations still queued, so a changed Kustomization waits for a
+            free worker. Unhealthy Kustomizations that each hold a worker for their timeout
+            are the usual cause. List them with kubectl get kustomizations -A; suspending one
+            frees its worker once its current wait ends.

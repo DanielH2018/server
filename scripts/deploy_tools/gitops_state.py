@@ -40,7 +40,7 @@ six hours old. The deployer clears a line itself on any tick that deploys the se
 hand-edited role, or one of the forty denylisted ones. NOTHING PAGES ON THAT CLASS, and every tick and every successful `deploy.sh`
 discharges an entry whose service has since been deployed (#4087), so this command is needed for two cases only: a reverted change,
 and a shared role one of whose callers nothing can prove applied — no tag runs it, or a caller writes no release record
-(`scripts/deploy_tools/shared_role_callers.py:caller_tags` names the callers).
+(`scripts/deploy_tools/shared_role_callers.py:main` names them, less any whose entry sets `owner`).
 
 This is not a path the deployer takes. Its own reverse is
 `DeployerState.clear_manual_plane_applied`, which fires when a tick applies the role's real
