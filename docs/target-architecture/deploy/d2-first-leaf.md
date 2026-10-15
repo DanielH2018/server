@@ -892,7 +892,10 @@ annotation (*Risks*).
 Ansible-owned from the list before `deploy_by_host` sees it. When nothing remains,
 `deploy_by_host` is never called, because it hands its list to `deploy.sh` as given. So a PR
 whose only service is flux-owned, D2.7 among them, waits on promotion and runs no
-`deploy.sh` at all.
+`deploy.sh` at all. An inventory-only flip such as D2.7 derives no tag of its own, because the
+edit is broad. For such a PR, `land.sh` runs the deployer's narrowing over the PR's own range
+and waits on promotion for every tag it names that is not Ansible-owned
+(`land_lib/promotion.py:owned_by_narrowing`, #5146).
 
 **`land.sh` refuses a handback merge while Flux still owns the tag.** Before it merges a PR,
 `land_lib/merge.py` compares `tag_owners` at the PR's base and head. For each tag that the
