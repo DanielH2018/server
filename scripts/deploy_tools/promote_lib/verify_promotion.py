@@ -54,14 +54,16 @@ import yaml
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+# `forge` and `changed_set` import bare, from scripts/deploy_tools.
+_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.cli_help import error
 from lib.exit_codes import FAILED, OK, USAGE_ERROR
 
 import forge
 from changed_set import ROOT, changed_set, footprints
-from promote_wait import kustomization_graph
+from deploy_tools.promote_lib.wait import kustomization_graph
 
 DIGESTS_FILE = "digests.json"
 # The files `verify` reads from each bundle. Nothing else is handed on.

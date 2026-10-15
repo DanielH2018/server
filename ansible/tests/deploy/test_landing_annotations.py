@@ -10,8 +10,10 @@ a panel unwraps is a field the script writes. Same shape as test_deploy_annotati
 import json
 import re
 
+import pytest
 from _helpers import REPO as _REPO
 from deploy_tools.land_lib.ledger import Ledger, annotation_line
+from deploy_tools.land_lib.outcome import Cause, Verdict
 
 _BOARD = (
     _REPO
@@ -81,16 +83,117 @@ def test_a_label_the_ledger_does_not_write_would_be_caught():
     ) == {"not_a_real_label"}
 
 
-def test_the_board_breaks_deploy_failed_down_by_cause():
-    """The reader half: writing `cause` into the annotation splits nothing on its own.
+def _cause_panel() -> dict:
+    """The one panel that groups by `cause`, found by its expr rather than its title."""
+    panels = [
+        p
+        for p in json.loads(_BOARD.read_text())["panels"]
+        if any("by (cause)" in t.get("expr", "") for t in p.get("targets", []))
+    ]
+    assert len(panels) == 1, [p.get("title") for p in panels]
+    return panels[0]
 
-    This asserts a panel reads it, not merely that the field can be parsed.
+
+def _cause_expr() -> str:
+    (expr,) = [
+        t["expr"] for t in _cause_panel()["targets"] if "by (cause)" in t["expr"]
+    ]
+    return expr
+
+
+# The verdicts other than `deploy-failed` that carry a cause, with the cause each carries.
+# No table in outcome.py pairs them; ledger.py's docstring names the same two (#4998).
+_CAUSE_BESIDE_ANOTHER_VERDICT = [
+    (Verdict.TIP_OUTRAN_RETRIES, Cause.DEPLOY_EXIT_STALE),
+    (Verdict.DEFERRED, Cause.PROMOTE_TIMEOUT),
+]
+
+_LABEL_FILTER = re.compile(r'^(\w+)\s*(=~|!~|!=|=)\s*"((?:[^"\\]|\\.)*)"$')
+
+
+def _selects(expr: str, line: str) -> bool:
+    """Whether `expr`'s pipeline keeps `line`, evaluating its line and label filters.
+
+    Only the stages the Landings board uses are understood. Any other stage fails the
+    calling test by assertion, naming the stage, rather than being skipped.
     """
-    exprs = _board_exprs()
-    assert any("by (cause)" in e and 'verdict="deploy-failed"' in e for e in exprs), (
-        exprs
+    selector_end = expr.index("}") + 1
+    pipeline = re.sub(r"\s*\[\$__\w+\]\)+\s*$", "", expr[selector_end:])
+    labels: dict[str, str] = {}
+    # Split on the pipes outside quotes: the fixture filter's regex holds `|` of its own.
+    stages = re.findall(r'(?:[^|"]|"(?:[^"\\]|\\.)*")+', pipeline)
+    for stage in (s.strip() for s in stages):
+        if not stage:
+            continue
+        if stage.startswith("= "):  # the `|=` line filter, split on its pipe
+            if json.loads(stage[2:].strip()) not in line:
+                return False
+        elif stage == "logfmt":
+            labels = dict(re.findall(r'(\w+)=("[^"]*"|\S*)', line))
+        else:
+            m = _LABEL_FILTER.match(stage)
+            assert m, f"stage the test evaluator does not understand: {stage!r}"
+            key, op, value = m.group(1), m.group(2), json.loads(f'"{m.group(3)}"')
+            actual = labels.get(key, "")
+            kept = {
+                "=": actual == value,
+                "!=": actual != value,
+                "=~": re.fullmatch(value, actual) is not None,
+                "!~": re.fullmatch(value, actual) is None,
+            }[op]
+            if not kept:
+                return False
+    return True
+
+
+def test_the_cause_panel_selects_on_a_non_empty_cause():
+    """Verify-by of #4998: the panel selects `cause!=""`, not `verdict="deploy-failed"`.
+
+    The reader half too: writing `cause` into the annotation splits nothing on its own,
+    so this asserts a panel reads it, not merely that the field can be parsed.
+    """
+    expr = _cause_expr()
+    assert re.search(r'\|\s*cause\s*!=\s*""', expr), expr
+    assert 'verdict="deploy-failed"' not in expr, expr
+    assert any("by (verdict)" in e for e in _board_exprs())
+
+
+@pytest.mark.parametrize(
+    ("verdict", "cause"),
+    _CAUSE_BESIDE_ANOTHER_VERDICT,
+    ids=[v.value for v, _ in _CAUSE_BESIDE_ANOTHER_VERDICT],
+)
+def test_the_cause_panel_counts_a_cause_beside_any_verdict(verdict, cause):
+    """A cause beside an exit-75 verdict is a bar on the panel, not only a raw line.
+
+    The panel's own pipeline runs over the line the ledger writes for that landing.
+    """
+    expr = _cause_expr()
+    line = annotation_line(
+        Ledger(pr="1", t_start=0.0, verdict=verdict, cause=cause), 75, 3.0
     )
-    assert any("by (verdict)" in e for e in exprs), exprs
+    assert _selects(expr, line), (expr, line)
+    no_cause = annotation_line(
+        Ledger(pr="1", t_start=0.0, verdict=Verdict.SETTLED), 0, 3.0
+    )
+    assert not _selects(expr, no_cause), (expr, no_cause)
+
+
+def test_the_cause_panel_title_does_not_name_deploy_failed_alone():
+    title = _cause_panel()["title"]
+    if Verdict.DEPLOY_FAILED.value in title:
+        assert all(v.value in title for v, _ in _CAUSE_BESIDE_ANOTHER_VERDICT), title
+
+
+def test_the_board_description_names_every_verdict_that_carries_a_cause():
+    """The description's `cause` sentence said it is empty beside every other verdict."""
+    description = json.loads(_BOARD.read_text())["description"]
+    missing = [
+        v.value
+        for v, _ in _CAUSE_BESIDE_ANOTHER_VERDICT
+        if f"`{v.value}`" not in description
+    ]
+    assert not missing, missing
 
 
 def test_the_board_filters_on_a_literal_the_ledger_writes():

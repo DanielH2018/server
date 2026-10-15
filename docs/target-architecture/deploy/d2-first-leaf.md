@@ -30,6 +30,11 @@ D2.6b, the bundle writer, `digests.json`, its census and the reserved names:
 [#5010](https://github.com/DanielH2018/server/pull/5010). The first `promote` run after it
 reported 0 published tags, and `flux/homelab` read `success` on `6c26fb6f5`.
 
+D2.6c, the publish gates and the object-loss check:
+[#5044](https://github.com/DanielH2018/server/pull/5044). Its first `promote` run,
+38669383075, passed all six jobs on `a5abf8581`. `flux/homelab` read `success`, `last-good`
+moved to prod's digest `sha256:23bfc8e1854c`, and both holds read `none`.
+
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five
 rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3), on
@@ -185,13 +190,18 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
         - `deploy_inventory.py:declared_k8s_services` parses host_vars without YAML.
     4. **`land.sh`.** `scripts/deploy_tools/land_lib/deploy.py:deploy_by_host` runs
        `deploy.sh` once per host.
-    5. **Three more `deploy.sh` callers.**
-        - `scripts/deploy_tools/render_targets.py` lists the tags for the hourly
-          `render_records` dry run. `deploy.sh` refuses the whole tag list when one tag is
-          refused.
-        - `scripts/secrets_mgmt/secret_rotation.py:cmd_rotate` runs `--deploy` from the
-          weekly cron, which reverts the tree when that deploy fails.
+    5. **Two more `deploy.sh` callers, and one more caller of the playbook.**
+        - `ansible/roles/setup/render_records/files/render_records.py` runs
+          `./scripts/deploy.sh --dry-run --skip-staleness-check --tags <list>` for the hourly
+          record run. `scripts/deploy_tools/render_targets.py` only prints that list.
+          `deploy.sh` refuses the whole tag list when one tag is refused.
         - `ansible/roles/setup/deploy_ui/` starts `land.sh` and `deploy.sh`.
+        - `scripts/secrets_mgmt/secret_rotation.py:cmd_rotate` runs `--deploy` from the
+          weekly cron, which reverts the tree when that deploy fails. It does not run
+          `deploy.sh`. `scripts/secrets_mgmt/rotation_tools.py:run_deploy` runs
+          `uv run --frozen ansible-playbook ansible/deploy.yml --tags <list>` itself, so it
+          meets neither `deploy.sh`'s exit 5 nor its locks. The play's `ansible_owned` batch
+          loop (D2.1d) is what keeps a non-Ansible-owned tag out of that run.
 - **Readers that would raise false alarms once Flux owns a role:**
     - `scripts/diagnostics/probe_lib/health.py:release_expected_restarts` reads the last
       Ansible release record and fails a workload as NOT ROLLED when its `restartedAt` is
@@ -221,8 +231,14 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
 - **R2 decides the render mode by one flag.** With `--secret-stubs FILE` the render is R1's
   stub mode. Without it, the render is in placeholder mode, and each secret variable `K` renders
   as `${K}` (R2 *Mode selection*). Stub mode writes R1's `homelab_secret_stub` form,
-  `stub-` plus the key with underscores turned to hyphens, so `domain` becomes
-  `stub-domain`.
+  `stub-` plus the key with underscores turned to hyphens. At the baseline a stub-mode
+  render therefore wrote `domain` as `stub-domain`.
+    - Since R2's domain PR 2b (#5007), `PUBLISHED` in
+      `ansible/filter_plugins/secret_stubs.py` holds `domain`, so `homelab_stub_keys`
+      leaves it out. A stub-mode render writes the inventory value of `domain`, and a
+      placeholder-mode render writes it as a literal, never as `${domain}`. The D2.6c gate
+      tests below still use `stub-domain` and `${domain}`, as fixture inputs a gate must
+      refuse.
 - **bento-pdf's render names one variable that the baseline holds as a secret, `domain`.**
     - `ansible/templates/ingressroute.yml.j2:ingressroute` builds the `.local.` object's Host
       match as `hostname ~ '.local.' ~ domain`, and the `-public` object's as
@@ -274,10 +290,10 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
       `promote.py verify T` and prints a verdict.
     - A `settle` job applies that verdict. It checks out no repository code, holds
       `packages: write` and sets `PROMOTE_TOKEN`. It moves `last-good`, or it writes the
-      hold and then resets `prod`. With the revert rule on, it also clears the hold. Its
-      concurrency group is set by an expression: `promote` on a promote run, and
-      `promote-reset` on D5's `reset_to_last_good` dispatch. One job then serves both
-      without serialising a reset behind a waiting promotion.
+      hold and then resets `prod`. With the revert rule on, it also clears the hold.
+      Neither `verify` nor `settle` joins a concurrency group. *Publication and
+      verification* gives the reason and the two checks that guard a verification in flight
+      instead.
     - The D1.4 workflow test asserts each job's permission map exactly. D1's registry client speaks the OCI distribution API to
   `ghcr.io` with a token from GHCR's token endpoint (D1 *Decisions*).
 - **`DEPLOY_HOLD` has no empty value.** D1 creates the variable as `none`, because `gh`
@@ -414,7 +430,7 @@ applies nothing and says so. No site ever hands an empty `--tags` value on.
 | `land.sh` | Splits the PR's tags before `deploy_by_host`. T waits on promotion (below), and `deploy.sh` runs only when an Ansible-owned tag remains. Before it merges, it refuses a PR that makes T Ansible-owned while T's Kustomization exists (*Rollback*). |
 | `smoke_caller` | Leaves T out of the candidates. `land.sh` would drop T from its `deploy.sh` call, so a flux-owned smoke caller would exercise nothing. |
 | `render_targets.py` CLI | `main` prints a new `render_record_targets(host)`, which leaves T out of the hourly record list. `render_targets()` stays the full universe for the renderer, R1's `compare` and R2. |
-| `secret_rotation.py --deploy` | Leaves T out of its redeploy and runs no `deploy.sh` when nothing remains. D3 gives a rotated cluster secret its path. |
+| `secret_rotation.py --deploy` | `cmd_rotate` drops T before it calls `rotation_tools.run_deploy`, which runs `ansible-playbook ansible/deploy.yml` without `deploy.sh`. It runs no playbook when nothing remains. D3 gives a rotated cluster secret its path. |
 | `probe.py health T` | Ignores the release record when T is not Ansible-owned in the tree (`tag_owners`). |
 | `probe.py releases --stale-only` | Skips T, read the same way. |
 | `manifest-prune-check.sh` | Skips an object labelled `kustomize.toolkit.fluxcd.io/name=<n>` only while a Kustomization `<n>` exists in `flux-system`. It reads that list once per run with the read-only kubeconfig. |
@@ -489,7 +505,8 @@ section calls domain PR 1, 2a, 2b and 3.
 ### Publication and verification
 
 ```text
-render job (one run per green master commit X; a dispatched sha passes D1's ancestry check first):
+render job (one run per green master commit X; a dispatched sha passes D1's ancestry check first;
+            contents: read, checks: read):
   published tags (owner: flux), none ─▶ write out/flux/kustomization.yaml, resources: []
   published tags, some ─▶ homelab_render.py cluster --out out --role <tag> ...
                           placeholder mode, selected by passing no --secret-stubs;
@@ -512,17 +529,20 @@ promote job (concurrency: promote):
                      ─▶ promote T | held | current | error
   promote T ─▶ a pull error exits non-zero, nothing moves
   held or current ─▶ nothing moves;   error ─▶ exit non-zero, nothing moves
-tag job (no checkout; packages: write): tag prod = sha-T, write PROD_DIGEST
-verify job (read-only, statuses: read): promote.py verify T
+tag job (concurrency: promote; no checkout; packages: write):
+     only while prod still names the digest decide read ─▶ tag prod = sha-T, write PROD_DIGEST
+verify job (no concurrency group; contents: read, statuses: read): promote.py verify T
      expected statuses = flux/homelab + flux/<name> for every name in T's changed set:
        footprint differs from prod's digests.json, plus dependsOn dependents,
        minus suspended; a dependent already failing on prod's commit is reported only
      every one success                ─▶ verdict good
      any failure, or timeout          ─▶ verdict failed=<names>
-settle job (no checkout; packages: write; PROMOTE_TOKEN):
-     good   ─▶ tag last-good = sha-T
-     failed ─▶ set DEPLOY_HOLD = "<T> failed=<names>",
-               then tag prod = last-good, write PROD_DIGEST
+settle job (no concurrency group; no checkout; packages: write; PROMOTE_TOKEN):
+     good       ─▶ tag last-good = sha-T
+     failed     ─▶ set DEPLOY_HOLD = "<T> failed=<names>",
+                   then tag prod = last-good, write PROD_DIGEST
+     no verdict ─▶ set DEPLOY_HOLD = "<T> unverified",
+                   then tag prod = last-good, write PROD_DIGEST
 ```
 
 C2 splits the render from the signing, and the decisions from the writes.
@@ -650,15 +670,52 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
     - D5 generalises its PR-time `Removes-Workload` check to `Removes-Object` in parallel,
       with the same trailer grammar. The PR-time check stops the PR, and `decide` stops a
       commit that reaches master without one.
-    - A squash merge keeps only the message it is given, so `land.sh` copies every
-      `Removes-Object:` trailer from the PR's commits into the squash commit's body. D2.6c
-      adds the copy, with a test whose red half drops one trailer. A merge that bypasses
-      `land.sh`, such as Renovate's automerge, carries no trailers. Such a bump that drops
-      an object therefore stalls at `decide`, and `PromotionStalled` pages. That is the
-      intended direction (D5.1f).
-- **The hold names what failed.** `verify` writes `<T> failed=<names>` (C2), where `<names>`
+    - `decide` matches a `Removes-Object:` line anywhere in a commit message, not only in
+      git's final-paragraph trailer block (`scripts/lib/removes_object.py`). The
+      repository's squash default, `COMMIT_MESSAGES`, already writes every PR commit's
+      message into the squash body as a `* <subject>` paragraph, so the line usually
+      reaches master without help. A settings change could turn that default into the PR
+      description or nothing. `land.sh` therefore sends the body itself when a PR commit
+      carries the line: `scripts/deploy_tools/land_lib/merge.py:squash_body` writes every
+      commit's message, then each line again as a final trailer paragraph. With no line,
+      it sends no body. D2.6c added the copy, with the pair
+      `scripts/deploy_tools/tests/test_land_merge_past_review.py::test_a_merge_copies_every_removes_object_line_into_the_body`
+      and
+      `scripts/deploy_tools/tests/test_land_merge_past_review.py::test_a_merge_with_no_removes_object_line_sends_no_body`.
+      A merge that bypasses
+      `land.sh` carries only the lines its commits hold. Renovate's automerge carries none,
+      because no Renovate commit writes one. A merge that replaces the body, such as
+      `gh pr merge --body`, can drop one. Such a merge that drops an object therefore
+      stalls at `decide`, and `PromotionStalled` pages. That is the intended direction
+      (D5.1f).
+- **The hold names what failed.** `settle` writes `<T> failed=<names>` (C2), where `<names>`
   comma-joins the expected names that read `failure` or had no status at the timeout. At the
   drill that is `<T> failed=bento-pdf`.
+- **A `verify` with no verdict holds as `<T> unverified` (C2).** The `verify` job can end
+  without printing a verdict: it crashes, it hits its `timeout-minutes`, or it is cancelled.
+  `settle` runs on `always()`, so it still weighs that run, and once `prod` has moved,
+  anything but `good` holds. With no names to report, it writes `<T> unverified`. A `failed`
+  verdict whose names are not a comma-joined list of lowercase names holds in the same form.
+  The value is a hold under C2's rule that any value but `none` holds. The revert rule never
+  passes it, so it clears only by hand.
+- **A verification in flight blocks the next promotion (C2).** `verify` and `settle` join no
+  concurrency group. GitHub keeps one pending job per group, and a newer one cancels it, so a
+  pending `settle` in the group `promote` could be evicted with its hold unwritten. Two checks
+  guard the gap instead:
+    - `decide` waits while `prod` and `last-good` name different digests, which they do only
+      between a run's `tag` and its `settle`. It polls every 30 seconds and gives up as
+      `current` after 40 minutes, longer than `verify`'s and `settle`'s `timeout-minutes`
+      together, with ten minutes for runner queueing;
+    - `tag` moves `prod` only while `prod` still names the digest `decide` read. Two runs can
+      decide on the same `prod` when the second run's `promote` job runs while the first
+      run's `tag` waits on the group. The second `tag` finds `prod` moved and moves nothing.
+
+  The decision is the marker `DECIDED: a verification in flight is guarded by two checks` in
+  `scripts/deploy_tools/promote_lib/verify_promotion.py`, and
+  `ansible/tests/repo/test_promote_workflow_verify.py` fails a `verify` or `settle` job that
+  joins a group. A run that never settles stalls promotion as `current`, which D2.6d's
+  `PromotionStalled` alert pages. D5's `reset_to_last_good` dispatch moves `prod` outside
+  this group as well, so D5 must design it against both checks (C2 *Requests on C2*).
 - **The revert rule is code behind a flag that stays off (C2).** D2.5 writes the rule and a
   module constant in `promote.py` that disables it. Turning it on is an **operator-only**
   ruling (Open question 11), made in a PR of its own. While the flag is off, `decide` treats
@@ -667,24 +724,27 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
     - `decide` may promote a candidate U that descends from the held T when, for every name
       in `<names>`, U's `footprint` digest equals `last-good`'s. Reading `last-good`'s
       `digests.json` costs one more pull, made only while a `failed=` hold stands;
-    - when U verifies, `verify` sets `DEPLOY_HOLD` to `none`;
-    - a hold in any other form, and a bundle with no `digests.json`, never qualify.
+    - when U verifies, `settle` sets `DEPLOY_HOLD` to `none`;
+    - a hold in any other form, `<T> unverified` included, and a bundle with no
+      `digests.json`, never qualify.
 - **`PROD_DIGEST` records each move of `prod` (C2).** Each time `promote.py` moves `prod`,
   on a promotion or a reset, it writes the digest it moved to into the repo variable
   `PROD_DIGEST` with `PROMOTE_TOKEN`. The deploy-pipeline exporter (D2.6d) compares it with `prod`'s live
   digest. The first move after D2.5 creates the variable.
 - **The hold is written before the reset**, the order `deploy_handlers.py:_rollback_k8s`
   uses for `hold_sha`. If the reset fails, the hold still stops the next promotion. If the
-  hold write fails, `verify` still attempts the reset and then exits non-zero, naming both
+  hold write fails, `settle` still attempts the reset and then exits non-zero, naming both
   results. The reset puts `prod` back on a verified revision. Without a hold, the next run
   may promote T again, which fails `verify` again and retries the hold. That costs one more
   failed rollout per run while the old pod serves. Skipping the reset instead would leave
   Flux retrying T, and the next run could build newer commits on it.
-- **The verify step's permissions and token.** D2.5 adds `statuses: read` to the `promote`
-  job, for the commit-status read with `GITHUB_TOKEN`. The `last-good` and `prod` tag moves
-  use `GITHUB_TOKEN` logged in to `ghcr.io`, as D1's tag moves do. `PROMOTE_TOKEN` is set as
-  `GH_TOKEN` on the verify step as well, because only that token writes `DEPLOY_HOLD`
-  (D1 *Decisions*).
+- **The verification jobs' permissions and tokens.** The `verify` job holds
+  `contents: read` and `statuses: read`, for the commit-status read with `GITHUB_TOKEN`, and
+  it carries no `PROMOTE_TOKEN`. The `promote` job holds no `statuses: read`. The `last-good` and
+  `prod` tag moves in `settle` use `GITHUB_TOKEN` logged in to `ghcr.io`, as D1's tag moves
+  do. `settle` sets `PROMOTE_TOKEN` as `GH_TOKEN`, because only that token writes
+  `DEPLOY_HOLD` and `PROD_DIGEST` (D1 *Decisions*). The `render` job gains `checks: read`
+  beside `contents: read`, for D1's CI re-check of a dispatched `sha`.
 - **The timeout is derived, not chosen.** It is the largest Kustomization `timeout` in the
   bundle, plus the OCIRepository interval, plus the Kustomization `retryInterval`.
 - **The first verified run seeds `last-good`.** When `last-good` is absent, `promote.py`
@@ -894,7 +954,8 @@ through Alertmanager from the first real flip.
                                                            with its footprint rules
   .github/workflows/promote.yml                          render, check-bundle, gitleaks, verify T,
                                                            dispatch with the ancestry check;
-                                                           statuses: read
+                                                           verify: statuses: read;
+                                                           render: checks: read
   ansible/roles/k8s/monitor-bridge/                      + deploy-pipeline family, scrape
                                                            endpoint, read-only token (D2.6d)
   ansible/roles/k8s/observability/                       + scrape job, deploy-pipeline rule
@@ -1108,12 +1169,14 @@ that D2.6d adds.
       set. One function computes the changed set. `verify`, `land-wait` and D4.3's timeout
       derivation all call it, and none of them derives the set a second time.
     - Add the `last-good` seeding and the hold-then-reset order with the
-      `<T> failed=<names>` value. Add the `PROD_DIGEST` write on every `prod` move, the
+      `<T> failed=<names>` value, and `<T> unverified` for a `verify` with no verdict. Add the `PROD_DIGEST` write on every `prod` move, the
       revert rule behind its disabled flag, and `decide`'s pull of `prod`'s artifact. Add
       the `workflow_dispatch` input `sha` behind D1's ancestry check, and the
       `probe.py landing` lines for both holds.
     - Add a read-only `verify` job with `statuses: read`. Add a `settle` job that checks out
       no repository code, holds `packages: write`, and sets `PROMOTE_TOKEN` as `GH_TOKEN`.
+      Neither joins a concurrency group (*A verification in flight blocks the next
+      promotion*). The `render` job gains `checks: read`.
     - The D1.4 workflow test's expected permission map gains both jobs. It has a red fixture
       in which `settle` checks out code, and one in which `verify` holds `packages: write`.
     - **Preconditions, quoted in the PR body:** the three reads under *What `probe.py
@@ -1392,9 +1455,14 @@ later slices size against:
 **Each new check can go red.**
 
 - Every skip in D2.1a to D2.4b is tested as an `_is_clean` and `_is_flagged` pair against a
-  fixture entry. The C4 census also names each of the six entry points as a member it must
-  find, so a renamed entry point fails the census instead of passing vacuously (failure
-  class 4).
+  fixture entry. Those pairs import the reader, not the entry point, so they still pass when
+  an entry point is renamed or stops calling the reader (failure class 4).
+  `ansible/tests/repo/test_owner_entry_points_census.py` therefore names each row of the
+  entry-point table as a member it must find, as `file:symbol`, and follows its calls down
+  to `tag_owners`, `ansible_owned` or `service_owners`. The two host checks and `deploy_ui`
+  read no tree reader, and the census names the reason for each. A table row with no
+  member fails it, and so does a member whose row is gone. The red halves rename an entry
+  point, drop a reader call, and add an unmapped row.
 - The narrowing pair in D2.1a fails if an `owner`-only edit reaches any of its five fixture
   whole-entry readers, and its other half fails if a `hostname` edit stops reaching them.
 - D2.1c's render census fails when a role whose render an added entry moves maps to a tag
@@ -1511,10 +1579,11 @@ later slices size against:
 ## Risks
 
 - **An entry point outside the census** (failure class 4). A path that applies a k8s role and
-  is missing from the table writes bento-pdf behind Flux's back. Mitigation: the census names
-  its six members. A `Census` row in `ansible/tests/repo/test_census_rows_text.py` selects
-  every tracked file that invokes `deploy.sh` and fails on one that is neither in the table
-  nor exempt with a reason.
+  is missing from the table writes bento-pdf behind Flux's back. Mitigation: two censuses.
+  A `Census` row in `ansible/tests/repo/test_census_rows_text.py` selects every tracked
+  file that invokes `deploy.sh` and fails on one that is neither in the table nor exempt
+  with a reason. `ansible/tests/repo/test_owner_entry_points_census.py` names every row of
+  the table as a member and fails when one stops reading ownership (*Verification*).
 - **A tick in flight at the flip.** A tick that started before D2.7 merged works from the
   older SHA. If its range holds a bento-pdf image bump, it deploys bento-pdf through Ansible
   once more. Mitigation: the D2.7 preconditions require no open bento-pdf Renovate PR and no
@@ -1734,8 +1803,9 @@ later slices size against:
    clear-owed k8s_unapplied <svc>" if you give me the command". The alternative, a full
    deploy under D1.2's stop rule, is not taken. D2.1d's PR body quotes the ruling. The
    same ruling covers a revert of D2.1d.
-10. **What narrow output should H1, H2 and H6 expect for a Flux-born entry?** Their steps
-    still branch on an own-tag-only outcome and expect 23 reader tags. D2.1c changes both
+10. **What narrow output should H1, H2 and H6 expect for a Flux-born entry?** *Applied on
+    2026-10-15 by [#5055](https://github.com/DanielH2018/server/pull/5055).* Their steps
+    branched on an own-tag-only outcome and expected 23 reader tags. D2.1c changes both
     for an added entry that carries `owner`:
     - **A bare entry** (`name`, `platform`, `owner`, and `depends_on` until D4.1 makes it a
       deploy-mechanics field). `deploy_tags.py narrow` names the entry's own tag plus the
@@ -2093,6 +2163,19 @@ The operator ruled that `domain` is published, and that the production drill is 
   *Values of `owner`* now state what Open questions 6 and 7 requested.
 
 ### Reader-set follow-up (2026-10-15)
+
+- **#5023: D2.5 made three choices that *Design* did not record.** Confirmed against
+  `.github/workflows/promote.yml` at `9b19ce841`. Fixed in *Design* and in C2 together:
+    - *Publication and verification* adds the `<T> unverified` hold that `settle` writes for
+      a `verify` with no verdict, with its diagram branch. The revert rule never passes it.
+    - *Baseline* gave `settle` a concurrency group set by an expression, `promote` or
+      `promote-reset`. D2.5 puts neither `verify` nor `settle` in a group, and the bullet *A
+      verification in flight blocks the next promotion* records the two checks that guard
+      the gap instead. D5's reset must be designed against them.
+    - *The verification jobs' permissions and tokens* moves `statuses: read` from `promote`
+      to `verify`, moves `PROMOTE_TOKEN` from the verify step to `settle`, and gives
+      `render` `checks: read`. Two bullets that named `verify` as the job that resets `prod`
+      or clears the hold now name `settle`.
 
 - **#4955: the design counted five whole-entry readers that 8e79e95d6 had moved onto named
   filters.** Confirmed. The D2.1c PR (#4977) already restated *The ownership flag and its
