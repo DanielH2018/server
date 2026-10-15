@@ -51,13 +51,23 @@ dotfiles repo's `home/dot_bashrc` on the chezmoi hosts, and [[config_files]]' tr
   covered `containers/` before that); they're backed up out-of-band (2026-06-06). Since
   **2026-06-11** `.sops.yaml` also lists an **off-box recovery recipient** (private half
   only in the operator's password manager), so the secrets survive losing every host key.
-  Gotcha: `sops updatekeys` resolves `.sops.yaml` from the CWD — run it from `ansible/`.
-  Removing a recipient takes `sops rotate --rm-age`, not `updatekeys`; `.sops.yaml`'s header
-  says why.
+- **Three creation rules, four kinds of file.** `ansible/.sops.yaml` holds two cluster rules
+  ahead of the generic rule, because SOPS takes the first rule that matches and the generic
+  rule also matches every cluster manifest. The cluster file (the `cluster-vars` dotenv under
+  `vars/`) and the cluster manifests (under `vars/cluster-manifests/`) go to the cluster key
+  plus the host keys. `secrets.yml`, and any other YAML under `vars/` or `secrets/`, go to the
+  host keys only, so the cluster never decrypts `secrets.yml` (ADR-0022). The file's header
+  holds the full runbook.
+- **Every `sops` command runs from `ansible/`, or with `--config ansible/.sops.yaml`.** SOPS
+  resolves `.sops.yaml` from the working directory, so from the repo root it finds no
+  creation rule.
 - **Onboarding an Nth host is NOT this role** — `.sops.yaml` is tracked, so every checkout
   already has it and step 4 self-skips. Adding a host = run `ansible/bootstrap.yml` on it,
-  add its pubkey to `.sops.yaml`, `sops updatekeys`, commit/pull. See `bootstrap.yml` header
-  and [[gitops_deploy]] only consume secrets after this is in place.
+  append its pubkey to the `age:` string of all three rules, then from `ansible/` run `sops
+  updatekeys -y` on `secrets.yml`, the cluster file and each cluster manifest that exists,
+  and commit/pull. Removing one deletes its key from all three rules and runs `sops rotate -i
+  --rm-age <key>` on the same files, not `updatekeys`; `.sops.yaml`'s header says why. See
+  `bootstrap.yml` header; [[gitops_deploy]] only consumes secrets after this is in place.
 - **Chicken-and-egg:** `initial_setup.yml`'s `Load encrypted secrets` pre_task needs SOPS to
   already work, so a brand-new host must run `bootstrap.yml` first (it has no secret
   dependency) before this role/playbook can succeed.

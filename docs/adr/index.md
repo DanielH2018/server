@@ -47,6 +47,7 @@ wrong is worth more than the record of one that did not.
 | [0019](0019-fact-support-stops-at-the-repo-store.md) | Fact support stops at the repo store, and the lock carries its own retirement test | Accepted | 2026-10-10 |
 | [0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md) | Flux applies the cluster from a promoted artifact | Proposed | 2026-10-12 |
 | [0021](0021-the-host-package-builder-trusts-master-plus-green-ci.md) | The host-package builder trusts master plus green CI, and checks no signature | Accepted | 2026-10-14 |
+| [0022](0022-the-cluster-decrypts-its-own-file-with-its-own-key.md) | The cluster decrypts its own file with its own key, and never secrets.yml | Proposed | 2026-10-15 |
 
 ## The long-form behind a record
 
