@@ -18,21 +18,26 @@ from test_digest_covers import TOPOSORT
 _DEP_MAP_RETURN = '    return {c["name"]: _edges(c) for c in containers_list}\n'
 
 
-def _reason_for_head_call(tree, imports: str, call: str) -> str | None:  # noqa: F811
-    """The rule's reason when the base imports `imports` and the head's dep map also runs `call`."""
-    plugin = f"{imports}\n\n\n{TOPOSORT}"
+def _reason_for_head_call(
+    tree,  # noqa: F811
+    imports: str,
+    call: str,
+    base_call: str = "",
+) -> str | None:
+    """The rule's reason when the base imports `imports` and the head's dep map also runs `call`.
+
+    `base_call` runs in the dep map at both ends, before the head's `call`.
+    """
+
+    def with_lines(plugin: str, code: str) -> str:
+        lines = "".join(f"    {line}\n" for line in code.split("\n") if line)
+        return plugin.replace(_DEP_MAP_RETURN, lines + _DEP_MAP_RETURN)
+
+    plugin = with_lines(f"{imports}\n\n\n{TOPOSORT}", base_call)
     tree.write("ansible/filter_plugins/toposort.py", plugin)
     base = tree.commit("toposort imports what the head calls")
-    lines = "".join(f"    {line}\n" for line in call.split("\n") if line)
     head = _commit(
-        tree,
-        [
-            {
-                "ansible/filter_plugins/toposort.py": plugin.replace(
-                    _DEP_MAP_RETURN, lines + _DEP_MAP_RETURN
-                )
-            }
-        ],
+        tree, [{"ansible/filter_plugins/toposort.py": with_lines(plugin, call)}]
     )
     return digest_covers.Classifier(tree.root).reason("authelia", base, head)
 
@@ -66,8 +71,8 @@ def test_an_in_place_change_to_a_module_held_object_keeps_the_line(tree, imports
 
     The attribute still names the same object, so comparing attribute identity sees nothing.
     In a deploy the plugin runs in the controller process, so the added item persists for
-    every later task and role. `loggerDict` sits three levels below `logging.Logger`, past the
-    walk's two levels (#5081).
+    every later task and role. `loggerDict` sits three levels below `logging.Logger`, so the
+    walk must copy at least three levels to see it (#5081).
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
@@ -183,7 +188,7 @@ def test_every_replaced_unaudited_call_keeps_the_line(tree, imports, call):  # n
             "logging.getLogger('ansible.utils.display').disabled = True",
         ),
         (
-            "import logging\nfrom ansible.errors import AnsibleFilterError",
+            "import logging\nimport ansible.utils.display",
             "logging.getLogger('ansible').disabled = True",
         ),
     ],
@@ -207,10 +212,10 @@ def test_a_change_to_object_attributes_or_timers_keeps_the_line(tree, imports, c
     namespace, so the walk must reach the root logger at its shallowest depth to see its filters.
 
     A named logger sits in `Logger.manager.loggerDict`, three levels below `logging.Logger`,
-    and its attributes four levels down (#5085). Importing `ansible.errors` creates the
-    `ansible` logger, and the runner preloads that import before it copies module state, so
-    that row's logger exists at both ends before the plugin runs. A logger the plugin's own
-    module code creates does not: both ends add it after the copy, so no walk depth sees it.
+    and its attributes four levels down (#5085). Importing `ansible.utils.display`
+    creates the `ansible` logger, and the runner preloads that import before it copies module
+    state, so that row's logger exists at both ends before the plugin runs. A module attribute
+    holds that logger too, so the row does not depend on the fourth level; the rows below do.
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
@@ -253,8 +258,17 @@ def test_a_call_the_runner_counts_keeps_the_line(tree, imports, call):  # noqa: 
             "import logging\nlogging.getLogger('order-only-5085')",
             "logging.getLogger('order-only-5085').setLevel(50)",
         ),
+        (
+            "import logging\nlogging.getLogger('order-only-5085')\nlogging.getLogger('other')",
+            "logging.getLogger('order-only-5085').parent = logging.getLogger('other')",
+        ),
     ],
-    ids=["getlogger-disabled", "bound-logger-disabled", "getlogger-set-level"],
+    ids=[
+        "getlogger-disabled",
+        "bound-logger-disabled",
+        "getlogger-set-level",
+        "getlogger-parent-replaced",
+    ],
 )
 def test_a_write_to_a_logger_the_plugin_module_creates_keeps_the_line(
     tree,  # noqa: F811
@@ -265,8 +279,45 @@ def test_a_write_to_a_logger_the_plugin_module_creates_keeps_the_line(
 
     Both ends create the logger when the plugin's module code runs, and the head writes to it
     when the chain runs. No module attribute the walk starts from holds the logger, so it sits
-    four levels down, under `logging.Logger.manager.loggerDict`, and a three-level walk
-    discharges the line.
+    four levels down, under `logging.Logger.manager.loggerDict`. The last row replaces the
+    `parent` object, which the fallback comparison of a logger's `bool`, `int`, `str` and
+    container-length attributes does not see, so only the fourth level of the walk catches it.
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        "logging.getLogger('order-only-5085').disabled = True",
+        "logging.getLogger('order-only-5085').setLevel(50)",
+    ],
+    ids=["disabled", "level"],
+)
+def test_a_write_to_a_logger_both_ends_create_in_the_filter_call_keeps_the_line(
+    tree,  # noqa: F811
+    call,
+):
+    """A write only the head makes to a logger both ends create while the chain runs keeps the line (#5085).
+
+    The logger is created after both walks, so neither copies it, and `loggerDict` gains the
+    same key at both ends. Only the logger's own attributes tell the ends apart.
+    """
+    reason = _reason_for_head_call(
+        tree, "import logging", call, base_call="logging.getLogger('order-only-5085')"
+    )
+    assert reason and "every deploy runs" in reason
+
+
+def test_a_logger_both_ends_create_in_the_filter_call_and_leave_alone_is_order_only(
+    tree,  # noqa: F811
+):
+    """The control for the row above: a logger created and left alone at both ends discharges."""
+    reason = _reason_for_head_call(
+        tree,
+        "import logging",
+        "logging.getLogger('order-only-5085')",
+        base_call="logging.getLogger('order-only-5085')",
+    )
+    assert reason is None

@@ -60,10 +60,13 @@ from lib.git import git
 # returned. An `open` whose mode string writes ends the run as its flags do, because a C-level
 # `fopen` such as `readline.write_history_file` raises the event with flags 0 (#5081).
 # A second walk, once the plugin's module code has run, copies the objects that code created,
-# such as a logger the base end makes and the head end's filter call disables (#5085).
+# such as a logger the base end makes and the head end's filter call disables (#5085). A logger
+# first created while the chain runs sits in neither walk, so the report also compares each such
+# logger's own `bool`, `int`, `str` and container-length attributes (#5085).
 # The gaps taken: a branch HEAD's data does not exercise; a change five or more levels below a
 # module attribute; a write the plugin's module code makes to an object that code created,
-# since neither walk sees the object before it; a change in state held in `__slots__` or
+# since neither walk sees the object before it; a change to a logger's handler or filter
+# objects, as opposed to how many it holds; a change in state held in `__slots__` or
 # inside a C object; process state the runner neither reads nor counts; a counted call through a
 # reference taken before the runner wrapped it; an unaudited call in a module the runner does
 # not replace; and a role whose bytes depend on list order, which the render proof the caller
@@ -229,6 +232,28 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, counted, p
                         following.append((path + "/" + name, child))
             level = following
 
+    def signature(value):
+        # What differs between two ends' copies of an object, as one string: an exact `bool`,
+        # `int`, `str` or `None` by value, a container by its length and anything else by
+        # nothing. `_cache` follows which levels were asked about, not what the logger is set to.
+        try:
+            copied = shallow(value)
+        except Exception:
+            return "?"
+        if copied is None:
+            return "?"
+        parts = []
+        for key, item in copied.items():
+            if type(key) is not str or key == "_cache":
+                continue
+            kind = type(item)
+            if kind in (bool, int, str, type(None)):
+                parts.append(key + "=" + repr(item))
+            elif kind in (list, dict, tuple, set, frozenset, deque):
+                parts.append(key + "=#" + str(len(item)))
+        parts.sort()
+        return ",".join(parts)
+
     def module_writes():
         writes = []
         for name, (module, attrs) in before.items():
@@ -251,6 +276,13 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, counted, p
                 now = None
             if now is None or changed(old, now):
                 writes.append(path)
+        for path, (value, old) in contents.items():
+            if path.endswith("/manager/loggerDict") and type(value) is dict:
+                # A logger created while the chain runs sits in no copy, so `loggerDict` gains
+                # the same key at both ends. Its own state is what differs (#5085).
+                for name, logger in dict.copy(value).items():
+                    if id(logger) not in claimed and type(name) is str:
+                        writes.append(path + "/" + name + "=" + signature(logger))
         for key, value in read_state().items():
             if state.get(key) != value:
                 writes.append("process." + key)
@@ -553,6 +585,7 @@ def order_only(repo: Path, path: str, base: str, head: str) -> bool:
     old, new = _run(repo, old_tree, head, preload), _run(repo, new_tree, head, preload)
     if old is None or new is None or not (old[1] and new[1]):
         return False
+
     if old[2] != new[2]:
         return False
     return old[0].keys() == new[0].keys() and all(
