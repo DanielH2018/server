@@ -1,7 +1,7 @@
 ---
 id: "0022"
 title: The cluster decrypts its own file with its own key, and never secrets.yml
-status: Proposed
+status: Accepted
 date: 2026-10-15
 governs: []
 ---
@@ -16,10 +16,7 @@ limits it to files written for it.
 
 ## Status
 
-Proposed. Slice D3 of the [target architecture](../target-architecture/design.md) drafts it
-in PR D3.1. Acceptance is **operator-only**, and the operator moves the status to `Accepted`
-in that PR's review. Adding the cluster recipient to `ansible/.sops.yaml` is a second
-operator-only decision in the same review. Slice H4 extends this record with per-host files
+Accepted. The operator accepted it on 2026-10-15 in PR D3.1's review. The answer was "Yes" to "accept ADR-0022 and the cluster recipient?" The same answer accepted the second operator-only decision in that PR: adding the cluster recipient to the two cluster creation rules in `ansible/.sops.yaml`. Slice H4 extends this record with per-host files
 (design.md, *Amend ADR-0003*).
 
 ## Context

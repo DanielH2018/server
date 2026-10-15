@@ -12,9 +12,9 @@ governs: []
 
 Accepted.
 
-2026-10-15: [ADR-0022](0022-the-cluster-decrypts-its-own-file-with-its-own-key.md) proposes
-an amendment: the cluster decrypts its own cluster file with its own age key, and never
-`secrets.yml`. This decision stands unchanged until ADR-0022 is accepted.
+2026-10-15: [ADR-0022](0022-the-cluster-decrypts-its-own-file-with-its-own-key.md) amends
+this decision, and the operator accepted it the same day: the cluster decrypts its own cluster
+file with its own age key, and never `secrets.yml`.
 
 ## Context
 
