@@ -203,6 +203,7 @@
  "ansible/roles/setup/homelab_builder/tests/test_builder_units.py": 0.1,
  "ansible/roles/setup/homelab_builder/tests/test_host_package_builder.py": 1.37,
  "ansible/roles/setup/homelab_builder/tests/test_host_package_builder_refusals.py": 0.23,
+ "ansible/roles/setup/homelab_builder/tests/test_repo_signer.py": 0.52,
  "ansible/roles/setup/initial_setup/tests/test_loki_route_health.py": 0.0,
  "ansible/roles/setup/initial_setup/tests/test_worktree_holders.py": 0.0,
  "ansible/roles/setup/k3s/tests/test_live_drift_check.py": 0.0,
