@@ -48,8 +48,8 @@ from lib.git import git
 # The gaps taken: a branch HEAD's data does not exercise; an in-place change to an object a
 # module holds, such as an item added to a module-level dict; a write into a module the run
 # itself loaded first, when both ends load it; process state no module attribute holds, such
-# as the umask or a signal handler; and a role whose bytes depend on list order, which the
-# render proof the caller still requires catches.
+# as the umask or a signal handler (the three are #5060); and a role whose bytes depend on
+# list order, which the render proof the caller still requires catches.
 # The runner is distinguishable from a deploy. Its cwd ends in `/cwd` under an `order-only-`
 # temp dir, `sys.flags.isolated` is 1, and `sys.argv[0]` is `-c`. So the check holds only for
 # a plugin written in good faith. It catches an accidental side effect, not an evasive one,
