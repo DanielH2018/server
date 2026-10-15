@@ -51,7 +51,7 @@ PERMISSIONS = {
     "promote": {"contents": "read", "checks": "read", "packages": "read"},
     "tag": {"packages": "write"},
     "verify": {"contents": "read", "statuses": "read"},
-    "settle": {"packages": "write"},
+    "settle": {"packages": "write", "actions": "write"},
 }
 
 RENDER_REF = "${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}"
