@@ -268,6 +268,17 @@ observability_rule_groups:
   - host-checks
   - deploy-pipeline
 
+# The hosts whose homelab-updater must report, each with the scrape job that reads its node
+# exporter and the age in seconds past which its last successful update pages. host-checks.yaml
+# carries one literal HostUpdateStale rule per entry, because a rule file is never Jinja, and
+# ansible/tests/services/test_host_plane_rule_literals.py holds the rules equal to this map.
+# scripts/renderer/tests/test_renderer_host_update_limits.py fails a limit shorter than the
+# longest gap between two of the host's updater fires plus the updater's TimeoutStartSec, read
+# from the rendered timer and its drop-in. Empty until H3.9c adds daniel-pi
+# (docs/target-architecture/host/h3-pi-pilot.md, *Steps*, H3.9c); an entry reads
+#   daniel-pi: {job: node-pi, limit_seconds: 11400}
+observability_expected_hosts: {}
+
 # The telemetry workloads, as the {kind, name} pairs post_tasks/k8s_stabilise_gate.yml reads.
 # A variable rather than a second inline copy of the list: tasks/main.yml still spells it out
 # once (the wait loop; the restart loop reads this variable), and the stabilisation tasks that

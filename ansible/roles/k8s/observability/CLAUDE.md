@@ -105,6 +105,13 @@ holds the two windows equal, and
 `ansible/tests/services/test_alertmanager_routing.py::test_every_route_a_paging_alert_reaches_is_muted`
 walks the routing tree to prove the alerts reach the mute.
 
+**A host-plane rule names its host as a literal, so a new host is a rule edit.** The
+`host-checks` group carries one `HostReconcileFailed` per host in `hosts.ini`, and one
+`HostUpdateStale` per entry of `observability_expected_hosts`, each from the shape in
+`tests/rules/fixtures/host-update-stale.yaml`, which `host-checks.test.yaml` fires.
+`ansible/tests/services/test_host_plane_rule_literals.py` holds both sets to their sources and
+prints the rule a new entry needs. `docs/host-packages.md` is the runbook for both pages.
+
 **The `blackbox-ingress` job probes every ingress tile through blackbox-exporter.** It is
 hand-written in `prometheus.yaml.j2` and renders one target per tile the
 `kuma_ingress_monitors` filter yields, so Kuma's tiles and the probes read one list. Each
