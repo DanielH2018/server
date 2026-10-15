@@ -120,11 +120,33 @@ M1's Alertmanager. Every rule carries `service="flux"`.
   points at the kube-state-metrics log.
 - **`FluxSuspended`, warning.** A Kustomization has been suspended for more than 24 hours.
   `flux_sync_suspend` and a hand suspend both count.
+- **`FluxWorkersSaturated`, warning.** For 30 minutes, every `kustomize-controller` reconcile
+  worker has been busy and its work queue has not been empty, so applies are queueing.
+    - The rule compares `controller_runtime_active_workers` with
+      `controller_runtime_max_concurrent_reconciles` for `controller="kustomization"`, and
+      reads `workqueue_depth` for the queue. It reads the maximum from its gauge, never a
+      literal, because `--concurrent` is 4 until D5.1 changes it. The three series come from
+      the `flux` scrape job, so the rule adds no series.
+    - A broad revision fills the workers for hours while it progresses. The rule therefore
+      reports queueing, not a failed deploy. It is a warning without `verify="true"`, so
+      the promotion soak, which reads only alerts carrying `severity="critical"` or
+      `verify="true"` ([contracts.md C7](target-architecture/contracts.md)), never reads it.
+    - **The gap `verify`'s timeout cannot see.** A revision queues a reconcile of every Kustomization on
+      the source, changed or not. An unchanged Kustomization that is unhealthy holds a worker
+      for its whole `timeout`, retries after its `retryInterval`, and holds one again. The
+      bundle does not say which Kustomizations are unhealthy, so the timeout leaves them out.
+      When as many of them fail at once as there are workers, every apply queues, the fix
+      included, and `verify` times out on a changed name that never applied. This rule is
+      what reports that state.
+    - **The shed bound is one `timeout`.** Suspending an unhealthy Kustomization needs no
+      worker, because a suspend is an API write. Nothing shows that a suspend ends a
+      health-check wait already in progress, so each held worker frees when its current wait
+      ends. The suspended Kustomization then does not retry.
 
 notification-controller's Discord alerts stay as a second channel beside these.
 `ansible/roles/k8s/observability/tests/rules/flux.test.yaml` fires each rule and holds a
-case one evaluation short of each hold. A lost `gotk_resource_info` leaves the last two rules
-quiet ([#4809](https://github.com/DanielH2018/server/issues/4809)).
+case one evaluation short of each hold. A lost `gotk_resource_info` leaves `FluxNotReady`'s
+readiness arms and `FluxSuspended` quiet ([#4809](https://github.com/DanielH2018/server/issues/4809)).
 
 ## A `containers_list` change reaches Flux
 
