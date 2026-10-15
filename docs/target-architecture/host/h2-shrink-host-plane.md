@@ -314,7 +314,7 @@ The exit criterion has three parts:
     - No `containers.py:FILTER_FIELDS` row names `netpol_from`, so the five are the
       whole-entry readers, which `reader_paths` keeps for any field edit.
     - 8e79e95d6, 17 minutes after `70591c307`, moved those five onto named filters. The
-      same call on the tree of 2026-10-15 returns netpol-baseline alone as the reader of
+      same call at `a5abf8581` returns netpol-baseline alone as the reader of
       either edit, beside the edited entry's own tag. D2 Open question 10 states what an
       added Flux-born entry reaches on that tree.
 
@@ -576,11 +576,14 @@ entry narrows*). That apply also ships any change of a named tag that is on `ori
 and not yet applied, and a failing verify task in any named tag writes `hold_sha` over the
 deploy plane. This holds until D6.1 deletes the deployer's k8s arms.
 
-The narrow output each PR expects, measured on the tree of 2026-10-15 with
-`deploy_tags.py narrow` over a scratch commit of each edit. A `netpol_from` edit is a field
-edit, so it names the edited entry's tag and the one reader of `netpol_from`,
-netpol-baseline. The added drill entry names the readers D2 Open question 10 gives a bare
-entry.
+The narrow output each PR expects, measured at `a5abf8581` with `deploy_tags.py narrow`.
+One scratch commit appended a label to both uptime-kuma's and qbittorrent's `netpol_from`,
+and printed `netpol-baseline,qbittorrent,uptime-kuma`. A second added the drill's entry. A
+`netpol_from` edit is a field edit, so it names the edited entry's tag and the one reader of
+`netpol_from`, netpol-baseline. Each family PR's own role tag (crowdsec, configarr,
+janitorr, qbittorrent) comes from `broad.py:_changed_half`, which maps the PR's edits under
+`ansible/roles/k8s/<role>/`, and was not part of the scratch commits. The added drill entry
+names the readers D2 Open question 10 gives a bare entry.
 
 - **H2.4b:** crowdsec, uptime-kuma and netpol-baseline. Two are denylisted: crowdsec and
   uptime-kuma.
@@ -1319,7 +1322,7 @@ change at merge time*).
     - **The added entry reaches four readers of the list.** D2.1c records an added Flux-born
       entry by its fields, so `deploy_tags.py narrow` names `longhorn-restore-drill` and
       the readers of those fields: artifacts, blackbox-exporter, pihole and uptime-kuma,
-      measured on the tree of 2026-10-15. D2.2 drops the drill's tag because Flux owns it,
+      measured at `a5abf8581`. D2.2 drops the drill's tag because Flux owns it,
       so the tick applies the four, unattended and forward-only. Three of them are
       denylisted: blackbox-exporter, pihole and uptime-kuma. D2.1c is on `origin/master` before this PR, because H2 needs
       H1 and H1 needs D2. No output is accepted as a reason to skip the stop rule, which
@@ -2104,8 +2107,8 @@ carries `prune: disabled`.
     added or removed `owner: flux` entry to its own tag alone. D2 refuses that: "The entry's
     own tag alone, which X2-06 proposed, is not sound, because the bare-entry render moves
     artifacts' `known_services.json`." D2.1c instead records such an entry by its fields,
-    which cuts the drill entry's reach from 23 reader tags to four on the tree of
-    2026-10-15: artifacts, blackbox-exporter, pihole and uptime-kuma (D2 Open question 10).
+    which cuts the drill entry's reach from 23 reader tags to four at `a5abf8581`:
+    artifacts, blackbox-exporter, pihole and uptime-kuma (D2 Open question 10).
     Three of the four remain denylisted. A `netpol_from` field edit reaches netpol-baseline
     alone on that tree (Baseline, *A field edit to a `containers_list` entry narrows*). Resolution: every H2 PR that edits the
     list, and every revert of one, runs *Landing a `containers_list` edit* (Design). No
@@ -2689,7 +2692,7 @@ The H1 and D2 parts go in cross-slice notes.
 
 ### Reader-set follow-up (2026-10-15)
 
-- **#4975: the per-PR narrow outputs named D2.1c's five whole-entry readers.** Confirmed.
+- **#4975: the per-PR narrow outputs named the `70591c307` whole-entry readers.** Confirmed.
   8e79e95d6 moved those readers onto named filters, so the round i1 lists no longer match
   the tree. `deploy_tags.py narrow` over a scratch commit appending a label to uptime-kuma's
   and qbittorrent's `netpol_from` printed `netpol-baseline,qbittorrent,uptime-kuma`. Over a

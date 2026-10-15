@@ -1510,9 +1510,9 @@ fails. Exit 2 shows that the same object was read and reconciled.
     - H1's six Flux-born roles, H2.3b's `longhorn-restore-drill` and H6's `system-upgrade`
       each add an entry. M4 and M6 cite D1.2's stop rule for theirs.
     - D2.1c, which needs D2.1a, records an added or removed entry that is not Ansible-owned
-      by its fields instead of returning None. A bare Flux-born entry then reaches five
-      reader tags: artifacts, monitor-bridge, netpol-baseline, pihole and uptime-kuma. An
-      entry with `hostname` or `tier` reaches more. It never reaches `flux`:
+      by its fields instead of returning None. At `a5abf8581` a bare Flux-born entry then
+      reaches four reader tags: artifacts, blackbox-exporter, pihole and uptime-kuma (D2
+      Open question 10). An entry with `hostname` or `tier` reaches more. It never reaches `flux`:
       `tier_priority_class` is in `containers.py:NAMED_ENTRY`, and the role calls it with
       the literal `'flux'`, so it reads that one entry.
     - `changed_fields` still returns None for an added or removed Ansible-owned entry, for a

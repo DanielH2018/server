@@ -1314,7 +1314,7 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
     - **After D2.1c, which merges before H1.2.** D2.1c records an added entry that is not
       Ansible-owned by its fields, so the entry reaches only the readers of the fields it
       carries (D2 Open question 10). H1's six entries carry `name`, `platform`, `owner` and
-      at most `depends_on`. On the tree of 2026-10-15 such an entry applies four reader
+      at most `depends_on`. At `a5abf8581` such an entry applies four reader
       tags. artifacts reads it through `entry_names`, which lists every entry.
       blackbox-exporter, pihole and uptime-kuma read its `platform` through
       `lan_hostnames`. No reader reads `depends_on`, and `owner` is a deploy-mechanics
@@ -2214,7 +2214,7 @@ subject's tests.
 - **A takeover PR re-applies readers of `containers_list`.** Until D6.1, an added or
   removed Flux-born entry narrows the deploy plane to the readers of the fields it carries,
   applied unattended and forward-only. For H1's entries that is artifacts,
-  blackbox-exporter, pihole and uptime-kuma on the tree of 2026-10-15 (D2 Open question
+  blackbox-exporter, pihole and uptime-kuma at `a5abf8581` (D2 Open question
   10). Three of them, blackbox-exporter, pihole and uptime-kuma, set
   `k8s_autodeploy: false`. Each of the six PRs and each revert quotes
   the narrow output and runs D1.2's stop rule, so no reader carries another session's

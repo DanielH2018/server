@@ -1744,11 +1744,11 @@ later slices size against:
       applies those four, because D2.2 drops the own tag.
     - **An entry with `hostname`**, or with `port`, `tier` or `metrics`. The output adds
       every `FILTER_FIELDS` reader of each field the entry carries. For `hostname` on the
-      same tree that is authelia's access rules and observability's Prometheus config. On
-      the tree of 2026-10-15, `port` adds netpol-baseline and observability, and `tier`
+      same tree that is authelia's access rules and observability's Prometheus config. At
+      `a5abf8581`, `port` adds netpol-baseline and observability, and `tier`
       adds observability. The PR measures that set; D2 does not fix a count for it.
     - **A field edit to an entry that exists**, such as a `netpol_from` label, names the
-      entry's own tag and the readers of that field. On the tree of 2026-10-15 a
+      entry's own tag and the readers of that field. At `a5abf8581` a
       `netpol_from` edit reaches netpol-baseline alone.
     - **An added Ansible-owned entry** still makes `changed_fields` return None, so it
       reaches the full reader set, 23 tags at `70591c307`. D1.2's 24-tag expectation is
@@ -2096,9 +2096,10 @@ The operator ruled that `domain` is published, and that the production drill is 
 
 - **#4955: the design counted five whole-entry readers that 8e79e95d6 had moved onto named
   filters.** Confirmed. The D2.1c PR (#4977) already restated *The ownership flag and its
-  three readers* and Open question 10 against the tree after 8e79e95d6. Four sentences
-  still relied on the five as live readers: the `reader_paths` bullets under D2.1c, the
-  D2.1a and D2.1c test steps, D2.7's two-writer check and *Verification*. Re-measured with
+  three readers* and Open question 10 against the tree after 8e79e95d6. Six sites still
+  relied on the five as live readers: the two `reader_paths` bullets and the sentence on
+  an edit that changes no field, the D2.1a and D2.1c test steps, D2.7's two-writer check
+  and *Verification*. Re-measured at `a5abf8581` with
   `deploy_tags.py narrow` over a scratch commit adding an `owner: flux` entry with
   `platform` and `depends_on`. It printed
   `artifacts,blackbox-exporter,longhorn-restore-drill,pihole,uptime-kuma`. Fixed: those

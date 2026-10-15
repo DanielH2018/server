@@ -948,7 +948,7 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       `70591c307`, `scripts/deploy_tools/narrow_lib/containers.py:changed_fields` returned
       None for an added entry. `scripts/deploy_tools/narrow_lib/broad.py:_list_reader_tags`
       with `changed` None then named 23 tags of 59 (D1, *Baseline*). D2.1c records an added
-      `owner: flux` entry by its fields instead. On the tree of 2026-10-15 an entry that
+      `owner: flux` entry by its fields instead. At `a5abf8581` an entry that
       carries `name`, `platform` and `owner` reaches artifacts, blackbox-exporter, pihole
       and uptime-kuma, three of them `k8s_autodeploy: false` (D2 Open question 10). The
       tick applies them unattended and forward-only, because D2.2 drops the
@@ -1851,7 +1851,7 @@ which journald does not store on these hosts, so it reads zero on every run.
     withdrawn. D2 refuses the own-tag mapping because the bare-entry render moves
     artifacts' `known_services.json` (D2 Open question 10). D2.1c instead records the entry
     by its fields, so before D6.1 the deployer narrows either PR to the readers of those
-    fields: artifacts, blackbox-exporter, pihole and uptime-kuma on the tree of 2026-10-15
+    fields: artifacts, blackbox-exporter, pihole and uptime-kuma at `a5abf8581`
     (*Steps*, H6.1b). Resolution: H6.1b and its revert record their narrow output and carry
     D1.2's stop rule and refusal exit over every tag it names. D2.1c's render census,
     `ansible/tests/k8s/test_flux_born_entry_reader_census.py`, proves the expected shape.
