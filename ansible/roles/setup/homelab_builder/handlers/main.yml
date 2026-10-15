@@ -1,0 +1,11 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+- name: Restart homelab-apt-repo
+  ansible.builtin.systemd:
+    name: homelab-apt-repo.service
+    state: restarted
+  become: true

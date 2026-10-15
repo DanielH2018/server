@@ -164,13 +164,42 @@ def _pinned_uv_lines():
             yield path, n, stripped
 
 
+# Units that run the system interpreter on purpose, each with the reason the syntax floor does
+# not reach it. Keyed by template basename.
+_SYSTEM_INTERPRETER_EXEMPT = {
+    "homelab-apt-repo.service.j2": (
+        "runs only the stdlib's `http.server`, so no repo code meets the 3.12 parser; the unit "
+        "is DynamicUser with ProtectHome=yes, which cannot reach the uv-installed interpreters "
+        "under a user's home"
+    ),
+}
+
+
+def _system_interpreter_lines():
+    """(template basename, offending line) for every `/usr/bin/python3` invocation."""
+    return [
+        (line.split(":", 1)[0].rsplit("/", 1)[-1], line)
+        for line in _offending_lines("/usr/bin/python3")
+    ]
+
+
 def test_no_host_invocation_uses_the_system_interpreter():
-    offenders = sorted(_offending_lines("/usr/bin/python3"))
+    offenders = sorted(
+        line
+        for name, line in _system_interpreter_lines()
+        if name not in _SYSTEM_INTERPRETER_EXEMPT
+    )
     assert not offenders, (
         "these invoke the host's system Python (Ubuntu 24.04's 3.12) instead of running through "
         "uv on the pinned interpreter. That silently puts a script back below the repo's syntax "
         "floor:\n  " + "\n  ".join(offenders)
     )
+
+
+def test_every_system_interpreter_exemption_is_still_used():
+    """A stale exemption would let the next unit of that name back out of the rule."""
+    used = {name for name, _ in _system_interpreter_lines()}
+    assert set(_SYSTEM_INTERPRETER_EXEMPT) <= used
 
 
 def test_no_host_invocation_names_an_interpreter_directly():
