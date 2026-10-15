@@ -45,7 +45,8 @@ After the clear, a change under this role's directory lands through the setup-pl
   the signer empties it.
 - `/var/lib/homelab-signer/` (0711) with `gnupg/` (0700) and `repo/` (0755), the published
   tree.
-- The archive signing key, generated once as `homelab-signer` by `gpg --quick-generate-key`.
+- The archive signing key, generated once by `gpg --quick-generate-key` under `runuser -u
+  homelab-signer`. A `become_user` task would need an interpreter the signer can execute.
   Its `creates:` guard is `gnupg/openpgp-revocs.d`, the one directory gpg writes only when it
   generates a key. Removing that directory makes the next apply generate a second key.
 - `homelab-apt-repo.service`, which runs `python3 -m http.server` on `server_ip` at

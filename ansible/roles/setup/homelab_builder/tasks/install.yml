@@ -54,6 +54,11 @@
     label: "{{ item.path }}"
   become: true
 
+# Both gpg tasks run as root and drop to the signer with `runuser`, never `become_user`: a
+# module run as homelab-signer needs an interpreter it can execute, and the controller's is
+# the repo venv under the 0750 /home/{{ sys_user }} (common/tasks/agent_user.yml has the same
+# rule). What gpg writes is then the signer's already.
+#
 # openpgp-revocs.d is the guard because gpg creates it only when it generates a key: a bare
 # `gpg --list-keys` on an empty home creates pubring.kbx and trustdb.gpg, never this directory
 # (measured with GnuPG 2.4.4). The key has no passphrase because the signer runs unattended,
@@ -62,6 +67,10 @@
   tags: [homelab-builder-install]
   ansible.builtin.command:
     argv:
+      - runuser
+      - -u
+      - homelab-signer
+      - --
       - gpg
       - --homedir
       - "{{ homelab_builder_signer_dir }}/gnupg"
@@ -77,7 +86,6 @@
       - never
     creates: "{{ homelab_builder_signer_dir }}/gnupg/openpgp-revocs.d"
   become: true
-  become_user: homelab-signer
 
 # Key generation starts a gpg-agent under the signer's home. Nothing else uses it until the
 # signer unit runs, so stop it rather than leave a stray process behind the apply. With no
@@ -86,13 +94,16 @@
   tags: [homelab-builder-install]
   ansible.builtin.command:
     argv:
+      - runuser
+      - -u
+      - homelab-signer
+      - --
       - gpgconf
       - --homedir
       - "{{ homelab_builder_signer_dir }}/gnupg"
       - --kill
       - gpg-agent
   become: true
-  become_user: homelab-signer
   changed_when: false
 
 - name: Install the apt repository unit

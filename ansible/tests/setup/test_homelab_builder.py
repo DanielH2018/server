@@ -86,14 +86,20 @@ def test_the_signing_key_is_generated_once_as_the_signer():
     task = task_named(INSTALL, "Generate the archive signing key")
     command = task["ansible.builtin.command"]
     assert "--quick-generate-key" in command["argv"]
-    assert command["argv"][1:3] == [
+    # runuser rather than become_user: the module interpreter is under the 0750 operator home.
+    assert command["argv"][:7] == [
+        "runuser",
+        "-u",
+        "homelab-signer",
+        "--",
+        "gpg",
         "--homedir",
         "{{ homelab_builder_signer_dir }}/gnupg",
     ]
     assert (
         command["creates"] == "{{ homelab_builder_signer_dir }}/gnupg/openpgp-revocs.d"
     )
-    assert task["become_user"] == "homelab-signer"
+    assert "become_user" not in task
 
 
 def test_the_repo_unit_serves_the_signer_tree_on_server_ip_as_a_dynamic_user():
