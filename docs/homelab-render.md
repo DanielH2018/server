@@ -64,10 +64,10 @@ stub instead, which the filter `homelab_secret_stub` builds:
 - `become_password` never takes a stub. It is the one name in `NEVER_STUB`, because
   `ansible/pre_tasks/load_secrets.yml` hands it to privilege escalation and no template
   reads it.
-- `domain` takes no stub and no placeholder. It is the one name in `PUBLISHED`, because the
-  operator ruled on 2026-10-14 that it is a variable, not a secret. Every render reads its
-  value from `ansible/inventory/group_vars/all.yml`. It leaves `PUBLISHED` once the operator
-  deletes it from `ansible/vars/secrets.yml`.
+- `domain` takes no stub and no placeholder, because it is not in `ansible/vars/secrets.yml`.
+  The operator ruled on 2026-10-14 that it is a variable, not a secret, and deleted it from
+  the store on 2026-10-15. Every render reads its value from
+  `ansible/inventory/group_vars/all.yml`.
 
 Two more filters serve the stub-file refusals in the playbook preamble (*A stub file stops
 outside a k8s dry run*). `homelab_stub_keys` lists the key names that take a stub, from the parsed `secrets.yml`. It

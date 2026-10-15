@@ -130,6 +130,9 @@ RETIRED: frozenset[str] = frozenset(
         # the app (#2806, #3499).
         "healthchecks_password",
         "healthchecks_secret_key",
+        # Published as an inventory variable by the operator's 2026-10-14 ruling;
+        # ansible/inventory/group_vars/all.yml holds it (target slice R2, domain PR 3).
+        "domain",
     }
 )
 

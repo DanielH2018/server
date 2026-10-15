@@ -26,15 +26,6 @@ NEVER_STUB = {
     ),
 }
 
-# Keys `secrets.yml` still holds that are published, not secret, each with its reason. They
-# take no stub and no placeholder, so every render reads their inventory value.
-PUBLISHED = {
-    "domain": (
-        "the operator ruled on 2026-10-14 that it is a variable, not a secret; "
-        "ansible/inventory/group_vars/all.yml holds it"
-    ),
-}
-
 
 def homelab_secret_stub(key) -> str:
     """The stub value of the secret variable `key`: `stub-<key with hyphens>`."""
@@ -45,12 +36,10 @@ def homelab_stub_keys(secrets) -> list[str]:
     """The sorted secret key names that take a stub, from the parsed `secrets.yml` mapping.
 
     The mapping may be the ciphertext file: only its keys are read. `sops`, SOPS's own
-    metadata block, and the names in `NEVER_STUB` and `PUBLISHED` are left out.
+    metadata block, and the names in `NEVER_STUB` are left out.
     """
     return sorted(
-        str(key)
-        for key in secrets
-        if key != "sops" and str(key) not in NEVER_STUB.keys() | PUBLISHED.keys()
+        str(key) for key in secrets if key != "sops" and str(key) not in NEVER_STUB
     )
 
 
