@@ -309,8 +309,9 @@ def discharge_k8s_unapplied(
                 for base in dict.fromkeys((records[tag], render, stored))
             ):
                 return True
-            reason = render and deploy_render_bases.RENDER_PRECEDES
-            waits.setdefault(reason or deploy_render_bases.NO_MATCH, []).append(tag)
+            newest = tools.render_commit(tag)
+            reason = deploy_render_bases.wait_reason(newest, descends(newest, origin))
+            waits.setdefault(reason, []).append(tag)
             return False
         if by_digest:
             return True

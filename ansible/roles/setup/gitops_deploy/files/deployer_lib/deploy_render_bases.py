@@ -30,9 +30,11 @@ from deployer_lib.deploy_config import log
 from gitops_ledger import OWED_K8S_UNAPPLIED, owed_line_key
 
 BASES_KEY = "render_bases"
-# The two reasons `log_waits` gives for a caller that holds a `manifests` line.
-RENDER_PRECEDES = "its newest matching render predates the change"
-NO_MATCH = "no render matches what it applied"
+# The reasons `log_waits` gives for a caller that holds a `manifests` line. Only the first
+# clears without a deploy: the producer has not yet rendered a commit at or after the change.
+NOT_RENDERED = "its newest render predates the change"
+NO_MATCH = "a render at or after the change does not match what it applied"
+NO_RENDER = "it has no render record"
 
 
 def _line_obj(line: str, subject: str) -> dict | None:
@@ -91,6 +93,18 @@ def with_bases(
     return None
 
 
+def wait_reason(newest: str | None, reached: bool) -> str:
+    """Why a caller holds the line, from its newest render's commit, matching or not.
+
+    Args:
+        newest: that commit, or None for a caller with no render record.
+        reached: whether `newest` descends from the line's origin.
+    """
+    if not newest:
+        return NO_RENDER
+    return NO_MATCH if reached else NOT_RENDERED
+
+
 def log_waits(subject: str, origin: str, waits: dict[str, list[str]]) -> None:
     """Name the callers that still hold `subject`'s line at `origin`, by reason."""
     if not waits:
@@ -101,7 +115,7 @@ def log_waits(subject: str, origin: str, waits: dict[str, list[str]]) -> None:
     ]
     hint = (
         " — waiting on the hourly render producer"
-        if set(waits) == {RENDER_PRECEDES}
+        if set(waits) == {NOT_RENDERED}
         else ""
     )
     log(f"k8s_unapplied: {subject} waits at {origin[:8]}: {'; '.join(parts)}{hint}")

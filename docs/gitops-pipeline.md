@@ -1176,9 +1176,12 @@ untouched.
   a rollback included, can change the live bytes the render vouched for. The bases go when the
   line goes.
 - While the `manifests` line is kept, each tick logs `k8s_unapplied: manifests waits at <sha>`,
-  naming every caller that holds it under one of two reasons. "Its newest matching render
-  predates the change" means the line waits on the producer. "No render matches what it
-  applied" means a caller needs a deploy, or has no release record.
+  naming every caller that holds it under one of three reasons, read from the commit of the
+  caller's newest render whether or not that render matches. "Its newest render predates the
+  change" means the line waits on the producer, and only then does the line add "waiting on the
+  hourly render producer". "A render at or after the change does not match what it applied"
+  means the caller needs a deploy, or has no release record; that is the case the hand clear
+  is for. "It has no render record" means the producer does not render that caller.
 - A service's OWN line takes the same render proof when its role acts only through the bytes the
   digest covers. `scripts/deploy_tools/digest_provable.py` derives that per role, fail-closed:
   every task is a `k8s/manifests` include, a pure fact or check module, or an include of a task

@@ -208,8 +208,13 @@ def _two_commit_range(root: pathlib.Path) -> tuple[str, str, str]:
     return base, tasks, origin
 
 
-def _discharger(settings, state, root, records, renders):
-    """A `discharge()` reading `records` and `renders` as they stand at each call."""
+def _discharger(settings, state, root, records, renders, newest=None):
+    """A `discharge()` reading `records`, `renders` and `newest` as they stand at each call.
+
+    `renders` is what `render_proof` answers, the matching renders; `newest` is each tag's
+    newest render commit, matching or not.
+    """
+    newest = {} if newest is None else newest
 
     def discharge():
         tools = DeployTools(
@@ -217,6 +222,7 @@ def _discharger(settings, state, root, records, renders):
             release_commit=records.get,
             shared_role_callers=_callers_from_main,
             render_proof=renders.get,
+            render_commit=newest.get,
             digest_provable=lambda _repo, _roles: set(),
             digest_covers=lambda _repo, _items: set(),
         )
@@ -271,7 +277,8 @@ def test_a_kept_line_names_each_caller_it_waits_on_and_why(
 ):
     """#5118: a line waiting on a render the producer has not yet made logged nothing that
     told it apart from a render that never matches. A range that also changes the role holds
-    both callers, one with a matching render behind the origin and one with none."""
+    both callers. The reason reads the newest render's commit whether or not it matches, so a
+    non-matching render from before the change still reads as waiting on the producer."""
     root = tmp_path / "checkout"
     base = _checkout(root)
     behind = commit(root, "an unrelated commit", **{"README.md": "x\n"})
@@ -284,18 +291,33 @@ def test_a_kept_line_names_each_caller_it_waits_on_and_why(
             )
         },
     )
+    after = commit(root, "a later commit", **{"README.md": "y\n"})
     records = {MOVED: base, UNTOUCHED: base}
-    discharge = _discharger(settings, state, root, records, {UNTOUCHED: behind})
-
+    # Only gm-untouched's render at `behind` matches; gm-moved's does not.
+    newest = {MOVED: behind, UNTOUCHED: behind}
+    discharge = _discharger(settings, state, root, records, {UNTOUCHED: behind}, newest)
     state.record_owed(OWED_K8S_UNAPPLIED, origin, {"manifests"}, 1000.0)
-    assert discharge() == []
-    logged = [
-        line
-        for line in capsys.readouterr().out.splitlines()
-        if line.startswith("k8s_unapplied: manifests waits")
+
+    def waits_line():
+        assert discharge() == []
+        return [
+            line
+            for line in capsys.readouterr().out.splitlines()
+            if line.startswith("k8s_unapplied: manifests waits")
+        ]
+
+    prefix = f"k8s_unapplied: manifests waits at {origin[:8]}: "
+    assert waits_line() == [
+        prefix + f"2 its newest render predates the change: {MOVED}, {UNTOUCHED}"
+        " — waiting on the hourly render producer"
     ]
-    assert logged == [
-        f"k8s_unapplied: manifests waits at {origin[:8]}: "
-        f"1 its newest matching render predates the change: {UNTOUCHED}; "
-        f"1 no render matches what it applied: {MOVED}"
+    newest.update({MOVED: after, UNTOUCHED: after})
+    assert waits_line() == [
+        prefix + "2 a render at or after the change does not match what it applied: "
+        f"{MOVED}, {UNTOUCHED}"
+    ]
+    del newest[MOVED]
+    assert waits_line() == [
+        prefix + "1 a render at or after the change does not match what it applied: "
+        f"{UNTOUCHED}; 1 it has no render record: {MOVED}"
     ]
