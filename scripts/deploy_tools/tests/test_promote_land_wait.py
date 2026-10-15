@@ -15,7 +15,11 @@ from dataclasses import dataclass, field, replace
 import pytest
 
 import forge
+from deploy_tools.promote_lib import verify_promotion as vp
 from deploy_tools.promote_lib import wait as promote_wait
+from lib import yaml_fast
+from lib.repo_paths import REPO
+from renderer.renderer_lib.bundle import bundle_files as render_bundle
 from flux_host import FluxHost
 from _promote_fakes import FakeTransport, digest_of
 
@@ -166,6 +170,63 @@ def test_no_promotion_within_the_timeout_gives_up():
     assert (result.verdict, result.cause) == ("gave-up", "promote-timeout")
     assert sim.sleeps == promote_wait.LAND_WAIT_TIMEOUT_S // promote_wait.POLL_S
     assert "publish" in result.detail
+
+
+# -- the timeout against a substituting bundle (#5155) --------------------------------------
+
+
+def _substituting_promote_timeout() -> int:
+    """`verify`'s wait on the bundle the renderer writes for `peanut` substituting at 10m.
+
+    It holds the `cluster-vars` hop D3.3b added, so it is the longest wait any one-tag bundle
+    makes today.
+    """
+    directories = {"peanut": {"kustomization.yaml": "resources: []\n"}}
+    files = render_bundle(
+        directories,
+        {"peanut": frozenset({"peanut_password"})},
+        ["peanut"],
+        "10m",
+        "x=ENC[y]\n",
+    )
+    return vp.promote_timeout(
+        vp.flux_kustomizations({p: t.encode() for p, t in files.items()})
+    )
+
+
+def _publish_pipeline_s() -> int:
+    """The longest the `promote` workflow's `render` and `publish` jobs may run, in seconds.
+
+    A promotion of M cannot start before both finish, so `land-wait` needs this much over
+    `verify`'s wait. The `promote` job's own budget is left out: most of it is `decide`'s wait
+    on a verification already in flight.
+    """
+    jobs = yaml_fast.safe_load(
+        (REPO / ".github/workflows/promote.yml").read_text(encoding="utf-8")
+    )["jobs"]
+    return sum(int(jobs[job]["timeout-minutes"]) * 60 for job in ("render", "publish"))
+
+
+def test_the_land_wait_timeout_covers_a_substituting_promotion_plus_the_publish_pipeline():
+    """The Verify-by of #5155, against the default `land.sh` reaches through `run_land_wait`."""
+    margin = promote_wait.LAND_WAIT_TIMEOUT_S - _substituting_promote_timeout()
+    assert margin >= _publish_pipeline_s(), (
+        f"land-wait gives up {margin}s after verify would, inside the "
+        f"{_publish_pipeline_s()}s render and publish may take"
+    )
+
+
+def test_a_substituting_promotion_verify_would_pass_settles_rather_than_gives_up():
+    """M is promoted after the publish pipeline, and `verify`'s full wait, have both run out.
+
+    `land_wait` runs at its default timeout, as `land.sh` calls it, and must not report
+    `gave-up` on a promotion that `verify` still counts as on time.
+    """
+    covered_at = _substituting_promote_timeout() + _publish_pipeline_s()
+    polls_before = -(-covered_at // promote_wait.POLL_S)  # the first poll at or past it
+    sim = Sim(polls=[at(P)] * polls_before + [at(M)])
+    result = sim.wait()
+    assert (result.verdict, result.revision) == ("settled", M), result.detail
 
 
 def test_an_unreadable_hold_keeps_the_wait_going():
