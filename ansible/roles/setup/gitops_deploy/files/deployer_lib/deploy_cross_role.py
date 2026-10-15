@@ -29,12 +29,25 @@ from pathlib import Path
 # `test_setup_cross_role_reads.py` holds its `defaults/` rows.
 _COMMON = "ansible/roles/setup/common"
 _HOST_LIB = frozenset(
-    {"fake_remux", "gitops_deploy", "k3s", "renovate_agent", "renovate_notify"}
+    {
+        "fake_remux",
+        "gitops_deploy",
+        "homelab_builder",
+        "k3s",
+        "renovate_agent",
+        "renovate_notify",
+    }
 )
 _STAMPED = _HOST_LIB | {"claude_code", "deploy_ui", "initial_setup"}
 _KUMA_CHECK = frozenset({"gitops_deploy", "initial_setup", "k3s", "render_records"})
 _ALERT_UNIT = frozenset(
-    {"claude_code", "gitops_deploy", "renovate_agent", "renovate_notify"}
+    {
+        "claude_code",
+        "gitops_deploy",
+        "homelab_builder",
+        "renovate_agent",
+        "renovate_notify",
+    }
 )
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/tasks/alert_unit.yml": _ALERT_UNIT,
@@ -73,6 +86,12 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     # deploy_ui's firewall sources include `k3s_agent_node_ips` (#4357). Only `k3s-bringup.yml`
     # runs k3s, so a change here records k3s in `manual_plane` and the tick applies deploy_ui.
     "ansible/roles/setup/k3s/defaults/main.yml": frozenset({"deploy_ui"}),
+    # The host-package builder's settings file renders the deployer's CI gate, walk bound and
+    # repo from these defaults (H3.5a), so a change to any of them re-renders the builder's copy.
+    # H7.2e moves the CI keys into inventory and owes this row's replacement.
+    "ansible/roles/setup/gitops_deploy/defaults/main.yml": frozenset(
+        {"homelab_builder"}
+    ),
 }
 
 

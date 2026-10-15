@@ -2,11 +2,11 @@
 # The disarmed half. Every task is absent-shaped, so a host that was never armed no-ops
 # through the whole file.
 #
-# It stops and removes the role's four units, the ufw rules for the clients now in
-# homelab_builder_repo_clients, and the builder's state directory. A rule for a client already
-# dropped from that list stays until someone runs `ufw delete` by hand.
-# Two of the units (homelab-builder.service and .timer) and homelab-repo-sign.service arrive
-# in H3.5a and H3.5b; listing them now means a disarm after those PRs needs no edit here.
+# It stops and removes the role's units, the ufw rules for the clients now in
+# homelab_builder_repo_clients, the builder's state, configuration and code directories, and the
+# builder's two stamp fragments. A rule for a client already dropped from that list stays until
+# someone runs `ufw delete` by hand. homelab-repo-sign.service arrives in H3.5b; listing it now
+# means a disarm after that PR needs no edit here.
 #
 # DECIDED: teardown never touches /var/lib/homelab-signer or either system user. The signer's
 # GnuPG home holds the archive key every host trusts, so a disarm must not cost a key
@@ -21,6 +21,7 @@
   loop:
     - homelab-builder.timer
     - homelab-builder.service
+    - homelab-builder-alert.service
     - homelab-repo-sign.service
     - homelab-apt-repo.service
   loop_control:
@@ -47,6 +48,7 @@
   loop:
     - homelab-builder.timer
     - homelab-builder.service
+    - homelab-builder-alert.service
     - homelab-repo-sign.service
     - homelab-apt-repo.service
   become: true
@@ -68,4 +70,18 @@
   ansible.builtin.file:
     path: "{{ homelab_builder_state_dir }}"
     state: absent
+  become: true
+
+# The token is in the configuration directory, and the stamp fragments would otherwise name code
+# this teardown removed.
+- name: Remove the builder's configuration, code and stamp fragments
+  tags: [homelab-builder-teardown]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/homelab-builder
+    - "{{ homelab_builder_code_dir }}"
+    - /var/lib/homelab/setup-deployed-manifest.d/homelab-builder
+    - /var/lib/homelab/setup-render-manifest.d/homelab-builder
   become: true

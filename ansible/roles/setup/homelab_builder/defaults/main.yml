@@ -29,3 +29,22 @@ homelab_builder_repo_clients:
 # The signing key's user ID. `gpg --quick-generate-key` takes it once, behind a creates:
 # guard, so changing it later renames nothing.
 homelab_builder_key_uid: "homelab archive signing key <homelab-archive@daniel-box>"
+
+# The builder half (H3.5a). Its script, host_lib, publish-textfile, uv and nfpm live in this
+# root-owned directory, outside the builder's ReadWritePaths, so a builder run cannot rewrite
+# the code a later run, or the root ExecStopPost line, executes.
+homelab_builder_code_dir: /opt/homelab-builder
+
+# The uv cache and the interpreter directory, both inside the builder's state directory, which
+# its sandbox may write. The install task and the unit read the same two variables.
+homelab_builder_uv_cache_dir: "{{ homelab_builder_state_dir }}/uv-cache"
+homelab_builder_python_dir: "{{ homelab_builder_state_dir }}/python"
+
+# The nfpm CI's host_packages job builds with. The custom manager in renovate.json moves the
+# version and the digest here in the same PR as ci.yml's, and
+# ansible/roles/setup/homelab_builder/tests/test_builder_units.py holds the two pins equal. The
+# digest is the sha256 of nfpm_<version>_Linux_x86_64.tar.gz.
+# renovate: datasource=github-release-attachments depName=goreleaser/nfpm
+homelab_builder_nfpm_version: v2.48.0
+homelab_builder_nfpm_sha256: 6d7f9a28b2f397934403950fcbba83f598b08d02edbe79a0815b3b4897341750
+homelab_builder_nfpm_dir: "{{ homelab_builder_code_dir }}/nfpm-{{ homelab_builder_nfpm_version }}"

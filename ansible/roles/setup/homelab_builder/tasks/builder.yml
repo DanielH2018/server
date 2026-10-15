@@ -1,0 +1,219 @@
+---
+# The builder half, H3.5a (docs/target-architecture/host/h3-pi-pilot.md, *Steps, as PRs*, item 6,
+# and *The builder and the repository*). install.yml imports it after the repository half, so the
+# users, the state directories and archive-key.fpr exist first.
+#
+# Every task carries homelab-builder-install, as install.yml's do, so narrow_setup narrows a
+# change here to the armed half alone.
+
+# apt-utils carries apt-ftparchive, which H3.5b's signer indexes the repository with.
+- name: Install git and apt-utils for the builder
+  tags: [homelab-builder-install]
+  ansible.builtin.apt:
+    name: [git, apt-utils]
+    state: present
+  become: true
+
+# Root-owned and outside the builder's ReadWritePaths: the builder runs code from the commit it
+# builds, so it must not be able to rewrite the code a later run executes, nor publish-textfile,
+# which the unit runs as root.
+- name: Create the builder's code directories
+  tags: [homelab-builder-install]
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ homelab_builder_code_dir }}"
+    - "{{ homelab_builder_code_dir }}/bin"
+    - "{{ homelab_builder_nfpm_dir }}"
+  become: true
+
+- name: Create the builder's interpreter directory
+  tags: [homelab-builder-install]
+  ansible.builtin.file:
+    path: "{{ homelab_builder_python_dir }}"
+    state: directory
+    owner: homelab-builder
+    group: homelab-builder
+    mode: "0700"
+  become: true
+
+- name: Write the builder's configuration
+  tags: [homelab-builder-install]
+  ansible.builtin.template:
+    src: config.env.j2
+    dest: /etc/homelab-builder/config.env
+    owner: root
+    group: homelab-builder
+    mode: "0640"
+  # The deployer's CI gate, walk bound and repo (builder step 4). They are gitops_deploy's
+  # defaults, so deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES carries the row that
+  # re-applies this role when one changes. H7.2e moves the CI keys into inventory and owes that
+  # row's replacement.
+  vars:
+    homelab_builder_ci_contexts: "{{ gitops_deploy_ci_contexts }}"
+    homelab_builder_ci_walk_max: "{{ gitops_deploy_ci_ancestor_walk_max }}"
+    homelab_builder_github_repo: "{{ gitops_deploy_github_repo }}"
+  become: true
+  # It renders homelab_builder_github_token. no_log also hides an undefined-variable failure:
+  # check the SOPS key is in scope if this task fails opaquely.
+  no_log: true
+
+# The nfpm CI builds with, checked against the same sha256 (defaults/main.yml has the pin).
+- name: Download the pinned nfpm
+  tags: [homelab-builder-install]
+  ansible.builtin.get_url:
+    url: "https://github.com/goreleaser/nfpm/releases/download/{{ homelab_builder_nfpm_version }}/nfpm_{{ homelab_builder_nfpm_version | regex_replace('^v', '') }}_Linux_x86_64.tar.gz"
+    dest: "{{ homelab_builder_nfpm_dir }}/nfpm.tar.gz"
+    checksum: "sha256:{{ homelab_builder_nfpm_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: Unpack the pinned nfpm
+  tags: [homelab-builder-install]
+  ansible.builtin.unarchive:
+    src: "{{ homelab_builder_nfpm_dir }}/nfpm.tar.gz"
+    dest: "{{ homelab_builder_nfpm_dir }}"
+    remote_src: true
+    include: [nfpm]
+    creates: "{{ homelab_builder_nfpm_dir }}/nfpm"
+    owner: root
+    group: root
+  become: true
+
+# The uv and Python steps of common/tasks/agent_user.yml, not the whole file, which also installs
+# Claude Code. A copy of the uv binary initial_setup pins, so a uv bump reaches the builder on the
+# next apply of this role. Root-owned, for the reason the code directory is.
+- name: Give the builder the operator's pinned uv
+  tags: [homelab-builder-install]
+  ansible.builtin.copy:
+    src: /home/{{ sys_user }}/.local/bin/uv
+    dest: "{{ homelab_builder_code_dir }}/bin/uv"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+# As agent_user.yml does it: runuser drops to the builder inside the module, so what uv writes is
+# the builder's already, and the unit's UV_PYTHON_INSTALL_DIR and UV_CACHE_DIR are this task's.
+# --no-bin writes no python3.14 shim; the unit names the version to uv.
+- name: Install the pinned host Python for the builder
+  tags: [homelab-builder-install]
+  ansible.builtin.command:
+    argv:
+      - runuser
+      - -u
+      - homelab-builder
+      - --
+      - "{{ homelab_builder_code_dir }}/bin/uv"
+      - python
+      - install
+      - --no-bin
+      - "{{ host_python_version }}"
+    chdir: "{{ homelab_builder_state_dir }}"
+  environment:
+    HOME: "{{ homelab_builder_state_dir }}"
+    UV_CACHE_DIR: "{{ homelab_builder_uv_cache_dir }}"
+    UV_PYTHON_INSTALL_DIR: "{{ homelab_builder_python_dir }}"
+    # runuser keeps root's TMPDIR (/tmp/user/0 on the host), which the builder cannot write.
+    TMPDIR: /tmp
+  register: homelab_builder_python
+  changed_when: >-
+    'Installed' in (homelab_builder_python.stderr | default(''))
+    + (homelab_builder_python.stdout | default(''))
+  become: true
+
+- name: Install the builder script and publish-textfile
+  tags: [homelab-builder-install]
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ homelab_builder_code_dir }}/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - { src: host_package_builder.py, dest: host_package_builder.py }
+    - { src: publish-textfile.sh, dest: publish-textfile }
+  loop_control:
+    label: "{{ item.dest }}"
+  become: true
+
+- name: Install the shared host_lib helper beside the builder
+  tags: [homelab-builder-install]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    # Literal, as the stamp pairs below are, so the copy-pair census can match the two.
+    host_lib_dir: /opt/homelab-builder
+
+- name: Record the deployed builder code
+  tags: [homelab-builder-install]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: homelab-builder
+    stamp_deployed_pairs:
+      - live: /opt/homelab-builder/host_package_builder.py
+        src: ansible/roles/setup/homelab_builder/files/host_package_builder.py
+      - live: /opt/homelab-builder/publish-textfile
+        src: ansible/roles/setup/homelab_builder/files/publish-textfile.sh
+      - live: /opt/homelab-builder/host_lib.py
+        src: ansible/roles/setup/common/files/host_lib.py
+      - live: /opt/homelab-builder/kuma_push.py
+        src: ansible/roles/setup/common/files/kuma_push.py
+
+- name: Install the builder units
+  tags: [homelab-builder-install]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - homelab-builder.service
+    - homelab-builder.timer
+  become: true
+  notify: Reload systemd
+
+- name: Install the builder's failure alert
+  tags: [homelab-builder-install]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/alert_unit.yml"
+  vars:
+    alert_unit_name: homelab-builder
+    alert_unit_description: Alert when the homelab host-package builder fails
+    alert_unit_message: >-
+      homelab-builder failed on {{ inventory_hostname }}. The reason label of
+      homelab_builder_unbuilt_since_timestamp_seconds names why; docs/host-packages.md has the
+      clear, and journalctl -u homelab-builder has the run.
+    alert_unit_env_dir: /etc/homelab-builder
+
+- name: Stamp the rendered builder units
+  tags: [homelab-builder-install]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: homelab-builder
+    stamp_render_templates:
+      - ansible/roles/setup/homelab_builder/templates/homelab-builder.service.j2
+      - ansible/roles/setup/homelab_builder/templates/homelab-builder.timer.j2
+      - ansible/roles/setup/common/templates/unit-failure-alert.service.j2
+      - ansible/roles/setup/common/templates/alert-webhook.env.j2
+      # The stamp and the drift check both hash the repo source, never the render, so the
+      # template carries no token into either.
+      - ansible/roles/setup/homelab_builder/templates/config.env.j2
+
+- name: Flush handlers so the builder units are loaded before the timer is enabled
+  tags: [homelab-builder-install]
+  ansible.builtin.meta: flush_handlers
+
+# The timer only: no task starts the service, so a first run that fails pages through
+# OnFailure= rather than failing this apply, which would hold every session's landings.
+- name: Enable and start the builder timer
+  tags: [homelab-builder-install]
+  ansible.builtin.systemd:
+    name: homelab-builder.timer
+    enabled: true
+    state: started
+  become: true

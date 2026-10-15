@@ -3,7 +3,8 @@ id: "0021"
 title: The host-package builder trusts master plus green CI, and checks no signature
 status: Accepted
 date: 2026-10-14
-governs: []
+governs:
+  - "ansible/roles/setup/homelab_builder/files/host_package_builder.py#the anchor is a commit on origin/master's first-parent chain"
 ---
 
 # ADR-0021: The host-package builder trusts master plus green CI, and checks no signature
@@ -77,6 +78,7 @@ commit signature and no landing tag. Every host takes its packages on that ancho
 
 ## Governs
 
-Nothing in the tree enforces this yet. H3.5a writes the builder, and builder step 5 is
-where the anchor is read. When H3.5a lands, that line gains a `# DECIDED:` marker
-referencing this record, and `governs:` gains its anchor.
+Builder step 5 reads the anchor in `choose` in
+`ansible/roles/setup/homelab_builder/files/host_package_builder.py`. The `# DECIDED:` marker there
+opens "the anchor is a commit on origin/master's first-parent chain" and cites this record.
+`governs:` names it by that text rather than by line, so an edit above it moves nothing.

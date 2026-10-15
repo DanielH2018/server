@@ -15,6 +15,8 @@ from _setup_render import render_setup_text
 
 ROLE = SETUP_ROLES / "homelab_builder"
 INSTALL = load_tasks(ROLE / "tasks" / "install.yml")
+# install.yml imports builder.yml, H3.5a's builder half, so the armed arm is both files.
+ARMED = INSTALL + load_tasks(ROLE / "tasks" / "builder.yml")
 TEARDOWN = load_tasks(ROLE / "tasks" / "teardown.yml")
 DEFAULTS = load_defaults(ROLE)
 
@@ -50,10 +52,20 @@ def signer_naming_tasks(tasks) -> list[str]:
 
 def _units_install_writes() -> set[str]:
     units = set()
-    for task in walk_tasks(INSTALL):
-        dest = str((task.get("ansible.builtin.template") or {}).get("dest", ""))
-        if dest.startswith(_UNIT_DIR):
+    for task in walk_tasks(ARMED):
+        template = task.get("ansible.builtin.template") or {}
+        dest = str(template.get("dest", ""))
+        if not dest.startswith(_UNIT_DIR):
+            continue
+        if "{{ item }}" in dest:
+            units.update(task["loop"])
+        else:
             units.add(dest.removeprefix(_UNIT_DIR))
+    # The alert unit comes from common/tasks/alert_unit.yml, under the import's name.
+    for task in walk_tasks(ARMED):
+        name = (task.get("vars") or {}).get("alert_unit_name")
+        if name and "alert_unit.yml" in str(task.get("ansible.builtin.import_tasks")):
+            units.add(f"{name}-alert.service")
     return units
 
 
@@ -129,7 +141,12 @@ def test_the_ufw_rule_admits_only_the_two_peer_addresses():
 
 def test_the_teardown_removes_every_unit_install_writes():
     units = _units_install_writes()
-    assert "homelab-apt-repo.service" in units
+    assert {
+        "homelab-apt-repo.service",
+        "homelab-builder.service",
+        "homelab-builder.timer",
+        "homelab-builder-alert.service",
+    } <= units
     removal = task_named(TEARDOWN, "Remove the builder unit files")
     assert removal["ansible.builtin.file"]["state"] == "absent"
     assert units <= set(removal["loop"])

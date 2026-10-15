@@ -142,6 +142,8 @@ def test_discover_templates_finds_the_known_set():
     assert {
         "deploy-ui.service.j2",
         "homelab-apt-repo.service.j2",
+        "homelab-builder.service.j2",
+        "homelab-builder.timer.j2",
         "gitops-deploy.service.j2",
         "gitops-deploy.timer.j2",
         "renovate-agent.timer.j2",
@@ -157,7 +159,7 @@ def test_discover_templates_finds_the_known_set():
         "worktree-holders.socket.j2",
         "worktree-holders@.service.j2",
     } <= names
-    assert len(names) == 29
+    assert len(names) == 31
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the homelab host-package builder every 2 minutes
+
+[Timer]
+OnBootSec=2min
+# Counted from the last start. A run still going when it elapses is not started a second time.
+OnUnitActiveSec=2min
+
+[Install]
+WantedBy=timers.target
