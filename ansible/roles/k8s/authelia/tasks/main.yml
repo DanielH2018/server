@@ -274,6 +274,44 @@
   when: not (homelab_secret_stubs | default(false) | bool)
   no_log: true
 
+# With OIDC on, Authelia's `template` config filter runs Go templating over the whole
+# configuration.yml at start, and the one action it should find is the `jwks[].key` expression
+# that reads the signing key's mount. Every test renders stub values, so none sees a real one.
+# A real value holding `{{` would open a second action, and Authelia would refuse to start,
+# taking SSO down under Recreate. These two tasks count the actions in the real render and
+# stop the deploy before the apply, so the old config stays live. The count is the only fact
+# set, and the assert prints that number and no value. With the lever off the config holds no
+# expression and the filter is off, so a `{{` in a value is plain text and neither task runs.
+# `[{][{]` matches the pair without writing it, which Ansible would read as a template.
+# After D5's flip for authelia, no deploy task reads the rendered config; D3's refusal of `{{`
+# in any value is the successor (docs/target-architecture/render/r2-secret-placeholders.md,
+# PR 7).
+- name: Count the template actions in Authelia's rendered configuration
+  tags: [config]
+  vars:
+    authelia_k8s_rendered_config_secret: >-
+      {{ lookup('ansible.builtin.template',
+                playbook_dir + '/roles/k8s/authelia/templates/config-secret.yaml.j2') }}
+  ansible.builtin.set_fact:
+    authelia_k8s_config_action_count: >-
+      {{ (authelia_k8s_rendered_config_secret | from_yaml).stringData['configuration.yml']
+         | regex_findall('[{][{]') | length }}
+  no_log: true
+  when: authelia_k8s_manage_oidc | bool
+
+- name: Fail unless the jwks key expression is the configuration's only template action
+  tags: [config]
+  ansible.builtin.assert:
+    that:
+      - authelia_k8s_config_action_count | int == 1
+    fail_msg: >-
+      Authelia's rendered configuration.yml holds {{ authelia_k8s_config_action_count }}
+      template actions where only the jwks key expression should be one. A secret value
+      holding a double opening brace would stop Authelia starting under its template config
+      filter. Find the value with sops and store one without it.
+    quiet: true
+  when: authelia_k8s_manage_oidc | bool
+
 # The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
 - name: Deploy Authelia to the cluster
   ansible.builtin.include_role:
@@ -309,9 +347,14 @@
             if authelia_k8s_redis_sessions | bool else []) }}
     # crowdsec-secret.yaml is concatenated rather than listed: it reads
     # crowdsec_k8s_agent_password, which a cluster not running the crowdsec role never
-    # defines, and the Secret has no template branch to gate.
+    # defines, and the Secret has no template branch to gate. oidc-jwk-secret.yaml rides
+    # authelia_k8s_manage_oidc, the lever that gates the `jwks` block reading it: a passed list
+    # wins whole, so a template named nowhere here is never rendered, and the Deployment would
+    # mount a Secret no deploy wrote. It is never in manifests_files, which stages a file
+    # world-readable and outside no_log.
     manifests_secret_files: >-
       {{ ['config-secret.yaml']
+         + (['oidc-jwk-secret.yaml'] if authelia_k8s_manage_oidc | bool else [])
          + (['crowdsec-secret.yaml'] if authelia_k8s_manage_crowdsec | bool else [])
          + (['redis-secret.yaml'] if authelia_k8s_redis_sessions | bool else []) }}
     # `authelia-redis` is listed so the batch drain WAITS on its rollout, never so this role

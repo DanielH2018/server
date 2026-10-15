@@ -14,6 +14,7 @@ expressions the deploy runs rather than a restatement of them.
 Run: uv run pytest ansible/tests/k8s/test_derived_manifest_files.py
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 
 from lib.k8s_roles import (
+    MANIFEST_TEMPLATE_GLOB,
     SECRET_MANIFEST_NAME,
     SKIP_ROLES,
     k8s_entries,
@@ -29,6 +31,7 @@ from lib.k8s_roles import (
 )
 from lib import yaml_fast
 from _helpers import ANSIBLE, load_tasks
+from _role_census import role_task_files
 from _k8s_render import rendered_texts
 
 MANIFESTS_TASKS = ANSIBLE / "roles" / "k8s" / "manifests" / "tasks" / "main.yml"
@@ -140,6 +143,57 @@ def test_the_jinja_list_roles_still_build_their_lists_with_jinja():
             f"{name} no longer builds manifests_files with Jinja; drop it from "
             "JINJA_LIST_ROLES so the agreement test covers it."
         )
+
+
+_TASK_SRC = re.compile(r"^\s*src:\s*[\"']?([\w.-]+\.yaml\.j2)", re.MULTILINE)
+
+
+def unlisted_templates(role: str, k8s_roles: Path | None = None) -> set[str]:
+    """`role`'s top-level manifest templates that nothing in the role renders.
+
+    A role that passes a list gets that list whole, so a template neither list names is never
+    rendered, unless the role's own tasks render it as a `src:`, as traefik does with
+    rbac.yaml.j2 for the objects it places in other namespaces. `resolved_manifest_files`
+    counts every basename in a Jinja value, a conditional branch included, which is the right
+    reading here: the question is whether a template is named anywhere. A role's lever is held
+    by a templar test in its own services test.
+    """
+    roles_dir = k8s_roles or ANSIBLE / "roles" / "k8s"
+    own = {
+        p.name.removesuffix(".j2")
+        for p in (roles_dir / role / "templates").glob(MANIFEST_TEMPLATE_GLOB)
+    }
+    files, secret = resolved_manifest_files(role, roles_dir, {})
+    rendered_by_task = {
+        name.removesuffix(".j2")
+        for tasks in role_task_files(roles_dir / role)
+        for name in _TASK_SRC.findall(tasks.read_text())
+    }
+    return own - files - secret - rendered_by_task
+
+
+def test_every_template_of_a_jinja_list_role_is_listed_is_clean():
+    assert {name: unlisted_templates(name) for name in JINJA_LIST_ROLES} == {
+        name: set() for name in JINJA_LIST_ROLES
+    }
+    # The named members: authelia's OIDC key Secret, which R2's PR 7 lists behind its lever,
+    # and traefik's rbac.yaml, which traefik's own task renders.
+    _files, secret = resolved_manifest_files("authelia")
+    assert "oidc-jwk-secret.yaml" in secret
+    assert "rbac.yaml" not in set().union(*resolved_manifest_files("traefik"))
+
+
+def test_a_template_an_explicit_list_leaves_out_is_flagged(tmp_path):
+    _widget(tmp_path, "deployment.yaml.j2", "orphan-secret.yaml.j2")
+    tasks = tmp_path / "roles" / "k8s" / "widget" / "tasks" / "main.yml"
+    tasks.write_text(
+        "---\n- name: Deploy widget\n  vars:\n"
+        "    manifests_files: \"{{ ['deployment.yaml'] }}\"\n"
+        "    manifests_secret_files: '{{ [] }}'\n"
+    )
+    assert unlisted_templates("widget", tmp_path / "roles" / "k8s") == {
+        "orphan-secret.yaml"
+    }
 
 
 def _widget(tmp_path: Path, *templates: str) -> Path:

@@ -1,4 +1,4 @@
-"""`render_sops_manifests` and the `sops-manifest-entries` check (target slice R2, PRs 5 to 7b).
+"""`render_sops_manifests` and the `sops-manifest-entries` check (target slice R2, PRs 5 to 7).
 
 A placeholder render leaves out each file a role lists in `render_sops_manifests`, and the
 check holds every entry to one Secret of `SOPS_MANIFEST_KEYS` keys. The fixtures build a
@@ -20,7 +20,6 @@ from renderer.renderer_lib.placeholders import (
 )
 from renderer.renderer_lib.secret_checks import (
     KNOWN_VIOLATIONS,
-    NO_SECRET_EXPRESSION,
     SOPS_MANIFEST_KEYS,
     check,
     rule5,
@@ -37,6 +36,7 @@ ENTRIES = {
     HA: (ENTRY, GA),
     "pi-peer-backup": ("ssh-key-secret.yaml", "pi_peer_backup_ssh_key"),
     "qbittorrent": ("mullvad-account-secret.yaml", "mullvad_account"),
+    "authelia": ("oidc-jwk-secret.yaml", "authelia_oidc_rsa_key_content"),
 }
 
 
@@ -52,7 +52,7 @@ def _check(entries: dict[str, str | None]) -> list[str]:
     return sops_manifest_entries(render, [GA, "domain", "fixture_token"])
 
 
-def test_the_real_tree_holds_three_entries_is_clean():
+def test_the_real_tree_holds_four_entries_is_clean():
     entries = {tag: sops_manifests(tag) for tag in select_tags(None)}
     assert {tag: names for tag, names in entries.items() if names} == {
         role: [entry] for role, (entry, _key) in ENTRIES.items()
@@ -141,7 +141,6 @@ def test_a_placeholder_render_with_a_wrong_entry_exits_1(tmp_path, capsys):
 
 # -- the third clause: a template outside the lists ------------------------------------------
 
-AUTHELIA_TEMPLATE = "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2"
 MULLVAD = "mullvad_account"
 
 
@@ -152,20 +151,17 @@ def _unlisted(template: str, key: str) -> str:
     )
 
 
-def test_the_real_tree_names_each_key_in_an_entry_or_the_ratchet_is_clean():
+def test_the_real_tree_names_each_key_only_in_an_entry_is_clean():
+    # R2's PR 7 moved authelia's OIDC key, the last key a template outside the lists named,
+    # so the clause holds with no ratchet at all: the namers are exactly the four entries.
     result = rule5(homelab_render.secret_keys())
     entry_templates = [
         f"ansible/roles/k8s/{role}/templates/{entry}.j2"
         for role, (entry, _key) in ENTRIES.items()
     ]
     namers = sorted(template for _tag, template, _key in result.sops_namers)
-    assert namers == sorted([AUTHELIA_TEMPLATE, *entry_templates])
+    assert namers == sorted(entry_templates)
     assert sops_manifest_namers(result, KNOWN_VIOLATIONS) == []
-    # The named member: authelia's template passes only through its rule 5 entry.
-    live = {v for v in KNOWN_VIOLATIONS if v.rule != NO_SECRET_EXPRESSION}
-    assert sops_manifest_namers(result, live) == [
-        _unlisted(AUTHELIA_TEMPLATE, "authelia_oidc_rsa_key_content")
-    ]
 
 
 def _rule5_over(tmp_path, source: str):

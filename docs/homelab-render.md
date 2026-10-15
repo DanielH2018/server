@@ -344,10 +344,10 @@ would accept it. No template iterates such a
 part, so a reviewer reads any new `{% for %}` over a part of a container alias as a
 transform.
 
-`KNOWN_VIOLATIONS` holds every violation the first fleet render found and the tree still has:
-rule 4 on authelia's and pi-peer-backup's Secrets, and rule 5's two entries, the `indent`s on
-those keys. R2's PRs 6 and 7 remove them, and an entry that no longer matches fails the check,
-so the set shrinks only through a fix. R2's PR 4 removed qbittorrent's two `trim`s and
+`KNOWN_VIOLATIONS` holds every violation the first fleet render found and the tree still has.
+It is empty. An entry that no longer matches fails the check, so the set shrank only through
+fixes. R2's PRs 6 and 7 removed rule 4 on pi-peer-backup's and authelia's Secrets and rule 5's
+`indent`s on their keys, by moving each key into a Secret of its own. R2's PR 4 removed qbittorrent's two `trim`s and
 mosquitto's `string`, and mosquitto's deploy refuses a stored hash that holds a colon.
 R2's PR 5 removed Home Assistant's two entries, the `from_json` parse and
 the Secret that embedded its output through `indent`. R2's PR 3 removed the 24 truthiness
@@ -384,6 +384,7 @@ applies it like any other secret file.
 | `home-assistant` | `google-sa-secret.yaml` | `home-assistant-google-sa` | `google_assistant_service_account` |
 | `pi-peer-backup` | `ssh-key-secret.yaml` | `pi-peer-backup-ssh-key` | `pi_peer_backup_ssh_key` |
 | `qbittorrent` | `mullvad-account-secret.yaml` | `qbittorrent-mullvad-account` | `mullvad_account` |
+| `authelia` | `oidc-jwk-secret.yaml` | `authelia-oidc-jwk` | `authelia_oidc_rsa_key_content` |
 
 A wrong entry would hide a whole Secret from the publish and from the round trip, so the
 `sops-manifest-entries` check in `renderer_lib/sops_entries.py` holds the lists on every
@@ -401,9 +402,9 @@ A third clause holds the templates outside the lists. Every template that names 
 entry in `KNOWN_VIOLATIONS` for that key. Rule 5's walk supplies the names, so an alias counts. The
 clause reads template sources, so it scans the whole tree on every run, `--role` renders included.
 `secret_checks.check` runs it beside the five rules, so a failure prints `secret check:
-sops-manifest-entries: <template> names <key>, ...` and `cluster` exits 1. Authelia's
-`config-secret.yaml.j2` passes it through its `filter indent` entry until R2's PR 7 moves
-`authelia_oidc_rsa_key_content` into a Secret of its own.
+sops-manifest-entries: <template> names <key>, ...` and `cluster` exits 1. Since R2's PR 7
+moved `authelia_oidc_rsa_key_content` out of authelia's `config-secret.yaml.j2`, the templates
+that name a `SOPS_MANIFEST_KEYS` key are exactly the four entries.
 
 ### Filters that only interpolate a secret
 
@@ -456,9 +457,9 @@ It runs two passes:
 
 Two things are left out of the comparison, by name and by count, and nothing else:
 
-- **The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names.** The one left is
-  authelia's `Secret/authelia-config`, which still carries a multi-line key. Each entry whose
-  directory was built must drop exactly one object.
+- **The documents a `KNOWN_VIOLATIONS` entry of rules 1 to 4 names.** None is left. The last
+  was authelia's `Secret/authelia-config`, compared since R2's PR 7 moved its multi-line key
+  out. Each entry whose directory was built must drop exactly one object.
 - **The files a role's `render_sops_manifests` names.** Placeholder mode emits no document for
   them, and each stub render drops the same files. Each pass counts the documents it dropped
   and fails unless the count equals the number of entries in the tags it built.
@@ -469,7 +470,7 @@ held `${domain}`. No hashed config holds a placeholder since `domain` was publis
 placeholder that reaches one is a difference.
 
 Each pass prints a summary line, such as `roundtrip: 58 tags, 4 deferred directories, 47
-substituting, 450 objects, 1 documents in KNOWN_VIOLATIONS left out, 0 differences, 3
+substituting, 450 objects, 0 documents in KNOWN_VIOLATIONS left out, 0 differences, 4
 documents in render_sops_manifests, with each key's R1 stub`. `roundtrip` exits 0 only when both passes find no difference and each
 exclusion count holds.
 
@@ -486,8 +487,8 @@ uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip 
 ```
 
 The CI job round-trips every tag outside `PLACEHOLDER_DEFERRED` in both passes, with no
-`--role`. That covers `home-assistant`, `pi-peer-backup` and `qbittorrent`, which carry the
-three `render_sops_manifests` entries.
+`--role`. That covers `home-assistant`, `pi-peer-backup`, `qbittorrent` and `authelia`, which
+carry the four `render_sops_manifests` entries.
 Its red half runs on `configarr`, `janitorr` and `home-assistant` only, because one changed byte
 is all it has to show. The job also round-trips `traefik` with `email` dropped from the guard's
 map under every tag, and fails unless that run exits 1 and names `Deployment/homelab/traefik`.

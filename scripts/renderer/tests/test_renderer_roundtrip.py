@@ -21,7 +21,10 @@ from renderer.renderer_lib.cluster import render_tag
 from renderer.renderer_lib.flux_probe import RESOLVER_CORPUS, TYPES_FIXTURE_MANIFEST
 from renderer.renderer_lib import roundtrip
 from renderer.renderer_lib.placeholders import read_guard_map
-from renderer.renderer_lib.secret_checks import KNOWN_VIOLATIONS
+from renderer.renderer_lib.secret_checks import (
+    NO_SOPS_MANIFEST_KEY,
+    Violation,
+)
 from renderer.renderer_lib.roundtrip import (
     compare_sides,
     guarded_keys,
@@ -228,11 +231,28 @@ def test_the_flux_crds_that_opt_out_of_substitution_are_clean(
     assert capsys.readouterr().out.count(" 0 differences, ") == 2
 
 
-def test_a_known_violation_document_left_out_is_clean(flux_on_path, tmp_path, capsys):
-    out = tmp_path / "rt"
-    assert _main("roundtrip", "--out", str(out), "--role", "authelia") == 0
-    for summary in capsys.readouterr().out.splitlines():
-        assert " 1 documents in KNOWN_VIOLATIONS left out, 0 differences" in summary
+# KNOWN_VIOLATIONS is empty since R2's PR 7, so the exclusion tests name a fixture entry: rule
+# 4 on configarr's config Secret, whose document the round trip must then leave out.
+FIXTURE_KNOWN = frozenset(
+    {
+        Violation(
+            NO_SOPS_MANIFEST_KEY,
+            "configarr",
+            "config-secret.yaml",
+            "Secret/configarr-config",
+            "fixture_key",
+        )
+    }
+)
+
+
+def test_a_known_violation_document_left_out_is_clean(flux_on_path, tmp_path):
+    keys = homelab_render.secret_keys()
+    passes = stub_passes(shadow_diff.stub_vars(), keys, guarded_keys(read_guard_map()))
+    sides = render_sides(tmp_path / "rt", ["configarr"], keys, passes)
+    report = compare_sides(sides, passes[0], flux_on_path, known=FIXTURE_KNOWN)
+    assert report.differences == []
+    assert report.documents == ["configarr: Secret/configarr-config"]
 
 
 def _report(**fields) -> roundtrip.Report:
@@ -241,14 +261,14 @@ def _report(**fields) -> roundtrip.Report:
 
 def test_exclusions_that_match_what_they_name_are_clean():
     report = _report(
-        directories=["authelia"], documents=["authelia: Secret/authelia-config"]
+        directories=["configarr"], documents=["configarr: Secret/configarr-config"]
     )
-    assert roundtrip.exclusion_problems(report, KNOWN_VIOLATIONS) == []
+    assert roundtrip.exclusion_problems(report, FIXTURE_KNOWN) == []
 
 
 def test_exclusions_that_miss_what_they_name_are_flagged():
-    report = _report(directories=["authelia"])
-    (problem,) = roundtrip.exclusion_problems(report, KNOWN_VIOLATIONS)
+    report = _report(directories=["configarr"])
+    (problem,) = roundtrip.exclusion_problems(report, FIXTURE_KNOWN)
     assert "left out the documents [], where KNOWN_VIOLATIONS names" in problem
 
 
@@ -330,12 +350,14 @@ def test_roundtrip_drops_one_document_per_sops_manifest_entry_is_clean(
     flux_on_path, tmp_path, capsys
 ):
     # home-assistant's render_sops_manifests names google-sa-secret.yaml, pi-peer-backup's
-    # names ssh-key-secret.yaml and qbittorrent's names mullvad-account-secret.yaml.
-    # Placeholder mode emits none of them, so the stub side drops all three too and counts one
-    # Secret for each. Each key left its role's secret.yaml with it, so no KNOWN_VIOLATIONS
-    # document is left out.
+    # names ssh-key-secret.yaml, qbittorrent's names mullvad-account-secret.yaml and
+    # authelia's names oidc-jwk-secret.yaml. Placeholder mode emits none of them, so the stub
+    # side drops all four too and counts one Secret for each. Each key left the Secret that
+    # held it, so no KNOWN_VIOLATIONS document is left out: authelia-config, the last one, is
+    # compared like any other.
     out = tmp_path / "rt"
     entries = {
+        "authelia": "oidc-jwk-secret.yaml",
         "home-assistant": "google-sa-secret.yaml",
         "pi-peer-backup": "ssh-key-secret.yaml",
         "qbittorrent": "mullvad-account-secret.yaml",
@@ -344,7 +366,7 @@ def test_roundtrip_drops_one_document_per_sops_manifest_entry_is_clean(
     assert _main("roundtrip", "--out", str(out), *roles) == 0
     printed = capsys.readouterr().out
     summary = (
-        " 0 documents in KNOWN_VIOLATIONS left out, 0 differences, 3 documents in "
+        " 0 documents in KNOWN_VIOLATIONS left out, 0 differences, 4 documents in "
         "render_sops_manifests, "
     )
     assert printed.count(summary) == 2
