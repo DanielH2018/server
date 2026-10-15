@@ -41,6 +41,7 @@ from lib.cli_help import warn
 from lib.git import git
 from lib.repo_paths import HOST_LIB_FILES
 from lib.repo_paths import REPO as _REPO_PATH
+from secrets_mgmt.cluster_vars_check import Expected, Tree
 
 # host_lib is the setup roles' shared host module, for the Kuma push below.
 _sys.path.insert(0, str(HOST_LIB_FILES))
@@ -224,6 +225,34 @@ def tree_owners() -> dict[str, str]:
     return tag_owners()
 
 
+# The cluster files' boundaries (slice D3). `cluster_vars` is imported inside each default,
+# never at the top: it imports `sops_set` from this module, so a top-level import is a cycle.
+def cluster_tree() -> Tree:
+    """The live tree's cluster file paths."""
+    return Tree(_REPO_PATH)
+
+
+def cluster_expected() -> Expected:
+    """The placeholder render's `Expected`. Raises `RenderError` when a template fails."""
+    from secrets_mgmt.cluster_vars import fleet_expected
+
+    return fleet_expected()
+
+
+def cluster_write(tree: Tree, expected: Expected) -> int:
+    """`cluster_vars.py write`, in process; returns its exit code."""
+    from secrets_mgmt.cluster_vars import write
+
+    return write(tree, expected)
+
+
+def cluster_check(tree: Tree) -> int:
+    """`cluster_vars.py check --no-render --base HEAD`, in process; returns its exit code."""
+    from secrets_mgmt.cluster_vars import main
+
+    return main(["check", "--no-render", "--base", "HEAD"], tree)
+
+
 # The rotation cadence per tier, and the default `secret_registry.py` seeds, syncs and audits with.
 # `secret_rotation.py` assigns the same table AS A LITERAL, because
 # `scripts/docs/gen_doc_fragments.py` reads it out of THAT file with `ast.literal_eval` and a
@@ -256,4 +285,8 @@ class RotationTools:
     kuma_push: Callable[[str, bool, str], None] = kuma_push
     deploy: Callable[[list[str]], int] = run_deploy
     owners: Callable[[], Mapping[str, str]] = tree_owners
+    cluster_tree: Callable[[], Tree] = cluster_tree
+    cluster_expected: Callable[[], Expected] = cluster_expected
+    cluster_write: Callable[[Tree, Expected], int] = cluster_write
+    cluster_check: Callable[[Tree], int] = cluster_check
     tier_days: Mapping[str, int | None] = DEFAULT_TIER_DAYS

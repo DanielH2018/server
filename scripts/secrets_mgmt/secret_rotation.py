@@ -287,13 +287,52 @@ def unattended_due(rows: list, rotate_all: bool = False) -> list:
     ]
 
 
+REVERT_PATHS = ["ansible/vars/secrets.yml", "ansible/secret_rotation.yml"]
+# What `cluster_vars.py write` may change, as `secret-rotate.sh.j2`'s TRACKED names them.
+CLUSTER_PATHS = [
+    "ansible/vars/cluster-vars.sops.env",
+    "ansible/vars/cluster-vars.source",
+    "ansible/vars/cluster-manifests/",
+]
+
+
+def sync_cluster_files(rotated: list[str], tools: RotationTools) -> bool:
+    """Rewrite the cluster files for the rotated keys a cluster render reads; True on success.
+
+    A no-op while the cluster file is absent, which is the tree before D3.2c, and when no
+    rotated key is cluster-referenced. Otherwise it runs `cluster_vars.py write` and then
+    `check --no-render --base HEAD`, both in process, and returns False when either fails or
+    the render raises.
+    """
+    tree = tools.cluster_tree()
+    if not rotated or not tree.cluster_file.is_file():
+        return True
+    # Any failure, not only `RenderError`: without the render nothing can say whether a
+    # rotated key reaches the cluster, so the deploy must not run. The render is in
+    # placeholder mode and holds no value, so its message is safe to print.
+    try:
+        expected = tools.cluster_expected()
+    except Exception as exc:
+        error("cluster render failed (%s): %s" % (type(exc).__name__, exc))
+        return False
+    # `expected.keys` leaves out the keys the SOPS manifests carry, so both sets count.
+    referenced = expected.keys.union(*(entry.keys for entry in expected.manifests))
+    hit = sorted(set(rotated) & referenced)
+    if not hit:
+        return True
+    print("  cluster files: rewriting for %s" % ", ".join(hit))
+    if tools.cluster_write(tree, expected) != 0:
+        return False
+    return tools.cluster_check(tree) == 0
+
+
 def cmd_rotate(args, tools: RotationTools) -> int:
     """Rotate `args.name`, or every coming-due auto-tier secret, and optionally redeploy.
 
     Dry-run by default; `--commit` writes new values via `sops set`. Due-ness is judged from
     the registry dates advanced to git's (skipped with `--no-derive`). Exits 64 when
     `args.name` names a non-auto-tier secret, 3 when a `sops set` fails or times out partway
-    through the batch, 1 when `--deploy` is given and the redeploy fails (the new tokens are written but
+    through the batch or the cluster files fail to follow it (`sync_cluster_files`), 1 when `--deploy` is given and the redeploy fails (the new tokens are written but
     their consumers are not), 0 otherwise. A consumer whose entry carries `owner` is left out of
     the redeploy and named, and no deploy runs when none is left.
     """
@@ -391,6 +430,16 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         return 0
 
     tools.save_registry(reg)
+    # Before the deploy, so a failure here leaves no rotated value live. The cron commits with
+    # --no-verify, which skips the `cluster-vars-ciphertext` hook, so the `check` this runs is
+    # that path's only guard on the cluster files.
+    if not sync_cluster_files(written, tools):
+        error(
+            "CLUSTER FILES NOT UPDATED for %s. Consumers were NOT deployed — revert the "
+            "working tree (`git checkout -- %s`) or finish by hand."
+            % (", ".join(written), " ".join(REVERT_PATHS + CLUSTER_PATHS))
+        )
+        return 3
     # Before both the redeploy and the Next: line, so neither names a tag `deploy.sh` refuses.
     owners = tools.owners()
     left_out = tags & owners.keys()
