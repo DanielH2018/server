@@ -447,14 +447,17 @@ class Builder:
         self, reason: str, tip: str | None, message: str, last: str | None = None
     ) -> int:
         log(f"{reason}: {message}")
-        if tip is not None:
-            self._write_prom(reason, tip, last)
+        # The failure is recorded before the metric, whose git reads can fail for the reason
+        # that ended the run. A raise there must not skip the record, or every run would
+        # exit 1 and page.
         record = {"reason": reason, "tip": tip}
         repeat = self.state.get("failure") == record
         self.state["failure"] = record
         if tip is None:
             # Step 1 ends before the fetch, so main() saves nothing; record the failure here.
             self._save("state.json", self.state)
+        else:
+            self._write_prom(reason, tip, last)
         return 0 if repeat else 1
 
     def _finish(self, reason: str, tip: str, last: str | None) -> int:
@@ -463,7 +466,18 @@ class Builder:
         return 0
 
     def _write_prom(self, reason: str, tip: str, last: str | None) -> None:
+        """Write the metric file; a git or filesystem error is logged, never raised.
+
+        A stale or missing metric is what H3.5c's arms page on, so a write that fails here is
+        still seen, without turning one broken clone into a page every run.
+        """
         assert reason in REASONS, reason
+        try:
+            self._write_prom_lines(reason, tip, last)
+        except (RuntimeError, OSError, ValueError) as exc:
+            log(f"could not write {PROM}: {type(exc).__name__}: {exc}")
+
+    def _write_prom_lines(self, reason: str, tip: str, last: str | None) -> None:
         sha, since = tip, 0.0
         if last != tip:
             chain = self.git("rev-list", "--first-parent", tip).split()

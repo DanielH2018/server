@@ -196,7 +196,7 @@
  "ansible/roles/setup/gitops_deploy/tests/test_k8s_unapplied_record_time.py": 0.01,
  "ansible/roles/setup/gitops_deploy/tests/test_systemd_unit_secrets.py": 0.02,
  "ansible/roles/setup/homelab_builder/tests/test_builder_units.py": 0.1,
- "ansible/roles/setup/homelab_builder/tests/test_host_package_builder.py": 1.09,
+ "ansible/roles/setup/homelab_builder/tests/test_host_package_builder.py": 1.37,
  "ansible/roles/setup/initial_setup/tests/test_loki_route_health.py": 0.0,
  "ansible/roles/setup/initial_setup/tests/test_worktree_holders.py": 0.0,
  "ansible/roles/setup/k3s/tests/test_live_drift_check.py": 0.0,

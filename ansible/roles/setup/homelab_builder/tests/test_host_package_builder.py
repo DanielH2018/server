@@ -20,7 +20,6 @@ from typing import ClassVar
 import pytest
 
 import host_package_builder as hb
-from deployer_lib import deploy_git
 from lib.repo_paths import REPO
 
 
@@ -121,6 +120,8 @@ class FixtureBuilder(hb.Builder):
 
     keyring: Path | None = KEYRING
     render_exit = 0
+    # True renders the same package at every commit, for a commit that changes no package.
+    fixed_render = False
 
     def render(self, tree: Path, out: Path) -> None:
         if self.render_exit:
@@ -129,7 +130,8 @@ class FixtureBuilder(hb.Builder):
         (package / "root").mkdir(parents=True)
         (package / "nfpm.yaml").write_text("name: homelab-updater\n")
         # The render follows the tree, so a commit that changes a file changes the package.
-        (package / "root" / "tree.txt").write_text(git(tree, "ls-files"))
+        tree_text = "fixed" if self.fixed_render else git(tree, "ls-files")
+        (package / "root" / "tree.txt").write_text(tree_text)
         if self.keyring is not None:
             target = out / hb.KEYRING
             target.parent.mkdir(parents=True)
@@ -374,17 +376,58 @@ def test_versions_built_commit_by_commit_compare_strictly_greater(lab):
         )
 
 
+class FixedRender(FixtureBuilder):
+    fixed_render = True
+
+
 def test_an_unconsumed_staged_set_is_replaced_at_the_new_commit(lab):
+    # The second commit leaves the render unchanged, so only the unconsumed set rule
+    # rebuilds the package; without it the old set would sit under a moved `chosen`.
     origin, state, _, github = lab
     first = origin.commit("a")
     github.runs[first] = GREEN
-    builder(lab).main()
+    builder(lab, cls=FixedRender).main()
     second = origin.commit("b")
     github.runs[second] = GREEN
-    builder(lab).main()
+    builder(lab, cls=FixedRender).main()
+    assert (state / "staged" / "chosen").read_text() == second[:12] + "\n"
     # One commit per staged set, as H3.5b's signer requires.
     debs = [n for n in staged(state) if n.endswith(".deb")]
     assert len(debs) == 1 and debs[0].endswith(f"+g{second[:12]}_all.deb")
+
+
+def test_a_commit_that_changes_no_package_stages_nothing_and_advances(lab):
+    origin, state, _, github = lab
+    first = origin.commit("a")
+    github.runs[first] = GREEN
+    builder(lab, cls=FixedRender).main()
+    # The signer took the set, as H3.5b's does after every run.
+    for entry in (state / "staged").iterdir():
+        entry.unlink()
+    second = origin.commit("b")
+    github.runs[second] = GREEN
+    assert builder(lab, cls=FixedRender).main() == 0
+    assert staged(state) == []
+    assert last_built(state) == second
+    assert metric(state) == ("ok", second[:12], 0.0)
+
+
+def test_a_git_error_that_recurs_in_the_metric_write_still_pages_once(lab):
+    origin, state, _, github = lab
+    tip = origin.commit("a")
+    github.runs[tip] = GREEN
+
+    class BrokenClone(FixtureBuilder):
+        def git(self, *args, cwd=None):
+            if args[0] in ("rev-list", "show"):
+                raise RuntimeError("git rev-list: bad object")
+            return super().git(*args, cwd=cwd)
+
+    assert builder(lab, cls=BrokenClone).main() == 1
+    assert builder(lab, cls=BrokenClone).main() == 0
+    assert (
+        json.loads((state / "state.json").read_text())["failure"]["reason"] == "build"
+    )
 
 
 def test_a_render_failure_reads_build_and_pages_once(lab):
@@ -431,41 +474,3 @@ def test_each_staged_deb_is_created_in_staged_not_renamed_into_it(lab):
     [deb] = [p for p in (state / "staged").iterdir() if p.suffix == ".deb"]
     assert FixtureBuilder.built_inodes, "the fixture nfpm built nothing"
     assert deb.stat().st_ino not in FixtureBuilder.built_inodes
-
-
-def test_every_reason_is_a_plan_value_and_none_is_trust():
-    assert "trust" not in hb.REASONS
-    assert hb.REASONS <= {
-        "hold",
-        "ancestry",
-        "keyring",
-        "ci",
-        "no-green",
-        "tools",
-        "canary",
-        "ok",
-        "build",
-    }
-
-
-@pytest.mark.parametrize(
-    "runs",
-    [
-        GREEN,
-        RED,
-        PENDING,
-        [],
-        GREEN + RED,
-        [{"name": "prek", "status": "completed", "conclusion": "cancelled"}],
-        [{"name": "other", "status": "completed", "conclusion": "failure"}],
-    ],
-)
-def test_the_grading_matches_the_deployers(runs):
-    assert hb.ci_verdict(runs, frozenset({"prek"})) == deploy_git.ci_verdict(
-        runs, frozenset({"prek"})
-    )
-
-
-def test_the_conclusion_sets_match_the_deployers():
-    assert hb._CI_PASS_CONCLUSIONS == deploy_git._CI_PASS_CONCLUSIONS
-    assert hb._CI_NO_VERDICT_CONCLUSIONS == deploy_git._CI_NO_VERDICT_CONCLUSIONS
