@@ -433,8 +433,8 @@ def test_another_unaudited_file_creating_call_keeps_the_line(
 ):
     """A file-creating call outside `os` that raises no audit event keeps the line (#4999).
 
-    The runner does not replace these. The line is kept because the call's module is one the
-    base end does not load, which the comparison of loaded modules reports.
+    The runner replaces these calls with one that ends the run (#5063). The call's module is
+    also one the base end does not load, which the comparison of loaded modules reports.
     """
     path = repr(str(tmp_path / "escaped"))
     base = git_out(tree.root, "rev-parse", "HEAD")

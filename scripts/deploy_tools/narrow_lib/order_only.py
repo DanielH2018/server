@@ -42,15 +42,26 @@ from lib.git import git
 # that leaves the process, such as a file write, an environment change or a child process, ends
 # the run through the runner's audit hook, and a path that appears under the temp tree fails
 # it too (#4846). `os.mkfifo` and `os.mknod` raise no audit event, so the runner replaces them
-# with a call that ends the run (#4999). A side effect that stays in the process, an attribute
-# of another module added, rebound or deleted, or a module loaded, is compared between the two
-# ends rather than refused: importing Ansible rebinds `sys.intern` at both (#4995). The same
-# comparison keeps a call from another module that raises no event, such as `_dbm.open`,
-# because the base end does not load that module.
-# The gaps taken: a branch HEAD's data does not exercise; an in-place change to an object a
-# module holds, such as an item added to a module-level dict, and process state no module
-# attribute holds, such as the umask or a signal handler (both #5060); such a call through a
-# module the base end already loads (#5063); and a role whose bytes depend on list order,
+# with a call that ends the run (#4999). The calls in `_dbm`, `_gdbm`, `_posixshmem` and
+# `_multiprocessing` that create or remove a filesystem entry raise no event either, so the
+# runner imports those modules first and replaces the calls the same way (#5063). A side
+# effect that stays in the process is compared between the two ends rather than refused:
+# importing Ansible rebinds `sys.intern` at both (#4995). That covers an attribute of another
+# module added, rebound or deleted, a module loaded, and an in-place change to an object the
+# walk copies. The walk copies every object a module attribute holds, and every object that
+# one holds, taking each object at the shallowest depth any module attribute reaches it: an
+# item of a list, dict, set or deque, or an attribute in an object's `__dict__`, such as
+# `logging.disable` writing `logging.root.manager` or `logging.root.addFilter` adding to
+# `logging.root.filters`. It also covers process state no module attribute holds, such as the
+# umask, a signal handler or mask, a pending timer, an atexit callback, the recursion limit,
+# the dlopen flags or gc's freeze count (#5060).
+# The gaps taken: a branch HEAD's data does not exercise; a change three or more levels below
+# a module attribute, such as a logger first created by `logging.getLogger`, whose entry lands
+# in `Logger.manager.loggerDict`, or an attribute of a logger already in it; a change in state
+# held in `__slots__` or inside a C object; process state the runner does not read, such as
+# the codecs registry or an at-fork handler; `faulthandler.dump_traceback_later`, which has no
+# query function, and whose watchdog thread starts in C, so no audit event fires; an unaudited
+# call in a module the runner does not replace; and a role whose bytes depend on list order,
 # which the render proof the caller still requires catches.
 # The runner is distinguishable from a deploy. Its cwd ends in `/cwd` under an `order-only-`
 # temp dir, `sys.flags.isolated` is 1, and `sys.argv[0]` is `-c`. So the check holds only for
@@ -74,12 +85,19 @@ _TIMEOUT = 60
 # misses, after an interpreter or Ansible upgrade, reads as doubt and keeps the line rather than
 # discharging it. An allowlist, because each denylist review found another mutating event.
 # `mkfifo` and `mknod` create a file and raise no event, so `_install` replaces them on `os`
-# and `posix` with a function that ends the process (#4999).
+# and `posix` with a function that ends the process (#4999), and does the same to the
+# `unaudited` table's calls (#5063).
 #
 # The hook also records the module state the run leaves behind (#4995). At the plugin's
-# `import` event it copies the attributes of every module loaded so far. At the
+# `import` event it copies the attributes of every module loaded so far. It also takes, by
+# `walk`, a breadth-first shallow copy of each object that is a container or carries a
+# `__dict__` and that a module attribute holds or one of those objects holds, and the process
+# state `_process_state` reads (#5060). At the
 # `order-only.report` event the runner raises after the chain, it writes into the report each
-# `module.attribute` added, rebound or deleted since then, and each module loaded since then.
+# `module.attribute` added, rebound or deleted since then, the `walk` path of each object that
+# gained, lost or replaced an item or attribute, each `process.<name>` that differs, and each
+# module loaded since then. The `exempt` containers are caches whose contents follow which
+# code ran and the temp paths it ran from, rather than anything a deploy would keep.
 # A submodule bound on its parent by the import system is not a write. A module first loaded
 # after the copy has no baseline, and the real plugin loads all of Ansible that way, so
 # `order_only` runs each end twice: the first run names the modules it loads, and the second
@@ -94,11 +112,93 @@ _TIMEOUT = 60
 # an `except` can swallow it. `_run` reads the nonzero exit as doubt. The chain runs inside
 # `_chain`, so the runner binds no name in `__main__` while the module state is compared.
 _RUNNER = """
-import copy, json, os, posix, sys
+import _collections, _locale, _signal, atexit, copy, faulthandler, gc, json, os, posix, sys
+import types
+from _functools import partial
+
+# Imported before the hook so their file-creating calls can be replaced below (#5063).
+unaudited = {
+    "_dbm": ("open",),
+    "_gdbm": ("open",),
+    "_posixshmem": ("shm_open", "shm_unlink"),
+    "_multiprocessing": ("SemLock", "sem_unlink"),
+}
+for name in list(unaudited):
+    try:
+        __import__(name)
+    except ImportError:
+        del unaudited[name]
 
 
-def _install(exit_, write_flags, allowed, modules):
+def _install(exit_, write_flags, allowed, exempt, modules, unaudited, process, kinds):
     before = {}
+    contents = {}
+    state = {}
+    skip, deque, getset, class_dict = kinds
+
+    def shallow(value):
+        # Only C-level copies and descriptors, so no code the plugin defines runs in the hook:
+        # `issubclass` on `type(value)` rather than `isinstance`, which reads `__class__`, and
+        # an instance `__dict__` only through the `getset_descriptor` CPython puts there.
+        kind = type(value)
+        if kind in skip:
+            return None
+        if issubclass(kind, dict):
+            return dict.copy(value)
+        if issubclass(kind, list):
+            return list.copy(value)
+        if issubclass(kind, (set, deque)):
+            return tuple(value)
+        if issubclass(kind, type):
+            return class_dict.__get__(value).copy()
+        for klass in kind.__mro__:
+            found = class_dict.__get__(klass)
+            if "__dict__" in found:
+                descriptor = found["__dict__"]
+                if type(descriptor) is getset:
+                    return dict.copy(descriptor.__get__(value, kind))
+                return None
+        return None
+
+    def changed(old, now):
+        if len(old) != len(now):
+            return True
+        if type(old) is dict:
+            missing = object()
+            return any(dict.get(now, k, missing) is not v for k, v in old.items())
+        if type(old) is tuple and type(now) is not list:
+            # A set's iteration order follows its hashes, so compare membership.
+            return any(item not in now for item in old)
+        return any(a is not b for a, b in zip(old, now))
+
+    def walk(roots):
+        # Breadth-first, so an object is copied at the shallowest depth any module attribute
+        # reaches it and its children are then copied too: `logging.Logger` precedes `root` in
+        # `vars(logging)`, and a depth-first pass would claim the root logger at depth 2 and
+        # never read its `filters`. Each object is copied once, under the first path in
+        # breadth-first order, so both ends name it alike while they load the same modules in
+        # the same order. Two levels: an attribute, and the objects it holds.
+        seen = set()
+        level = roots
+        for depth in (1, 2):
+            following = []
+            for path, value in level:
+                if id(value) in seen or path in exempt:
+                    continue
+                try:
+                    copied = shallow(value)
+                except Exception:
+                    continue
+                if copied is None:
+                    continue
+                seen.add(id(value))
+                contents[path] = (value, copied)
+                if depth == 1:
+                    items = copied.items() if type(copied) is dict else enumerate(copied)
+                    for index, (key, child) in enumerate(items):
+                        name = key if type(key) is str else "#" + str(index)
+                        following.append((path + "/" + name, child))
+            level = following
 
     def module_writes():
         writes = []
@@ -115,6 +215,16 @@ def _install(exit_, write_flags, allowed, modules):
                     submodule = modules.get(name + "." + key)
                     if submodule is None or value is not submodule:
                         writes.append(name + "." + key)
+        for path, (value, old) in contents.items():
+            try:
+                now = shallow(value)
+            except Exception:
+                now = None
+            if now is None or changed(old, now):
+                writes.append(path)
+        for key, value in process().items():
+            if state.get(key) != value:
+                writes.append("process." + key)
         loaded = [name for name in modules if name not in before]
         writes.sort()
         loaded.sort()
@@ -129,6 +239,12 @@ def _install(exit_, write_flags, allowed, modules):
                 if args[0] == "toposort" and not before:
                     for name, module in modules.copy().items():
                         before[name] = (module, module.__dict__.copy())
+                    walk([
+                        (name + "." + key, value)
+                        for name, (module, attrs) in before.items()
+                        for key, value in attrs.items()
+                    ])
+                    state.update(process())
             elif event == "order-only.report":
                 args[0]["module_writes"], args[0]["modules_loaded"] = module_writes()
             elif event not in allowed:
@@ -136,8 +252,9 @@ def _install(exit_, write_flags, allowed, modules):
         except BaseException:
             exit_(86)
 
-    # The stubs sit on `os`, where the plugin can read their closure, so each gets a cell of
-    # its own. Sharing the hook's `exit_` cell would let a write to it disarm the hook.
+    # The stubs sit on modules the plugin can read, where it can reach their closure, so each
+    # gets a cell of its own. Sharing the hook's `exit_` cell would let a write to it disarm
+    # the hook.
     def stub(exit_stub):
         def refuse(*args, **kwargs):
             exit_stub(86)
@@ -147,6 +264,46 @@ def _install(exit_, write_flags, allowed, modules):
     sys.addaudithook(audit)
     for module in (os, posix):
         module.mkfifo = module.mknod = stub(exit_)
+    for name, attrs in unaudited.items():
+        for attr in attrs:
+            setattr(modules[name], attr, stub(exit_))
+
+
+def _process_state(umask, getsignal, signals, getrecursionlimit, getpriority, prio,
+                   getsid, getpgrp, ids, get_threshold, isenabled, getswitchinterval,
+                   getitimer, timers, sigmask, ncallbacks, affinity, int_digits,
+                   faulthandler_enabled, getlocale, getdlopenflags, freeze_count):
+    def read():
+        # Set and restore: the umask has no reader that leaves it alone.
+        mask = umask(0)
+        umask(mask)
+        state = {
+            "umask": mask,
+            "recursionlimit": getrecursionlimit(),
+            "priority": getpriority(prio, 0),
+            "sid": getsid(0),
+            "pgrp": getpgrp(),
+            "ids": tuple(f() for f in ids),
+            "gc": (isenabled(), get_threshold()),
+            "switchinterval": getswitchinterval(),
+            "sigmask": sorted(sigmask()),
+            "atexit": ncallbacks(),
+            "affinity": sorted(affinity()),
+            "intmaxstrdigits": int_digits(),
+            "faulthandler": faulthandler_enabled(),
+            "locale": getlocale(),
+            "dlopenflags": getdlopenflags(),
+            "gcfreeze": freeze_count(),
+        }
+        for timer in timers:
+            # A running timer's remaining time falls between reads, so compare whether it runs.
+            value, interval = getitimer(timer)
+            state["itimer." + str(timer)] = (value > 0, interval)
+        for signum in signals:
+            state["signal." + str(signum)] = getsignal(signum)
+        return state
+
+    return read
 
 
 _install(
@@ -159,9 +316,40 @@ _install(
         # Interpreter shutdown, after the result is printed.
         "cpython.PyInterpreterState_Clear", "cpython._PySys_ClearAuditHooks",
     }),
+    # Containers whose contents follow which code ran rather than what it did: the import
+    # system's caches and the stdlib's memo tables. `sys.modules` is `modules_loaded`.
+    frozenset({
+        "sys.modules", "sys.path_importer_cache", "linecache.cache", "re._cache",
+        "re._cache2", "encodings._cache", "importlib._bootstrap._module_locks",
+        "importlib._bootstrap._blocking_on", "_frozen_importlib._module_locks",
+        "_frozen_importlib._blocking_on",
+    }),
     sys.modules,
+    unaudited,
+    _process_state(
+        os.umask, _signal.getsignal,
+        tuple(s for s in _signal.valid_signals() if s < _signal.NSIG),
+        sys.getrecursionlimit, os.getpriority, os.PRIO_PROCESS, os.getsid, os.getpgrp,
+        (os.getuid, os.geteuid, os.getgid, os.getegid, os.getgroups),
+        gc.get_threshold, gc.isenabled, sys.getswitchinterval,
+        _signal.getitimer, (_signal.ITIMER_REAL, _signal.ITIMER_VIRTUAL, _signal.ITIMER_PROF),
+        partial(_signal.pthread_sigmask, _signal.SIG_BLOCK, ()), atexit._ncallbacks,
+        partial(os.sched_getaffinity, 0), sys.get_int_max_str_digits, faulthandler.is_enabled,
+        partial(_locale.setlocale, _locale.LC_ALL, None), sys.getdlopenflags,
+        gc.get_freeze_count,
+    ),
+    (
+        frozenset({
+            types.ModuleType, types.FunctionType, types.BuiltinFunctionType, types.MethodType,
+            types.CodeType, str, bytes, int, float, complex, bool, type(None), tuple,
+            frozenset, range,
+        }),
+        _collections.deque,
+        type(type.__dict__["__dict__"]),
+        type.__dict__["__dict__"],
+    ),
 )
-del _install
+del _install, _process_state, unaudited, name, partial
 
 
 def _chain(plugins, roles, preload):
@@ -212,8 +400,9 @@ def _run(
 
     Returns:
       The chain's canonical outputs; whether the run left its input unchanged; and the
-      module state the run left behind, as the `module.attribute` names it added, rebound or
-      deleted and the names of the modules it loaded (#4995). None on any doubt: data that
+      module state the run left behind, as the `module.attribute` names it added, rebound,
+      deleted or changed in place and the `process.<name>` state it changed (#4995, #5060),
+      and the names of the modules it loaded. None on any doubt: data that
       will not load or serialize, an import error, an exception, a timeout, a side effect the
       runner's audit hook reports, a path that appeared under the temp tree during the run,
       or output that is not the expected JSON.
@@ -272,7 +461,8 @@ def order_only(repo: Path, path: str, base: str, head: str) -> bool:
 
     True when the sort chain, run with the plugins at `base` and at `head` on HEAD's data,
     returns the same entries as multisets for each output, neither run changed its input, and
-    both runs loaded the same modules and left the same module state behind (#4995). False for
+    both runs loaded the same modules and left the same module and process state behind
+    (#4995, #5060). False for
     a plugin not in `ORDER_ONLY_PLUGINS` and on any doubt (`_run`).
     """
     if path not in ORDER_ONLY_PLUGINS:
