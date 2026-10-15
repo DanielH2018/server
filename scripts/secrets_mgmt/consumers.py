@@ -21,6 +21,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from secrets_mgmt.rotation_tools import REPO
+from lib.ansible_inventory import K8S_HOST, host_vars_file
+from lib.k8s_roles import tag_owners
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -332,9 +334,23 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
 
     Setup-plane roles are listed with their own playbook because `deploy.sh` cannot reach them
     and exits 2 rather than failing loudly at the role.
+
+    A deploy tag whose `containers_list` entry carries `owner` is left off the `deploy.sh`
+    line and named on a line of its own. `deploy.sh` exits 5 on such a tag, and exit 5 refuses
+    the whole run, so one owned tag on the line would deploy none of the other consumers. The
+    owners are read from `repo`'s own host_vars, the same tree the census read.
     """
     consumers = tree_consumers(name, repo=repo)
-    deploy_tags = sorted(r for r, plane in consumers.items() if plane == "deploy")
+    deploy_roles = sorted(r for r, plane in consumers.items() if plane == "deploy")
+    owners = (
+        tag_owners(
+            host_vars_file(K8S_HOST, _Path(repo) / "ansible/inventory/host_vars")
+        )
+        if deploy_roles
+        else {}
+    )
+    deploy_tags = [r for r in deploy_roles if r not in owners]
+    owned_tags = [r for r in deploy_roles if r in owners]
     setup_roles = sorted(r for r, plane in consumers.items() if plane == "setup")
     # BACKTICKS ARE LOAD-BEARING, not decoration. This module is reached by two crons, and
     # `reference/scripts.py` classifies a script as `scheduled` when a scheduled script's
@@ -349,5 +365,9 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     for role in setup_roles:
         commands.append(
             "`uv run ansible-playbook ansible/initial_setup.yml --tags %s`" % role
+        )
+    for tag in owned_tags:
+        commands.append(
+            "%s carries owner: %s, which no Ansible path may apply" % (tag, owners[tag])
         )
     return commands
