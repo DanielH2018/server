@@ -274,6 +274,11 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   `docs/claude-shell-permissions.md` has the guard's location.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
+- **The cluster file is generated, never hand-edited.** `cluster-vars.sops.env`, with its
+  `cluster-vars.source` and the manifests under `cluster-manifests/`, sits in `ansible/vars/`
+  and holds the values Flux substitutes into a flux-owned role. Only `cluster_vars.py write`
+  writes it: the operator, or the rotation cron after it rotates a key. A hand edit breaks the
+  file's SOPS MAC, and `cluster_vars.py check` runs in CI to refuse a stale or hand-edited file.
 - **A host that can't decrypt yet** fails `initial_setup.yml`/`deploy.yml` at their
   secret-load `pre_task`, which reads as a playbook bug rather than a missing key. The
   **`add-secret` skill** has the onboarding through `ansible/bootstrap.yml`.

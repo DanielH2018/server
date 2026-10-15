@@ -138,7 +138,12 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
         "the containers_list fact lost an owned entry, so a template reading it would stop "
         "seeing a service Flux applies"
     )
-    assert visited == [n for n in _names(fact) if not n.startswith("fixture-")]
+    # bento-pdf has carried `owner: flux` since D2.7, so the live list holds an owned entry too.
+    owned = {"fixture-flux", "fixture-released"} | {
+        c["name"] for c in live if "owner" in c
+    }
+    assert "bento-pdf" in owned
+    assert visited == [n for n in _names(fact) if n not in owned]
 
 
 # ── On every host's live containers_list ────────────────────────────────────────────────────
@@ -181,8 +186,9 @@ def test_a_filter_dropping_an_entry_without_owner_is_flagged():
 
 
 def test_a_batch_loop_dropping_an_entry_without_owner_is_flagged():
-    # The live list carries no `owner` yet, so this loop is the play half's only red case: it
-    # skips the last Ansible-owned role, which the clean half must catch on the same list.
+    # The loop skips bento-pdf, the live list's one owned entry, as it must, but it also drops
+    # the last Ansible-owned entry. That makes it the play half's red case: the visit check the
+    # clean half runs on the live list must flag the missing entry.
     loop = "{{ (containers_list | ansible_owned)[:-1] | batch(2) | list }}"
     assert _play_visit_mismatch(_containers(HOST_VARS / "daniel-box.yml"), loop) != ""
 
