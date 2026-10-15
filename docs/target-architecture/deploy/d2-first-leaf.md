@@ -688,7 +688,7 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
       `gh pr merge --body`, can drop one. Such a merge that drops an object therefore
       stalls at `decide`, and `PromotionStalled` pages. That is the intended direction
       (D5.1f).
-- **The hold names what failed.** `verify` writes `<T> failed=<names>` (C2), where `<names>`
+- **The hold names what failed.** `settle` writes `<T> failed=<names>` (C2), where `<names>`
   comma-joins the expected names that read `failure` or had no status at the timeout. At the
   drill that is `<T> failed=bento-pdf`.
 - **A `verify` with no verdict holds as `<T> unverified` (C2).** The `verify` job can end

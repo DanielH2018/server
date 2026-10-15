@@ -702,7 +702,7 @@ No request on C5 is open.
 
 - **The soak in `land.sh`'s wait** (D5 Open question 18). `flux/soak` gates the wait from
   D5.3b3, not from D5's first PR. A `flux/soak` `failure` on R ends the wait as
-  `deploy-failed` with the `Cause` `soak-failed`, before `verify` writes `DEPLOY_HOLD`.
+  `deploy-failed` with the `Cause` `soak-failed`, before `settle` writes `DEPLOY_HOLD`.
   `land-wait` repeats the combined-status read on each poll until the soak has a verdict.
   Gate: before D5.3b3 merges.
 
