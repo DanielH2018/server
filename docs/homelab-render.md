@@ -381,6 +381,7 @@ applies it like any other secret file.
 |---|---|---|---|
 | `home-assistant` | `google-sa-secret.yaml` | `home-assistant-google-sa` | `google_assistant_service_account` |
 | `pi-peer-backup` | `ssh-key-secret.yaml` | `pi-peer-backup-ssh-key` | `pi_peer_backup_ssh_key` |
+| `qbittorrent` | `mullvad-account-secret.yaml` | `qbittorrent-mullvad-account` | `mullvad_account` |
 
 A wrong entry would hide a whole Secret from the publish and from the round trip, so the
 `sops-manifest-entries` check in `renderer_lib/sops_entries.py` holds the lists on every
@@ -459,7 +460,7 @@ held `${domain}`. No hashed config holds a placeholder since `domain` was publis
 placeholder that reaches one is a difference.
 
 Each pass prints a summary line, such as `roundtrip: 58 tags, 4 deferred directories, 47
-substituting, 450 objects, 1 documents in KNOWN_VIOLATIONS left out, 0 differences, 2
+substituting, 450 objects, 1 documents in KNOWN_VIOLATIONS left out, 0 differences, 3
 documents in render_sops_manifests, with each key's R1 stub`. `roundtrip` exits 0 only when both passes find no difference and each
 exclusion count holds.
 
@@ -476,7 +477,8 @@ uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip 
 ```
 
 The CI job round-trips every tag outside `PLACEHOLDER_DEFERRED` in both passes, with no
-`--role`. That covers `home-assistant`, which carries the first `render_sops_manifests` entry.
+`--role`. That covers `home-assistant`, `pi-peer-backup` and `qbittorrent`, which carry the
+three `render_sops_manifests` entries.
 Its red half runs on `configarr`, `janitorr` and `home-assistant` only, because one changed byte
 is all it has to show. The job also round-trips `traefik` with `email` dropped from the guard's
 map under every tag, and fails unless that run exits 1 and names `Deployment/homelab/traefik`.
@@ -563,19 +565,21 @@ template shape fixes it, so the guard checks the values where they are decrypted
   `1e3`, `08`, `0o17` and `y`, which PyYAML reads as strings. The flux probe holds both to
   the pinned CLI. D3's `cluster_vars.py write` imports the same function.
 - **`GUARD_DEFERRED`** in `placeholders.py` names the keys with a standalone use that the
-  guard does not check, each with its reason. It holds `mullvad_account`, whose one use is
-  qbittorrent's Secret and whose real value is all digits. R2's PR 7b moves it into a
-  dedicated SOPS-encrypted Secret and empties the set.
+  guard does not check, each with its reason. It is empty. Its last member was
+  `mullvad_account`, whose real value is all digits. R2's PR 7b moved that key into the
+  dedicated SOPS-encrypted Secret `qbittorrent-mullvad-account`, which placeholder mode
+  leaves out.
 - **The coverage test**, `scripts/renderer/tests/test_renderer_standalone_map.py`, renders the
   fleet in placeholder mode and holds the committed map equal to it. It also fails on a key
   in both the map and `GUARD_DEFERRED`, on a `GUARD_DEFERRED` member that stands alone
   nowhere, and on a mapped key absent from `ansible/vars/secrets.yml`. Its named members are
-  `email` under `traefik` and `mullvad_account` in `GUARD_DEFERRED`.
+  `email` and `wireguard_interface_private_key`, mapped under `traefik` and `qbittorrent`, and
+  an empty `GUARD_DEFERRED`.
 
 When the assert refuses a key, the deploy stops before anything renders or applies, so the
 live objects keep their old values. R2's Open question 13 records the operator's ruling of
 2026-10-13: rotate the value to one that stays a string (**operator-only**), or move the key
-into a dedicated SOPS-encrypted Secret, as PR 7b does for `mullvad_account`. Then deploy
+into a dedicated SOPS-encrypted Secret, as PR 7b did for `mullvad_account`. Then deploy
 again.
 
 ## Pinned live-read facts
