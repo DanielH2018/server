@@ -347,7 +347,11 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
   - `homelab-<hostname>`, one per host;
   - `homelab-updater`, the pull timer;
   - `homelab-repos`, the third-party apt sources and keyrings.
-- **Version.** `0.<git rev-list --count origin/master>+g<12-hex sha>`, with `Architecture: all`.
+- **Version.** `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`,
+  with `Architecture: all`. `<chosen>` is the commit the builder builds: the newest commit on
+  `origin/master`'s first-parent chain with a green CI verdict, which can be older than the
+  tip. A count taken from the tip would give a commit and its successor the same number, and
+  dpkg would then order the two by SHA.
 - **Repository.**
   - Suite `homelab`, component `main`, keyring `/usr/share/keyrings/homelab-archive-keyring.gpg`.
   - Served by a plain systemd unit on daniel-box, outside k3s. H3 picks the port and the URL.
@@ -659,10 +663,7 @@ request leaves this list and the round's *Review log* entry names it.
 
 ### Requests on C5
 
-- **The version counts the built commit** (H3 Open question 7). The builder builds the newest
-  green commit, which can be older than the tip. *Version* then reads
-  `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`. Gate: before
-  H3.5a merges.
+No request on C5 is open.
 
 ### Requests on C6
 
@@ -985,3 +986,11 @@ Applied to this page:
   allowlist census. The slice index has no D4.3a edge: D3's row waits on D2.1 to D2.6c, which
   include D2.6b. The round 2 entry for X2-11 made these edits, so this entry records that the
   request is applied, and the gates before D2.5 and D2.6b are clear.
+
+### Applied requests (2026-10-15)
+
+- **The version counts the built commit** (H3 Open question 7). C5 *Version* now reads
+  `0.<git rev-list --count --first-parent <chosen>>+g<12-hex sha of <chosen>>`, where
+  `<chosen>` is the green commit the builder builds, not `origin/master`'s tip. That matches
+  H3's *Package rules*. The request leaves *Requests on C5*, which clears its gate before
+  H3.5a merges.
