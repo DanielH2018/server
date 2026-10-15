@@ -50,6 +50,7 @@ KNOWN_ALERTS = frozenset(
         "fanout",
         "gitops-deploy",
         "homelab-builder",
+        "homelab-repo-sign",
         "renovate-agent",
         "renovate-notify",
     }

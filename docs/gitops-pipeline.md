@@ -115,6 +115,16 @@ the same PR that adds the tool.
 **A broad change the deployer must not apply itself.** This is the one that surprises people,
 so it has its own section.
 
+## A change under `hosts/` is the builder's, not the tick's
+
+The tick maps no path under `hosts/` to a service or a plane. It fast-forwards such a change
+and applies nothing. The host-package builder on daniel-box applies it instead:
+`homelab-builder.timer` builds each changed package from the newest green master commit,
+`homelab-repo-sign.service` signs and publishes it, and each host's `homelab-updater.timer`
+installs it. [Host packages](host-packages.md) is the runbook. One change needs both paths: a
+key rotation commits the new keyring under `hosts/keys/`, and only a `homelab_builder` apply
+rewrites the `archive-key.fpr` the builder checks it against. The runbook names that apply.
+
 ## Broad changes
 
 A change under a **broad prefix** is one that maps to no single service. The deployer splits

@@ -5,8 +5,7 @@
 # It stops and removes the role's units, the ufw rules for the clients now in
 # homelab_builder_repo_clients, the builder's state, configuration and code directories, and the
 # builder's two stamp fragments. A rule for a client already dropped from that list stays until
-# someone runs `ufw delete` by hand. homelab-repo-sign.service arrives in H3.5b; listing it now
-# means a disarm after that PR needs no edit here.
+# someone runs `ufw delete` by hand.
 #
 # DECIDED: teardown never touches /var/lib/homelab-signer or either system user. The signer's
 # GnuPG home holds the archive key every host trusts, so a disarm must not cost a key
@@ -23,6 +22,7 @@
     - homelab-builder.service
     - homelab-builder-alert.service
     - homelab-repo-sign.service
+    - homelab-repo-sign-alert.service
     - homelab-apt-repo.service
   loop_control:
     label: "{{ item }}"
@@ -50,6 +50,7 @@
     - homelab-builder.service
     - homelab-builder-alert.service
     - homelab-repo-sign.service
+    - homelab-repo-sign-alert.service
     - homelab-apt-repo.service
   become: true
   notify: Reload systemd

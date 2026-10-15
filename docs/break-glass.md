@@ -109,9 +109,8 @@ otherwise; none of the values below are secrets themselves, only names and locat
       `openpgp-revocs.d/` in place: it is the key generation's `creates:` guard, and without
       it the next apply generates another key. Then re-run the same apply. From the plan's PR H3.5a, that apply also runs the task that
       writes `/etc/homelab-builder/archive-key.fpr`, so the builder names the restored key.
-    - **To rotate it**, follow *Recovering from a revoked archive key* in
-      `docs/target-architecture/host/h3-pi-pilot.md` until PR H3.5b moves that procedure into
-      `docs/host-packages.md`. A rotation re-pins every host, so it is never a step in a
+    - **To rotate it**, follow *Rotating the archive key, or recovering from a revoked one*
+      in `docs/host-packages.md`. A rotation re-pins every host, so it is never a step in a
       routine disarm or re-arm.
    Source: `ansible/roles/setup/homelab_builder/CLAUDE.md` and `docs/host-packages.md`.
 
