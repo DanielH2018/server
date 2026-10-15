@@ -3,6 +3,12 @@ Description=Homelab host-package builder (stages packages from the newest green 
 After=network-online.target
 Wants=network-online.target
 OnFailure=homelab-builder-alert.service
+# Every run that exits 0 starts the signer, a held run included, so the signer re-signs the
+# published tree daily while this timer runs.
+OnSuccess=homelab-repo-sign.service
+# A builder start waits for a signer still running, so the builder never rewrites staged/
+# while the signer reads it. The signer carries no After= back, which would be a cycle.
+After=homelab-repo-sign.service
 
 [Service]
 Type=oneshot

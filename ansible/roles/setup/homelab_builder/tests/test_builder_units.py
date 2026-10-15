@@ -1,8 +1,8 @@
 """The builder's rendered units, its settings file, its tool pins and publish-textfile.
 
 The sandboxing directives are the list in docs/target-architecture/host/h3-pi-pilot.md, *The
-builder and the repository*, Sandboxing. H3.5b adds the signer unit and its own list, with
-`PrivateNetwork=yes`, to `SANDBOX`.
+builder and the repository*, Sandboxing: both units' shared list, then each unit's own, the
+signer's `PrivateNetwork=yes` among them.
 
 Run: uv run pytest ansible/roles/setup/homelab_builder/tests/test_builder_units.py
 """
@@ -43,6 +43,14 @@ SANDBOX = {
         **_BOTH,
         "ReadWritePaths": ["/var/lib/homelab-builder"],
     },
+    "homelab-repo-sign.service.j2": {
+        **_BOTH,
+        "PrivateNetwork": ["yes"],
+        "ReadWritePaths": [
+            "/var/lib/homelab-signer",
+            "/var/lib/homelab-builder/staged",
+        ],
+    },
 }
 
 
@@ -81,6 +89,13 @@ def test_a_builder_unit_without_no_new_privileges_is_flagged():
     ]
 
 
+def test_a_signer_unit_without_private_network_is_flagged():
+    text = render("homelab-repo-sign.service.j2").replace("PrivateNetwork=yes\n", "")
+    assert sandbox_problems(text, SANDBOX["homelab-repo-sign.service.j2"]) == [
+        "PrivateNetwork=None where the plan names ['yes']"
+    ]
+
+
 def test_a_second_writable_path_is_flagged():
     text = render("homelab-builder.service.j2") + "ReadWritePaths=/etc\n"
     assert sandbox_problems(text, SANDBOX["homelab-builder.service.j2"])
@@ -90,17 +105,41 @@ def test_the_builder_runs_as_its_user_and_pages_on_failure():
     got = directives(render("homelab-builder.service.j2"))
     assert got["User"] == ["homelab-builder"]
     assert got["OnFailure"] == ["homelab-builder-alert.service"]
-    # H3.5b adds the signer and its OnSuccess= link; naming a unit that does not exist yet
-    # would fail every successful run's activation.
-    assert "OnSuccess" not in got
 
 
-def test_publish_textfile_runs_as_root_outside_the_sandbox_from_root_owned_code():
-    [line] = directives(render("homelab-builder.service.j2"))["ExecStopPost"]
-    assert line == (
-        "-+/bin/sh /opt/homelab-builder/publish-textfile homelab_builder_ "
-        "/var/lib/homelab-builder/homelab_builder.prom"
-    )
+def test_every_successful_builder_run_starts_the_signer_and_waits_for_a_running_one():
+    builder = directives(render("homelab-builder.service.j2"))
+    assert builder["OnSuccess"] == ["homelab-repo-sign.service"]
+    assert "homelab-repo-sign.service" in builder["After"]
+    signer = directives(render("homelab-repo-sign.service.j2"))
+    assert signer["User"] == ["homelab-signer"]
+    assert signer["OnFailure"] == ["homelab-repo-sign-alert.service"]
+    # The reverse After= would be an ordering cycle, and a timer of its own would sign
+    # between a builder run's writes.
+    assert "homelab-builder.service" not in " ".join(signer.get("After", []))
+    assert not (ROLE / "templates" / "homelab-repo-sign.timer.j2").exists()
+
+
+@pytest.mark.parametrize(
+    ("template", "prefix", "prom"),
+    [
+        (
+            "homelab-builder.service.j2",
+            "homelab_builder_",
+            "/var/lib/homelab-builder/homelab_builder.prom",
+        ),
+        (
+            "homelab-repo-sign.service.j2",
+            "homelab_repo_",
+            "/var/lib/homelab-signer/homelab_repo.prom",
+        ),
+    ],
+)
+def test_publish_textfile_runs_as_root_outside_the_sandbox_from_root_owned_code(
+    template, prefix, prom
+):
+    [line] = directives(render(template))["ExecStopPost"]
+    assert line == f"-+/bin/sh /opt/homelab-builder/publish-textfile {prefix} {prom}"
     # The root line runs nothing the builder could rewrite.
     assert not DEFAULTS["homelab_builder_code_dir"].startswith(
         DEFAULTS["homelab_builder_state_dir"]

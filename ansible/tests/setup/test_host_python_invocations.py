@@ -172,6 +172,13 @@ _SYSTEM_INTERPRETER_EXEMPT = {
         "is DynamicUser with ProtectHome=yes, which cannot reach the uv-installed interpreters "
         "under a user's home"
     ),
+    "homelab-repo-sign.service.j2": (
+        "the signer cannot read the builder's pinned interpreter under its 0700 state "
+        "directory, and a second uv install would be one more task that can fail the attended "
+        "apply. The script is stdlib-only, pyproject.toml formats it for py312, and "
+        "homelab_builder/tests/test_repo_signer.py parses it with the 3.12 grammar, as "
+        "homelab-reconcile is held"
+    ),
 }
 
 

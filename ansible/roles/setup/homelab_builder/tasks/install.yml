@@ -90,7 +90,9 @@
 # /etc/homelab-builder/ is root's, and the builder reads it through its group: config.env (0640)
 # carries the token, archive-key.fpr (0644) the fingerprint. The builder cannot read the
 # signer's 0700 GnuPG home, so the role writes the fingerprint from it on every apply, and builder
-# step 6 compares the rendered keyring with it.
+# step 6 compares the rendered keyring with it. The world execute bit lets the signer, which is
+# not in the group, stat the operator's hold and read archive-key.fpr, the key it signs with,
+# without listing the directory. config.env stays 0640.
 - name: Create the builder's configuration directory
   tags: [homelab-builder-install]
   ansible.builtin.file:
@@ -98,7 +100,7 @@
     state: directory
     owner: root
     group: homelab-builder
-    mode: "0750"
+    mode: "0751"
   become: true
 
 # --list-keys reads the public keyring only, so it needs no gpg-agent. check_mode: false, because

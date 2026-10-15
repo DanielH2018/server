@@ -62,14 +62,15 @@ After the clear, a change under this role's directory lands through the setup-pl
 
 ## What the builder half writes (H3.5a)
 
-`tasks/builder.yml` installs the builder, which stages packages and publishes nothing until
-H3.5b's signer.
+`tasks/builder.yml` installs the builder, which stages packages for the signer.
 
-- `/etc/homelab-builder/` (root, group `homelab-builder`, 0750). It holds `config.env` (0640),
+- `/etc/homelab-builder/` (root, group `homelab-builder`, 0751). It holds `config.env` (0640),
   which carries the SOPS key `homelab_builder_github_token`, the deployer's CI contexts, its
   walk bound and its repo. It also holds `archive-key.fpr` (0644), which `install.yml` writes
   from the signer's key on every apply, because the builder cannot read the signer's GnuPG home.
-  Every task that renders the token carries `no_log: true`.
+  Every task that renders the token carries `no_log: true`. The world execute bit lets the
+  signer, which is not in the group, stat the operator's `hold` and read `archive-key.fpr`
+  without listing the directory.
 - `/opt/homelab-builder/`, root-owned: the script `files/host_package_builder.py`, `host_lib.py`,
   `publish-textfile`, a copy of the operator's pinned uv, and nfpm at the version
   `homelab_builder_nfpm_version` pins in `ansible/roles/setup/homelab_builder/defaults/main.yml`.
@@ -97,7 +98,7 @@ chain since the last built one whose CI is green, renders every host package the
 run --frozen`, checks the rendered keyring against `archive-key.fpr`, and builds each package
 whose render changed with nfpm. It writes `staged/chosen` and the `.deb` files, all at one
 version, `0.<first-parent count>+g<12-hex sha>`. A staged set the signer has not taken yet is
-rebuilt at the new commit, because H3.5b's signer refuses a `staged/` whose versions name two
+rebuilt at the new commit, because the signer refuses a `staged/` whose versions name two
 commits.
 
 The anchor is master plus a green CI verdict, and nothing more. The `# DECIDED:` marker in the
@@ -114,33 +115,85 @@ that fails after a refusal is logged, and the run keeps the refusal's reason. A 
 then 0 on a repeat, so `OnFailure=` pages once for each condition. A failed fetch exits 0 and
 writes nothing: the fetch timestamp then ages, which H3.5c's fetch-age arm pages on.
 
-## Autonomous-role contract (the builder stages host packages with no human in the loop)
+## The signer and the publish (H3.5b)
+
+`homelab-repo-sign.service` runs `files/homelab_repo_sign.py` as `homelab-signer`. It has no
+timer: the builder unit's `OnSuccess=` starts it after every builder run that exits 0, a held
+run included. The builder unit also carries `After=homelab-repo-sign.service`, so a builder
+start waits for a signer still running and never rewrites `staged/` under it.
+
+- **The refusal rule.** The signer reads every `staged/` entry without following a symlink,
+  and checks all of them before it copies anything. It accepts `chosen`, holding a 12-hex SHA,
+  and `.deb` files whose `Package` starts with `homelab-` and whose `Version` ends in `+g` and
+  that SHA. Anything else is a refusal: the signer copies the set into
+  `/var/lib/homelab-signer/refused/<UTC time>/`, empties `staged/`, publishes nothing and exits
+  1. It names each pool file from the package's control fields, never from the builder's file
+  name. A copy, never a rename, because `staged/` and the signer's directory are separate
+  `ReadWritePaths=` bind mounts.
+- **The publish.** `apt-ftparchive` writes the `amd64` and `arm64` `Packages` indexes and a
+  `Release` whose `Valid-Until` is seven days after its `Date`. gpg signs `InRelease` and
+  `Release.gpg` with the key whose fingerprint `archive-key.fpr` names. The suite is built in a
+  fresh directory under `repo/.snapshots/`, and one rename of a symlink points `repo/dists` at
+  it. Every published file is 0644 and every directory 0755, because
+  `homelab-apt-repo.service` is a `DynamicUser` that reads through the other bits.
+- **The daily re-sign.** With nothing staged, the signer re-signs the unchanged tree once the
+  published `Release`'s `Date` is 24 hours old, or once `archive-key.fpr` names a key other
+  than the one that signed it.
+- **The hold.** With `/etc/homelab-builder/hold` present, the builder builds nothing and the
+  signer leaves `staged/` as it is. The re-sign still runs, so a long hold does not let
+  `Valid-Until` lapse on every host.
+- **The metric.** `homelab_repo.prom` carries `homelab_repo_published_info{package,sha,version}
+  1` for the newest published version of each package, read from the published indexes. The
+  unit's `ExecStopPost=-+` line copies it through `publish-textfile`.
+- **The interpreter.** The unit runs the host's `/usr/bin/python3`, because the signer cannot
+  read the builder's pinned interpreter under its 0700 state directory. The script is
+  stdlib-only, `pyproject.toml` formats it for 3.12, and
+  `ansible/roles/setup/homelab_builder/tests/test_repo_signer.py::test_the_signer_parses_with_the_3_12_grammar`
+  holds it to that grammar.
+- **The sandbox.** The plan's *Sandboxing* list plus `PrivateNetwork=yes`, writing only
+  `/var/lib/homelab-signer` and `staged/`.
+
+A failure other than a refusal exits 1 once per reason (`key`, `index` or `sign`), then 0 on a
+repeat, so `OnFailure=homelab-repo-sign-alert.service` pages once. It keeps `staged/`, and the
+next successful builder run starts the signer again. `docs/host-packages.md` has each page's
+clear.
+
+## Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
 
 Every 2 minutes, `homelab-builder.timer` may build the host packages from a master commit and
-replace the contents of `staged/`.
+replace the contents of `staged/`. After each such run, `homelab-repo-sign.service` may sign
+and publish what was staged, so every host's updater installs it at its next fire.
 
-- **Scope / exclusions:** it writes `/var/lib/homelab-builder/` alone, which the unit's
-  `ReadWritePaths=` enforces, plus its metric through `publish-textfile`. It **never** signs,
-  publishes or touches `/var/lib/homelab-signer/`, and never builds a commit off master's
-  first-parent chain or one whose CI is not green.
+- **Scope / exclusions:** the builder writes `/var/lib/homelab-builder/` alone, which its
+  unit's `ReadWritePaths=` enforces, plus its metric through `publish-textfile`. It **never**
+  signs, publishes or touches `/var/lib/homelab-signer/`, and never builds a commit off
+  master's first-parent chain or one whose CI is not green. The signer writes
+  `/var/lib/homelab-signer/` and empties `staged/`, with no network. It **never** publishes a
+  package outside the refusal rule, and never runs code from the builder's clone.
 - **Mode (explicit + reversible):** `homelab_builder_enabled` arms the role; `false` and the
   setup-plane tick apply the teardown, which removes the timer, the units, the code and the
   settings.
 - **Authoritative sources:** `origin/master` as fetched this run, GitHub's check-runs API
-  graded over `CI_CONTEXTS`, and `archive-key.fpr`. It reads nothing from its clone to decide
-  what to trust.
+  graded over `CI_CONTEXTS`, and `archive-key.fpr`. The builder reads nothing from its clone
+  to decide what to trust. The signer trusts only `staged/chosen` and the control fields of
+  the packages it checks, and signs with the key `archive-key.fpr` names.
 - **Abort valves:** an empty `CI_CONTEXTS` or a walk bound that is not a positive integer
   (`ci`), a tip that does not descend from the last built commit (`ancestry`), and a keyring
-  that differs from `archive-key.fpr` (`keyring`). Each builds nothing. H3.5b adds the
-  operator's `/etc/homelab-builder/hold` to the runbook; the script already honours it.
-- **Required evidence:** `homelab_builder.prom` on every run past the fetch, and one Discord
-  page per new failure through `OnFailure=`.
-- **Next-run review:** before widening scope, read `journalctl -u homelab-builder` for the
-  refusals since the last change, and the metric's `reason` label.
+  that differs from `archive-key.fpr` (`keyring`). Each builds nothing. The signer's refusal
+  rule publishes nothing from a set it refuses. The operator's root-owned
+  `/etc/homelab-builder/hold` stops both from publishing anything new, and
+  `homelab_builder_enabled: false` removes both.
+- **Required evidence:** `homelab_builder.prom` on every run past the fetch,
+  `homelab_repo.prom` on every publish, a refused set kept under
+  `/var/lib/homelab-signer/refused/`, and one Discord page per new failure of either unit
+  through `OnFailure=`.
+- **Next-run review:** before widening scope, read `journalctl -u homelab-builder -u
+  homelab-repo-sign` for the refusals since the last change, and the builder metric's `reason`
+  label.
 
 ## The teardown keeps the signing key
 
-The teardown stops and removes the units the role installs by H3.5b, the ufw rules for
+The teardown stops and removes the units the role installs, the ufw rules for
 the clients in `homelab_builder_repo_clients` at teardown time, `/var/lib/homelab-builder/`,
 `/etc/homelab-builder/`, `/opt/homelab-builder/` and the builder's stamp fragments. It never
 touches `/var/lib/homelab-signer/` or either user. The
