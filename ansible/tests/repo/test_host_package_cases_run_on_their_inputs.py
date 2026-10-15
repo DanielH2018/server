@@ -81,6 +81,13 @@ _TOKEN = re.compile(
     r"|(?P<op>==|!=|&&|\|\||!|\(|\)|,)|(?P<name>[A-Za-z_][A-Za-z0-9_.\-*]*))"
 )
 _STATUS = {"always": True, "success": True, "failure": False, "cancelled": False}
+_STRING_FUNCTIONS = {
+    "contains": lambda haystack, needle: str(needle).lower() in str(haystack).lower(),
+    "startsWith": lambda text, prefix: (
+        str(text).lower().startswith(str(prefix).lower())
+    ),
+    "endsWith": lambda text, suffix: str(text).lower().endswith(str(suffix).lower()),
+}
 
 
 def _tokens(text: str) -> list[tuple[str, str]]:
@@ -142,10 +149,17 @@ def evaluate(expression: str, context: dict) -> object:
                 return None
             if peek() == ("op", "("):
                 take()
-                assert take() == ("op", ")"), f"function arguments in {expression!r}"
-                if text not in _STATUS:
-                    raise ValueError(f"unsupported function {text}() in {expression!r}")
-                return _STATUS[text]
+                args = []
+                while peek() != ("op", ")"):
+                    args.append(disjunction())
+                    if peek() == ("op", ","):
+                        take()
+                take()
+                if text in _STATUS and not args:
+                    return _STATUS[text]
+                if text in _STRING_FUNCTIONS and len(args) == 2:
+                    return _STRING_FUNCTIONS[text](*args)
+                raise ValueError(f"unsupported function {text}() in {expression!r}")
             return lookup(text)
         raise ValueError(f"unexpected {text!r} in {expression!r}")
 
@@ -223,12 +237,18 @@ def clone(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """A clone of this repository's HEAD, sharing its object store.
 
     `--shared` reads objects through an alternate, so HEAD resolves even when it is a detached
-    merge ref that no branch carries, as it is in CI's pytest job."""
+    merge ref that no branch carries, as it is in CI's pytest job.
+
+    `origin` is the clone itself, so `origin/master` is the PR's base, as on the runner, and
+    `git fetch origin master` (what `scripts/dev/pr_changed_files.sh` runs) works offline. The
+    prune drops the remote-tracking refs the clone copied from this checkout's branches."""
     repo = tmp_path_factory.mktemp("host-cases") / "clone"
     head = git_out(REPO, "rev-parse", "HEAD")
     git(REPO.parent, "clone", "-q", "--shared", "--no-checkout", str(REPO), str(repo))
     git(repo, "checkout", "-q", "--detach", head)
     git(repo, "branch", "-f", "master", head)
+    git(repo, "remote", "set-url", "origin", str(repo))
+    git(repo, "fetch", "-q", "--prune", "--no-tags", "origin")
     return repo
 
 
@@ -258,6 +278,18 @@ def _simulate(clone: Path, tmp_path: Path, leg: dict) -> tuple[dict[str, bool], 
             "ref": "refs/pull/1/merge",
             "sha": git_out(clone, "rev-parse", "HEAD"),
             "workspace": str(clone),
+            "token": "test-token",
+            "event": {
+                "number": 1,
+                "pull_request": {
+                    "number": 1,
+                    "base": {
+                        "ref": "master",
+                        "sha": git_out(clone, "rev-parse", "HEAD^1"),
+                    },
+                    "head": {"sha": git_out(clone, "rev-parse", "HEAD^2")},
+                },
+            },
         },
         "matrix": leg,
         "steps": {},
