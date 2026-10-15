@@ -4,7 +4,7 @@ The chain has four links in three languages, and every break in it is SILENT —
 an annotation query that matches nothing exactly as it renders one with no deploys to show:
 
     deploy.sh / gitops_deploy.py  --logger-->  syslog
-    promote.py land-wait          --logger-->  syslog  (promote_wait.py, flux_host.py)
+    promote.py land-wait          --logger-->  syslog  (promote_lib/wait.py, flux_host.py)
     alloy                         --ships-->   loki-homelab
     dashboards                    --query-->   that Loki, by datasource uid
 
@@ -32,8 +32,8 @@ _DEPLOY_DETACH = _REPO / "scripts/deploy_tools/deploy_lib/detach_run.py"
 # emit_deploy_annotation lives in the deployer's I/O module, not in its entry point.
 _GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py"
 # A Flux promotion that land.sh waited on: `land-wait` builds the line, and `FluxHost.log`
-# runs `logger`, because promote_wait.py starts no subprocess itself.
-_PROMOTE = _REPO / "scripts/deploy_tools/promote_wait.py"
+# runs `logger`, because promote_lib/wait.py starts no subprocess itself.
+_PROMOTE = _REPO / "scripts/deploy_tools/promote_lib/wait.py"
 _FLUX_HOST = _REPO / "scripts/deploy_tools/flux_host.py"
 _EMITTERS = (_DEPLOY_PLAYBOOK, _GITOPS, _PROMOTE)
 

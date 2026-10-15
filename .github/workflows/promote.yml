@@ -379,7 +379,7 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
     # `decide` waits up to 40 minutes on a verification in flight
-    # (verify_promotion.IN_FLIGHT_WAIT_S), and the walk and the pulls take a few more.
+    # (promote_lib/verify_promotion.py:IN_FLIGHT_WAIT_S), and the walk and the pulls take a few more.
     timeout-minutes: 50
     # GitHub keeps one pending job per group and a newer one evicts it. `decide` walks master
     # from its tip rather than reading the trigger, so the last job to run promotes the newest
@@ -484,8 +484,8 @@ jobs:
       # same `prod`. The first `tag` moves it; the second finds it moved, moves nothing, and
       # verifies nothing, rather than moving `prod` past a T that the first run's `verify`
       # still waits on. `tag` jobs share the `promote` group, so the read and the move are
-      # never interleaved with another run's. The DECIDED marker in verify_promotion.py has
-      # the other half, `decide`'s wait.
+      # never interleaved with another run's. The DECIDED marker in promote_lib/verify_promotion.py
+      # has the other half, `decide`'s wait.
       #
       # The first verified run seeds `last-good`: when `decide` read no `last-good`, the step
       # tags `prod`'s digest with it before `prod` moves, so a failed verification has a
@@ -566,12 +566,13 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
-    # Above the largest derived timeout (verify_promotion.promote_timeout, 13 minutes for a
-    # tag at manifests_rollout_timeout_default), and with settle's below decide's in-flight
-    # wait. A job killed at this limit leaves no verdict, which settle holds as unverified.
+    # Above the largest derived timeout (promote_lib/verify_promotion.py:promote_timeout, 13 minutes
+    # for a tag at manifests_rollout_timeout_default), and with settle's below decide's
+    # in-flight wait. A job killed at this limit leaves no verdict, which settle holds as
+    # unverified.
     timeout-minutes: 25
     # No concurrency group: a pending job in `promote` can be evicted. `decide` waits while
-    # `prod` differs from `last-good` instead (the DECIDED marker in verify_promotion.py).
+    # `prod` differs from `last-good` instead (the DECIDED marker in promote_lib/verify_promotion.py).
     permissions:
       contents: read
       statuses: read

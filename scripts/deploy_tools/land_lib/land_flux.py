@@ -7,7 +7,7 @@ Kustomization still exists (`kustomization_exists`). `promotion.wait_on_promotio
 `promote.py land-wait` in process (`run_land_wait`). The plan is
 docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*.
 
-`promote_wait` is imported from land.py's checkout, beside it, as `await_ci` is, so it is the
+`promote_lib/wait.py` is imported from land.py's checkout, beside it, as `await_ci` is, so it is the
 same release as the landing that calls it.
 """
 
@@ -21,13 +21,13 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-# `promote_wait` imports `forge` and `changed_set` bare, from scripts/deploy_tools.
+# `promote_lib/wait.py` imports `forge` and `changed_set` bare, from scripts/deploy_tools.
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from deploy_tools.deploy_lib.owners import flux_owned
 from lib import kubectl
 
 import forge
-from promote_wait import WaitResult, land_wait, live_wait_reads
+from deploy_tools.promote_lib.wait import WaitResult, land_wait, live_wait_reads
 
 KUSTOMIZATIONS = "kustomizations.kustomize.toolkit.fluxcd.io"
 
