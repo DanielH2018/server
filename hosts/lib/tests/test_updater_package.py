@@ -61,7 +61,7 @@ def test_the_package_ships_the_committed_keyring_unchanged(package):
 
 def test_the_package_ships_no_enable_link(package):
     # A host arms its updater by shipping the link in its own package (H3, *Shared names*).
-    assert not [dst for dst in package.files if ".wants/" in dst]
+    assert package.links == {}
 
 
 def timeout_start_s(unit: str) -> int:

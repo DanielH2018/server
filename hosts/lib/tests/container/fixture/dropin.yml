@@ -5,8 +5,9 @@ components: [reconcile]
 maintainer_scripts: [preinst, postinst, prerm]
 files:
   - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/homelab-fixture-kept.service}
-  - {src: units/homelab-fixture-kept.service, dst: /usr/lib/systemd/system/multi-user.target.wants/homelab-fixture-kept.service}
   - {src: units/homelab-fixture-dropped.service, dst: /usr/lib/systemd/system/homelab-fixture-dropped.service}
-  - {src: units/homelab-fixture-dropped.service, dst: /usr/lib/systemd/system/multi-user.target.wants/homelab-fixture-dropped.service}
   - {src: files/fixture-dropped, dst: /usr/lib/homelab/fixture-dropped}
   - {src: units/updater-timer-changed.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
+enable:
+  homelab-fixture-kept.service: multi-user.target
+  homelab-fixture-dropped.service: multi-user.target

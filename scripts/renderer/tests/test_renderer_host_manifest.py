@@ -39,9 +39,9 @@ def test_a_host_manifest_lists_units_links_policies_and_legacy_entries(hosts):
         "files": [
             {"src": "u", "dst": f"{UNITS}/homelab-beat.service"},
             {"src": "u", "dst": f"{UNITS}/homelab-beat.timer"},
-            {"src": "u", "dst": f"{UNITS}/timers.target.wants/homelab-beat.timer"},
             {"src": "u", "dst": f"{UNITS}/homelab-updater.timer.d/50-homelab.conf"},
         ],
+        "enable": {"homelab-beat.timer": "timers.target"},
         "units": {"homelab-beat.service": {"policy": "manual"}},
         "legacy": [
             {"path": "/usr/local/bin/beat.sh"},
@@ -121,11 +121,7 @@ def test_a_shared_package_ships_no_manifest(hosts):
             "no package installs them",
         ),
         (
-            {
-                "files": [
-                    {"src": "u", "dst": f"{UNITS}/multi-user.target.wants/ssh.service"}
-                ]
-            },
+            {"enable": {"ssh.service": "multi-user.target"}},
             "daniel-pi",
             r"enable links name \['ssh.service'\]",
         ),

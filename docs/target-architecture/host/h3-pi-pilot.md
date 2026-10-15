@@ -243,7 +243,8 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
 - **Installed paths.**
     - Scripts go in `/usr/lib/homelab/`.
     - Units go in `/usr/lib/systemd/system/`, and enable links in
-      `/usr/lib/systemd/system/<target>.wants/`.
+      `/usr/lib/systemd/system/<target>.wants/`. An enable link is a symlink to `../<unit>`,
+      as `systemctl enable` writes it: systemd adds a `Wants=` only for a symlinked unit.
     - A drop-in for another package's unit goes in `/usr/lib/systemd/system/<unit>.d/50-homelab.conf`.
     - The rendered manifest goes in `/usr/lib/homelab/manifest.json`.
 - **Unit naming.** Every unit a homelab package ships is named `homelab-*`. The reconcile
@@ -427,7 +428,11 @@ and every host slice applies it.
 
 - **Plain files only.** No nfpm content has `type: config*`. The renderer emits no such
   type, and the CI lint fails the build if one appears. A file under `/etc`, such as
-  `/etc/logrotate.d/pi-health`, is a plain file too.
+  `/etc/logrotate.d/pi-health`, is a plain file too. An enable link is the one entry that is
+  not a file: it ships as `type: symlink`, for the reason *Installed paths* gives.
+- **Version schema.** Every `nfpm.yaml` sets `version_schema: none`, so the built package
+  carries the *Version* string below unchanged. nfpm's default, `semver`, would build
+  `0.<count>+g<sha>` as `0.<count>.0+g<sha>`.
 - **Maintainer scripts.**
     - `postinst` holds only `systemctl daemon-reload || true`,
       `systemctl --no-block start homelab-reconcile.service || true` and `exit 0`.
