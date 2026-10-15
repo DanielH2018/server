@@ -5,7 +5,8 @@ the real implementations, defined HERE rather than beside their callers: `secret
 is the entry point, so a default imported from it would be a cycle — and, when that file runs
 as `__main__`, a second copy of the module under a second name. **This module names
 `secret_rotation` nowhere**, at import time or later, which is what makes it a leaf every
-other module in the package can import. The one fact both files hold is the tier table, and
+other module in the package can import. The `cluster_*` defaults import `cluster_vars` inside
+the function, because `cluster_vars` imports `sops_set` from here. The one fact both files hold is the tier table, and
 each spells the literal out; `DEFAULT_TIER_DAYS` below says why, and which test holds the two
 equal.
 

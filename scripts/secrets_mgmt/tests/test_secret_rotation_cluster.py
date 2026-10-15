@@ -127,4 +127,4 @@ def test_a_failing_cluster_step_returns_non_zero_without_deploying(
     assert not _deployed(calls)
     err = capsys.readouterr().err
     assert "Consumers were NOT deployed" in err, err
-    assert "ansible/vars/cluster-manifests/" in err, err
+    assert "ansible/vars/cluster-manifests" in err, err

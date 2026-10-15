@@ -292,7 +292,7 @@ REVERT_PATHS = ["ansible/vars/secrets.yml", "ansible/secret_rotation.yml"]
 CLUSTER_PATHS = [
     "ansible/vars/cluster-vars.sops.env",
     "ansible/vars/cluster-vars.source",
-    "ansible/vars/cluster-manifests/",
+    "ansible/vars/cluster-manifests",
 ]
 
 
@@ -307,8 +307,10 @@ def sync_cluster_files(rotated: list[str], tools: RotationTools) -> bool:
     tree = tools.cluster_tree()
     if not rotated or not tree.cluster_file.is_file():
         return True
-    # Any failure, not only `RenderError`: without the render nothing can say whether a
-    # rotated key reaches the cluster, so the deploy must not run. The render is in
+    # DECIDED: the render decides which rotated keys the cluster reads, not `.source`, so a
+    # key a template newly references is written too. The cost: once the cluster file exists,
+    # a broken k8s template render stops every rotation, host-only keys included, and it
+    # stops before the deploy. Any failure counts, not only `RenderError`. The render is in
     # placeholder mode and holds no value, so its message is safe to print.
     try:
         expected = tools.cluster_expected()
