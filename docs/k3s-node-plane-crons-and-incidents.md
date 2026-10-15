@@ -215,6 +215,41 @@ uv run ansible-playbook ansible/k3s-bringup.yml \
 While `pin_agent_address` is set, the server play matches no hosts, so its server-host guard
 does not refuse the agent. The run touches nothing of the agent join.
 
+## Both nodes fall back to WiFi when ethernet loses carrier
+
+The same task file joins each node's WiFi link, named by `k3s_node_wifi_link`, to the home
+network. It renders `/etc/netplan/80-homelab-wifi-fallback.yaml` from the SOPS keys
+`wifi_ssid` and `wifi_password`. The link takes a DHCP address with its routes pinned at
+metric 600, behind the wired link's 100. It is `optional`, so boot does not wait for it to
+associate. daniel-box uses `wlp4s0`, a MediaTek MT7922. daniel-server uses `wlo1`, an Intel
+AX201. The installer's `00-installer-config-wifi.yaml` already joined `wlo1`, and the role's
+file merges on top of it.
+
+The fallback depends on the pin's `ignore_routes_with_linkdown`. Without it, the pinned routes
+win with no carrier, and traffic goes nowhere. With it, both nodes keep their addresses:
+`server_ip` stays on the wired link through `ignore-carrier`, and the kernel answers ARP for it
+on WiFi, because `arp_ignore` is 0. A peer that re-resolves the address reaches the node over
+WiFi. flannel's VXLAN device records the wired link as `dev`, but its per-peer forwarding
+entries carry no interface. The kernel therefore routes the encapsulated packets through the
+main table, which picks WiFi once the wired routes are skipped.
+
+The fallback covers a failed cable, NIC or switch port on one node. It does not cover a dead
+gateway, which is also the access point. A WiFi link carries a fraction of the wired
+bandwidth: daniel-server's `wlo1` read a signal level of `-71 dBm` on 2026-10-15, so Longhorn replication and
+media streaming slow down while it carries them.
+
+To apply it, add both keys with `sops ansible/vars/secrets.yml`, then run
+`uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit. Then run the
+`node-address` tag on each node, the same two commands as the pin. The run refuses to start
+while either key is missing. To back it out, empty `k3s_node_wifi_link` and run the same tag.
+
+To check the fallback, unplug the node's cable and confirm three things. First, `ip route get
+1.1.1.1` names the WiFi link. Second, the other node reaches `server_ip`, by `ping` and by
+`kubectl get nodes` reading both `Ready`. Third, a pod on one node reaches a pod on the other.
+On daniel-box, also check that a LAN client reaches the Traefik VIP. No unplug test has shown
+that MetalLB's speaker answers ARP for the VIPs on `wlp4s0`. A client's cached ethernet MAC can
+also take minutes to expire.
+
 ## Two smaller traps
 
 **Cron's PATH omits `/usr/local/bin`, where k3s lives.** Every script here sets its own PATH; a
