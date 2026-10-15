@@ -108,15 +108,22 @@ def save_registry(reg: dict, path: str = REGISTRY_FILE) -> None:
         fh.write(body)
 
 
-def sops_set(name: str, value: str, *, run: Callable = subprocess.run) -> None:
-    """Write `value` as secret `name`'s plaintext, handing it over on stdin.
+def sops_set(
+    name: str,
+    value: str,
+    *,
+    path: str = SECRETS_FILE,
+    run: Callable = subprocess.run,
+) -> None:
+    """Write `value` as secret `name`'s plaintext in the SOPS file `path`, on stdin.
 
     --value-stdin keeps the new token out of argv (world-readable via /proc/<pid>/cmdline
     here — no hidepid). It still requires a JSON-encoded value, same as the old argv form, so
-    the quoting stays; only the transport moves to stdin.
+    the quoting stays; only the transport moves to stdin. `path` defaults to `secrets.yml`;
+    `cluster_vars.py write` passes the cluster file.
     """
     run(
-        ["sops", "set", "--value-stdin", SECRETS_FILE, '["%s"]' % name],
+        ["sops", "set", "--value-stdin", path, '["%s"]' % name],
         input='"%s"' % value,
         text=True,
         check=True,

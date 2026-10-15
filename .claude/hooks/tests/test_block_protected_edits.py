@@ -86,6 +86,25 @@ def test_is_sops_encrypted_false_on_plaintext():
     assert is_sops_encrypted("") is False
 
 
+# The dotenv form: SOPS writes its metadata as plain `sops_*=` lines, so the MAC opens a line
+# with `sops_mac=`. The plaintext half is the same file before encryption.
+SOPS_DOTENV = (
+    "peanut_password=" + _ENC + "\n"
+    "sops_lastmodified=2026-10-15T18:11:03Z\n"
+    "sops_mac=" + _ENC + "\n"
+    "sops_version=3.13.3\n"
+)
+PLAINTEXT_DOTENV = "peanut_password=hunter2\nemail=ops@example.com\n"
+
+
+def test_a_sops_dotenv_is_flagged():
+    assert is_sops_encrypted(SOPS_DOTENV) is True
+
+
+def test_a_plaintext_dotenv_is_clean():
+    assert is_sops_encrypted(PLAINTEXT_DOTENV) is False
+
+
 def test_is_sops_encrypted_false_on_prose_mention():
     # regression: a file that only TALKS about the marker is plaintext, not encrypted.
     assert is_sops_encrypted(PROSE_MENTIONING_MARKER) is False
