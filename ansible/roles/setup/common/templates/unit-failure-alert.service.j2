@@ -78,7 +78,7 @@ ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors
   --variable 'failed_at@%t/{{ alert_run_dir }}/failed-at' \
 {% if alert_unit_instanced | default(false) %}
   --variable 'instance=%i' \
-  --expand-data '{"content":"{% raw %}{{instance:json}}{% endraw %}: {{ alert_unit_message }} Failed at {% raw %}{{failed_at:trim:json}}{% endraw %}."}' \
+  --expand-data '{"content":"{% raw %}{{instance:json}}{% endraw %}: {{ alert_unit_message }} {{ alert_unit_time_label | default('Failed at') }} {% raw %}{{failed_at:trim:json}}{% endraw %}."}' \
 {% else %}
   --expand-data '{"content":"{{ alert_unit_message }} Failed at {% raw %}{{failed_at:trim:json}}{% endraw %}."}' \
 {% endif %}
