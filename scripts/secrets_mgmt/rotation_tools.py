@@ -41,16 +41,16 @@ from lib.cli_help import warn
 from lib.git import git
 from lib.repo_paths import HOST_LIB_FILES
 from lib.repo_paths import REPO as _REPO_PATH
+from secrets_mgmt.cluster_vars import fleet_expected
+from secrets_mgmt.cluster_vars import main as cluster_vars_main
+from secrets_mgmt.cluster_vars import write as cluster_vars_write
+from secrets_mgmt.cluster_vars_check import Expected, Tree
+from secrets_mgmt.sops_io import REPO, SECRETS_FILE, sops_set
 
 # host_lib is the setup roles' shared host module, for the Kuma push below.
 _sys.path.insert(0, str(HOST_LIB_FILES))
 import host_lib
 
-# `str`, because every consumer below builds paths with os.path.join. lib.repo_paths.REPO is a
-# Path; this module is the last of the twenty call sites that module's docstring describes,
-# which re-derived `parents[2]` by hand under three different names.
-REPO = str(_REPO_PATH)
-SECRETS_FILE = os.path.join(REPO, "ansible", "vars", "secrets.yml")
 REGISTRY_FILE = os.path.join(REPO, "ansible", "secret_rotation.yml")
 
 
@@ -106,35 +106,6 @@ def save_registry(reg: dict, path: str = REGISTRY_FILE) -> None:
     with open(path, "w") as fh:
         fh.write(_HEADER)
         fh.write(body)
-
-
-def sops_set(
-    name: str,
-    value: str,
-    *,
-    path: str = SECRETS_FILE,
-    run: Callable = subprocess.run,
-) -> None:
-    """Write `value` as secret `name`'s plaintext in the SOPS file `path`, on stdin.
-
-    --value-stdin keeps the new token out of argv (world-readable via /proc/<pid>/cmdline
-    here — no hidepid). It still requires a JSON-encoded value, same as the old argv form, so
-    the quoting stays; only the transport moves to stdin. `path` defaults to `secrets.yml`;
-    `cluster_vars.py write` passes the cluster file.
-    """
-    run(
-        ["sops", "set", "--value-stdin", path, '["%s"]' % name],
-        input='"%s"' % value,
-        text=True,
-        check=True,
-        cwd=REPO,
-        # A hung `sops set` would otherwise hang the weekly secret-rotate cron forever,
-        # mid-batch, still holding the repo-tree lock the deploy pipeline shares. Bounded
-        # the same as the sibling `decrypted_values`; `cmd_rotate` catches the
-        # TimeoutExpired alongside its other failures, so the names already written to the
-        # store are still reported.
-        timeout=30,
-    )
 
 
 def decrypted_values(
@@ -224,6 +195,27 @@ def tree_owners() -> dict[str, str]:
     return tag_owners()
 
 
+# The cluster files' boundaries (slice D3).
+def cluster_tree() -> Tree:
+    """The live tree's cluster file paths."""
+    return Tree(_REPO_PATH)
+
+
+def cluster_expected() -> Expected:
+    """The placeholder render's `Expected`. Raises `RenderError` when a template fails."""
+    return fleet_expected()
+
+
+def cluster_write(tree: Tree, expected: Expected) -> int:
+    """`cluster_vars.py write`, in process; returns its exit code."""
+    return cluster_vars_write(tree, expected)
+
+
+def cluster_check(tree: Tree) -> int:
+    """`cluster_vars.py check --no-render --base HEAD`, in process; returns its exit code."""
+    return cluster_vars_main(["check", "--no-render", "--base", "HEAD"], tree)
+
+
 # The rotation cadence per tier, and the default `secret_registry.py` seeds, syncs and audits with.
 # `secret_rotation.py` assigns the same table AS A LITERAL, because
 # `scripts/docs/gen_doc_fragments.py` reads it out of THAT file with `ast.literal_eval` and a
@@ -256,4 +248,8 @@ class RotationTools:
     kuma_push: Callable[[str, bool, str], None] = kuma_push
     deploy: Callable[[list[str]], int] = run_deploy
     owners: Callable[[], Mapping[str, str]] = tree_owners
+    cluster_tree: Callable[[], Tree] = cluster_tree
+    cluster_expected: Callable[[], Expected] = cluster_expected
+    cluster_write: Callable[[Tree, Expected], int] = cluster_write
+    cluster_check: Callable[[Tree], int] = cluster_check
     tier_days: Mapping[str, int | None] = DEFAULT_TIER_DAYS

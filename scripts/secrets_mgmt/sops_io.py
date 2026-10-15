@@ -1,11 +1,35 @@
-"""The push-token shape check, over an already-decrypted mapping.
+"""The two SOPS-facing helpers that import no other secrets_mgmt module.
 
-`RotationTools.sops_decrypt` does the decrypting; this module only inspects what it returned,
-which is what lets the whole check be tested with synthetic values on a host (or in CI) with
-no age key. Nothing here opens a file or spawns a process.
+`malformed_push_tokens` is the push-token shape check, over an already-decrypted mapping.
+`RotationTools.sops_decrypt` does the decrypting; the check only inspects what it returned,
+which is what lets it be tested with synthetic values on a host (or in CI) with no age key.
+It opens no file and spawns no process.
+
+`sops_set` writes one secret into a SOPS file through `sops set`, with the runner injectable.
+It lives here, and not in `rotation_tools.py`, because both `rotation_tools.py` and
+`cluster_vars.py` need it and each imports the other's work: a leaf both can import keeps the
+import graph acyclic.
 """
 
+import os
 import re
+import subprocess
+from collections.abc import Callable
+
+# Reach the sibling package directories: a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+
+from lib.repo_paths import REPO as _REPO_PATH
+
+# `str`, because every consumer builds paths with os.path.join. lib.repo_paths.REPO is a Path;
+# this module is the last of the twenty call sites that module's docstring describes, which
+# re-derived `parents[2]` by hand under three different names.
+REPO = str(_REPO_PATH)
+SECRETS_FILE = os.path.join(REPO, "ansible", "vars", "secrets.yml")
 
 # Uptime Kuma rejects a push token that is not exactly 32 letters/digits, and it rejects it at
 # monitor-CREATION time — so the tile is never made and every repo-side gate stays green: the
@@ -44,3 +68,32 @@ def malformed_push_tokens(values: dict) -> list[tuple[str, str]]:
                 )
             )
     return bad
+
+
+def sops_set(
+    name: str,
+    value: str,
+    *,
+    path: str = SECRETS_FILE,
+    run: Callable = subprocess.run,
+) -> None:
+    """Write `value` as secret `name`'s plaintext in the SOPS file `path`, on stdin.
+
+    --value-stdin keeps the new token out of argv (world-readable via /proc/<pid>/cmdline
+    here — no hidepid). It still requires a JSON-encoded value, same as the old argv form, so
+    the quoting stays; only the transport moves to stdin. `path` defaults to `secrets.yml`;
+    `cluster_vars.py write` passes the cluster file.
+    """
+    run(
+        ["sops", "set", "--value-stdin", path, '["%s"]' % name],
+        input='"%s"' % value,
+        text=True,
+        check=True,
+        cwd=REPO,
+        # A hung `sops set` would otherwise hang the weekly secret-rotate cron forever,
+        # mid-batch, still holding the repo-tree lock the deploy pipeline shares. Bounded
+        # the same as the sibling `decrypted_values`; `cmd_rotate` catches the
+        # TimeoutExpired alongside its other failures, so the names already written to the
+        # store are still reported.
+        timeout=30,
+    )

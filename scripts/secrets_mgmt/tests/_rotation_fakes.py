@@ -14,12 +14,14 @@ import datetime as dt
 import subprocess
 from dataclasses import dataclass, field
 from functools import partial
+from pathlib import Path
 
 import yaml
 
 # Package-qualified, as `_land_fakes.py` reaches `land_lib.tools`: a bare `import
 # rotation_tools` binds a SECOND module object in a pytest session, since the module under
 # test reaches the same file as `secrets_mgmt.rotation_tools`.
+from secrets_mgmt.cluster_vars_check import Expected, Tree
 from secrets_mgmt.rotation_tools import (
     RotationTools,
     decrypted_values,
@@ -50,6 +52,16 @@ class Fakes:
     # Deploy tag to `owner`, as `lib.k8s_roles.tag_owners` maps it. Empty is the live tree's
     # answer until a service moves to Flux.
     owners: dict[str, str] = field(default_factory=dict)
+    # The tree the cluster hook reads. The default holds no cluster file, so the hook is a
+    # no-op and no test reaches the real `cluster_vars.py write`; a test that wants the hook
+    # to run builds a tree in `tmp_path`.
+    cluster_root: Path = Path("/nonexistent-cluster-tree")
+    expected: Expected = field(
+        default_factory=lambda: Expected(frozenset(), frozenset(), ())
+    )
+    expected_error: BaseException | None = None
+    write_rc: int = 0
+    check_rc: int = 0
 
 
 def build_tools(f: Fakes) -> tuple[RotationTools, list]:
@@ -103,6 +115,20 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
     def kuma_push(url: str, ok: bool, msg: str) -> None:
         calls.append(("kuma_push", (url, ok, msg), {}))
 
+    def cluster_expected() -> Expected:
+        calls.append(("cluster_expected", (), {}))
+        if f.expected_error is not None:
+            raise f.expected_error
+        return f.expected
+
+    def cluster_write(tree: Tree, expected: Expected) -> int:
+        calls.append(("cluster_write", (tree, expected), {}))
+        return f.write_rc
+
+    def cluster_check(tree: Tree) -> int:
+        calls.append(("cluster_check", (tree,), {}))
+        return f.check_rc
+
     # `tier_days` is left at its default: every test wants the real table, and the default
     # is a literal in `rotation_tools`.
     return RotationTools(
@@ -116,6 +142,10 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         kuma_push=kuma_push,
         deploy=partial(run_deploy, run=run),
         owners=lambda: f.owners,
+        cluster_tree=lambda: Tree(f.cluster_root),
+        cluster_expected=cluster_expected,
+        cluster_write=cluster_write,
+        cluster_check=cluster_check,
     ), calls
 
 
