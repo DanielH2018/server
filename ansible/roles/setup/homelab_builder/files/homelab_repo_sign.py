@@ -17,8 +17,8 @@ What a run does:
     refusal: it copies the whole of `staged/` into `refused/<UTC time>/`, empties `staged/`,
     publishes nothing and exits 1. Otherwise it copies the packages into `repo/pool/main/`
     under names it derives from their control fields (step 2), then publishes (steps 3 to 5).
-    A publish that fails removes the pool files this run added, so no later re-sign indexes
-    them.
+    A publish that fails before its index goes live removes the pool files this run added,
+    so no later re-sign indexes them.
   * With `staged/` empty, it re-signs the unchanged tree when the published `Release` is
     more than 24 hours old, or was signed by a key other than the one `archive-key.fpr` names.
 
@@ -41,7 +41,8 @@ State, all under `SIGNER_DIR` (`/var/lib/homelab-signer`):
 Exit codes: 0 when the run published, re-signed, had nothing to do, was held, or failed for
 the same reason as the run before it; 1 on a new refusal or a new failure, which
 `OnFailure=homelab-repo-sign-alert.service` pages once. The reasons are `refused` (keyed by
-the set's chosen SHA), `key`, `index`, `sign` and `io`, a filesystem or tool error.
+the set's chosen SHA), `key`, `index`, `sign`, `staged` (it is not a plain directory) and
+`io`, a filesystem or tool error.
 
 It runs under the host's `/usr/bin/python3`, Ubuntu 24.04's 3.12, with the standard library
 only, so pyproject.toml formats it for 3.12.
@@ -102,21 +103,21 @@ def log(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
-def read_no_follow(path: Path) -> bytes:
-    """Read a regular file without following a symlink at its last component.
+def read_no_follow(name: str, dir_fd: int) -> bytes:
+    """Read the regular file `name` inside the directory `dir_fd`, never through a symlink.
 
     Raises:
-        Refusal: `path` is a symlink, a directory, a FIFO or anything else that is not a
+        Refusal: `name` is a symlink, a directory, a FIFO or anything else that is not a
             regular file. O_NONBLOCK keeps a FIFO from stalling the open.
     """
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
     except OSError as exc:
-        raise Refusal(f"{path.name} is not a regular file: {exc.strerror}") from exc
+        raise Refusal(f"{name} is not a regular file: {exc.strerror}") from exc
     # fstat before fdopen: fdopen itself raises on a directory, which is not a Refusal.
     if not stat.S_ISREG(os.fstat(fd).st_mode):
         os.close(fd)
-        raise Refusal(f"{path.name} is not a regular file")
+        raise Refusal(f"{name} is not a regular file")
     with os.fdopen(fd, "rb") as handle:
         return handle.read()
 
@@ -173,6 +174,7 @@ class Signer:
         self.snapshots = self.repo / ".snapshots"
         self.dists = self.repo / "dists"
         self.state: dict = {}
+        self.staged_fd: int | None = None
 
     # ── the run ───────────────────────────────────────────────────────────────────────────
 
@@ -181,6 +183,8 @@ class Signer:
         try:
             return self._run()
         finally:
+            if self.staged_fd is not None:
+                os.close(self.staged_fd)
             shutil.rmtree(self.incoming, ignore_errors=True)
             write_file(
                 self.signer_dir / "state.json",
@@ -199,6 +203,7 @@ class Signer:
             if os.path.lexists(self.hold_path):
                 log(f"held by {self.hold_path}; staged/ left as it is")
             else:
+                self.open_staged()
                 accepted = self.take_staged()
             try:
                 if accepted:
@@ -210,7 +215,8 @@ class Signer:
                     log("re-signed the published tree")
             except BaseException:
                 # A package copied into the pool but never indexed would otherwise be indexed
-                # by the next re-sign, a held one included.
+                # by the next re-sign, a held one included. publish() empties the list once
+                # the swap makes the new index live.
                 for path in self.new_in_pool:
                     path.unlink(missing_ok=True)
                 raise
@@ -232,9 +238,36 @@ class Signer:
         self.state["failure"] = record
         return 0 if repeat else 1
 
+    def open_staged(self) -> None:
+        """Open `staged/` once, refusing a symlink, so every entry operation stays inside it.
+
+        The builder owns `staged/`'s parent and can replace `staged/` with a link to anything
+        the signer may write. Every read, unlink and removal below goes through this
+        descriptor, never through the path.
+
+        Raises:
+            Failure: `staged/` is not a directory, or is a symlink (reason `staged`).
+        """
+        try:
+            self.staged_fd = os.open(
+                self.staged, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+            )
+        except OSError as exc:
+            raise Failure(
+                "staged", f"{self.staged} is not a plain directory: {exc.strerror}"
+            ) from exc
+
+    def staged_dir(self) -> int:
+        """The descriptor open_staged() opened; every staged/ entry is reached through it."""
+        if self.staged_fd is None:
+            raise Failure("staged", "staged/ was used before open_staged() opened it")
+        return self.staged_fd
+
     def _refused(self, exc: Refusal) -> int:
         try:
-            chosen = read_no_follow(self.staged / "chosen").decode(errors="replace")
+            chosen = read_no_follow("chosen", self.staged_dir()).decode(
+                errors="replace"
+            )
         except (OSError, Refusal):
             chosen = ""
         try:
@@ -281,7 +314,7 @@ class Signer:
         Returns the pool paths it wrote, empty when `staged/` holds no package. Raises
         Refusal, having copied nothing into the pool, when any entry breaks the rule.
         """
-        names = sorted(os.listdir(self.staged))
+        names = sorted(os.listdir(self.staged_dir()))
         if not names:
             return []
         shutil.rmtree(self.incoming, ignore_errors=True)
@@ -291,7 +324,7 @@ class Signer:
         for name in names:
             # Every entry is read without following a symlink: a staged link to the signer's
             # own GnuPG home would otherwise be copied into a pool anyone can fetch.
-            data = read_no_follow(self.staged / name)
+            data = read_no_follow(name, self.staged_dir())
             if name == "chosen":
                 chosen = data.decode(errors="replace").strip()
                 if not _CHOSEN.fullmatch(chosen):
@@ -359,22 +392,23 @@ class Signer:
         """
         where = self.refused / time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(self.now()))
         where.mkdir(mode=0o700, parents=True, exist_ok=True)
-        for name in sorted(os.listdir(self.staged)):
+        for name in sorted(os.listdir(self.staged_dir())):
             try:
-                write_file(where / name, read_no_follow(self.staged / name), 0o600)
+                write_file(where / name, read_no_follow(name, self.staged_dir()), 0o600)
             except (OSError, Refusal):
                 write_file(where / f"{name}.not-a-file", b"", 0o600)
         self.empty_staged()
         return where
 
     def empty_staged(self) -> None:
-        for name in os.listdir(self.staged):
-            path = self.staged / name
+        fd = self.staged_dir()
+        for name in os.listdir(fd):
             try:
-                if path.is_dir() and not path.is_symlink():
-                    shutil.rmtree(path)
+                mode = os.stat(name, dir_fd=fd, follow_symlinks=False).st_mode
+                if stat.S_ISDIR(mode):
+                    shutil.rmtree(name, dir_fd=fd)
                 else:
-                    path.unlink()
+                    os.unlink(name, dir_fd=fd)
             except OSError as exc:
                 log(f"could not remove staged/{name}: {exc}")
 
@@ -412,6 +446,9 @@ class Signer:
         except BaseException:
             shutil.rmtree(snapshot, ignore_errors=True)
             raise
+        # The live index now lists this run's pool files, so a later failure must not
+        # remove them.
+        self.new_in_pool.clear()
         self.state["signed_by"] = fingerprint
         for old in self.snapshots.iterdir():
             if old != snapshot:

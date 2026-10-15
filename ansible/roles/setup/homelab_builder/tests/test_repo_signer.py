@@ -375,3 +375,38 @@ def test_a_failed_publish_never_rides_along_on_a_later_held_re_sign(lab):
     index = (lab.suite / "main" / "binary-amd64" / "Packages").read_text()
     assert f"Version: 0.5+g{CHOSEN}" in index
     assert "Version: 0.6" not in index
+
+
+@pytest.mark.parametrize("target", ["gnupg", "repo", "."])
+def test_a_staged_directory_replaced_by_a_symlink_touches_nothing(lab, target):
+    # The builder owns staged/'s parent, so it can swap staged/ for a link into the
+    # signer's tree. Followed, a refusal would empty whatever the link names.
+    lab.stage("homelab-daniel-pi")
+    assert lab.signer().main() == 0
+    linked = lab.signer_dir / target
+    before = sorted(p.relative_to(lab.signer_dir) for p in linked.rglob("*"))
+    lab.staged.rmdir()
+    lab.staged.symlink_to(linked)
+    assert lab.signer().main() == 1
+    state = json.loads((lab.signer_dir / "state.json").read_text())
+    assert state["failure"] == {"reason": "staged"}
+    after = sorted(p.relative_to(lab.signer_dir) for p in linked.rglob("*"))
+    # The run rewrites state.json, and nothing else under the signer's tree may change.
+    assert [p for p in after if p.name != "state.json"] == [
+        p for p in before if p.name != "state.json"
+    ]
+
+
+def test_a_failure_after_the_index_goes_live_keeps_the_pool_it_lists(lab):
+    lab.stage("homelab-daniel-pi")
+    signer = lab.signer()
+
+    def full_disk(suite):
+        raise OSError(28, "No space left on device")
+
+    signer.write_prom = full_disk
+    assert signer.main() == 1
+    index = (lab.suite / "main" / "binary-amd64" / "Packages").read_text()
+    name = f"homelab-daniel-pi_0.5+g{CHOSEN}_all.deb"
+    assert f"Filename: pool/main/{name}" in index
+    assert (lab.signer_dir / "repo" / "pool" / "main" / name).is_file()

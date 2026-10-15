@@ -153,11 +153,17 @@ start waits for a signer still running and never rewrites `staged/` under it.
 - **The sandbox.** The plan's *Sandboxing* list plus `PrivateNetwork=yes`, writing only
   `/var/lib/homelab-signer` and `staged/`.
 
-A failure other than a refusal exits 1 once per reason (`key`, `index`, `sign`, or `io` for a
-filesystem or tool error), then 0 on a repeat, so `OnFailure=homelab-repo-sign-alert.service`
-pages once. A refusal pages once per refused set. A failure keeps `staged/` and removes the
-pool files that run added, and the next successful builder run starts the signer again. `docs/host-packages.md` has each page's
-clear.
+The signer opens `staged/` once with `O_DIRECTORY|O_NOFOLLOW` and reaches every entry through
+that descriptor, because the builder owns the directory `staged/` sits in. A `staged/` that is
+not a plain directory fails the run with reason `staged` and touches nothing.
+
+A failure other than a refusal exits 1 once per reason (`key`, `index`, `sign`, `staged`, or
+`io` for a filesystem or tool error), then 0 on a repeat, so
+`OnFailure=homelab-repo-sign-alert.service` pages once. A refusal pages once per refused set.
+A failure keeps `staged/`, and the next successful builder run starts the signer again. A
+publish that fails before its index goes live removes the pool files it added. Once the
+`dists` swap has happened, the live index lists those files, so a later failure keeps them.
+`docs/host-packages.md` has each page's clear.
 
 ## Autonomous-role contract (the builder and the signer publish host packages with no human in the loop)
 

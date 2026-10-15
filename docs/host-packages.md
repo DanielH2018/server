@@ -325,10 +325,14 @@ repeat every 2 minutes. Read `journalctl -u homelab-repo-sign` for the reason:
 - **`index`.** `apt-ftparchive` failed. The journal line carries its stderr.
 - **`io`.** A filesystem error, or a tool that would not start. The journal line names the
   path or the tool.
+- **`staged`.** `/var/lib/homelab-builder/staged` is not a plain directory, for example a
+  symlink. The signer touched nothing. Read `ls -la /var/lib/homelab-builder` and the
+  builder's journal, then restore the directory with the role's apply.
 
 A signer failure other than a refusal keeps `staged/`, and the next successful builder run
-starts the signer again. A publish that fails removes the pool files it had added, so no later
-re-sign indexes them.
+starts the signer again. A publish that fails before its index goes live removes the pool
+files it had added, so no later re-sign indexes them. A failure after the index goes live,
+such as a full disk while writing the metric, keeps them, because the live index lists them.
 
 ## The builder's pages
 
