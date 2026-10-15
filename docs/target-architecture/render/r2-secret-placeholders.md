@@ -47,11 +47,17 @@ peer file(s) from daniel-pi`, so the key in `pi-peer-backup-ssh-key` authenticat
 stored.
 
 PR 7b, `mullvad_account`'s dedicated Secret:
-[#5050](https://github.com/DanielH2018/server/pull/5050). PR 7 has not merged, so the real
-tree holds three `render_sops_manifests` entries, not the four the plan counts after both. It
-deployed at `4e70b0c18`. The new pod projects `qbittorrent-mullvad` and
+[#5050](https://github.com/DanielH2018/server/pull/5050). It landed before PR 7, so until PR 7
+the real tree held three `render_sops_manifests` entries. It deployed at `4e70b0c18`. The new pod projects `qbittorrent-mullvad` and
 `qbittorrent-mullvad-account` into one volume, and its wireguard sidecar fetched a tunnel
 address from the Mullvad API with the account read from that volume.
+
+PR 7, Authelia's OIDC key: [#5092](https://github.com/DanielH2018/server/pull/5092). The
+operator's pre-window `--dry-run` passed the count assert, and its render record listed
+`oidc-jwk-secret.yaml`. It deployed at `26b2678d6` in an operator-attended window on
+2026-10-15. The portal served the same JWKS before and after, `kid` `53ecf7-rs256`, redis
+kept its sessions, and the operator's `pytest -m ui -k grafana` read `6 passed`. The real
+tree now holds the plan's four `render_sops_manifests` entries.
 
 Domain PR 1, `domain` as an inventory variable read without SOPS:
 [#4994](https://github.com/DanielH2018/server/pull/4994).
@@ -62,6 +68,13 @@ Domain PR 2a of step 10, the named members moved from `domain` to `email`:
 Domain PR 2b, the flip, so `domain` is published and no stub or placeholder:
 [#5017](https://github.com/DanielH2018/server/pull/5017). It deployed every tag with no pod
 restart, and CI's flux round trip read 0 differences over 58 tags in both passes.
+
+Domain PR 3, `domain` deleted from the store:
+[#5087](https://github.com/DanielH2018/server/pull/5087). The operator deleted the key with
+`sops` on 2026-10-15, and the PR carried that deletion with the registry, `RETIRED` and
+`PUBLISHED` changes. The store change deferred the deploy plane, so the session deployed all
+58 owed services. No pod outside a Job restarted, because every live IngressRoute host already
+carried the inventory value.
 
 Depends on: [R1](r1-shadow-render.md)
 
