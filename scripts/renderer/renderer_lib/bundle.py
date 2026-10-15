@@ -3,8 +3,9 @@
 A placeholder render with `--role` writes, for each tag it names:
 
 - `DIR/flux/<tag>.yaml`, the Kustomization `<tag>` (C3 *Per-tag Kustomizations*). It carries
-  `spec.postBuild`, naming `homelab-cluster-vars`, exactly when the tag's placeholder key set
-  is not empty (C1 *The projection*);
+  `spec.postBuild`, naming `homelab-cluster-vars`, and a `dependsOn` entry for `cluster-vars`
+  exactly when the placeholder key set of the directory `<tag>` is not empty (C1 *The
+  projection*, D3.3b);
 - `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member;
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
@@ -134,8 +135,9 @@ def tag_kustomization(tag: str, substitutes: bool, timeout: str) -> dict:
 
     Args:
         tag: The deploy tag, the Kustomization's name and its directory under `cluster/`.
-        substitutes: Whether the tag's placeholder key set is not empty, which alone decides
-            `postBuild` (C1 *The projection*).
+        substitutes: Whether the directory's placeholder key set is not empty, which alone
+            decides `postBuild` (C1 *The projection*) and the `cluster-vars` edge. The edge
+            makes Flux wait for `homelab-cluster-vars` before it substitutes from it (D3.3b).
         timeout: `manifests_rollout_timeout_default`, the manifests role's rollout timeout.
     """
     spec: dict = {
@@ -154,6 +156,7 @@ def tag_kustomization(tag: str, substitutes: bool, timeout: str) -> dict:
         spec["postBuild"] = {
             "substituteFrom": [{"kind": "Secret", "name": CLUSTER_VARS_SECRET}]
         }
+        spec["dependsOn"] = [{"name": CLUSTER_VARS}]
     return {
         "apiVersion": FLUX_API_VERSION,
         "kind": "Kustomization",
@@ -163,7 +166,9 @@ def tag_kustomization(tag: str, substitutes: bool, timeout: str) -> dict:
 
 
 def cluster_vars_kustomization(timeout: str) -> dict:
-    """The Kustomization `cluster-vars`: a tag's fields without `postBuild`, plus `decryption`.
+    """The Kustomization `cluster-vars`: a tag's fields, never substituting, plus `decryption`.
+
+    Its directory holds no rendered template, so it gets neither `postBuild` nor the edge.
 
     `deletionPolicy: Orphan` keeps the Secret serving if the Kustomization is ever deleted.
     """
@@ -320,6 +325,39 @@ def digests_text(value: Mapping) -> str:
     return json.dumps(value, sort_keys=True) + "\n"
 
 
+def substitution(
+    tags: Iterable[str],
+    directories: Mapping[str, object],
+    key_sets: Mapping[str, frozenset[str]],
+) -> tuple[dict[str, bool], set[str]]:
+    """Which Kustomizations substitute, and which tags count as substituting (D3.3b).
+
+    Args:
+        tags: The published tags.
+        directories: Each rendered directory's name under `cluster/`.
+        key_sets: Each directory name mapped to its placeholder key set.
+
+    Returns:
+        Each directory name in `directories` that a tag in `tags` owns, `<tag>` and
+        `<tag>-deferred` alike, mapped to whether its own key set is non-empty. That alone
+        decides `postBuild` and the `cluster-vars` edge on its Kustomization (C1
+        *Substitution and escaping*). Second, the tags with either directory substituting,
+        the per-tag set the `cluster-vars` footprint rule reads.
+    """
+    per_directory = {
+        name: bool(key_sets.get(name))
+        for tag in tags
+        for name in (tag, tag + DEFERRED_SUFFIX)
+        if name in directories
+    }
+    substituting = {
+        tag
+        for tag in tags
+        if per_directory.get(tag) or per_directory.get(tag + DEFERRED_SUFFIX)
+    }
+    return per_directory, substituting
+
+
 def bundle_files(
     directories: Mapping[str, Mapping[str, str]],
     key_sets: Mapping[str, frozenset[str]],
@@ -351,18 +389,12 @@ def bundle_files(
             f"{deferred} render a {DEFERRED_SUFFIX} directory, and no Kustomization applies "
             f"it until D4.2 adds <tag>{DEFERRED_SUFFIX}"
         )
-    substituting = {
-        tag
-        for tag in tags
-        if any(
-            key_sets.get(name)
-            for name in (tag, tag + DEFERRED_SUFFIX)
-            if name in directories
-        )
-    }
+    per_directory, substituting = substitution(tags, directories, key_sets)
     shared = cluster_vars_files(cluster_vars, timeout)
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
-    files = flux_files({tag: tag in substituting for tag in tags}, timeout, flux)
+    files = flux_files(
+        {tag: per_directory.get(tag, False) for tag in tags}, timeout, flux
+    )
     files |= shared
     cluster = {
         f"{CLUSTER_DIR}/{name}/{file}": text
