@@ -1145,6 +1145,7 @@
  "scripts/renderer/tests/test_renderer_template_census.py": 0.35,
  "scripts/renderer/tests/test_renderer_trailing_newlines.py": 0.05,
  "scripts/secrets_mgmt/tests/test_cluster_vars_check.py": 7.72,
+ "scripts/secrets_mgmt/tests/test_cluster_vars_tree.py": 8.04,
  "scripts/secrets_mgmt/tests/test_cluster_vars_write.py": 2.6,
  "scripts/secrets_mgmt/tests/test_cluster_vars_write_refusals.py": 1.1,
  "scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py": 0.76,
