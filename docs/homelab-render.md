@@ -297,7 +297,7 @@ rule, the tag, the file, the document as `Kind/name` or the refused form, and th
 | `known-key` | the output of a directory that substitutes | a `${NAME}` whose name is not a key of `ansible/vars/secrets.yml` |
 | `no-bare-dollar-brace` | the output, read as Flux reads it, each `$$` paired first | a `${` that is not a placeholder of pass 3, and a sentinel fragment in any directory |
 | `confined-to-secret` | the kind of each rendered document | a placeholder outside `kind: Secret`, except `email` (`PLACEHOLDER_ANYWHERE`) |
-| `no-sops-manifest-key` | the output | a placeholder of a key in `SOPS_MANIFEST_KEYS`, the multi-line keys Flux cannot substitute |
+| `no-sops-manifest-key` | the output | a placeholder of a key in `SOPS_MANIFEST_KEYS`, the multi-line or all-digit standalone keys Flux cannot substitute as written |
 | `no-secret-expression` | the syntax tree of every `.j2` under the k8s roles' `templates/` and `ansible/templates/`, but `*.sh.j2` | any form of a secret key that could change its value |
 
 Rule 5 allows a key only bare, under `default`, `to_json` or `indent` (not for a
@@ -370,8 +370,10 @@ members.
 ### Manifests placeholder mode leaves out
 
 A multi-line key cannot pass through a placeholder, because Flux deletes every newline from a
-substituted value. Each such key moves into a small Secret of its own, which D3 ships as a
-SOPS-encrypted manifest. The role lists that Secret's manifest in the defaults variable
+substituted value. An all-digit key that stands alone in its field cannot either, because Flux
+drops the template's quotes and types the value as a number. Each such key moves into a small
+Secret of its own, which D3 ships as a SOPS-encrypted manifest. The role lists that Secret's
+manifest in the defaults variable
 `render_sops_manifests`, and placeholder mode emits no document for it. It drops the file
 before pass 2 and rebuilds the directory's `kustomization.yaml` without it, so its key counts
 in no key set and in no standalone set. Stub mode still renders it, and Ansible renders and
