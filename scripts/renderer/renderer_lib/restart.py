@@ -31,6 +31,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+import ast
 import hashlib
 import json
 from collections.abc import Iterable, Mapping
@@ -77,6 +78,13 @@ def restart_targets(tag: str, context: Mapping, roles: Path = K8S_ROLES) -> list
         raise RenderError(f"{tag}: its restart targets do not resolve: {exc}") from exc
     primary = values.get("manifests_rollout", tag)
     extra = values.get("manifests_extra_rollouts") or []
+    if isinstance(extra, str):
+        # An expression that builds the list inline, as authelia's does, renders as its
+        # text; Ansible turns such text back into the list, and so does this.
+        try:
+            extra = ast.literal_eval(extra.strip() or "[]")
+        except ValueError, SyntaxError:
+            pass
     if not isinstance(primary, str) or not isinstance(extra, list):
         raise RenderError(
             f"{tag}: manifests_rollout must be a name and manifests_extra_rollouts a list"

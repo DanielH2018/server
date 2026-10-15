@@ -25,6 +25,7 @@ from renderer.renderer_lib.restart import (
     RESTART_ANNOTATION,
     any_pod_template,
     pod_references,
+    restart_targets,
     restart_values,
     stamp,
 )
@@ -90,6 +91,26 @@ def test_a_key_missing_from_source_is_flagged():
 def test_a_target_that_names_no_rendered_workload_is_flagged():
     with pytest.raises(RenderError, match="restart target four"):
         _values(targets=("four",))
+
+
+INCLUDE = """- name: Deploy fixture
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_rollout: ""
+    manifests_extra_rollouts: >-
+      {{ [{'name': 'fixture-redis', 'restart_on': []}] if redis | bool else [] }}
+"""
+
+
+@pytest.mark.parametrize("redis, targets", [(True, ["fixture-redis"]), (False, [])])
+def test_an_extra_rollouts_list_built_by_an_expression_resolves(
+    tmp_path, redis, targets
+):
+    """authelia builds its list inline, which renders as text before it is a list."""
+    (tmp_path / "fixture" / "tasks").mkdir(parents=True)
+    (tmp_path / "fixture" / "tasks" / "main.yml").write_text(INCLUDE)
+    assert restart_targets("fixture", {"redis": redis}, roles=tmp_path) == targets
 
 
 def test_a_secret_shipped_as_a_sops_manifest_hashes_its_keys_source_digest():
