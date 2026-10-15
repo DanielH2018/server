@@ -114,7 +114,7 @@ The exit criterion has five parts, all observed together:
     - with `strict=True`, it still resolves to `''` and nothing raises;
     - with `overrides={'inventory_hostname': 'daniel-server'}`, it resolves to `127.0.0.1`.
 
-  `scripts/deploy_tools/setup_gates.py:eval_when_strict` sets `inventory_hostname` itself,
+  `scripts/deploy_tools/setup_lib/setup_gates.py:eval_when_strict` sets `inventory_hostname` itself,
   so a census and a render can evaluate one comparison differently. Host mode must therefore
   supply the variable (*Render context* under *NUT on daniel-server*).
 - **The playbook gate and the deployer.** `ansible/initial_setup.yml` runs `nut_host` when
@@ -125,7 +125,7 @@ The exit criterion has five parts, all observed together:
       which stalls every session's landing.
     - `deploy_changes.py:_BROAD_SETUP_PREFIXES` lists `ansible/roles/setup/`. The tick applies
       a change to a setup role itself, on daniel-box.
-    - `scripts/deploy_tools/setup_gates.py:eval_when_strict` evaluates an
+    - `scripts/deploy_tools/setup_lib/setup_gates.py:eval_when_strict` evaluates an
       `inventory_hostname` comparison against a host's merged vars.
     - ansible-core is pinned at 2.21.5 in `pyproject.toml`. Its `meta: end_role` (2.18 and
       later) evaluates `when:` per host and skips the rest of the role.
@@ -660,7 +660,7 @@ itself (H5), declared outputs through `homelab-secrets`. These rules change C1 a
   `nut-host` stamp, whose template hashes moved.
 - Three readers evaluate a role's leading `end_role` guard with
   `setup_gates.py:eval_when_strict`, through one helper that H4.3b2 adds to
-  `scripts/deploy_tools/setup_gates.py`:
+  `scripts/deploy_tools/setup_lib/setup_gates.py`:
     - H3's two-writer census sees `nut_host` applying to daniel-box only, so the
       daniel-server package's legacy entries collide with nothing;
     - `land_reach.setup_role_hosts` drops a host on which the guard passes, so a `nut_host`
@@ -711,7 +711,7 @@ homelab-secrets (age key /etc/homelab/age.key)        │
   .gitleaks.toml                                      (per-host SOPS files, package ciphertext)
   scripts/secrets_mgmt/git_dates.py                   (path parameter, commit-returning walk)
   scripts/secrets_mgmt/secret_rotation.py             (unattended path skips host-file keys)
-  scripts/deploy_tools/setup_gates.py                 (leading end_role guard reader)
+  scripts/deploy_tools/setup_lib/setup_gates.py       (leading end_role guard reader)
   scripts/deploy_tools/land_lib/land_reach.py         (setup_role_hosts reads the guard)
   scripts/docs/catalog_lib/glance_facts.py            (Applied by names the guard)
   ansible/roles/setup/nut_host/tasks/main.yml         (udev tasks removed, end_role guard)
@@ -880,7 +880,7 @@ meaning.
       hosts' `homelab_host_applied_info` and `homelab_host_reconcile_ok` through Prometheus,
       as for H4.1b.
 10. **H4.3b2 One reader for a role's leading `end_role` guard (about 180 lines).**
-    - Add the helper to `scripts/deploy_tools/setup_gates.py`. It returns the `when:` of a
+    - Add the helper to `scripts/deploy_tools/setup_lib/setup_gates.py`. It returns the `when:` of a
       role's leading `meta: end_role` task, and evaluates it per host with
       `eval_when_strict`.
     - H3's two-writer census, `land_reach.setup_role_hosts` and

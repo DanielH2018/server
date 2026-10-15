@@ -11,7 +11,8 @@ holds:
   - every name, when `_unclassified` differs.
 
 It leaves out a name absent from the newer file, which the newer commit removes, and every
-suspended Kustomization.
+suspended Kustomization. A Kustomization that no `digests.json` keys, such as a tag's
+`<tag>-deferred` or `<tag>-verify`, is not a removal: it joins through its `dependsOn` chain.
 
 A file that is missing or malformed counts as every name changed, and the result says it
 widened. Widening is the safe direction: a reader waits on more names than the commit moved,
@@ -42,10 +43,15 @@ class ChangedSet:
     Attributes:
         names: the Kustomizations the newer bundle changes, `ROOT` excluded.
         widened: why every name counts as changed, or "" when the digests decided.
+        direct: the members of `names` whose own footprint moved, as opposed to those that
+            joined through a `dependsOn` chain. When the set widened it equals `names`.
+            `promote.py verify` reports a dependent that already failed on `prod`'s commit
+            rather than expecting it, and only a member outside `direct` is a dependent.
     """
 
     names: frozenset[str]
     widened: str = ""
+    direct: frozenset[str] = frozenset()
 
 
 def footprints(digests: object) -> dict[str, str] | None:
@@ -98,6 +104,9 @@ def changed_set(
     left_out = set(suspended) | {ROOT}
     new_prints = None if new is None else footprints(new)
     old_prints = None if old is None else footprints(old)
+    # The names a digests.json tracks. A Kustomization outside them, such as a `-deferred`,
+    # is never read as removed for its absence from the newer file.
+    keyed = set(new_prints or ()) | set(old_prints or ())
     widened = ""
     if new is None:
         widened = "the newer digests.json could not be read"
@@ -109,14 +118,17 @@ def changed_set(
         widened = "the older digests.json is malformed"
     elif new_prints.get(UNCLASSIFIED) != old_prints.get(UNCLASSIFIED):
         widened = f"{UNCLASSIFIED} changed"
-    universe = set(new_prints or depends_on) - {UNCLASSIFIED}
+    universe = set(depends_on) if new_prints is None else set(new_prints)
+    universe |= {name for name in depends_on if name not in keyed}
+    universe -= {UNCLASSIFIED}
     if widened or new_prints is None or old_prints is None:
-        return ChangedSet(frozenset(universe - left_out), widened)
+        names = frozenset(universe - left_out)
+        return ChangedSet(names, widened, names)
     moved = {
         name
         for name, footprint in new_prints.items()
         if name != UNCLASSIFIED and old_prints.get(name) != footprint
     }
     # A dependent the newer bundle removes is not expected either.
-    reached = dependents(moved, depends_on) & (universe | moved)
-    return ChangedSet(frozenset(reached - left_out))
+    reached = dependents(moved, depends_on) & universe
+    return ChangedSet(frozenset(reached - left_out), direct=frozenset(moved - left_out))

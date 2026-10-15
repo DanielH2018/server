@@ -91,6 +91,30 @@ otherwise; none of the values below are secrets themselves, only names and locat
    them.
    Source: `docs/longhorn-disaster-recovery.md` ("The off-site recovery kit").
 
+9. **The host-package archive signing key.** The `homelab_builder` role generates it once on
+   daniel-box, in `homelab-signer`'s GnuPG home `/var/lib/homelab-signer/gnupg/` (mode
+   0700). Every host's apt trusts its public half. The role's teardown never removes that
+   home, so a disarm keeps the key. The password manager holds the copy, which the operator
+   exports after the first apply that generates the key:
+   `sudo -u homelab-signer gpg --homedir /var/lib/homelab-signer/gnupg --armor
+   --export-secret-keys`. Then stop the agent that the export starts, with
+   `sudo -u homelab-signer gpgconf --homedir /var/lib/homelab-signer/gnupg --kill gpg-agent`.
+   Left running, it is another uid's process in the operator's login slice. The worktree
+   tools cannot read such a process's cwd, so they treat every worktree as in use.
+    - **To restore it** onto a rebuilt daniel-box, run `initial_setup.yml --tags
+      homelab_builder` once with the flag armed. That apply creates the users and
+      directories and generates a fresh key. As `homelab-signer`, import the copy with
+      `gpg --homedir /var/lib/homelab-signer/gnupg --batch --import`, then delete the fresh
+      key with `--batch --yes --delete-secret-and-public-key <its fingerprint>`. Leave
+      `openpgp-revocs.d/` in place: it is the key generation's `creates:` guard, and without
+      it the next apply generates another key. Then re-run the same apply. From the plan's PR H3.5a, that apply also runs the task that
+      writes `/etc/homelab-builder/archive-key.fpr`, so the builder names the restored key.
+    - **To rotate it**, follow *Recovering from a revoked archive key* in
+      `docs/target-architecture/host/h3-pi-pilot.md` until PR H3.5b moves that procedure into
+      `docs/host-packages.md`. A rotation re-pins every host, so it is never a step in a
+      routine disarm or re-arm.
+   Source: `ansible/roles/setup/homelab_builder/CLAUDE.md` and `docs/host-packages.md`.
+
 ## What to do first, by scenario
 
 ### Scenario: daniel-box is dead, daniel-server survives

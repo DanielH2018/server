@@ -74,3 +74,25 @@ def test_an_added_name_is_in_the_set_and_a_removed_one_is_not():
 def test_a_suspended_kustomization_is_left_out():
     new = digests(bento_pdf="b", sonarr="s2", cluster_vars="v", _unclassified="u")
     assert changed_set(new, OLD, GRAPH, suspended={"sonarr"}).names == {"bento-pdf"}
+
+
+def test_a_deferred_dependent_no_digests_json_keys_is_in_the_set_and_not_direct():
+    """D4's `<tag>-deferred` is a Kustomization, never a key of `digests.json`."""
+    graph = {**GRAPH, "bento-pdf-deferred": ["bento-pdf"]}
+    new = digests(bento_pdf="b", sonarr="s", cluster_vars="v", _unclassified="u")
+    result = changed_set(new, OLD, graph)
+    assert result.names == {"bento-pdf", "bento-pdf-deferred"}
+    assert result.direct == {"bento-pdf"}
+
+
+def test_a_dependent_the_newer_file_removes_is_not_in_the_set():
+    graph = {**GRAPH, "sonarr": ["bento-pdf"]}
+    new = digests(bento_pdf="b", cluster_vars="v", _unclassified="u")
+    assert changed_set(new, OLD, graph).names == {"bento-pdf"}
+
+
+def test_a_widened_set_takes_in_every_unkeyed_kustomization_and_is_all_direct():
+    graph = {**GRAPH, "bento-pdf-deferred": ["bento-pdf"]}
+    result = changed_set(OLD, None, graph)
+    assert result.names == {"bento-pdf", "sonarr", "cluster-vars", "bento-pdf-deferred"}
+    assert result.direct == result.names

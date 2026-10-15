@@ -16,6 +16,7 @@ from py_table import py_table
 from secrets_mgmt.consumers import (
     CROSS_HOST_PUSH_TOKENS,
     UPTIME_KUMA_TAG,
+    consumer_commands,
     consumer_tags,
 )
 from secrets_mgmt.secrets_lib.secret_registry import audit
@@ -242,3 +243,68 @@ def test_the_tile_and_pusher_tags_are_both_real_deploy_targets():
         "uptime-kuma must be in daniel-box's containers_list for the tag to match anything"
     )
     assert "name: monitor-bridge" in host_vars
+
+
+# ── consumer_commands leaves a Flux-owned tag off the deploy.sh line (#4983) ──
+# `deploy.sh` exits 5 on a tag whose containers_list entry carries `owner`, and exit 5 refuses
+# the WHOLE run, so one owned consumer on the printed line deploys none of the others. The
+# fixture is a whole repo, `ansible/` and all, because `consumer_commands` takes `repo` and the
+# owner it reads must come from that repo's containers_list rather than the live tree's.
+_FIXTURE_SECRET = "fixture_issue_4983_api_key"
+
+
+def _repo_with_a_flux_owned_consumer(tmp_path: Path) -> str:
+    """A repo whose secret is rendered by `bento-pdf` (owner: flux) and `sonarr` (unowned)."""
+    for role in ("bento-pdf", "sonarr"):
+        template = tmp_path / "ansible/roles/k8s" / role / "templates/secret.yaml.j2"
+        template.parent.mkdir(parents=True)
+        template.write_text(f"apiKey: {{{{ {_FIXTURE_SECRET} }}}}\n")
+    host_vars = tmp_path / "ansible/inventory/host_vars/daniel-box.yml"
+    host_vars.parent.mkdir(parents=True)
+    host_vars.write_text(
+        "containers_list:\n"
+        "  - name: bento-pdf\n"
+        "    platform: k8s\n"
+        "    owner: flux\n"
+        "  - name: sonarr\n"
+        "    platform: k8s\n"
+    )
+    return str(tmp_path)
+
+
+def _deploy_lines(commands: list[str]) -> list[str]:
+    return [c for c in commands if "deploy.sh" in c]
+
+
+def test_consumer_commands_prints_no_deploy_line_naming_a_flux_owned_tag(tmp_path):
+    commands = consumer_commands(
+        _FIXTURE_SECRET, repo=_repo_with_a_flux_owned_consumer(tmp_path)
+    )
+
+    naming_owned = [c for c in _deploy_lines(commands) if "bento-pdf" in c]
+    assert naming_owned == [], (
+        f"deploy.sh exits 5 on the Flux-owned bento-pdf tag and so deploys nothing: {commands}"
+    )
+
+
+def test_consumer_commands_keeps_the_unowned_consumers_on_one_deploy_line(tmp_path):
+    commands = consumer_commands(
+        _FIXTURE_SECRET, repo=_repo_with_a_flux_owned_consumer(tmp_path)
+    )
+
+    assert _deploy_lines(commands) == ['`./scripts/deploy.sh --tags "sonarr"`'], (
+        commands
+    )
+
+
+def test_consumer_commands_prints_one_line_naming_the_owner_of_each_dropped_tag(
+    tmp_path,
+):
+    commands = consumer_commands(
+        _FIXTURE_SECRET, repo=_repo_with_a_flux_owned_consumer(tmp_path)
+    )
+
+    owner_lines = [
+        c for c in commands if "deploy.sh" not in c and "bento-pdf" in c and "flux" in c
+    ]
+    assert len(owner_lines) == 1, commands

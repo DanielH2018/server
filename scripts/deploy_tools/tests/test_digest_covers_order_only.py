@@ -16,6 +16,7 @@ from lib.git_testing import git_out
 
 from test_digest_covers import _commit, _dep_map_body, _edit, tree  # noqa: F401
 from test_digest_covers import HOST_VARS
+from test_digest_covers import TOPOSORT
 
 # Must-keep rows: (id, a new top-level statement, what `build_k8s_dep_map` runs before its
 # return).
@@ -256,3 +257,217 @@ def test_a_dep_map_with_another_side_effect_keeps_the_line(tree, helper, body): 
     )
     reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
     assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "copy.Error = None",
+        "copy.SOME_SETTING = 'x'",
+    ],
+    ids=["rebinds-an-attribute", "adds-an-attribute"],
+)
+def test_a_dep_map_that_writes_another_modules_state_keeps_the_line(tree, body):  # noqa: F811
+    """A write into another imported module's attributes keeps the line (#4995).
+
+    No audit event reports it, and the entries and the input are unchanged. In a deploy,
+    Ansible imports the plugin into the controller process, so the change persists for every
+    later task. `copy` is a module the runner has imported already and does not read after the
+    chain runs, so the row reaches the rule rather than failing the run.
+    """
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree,
+        [{"ansible/filter_plugins/toposort.py": _dep_map_writes("import copy", body)}],
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "call",
+    ["os.mknod({path}, stat.S_IFREG | 0o600)", "os.mkfifo({path})"],
+    ids=["mknod", "mkfifo"],
+)
+def test_a_dep_map_that_creates_a_file_outside_the_temp_tree_keeps_the_line(
+    tree,  # noqa: F811
+    tmp_path,
+    call,
+):
+    """A call that raises no audit event and creates a file at an absolute path keeps the line (#4999).
+
+    The path lies outside the runner's `order-only-` temp tree, so the check for paths created
+    under that tree does not see it either. In a deploy the entry lands wherever the path
+    points, where a later role could read it.
+    """
+    path = repr(str(tmp_path / "escaped"))
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_writes(
+                    "import os\nimport stat",
+                    f"try:\n    {call.format(path=path)}\nexcept FileExistsError:\n    pass",
+                )
+            }
+        ],
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "helper, body",
+    [
+        ("import copy\n\ncopy.SOME_SETTING = 'x'", ""),
+        ("", "import graphlib"),
+    ],
+    ids=["module-level-write", "loads-a-module"],
+)
+def test_module_state_the_base_does_not_leave_keeps_the_line(tree, helper, body):  # noqa: F811
+    """A write at import time, or a module only the head loads, keeps the line (#4995).
+
+    The runner compares the module state each end leaves behind from the plugin's import on, so
+    module-level code counts as much as the chain. A module loaded during the run has no
+    baseline to diff its attributes against, so loading one the base does not load is itself a
+    difference.
+    """
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree, [{"ansible/filter_plugins/toposort.py": _dep_map_writes(helper, body)}]
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
+
+
+def test_module_state_both_ends_leave_is_order_only(tree):  # noqa: F811
+    """A write the base already makes is compared, not refused (#4995).
+
+    A write both ends make is not part of the change under review. Such a write would also
+    keep every later line, including order-only ones, if the rule refused it.
+    """
+    writes = "import copy\n\ncopy.SOME_SETTING = 'x'\n\n\n" + TOPOSORT
+    tree.write("ansible/filter_plugins/toposort.py", writes)
+    base = tree.commit("toposort writes copy.SOME_SETTING")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": writes.replace(
+                    "    return list(containers_list)\n",
+                    "    return list(reversed(containers_list))\n",
+                )
+            }
+        ],
+    )
+    assert digest_covers.Classifier(tree.root).reason("authelia", base, head) is None
+
+
+def test_a_dep_map_that_rewrites_the_mknod_stubs_cell_keeps_the_line(tree):  # noqa: F811
+    """The `mknod` stub the runner installs holds no cell the hook reads (#4999).
+
+    A plugin can reach a stub through `os.mknod.__closure__`, and rewriting a cell raises no
+    audit event. A stub sharing the hook's exit cell would let it turn the hook's every exit
+    into a no-op before an environment write, which no path scan sees.
+    """
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_writes(
+                    "import os\n\nos.mknod.__closure__[0].cell_contents = lambda code: None",
+                    "os.putenv('MARKER', '1')",
+                )
+            }
+        ],
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
+
+
+def test_a_write_into_a_module_the_plugin_loads_at_both_ends_keeps_the_line(tree):  # noqa: F811
+    """A write into a module the runner has not loaded before the plugin keeps the line (#4995).
+
+    Both ends import `socket`, so it loads after the runner's copy of module state, as all of
+    Ansible does for the real plugin. In a deploy the controller has it loaded already and the
+    write persists, so the runner's second run imports it before the copy.
+    """
+    plugin = "import socket\n\n\n" + TOPOSORT
+    tree.write("ansible/filter_plugins/toposort.py", plugin)
+    base = tree.commit("toposort imports socket")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": plugin.replace(
+                    '    return {c["name"]: _edges(c) for c in containers_list}\n',
+                    "    socket.SOME_SETTING = 'x'\n"
+                    '    return {c["name"]: _edges(c) for c in containers_list}\n',
+                )
+            }
+        ],
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "helper, body",
+    [
+        ("import _dbm", "_dbm.open({path}, 'c').close()"),
+        (
+            "import _posixshmem\nimport os",
+            "os.close(_posixshmem.shm_open('/order-only-4999', os.O_CREAT | os.O_RDWR, 0o600))\n"
+            "_posixshmem.shm_unlink('/order-only-4999')",
+        ),
+    ],
+    ids=["dbm-open", "shm-open"],
+)
+def test_another_unaudited_file_creating_call_keeps_the_line(
+    tree,  # noqa: F811
+    tmp_path,
+    helper,
+    body,
+):
+    """A file-creating call outside `os` that raises no audit event keeps the line (#4999).
+
+    The runner does not replace these. The line is kept because the call's module is one the
+    base end does not load, which the comparison of loaded modules reports.
+    """
+    path = repr(str(tmp_path / "escaped"))
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_writes(
+                    helper, body.format(path=path)
+                )
+            }
+        ],
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
+
+
+def test_rewriting_the_mknod_stubs_cell_alone_is_order_only(tree):  # noqa: F811
+    """The control for the stub-cell row: the rewrite runs, and by itself changes nothing seen.
+
+    So the stub-cell row is kept because the hook still ends the run on `os.putenv`, not
+    because the rewrite failed, as it does where `os.mknod` is the builtin with no closure.
+    """
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": _dep_map_writes(
+                    "import os\n\nos.mknod.__closure__[0].cell_contents = lambda code: None",
+                    "",
+                )
+            }
+        ],
+    )
+    assert digest_covers.Classifier(tree.root).reason("authelia", base, head) is None

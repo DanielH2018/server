@@ -17,7 +17,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from collections.abc import Mapping
-from promote_wait import WaitResult
+from deploy_tools.promote_lib.wait import WaitResult
 from typing import Any
 
 from deploy_tools.deploy_lib.detach_notify import GateResult
@@ -255,6 +255,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         k: (list(v) if isinstance(v, list) else [v]) for k, v in f.gh_views.items()
     }
     views.setdefault("mergeCommit", [{"mergeCommit": {"oid": MERGE_SHA}}])
+    views.setdefault("commits", [{"commits": []}])
     views.setdefault(
         "files,changedFiles",
         [

@@ -21,6 +21,7 @@ const CLEAR: DeckSnapshot = {
     { number: 3676, worktree: 'worktree-fanout-1', live: true, reason: '', age_days: 0 },
     { number: 3500, worktree: 'worktree-on-the-box', live: true, reason: '', age_days: 1 },
   ],
+  promote: { deploy_hold: 'none', prod: null, last_good: null },
   blockers: [],
   errors: [],
 }

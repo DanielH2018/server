@@ -6,19 +6,26 @@ name: promote
 # docs/target-architecture/contracts.md C2 is the contract. The operator's view is
 # docs/flux-deploy-plane.md.
 #
-# Four jobs, so code that runs during a render never holds a token that can sign, push or move
-# a tag:
-#   render   contents: read. Checks out the triggering commit, refuses one that is not on
-#            master, renders the bundle, runs the publish census and scans it, and hands
-#            `out/` on as an artifact.
+# Six jobs, so code that runs during a render or a decision never holds a token that can sign,
+# push or move a tag:
+#   render   contents: read, checks: read. Checks out the triggering commit, or the dispatched
+#            `sha`, refuses one that is not on master, re-reads a dispatched commit's CI,
+#            renders the bundle, runs the publish census and gates and scans it, and hands
+#            `out/` on.
 #   publish  packages: write, id-token: write. Checks out nothing. Pushes `sha-<X>` and signs
 #            it with cosign keyless under this workflow's identity. A `verify_drill` dispatch
 #            instead pushes an annotated bundle to `verify-drill` unsigned, and fails unless
 #            `cosign verify` refuses it.
 #   promote  read-only. Checks out this workflow's own commit and runs `promote.py decide`,
-#            which walks master from its tip and picks the commit `prod` moves to.
-#   tag      packages: write. Checks out nothing. Moves `prod` to the commit `decide` picked
-#            and records its digest in the repository variable PROD_DIGEST.
+#            which walks master from its tip and picks the commit T `prod` moves to. It pulls
+#            `prod`'s bundle and T's before anything moves, and hands them on to `verify`.
+#   tag      packages: write. Checks out nothing. Tags `prod`'s digest `last-good` when that
+#            tag is absent, moves `prod` to T, and records its digest in PROD_DIGEST.
+#   verify   contents: read, statuses: read. Runs `promote.py verify T`, which waits on T's
+#            commit statuses for T's changed set and prints `good` or `failed`.
+#   settle   packages: write. Checks out nothing. A good verdict moves `last-good` to T.
+#            Anything else writes DEPLOY_HOLD, then resets `prod` to `last-good` and records
+#            PROD_DIGEST. Contract C2's *Verification* is the rule.
 #
 # ansible/tests/repo/test_promote_workflow.py holds every guard, permission and handoff here.
 
@@ -34,6 +41,11 @@ on:
         required: false
         type: boolean
         default: false
+      sha:
+        description: "The 40-hex master commit to publish and promote from, instead of master's tip. It must descend from origin/master and have green CI."
+        required: false
+        type: string
+        default: ""
 
 permissions: {}
 
@@ -52,22 +64,35 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      checks: read  # the CI re-check of a dispatched `sha`
     outputs:
       sha: ${{ steps.ancestry.outputs.sha }}
     steps:
       # The triggering commit's tree is the bundle. A dispatch has no workflow_run event, so it
-      # renders master's tip.
+      # renders the `sha` input, or master's tip when the input is empty.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}
           fetch-depth: 0  # the ancestry check reads origin/master's history
           persist-credentials: false
 
+      # WANTED is the commit the checkout was asked for, so a dispatched `sha` is the commit
+      # this step checks, never the workflow's own `github.sha`.
       - name: Refuse a commit that is not on master
         id: ancestry
+        env:
+          WANTED: ${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
+          if ! printf '%s' "$WANTED" | grep -Eqx '[0-9a-f]{40}'; then
+            echo "::error::'$WANTED' is not a 40-hex commit"
+            exit 1
+          fi
           sha="$(git rev-parse HEAD)"
+          if [ "$sha" != "$WANTED" ]; then
+            echo "::error::checked out $sha, not the requested $WANTED"
+            exit 1
+          fi
           rc=0
           git merge-base --is-ancestor "$sha" origin/master || rc=$?
           case "$rc" in
@@ -79,6 +104,16 @@ jobs:
 
       # Python and uv for the renderer and promote.py. The renderer imports no Galaxy collection.
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      # A workflow_run carries CI's own success. A dispatched `sha` carries none, so its CI is
+      # read again, as `decide` reads it, and anything but green stops the run here.
+      - name: Refuse a dispatched commit whose CI is not green
+        id: ci-recheck
+        if: ${{ inputs.sha != '' }}
+        env:
+          SHA: ${{ steps.ancestry.outputs.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run --frozen python scripts/deploy_tools/promote.py ci-verdict "$SHA"
 
       # The bundle publishes the tags the inventory marks `owner: flux`. The renderer writes
       # each one's `cluster/<tag>/`, its Kustomization `flux/<tag>.yaml`, the root's
@@ -112,7 +147,8 @@ jobs:
           fi
 
       # The publish census: flux/ holds exactly the published tags' files, and the root lists
-      # every one. A refusal fails the job before any push, so `prod` stays where it was.
+      # every one. Beside it run three gates: source, host and no-stub (bundle_gates.py). A
+      # refusal fails the job before any push, so `prod` stays where it was.
       - name: Check the bundle
         id: check-bundle
         run: uv run python scripts/deploy_tools/promote.py check-bundle out
@@ -342,7 +378,9 @@ jobs:
       github.event.workflow_run.head_branch == 'master' &&
       github.event.workflow_run.head_repository.full_name == github.repository))
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    # `decide` waits up to 40 minutes on a verification in flight
+    # (promote_lib/verify_promotion.py:IN_FLIGHT_WAIT_S), and the walk and the pulls take a few more.
+    timeout-minutes: 50
     # GitHub keeps one pending job per group and a newer one evicts it. `decide` walks master
     # from its tip rather than reading the trigger, so the last job to run promotes the newest
     # published commit whichever pending job was evicted.
@@ -357,13 +395,19 @@ jobs:
       verdict: ${{ steps.decide.outputs.verdict }}
       target: ${{ steps.decide.outputs.target }}
       digest: ${{ steps.decide.outputs.digest }}
+      prior: ${{ steps.decide.outputs.prior }}
+      prior_digest: ${{ steps.decide.outputs.prior_digest }}
+      reset_digest: ${{ steps.decide.outputs.reset_digest }}
+      seed: ${{ steps.decide.outputs.seed }}
+      clears_hold: ${{ steps.decide.outputs.clears_hold }}
     steps:
       # This workflow's own commit, so the promote.py that runs matches the promote.yml that
       # calls it. A workflow_run always runs master's copy of this file.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 0  # the walk reads master back to prod's commit
+          # The walk, and decide's Removes-Object lines, read master back to prod's commit.
+          fetch-depth: 0
           persist-credentials: false
 
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
@@ -387,10 +431,22 @@ jobs:
       - name: Decide
         id: decide
         env:
-          TRIGGER: ${{ github.event.workflow_run.head_sha || github.sha }}
+          TRIGGER: ${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
-        run: uv run --frozen python scripts/deploy_tools/promote.py decide --trigger "$TRIGGER"
+        run: >-
+          uv run --frozen python scripts/deploy_tools/promote.py decide
+          --trigger "$TRIGGER" --bundle-dir "$RUNNER_TEMP/verify-input"
+
+      # The two bundles `decide` pulled before anything moved. `verify` reads them, so it
+      # waits on T's own changed set rather than on the render of the commit that triggered.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: ${{ steps.decide.outputs.verdict == 'promote' }}
+        with:
+          name: verify-input
+          path: ${{ runner.temp }}/verify-input/
+          if-no-files-found: error
+          retention-days: 7
 
   tag:
     needs: promote
@@ -410,6 +466,10 @@ jobs:
       cancel-in-progress: false
     permissions:
       packages: write
+    # `verify` and `settle` run only once `prod` has moved, whatever else this job did.
+    outputs:
+      moved: ${{ steps.move.outputs.moved }}
+      moved_at: ${{ steps.move.outputs.moved_at }}
     steps:
       - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
         with:
@@ -418,10 +478,25 @@ jobs:
 
       # The commit and digest come from `decide`, never from the trigger: the commit `prod`
       # moves to is the newest published one, which need not be the one whose CI ran.
+      #
+      # `prod` moves only if it still names the digest `decide` read. Another run's `promote`
+      # can decide while this run's `tag` waits on the group, so two runs can each read the
+      # same `prod`. The first `tag` moves it; the second finds it moved, moves nothing, and
+      # verifies nothing, rather than moving `prod` past a T that the first run's `verify`
+      # still waits on. `tag` jobs share the `promote` group, so the read and the move are
+      # never interleaved with another run's. The DECIDED marker in promote_lib/verify_promotion.py
+      # has the other half, `decide`'s wait.
+      #
+      # The first verified run seeds `last-good`: when `decide` read no `last-good`, the step
+      # tags `prod`'s digest with it before `prod` moves, so a failed verification has a
+      # verified revision to reset to.
       - name: Move prod
+        id: move
         env:
           TARGET: ${{ needs.promote.outputs.target }}
           DIGEST: ${{ needs.promote.outputs.digest }}
+          SEED: ${{ needs.promote.outputs.seed }}
+          PRIOR_DIGEST: ${{ needs.promote.outputs.prior_digest }}
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
@@ -430,13 +505,185 @@ jobs:
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
           printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
             || { echo "::error::decide's digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
+
+          # prod's live digest, from one HEAD. curl reads each credential from stdin.
+          name=danielh2018/homelab-manifests
+          token="$(printf 'user = "%s:%s"\n' "$GH_ACTOR" "$GITHUB_TOKEN" \
+            | curl --retry 3 -fsS -K - \
+              "https://ghcr.io/token?scope=repository:$name:pull&service=ghcr.io" \
+            | jq -r '.token // empty')"
+          [ -n "$token" ] || { echo "::error::ghcr.io issued no pull token for $name"; exit 1; }
+          heads="$RUNNER_TEMP/prod-head.txt"
+          status="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
+            | curl --retry 3 -sS -K - -I -o "$heads" -w '%{http_code}' \
+              -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.oci.image.index.v1+json' \
+              "https://ghcr.io/v2/$name/manifests/prod")"
+          case "$status" in
+            200) live="$(tr -d '\r' < "$heads" | awk 'tolower($1) == "docker-content-digest:" { print $2 }')" ;;
+            404) live="" ;;
+            *) echo "::error::HEAD prod answered HTTP $status"; exit 1 ;;
+          esac
+          if [ "$live" != "$PRIOR_DIGEST" ]; then
+            echo "::warning::prod is at '${live:-absent}', not the '${PRIOR_DIGEST:-absent}' decide read: another run moved it first, so this run moves nothing and verifies nothing. The next promote run promotes $TARGET or a newer commit."
+            exit 0
+          fi
+
           printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
-          flux tag artifact "oci://ghcr.io/danielh2018/homelab-manifests:sha-$TARGET" --tag prod
+          repo=ghcr.io/danielh2018/homelab-manifests
+          if [ "$SEED" = true ]; then
+            printf '%s' "$PRIOR_DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
+              || { echo "::error::decide read no prod digest to seed last-good from"; exit 1; }
+            flux tag artifact "oci://$repo@$PRIOR_DIGEST" --tag last-good
+            echo "seeded last-good at prod's digest $PRIOR_DIGEST"
+          fi
+          # Stamped before the move, so no status Flux posts for this promotion predates it.
+          # verify ignores any older status on T, such as one an earlier promotion left.
+          moved_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          flux tag artifact "oci://$repo:sha-$TARGET" --tag prod
+          printf 'moved=true\nmoved_at=%s\n' "$moved_at" >> "$GITHUB_OUTPUT"
 
       # A failed write leaves PROD_DIGEST behind prod, which the deploy-pipeline exporter pages
       # on from slice D2: the safe direction.
       - name: Record prod's digest
+        if: ${{ steps.move.outputs.moved == 'true' }}
         env:
           DIGEST: ${{ needs.promote.outputs.digest }}
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
         run: gh variable set PROD_DIGEST --body "$DIGEST" -R "$GITHUB_REPOSITORY"
+
+  verify:
+    needs: [promote, tag]
+    # always() so the job is weighed even when `tag` failed after the move, such as on a
+    # failed PROD_DIGEST write: once `prod` has moved, T is verified.
+    if: >-
+      always() &&
+      needs.tag.outputs.moved == 'true' &&
+      !inputs.verify_drill &&
+      github.ref == 'refs/heads/master' && (
+      github.event_name == 'workflow_dispatch' || (
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-26.04
+    # Above the largest derived timeout (promote_lib/verify_promotion.py:promote_timeout, 13 minutes
+    # for a tag at manifests_rollout_timeout_default), and with settle's below decide's
+    # in-flight wait. A job killed at this limit leaves no verdict, which settle holds as
+    # unverified.
+    timeout-minutes: 25
+    # No concurrency group: a pending job in `promote` can be evicted. `decide` waits while
+    # `prod` differs from `last-good` instead (the DECIDED marker in promote_lib/verify_promotion.py).
+    permissions:
+      contents: read
+      statuses: read
+    outputs:
+      verdict: ${{ steps.verify.outputs.verdict }}
+      failed: ${{ steps.verify.outputs.failed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: verify-input
+          path: ${{ runner.temp }}/verify-input
+
+      # T is `decide`'s target, never the triggering commit: Flux posts statuses only on the
+      # commit `prod` names, so waiting on another one would time out into a false hold.
+      - name: Verify
+        id: verify
+        env:
+          TARGET: ${{ needs.promote.outputs.target }}
+          PRIOR: ${{ needs.promote.outputs.prior }}
+          MOVED_AT: ${{ needs.tag.outputs.moved_at }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          uv run --frozen python scripts/deploy_tools/promote.py verify "$TARGET"
+          --bundle-dir "$RUNNER_TEMP/verify-input" --prior "$PRIOR" --moved-at "$MOVED_AT"
+
+  settle:
+    needs: [promote, tag, verify]
+    # always() so a verify that failed, timed out or was cancelled still settles: once `prod`
+    # has moved, anything but a good verdict holds.
+    if: >-
+      always() &&
+      needs.tag.outputs.moved == 'true' &&
+      !inputs.verify_drill &&
+      github.ref == 'refs/heads/master' && (
+      github.event_name == 'workflow_dispatch' || (
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      packages: write
+    steps:
+      - uses: fluxcd/flux2/action@b9c17924adb533d3617ec7de97a7b0f4acc07b39 # v2.9.6
+        with:
+          # renovate: datasource=github-releases depName=fluxcd/flux2
+          version: v2.9.6
+
+      # Contract C2: good moves `last-good` to T. Anything else writes the hold FIRST, so a
+      # failed reset still stops the next promotion, then resets `prod` to the digest `decide`
+      # read for `last-good` and records it in PROD_DIGEST. A failed hold write still attempts
+      # the reset, and the step names both results. A verify that ended with no verdict holds
+      # as `<T> unverified`, a form the revert rule never passes.
+      - name: Apply the verdict
+        env:
+          TARGET: ${{ needs.promote.outputs.target }}
+          RESET_DIGEST: ${{ needs.promote.outputs.reset_digest }}
+          CLEARS_HOLD: ${{ needs.promote.outputs.clears_hold }}
+          VERDICT: ${{ needs.verify.outputs.verdict }}
+          FAILED_NAMES: ${{ needs.verify.outputs.failed }}
+          GH_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
+        run: |
+          set -uo pipefail
+          printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
+            || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
+          repo=ghcr.io/danielh2018/homelab-manifests
+          login() { printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin; }
+
+          if [ "$VERDICT" = good ]; then
+            if ! { login && flux tag artifact "oci://$repo:sha-$TARGET" --tag last-good; }; then
+              echo "::error::moving last-good to sha-$TARGET failed"
+              exit 1
+            fi
+            echo "last-good moved to sha-$TARGET"
+            if [ "$CLEARS_HOLD" = true ]; then
+              gh variable set DEPLOY_HOLD --body none -R "$GITHUB_REPOSITORY" \
+                || { echo "::error::the revert rule's clear of DEPLOY_HOLD failed"; exit 1; }
+              echo "DEPLOY_HOLD cleared by the revert rule"
+            fi
+            exit 0
+          fi
+
+          if [ "$VERDICT" = failed ] && printf '%s' "$FAILED_NAMES" | grep -Eqx '[a-z0-9-]+(,[a-z0-9-]+)*'; then
+            hold="$TARGET failed=$FAILED_NAMES"
+          else
+            hold="$TARGET unverified"
+          fi
+          problems=()
+          if gh variable set DEPLOY_HOLD --body "$hold" -R "$GITHUB_REPOSITORY"; then
+            echo "DEPLOY_HOLD set to '$hold'"
+          else
+            problems+=("writing DEPLOY_HOLD='$hold' failed")
+          fi
+          if ! printf '%s' "$RESET_DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}'; then
+            problems+=("decide read no last-good digest to reset to, so prod stays on sha-$TARGET")
+          elif login && flux tag artifact "oci://$repo@$RESET_DIGEST" --tag prod; then
+            echo "prod reset to $RESET_DIGEST"
+            gh variable set PROD_DIGEST --body "$RESET_DIGEST" -R "$GITHUB_REPOSITORY" \
+              || problems+=("prod moved to $RESET_DIGEST, and recording PROD_DIGEST failed")
+          else
+            problems+=("resetting prod to $RESET_DIGEST failed, so prod stays on sha-$TARGET")
+          fi
+          for problem in "${problems[@]}"; do echo "::error::$problem"; done
+          [ "${#problems[@]}" -eq 0 ]

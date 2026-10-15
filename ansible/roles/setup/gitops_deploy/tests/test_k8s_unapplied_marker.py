@@ -25,6 +25,7 @@ import pytest
 from deployer_lib import deploy_k8s_owed
 from deployer_lib import deploy_release
 from deployer_lib.deploy_changes import ChangeSet
+from deployer_lib.deploy_narrow import SharedCallers
 from deployer_lib.deploy_toolbox import DeployTools
 from gitops_ledger import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED
 
@@ -301,7 +302,9 @@ def _discharge_shared(
         is_ancestor=lambda _repo, _origin, commit: commit[40:] not in behind,
         shared_role_callers=shared_role_callers
         or (
-            lambda _repo, roles: {r: {"terraria-stats", "valheim-stats"} for r in roles}
+            lambda _repo, roles: SharedCallers(
+                {r: {"terraria-stats", "valheim-stats"} for r in roles}, set()
+            )
         ),
         render_proof=render_proof or (lambda _svc: None),
     )
@@ -330,7 +333,10 @@ def test_a_shared_role_with_one_caller_behind_is_kept(shared_pending, settings):
 @pytest.mark.parametrize(
     "shared_role_callers",
     [
-        pytest.param(lambda _repo, roles: {r: set() for r in roles}, id="no-callers"),
+        pytest.param(
+            lambda _repo, roles: SharedCallers({r: set() for r in roles}, set()),
+            id="no-callers",
+        ),
         pytest.param(
             lambda _repo, _roles: (_ for _ in ()).throw(ValueError("bad json")),
             id="derivation-fails",

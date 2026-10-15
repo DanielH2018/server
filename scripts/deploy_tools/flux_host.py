@@ -1,11 +1,11 @@
 """The two host-side boundaries `promote.py land-wait` crosses on daniel-box.
 
 `FluxHost` reads the Flux Kustomizations with the read-only `kubectl`, and writes the `logger`
-line that records a settled promotion as a deploy annotation. `promote_wait.py` starts no
+line that records a settled promotion as a deploy annotation. `promote_lib/wait.py` starts no
 subprocess itself, as `promote.py` starts none (`forge.py` holds their GitHub and GHCR
 calls), so both process boundaries live here. A GitHub runner never constructs one.
 
-Run: imported only, by `promote_wait.py`.
+Run: imported only, by `promote_lib/wait.py`.
 """
 
 import contextlib

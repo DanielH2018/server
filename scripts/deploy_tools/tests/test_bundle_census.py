@@ -4,7 +4,9 @@ Run: uv run pytest scripts/deploy_tools/tests/test_bundle_census.py
 """
 
 import bundle_census
+import bundle_gates
 import promote
+from _bundle_fixtures import route
 from lib.exit_codes import FAILED, OK
 from renderer.renderer_lib.bundle import (
     DIGESTS,
@@ -126,6 +128,9 @@ def test_a_released_tag_is_absent_from_the_bundle_and_the_census_is_clean(tmp_pa
     host_vars = _host_vars(tmp_path, {"bento-pdf": "flux", "sonarr": "released"})
     assert bundle_census.published_tags(host_vars) == ["bento-pdf"]
     out = _bundle(tmp_path, ["bento-pdf"])
+    # The CLI runs the publish gates too, and the host gate's named member is this route.
+    domain = bundle_gates.inventory_domain()
+    (out / "cluster" / "bento-pdf" / "ingressroute.yaml").write_text(route(domain))
     assert promote.main(["check-bundle", str(out), "--host-vars", str(host_vars)]) == OK
 
 

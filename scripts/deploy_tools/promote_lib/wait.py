@@ -40,7 +40,9 @@ from pathlib import Path
 import sys as _sys
 from pathlib import Path as _Path
 
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+# `forge`, `changed_set` and `flux_host` import bare, from scripts/deploy_tools.
+_sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from lib.exit_codes import FAILED, LAND_GAVE_UP, OK
 from lib.git import git
 
@@ -164,7 +166,7 @@ def _name(kustomization: dict) -> str:
     return name if isinstance(name, str) else ""
 
 
-def _graph(items: list[dict]) -> tuple[dict[str, list[str]], set[str]]:
+def kustomization_graph(items: list[dict]) -> tuple[dict[str, list[str]], set[str]]:
     """Each Kustomization's `dependsOn` names, and the names that are suspended."""
     depends_on: dict[str, list[str]] = {}
     suspended: set[str] = set()
@@ -238,7 +240,7 @@ class _Expected:
         """The changed set against the Kustomizations `items` lists, `ROOT` excluded."""
         if not self._final:
             self._read()
-        depends_on, suspended = _graph(items)
+        depends_on, suspended = kustomization_graph(items)
         if self._old is None:
             # `changed_set` widens to M's names when M's file was read, else to every
             # Kustomization listed; the reason is this wait's, not the function's.
@@ -371,9 +373,12 @@ def _wait_is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool | None
 
 def _bundle_digests(f: forge.Forge, sha: str) -> object | None:
     """The parsed `digests.json` of `sha-<sha>`, or None when that tag is not published."""
-    raw = f.registry.bundle_file(f"sha-{sha}", DIGESTS_FILE)
-    if raw is None:
+    files = f.registry.bundle(f"sha-{sha}")
+    if files is None:
         return None
+    raw = files.get(DIGESTS_FILE)
+    if raw is None:
+        raise WaitReadError(f"sha-{sha} holds no {DIGESTS_FILE}")
     try:
         return json.loads(raw)
     except ValueError as err:
@@ -421,3 +426,28 @@ def report_wait(merge: str, result: WaitResult) -> int:
     if result.verdict == "settled":
         return OK
     return LAND_GAVE_UP if result.verdict == "gave-up" else FAILED
+
+
+def add_parser(commands, repo: Path) -> None:
+    """Add the `land-wait` subcommand to `promote.py`'s subparsers, `repo` its default checkout."""
+    waiter = commands.add_parser(
+        "land-wait", help="wait until a promotion covers a merge commit (land.sh)"
+    )
+    waiter.add_argument("merge", help="M, the merge commit to wait on")
+    waiter.add_argument(
+        "--services",
+        default="",
+        help="the PR's published tags, comma-separated, named in the settled annotation",
+    )
+    waiter.add_argument(
+        "--repo",
+        type=Path,
+        default=repo,
+        help="the checkout whose history answers each ancestry read",
+    )
+    waiter.add_argument(
+        "--timeout",
+        type=int,
+        default=LAND_WAIT_TIMEOUT_S,
+        help="seconds before it gives up (default: twice the promote timeout)",
+    )

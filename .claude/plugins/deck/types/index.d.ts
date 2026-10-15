@@ -31,6 +31,20 @@ export type DeckClaim = {
   age_days: number
 }
 
+// A tag of the promoted artifact: the commit its manifest names and its digest.
+export type DeckArtifact = {
+  commit: string
+  digest: string
+}
+
+// The promote workflow's hold and tags. Each field is null when its read failed or was not
+// made; `last_good` carries empty strings while the tag is absent.
+export type DeckPromote = {
+  deploy_hold: string | null
+  prod: DeckArtifact | null
+  last_good: DeckArtifact | null
+}
+
 export type DeckSnapshot = {
   host: string
   read_at: number
@@ -41,6 +55,7 @@ export type DeckSnapshot = {
   last_verdict: { log: string; verdict: string | null } | null
   worktrees: DeckWorktree[] | null
   claims: DeckClaim[] | null
+  promote: DeckPromote
   blockers: string[]
   errors: string[]
 }

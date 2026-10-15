@@ -69,12 +69,19 @@ spec:
             - name: pi-peer-backup-data
               persistentVolumeClaim:
                 claimName: {{ pi_peer_backup_k8s_claim }}
+            # Both Secrets at /ssh: known_hosts from pi-peer-backup-ssh, and the private key
+            # `id`, which has a Secret of its own because its multi-line value cannot pass
+            # through a Flux placeholder (templates/ssh-key-secret.yaml.j2).
             - name: pi-peer-backup-ssh
-              secret:
-                secretName: pi-peer-backup-ssh
+              projected:
                 # Group-readable for the fsGroup (root-owned files, same trap the bridge
                 # twin hit) — but ssh refuses a group-readable identity, so the script
                 # stages a 0400 copy under $HOME before connecting.
                 defaultMode: 0440
+                sources:
+                  - secret:
+                      name: pi-peer-backup-ssh
+                  - secret:
+                      name: pi-peer-backup-ssh-key
             - name: pi-peer-backup-tmp
               emptyDir: {}

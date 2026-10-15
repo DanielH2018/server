@@ -2,7 +2,7 @@
 # @sha256-pinned as well as tagged, so the k8s-defaults Renovate manager tracks digest bumps;
 # a bare repo@sha256 would freeze the image with zero update signal instead.
 freshrss_k8s_image: lscr.io/linuxserver/freshrss:latest@sha256:d5a11c52ba6987702e899c2c3831946eb959b54af34db96b1fe41194286acfb2
-freshrss_k8s_cache_image: nginx:alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
+freshrss_k8s_cache_image: nginx:alpine@sha256:72aeb3308ef6cb3118242fb16389518923916dfa206e32d1a8377acc328b9870
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — strategy is Recreate and the config volume is ReadWriteOnce. This role

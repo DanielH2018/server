@@ -4,8 +4,14 @@ Status: IN PROGRESS
 
 PR D4.0, netpol-baseline drains before it applies: [#4747](https://github.com/DanielH2018/server/pull/4747) (issue #4743).
 
-Depends on: [D2](d2-first-leaf.md). PR D4.0 alone depends on nothing, and it must land
-before D2.7 (Open question 3). No PR of D3 waits on D4: the publish layout that D3.3 needs is
+PR D4.9, the saturated-workers rule: [#5051](https://github.com/DanielH2018/server/pull/5051).
+Its step waits on D1.6, D1.6b and M1 and names no D2 PR, so it landed ahead of D2. After the
+deploy, Prometheus's `flux` group held 5 rules. `controller_runtime_max_concurrent_reconciles`
+read 4 for the `kustomization` controller, and the alert held no series.
+
+Depends on: [D2](d2-first-leaf.md), with two exceptions. PR D4.0 depends on nothing, and it
+must land before D2.7 (Open question 3). PR D4.9 waits only on D1.6, D1.6b and M1, as its step
+says. No PR of D3 waits on D4: the publish layout that D3.3 needs is
 D2.6b's (Open question 5).
 
 Unblocks: [D5](d5-bulk-move.md) and H1
@@ -495,13 +501,31 @@ hop to every chain.
   hold every worker. Every apply then queues, the fix included, and `verify` times out on a
   changed name that never applied. The rule under *Saturated reconcile workers* reports
   that state, D4.7 and D5 measure it, and Open question 13 holds the remedy.
-- **The cap.** GitHub stops a job on a GitHub-hosted runner after 6 hours (*Baseline*). A
-  job stopped during `verify` writes no hold and moves no `last-good`, so `prod` would stay
-  on a revision nobody verified. `verify` therefore caps its derived timeout at 5.5 hours,
-  which leaves the pull, the hold and the reset inside the job's 6 hours. At the cap it
-  writes the hold like any other timeout. The cap counts from the start of the `promote`
-  job, so any wait that a later slice adds to that job before `verify` comes out of the 5.5
-  hours. D5's wait for the weekly-reboot window is one.
+- **The cap.** GitHub stops a job on a GitHub-hosted runner after 6 hours (*Baseline*).
+  D2.5 runs `verify` as its own job, with no concurrency group, and `settle` runs on
+  `always()`. A `verify` job that its `timeout-minutes` or the 6-hour limit stops therefore
+  leaves no verdict, and `settle` writes `<T> unverified` (C2 *On failure*). That hold names
+  no Kustomization and the revert rule never passes it, so `promote.py`'s own derived
+  timeout must fire first and write `<T> failed=<names>`. `verify` caps its derived timeout
+  at 5.5 hours for that reason, and at the cap `settle` writes the hold like any other
+  timeout.
+    - **Three limits move with the derived timeout.**
+      `ansible/tests/repo/test_promote_workflow_verify.py` holds them against each other:
+      `verify`'s `timeout-minutes` must exceed the derived timeout, `decide`'s in-flight wait
+      (`scripts/deploy_tools/promote_lib/verify_promotion.py:IN_FLIGHT_WAIT_S`) must cover
+      `verify`'s and `settle`'s `timeout-minutes`, and the `promote` job's `timeout-minutes`
+      must exceed that wait. D2.5 sets them at 25 minutes, 40 minutes and 50 minutes, sized
+      for bento-pdf's 13-minute timeout. D4.3 raises all three from the largest timeout it
+      can derive.
+    - **The 6-hour limit binds the `promote` job, not `verify`.** A later run's `decide`
+      waits on a verification in flight inside its own `promote` job. So `verify`'s and
+      `settle`'s `timeout-minutes`, plus ten minutes of runner queueing, plus any wait a
+      later slice adds before `decide`, must fit inside 6 hours. D5's wait for the
+      weekly-reboot window is one, and D5 ends it as `deferred` without waiting. At the
+      5.5-hour cap that leaves about 15 minutes.
+    - **A wait shorter than the verification is safe and costs a promotion.** When the
+      wait ends first, `decide` gives up as `current` and moves nothing. The commit waits
+      for the next run, and `PromotionStalled` pages once a stall passes 2 hours.
 - **The size.** Each figure is before the OCIRepository interval and the retry.
     - At the end of D4 the bundle holds bento-pdf and texbrain, with no edge between them,
       because D4.8 reverts D4.6. A change to bento-pdf expects bento-pdf alone: one
@@ -533,9 +557,9 @@ hop to every chain.
       they sit on it.
 
   `land-wait` gives up at twice the promote timeout (C6): about 82 minutes for a one-role
-  change, about 4 hours for a tdarr change, and 11 hours at the cap. `verify` writes the hold
-  at its own timeout, and `land-wait` ends on a `DEPLOY_HOLD` other than `none`, so
-  `land-wait`'s ceiling binds only when the `promote` job itself never finishes.
+  change, about 4 hours for a tdarr change, and 11 hours at the cap. `settle` writes the hold
+  when `verify` reaches its own timeout, and `land-wait` ends on a `DEPLOY_HOLD` other than
+  `none`, so `land-wait`'s ceiling binds only when the workflow run itself never finishes.
 
 ### Saturated reconcile workers
 
@@ -758,6 +782,10 @@ conditions of dispatch runs.
     - Add the per-file document rule to `check-bundle`, and the chained timeout, with the
       queueing term and the 5.5-hour cap, to `verify`. The timeout reads C2's changed set,
       the same set `verify` expects.
+    - Raise `verify`'s `timeout-minutes`, `IN_FLIGHT_WAIT_S` and the `promote` job's
+      `timeout-minutes` together, from the capped timeout (*The cap*). Without that, a
+      tdarr change derives about 50 minutes, D2.5's 25-minute `timeout-minutes` stops
+      `verify` first, and `settle` writes a false `<T> unverified` hold.
     - Tests in `scripts/deploy_tools/tests/`, each a pair:
         - a tag file that holds `<tag>` and `<tag>-deferred`, for a fixture tag with
           `manifests_deferred_files`, passes the census. A file that holds a third document,
@@ -775,7 +803,8 @@ conditions of dispatch runs.
         - an unchanged ancestor on the path adds one `requeue-dependency` interval and no
           `timeout`, and a changed one adds its `timeout`;
         - a fixture whose derived timeout exceeds 5.5 hours gets 5.5 hours, and at the cap
-          `verify` writes the hold.
+          `verify` prints `failed`, which `settle` writes as the hold. The workflow test's
+          three-limit check fails a `verify` `timeout-minutes` below the cap.
     - **Live effect.** The census admits what it did before, because no flux-owned tag has
       a `-deferred` until D5. The promote timeout grows by one queueing round.
 5. **D4.4 — The cross-plane gate** (about 200 lines).
@@ -1059,10 +1088,11 @@ Each bound below says how long a PR can be reverted alone.
   and the replay before D4.4 merges measures the real count (Open question 9).
 - **The promote timeout grows with the chain and the queue.** On the full map it is about
   41 minutes for a one-role change, up to about 2 hours for a revision within
-  `--concurrent`, and capped at 5.5 hours. `land-wait` waits twice that. The promote job
-  holds `concurrency: promote` while it verifies, so the next master commit waits its turn.
-  A broad revision can hold the runner up to the cap, and no other promotion runs
-  meanwhile (Open question 14).
+  `--concurrent`, and capped at 5.5 hours. `land-wait` waits twice that. `verify` runs in no
+  concurrency group (C2 *A verification in flight blocks the next promotion*). The next
+  master commit's `decide` waits on it inside its own `promote` job, and that job holds the
+  group `promote`. A broad revision can hold one runner up to the cap and a second one for
+  the wait, and no other promotion runs meanwhile (Open question 14).
   GitHub evicts a queued run beyond the first (D1's baseline), and the next run promotes the
   newest descendant, so no commit is skipped. Mitigation: `verify` returns on the first
   `failure` status and on the last `success`, so a ceiling binds only when a status never
@@ -1246,7 +1276,9 @@ Each bound below says how long a PR can be reverted alone.
     C3 request only if a shorter `timeout` does not end the saturation.
 14. **Should `verify` hold one runner for up to 5.5 hours?** (P5) A broad revision, such as
     one that moves every importer of `workload-shell.yml.j2`, holds `verify`'s runner up to
-    the cap, and `concurrency: promote` runs no other promotion meanwhile. Recommendation:
+    the cap. The next run's `decide` holds a second runner while it waits, and it gives up
+    as `current` if its wait ends first, so no other promotion runs meanwhile.
+    Recommendation:
     run `verify` as a short job that re-enters, or as a scheduled poller. Each run reads
     T's statuses once. It writes the hold or moves `last-good` when the verdict is in, and
     otherwise exits and leaves the deadline to the next run. Either form changes C2's
@@ -1500,3 +1532,14 @@ Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-st
   hold. Open question 12 notes that C1 replaces `--moved-tags`. Exit criterion 4, the
   Exit 4 reading and the drill's *Risks* entry take T from the first field of C2's
   `<T> failed=<names>` hold, and the hold's `failed=` list must name bento-pdf.
+
+### D2.5 verification fold (2026-10-15)
+
+- **#5078: D4 reasoned from a `verify` inside the group `promote`.** Confirmed against
+  `.github/workflows/promote.yml`. D2.5 runs `verify` and `settle` in no group, and `settle`
+  writes `<T> unverified` for a `verify` stopped with no verdict. Fixed: *The cap* now rests
+  on that hold, names the three limits that move with the derived timeout, and places the
+  6-hour limit on the `promote` job's in-flight wait. D4.3 raises the three limits together.
+  *Risks* and Open question 14 describe the wait in the next run's `decide`, and three
+  sentences that named `verify` as the hold's writer name `settle`. D4-R1-13 and D4-R10-08
+  keep their wording as history.

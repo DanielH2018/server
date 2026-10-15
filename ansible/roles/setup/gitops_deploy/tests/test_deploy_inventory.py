@@ -30,6 +30,49 @@ def test_declared_k8s_services_excludes_docker_entries():
     assert declared_k8s_services(text) == set()
 
 
+def test_declared_k8s_services_skips_a_later_list_of_k8s_items():
+    """A top-level list after `containers_list` is not more entries (#4964)."""
+    text = (
+        "containers_list:\n"
+        "  - name: wg-easy\n"
+        "    platform: k8s\n"
+        "  - name: sonarr\n"
+        "    platform: k8s\n"
+        "has_gitops: true\n"
+        "other_list:\n"
+        "  - name: sonarr-shadow\n"
+        "    platform: k8s\n"
+    )
+    assert declared_k8s_services(text) == {"wg-easy", "sonarr"}
+
+
+def test_declared_k8s_services_ends_the_last_entry_at_the_list():
+    """A later key's indented `platform: k8s` does not make the last Docker entry k8s."""
+    text = (
+        "containers_list:\n"
+        "  - name: wg-easy\n"
+        "    platform: k8s\n"
+        "  - name: traefik\n"
+        "    port: 8080\n"
+        "defaults:\n"
+        "    platform: k8s\n"
+    )
+    assert declared_k8s_services(text) == {"wg-easy"}
+
+
+def test_declared_k8s_services_skips_a_list_before_containers_list():
+    """The parse starts at the `containers_list:` key, not at the top of the file."""
+    text = (
+        "earlier_list:\n"
+        "  - name: earlier-svc\n"
+        "    platform: k8s\n"
+        "containers_list:\n"
+        "  - name: wg-easy\n"
+        "    platform: k8s\n"
+    )
+    assert declared_k8s_services(text) == {"wg-easy"}
+
+
 def test_service_owners_reads_quoted_and_commented_values_and_flow_tags():
     text = (
         "containers_list:\n"

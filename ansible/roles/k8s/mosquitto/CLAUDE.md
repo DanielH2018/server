@@ -23,7 +23,10 @@ web UI, no route — infra role.
   state only, which the three known clients republish on reconnect; nothing worth a B2
   transaction.
 - **Secrets:** `mqtt_username`/`mqtt_password_hash` (SOPS keys), rendered into a password file
-  alongside the broker config in one Secret.
+  alongside the broker config in one Secret. **The stored hash carries no `user:` prefix.** The
+  template renders `mqtt_username:mqtt_password_hash` with no transform on the hash, so a stored
+  `mosquitto_passwd` line would render `user:user:$7$...` and fail every client's auth. A task
+  before the manifests include refuses a hash that holds any colon, and prints only the count.
 - **Why `Recreate` + its own PVC matters for the denylist:** a bad image swap can migrate
   broker state before the gate observes a fault.
 
