@@ -10,10 +10,12 @@ volume-snapshot` into a deploy of every caller, and `land_tags` reads `caller_ta
 shared role's callers instead of reporting `needs-manual-apply`. The deployer runs
 `main` as a SUBPROCESS through `deploy_narrow.shared_role_callers`, because this parses YAML
 and the unit runs under `uv run --no-project` — the boundary `narrow_setup.py` sits behind for
-the same reason. It prints one JSON object, role to sorted `caller_tags`, and
-`deploy_k8s_owed.discharge_k8s_unapplied` drops a shared role's `k8s_unapplied` line once every
-one of those tags carries the change. A tag whose entry sets `owner` is not in that object,
-because no Ansible deploy can prove it carries anything. How a tag proves that, by its release
+the same reason. It prints one JSON object with two keys. `callers` maps each role to its
+sorted `caller_tags`, and `deploy_k8s_owed.discharge_k8s_unapplied` drops a shared role's
+`k8s_unapplied` line once every one of those tags carries the change. A tag whose entry sets
+`owner` is not in `callers`, because no Ansible deploy can prove it carries anything.
+`owned_only` lists the roles that some tag runs but only such tags run, so the deployer can tell
+them from a role no tag runs (#5052). How a tag proves it carries a change, by its release
 record or by a matching render, is the deployer's question; this module only names the tags.
 
 THE THREE READERS DIFFER, and `smoke_caller` is why. The deployer's discharge needs every
@@ -222,6 +224,11 @@ def expand_shared_tags(
 # ever prove it carries the change, so waiting on it would keep the line forever. Flux applies
 # what that caller renders, so its own promotion carries the change there. Ownership is read
 # at HEAD, the commit the caller graph is read at.
+#
+# A role every caller of which sets `owner` is left with no tag, the same answer as a role no
+# tag runs (#5052). The two need opposite verdicts: Ansible has nothing left to apply for the
+# first, so its line drops, while the second has no proof at all, so its line stays. That is
+# why `owned_only` names the first, and a role with no caller is never in it.
 def main(argv: list[str] | None = None) -> int:
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("roles", nargs="+", help="role directories under roles/k8s/")
@@ -231,13 +238,20 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     ctx = context_for("HEAD", args.repo)
     owned = flux_owned(Path(args.repo), "HEAD")
+    reached = {
+        role: caller_tags(role, ctx.declared, ctx.callers) for role in args.roles
+    }
     print(
         json.dumps(
             {
-                role: sorted(
-                    caller_tags(role, ctx.declared, ctx.callers) - owned.keys()
-                )
-                for role in args.roles
+                "callers": {
+                    role: sorted(tags - owned.keys()) for role, tags in reached.items()
+                },
+                "owned_only": sorted(
+                    role
+                    for role, tags in reached.items()
+                    if tags and tags <= owned.keys()
+                ),
             },
             sort_keys=True,
         )
