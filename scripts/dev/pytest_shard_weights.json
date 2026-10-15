@@ -508,7 +508,7 @@
  "ansible/tests/services/test_authelia_argon2_parameters_agree.py": 0.0,
  "ansible/tests/services/test_authelia_claude_ui_user.py": 0.0,
  "ansible/tests/services/test_authelia_config_schema.py": 0.0,
- "ansible/tests/services/test_authelia_digest_assert.py": 0.02,
+ "ansible/tests/services/test_authelia_digest_assert.py": 0.13,
  "ansible/tests/services/test_authelia_oidc_jwk_secret.py": 0.13,
  "ansible/tests/services/test_authelia_redis_sessions.py": 0.0,
  "ansible/tests/services/test_autofix_bridge_modules.py": 0.0,
