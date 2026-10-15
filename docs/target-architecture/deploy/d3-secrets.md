@@ -10,6 +10,18 @@ D3.1, recipients, runbooks and the ADR: [#5121](https://github.com/DanielH2018/s
 The operator accepted [ADR-0022](../../adr/0022-the-cluster-decrypts-its-own-file-with-its-own-key.md)
 and the cluster recipient in its review on 2026-10-15.
 
+D3.2a, `cluster_vars.py` and its guards: [#5133](https://github.com/DanielH2018/server/pull/5133).
+It adds no cluster file and no tree gate. Its fix round pinned the `sops_` metadata to an exact
+name set with value shapes, and refuses repeated keys by line number.
+
+D3.2b, the rotation hook: [#5138](https://github.com/DanielH2018/server/pull/5138). Its
+landing read `settled` at `9ca696963`, and the deployer rewrote `/usr/local/bin/secret-rotate.sh`
+with the three cluster paths at 19:59 UTC on 2026-10-15. To break the import cycle the hook
+would have made, `sops_set` moved to the leaf `sops_io.py`, and `rotation_tools` re-exports it.
+
+D3.2d, the successor refusals: [#5137](https://github.com/DanielH2018/server/pull/5137). It
+landed before D3.2c, so its operator-only `write` step did not apply.
+
 Depends on: [D2](d2-first-leaf.md), [R2](../render/r2-secret-placeholders.md). D3.0 to D3.3c
 need only D2.1 to D2.6c, which include D2.6b's empty `SHARED_KINDS` and census, as the slice
 index says. D3.4 to D3.9 need all of D2.
