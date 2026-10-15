@@ -1150,19 +1150,35 @@ untouched.
 - A caller carries the change when its release record descends from the line's commit. For
   `manifests`, a caller also carries it when a render at a commit descending from the line's
   matches its applied digests (`deploy_release.render_proof`). The render need only hold the
-  change, so the hourly producer answers within about an hour of a merge. Every other shared role
+  change. The producer starts at :17 past each hour, renders the newest green commit, and takes
+  about ten minutes, so the answer comes 10 to 70 minutes after a merge whose CI is green by the
+  next :17. A line kept in that window is not a failed proof. On 2026-10-15 a session cleared
+  #5096's line by hand at 15:09; the 14:17 render had picked the line's parent, and the next one
+  started at 15:17 (#5118). Every other shared role
   acts outside the digest, and `deploy_k8s_owed.DIGEST_PROVABLE_ROLES` carries the `# DECIDED:`
   that says how each one does.
 - A `manifests` caller also carries a change to the standalone guard map alone when its own row
   did not move (#5106). The guard task reads only the caller's row of
   `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. Take B as the caller's
-  release record or the commit of its matching render. When B precedes the line's origin, the
+  release record, the commit of its matching render, or the render base the line stored. When B
+  precedes the line's origin, the
   caller carries the change if `B..origin` changes no other applied `manifests` path and leaves
   that caller's row equal (`deploy_k8s_owed._guard_row_carries`). An earlier role change that a
   render already proved for the caller therefore does not hold the line. A map-only line waits
   on the callers whose row moved, which are the tags `land_shared.guard_map_rows` deploys. It
   waits on an untouched caller only when no proof of that caller has passed the last other
   `manifests` change.
+- The producer keeps one render record per caller and overwrites it every hour, so a render
+  that proved a caller would last only until the next one (#5122). Each tick therefore stores
+  every caller's matching render on the `manifests` line as `[render commit, release commit]`,
+  under the ledger key `render_bases` (`deploy_render_bases`). A stored render stays a base only
+  while the caller's release record still names that release commit, because any later apply,
+  a rollback included, can change the live bytes the render vouched for. The bases go when the
+  line goes.
+- While the `manifests` line is kept, each tick logs `k8s_unapplied: manifests waits at <sha>`,
+  naming every caller that holds it under one of two reasons. "Its newest matching render
+  predates the change" means the line waits on the producer. "No render matches what it
+  applied" means a caller needs a deploy, or has no release record.
 - A service's OWN line takes the same render proof when its role acts only through the bytes the
   digest covers. `scripts/deploy_tools/digest_provable.py` derives that per role, fail-closed:
   every task is a `k8s/manifests` include, a pure fact or check module, or an include of a task
@@ -1199,8 +1215,9 @@ untouched.
 - The banner, the journal and `probe.py gitops-state` print one remedy per line, from
   `gitops_markers.k8s_unapplied_remedy`. A shared role never gets a bare `deploy.sh --tags
   <role>`, because that command redeploys every service that runs the role (#4373). For
-  `manifests` the remedy is to wait for the render proof, or to run `clear-owed`, and the full
-  redeploy is named only as the alternative.
+  `manifests` the remedy is to wait for the render proof, and to run `clear-owed` only once a
+  render at or after the change still fails to prove a caller. The full redeploy is named only
+  as the alternative.
 
 
 ### The `has_gitops` gate, the GitHub crons and the marker module: history

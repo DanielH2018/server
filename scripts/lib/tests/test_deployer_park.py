@@ -156,7 +156,8 @@ def test_a_shared_role_unapplied_line_names_no_bare_fleet_redeploy():
     assert '`./scripts/deploy.sh --tags "manifests"`;' not in shared
     assert "nothing to deploy: `manifests` is a shared role" in shared
     assert shared.endswith(
-        "clear-owed k8s_unapplied manifests` if no caller can be proven or it was reverted"
+        "clear-owed k8s_unapplied manifests` if a render after the change still proves no "
+        "caller, or it was reverted"
     )
     assert '`./scripts/deploy.sh --tags "authelia"`;' in ordinary
     assert ordinary.endswith("clear-owed k8s_unapplied authelia` if it was reverted")

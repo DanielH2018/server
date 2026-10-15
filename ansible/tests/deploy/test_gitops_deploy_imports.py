@@ -83,6 +83,10 @@ ALLOWED: dict[str, set[str] | None] = {
     # default, so an import of `deploy_toolbox` or anything reaching it would be a cycle; so
     # would `deploy_narrow`, whose `BroadPlan` the shadow log reads without importing.
     "deploy_release": {"deploy_config"},
+    # The render bases a `manifests` line stores, as pure transforms of the ledger's text, and
+    # `log` for the line naming the callers it waits on (#5118, #5122). `deploy_k8s_owed`
+    # does the read and the write.
+    "deploy_render_bases": {"deploy_config", "gitops_ledger"},
     "deploy_config": set(),
     "deploy_failtext": set(),
     "deploy_git": set(),
@@ -121,6 +125,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_changes",
         "deploy_config",
         "deploy_k8s",
+        "deploy_render_bases",
         "deploy_state",
         "deploy_toolbox",
         "gitops_markers",

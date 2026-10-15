@@ -69,6 +69,7 @@ from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     CONTENTION_PAGE_SECONDS,
     PLAYBOOK_CMD,
+    RENDER_PROOF_SHARED_ROLES,
     SHARED_K8S_ROLES,
     STATE_DIR,
     k8s_deferred_deploy_cmd,
@@ -362,9 +363,12 @@ def k8s_unapplied_lines(marker, now):
     for entry in sorted(parse_owed(marker, OWED_K8S_UNAPPLIED), key=lambda e: e.at):
         remedy = k8s_unapplied_remedy(entry.subject)
         # A shared role's line also takes the hand clear when no caller can be proven to
-        # carry the change, so the clause names that case beside the revert.
+        # carry the change, so the clause names that case beside the revert. For a
+        # render-provable role that is only after a render has reached the change (#5118).
         when = "if it was reverted"
-        if entry.subject in SHARED_K8S_ROLES:
+        if entry.subject in RENDER_PROOF_SHARED_ROLES:
+            when = "if a render after the change still proves no caller, or it was reverted"
+        elif entry.subject in SHARED_K8S_ROLES:
             when = "if no caller can be proven or it was reverted"
         else:
             remedy = f"`{remedy}`"
