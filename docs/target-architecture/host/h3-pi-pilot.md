@@ -229,6 +229,9 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
     - `hosts/keys/` holds the public keys hosts trust. PR H3.4c commits the first,
       `homelab-archive-keyring.gpg`. The builder's anchor reads no key ([ADR-0021](../../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md)), so
       nothing a candidate commit puts there can move it.
+    - A package ships a key with a `key:` file entry, which names `hosts/keys/<name>.gpg`
+      without its suffix, the way a `lib:` entry names `hosts/lib/<name>`. Both are copied
+      byte for byte, and they are the only sources outside a component's own directory.
 - **Packages and the slice that creates each.** `homelab-updater`, `homelab-daniel-pi` and
   `homelab-tools` in H3, `homelab-daniel-server` in H4, `homelab-daniel-box` in H6, and
   `homelab-repos` in H7. `homelab-tools` is the one architecture-specific package (C5,
@@ -1283,7 +1286,11 @@ says otherwise.
       and before H3.5a, so the builder never renders `homelab-updater` without it.
         - **Operator-only**, because the signer's GnuPG home is 0700: export the public key
           with `sudo -u homelab-signer gpg --homedir /var/lib/homelab-signer/gnupg --export`
-          into `hosts/keys/homelab-archive-keyring.gpg` in a worktree, and commit it.
+          into `hosts/keys/homelab-archive-keyring.gpg` in a worktree, and commit it. Then
+          stop the gpg-agent the export starts:
+          `sudo -u homelab-signer gpgconf --homedir /var/lib/homelab-signer/gnupg --kill gpg-agent`.
+          On 2026-10-15 the agent outlived the export, and the worktree tools then read
+          every worktree as in use.
         - Add the keyring to `hosts/packages/homelab-updater/package.yml`, installed at
           `/usr/share/keyrings/homelab-archive-keyring.gpg`.
         - The shared-package render test names that path as a member of `homelab-updater`'s

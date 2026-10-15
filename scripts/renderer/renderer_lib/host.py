@@ -12,10 +12,12 @@ component's are. A component directory under `hosts/components/` holds a `compon
     files:
       - {src: templates/x.sh.j2, dst: /usr/lib/homelab/x, mode: "0755"}
       - {lib: homelab-updater, dst: /usr/lib/homelab/homelab-updater, mode: "0755"}
+      - {key: homelab-archive-keyring, dst: /usr/share/keyrings/homelab-archive-keyring.gpg}
 
 A `src` ending `.j2` renders through the renderer's strict environment. Any other `src` is
 copied byte for byte. A `lib` entry copies `hosts/lib/<name>`, a script several packages ship,
-byte for byte; it is the one source outside the component a file entry may name.
+byte for byte. A `key` entry copies `hosts/keys/<name>.gpg`, a public keyring hosts trust, byte
+for byte. Those two are the only sources outside the component a file entry may name.
 
 A package or component may also carry `units`, a policy for each unit reconcile must not
 restart on a change, and `legacy`, the Ansible-era entries reconcile retires (H3, *The host
@@ -371,7 +373,7 @@ def _render_unit(
 ) -> None:
     """Render the files, policies and legacy entries `spec` lists into `package`.
 
-    Files come from `directory`, or from `lib`.
+    Files come from `directory`, from `lib`, or from the `keys` directory beside `lib`.
     """
     files = spec.get("files") or []
     add_policies(package, directory, spec.get("units") or {})
@@ -389,13 +391,14 @@ def _render_unit(
                 lambda text: _render_string(env, text, ctx, reasons, directory),
             )
         )
+    keys = lib.parent / "keys"
     for entry in files:
-        sources = {"src", "lib"} & set(entry)
+        sources = {"src", "lib", "key"} & set(entry)
         if "dst" not in entry or not sources:
             raise RenderRefused(f"{directory}: file entry {entry} lacks src or dst")
         if len(sources) > 1:
             raise RenderRefused(
-                f"{directory}: file entry {entry} names both src and lib"
+                f"{directory}: file entry {entry} names more than one of src, lib and key"
             )
         dst = str(entry["dst"])
         destination = PurePosixPath(dst)
@@ -409,6 +412,11 @@ def _render_unit(
         if "lib" in entry:
             # A plain name has no `.j2` suffix, so a lib script is copied, never rendered.
             source = _confined(lib, _plain_name(entry["lib"], "lib script"))
+            package.files[dst] = (source.read_bytes(), mode)
+            continue
+        if "key" in entry:
+            # The name carries no suffix, so the plain-name rule holds and `.gpg` is fixed here.
+            source = _confined(keys, f"{_plain_name(entry['key'], 'key')}.gpg")
             package.files[dst] = (source.read_bytes(), mode)
             continue
         src = str(entry["src"])

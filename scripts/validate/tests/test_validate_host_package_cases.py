@@ -75,7 +75,7 @@ def test_every_fixtures_maintainer_scripts_pass_the_lint(fixtures, variant):
         assert host_packages.lint_script(script.name, script.read_text()) == []
 
 
-def test_the_updater_variant_changes_its_unit_and_ships_the_keyring(tmp_path):
+def test_the_updater_variant_changes_its_unit_and_keeps_the_keyring(tmp_path):
     head = tmp_path / "head"
     host_mode.write_packages([host_mode.render_package(fx.UPDATER)], head)
 
@@ -85,8 +85,11 @@ def test_the_updater_variant_changes_its_unit_and_ships_the_keyring(tmp_path):
     assert (variant / unit).read_text() == (
         (head / "packages" / fx.UPDATER / unit).read_text() + fx.UNIT_CHANGE + "\n"
     )
-    assert (variant / f"root{fx.KEYRING}").is_file()
-    assert f"dst: {fx.KEYRING}" in (variant / "nfpm.yaml").read_text()
+    keyring = f"root{fx.KEYRING}"
+    assert (variant / keyring).read_bytes() == (
+        head / "packages" / fx.UPDATER / keyring
+    ).read_bytes()
+    assert (variant / "nfpm.yaml").read_text().count(f"dst: {fx.KEYRING}") == 1
 
 
 def test_the_box_address_comes_from_the_shipped_source(tmp_path):

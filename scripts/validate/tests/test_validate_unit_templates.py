@@ -314,6 +314,7 @@ def _hosts_tree(tmp_path, dropin: str = PI_DROPIN, component_unit: str | None = 
         v.HOSTS / "packages" / "homelab-updater"
     )
     (root / "lib").symlink_to(v.HOSTS / "lib")
+    (root / "keys").symlink_to(v.HOSTS / "keys")
     pi = root / "daniel-pi"
     (pi / "units").mkdir(parents=True)
     (pi / "units" / "50-homelab.conf").write_text(dropin)

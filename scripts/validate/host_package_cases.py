@@ -12,8 +12,8 @@ container, and drives `homelab-updater` through these cases:
   * stop the server, and the head version's updater exits non-zero with `last_success`
     unadvanced. This is the red proof of step 3's `--error-on=any`: it fails when the
     updater lets a failed fetch through;
-  * upgrade homelab-updater under a running updater, which finishes with no restart. The new
-    version also ships a keyring-shaped file at H3.4c's path, which nothing reads;
+  * upgrade homelab-updater under a running updater, which finishes with no restart. Both
+    versions ship the archive keyring at H3.4c's path, which the test's source does not name;
   * kill the updater's cgroup during an unpack, then hold dpkg's frontend lock over the next
     run, which exits 75 and writes nothing, then run again and leave `dpkg --audit` empty;
   * the common path, which leaves `pkgcache.bin` unchanged;
