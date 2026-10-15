@@ -25,7 +25,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib import yaml_fast
 
-from deploy_tools.promote_lib import verify
+from deploy_tools.promote_lib import verify_promotion as verify
 from deploy_tools.promote_lib.prune import ReadError
 from renderer.renderer_lib.bundle import CLUSTER_DIR
 

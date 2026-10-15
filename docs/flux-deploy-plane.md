@@ -300,7 +300,7 @@ run fails if the verification succeeds.
 
 ## Verification
 
-Contract C2 *Verification* is the rule, and `scripts/deploy_tools/promote_lib/verify.py`
+Contract C2 *Verification* is the rule, and `scripts/deploy_tools/promote_lib/verify_promotion.py`
 holds it. After `tag` moves `prod` to T, `verify` waits on the commit statuses that
 notification-controller posts on T:
 

@@ -22,7 +22,7 @@ from test_promote_workflow import (
     problems,
 )
 
-from deploy_tools.promote_lib import verify as promote_verify
+from deploy_tools.promote_lib import verify_promotion as promote_verify
 
 # `verify` and `settle` run only once the `tag` job's move step reports that `prod` moved.
 MOVED_GATE = "needs.tag.outputs.moved == 'true'"
@@ -51,7 +51,7 @@ def verification_problems(wf: dict) -> list[str]:
         for gate in (ALWAYS, MOVED_GATE):
             if gate not in condition:
                 found.append(f"{name}: its `if` lacks {gate}")
-        # The DECIDED marker in scripts/deploy_tools/promote_lib/verify.py: a pending job in the
+        # The DECIDED marker in scripts/deploy_tools/promote_lib/verify_promotion.py: a pending job in the
         # group can be evicted, so `decide` waits on a verification in flight instead.
         if "concurrency" in job:
             found.append(f"{name}: joins a concurrency group")

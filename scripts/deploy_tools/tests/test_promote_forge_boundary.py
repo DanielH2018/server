@@ -21,7 +21,7 @@ PROMOTE = Path(promote.__file__)
 PROMOTE_LIB = sorted(PROMOTE.with_name("promote_lib").glob("*.py"))
 # The members the glob must find, so a rename or a move out of the package fails by name
 # rather than leaving the census over fewer modules.
-PROMOTE_LIB_MEMBERS = frozenset({"wait.py", "verify.py", "prune.py"})
+PROMOTE_LIB_MEMBERS = frozenset({"wait.py", "verify_promotion.py", "prune.py"})
 
 # The modules that would let promote.py make a forge call without the adapter. `subprocess`
 # and `pty` are here because `gh` and `cosign` are forge calls too.
@@ -133,7 +133,7 @@ def test_the_census_finds_every_promote_lib_member():
 )
 def test_promote_imports_the_adapter_and_no_http_library_is_clean(module):
     """Each module split out of promote.py holds the same boundary: `promote_lib/wait.py`
-    (`land-wait`), whose kubectl and logger go through `flux_host.py`; `promote_lib/verify.py`
+    (`land-wait`), whose kubectl and logger go through `flux_host.py`; `promote_lib/verify_promotion.py`
     (`verify`), whose status reads go through forge; and `promote_lib/prune.py` (`prune`)."""
     source = module.read_text(encoding="utf-8")
     assert ADAPTER in imported_modules(source)

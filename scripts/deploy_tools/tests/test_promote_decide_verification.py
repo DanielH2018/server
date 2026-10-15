@@ -17,7 +17,7 @@ import pytest
 from _promote_fakes import World, bundle_files, digest_of
 
 import promote
-from deploy_tools.promote_lib import verify as vp
+from deploy_tools.promote_lib import verify_promotion as vp
 
 
 @pytest.fixture

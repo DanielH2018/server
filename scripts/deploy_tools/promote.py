@@ -19,10 +19,10 @@ THE VERDICTS.
   error    A read failed or answered something no rule covers. Nothing moves.
 
 VERIFICATION (contract C2). While `prod` and `last-good` name different digests, a run's
-`verify` is still waiting, so `decide` waits too (`promote_lib/verify.py:wait_settled`). Once T is
+`verify` is still waiting, so `decide` waits too (`promote_lib/verify_promotion.py:wait_settled`). Once T is
 chosen, it pulls `prod`'s bundle and `sha-<T>`'s before `prod` moves, and writes them under
 `--bundle-dir` for `verify`; a failed pull is `error`. The revert rule stays off while
-REVERT_RULE is False. `promote_lib/verify.py`'s docstring states all three.
+REVERT_RULE is False. `promote_lib/verify_promotion.py`'s docstring states all three.
 
 Each read has three outcomes: a value, absent, or an error. Any error is the verdict `error`.
 The rules for each read are in docs/target-architecture/deploy/d1-flux-installed.md,
@@ -50,7 +50,7 @@ when `tag` must tag `prior_digest` as `last-good` first; and `clears_hold`.
 PRUNE. `prune` deletes old artifact versions, once a day from `prune-artifacts.yml`.
 `promote_lib/prune.py` holds it, and its docstring states what it reads.
 
-VERIFY. `verify T` prints `good` or `failed` for the `settle` job (`promote_lib/verify.py`).
+VERIFY. `verify T` prints `good` or `failed` for the `settle` job (`promote_lib/verify_promotion.py`).
 `ci-verdict SHA` prints a commit's CI verdict, for the render job's re-check of a dispatched sha.
 
 LAND-WAIT. `land-wait M` waits until a promotion covers merge commit M, for `land.sh`
@@ -104,7 +104,7 @@ import bundle_census
 import forge
 import object_loss
 from artifact_retention import PROD_TAG
-from deploy_tools.promote_lib import verify, wait
+from deploy_tools.promote_lib import verify_promotion as verify, wait
 from deploy_tools.promote_lib.prune import READ_ERRORS, ReadError, prune
 
 # The deployer's own CI reduction, so a promotion and a tick agree on what green means.
