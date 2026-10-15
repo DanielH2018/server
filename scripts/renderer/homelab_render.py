@@ -12,8 +12,8 @@ Flux would read as syntax. `renderer_lib/placeholders.py` holds the passes and t
 key sets, and placeholder mode skips the tags in its `PLACEHOLDER_DEFERRED`. Placeholder mode
 leaves out each role's `render_sops_manifests` files, and the `sops-manifest-entries` check of
 `renderer_lib/sops_entries.py` holds those lists before anything is written. Before it writes
-anything, a placeholder render also refuses a tag marked `owner: flux` that reads a pinned
-live-read fact, and runs the five secret rules of `renderer_lib/secret_checks.py`.
+anything, a placeholder render also runs the five secret rules of
+`renderer_lib/secret_checks.py`.
 
 A placeholder render with `--role` also writes the publish bundle beside `DIR/cluster/`, for
 the tags it names that carry `owner: flux` (target slice D2): `DIR/flux/<tag>.yaml`,
@@ -31,9 +31,8 @@ secret and keep every `${` literal (`renderer_lib/host.py`).
 `shadow_diff.py stubs` writes, and every secret renders as its stub. A stub render is a
 comparison input and is never published.
 
-Exit codes: 0 rendered; 1 a template failed to render, a secret check failed, or a flux-owned
-tag reads a pinned live-read fact; 2 refused before writing anything, a reserved tag name among
-the causes; 64 a usage error.
+Exit codes: 0 rendered; 1 a template failed to render or a secret check failed; 2 refused
+before writing anything, a reserved tag name among the causes; 64 a usage error.
 
 Run: uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-render
      uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
@@ -79,11 +78,9 @@ from renderer.renderer_lib.cluster import (
 from renderer.renderer_lib.context import load_stubs
 from renderer.renderer_lib.host import render_host, render_package, write_packages
 from renderer.renderer_lib.sops_entries import sops_manifest_entries
-from renderer.renderer_lib.task_inputs import PinnedFact
 from renderer.renderer_lib.placeholders import (
     Mode,
     PlaceholderRender,
-    pinned_fact_refusals,
     render_placeholders,
     select_mode,
 )
@@ -116,7 +113,6 @@ def cluster(
     secret_stubs: Path | None,
     render: Callable[[list[str], list[str]], PlaceholderRender] = render_placeholders,
     flux_owned: Callable[[], set[str]] = flux_owned_tags,
-    pinned: dict[str, PinnedFact] | None = None,
     known: frozenset[secret_checks.Violation] = secret_checks.KNOWN_VIOLATIONS,
     kinds: frozenset[str] = SHARED_KINDS,
 ) -> int:
@@ -128,13 +124,12 @@ def cluster(
         secret_stubs: The stub file of a stub-mode render, or None for placeholder mode.
         render: The placeholder render; a test replaces it with one over fixture sets.
         flux_owned: Returns the tags marked `owner: flux`; a test passes fixture tags.
-        pinned: The pinned live-read facts the refusal reads, `PINNED_LIVE_FACTS` when None.
         known: The ratchet the secret checks hold the render to; a test passes another.
         kinds: The shared kinds, whose names no deploy tag may take; a test passes others.
     """
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
         return _stub_cluster(out, roles, secret_stubs, kinds)
-    return _placeholder_cluster(out, roles, render, flux_owned, pinned, known, kinds)
+    return _placeholder_cluster(out, roles, render, flux_owned, known, kinds)
 
 
 def _stub_cluster(
@@ -170,23 +165,12 @@ def _placeholder_cluster(
     roles: list[str] | None,
     render: Callable[[list[str], list[str]], PlaceholderRender],
     flux_owned: Callable[[], set[str]],
-    pinned: dict[str, PinnedFact] | None,
     known: frozenset[secret_checks.Violation],
     kinds: frozenset[str],
 ) -> int:
     try:
         tags = select_tags(roles, kinds=kinds)
         owned = flux_owned()
-        refusals = pinned_fact_refusals(tags, owned, pinned)
-        if refusals:
-            for tag, fact in refusals:
-                print(
-                    f"homelab-render: {tag} is marked owner: flux and reads the pinned "
-                    f"live-read fact {fact}, whose stand-in must never be published. "
-                    "Nothing was written.",
-                    file=sys.stderr,
-                )
-            return RENDER_FAILED
         keys = secret_keys()
         result = render(tags, keys)
         if not result.tags:

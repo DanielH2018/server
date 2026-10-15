@@ -2,8 +2,7 @@
 
 A shadow render (target slice R1) runs `deploy.sh --dry-run` with a stub file, so every
 secret key holds a placeholder. A task that hands a secret to a live system would send that
-placeholder: sonarr's API reads drew a 401 that stopped the play, and authelia's hashing pods
-would hash a stub. This census reads every task in `ansible/roles/k8s/*/tasks/*.yml` whose
+placeholder: sonarr's API reads drew a 401 that stopped the play. This census reads every task in `ansible/roles/k8s/*/tasks/*.yml` whose
 body names a secret key, or a variable derived from one, and requires one of four things of it:
 
 - a `k8s_dry_run`, `k8s_no_mutate` or `homelab_secret_stubs` guard on its `when:`, on an
@@ -83,14 +82,9 @@ _SIDE_EFFECT_FREE = {
 
 # "<role>/<task file>::<task name>" -> why the task may act under a stub file. For an `assert` or
 # `fail`, why it passes on any stub value. A stub is `homelab_secret_stub`'s label, never empty.
-# authelia's three hashing tasks, the plan's only exemptions, gained a
-# `not (k8s_no_mutate | bool)` guard in 5883ef610 and pass on that.
 EXEMPT: dict[str, str] = {
     "authelia/main.yml::Fail if the claude-ui credentials are missing": (
-        "checks only that each value is non-empty, and a stub is never empty"
-    ),
-    "authelia/main.yml::Fail if the claude-agent credential is missing": (
-        "checks only that the value is non-empty, and a stub is never empty"
+        "checks only that the TOTP secret is non-empty, and a stub is never empty"
     ),
     "uptime-kuma/main.yml::Check the declaration index is populated": (
         "counts the parsed declarations, and a stub token changes no count"

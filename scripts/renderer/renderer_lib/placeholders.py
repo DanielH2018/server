@@ -62,7 +62,7 @@ from renderer.renderer_lib.cluster import (
     render_tag,
 )
 from renderer.renderer_lib.environment import RenderError
-from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS, PinnedFact
+from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS
 
 SENTINEL_PREFIX = "HOMELAB_SECRET__"
 SENTINEL_SUFFIX = "__END"
@@ -144,8 +144,7 @@ def placeholder_vars(keys: Iterable[str]) -> dict[str, object]:
     """The overrides of a placeholder render: each key's sentinel and the pinned facts.
 
     The pinned live-read facts take the values the stub file holds, so a round trip sees the
-    same value on both sides. Until R3 deletes `PINNED_LIVE_FACTS`, no tag that reads one may
-    be published, and `pinned_fact_refusals` refuses one marked `owner: flux`.
+    same value on both sides. R3 emptied `PINNED_LIVE_FACTS`, and its PR 5 deletes it.
 
     Raises:
         ValueError: a pinned fact shares a name with a secret key, so one value would
@@ -157,27 +156,6 @@ def placeholder_vars(keys: Iterable[str]) -> dict[str, object]:
         raise ValueError(f"{clashes} are both secret keys and pinned live-read facts")
     overrides.update({name: fact.value for name, fact in PINNED_LIVE_FACTS.items()})
     return overrides
-
-
-def pinned_fact_refusals(
-    tags: Iterable[str],
-    flux_owned: Iterable[str],
-    facts: dict[str, PinnedFact] | None = None,
-) -> list[tuple[str, str]]:
-    """Each `(tag, fact)` where a requested tag marked `owner: flux` reads a pinned fact.
-
-    A pinned value renders a valid object that fails logins or backups, and only a flux-owned
-    tag is published, so a placeholder render refuses that combination (R2 *Mode selection*).
-    R3's PR 5 deletes this refusal with `PINNED_LIVE_FACTS`.
-    """
-    facts = PINNED_LIVE_FACTS if facts is None else facts
-    owned = set(tags) & set(flux_owned)
-    return sorted(
-        (tag, name)
-        for name, fact in facts.items()
-        for tag in fact.readers
-        if tag in owned
-    )
 
 
 def references(text: str) -> Iterator[str]:

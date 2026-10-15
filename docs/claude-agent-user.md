@@ -410,9 +410,9 @@ instead of the operator.
   deploy-ui). It has no public name.
 - To switch it off, set `claude_code_agent_user_enabled: false`, which removes the file. To
   revoke the account, delete the `claude-agent` block from the authelia role's
-  `users_database.yml` template and redeploy. To rotate the password, run `sops` set, then
-  `./scripts/deploy.sh --tags authelia -e authelia_k8s_rehash_passwords=true`, then apply
-  `claude_code` to rewrite the file.
+  `users_database.yml` template and redeploy. To rotate the password, follow *Authelia user
+  passwords* in `docs/secret-rotation.md`, which mints the new digest, lands it with
+  `--tags authelia`, and then applies `claude_code` to rewrite the file.
 
 **The agent's own browser.** The operator's Node, `playwright-mcp` and Chromium sit under
 `/home/ubuntu`, which `claude` cannot read, and the operator's homelab-ui registration is

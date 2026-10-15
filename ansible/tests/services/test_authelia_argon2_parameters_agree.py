@@ -1,16 +1,16 @@
 """Authelia's argon2 parameters are written twice, and nothing else holds the copies together.
 
 `roles/k8s/authelia/templates/config-secret.yaml.j2` renders the parameters the running portal
-uses to MINT a digest (its own password reset). `roles/k8s/authelia/tasks/main.yml` mints the
-digests that actually land in the users database, in a throwaway pod, with the same numbers
-spelled as CLI flags. Drift between them is invisible by construction: Authelia reads the
+uses to MINT a digest (its own password reset). The rotation procedure in
+`docs/secret-rotation.md` mints the digests that actually land in the users database, in a
+throwaway pod, with the same numbers spelled as CLI flags. Drift between them is invisible by construction: Authelia reads the
 algorithm and parameters back off each stored digest's own `$argon2id$` PHC prefix
 (`crypt.Decode`, `file_user_provider_database.go` at v4.39.21), so a login succeeds whatever
 the config block says and a deploy is green either way. Under the legacy flat spelling the two
 copies stand 1024x apart on `memory`; this guard keeps them agreeing.
 
-A third copy is the digest assert in the same task file, "Fail if a stored Authelia digest is
-malformed". Its PHC pattern spells `m`, `t` and `p`, and its two base64 lengths encode the salt
+A third copy is the digest assert in `roles/k8s/authelia/tasks/main.yml`, "Fail if a stored
+Authelia digest is malformed". Its PHC pattern spells `m`, `t` and `p`, and its two base64 lengths encode the salt
 and key sizes, so a parameter change that misses it fails every deploy before the apply. The
 pattern is compared with the rendered block too.
 
@@ -18,7 +18,7 @@ The flag-to-key mapping is NOT identity — `--salt-size` is `salt_length` and `
 `key_length` — which is itself the reason it is pinned here rather than left to a reader.
 
 Each rule is a predicate with a passing and a rejecting input, then applied to the real
-rendered manifest and the real task file behind non-vacuity assertions.
+rendered manifest, the real task file and the real doc behind non-vacuity assertions.
 
 Those non-vacuity assertions carry the legacy-spelling case itself, so do not simplify them away. A revert
 to the legacy flat spelling empties `password.argon2`, and the comparison would then hold two
@@ -29,11 +29,12 @@ the mapping lost.
 import re
 
 import pytest
-from _helpers import ROLES
+from _helpers import REPO, ROLES
 from _k8s_render import rendered_docs
 from lib import yaml_fast
 
 TASKS = ROLES / "k8s/authelia/tasks/main.yml"
+ROTATION_DOC = REPO / "docs" / "secret-rotation.md"
 
 # The CLI flag each config key is spelled as. Pinned, because the mapping is not identity and
 # a reader who assumed it is would accept `--salt-size 32` against `key_length: 32`.
@@ -56,10 +57,6 @@ FLAG_TO_CONFIG_KEY = {
 # is its red proof, because the quoted case passes with or without this filter.
 IGNORED_FLAGS = frozenset({"--password"})
 
-# The one-shot pods whose commands must be found. A count would fail saying a number moved; a
-# name says which task went missing, and an empty parse can no longer read as agreement.
-HASH_TASK_PODS = frozenset({"authelia-hash", "authelia-hash-claude"})
-
 # The digest assert, the third copy of the parameters. Named, so a rename fails here rather
 # than leaving its pattern unchecked.
 DIGEST_ASSERT_TASK = "Fail if a stored Authelia digest is malformed"
@@ -79,12 +76,13 @@ _FLAG = re.compile(r"(--[a-z][a-z0-9-]*)(?:[=\s]+)([^\s'\"]+)")
 def argon2_flags(cmd: str) -> dict[str, str]:
     """The argon2 flags on a `crypto hash generate argon2` command, as {flag: value}.
 
-    Only the segment after the subcommand is read, so `kubectl run`'s own `--image`/`--quiet`
-    flags never reach the comparison.
+    Only the segment after the subcommand is read, up to the first pipe, so `kubectl run`'s own
+    `--image`/`--quiet` flags and the flags of a later stage, such as `sops set --value-stdin`,
+    never reach the comparison.
     """
     if _MARKER not in cmd:
         return {}
-    tail = cmd.split(_MARKER, 1)[1]
+    tail = cmd.split(_MARKER, 1)[1].split("|", 1)[0]
     return {
         flag: value for flag, value in _FLAG.findall(tail) if flag not in IGNORED_FLAGS
     }
@@ -261,26 +259,24 @@ def rendered_argon2():
     pytest.fail("no rendered authelia-config Secret")
 
 
+def mint_commands(text: str) -> list[str]:
+    """Each fenced shell block in `text` that runs the generate command, continuations joined."""
+    blocks = re.findall(r"^\s*```bash\n(.*?)^\s*```", text, flags=re.M | re.S)
+    return [re.sub(r"\\\n", " ", b) for b in blocks if _MARKER in b]
+
+
 @pytest.fixture(scope="module")
 def hash_commands():
-    """{pod name: cmd} for every hash-generation task in the authelia role."""
-    tasks = yaml_fast.safe_load(TASKS.read_text()) or []
-    found = {}
-    for task in tasks:
-        if not isinstance(task, dict):
-            continue
-        cmd = (task.get("ansible.builtin.command") or {}).get("cmd", "")
-        if not isinstance(cmd, str) or _MARKER not in cmd:
-            continue
-        # The name's fixed prefix, without the per-run `-{{ ... | random }}` suffix the task
-        # appends, which is all a reader of the untemplated command can see.
-        pod = re.search(r"\brun\s+([a-z0-9-]*[a-z0-9])", cmd)
-        found[pod.group(1) if pod else task.get("name", "?")] = cmd
-    assert set(found) >= HASH_TASK_PODS, (
-        "a hash-generation task this guard compares is gone from the authelia role, so its "
-        f"flags are no longer checked against the config: {sorted(HASH_TASK_PODS - set(found))}"
+    """{source: cmd} for the mint command in the rotation procedure.
+
+    Named, so a reworded or moved procedure fails here rather than leaving its flags unchecked.
+    """
+    found = mint_commands(ROTATION_DOC.read_text())
+    assert len(found) == 1, (
+        f"expected one mint command in {ROTATION_DOC}, found {len(found)}, so the flags that "
+        "mint the stored digests are no longer checked against the config"
     )
-    return found
+    return {"docs/secret-rotation.md": found[0]}
 
 
 def test_the_rendered_variant_is_the_long_spelling(rendered_argon2):
