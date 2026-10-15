@@ -904,7 +904,15 @@ concurrency group on push. It needs no secrets, and it does these steps:
 1. It renders every package at the PR head and at its merge base, on every run. A path filter
    would miss a `group_vars` change that alters a render, such as a `containers_list` edit that
    changes the Pi's recovery script.
-2. If no rendered tree differs, the job ends green here.
+2. If no rendered tree differs, the job ends green here, unless the PR changes an input of
+   the container cases. Those inputs change no render: the test image's build context
+   `hosts/lib/tests/container/`, which holds the fixture specs, and the cases' own scripts.
+   `CASE_INPUTS` on the render step lists them, and
+   `ansible/tests/repo/test_host_package_case_inputs_census.py` holds that list to
+   every `validate` module the cases script imports (#5004). An edit to the
+   `host_packages` job itself counts too, because its steps invoke the cases.
+   `host_packages.py job-changed` compares the job as parsed YAML, so an edit to a comment
+   alone does not count. Such a PR runs steps 3 to 5.
 3. It builds both renders with nfpm pinned by version and sha256, and runs the
    maintainer-script lint and the `type: config` lint.
 4. It builds the test image from `hosts/lib/tests/container/Dockerfile`. The job does not
