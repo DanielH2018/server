@@ -1,6 +1,8 @@
-# Host checks that write a node_exporter textfile, read from the `node` scrape job. Plain YAML,
-# never Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The producer metric contract
-# and the design are docs/target-architecture/monitoring/m3-textfile-timer.md, "The rules".
+# Host checks that write a node_exporter textfile, read from the `node` scrape job, or from
+# `node-pi` for daniel-pi. Plain YAML, never Jinja: prometheus-rules.yaml.j2 carries this file
+# verbatim. The producer metric contract and the design are
+# docs/target-architecture/monitoring/m3-textfile-timer.md, "The rules". The host-plane rules at
+# the end are H3's (docs/target-architecture/host/h3-pi-pilot.md, "Host rules (PR H3.5d, C7)").
 #
 # Every rule names its host as a literal `service`. A node is not a workload, so M2's
 # workload-service join cannot supply it, and deriving it from `origin` needs a label_replace
@@ -86,3 +88,64 @@ groups:
             a file in /var/lib/node-exporter-textfile is malformed or unreadable, and every
             series in it is gone. Read node_textfile_mtime_seconds for the files it still sees,
             and the node-exporter pod's log.
+      # One rule per inventory host, so `service` stays a literal. The updater writes
+      # homelab_host_reconcile_ok 0 on every run while the host holds, so the rule pages a hold
+      # that stands for 15 minutes, not one failed run.
+      # ansible/tests/services/test_host_plane_rule_literals.py holds the set to hosts.ini.
+      #
+      # Convention 5 (m1-alertmanager.md) does not bind the host-plane rules, because the `node`
+      # and `node-pi` jobs both carry `origin`. They meet it anyway: neither pages on `up`, and
+      # HostUpdateStale's absent arm is conjoined with `up == 1`.
+      - alert: HostReconcileFailed
+        expr: homelab_host_reconcile_ok{origin="daniel-server"} == 0
+        for: 15m
+        labels:
+          severity: critical
+          service: daniel-server
+        annotations:
+          summary: daniel-server holds after a failed reconcile.
+          description: >-
+            homelab_host_reconcile_ok on daniel-server has read 0 for 15 minutes, so the host
+            holds and installs no newer homelab package. Read `journalctl -u homelab-updater -u
+            homelab-reconcile` on daniel-server and docs/host-packages.md, "Host-plane pages".
+            Once the cause is fixed, `sudo /usr/lib/homelab/homelab-updater --clear-hold`
+            reruns reconcile and clears the hold if it passes, and `sudo
+            /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
+            then installs the newest packages as a timer run does.
+      - alert: HostReconcileFailed
+        expr: homelab_host_reconcile_ok{origin="daniel-pi"} == 0
+        for: 15m
+        labels:
+          severity: critical
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi holds after a failed reconcile.
+          description: >-
+            homelab_host_reconcile_ok on daniel-pi has read 0 for 15 minutes, so the host holds
+            and installs no newer homelab package. Read `journalctl -u homelab-updater -u
+            homelab-reconcile` on daniel-pi and docs/host-packages.md, "Host-plane pages". Once
+            the cause is fixed, `sudo /usr/lib/homelab/homelab-updater --clear-hold` reruns
+            reconcile and clears the hold if it passes, and `sudo
+            /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
+            then installs the newest packages as a timer run does.
+      - alert: HostReconcileFailed
+        expr: homelab_host_reconcile_ok{origin="daniel-box"} == 0
+        for: 15m
+        labels:
+          severity: critical
+          service: daniel-box
+        annotations:
+          summary: daniel-box holds after a failed reconcile.
+          description: >-
+            homelab_host_reconcile_ok on daniel-box has read 0 for 15 minutes, so the host holds
+            and installs no newer homelab package. Read `journalctl -u homelab-updater -u
+            homelab-reconcile` on daniel-box and docs/host-packages.md, "Host-plane pages". Once
+            the cause is fixed, `sudo /usr/lib/homelab/homelab-updater --clear-hold` reruns
+            reconcile and clears the hold if it passes, and `sudo
+            /usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold and
+            then installs the newest packages as a timer run does.
+      # HostUpdateStale: one rule per entry of observability_expected_hosts, which is empty
+      # until H3.9c, so no rule follows yet. Each entry's rule is the shape of
+      # tests/rules/fixtures/host-update-stale.yaml, and
+      # ansible/tests/services/test_host_plane_rule_literals.py prints the rule a new entry
+      # needs.

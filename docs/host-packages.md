@@ -6,9 +6,9 @@ Ansible role `homelab_builder` installs the builder half on daniel-box; its rule
 `ansible/roles/setup/homelab_builder/CLAUDE.md`, and its design is in
 [the H3 plan](target-architecture/host/h3-pi-pilot.md).
 
-This page holds the procedures an operator runs when the pipeline stops. It starts with one
-procedure. The plan's PR H3.5b adds the rest: the host holds, the builder hold, a host
-rollback, key rotation and the five builder pages.
+This page holds the procedures an operator runs when the pipeline stops. It starts with two:
+clearing a deployer hold, and the two host-plane pages. The plan's PR H3.5b adds the rest: the
+host holds, the builder hold, a host rollback, key rotation and the five builder pages.
 
 ## Clearing a deployer hold that a failed `homelab_builder` or `gitops_deploy` apply wrote
 
@@ -61,3 +61,33 @@ To clear the hold:
 
 Never `rm` `hold_sha`. That leaves its `hold_plane` lines in the ledger with nothing that
 names them, and `clear-hold --orphaned` is then the only way to drop them.
+
+## Host-plane pages
+
+Two Alertmanager rules in observability's `host-checks` group page on a host's updater. Each
+carries `severity="critical"` and the host's name as `service`, and the alert's description
+names what to read first.
+
+- **`HostReconcileFailed`** fires when `homelab_host_reconcile_ok` has read 0 on a host for 15
+  minutes. The updater writes 0 on every run while the host holds after a failed reconcile,
+  so the host installs nothing newer until the hold clears. Read `journalctl -u
+  homelab-updater -u homelab-reconcile` on the host and fix the cause. Then clear the hold
+  with one of the updater's two levers, run as root on the host:
+    - `/usr/lib/homelab/homelab-updater --clear-hold` reruns reconcile against the installed
+      packages and clears the hold if it passes;
+    - `/usr/lib/homelab/homelab-updater --clear-hold --install-newest` clears the hold, then
+      installs the newest packages and reconciles as a timer run does. Use it when the fix is
+      a newer package.
+- **`HostUpdateStale`** fires when a host listed in
+  `ansible/roles/k8s/observability/defaults/main.yml:observability_expected_hosts` reports no
+  successful update within its `limit_seconds`. It also fires when the host's exporter is up
+  and serves no success timestamp. A failed fetch writes no metric, so an unreachable
+  repository, a stopped `homelab-apt-repo.service`, a firewall rule, a keyring mismatch and a
+  stopped timer all end here. Read `systemctl status homelab-updater.timer` and `journalctl -u
+  homelab-updater` on the host. A dead exporter does not fire it: that host's `up` at 0 keeps
+  the rule quiet.
+
+Each limit exceeds the longest gap between two of the host's updater fires plus the updater's
+`TimeoutStartSec`, so one failed fetch never pages.
+`scripts/renderer/tests/test_renderer_host_update_limits.py` fails a limit the host's rendered
+schedule outgrows. The map is empty until H3.9c adds daniel-pi.
