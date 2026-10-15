@@ -64,6 +64,7 @@ from lib.exit_codes import FAILED, OK, USAGE_ERROR
 import forge
 from changed_set import ROOT, changed_set, footprints
 from deploy_tools.promote_lib.wait import kustomization_graph
+from renderer.renderer_lib.bundle import CLUSTER_VARS
 
 DIGESTS_FILE = "digests.json"
 # The files `verify` reads from each bundle. Nothing else is handed on.
@@ -90,6 +91,11 @@ POLL_S = 30
 OCI_INTERVAL_S = 60
 ROOT_TIMEOUT_S = 5 * 60
 ROOT_RETRY_S = 60
+# kustomize-controller's `--requeue-dependency` default. A Kustomization whose dependency is
+# not Ready requeues after this interval, and no watch re-enqueues it sooner, so each
+# `dependsOn` hop costs up to one interval (d4-ordering.md). The flux role sets no such flag;
+# scripts/deploy_tools/tests/test_verify_promotion.py fails one it adds.
+REQUEUE_DEPENDENCY_S = 30
 
 _DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
 
@@ -209,20 +215,43 @@ def promote_timeout(docs: list[dict]) -> int:
     `retryInterval`. The root `homelab` is always expected and is not in the bundle, so its values are the
     floor. A Kustomization with no `timeout` times out after its `interval`, as Flux does.
 
+    When a Kustomization substitutes, which the renderer projects as `postBuild`, it waits on
+    `cluster-vars`, so the wait also covers that hop: `cluster-vars`'s own timeout plus one
+    REQUEUE_DEPENDENCY_S (D3.3b). D4.3's chained timeout replaces this term with one per edge.
+
     Raises:
-        ValueError: a duration this module cannot read.
+        ValueError: a duration this module cannot read, or a substituting Kustomization in a
+            bundle that holds no `cluster-vars`.
     """
+
+    def spec_of(doc: dict) -> dict:
+        spec = doc.get("spec")
+        return spec if isinstance(spec, dict) else {}
+
+    def timeout_of(spec: dict) -> int | None:
+        timeout = spec.get("timeout", spec.get("interval"))
+        return None if timeout is None else seconds(timeout)
+
     timeouts, retries = [ROOT_TIMEOUT_S], [ROOT_RETRY_S]
     for doc in docs:
-        spec = doc.get("spec")
-        spec = spec if isinstance(spec, dict) else {}
-        timeout = spec.get("timeout", spec.get("interval"))
+        spec = spec_of(doc)
+        timeout = timeout_of(spec)
         if timeout is not None:
-            timeouts.append(seconds(timeout))
+            timeouts.append(timeout)
         retry = spec.get("retryInterval")
         if retry is not None:
             retries.append(seconds(retry))
-    return max(timeouts) + OCI_INTERVAL_S + max(retries)
+    hop = 0
+    if any("postBuild" in spec_of(doc) for doc in docs):
+        found = [
+            d for d in docs if (d.get("metadata") or {}).get("name") == CLUSTER_VARS
+        ]
+        if not found:
+            raise ValueError(
+                f"a Kustomization substitutes and the bundle holds no {CLUSTER_VARS}"
+            )
+        hop = (timeout_of(spec_of(found[0])) or 0) + REQUEUE_DEPENDENCY_S
+    return max(timeouts) + OCI_INTERVAL_S + max(retries) + hop
 
 
 @dataclass(frozen=True)

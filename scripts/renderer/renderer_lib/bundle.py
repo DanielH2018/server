@@ -3,8 +3,9 @@
 A placeholder render with `--role` writes, for each tag it names:
 
 - `DIR/flux/<tag>.yaml`, the Kustomization `<tag>` (C3 *Per-tag Kustomizations*). It carries
-  `spec.postBuild`, naming `homelab-cluster-vars`, exactly when the tag's placeholder key set
-  is not empty (C1 *The projection*);
+  `spec.postBuild`, naming `homelab-cluster-vars`, and a `dependsOn` entry for `cluster-vars`
+  exactly when the placeholder key set of the directory `<tag>` is not empty (C1 *The
+  projection*, D3.3b);
 - `DIR/flux/<kind>.yaml` and `DIR/cluster/<kind>/` for each `SHARED_KINDS` member;
 - `DIR/flux/kustomization.yaml`, which lists every other file in `DIR/flux/`, so the root
   Kustomization `homelab` applies each of them;
@@ -134,8 +135,9 @@ def tag_kustomization(tag: str, substitutes: bool, timeout: str) -> dict:
 
     Args:
         tag: The deploy tag, the Kustomization's name and its directory under `cluster/`.
-        substitutes: Whether the tag's placeholder key set is not empty, which alone decides
-            `postBuild` (C1 *The projection*).
+        substitutes: Whether the directory's placeholder key set is not empty, which alone
+            decides `postBuild` (C1 *The projection*) and the `cluster-vars` edge. The edge
+            makes Flux wait for `homelab-cluster-vars` before it substitutes from it (D3.3b).
         timeout: `manifests_rollout_timeout_default`, the manifests role's rollout timeout.
     """
     spec: dict = {
@@ -154,6 +156,7 @@ def tag_kustomization(tag: str, substitutes: bool, timeout: str) -> dict:
         spec["postBuild"] = {
             "substituteFrom": [{"kind": "Secret", "name": CLUSTER_VARS_SECRET}]
         }
+        spec["dependsOn"] = [{"name": CLUSTER_VARS}]
     return {
         "apiVersion": FLUX_API_VERSION,
         "kind": "Kustomization",
@@ -163,7 +166,9 @@ def tag_kustomization(tag: str, substitutes: bool, timeout: str) -> dict:
 
 
 def cluster_vars_kustomization(timeout: str) -> dict:
-    """The Kustomization `cluster-vars`: a tag's fields without `postBuild`, plus `decryption`.
+    """The Kustomization `cluster-vars`: a tag's fields, never substituting, plus `decryption`.
+
+    Its directory holds no rendered template, so it gets neither `postBuild` nor the edge.
 
     `deletionPolicy: Orphan` keeps the Secret serving if the Kustomization is ever deleted.
     """
@@ -351,6 +356,9 @@ def bundle_files(
             f"{deferred} render a {DEFERRED_SUFFIX} directory, and no Kustomization applies "
             f"it until D4.2 adds <tag>{DEFERRED_SUFFIX}"
         )
+    # The footprint rule counts per tag, so a tag substitutes when either of its directories
+    # does. `postBuild` and the edge are per directory: each goes on the Kustomization whose
+    # own directory holds a placeholder (C1 *Substitution and escaping*).
     substituting = {
         tag
         for tag in tags
@@ -362,7 +370,7 @@ def bundle_files(
     }
     shared = cluster_vars_files(cluster_vars, timeout)
     flux = {p: t for p, t in shared.items() if p.startswith(f"{FLUX_DIR}/")}
-    files = flux_files({tag: tag in substituting for tag in tags}, timeout, flux)
+    files = flux_files({tag: bool(key_sets.get(tag)) for tag in tags}, timeout, flux)
     files |= shared
     cluster = {
         f"{CLUSTER_DIR}/{name}/{file}": text

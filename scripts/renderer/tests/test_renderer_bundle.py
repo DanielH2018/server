@@ -76,18 +76,24 @@ def _expected(name: str) -> dict:
     }
 
 
-def test_a_tag_holding_a_placeholder_gets_post_build_naming_the_cluster_vars_secret():
+def test_a_tag_holding_a_placeholder_gets_substitute_from_and_the_cluster_vars_edge():
     files = _bundle(_tag("bento-pdf", sentinel("email")))
     expected = _expected("bento-pdf")
     expected["spec"]["postBuild"] = {
         "substituteFrom": [{"kind": "Secret", "name": "homelab-cluster-vars"}]
     }
+    expected["spec"]["dependsOn"] = [{"name": "cluster-vars"}]
     assert yaml_fast.safe_load(files["flux/bento-pdf.yaml"]) == expected
 
 
-def test_a_tag_holding_no_placeholder_gets_no_post_build():
-    files = _bundle(_tag("bento-pdf", "${HOME}"))
+def test_a_tag_holding_no_placeholder_gets_neither_and_keeps_a_literal_dollar_brace():
+    tag = _tag("bento-pdf", "${HOME}")
+    files = _bundle(tag)
     assert yaml_fast.safe_load(files["flux/bento-pdf.yaml"]) == _expected("bento-pdf")
+    rendered = apply_placeholders([tag], ("email",)).tags[0].files["deployment.yaml"]
+    assert "value: ${HOME}\n" in rendered, (
+        "Flux never substitutes it, so it stays unescaped"
+    )
 
 
 def test_the_root_lists_every_file_in_flux():
@@ -299,7 +305,8 @@ def test_the_written_digests_json_is_the_shape_land_wait_reads():
 
 
 def test_the_cluster_vars_kustomization_decrypts_with_the_cluster_key():
-    files = _bundle(_tag("bento-pdf"))
+    """With a substituting tag beside it, `cluster-vars` still gets no `postBuild` or edge."""
+    files = _bundle(_tag("bento-pdf", sentinel("email")))
     expected = _expected("cluster-vars")
     expected["spec"]["decryption"] = {
         "provider": "sops",
