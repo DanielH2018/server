@@ -263,12 +263,14 @@ def discharge_k8s_unapplied(
     subprocess per call judges every range, and a failure reads as "no range is covered".
 
     A `manifests` CALLER WHOSE GUARD-MAP ROW DID NOT MOVE CARRIES A MAP-ONLY CHANGE (#5106).
-    The guard task reads only `.get(manifests_service, [])` of `STANDALONE_GUARD_MAP`, so a
-    caller whose record at R precedes the line's origin carries it when `R..origin` changes no
-    other applied `manifests` path and leaves that caller's row equal (`_guard_row_carries`).
-    That is `land_shared.guard_map_rows`'s narrowing, asked per caller from its own record
+    The guard task reads only `.get(manifests_service, [])` of `STANDALONE_GUARD_MAP`. A caller
+    whose last proven carry B precedes the line's origin therefore carries it when `B..origin`
+    changes no other applied `manifests` path and leaves that caller's row equal
+    (`_guard_row_carries`). B is the caller's release record or its matching render, whichever
+    passes: an earlier role change a render already proved for that caller does not hold the
+    line. That is `land_shared.guard_map_rows`'s narrowing, asked per caller from its own proof
     because a line keeps only its newest origin. A map-only line then waits on the callers
-    whose row moved, the ones `land.sh` deploys, and on no other.
+    whose row moved, the ones `land.sh` deploys.
     """
     pending = state.owed_pending(OWED_K8S_UNAPPLIED)
     records = {e.service: tools.release_commit(e.service) for e in pending}
@@ -292,8 +294,9 @@ def discharge_k8s_unapplied(
             return True
         render = tools.render_proof(tag)
         if not descends(render, origin):
-            return service == "manifests" and _guard_row_carries(
-                tools, config, tag, records[tag], origin
+            return service == "manifests" and any(
+                _guard_row_carries(tools, config, tag, base, origin)
+                for base in (records[tag], render)
             )
         if by_digest:
             return True
@@ -378,13 +381,14 @@ STANDALONE_GUARD_MAP = f"{_MANIFESTS_ROLE}files/standalone_secret_keys.json"
 def _guard_row_carries(
     tools: DeployTools, config: Config, tag: str, record: str | None, origin: str
 ) -> bool:
-    """Whether `tag`, deployed at `record`, already runs the `manifests` role as `origin` does.
+    """Whether `tag`, proven to carry `manifests` at `record`, carries it at `origin` too.
 
-    True when `record` is an ancestor of `origin`, `record..origin` changes no `manifests`
-    path but `STANDALONE_GUARD_MAP` and its documentation and tests, and `tag`'s row of that
-    map is equal at both ends (#5106). Every unknown is False, which keeps the line: no
-    record, a git error, or a map that is absent or does not parse at either end while the
-    range changes it.
+    `record` is the caller's release record or the commit of its matching render; either
+    proves what the role applied for it there. True when `record` is an ancestor of `origin`,
+    `record..origin` changes no `manifests` path but `STANDALONE_GUARD_MAP` and its
+    documentation and tests, and `tag`'s row of that map is equal at both ends (#5106). Every
+    unknown is False, which keeps the line: no commit, a git error, or a map that is absent
+    or does not parse at either end while the range changes it.
     """
     if not record or not tools.is_ancestor(config.repo, record, origin):
         return False

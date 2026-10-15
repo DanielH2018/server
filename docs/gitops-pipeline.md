@@ -1145,11 +1145,14 @@ untouched.
   that says how each one does.
 - A `manifests` caller also carries a change to the standalone guard map alone when its own row
   did not move (#5106). The guard task reads only the caller's row of
-  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. So a caller whose release
-  record R precedes the line's origin carries the change when `R..origin` changes no other
-  applied `manifests` path and leaves that caller's row equal
-  (`deploy_k8s_owed._guard_row_carries`). A map-only line then waits on the callers whose row
-  moved, which are the tags `land_shared.guard_map_rows` deploys, and on no render.
+  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. Take B as the caller's
+  release record or the commit of its matching render. When B precedes the line's origin, the
+  caller carries the change if `B..origin` changes no other applied `manifests` path and leaves
+  that caller's row equal (`deploy_k8s_owed._guard_row_carries`). An earlier role change that a
+  render already proved for the caller therefore does not hold the line. A map-only line waits
+  on the callers whose row moved, which are the tags `land_shared.guard_map_rows` deploys. It
+  waits on an untouched caller only when no proof of that caller has passed the last other
+  `manifests` change.
 - A service's OWN line takes the same render proof when its role acts only through the bytes the
   digest covers. `scripts/deploy_tools/digest_provable.py` derives that per role, fail-closed:
   every task is a `k8s/manifests` include, a pure fact or check module, or an include of a task

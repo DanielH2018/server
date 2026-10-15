@@ -139,3 +139,45 @@ def test_a_range_that_also_changes_the_role_keeps_the_line_for_an_unmoved_row(
     state.record_owed(OWED_K8S_UNAPPLIED, origin, {"manifests"}, 1000.0)
     assert deploy_k8s_owed.discharge_k8s_unapplied(tools, state, config) == []
     assert [e.service for e in state.owed_pending(OWED_K8S_UNAPPLIED)] == ["manifests"]
+
+
+def test_a_role_change_a_render_already_proved_does_not_hold_a_later_map_only_line(
+    gitops_deploy, settings, state, tmp_path
+):
+    """FLAGGED: #5096's shape. A tasks change lands before the map-only commit, and
+    `gm-untouched` was never redeployed for it: its record is at the base, and only its
+    render, at the tasks commit, proves it carries that change. The map-only line must still
+    drop once `gm-moved` deploys, because the render bounds the range from below."""
+    root = tmp_path / "checkout"
+    base = _checkout(root)
+    tasks = commit(
+        root,
+        "change the role",
+        **{
+            "ansible/roles/k8s/manifests/tasks/main.yml": (
+                "- ansible.builtin.debug:\n    msg: render twice\n"
+            )
+        },
+    )
+    origin = commit(
+        root,
+        "add a key to gm-moved's row",
+        **{GUARD_MAP: _guard_map(["moved_email", "moved_token"])},
+    )
+
+    def discharge(renders):
+        tools = DeployTools(
+            discord_post=lambda _webhook, _content: True,
+            release_commit={MOVED: origin, UNTOUCHED: base}.get,
+            shared_role_callers=_callers_from_main,
+            render_proof=renders.get,
+            digest_provable=lambda _repo, _roles: set(),
+            digest_covers=lambda _repo, _items: set(),
+        )
+        config = dataclasses.replace(settings, repo=str(root))
+        return deploy_k8s_owed.discharge_k8s_unapplied(tools, state, config)
+
+    state.record_owed(OWED_K8S_UNAPPLIED, origin, {"manifests"}, 1000.0)
+    assert discharge({}) == [], "from the record alone, the tasks change holds the line"
+    assert discharge({UNTOUCHED: tasks}) == ["manifests"]
+    assert state.owed_pending(OWED_K8S_UNAPPLIED) == []
