@@ -4,7 +4,7 @@ A test replaces one field of `Tools` and never a PATH entry. The defaults are th
 implementations, defined here so the phase modules never import subprocess.
 
 WHICH CHECKOUT EACH HELPER COMES FROM. await_ci, land_tags, deploy_lib/detach_notify and
-land_flux's promote_wait are imported from land.py's checkout, so they are the same release as
+land_flux's promote_lib.wait are imported from land.py's checkout, so they are the same release as
 it: a PR adding a flag to one and its call site must pass its own landing, though the primary
 checkout holds the previous release. gitops_tick.sh is run from beside land.py for that reason.
 deploy_tags.py and deploy.sh are run as subprocesses with the PRIMARY checkout as cwd,
