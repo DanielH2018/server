@@ -909,7 +909,10 @@ concurrency group on push. It needs no secrets, and it does these steps:
    `hosts/lib/tests/container/`, which holds the fixture specs, and the cases' own scripts.
    `CASE_INPUTS` on the render step lists them, and
    `ansible/tests/repo/test_host_package_case_inputs_census.py` holds that list to
-   every `validate` module the cases script imports (#5004). Such a PR runs steps 3 to 5.
+   every `validate` module the cases script imports (#5004). An edit to the
+   `host_packages` job itself counts too, because its steps invoke the cases.
+   `host_packages.py job-changed` compares the job as parsed YAML, so an edit to a comment
+   alone does not count. Such a PR runs steps 3 to 5.
 3. It builds both renders with nfpm pinned by version and sha256, and runs the
    maintainer-script lint and the `type: config` lint.
 4. It builds the test image from `hosts/lib/tests/container/Dockerfile`. The job does not
