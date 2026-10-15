@@ -10,6 +10,12 @@ docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*.
 given and deploy.sh refuses such a tag with exit 5. A PR whose only tags are such tags runs no
 deploy.sh at all.
 
+`owned_by_narrowing` finds such a tag for a PR that derived no tag at all. A deploy-plane edit,
+such as the `host_vars` line that flips an entry to `owner: flux`, classifies as broad: the
+tick applies it and `resolved_tags` stays empty. The deployer's own narrowing still names the
+tag, and the tick drops it because Flux applies it, so the landing reads the same narrowing and
+waits on promotion for it (#5146).
+
 `wait_on_promotion` then runs `promote.py land-wait` on the merge commit. Its three outcomes
 map to a landing's words:
 
@@ -32,6 +38,11 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Cause, Verdict, say
+from lib.exit_codes import DEPLOY_OK
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+from deployer_lib.deploy_changes import _BROAD_DEPLOY_PREFIXES
 
 
 def published(ln: Landing) -> list[str]:
@@ -44,23 +55,28 @@ def gated_tags(ln: Landing) -> list[str]:
     return ln.resolved_tags + published(ln)
 
 
-def split_owned(ln: Landing) -> None:
-    """Move every tag that is not Ansible-owned out of `resolved_tags` into `owned_tags`.
+def _owners(ln: Landing) -> dict[str, str]:
+    """Each tag that is not Ansible-owned at the merge commit, to its `owner`; dies unread.
 
     Ownership is read at the merge commit, the tree this landing deploys, because the primary
     checkout may not carry the PR yet. An unreadable ownership map ends the landing: reading an
     unknown `owner` as Ansible-owned would hand the tag to two writers.
     """
-    if not ln.resolved_tags:
-        return
     try:
-        owners = ln.tools.flux.owners_at(ln.opts.primary, ln.merge_sha)
+        return ln.tools.flux.owners_at(ln.opts.primary, ln.merge_sha)
     except (ValueError, subprocess.SubprocessError, OSError) as exc:
         ln.die(
             f"could not read which tags Flux applies at {ln.merge_sha[:12]}, so nothing "
             f"was deployed: {exc}",
             1,
         )
+
+
+def split_owned(ln: Landing) -> None:
+    """Move every tag that is not Ansible-owned out of `resolved_tags` into `owned_tags`."""
+    if not ln.resolved_tags:
+        return
+    owners = _owners(ln)
     ln.owned_tags = {tag: owners[tag] for tag in ln.resolved_tags if tag in owners}
     if not ln.owned_tags:
         return
@@ -68,6 +84,46 @@ def split_owned(ln: Landing) -> None:
     ln.k8s_only = [tag for tag in ln.k8s_only if tag not in owners]
     for tag, owner in ln.owned_tags.items():
         say(f"{tag}: owner: {owner}, so it lands through promote, not deploy.sh")
+
+
+def owned_by_narrowing(ln: Landing) -> None:
+    """Fill `owned_tags` from the deployer's narrowing, for a deploy-plane PR with no tag.
+
+    The deployer narrows a deploy-plane range to the tags its render reaches, then drops each
+    tag that is not Ansible-owned (`deploy_narrow._deploy_plane`). A PR whose only change is
+    such a range therefore lands with an empty `resolved_tags`, and without this the landing
+    graded the tick alone and printed `settled` while the promotion was still running.
+
+    `deploy_tags.py narrow` runs over the PR's own range, the commits the PR added, rather
+    than `--since`, which also holds other sessions' merges. A tag it names that is still
+    Ansible-owned stays with the tick, which applied it; only the rest enter `owned_tags`.
+    No PR range, no deploy-plane path, or a narrowing that refuses leaves `owned_tags`
+    empty, which is the landing as it was before #5146.
+    """
+    cl = ln.classification
+    if not any(p.startswith(_BROAD_DEPLOY_PREFIXES) for p in cl.pr_paths):
+        return
+    if not cl.pr_range:
+        say("no PR range to narrow, so no tag Flux applies is looked for")
+        return
+    base, head = cl.pr_range.split("..", 1)
+    r = ln.tools.deploy_tags(ln.opts.primary, ["narrow", base, head])
+    if r.returncode != DEPLOY_OK:
+        say(
+            f"the deployer's narrowing refused this PR's range (exit {r.returncode}), so "
+            "no tag Flux applies is looked for"
+        )
+        return
+    narrowed = [t for t in r.stdout.strip().split(",") if t]
+    if not narrowed:
+        return
+    owners = _owners(ln)
+    ln.owned_tags = {tag: owners[tag] for tag in narrowed if tag in owners}
+    for tag, owner in ln.owned_tags.items():
+        say(
+            f"{tag}: this PR's deploy-plane change reaches it, and owner: {owner}, so it "
+            "lands through promote"
+        )
 
 
 def wait_on_promotion(ln: Landing) -> None:

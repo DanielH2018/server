@@ -12,7 +12,7 @@ import subprocess
 import pytest
 from dataclasses import replace
 
-from _land_fakes import MERGE_SHA, Fakes
+from _land_fakes import MERGE_SHA, Fakes, receipt
 from deploy_tools.land_lib import deploy, land_flux, merge
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Outcome
 from deploy_tools.promote_lib.wait import WaitResult
@@ -97,6 +97,65 @@ def test_an_unreadable_ownership_map_deploys_nothing(land_run):
     rc, out, _, calls, _ = land_run([], fakes)
     assert rc == 1 and "VERDICT: refused" in out
     assert "deploy" not in _names(calls) and "land_wait" not in _names(calls)
+
+
+# -- a deploy-plane PR the deployer narrows to a tag Flux applies (#5146) ------------------
+
+
+def _flip(**kwargs: object) -> Fakes:
+    """#5143's shape: one `host_vars` edit sets `owner: flux` on bento-pdf, and nothing else.
+
+    The edit is broad, so no tag is derived and the tick applies it; the deployer's narrowing
+    names bento-pdf and the tick drops it, leaving nothing applied."""
+    fakes = Fakes(
+        gh_views={
+            "files,changedFiles": {
+                "files": [{"path": "ansible/inventory/host_vars/daniel-box.yml"}],
+                "changedFiles": 1,
+            }
+        },
+        derived=([], "pr"),
+        self_applied=True,
+        narrowed="bento-pdf",
+        narrowed_rc=0,
+        owners={MERGE_SHA: {"bento-pdf": "flux"}},
+        state=receipt({"ansible/deploy.yml": ["narrowed-to-nothing"]}),
+        gate=(True, ["bento-pdf: healthy"]),
+    )
+    return replace(fakes, **kwargs)
+
+
+def test_an_inventory_flip_to_flux_waits_on_promotion(land_run):
+    rc, out, _, calls, _ = land_run([], _flip())
+    assert rc == 0 and "VERDICT: settled" in out
+    # Narrowed over the PR's own range, not `--since`.
+    assert ("narrow", "prbase", "prhead") in [
+        c[1] for c in calls if c[0] == "deploy_tags"
+    ]
+    assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [
+        (MERGE_SHA, ["bento-pdf"])
+    ]
+    assert "deploy" not in _names(calls)
+    assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]
+
+
+def test_an_inventory_flip_does_not_settle_before_the_promotion_verdict(land_run):
+    timed_out = WaitResult("gave-up", "promote-timeout", "no promotion covered it")
+    rc, out, _, _, _ = land_run([], _flip(land_wait=[timed_out]))
+    assert rc == 75 and "VERDICT: deferred" in out
+    assert "VERDICT: settled" not in out
+
+
+def test_a_narrowed_ansible_owned_tag_settles_on_the_tick(land_run):
+    rc, out, _, calls, _ = land_run([], _flip(owners={MERGE_SHA: {}}))
+    assert rc == 0 and "VERDICT: settled" in out
+    assert "land_wait" not in _names(calls) and "deploy" not in _names(calls)
+
+
+def test_a_refused_narrowing_settles_on_the_tick_as_before(land_run):
+    rc, out, _, calls, _ = land_run([], _flip(narrowed="", narrowed_rc=3))
+    assert rc == 0 and "VERDICT: settled" in out
+    assert "land_wait" not in _names(calls) and "owners_at" not in _names(calls)
 
 
 # -- the handback refusal --------------------------------------------------------------------
