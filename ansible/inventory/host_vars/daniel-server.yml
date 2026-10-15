@@ -7,6 +7,9 @@ server_ip: 10.0.0.161
 # ignore_routes_with_linkdown on this link (#4510). The pin also holds the link's IPv6 RA route
 # at metric 100, so IPv6 prefers it over wlo1 too (#4561).
 k3s_node_static_link: enp88s0
+# The Intel AX201. The installer's 00-installer-config-wifi.yaml joined it first; the k3s
+# role's 80-homelab-wifi-fallback.yaml merges on top and pins the metric-600 route.
+k3s_node_wifi_link: wlo1
 ssh_config_path: /etc/ssh/sshd_config
 # Intel XE iGPU present — enables /dev/dri passthrough for jellyfin/tdarr hardware transcode.
 has_igpu: true

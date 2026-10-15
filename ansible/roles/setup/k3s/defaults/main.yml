@@ -1068,6 +1068,12 @@ k3s_node_dns_dhcp_links:
 # out of its DHCP pool.
 k3s_node_static_link: ""
 
+# The WiFi link that tasks/static-address.yml joins to the home network as a fallback uplink,
+# using the SOPS keys `wifi_ssid` and `wifi_password`. Its routes sit at metric 600, behind
+# the pinned link's 100, so it carries traffic only while the pinned link has no carrier.
+# Empty removes the file and re-applies netplan.
+k3s_node_wifi_link: ""
+
 # ── Cluster DNS (tasks/coredns.yml) ─────────────────────────────────────────────────────
 # What CoreDNS forwards to, in order. This is deliberately NOT the node's resolv.conf that
 # k3s's bundled Corefile uses: that inherits whichever resolvers CoreDNS's node happens to

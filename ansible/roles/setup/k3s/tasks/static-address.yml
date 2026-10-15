@@ -64,6 +64,45 @@
   become: true
   when: k3s_node_static_link | length == 0
 
+# The WiFi fallback uplink. It sits here, under the same tag, because the fallback only works
+# alongside the pin's ignore_routes_with_linkdown above, and because both plays that pin an
+# address import this file. templates/netplan-wifi-fallback.yaml.j2 has the routing argument.
+# Emptying `k3s_node_wifi_link` removes the file, the same way back as the pin's.
+- name: Refuse a WiFi fallback whose credentials are not in SOPS
+  tags: [node-address]
+  ansible.builtin.assert:
+    that:
+      - wifi_ssid is defined
+      - wifi_password is defined
+    fail_msg: >-
+      k3s_node_wifi_link is {{ k3s_node_wifi_link }}, but ansible/vars/secrets.yml holds no
+      wifi_ssid or no wifi_password. Add both with sops before applying, or empty the link.
+    quiet: true
+  when: k3s_node_wifi_link | length > 0
+
+- name: Join the WiFi as a fallback uplink in netplan
+  tags: [node-address]
+  ansible.builtin.template:
+    src: netplan-wifi-fallback.yaml.j2
+    dest: /etc/netplan/80-homelab-wifi-fallback.yaml
+    mode: "0600"
+    owner: root
+    group: root
+  become: true
+  no_log: true
+  diff: false
+  when: k3s_node_wifi_link | length > 0
+  register: k3s_node_wifi_netplan
+
+- name: Remove the WiFi fallback when no WiFi link is named
+  tags: [node-address]
+  ansible.builtin.file:
+    path: /etc/netplan/80-homelab-wifi-fallback.yaml
+    state: absent
+  become: true
+  when: k3s_node_wifi_link | length == 0
+  register: k3s_node_wifi_netplan_removed
+
 # Split from the apply for the reason node.yml splits the DNS override's: `generate` parses
 # and merges every /etc/netplan/*.yaml and fails without touching the running configuration,
 # so a bad merge stops here rather than reconfiguring the node's only uplink.
@@ -73,12 +112,16 @@
     cmd: netplan generate
   become: true
   changed_when: false
-  when: k3s_node_static_netplan.changed or k3s_node_static_netplan_removed.changed
+  when: >-
+    k3s_node_static_netplan.changed or k3s_node_static_netplan_removed.changed
+    or k3s_node_wifi_netplan.changed or k3s_node_wifi_netplan_removed.changed
 
-- name: Apply the pinned address, or its removal # noqa no-handler
+- name: Apply the pinned address and WiFi fallback, or their removal # noqa no-handler
   tags: [node-address]
   ansible.builtin.command:
     cmd: netplan apply
   become: true
   changed_when: true
-  when: k3s_node_static_netplan.changed or k3s_node_static_netplan_removed.changed
+  when: >-
+    k3s_node_static_netplan.changed or k3s_node_static_netplan_removed.changed
+    or k3s_node_wifi_netplan.changed or k3s_node_wifi_netplan_removed.changed
