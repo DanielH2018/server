@@ -195,6 +195,12 @@ def test_a_forbidden_character_is_refused_by_key_name_alone(value):
     assert all(value not in line for line in refused)
 
 
+def test_an_empty_value_is_refused():
+    """The pinned SOPS writes an empty dotenv value as a plain `key=` line, unencrypted."""
+    refused = value_refusals({**VALUES, "alpha_one": ""}, EXPECTED)
+    assert [line.split(":")[0] for line in refused] == ["alpha_one"]
+
+
 def test_a_single_brace_passes():
     assert value_refusals({**VALUES, "alpha_one": "a{b}c"}, EXPECTED) == []
 

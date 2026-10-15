@@ -1,7 +1,7 @@
 """The assertions of `cluster_vars.py check`, over file text alone (target slice D3).
 
 Every function here reads text or parsed data and returns problem lines. Nothing opens a
-process, decrypts or renders, so CI runs all of it without an age key. `cluster_vars.py`
+process, decrypts or renders, so CI can run all of it without an age key. `cluster_vars.py`
 gathers the inputs (the files, their base versions, the render's expectations) and calls these.
 
 The cluster files are three kinds:

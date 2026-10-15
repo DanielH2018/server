@@ -16,11 +16,13 @@
 #   - the cluster file ansible/vars/cluster-vars.sops.env and the manifests under
 #     ansible/vars/cluster-manifests/ (target slice D3): the same hook, which also knows the
 #     dotenv form's `sops_mac=` line; the `cluster-vars-ciphertext` pre-commit hook, which fails
-#     a plaintext value or a hand edit; and `cluster_vars.py check` in CI.
-#   - the publish job's copies of both under out/cluster/: `cluster_vars.py check
-#     --ciphertext-only` on exactly those files, run before the job's gitleaks step, which
-#     loads this file with `--config .gitleaks.toml`. The rest of out/cluster/ is plaintext by
-#     design and stays scanned.
+#     a plaintext value or a hand edit; and, from PR D3.2c, which commits the first such file,
+#     `cluster_vars.py check` in CI.
+#   - the publish job's copies of both under out/cluster/, which PR D3.3a first publishes:
+#     `cluster_vars.py check --ciphertext-only` on exactly those files, which D3.3a adds to the
+#     publish job ahead of its gitleaks step. That step loads this file with
+#     `--config .gitleaks.toml`. The rest of out/cluster/ is plaintext by design and stays
+#     scanned.
 # (A line/match-target regex on `ENC[AES256_GCM` works in `gitleaks detect` but not in the
 # pre-commit `gitleaks git --staged` diff-scan mode, hence the path scope.)
 

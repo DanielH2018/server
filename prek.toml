@@ -399,9 +399,10 @@ files = "^(ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secr
 # writes them, so this runs the checks that need no render or key: every value is ciphertext,
 # a file whose content moved also moved its MAC and lastmodified lines since HEAD, each file
 # is encrypted to its own creation rule, and .source matches secrets.yml's ciphertext. A
-# plaintext value or a hand edit then fails here rather than after a push. CI's full `check`
-# stays the backstop for a commit made without hooks, which is how the rotation cron commits.
-# While no cluster file exists it checks nothing and passes, in about 0.1s.
+# plaintext value or a hand edit then fails here rather than after a push. From target slice
+# PR D3.2c, which commits the first cluster file, CI's full `check` is the backstop for a
+# commit made without hooks, which is how the rotation cron commits. While no cluster file
+# exists the hook checks nothing and passes, in about 0.1s.
 # `files` is the cluster paths plus the entry's import closure, which
 # scripts/tests/test_prek_files_cover_entry_imports.py derives and holds this regex to. The
 # closure reaches the renderer through `write` and the full `check`, which this hook never

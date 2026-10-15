@@ -5,7 +5,7 @@ Flux substitutes a flux-owned role's secret placeholders from one Secret, which
 kustomize-controller decrypts from the cluster file `ansible/vars/cluster-vars.sops.env` with
 a key only the cluster and the hosts hold. R2's multi-line keys travel as SOPS manifests under
 `ansible/vars/cluster-manifests/` instead. `ansible/vars/cluster-vars.source` records, per key,
-the digest of its ciphertext in `secrets.yml`, so CI proves the files fresh without a key.
+the digest of its ciphertext in `secrets.yml`, so CI can prove the files fresh without a key.
 
 Two modes:
 
@@ -16,12 +16,13 @@ Two modes:
            byte-identical. It prints key names, never a value. A refusal adds and changes no
            file, and so does a failed encrypt: every encrypt runs into memory before the first
            write.
-  check  — reads no plaintext, so CI runs it. It renders the cluster in placeholder mode and
-           asserts the files against the render and against `secrets.yml`'s ciphertext
-           (`cluster_vars_check.py` holds each assertion). `--no-render` runs only the
-           assertions that need no render; the pre-commit hook `cluster-vars-ciphertext` runs
-           that. `--ciphertext-only FILE...` asserts only that each named SOPS file holds
-           ciphertext, for the publish job's copies.
+  check  — reads no plaintext, so CI can run it; PR D3.2c adds the test that does. It
+           renders the cluster in placeholder mode and asserts the files against the render
+           and against `secrets.yml`'s ciphertext (`cluster_vars_check.py` holds each
+           assertion). `--no-render` runs only the assertions that need no render, the
+           annotation and `type:str` checks among them; the pre-commit hook
+           `cluster-vars-ciphertext` runs that. `--ciphertext-only FILE...` asserts only that
+           each named SOPS file holds ciphertext, for the publish job's copies (D3.3a).
 
 Every `sops` call that resolves a creation rule passes `--config ansible/.sops.yaml`, because
 SOPS finds its config from the working directory and the rotation cron runs from the repo
@@ -77,7 +78,10 @@ Run = Callable[..., subprocess.CompletedProcess]
 # backslash and a control character make the implicit contract of today's raw embedding
 # explicit. `{{` would open a second Go template action in Authelia's configuration once its
 # template filter parses the whole file. A single `{` passes.
+# An empty value is refused too, because the pinned SOPS writes it into a dotenv as a plain
+# `key=` line, which `check` then fails as plaintext.
 _FORBIDDEN = (
+    ("nothing (SOPS leaves an empty dotenv value unencrypted)", lambda v: v == ""),
     ("a newline", lambda v: "\n" in v or "\r" in v),
     ("a double quote", lambda v: '"' in v),
     ("a backslash", lambda v: "\\" in v),
