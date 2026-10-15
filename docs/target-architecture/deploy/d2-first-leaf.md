@@ -228,11 +228,12 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
   as `${K}` (R2 *Mode selection*). Stub mode writes R1's `homelab_secret_stub` form,
   `stub-` plus the key with underscores turned to hyphens. At the baseline a stub-mode
   render therefore wrote `domain` as `stub-domain`.
-    - **HISTORY —** R2's domain PR 2b (#5007) added `domain` to `PUBLISHED` in
-      `ansible/filter_plugins/secret_stubs.py`, so `homelab_stub_keys` leaves it out. Stub
-      mode now writes the inventory value of `domain`, and placeholder mode writes it as a
-      literal, never as `${domain}`. The D2.6c gate tests below still use `stub-domain` and
-      `${domain}`, as fixture inputs a gate must refuse.
+    - Since R2's domain PR 2b (#5007), `PUBLISHED` in
+      `ansible/filter_plugins/secret_stubs.py` holds `domain`, so `homelab_stub_keys`
+      leaves it out. A stub-mode render writes the inventory value of `domain`, and a
+      placeholder-mode render writes it as a literal, never as `${domain}`. The D2.6c gate
+      tests below still use `stub-domain` and `${domain}`, as fixture inputs a gate must
+      refuse.
 - **bento-pdf's render names one variable that the baseline holds as a secret, `domain`.**
     - `ansible/templates/ingressroute.yml.j2:ingressroute` builds the `.local.` object's Host
       match as `hostname ~ '.local.' ~ domain`, and the `-public` object's as
@@ -673,9 +674,11 @@ D1 builds the split. D2 adds its steps to the render job, and it adds the `verif
       and
       `scripts/deploy_tools/tests/test_land_merge_past_review.py::test_a_merge_with_no_removes_object_line_sends_no_body`.
       A merge that bypasses
-      `land.sh` and replaces the body, such as `gh pr merge --body`, can drop the line.
-      Such a merge that drops an object therefore stalls at `decide`, and
-      `PromotionStalled` pages. That is the intended direction (D5.1f).
+      `land.sh` carries only the lines its commits hold. Renovate's automerge carries none,
+      because no Renovate commit writes one. A merge that replaces the body, such as
+      `gh pr merge --body`, can drop one. Such a merge that drops an object therefore
+      stalls at `decide`, and `PromotionStalled` pages. That is the intended direction
+      (D5.1f).
 - **The hold names what failed.** `verify` writes `<T> failed=<names>` (C2), where `<names>`
   comma-joins the expected names that read `failure` or had no status at the timeout. At the
   drill that is `<T> failed=bento-pdf`.
