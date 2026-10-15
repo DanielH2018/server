@@ -118,8 +118,9 @@ def test_a_change_to_process_state_keeps_the_line(tree, imports, call):  # noqa:
             "os.close(_posixshmem.shm_open('/order-only-5063', os.O_CREAT | os.O_RDWR, 0o600))\n"
             "_posixshmem.shm_unlink('/order-only-5063')",
         ),
+        ("import readline", "readline.write_history_file({path})"),
     ],
-    ids=["dbm-open", "shm-open"],
+    ids=["dbm-open", "shm-open", "readline-history"],
 )
 def test_an_unaudited_file_creating_call_through_a_module_the_base_loads_keeps_the_line(
     tree,  # noqa: F811
@@ -131,7 +132,8 @@ def test_an_unaudited_file_creating_call_through_a_module_the_base_loads_keeps_t
 
     Both ends load the same modules, so the comparison of loaded modules reports nothing. With
     an absolute path the entry lands outside the runner's temp tree. In a deploy it lands
-    wherever the path points.
+    wherever the path points. `readline.write_history_file` does raise `open`, but with mode
+    `'w'` and flags 0, so the hook's flag test passes it (#5081).
     """
     path = repr(str(tmp_path / "escaped"))
     reason = _reason_for_head_call(tree, imports, call.format(path=path))
