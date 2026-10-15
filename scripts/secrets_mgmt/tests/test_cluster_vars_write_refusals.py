@@ -5,6 +5,7 @@ The digests are literals in the base64 alphabet, never copied from the real `sec
 
 `authelia_k8s_manage_claude_user: false` reaches `write` only as a render that does not
 reference the claude-ui digest, so the test of that case drops the key from `Expected`.
+`ansible/tests/services/test_authelia_digest_assert.py` holds the real render to that.
 
 Run: uv run pytest scripts/secrets_mgmt/tests/test_cluster_vars_write_refusals.py
 """
@@ -16,6 +17,7 @@ import pytest
 
 from _cluster_vars_fixture import EXPECTED, VALUES, make_sops_tree
 from secrets_mgmt.cluster_vars import write
+from secrets_mgmt.cluster_vars_check import dotenv_pairs
 
 _PREFIX = "$argon2id$v=19$m=65536,t=3,p=4$"
 ADMIN = (
@@ -46,8 +48,12 @@ def written(tmp_path):
     return sops_tree
 
 
-def test_a_distinct_well_formed_set_and_a_bare_mosquitto_hash_are_clean(written):
-    assert written.tree.cluster_file.is_file()
+def test_a_distinct_well_formed_set_and_a_bare_mosquitto_hash_are_clean(tmp_path):
+    """The clean half of each refusal below: the same tree with only the bad value swapped."""
+    sops_tree = make_sops_tree(tmp_path, {**VALUES, **GOOD})
+    assert write(sops_tree.tree, PLACED, run=sops_tree.run) == 0
+    held = dotenv_pairs(sops_tree.decrypt(sops_tree.tree.cluster_file))
+    assert {k: held[k] for k in GOOD} == GOOD
 
 
 @pytest.mark.parametrize(
@@ -89,11 +95,15 @@ def test_two_equal_digests_name_both_keys(tmp_path, capfd):
     assert not sops_tree.tree.cluster_file.exists()
 
 
-def test_an_unplaced_claude_digest_is_not_checked(tmp_path):
-    """With `authelia_k8s_manage_claude_user` false, the render places no claude-ui digest."""
+@pytest.mark.parametrize(("placed", "code"), [(True, 1), (False, 0)])
+def test_a_malformed_claude_digest_is_checked_only_when_placed(tmp_path, placed, code):
+    """With `authelia_k8s_manage_claude_user` false, the render places no claude-ui digest.
+
+    `ansible/tests/services/test_authelia_digest_assert.py` holds the render to that.
+    """
     sops_tree = make_sops_tree(
         tmp_path,
         {**VALUES, **GOOD, "authelia_claude_password_argon2": "Digest: plain-x7"},
     )
-    unmanaged = replace(PLACED, keys=PLACED.keys - {"authelia_claude_password_argon2"})
-    assert write(sops_tree.tree, unmanaged, run=sops_tree.run) == 0
+    keys = PLACED.keys - (set() if placed else {"authelia_claude_password_argon2"})
+    assert write(sops_tree.tree, replace(PLACED, keys=keys), run=sops_tree.run) == code
