@@ -41,16 +41,21 @@ from lib.git import git
 # deploy itself imports, under the same interpreter. A side effect outside the returned entries
 # that leaves the process, such as a file write, an environment change or a child process, ends
 # the run through the runner's audit hook, and a path that appears under the temp tree fails
-# it too (#4846). The gaps taken: a branch HEAD's data does not exercise, a write into another
-# imported module's state, which no audit event reports and which persists in the controller
-# process in a deploy (#4995), a call that raises no audit event and creates a file at an
-# absolute path outside the temp tree (#4999), and a role whose bytes depend on list order,
-# which the render proof the caller still requires catches.
+# it too (#4846). `os.mkfifo` and `os.mknod` raise no audit event, so the runner replaces them
+# with a call that ends the run (#4999). A side effect that stays in the process, an attribute
+# of another module added, rebound or deleted, or a module loaded, is compared between the two
+# ends rather than refused: importing Ansible rebinds `sys.intern` at both (#4995).
+# The gaps taken: a branch HEAD's data does not exercise; an in-place change to an object a
+# module holds, such as an item added to a module-level dict; a write into a module the run
+# itself loaded first, when both ends load it; process state no module attribute holds, such
+# as the umask or a signal handler; and a role whose bytes depend on list order, which the
+# render proof the caller still requires catches.
 # The runner is distinguishable from a deploy. Its cwd ends in `/cwd` under an `order-only-`
 # temp dir, `sys.flags.isolated` is 1, and `sys.argv[0]` is `-c`. So the check holds only for
-# a plugin written in good faith. It catches an accidental side effect, not an evasive one.
+# a plugin written in good faith. It catches an accidental side effect, not an evasive one,
+# such as a fresh `posix` from `_imp.create_builtin` that still has `mknod`.
 # We accept that limit, because a commit that can land a hostile filter plugin on master can
-# act through any deploy anyway. The related open gaps are #4995 and #4999.
+# act through any deploy anyway.
 ORDER_ONLY_PLUGINS = frozenset({"ansible/filter_plugins/toposort.py"})
 
 _PLUGINS = "ansible/filter_plugins"
@@ -66,55 +71,110 @@ _TIMEOUT = 60
 # write or create (#4846). The allowlist is every event the real chain raises; an event it
 # misses, after an interpreter or Ansible upgrade, reads as doubt and keeps the line rather than
 # discharging it. An allowlist, because each denylist review found another mutating event.
+# `mkfifo` and `mknod` create a file and raise no event, so `_install` replaces them on `os`
+# and `posix` with a function that ends the process (#4999).
+#
+# The hook also records the module state the run leaves behind (#4995). At the plugin's
+# `import` event it copies the attributes of every module loaded so far. At the
+# `order-only.report` event the runner raises after the chain, it writes into the report each
+# `module.attribute` added, rebound or deleted since then, and each module loaded since then.
+# A submodule bound on its parent by the import system is not a write. `_run`'s caller
+# compares the two lists between the ends, because the real plugin's import of Ansible writes
+# some at both. A report the hook never filled in reads as doubt.
 #
 # The plugin is imported after the hook and can reach anything `__main__`, `os` or `builtins`
 # holds, so the hook reads nothing from them: `_install` binds the exit function and the tables
 # as closure cells, and is deleted before the import. Only the interpreter's hook list then
 # refers to the hook, and the `gc` events that would walk to it are off the allowlist. The hook
 # exits with `os._exit` rather than raising, because a raise lands in the plugin's frame, where
-# an `except` can swallow it. `_run` reads the nonzero exit as doubt.
+# an `except` can swallow it. `_run` reads the nonzero exit as doubt. The chain runs inside
+# `_chain`, so the runner binds no name in `__main__` while the module state is compared.
 _RUNNER = """
-import copy, json, os, sys
+import copy, json, os, posix, sys
 
 
-def _install(exit_, write_flags, allowed):
+def _install(exit_, write_flags, allowed, modules):
+    before = {}
+
+    def module_writes():
+        writes = []
+        for name, (module, attrs) in before.items():
+            if modules.get(name) is not module:
+                writes.append(name)
+                continue
+            now = module.__dict__
+            for key, value in attrs.items():
+                if key not in now or now[key] is not value:
+                    writes.append(name + "." + key)
+            for key, value in now.items():
+                if key not in attrs:
+                    submodule = modules.get(name + "." + key)
+                    if submodule is None or value is not submodule:
+                        writes.append(name + "." + key)
+        loaded = [name for name in modules if name not in before]
+        writes.sort()
+        loaded.sort()
+        return writes, loaded
+
     def audit(event, args):
         try:
             if event == "open":
                 if args[2] & write_flags:
                     exit_(86)
+            elif event == "import":
+                if args[0] == "toposort" and not before:
+                    for name, module in modules.copy().items():
+                        before[name] = (module, module.__dict__.copy())
+            elif event == "order-only.report":
+                args[0]["module_writes"], args[0]["modules_loaded"] = module_writes()
             elif event not in allowed:
                 exit_(86)
         except BaseException:
             exit_(86)
 
+    def refuse(*args, **kwargs):
+        exit_(86)
+
     sys.addaudithook(audit)
+    for module in (os, posix):
+        module.mkfifo = module.mknod = refuse
 
 
 _install(
     os._exit,
     os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC,
     frozenset({
-        "builtins.id", "compile", "exec", "function.__new__", "import", "marshal.loads",
+        "builtins.id", "compile", "exec", "function.__new__", "marshal.loads",
         "object.__getattr__", "object.__setattr__", "os.listdir", "socket.getaddrinfo",
         "sys._getframemodulename",
         # Interpreter shutdown, after the result is printed.
         "cpython.PyInterpreterState_Clear", "cpython._PySys_ClearAuditHooks",
     }),
+    sys.modules,
 )
 del _install
-sys.path.insert(0, sys.argv[1])
-import toposort
-f = toposort.FilterModule().filters()
-entries = json.load(sys.stdin)
-before = copy.deepcopy(entries)
-k8s = f["filter_by_platform"](entries, "k8s")
-out = {
-    "k8s": f["toposort_containers"](k8s, f["build_k8s_dep_map"](k8s, sys.argv[2])),
-    "docker": f["filter_by_platform"](entries, "docker"),
-}
-canon = {k: [json.dumps(e, sort_keys=True) for e in v] for k, v in out.items()}
-print(json.dumps({"out": canon, "input_unchanged": entries == before}))
+
+
+def _chain(plugins, roles):
+    sys.path.insert(0, plugins)
+    import toposort
+    f = toposort.FilterModule().filters()
+    entries = json.load(sys.stdin)
+    before = copy.deepcopy(entries)
+    k8s = f["filter_by_platform"](entries, "k8s")
+    out = {
+        "k8s": f["toposort_containers"](k8s, f["build_k8s_dep_map"](k8s, roles)),
+        "docker": f["filter_by_platform"](entries, "docker"),
+    }
+    report = {
+        "out": {k: [json.dumps(e, sort_keys=True) for e in v] for k, v in out.items()},
+        "input_unchanged": entries == before,
+    }
+    sys.audit("order-only.report", report)
+    print(json.dumps(report))
+
+
+_chain(sys.argv[1], sys.argv[2])
 """
 
 
@@ -128,12 +188,18 @@ def _extract(repo: Path, treeish: str, dest: Path) -> None:
 
 
 @lru_cache(maxsize=None)
-def _run(repo: Path, plugins: str, head: str) -> tuple[dict, bool] | None:
-    """The chain's canonical outputs with the plugin tree `plugins` on HEAD's data, or None.
+def _run(
+    repo: Path, plugins: str, head: str
+) -> tuple[dict, bool, tuple[tuple[str, ...], tuple[str, ...]]] | None:
+    """One run of the chain with the plugin tree `plugins` on HEAD's data, or None.
 
-    None on any doubt: data that will not load or serialize, an import error, an exception,
-    a timeout, a side effect the runner's audit hook reports, a path that appeared under the
-    temp tree during the run, or output that is not the expected JSON.
+    Returns:
+      The chain's canonical outputs; whether the run left its input unchanged; and the
+      module state the run left behind, as the `module.attribute` names it added, rebound or
+      deleted and the names of the modules it loaded (#4995). None on any doubt: data that
+      will not load or serialize, an import error, an exception, a timeout, a side effect the
+      runner's audit hook reports, a path that appeared under the temp tree during the run,
+      or output that is not the expected JSON.
     """
     try:
         host_vars = git(
@@ -156,13 +222,14 @@ def _run(repo: Path, plugins: str, head: str) -> tuple[dict, bool] | None:
                 text=True,
                 timeout=_TIMEOUT,
             )
-            # Some calls create a file and raise no audit event (`os.mkfifo`, `os.mknod`), so a
-            # relative path the hook cannot see still shows up here (#4846).
+            # A backstop for a file-creating call that raises no audit event and that the
+            # runner does not replace, on a path relative to the cwd (#4846).
             created = set(root.rglob("*")) - before
         if r.returncode != 0 or created:
             return None
         result = json.loads(r.stdout)
-        return result["out"], result["input_unchanged"] is True
+        state = tuple(result["module_writes"]), tuple(result["modules_loaded"])
+        return result["out"], result["input_unchanged"] is True, state
     except (
         subprocess.SubprocessError,
         OSError,
@@ -178,8 +245,9 @@ def order_only(repo: Path, path: str, base: str, head: str) -> bool:
     """Whether `path`'s change over `base..head` only reorders the k8s play (#4842).
 
     True when the sort chain, run with the plugins at `base` and at `head` on HEAD's data,
-    returns the same entries as multisets for each output, and neither run changed its input.
-    False for a plugin not in `ORDER_ONLY_PLUGINS` and on any doubt (`_run`).
+    returns the same entries as multisets for each output, neither run changed its input, and
+    both runs left the same module state behind (#4995). False for a plugin not in
+    `ORDER_ONLY_PLUGINS` and on any doubt (`_run`).
     """
     if path not in ORDER_ONLY_PLUGINS:
         return False
@@ -191,6 +259,8 @@ def order_only(repo: Path, path: str, base: str, head: str) -> bool:
     old_tree, new_tree = trees.stdout.split()
     old, new = _run(repo, old_tree, head), _run(repo, new_tree, head)
     if old is None or new is None or not (old[1] and new[1]):
+        return False
+    if old[2] != new[2]:
         return False
     return old[0].keys() == new[0].keys() and all(
         Counter(old[0][k]) == Counter(new[0][k]) for k in old[0]

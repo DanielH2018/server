@@ -16,6 +16,7 @@ from lib.git_testing import git_out
 
 from test_digest_covers import _commit, _dep_map_body, _edit, tree  # noqa: F401
 from test_digest_covers import HOST_VARS
+from test_digest_covers import TOPOSORT
 
 # Must-keep rows: (id, a new top-level statement, what `build_k8s_dep_map` runs before its
 # return).
@@ -314,3 +315,50 @@ def test_a_dep_map_that_creates_a_file_outside_the_temp_tree_keeps_the_line(
     )
     reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
     assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "helper, body",
+    [
+        ("import copy\n\ncopy.SOME_SETTING = 'x'", ""),
+        ("", "import graphlib"),
+    ],
+    ids=["module-level-write", "loads-a-module"],
+)
+def test_module_state_the_base_does_not_leave_keeps_the_line(tree, helper, body):  # noqa: F811
+    """A write at import time, or a module only the head loads, keeps the line (#4995).
+
+    The runner compares the module state each end leaves behind from the plugin's import on, so
+    module-level code counts as much as the chain. A module loaded during the run has no
+    baseline to diff its attributes against, so loading one the base does not load is itself a
+    difference.
+    """
+    base = git_out(tree.root, "rev-parse", "HEAD")
+    head = _commit(
+        tree, [{"ansible/filter_plugins/toposort.py": _dep_map_writes(helper, body)}]
+    )
+    reason = digest_covers.Classifier(tree.root).reason("authelia", base, head)
+    assert reason and "every deploy runs" in reason
+
+
+def test_module_state_both_ends_leave_is_order_only(tree):  # noqa: F811
+    """A write the base already makes is compared, not refused (#4995).
+
+    The real plugin's import of Ansible rebinds `sys.intern` at both ends, so a rule that
+    refused every write would keep every `toposort.py` line.
+    """
+    writes = "import copy\n\ncopy.SOME_SETTING = 'x'\n\n\n" + TOPOSORT
+    tree.write("ansible/filter_plugins/toposort.py", writes)
+    base = tree.commit("toposort writes copy.SOME_SETTING")
+    head = _commit(
+        tree,
+        [
+            {
+                "ansible/filter_plugins/toposort.py": writes.replace(
+                    "    return list(containers_list)\n",
+                    "    return list(reversed(containers_list))\n",
+                )
+            }
+        ],
+    )
+    assert digest_covers.Classifier(tree.root).reason("authelia", base, head) is None
