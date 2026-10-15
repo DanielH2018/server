@@ -38,7 +38,7 @@ from lib.exit_codes import SHADOW_DIFFERENT, SHADOW_OK, SHADOW_REFUSED
 from renderer.renderer_lib.cluster import DEFERRED_SUFFIX, KUSTOMIZATION
 
 CLUSTER = "cluster"
-# A stub token, as `homelab_secret_stub` and the string stand-ins of `PINNED_LIVE_FACTS` build it.
+# A stub token, as `homelab_secret_stub` builds it.
 STUB_TOKEN = re.compile(r"stub-[a-z0-9-]+")
 REDACTED = "<stub>"
 # Conservative: a ConfigMap that embeds a Secret's text also has its hunk withheld.

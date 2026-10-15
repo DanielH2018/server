@@ -317,7 +317,6 @@ def render_sides(
     Raises:
         RenderError: A template fails to render.
         RenderRefused: A directory to write already holds files.
-        ValueError: A pinned fact shares a name with a secret key.
     """
     placeholder = render_placeholders(tags, keys)
     rendered = [t.tag for t in placeholder.tags]

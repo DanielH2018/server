@@ -18,8 +18,8 @@ steps, and this page describes each piece once its PR has merged.
   that R1's renderer and its playbook checks are built to share, so neither restates it.
 - `scripts/renderer/shadow_diff.py stubs` writes the stub file both halves of the shadow
   render take.
-- `scripts/renderer/renderer_lib/task_inputs.py` holds `PINNED_LIVE_FACTS`, the stand-ins for
-  facts a role task reads from live state. It is empty, and target slice R3's PR 5 deletes it.
+- The renderer pins no live fact, because no value a template reads comes from live state
+  (*The renderer pins nothing*).
 - `scripts/renderer/homelab_render.py cluster` renders in stub mode into the C1 layout. It
   applies the manifests role's file rules (*The file rules*), and renders every k8s render
   target of daniel-box.
@@ -245,8 +245,8 @@ would also escape a placeholder emitted before it:
    written. A literal `${HOME}` renders as `$${HOME}`, and a bare `$$` as `$$$`.
 3. In a directory that substitutes, every sentinel becomes `${K}`.
 
-Any pinned live-read fact would keep the value the stub file gives it (*Pinned live-read
-facts*), so a round trip sees one value on both sides. None is pinned.
+The renderer pins no live fact (*The renderer pins nothing*), so every value outside the
+secret keys is the same on both sides of a round trip.
 
 ### Which directories substitute
 
@@ -583,13 +583,30 @@ live objects keep their old values. R2's Open question 13 records the operator's
 into a dedicated SOPS-encrypted Secret, as PR 7b did for `mullvad_account`. Then deploy
 again.
 
-## Pinned live-read facts
+## The renderer pins nothing
 
-A fact that a role task reads from live state cannot be computed from the tree, so the
-renderer would give it a fixed stand-in in both halves. `PINNED_LIVE_FACTS` holds those
-stand-ins, and it is empty. Target slice R3 removed the last live reads: authelia's three
-password digests are SOPS keys, `authelia_password_argon2` and its two siblings, which take
-the ordinary secret stubs. R3's PR 5 deletes the constant and the code that reads it.
+No value a k8s template reads comes from live state, so the renderer gives no fact a fixed
+stand-in. Target slice R3 removed the three live reads: pi-peer-backup's host key, n8n's
+registry digest and authelia's password digests. The stub file holds exactly R1's secret-key
+stub map plus the sentinel `homelab_secret_stubs`, and a placeholder render overrides only
+the secret keys.
+
+Two tests hold this:
+
+- `scripts/renderer/tests/test_renderer_stub_file.py` requires the stub file's key set to be
+  the secret keys plus the sentinel. A stub writer that adds one other key fails it.
+- The live-read census, `scripts/renderer/tests/test_renderer_live_read_census.py`, walks
+  every task file the k8s play in `ansible/deploy.yml` reaches. It fails when a name a task
+  sets reaches a template the render reads, directly or through a role default, an
+  inventory value, an `include_role` var or a `set_fact`, unless the renderer derives that
+  name from the tree. It also fails on a lookup whose reads it cannot name: any plugin but
+  `file`, `template`, `pipe` and `vars`, a `pipe` other than `'base64 -w0 ' ~ <path>`, and
+  a `vars` lookup outside a loop over `py_table('CHECKS')` or `scrape_jobs`. The engine is
+  `_live_read_census.py` beside it.
+
+A new value that a task reads from the cluster and a template needs fails the census. Move
+the value into the tree instead: a SOPS key, a committed file, or a value
+`task_inputs.derived_facts` computes from the tree.
 
 ## Stub output is never published
 
