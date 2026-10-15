@@ -1,0 +1,45 @@
+[Unit]
+Description=Unattended triage of monitor episode %i, as the agent user
+After=network-online.target
+Wants=network-online.target
+# A run that crashes, or that systemd kills, pages here. A run that finishes pages through
+# claude-triage-report-alert@<episode>:<state>.service instead, which the script starts itself.
+OnFailure=claude-triage-alert.service
+
+[Service]
+Type=oneshot
+# The agent user, never {{ sys_user }}: the episode text is untrusted, and this user has no
+# sudo, no age key, read-only kubectl and no read on /home. docs/claude-agent-user.md,
+# "Alert-triggered triage", has the design.
+User={{ claude_code_triage_agent_user }}
+WorkingDirectory={{ claude_code_triage_agent_home }}/server
+Environment=HOME={{ claude_code_triage_agent_home }}
+# systemd's PATH is as minimal as cron's: without /usr/local/bin the session loses kubectl and
+# reports an empty cluster rather than failing.
+Environment=PATH={{ claude_code_triage_agent_home }}/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=KUBECONFIG={{ claude_code_triage_agent_home }}/.kube/config
+# The repo's hook shim resolves the clone and uv from these. A guard that cannot start turns
+# every Bash call into an ask, and nobody answers one here.
+Environment=RUN_HOOK_PROJECT_DIR={{ claude_code_triage_agent_home }}/server
+Environment=RUN_HOOK_UV={{ claude_code_triage_agent_home }}/.local/bin/uv
+Environment=PYTHONDONTWRITEBYTECODE=1
+# The Claude credential from `claude setup-token`, read by systemd as root (0600), so it is in
+# no unit line `systemctl show` publishes. It is this unit's own token: the interactive login
+# claude-rc.service uses can lapse while idle (#4618).
+EnvironmentFile=/etc/claude-triage/session.env
+SyslogLevel=notice
+# SIGINT ends the session's turn cleanly; SIGTERM exits 143 with the turn unrecorded.
+KillSignal=SIGINT
+# Above the script's own RUN_TIMEOUT_S ({{ claude_code_triage_run_timeout_s }}s), which should
+# trip first: it still writes the record, the report and the page.
+TimeoutStartSec={{ claude_code_triage_run_timeout_s + 600 }}
+NoNewPrivileges=yes
+ProtectHome=yes
+ProtectProc=invisible
+PrivateTmp=yes
+# One run at a time. A busy lock exits 75, which is not a failure: the episode stays in the
+# inbox for the next start, and nothing pages.
+SuccessExitStatus=75
+ExecStart=/usr/bin/flock -n -E 75 {{ claude_code_triage_state_dir }}/run.lock \
+  {{ claude_code_triage_agent_home }}/.local/bin/uv run --no-project --no-python-downloads \
+  --python {{ host_python_version }} /opt/claude-triage/claude_triage_run.py %i

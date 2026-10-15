@@ -224,6 +224,11 @@ FLOOR = [
     f"ansible/roles/setup/claude_code/templates/{PATHS}",
     f"ansible/roles/setup/claude_code/templates/{UNIT}",
     f"ansible/roles/setup/claude_code/templates/{RULE}",
+    # Alert-triggered triage joined the floor on 2026-10-15 (test_claude_triage.py).
+    "ansible/roles/setup/claude_code/tasks/triage.yml",
+    "ansible/roles/setup/claude_code/templates/claude-triage",
+    "ansible/roles/setup/claude_code/templates/50-claude-triage.rules.j2",
+    "ansible/roles/setup/claude_code/files/claude_triage_run.py",
     "scripts/deploy_tools/land",
     "pyproject.toml",
     "uv.lock",

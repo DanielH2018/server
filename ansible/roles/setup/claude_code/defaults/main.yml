@@ -492,6 +492,28 @@ claude_code_lander_approver: DanielH2018
 # in templates/claude-land-approval-paths.j2, not a variable here, so the inventory cannot
 # override it. That template has the floor and the reason for each entry.
 
+# ── Alert-triggered triage ──────────────────────────────────────────────────────────────
+# claude-triage@<episode>.service runs one capped, diagnose-only headless session as the agent
+# user over <state_dir>/inbox/<episode>.json, then writes a record, an HTML report in the
+# agent's artifacts tree, and a Discord page. docs/claude-agent-user.md, "Alert-triggered
+# triage", has the design and the operator's rulings of 2026-10-15.
+#
+# Installed only while claude_code_agent_user_enabled is also true, and only with
+# claude_code_triage_claude_oauth_token in secrets.yml. False on either removes the rule, the
+# units, the code and the config; the state directory and its records stay.
+claude_code_triage_enabled: false
+# Pinned again as block vars in tasks/triage.yml, which wins over any inventory override; the
+# values here are what the validator renders with. Literals, for the reason the lander's are.
+claude_code_triage_agent_user: claude
+claude_code_triage_agent_home: /var/lib/claude
+claude_code_triage_state_dir: /var/lib/claude/triage
+claude_code_triage_model: opus
+# The operator's budget (2026-10-15): $10 to diagnose. The fix phase gets its own cap later.
+claude_code_triage_budget_usd: 10
+claude_code_triage_max_turns: 60
+# The script's wall clock. The unit's TimeoutStartSec sits 10 minutes above it.
+claude_code_triage_run_timeout_s: 1800
+
 # ── The fan-out alert ───────────────────────────────────────────────────────────────────
 # fanout-alert@<unit>:<state>.service pages Discord when a fan-out batch's unit stops on any
 # state but `done` (#4602). The batch's ExecStopPost= starts it

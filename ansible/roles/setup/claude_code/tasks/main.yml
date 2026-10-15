@@ -480,6 +480,13 @@
   tags: [claude_code]
   ansible.builtin.import_tasks: lander.yml
 
+# ── Alert-triggered triage ──────────────────────────────────────────────────────────────
+# In its own file, because that file is on the lander's approval list and pins the run's caps
+# against an inventory override (tasks/triage.yml).
+- name: Install the agent's triage unit, or take it back
+  tags: [claude_code]
+  ansible.builtin.import_tasks: triage.yml
+
 # Render provenance for manifest-prune-check.sh's stale-script arm: without a stamp, an edit to
 # a rendered file can sit undeployed on this host with every repo-side check green. Last in the
 # role so a failed run leaves the previous checksums rather than claiming these. `import_tasks`,
@@ -510,6 +517,12 @@
       - ansible/roles/setup/claude_code/templates/claude-land@.service.j2
       - ansible/roles/setup/claude_code/templates/50-claude-land.rules.j2
       - ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2
+      - ansible/roles/setup/claude_code/templates/claude-triage@.service.j2
+      - ansible/roles/setup/claude_code/templates/50-claude-triage.rules.j2
+      - ansible/roles/setup/claude_code/templates/claude-triage-config.env.j2
+      - ansible/roles/setup/claude_code/templates/claude-triage-prompt.txt.j2
+      # The stamp hashes the repo source, never the rendered file, so no secret reaches it.
+      - ansible/roles/setup/claude_code/templates/claude-triage-session.env.j2
 
 # Sibling of the stamp above, for the ONE copy:-deployed (not template:-rendered) artifact
 # this role carries — manifest-prune-check.sh's second arm (is the deployed code the repo's
@@ -544,3 +557,13 @@
     stamp_deployed_pairs:
       - live: /usr/local/bin/claude-dotfiles-sync.sh
         src: ansible/roles/setup/claude_code/files/claude-dotfiles-sync.sh
+
+- name: Record the deployed triage runner for drift checking
+  tags: [claude_code]
+  when: claude_code_agent_user_enabled and claude_code_triage_enabled
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: claude-code-triage
+    stamp_deployed_pairs:
+      - live: /opt/claude-triage/claude_triage_run.py
+        src: ansible/roles/setup/claude_code/files/claude_triage_run.py

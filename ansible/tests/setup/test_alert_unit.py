@@ -42,6 +42,9 @@ KNOWN_ALERTS = frozenset(
         "claude-land",
         "claude-memory-sync",
         "claude-rc",
+        "claude-triage",
+        # Instanced, and started by the triage runner itself rather than OnFailure=.
+        "claude-triage-report",
         # Instanced, and started by a fan-out batch's ExecStopPost= rather than OnFailure=,
         # so the OnFailure= scan below does not find it.
         "fanout",
@@ -108,9 +111,9 @@ def test_every_onfailure_alert_renders_from_the_shared_template() -> None:
         f"alerts no longer wired through alert_unit.yml: {sorted(missing)}"
     )
     texts = [p.read_text() for p in SETUP_ROLES.glob("*/templates/*.j2")]
-    assert KNOWN_ALERTS - {"fanout"} <= onfailure_alerts(texts), (
-        "the OnFailure= scan found too few"
-    )
+    assert KNOWN_ALERTS - {"fanout", "claude-triage-report"} <= onfailure_alerts(
+        texts
+    ), "the OnFailure= scan found too few"
     unwired = unwired_alerts(texts, set(wired))
     assert not unwired, (
         f"OnFailure= names {sorted(unwired)}-alert.service, but no import of "
@@ -145,6 +148,7 @@ CALLER_CONTEXT = {
     "inventory_hostname": "daniel-box",
     "claude_code_memory_sync_target": "daniel-server",
     "claude_code_agent_user": "claude",
+    "domain": "example.test",
     **load_yaml(SETUP_ROLES / "claude_code" / "defaults" / "main.yml"),
 }
 
@@ -167,8 +171,9 @@ def test_each_message_renders_a_valid_json_payload() -> None:
         payload = expanded_payload(unit, "2026-10-08 11:04 UTC", "fanout-1:failed")
         assert payload is not None, f"{name}: no single-quoted payload in ExecStart"
         opening = "fanout-1:failed: " if resolved.get("alert_unit_instanced") else ""
+        label = resolved.get("alert_unit_time_label", "Failed at")
         assert json.loads(payload) == {
-            "content": f"{opening}{message} Failed at 2026-10-08 11:04 UTC."
+            "content": f"{opening}{message} {label} 2026-10-08 11:04 UTC."
         }, f"{name}: the message does not survive as the JSON payload's content"
         assert (
             f"EnvironmentFile={variables['alert_unit_env_dir']}/alert-webhook.env"

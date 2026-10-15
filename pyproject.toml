@@ -332,6 +332,7 @@ extra-paths = [
   "ansible/roles/setup/renovate_notify/files",
   "ansible/roles/setup/renovate_agent/files",
   "ansible/roles/setup/homelab_builder/files",
+  "ansible/roles/setup/claude_code/files",
   "ansible/roles/k8s/home-assistant/files",
   "scripts/backup/tests",
   "scripts/deploy_tools/tests",
