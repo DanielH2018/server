@@ -32,16 +32,20 @@ READERS = frozenset({"tag_owners", "ansible_owned", "service_owners"})
 
 @dataclass(frozen=True)
 class Link:
-    """One step of a chain: the definition `symbol` in `path` reads the name `reads`.
+    """One step of a chain: the definition `symbol` in `path` calls `reads`.
 
-    `symbol` is a function or class name, found anywhere in the module. A link with no
-    `symbol` reads `path` as text and needs `reads` as a literal in it, for a playbook, a
+    `symbol` is a function or class name, found anywhere in the module. The call is a
+    `reads(...)` or `<anything>.reads(...)` node, not a bare name: a local variable that
+    shares the reader's name would otherwise satisfy the link with the call gone. A link with
+    `call=False` needs only a read of the name, for a field default or a constant. A link with
+    no `symbol` reads `path` as text and needs `reads` as a literal in it, for a playbook, a
     shell template or an argv string.
     """
 
     path: str
     symbol: str | None
     reads: str
+    call: bool = True
 
 
 OWNERS = "scripts/deploy_tools/deploy_lib/owners.py"
@@ -111,7 +115,7 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
     # `cmd_rotate` calls `tools.owners()`, a field of `RotationTools` whose default is `tree_owners`.
     "`secret_rotation.py --deploy`": (
         Link("scripts/secrets_mgmt/secret_rotation.py", "cmd_rotate", "owners"),
-        Link(ROTATION_TOOLS, "RotationTools", "tree_owners"),
+        Link(ROTATION_TOOLS, "RotationTools", "tree_owners", call=False),
         Link(ROTATION_TOOLS, "tree_owners", "tag_owners"),
     ),
     "`probe.py health T`": (
@@ -137,6 +141,7 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
             "ansible/roles/setup/k3s/files/live_drift_check.py",
             "is_server_side_applied",
             "LAST_APPLIED",
+            call=False,
         ),
     ),
     "`gen_role_glance.py`, `service_catalog.py`": (
@@ -173,16 +178,28 @@ def _repo_text(rel: str) -> str | None:
     return path.read_text() if path.is_file() else None
 
 
-def _names_in(tree: ast.Module, symbol: str) -> set[str] | None:
-    """Every name and attribute the definition `symbol` reads, or None when none is defined."""
+def _name(node: ast.AST) -> str | None:
+    if isinstance(node, ast.Name):
+        return node.id
+    return node.attr if isinstance(node, ast.Attribute) else None
+
+
+def _names_in(tree: ast.Module, symbol: str, call: bool) -> set[str] | None:
+    """The names the definition `symbol` reads, or None when none is defined.
+
+    With `call`, only the names it calls: the function of each `ast.Call` in its body.
+    """
     for node in ast.walk(tree):
         if (
             isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
             and node.name == symbol
         ):
-            return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)} | {
-                n.attr for n in ast.walk(node) if isinstance(n, ast.Attribute)
-            }
+            found = (
+                (n.func for n in ast.walk(node) if isinstance(n, ast.Call))
+                if call
+                else ast.walk(node)
+            )
+            return {name for n in found if (name := _name(n))}
     return None
 
 
@@ -196,11 +213,12 @@ def _link_problems(link: Link, source: Source) -> list[str]:
             if link.reads in text
             else [f"{link.path} no longer holds `{link.reads}`"]
         )
-    names = _names_in(ast.parse(text), link.symbol)
+    names = _names_in(ast.parse(text), link.symbol, link.call)
     if names is None:
         return [f"{link.path} defines no `{link.symbol}`"]
     if link.reads not in names:
-        return [f"{link.path}:{link.symbol} no longer reads `{link.reads}`"]
+        verb = "calls" if link.call else "reads"
+        return [f"{link.path}:{link.symbol} no longer {verb} `{link.reads}`"]
     return []
 
 
@@ -264,7 +282,7 @@ def test_an_entry_point_that_stops_reading_ownership_is_flagged():
         .replace("for name in render_record_targets(", "for name in render_targets(")
     )
     assert census_problems(_plan(), source=_source_with(rel, text)) == [
-        f"`smoke_caller`: {rel}:smoke_caller no longer reads `render_record_targets`"
+        f"`smoke_caller`: {rel}:smoke_caller no longer calls `render_record_targets`"
     ]
 
 
@@ -296,4 +314,13 @@ def test_a_chain_that_stops_short_of_a_reader_is_flagged():
     assert census_problems(_plan(), short) == [
         "`deploy.sh --changed`: the chain ends at `read_owners`, which is none of "
         f"{sorted(READERS)}"
+    ]
+
+
+def test_an_owner_map_no_longer_read_from_the_tools_is_flagged():
+    """A local named `owners` must not stand in for the `tools.owners()` call."""
+    rel = "scripts/secrets_mgmt/secret_rotation.py"
+    text = (REPO / rel).read_text().replace("owners = tools.owners()", "owners = {}")
+    assert census_problems(_plan(), source=_source_with(rel, text)) == [
+        f"`secret_rotation.py --deploy`: {rel}:cmd_rotate no longer calls `owners`"
     ]
