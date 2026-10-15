@@ -23,6 +23,14 @@ k8s_autodeploy_reason: "state coupled outside the volume — reverting qbittorre
 # regardless of k8s_autodeploy — it protects a manual deploy too.
 k8s_autodeploy_snapshot_pvcs: [qbittorrent-config]  # noqa var-naming[no-role-prefix]
 
+# The manifest whose Secret holds the all-digit Mullvad account number, which no Flux
+# placeholder can carry as a string. A placeholder render (scripts/renderer, target slice R2)
+# leaves it out, and D3 ships it as a SOPS-encrypted manifest instead. Ansible renders and
+# applies it like any other secret file. `sops-manifest-entries` in
+# scripts/renderer/renderer_lib/sops_entries.py holds the entry to one Secret of
+# `SOPS_MANIFEST_KEYS` keys.
+render_sops_manifests: [mullvad-account-secret.yaml]  # noqa var-naming[no-role-prefix]
+
 # One config volume, two containers: wireguard and qbittorrent both mount it at /config. It
 # looks like a mistake and is not — they write different subtrees, and splitting them would
 # strand wg0.conf away from the mod that regenerates it.

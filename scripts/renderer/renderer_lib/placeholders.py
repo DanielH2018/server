@@ -77,17 +77,10 @@ PLACEHOLDER_DEFERRED: frozenset[str] = frozenset()
 SOPS_MANIFESTS_VAR = "render_sops_manifests"
 
 # The keys with a standalone use that the guard does not check, each with its reason. The
-# guard's map leaves them out, and the round trip's second pass keeps their R1 stub. R2's PR
-# 7b empties the set, and R2's exit criterion requires it empty.
-GUARD_DEFERRED = frozenset(
-    {
-        # qbittorrent's Secret renders `account: "{{ mullvad_account }}"`, and the real value
-        # is all digits, so the guard would refuse every qbittorrent deploy. R2's PR 7b moves
-        # the key into a SOPS-encrypted Secret of its own, which no placeholder reaches. The
-        # operator ruled on 2026-10-13 for this pairing (R2's Open question 13).
-        "mullvad_account",
-    }
-)
+# guard's map leaves them out, and the round trip's second pass keeps their R1 stub. R2's exit
+# criterion requires it empty. R2's PR 7b removed its last member, `mullvad_account`, by
+# moving it into a SOPS-encrypted Secret of its own, which no placeholder reaches.
+GUARD_DEFERRED: frozenset[str] = frozenset()
 
 # The guard's committed map: each deploy tag to the keys standing alone in its render, less
 # GUARD_DEFERRED. `scripts/renderer/standalone_map.py` writes it, and the shared
