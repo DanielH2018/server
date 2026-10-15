@@ -58,7 +58,10 @@ def test_a_reaped_group_leader_whose_member_survives_counts_as_exited() -> None:
 
 
 def test_a_thread_id_is_an_error_not_an_exit() -> None:
-    """EINVAL for a live non-leader thread is a wrong pid, and must not read as exited."""
+    """A live non-leader thread is a wrong pid, and must not read as exited.
+
+    The kernel reports it as EINVAL (Linux 6.8) or ENOENT (the CI runner's kernel).
+    """
     started = threading.Event()
     release = threading.Event()
     tids: list[int] = []
@@ -72,7 +75,7 @@ def test_a_thread_id_is_an_error_not_an_exit() -> None:
     thread.start()
     try:
         started.wait()
-        with pytest.raises(OSError, match=r"\[Errno 22\] Invalid argument"):
+        with pytest.raises(OSError, match=r"\[Errno (22|2)\] "):
             wait_for_exit(tids[0], timeout=0.2)
     finally:
         release.set()
