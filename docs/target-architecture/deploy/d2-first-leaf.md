@@ -1,6 +1,6 @@
 # D2 — One stateless leaf end to end on production
 
-Status: IN PROGRESS
+Status: DONE
 
 D2.1a, the flag's script reader and the narrowing: [#4956](https://github.com/DanielH2018/server/pull/4956).
 
@@ -51,6 +51,29 @@ observability at `53e238567`. The four gauges read `homelab_deploy_hold_active` 
 `homelab_deploy_hold_age_seconds` 0, `homelab_deploy_unpromoted_age_seconds` 0 and
 `homelab_deploy_prod_digest_match` 1, and `ALERTS{service="deploy-pipeline"}` held no
 series.
+
+D2.7, the flip: [#5143](https://github.com/DanielH2018/server/pull/5143). Its merge commit
+`9ad1845a5` promoted, and `flux/bento-pdf` read `success` 5m27s after the merge. Flux
+labels every bento-pdf object, `kustomize-controller` and `k3s` are the Deployment's only
+managers, and the `.local.` route rules read the same string before and after. The
+deployer logged bento-pdf dropped as flux-owned, then applied nothing. `land.sh` printed
+`settled` without waiting on promotion, because an inventory-only edit resolves no tag of
+its own. That gap is [#5146](https://github.com/DanielH2018/server/issues/5146).
+
+D2.8, the drill: [#5148](https://github.com/DanielH2018/server/pull/5148). D2.9, its revert:
+[#5150](https://github.com/DanielH2018/server/pull/5150). Run on production on 2026-10-15,
+the drill showed all six facts of exit criterion 3:
+- `flux/bento-pdf` read `failure` (`health check failed`) on T = D = `ade6651a8`.
+- `DEPLOY_HOLD` read `<T> failed=bento-pdf`.
+- `prod` reset to `last-good`.
+- The old ReplicaSet served throughout, and the page rendered before, during and after.
+- `DeployHoldActive` fired at the 15-minute bound.
+- `ProdMovedOutsidePromote` never had a series.
+
+The operator cleared the hold and dispatched `promote` at 21:38 UTC. `last-good` moved to
+the revert R, `f6c3944e0`, whose `flux/bento-pdf` status reads `success`. A re-run of
+`land.sh` on #5150 waited on promotion and printed `VERDICT: settled`, which is exit
+criterion 2's last clause.
 
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five

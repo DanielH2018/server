@@ -18,6 +18,15 @@ The key's fingerprint is `83B57416B342DDE1CBA0752D435D139ADFD6F016`.
 PR H3.5a, the builder half, staging only: [#5046](https://github.com/DanielH2018/server/pull/5046).
 The operator landed it on 2026-10-15, and the tick applied it at `b7d8f0ef5`. The builder's
 first run ended at 12:39:05 UTC with `reason="ok"` for `a594ad662e68` and nothing unbuilt.
+PR H3.5b, signer and publish: [#5149](https://github.com/DanielH2018/server/pull/5149). It
+landed in an attended window on 2026-10-15, and the tick applied it at `9b063197a`. The
+signer's first run ended at 21:51:16 UTC with `Result=success`.
+`http://10.0.0.215:8791/dists/homelab/InRelease` carries a `Valid-Until` seven days after its
+`Date`, and `gpgv` against `hosts/keys/homelab-archive-keyring.gpg` reports a good
+signature from `83B57416B342DDE1CBA0752D435D139ADFD6F016`. `homelab_repo_published_info`
+names `homelab-updater` at `9b063197a50a`. With the operator's `/etc/homelab-builder/hold` in
+place, the builder's next run wrote `reason="hold"` at 21:53:13, and the signer it triggered
+exited 0 and left `InRelease`'s `Date` at 21:51:16.
 PR H3.5d, the host rules: [#5112](https://github.com/DanielH2018/server/pull/5112). It
 deployed `observability` at `de380735e`. Prometheus loaded the `host-checks` group with 7
 rules, and neither `HostReconcileFailed` nor `HostUpdateStale` has a series, because the
