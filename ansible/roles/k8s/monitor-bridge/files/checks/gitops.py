@@ -42,7 +42,7 @@ from gitops_ledger import (
     manual_plane_entries,
 )
 from gitops_hold import DeployerSnapshot
-from verdicts.service import gitops_alive
+from verdicts.service import gitops_alive, host_packages
 
 
 def _apply_and_clear(pending, narrow) -> str:
@@ -292,4 +292,33 @@ def check_gitops_status(cfg: Config, src: Sources) -> tuple[bool, str]:
         snap.behind,
         contention_since=snap.contention,
         owed=snap.owed,
+    )
+
+
+def check_host_packages(
+    cfg: Config, src: Sources, now: float | None = None
+) -> tuple[bool, str]:
+    """Pages when the host-package builder stops fetching, or master stays unbuilt.
+
+    Reads the builder's two textfile series off daniel-box's node exporter, the `node` job
+    (`docs/host-packages.md`, *The builder's pages*). The row is gated on Prometheus and sits
+    under `EXPORTER_DEPENDENT["node"]`: a dead exporter then pages once through Scrape Targets
+    instead of also as an absent builder series. With Prometheus and the exporter both up, an
+    absent series pages, because it means the builder's metric file never reached the exporter.
+
+    It is a row of its own rather than an arm of `check_gitops_status`: that check reads the
+    deployer's state directory outside the Prometheus gate, and a Prometheus-sourced arm there
+    would page on every Prometheus outage. The query names no origin, because only daniel-box
+    runs the builder, and `bridge.net.origin_sel` would pin daniel-server.
+    """
+    fetch = src.prom_scalar('homelab_builder_fetch_timestamp_seconds{job="node"}')
+    unbuilt = src.prom_vector(
+        'homelab_builder_unbuilt_since_timestamp_seconds{job="node"}'
+    )
+    return host_packages(
+        fetch,
+        unbuilt,
+        now if now is not None else time.time(),
+        cfg.BUILDER_MAX_FETCH_AGE_S,
+        cfg.BUILDER_MAX_LAG_S,
     )

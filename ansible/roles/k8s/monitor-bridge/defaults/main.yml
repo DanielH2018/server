@@ -9,6 +9,15 @@ monitor_bridge_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37
 # ansible/tests/services/test_deploy_pipeline_scrape.py holds that literal to this value.
 monitor_bridge_deploy_pipeline_port: 9180
 
+# The host-package builder's two page bounds (h3-pi-pilot.md, *Builder arms*), rendered into the
+# env-secret as BUILDER_MAX_LAG_S and BUILDER_MAX_FETCH_AGE_S for the `host_packages` row.
+# Lag: how long master may sit unbuilt (a trust, keyring or tools refusal, a rewritten master,
+# a hold, an open rollout gate, a master that stays red) before the tile pages: 2 hours, against
+# a ~103 s master CI run. Fetch age: how old the builder's last successful `git fetch` may be,
+# 30 minutes, which is 15 of its 2-minute runs and covers a dead timer or a missing token.
+monitor_bridge_builder_max_lag_s: 7200
+monitor_bridge_builder_max_fetch_age_s: 1800
+
 # The Python files that make up the running bridge. This is the SHIP LIST: a module missing
 # here never reaches the ConfigMap, and the pod dies at import with ModuleNotFoundError the
 # next time it rolls — while the test suite stays green, because pytest imports from files/

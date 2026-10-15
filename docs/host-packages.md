@@ -182,7 +182,8 @@ sudo rm /etc/homelab-builder/hold
 ```
 
 The next builder run builds the newest green commit and stages again any set the hold kept.
-The signer then publishes it. H3.5c's lag arm pages once a hold has stood for 2 hours.
+The signer then publishes it. The "Host Packages — Status" tile pages once a hold has left a
+commit waiting to be built for 2 hours.
 
 To stop the pipeline for longer than an incident, disarm it instead. Set
 `homelab_builder_enabled: false` in `ansible/roles/setup/homelab_builder/defaults/main.yml` and
@@ -336,9 +337,18 @@ such as a full disk while writing the metric, keeps them, because the live index
 
 ## The builder's pages
 
-The builder pages once per new failure through `homelab-builder-alert.service`. H3.5c's arms
-page on a condition that persists. The `reason` label of
-`homelab_builder_unbuilt_since_timestamp_seconds` names the case. Every procedure below that
+The builder pages once per new failure through `homelab-builder-alert.service`. The Uptime
+Kuma tile "Host Packages — Status" (monitor-bridge's `host_packages` row, in "Automation &
+Drift") pages on a condition that persists, in two cases:
+
+- the builder's last good fetch of master is older than 30 minutes, or its series is absent.
+  That covers a dead `homelab-builder.timer`, a missing token and a fetch that keeps failing;
+- a commit of master has waited more than 2 hours to be built. The builder runs and exits 0 in each of these cases,
+  so only the tile reports them.
+
+The tile's message names the `reason` and `sha` labels of
+`homelab_builder_unbuilt_since_timestamp_seconds`, which name the case. The tile stays silent
+while daniel-box's node exporter is down, because Scrape Targets pages that instead. Every procedure below that
 edits the builder's state stops its timer first, so no run overwrites the edit:
 
 ```bash
