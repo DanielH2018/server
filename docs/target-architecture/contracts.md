@@ -636,7 +636,11 @@ request leaves this list and the round's *Review log* entry names it.
       the reset against nothing of D2's. A reset that moves `prod` to `last-good` while
       another run verifies releases `decide`'s wait. That run's `settle` then still writes
       its own hold over the operator's, or moves `last-good` to a T that `prod` no longer
-      names.
+      names. So the reset holds both checks true (#5079). It refuses while `prod` differs
+      from `last-good`, unless `DEPLOY_HOLD`'s first word is a SHA X whose `sha-<X>` digest
+      equals `prod`'s, which means `prod`'s run has settled. It moves `prod` only while
+      `prod` still names the digest it read, as `tag` does. D2's `settle` is unchanged. D5
+      *A reset input* has the argument and the one residual race under the revert rule.
     - The hold posts to Discord, with a command block per changed snapshot role. A revision
       that changes a suspended tag holds with `suspended-changed`.
     - No promotion moves `prod` inside the derived reboot window. A run inside it ends
