@@ -111,3 +111,32 @@ def test_an_unaudited_file_creating_call_through_a_module_the_base_loads_keeps_t
     path = repr(str(tmp_path / "escaped"))
     reason = _reason_for_head_call(tree, imports, call.format(path=path))
     assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "imports, call",
+    [
+        (
+            "import _multiprocessing",
+            "_multiprocessing.SemLock(1, 1, 1, '/order-only-5063', True)",
+        ),
+        (
+            "import _multiprocessing",
+            "try:\n    _multiprocessing.sem_unlink('/order-only-5063')\nexcept OSError:\n    pass",
+        ),
+        (
+            "import _posixshmem",
+            "try:\n    _posixshmem.shm_unlink('/order-only-5063')\nexcept OSError:\n    pass",
+        ),
+    ],
+    ids=["sem-lock", "sem-unlink", "shm-unlink"],
+)
+def test_every_replaced_unaudited_call_keeps_the_line(tree, imports, call):  # noqa: F811
+    """The runner's other replaced calls keep the line too, not only the two the rows above use.
+
+    Each call leaves nothing under the temp tree, and the `except` swallows the error a
+    missing name raises, so only the replacement ending the run keeps the line. A misspelt
+    name in the runner's table would bind a new attribute and leave the real call live.
+    """
+    reason = _reason_for_head_call(tree, imports, call)
+    assert reason and "every deploy runs" in reason
