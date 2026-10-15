@@ -67,24 +67,12 @@ from renderer.renderer_lib.task_inputs import PINNED_LIVE_FACTS
 SENTINEL_PREFIX = "HOMELAB_SECRET__"
 SENTINEL_SUFFIX = "__END"
 
-# The tags placeholder mode skips, each with its reason. Stub mode renders every tag, and the
-# summary line of a placeholder render names each tag it skipped. R2's exit criterion requires
-# the set empty. R2's PR 5 removed its last member, home-assistant, whose `from_json` parse
-# raised on a sentinel.
-PLACEHOLDER_DEFERRED: frozenset[str] = frozenset()
-
 # The role defaults variable listing the manifests a placeholder render leaves out.
 SOPS_MANIFESTS_VAR = "render_sops_manifests"
 
-# The keys with a standalone use that the guard does not check, each with its reason. The
-# guard's map leaves them out, and the round trip's second pass keeps their R1 stub. R2's exit
-# criterion requires it empty. R2's PR 7b removed its last member, `mullvad_account`, by
-# moving it into a SOPS-encrypted Secret of its own, which no placeholder reaches.
-GUARD_DEFERRED: frozenset[str] = frozenset()
-
-# The guard's committed map: each deploy tag to the keys standing alone in its render, less
-# GUARD_DEFERRED. `scripts/renderer/standalone_map.py` writes it, and the shared
-# `k8s/manifests` role reads it before every render.
+# The guard's committed map: each deploy tag to the keys standing alone in its render, every
+# one of them. `scripts/renderer/standalone_map.py` writes it, and the shared `k8s/manifests`
+# role reads it before every render.
 GUARD_MAP = K8S_ROLES / "manifests" / "files" / "standalone_secret_keys.json"
 
 
@@ -305,7 +293,6 @@ class PlaceholderRender:
             A directory substitutes exactly when its set is not empty.
         standalone: Each directory name mapped to its standalone key set, the subset of its
             key set whose placeholder is the whole value of a scalar.
-        skipped: The requested tags in `PLACEHOLDER_DEFERRED`, which were not rendered.
         sops_manifests: Each rendered tag with `render_sops_manifests` entries, mapped to
             each entry's sentinel render, which no directory holds; None where the role
             rendered no such file.
@@ -314,7 +301,6 @@ class PlaceholderRender:
     tags: list[RenderedTag]
     key_sets: dict[str, frozenset[str]]
     standalone: dict[str, frozenset[str]]
-    skipped: list[str]
     sops_manifests: dict[str, dict[str, str | None]] = field(default_factory=dict)
 
     def substituting(self) -> list[str]:
@@ -325,7 +311,6 @@ class PlaceholderRender:
 def apply_placeholders(
     rendered: list[RenderedTag],
     keys: Iterable[str],
-    skipped: Iterable[str] = (),
     sops: dict[str, dict[str, str | None]] | None = None,
 ) -> PlaceholderRender:
     """Run passes 2 and 3 over sentinel renders, directory by directory, and find standalone uses.
@@ -350,35 +335,31 @@ def apply_placeholders(
                 standalone[name] = frozenset()
         deferred = finished.get(tag.tag + DEFERRED_SUFFIX, {})
         tags.append(RenderedTag(tag.tag, finished[tag.tag], deferred))
-    return PlaceholderRender(tags, key_sets, standalone, sorted(skipped), sops or {})
+    return PlaceholderRender(tags, key_sets, standalone, sops or {})
 
 
 def render_placeholders(
     tags: list[str],
     keys: list[str],
     host: str = K8S_HOST,
-    deferred: frozenset[str] = PLACEHOLDER_DEFERRED,
     entries: Callable[[str], list[str]] = sops_manifests,
 ) -> PlaceholderRender:
-    """Render `tags` in placeholder mode, skipping those in `deferred`.
+    """Render every one of `tags` in placeholder mode.
 
     Each tag's `render_sops_manifests` files, as `entries` reads them, are dropped before
-    pass 2. A test passes its own `deferred` and `entries`.
+    pass 2. A test passes its own `entries`.
 
     Raises:
         RenderError: A template fails to render.
         ValueError: A pinned fact shares a name with a secret key.
     """
     overrides = placeholder_vars(keys)
-    skipped = [tag for tag in tags if tag in deferred]
     rendered, sops = [], {}
     for tag in tags:
-        if tag in deferred:
-            continue
         kept, dropped = exclude_sops_manifests(
             render_tag(tag, overrides, host), entries(tag)
         )
         rendered.append(kept)
         if dropped:
             sops[tag] = dropped
-    return apply_placeholders(rendered, keys, skipped, sops)
+    return apply_placeholders(rendered, keys, sops)

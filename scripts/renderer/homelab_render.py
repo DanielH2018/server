@@ -9,8 +9,7 @@ cluster.
 Without `--secret-stubs`, `cluster` renders in placeholder mode (target slice R2): every secret
 reference renders as `${<key>}`, and a directory whose render holds one escapes every other `$`
 Flux would read as syntax. `renderer_lib/placeholders.py` holds the passes and the per-directory
-key sets, and placeholder mode skips the tags in its `PLACEHOLDER_DEFERRED`. Placeholder mode
-leaves out each role's `render_sops_manifests` files, and the `sops-manifest-entries` check of
+key sets, and placeholder mode renders every requested tag. Placeholder mode leaves out each role's `render_sops_manifests` files, and the `sops-manifest-entries` check of
 `renderer_lib/sops_entries.py` holds those lists before anything is written. Before it writes
 anything, a placeholder render also runs the five secret rules of
 `renderer_lib/secret_checks.py`.
@@ -113,7 +112,6 @@ def cluster(
     secret_stubs: Path | None,
     render: Callable[[list[str], list[str]], PlaceholderRender] = render_placeholders,
     flux_owned: Callable[[], set[str]] = flux_owned_tags,
-    known: frozenset[secret_checks.Violation] = secret_checks.KNOWN_VIOLATIONS,
     kinds: frozenset[str] = SHARED_KINDS,
 ) -> int:
     """Render `roles`, or every renderable tag, into `out`; return the exit code.
@@ -124,12 +122,11 @@ def cluster(
         secret_stubs: The stub file of a stub-mode render, or None for placeholder mode.
         render: The placeholder render; a test replaces it with one over fixture sets.
         flux_owned: Returns the tags marked `owner: flux`; a test passes fixture tags.
-        known: The ratchet the secret checks hold the render to; a test passes another.
         kinds: The shared kinds, whose names no deploy tag may take; a test passes others.
     """
     if select_mode(secret_stubs) is Mode.STUB and secret_stubs is not None:
         return _stub_cluster(out, roles, secret_stubs, kinds)
-    return _placeholder_cluster(out, roles, render, flux_owned, known, kinds)
+    return _placeholder_cluster(out, roles, render, flux_owned, kinds)
 
 
 def _stub_cluster(
@@ -165,7 +162,6 @@ def _placeholder_cluster(
     roles: list[str] | None,
     render: Callable[[list[str], list[str]], PlaceholderRender],
     flux_owned: Callable[[], set[str]],
-    known: frozenset[secret_checks.Violation],
     kinds: frozenset[str],
 ) -> int:
     try:
@@ -173,14 +169,10 @@ def _placeholder_cluster(
         owned = flux_owned()
         keys = secret_keys()
         result = render(tags, keys)
-        if not result.tags:
-            raise RenderRefused(
-                f"every requested tag is in PLACEHOLDER_DEFERRED: {result.skipped}"
-            )
         problems = sops_manifest_entries(result, keys)
         if problems:
             raise RenderError("\n".join(problems))
-        report = secret_checks.check(result, keys, known)
+        report = secret_checks.check(result, keys)
         if not report.ok():
             print("\n".join(report.lines()), file=sys.stderr)
             print(
@@ -200,19 +192,13 @@ def _placeholder_cluster(
     except (RenderError, ValueError) as exc:
         print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
         return RENDER_FAILED
-    skipped = (
-        f"; skipped, in PLACEHOLDER_DEFERRED: {', '.join(result.skipped)}"
-        if result.skipped
-        else ""
-    )
     publishing = (
         f", {FLUX_DIR}/ and {DIGESTS} for {', '.join(published)}" if bundle else ""
     )
     print(
         f"homelab-render: placeholder mode, {len(result.tags)} tags, "
         f"{len(result.substituting())} of {len(result.key_sets)} directories substitute, "
-        f"{len(written)} files under {out}{publishing}, the five secret rules pass with "
-        f"{len(report.violations)} known violations{skipped}"
+        f"{len(written)} files under {out}{publishing}, the five secret rules pass"
     )
     return RENDER_OK
 

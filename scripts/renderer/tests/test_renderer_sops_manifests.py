@@ -19,10 +19,10 @@ from renderer.renderer_lib.placeholders import (
     sops_manifests,
 )
 from renderer.renderer_lib.secret_checks import (
-    KNOWN_VIOLATIONS,
     SOPS_MANIFEST_KEYS,
     check,
     rule5,
+    sops_entry_templates,
     sops_manifest_entries,
     sops_manifest_namers,
 )
@@ -48,7 +48,7 @@ def _secret(*keys: str) -> str:
 
 
 def _check(entries: dict[str, str | None]) -> list[str]:
-    render = PlaceholderRender([], {}, {}, [], {"fixture": entries})
+    render = PlaceholderRender([], {}, {}, {"fixture": entries})
     return sops_manifest_entries(render, [GA, "domain", "fixture_token"])
 
 
@@ -146,49 +146,53 @@ MULLVAD = "mullvad_account"
 
 def _unlisted(template: str, key: str) -> str:
     return (
-        f"sops-manifest-entries: {template} names {key}, is in no role's "
-        "render_sops_manifests, and has no live KNOWN_VIOLATIONS entry for it"
+        f"sops-manifest-entries: {template} names {key} and is in no role's "
+        "render_sops_manifests"
     )
 
 
 def test_the_real_tree_names_each_key_only_in_an_entry_is_clean():
-    # R2's PR 7 moved authelia's OIDC key, the last key a template outside the lists named,
-    # so the clause holds with no ratchet at all: the namers are exactly the four entries.
+    # The clause is an equality: the namers are exactly the four entries' templates.
     result = rule5(homelab_render.secret_keys())
-    entry_templates = [
+    entry_templates = sorted(
         f"ansible/roles/k8s/{role}/templates/{entry}.j2"
         for role, (entry, _key) in ENTRIES.items()
-    ]
+    )
     namers = sorted(template for _tag, template, _key in result.sops_namers)
-    assert namers == sorted(entry_templates)
-    assert sops_manifest_namers(result, KNOWN_VIOLATIONS) == []
+    assert namers == entry_templates
+    assert sorted(sops_entry_templates()) == entry_templates
+    assert sops_manifest_namers(result) == []
 
 
 def _rule5_over(tmp_path, source: str):
     template = tmp_path / "t.yaml.j2"
     template.write_text(source)
-    return rule5([MULLVAD], [template], frozenset(), root=tmp_path)
+    return rule5([MULLVAD, "fixture_token"], [template], frozenset(), root=tmp_path)
+
+
+def test_a_listed_template_naming_a_sops_manifest_key_is_clean(tmp_path):
+    result = _rule5_over(tmp_path, "a: {{ mullvad_account }}\n")
+    assert sops_manifest_namers(result, ["t.yaml.j2"]) == []
 
 
 def test_an_unlisted_template_naming_a_sops_manifest_key_is_flagged(tmp_path):
     result = _rule5_over(tmp_path, "a: {{ mullvad_account }}\n")
     assert result.violations == []
-    assert sops_manifest_namers(result, KNOWN_VIOLATIONS) == [
-        _unlisted("t.yaml.j2", MULLVAD)
+    assert sops_manifest_namers(result, []) == [_unlisted("t.yaml.j2", MULLVAD)]
+
+
+def test_an_entry_whose_template_names_no_sops_manifest_key_is_flagged(tmp_path):
+    result = _rule5_over(tmp_path, "a: {{ fixture_token }}\n")
+    assert sops_manifest_namers(result, ["t.yaml.j2"]) == [
+        "sops-manifest-entries: t.yaml.j2 is a render_sops_manifests entry and names no "
+        "key in SOPS_MANIFEST_KEYS"
     ]
-
-
-def test_an_unlisted_template_with_a_live_ratchet_entry_is_clean(tmp_path):
-    result = _rule5_over(tmp_path, "a: {{ mullvad_account | indent(2) }}\n")
-    (violation,) = result.violations
-    assert (violation.file, violation.key) == ("t.yaml.j2", MULLVAD)
-    assert sops_manifest_namers(result, {violation}) == []
 
 
 def test_the_secret_check_runs_the_third_clause_whatever_the_render_is_flagged(
     tmp_path,
 ):
     result = _rule5_over(tmp_path, "a: {{ mullvad_account }}\n")
-    render = PlaceholderRender([], {}, {}, [], {})
-    report = check(render, homelab_render.secret_keys(), rule5_result=result)
+    render = PlaceholderRender([], {}, {}, {})
+    report = check(render, homelab_render.secret_keys(), rule5_result=result, listed=[])
     assert _unlisted("t.yaml.j2", MULLVAD) in report.missing

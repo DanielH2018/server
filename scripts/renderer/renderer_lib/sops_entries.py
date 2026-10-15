@@ -7,10 +7,11 @@ must render exactly one document, of kind `Secret`, and the secret keys that doc
 must be some of `SOPS_MANIFEST_KEYS` and nothing else. The keys are read from the entry's
 sentinel render, so a key reached through an alias counts.
 
-The third clause, `unlisted_namers`, holds every template outside the lists that names a
-`SOPS_MANIFEST_KEYS` key to a live `KNOWN_VIOLATIONS` entry for that key. It reads template
-sources, so it scans the whole tree on every run, like rule 5. `secret_checks.check` runs it,
-because rule 5's result and the ratchet are both there.
+The third clause, `namer_problems`, is an equality: the entries' templates are exactly the
+templates that name a `SOPS_MANIFEST_KEYS` key. A template outside the lists that names one
+fails, and so does an entry whose template names none. It reads template sources, so it scans
+the whole tree on every run, like rule 5. `secret_checks.check` runs it, because rule 5's
+result is there.
 
 `docs/homelab-render.md` is the operator's page, and
 `docs/target-architecture/render/r2-secret-placeholders.md` the plan.
@@ -91,22 +92,26 @@ def sops_manifest_entries(
     return problems
 
 
-def unlisted_namers(
-    namers: Iterable[tuple[str, str]],
-    listed: Iterable[str],
-    live: Iterable[tuple[str, str]],
+def namer_problems(
+    namers: Iterable[tuple[str, str]], listed: Iterable[str]
 ) -> list[str]:
-    """The third clause's problems, one line each; empty when clean.
+    """The third clause's problems, one line each; empty when the two sets are equal.
 
     Args:
         namers: `(template, key)` for each `SOPS_MANIFEST_KEYS` key a template names.
         listed: The templates of every role's `render_sops_manifests` entries.
-        live: `(template, key)` for each `KNOWN_VIOLATIONS` entry this run found.
     """
-    listed, live = set(listed), set(live)
-    return [
-        f"{SOPS_MANIFEST_ENTRIES}: {template} names {key}, is in no role's "
-        "render_sops_manifests, and has no live KNOWN_VIOLATIONS entry for it"
-        for template, key in sorted(set(namers))
-        if template not in listed and (template, key) not in live
+    namers, listed = set(namers), set(listed)
+    naming = {template for template, _key in namers}
+    problems = [
+        f"{SOPS_MANIFEST_ENTRIES}: {template} names {key} and is in no role's "
+        "render_sops_manifests"
+        for template, key in sorted(namers)
+        if template not in listed
     ]
+    problems += [
+        f"{SOPS_MANIFEST_ENTRIES}: {template} is a render_sops_manifests entry and names "
+        "no key in SOPS_MANIFEST_KEYS"
+        for template in sorted(listed - naming)
+    ]
+    return problems
