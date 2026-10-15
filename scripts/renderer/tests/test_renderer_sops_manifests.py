@@ -194,5 +194,5 @@ def test_the_secret_check_runs_the_third_clause_whatever_the_render_is_flagged(
 ):
     result = _rule5_over(tmp_path, "a: {{ mullvad_account }}\n")
     render = PlaceholderRender([], {}, {}, {})
-    report = check(render, homelab_render.secret_keys(), rule5_result=result)
+    report = check(render, homelab_render.secret_keys(), rule5_result=result, listed=[])
     assert _unlisted("t.yaml.j2", MULLVAD) in report.missing

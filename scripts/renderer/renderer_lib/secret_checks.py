@@ -475,6 +475,7 @@ def check(
     render: PlaceholderRender,
     known_keys: Iterable[str],
     rule5_result: Rule5 | None = None,
+    listed: Iterable[str] | None = None,
 ) -> Report:
     """Run the five rules on `render`.
 
@@ -482,10 +483,13 @@ def check(
         render: A placeholder render, after all three passes.
         known_keys: The key names of `ansible/vars/secrets.yml`.
         rule5_result: Rule 5's result, when the caller has it already.
+        listed: The `render_sops_manifests` templates the third clause holds the namers in
+            `rule5_result` to; by default the real tree's. A caller that passes a rule 5
+            result over other templates passes their list too.
     """
     keys = list(known_keys)
     result = rule5(keys) if rule5_result is None else rule5_result
     violations = output_violations(render, keys) + result.violations
     missing = output_members(render, keys) + rule5_members(result, keys)
-    missing += sops_manifest_namers(result)
+    missing += sops_manifest_namers(result, listed)
     return Report(violations, missing)

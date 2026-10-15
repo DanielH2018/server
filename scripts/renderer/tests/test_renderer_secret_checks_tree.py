@@ -3,7 +3,9 @@
 A fleet render in placeholder mode must pass the rules with no violation at all, and each
 rule must find its named members, so a rule that stops matching cannot pass. A `--role`
 render asserts only the members of the tags it rendered. The fixture pairs for each rule are in
-`test_renderer_secret_checks.py`.
+`test_renderer_secret_checks.py`. The pair that shows any violation alone fails the check runs
+here, over the real tree's rule 5 result and keys, because only those meet every member and
+so leave a clean report possible.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_secret_checks_tree.py
 """
@@ -46,6 +48,30 @@ def test_the_fleet_passes_with_no_violation_is_clean(render, keys, rule5_result)
     report = check(render, keys, rule5_result=rule5_result)
     assert report.lines() == []
     assert report.violations == []
+
+
+KEY = "speedtest_app_key"
+
+
+def _one_document(kind: str):
+    doc = f"apiVersion: v1\nkind: {kind}\nmetadata:\n  name: c\ndata:\n  v: {sentinel(KEY)}\n"
+    return lambda _tags, keys: apply_placeholders(
+        [RenderedTag("bento-pdf", {"f.yaml": doc})], keys
+    )
+
+
+def test_a_render_with_no_violation_passes_the_check_is_clean(keys, rule5_result):
+    render = _one_document("Secret")([], keys)
+    report = check(render, keys, rule5_result=rule5_result)
+    assert (report.lines(), report.ok()) == ([], True)
+
+
+def test_one_violation_alone_fails_the_check_is_flagged(keys, rule5_result):
+    render = _one_document("ConfigMap")([], keys)
+    report = check(render, keys, rule5_result=rule5_result)
+    violation = Violation(CONFINED_TO_SECRET, "bento-pdf", "f.yaml", "ConfigMap/c", KEY)
+    assert report.lines() == [f"secret check: violation: {violation.line()}"]
+    assert not report.ok()
 
 
 def test_rule5_finds_its_floor_named_members_and_allowlisted_site_is_clean(
@@ -98,17 +124,12 @@ def test_a_role_render_without_the_named_members_is_clean(tmp_path, capsys):
 
 
 def test_a_render_with_a_violation_exits_1_and_writes_nothing(tmp_path, capsys):
-    # With no ratchet, one placeholder outside a Secret fails the whole render.
-    key = "speedtest_app_key"
-    doc = f"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: c\ndata:\n  v: {sentinel(key)}\n"
-
-    def render(_tags, keys):
-        return apply_placeholders([RenderedTag("bento-pdf", {"f.yaml": doc})], keys)
-
+    # The check's verdict reaches `cluster`: a failing report exits 1 before any write.
     out = tmp_path / "out"
-    assert homelab_render.cluster(out, ["bento-pdf"], None, render) == 1
+    code = homelab_render.cluster(out, ["bento-pdf"], None, _one_document("ConfigMap"))
+    assert code == 1
     err = capsys.readouterr().err
-    violation = Violation(CONFINED_TO_SECRET, "bento-pdf", "f.yaml", "ConfigMap/c", key)
+    violation = Violation(CONFINED_TO_SECRET, "bento-pdf", "f.yaml", "ConfigMap/c", KEY)
     assert f"secret check: violation: {violation.line()}" in err
     assert "the secret checks failed. Nothing was written." in err
     assert not (out / "cluster").exists()

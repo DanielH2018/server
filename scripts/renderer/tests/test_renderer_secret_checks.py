@@ -35,8 +35,6 @@ from renderer.renderer_lib.secret_checks import (
     NamedUse,
     Rule5,
     VarsLookupSite,
-    Violation,
-    check,
     output_members,
     output_violations,
     rule5,
@@ -443,29 +441,3 @@ def test_a_non_secret_vars_lookup_entry_whose_site_has_gone_is_flagged(tmp_path)
     sites = frozenset({_site(set())})
     (problem,) = rule5_members(result, FIXTURE_KEYS, sites, (), 0, ())
     assert "stale NON_SECRET_VARS_LOOKUPS entry" in problem
-
-
-# -- no exemption ---------------------------------------------------------------------------
-
-VIOLATION = Violation(CONFINED_TO_SECRET, "t", "f.yaml", "ConfigMap/c", KEY)
-
-
-def _check_over(text: str):
-    # A stand-in rule 5 result, so the check is read over rules 1 to 4 alone.
-    rule5_result = Rule5(naming=["t.yaml.j2"] * RULE5_FLOOR)
-    return check(_render(text), FIXTURE_KEYS, rule5_result)
-
-
-def _violation_lines(report) -> list[str]:
-    return [line for line in report.lines() if "violation:" in line]
-
-
-def test_a_render_with_no_violation_passes_the_check_is_clean():
-    report = _check_over(SECRET_DOC.format(sentinel(KEY)))
-    assert (report.violations, _violation_lines(report)) == ([], [])
-
-
-def test_any_violation_fails_the_check_is_flagged():
-    report = _check_over(CONFIGMAP_DOC.format(sentinel(KEY)))
-    assert report.violations == [VIOLATION]
-    assert _violation_lines(report) == [f"secret check: violation: {VIOLATION.line()}"]
