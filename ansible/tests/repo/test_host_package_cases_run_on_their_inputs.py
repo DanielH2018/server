@@ -411,3 +411,35 @@ def test_a_pr_touching_only_a_case_input_runs_the_cases(
     clone: Path, tmp_path: Path, path: str
 ) -> None:
     _assert_cases_run(clone, tmp_path, path)
+
+
+CASES_INVOCATION = '--work "$RUNNER_TEMP/cases"'
+
+
+def test_a_pr_editing_only_the_cases_step_runs_the_cases(
+    clone: Path, tmp_path: Path
+) -> None:
+    """The job's own steps invoke the cases, so an edit to one is an input of the cases too.
+
+    The edit changes the cases step's command line, which no render reads. The README control
+    in `test_a_dockerfile_only_pr_runs_the_cases_on_both_legs` covers the edit that must not
+    trigger them.
+    """
+    workflow = ".github/workflows/ci.yml"
+    git(clone, "checkout", "-q", "--detach", "master")
+    git(clone, "checkout", "-q", "-B", "pr-cases-step")
+    target = clone / workflow
+    text = target.read_text()
+    assert text.count(CASES_INVOCATION) == 1, f"{workflow} lost {CASES_INVOCATION!r}"
+    target.write_text(
+        text.replace(CASES_INVOCATION, '--work "$RUNNER_TEMP/cases-edited"')
+    )
+    git(clone, "commit", "-q", "-am", "edit the cases step")
+    git(clone, "checkout", "-q", "--detach", "master")
+    git(clone, "merge", "-q", "--no-ff", "--no-edit", "pr-cases-step")
+    for number, leg in enumerate(_legs()):
+        verdicts, context = _simulate(clone, tmp_path / f"leg-{number}", leg)
+        assert verdicts[CASES_STEP], (
+            f"a PR editing only the cases step skips it on leg {leg} "
+            f"(render outputs {context['steps']['render']['outputs']})"
+        )

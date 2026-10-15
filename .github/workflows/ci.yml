@@ -856,7 +856,9 @@ jobs:
       # fixture specs, and the cases' own code. CASE_INPUTS is the one list of them, and
       # ansible/tests/repo/test_host_package_case_inputs_census.py holds it to every
       # `validate` module the cases script imports. The renderer is a render input, so it
-      # reaches the cases through `changed`.
+      # reaches the cases through `changed`. The job's own steps invoke the cases, so an
+      # edit to this job counts too. `job-changed` compares it as parsed YAML, so a
+      # comment-only edit, or an edit to another job, does not.
       - name: Render every host package at the head and at the merge base
         id: render
         env:
@@ -893,11 +895,15 @@ jobs:
           fi
           # CASE_INPUTS is left unquoted so each line is its own pathspec.
           # shellcheck disable=SC2086
-          if git diff --quiet "$base" HEAD -- $CASE_INPUTS; then
-            echo "cases=false" >> "$GITHUB_OUTPUT"
-          else
+          if ! git diff --quiet "$base" HEAD -- $CASE_INPUTS; then
             echo "::notice::This PR changes an input of the container cases, so they run."
             echo "cases=true" >> "$GITHUB_OUTPUT"
+          elif [ "$(uv run python scripts/validate/host_packages.py job-changed "$base" \
+              --workflow .github/workflows/ci.yml --job host_packages)" = true ]; then
+            echo "::notice::This PR changes the host_packages job's steps, so the cases run."
+            echo "cases=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cases=false" >> "$GITHUB_OUTPUT"
           fi
 
       # The version is H3's *Package rules* shape, `0.<first-parent count>+g<12 hex>`, taken

@@ -20,15 +20,23 @@ pinned nfpm, and `lint` checks what it rendered and what it built:
 a render shows in the diff. A tree with no `hosts/` directory predates H3.1 and renders no
 package.
 
+`job-changed` says whether one job of a workflow parses differently at a commit than in the
+working tree. The job's own steps invoke the container cases, so a PR that edits them runs the
+cases (#5004). The comparison is of the parsed YAML, so an edit to a comment alone does not
+count.
+
 Usage:
     uv run python scripts/validate/host_packages.py render --tree . --out /tmp/head
     uv run python scripts/validate/host_packages.py diff /tmp/base /tmp/head --summary FILE
     uv run python scripts/validate/host_packages.py lint /tmp/head /tmp/debs
+    uv run python scripts/validate/host_packages.py job-changed BASE_SHA \
+        --workflow .github/workflows/ci.yml --job host_packages
 
 Exit codes: 0 the render, diff or lint succeeded and the lint found nothing; 1 the lint found a
 problem (each `[FAIL]` line on stderr names it), or nothing to lint, or a render failed; 64 a
 usage error. `diff` exits 0 whether or not the renders differ, and prints `changed=true` or
-`changed=false` on stdout for `$GITHUB_OUTPUT`.
+`changed=false` on stdout for `$GITHUB_OUTPUT`. `job-changed` exits 0 either way and prints
+`true` or `false` on stdout.
 """
 
 import sys as _sys
@@ -44,6 +52,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 from lib.cli_help import ArgumentParser
+from lib.git import git
 
 _UNIT = r"homelab-[a-z0-9-]+\.(?:service|timer|socket|path)"
 _HOST = r"[a-z0-9][a-z0-9-]*"
@@ -205,6 +214,30 @@ def diff(base: Path, head: Path) -> list[str]:
     return lines
 
 
+def job_differs(before: str | None, after: str, job: str) -> bool:
+    """Whether `job` differs between two texts of one workflow, compared as parsed YAML.
+
+    Args:
+        before: the workflow at the base, or None when the base has no such file.
+        after: the workflow at the head.
+        job: the job id under `jobs:`.
+    """
+
+    def parsed(text: str | None) -> object:
+        if text is None:
+            return None
+        return (yaml_fast.safe_load(text) or {}).get("jobs", {}).get(job)
+
+    return parsed(before) != parsed(after)
+
+
+def job_changed(base: str, workflow: Path, job: str) -> bool:
+    """Whether `job` in `workflow` differs between commit `base` and the working tree."""
+    shown = git("show", f"{base}:{workflow.as_posix()}", check=False)
+    before = shown.stdout if shown.returncode == 0 else None
+    return job_differs(before, workflow.read_text(), job)
+
+
 def lint(paths: list[Path]) -> list[str]:
     """Every problem in each `nfpm.yaml` and `.deb` under `paths`, as `[FAIL]` lines."""
     problems, checked = [], 0
@@ -242,6 +275,12 @@ def main(argv: list[str] | None = None) -> int:
         "lint", help="lint every nfpm.yaml and .deb under PATH"
     )
     lint_cmd.add_argument("paths", nargs="+", type=Path, metavar="PATH")
+    job_cmd = commands.add_parser(
+        "job-changed", help="whether a workflow job differs from its form at BASE"
+    )
+    job_cmd.add_argument("base", metavar="BASE")
+    job_cmd.add_argument("--workflow", type=Path, required=True)
+    job_cmd.add_argument("--job", required=True)
     args = parser.parse_args(argv)
 
     if args.command == "render":
@@ -257,6 +296,10 @@ def main(argv: list[str] | None = None) -> int:
             with args.summary.open("a") as summary:
                 summary.write(report + "\n")
         print(f"changed={'true' if lines else 'false'}")
+        return 0
+    if args.command == "job-changed":
+        changed = job_changed(args.base, args.workflow, args.job)
+        print("true" if changed else "false")
         return 0
     problems = lint(args.paths)
     for problem in problems:

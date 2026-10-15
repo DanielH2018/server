@@ -152,3 +152,36 @@ def test_an_enable_link_is_diffed_by_its_target_even_when_it_dangles(tmp_path):
         f"- `hosts/p/{wants}/b.timer`: content changed",
         f"- `hosts/p/{wants}/c.timer`: added",
     ]
+
+
+_WORKFLOW = """\
+jobs:
+  host_packages:
+    steps:
+      - name: cases  # step 5
+        run: host_package_cases.py --work /tmp/cases
+  hooks:
+    steps:
+      - run: prek run
+"""
+
+
+def test_an_edit_to_the_job_steps_is_a_job_change():
+    edited = _WORKFLOW.replace("--work /tmp/cases", "--work /tmp/other")
+    assert host_packages.job_differs(_WORKFLOW, edited, "host_packages")
+
+
+@pytest.mark.parametrize(
+    "edited",
+    [
+        _WORKFLOW.replace("# step 5", "# step five"),
+        _WORKFLOW.replace("prek run", "prek run --all-files"),
+    ],
+    ids=["comment-only", "another-job"],
+)
+def test_a_comment_or_another_job_is_not_a_job_change(edited):
+    assert not host_packages.job_differs(_WORKFLOW, edited, "host_packages")
+
+
+def test_a_base_without_the_workflow_is_a_job_change():
+    assert host_packages.job_differs(None, _WORKFLOW, "host_packages")

@@ -116,11 +116,27 @@ def test_every_case_input_pathspec_matches_a_tracked_file() -> None:
     assert not stale, f"CASE_INPUTS lists {stale}, which match no tracked file"
 
 
-def test_the_coverage_check_reports_a_dropped_input() -> None:
-    """The red half: a list that has lost one module, or holds a directory as an exact name."""
-    module = "scripts/validate/validate_lib/host_fixtures.py"
+def test_dropping_any_case_input_leaves_a_member_uncovered() -> None:
+    """The red half, on the real list: every CASE_INPUTS entry covers a member nothing else does.
+
+    Dropping an entry must fail the coverage check above, so the check reads the list ci.yml
+    holds rather than passing on any list.
+    """
+    members = _case_input_members()
+    pathspecs = _case_input_pathspecs()
+    assert "scripts/validate/validate_lib/host_fixtures.py" in pathspecs, pathspecs
+    unneeded = [
+        spec
+        for spec in pathspecs
+        if not _uncovered(members, [s for s in pathspecs if s != spec])
+    ]
+    assert not unneeded, (
+        f"dropping {unneeded} from CASE_INPUTS leaves every member covered, so the coverage "
+        f"check cannot go red on that entry"
+    )
+
+
+def test_a_directory_named_without_its_slash_matches_nothing_under_it() -> None:
     fixture = "hosts/lib/tests/container/fixture/base.yml"
-    members = {module, fixture}
-    assert _uncovered(members, ["hosts/lib/tests/container/", module]) == []
-    assert _uncovered(members, ["hosts/lib/tests/container/"]) == [module]
-    assert _uncovered(members, ["hosts/lib/tests/container", module]) == [fixture]
+    assert _uncovered({fixture}, ["hosts/lib/tests/container/"]) == []
+    assert _uncovered({fixture}, ["hosts/lib/tests/container"]) == [fixture]
