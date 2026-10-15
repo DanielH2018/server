@@ -33,6 +33,8 @@ SWEEP_STEPS = frozenset(
         "Build both renders with the pinned nfpm",
         "Build the test image for this release",
         "Run the updater cases in systemd containers",
+        "Green half — the all-digit values reach the cluster as their digits",
+        "Red half — values encrypted from an int fail to apply or come back changed",
     }
 )
 SCOPED_STEPS = frozenset(
@@ -44,6 +46,7 @@ SCOPED_STEPS = frozenset(
         "Notice: CLAUDE.md sections citing atoms this PR moved",
         "Notice step failed",
         "Upload notice failure",
+        "Check whether this PR touches the type proof's inputs",
     }
 )
 KNOWN_JOBS = frozenset(
@@ -52,6 +55,7 @@ KNOWN_JOBS = frozenset(
         "ansible_lint",
         "pytest",
         "deck_mod",
+        "sops_manifest_type_proof",
         "host_packages",
         "prek",
         "renovate-config",

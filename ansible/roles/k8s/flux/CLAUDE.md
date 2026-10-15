@@ -40,9 +40,11 @@ so a regeneration diffs as the pipeline plus upstream's change.
   Renovate cannot regenerate the file, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
   rule) and the header test fails until the file is regenerated. The same PR moves the
   `version:` of all three `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, of the
-  one in `.github/workflows/ci.yml`'s `flux_roundtrip` job, and the action's commit pin, so
-  the CLI that pushes and tags the artifact and the CLI that proves the round trip move with
-  the controllers. A `# renovate:` comment above each input is what Renovate reads, and
+  two in `.github/workflows/ci.yml`'s `flux_roundtrip` and `sops_manifest_type_proof` jobs, and
+  the action's commit pin, so the CLI that pushes and tags the artifact and the CLI that proves
+  the round trip move with the controllers. `sops_manifest_type_proof` also applies this file
+  as it stands to a kind cluster, so a regeneration re-runs D3.3d's in-cluster proof on the
+  new controller images. A `# renovate:` comment above each input is what Renovate reads, and
   `scripts/tests/test_renovate_flux_cli.py` fails a step that lost it (#4822). For a bump by
   hand, set all three yourself. `ansible/tests/repo/test_promote_workflow.py` fails a drift.
 
