@@ -8,6 +8,9 @@ PR H3.2b, the reconcile unit: [#4927](https://github.com/DanielH2018/server/pull
 PR H3.2c, the censuses and the unit validator: [#4935](https://github.com/DanielH2018/server/pull/4935).
 PR H3.2d, the manifest emitter: [#4944](https://github.com/DanielH2018/server/pull/4944).
 PR H3.3a, the `host_packages` CI job skeleton: [#4974](https://github.com/DanielH2018/server/pull/4974).
+PR H3.3b, the updater cases in systemd containers: [#5009](https://github.com/DanielH2018/server/pull/5009).
+PR H3.4a, the `homelab_builder` role behind a disarmed flag: [#5016](https://github.com/DanielH2018/server/pull/5016).
+The operator cleared its park on 2026-10-14, and the apply changed nothing.
 
 Depends on: R1
 Unblocks: H4, H5

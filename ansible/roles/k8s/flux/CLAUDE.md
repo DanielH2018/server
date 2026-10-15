@@ -39,7 +39,7 @@ so a regeneration diffs as the pipeline plus upstream's change.
   that module's lists only as a decision the PR states.
   Renovate cannot regenerate the file, so its PR is manual (`renovate.json`'s `fluxcd/flux2`
   rule) and the header test fails until the file is regenerated. The same PR moves the
-  `version:` of both `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, of the
+  `version:` of all three `fluxcd/flux2/action` steps in `.github/workflows/promote.yml`, of the
   one in `.github/workflows/ci.yml`'s `flux_roundtrip` job, and the action's commit pin, so
   the CLI that pushes and tags the artifact and the CLI that proves the round trip move with
   the controllers. A `# renovate:` comment above each input is what Renovate reads, and

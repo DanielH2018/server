@@ -26,8 +26,14 @@ WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
 PRUNE_WORKFLOW = REPO / ".github" / "workflows" / "prune-artifacts.yml"
 FLUX_DEFAULTS = REPO / "ansible" / "roles" / "k8s" / "flux" / "defaults" / "main.yml"
 
-JOBS = ("render", "publish", "promote", "tag")
-NEEDS = {"publish": "render", "promote": "publish", "tag": "promote"}
+JOBS = ("render", "publish", "promote", "tag", "verify", "settle")
+NEEDS = {
+    "publish": "render",
+    "promote": "publish",
+    "tag": "promote",
+    "verify": ["promote", "tag"],
+    "settle": ["promote", "tag", "verify"],
+}
 
 # Every job runs only for a successful push run of CI on master in this repository.
 TRIGGER_GUARDS = (
@@ -40,13 +46,17 @@ TRIGGER_GUARDS = (
 REF_GUARD = "github.ref == 'refs/heads/master'"
 
 PERMISSIONS = {
-    "render": {"contents": "read"},
+    "render": {"contents": "read", "checks": "read"},
     "publish": {"packages": "write", "id-token": "write"},
     "promote": {"contents": "read", "checks": "read", "packages": "read"},
     "tag": {"packages": "write"},
+    "verify": {"contents": "read", "statuses": "read"},
+    "settle": {"packages": "write"},
 }
 
-RENDER_REF = "${{ github.event.workflow_run.head_sha || github.sha }}"
+RENDER_REF = "${{ inputs.sha || github.event.workflow_run.head_sha || github.sha }}"
+# The ancestry step must read the dispatched commit, never the workflow's own `github.sha`.
+DISPATCHED_SHA = "inputs.sha"
 PROMOTE_REF = "${{ github.sha }}"
 COSIGN_RELEASE = "v3.1.3"
 HEAD_SHA = "workflow_run.head_sha"
@@ -96,7 +106,11 @@ def _guard_problems(name: str, job: dict) -> list[str]:
 
 def _checkout_problems(jobs: dict) -> list[str]:
     found = []
-    for name, ref in (("render", RENDER_REF), ("promote", PROMOTE_REF)):
+    for name, ref in (
+        ("render", RENDER_REF),
+        ("promote", PROMOTE_REF),
+        ("verify", PROMOTE_REF),
+    ):
         checkouts = _checkouts(jobs.get(name, {}))
         if len(checkouts) != 1:
             found.append(f"{name}: has {len(checkouts)} checkout steps, not one")
@@ -104,9 +118,10 @@ def _checkout_problems(jobs: dict) -> list[str]:
         args = checkouts[0].get("with") or {}
         if args.get("ref") != ref:
             found.append(f"{name}: checks out {args.get('ref')!r}, not {ref!r}")
-        if args.get("fetch-depth") != 0:
+        # `verify` reads no history: the bundles it reads came from `decide`.
+        if name != "verify" and args.get("fetch-depth") != 0:
             found.append(f"{name}: checks out without fetch-depth: 0")
-    for name in ("publish", "tag"):
+    for name in ("publish", "tag", "settle"):
         if _checkouts(jobs.get(name, {})):
             found.append(f"{name}: checks out the repository")
     return found
@@ -114,6 +129,7 @@ def _checkout_problems(jobs: dict) -> list[str]:
 
 def _ancestry_problems(render: dict) -> list[str]:
     ancestry, build = _step_index(render, "ancestry"), _step_index(render, "build")
+    recheck = _step_index(render, "ci-recheck")
     if build is None:
         return ["render: has no step with id `build`"]
     if ancestry is None or "git merge-base --is-ancestor" not in str(
@@ -122,9 +138,20 @@ def _ancestry_problems(render: dict) -> list[str]:
         return [
             "render: runs no `git merge-base --is-ancestor` step with id `ancestry`"
         ]
+    found = []
     if ancestry > build:
-        return ["render: checks ancestry after the build step"]
-    return []
+        found.append("render: checks ancestry after the build step")
+    if DISPATCHED_SHA not in str(_steps(render)[ancestry].get("env")):
+        found.append(f"render: the ancestry step does not read {DISPATCHED_SHA}")
+    if recheck is None or "promote.py ci-verdict" not in str(
+        _steps(render)[recheck].get("run", "")
+    ):
+        found.append(
+            "render: runs no `promote.py ci-verdict` step with id `ci-recheck`"
+        )
+    elif recheck > build:
+        found.append("render: re-checks a dispatched commit's CI after the build step")
+    return found
 
 
 def _handoff_problems(jobs: dict) -> list[str]:
@@ -141,9 +168,10 @@ def _handoff_problems(jobs: dict) -> list[str]:
             found.append(f"promote: output {key} does not come from the decide step")
         if f"needs.promote.outputs.{key}" not in str(tag.get("steps")):
             found.append(f"tag: does not take {key} from promote's outputs")
-    after_decide = _steps(promote)[decide + 1 :] + _steps(tag)
-    if any(HEAD_SHA in str(step) for step in after_decide) or HEAD_SHA in str(
-        tag.get("if", "")
+    later = [jobs.get(name, {}) for name in ("tag", "verify", "settle")]
+    after_decide = _steps(promote)[decide + 1 :] + [s for j in later for s in _steps(j)]
+    if any(HEAD_SHA in str(step) for step in after_decide) or any(
+        HEAD_SHA in str(job.get("if", "")) for job in later
     ):
         found.append(f"a step after decide reads github.event.{HEAD_SHA}")
     # Without the gate a `held` or `current` verdict reaches `tag`, which then fails red on
@@ -161,8 +189,8 @@ def _pin_problems(jobs: dict, flux_version: str) -> list[str]:
         for s in _steps(job)
         if _uses(s, "fluxcd/flux2/action")
     ]
-    if {name for name, _ in flux_steps} != {"publish", "tag"}:
-        found.append("the flux CLI is not installed in exactly publish and tag")
+    if {name for name, _ in flux_steps} != {"publish", "tag", "settle"}:
+        found.append("the flux CLI is not installed in exactly publish, tag and settle")
     for name, step in flux_steps:
         version = (step.get("with") or {}).get("version")
         if version != flux_version:

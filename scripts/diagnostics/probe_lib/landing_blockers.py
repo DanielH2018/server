@@ -29,6 +29,13 @@ Every fact comes from a reader that already exists; this module only joins them:
   process sees it: `$CLAUDE_JOB_DIR/tmp` when that variable is set, otherwise
   `/tmp/homelab-landings-<user>`. A log with no `VERDICT:` line reports its last `land:`
   line, which is where a landing-policy refusal writes its reason.
+- **Promotion (Flux-owned tags).** `DEPLOY_HOLD` from one `gh variable get`; `prod` from the
+  OCIRepository `homelab`'s `status.artifact`, through the read-only `kubectl`; `last-good` from
+  one GHCR manifest fetch, which costs a token request and one GET. That is one
+  `api.github.com` call, two `ghcr.io` requests and one cluster read per run
+  (docs/target-architecture/deploy/d2-first-leaf.md, *What `probe.py landing` reads*). A
+  failed read leaves its own field `null`, and the text view then never reports `prod` equal
+  to `last-good`. `run_landing` passes the live reads; `collect` called without them reads none.
 - **Worktrees and claims.** `git worktree list` and `findings.py claims --json`. A claim
   joins a worktree on its branch, or on the issue numbers a fan-out batch worktree's name
   carries (`fanout_lib.launch.worktree_path`: `fanout-<n>-<n>`), because a fan-out batch's
@@ -72,6 +79,12 @@ from land_lib.detach import _VERDICT_LINE, default_log_dir, error_in, verdict_in
 from lib import deployer_park, yaml_fast
 from lib.ansible_inventory import GITOPS_HOST, host_vars_file
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO, ROLES
+
+from diagnostics.probe_lib.promote_state import (
+    LIVE_PROMOTE_READS,
+    PromoteReads,
+    hold_lines,
+)
 
 # The deployer's own modules, so the CI and ledger rules are its rules and not a copy.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -300,6 +313,7 @@ def collect(
     get_json: Callable[[str], dict] = _get_json,
     run: Callable[[list[str]], str] = _run,
     get_text: Callable[[str], str] = _get_text,
+    promote: PromoteReads | None = None,
 ) -> dict:
     """Read every source once. A source that fails is named in `errors`, its field `null`.
 
@@ -308,6 +322,7 @@ def collect(
         get_json: GETs one deploy-ui API path and parses it.
         run: runs an argv in the repo and answers its stdout.
         get_text: GETs one deploy-ui API path as text, for `/api/log`.
+        promote: the promotion reads. None reads none of them and leaves each field `null`.
     """
     snap: dict = {
         "host": socket.gethostname(),
@@ -319,6 +334,7 @@ def collect(
         "last_verdict": None,
         "worktrees": None,
         "claims": None,
+        "promote": {"deploy_hold": None, "prod": None, "last_good": None},
         "errors": [],
     }
 
@@ -411,6 +427,17 @@ def collect(
         ]
         snap["claims"] = claims
 
+    if promote is not None:
+        for name in ("deploy_hold", "prod", "last_good"):
+
+            def read(name=name):
+                snap["promote"][name] = getattr(promote, name)()
+                if name != "last_good" or snap["promote"][name] is not None:
+                    return
+                # Absent, as opposed to unread: no verified promotion has seeded it yet.
+                snap["promote"][name] = {"commit": "", "digest": ""}
+
+            attempt(name, read)
     attempt("hold", read_hold)
     attempt("ci", read_ci)
     attempt("runs", read_runs)
@@ -458,11 +485,9 @@ def format_text(snap: dict) -> str:
 
     lines = ["Landing blockers:"]
     lines += [f"  ✗ {b}" for b in snap["blockers"]] or ["  none"]
+    lines += ["", *hold_lines(snap)]
     lines += [
-        "",
-        "hold: "
-        + known(snap["hold"], lambda h: h["sha"][:8] or "none")
-        + "   master CI: "
+        "master CI: "
         + known(snap["ci"], lambda c: f"{c['state']} {c['sha']}".strip())
         + "   manual planes: "
         + known(snap["manual_planes"], lambda m: str(len(m))),
@@ -497,6 +522,6 @@ def format_text(snap: dict) -> str:
 
 
 def run_landing(ns) -> int:
-    snap = collect()
+    snap = collect(promote=LIVE_PROMOTE_READS)
     print(json.dumps(snap) if ns.json else format_text(snap))
     return 1 if snap["blockers"] else 0

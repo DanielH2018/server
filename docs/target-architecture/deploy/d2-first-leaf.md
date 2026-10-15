@@ -22,6 +22,10 @@ operator ran its `k3s-bringup.yml` hand apply on 2026-10-14 and cleared the owed
 D2.4b, the script readers and the two generators:
 [#4988](https://github.com/DanielH2018/server/pull/4988).
 
+D2.6b, the bundle writer, `digests.json`, its census and the reserved names:
+[#5010](https://github.com/DanielH2018/server/pull/5010). The first `promote` run after it
+reported 0 published tags, and `flux/homelab` read `success` on `6c26fb6f5`.
+
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five
 rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3), on
