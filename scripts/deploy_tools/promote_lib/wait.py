@@ -78,7 +78,10 @@ POLL_S = 30
 # test_promote_land_wait.py pins the two together. `verify_promotion` imports this module, so
 # this one cannot import `promote_timeout` back to derive the figure from M's bundle.
 # `land-wait` gives up at twice it (contract C6). The second half covers `promote.yml`'s
-# `render` and `publish` jobs, 10m each, which run before any promotion of M can start.
+# `render` and `publish` jobs, 10m each, which run before any promotion of M can start. It
+# does not cover M's `decide` waiting on an earlier commit's verification that is still in
+# flight, up to `verify_promotion.IN_FLIGHT_WAIT_S`. Two merges minutes apart can then end the
+# wait `gave-up` on a promotion that passes later (#5164).
 PROMOTE_TIMEOUT_S = 10 * 60 + 60 + 2 * 60 + 10 * 60 + 30
 LAND_WAIT_TIMEOUT_S = 2 * PROMOTE_TIMEOUT_S
 
