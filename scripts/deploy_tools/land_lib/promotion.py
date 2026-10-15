@@ -55,6 +55,10 @@ def gated_tags(ln: Landing) -> list[str]:
     return ln.resolved_tags + published(ln)
 
 
+# What `FluxReads.owners_at` raises when the ownership map cannot be read.
+OWNER_READ_ERRORS = (ValueError, subprocess.SubprocessError, OSError)
+
+
 def owners_at_merge(ln: Landing) -> dict[str, str]:
     """Each tag that is not Ansible-owned at the merge commit, to its `owner`; dies unread.
 
@@ -64,7 +68,7 @@ def owners_at_merge(ln: Landing) -> dict[str, str]:
     """
     try:
         return ln.tools.flux.owners_at(ln.opts.primary, ln.merge_sha)
-    except (ValueError, subprocess.SubprocessError, OSError) as exc:
+    except OWNER_READ_ERRORS as exc:
         ln.die(
             f"could not read which tags Flux applies at {ln.merge_sha[:12]}, so nothing "
             f"was deployed: {exc}",
@@ -101,6 +105,11 @@ def owned_by_narrowing(ln: Landing) -> None:
     covering most of the fleet is refused, and its tags need the wait as much as one tag
     does. No PR range, no deploy-plane path, or any other failure adds nothing, which is the
     landing as it was before #5146.
+
+    An unreadable ownership map ends the landing as `needs-manual-apply`, not through
+    `owners_at_merge`'s refusal. When the tick is the apply, step 4 has already applied this
+    deploy-plane change, so "nothing was deployed" would be false. What is unknown is only
+    whether a promotion owes any of the narrowed tags, and the verdict line says so.
     """
     cl = ln.classification
     if not any(p.startswith(_BROAD_DEPLOY_PREFIXES) for p in cl.pr_paths):
@@ -119,7 +128,20 @@ def owned_by_narrowing(ln: Landing) -> None:
     narrowed = [t for t in r.stdout.strip().split(",") if t]
     if not narrowed:
         return
-    owners = owners_at_merge(ln)
+    try:
+        owners = ln.tools.flux.owners_at(ln.opts.primary, ln.merge_sha)
+    except OWNER_READ_ERRORS as exc:
+        print(f"  could not read which tags Flux applies at {ln.merge_sha[:12]}: {exc}")
+        print(
+            "  once it reads, wait on the promotion by hand: uv run python "
+            f"scripts/deploy_tools/promote.py land-wait {ln.merge_sha}"
+        )
+        ln.finish(
+            Verdict.NEEDS_MANUAL_APPLY,
+            1,
+            f"PR #{ln.opts.pr}, {ln.merge_sha} — the tick may already have applied this "
+            f"change; whether a promotion owes {','.join(narrowed)} is unknown",
+        )
     found = {
         tag: owners[tag]
         for tag in narrowed

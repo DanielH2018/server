@@ -158,6 +158,17 @@ def test_a_narrowing_that_fails_settles_on_the_tick_as_before(land_run):
     assert "land_wait" not in _names(calls) and "owners_at" not in _names(calls)
 
 
+def test_an_unreadable_ownership_map_after_the_tick_is_not_a_refusal(land_run):
+    """The tick already applied the deploy-plane change, so the landing must not claim that
+    nothing was deployed; only whether a promotion owes the tag is unknown."""
+    fakes = _flip(owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")})
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 1 and "VERDICT: needs-manual-apply" in out
+    assert "nothing was deployed" not in out
+    assert f"promote.py land-wait {MERGE_SHA}" in out
+    assert "land_wait" not in _names(calls) and "deploy" not in _names(calls)
+
+
 def test_a_refused_bulk_flip_still_waits_on_the_tags_it_reached(land_run):
     """`narrow` refuses a list covering most of the fleet, as D5's bulk move would, and still
     prints the tags it reached."""
