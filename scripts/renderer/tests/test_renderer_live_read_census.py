@@ -179,7 +179,10 @@ def test_the_same_read_in_a_deployment_template_is_flagged(tmp_path):
     assert "widget_line" in _flagged(found)
 
 
-ICON = "{{ lookup('pipe', 'base64 -w0 ' ~ playbook_dir ~ '/roles/k8s/widget/files/a.png') }}"
+ICON = (
+    "{% for icon in ['a.png', 'b.png'] %}{{ lookup('pipe', 'base64 -w0 ' ~ playbook_dir"
+    " ~ '/roles/k8s/widget/files/' ~ icon) }}{% endfor %}"
+)
 
 
 def test_a_base64_pipe_lookup_is_clean(tmp_path):
@@ -196,6 +199,60 @@ def test_a_pipe_lookup_with_another_command_is_flagged(tmp_path):
     )
     assert len(found.problems) == 1
     assert "lookup('pipe')" in found.problems[0]
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "playbook_dir ~ '/roles/k8s/widget/files/a.png; kubectl get secret -A'",
+        "playbook_dir ~ '/files/' ~ widget_icon",
+    ],
+    ids=["a trailing command", "a path piece the census cannot list"],
+)
+def test_a_base64_pipe_lookup_with_more_than_a_path_is_flagged(tmp_path, path):
+    template = f"icon: {{{{ lookup('pipe', 'base64 -w0 ' ~ {path}) }}}}\n"
+    found = _census(tmp_path, {"icons-configmap.yaml.j2": template})
+    assert found.accepted == []
+    assert len(found.problems) == 1
+    assert "lookup('pipe')" in found.problems[0]
+
+
+@pytest.mark.parametrize(
+    "read",
+    [
+        "hostvars[inventory_hostname].widget_line",
+        "hostvars['daniel-box']['widget_line']",
+        "vars['widget_line']",
+        "vars.widget_line",
+    ],
+)
+def test_a_set_fact_read_through_vars_or_hostvars_is_flagged(tmp_path, read):
+    found = _census(
+        tmp_path, {"deployment.yaml.j2": f"line: {{{{ {read} }}}}\n"}, SLURP_TASKS
+    )
+    assert "widget_line" in _flagged(found)
+
+
+def test_a_defaults_value_read_through_hostvars_is_clean(tmp_path):
+    found = _census(
+        tmp_path,
+        {
+            "deployment.yaml.j2": "port: {{ hostvars[inventory_hostname].widget_port }}\n"
+        },
+        SLURP_TASKS,
+        "widget_port: 8080\n",
+    )
+    assert found.offenders() == []
+    assert "widget_port" in found.reached
+
+
+@pytest.mark.parametrize(
+    "read", ["vars['widget_' ~ suffix]", "vars | dict2items", "hostvars[host]"]
+)
+def test_vars_or_hostvars_read_by_a_computed_name_is_flagged(tmp_path, read):
+    found = _census(tmp_path, {"deployment.yaml.j2": f"x: {{{{ {read} }}}}\n"})
+    assert len(found.problems) == 1
+    assert "census cannot" in found.problems[0]
 
 
 CHECK_LOOP = (

@@ -7,15 +7,20 @@ every `lookup`, `query` or `q` call it finds. It accepts four plugins:
 - `file` and `template`, which read the tree. The names in their path expressions are names
   the source reads.
 - `pipe`, only as `'base64 -w0 ' ~ <path>`, the one shape `scripts/lib/k8s_yaml.py:make_lookup`
-  implements.
+  implements. Each piece of the path is a literal with no space or shell metacharacter,
+  `playbook_dir`, or a loop variable over a literal list of such pieces.
 - `vars`, only over an attribute of a loop variable whose loop runs over a
   `py_table('CHECKS')` file lookup or over `containers_list | scrape_jobs(...)`. It runs the
   filter, as the render does, and every value of that attribute is a name the source reads.
 
-Any other call is a problem, because nothing can say what it reads. `_live_read_census.py`
+Any other call is a problem, because nothing can say what it reads.
+
+`vars.X`, `vars['X']`, `hostvars[H].X` and `hostvars[H]['X']` read the name `X`, as a bare
+`X` does. A computed `X`, or `vars` or `hostvars` read any other way, is a problem too. `_live_read_census.py`
 is the census that calls it.
 """
 
+import re
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -27,6 +32,10 @@ from lib.ansible_jinja_env import make_ansible_env
 
 LOOKUPS = frozenset({"lookup", "query", "q"})
 PIPE_PREFIX = "base64 -w0 "
+# A literal piece of a piped path: no space and no shell metacharacter.
+PATH_PIECE = re.compile(r"[A-Za-z0-9_./-]+")
+# The two variables that hold other variables by name.
+SCOPES = frozenset({"vars", "hostvars"})
 
 
 def _path_value(playbook_dir: Path, node: nodes.Expr) -> str | None:
@@ -126,11 +135,7 @@ class Reader:
         if kind in ("file", "template"):
             return set()
         if kind == "pipe":
-            if (
-                isinstance(arg, nodes.Concat)
-                and isinstance(arg.nodes[0], nodes.Const)
-                and arg.nodes[0].value == PIPE_PREFIX
-            ):
+            if _is_base64_of_a_path(arg, loops):
                 self.accepted.append(f"pipe in {where}")
                 return set()
             self.problems.append(
@@ -161,6 +166,25 @@ class Reader:
 
     def _scan(self, where: str, node: nodes.Node, loops: list[nodes.For]) -> set[str]:
         names = set()
+        scope = _scope_access(node)
+        if scope is not None:
+            # `vars.X`, `vars['X']`, `hostvars[H].X` and `hostvars[H]['X']` read the name X,
+            # which `find_undeclared_variables` never sees.
+            key, subscripts = scope
+            if key is None:
+                self.problems.append(
+                    f"{where}: vars or hostvars subscripted by a name the census cannot resolve"
+                )
+            else:
+                names.add(key)
+            for child in subscripts:
+                names |= self._scan(where, child, loops)
+            return names
+        if isinstance(node, nodes.Name) and node.ctx == "load" and node.name in SCOPES:
+            self.problems.append(
+                f"{where}: {node.name} read other than as one named variable, so the census "
+                "cannot name what it reads"
+            )
         if (
             isinstance(node, nodes.Call)
             and isinstance(node.node, nodes.Name)
@@ -188,6 +212,73 @@ class Reader:
         ast = self.env.parse(source)
         names = meta.find_undeclared_variables(ast) - self.env.globals.keys()
         return names | self._scan(where, ast, []), ast
+
+
+def _key(node: nodes.Getattr | nodes.Getitem) -> str | None:
+    """The literal name a `.X` or `['X']` access selects, or None for a computed one."""
+    if isinstance(node, nodes.Getattr):
+        return node.attr
+    arg = node.arg
+    return (
+        arg.value
+        if isinstance(arg, nodes.Const) and isinstance(arg.value, str)
+        else None
+    )
+
+
+def _scope_access(node: nodes.Node) -> tuple[str | None, list[nodes.Expr]] | None:
+    """For a variable read through `vars` or a host's `hostvars` entry, the name and subscripts.
+
+    Returns None for any other node. Otherwise returns the name the access selects, None when
+    it is computed, and the subscript expressions the access evaluates, which read names too.
+    """
+    if not isinstance(node, (nodes.Getattr, nodes.Getitem)):
+        return None
+    base = node.node
+    own = [node.arg] if isinstance(node, nodes.Getitem) else []
+    if isinstance(base, nodes.Name) and base.name == "vars":
+        return _key(node), own
+    if (
+        isinstance(base, (nodes.Getattr, nodes.Getitem))
+        and isinstance(base.node, nodes.Name)
+        and base.node.name == "hostvars"
+    ):
+        host = [base.arg] if isinstance(base, nodes.Getitem) else []
+        return _key(node), [*host, *own]
+    return None
+
+
+def _is_path_part(node: nodes.Node, loops: list[nodes.For]) -> bool:
+    """A literal path piece, `playbook_dir`, or a loop variable over literal path pieces."""
+    if isinstance(node, nodes.Const):
+        return isinstance(node.value, str) and bool(PATH_PIECE.fullmatch(node.value))
+    if not isinstance(node, nodes.Name):
+        return False
+    if node.name == "playbook_dir":
+        return True
+    for loop in reversed(loops):
+        if isinstance(loop.target, nodes.Name) and loop.target.name == node.name:
+            items = loop.iter
+            return isinstance(items, (nodes.List, nodes.Tuple)) and all(
+                _is_path_part(item, []) for item in items.items
+            )
+    return False
+
+
+def _is_base64_of_a_path(arg: nodes.Node | None, loops: list[nodes.For]) -> bool:
+    """`'base64 -w0 ' ~ <path>`, where every piece of the path is a path piece.
+
+    A piece is never a shell metacharacter or a space, so the command stays base64 over one
+    file: `'base64 -w0 ' ~ p ~ '; cmd'` does not pass.
+    """
+    if not (isinstance(arg, nodes.Concat) and len(arg.nodes) > 1):
+        return False
+    first, *path = arg.nodes
+    return (
+        isinstance(first, nodes.Const)
+        and first.value == PIPE_PREFIX
+        and all(_is_path_part(piece, loops) for piece in path)
+    )
 
 
 def references(ast: nodes.Template) -> Iterator[str]:

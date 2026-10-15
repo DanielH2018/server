@@ -601,8 +601,9 @@ Two tests hold this:
   inventory value, an `include_role` var or a `set_fact`, unless the renderer derives that
   name from the tree. It also fails on a lookup whose reads it cannot name: any plugin but
   `file`, `template`, `pipe` and `vars`, a `pipe` other than `'base64 -w0 ' ~ <path>`, and
-  a `vars` lookup outside a loop over `py_table('CHECKS')` or `scrape_jobs`. The engine is
-  `_live_read_census.py` beside it.
+  a `vars` lookup outside a loop over `py_table('CHECKS')` or `scrape_jobs`. A read through
+  `vars.X` or `hostvars[H].X` counts as a read of `X`, and a `vars` or `hostvars` read whose
+  name it cannot list fails it too. The engine is `_live_read_census.py` beside it.
 
 A new value that a task reads from the cluster and a template needs fails the census. Move
 the value into the tree instead: a SOPS key, a committed file, or a value
