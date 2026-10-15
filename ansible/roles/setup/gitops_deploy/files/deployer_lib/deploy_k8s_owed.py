@@ -236,7 +236,9 @@ def discharge_k8s_unapplied(
     carry no `containers_list` entry, so the question moves to every tag whose deploy runs
     them, as `shared_role_callers.py:caller_tags` derives them: the line drops when each of
     those carries the change. The derivation is asked once per tick, and only when a pending
-    line has no record. If it fails, or names no tag, the line is kept.
+    line has no record. If it fails, or names no tag, the line is kept. A caller whose entry
+    sets `owner` is not waited on (#4986), and a role whose every caller sets it drops at once
+    (#5052): Flux applies what those callers render, so Ansible has nothing left to apply.
 
     A caller carries the change when its release record descends from the line's commit —
     the fast path, which drops a line minutes after a deploy. For a role in
@@ -260,7 +262,9 @@ def discharge_k8s_unapplied(
     """
     pending = state.owed_pending(OWED_K8S_UNAPPLIED)
     records = {e.service: tools.release_commit(e.service) for e in pending}
-    callers = _shared_callers(tools, config, {s for s, c in records.items() if not c})
+    callers, owned_only = _shared_callers(
+        tools, config, {s for s, c in records.items() if not c}
+    )
 
     def descends(commit: str | None, origin: str) -> bool:
         return _record_carries(tools, config, commit, origin)
@@ -296,6 +300,9 @@ def discharge_k8s_unapplied(
     waiting: dict[str, set[str]] = {}
     for entry in pending:
         own = bool(records[entry.service])
+        if not own and entry.service in owned_only:
+            waiting[entry.service] = set()
+            continue
         tags = {entry.service} if own else callers.get(entry.service)
         by_digest = entry.service in (provable if own else DIGEST_PROVABLE_ROLES)
         found = [
@@ -307,9 +314,15 @@ def discharge_k8s_unapplied(
     discharged = [s for s, ranges in waiting.items() if ranges <= covered]
     if discharged:
         state.clear_owed(OWED_K8S_UNAPPLIED, discharged)
+    if proved := sorted(set(discharged) - owned_only):
         log(
-            f"k8s_unapplied: discharged for {', '.join(sorted(discharged))}: a release "
+            f"k8s_unapplied: discharged for {', '.join(proved)}: a release "
             f"record or a matching render names a commit that carries the change"
+        )
+    if owned := sorted(set(discharged) & owned_only):
+        log(
+            f"k8s_unapplied: discharged for {', '.join(owned)}: every caller's entry sets "
+            f"`owner`, so no Ansible deploy is left to carry the change"
         )
     return sorted(discharged)
 
@@ -345,14 +358,18 @@ def _record_carries(
 
 def _shared_callers(
     tools: DeployTools, config: Config, services: set[str]
-) -> dict[str, set[str]]:
+) -> tuple[dict[str, set[str]], set[str]]:
     """`tools.shared_role_callers` for `services`, or no callers at all when it fails.
+
+    Returns:
+        Each role's caller tags, and the roles only owned callers run, as
+        `deploy_narrow.SharedCallers` carries them.
 
     Any exception, not a tuple: the call decodes a subprocess's JSON, and the one safe
     reading of a failure is "no evidence", which keeps every line it would have judged.
     """
     if not services:
-        return {}
+        return {}, set()
     try:
         return tools.shared_role_callers(config.repo, services)
     except Exception as exc:
@@ -361,7 +378,7 @@ def _shared_callers(
             f"({type(exc).__name__}: {exc}) — keeping their lines",
             level=WARNING,
         )
-        return {}
+        return {}, set()
 
 
 def _digest_covers(tools: DeployTools, config: Config, items: set[str]) -> set[str]:

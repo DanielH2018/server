@@ -30,8 +30,11 @@ def test_the_committed_map_covers_every_standalone_use_is_clean(render, known_ke
 
 def test_the_named_members_are_where_the_guard_expects_them(render):
     assert "email" in read_guard_map()["traefik"]
-    assert "mullvad_account" in GUARD_DEFERRED
-    assert "mullvad_account" in render.standalone["qbittorrent"]
+    # R2's PR 7b moved mullvad_account, the set's last member, into a Secret placeholder
+    # mode leaves out, so it stands alone nowhere and nothing is deferred.
+    assert GUARD_DEFERRED == frozenset()
+    assert "mullvad_account" not in render.standalone["qbittorrent"]
+    assert "wireguard_interface_private_key" in read_guard_map()["qbittorrent"]
 
 
 def test_a_map_missing_a_standalone_key_is_flagged(render, known_keys):

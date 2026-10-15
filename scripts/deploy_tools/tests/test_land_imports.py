@@ -78,7 +78,7 @@ ALLOWED = {
     "land_tags_cli": {"land_tags", "land_reach"},
     "land_platform": {"land_tags"},
     "land_reach": set(),
-    # The boundaries for a tag Flux applies. It imports promote_wait, outside land_lib.
+    # The boundaries for a tag Flux applies. It imports promote_lib.wait, outside land_lib.
     "land_flux": set(),
     "land_rerolls": set(),
     "land_shared": set(),

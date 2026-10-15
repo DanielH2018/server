@@ -300,8 +300,8 @@ run fails if the verification succeeds.
 
 ## Verification
 
-Contract C2 *Verification* is the rule, and `scripts/deploy_tools/verify_promotion.py` holds
-it. After `tag` moves `prod` to T, `verify` waits on the commit statuses that
+Contract C2 *Verification* is the rule, and `scripts/deploy_tools/promote_lib/verify_promotion.py`
+holds it. After `tag` moves `prod` to T, `verify` waits on the commit statuses that
 notification-controller posts on T:
 
 - **What it expects.** `flux/homelab`, plus `flux/<name>` for every name in T's changed set.

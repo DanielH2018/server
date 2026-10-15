@@ -904,7 +904,20 @@ concurrency group on push. It needs no secrets, and it does these steps:
 1. It renders every package at the PR head and at its merge base, on every run. A path filter
    would miss a `group_vars` change that alters a render, such as a `containers_list` edit that
    changes the Pi's recovery script.
-2. If no rendered tree differs, the job ends green here.
+2. If no rendered tree differs, the job ends green here, unless the PR changes an input of
+   the container cases. Those inputs change no render: the test image's build context
+   `hosts/lib/tests/container/`, which holds the fixture specs, and the cases' own scripts.
+   `CASE_INPUTS` on the render step lists them, and
+   `ansible/tests/repo/test_host_package_case_inputs_census.py` holds that list to
+   every `validate` module the cases script imports (#5004). An edit to the
+   `host_packages` job itself counts too, because its steps invoke the cases.
+   `host_packages.py job-changed` compares the job as parsed YAML, so an edit to a comment
+   alone does not count. A renderer change that alters only the cases' fixture counts too,
+   because the fixture exercises renderer paths no real package does until H3.6.
+   `host_packages.py fixture-changed` renders the fixture in each tree with that tree's own
+   renderer and compares the output, so an edit to the renderer's files alone does not count
+   (#5066). Such a PR runs steps 3 to 5. Each of these verdicts fails the step when it cannot
+   be computed, rather than reading as no change (#5071).
 3. It builds both renders with nfpm pinned by version and sha256, and runs the
    maintainer-script lint and the `type: config` lint.
 4. It builds the test image from `hosts/lib/tests/container/Dockerfile`. The job does not
@@ -1244,7 +1257,7 @@ says otherwise.
 4. **H3.4a Place the `homelab_builder` role. This PR parks the GitOps deployer.**
     - Add the `initial_setup.yml` entry `{ role: homelab_builder, tags: ["homelab_builder"],
       when: has_gitops }` after `gitops_deploy`. `has_gitops` is already resolvable by
-      `scripts/deploy_tools/setup_gates.py`, so no inventory change is needed.
+      `scripts/deploy_tools/setup_lib/setup_gates.py`, so no inventory change is needed.
     - Add the role skeleton:
         - `defaults/main.yml` with `homelab_builder_enabled: false`;
         - `tasks/main.yml` dispatching to `install.yml` or `teardown.yml` on that flag, both

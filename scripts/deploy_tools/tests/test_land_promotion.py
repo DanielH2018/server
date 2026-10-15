@@ -15,7 +15,7 @@ from dataclasses import replace
 from _land_fakes import MERGE_SHA, Fakes
 from deploy_tools.land_lib import deploy, land_flux, merge
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Outcome
-from promote_wait import WaitResult
+from deploy_tools.promote_lib.wait import WaitResult
 
 HEAD = "c" * 40
 BASE = "prbase"  # what the fake `git merge-base` answers

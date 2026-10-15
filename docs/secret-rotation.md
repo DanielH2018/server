@@ -169,6 +169,14 @@ not rotated again by the weekly cron. Examples:
   that one small Secret, and `--tags home-assistant` redeploys it. Delete the old key in the
   console only after HA has restarted on the new one. `google_assistant_project_id` changes
   only with a new Google project.
+- `pi_peer_backup_ssh_key`: generate a new ed25519 keypair, store the private half with
+  `sops set`, and commit the public half over
+  `ansible/roles/k8s/pi-peer-backup/files/pi-peer-backup.pub`. The private key is multi-line,
+  so it has a Secret of its own, `pi-peer-backup-ssh-key`, rendered from
+  `ansible/roles/k8s/pi-peer-backup/templates/ssh-key-secret.yaml.j2`. A rotation changes that
+  one small Secret, and `--tags pi-peer-backup` redeploys it and authorizes the new public half
+  on the Pi. The role's `authorized_key` task adds the new line and leaves the old one, so
+  remove the old key from the Pi's `authorized_keys` after the next nightly run succeeds.
 - `authelia_secret` / `authelia_jwt`: rotating forces all users to re-login (not breaking).
 - `authelia_oidc_hmac_secret` / `*_password_hash`: re-issues OIDC — re-pair jellyfin (the
   live OIDC client; beszel's client is provisioned but parked in `archive/`, re-pair only
@@ -215,7 +223,11 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
 - `cloudflare_dns_token`: Cloudflare dashboard → API Tokens (keep it **zone-scoped**: DNS
   edit + Zone read for the one zone — audit this scope when rotating).
 - `*_discord_webhook*`: Discord → channel → Integrations → Webhooks → regenerate.
-- `mullvad_account`, `wireguard_peer_*`: Mullvad account panel / regenerate the WG key.
+- `mullvad_account`: Mullvad account panel. The value is all digits, so it has a Secret of its
+  own, `qbittorrent-mullvad-account`, rendered from
+  `ansible/roles/k8s/qbittorrent/templates/mullvad-account-secret.yaml.j2`. A rotation changes
+  that one small Secret, and `--tags qbittorrent` redeploys it.
+- `wireguard_peer_*`: Mullvad account panel / regenerate the WG key.
 - `homelab_builder_github_token`: GitHub → Settings → Developer settings → Fine-grained
   tokens, owner DanielH2018, *Public repositories (read-only)*, no permissions. The
   host-package builder reads CI check runs with it, because its system user has no gh login

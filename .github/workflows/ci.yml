@@ -757,9 +757,10 @@ jobs:
           [ "$rc" = 1 ]
 
       # The green run builds every tag outside PLACEHOLDER_DEFERRED, in both passes, so it
-      # covers home-assistant and pi-peer-backup, which carry the render_sops_manifests
-      # entries: each pass also asserts it dropped exactly one document for each. The red
-      # half stays on three tags: it only has to show that one changed byte is seen.
+      # covers home-assistant, pi-peer-backup and qbittorrent, which carry the
+      # render_sops_manifests entries: each pass also asserts it dropped exactly one document
+      # for each. The red half stays on three tags: it only has to show that one changed byte
+      # is seen.
       - name: Round-trip every tag through flux build
         run: |
           set -euo pipefail
@@ -850,10 +851,31 @@ jobs:
 
       # Each side renders with the renderer in its own tree, so a renderer change that alters a
       # render shows as a diff. The base tree is a worktree at the merge base.
+      #
+      # `cases=true` when the PR changes an input of the container cases (steps 4 and 5) that is
+      # not a render input, so it changes no render (#5004): the test image's build context and
+      # fixture specs, and the cases' own code. CASE_INPUTS is the one list of them, and
+      # ansible/tests/repo/test_host_package_case_inputs_census.py holds it to every
+      # `validate` module the cases script imports. The renderer is a render input, so it
+      # reaches the cases through `changed` when it alters a real render. The job's own steps
+      # invoke the cases, so an edit to this job counts too. `job-changed` compares it as
+      # parsed YAML, so a comment-only edit, or an edit to another job, does not. The cases'
+      # fixture exercises renderer paths no real package does, so `fixture-changed` renders it
+      # in each tree with that tree's renderer, and a differing fixture counts too (#5066).
+      #
+      # Each verdict is captured on a line of its own, where `set -e` aborts the step when
+      # the command fails. Inside a `[ "$(...)" = true ]` test the failure would read as
+      # `false` and skip the cases (#5071). Each is computed only when the arms before it
+      # did not fire.
       - name: Render every host package at the head and at the merge base
         id: render
         env:
           EVENT: ${{ github.event_name }}  # via env, never interpolated into the shell
+          CASE_INPUTS: |
+            hosts/lib/tests/container/
+            scripts/validate/host_package_cases.py
+            scripts/validate/validate_lib/host_container.py
+            scripts/validate/validate_lib/host_fixtures.py
         run: |
           set -euo pipefail
           if [ "$EVENT" = workflow_dispatch ]; then
@@ -879,11 +901,37 @@ jobs:
           else
             echo "upgrade=true" >> "$GITHUB_OUTPUT"
           fi
+          cases=false
+          # CASE_INPUTS is left unquoted so each line is its own pathspec.
+          # shellcheck disable=SC2086
+          if ! git diff --quiet "$base" HEAD -- $CASE_INPUTS; then
+            echo "::notice::This PR changes an input of the container cases, so they run."
+            cases=true
+          fi
+          if [ "$cases" = false ]; then
+            job=$(uv run python scripts/validate/host_packages.py job-changed "$base" \
+              --workflow .github/workflows/ci.yml --job host_packages)
+            if [ "$job" = true ]; then
+              echo "::notice::This PR changes the host_packages job's steps, so the cases run."
+              cases=true
+            fi
+          fi
+          if [ "$cases" = false ]; then
+            fixture=$(uv run python scripts/validate/host_packages.py fixture-changed \
+              "$RUNNER_TEMP/base-tree" .)
+            if [ "$fixture" = true ]; then
+              echo "::notice::This PR changes how the cases' fixture renders, so the cases run."
+              cases=true
+            fi
+          fi
+          echo "cases=$cases" >> "$GITHUB_OUTPUT"
 
       # The version is H3's *Package rules* shape, `0.<first-parent count>+g<12 hex>`, taken
       # from each side's own commit, as the builder takes it from the commit it builds.
       - name: Build both renders with the pinned nfpm
-        if: github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
         env:
           BASE_SHA: ${{ steps.render.outputs.base }}
         run: |
@@ -908,7 +956,9 @@ jobs:
             done
 
       - name: Run the type-config and maintainer-script lints over both renders and builds
-        if: github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
         run: |
           uv run python scripts/validate/host_packages.py lint \
             "$RUNNER_TEMP/render" "$RUNNER_TEMP/debs"
@@ -916,7 +966,9 @@ jobs:
       # The lints' red proof on the pinned nfpm: a package built from the red fixture carries a
       # conffile and a postinst line outside the whitelist, and the lint must flag both.
       - name: Red-proof the lints on a package built from the red fixture
-        if: github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/red"
@@ -936,7 +988,9 @@ jobs:
       # The early exit is in the script, not the `if:`, because a dispatch must reach this
       # step (test_ci_dispatch_sweeps_everything.py) and a dispatch of master must stay green.
       - name: Build the test image for this release
-        if: github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
         env:
           RELEASE: ${{ matrix.release }}
           UPGRADE: ${{ steps.render.outputs.upgrade }}
@@ -957,7 +1011,9 @@ jobs:
 
       # Step 5: every case, on this leg's release. The script's docstring lists them.
       - name: Run the updater cases in systemd containers
-        if: github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+        if: >-
+          github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
+          || steps.render.outputs.cases == 'true'
         env:
           RELEASE: ${{ matrix.release }}
           PYTHON: ${{ matrix.python }}

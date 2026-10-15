@@ -329,22 +329,28 @@ def test_fluxprobe_where_the_resolver_and_the_cli_disagree_is_flagged(
 def test_roundtrip_drops_one_document_per_sops_manifest_entry_is_clean(
     flux_on_path, tmp_path, capsys
 ):
-    # home-assistant's render_sops_manifests names google-sa-secret.yaml and
-    # pi-peer-backup's names ssh-key-secret.yaml. Placeholder mode emits neither, so the stub
-    # side drops both too and counts one Secret for each. pi-peer-backup's key left
-    # secret.yaml with it, so no KNOWN_VIOLATIONS document is left out.
+    # home-assistant's render_sops_manifests names google-sa-secret.yaml, pi-peer-backup's
+    # names ssh-key-secret.yaml and qbittorrent's names mullvad-account-secret.yaml.
+    # Placeholder mode emits none of them, so the stub side drops all three too and counts one
+    # Secret for each. Each key left its role's secret.yaml with it, so no KNOWN_VIOLATIONS
+    # document is left out.
     out = tmp_path / "rt"
-    roles = ["--role", "home-assistant", "--role", "pi-peer-backup"]
+    entries = {
+        "home-assistant": "google-sa-secret.yaml",
+        "pi-peer-backup": "ssh-key-secret.yaml",
+        "qbittorrent": "mullvad-account-secret.yaml",
+    }
+    roles = [arg for role in entries for arg in ("--role", role)]
     assert _main("roundtrip", "--out", str(out), *roles) == 0
     printed = capsys.readouterr().out
     summary = (
-        " 0 documents in KNOWN_VIOLATIONS left out, 0 differences, 2 documents in "
+        " 0 documents in KNOWN_VIOLATIONS left out, 0 differences, 3 documents in "
         "render_sops_manifests, "
     )
     assert printed.count(summary) == 2
     stub = out / "stub" / "cluster"
-    assert not (stub / "home-assistant" / "google-sa-secret.yaml").exists()
-    assert not (stub / "pi-peer-backup" / "ssh-key-secret.yaml").exists()
+    for role, entry in entries.items():
+        assert not (stub / role / entry).exists()
 
 
 def test_roundtrip_dropping_a_document_more_than_the_entries_is_flagged(

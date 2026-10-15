@@ -22,7 +22,7 @@ from test_promote_workflow import (
     problems,
 )
 
-import verify_promotion
+from deploy_tools.promote_lib import verify_promotion as promote_verify
 
 # `verify` and `settle` run only once the `tag` job's move step reports that `prod` moved.
 MOVED_GATE = "needs.tag.outputs.moved == 'true'"
@@ -51,7 +51,7 @@ def verification_problems(wf: dict) -> list[str]:
         for gate in (ALWAYS, MOVED_GATE):
             if gate not in condition:
                 found.append(f"{name}: its `if` lacks {gate}")
-        # The DECIDED marker in scripts/deploy_tools/verify_promotion.py: a pending job in the
+        # The DECIDED marker in scripts/deploy_tools/promote_lib/verify_promotion.py: a pending job in the
         # group can be evicted, so `decide` waits on a verification in flight instead.
         if "concurrency" in job:
             found.append(f"{name}: joins a concurrency group")
@@ -72,9 +72,9 @@ def verification_problems(wf: dict) -> list[str]:
     if "needs.promote.outputs.target" not in str(_steps(verify)):
         found.append("verify: does not take T from promote's outputs")
     minutes = {name: jobs.get(name, {}).get("timeout-minutes", 0) for name in jobs}
-    if (minutes["verify"] + minutes["settle"]) * 60 > verify_promotion.IN_FLIGHT_WAIT_S:
+    if (minutes["verify"] + minutes["settle"]) * 60 > promote_verify.IN_FLIGHT_WAIT_S:
         found.append("verify and settle can outlast decide's in-flight wait")
-    if minutes["promote"] * 60 <= verify_promotion.IN_FLIGHT_WAIT_S:
+    if minutes["promote"] * 60 <= promote_verify.IN_FLIGHT_WAIT_S:
         found.append("promote: its timeout-minutes cannot hold decide's in-flight wait")
     return found
 
@@ -94,9 +94,7 @@ def test_verifys_timeout_holds_the_timeout_derived_for_a_tag_at_the_rollout_defa
         "bento-pdf", False, defaults["manifests_rollout_timeout_default"]
     )
     minutes = _load(WORKFLOW)["jobs"]["verify"]["timeout-minutes"]
-    assert (
-        verify_promotion.promote_timeout([doc]) + verify_promotion.POLL_S < minutes * 60
-    )
+    assert promote_verify.promote_timeout([doc]) + promote_verify.POLL_S < minutes * 60
 
 
 def _settle_checks_out(wf):
