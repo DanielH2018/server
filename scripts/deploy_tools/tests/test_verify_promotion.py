@@ -258,6 +258,40 @@ def test_the_timeout_is_the_largest_timeout_plus_the_interval_plus_the_largest_r
     assert vp.expected_set(CHANGED, PROD).timeout_s == 10 * 60 + 60 + 2 * 60
 
 
+def _timeout_of_render(key_sets: dict[str, frozenset[str]]) -> int:
+    """The derived timeout of a bundle the renderer writes for `peanut` at a 10m timeout."""
+    directories = {"peanut": {"kustomization.yaml": "resources: []\n"}}
+    files = render_bundle(directories, key_sets, ["peanut"], "10m", "x=ENC[y]\n")
+    return vp.promote_timeout(
+        vp.flux_kustomizations({p: t.encode() for p, t in files.items()})
+    )
+
+
+def test_a_bundle_holding_a_substituting_tag_adds_the_cluster_vars_hop():
+    """10m + 1m + 2m, plus cluster-vars's 10m and one requeue-dependency interval."""
+    found = _timeout_of_render({"peanut": frozenset({"peanut_password"})})
+    assert found == 10 * 60 + 60 + 2 * 60 + 10 * 60 + vp.REQUEUE_DEPENDENCY_S
+
+
+def test_a_bundle_holding_no_substituting_tag_adds_no_hop():
+    """The plan's negative half, a guard on kept behaviour: it goes red on an unconditional hop."""
+    assert _timeout_of_render({"peanut": frozenset()}) == 10 * 60 + 60 + 2 * 60
+
+
+def test_a_substituting_kustomization_without_cluster_vars_is_an_error():
+    doc = yaml_fast.safe_load(ks("peanut"))
+    doc["spec"]["postBuild"] = {"substituteFrom": []}
+    with pytest.raises(ValueError, match="holds no cluster-vars"):
+        vp.promote_timeout([doc])
+
+
+def test_the_requeue_interval_is_kustomize_controllers_default():
+    """The vendored install passes no `--requeue-dependency`, so the 30s default holds."""
+    vendored = (REPO / "ansible/roles/k8s/flux/files/gotk-components.yaml").read_text()
+    assert "--requeue-dependency" not in vendored
+    assert vp.REQUEUE_DEPENDENCY_S == 30
+
+
 def test_an_empty_bundle_times_out_at_the_roots_floor():
     assert (
         vp.promote_timeout([])

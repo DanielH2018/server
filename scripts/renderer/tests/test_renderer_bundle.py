@@ -25,6 +25,7 @@ from renderer.renderer_lib.bundle import (
     bundle_files,
     digests,
     rules_missing,
+    substitution,
 )
 from renderer.renderer_lib.cluster import KUSTOMIZATION, RenderedTag, kustomization_text
 from renderer.renderer_lib.placeholders import apply_placeholders, sentinel
@@ -76,18 +77,49 @@ def _expected(name: str) -> dict:
     }
 
 
-def test_a_tag_holding_a_placeholder_gets_post_build_naming_the_cluster_vars_secret():
+def test_a_tag_holding_a_placeholder_gets_substitute_from_and_the_cluster_vars_edge():
     files = _bundle(_tag("bento-pdf", sentinel("email")))
     expected = _expected("bento-pdf")
     expected["spec"]["postBuild"] = {
         "substituteFrom": [{"kind": "Secret", "name": "homelab-cluster-vars"}]
     }
+    expected["spec"]["dependsOn"] = [{"name": "cluster-vars"}]
     assert yaml_fast.safe_load(files["flux/bento-pdf.yaml"]) == expected
 
 
-def test_a_tag_holding_no_placeholder_gets_no_post_build():
-    files = _bundle(_tag("bento-pdf", "${HOME}"))
+def test_a_tag_holding_no_placeholder_gets_neither_and_keeps_a_literal_dollar_brace():
+    """The plan's negative half, a guard on kept behaviour.
+
+    It goes red on a writer that gives either field to every tag, not on the base commit.
+    """
+    tag = _tag("bento-pdf", "${HOME}")
+    files = _bundle(tag)
     assert yaml_fast.safe_load(files["flux/bento-pdf.yaml"]) == _expected("bento-pdf")
+    rendered = apply_placeholders([tag], ("email",)).tags[0].files["deployment.yaml"]
+    assert "value: ${HOME}\n" in rendered, (
+        "Flux never substitutes it, so it stays unescaped"
+    )
+
+
+def test_only_a_tags_own_directory_with_a_placeholder_substitutes():
+    """`<tag>` holds a placeholder and `<tag>-deferred` none, as D3.3b's fixture asks.
+
+    `bundle_files` refuses `-deferred` until D4.2, so this calls the decision it makes.
+    """
+    directories = {"pihole": {}, "pihole-deferred": {}}
+    keys = {"pihole": frozenset({"email"}), "pihole-deferred": frozenset()}
+    per_directory, substituting = substitution(["pihole"], directories, keys)
+    assert per_directory == {"pihole": True, "pihole-deferred": False}
+    assert substituting == {"pihole"}
+
+
+def test_a_placeholder_only_in_deferred_substitutes_there_and_counts_for_the_tag():
+    """The reverse split: no edge on `<tag>`, while the footprint rule still counts it."""
+    directories = {"pihole": {}, "pihole-deferred": {}}
+    keys = {"pihole": frozenset(), "pihole-deferred": frozenset({"email"})}
+    per_directory, substituting = substitution(["pihole"], directories, keys)
+    assert per_directory == {"pihole": False, "pihole-deferred": True}
+    assert substituting == {"pihole"}
 
 
 def test_the_root_lists_every_file_in_flux():
@@ -299,7 +331,8 @@ def test_the_written_digests_json_is_the_shape_land_wait_reads():
 
 
 def test_the_cluster_vars_kustomization_decrypts_with_the_cluster_key():
-    files = _bundle(_tag("bento-pdf"))
+    """With a substituting tag beside it, `cluster-vars` still gets no `postBuild` or edge."""
+    files = _bundle(_tag("bento-pdf", sentinel("email")))
     expected = _expected("cluster-vars")
     expected["spec"]["decryption"] = {
         "provider": "sops",
