@@ -188,6 +188,19 @@ data:
           - source_labels: [__name__]
             action: drop
             regex: .+_bucket
+      # The deploy-pipeline exporter's four homelab_deploy_* gauges, which monitor-bridge serves
+      # and the deploy-pipeline rule group reads (docs/target-architecture/deploy/
+      # d2-first-leaf.md, *The deploy-pipeline exporter and its alerts*). The bridge refreshes
+      # them once per 300s cycle, so 1m loses nothing. Hand-written rather than a `metrics`
+      # item on monitor-bridge's entry, because the deploy tags derive a change to that field
+      # onto every role that reads it. The port is monitor-bridge's
+      # monitor_bridge_deploy_pipeline_port, which this role cannot read, and
+      # ansible/tests/services/test_deploy_pipeline_scrape.py holds the two equal. No `origin`
+      # label, so Kuma's Cluster Scrape Targets tile pages a failed scrape (M1 convention 5).
+      - job_name: deploy-pipeline
+        scrape_interval: 1m
+        static_configs:
+          - targets: ['monitor-bridge.{{ k8s_namespace }}.svc:9180']
       # The plain exporters: a static `<service>.<namespace>.svc:<port>` target with no auth or
       # relabeling. Each is a `metrics` item on its containers_list entry, which is where the
       # port is defined; the owning role reads it back with `metrics_port`, so its Service and

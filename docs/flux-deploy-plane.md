@@ -148,6 +148,48 @@ notification-controller's Discord alerts stay as a second channel beside these.
 case one evaluation short of each hold. A lost `gotk_resource_info` leaves `FluxNotReady`'s
 readiness arms and `FluxSuspended` quiet ([#4809](https://github.com/DanielH2018/server/issues/4809)).
 
+### The deploy-pipeline alerts
+
+The `deploy-pipeline` rule group,
+`ansible/roles/k8s/observability/files/rules/deploy-pipeline.yaml`, pages on `promote`'s own
+state. monitor-bridge reads that state each 300-second cycle and serves it as four gauges, one
+series each, which the `deploy-pipeline` scrape job collects:
+
+- `homelab_deploy_hold_active` reads 1 while `DEPLOY_HOLD` reads anything but `none`.
+- `homelab_deploy_hold_age_seconds` is the time since `DEPLOY_HOLD` was last written while a
+  hold stands, and 0 otherwise.
+- `homelab_deploy_unpromoted_age_seconds` is the time since the oldest green master commit that
+  `prod`'s commit lacks went green, and 0 when there is none.
+- `homelab_deploy_prod_digest_match` reads 1 when `prod`'s digest in GHCR equals
+  `PROD_DIGEST`, and also while `PROD_DIGEST` reads `none` and no `prod` tag exists.
+
+Every rule carries `service="deploy-pipeline"`. That value names no deploy tag, so no
+`probe.py health` gate reads these alerts, and a standing hold cannot fail the `flux` role's
+gate (D2 Open question 12).
+
+- **`DeployHoldActive`, warning.** A hold has stood for 15 minutes, so `promote` moves `prod`
+  nowhere. Alertmanager repeats it every 24 hours while the hold stands, not every 6. Read
+  the hold with `probe.py landing`, and clear it as *Clearing a hold* below says.
+- **`PromotionStalled`, warning.** A green master commit that `prod` lacks went green more
+  than 2 hours ago, and no hold stands. Either `promote` is not running, or its runs end
+  without moving `prod`, such as a run that never settles and leaves every later run
+  reporting `current`. Read the workflow's recent runs. A hold silences this alert, because
+  `DeployHoldActive` already pages that state.
+- **`ProdMovedOutsidePromote`, critical.** `prod`'s digest has differed from `PROD_DIGEST` for
+  15 minutes. `promote` writes `PROD_DIGEST` each time it moves `prod`, so either something
+  else moved the tag, or `promote` moved it and the write failed. Flux follows `prod`, so
+  production runs whatever the tag names now. The 15 minutes cover the gap between a move and
+  its write, plus one exporter cycle.
+- **`DeployPipelineExporterAbsent`, warning.** For 15 minutes, either the scrape job is gone
+  from `prometheus.yml`, or monitor-bridge is scraped without one of the four gauges. A read
+  that fails exports no series for what it feeds, never a 0, and so does a deleted variable
+  or an empty token. monitor-bridge logs one `deploy-pipeline:` line each cycle naming the
+  read that failed. A failed scrape of the job pages through Kuma's `Cluster Scrape Targets`
+  tile until M6's batch A3, so this rule leaves that case alone.
+
+`ansible/roles/k8s/observability/tests/rules/deploy-pipeline.test.yaml` fires each alert and
+keeps each one silent in the case D2's plan names.
+
 ## A `containers_list` change reaches Flux
 
 The flux role reads `containers_list`, because each controller's priority class derives from
