@@ -1,7 +1,8 @@
-# The HostUpdateStale rule for a one-host fixture map, {daniel-pi: {job: node-pi,
+# The HostUpdateStale rule for a one-host fixture map, {fixture-host: {job: node-fixture,
 # limit_seconds: 11400}}. files/rules/host-checks.yaml carries one rule of this shape per entry
 # of observability_expected_hosts, which is empty until H3.9c, so host-checks.test.yaml loads
-# this file beside it to give the rule its firing and silent cases.
+# this file beside it to give the rule its firing and silent cases. The host is one no
+# inventory declares, so this rule never fires beside a shipped rule for a real host.
 # ansible/tests/services/test_host_plane_rule_literals.py holds this file, and every shipped
 # HostUpdateStale rule, equal to the rule it builds from a map entry. Never shipped: only
 # observability_rule_groups' files reach Prometheus.
@@ -15,22 +16,22 @@ groups:
       - alert: HostUpdateStale
         expr: |
           (
-              time() - homelab_host_update_success_timestamp_seconds{job="node-pi",origin="daniel-pi"} > 11400
+              time() - homelab_host_update_success_timestamp_seconds{job="node-fixture",origin="fixture-host"} > 11400
             or
               (
-                  absent(homelab_host_update_success_timestamp_seconds{job="node-pi",origin="daniel-pi"})
+                  absent(homelab_host_update_success_timestamp_seconds{job="node-fixture",origin="fixture-host"})
                 and on (job, origin)
-                  up{job="node-pi",origin="daniel-pi"} == 1
+                  up{job="node-fixture",origin="fixture-host"} == 1
               )
           )
         labels:
           severity: critical
-          service: daniel-pi
+          service: fixture-host
         annotations:
-          summary: daniel-pi has had no successful homelab update for 11400s.
+          summary: fixture-host has had no successful homelab update for 11400s.
           description: >-
-            No homelab-updater run on daniel-pi has succeeded in 11400s, or its exporter is up
+            No homelab-updater run on fixture-host has succeeded in 11400s, or its exporter is up
             and serves no success timestamp. A failed fetch, a stopped homelab-apt-repo.service,
             a firewall rule, a keyring mismatch and a stopped timer each leave it stale. Read
             `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on
-            daniel-pi, and docs/host-packages.md, "Host-plane pages".
+            fixture-host, and docs/host-packages.md, "Host-plane pages".

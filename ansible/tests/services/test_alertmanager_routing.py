@@ -250,7 +250,7 @@ def test_host_sets_names_every_host_check_rule():
         "HostReconcileFailed/daniel-pi",
     }
     assert set(host_sets(shadow=False, path=HOST_UPDATE_STALE_FIXTURE)) == {
-        "HostUpdateStale/daniel-pi"
+        "HostUpdateStale/fixture-host"
     }
 
 

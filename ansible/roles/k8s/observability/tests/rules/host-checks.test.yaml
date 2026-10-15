@@ -10,8 +10,9 @@
 # labels, `job` and `instance` included. Its absent_over_time arm carries only the equality
 # matchers' `check` and `origin`. HostUpdateStale's two arms differ the same way.
 #
-# fixtures/host-update-stale.yaml holds the HostUpdateStale rule for a one-host map, daniel-pi
-# at 11400s, because host-checks.yaml carries none while observability_expected_hosts is empty.
+# fixtures/host-update-stale.yaml holds the HostUpdateStale rule for a one-host map,
+# fixture-host at 11400s, because host-checks.yaml carries none while
+# observability_expected_hosts is empty.
 rule_files:
   - ../../files/rules/host-checks.yaml
   - fixtures/host-update-stale.yaml
@@ -327,9 +328,9 @@ tests:
   # quiet at 189 minutes (11340s) and fires at 191 (11460s), past the 11400s limit.
   - interval: 1m
     input_series:
-      - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+      - series: 'homelab_host_update_success_timestamp_seconds{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
         values: '0x200'
-      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+      - series: 'up{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
         values: '1x200'
     alert_rule_test:
       - eval_time: 189m
@@ -339,27 +340,27 @@ tests:
         alertname: HostUpdateStale
         exp_alerts:
           - exp_labels:
-              instance: daniel-pi
-              job: node-pi
-              origin: daniel-pi
+              instance: fixture-host
+              job: node-fixture
+              origin: fixture-host
               severity: critical
-              service: daniel-pi
+              service: fixture-host
             exp_annotations:
-              summary: daniel-pi has had no successful homelab update for 11400s.
+              summary: fixture-host has had no successful homelab update for 11400s.
               description: >-
-                No homelab-updater run on daniel-pi has succeeded in 11400s, or its exporter is
+                No homelab-updater run on fixture-host has succeeded in 11400s, or its exporter is
                 up and serves no success timestamp. A failed fetch, a stopped
                 homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
-                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
+                `journalctl -u homelab-updater` on fixture-host, and docs/host-packages.md,
                 "Host-plane pages".
 
   # A success timestamp that follows the clock keeps HostUpdateStale quiet.
   - interval: 1m
     input_series:
-      - series: 'homelab_host_update_success_timestamp_seconds{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+      - series: 'homelab_host_update_success_timestamp_seconds{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
         values: '0+60x200'
-      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+      - series: 'up{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
         values: '1x200'
     alert_rule_test:
       - eval_time: 191m
@@ -370,32 +371,32 @@ tests:
   # matchers' `job` and `origin` alone.
   - interval: 1m
     input_series:
-      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+      - series: 'up{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
         values: '1x10'
     alert_rule_test:
       - eval_time: 5m
         alertname: HostUpdateStale
         exp_alerts:
           - exp_labels:
-              job: node-pi
-              origin: daniel-pi
+              job: node-fixture
+              origin: fixture-host
               severity: critical
-              service: daniel-pi
+              service: fixture-host
             exp_annotations:
-              summary: daniel-pi has had no successful homelab update for 11400s.
+              summary: fixture-host has had no successful homelab update for 11400s.
               description: >-
-                No homelab-updater run on daniel-pi has succeeded in 11400s, or its exporter is
+                No homelab-updater run on fixture-host has succeeded in 11400s, or its exporter is
                 up and serves no success timestamp. A failed fetch, a stopped
                 homelab-apt-repo.service, a firewall rule, a keyring mismatch and a stopped
                 timer each leave it stale. Read `systemctl status homelab-updater.timer` and
-                `journalctl -u homelab-updater` on daniel-pi, and docs/host-packages.md,
+                `journalctl -u homelab-updater` on fixture-host, and docs/host-packages.md,
                 "Host-plane pages".
 
   # The exporter is down, so every series of the target is stale and the success timestamp
   # reads as absent. `up` at 0 keeps the absent arm quiet: a failed scrape is not a stale host.
   - interval: 1m
     input_series:
-      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+      - series: 'up{instance="fixture-host", job="node-fixture", origin="fixture-host"}'
         values: '0x10'
     alert_rule_test:
       - eval_time: 5m

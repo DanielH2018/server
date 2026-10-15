@@ -1632,7 +1632,11 @@ says otherwise.
       run's, which can be days old, so the rule would fire as soon as the observability
       role redeployed.
         1. Add daniel-pi, with its limit, to the observability role's expected-host map
-           (H3.5d). The limit test then covers the Pi's rendered schedule.
+           (H3.5d). The limit test then covers the Pi's rendered schedule. The rule file is
+           plain YAML, so also add the `HostUpdateStale` rule for daniel-pi to
+           `ansible/roles/k8s/observability/files/rules/host-checks.yaml`.
+           `ansible/tests/services/test_host_plane_rule_literals.py` fails until the rule
+           is there, and its message prints the rule.
         2. The Pi's absent clause reads `up{job="node-pi"}`. A failed scrape marks the
            Pi's series stale, so the success timestamp reads as absent. The `node-pi`
            job's comment in `ansible/roles/k8s/observability/templates/prometheus.yaml.j2`

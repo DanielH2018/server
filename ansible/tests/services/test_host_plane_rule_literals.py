@@ -21,7 +21,8 @@ from lib.ansible_inventory import inventory_hosts
 ROLE = K8S_ROLES / "observability"
 RULES = ROLE / "files" / "rules" / "host-checks.yaml"
 FIXTURE = ROLE / "tests" / "rules" / "fixtures" / "host-update-stale.yaml"
-FIXTURE_HOSTS = {"daniel-pi": {"job": "node-pi", "limit_seconds": 11400}}
+# A host no inventory declares, so the fixture never shadows a shipped rule for a real host.
+FIXTURE_HOSTS = {"fixture-host": {"job": "node-fixture", "limit_seconds": 11400}}
 # Non-vacuity: the hosts hosts.ini must keep declaring for the reconcile census to mean much.
 FLEET = frozenset({"daniel-box", "daniel-server", "daniel-pi"})
 
@@ -141,18 +142,18 @@ def test_the_fixture_rule_matches_the_one_host_fixture_map_is_clean():
 
 def test_a_listed_host_with_no_rule_is_flagged():
     [problem] = update_stale_problems([], FIXTURE_HOSTS)
-    assert "lists daniel-pi" in problem
+    assert "lists fixture-host" in problem
     assert "> 11400" in problem
 
 
 def test_a_rule_whose_limit_differs_from_the_map_is_flagged():
-    moved = {"daniel-pi": {"job": "node-pi", "limit_seconds": 12000}}
+    moved = {"fixture-host": {"job": "node-fixture", "limit_seconds": 12000}}
     assert update_stale_problems(_rules(FIXTURE, "HostUpdateStale"), moved)
 
 
 def test_a_rule_for_a_host_the_map_does_not_list_is_flagged():
     [problem] = update_stale_problems(_rules(FIXTURE, "HostUpdateStale"), {})
-    assert "names daniel-pi" in problem
+    assert "names fixture-host" in problem
 
 
 def test_every_inventory_host_has_its_reconcile_rule_is_clean():
