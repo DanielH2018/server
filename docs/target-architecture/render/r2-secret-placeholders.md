@@ -696,7 +696,7 @@ placeholder render and fails it with exit 1, like the five rules:
 - Each entry's template names no secret key outside `SOPS_MANIFEST_KEYS`. Rule 5's syntax
   tree walk supplies the names, so an alias counts.
 - Every entry names a `SOPS_MANIFEST_KEYS` key. Every template outside the list that names
-  one carries a live `KNOWN_VIOLATIONS` entry for that key. From PR 9, with the ratchet
+  one carries a live rule 5 entry in `KNOWN_VIOLATIONS` for that key. From PR 9, with the ratchet
   empty, the entries are exactly the templates that name such a key.
 
 A `--role` render applies the first two bullets only to the tags it rendered. The third
