@@ -236,3 +236,37 @@ def test_a_call_the_runner_counts_keeps_the_line(tree, imports, call):  # noqa: 
     """
     reason = _reason_for_head_call(tree, imports, call)
     assert reason and "every deploy runs" in reason
+
+
+@pytest.mark.parametrize(
+    "imports, call",
+    [
+        (
+            "import logging\nlogging.getLogger('order-only-5085')",
+            "logging.getLogger('order-only-5085').disabled = True",
+        ),
+        (
+            "import logging\n_LOGGER = logging.getLogger('order-only-5085')",
+            "_LOGGER.disabled = True",
+        ),
+        (
+            "import logging\nlogging.getLogger('order-only-5085')",
+            "logging.getLogger('order-only-5085').setLevel(50)",
+        ),
+    ],
+    ids=["getlogger-disabled", "bound-logger-disabled", "getlogger-set-level"],
+)
+def test_a_write_to_a_logger_the_plugin_module_creates_keeps_the_line(
+    tree,  # noqa: F811
+    imports,
+    call,
+):
+    """A write to a logger the base's module code already created keeps the line (#5085).
+
+    Both ends create the logger when the plugin's module code runs, and the head writes to it
+    when the chain runs. No module attribute the walk starts from holds the logger, so it sits
+    four levels down, under `logging.Logger.manager.loggerDict`, and a three-level walk
+    discharges the line.
+    """
+    reason = _reason_for_head_call(tree, imports, call)
+    assert reason and "every deploy runs" in reason

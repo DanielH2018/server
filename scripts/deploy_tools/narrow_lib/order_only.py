@@ -59,10 +59,12 @@ from lib.git import git
 # handlers and watchdog, so the runner wraps the calls that change them and compares how many
 # returned. An `open` whose mode string writes ends the run as its flags do, because a C-level
 # `fopen` such as `readline.write_history_file` raises the event with flags 0 (#5081).
+# A second walk, once the plugin's module code has run, copies the objects that code created,
+# such as a logger the base end makes and the head end's filter call disables (#5085).
 # The gaps taken: a branch HEAD's data does not exercise; a change five or more levels below a
-# module attribute; an object the plugin's own module code creates, such as a logger, since
-# both ends create it after the runner's copy; a change in state held in `__slots__` or inside
-# a C object; process state the runner neither reads nor counts; a counted call through a
+# module attribute; a write the plugin's module code makes to an object that code created,
+# since neither walk sees the object before it; a change in state held in `__slots__` or
+# inside a C object; process state the runner neither reads nor counts; a counted call through a
 # reference taken before the runner wrapped it; an unaudited call in a module the runner does
 # not replace; and a role whose bytes depend on list order, which the render proof the caller
 # still requires catches.
@@ -97,6 +99,8 @@ _TIMEOUT = 60
 # `walk`, a breadth-first shallow copy of each object that is a container or carries a
 # `__dict__` and that sits up to four levels below a module attribute, the process state
 # `_process_state` reads (#5060), and the counts of the `counted` calls (#5081). At the
+# `order-only.imported` event `_chain` raises once the import returns, it walks again and
+# copies the objects the plugin's module code created (#5085). At the
 # `order-only.report` event the runner raises after the chain, it writes into the report each
 # `module.attribute` added, rebound or deleted since then, the `walk` path of each object that
 # gained, lost or replaced an item or attribute, each `process.<name>` that differs, and each
@@ -150,6 +154,8 @@ counted = {
 def _install(exit_, write_flags, allowed, exempt, modules, unaudited, counted, process, kinds):
     before = {}
     contents = {}
+    claimed = set()
+    walked_after_import = []
     state = {}
     calls = {}
     skip, deque, getset, class_dict = kinds
@@ -197,6 +203,8 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, counted, p
         # breadth-first order, so both ends name it alike while they load the same modules in
         # the same order. Four levels, so an attribute of a named logger is in reach:
         # `logging.Logger`, its `manager`, the manager's `loggerDict`, and the logger (#5085).
+        # A second walk, once the plugin's module code has run, descends through the objects
+        # the first copied and copies only the ones it did not, under a path not yet taken.
         seen = set()
         level = roots
         for depth in (1, 2, 3, 4):
@@ -211,7 +219,9 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, counted, p
                 if copied is None:
                     continue
                 seen.add(id(value))
-                contents[path] = (value, copied)
+                if id(value) not in claimed and path not in contents:
+                    claimed.add(id(value))
+                    contents[path] = (value, copied)
                 if depth < 4:
                     items = copied.items() if type(copied) is dict else enumerate(copied)
                     for index, (key, child) in enumerate(items):
@@ -275,6 +285,17 @@ def _install(exit_, write_flags, allowed, exempt, modules, unaudited, counted, p
                         for key, value in attrs.items()
                     ])
                     state.update(read_state())
+            elif event == "order-only.imported":
+                # The plugin's module code has run, so copy what it created, such as a logger
+                # its base end makes and its head end then writes to (#5085). The roots are
+                # the modules the first walk started from, which leaves out the plugin's own.
+                if before and not walked_after_import:
+                    walked_after_import.append(True)
+                    walk([
+                        (name + "." + key, value)
+                        for name, (module, attrs) in before.items()
+                        for key, value in module.__dict__.copy().items()
+                    ])
             elif event == "order-only.report":
                 args[0]["module_writes"], args[0]["modules_loaded"] = module_writes()
             elif event not in allowed:
@@ -402,6 +423,7 @@ def _chain(plugins, roles, preload):
         __import__(name)
     sys.path.insert(0, plugins)
     import toposort
+    sys.audit("order-only.imported")
     f = toposort.FilterModule().filters()
     entries = json.load(sys.stdin)
     before = copy.deepcopy(entries)
