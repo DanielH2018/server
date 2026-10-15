@@ -19,12 +19,20 @@ reads `KNOWN_VIOLATIONS`, is [#4930](https://github.com/DanielH2018/server/issue
 PR 2b, rule 5's aliases: [#4953](https://github.com/DanielH2018/server/pull/4953). The
 census found one entry, the `hash('sha1')` on `observability_prometheus_config`, which has
 output `domain` since `0ef579e1f`
-([#4952](https://github.com/DanielH2018/server/issues/4952)). PR 8 removes it.
+([#4952](https://github.com/DanielH2018/server/issues/4952)). Domain PR 2b removed it, so
+PR 8 has no observability item.
 
 PR 3, branches on a secret's value:
 [#4978](https://github.com/DanielH2018/server/pull/4978). It rewrites 24 truthiness tests,
 not the Baseline's 18. `2fe9ad122` and `ba05d2459` added six push tiles to
 `static-monitors.yaml.j2` after `70591c307`, each with its own `KNOWN_VIOLATIONS` entry.
+
+PR 4, transforms on secrets: [#5024](https://github.com/DanielH2018/server/pull/5024). Its
+first head dry run stopped at the new colon-count assert, because the stored
+`mqtt_password_hash` carried the `mosquitto_passwd` `user:` prefix. Following Open question 4,
+the operator removed the prefix with `sops`
+([#5030](https://github.com/DanielH2018/server/pull/5030)), and both services' digests then
+matched.
 
 Domain PR 1, `domain` as an inventory variable read without SOPS:
 [#4994](https://github.com/DanielH2018/server/pull/4994).

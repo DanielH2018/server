@@ -22,6 +22,10 @@ operator ran its `k3s-bringup.yml` hand apply on 2026-10-14 and cleared the owed
 D2.4b, the script readers and the two generators:
 [#4988](https://github.com/DanielH2018/server/pull/4988).
 
+D2.5, verification, `last-good` and the hold:
+[#5025](https://github.com/DanielH2018/server/pull/5025). Its first `promote` run passed
+`verify` and `settle`, and seeded `last-good` on prod's digest. Both holds read `none`.
+
 D2.6b, the bundle writer, `digests.json`, its census and the reserved names:
 [#5010](https://github.com/DanielH2018/server/pull/5010). The first `promote` run after it
 reported 0 published tags, and `flux/homelab` read `success` on `6c26fb6f5`.

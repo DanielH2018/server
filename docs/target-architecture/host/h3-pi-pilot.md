@@ -11,6 +11,10 @@ PR H3.3a, the `host_packages` CI job skeleton: [#4974](https://github.com/Daniel
 PR H3.3b, the updater cases in systemd containers: [#5009](https://github.com/DanielH2018/server/pull/5009).
 PR H3.4a, the `homelab_builder` role behind a disarmed flag: [#5016](https://github.com/DanielH2018/server/pull/5016).
 The operator cleared its park on 2026-10-14, and the apply changed nothing.
+PR H3.4b, the repository half: [#5029](https://github.com/DanielH2018/server/pull/5029).
+The tick applied it on 2026-10-15, and daniel-server reads `10.0.0.215:8791`.
+PR H3.4c, the archive key in `homelab-updater`: [#5032](https://github.com/DanielH2018/server/pull/5032).
+The key's fingerprint is `83B57416B342DDE1CBA0752D435D139ADFD6F016`.
 
 Depends on: R1
 Unblocks: H4, H5
