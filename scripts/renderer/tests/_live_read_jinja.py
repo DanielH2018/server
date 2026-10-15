@@ -6,7 +6,7 @@ every `lookup`, `query` or `q` call it finds. It accepts four plugins:
 
 - `file` and `template`, which read the tree. The names in their path expressions are names
   the source reads.
-- `pipe`, only as `'base64 -w0 ' ~ <path>`, the one shape `scripts/lib/k8s_yaml.py:make_lookup`
+- `pipe`, only as `lookup('pipe', 'base64 -w0 ' ~ <path>)` with no further argument, the one shape `scripts/lib/k8s_yaml.py:make_lookup`
   implements. Each piece of the path is a literal with no space or shell metacharacter,
   `playbook_dir`, or a loop variable over a literal list of such pieces.
 - `vars`, only over an attribute of a loop variable whose loop runs over a
@@ -16,8 +16,8 @@ every `lookup`, `query` or `q` call it finds. It accepts four plugins:
 Any other call is a problem, because nothing can say what it reads.
 
 `vars.X`, `vars['X']`, `hostvars[H].X` and `hostvars[H]['X']` read the name `X`, as a bare
-`X` does. A computed `X`, or `vars` or `hostvars` read any other way, is a problem too. `_live_read_census.py`
-is the census that calls it.
+`X` does. A computed `X`, or `vars` or `hostvars` read any other way, is a problem too. A method called on `vars` or `hostvars`, such as `vars.get('X')`, is a problem as well.
+`_live_read_census.py` is the census that calls it.
 """
 
 import re
@@ -135,7 +135,7 @@ class Reader:
         if kind in ("file", "template"):
             return set()
         if kind == "pipe":
-            if _is_base64_of_a_path(arg, loops):
+            if _is_base64_of_a_path(arg, loops) and _is_only_the_command(call):
                 self.accepted.append(f"pipe in {where}")
                 return set()
             self.problems.append(
@@ -167,6 +167,13 @@ class Reader:
     def _scan(self, where: str, node: nodes.Node, loops: list[nodes.For]) -> set[str]:
         names = set()
         scope = _scope_access(node)
+        if isinstance(node, nodes.Call) and _scope_access(node.node) is not None:
+            # `vars.get('X')` calls a method on the mapping: the key is an argument, not a
+            # subscript, so the census cannot name the variable it reads.
+            self.problems.append(
+                f"{where}: a method called on vars or hostvars, so the census cannot name "
+                "what it reads"
+            )
         if scope is not None:
             # `vars.X`, `vars['X']`, `hostvars[H].X` and `hostvars[H]['X']` read the name X,
             # which `find_undeclared_variables` never sees.
@@ -246,6 +253,16 @@ def _scope_access(node: nodes.Node) -> tuple[str | None, list[nodes.Expr]] | Non
         host = [base.arg] if isinstance(base, nodes.Getitem) else []
         return _key(node), [*host, *own]
     return None
+
+
+def _is_only_the_command(call: nodes.Call) -> bool:
+    """The call passes the plugin name and the command, and no other argument."""
+    return (
+        len(call.args) == 2
+        and not call.kwargs
+        and call.dyn_args is None
+        and call.dyn_kwargs is None
+    )
 
 
 def _is_path_part(node: nodes.Node, loops: list[nodes.For]) -> bool:

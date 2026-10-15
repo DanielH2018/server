@@ -129,18 +129,13 @@ def stub_vars(secrets: Path = SECRETS) -> dict[str, object]:
     return stubs
 
 
-def stub_file_text(
-    secrets: Path = SECRETS, variables: dict[str, object] | None = None
-) -> str:
+def stub_file_text(secrets: Path = SECRETS) -> str:
     """The stub file's bytes: a YAML mapping with sorted keys after a fixed header.
 
     Args:
         secrets: The secrets file whose key names the stubs are built from.
-        variables: The mapping to write instead of `stub_vars(secrets)`. A test passes one
-            to show that the stub-file key test fails a writer that adds a key.
     """
-    if variables is None:
-        variables = stub_vars(secrets)
+    variables = stub_vars(secrets)
     body = yaml.safe_dump(
         variables, sort_keys=True, default_flow_style=False, width=4096
     )

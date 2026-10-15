@@ -218,6 +218,20 @@ def test_a_base64_pipe_lookup_with_more_than_a_path_is_flagged(tmp_path, path):
 
 
 @pytest.mark.parametrize(
+    "arguments",
+    [", 'extra'", ", chdir='/'", ", *extra", ", **extra"],
+    ids=["a second positional", "a keyword", "a star args", "a star kwargs"],
+)
+def test_a_base64_pipe_lookup_with_a_further_argument_is_flagged(tmp_path, arguments):
+    path = "playbook_dir ~ '/roles/k8s/widget/files/a.png'"
+    template = f"icon: {{{{ lookup('pipe', 'base64 -w0 ' ~ {path}{arguments}) }}}}\n"
+    found = _census(tmp_path, {"icons-configmap.yaml.j2": template})
+    assert found.accepted == []
+    assert len(found.problems) == 1
+    assert "lookup('pipe')" in found.problems[0]
+
+
+@pytest.mark.parametrize(
     "read",
     [
         "hostvars[inventory_hostname].widget_line",
@@ -247,7 +261,14 @@ def test_a_defaults_value_read_through_hostvars_is_clean(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "read", ["vars['widget_' ~ suffix]", "vars | dict2items", "hostvars[host]"]
+    "read",
+    [
+        "vars['widget_' ~ suffix]",
+        "vars | dict2items",
+        "hostvars[host]",
+        "vars.get('widget_line')",
+        "hostvars[inventory_hostname].get('widget_line')",
+    ],
 )
 def test_vars_or_hostvars_read_by_a_computed_name_is_flagged(tmp_path, read):
     found = _census(tmp_path, {"deployment.yaml.j2": f"x: {{{{ {read} }}}}\n"})

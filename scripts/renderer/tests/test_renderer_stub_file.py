@@ -6,6 +6,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_stub_file.py
 from pathlib import Path
 
 import pytest
+import yaml
 
 from lib import yaml_fast
 from renderer import shadow_diff
@@ -43,9 +44,10 @@ def test_the_stub_file_holds_only_the_secret_stubs_and_the_sentinel_is_clean(tmp
 
 
 def test_a_stub_writer_that_adds_a_non_secret_key_is_flagged(tmp_path):
+    # The fixture writer is the test itself: it dumps the real stub map plus one live fact.
     written = {**shadow_diff.stub_vars(), "widget_live_fact": "x"}
     out = tmp_path / "stubs.yml"
-    out.write_text(shadow_diff.stub_file_text(variables=written))
+    out.write_text(yaml.safe_dump(written, sort_keys=True))
     assert unexpected_entries(out) == {"widget_live_fact": "x"}
 
 
