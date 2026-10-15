@@ -244,6 +244,14 @@ Mint a new value in the provider, then `sops set` + redeploy the consumer:
   and an anonymous read shares one quota per source IP with the deployer's CI gate. A leaked
   copy reads only public data. Redeploy with `initial_setup.yml --tags homelab_builder`,
   which the setup-plane tick runs.
+- `monitor_bridge_deploy_pipeline_github_token`: GitHub → Settings → Developer settings →
+  Fine-grained tokens, named `homelab-deploy-pipeline-exporter`, owner DanielH2018, only the
+  `server` repository, with *Actions* read and *Variables* read and no other permission.
+  GitHub caps the display name at 40 characters, so it differs from the SOPS key. The
+  deploy-pipeline exporter in monitor-bridge (D2.6d in
+  `docs/target-architecture/deploy/d2-first-leaf.md`) reads `DEPLOY_HOLD`, `PROD_DIGEST`
+  and master's CI runs with it. It holds no write scope, so a leaked copy can neither clear a
+  hold nor move a tag. Redeploy with `--tags monitor-bridge`.
 
 ## `pinned` — DANGER, never `sops set` blindly
 
