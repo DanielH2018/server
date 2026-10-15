@@ -1119,6 +1119,7 @@
  "scripts/lib/tests/test_worktrees.py": 0.07,
  "scripts/lib/tests/test_yaml_fast.py": 0.0,
  "scripts/renderer/tests/test_renderer_bundle.py": 0.88,
+ "scripts/renderer/tests/test_renderer_bundle_ordering.py": 0.82,
  "scripts/renderer/tests/test_renderer_context.py": 0.19,
  "scripts/renderer/tests/test_renderer_determinism_0.py": 4.18,
  "scripts/renderer/tests/test_renderer_determinism_1.py": 4.87,
