@@ -18,6 +18,10 @@ The key's fingerprint is `83B57416B342DDE1CBA0752D435D139ADFD6F016`.
 PR H3.5a, the builder half, staging only: [#5046](https://github.com/DanielH2018/server/pull/5046).
 The operator landed it on 2026-10-15, and the tick applied it at `b7d8f0ef5`. The builder's
 first run ended at 12:39:05 UTC with `reason="ok"` for `a594ad662e68` and nothing unbuilt.
+PR H3.5d, the host rules: [#5112](https://github.com/DanielH2018/server/pull/5112). It
+deployed `observability` at `de380735e`. Prometheus loaded the `host-checks` group with 7
+rules, and neither `HostReconcileFailed` nor `HostUpdateStale` has a series, because the
+expected-host map is empty until H3.9c.
 
 Depends on: R1
 Unblocks: H4, H5
@@ -335,8 +339,10 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
           committer time when the tip does not descend from the last built commit, and 0
           when the tip is the last built commit. `sha` names that oldest unbuilt commit, or
           the tip. `reason` says why the run built nothing newer: `hold`, `ancestry`,
-          `keyring`, `ci`, `no-green`, `tools`, `canary`, or `ok` when it built or had
-          nothing to build. `tools` is a pinned binary whose digest differs
+          `keyring`, `ci`, `no-green`, `token`, `tools`, `canary`, or `ok` when it built
+          or had nothing to build. `token` is a builder token that `config.env` lacks or that
+          the check-runs read refused with 401 or 403, so a revoked token never reads as
+          `no-green`. `tools` is a pinned binary whose digest differs
           (*`homelab-tools`*), and `canary` is an open rollout gate (*Staged rollout*).
     - Neither `homelab-builder` nor `homelab-signer` can write the textfile directory. Each
       writes its file under its own state directory. Its unit then runs the role's
@@ -1893,6 +1899,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - A held builder fetches, writes its metrics with `reason="hold"` and builds nothing.
     - A walk with no green commit exits 0 and writes `reason="no-green"`. A run that builds
       writes `reason="ok"` with the value 0.
+    - A check-runs read refused with 401 or 403 builds nothing, exits non-zero on the first
+      run and 0 on a repeat, and writes `reason="token"`.
     - A pending tip over a green parent builds the parent, and so does a red tip. The walk
       stops at the last built commit and at the walk bound in `config.env`.
     - A `config.env` with an empty `CI_CONTEXTS`, and one with a walk bound of 0, each make

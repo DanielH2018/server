@@ -45,6 +45,13 @@ D2.6d's 24-hour `DeployHoldActive` route: [#5098](https://github.com/DanielH2018
 It landed ahead of the rest of D2.6d because it changes the Alertmanager Secret alone, and its
 deploy at `cfaadb4a` was M1's exit criterion 4.
 
+D2.6d, the deploy-pipeline exporter and its rules:
+[#5109](https://github.com/DanielH2018/server/pull/5109). It deployed monitor-bridge and
+observability at `53e238567`. The four gauges read `homelab_deploy_hold_active` 0,
+`homelab_deploy_hold_age_seconds` 0, `homelab_deploy_unpromoted_age_seconds` 0 and
+`homelab_deploy_prod_digest_match` 1, and `ALERTS{service="deploy-pipeline"}` held no
+series.
+
 Depends on: [D1](d1-flux-installed.md), [R1](../render/r1-shadow-render.md),
 [R2](../render/r2-secret-placeholders.md) (its PR 1, placeholder mode, and its PR 2, the five
 rules). PR D2.7 also waits on PR D4.0 of [D4](d4-ordering.md) (D4 Open question 3), on

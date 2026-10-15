@@ -1,6 +1,6 @@
 # R2 — Secret placeholders and CI secret checks
 
-Status: IN PROGRESS
+Status: DONE
 
 PR 1, placeholder mode and the round trip: [#4887](https://github.com/DanielH2018/server/pull/4887).
 
@@ -75,6 +75,12 @@ Domain PR 3, `domain` deleted from the store:
 `PUBLISHED` changes. The store change deferred the deploy plane, so the session deployed all
 58 owed services. No pod outside a Job restarted, because every live IngressRoute host already
 carried the inventory value.
+
+PR 9, the ratchet closed: [#5113](https://github.com/DanielH2018/server/pull/5113).
+`KNOWN_VIOLATIONS`, `PLACEHOLDER_DEFERRED` and `GUARD_DEFERRED` are gone. Master's CI on
+`e9fb9d4a3`, run 38769418691, printed `roundtrip: 58 tags, 4 deferred directories, 33
+substituting, 463 objects, 0 differences, 4 documents in render_sops_manifests` in both
+passes, so the five exit checks hold at that commit.
 
 Depends on: [R1](r1-shadow-render.md)
 

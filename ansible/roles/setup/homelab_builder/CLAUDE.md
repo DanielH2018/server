@@ -107,8 +107,10 @@ script cites ADR-0021:
 Every run past the fetch writes `homelab_builder.prom`, and the unit's `ExecStopPost=-+` line
 copies it into the textfile directory. The `reason` label of
 `homelab_builder_unbuilt_since_timestamp_seconds` is one of `ok`, `hold`, `ancestry`,
-`keyring`, `ci`, `no-green` and `build`. `build` is a render or nfpm failure at the chosen
-commit, a value the plan's list does not name. A failing run exits 1 once per reason and tip,
+`keyring`, `ci`, `no-green`, `token` and `build`. `token` is a missing token, or a 401 or
+403 from the check-runs read, which the anonymous fetch cannot see. `build` is a render or
+nfpm failure at the chosen commit, a value the plan's list does not name. A worktree cleanup
+that fails after a refusal is logged, and the run keeps the refusal's reason. A failing run exits 1 once per reason and tip,
 then 0 on a repeat, so `OnFailure=` pages once for each condition. A failed fetch exits 0 and
 writes nothing: the fetch timestamp then ages, which H3.5c's fetch-age arm pages on.
 
