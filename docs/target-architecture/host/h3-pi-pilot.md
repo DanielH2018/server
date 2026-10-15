@@ -908,7 +908,7 @@ concurrency group on push. It needs no secrets, and it does these steps:
    the container cases. Those inputs change no render: the test image's build context
    `hosts/lib/tests/container/`, which holds the fixture specs, and the cases' own scripts.
    `CASE_INPUTS` on the render step lists them, and
-   `ansible/tests/repo/test_host_package_cases_run_on_their_inputs.py` holds that list to
+   `ansible/tests/repo/test_host_package_case_inputs_census.py` holds that list to
    every `validate` module the cases script imports (#5004). Such a PR runs steps 3 to 5.
 3. It builds both renders with nfpm pinned by version and sha256, and runs the
    maintainer-script lint and the `type: config` lint.

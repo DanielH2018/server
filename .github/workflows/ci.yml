@@ -854,7 +854,7 @@ jobs:
       # `cases=true` when the PR changes an input of the container cases (steps 4 and 5) that is
       # not a render input, so it changes no render (#5004): the test image's build context and
       # fixture specs, and the cases' own code. CASE_INPUTS is the one list of them, and
-      # ansible/tests/repo/test_host_package_cases_run_on_their_inputs.py holds it to every
+      # ansible/tests/repo/test_host_package_case_inputs_census.py holds it to every
       # `validate` module the cases script imports. The renderer is a render input, so it
       # reaches the cases through `changed`.
       - name: Render every host package at the head and at the merge base
