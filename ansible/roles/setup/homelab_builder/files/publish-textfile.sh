@@ -17,8 +17,16 @@
 # it, so a host whose exporter is not set up fails loudly (h3-pi-pilot.md, *Shared names*,
 # Metrics).
 #
-# TEXTFILE_DIR overrides the directory for the tests; the units never set it.
+# TEXTFILE_DIR overrides the directory for the tests; the units never set it. `-h` or `--help`
+# prints this header and exits 0.
 set -eu
+
+case " $* " in
+  *" -h "* | *" --help "*)
+    awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"
+    exit 0
+    ;;
+esac
 
 prefix=${1:?usage: publish-textfile <prefix> <file>}
 src=${2:?usage: publish-textfile <prefix> <file>}

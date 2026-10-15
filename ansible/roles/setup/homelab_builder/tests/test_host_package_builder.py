@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -134,8 +135,12 @@ class FixtureBuilder(hb.Builder):
             target.parent.mkdir(parents=True)
             target.write_bytes(self.keyring.read_bytes())
 
+    built_inodes: ClassVar[set[int]] = set()
+
     def package(self, directory: Path, target: Path, ver: str) -> None:
-        (target / f"{directory.name}_{ver}_all.deb").write_bytes(b"")
+        deb = target / f"{directory.name}_{ver}_all.deb"
+        deb.write_bytes(b"")
+        FixtureBuilder.built_inodes.add(deb.stat().st_ino)
 
 
 @pytest.fixture
@@ -412,6 +417,20 @@ def test_an_unexpected_os_error_reads_build_and_pages_once(lab):
     assert run() == 1
     assert run() == 0
     assert metric(state)[0] == "build"
+
+
+def test_each_staged_deb_is_created_in_staged_not_renamed_into_it(lab):
+    # The test user has one group, so the setgid group itself cannot be asserted. A file
+    # created in staged/ takes that group, and a renamed one keeps the builder's, so the
+    # check is that each staged .deb is a new inode rather than the one nfpm wrote.
+    origin, state, _, github = lab
+    tip = origin.commit("a")
+    github.runs[tip] = GREEN
+    FixtureBuilder.built_inodes.clear()
+    builder(lab).main()
+    [deb] = [p for p in (state / "staged").iterdir() if p.suffix == ".deb"]
+    assert FixtureBuilder.built_inodes, "the fixture nfpm built nothing"
+    assert deb.stat().st_ino not in FixtureBuilder.built_inodes
 
 
 def test_every_reason_is_a_plan_value_and_none_is_trust():

@@ -24,6 +24,7 @@ failed for the same reason on the same tip as the run before it; 1 on a new fail
 `OnFailure=homelab-builder-alert.service` pages once.
 
 Run: uv run --no-project --python <host_python_version> host_package_builder.py
+`--help` prints this text and exits 0.
 """
 
 from __future__ import annotations
@@ -415,8 +416,11 @@ class Builder:
             self.package(out / package, debs, ver)
         for entry in self.staged.iterdir():
             entry.unlink()
+        # A copy, never a move: a file created in the setgid staged/ takes its homelab-signer
+        # group, while a rename keeps the builder's, and the builder is not in that group to
+        # chgrp it. The signer reads each .deb through that group (UMask=0027 gives 0640).
         for deb in sorted(debs.glob("*.deb")):
-            shutil.move(str(deb), self.staged / deb.name)
+            shutil.copyfile(deb, self.staged / deb.name)
         atomic_write(str(self.staged / "chosen"), chosen[:12] + "\n")
         for package in changed:
             shutil.rmtree(self.published / package, ignore_errors=True)
@@ -486,4 +490,7 @@ _NO_GH = _NoGh()
 
 
 if __name__ == "__main__":
+    if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
+        print(__doc__.strip())
+        sys.exit(0)
     sys.exit(Builder().main())

@@ -303,7 +303,13 @@ def test_a_host_lib_change_reaches_its_consumers_and_not_common():
     initial_setup consumers apply on the tick, `k3s` is the one role left to record, and
     `common` is named nowhere. A `common` file no role ships still names `common`."""
     host_lib = ["ansible/roles/setup/common/files/host_lib.py"]
-    consumers = {"fake_remux", "gitops_deploy", "renovate_agent", "renovate_notify"}
+    consumers = {
+        "fake_remux",
+        "gitops_deploy",
+        "homelab_builder",
+        "renovate_agent",
+        "renovate_notify",
+    }
     assert services_from_changed_paths(host_lib).setup_roles == consumers | {"k3s"}
     assert setup_tags_for(host_lib) == consumers
     resolv = ["ansible/roles/setup/common/templates/resolv.conf.j2"]
@@ -315,7 +321,13 @@ def test_a_common_task_file_change_reaches_the_roles_importing_it():
     each importer's tags and only re-applying the importers applies the change (#3317). The
     same four initial_setup roles apply on the tick, and `k3s` is the one left to record."""
     path = "ansible/roles/setup/common/tasks/install_host_lib.yml"
-    consumers = {"fake_remux", "gitops_deploy", "renovate_agent", "renovate_notify"}
+    consumers = {
+        "fake_remux",
+        "gitops_deploy",
+        "homelab_builder",
+        "renovate_agent",
+        "renovate_notify",
+    }
     assert setup_roles_for(path) == consumers | {"k3s"}
     assert setup_tags_for([path]) == consumers
 
